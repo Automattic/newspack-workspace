@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.49.4\n"
+"Project-Id-Version: Newspack 6.49.5\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-09T17:17:09+00:00\n"
+"POT-Creation-Date: 2026-09-09T22:08:22+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -3345,134 +3345,337 @@ msgstr ""
 msgid "This tool is controlled by the %s constant and cannot be toggled."
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:147
+#: includes/export/class-csv-batch-exporter.php:202
 msgid "Billing First Name"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:148
+#: includes/export/class-csv-batch-exporter.php:203
 msgid "Billing Last Name"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:149
+#: includes/export/class-csv-batch-exporter.php:204
 msgid "Billing Company"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:150
+#: includes/export/class-csv-batch-exporter.php:205
 msgid "Billing Address 1"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:151
+#: includes/export/class-csv-batch-exporter.php:206
 msgid "Billing Address 2"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:152
+#: includes/export/class-csv-batch-exporter.php:207
 msgid "Billing City"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:153
+#: includes/export/class-csv-batch-exporter.php:208
 msgid "Billing State"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:154
+#: includes/export/class-csv-batch-exporter.php:209
 msgid "Billing Postcode"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:155
+#: includes/export/class-csv-batch-exporter.php:210
 msgid "Billing Country"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:156
+#: includes/export/class-csv-batch-exporter.php:211
 msgid "Billing Email"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:157
+#: includes/export/class-csv-batch-exporter.php:212
 msgid "Billing Phone"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:158
+#: includes/export/class-csv-batch-exporter.php:213
 msgid "Shipping First Name"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:159
+#: includes/export/class-csv-batch-exporter.php:214
 msgid "Shipping Last Name"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:160
+#: includes/export/class-csv-batch-exporter.php:215
 msgid "Shipping Company"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:161
+#: includes/export/class-csv-batch-exporter.php:216
 msgid "Shipping Address 1"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:162
+#: includes/export/class-csv-batch-exporter.php:217
 msgid "Shipping Address 2"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:163
+#: includes/export/class-csv-batch-exporter.php:218
 msgid "Shipping City"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:164
+#: includes/export/class-csv-batch-exporter.php:219
 msgid "Shipping State"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:165
+#: includes/export/class-csv-batch-exporter.php:220
 msgid "Shipping Postcode"
 msgstr ""
 
-#: includes/export/class-csv-batch-exporter.php:166
+#: includes/export/class-csv-batch-exporter.php:221
 msgid "Shipping Country"
 msgstr ""
 
-#: includes/export/class-csv-exports.php:229
+#: includes/export/class-csv-exports.php:426
 msgid "Export CSV"
 msgstr ""
 
-#: includes/export/class-csv-exports.php:230
-msgid "Exports the current filtered view as CSV, as a point-in-time snapshot. List sorting is not applied to the export."
+#: includes/export/class-csv-exports.php:459
+msgid "Export users"
 msgstr ""
 
-#: includes/export/class-csv-exports.php:275
+#: includes/export/class-csv-exports.php:459
+msgid "Export subscriptions"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:461
+msgid "A point-in-time snapshot of the rows these options select. List sorting is not applied."
+msgstr ""
+
+#: includes/export/class-csv-exports.php:467
+msgid "Registered"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:467
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:221
+#: dist/subscribers.js:14
+#: src/wizards/subscribers/screens/GroupList.jsx:177
+msgid "Created"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:468
+msgctxt "start of a date range"
+msgid "from"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:470
+msgctxt "end of a date range"
+msgid "to"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:476
+#: includes/export/class-users-csv-exporter.php:69
+msgid "Roles"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:480
+#: includes/export/class-csv-exports.php:542
+msgid "Leave all unchecked to keep the current list filter. This view has no checkbox here."
+msgstr ""
+
+#: includes/export/class-csv-exports.php:481
+msgid "Leave all unchecked to export every role."
+msgstr ""
+
+#: includes/export/class-csv-exports.php:496
+msgid "Extra user meta"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:498
+msgid "Adds one column per key, headed by the key itself. Registration fields collected by Memberships or a form plugin live here."
+msgstr ""
+
+#: includes/export/class-csv-exports.php:514
+msgid "Refresh list"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:538
+msgid "Statuses"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:543
+msgid "Leave all unchecked to export every status."
+msgstr ""
+
+#: includes/export/class-csv-exports.php:558
+msgid "Separate fields by"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:560
+msgid "Comma"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:561
+msgid "Semicolon"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:562
+msgid "Tab"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:563
+msgid "Pipe"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:568
+msgid "Date format"
+msgstr ""
+
+#. translators: 1: a sample date, 2: the PHP date format producing it.
+#. Translators: 1 is ad unit name and 2 is ad unit id.
+#: includes/export/class-csv-exports.php:575
+#: dist/billboard.js:7
+#: src/wizards/advertising/components/placement-control/index.js:57
+#, php-format,js-format
+msgid "%1$s (%2$s)"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:582
+msgid "Custom…"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:585
+msgid "Custom date format"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:591
+msgid "PHP date format, e.g. d/m/Y"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:598
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:759
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php:125
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php:632
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php:634
+#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1-passwords.php:239
+#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:463
+#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:549
+#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:900
+#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:936
+#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:990
+#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:1085
+#: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:346
+#: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:372
+#: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:420
+#: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:446
+#: includes/plugins/woocommerce/my-account/templates/v1/group.php:162
+#: includes/plugins/woocommerce/my-account/templates/v1/subscription-header.php:258
+#: includes/reader-activation/class-reader-activation.php:1712
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:16
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:22
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:24
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:30
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:57
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:132
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:144
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:151
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:177
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:184
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:207
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:209
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:220
+#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:222
+#: dist/billboard.js:1
+#: dist/billboard.js:11
+#: dist/billboard.js:17
+#: dist/commons.js:122
+#: dist/componentsDemo.js:3
+#: dist/componentsDemo.js:4
+#: dist/newsletters-wizards.382667453da35b599ece.js:31
+#: dist/newsletters-wizards.382667453da35b599ece.js:106
+#: dist/newspack-wizards.2521cde1a8728f2525ec.js:5
+#: dist/newspack-wizards.2521cde1a8728f2525ec.js:9
+#: dist/newspack-wizards.2521cde1a8728f2525ec.js:28
+#: dist/newspack-wizards.2521cde1a8728f2525ec.js:32
+#: dist/other-scripts/corrections-modal.js:7
+#: packages/components/dist/cjs/with-wizard/index.js:277
+#: packages/components/dist/esm/with-wizard/index.js:272
+#: packages/components/src/with-wizard/index.js:240
+#: src/other-scripts/corrections-modal/index.js:410
+#: src/wizards/advertising/index.js:240
+#: src/wizards/advertising/index.js:276
+#: src/wizards/advertising/views/placements/index.js:230
+#: src/wizards/advertising/views/providers/index.js:108
+#: src/wizards/audience/components/platform-selection/index.js:189
+#: src/wizards/audience/components/prompt-action-card/index.js:167
+#: src/wizards/audience/components/settings-modal/index.js:177
+#: src/wizards/audience/views/campaigns/campaigns/add-campaign-action.js:63
+#: src/wizards/audience/views/campaigns/campaigns/index.js:287
+#: src/wizards/audience/views/campaigns/contextual-prompts/contextual-prompts-settings.js:109
+#: src/wizards/audience/views/campaigns/segments/single-segment.js:306
+#: src/wizards/audience/views/integrations/enable-modal.js:86
+#: src/wizards/audience/views/integrations/enable-modal.js:106
+#: src/wizards/componentsDemo/index.js:120
+#: src/wizards/componentsDemo/index.js:1171
+msgid "Cancel"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:599
+msgid "Export"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:708
 msgid "Exporting…"
 msgstr ""
 
-#: includes/export/class-csv-exports.php:276
+#: includes/export/class-csv-exports.php:709
 msgid "Export complete, downloading…"
 msgstr ""
 
-#: includes/export/class-csv-exports.php:277
+#: includes/export/class-csv-exports.php:710
 msgid "Export failed. Please try again."
 msgstr ""
 
-#: includes/export/class-csv-exports.php:292
+#: includes/export/class-csv-exports.php:711
+msgid "Refreshing…"
+msgstr ""
+
+#: includes/export/class-csv-exports.php:712
+msgid "List updated."
+msgstr ""
+
+#: includes/export/class-csv-exports.php:713
+msgid "Could not refresh the list."
+msgstr ""
+
+#. translators: %d: the most keys the list holds.
+#: includes/export/class-csv-exports.php:733
+#, php-format
+msgid "This site stores more keys than the list holds, so it stops at %d. Type any key the list does not show, separated by commas."
+msgstr ""
+
+#: includes/export/class-csv-exports.php:737
+msgid "Type any key the list does not show, separated by commas. A key first stored in the last few hours is listed once the list is refreshed."
+msgstr ""
+
+#: includes/export/class-csv-exports.php:753
+#: includes/export/class-csv-exports.php:776
 msgid "You do not have permission to export this data."
 msgstr ""
 
-#: includes/export/class-csv-exports.php:300
-#: includes/export/class-csv-exports.php:403
+#: includes/export/class-csv-exports.php:784
+#: includes/export/class-csv-exports.php:896
 msgid "CSV export requires WooCommerce with its export framework available."
 msgstr ""
 
-#: includes/export/class-csv-exports.php:348
+#: includes/export/class-csv-exports.php:840
 msgid "The export file could not be written. Please check uploads directory permissions."
 msgstr ""
 
-#: includes/export/class-csv-exports.php:359
+#: includes/export/class-csv-exports.php:852
 msgid "Rows were removed or changed while the export was running, so this file may be incomplete. Run the export again for a fresh snapshot."
 msgstr ""
 
-#: includes/export/class-csv-exports.php:393
-#: includes/export/class-csv-exports.php:406
-#: includes/export/class-csv-exports.php:412
+#: includes/export/class-csv-exports.php:886
+#: includes/export/class-csv-exports.php:899
+#: includes/export/class-csv-exports.php:905
 msgid "Invalid download link."
 msgstr ""
 
-#: includes/export/class-csv-exports.php:398
+#: includes/export/class-csv-exports.php:891
 msgid "You do not have permission to download this export."
 msgstr ""
 
-#: includes/export/class-csv-exports.php:418
+#: includes/export/class-csv-exports.php:913
 msgid "This download link has expired. Please run the export again."
 msgstr ""
 
@@ -3583,19 +3786,19 @@ msgstr ""
 msgid "Parent Order ID"
 msgstr ""
 
-#: includes/export/class-subscriptions-csv-exporter.php:298
+#: includes/export/class-subscriptions-csv-exporter.php:336
 msgid "Manual renewal"
 msgstr ""
 
-#: includes/export/class-users-csv-exporter.php:62
+#: includes/export/class-users-csv-exporter.php:63
 msgid "User ID"
 msgstr ""
 
-#: includes/export/class-users-csv-exporter.php:63
+#: includes/export/class-users-csv-exporter.php:64
 msgid "Username"
 msgstr ""
 
-#: includes/export/class-users-csv-exporter.php:64
+#: includes/export/class-users-csv-exporter.php:65
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:136
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:167
 #: dist/audience-wizards.daa24f992bdb0d7f94e5.js:152
@@ -3607,23 +3810,19 @@ msgstr ""
 msgid "Email"
 msgstr ""
 
-#: includes/export/class-users-csv-exporter.php:65
+#: includes/export/class-users-csv-exporter.php:66
 msgid "Display Name"
 msgstr ""
 
-#: includes/export/class-users-csv-exporter.php:66
+#: includes/export/class-users-csv-exporter.php:67
 msgid "First Name"
 msgstr ""
 
-#: includes/export/class-users-csv-exporter.php:67
+#: includes/export/class-users-csv-exporter.php:68
 msgid "Last Name"
 msgstr ""
 
-#: includes/export/class-users-csv-exporter.php:68
-msgid "Roles"
-msgstr ""
-
-#: includes/export/class-users-csv-exporter.php:69
+#: includes/export/class-users-csv-exporter.php:70
 msgid "Registered Date"
 msgstr ""
 
@@ -4752,73 +4951,6 @@ msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:683
 msgid "Purchase"
-msgstr ""
-
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:759
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php:125
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php:632
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php:634
-#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1-passwords.php:239
-#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:463
-#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:549
-#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:900
-#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:936
-#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:990
-#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:1085
-#: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:346
-#: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:372
-#: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:420
-#: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:446
-#: includes/plugins/woocommerce/my-account/templates/v1/group.php:162
-#: includes/plugins/woocommerce/my-account/templates/v1/subscription-header.php:258
-#: includes/reader-activation/class-reader-activation.php:1712
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:16
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:22
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:24
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:30
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:57
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:132
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:144
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:151
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:177
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:184
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:207
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:209
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:220
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:222
-#: dist/billboard.js:1
-#: dist/billboard.js:11
-#: dist/billboard.js:17
-#: dist/commons.js:122
-#: dist/componentsDemo.js:3
-#: dist/componentsDemo.js:4
-#: dist/newsletters-wizards.382667453da35b599ece.js:31
-#: dist/newsletters-wizards.382667453da35b599ece.js:106
-#: dist/newspack-wizards.2521cde1a8728f2525ec.js:5
-#: dist/newspack-wizards.2521cde1a8728f2525ec.js:9
-#: dist/newspack-wizards.2521cde1a8728f2525ec.js:28
-#: dist/newspack-wizards.2521cde1a8728f2525ec.js:32
-#: dist/other-scripts/corrections-modal.js:7
-#: packages/components/dist/cjs/with-wizard/index.js:277
-#: packages/components/dist/esm/with-wizard/index.js:272
-#: packages/components/src/with-wizard/index.js:240
-#: src/other-scripts/corrections-modal/index.js:410
-#: src/wizards/advertising/index.js:240
-#: src/wizards/advertising/index.js:276
-#: src/wizards/advertising/views/placements/index.js:230
-#: src/wizards/advertising/views/providers/index.js:108
-#: src/wizards/audience/components/platform-selection/index.js:189
-#: src/wizards/audience/components/prompt-action-card/index.js:167
-#: src/wizards/audience/components/settings-modal/index.js:177
-#: src/wizards/audience/views/campaigns/campaigns/add-campaign-action.js:63
-#: src/wizards/audience/views/campaigns/campaigns/index.js:287
-#: src/wizards/audience/views/campaigns/contextual-prompts/contextual-prompts-settings.js:109
-#: src/wizards/audience/views/campaigns/segments/single-segment.js:306
-#: src/wizards/audience/views/integrations/enable-modal.js:86
-#: src/wizards/audience/views/integrations/enable-modal.js:106
-#: src/wizards/componentsDemo/index.js:120
-#: src/wizards/componentsDemo/index.js:1171
-msgid "Cancel"
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:1090
@@ -14353,12 +14485,6 @@ msgid "Paused"
 msgstr ""
 
 #: dist/audience-wizards.daa24f992bdb0d7f94e5.js:221
-#: dist/subscribers.js:14
-#: src/wizards/subscribers/screens/GroupList.jsx:177
-msgid "Created"
-msgstr ""
-
-#: dist/audience-wizards.daa24f992bdb0d7f94e5.js:221
 msgid "Pause"
 msgstr ""
 
@@ -14612,13 +14738,6 @@ msgstr ""
 #: dist/billboard.js:4
 #: src/wizards/advertising/components/placement-control/index.js:50
 msgid "Select an Ad Unit"
-msgstr ""
-
-#. Translators: 1 is ad unit name and 2 is ad unit id.
-#: dist/billboard.js:7
-#: src/wizards/advertising/components/placement-control/index.js:57
-#, js-format
-msgid "%1$s (%2$s)"
 msgstr ""
 
 #. translators: %s: bidder name.
