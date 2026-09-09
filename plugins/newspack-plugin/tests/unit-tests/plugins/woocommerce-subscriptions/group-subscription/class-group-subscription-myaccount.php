@@ -877,33 +877,22 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A per-seat group's owner is paying per seat, so the page says how many of the
-	 * seats they bought are in use. Both numbers count the owner and every invitation
-	 * still holding a seat -- the same measure "Change seats" is judged against.
+	 * Rename and "View subscription" are how an owner gets back to a group whose
+	 * subscription has lapsed, so they render whatever the status; only inviting is
+	 * tied to an active group.
 	 */
-	public function test_group_page_shows_the_seat_count_for_a_per_seat_group() {
+	public function test_group_page_keeps_rename_and_view_subscription_when_on_hold() {
 		$owner_id = $this->create_reader_user();
-		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		$sub      = $this->create_group_subscription( $owner_id );
+		$sub->update_status( 'on-hold' );
+		$sub->save();
 		wp_set_current_user( $owner_id );
 
 		$html = $this->render_group_page( $sub );
 
-		// The fixture's line item holds 4 seats, and the owner alone occupies one.
-		$this->assertStringContainsString( '1 of 4 seats', $html );
-	}
-
-	/**
-	 * A flat group's price covers the whole group however many people are in it, so
-	 * there are no seats to report and the page is left as it was.
-	 */
-	public function test_group_page_shows_no_seat_count_for_a_flat_group() {
-		$owner_id = $this->create_reader_user();
-		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_TEAM );
-		wp_set_current_user( $owner_id );
-
-		$html = $this->render_group_page( $sub );
-
-		$this->assertStringNotContainsString( 'newspack-my-account__group--seats', $html );
+		$this->assertStringContainsString( 'newspack-my-account__group--rename', $html );
+		$this->assertStringContainsString( 'View subscription', $html );
+		$this->assertStringNotContainsString( 'newspack-my-account__subscription--invite-member', $html );
 	}
 
 	/**

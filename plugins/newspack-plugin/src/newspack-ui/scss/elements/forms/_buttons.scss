@@ -32,6 +32,10 @@
 			margin-bottom: 0;
 		}
 
+		&[role="tab"] {
+			margin-bottom: 0;
+		}
+
 		@media only screen and ( min-width: breakpoints.$tablet_width ) {
 			&:not(.newspack-ui__button--wide) {
 				margin-bottom: 0;
