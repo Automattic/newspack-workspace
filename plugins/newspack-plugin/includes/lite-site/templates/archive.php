@@ -27,13 +27,14 @@ namespace Newspack;
 	<ul class="post-list">
 	<?php
 	foreach ( Lite_Site::get_archive_posts() as $current_post ) {
+		$is_sticky = is_sticky( $current_post->ID );
 		printf(
 			'<li>%s<a href="/%s/%d">%s</a>%s</li>',
-			is_sticky( $current_post->ID ) ? '<h3>' : '',
+			$is_sticky ? '<h3>' : '',
 			esc_attr( Lite_Site::get_url_base() ),
 			esc_attr( $current_post->ID ),
 			esc_html( $current_post->post_title ),
-			is_sticky( $current_post->ID ) ? '</h3>' : ''
+			$is_sticky ? '</h3>' : ''
 		);
 	}
 	?>
