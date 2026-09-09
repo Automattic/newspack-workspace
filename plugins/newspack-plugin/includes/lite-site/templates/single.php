@@ -36,7 +36,7 @@ if ( ! Lite_Site::is_post_accessible( $current_post ) ) {
 			<?php echo wp_kses_post( Lite_Site::get_authors( $current_post ) ); ?>
 		</div>
 		<div class="date">
-			<?php echo get_the_date(); ?>
+			<?php echo esc_html( get_the_date( '', $current_post ) ); ?>
 		</div>
 	</div>
 	<hr class="separator">
