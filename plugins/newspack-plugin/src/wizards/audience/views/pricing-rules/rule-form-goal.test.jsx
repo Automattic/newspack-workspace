@@ -62,8 +62,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 	);
 	const AutocompleteTokenField = ( { label, onChange } ) => <button type="button" onClick={ () => onChange( [ 1 ] ) }>{ `Set ${ label }` }</button>;
 	const history = { push: jest.fn(), replace: jest.fn() };
-	// Mirrors the real hook: `when === false` skips the prompt and runs straight away.
-	const useConfirmDialog = ( { when, message, title, confirmButtonText } ) => {
+	const useConfirmDialog = ( { message, title, confirmButtonText } ) => {
 		const [ pending, setPending ] = useStateMock( null );
 		return {
 			confirmDialog: pending ? (
@@ -83,13 +82,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 					</button>
 				</div>
 			) : null,
-			requestConfirm: callback => {
-				if ( when === false ) {
-					callback();
-				} else {
-					setPending( () => callback );
-				}
-			},
+			requestConfirm: callback => setPending( () => callback ),
 			cancelConfirm: () => setPending( null ),
 		};
 	};
