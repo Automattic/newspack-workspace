@@ -298,8 +298,11 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 		return lost;
 	}, [ recipe, priority, composeMode, dateModes, vocab.conditions ] );
 
+	// No `when`: the hook forwards it to ConfirmDialog, where it means "block
+	// navigation while true", so a Custom rule with its own priority would raise
+	// this dialog on Save's redirect and on the back crumb. requestGoal() decides
+	// whether there is anything to warn about.
 	const { confirmDialog: goalDialog, requestConfirm: requestGoalChange } = useConfirmDialog( {
-		when: goalChangeLosses.length > 0,
 		title: __( 'Change goal?', 'newspack-plugin' ),
 		confirmButtonText: __( 'Change Goal', 'newspack-plugin' ),
 		message: (
@@ -327,6 +330,10 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 
 	const requestGoal = ( next: PricingPath ) => {
 		if ( next === path ) {
+			return;
+		}
+		if ( ! goalChangeLosses.length ) {
+			choosePath( next );
 			return;
 		}
 		requestGoalChange( () => choosePath( next ) );
