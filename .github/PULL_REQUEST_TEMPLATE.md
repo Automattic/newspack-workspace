@@ -1,5 +1,5 @@
 <!-- Contributing guidelines: https://github.com/Automattic/newspack-workspace/blob/main/.github/CONTRIBUTING.md -->
-<!-- Write everything above Technical details for the whole team, including engineers and support. Replace each comment below with the content it describes, or delete it. For anything that is not a fix, use "The need" and "The change" instead of "The problem" and "The fix". -->
+<!-- Write everything above Technical details for the whole team, including engineers and support. Each comment below explains what belongs in its section; follow it, then delete the comment. For anything other than a fix, use "The need" and "The change" instead of "The problem" and "The fix". -->
 
 ## The problem
 
