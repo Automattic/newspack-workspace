@@ -1,23 +1,27 @@
-### All Submissions:
+<!-- Contributing guidelines: https://github.com/Automattic/newspack-workspace/blob/main/.github/CONTRIBUTING.md -->
+<!-- Everything above the Technical details block is for the whole team, engineers and support alike. Each comment says what its section holds; replace it with the section. The headings suit a bugfix; a feature PR uses "The need" and "The change". -->
 
-* [ ] Have you followed the [Newspack Contributing guidelines](https://github.com/Automattic/newspack-workspace/blob/main/.github/CONTRIBUTING.md)?
-* [ ] Does your code follow the [WordPress coding standards](https://make.wordpress.org/core/handbook/best-practices/coding-standards/) and [VIP Go coding standards](https://vip.wordpress.com/documentation/vip-go/code-review-blockers-warnings-notices/)?
-* [ ] Have you checked to ensure there aren't other open [Pull Requests](../../pulls) for the same update/change?
+## The problem
 
-### Changes proposed in this Pull Request:
+<!-- What did not work, or what was missing, in publisher terms: the feature, then what the reader or editor saw. Never why it broke. -->
 
-<!-- Describe the changes made to this Pull Request, and the reason for such changes. -->
+## The fix
+
+<!-- The solution in plain language, then a short "With this change:" list of what now works. No class names, file names, or format specifiers. -->
 
 Closes # .
 
-### How to test the changes in this Pull Request:
+## How to test
+
+<!-- Numbered steps anyone on the team can follow: one action per step, then the expected result. For a fix, reproduce on the base branch first, then verify on this one. A CLI command is fine where that is the honest check. -->
 
 1.
 2.
 3.
 
-### Other information:
+<details>
+<summary><strong>Technical details</strong></summary>
 
-* [ ] Have you added an explanation of what your changes do and why you'd like us to include them?
-* [ ] Have you written new tests for your changes, as applicable?
-* [ ] Have you successfully run tests with your changes locally?
+<!-- Implementation, build commands, CLI reproduction and verification, the tests written and run, and notes for reviewers. End with one line on review: "Self-review: two rounds, clean. Copilot: one pass, three findings addressed." -->
+
+</details>
