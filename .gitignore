@@ -44,3 +44,20 @@ packages/*/package-lock.json
 # Per-checkout personal hooks run by .husky/pre-commit (see AGENTS.md).
 # `*.local*` also covers editor backups like pre-commit.local~ / .local.bak.
 .husky/*.local*
+# Security scan artifacts: findings, patches, and reports from AI security
+# scanners. This repo is public, and deleting a published commit does not
+# undelete it, so the cost of missing one is not symmetric with the cost of an
+# over-wide pattern that silently drops source files.
+#
+# Named rather than globbed, for the reason the `/data` block above records:
+# a broad pattern swallows source directories. These names are specific enough
+# to need no anchor, so unlike `/data` they match at any depth — which is what
+# catches a scan started from inside a plugin directory.
+#
+# `CLAUDE-SECURITY-*` is deliberate belt-and-braces: that scanner fences its own
+# report directory with a `*` .gitignore, so this line is the second layer, and
+# it still covers a run killed before the fence lands. `.codex-security/` has no
+# such fence and this line is its only protection. When adding a scanner, that
+# is the question to ask — does it fence its own output?
+CLAUDE-SECURITY-*
+.codex-security/
