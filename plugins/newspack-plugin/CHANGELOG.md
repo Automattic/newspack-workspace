@@ -1,3 +1,10 @@
+## newspack [6.49.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.3...newspack@6.49.4) (2026-09-09)
+
+
+### Bug Fixes
+
+* **subscriptions:** no renewal messaging for free subscriptions (NPPD-2253, [#1052](https://github.com/Automattic/newspack-workspace/issues/1052)) ([b2a11b2](https://github.com/Automattic/newspack-workspace/commit/b2a11b2f6a9ee84670a73ddbc5b8e8f7f4e164f1))
+
 ## newspack [6.49.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.2...newspack@6.49.3) (2026-09-08)
 
 

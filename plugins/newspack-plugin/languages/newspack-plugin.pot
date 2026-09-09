@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.49.1\n"
+"Project-Id-Version: Newspack 6.49.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-03T08:32:47+00:00\n"
+"POT-Creation-Date: 2026-09-09T08:52:55+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -430,7 +430,7 @@ msgid "Invitations"
 msgstr ""
 
 #: includes/class-newspack-ui.php:980
-#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1165
+#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1167
 #: includes/plugins/woocommerce/class-woocommerce-connection.php:690
 #: includes/plugins/woocommerce/class-woocommerce-connection.php:788
 #: dist/audience-wizards.daa24f992bdb0d7f94e5.js:57
@@ -4189,7 +4189,7 @@ msgid "Every 3 hours"
 msgstr ""
 
 #: includes/optional-modules/class-rss.php:384
-#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1163
+#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1165
 msgid "Daily"
 msgstr ""
 
@@ -4849,40 +4849,40 @@ msgstr ""
 msgid "A payment method was added, but the next payment date could not be scheduled: %s. The next payment date may need setting by hand."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1164
+#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1166
 #: dist/audience-wizards.daa24f992bdb0d7f94e5.js:57
 #: dist/newsletters-wizards.382667453da35b599ece.js:31
 msgid "Weekly"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1166
+#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1168
 #: includes/plugins/woocommerce/class-woocommerce-connection.php:691
 #: includes/plugins/woocommerce/class-woocommerce-connection.php:789
 msgid "Yearly"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1171
+#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1173
 #, php-format
 msgid "%s Days"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1172
+#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1174
 #, php-format
 msgid "%s Weeks"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1173
+#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1175
 #, php-format
 msgid "%s Months"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1174
+#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1176
 #, php-format
 msgid "%s Years"
 msgstr ""
 
 #. translators: 1: Subscription interval. 2: Subscription period.
-#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1188
+#: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1190
 #, php-format
 msgid "%1$s %2$ss"
 msgstr ""
