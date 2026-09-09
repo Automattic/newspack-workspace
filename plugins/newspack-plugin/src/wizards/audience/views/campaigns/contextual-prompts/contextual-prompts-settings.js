@@ -16,6 +16,8 @@ import { useEffect, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import {
+	Card,
+	CardBody,
 	Notice,
 	Spinner,
 	TextControl,
@@ -99,27 +101,31 @@ const ControlPreview = ( { enabled, interval } ) => {
 	}
 
 	return (
-		<div>
-			<p style={ { margin: '0 0 8px', fontWeight: 600 } }>{ __( 'Stories that will show the control copy', 'newspack-plugin' ) }</p>
-			{ loading && <Spinner /> }
-			{ ! loading && ! posts.length && (
-				<p style={ { margin: 0 } }>{ __( 'No published stories with a Contextual Prompt match this interval yet.', 'newspack-plugin' ) }</p>
-			) }
-			{ ! loading && posts.length > 0 && (
-				<ul style={ { margin: 0, paddingLeft: '1.2em' } }>
-					{ posts.map( post => (
-						<li key={ post.id }>
-							<a href={ post.edit_link }>{ post.title || `#${ post.id }` }</a>
-						</li>
-					) ) }
-				</ul>
-			) }
-			{ posts.length >= limit && (
-				<p style={ { margin: '8px 0 0' } }>
-					{ sprintf( /* translators: %d: row cap */ __( 'Showing the %d most recent.', 'newspack-plugin' ), limit ) }
-				</p>
-			) }
-		</div>
+		<Card>
+			<CardBody>
+				<p style={ { margin: '0 0 8px', fontWeight: 600 } }>{ __( 'Articles that show control copy', 'newspack-plugin' ) }</p>
+				{ loading && <Spinner /> }
+				{ ! loading && ! posts.length && (
+					<p style={ { margin: 0 } }>
+						{ __( 'No published stories with a Contextual Prompt match this interval yet.', 'newspack-plugin' ) }
+					</p>
+				) }
+				{ ! loading && posts.length > 0 && (
+					<ul>
+						{ posts.map( post => (
+							<li key={ post.id }>
+								<a href={ post.edit_link }>{ post.title || `#${ post.id }` }</a>
+							</li>
+						) ) }
+					</ul>
+				) }
+				{ posts.length >= limit && (
+					<p style={ { margin: '8px 0 0' } }>
+						{ sprintf( /* translators: %d: row cap */ __( 'Showing the %d most recent.', 'newspack-plugin' ), limit ) }
+					</p>
+				) }
+			</CardBody>
+		</Card>
 	);
 };
 
