@@ -336,9 +336,12 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 
 	/**
 	 * A reader who already has the access the link offers is told to sign in, rather
-	 * than shown a dead end they cannot act on.
+	 * than shown a dead end they cannot act on — and the source invitation is spent,
+	 * because the address already holds what it offers. Nothing else closes the row on
+	 * this path: removing a member cancels no invites, so neither listener ever fires
+	 * for it, and a pending row would re-admit a reader the manager removed.
 	 */
-	public function test_an_existing_member_is_told_to_sign_in() {
+	public function test_an_existing_member_is_told_to_sign_in_and_spends_the_invitation() {
 		$member_email = 'already-in@test.com';
 		$owner        = $this->create_reader();
 		$member       = $this->create_reader( $member_email );
@@ -348,19 +351,97 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		// membership check running first, the reuse path would hand it straight back.
 		Group_Subscription_Invite::generate_invite( $subscription, $member_email, false );
 		Group_Subscription::update_members( $subscription, [ $member ] );
-		$this->create_team_invitation( $team_id, $member_email, 'tok-member' );
+		$invitation_id = $this->create_team_invitation( $team_id, $member_email, 'tok-member' );
 
 		$result = Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-member' );
 
 		$this->assertWPError( $result, 'A reader who is already a member must not be handed an invite.' );
 		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_SIGN_IN, $result->get_error_code(), 'A signed-out member needs the sign-in message, not the generic one.' );
+		$this->assertSame( 'wcmti-accepted', get_post( $invitation_id )->post_status, 'An address that already holds what the link offers has spent it.' );
+
+		// The manager changes their mind.
+		Group_Subscription::update_members( $subscription, [], [ $member ] );
+
+		$second = Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-member' );
+		$this->assertWPError( $second, 'A removed reader must not re-admit themselves with the original link.' );
+		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_INVALID, $second->get_error_code() );
 	}
 
 	/**
-	 * The invite the reader is sent to is addressed with the casing the invite was
-	 * stored under, not the casing on the Teams invitation row. The acceptance handler
-	 * compares the two strictly, so the difference is a dead end rather than a
-	 * cosmetic mismatch — the exact failure this route exists to remove.
+	 * The membership that decides this is the invited address's, and the visitor
+	 * holding the link is that reader only when they are signed in as them. Somebody
+	 * else following a forwarded invitation gets the dead-link message: "you already
+	 * have access" would be false for them, and would confirm that the invited address
+	 * holds an account in this group.
+	 */
+	public function test_the_already_a_member_message_is_only_for_the_invited_reader() {
+		$owner        = $this->create_reader();
+		$team_id      = $this->create_team( $owner );
+		$subscription = $this->create_migrated_group_subscription( $owner, $team_id );
+		$invitee      = $this->create_reader( 'invited-member@test.com' );
+		$other_member = $this->create_reader( 'other-member@test.com' );
+		$bystander    = $this->create_reader();
+		Group_Subscription::update_members( $subscription, [ $invitee, $other_member ] );
+		// Two rows, for two addresses: resolving one spends every pending invitation
+		// for its address, so a single row could not carry both halves.
+		$this->create_team_invitation( $team_id, 'invited-member@test.com', 'tok-own' );
+		$this->create_team_invitation( $team_id, 'other-member@test.com', 'tok-forwarded' );
+
+		wp_set_current_user( $invitee );
+		$own = Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-own' );
+		wp_set_current_user( $bystander );
+		$forwarded = Group_Subscription_Teams_Invite::resolve_invitation_token( 'tok-forwarded' );
+		wp_set_current_user( 0 );
+
+		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_MEMBER, $own->get_error_code(), 'The invited reader is told they already have access.' );
+		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_INVALID, $forwarded->get_error_code(), 'Anyone else holding the link is not told whose account it is.' );
+	}
+
+	/**
+	 * The rule this asserts on can only exist while the endpoint is registered, and
+	 * WooCommerce is what registers it. Without that floor, a site where the rule can
+	 * never appear — WooCommerce inactive, or a slug collision that made
+	 * add_query_var() stand down — regenerates the whole rule set on every request,
+	 * indefinitely.
+	 */
+	public function test_rewrite_rules_flush_only_when_the_endpoint_is_registered() {
+		global $wp_rewrite;
+		$original_endpoints = $wp_rewrite->endpoints;
+		$flushes            = 0;
+		$count_flushes      = function ( $value ) use ( &$flushes ) {
+			$flushes++;
+			return $value;
+		};
+		update_option( 'rewrite_rules', [ 'sentinel/?$' => 'index.php?sentinel=1' ] );
+		add_filter( 'pre_update_option_rewrite_rules', $count_flushes );
+
+		$wp_rewrite->endpoints = [];
+		$flushes               = 0;
+		Group_Subscription_Teams_Invite::maybe_flush_rewrite_rules();
+		$this->assertSame( 0, $flushes, 'An endpoint nothing registered can never reach the stored rules, so asserting it would flush forever.' );
+
+		// An entry of places, name and query var, as WooCommerce leaves it after add_endpoints().
+		$wp_rewrite->endpoints = [ [ EP_PAGES, 'join-team', 'join-team' ] ];
+		$flushes               = 0;
+		Group_Subscription_Teams_Invite::maybe_flush_rewrite_rules();
+		$this->assertSame( 1, $flushes, 'A registered endpoint missing from the stored rules must flush.' );
+
+		remove_filter( 'pre_update_option_rewrite_rules', $count_flushes );
+		update_option( 'rewrite_rules', [ 'my-account/join-team(/(.*))?/?$' => 'index.php?pagename=my-account&newspack_join_team=$matches[2]' ] );
+		add_filter( 'pre_update_option_rewrite_rules', $count_flushes );
+		$flushes = 0;
+		Group_Subscription_Teams_Invite::maybe_flush_rewrite_rules();
+		$this->assertSame( 0, $flushes, 'A rule already in the stored set is the whole point of the check.' );
+
+		remove_filter( 'pre_update_option_rewrite_rules', $count_flushes );
+		$wp_rewrite->endpoints = $original_endpoints;
+	}
+
+	/**
+	 * The URL the reader is handed carries the address the invite was stored under, not
+	 * the casing on the Teams invitation row. That address is the one an account gets
+	 * created under when the invitee is new to the site, so the two are not
+	 * interchangeable even though acceptance matches them case-insensitively.
 	 */
 	public function test_reused_invite_is_addressed_with_its_stored_casing() {
 		$owner        = $this->create_reader();
@@ -376,16 +457,13 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		$args = $this->query_args_of( $url );
 
 		$this->assertSame( 'Reader@Example.test', $args['email'], 'The stored address must survive into the URL.' );
-		$this->assertTrue(
-			Group_Subscription_Invite::accept_invite( $subscription, $args['key'], $args['email'] ),
-			'The URL the reader is handed must be one the acceptance handler accepts.'
-		);
 	}
 
 	/**
 	 * The prefix is the only thing telling an email-bound invitation from a team's open
-	 * registration key, so this split decides which resolver a reader reaches. Both
-	 * resolvers are tested directly, which leaves the dispatch itself unpinned.
+	 * registration key. This pins the dispatch it decides: each token kind reaches its
+	 * own resolver, and the prefix is stripped rather than merely detected — the bare
+	 * form of an invitation token is a registration key, and must not resolve as one.
 	 */
 	public function test_token_prefix_decides_which_resolver_runs() {
 		$owner        = $this->create_reader();
@@ -398,9 +476,7 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 
 		$this->assertSame( Group_Subscription_Invite::QUERY_ARG, $this->query_args_of( $invitation_url )['action'], 'An i_-prefixed token is an invitation.' );
 		$this->assertSame( Group_Subscription_Invite::LINK_QUERY_ARG, $this->query_args_of( $registration_url )['action'], 'A bare token is a registration key.' );
-		// The prefix is stripped, not merely detected: the bare form of an invitation
-		// token is a registration key, and must not resolve as one.
-		$this->assertWPError( Group_Subscription_Teams_Invite::resolve_token( 'inv-tok-dispatch' ) );
+		$this->assertWPError( Group_Subscription_Teams_Invite::resolve_token( 'inv-tok-dispatch' ), 'The bare form of an invitation token is not a registration key.' );
 	}
 
 	/**
@@ -457,17 +533,17 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 
 	/**
 	 * An absent invite link means either "never had one" or "the owner disabled it",
-	 * and delete_link_invite() leaves nothing to tell them apart. Minting into the
-	 * second puts a revoked link back into circulation for everyone still holding an
-	 * old registration URL.
+	 * and delete_link_invite() removes the entry outright. Minting into the second puts
+	 * a revoked link back into circulation for everyone still holding an old
+	 * registration URL, so the withdrawal is what has to be recorded — whichever side
+	 * minted the link. Post-flip the group panel is where owners manage these, so the
+	 * link this seeds is minted there rather than through the route.
 	 */
 	public function test_a_disabled_invite_link_is_not_re_minted() {
 		$owner        = $this->create_reader();
 		$team_id      = $this->create_team( $owner, 'reg-key-revoke' );
 		$subscription = $this->create_migrated_group_subscription( $owner, $team_id );
-
-		$first = Group_Subscription_Teams_Invite::resolve_registration_token( 'reg-key-revoke' );
-		$this->assertIsString( $first, 'A group with no link yet gets one minted.' );
+		$this->assertNotWPError( Group_Subscription_Invite::generate_link_invite( $subscription, $owner ), 'Fixture: the owner mints a link in the group panel.' );
 
 		// The owner uses the Disable control.
 		Group_Subscription_Invite::delete_link_invite( $subscription, $owner );
@@ -476,6 +552,11 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		$this->assertWPError( $result, 'A revoked link must stay revoked.' );
 		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_INVALID, $result->get_error_code() );
 		$this->assertNull( Group_Subscription_Invite::get_link_invite( $subscription ), 'Nothing should have been minted.' );
+
+		// Minting again is the owner's own decision, and it supersedes the withdrawal:
+		// the marker must not outlive the link it was recorded against.
+		$this->assertNotWPError( Group_Subscription_Invite::generate_link_invite( $subscription, $owner ) );
+		$this->assertIsString( Group_Subscription_Teams_Invite::resolve_registration_token( 'reg-key-revoke' ), 'A link minted again must resolve.' );
 	}
 
 	/**

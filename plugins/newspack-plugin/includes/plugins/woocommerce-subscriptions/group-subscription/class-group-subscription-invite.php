@@ -79,6 +79,19 @@ class Group_Subscription_Invite {
 	const LINK_META = 'newspack_group_subscription_link_invites';
 
 	/**
+	 * The subscription meta key recording that the group's invite link was withdrawn.
+	 * Stored as the withdrawal timestamp.
+	 *
+	 * An absent link cannot otherwise be told from one that was never minted, because
+	 * delete_link_invite() removes the entry outright. Only the withdrawal knows the
+	 * difference, so it is what records it — and a caller minting a link on a reader's
+	 * behalf can then refuse to put a withdrawn one back into circulation.
+	 *
+	 * @var string
+	 */
+	const LINK_REVOKED_META = 'newspack_group_subscription_link_invites_revoked';
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -416,6 +429,8 @@ class Group_Subscription_Invite {
 		];
 
 		$subscription->update_meta_data( self::LINK_META, $entry );
+		// A fresh link supersedes any earlier withdrawal.
+		$subscription->delete_meta_data( self::LINK_REVOKED_META );
 		$subscription->save();
 
 		return array_merge(
@@ -458,11 +473,31 @@ class Group_Subscription_Invite {
 			return true;
 		}
 
-		// Delete rather than store an empty array, so a disabled link is indistinguishable from one
-		// that never existed. This clears a legacy subscription's per-manager keys in one go.
+		// Delete rather than store an empty array: a disabled link and one that never
+		// existed read the same from this meta. The withdrawal is recorded separately,
+		// below, which is what lets a caller minting on a reader's behalf tell them
+		// apart. This clears a legacy subscription's per-manager keys in one go.
 		$subscription->delete_meta_data( self::LINK_META );
+		// Record the withdrawal alongside the removal: this is the only path that knows
+		// the absent link was disabled rather than never minted.
+		$subscription->update_meta_data( self::LINK_REVOKED_META, time() );
 		$subscription->save();
 		return true;
+	}
+
+	/**
+	 * Whether the group's invite link was withdrawn, rather than never minted.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return bool
+	 */
+	public static function link_invite_was_revoked( $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return false;
+		}
+		return ! empty( $subscription->get_meta( self::LINK_REVOKED_META, true ) );
 	}
 
 	/**

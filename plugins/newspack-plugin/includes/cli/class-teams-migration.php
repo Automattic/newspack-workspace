@@ -1760,9 +1760,8 @@ class Teams_Migration {
 	 * Teams plugin being active. Malformed addresses are dropped and case variants of one
 	 * mailbox dedupe to a single entry (first one wins) — matching the case-insensitive
 	 * already-invited gate the invite layer applies. The address itself is returned in its
-	 * original casing: the acceptance handler compares it strictly against the reader's
-	 * stored `user_email`, so lowercasing it would strand every invitee whose account
-	 * email carries uppercase characters. Exposed for testing.
+	 * original casing: it is what gets stored on the invite and emailed, and what an
+	 * account is created under when the invitee is new to the site. Exposed for testing.
 	 *
 	 * The `post_status` query filter only narrows the result when the status is
 	 * registered: WooCommerce Teams registers `wcmti-pending` on `init`, so during a
