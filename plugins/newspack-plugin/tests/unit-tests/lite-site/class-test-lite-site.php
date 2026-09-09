@@ -196,6 +196,49 @@ class Test_Lite_Site extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that more than five sticky posts all render first.
+	 */
+	public function test_archive_posts_hoist_all_sticky_posts() {
+		$sticky_ids = [];
+		for ( $i = 1; $i <= 6; $i++ ) {
+			$sticky_ids[] = $this->factory()->post->create(
+				[
+					'post_status' => 'publish',
+					'post_date'   => sprintf( '2020-01-%02d 10:00:00', $i ),
+				]
+			);
+		}
+		$newest_id = $this->factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_option( 'sticky_posts', $sticky_ids );
+
+		$ids = wp_list_pluck( Lite_Site::get_archive_posts(), 'ID' );
+
+		$this->assertEqualsCanonicalizing( $sticky_ids, array_slice( $ids, 0, 6 ) );
+		$this->assertSame( $newest_id, $ids[6] );
+	}
+
+	/**
+	 * Test that sticky posts respect the categories setting.
+	 */
+	public function test_archive_posts_sticky_respect_categories() {
+		$category_id    = $this->factory()->category->create();
+		$in_category_id = $this->factory()->post->create(
+			[
+				'post_status'   => 'publish',
+				'post_category' => [ $category_id ],
+			]
+		);
+		$sticky_other_category_id = $this->factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_option( 'sticky_posts', [ $sticky_other_category_id ] );
+		update_option( Lite_Site::OPTION_NAME, [ 'categories' => [ $category_id ] ] );
+
+		$ids = wp_list_pluck( Lite_Site::get_archive_posts(), 'ID' );
+
+		$this->assertContains( $in_category_id, $ids );
+		$this->assertNotContains( $sticky_other_category_id, $ids );
+	}
+
+	/**
 	 * Test that a revision is not accessible.
 	 */
 	public function test_revision_is_not_accessible() {

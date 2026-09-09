@@ -397,10 +397,10 @@ class Lite_Site {
 		$sticky_post_ids_option = get_option( 'sticky_posts' );
 		if ( ! empty( $sticky_post_ids_option ) ) {
 			$sticky_posts = get_posts(
-				[
-					'post__in'     => array_values( $sticky_post_ids_option ),
-					'has_password' => false,
-				]
+				array_merge(
+					$query_args,
+					[ 'post__in' => array_values( $sticky_post_ids_option ) ]
+				)
 			);
 		}
 
