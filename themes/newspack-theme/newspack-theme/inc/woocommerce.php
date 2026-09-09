@@ -46,9 +46,7 @@ add_action( 'after_setup_theme', 'newspack_woocommerce_setup' );
  */
 function newspack_request_needs_woocommerce_styles(): bool {
 	// Nothing below can be true without WooCommerce: no native route matches and
-	// no WooCommerce markup renders, so the stylesheet would style nothing. This
-	// also keeps the detector's content scan off every front-end request on the
-	// sites that can never need it.
+	// no WooCommerce markup renders, so the stylesheet would style nothing.
 	if ( ! function_exists( 'is_woocommerce' ) ) {
 		return false;
 	}
