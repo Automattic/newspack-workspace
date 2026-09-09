@@ -210,6 +210,7 @@ class Content_Gate {
 		include __DIR__ . '/class-premium-newsletters.php';
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
+		include __DIR__ . '/class-email-verification-prompt.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
@@ -1414,6 +1415,12 @@ class Content_Gate {
 	/**
 	 * Whether the post is restricted for the current user.
 	 *
+	 * Callbacks on `newspack_is_post_restricted` may run inside a hypothetical replay
+	 * asking what a reader would see if they verified their email address. A callback
+	 * that branches on verification state, or that memoises anything derived from it,
+	 * must check `Access_Rules::is_verification_assumed_for()` — the reader is not
+	 * verified, and a value cached from that answer would be read back later as fact.
+	 *
 	 * @param int $post_id Post ID.
 	 *
 	 * @return int|bool Gate ID restricting the post, false if not restricted, or true if restricted by a Woo Memberships plan.
@@ -1963,7 +1970,9 @@ class Content_Gate {
 	 *
 	 * @param \WP_Post $post Post object.
 	 *
-	 * @return string
+	 * @return string Rendered excerpt HTML. Already through the `newspack_gate_content`
+	 *                pipeline: callers must not apply that filter again, or blocks get
+	 *                re-rendered and shortcodes re-expanded over the rendered output.
 	 */
 	public static function get_restricted_post_excerpt( $post ) {
 		self::$is_gated = true;
