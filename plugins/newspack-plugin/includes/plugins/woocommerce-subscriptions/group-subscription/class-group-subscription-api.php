@@ -37,7 +37,7 @@ class Group_Subscription_API {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_search_users' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'admin_permission_callback' ],
 				'args'                => [
 					'search'          => [
 						'type'              => 'string',
@@ -184,16 +184,42 @@ class Group_Subscription_API {
 	/**
 	 * Permission callback for managing group subscriptions.
 	 *
+	 * Shared by every route in the namespace apart from the member search, which
+	 * answers about the site's user records instead and uses
+	 * {@see self::admin_permission_callback()}.
+	 *
 	 * @param \WP_REST_Request $request The request object.
-	 * @return bool Whether the user has permission to invite to the group subscription.
+	 * @return bool Whether the caller may manage the subscription named in the request.
 	 */
 	public static function permission_callback( $request ) {
+		// Neither branch below can legitimately pass for an anonymous caller, so this
+		// turns away nothing that works today. It is the boundary at which a regression
+		// in either branch would otherwise become an unauthenticated grant.
+		if ( ! is_user_logged_in() ) {
+			return false;
+		}
 		$subscription_id = $request->get_param( 'subscription_id' );
 		$subscription    = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
 		if ( ! $subscription ) {
 			return false;
 		}
 		return current_user_can( 'manage_woocommerce' ) || Group_Subscription::user_is_manager( get_current_user_id(), $subscription );
+	}
+
+	/**
+	 * Permission callback for routes that answer about the site's user records rather
+	 * than about the subscription named in the request.
+	 *
+	 * Managing a group authorizes the caller for that subscription, which is not the
+	 * same object. Store staff are the only callers with a UI for these routes: the
+	 * subscription admin metabox calls them, while the reader-facing My Account bundle
+	 * uses /invite-link and /name.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return bool Whether the caller may search the site's readers.
+	 */
+	public static function admin_permission_callback( $request ) {
+		return current_user_can( 'manage_woocommerce' ) && self::permission_callback( $request );
 	}
 
 	/**

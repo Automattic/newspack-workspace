@@ -156,14 +156,21 @@ if ( ! function_exists( 'newspack_posted_by' ) ) :
 	}
 endif;
 
-if ( ! function_exists( 'newspack_post_subtitle' ) ) :
+if ( ! function_exists( 'newspack_get_post_subtitle_allowed_tags' ) ) :
 	/**
-	 * Prints the post subtitle.
+	 * Inline tags a post subtitle may carry.
+	 *
+	 * This list gates storage as well as rendering, so it is the union of what the
+	 * subtitle's render paths allow -- a narrower list here would strip attributes a
+	 * renderer still supports. Newspack Blocks' homepage-articles template is what
+	 * contributes target and rel.
+	 *
+	 * TODO: Keep in sync with SUBTITLE_ALLOWED_TAGS in js/src/post-subtitle/utils.js.
+	 *
+	 * @return array Allowed tags in wp_kses() form.
 	 */
-	function newspack_post_subtitle() {
-		$subtitle = get_post_meta( get_the_ID(), 'newspack_post_subtitle', true );
-		// TODO: Keep in sync with SUBTITLE_ALLOWED_TAGS in js/src/post-subtitle/utils.js.
-		$subtitle_allowed_tags = array(
+	function newspack_get_post_subtitle_allowed_tags() {
+		return array(
 			'b'      => true,
 			'strong' => true,
 			'i'      => true,
@@ -174,11 +181,39 @@ if ( ! function_exists( 'newspack_post_subtitle' ) ) :
 			'sub'    => true,
 			'sup'    => true,
 			'a'      => array(
-				'href' => true,
+				'href'   => true,
+				'target' => true,
+				'rel'    => true,
 			),
 		);
+	}
+endif;
+
+if ( ! function_exists( 'newspack_sanitize_post_subtitle' ) ) :
+	/**
+	 * Sanitizes a post subtitle on write.
+	 *
+	 * Registered as the meta key's sanitize_callback so every writer inherits it: REST,
+	 * the block editor, the classic custom-fields box and direct update_post_meta()
+	 * calls alike. Post meta is the one carrier of user content kses does not filter by
+	 * default, and a consumer that renders the value as markup has no other guard.
+	 *
+	 * @param string $subtitle Raw subtitle.
+	 * @return string Subtitle limited to the allowed inline tags.
+	 */
+	function newspack_sanitize_post_subtitle( $subtitle ) {
+		return wp_kses( (string) $subtitle, newspack_get_post_subtitle_allowed_tags() );
+	}
+endif;
+
+if ( ! function_exists( 'newspack_post_subtitle' ) ) :
+	/**
+	 * Prints the post subtitle.
+	 */
+	function newspack_post_subtitle() {
+		$subtitle = get_post_meta( get_the_ID(), 'newspack_post_subtitle', true );
 		if ( $subtitle ) :
-			return wptexturize( wp_kses( $subtitle, $subtitle_allowed_tags ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			return wptexturize( newspack_sanitize_post_subtitle( $subtitle ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		endif;
 	}
 endif;

@@ -1,3 +1,32 @@
+# newspack [6.50.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.5...newspack@6.50.0) (2026-09-09)
+
+
+### Features
+
+* **export:** add an options dialog to the CSV exports (NPPD-2231, [#1001](https://github.com/Automattic/newspack-workspace/issues/1001)) ([9bbe43b](https://github.com/Automattic/newspack-workspace/commit/9bbe43be498485782b292fd8b4119c3f7ad16317))
+
+## newspack [6.49.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.4...newspack@6.49.5) (2026-09-09)
+
+
+### Bug Fixes
+
+* **lite-site:** harden and correct the built-in lite site (NPPM-3374) ([#1053](https://github.com/Automattic/newspack-workspace/issues/1053)) ([0a66701](https://github.com/Automattic/newspack-workspace/commit/0a6670123dc738f48ba530d7f521ed5cc1f5531f))
+
+## newspack [6.49.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.3...newspack@6.49.4) (2026-09-09)
+
+
+### Bug Fixes
+
+* **subscriptions:** no renewal messaging for free subscriptions (NPPD-2253, [#1052](https://github.com/Automattic/newspack-workspace/issues/1052)) ([b2a11b2](https://github.com/Automattic/newspack-workspace/commit/b2a11b2f6a9ee84670a73ddbc5b8e8f7f4e164f1))
+
+## newspack [6.49.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.2...newspack@6.49.3) (2026-09-08)
+
+
+### Bug Fixes
+
+* improve scraper handling on share urls ([5867c33](https://github.com/Automattic/newspack-workspace/commit/5867c33d50e3fd4753365a7392d1df14850b9c35))
+* **reader-activation:** restore the Newsletter Selection ESP field ([#1018](https://github.com/Automattic/newspack-workspace/issues/1018)) ([6a89410](https://github.com/Automattic/newspack-workspace/commit/6a89410e942413c81f5881da4723d97b2666032e))
+
 ## newspack [6.49.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.1...newspack@6.49.2) (2026-09-03)
 
 

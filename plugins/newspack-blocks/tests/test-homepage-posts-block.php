@@ -27,6 +27,8 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			}
 		}
 		$this->registered_post_types = [];
+		self::reset_dedup_globals();
+		wp_reset_postdata();
 		parent::tear_down();
 	}
 
@@ -69,6 +71,121 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Clear the request-scoped deduplication globals between tests.
+	 */
+	private static function reset_dedup_globals() {
+		unset( $GLOBALS['newspack_blocks_post_id'], $GLOBALS['newspack_blocks_all_specific_posts_ids'], $GLOBALS['newspack_blocks_hpb_all_blocks'] );
+	}
+
+	/**
+	 * Create published posts and a page holding two Content Loop blocks of one
+	 * post each, and make that page the current post.
+	 *
+	 * @param int $posts_count How many posts to create.
+	 * @return WP_Post The page.
+	 */
+	private function create_dedup_page( $posts_count = 3 ) {
+		self::reset_dedup_globals();
+		for ( $i = 0; $i < $posts_count; $i++ ) {
+			self::factory()->post->create(
+				[
+					'post_status' => 'publish',
+					'post_date'   => gmdate( 'Y-m-d H:i:s', time() - ( $i + 1 ) * HOUR_IN_SECONDS ),
+				]
+			);
+		}
+		$block   = '<!-- wp:newspack-blocks/homepage-articles {"postsToShow":1} /-->';
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => $block . "\n" . $block,
+			]
+		);
+		$GLOBALS['post'] = get_post( $page_id );
+		setup_postdata( $GLOBALS['post'] );
+		return $GLOBALS['post'];
+	}
+
+	/**
+	 * Apply `the_content` to a post and return the IDs the pass has marked as rendered.
+	 *
+	 * @param WP_Post $post The post.
+	 * @return int[] Deduplicated post IDs after the pass.
+	 */
+	private function render_pass( $post ) {
+		apply_filters( 'the_content', $post->post_content );
+		return array_keys( (array) ( $GLOBALS['newspack_blocks_post_id'] ?? [] ) );
+	}
+
+	/**
+	 * Make the request look like wp-admin, where `is_admin()` is true.
+	 */
+	private function enter_admin() {
+		if ( ! function_exists( 'set_current_screen' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-wp-screen.php';
+			require_once ABSPATH . 'wp-admin/includes/screen.php';
+		}
+		set_current_screen( 'edit-page' );
+		self::assertTrue( is_admin(), 'The request is treated as an admin request.' );
+	}
+
+	/**
+	 * On the front end, deduplication accumulates for the whole request, so a
+	 * second pass over the same content excludes what the first one rendered.
+	 */
+	public function test_dedup_state_is_kept_across_render_passes_on_front_end() {
+		$page = $this->create_dedup_page();
+		self::assertFalse( Newspack_Blocks::should_reset_deduplication_per_render_pass() );
+
+		$first = $this->render_pass( $page );
+		self::assertCount( 2, $first, 'Two blocks of one post each render two distinct posts.' );
+
+		$second = $this->render_pass( $page );
+		self::assertCount( 3, $second, 'The second pass keeps excluding the posts the first pass rendered.' );
+	}
+
+	/**
+	 * Outside the front end (admin, REST, cron, CLI) every top-level pass starts
+	 * from scratch, so re-rendering the same content returns the same posts.
+	 */
+	public function test_dedup_state_resets_per_render_pass_outside_front_end() {
+		$this->enter_admin();
+		$page = $this->create_dedup_page();
+		self::assertTrue( Newspack_Blocks::should_reset_deduplication_per_render_pass() );
+
+		$first = $this->render_pass( $page );
+		self::assertCount( 2, $first, 'Two blocks of one post each render two distinct posts.' );
+
+		$second = $this->render_pass( $page );
+		self::assertSame( $first, $second, 'A second pass over the same content renders the same posts.' );
+	}
+
+	/**
+	 * A `the_content` application nested inside a pass (a Query Loop rendering
+	 * Post Content, for instance) must not wipe the state of the outer pass.
+	 */
+	public function test_nested_content_render_does_not_reset_dedup_state() {
+		$this->enter_admin();
+		$page = $this->create_dedup_page();
+
+		$nested_calls = 0;
+		$nested       = function ( $content ) use ( &$nested_calls ) {
+			if ( 0 === $nested_calls++ ) {
+				apply_filters( 'the_content', '<p>nested</p>' );
+			}
+			return $content;
+		};
+		// After do_blocks (9), so the outer pass has already rendered its blocks.
+		add_filter( 'the_content', $nested, 10 );
+		$ids = $this->render_pass( $page );
+		remove_filter( 'the_content', $nested, 10 );
+
+		self::assertSame( 2, $nested_calls, 'The filter ran for the outer pass and once more for the nested one.' );
+		self::assertCount( 2, $ids, 'The outer pass keeps the posts it rendered before the nested pass.' );
+	}
+
+	/**
 	 * HPB query from attributes.
 	 */
 	public function test_hpb_build_articles_query() {
@@ -98,6 +215,20 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 				],
 				'description'             => 'With custom post type and author',
 				'ignore_tax_query'        => true,
+			],
+			[
+				'block_attributes'        => [
+					'postsToShow' => 3,
+					'moreButton'  => true,
+				],
+				'resulting_query_partial' => [
+					'posts_per_page' => 3,
+					'post_status'    => [ 'publish' ],
+					'post_type'      => [ 'post' ],
+					'tax_query'      => [],
+					'no_found_rows'  => false,
+				],
+				'description'             => 'A More button needs the total to know whether there is a next page',
 			],
 		];
 
@@ -698,5 +829,73 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertStringContainsString( 'PUBLICMARK', $excerpt, 'Public block content must remain in excerpt.' );
 
 		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * The subtitle allowlist keeps the inline formatting an editor may write.
+	 */
+	public function test_sanitize_post_subtitle_keeps_allowed_markup() {
+		self::assertSame(
+			'A <em>real</em> <strong>subtitle</strong>',
+			Newspack_Blocks::sanitize_post_subtitle( 'A <em>real</em> <strong>subtitle</strong>' ),
+			'Allowed inline tags survive sanitization.'
+		);
+		self::assertSame(
+			'<a href="https://example.com" target="_blank" rel="noopener">Link</a>',
+			Newspack_Blocks::sanitize_post_subtitle( '<a href="https://example.com" target="_blank" rel="noopener">Link</a>' ),
+			'A link keeps href, target and rel.'
+		);
+	}
+
+	/**
+	 * Markup outside the allowlist is removed rather than escaped, so nothing reaches
+	 * the editor component that assigns this value as HTML.
+	 */
+	public function test_sanitize_post_subtitle_removes_disallowed_markup() {
+		$sanitized = Newspack_Blocks::sanitize_post_subtitle( '<img src=x onerror="STEAL()">' );
+
+		self::assertStringNotContainsString( '<img', $sanitized, 'A disallowed element is removed.' );
+		self::assertStringNotContainsString( 'STEAL', $sanitized, 'Its handler goes with it.' );
+		self::assertStringNotContainsString(
+			'onmouseover',
+			Newspack_Blocks::sanitize_post_subtitle( '<em onmouseover="STEAL()">hover</em>' ),
+			'An event handler on an allowed element is stripped.'
+		);
+	}
+
+	/**
+	 * The editor endpoint returns the whole registered-meta bag, and the Homepage Posts
+	 * editor component assigns the subtitle as HTML. A value stored while the theme had
+	 * no sanitize_callback is still raw in the database, so the endpoint filters it.
+	 */
+	public function test_editor_posts_endpoint_sanitizes_post_subtitle() {
+		// Registered without a sanitize_callback on purpose: this is the pre-fix theme,
+		// and therefore the state of every subtitle stored before the fix ships.
+		register_post_meta(
+			'post',
+			'newspack_post_subtitle',
+			[
+				'show_in_rest' => true,
+				'single'       => true,
+				'type'         => 'string',
+			]
+		);
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, 'newspack_post_subtitle', '<em>Kept</em><img src=x onerror="STEAL()">' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $post_id, $posts_by_id, 'The endpoint returns the carrier post.' );
+
+		$subtitle = $posts_by_id[ $post_id ]['meta']['newspack_post_subtitle'];
+		self::assertStringNotContainsString( 'onerror', $subtitle, 'The payload does not reach the editor.' );
+		self::assertStringNotContainsString( '<img', $subtitle, 'The disallowed element does not reach the editor.' );
+		self::assertStringContainsString( '<em>Kept</em>', $subtitle, 'Allowed formatting still reaches the editor.' );
+
+		unregister_post_meta( 'post', 'newspack_post_subtitle' );
 	}
 }

@@ -1014,6 +1014,63 @@ class Test_Metering extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The excerpt localized for the frontend metering script leaves the gate content
+	 * pipeline already rendered. Running that pipeline over it again re-renders blocks and
+	 * re-expands shortcodes, and — do_blocks() suppresses wpautop only while block
+	 * delimiters are still there — reflows markup the first pass deliberately spared.
+	 */
+	public function test_metering_excerpt_applies_the_gate_content_filter_once() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 3 ] );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_content' => "<!-- wp:paragraph -->\n<p>First paragraph.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Second paragraph.</p>\n<!-- /wp:paragraph -->",
+			]
+		);
+		$this->post_ids[] = $post_id;
+
+		$layout_id = $this->factory->post->create( [ 'post_type' => Content_Gate::GATE_LAYOUT_CPT ] );
+		$this->post_ids[] = $layout_id;
+		update_post_meta( $layout_id, 'style', 'inline' );
+		update_post_meta( $layout_id, 'use_more_tag', false );
+		update_post_meta( $layout_id, 'visible_paragraphs', 2 );
+
+		$this->go_to( get_permalink( $post_id ) );
+		wp_set_current_user( 0 );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+		add_filter(
+			'newspack_content_gate_post_id',
+			function() use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+		add_filter(
+			'newspack_content_gate_layout_id',
+			function() use ( $layout_id ) {
+				return $layout_id;
+			}
+		);
+
+		$applications        = 0;
+		$count_applications  = function( $content ) use ( &$applications ) {
+			++$applications;
+			return $content;
+		};
+		add_filter( 'newspack_gate_content', $count_applications, 1 );
+
+		try {
+			Metering::enqueue_scripts();
+		} finally {
+			remove_filter( 'newspack_gate_content', $count_applications, 1 );
+		}
+
+		$localized_settings = wp_scripts()->get_data( 'newspack-content-gate-metering', 'data' );
+
+		$this->assertStringContainsString( 'First paragraph.', (string) $localized_settings, 'The metering script should be localized with the restricted post excerpt' );
+		$this->assertSame( 1, $applications, 'The metering excerpt should pass through the newspack_gate_content pipeline exactly once' );
+	}
+
+	/**
 	 * Create a gate the way the wizard does - passing full settings to create_gate() so the
 	 * default layouts are generated against the gate's real metering, not empty defaults.
 	 *
