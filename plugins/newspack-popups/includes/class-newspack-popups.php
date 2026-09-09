@@ -175,6 +175,20 @@ final class Newspack_Popups {
 	}
 
 	/**
+	 * The post being edited, on the editor screen. `get_the_ID()` is set there;
+	 * the query arg is the fallback for the first paint of a new post.
+	 *
+	 * @return int
+	 */
+	private static function get_current_post_id() {
+		$id = (int) get_the_ID();
+		if ( ! $id && isset( $_GET['post'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only id on an admin screen.
+			$id = absint( $_GET['post'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		return $id;
+	}
+
+	/**
 	 * The singular label as the post type declares it, for headings ("Top of
 	 * Post"). Kept as-is: recasing it would mis-case some locales.
 	 *
@@ -935,13 +949,17 @@ final class Newspack_Popups {
 						'newspack-popups',
 						'newspackPopupsContextualPrompt',
 						[
-							'enabled'         => $opted_in,
+							'enabled'            => $opted_in,
 							// The pattern instances the panel inserts and updates.
 							// Reading the id seeds it, so it is only asked for once
 							// the site has opted in.
-							'patternId'       => $opted_in ? Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() : 0,
-							'postTypeLabel'   => self::get_current_post_type_label(),
-							'postTypeHeading' => self::get_current_post_type_heading(),
+							'patternId'          => $opted_in ? Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() : 0,
+							'postTypeLabel'      => self::get_current_post_type_label(),
+							'postTypeHeading'    => self::get_current_post_type_heading(),
+							// Which condition this post's card renders under, so the
+							// editor can say when readers are seeing the control copy.
+							'condition'          => $opted_in ? Newspack_Popups_Contextual_Prompt_Render::get_condition( self::get_current_post_id() ) : '',
+							'controlSettingsUrl' => admin_url( 'admin.php?page=newspack-audience-campaigns#/contextual-prompts' ),
 						]
 					);
 				}

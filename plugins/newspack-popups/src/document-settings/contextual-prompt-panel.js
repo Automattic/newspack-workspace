@@ -14,7 +14,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { createInterpolateElement, useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch, select as coreSelect } from '@wordpress/data';
 import { createBlock } from '@wordpress/blocks';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
@@ -226,6 +226,18 @@ const ContextualPromptPanel = () => {
 				{ error && (
 					<Notice status="error" isDismissible={ false }>
 						{ error }
+					</Notice>
+				) }
+
+				{ promptClientId && 'generic_control' === window.newspackPopupsContextualPrompt?.condition && (
+					<Notice status="info" isDismissible={ false }>
+						{ createInterpolateElement(
+							__(
+								'This prompt is currently showing control test copy to readers. Configure test settings in <a>Contextual Prompts</a>.',
+								'newspack-popups'
+							),
+							{ a: <a href={ window.newspackPopupsContextualPrompt?.controlSettingsUrl || '#' } /> } // eslint-disable-line jsx-a11y/anchor-has-content
+						) }
 					</Notice>
 				) }
 
