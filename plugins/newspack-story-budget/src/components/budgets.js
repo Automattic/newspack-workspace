@@ -49,10 +49,11 @@ const LoadingSpinner = () => (
 );
 
 export default () => {
-	const { view, totalBudgets, isLoading } = useSelect( select => ( {
+	const { view, totalBudgets, isLoading, canManageBudgets } = useSelect( select => ( {
 		view: select( storeNamespace ).getBudgetsView(),
 		totalBudgets: select( storeNamespace ).getBudgetsCount(),
 		isLoading: select( storeNamespace ).isBudgetsLoading(),
+		canManageBudgets: select( storeNamespace ).canManageBudgets(),
 	} ) );
 
 	const { setBudgetsView, setSearching, searchBudgets } = useDispatch( storeNamespace );
@@ -127,20 +128,22 @@ export default () => {
 						__nextHasNoMarginBottom
 					/>
 				</HStack>
-				<div className="newspack-story-budget__budgets-actions__secondary">
-					<ToggleControl
-						label={ __( 'Edit Mode', 'newspack-story-budget' ) }
-						checked={ editMode }
-						onChange={ () => setEditMode( ! editMode ) }
-						__nextHasNoMarginBottom
-					/>
-				</div>
+				{ canManageBudgets && (
+					<div className="newspack-story-budget__budgets-actions__secondary">
+						<ToggleControl
+							label={ __( 'Edit Mode', 'newspack-story-budget' ) }
+							checked={ editMode }
+							onChange={ () => setEditMode( ! editMode ) }
+							__nextHasNoMarginBottom
+						/>
+					</div>
+				) }
 			</HStack>
 			{ isLoading ? (
 				<LoadingSpinner />
 			) : (
 				<VStack className="newspack-story-budget__budgets-list" spacing={ 2 } align="stretch">
-					<BudgetRows allowEdit={ editMode } budgetStatus={ budgetStatus } isSearching={ searchTerm.length > 0 } />
+					<BudgetRows allowEdit={ editMode && canManageBudgets } budgetStatus={ budgetStatus } isSearching={ searchTerm.length > 0 } />
 					{ BUDGET_STATUS.ARCHIVED === budgetStatus && 0 === searchTerm.length && (
 						<Pagination currentPage={ page } totalPages={ totalPages } onPageChange={ setPage } />
 					) }
