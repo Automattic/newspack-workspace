@@ -354,4 +354,35 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 		expect( screen.getByRole( 'link', { name: 'Interval 5, story 1' } ) ).toBeInTheDocument();
 		expect( screen.getAllByRole( 'link' ) ).toHaveLength( 1 );
 	} );
+
+	it( 'shows "500+" and the cap note when the scan hit its limit', async () => {
+		const controlEnabledField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_enabled',
+			label: 'Enable control test',
+			type: 'toggle',
+			value: '1',
+		};
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 0,
+			total: 500,
+			capped: true,
+			posts: [
+				{
+					id: 3,
+					title: 'Local election results',
+					edit_link: 'https://example.test/wp-admin/post.php?post=3&action=edit',
+					permalink: 'https://example.test/?p=3',
+				},
+			],
+		} );
+
+		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
+
+		expect( await screen.findByRole( 'button', { name: 'Load more' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Showing 1 of 500+.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Only the newest 500 stories are scanned.' ) ).toBeInTheDocument();
+	} );
 } );

@@ -67,6 +67,33 @@ const PREVIEW_DEBOUNCE_MS = 400;
 // every "Load more" page.
 const PREVIEW_PATH = '/newspack-popups/v1/contextual-prompt/control-preview';
 
+// A stable id for the preview heading, referenced by the list's
+// aria-labelledby so screen readers announce what the list is for.
+const PREVIEW_HEADING_ID = 'newspack-contextual-prompts-control-preview-heading';
+
+/**
+ * English ordinal suffix for a positive integer, e.g. 2 -> '2nd', 3 -> '3rd'.
+ *
+ * @param {number} n Number to suffix.
+ * @return {string} The number with its ordinal suffix.
+ */
+const ordinal = n => {
+	const remainder100 = n % 100;
+	if ( remainder100 >= 11 && remainder100 <= 13 ) {
+		return `${ n }th`;
+	}
+	switch ( n % 10 ) {
+		case 1:
+			return `${ n }st`;
+		case 2:
+			return `${ n }nd`;
+		case 3:
+			return `${ n }rd`;
+		default:
+			return `${ n }th`;
+	}
+};
+
 /**
  * The published stories that will show the control copy at the current
  * interval, so an admin can see the effect of a value before saving it.
@@ -80,6 +107,8 @@ const PREVIEW_PATH = '/newspack-popups/v1/contextual-prompt/control-preview';
 const ControlPreview = ( { enabled, interval } ) => {
 	const [ posts, setPosts ] = useState( [] );
 	const [ total, setTotal ] = useState( 0 );
+	const [ capped, setCapped ] = useState( false );
+	const [ serverInterval, setServerInterval ] = useState( interval );
 	const [ loading, setLoading ] = useState( true );
 	const [ loadingMore, setLoadingMore ] = useState( false );
 
@@ -98,6 +127,10 @@ const ControlPreview = ( { enabled, interval } ) => {
 				return;
 			}
 			setTotal( response.total || 0 );
+			setCapped( !! response.capped );
+			if ( response.interval ) {
+				setServerInterval( response.interval );
+			}
 			setPosts( previous => ( append ? [ ...previous, ...( response.posts || [] ) ] : response.posts || [] ) );
 		} );
 	};
@@ -140,38 +173,66 @@ const ControlPreview = ( { enabled, interval } ) => {
 			.finally( () => setLoadingMore( false ) );
 	};
 
+	// The heading names the interval actually used by the server, which can
+	// differ from the typed value (e.g. it's out of range and got clamped, or
+	// still debouncing) so the preview never claims an interval it didn't use.
+	const heading =
+		serverInterval && serverInterval !== interval
+			? sprintf(
+					/* translators: %s: e.g. "every 2nd story" */ __( 'Articles that show control copy (%s)', 'newspack-plugin' ),
+					sprintf( /* translators: %s: ordinal, e.g. "2nd" */ __( 'every %s story', 'newspack-plugin' ), ordinal( serverInterval ) )
+			  )
+			: __( 'Articles that show control copy', 'newspack-plugin' );
+
+	const totalDisplay = capped ? __( '500+', 'newspack-plugin' ) : `${ total }`;
+
 	return (
 		<Card>
 			<CardBody>
-				<p style={ { margin: '0 0 8px', fontWeight: 600 } }>{ __( 'Articles that show control copy', 'newspack-plugin' ) }</p>
-				{ loading && <Spinner /> }
-				{ ! loading && ! posts.length && (
-					<p style={ { margin: 0 } }>
-						{ __( 'No published stories with a Contextual Prompt match this interval yet.', 'newspack-plugin' ) }
-					</p>
-				) }
-				{ ! loading && posts.length > 0 && (
-					<ul>
-						{ posts.map( post => (
-							<li key={ post.id }>
-								<a href={ post.edit_link }>{ post.title || `#${ post.id }` }</a>
-							</li>
-						) ) }
-					</ul>
-				) }
-				{ ! loading && hasMore && (
-					<HStack justify="space-between" style={ { marginTop: 8 } }>
-						<span>
-							{ sprintf(
-								/* translators: 1: rows shown, 2: total matching stories */ __( 'Showing %1$d of %2$d.', 'newspack-plugin' ),
-								posts.length,
-								total
-							) }
-						</span>
-						<Button variant="secondary" onClick={ loadMore } isBusy={ loadingMore } disabled={ loadingMore } __next40pxDefaultSize>
-							{ __( 'Load more', 'newspack-plugin' ) }
-						</Button>
-					</HStack>
+				<h3 id={ PREVIEW_HEADING_ID } style={ { margin: '0 0 8px', fontWeight: 600 } }>
+					{ heading }
+				</h3>
+				<div aria-live="polite" aria-busy={ loading || loadingMore }>
+					{ loading && (
+						<>
+							<Spinner />
+							<span className="screen-reader-text">{ __( 'Loading…', 'newspack-plugin' ) }</span>
+						</>
+					) }
+					{ ! loading && ! posts.length && (
+						<p style={ { margin: 0 } }>
+							{ __( 'No published stories with a Contextual Prompt match this interval yet.', 'newspack-plugin' ) }
+						</p>
+					) }
+					{ ! loading && posts.length > 0 && (
+						<ul aria-labelledby={ PREVIEW_HEADING_ID }>
+							{ posts.map( post => (
+								<li key={ post.id }>
+									<a href={ post.edit_link }>{ post.title || `#${ post.id }` }</a>
+								</li>
+							) ) }
+						</ul>
+					) }
+					{ ! loading && hasMore && (
+						<HStack justify="space-between" style={ { marginTop: 8 } }>
+							<span>
+								{ sprintf(
+									/* translators: 1: rows shown, 2: total matching stories, or "500+" when the scan is capped */ __(
+										'Showing %1$d of %2$s.',
+										'newspack-plugin'
+									),
+									posts.length,
+									totalDisplay
+								) }
+							</span>
+							<Button variant="secondary" onClick={ loadMore } isBusy={ loadingMore } disabled={ loadingMore } __next40pxDefaultSize>
+								{ __( 'Load more', 'newspack-plugin' ) }
+							</Button>
+						</HStack>
+					) }
+				</div>
+				{ ! loading && capped && (
+					<p style={ { margin: '8px 0 0', fontSize: '12px' } }>{ __( 'Only the newest 500 stories are scanned.', 'newspack-plugin' ) }</p>
 				) }
 			</CardBody>
 		</Card>
