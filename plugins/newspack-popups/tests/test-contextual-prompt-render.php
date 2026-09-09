@@ -1532,4 +1532,125 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertFalse( Newspack_Popups_Contextual_Prompt_Render::is_control_story( $selected, 5 ) );
 		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
 	}
+
+	/**
+	 * A `"ref":<id>` needle without a delimiter would prefix-match an unrelated
+	 * pattern's ref (core serializes every `core/block` the same way), listing a
+	 * story that will not actually show the prompt. The needle must be anchored
+	 * on both sides of the id.
+	 */
+	public function test_control_preview_does_not_prefix_match_ref() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$other_ref  = $pattern_id * 10 + 1; // Starts with the pattern id's digits, e.g. 12 -> 121.
+		$decoy      = '<!-- wp:block ' . wp_json_encode( [ 'ref' => $other_ref ] ) . ' /-->';
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			]
+		) . ' /-->';
+		$decoy_post = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $decoy,
+			]
+		);
+		$real_post  = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $instance,
+			]
+		);
+
+		// Interval of 1 selects every candidate the SQL scan turns up, so the
+		// assertion is purely about the LIKE needle, not the interval filter.
+		$preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$ids     = wp_list_pluck( $preview, 'id' );
+		$this->assertNotContains( $decoy_post, $ids, 'A post embedding an unrelated ref that starts with the pattern id must not be listed.' );
+		$this->assertContains( $real_post, $ids, 'A post embedding the real pattern instance must be listed.' );
+	}
+
+	/**
+	 * The candidate id scan is cached in a transient keyed on the pattern id,
+	 * so a second preview call within the TTL does not re-run the LIKE scan.
+	 * A row is inserted straight into `wp_posts`, bypassing `wp_insert_post()`
+	 * and therefore the `save_post` invalidation hook, so the only way it
+	 * could appear in the second call's result is a re-run of the query.
+	 */
+	public function test_control_preview_caches_candidate_scan() {
+		global $wpdb;
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			]
+		) . ' /-->';
+
+		$transient_key = 'newspack_cp_control_candidates_' . $pattern_id;
+		$this->assertFalse( get_transient( $transient_key ), 'No cache before the first call.' );
+
+		// Interval of 1 selects every candidate the scan turns up, isolating
+		// this test from the interval filter.
+		Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$this->assertNotFalse( get_transient( $transient_key ), 'The candidate scan is cached after the first call.' );
+
+		// Deliberately bypasses wp_insert_post() (and the save_post cache
+		// invalidation it fires) to prove the second get_control_preview() call
+		// below is served from cache, not a fresh query.
+		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->posts,
+			[
+				'post_status'   => 'publish',
+				'post_type'     => 'post',
+				'post_title'    => 'Bypasses save_post',
+				'post_name'     => 'bypasses-save-post-' . wp_generate_password( 8, false ),
+				'post_content'  => $instance,
+				'post_date'     => current_time( 'mysql' ),
+				'post_date_gmt' => current_time( 'mysql', true ),
+			]
+		);
+		$bypassed_id = $wpdb->insert_id;
+
+		$second_preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$this->assertNotContains( $bypassed_id, wp_list_pluck( $second_preview, 'id' ), 'A cached call must not reflect a row inserted after the cache was warmed.' );
+	}
+
+	/**
+	 * Publishing a post of a supported type clears the cached candidate list,
+	 * so a newly published story shows up in the preview without waiting for
+	 * the TTL.
+	 */
+	public function test_saving_post_invalidates_control_preview_cache() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			]
+		) . ' /-->';
+
+		// Warm the cache with an empty result: no matching posts exist yet.
+		Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$transient_key = 'newspack_cp_control_candidates_' . $pattern_id;
+		$this->assertNotFalse( get_transient( $transient_key ) );
+
+		$new_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $instance,
+			]
+		);
+
+		$this->assertFalse( get_transient( $transient_key ), 'Publishing a supported post type must clear the cache.' );
+
+		$preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$this->assertContains( $new_id, wp_list_pluck( $preview, 'id' ), 'The newly published story is visible once the cache is rebuilt.' );
+	}
 }

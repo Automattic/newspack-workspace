@@ -76,6 +76,8 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_layout_styles' ] );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'add_editor_layout_styles' ] );
 		add_action( 'newspack_blocks_donate_before_form_fields', [ __CLASS__, 'print_form_hidden_fields' ] );
+		add_action( 'save_post', [ __CLASS__, 'invalidate_control_candidates_cache' ], 10, 2 );
+		add_action( 'deleted_post', [ __CLASS__, 'invalidate_control_candidates_cache' ], 10, 2 );
 	}
 
 	/**
@@ -656,6 +658,11 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	}
 
 	/**
+	 * How long the candidate id list is cached for, per pattern id.
+	 */
+	const CANDIDATES_CACHE_TTL = 5 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Published stories that carry a Contextual Prompt and will show the control
 	 * copy at the interval, newest first. The instance markup is a `core/block`
 	 * ref to the pattern; a detached card carries the marker class instead, so
@@ -666,30 +673,11 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * @return array[] Each: id, title, edit_link, permalink.
 	 */
 	public static function get_control_preview( $interval, $limit = 10 ) {
-		global $wpdb;
 		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
 		if ( ! $pattern_id ) {
 			return [];
 		}
-		$types = Newspack_Popups_Model::get_default_popup_post_types();
-		$in    = implode( ',', array_fill( 0, count( $types ), '%s' ) );
-		// The interval/limit filters run in PHP below, so the query itself can't be
-		// scoped by them for caching; the placeholder count sniff also
-		// miscounts the dynamically-built $in list.
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		$ids = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ($in) AND ( post_content LIKE %s OR post_content LIKE %s ) ORDER BY post_date DESC LIMIT 500",
-				array_merge(
-					$types,
-					[
-						'%' . $wpdb->esc_like( '"ref":' . $pattern_id ) . '%',
-						'%' . $wpdb->esc_like( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS ) . '%',
-					]
-				)
-			)
-		);
-		// phpcs:enable
+		$ids  = self::get_control_candidate_ids( $pattern_id );
 		$rows = [];
 		foreach ( $ids as $id ) {
 			$id = (int) $id;
@@ -707,6 +695,76 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			}
 		}
 		return $rows;
+	}
+
+	/**
+	 * The raw candidate id list `get_control_preview()` filters by interval,
+	 * cached in a transient keyed on the pattern id: the underlying query is a
+	 * double-wildcard `LIKE` scan of `wp_posts.post_content`, and re-running it
+	 * on every settings-form keystroke would put a full table scan on the
+	 * debounce timer. `save_post`/`deleted_post` clear the transient for
+	 * supported post types, so a newly published or removed story shows up
+	 * without waiting for the TTL.
+	 *
+	 * The needle for the `core/block` ref is anchored on both sides of the id
+	 * (`"ref":<id>,` or `"ref":<id>}`) so a pattern id of 12 does not
+	 * prefix-match an unrelated ref of 123 or 125 serialized elsewhere in the
+	 * same post.
+	 *
+	 * @param int $pattern_id The pattern id.
+	 * @return string[] Post ids, as returned by $wpdb (strings), newest first.
+	 */
+	private static function get_control_candidate_ids( $pattern_id ) {
+		$transient_key = 'newspack_cp_control_candidates_' . $pattern_id;
+		$cached        = get_transient( $transient_key );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
+		global $wpdb;
+		$types = Newspack_Popups_Model::get_default_popup_post_types();
+		$in    = implode( ',', array_fill( 0, count( $types ), '%s' ) );
+		// The placeholder count sniff miscounts the dynamically-built $in list,
+		// and the result is cached in a transient above rather than scoped by
+		// interval/limit, which is what the caching sniff cannot see through.
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ($in) AND ( post_content LIKE %s OR post_content LIKE %s OR post_content LIKE %s ) ORDER BY post_date DESC LIMIT 500",
+				array_merge(
+					$types,
+					[
+						'%' . $wpdb->esc_like( '"ref":' . $pattern_id . ',' ) . '%',
+						'%' . $wpdb->esc_like( '"ref":' . $pattern_id . '}' ) . '%',
+						'%' . $wpdb->esc_like( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS ) . '%',
+					]
+				)
+			)
+		);
+		// phpcs:enable
+
+		set_transient( $transient_key, $ids, self::CANDIDATES_CACHE_TTL );
+		return $ids;
+	}
+
+	/**
+	 * Clear the cached control-preview candidate list when a supported post
+	 * type is saved or deleted, so a story that just gained or lost its
+	 * Contextual Prompt is reflected in the settings preview immediately
+	 * instead of waiting for the cache to expire.
+	 *
+	 * @param int          $post_id The post being saved or deleted.
+	 * @param WP_Post|null $post    The post object, when the hook provides one.
+	 */
+	public static function invalidate_control_candidates_cache( $post_id, $post = null ) {
+		$post_type = $post instanceof WP_Post ? $post->post_type : get_post_type( $post_id );
+		if ( ! $post_type || ! in_array( $post_type, Newspack_Popups_Model::get_default_popup_post_types(), true ) ) {
+			return;
+		}
+		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+		if ( $pattern_id ) {
+			delete_transient( 'newspack_cp_control_candidates_' . $pattern_id );
+		}
 	}
 
 	/**
