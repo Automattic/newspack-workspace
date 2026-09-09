@@ -965,11 +965,10 @@ class Group_Subscription_Invite {
 				__( 'You already have access through this %s.', 'newspack-plugin' ),
 				$group_label
 			),
-			self::RESULT_JOIN_TEAM_SIGN_IN => sprintf(
-				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
-				__( 'You already have access through this %s. Sign in to continue.', 'newspack-plugin' ),
-				$group_label
-			),
+			// Deliberately says nothing about the invited address: an unauthenticated
+			// visitor may be holding a forwarded link, and naming the group or the
+			// access would confirm to them that the invited address is a member.
+			self::RESULT_JOIN_TEAM_SIGN_IN => __( 'Sign in to continue with this invitation.', 'newspack-plugin' ),
 			'link_invalid'                 => __( 'This link is no longer valid. Please contact the group manager.', 'newspack-plugin' ),
 			'link_full'                    => __( 'This group already has the maximum number of members. Please contact the group manager.', 'newspack-plugin' ),
 			'link_failed'                  => __( "We couldn't add you to the group. Please contact the group manager.", 'newspack-plugin' ),
@@ -985,8 +984,8 @@ class Group_Subscription_Invite {
 			$type    = 'success';
 		} else {
 			$message = ! empty( $messages[ $result ] ) ? $messages[ $result ] : __( 'There was a problem with your invitation.', 'newspack-plugin' );
-			// 'login_needed' is an informational call to action, not an error, so it announces politely.
-			$type = 'login_needed' === $result ? 'success' : 'error';
+			// These two are informational calls to action, not errors, so they announce politely.
+			$type = in_array( $result, [ 'login_needed', self::RESULT_JOIN_TEAM_SIGN_IN ], true ) ? 'success' : 'error';
 		}
 
 		$notice_args = [ 'type' => $type ];

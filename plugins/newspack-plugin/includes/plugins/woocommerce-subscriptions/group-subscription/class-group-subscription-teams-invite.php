@@ -224,8 +224,12 @@ class Group_Subscription_Teams_Invite {
 	 *
 	 * WooCommerce is what registers it, from the query var add_query_var() supplies,
 	 * so this answers "can a rule for this slug exist at all" — false while WooCommerce
-	 * is inactive, and false when add_query_var() stood down over a slug WooCommerce
-	 * already answers on. Exposed for testing.
+	 * is inactive, and false when add_query_var() stood down because WooCommerce
+	 * already keys a query var by this slug and registers it under some other name.
+	 * The other collision add_query_var() refuses, a slug WooCommerce serves as an
+	 * endpoint in its own right, answers true here: WooCommerce registered that very
+	 * name, and its own rule is already in the stored set, so maybe_flush_rewrite_rules()
+	 * finds the pattern and stands down there instead. Exposed for testing.
 	 */
 	public static function endpoint_is_registered(): bool {
 		global $wp_rewrite;
@@ -306,10 +310,17 @@ class Group_Subscription_Teams_Invite {
 			// the root on to `edit-account` for them and drops the query string on the
 			// way, so the notice would never be rendered. They take
 			// redirect_with_result()'s own default, which is that endpoint directly.
-			Group_Subscription_Invite::redirect_with_result(
-				$destination->get_error_code(),
-				! is_user_logged_in() && function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : null
-			);
+			$target = ! is_user_logged_in() && function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : null;
+			// A message that asks the reader to sign in has to leave them somewhere to
+			// arrive afterwards, because the link they came in on is spent by the time
+			// they read it. Reader_Activation::render_auth_form() takes `redirect` as
+			// the auth callback URL, which is the same handoff
+			// process_link_invite_request() uses for `login_needed`.
+			$data = $destination->get_error_data();
+			if ( $target && is_array( $data ) && ! empty( $data['redirect'] ) ) {
+				$target = add_query_arg( 'redirect', rawurlencode( $data['redirect'] ), $target );
+			}
+			Group_Subscription_Invite::redirect_with_result( $destination->get_error_code(), $target );
 			return;
 		}
 		wp_safe_redirect( $destination );
@@ -414,6 +425,14 @@ class Group_Subscription_Teams_Invite {
 			// circulation for everyone still holding an old registration URL. The
 			// withdrawal itself is what records the difference, whoever minted the
 			// link: this route, or the owner in the group panel.
+			//
+			// Only withdrawals recorded from this release onwards, though. A link an
+			// owner disabled on an already-flipped site before it shipped left no
+			// marker behind, so the first click on a legacy registration URL takes the
+			// mint branch below and puts a fresh link into circulation. That window is
+			// out of scope: nothing distinguishes those groups from ones whose owner
+			// never minted a link at all, and treating them as withdrawn would leave
+			// the latter's registration URLs permanently dead.
 			if ( Group_Subscription_Invite::link_invite_was_revoked( $subscription, $owner_id ) ) {
 				return self::invalid_link_error( 'link_invite_revoked', [ 'subscription_id' => $subscription->get_id() ] );
 			}
@@ -737,8 +756,12 @@ class Group_Subscription_Teams_Invite {
 	 * A half-done flip is indistinguishable from a team nobody migrated by the time
 	 * the lookup returns: is_group_subscription() answers false on every My Account
 	 * page while WooCommerce Memberships owns the front end, and this route is one.
-	 * Only the difference in the two reasons lets a publisher be told which they have,
-	 * and the half-flip one clears itself when Memberships is deactivated.
+	 * Splitting on whether Memberships is active narrows which of the two a publisher
+	 * has, rather than deciding it — Memberships being active says nothing about this
+	 * particular team, and the other label still covers a group since cancelled and a
+	 * site with no WooCommerce Subscriptions. What it does buy is that
+	 * `memberships_still_active` names a state that clears itself once Memberships is
+	 * deactivated, so those entries are worth re-checking before chasing them.
 	 */
 	private static function unresolved_team_reason(): string {
 		return Memberships::is_active() ? 'memberships_still_active' : 'team_not_migrated';
@@ -759,7 +782,7 @@ class Group_Subscription_Teams_Invite {
 	 */
 	private static function spend_for_existing_member( $subscription, string $email, int $invitee_id ): \WP_Error {
 		self::close_invitations_for( $subscription, [ $email ] );
-		return self::existing_member_error( $invitee_id );
+		return self::existing_member_error( $subscription, $invitee_id );
 	}
 
 	/**
@@ -771,16 +794,48 @@ class Group_Subscription_Teams_Invite {
 	 * instead: "you already have access" is false for them, and would confirm that the
 	 * invited address holds an account in this group.
 	 *
-	 * @param int $invitee_id The reader holding the invited address, if any.
+	 * A signed-out visitor is told to sign in and carries a redirect onward to the
+	 * group's subscription view. Both halves are needed. The link is spent by the time
+	 * they read the message, so without somewhere to continue to their only move is to
+	 * click the same URL again and be told it is no longer valid. And the message
+	 * asserts nothing about the invited address, because an unauthenticated visitor may
+	 * be holding a forwarded link — the disclosure the signed-in branch above refuses.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param int              $invitee_id   The reader holding the invited address, if any.
 	 */
-	private static function existing_member_error( int $invitee_id ): \WP_Error {
+	private static function existing_member_error( $subscription, int $invitee_id ): \WP_Error {
 		if ( ! is_user_logged_in() ) {
-			return new \WP_Error( Group_Subscription_Invite::RESULT_JOIN_TEAM_SIGN_IN );
+			return new \WP_Error(
+				Group_Subscription_Invite::RESULT_JOIN_TEAM_SIGN_IN,
+				'',
+				[ 'redirect' => self::subscription_view_url( $subscription ) ]
+			);
 		}
 		if ( $invitee_id && get_current_user_id() === $invitee_id ) {
 			return new \WP_Error( Group_Subscription_Invite::RESULT_JOIN_TEAM_MEMBER );
 		}
 		return self::invalid_link_error( 'invitation_for_another_member' );
+	}
+
+	/**
+	 * Where a reader continues to once they have signed in.
+	 *
+	 * The group's own subscription view, which is where every other invite path lands a
+	 * reader who turns out to be in the group already. Somebody who signs in as
+	 * anyone else meets WooCommerce Subscriptions' own refusal there:
+	 * Group_Subscription_MyAccount::grant_group_member_view_order_cap() grants
+	 * `view_order` to that group's members and to nobody else.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 *
+	 * @return string The URL, or an empty string when WooCommerce cannot build one.
+	 */
+	private static function subscription_view_url( $subscription ): string {
+		if ( ! function_exists( 'wc_get_endpoint_url' ) || ! function_exists( 'wc_get_page_permalink' ) ) {
+			return '';
+		}
+		return (string) wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), wc_get_page_permalink( 'myaccount' ) );
 	}
 }
 

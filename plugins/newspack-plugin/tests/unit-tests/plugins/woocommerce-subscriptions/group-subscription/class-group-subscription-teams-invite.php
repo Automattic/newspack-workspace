@@ -57,6 +57,17 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 	private $email_post_id = null;
 
 	/**
+	 * The rewrite state a test replaced, when one did.
+	 *
+	 * WP_UnitTestCase restores $wp_filter between tests but not $wp_rewrite, so a test
+	 * that writes to the global has to hand it back itself — from tear_down() rather
+	 * than its own last line, which a failing assertion never reaches.
+	 *
+	 * @var array|null
+	 */
+	private $original_rewrite_state = null;
+
+	/**
 	 * Load the WooCommerce mocks.
 	 */
 	public static function set_up_before_class() {
@@ -93,6 +104,12 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		}
 		remove_filter( 'newspack_guest_author_mail_guard_active', '__return_false' );
 		reset_phpmailer_instance();
+		if ( null !== $this->original_rewrite_state ) {
+			global $wp_rewrite;
+			$wp_rewrite->endpoints        = $this->original_rewrite_state['endpoints'];
+			$wp_rewrite->rules            = $this->original_rewrite_state['rules'];
+			$this->original_rewrite_state = null;
+		}
 		foreach ( $this->user_ids as $user_id ) {
 			wp_delete_user( $user_id );
 		}
@@ -340,6 +357,10 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 	 * because the address already holds what it offers. Nothing else closes the row on
 	 * this path: removing a member cancels no invites, so neither listener ever fires
 	 * for it, and a pending row would re-admit a reader the manager removed.
+	 *
+	 * Spending it is what makes the redirect load-bearing: the link is dead by the time
+	 * the reader reads the message, so signing in has to carry them onward to the group
+	 * itself rather than back to a URL that now answers "no longer valid".
 	 */
 	public function test_an_existing_member_is_told_to_sign_in_and_spends_the_invitation() {
 		$member_email = 'already-in@test.com';
@@ -358,6 +379,11 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		$this->assertWPError( $result, 'A reader who is already a member must not be handed an invite.' );
 		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_SIGN_IN, $result->get_error_code(), 'A signed-out member needs the sign-in message, not the generic one.' );
 		$this->assertSame( 'wcmti-accepted', get_post( $invitation_id )->post_status, 'An address that already holds what the link offers has spent it.' );
+		$this->assertSame(
+			wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), wc_get_page_permalink( 'myaccount' ) ),
+			$result->get_error_data()['redirect'] ?? '',
+			'Signing in must land the reader on the group, not back on the spent link.'
+		);
 
 		// The manager changes their mind.
 		Group_Subscription::update_members( $subscription, [], [ $member ] );
@@ -400,15 +426,18 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 	/**
 	 * The rule this asserts on can only exist while the endpoint is registered, and
 	 * WooCommerce is what registers it. Without that floor, a site where the rule can
-	 * never appear — WooCommerce inactive, or a slug collision that made
-	 * add_query_var() stand down — regenerates the whole rule set on every request,
-	 * indefinitely.
+	 * never appear — WooCommerce inactive, or a slug WooCommerce already keys a query
+	 * var by and registers under some other name, which is what makes add_query_var()
+	 * stand down — regenerates the whole rule set on every request, indefinitely.
 	 */
 	public function test_rewrite_rules_flush_only_when_the_endpoint_is_registered() {
 		global $wp_rewrite;
-		$original_endpoints = $wp_rewrite->endpoints;
-		$flushes            = 0;
-		$count_flushes      = function ( $value ) use ( &$flushes ) {
+		$this->original_rewrite_state = [
+			'endpoints' => $wp_rewrite->endpoints,
+			'rules'     => $wp_rewrite->rules,
+		];
+		$flushes                      = 0;
+		$count_flushes                = function ( $value ) use ( &$flushes ) {
 			$flushes++;
 			return $value;
 		};
@@ -434,7 +463,6 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		$this->assertSame( 0, $flushes, 'A rule already in the stored set is the whole point of the check.' );
 
 		remove_filter( 'pre_update_option_rewrite_rules', $count_flushes );
-		$wp_rewrite->endpoints = $original_endpoints;
 	}
 
 	/**
