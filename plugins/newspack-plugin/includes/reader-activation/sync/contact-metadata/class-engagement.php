@@ -90,7 +90,7 @@ class Engagement extends Contact_Metadata {
 			],
 			'Last_Payment_Page'    => [
 				'name'        => 'Last Payment Page',
-				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type. Unlike the legacy Payment Page, which follows the reader\'s current subscription or last one-time donation, this can diverge for recurring subscribers and one-time non-donation purchasers.', 'newspack-plugin' ),
+				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
 			'Last_Payment_UTM_Source'   => [
@@ -110,7 +110,7 @@ class Engagement extends Contact_Metadata {
 			],
 			'Lifetime_Total_Paid'  => [
 				'name'        => 'Lifetime Total Paid',
-				'description' => __( 'Lifetime total paid across all purchases; unlike the legacy Total Paid, never blanked when no current subscription or donation exists', 'newspack-plugin' ),
+				'description' => __( 'Lifetime total paid across all purchases.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
 		];

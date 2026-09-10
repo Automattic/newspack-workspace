@@ -100,17 +100,17 @@ class Subscription extends Contact_Metadata {
 			],
 			'Subscription_Start_Date'               => [
 				'name'        => 'Subscription Start Date',
-				'description' => __( 'Start date of the most recent active non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Current Subscription Start Date, donation subscriptions are excluded.', 'newspack-plugin' ),
+				'description' => __( 'Start date of the most recent active non-donation subscription (YYYY-MM-DD HH:MM:SS).', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
 			'Subscription_End_Date'                 => [
 				'name'        => 'Subscription End Date',
-				'description' => __( 'End/renewal date of the most recent non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Current Subscription End Date, donation subscriptions are excluded.', 'newspack-plugin' ),
+				'description' => __( 'End/renewal date of the most recent non-donation subscription (YYYY-MM-DD HH:MM:SS).', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
 			'Last_Subscription_Cancellation_Reason' => [
 				'name'        => 'Last Subscription Cancellation Reason',
-				'description' => __( 'Reason the reader\'s most recent non-donation subscription was cancelled. One of: user-canceled, manually-canceled, expired. Unlike the legacy Subscription Cancellation Reason, donation subscriptions are excluded.', 'newspack-plugin' ),
+				'description' => __( 'Reason the reader\'s most recent non-donation subscription was cancelled. One of: user-canceled, manually-canceled, expired.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
 			'Subscription_Billing_Frequency'        => [
@@ -145,12 +145,12 @@ class Subscription extends Contact_Metadata {
 			],
 			'Last_Subscription_Payment_Amount'      => [
 				'name'        => 'Last Subscription Payment Amount',
-				'description' => __( 'Amount of the most recent payment on the reader\'s current non-donation subscription. Unlike the legacy Last Payment Amount, one-time purchases and donations are excluded.', 'newspack-plugin' ),
+				'description' => __( 'Amount of the most recent payment on the reader\'s current non-donation subscription.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
 			'Last_Subscription_Payment_Date'        => [
 				'name'        => 'Last Subscription Payment Date',
-				'description' => __( 'Date of the most recent payment on the reader\'s current non-donation subscription (YYYY-MM-DD HH:MM:SS). Unlike the legacy Last Payment Date, one-time purchases and donations are excluded.', 'newspack-plugin' ),
+				'description' => __( 'Date of the most recent payment on the reader\'s current non-donation subscription (YYYY-MM-DD HH:MM:SS).', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
 		];
