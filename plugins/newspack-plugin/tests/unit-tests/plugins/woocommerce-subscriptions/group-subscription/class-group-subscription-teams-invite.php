@@ -790,6 +790,7 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		$this->assertIsString( $url );
 		$minted = Group_Subscription_Invite::get_link_invite( $subscription );
 		$this->assertNotEmpty( $minted['key'], 'A link should have been minted.' );
+		$this->assertSame( $owner, (int) $minted['created_by'], 'The minted link should be attributed to the owner.' );
 		$args = $this->query_args_of( $url );
 		$this->assertSame( $minted['key'], $args['key'] );
 	}
