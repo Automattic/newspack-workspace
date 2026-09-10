@@ -1301,6 +1301,20 @@ class Contact_Sync extends Sync {
 			if ( self::$current_as_action_id ) {
 				\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $success_message );
 			}
+			if ( 'flag' === $mode ) {
+				// The retried push can re-attach the reader to lists: `skip_lists`
+				// is advisory, and an integration on the three-argument contract
+				// never sees it. The original deletion already ran the cleanup,
+				// so run it again here to leave the provider state where that
+				// deletion left it. As on the original path, a cleanup failure
+				// is logged, not retried.
+				$cleanup_result = $integration->flag_deletion_cleanup( $email );
+				if ( \is_wp_error( $cleanup_result ) ) {
+					static::log( sprintf( 'Flag-deletion cleanup failed after retry %d for integration "%s" of %s: %s', $retry_count, $integration_id, $email, $cleanup_result->get_error_message() ) );
+				} else {
+					static::log( sprintf( 'Flag-deletion cleanup succeeded after retry %d for integration "%s" of %s.', $retry_count, $integration_id, $email ) );
+				}
+			}
 		}
 	}
 

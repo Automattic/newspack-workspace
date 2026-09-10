@@ -95,7 +95,7 @@ class Donation extends Subscription {
 			'Current_Donation_Frequency'    => [
 				'name'        => 'Current Donation Frequency',
 				'description' => __( 'Donation frequency. One of: month, year', 'newspack-plugin' ),
-				'status'      => 'existing',
+				'status'      => 'updated',
 			],
 			'Current_Recurring_Donation'    => [
 				'name'        => 'Current Recurring Donation',

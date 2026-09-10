@@ -48,7 +48,7 @@ class Legacy_Payment extends Contact_Metadata {
 			'sub_start_date'      => 'Current Subscription Start Date',
 			'sub_end_date'        => 'Current Subscription End Date',
 			'cancellation_reason' => 'Subscription Cancellation Reason',
-			'billing_frequency'   => 'Billing Frequency',
+			'billing_cycle'       => 'Billing Cycle',
 			'recurring_payment'   => 'Recurring Payment',
 			'last_payment_date'   => 'Last Payment Date',
 			'last_payment_amount' => 'Last Payment Amount',
@@ -96,8 +96,8 @@ class Legacy_Payment extends Contact_Metadata {
 				'description' => __( 'Reason the most recent subscription of any product type was cancelled.', 'newspack-plugin' ),
 				'status'      => 'legacy',
 			],
-			'billing_frequency'   => [
-				'name'        => 'Billing Frequency',
+			'billing_cycle'       => [
+				'name'        => 'Billing Cycle',
 				'description' => __( 'Billing frequency of the current recurring payment.', 'newspack-plugin' ),
 				'status'      => 'legacy',
 			],

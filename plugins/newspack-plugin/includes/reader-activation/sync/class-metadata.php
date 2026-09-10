@@ -114,8 +114,10 @@ class Metadata {
 	 * Beyond the ESP accessor, this also resolves the pre-init PREFIX_OPTION
 	 * fallback — so a caller that needs the site-wide prefix before
 	 * integrations register must keep using this. The ESP's own accessor
-	 * applies the `newspack_ras_metadata_prefix` filter too, keeping the
-	 * push and audit paths on the same prefix.
+	 * already applies the `newspack_ras_metadata_prefix` filter, and its
+	 * value is returned as-is here: filtering it again would run a
+	 * compositional callback (`'CUSTOM_' . $prefix`) twice, so the audit and
+	 * get_key() would disagree with the push path.
 	 *
 	 * @deprecated Use Integration::get_metadata_prefix() instead.
 	 *
@@ -126,8 +128,7 @@ class Metadata {
 		if ( $esp_integration ) {
 			$prefix = $esp_integration->get_metadata_prefix();
 			if ( ! empty( $prefix ) ) {
-				/** This filter is documented below. */
-				return apply_filters( 'newspack_ras_metadata_prefix', $prefix );
+				return $prefix;
 			}
 		}
 

@@ -878,6 +878,45 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A successful retried flag push runs flag_deletion_cleanup() again. The
+	 * retried upsert can re-attach the reader to lists — skip_lists is
+	 * advisory, and a three-argument push_contact_data() never sees it — so
+	 * the cleanup the original deletion ran is repeated to leave the provider
+	 * where that deletion left it.
+	 */
+	public function test_execute_deletion_retry_flag_mode_reruns_cleanup() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		\as_unschedule_all_actions( \Newspack\Reader_Activation\Contact_Sync::RETRY_DELETION_HOOK );
+
+		$this->reset_integrations();
+		$spy = new \Deletion_Spy_Integration( 'spy-retry-exec-flag', 'Spy Retry Exec Flag' );
+		Integrations::register( $spy );
+		Integrations::enable( 'spy-retry-exec-flag' );
+
+		\Newspack\Reader_Activation\Contact_Sync::execute_deletion_retry(
+			[
+				'integration_id' => 'spy-retry-exec-flag',
+				'mode'           => 'flag',
+				'email'          => 'reader@example.com',
+				'contact'        => [
+					'email'    => 'reader@example.com',
+					'metadata' => [ 'NP_Account_Deleted' => '2026-09-10 12:00:00' ],
+				],
+				'context'        => 'TestContext',
+				'retry_count'    => 1,
+			]
+		);
+
+		$this->assertCount( 1, $spy->push_calls, 'The retried flag push reaches the integration.' );
+		$this->assertTrue( $spy->push_calls[0]['options']['skip_lists'] ?? false, 'The retried push still asks for no list attachment.' );
+		$this->assertCount( 1, $spy->cleanup_calls, 'A successful retried flag push runs the cleanup again.' );
+		$this->assertSame( 'reader@example.com', $spy->cleanup_calls[0]['email'] );
+		$this->assertCount( 0, $spy->delete_calls, 'Flag mode never hard-deletes.' );
+	}
+
+	/**
 	 * On the final retry, execute_deletion_retry() throws so ActionScheduler
 	 * marks the action as failed.
 	 */

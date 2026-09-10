@@ -110,7 +110,8 @@ class My_Integration extends Integration {
     }
 
     public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
-        $contact = $this->prepare_contact( $contact );
+        // $contact arrives prepared: filtered to this integration's enabled
+        // fields and prefixed. Don't call prepare_contact() here.
         // ... push $contact to your API.
         return true;
     }
@@ -272,7 +273,7 @@ An **undeclared** toggle field reads as enabled. An integration that overrides `
 
 ## Push (Outgoing Sync)
 
-When a contact needs to be synced, the framework calls `push_contact()` on every active integration. That method is `final` on the base class: it delegates to your `push_contact_data()` and records one `newspack_sync_push_contact` entry through `newspack_log` — type `debug` on success, `error` on a `WP_Error` — carrying the integration id, provider slug, context, the contact exactly as handed to the integration, the options in effect, and any error messages and codes. That entry is the manager-log record of a sync for every integration, including ones that never go through Newspack Newsletters (whose upsert writes its own `newspack_esp_sync_upsert_contact` entry, so a Mailchimp push shows both). It reflects what the framework handed over: an implementation may still reshape the payload internally, and a non-error result only means the integration reported success. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which:
+When a contact needs to be synced, the framework calls `push_contact()` on every active integration. That method is `final` on the base class: it delegates to your `push_contact_data()` and records one `newspack_sync_push_contact` entry through `newspack_log` — type `debug` on success, `error` on a `WP_Error` — carrying the integration id, provider slug, context, the contact exactly as handed to the integration, the options in effect, and any error messages and codes. That entry is the manager-log record of a sync for every integration, including ones that never go through Newspack Newsletters (whose upsert writes its own `newspack_esp_sync_upsert_contact` entry, so a Mailchimp push shows both). It reflects what the framework handed over: an implementation may still reshape the payload internally, and a non-error result only means the integration reported success. The contact array is the Newspack canonical form (email, name, metadata, etc.). The framework runs it through `prepare_contact()` before calling `push_contact()`, so `push_contact_data()` receives the prepared contact and must not call `prepare_contact()` itself, or any custom preparation logic in an override runs twice. `prepare_contact()`:
 
 1. Filters `$contact['metadata']` to the fields enabled on this integration.
 2. Renames raw keys to `prefix . field name`, using the integration's metadata prefix.
@@ -286,7 +287,7 @@ An integration that has **never saved** an Outbound selection inherits the ESP i
 
 **ESP resolution order.** No flag gates this, and it's what every other integration's inheritance ultimately reaches too, since `get_inherited_outgoing_fields()` calls into the ESP integration for it. `Esp::get_enabled_outgoing_fields()` checks three tiers in order: its own saved outgoing-fields option; failing that, the legacy global `_newspack_metadata_fields` option (`Metadata::FIELDS_OPTION`), copied into that per-integration option **verbatim** on first read rather than through the validating setter — validating here would permanently strip a currently-unavailable name (e.g. a payment field while WooCommerce is inactive) from a publisher's existing selection; failing that, the era-scoped default described next.
 
-**Default posture.** Inheritance preserves behavior rather than tightening it. The final tier, `Metadata::get_default_enabled_fields()`, returns every available field of the schema era the site comes from — including Membership Status, Total Paid and Recurring Payment on a legacy site — computed fresh on every call and never persisted, so a wrong era guess self-corrects on the next read rather than freezing. Per-integration selection is what closes that exposure, and it takes an explicit save to do so.
+**Default posture.** Inheritance preserves behavior rather than tightening it. The final tier, `Metadata::get_default_enabled_fields()`, returns every available field of the schema era the site comes from — including Membership Status, Total Paid and Recurring Payment on a legacy site. The era is derived once and stamped into `newspack_sync_schema_origin` (`Metadata::SCHEMA_ORIGIN_OPTION`), and the stamp wins on every later read; only the field list is recomputed per read, so a field whose class becomes available later (WooCommerce activated, say) joins the default without a new stamp. Correcting a wrong era means changing that stored option. Per-integration selection is what closes the exposure, and it takes an explicit save to do so.
 
 ### Optional `$options` parameter
 

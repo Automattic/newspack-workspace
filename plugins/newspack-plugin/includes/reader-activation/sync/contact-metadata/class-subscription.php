@@ -141,7 +141,7 @@ class Subscription extends Contact_Metadata {
 			'Subscription_Coupon_Code'              => [
 				'name'        => 'Subscription Coupon Code',
 				'description' => __( 'Coupon code applied at checkout for a non-donation subscription', 'newspack-plugin' ),
-				'status'      => 'existing',
+				'status'      => 'updated',
 			],
 			'Last_Subscription_Payment_Amount'      => [
 				'name'        => 'Last Subscription Payment Amount',
