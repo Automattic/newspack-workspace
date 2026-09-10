@@ -1,3 +1,10 @@
+## newspack-newsletters [3.40.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.40.2...newspack-newsletters@3.40.3) (2026-09-09)
+
+
+### Bug Fixes
+
+* **newspack-plugin:** flag gates built from the newsletter block for Insights ([#1056](https://github.com/Automattic/newspack-workspace/issues/1056)) ([c8c4f64](https://github.com/Automattic/newspack-workspace/commit/c8c4f6461293ffd3f0406a21748023ba9505f523))
+
 ## newspack-newsletters [3.40.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.40.1...newspack-newsletters@3.40.2) (2026-09-01)
 
 

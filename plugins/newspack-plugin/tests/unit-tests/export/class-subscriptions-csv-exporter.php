@@ -650,4 +650,73 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 		$page_two->clear_pinned_total();
 		$this->assertFalse( get_transient( 'newspack_export_total_' . md5( $filename ) ) );
 	}
+
+	/**
+	 * The dialog's status selection supersedes the list's status tab, which
+	 * can only ever hold one status.
+	 */
+	public function test_build_query_args_statuses_supersede_the_status_tab() {
+		$args = Subscriptions_CSV_Exporter::build_query_args(
+			[ 'post_status' => 'wc-active' ],
+			'',
+			[ 'statuses' => [ 'wc-active', 'wc-on-hold' ] ]
+		);
+
+		$this->assertSame( [ 'wc-active', 'wc-on-hold' ], $args['status'] );
+	}
+
+	/**
+	 * The dialog's date range covers whole days and supersedes the list's
+	 * month filter, which is the same filter at coarser precision. Either
+	 * bound can be left open.
+	 */
+	public function test_build_query_args_date_range_supersedes_month() {
+		$args = Subscriptions_CSV_Exporter::build_query_args(
+			[ 'm' => '202605' ],
+			'',
+			[
+				'date_from' => '2026-01-01',
+				'date_to'   => '2026-03-31',
+			]
+		);
+		$this->assertSame( '2026-01-01...2026-03-31', $args['date_created'] );
+
+		$from_only = Subscriptions_CSV_Exporter::build_query_args( [], '', [ 'date_from' => '2026-01-01' ] );
+		$this->assertSame( '>=2026-01-01', $from_only['date_created'] );
+
+		$to_only = Subscriptions_CSV_Exporter::build_query_args( [], '', [ 'date_to' => '2026-03-31' ] );
+		$this->assertSame( '<=2026-03-31', $to_only['date_created'] );
+	}
+
+	/**
+	 * Clearing the dialog's status and date controls means "everything", not
+	 * "fall back to the status tab and month filter the list was showing".
+	 */
+	public function test_cleared_selection_beats_the_list_filters() {
+		$cleared = Subscriptions_CSV_Exporter::build_query_args(
+			[
+				'post_status' => 'wc-active',
+				'm'           => '202605',
+			],
+			'',
+			[ 'selection_submitted' => true ]
+		);
+
+		$this->assertSame( array_keys( wcs_get_subscription_statuses() ), $cleared['status'] );
+		$this->assertArrayNotHasKey( 'date_created', $cleared );
+	}
+
+	/**
+	 * A status tab the dialog has no checkbox for — Trash — keeps its filter:
+	 * nothing was shown for the admin to clear.
+	 */
+	public function test_cleared_selection_leaves_an_unrepresented_status_tab_alone() {
+		$args = Subscriptions_CSV_Exporter::build_query_args(
+			[ 'post_status' => 'trash' ],
+			'',
+			[ 'selection_submitted' => true ]
+		);
+
+		$this->assertSame( [ 'wc-trash' ], $args['status'] );
+	}
 }
