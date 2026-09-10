@@ -85,7 +85,7 @@ class Engagement extends Contact_Metadata {
 			],
 			'Favorite_Categories'  => [
 				'name'        => 'Favorite Categories',
-				'description' => __( 'Comma-separated list of the reader\'s most-engaged content categories, ordered by frequency', 'newspack-plugin' ),
+				'description' => __( 'Comma-separated list of the reader\'s most-engaged content categories names, ordered by frequency', 'newspack-plugin' ),
 				'status'      => 'new',
 			],
 			'Last_Payment_Page'    => [
