@@ -1,3 +1,10 @@
+## newspack-network [2.22.7](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.6...newspack-network@2.22.7) (2026-09-08)
+
+
+### Bug Fixes
+
+* **content-distribution:** authorize the post on unlink and pull ([#1049](https://github.com/Automattic/newspack-workspace/issues/1049)) ([816b1d6](https://github.com/Automattic/newspack-workspace/commit/816b1d638c127234596277ae3c6adddafe6592a2))
+
 ## newspack-network [2.22.6](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.5...newspack-network@2.22.6) (2026-09-02)
 
 

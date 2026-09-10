@@ -941,6 +941,30 @@ class Metadata {
 	}
 
 	/**
+	 * Whether any push-enabled, set-up integration sends the given raw key.
+	 *
+	 * Class-level scoping (get_computing_classes()) runs a class for any of
+	 * its enabled fields and computes the rest with it. A field whose value
+	 * costs something on its own (a lookup, a log entry) checks here before
+	 * paying it. Resolved through the same union get_contact_with_metadata()
+	 * scopes by, so a field reported as disabled is one no integration would
+	 * push; with no integrations registered every field counts as enabled,
+	 * matching the compute-everything fallback for pre-init callers.
+	 *
+	 * @param string $raw_key Raw metadata key.
+	 *
+	 * @return bool
+	 */
+	public static function is_field_push_enabled( $raw_key ) {
+		$label = self::get_keys()[ $raw_key ] ?? null;
+		if ( null === $label ) {
+			return false;
+		}
+		$union = self::get_push_enabled_fields_union();
+		return null === $union || in_array( $label, $union, true );
+	}
+
+	/**
 	 * The metadata classes to run for a requested field-label list.
 	 *
 	 * Each requested label is claimed by the first producing class in claim

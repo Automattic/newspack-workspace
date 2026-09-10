@@ -23,6 +23,7 @@ type AccessRuleShape = {
 	has_options?: boolean;
 	is_boolean?: boolean;
 	empty_grants_access?: boolean;
+	requires_value?: boolean;
 	options?: unknown[];
 };
 
@@ -77,10 +78,24 @@ export const isMalformedAccessRuleValue = ( config: AccessRuleShape | undefined,
 /**
  * Whether a rule imposes no constraint as stored, and so grants access to every
  * reader. Only rules that declare `empty_grants_access` read their empty value
- * that way — `subscription` naming no product still requires an active one.
+ * that way — `subscription` naming no product still requires an active one, and
+ * `institution` naming none matches nobody.
  */
 export const isUnconstrainedAccessRuleValue = ( config: AccessRuleShape | undefined, value: unknown ) =>
 	Boolean( config?.empty_grants_access ) && isEmptyAccessRuleValue( value );
+
+/**
+ * Whether a rule that needs a value has none, so it states no condition at all.
+ *
+ * The superset of the state above, and the one the editor and the save-time
+ * refusal both act on. Every rule granting access on an empty value also
+ * declares `requires_value`; `institution` declares only `requires_value`,
+ * because it matches nobody instead — a different symptom, equally far from
+ * what the operator configured. Only the wording of the caution depends on
+ * which of the two it is.
+ */
+export const isUnconfiguredAccessRuleValue = ( config: AccessRuleShape | undefined, value: unknown ) =>
+	Boolean( config?.requires_value ) && isEmptyAccessRuleValue( value );
 
 /**
  * The caution to show under a rule's picker, or undefined where the stored value
@@ -115,17 +130,28 @@ export const getAccessRuleValueNotice = ( config: AccessRuleShape | undefined, v
 					'newspack-plugin'
 			  );
 	}
-	if ( ! isUnconstrainedAccessRuleValue( config, value ) ) {
+	if ( ! isUnconfiguredAccessRuleValue( config, value ) ) {
 		return undefined;
 	}
-	// Nothing to pick and nothing picked: every answer the picker can express is the
-	// one that lets every reader through, so say where the items come from.
+	// What an empty value does is the rule's own business, and the two answers are
+	// opposites. Naming the wrong one sends an editor looking for the wrong symptom
+	// on the front end: an open paywall reads nothing like a walled-off one.
+	if ( isUnconstrainedAccessRuleValue( config, value ) ) {
+		// Nothing to pick and nothing picked: every answer the picker can express is
+		// the one that lets every reader through, so say where the items come from.
+		return hasOptions
+			? __(
+					'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.',
+					'newspack-plugin'
+			  )
+			: __(
+					'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
+					'newspack-plugin'
+			  );
+	}
 	return hasOptions
-		? __( 'Nothing is selected, so this rule grants access to everyone. Select at least one option, or turn the rule off.', 'newspack-plugin' )
-		: __(
-				'This rule has nothing to select yet, so it grants access to everyone. Add the items it selects, or turn the rule off.',
-				'newspack-plugin'
-		  );
+		? __( 'Nothing is selected, so this rule matches no reader. Select at least one option, or turn the rule off.', 'newspack-plugin' )
+		: __( 'This rule has nothing to select yet, so it matches no reader. Add the items it selects, or turn the rule off.', 'newspack-plugin' );
 };
 
 /**
@@ -141,4 +167,4 @@ export const getAccessRuleValueNotice = ( config: AccessRuleShape | undefined, v
  * @param hasOptions Whether the picker has anything to offer.
  */
 export const isAccessRulePickerInert = ( config: AccessRuleShape | undefined, value: unknown, hasOptions: boolean ) =>
-	! hasOptions && isUnconstrainedAccessRuleValue( config, value );
+	! hasOptions && isUnconfiguredAccessRuleValue( config, value );

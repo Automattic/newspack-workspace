@@ -6,26 +6,25 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-// Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
 import {
 	DropdownMenu,
 	MenuGroup,
 	MenuItem,
-	Notice as CoreNotice,
+	Notice,
 	SlotFillProvider,
 	createSlotFill,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
 } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, createInterpolateElement, isValidElement, useEffect, useRef, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useLayoutEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { Footer, Notice, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
+import { Footer, DebugBadge, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
 import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
@@ -92,7 +91,9 @@ const ResetHeaderData = () => {
 	const location = useLocation();
 	const { resetHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	useEffect( () => {
+	// Must stay before paint: a passive effect here would run after a section that
+	// publishes from a layout effect, wiping the header it just set.
+	useLayoutEffect( () => {
 		resetHeaderData();
 		window.scrollTo( 0, 0 );
 	}, [ location.pathname, resetHeaderData ] );
@@ -177,6 +178,7 @@ const Wizard = (
 		actions,
 		backNav,
 		badges,
+		fullWidth: headerFullWidth,
 		sectionDescription,
 		sectionMenu,
 		sectionName,
@@ -269,7 +271,7 @@ const Wizard = (
 	// as page chrome rather than as content.
 	const inertGating = window.newspack_aux_data?.inert_gating;
 	const inertGatingNotice = inertGating?.show && (
-		<CoreNotice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
+		<Notice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
 			{ /* The conversion map takes childless elements and fills them from the
 			     translated string, so jsx-a11y can't see the content they end up with. */ }
 			{ interpolateOrPlainText( inertGating.message, {
@@ -279,7 +281,7 @@ const Wizard = (
 				/* eslint-enable jsx-a11y/anchor-has-content */
 				strong: <strong />,
 			} ) }
-		</CoreNotice>
+		</Notice>
 	);
 
 	const content = (
@@ -303,7 +305,7 @@ const Wizard = (
 								render={ routerProps => (
 									<div
 										className={ classnames( 'newspack-wizard__content', className, {
-											'newspack-wizard__content--full-width': section.fullWidth,
+											'newspack-wizard__content--full-width': headerFullWidth ?? section.fullWidth,
 										} ) }
 									>
 										{ 'function' === typeof renderAboveSections ? renderAboveSections() : null }
@@ -403,7 +405,7 @@ const Wizard = (
 					} ) }
 				>
 					<HashRouter hashType="slash">
-						{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+						<DebugBadge />
 						<WizardHeaderRegion
 							hideHeader={ hideHeader }
 							headerText={ headerText }

@@ -1092,4 +1092,149 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 			'A subscription rule\'s IDs should survive sanitizing whether or not the shop has products.'
 		);
 	}
+
+	/**
+	 * Test that a subscriber loses access when their group also carries an
+	 * institution rule naming nothing.
+	 *
+	 * The one case where reading an unconfigured rule as "matches nobody" takes
+	 * access away from readers who are paying for it. Rules AND within a group, so
+	 * the subscription rule no longer decides on its own. The gate save refuses
+	 * this shape, which leaves rows written before that check — and the block
+	 * attributes and CLI paths that never reach it.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_a_subscriber_is_denied_when_the_group_also_names_no_institution() {
+		$this->create_subscription();
+
+		$subscription_only = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ self::$product_id ],
+				],
+			],
+		];
+		$this->assertTrue(
+			Access_Rules::evaluate_rules( $subscription_only, self::$owner_user_id ),
+			'The subscriber passes a group holding only their subscription rule.'
+		);
+
+		$with_unconfigured_institution = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ self::$product_id ],
+				],
+				[
+					'slug'  => 'institution',
+					'value' => [],
+				],
+			],
+		];
+		$this->assertFalse(
+			Access_Rules::evaluate_rules( $with_unconfigured_institution, self::$owner_user_id ),
+			'ANDing an institution rule that names nothing withholds access from the same subscriber.'
+		);
+	}
+
+	/**
+	 * Test that a rule the site no longer registers is skipped, not denied.
+	 *
+	 * A slug disappears from the registry whenever the integration that supplied
+	 * it is switched off — `Promoted_Fields::register()` adds one rule per enabled
+	 * field of each active integration. Reading such a rule as a failed condition
+	 * would take a gate the publisher cannot see or edit and have it deny every
+	 * reader, so the group is decided by the rules that are still real.
+	 *
+	 * Asserting the group passes is what separates "skipped" from "denied": a test
+	 * expecting false would be satisfied by either.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_an_unregistered_rule_is_skipped_rather_than_failing_its_group() {
+		$this->create_subscription();
+
+		$this->assertTrue(
+			Access_Rules::evaluate_rules(
+				[
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ self::$product_id ],
+						],
+						[
+							'slug'  => 'field_from_a_disabled_integration',
+							'value' => 'anything',
+						],
+					],
+				],
+				self::$owner_user_id
+			),
+			'The registered rule the reader passes decides the group.'
+		);
+	}
+
+	/**
+	 * Test that a logged-out visitor is judged by the anonymous evaluator.
+	 *
+	 * The two evaluators agree on every registered rule a gate can hold today, so
+	 * what this pins is the three shapes where they part. Two are shapes neither
+	 * the wizard nor the REST sanitizer produces and block attributes are never
+	 * checked for: a group with nothing in it, and a rule carrying no slug. The
+	 * third is a rule from an integration the site has switched off, which reaches
+	 * `evaluate_rule()`'s missing-callback branch — and that branch returns true
+	 * ahead of the anonymous check. In all three `evaluate_rules()` has no
+	 * condition to fail and reads the group as satisfied, which admits every
+	 * visitor. The anonymous evaluator treats all three as unconfigured.
+	 *
+	 * The unregistered case is deliberately asymmetric: skipped for a signed-in
+	 * reader (asserted in
+	 * test_an_unregistered_rule_is_skipped_rather_than_failing_its_group), denying
+	 * for a logged-out one. Pinned here so a later reconciliation of the two is a
+	 * decision rather than a tidy-up.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_evaluate_rules_for_visitor_judges_a_logged_out_visitor_anonymously() {
+		foreach ( [
+			'an empty group'                         => [ [] ],
+			'a rule carrying no slug'                => [ [ [ 'value' => 'orphan' ] ] ],
+			'a rule from a switched-off integration' => [
+				[
+					[
+						'slug'  => 'field_from_a_disabled_integration',
+						'value' => 'anything',
+					],
+				],
+			],
+		] as $description => $rules ) {
+			$this->assertTrue(
+				Access_Rules::evaluate_rules( $rules, 0 ),
+				"The direct evaluator reads {$description} as satisfied, which is what this routing keeps off the gating surfaces."
+			);
+			$this->assertFalse(
+				Access_Rules::evaluate_rules_for_visitor( $rules, 0 ),
+				"A logged-out visitor is denied by {$description}."
+			);
+		}
+
+		$institution_rule = [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [],
+				],
+			],
+		];
+		$this->assertFalse(
+			Access_Rules::evaluate_rules_for_visitor( $institution_rule, 0 ),
+			'An institution rule naming nothing denies a logged-out visitor.'
+		);
+		$this->assertFalse(
+			Access_Rules::evaluate_rules_for_visitor( $institution_rule, self::$owner_user_id ),
+			'And denies a logged-in reader, which is the asymmetry this issue is about.'
+		);
+	}
 }

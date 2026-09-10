@@ -36,6 +36,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-institutions-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/trait-one-time-purchase-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-memberships-audit.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-discounts-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-verify.php';
@@ -126,6 +127,7 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
 			WP_CLI::add_command( 'newspack migrate-discounts', [ 'Newspack\CLI\Discounts_Migration', 'migrate_discounts' ] );
 			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
+			WP_CLI::add_command( 'newspack audit-membership-subscriptions', [ 'Newspack\CLI\Memberships_Audit', 'audit_membership_subscriptions' ] );
 			WP_CLI::add_command( 'newspack migrate-institutions', [ 'Newspack\CLI\Institutions_Migration', 'migrate_institutions' ] );
 			// The standalone `migrate-memberships` drop-in registers the same command
 			// name with the opposite, write-by-default flag convention. Registration is

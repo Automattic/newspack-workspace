@@ -429,7 +429,8 @@ class Content_Restriction_Control {
 		}
 
 		// Return if the post gate has already been determined.
-		if ( ! empty( self::$post_gate_id_map[ $post_id . '_' . $user_id ] ) ) {
+		$memo_key = self::get_gate_memo_key( $post_id, $user_id );
+		if ( ! empty( self::$post_gate_id_map[ $memo_key ] ) ) {
 			return true;
 		}
 
@@ -446,9 +447,13 @@ class Content_Restriction_Control {
 				if ( $user_id === 0 ) {
 					// Anonymous visitors can still pass via the gate's custom_access rules if they
 					// match a populated rule with `supports_anonymous` (currently only `institution`).
-					// An unpopulated rule (e.g., institution rule with no institutions selected) must
-					// not grant access — Access_Rules treats an empty value as "no constraint" and
-					// returns true, which would silently bypass registration here.
+					// A rule left with no value names no condition, so it cannot be what lets a
+					// visitor past the registration wall.
+					//
+					// Inside a listing teaser this bypass yields nothing:
+					// evaluate_anonymous_rules() declines there, because its one rule
+					// answers from the current request and a listing is built once for
+					// everyone. {@see Content_Gate::is_withheld_outside_article()}.
 					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
 						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
 					$is_restricted  = ! $anonymous_bypass_passed;
@@ -471,15 +476,15 @@ class Content_Restriction_Control {
 			if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
 				$access_rules = $gate['custom_access']['access_rules'] ?? [];
 				$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
-				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id, $rule_context ) ) {
+				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules_for_visitor( $access_rules, $user_id, $rule_context ) ) {
 					$is_restricted  = true;
 					$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
 				}
 			}
 
 			if ( $is_restricted && $gate_layout_id ) {
-				self::$post_gate_id_map[ $post_id . '_' . $user_id ] = $gate['id'];
-				self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ] = $gate_layout_id;
+				self::$post_gate_id_map[ $memo_key ]        = $gate['id'];
+				self::$post_gate_layout_id_map[ $memo_key ] = $gate_layout_id;
 				return true;
 			}
 		}
@@ -508,9 +513,9 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return false;
 		}
-		$user_id = get_current_user_id();
-		if ( ! empty( self::$post_gate_id_map[ $post_id . '_' . $user_id ] ) ) {
-			return self::$post_gate_id_map[ $post_id . '_' . $user_id ];
+		$memo_key = self::get_gate_memo_key( $post_id, get_current_user_id() );
+		if ( ! empty( self::$post_gate_id_map[ $memo_key ] ) ) {
+			return self::$post_gate_id_map[ $memo_key ];
 		}
 		return false;
 	}
@@ -523,11 +528,16 @@ class Content_Restriction_Control {
 	 * queue workers, REST callbacks iterating over readers) write to their
 	 * own cache slot and do not surface here.
 	 *
-	 * @param int $post_id Post ID. If not given, uses the current post ID.
+	 * @param int      $post_id Post ID. If not given, uses the current post ID.
+	 * @param int|null $user_id Reader to look the entry up for. Defaults to the
+	 *                          current user. Pass 0 to read the anonymous entry,
+	 *                          which is what a surface serving one copy of its
+	 *                          markup to every reader needs
+	 *                          ({@see Content_Gate::is_withheld_outside_article()}).
 	 *
 	 * @return int|false
 	 */
-	public static function get_gate_layout_id( $post_id = null ) {
+	public static function get_gate_layout_id( $post_id = null, $user_id = null ) {
 		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
 			return false;
 		}
@@ -537,11 +547,30 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return false;
 		}
-		$user_id = get_current_user_id();
-		if ( ! empty( self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ] ) ) {
-			return self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ];
+		$memo_key = self::get_gate_memo_key( $post_id, $user_id ?? get_current_user_id() );
+		if ( ! empty( self::$post_gate_layout_id_map[ $memo_key ] ) ) {
+			return self::$post_gate_layout_id_map[ $memo_key ];
 		}
 		return false;
+	}
+
+	/**
+	 * Key the resolved gate and layout are memoised under.
+	 *
+	 * A listing teaser and an article page both ask as user 0 and do not get the
+	 * same answer: a listing declines the anonymous bypass, so a gate that lets an
+	 * on-campus visitor through on the article page still restricts in a listing.
+	 * The narrower verdict therefore needs a narrower key, or the first surface to
+	 * ask answers for the second — and the reader entitled to the post meets the
+	 * gate on the article page for the rest of the request.
+	 *
+	 * @param int $post_id Post ID.
+	 * @param int $user_id Reader the verdict was reached for.
+	 *
+	 * @return string
+	 */
+	private static function get_gate_memo_key( $post_id, $user_id ) {
+		return $post_id . '_' . $user_id . ( Content_Gate::is_listing_context() ? '_listing' : '' );
 	}
 
 	/**
