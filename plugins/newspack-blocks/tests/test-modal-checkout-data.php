@@ -552,12 +552,15 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 
 	/**
 	 * A cart item whose contextual prompt post id isn't a positive integer is
-	 * dropped the same way.
+	 * dropped the same way. Uses a non-numeric id rather than '0': that value
+	 * is already falsy and gets dropped by the pre-existing truthiness guard
+	 * before is_valid_contextual_prompt_value() ever runs, so it wouldn't
+	 * actually exercise that check.
 	 */
 	public function test_cart_checkout_data_drops_invalid_contextual_prompt_post_id() {
 		$cart = $this->cart_with_item(
 			[
-				'contextual_prompt_post_id'   => '0',
+				'contextual_prompt_post_id'   => 'abc',
 				'contextual_prompt_placement' => 'top',
 				'contextual_prompt_condition' => 'override',
 			]
@@ -565,6 +568,23 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 		$data = Checkout_Data::get_checkout_data( $cart );
 		$this->assertArrayNotHasKey( 'contextual_prompt_post_id', $data );
 		$this->assertSame( 'top', $data['contextual_prompt_placement'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt post id is a mixed numeric/alpha
+	 * string still passes is_valid_contextual_prompt_value() (absint() > 0),
+	 * so the payload must carry the normalized int, not the raw string.
+	 */
+	public function test_cart_checkout_data_normalizes_contextual_prompt_post_id() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12abc',
+				'contextual_prompt_placement' => 'top',
+				'contextual_prompt_condition' => 'override',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 12, $data['contextual_prompt_post_id'] );
 	}
 
 	/**

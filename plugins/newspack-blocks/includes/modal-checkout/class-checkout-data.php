@@ -264,6 +264,12 @@ final class Checkout_Data {
 	 * `contextual_prompt_*` cart item or query arg from another source can't
 	 * make its way into the checkout payload.
 	 *
+	 * The placement and condition allowlists below mirror
+	 * `Newspack_Popups_Contextual_Prompt_Render::PLACEMENTS` and `::CONDITIONS`
+	 * (newspack-popups is not a runtime dependency here; popups may be
+	 * inactive when this runs, so the values are duplicated rather than read
+	 * from that class).
+	 *
 	 * @param string $key   One of `Modal_Checkout::CONTEXTUAL_PROMPT_KEYS`.
 	 * @param mixed  $value The value read from the cart item or `$_GET`.
 	 *
@@ -520,8 +526,15 @@ final class Checkout_Data {
 				} else {
 					$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
 				}
-				if ( $value && ! self::is_valid_contextual_prompt_value( $key, $value ) ) {
-					$value = null;
+				if ( $value ) {
+					if ( ! self::is_valid_contextual_prompt_value( $key, $value ) ) {
+						$value = null;
+					} elseif ( 'contextual_prompt_post_id' === $key ) {
+						// is_valid_contextual_prompt_value() only checked
+						// absint( $value ) > 0; normalize here so a value like
+						// '12abc' reaches the payload as 12, not that raw string.
+						$value = absint( $value );
+					}
 				}
 			}
 			if ( $value ) {
