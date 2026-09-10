@@ -92,7 +92,7 @@ class Donation extends Subscription {
 				'description' => __( 'End date of the most recent recurring donation, if there is one (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
 				'status'      => 'existing',
 			],
-			'Current_Donation_Frequency'        => [
+			'Current_Donation_Frequency'    => [
 				'name'        => 'Current Donation Frequency',
 				'description' => __( 'Donation frequency. One of: month, year', 'newspack-plugin' ),
 				'status'      => 'existing',

@@ -68,27 +68,27 @@ class Engagement extends Contact_Metadata {
 	 */
 	public static function get_fields_config() {
 		return [
-			'First_Visit_Date'     => [
+			'First_Visit_Date'          => [
 				'name'        => 'First Visit Date',
 				'description' => __( 'Date of the reader\'s very first visit to the site, regardless of whether or when they registered (YYYY-MM-DD HH:MM:SS).', 'newspack-plugin' ),
 				'status'      => 'new',
 			],
-			'Last_Active'          => [
+			'Last_Active'               => [
 				'name'        => 'Last Active',
 				'description' => __( 'Date reader was last seen on site', 'newspack-plugin' ),
 				'status'      => 'new',
 			],
-			'Paywall_Hits'         => [
+			'Paywall_Hits'              => [
 				'name'        => 'Paywall Hits',
 				'description' => __( 'Number of times reader has reached a metered paywall', 'newspack-plugin' ),
 				'status'      => 'new',
 			],
-			'Favorite_Categories'  => [
+			'Favorite_Categories'       => [
 				'name'        => 'Favorite Categories',
 				'description' => __( 'Comma-separated list of the reader\'s most-engaged content categories names, ordered by frequency', 'newspack-plugin' ),
 				'status'      => 'new',
 			],
-			'Last_Payment_Page'    => [
+			'Last_Payment_Page'         => [
 				'name'        => 'Last Payment Page',
 				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type.', 'newspack-plugin' ),
 				'status'      => 'updated',
@@ -108,7 +108,7 @@ class Engagement extends Contact_Metadata {
 				'description' => __( 'Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
-			'Lifetime_Total_Paid'  => [
+			'Lifetime_Total_Paid'       => [
 				'name'        => 'Lifetime Total Paid',
 				'description' => __( 'Lifetime total paid across all purchases.', 'newspack-plugin' ),
 				'status'      => 'updated',
