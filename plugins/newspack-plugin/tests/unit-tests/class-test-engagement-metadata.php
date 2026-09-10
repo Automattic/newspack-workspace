@@ -143,9 +143,9 @@ class Test_Engagement_Metadata extends WP_UnitTestCase {
 	public function test_payment_fields_empty_without_woocommerce_orders() {
 		$metadata = ( new Engagement( self::$user_id ) )->get_metadata();
 		$this->assertSame( '', $metadata['Last_Payment_Page'] );
-		$this->assertSame( '', $metadata['Payment_UTM_Source'] );
-		$this->assertSame( '', $metadata['Payment_UTM_Medium'] );
-		$this->assertSame( '', $metadata['Payment_UTM_Campaign'] );
+		$this->assertSame( '', $metadata['Last_Payment_UTM_Source'] );
+		$this->assertSame( '', $metadata['Last_Payment_UTM_Medium'] );
+		$this->assertSame( '', $metadata['Last_Payment_UTM_Campaign'] );
 	}
 
 	/**

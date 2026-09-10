@@ -49,15 +49,15 @@ class Engagement extends Contact_Metadata {
 	 */
 	public static function get_fields() {
 		return [
-			'First_Visit_Date'     => 'First Visit Date',
-			'Last_Active'          => 'Last Active',
-			'Paywall_Hits'         => 'Paywall Hits',
-			'Favorite_Categories'  => 'Favorite Categories',
-			'Last_Payment_Page'    => 'Last Payment Page',
-			'Payment_UTM_Source'   => 'Payment UTM Source',
-			'Payment_UTM_Medium'   => 'Payment UTM Medium',
-			'Payment_UTM_Campaign' => 'Payment UTM Campaign',
-			'Lifetime_Total_Paid'  => 'Lifetime Total Paid',
+			'First_Visit_Date'          => 'First Visit Date',
+			'Last_Active'               => 'Last Active',
+			'Paywall_Hits'              => 'Paywall Hits',
+			'Favorite_Categories'       => 'Favorite Categories',
+			'Last_Payment_Page'         => 'Last Payment Page',
+			'Last_Payment_UTM_Source'   => 'Last Payment UTM Source',
+			'Last_Payment_UTM_Medium'   => 'Last Payment UTM Medium',
+			'Last_Payment_UTM_Campaign' => 'Last Payment UTM Campaign',
+			'Lifetime_Total_Paid'       => 'Lifetime Total Paid',
 		];
 	}
 
@@ -93,19 +93,19 @@ class Engagement extends Contact_Metadata {
 				'description' => __( 'URL of the checkout page from the reader\'s most recent completed order, of any product type. Unlike the legacy Payment Page, which follows the reader\'s current subscription or last one-time donation, this can diverge for recurring subscribers and one-time non-donation purchasers.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
-			'Payment_UTM_Source'   => [
-				'name'        => 'Payment UTM Source',
-				'description' => __( 'UTM source on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
+			'Last_Payment_UTM_Source'   => [
+				'name'        => 'Last Payment UTM Source',
+				'description' => __( 'Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
-			'Payment_UTM_Medium'   => [
-				'name'        => 'Payment UTM Medium',
-				'description' => __( 'UTM medium on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
+			'Last_Payment_UTM_Medium'   => [
+				'name'        => 'Last Payment UTM Medium',
+				'description' => __( 'Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
-			'Payment_UTM_Campaign' => [
-				'name'        => 'Payment UTM Campaign',
-				'description' => __( 'UTM campaign on payment page if present. Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
+			'Last_Payment_UTM_Campaign' => [
+				'name'        => 'Last Payment UTM Campaign',
+				'description' => __( 'Values come from the reader\'s most recent completed order, which for recurring donors is a renewal that may lack the original campaign parameters.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
 			'Lifetime_Total_Paid'  => [
@@ -129,14 +129,14 @@ class Engagement extends Contact_Metadata {
 		$order = $this->get_latest_order();
 
 		$metadata = [
-			'First_Visit_Date'     => $this->format_reader_data_timestamp( 'first_visit_date' ),
-			'Last_Active'          => $this->format_reader_data_timestamp( 'last_active' ),
-			'Paywall_Hits'         => $this->get_reader_data_int( 'paywall_hits' ),
-			'Favorite_Categories'  => $this->get_favorite_categories(),
-			'Last_Payment_Page'    => $this->get_payment_page( $order ),
-			'Payment_UTM_Source'   => $this->get_order_utm( $order, 'source' ),
-			'Payment_UTM_Medium'   => $this->get_order_utm( $order, 'medium' ),
-			'Payment_UTM_Campaign' => $this->get_order_utm( $order, 'campaign' ),
+			'First_Visit_Date'          => $this->format_reader_data_timestamp( 'first_visit_date' ),
+			'Last_Active'               => $this->format_reader_data_timestamp( 'last_active' ),
+			'Paywall_Hits'              => $this->get_reader_data_int( 'paywall_hits' ),
+			'Favorite_Categories'       => $this->get_favorite_categories(),
+			'Last_Payment_Page'         => $this->get_payment_page( $order ),
+			'Last_Payment_UTM_Source'   => $this->get_order_utm( $order, 'source' ),
+			'Last_Payment_UTM_Medium'   => $this->get_order_utm( $order, 'medium' ),
+			'Last_Payment_UTM_Campaign' => $this->get_order_utm( $order, 'campaign' ),
 		];
 
 		// Emitting an empty string for a reader with no customer record would
