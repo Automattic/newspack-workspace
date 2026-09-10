@@ -592,6 +592,10 @@ abstract class Integration {
 	 * @return true|\WP_Error The push_contact_data() result, unchanged.
 	 */
 	final public function push_contact( $contact, $context = '', $existing_contact = null, $options = [] ) {
+		
+		Logger::log( 'Invoking push_contact_data for' . $this->get_id() . ' with context: ' . $context );
+		Logger::log( $contact );
+		
 		$result = $this->push_contact_data( $contact, $context, $existing_contact, $options );
 		$failed = \is_wp_error( $result );
 		$email  = (string) ( $contact['email'] ?? '' );
