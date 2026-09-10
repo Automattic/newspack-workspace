@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.49.5\n"
+"Project-Id-Version: Newspack 6.50.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-09T22:08:22+00:00\n"
+"POT-Creation-Date: 2026-09-10T04:07:12+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -1270,44 +1270,6 @@ msgstr ""
 #: includes/cli/class-ras.php:86
 #, php-format
 msgid "Verified user %s."
-msgstr ""
-
-#: includes/cli/class-teams-migration.php:2023
-msgid "Already invited."
-msgstr ""
-
-#: includes/cli/class-teams-migration.php:2035
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:409
-msgid "Not a valid reader account."
-msgstr ""
-
-#: includes/cli/class-teams-migration.php:2039
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:412
-msgid "User is already a member of this group subscription."
-msgstr ""
-
-#: includes/cli/class-teams-migration.php:2058
-msgid "Not sent this run (--limit reached); re-run to send."
-msgstr ""
-
-#: includes/cli/class-teams-migration.php:2081
-msgid "Invitation email was not sent — the invite was rolled back so a re-run can retry."
-msgstr ""
-
-#: includes/cli/class-teams-migration.php:2082
-msgid "Invitation email was not sent, and the stored invite could not be rolled back afterwards. If the subscription's group panel shows a pending invitation for this reader, cancel it before re-running, or the re-run will answer \"Already invited.\""
-msgstr ""
-
-#. translators: %s: the error thrown by the send path.
-#: includes/cli/class-teams-migration.php:2102
-#, php-format
-msgid "%s — any stored invite was rolled back so a re-run can retry."
-msgstr ""
-
-#. translators: %s: the error thrown by the send path.
-#: includes/cli/class-teams-migration.php:2107
-#, php-format
-msgid "%s — the invite could not be rolled back. If the subscription's group panel shows a pending invitation for this reader, cancel it before re-running, or the re-run will answer \"Already invited.\""
 msgstr ""
 
 #: includes/cli/class-woocommerce-subscriptions.php:186
@@ -4851,14 +4813,14 @@ msgid "the contact email to your site (same as the \"From\" email address)"
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-card-expiry-warning.php:274
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:97
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:120
 #: includes/reader-activation/class-reader-activation-emails.php:64
 #: includes/reader-revenue/class-reader-revenue-emails.php:87
 msgid "the site title"
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-card-expiry-warning.php:278
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:101
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:124
 #: includes/reader-activation/class-reader-activation-emails.php:68
 #: includes/reader-revenue/class-reader-revenue-emails.php:91
 msgid "the site url"
@@ -5025,9 +4987,9 @@ msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-api.php:214
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-api.php:357
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:287
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:317
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:611
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:298
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:328
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:622
 msgid "Subscription not found."
 msgstr ""
 
@@ -5053,40 +5015,40 @@ msgstr ""
 msgid "This %s is not active, so new invitations can't be issued."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:90
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:113
 msgid "Group Subscription Invitation"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:91
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:114
 msgid "Email sent to invite a reader to join a group subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:93
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:116
 msgid "This email will be sent when a reader is invited to join a group subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:94
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:117
 msgid "Sent to invite a reader to join a group subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:105
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:128
 msgid "the invitation acceptance link"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:109
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:132
 msgid "the sender name"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:113
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:136
 msgid "the sender email address"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:117
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:140
 msgid "the recipient email address"
 msgstr ""
 
 #. translators: %s: number of weeks.
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:150
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:173
 #, php-format
 msgid "%s week"
 msgid_plural "%s weeks"
@@ -5094,7 +5056,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: number of days.
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:156
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:179
 #, php-format
 msgid "%s day"
 msgid_plural "%s days"
@@ -5102,7 +5064,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: number of hours.
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:162
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:185
 #, php-format
 msgid "%s hour"
 msgid_plural "%s hours"
@@ -5110,113 +5072,137 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: number of minutes.
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:167
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:190
 #, php-format
 msgid "%s minute"
 msgid_plural "%s minutes"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:267
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:314
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:351
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:392
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:946
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:290
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:343
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:406
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:454
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1045
 msgid "Invalid subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:275
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:322
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:298
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:351
 msgid "You do not have permission to manage this group subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:357
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:412
 msgid "Subscription is not active."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:364
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:419
 msgid "The link manager is no longer a manager of this subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:371
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:426
 msgid "Invite link not found."
 msgstr ""
 
 #. translators: %s: lowercase singular group label (e.g. "group", "team").
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:399
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:522
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:461
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:584
 #, php-format
 msgid "This %s is no longer active."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:405
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:959
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:467
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:1058
 #: includes/reader-activation/class-reader-activation.php:1877
 msgid "Invalid email address."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:436
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:471
+msgid "Not a valid reader account."
+msgstr ""
+
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:474
+msgid "User is already a member of this group subscription."
+msgstr ""
+
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:498
 msgid "You have reached the group member limit for this subscription. Please remove some members or cancel pending invitations before inviting more group members."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:543
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:886
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:610
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:978
 msgid "Invalid or expired invitation."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:546
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:613
 msgid "This invitation has expired."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:551
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:618
 msgid "No user found for this email address."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:568
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:635
 msgid "Could not add this user to the group."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:724
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:801
 msgid "New user registration failed."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:845
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:922
 msgid "Could not add the current user to the group."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:880
+#. translators: %s: lowercase singular group label (e.g. "group", "team").
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:960
+#, php-format
+msgid "This invitation link is no longer valid. Ask the %s's owner or manager to send you a new invitation."
+msgstr ""
+
+#. translators: %s: lowercase singular group label (e.g. "group", "team").
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:965
+#, php-format
+msgid "You already have access through this %s."
+msgstr ""
+
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:971
+msgid "Sign in to continue with this invitation."
+msgstr ""
+
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:972
 msgid "This link is no longer valid. Please contact the group manager."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:881
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:973
 msgid "This group already has the maximum number of members. Please contact the group manager."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:882
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:974
 msgid "We couldn't add you to the group. Please contact the group manager."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:883
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:975
 msgid "Please log in or register an account to join the group."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:884
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:976
 msgid "Invalid invitation link."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:885
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:977
 msgid "This invitation is for a different email address."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:887
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:979
 msgid "Could not create your account. Please try again."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:891
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:983
 msgid "You have successfully joined the group!"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:894
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php:986
 msgid "There was a problem with your invitation."
 msgstr ""
 
@@ -5440,7 +5426,7 @@ msgstr ""
 msgid "Non-group subscriptions"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:197
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:208
 #: dist/audience-wizards.daa24f992bdb0d7f94e5.js:207
 #: dist/subscribers.js:11
 #: src/wizards/audience/components/group-labels/index.js:32
@@ -5448,7 +5434,7 @@ msgstr ""
 msgid "Groups"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:198
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:209
 #: dist/audience-wizards.daa24f992bdb0d7f94e5.js:152
 #: dist/audience-wizards.daa24f992bdb0d7f94e5.js:207
 #: dist/subscribers.js:11
@@ -5458,23 +5444,23 @@ msgstr ""
 msgid "Group"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:290
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:301
 msgid "The owner already manages this subscription."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:297
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:308
 msgid "Only an existing member can be made a manager."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:320
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:331
 msgid "The owner cannot be demoted."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:323
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:334
 msgid "This member is not a manager."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:687
+#: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php:698
 msgid "Member limit reached. Please remove some members or increase the limit."
 msgstr ""
 

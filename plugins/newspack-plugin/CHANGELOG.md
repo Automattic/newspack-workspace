@@ -1,3 +1,10 @@
+## newspack [6.50.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.50.1...newspack@6.50.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **groups:** resolve Teams join-team links after the flip (NPPD-2252, [#1040](https://github.com/Automattic/newspack-workspace/issues/1040)) ([71e0b54](https://github.com/Automattic/newspack-workspace/commit/71e0b540cd9b5e555fae6f1c436647c80733d050))
+
 ## newspack [6.50.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.50.0...newspack@6.50.1) (2026-09-09)
 
 
