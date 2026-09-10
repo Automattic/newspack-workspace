@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.31.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.31.1...newspack-blocks@4.31.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **iframe:** keep Back working on iframe block pages (NPPM-3180) ([#1042](https://github.com/Automattic/newspack-workspace/issues/1042)) ([6a87cb2](https://github.com/Automattic/newspack-workspace/commit/6a87cb2c6dcab735a81b54e87fb11b93769baac1))
+
 ## @automattic/newspack-blocks [4.31.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.31.0...newspack-blocks@4.31.1) (2026-09-09)
 
 
