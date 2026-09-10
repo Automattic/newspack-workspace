@@ -305,7 +305,7 @@ Fires for every WC Subscription status transition AND for switches (recurrence/a
 
 ### `contextual_prompt_interaction`
 
-Fires when a donation that started from a Contextual Prompt completes, mirroring `prompt_interaction`'s shape for prompts generally. Registered as two listeners in `Newspack\Data_Events\Popups`, one per donation path:
+Fires when a donation that started from a Contextual Prompt completes. Registered as two listeners in `Newspack\Data_Events\Popups`, one per donation path:
 
 | Listener hook                                                   | `action`                | When                                      |
 | ---------------------------------------------------------------- | ----------------------- | ------------------------------------------ |

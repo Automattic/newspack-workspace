@@ -71,28 +71,10 @@ const PREVIEW_PATH = '/newspack-popups/v1/contextual-prompt/control-preview';
 // aria-labelledby so screen readers announce what the list is for.
 const PREVIEW_HEADING_ID = 'newspack-contextual-prompts-control-preview-heading';
 
-/**
- * English ordinal suffix for a positive integer, e.g. 2 -> '2nd', 3 -> '3rd'.
- *
- * @param {number} n Number to suffix.
- * @return {string} The number with its ordinal suffix.
- */
-const ordinal = n => {
-	const remainder100 = n % 100;
-	if ( remainder100 >= 11 && remainder100 <= 13 ) {
-		return `${ n }th`;
-	}
-	switch ( n % 10 ) {
-		case 1:
-			return `${ n }st`;
-		case 2:
-			return `${ n }nd`;
-		case 3:
-			return `${ n }rd`;
-		default:
-			return `${ n }th`;
-	}
-};
+// Mirrors Newspack_Popups_Contextual_Prompt_Render::CANDIDATES_SCAN_LIMIT.
+// The server sends the live value as `scan_limit`; this is only the fallback
+// for a response that predates that field.
+const DEFAULT_SCAN_LIMIT = 500;
 
 /**
  * The published stories that will show the control copy at the current
@@ -108,6 +90,7 @@ const ControlPreview = ( { enabled, interval } ) => {
 	const [ posts, setPosts ] = useState( [] );
 	const [ total, setTotal ] = useState( 0 );
 	const [ capped, setCapped ] = useState( false );
+	const [ scanLimit, setScanLimit ] = useState( DEFAULT_SCAN_LIMIT );
 	const [ serverInterval, setServerInterval ] = useState( interval );
 	const [ loading, setLoading ] = useState( true );
 	const [ loadingMore, setLoadingMore ] = useState( false );
@@ -128,6 +111,7 @@ const ControlPreview = ( { enabled, interval } ) => {
 			}
 			setTotal( response.total || 0 );
 			setCapped( !! response.capped );
+			setScanLimit( response.scan_limit || DEFAULT_SCAN_LIMIT );
 			if ( response.interval ) {
 				setServerInterval( response.interval );
 			}
@@ -179,12 +163,24 @@ const ControlPreview = ( { enabled, interval } ) => {
 	const heading =
 		serverInterval && serverInterval !== interval
 			? sprintf(
-					/* translators: %s: e.g. "every 2nd story" */ __( 'Articles that show control copy (%s)', 'newspack-plugin' ),
-					sprintf( /* translators: %s: ordinal, e.g. "2nd" */ __( 'every %s story', 'newspack-plugin' ), ordinal( serverInterval ) )
+					/* translators: %s: e.g. "1 in every 3 stories" */ __( 'Articles that show control copy (%s)', 'newspack-plugin' ),
+					sprintf(
+						/* translators: %d: interval, e.g. 3 for every 3rd story */ __( '1 in every %d stories', 'newspack-plugin' ),
+						serverInterval
+					)
 			  )
 			: __( 'Articles that show control copy', 'newspack-plugin' );
 
-	const totalDisplay = capped ? __( '500+', 'newspack-plugin' ) : `${ total }`;
+	// `total` already counts only the stories selected at this interval among
+	// the scanned candidates (~scanned / interval), so it stays the number in
+	// the "Showing X of Y" line even when the scan was capped; the "+" just
+	// flags that more candidates existed beyond the scan window.
+	const totalDisplay = capped
+		? sprintf(
+				/* translators: %d: selected story count, capped because the underlying scan hit its limit */ __( '%d+', 'newspack-plugin' ),
+				total
+		  )
+		: `${ total }`;
 
 	return (
 		<Card>
@@ -192,7 +188,7 @@ const ControlPreview = ( { enabled, interval } ) => {
 				<h3 id={ PREVIEW_HEADING_ID } style={ { margin: '0 0 8px', fontWeight: 600 } }>
 					{ heading }
 				</h3>
-				<div aria-live="polite" aria-busy={ loading || loadingMore }>
+				<div>
 					{ loading && (
 						<>
 							<Spinner />
@@ -215,9 +211,12 @@ const ControlPreview = ( { enabled, interval } ) => {
 					) }
 					{ ! loading && hasMore && (
 						<HStack justify="space-between" style={ { marginTop: 8 } }>
-							<span>
+							{ /* role="status" scopes the live announcement to this count, so a
+							     debounced interval change reports the outcome without a screen
+							     reader re-reading every title in the list above. */ }
+							<span role="status">
 								{ sprintf(
-									/* translators: 1: rows shown, 2: total matching stories, or "500+" when the scan is capped */ __(
+									/* translators: 1: rows shown, 2: total matching stories, or "167+" when the underlying scan is capped */ __(
 										'Showing %1$d of %2$s.',
 										'newspack-plugin'
 									),
@@ -232,7 +231,15 @@ const ControlPreview = ( { enabled, interval } ) => {
 					) }
 				</div>
 				{ ! loading && capped && (
-					<p style={ { margin: '8px 0 0', fontSize: '12px' } }>{ __( 'Only the newest 500 stories are scanned.', 'newspack-plugin' ) }</p>
+					<p style={ { margin: '8px 0 0', fontSize: '12px' } }>
+						{ sprintf(
+							/* translators: %d: number of newest stories scanned for a Contextual Prompt */ __(
+								'Only the newest %d stories are scanned.',
+								'newspack-plugin'
+							),
+							scanLimit
+						) }
+					</p>
 				) }
 			</CardBody>
 		</Card>

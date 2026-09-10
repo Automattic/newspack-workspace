@@ -355,7 +355,42 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 		expect( screen.getAllByRole( 'link' ) ).toHaveLength( 1 );
 	} );
 
-	it( 'shows "500+" and the cap note when the scan hit its limit', async () => {
+	it( 'shows the true selected count with a "+" and the scan-limit cap note when the scan hit its limit', async () => {
+		const controlEnabledField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_enabled',
+			label: 'Enable control test',
+			type: 'toggle',
+			value: '1',
+		};
+		// total (167) is the selected count among the capped scan, not the scan
+		// limit itself (750, distinct from the 500 default to prove the note
+		// reads response.scan_limit rather than a hardcoded number).
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 0,
+			total: 167,
+			capped: true,
+			scan_limit: 750,
+			posts: [
+				{
+					id: 3,
+					title: 'Local election results',
+					edit_link: 'https://example.test/wp-admin/post.php?post=3&action=edit',
+					permalink: 'https://example.test/?p=3',
+				},
+			],
+		} );
+
+		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
+
+		expect( await screen.findByRole( 'button', { name: 'Load more' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Showing 1 of 167+.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Only the newest 750 stories are scanned.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'falls back to a scan limit of 500 when the response omits scan_limit', async () => {
 		const controlEnabledField = {
 			section: 'control',
 			key: 'newspack_contextual_prompts_control_enabled',
@@ -367,7 +402,7 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 			interval: 3,
 			limit: 10,
 			offset: 0,
-			total: 500,
+			total: 167,
 			capped: true,
 			posts: [
 				{
@@ -382,7 +417,6 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
 
 		expect( await screen.findByRole( 'button', { name: 'Load more' } ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Showing 1 of 500+.' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Only the newest 500 stories are scanned.' ) ).toBeInTheDocument();
 	} );
 } );
