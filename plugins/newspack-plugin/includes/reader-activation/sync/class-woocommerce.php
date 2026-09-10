@@ -347,7 +347,7 @@ class WooCommerce {
 
 			$metadata['sub_start_date']      = empty( $sub_start_date ) ? '' : $sub_start_date;
 			$metadata['sub_end_date']        = empty( $sub_end_date ) ? '' : $sub_end_date;
-			$metadata['billing_cycle']       = $current_subscription->get_billing_period();
+			$metadata['billing_frequency']   = $current_subscription->get_billing_period();
 			$metadata['recurring_payment']   = $current_subscription->get_total();
 
 			// When a WC Subscription is terminated, the next payment date is set to 0. We don't want to sync that – the next payment date should remain as it was

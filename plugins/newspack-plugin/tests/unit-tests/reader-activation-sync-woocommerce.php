@@ -114,7 +114,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 					'payment_page_utm_content'  => 'test_content',
 					'sub_start_date'            => '',
 					'sub_end_date'              => '',
-					'billing_cycle'             => '',
+					'billing_frequency'         => '',
 					'recurring_payment'         => '',
 					'next_payment_date'         => '',
 					'total_paid'                => self::USER_DATA['meta_input']['wc_total_spent'] + $order_data['total'],

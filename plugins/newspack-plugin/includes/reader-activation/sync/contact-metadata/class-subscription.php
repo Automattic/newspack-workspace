@@ -70,7 +70,7 @@ class Subscription extends Contact_Metadata {
 			'Subscription_Start_Date'               => 'Subscription Start Date',
 			'Subscription_End_Date'                 => 'Subscription End Date',
 			'Last_Subscription_Cancellation_Reason' => 'Last Subscription Cancellation Reason',
-			'Subscription_Billing_Cycle'            => 'Subscription Billing Cycle',
+			'Subscription_Billing_Frequency'        => 'Subscription Billing Frequency',
 			'Subscription_Recurring_Payment'        => 'Subscription Recurring Payment',
 			'Subscription_Next_Payment_Date'        => 'Subscription Next Payment Date',
 			'Subscription_Product_Name'             => 'Subscription Product Name',
@@ -113,8 +113,8 @@ class Subscription extends Contact_Metadata {
 				'description' => __( 'Reason the reader\'s most recent non-donation subscription was cancelled. One of: user-canceled, manually-canceled, expired. Unlike the legacy Subscription Cancellation Reason, donation subscriptions are excluded.', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
-			'Subscription_Billing_Cycle'            => [
-				'name'        => 'Subscription Billing Cycle',
+			'Subscription_Billing_Frequency'        => [
+				'name'        => 'Subscription Billing Frequency',
 				'description' => __( 'Billing frequency. One of: month, year', 'newspack-plugin' ),
 				'status'      => 'updated',
 			],
@@ -172,7 +172,7 @@ class Subscription extends Contact_Metadata {
 			'Subscription_Start_Date'               => $this->get_current_subscription_start_date(),
 			'Subscription_End_Date'                 => $this->get_current_subscription_end_date(),
 			'Last_Subscription_Cancellation_Reason' => $this->get_subscription_cancellation_reason(),
-			'Subscription_Billing_Cycle'            => $this->get_current_subscription_billing_cycle(),
+			'Subscription_Billing_Frequency'        => $this->get_current_subscription_billing_frequency(),
 			'Subscription_Recurring_Payment'        => $this->get_current_subscription_recurring_payment(),
 			'Subscription_Next_Payment_Date'        => $this->get_current_subscription_next_payment_date(),
 			'Subscription_Product_Name'             => $this->get_current_subscription_product_name(),
@@ -400,11 +400,11 @@ class Subscription extends Contact_Metadata {
 	}
 
 	/**
-	 * Get the billing cycle of the current subscription.
+	 * Get the billing frequency of the current subscription.
 	 *
 	 * @return string
 	 */
-	protected function get_current_subscription_billing_cycle() {
+	protected function get_current_subscription_billing_frequency() {
 		$subscription = $this->get_current_subscription();
 		return $subscription ? $subscription->get_billing_period() : '';
 	}

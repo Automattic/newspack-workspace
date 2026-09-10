@@ -97,7 +97,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'Subscription_Start_Date', $fields );
 		$this->assertArrayHasKey( 'Subscription_End_Date', $fields );
 		$this->assertArrayHasKey( 'Last_Subscription_Cancellation_Reason', $fields );
-		$this->assertArrayHasKey( 'Subscription_Billing_Cycle', $fields );
+		$this->assertArrayHasKey( 'Subscription_Billing_Frequency', $fields );
 		$this->assertArrayHasKey( 'Subscription_Recurring_Payment', $fields );
 		$this->assertArrayHasKey( 'Subscription_Next_Payment_Date', $fields );
 		$this->assertArrayHasKey( 'Subscription_Product_Name', $fields );
@@ -227,10 +227,10 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		$this->assertSame( '2025-06-01 00:00:00', $metadata['Subscription_End_Date'] );
 	}
 
-	public function test_billing_cycle() {
+	public function test_billing_frequency() {
 		$this->create_subscription( [ 'billing_period' => 'year' ] );
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
-		$this->assertSame( 'year', $metadata['Subscription_Billing_Cycle'] );
+		$this->assertSame( 'year', $metadata['Subscription_Billing_Frequency'] );
 	}
 
 	public function test_recurring_payment() {
@@ -465,7 +465,7 @@ class Test_Subscription_Metadata extends WP_UnitTestCase {
 		$metadata = ( new Subscription( self::$user_id ) )->get_metadata();
 		$this->assertSame( 'active', $metadata['Subscriber_Status'] );
 		$this->assertSame( '20.00', $metadata['Subscription_Recurring_Payment'] );
-		$this->assertSame( 'year', $metadata['Subscription_Billing_Cycle'] );
+		$this->assertSame( 'year', $metadata['Subscription_Billing_Frequency'] );
 	}
 
 	public function test_falls_back_to_cancelled_subscription_when_no_active() {

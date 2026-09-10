@@ -161,7 +161,7 @@ class Test_Donation_Metadata extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'Active_Donation_Count', $fields );
 		$this->assertArrayHasKey( 'Current_Donation_Start_Date', $fields );
 		$this->assertArrayHasKey( 'Current_Donation_End_Date', $fields );
-		$this->assertArrayHasKey( 'Current_Donation_Cycle', $fields );
+		$this->assertArrayHasKey( 'Current_Donation_Frequency', $fields );
 		$this->assertArrayHasKey( 'Current_Recurring_Donation', $fields );
 		$this->assertArrayHasKey( 'Next_Donation_Date', $fields );
 		$this->assertArrayHasKey( 'Current_Donation_Product_Name', $fields );
@@ -306,7 +306,7 @@ class Test_Donation_Metadata extends WP_UnitTestCase {
 		);
 
 		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
-		$this->assertSame( 'year', $metadata['Current_Donation_Cycle'] );
+		$this->assertSame( 'year', $metadata['Current_Donation_Frequency'] );
 		$this->assertSame( '120.00', $metadata['Current_Recurring_Donation'] );
 	}
 

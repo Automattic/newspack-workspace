@@ -54,7 +54,7 @@ class Donation extends Subscription {
 			'Active_Donation_Count'         => 'Active Donation Count',
 			'Current_Donation_Start_Date'   => 'Current Donation Start Date',
 			'Current_Donation_End_Date'     => 'Current Donation End Date',
-			'Current_Donation_Cycle'        => 'Current Donation Cycle',
+			'Current_Donation_Frequency'    => 'Current Donation Frequency',
 			'Current_Recurring_Donation'    => 'Current Recurring Donation',
 			'Next_Donation_Date'            => 'Next Donation Date',
 			'Current_Donation_Product_Name' => 'Current Donation Product Name',
@@ -92,8 +92,8 @@ class Donation extends Subscription {
 				'description' => __( 'End date of the most recent recurring donation, if there is one (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
 				'status'      => 'existing',
 			],
-			'Current_Donation_Cycle'        => [
-				'name'        => 'Current Donation Cycle',
+			'Current_Donation_Frequency'        => [
+				'name'        => 'Current Donation Frequency',
 				'description' => __( 'Donation frequency. One of: month, year', 'newspack-plugin' ),
 				'status'      => 'existing',
 			],
@@ -150,7 +150,7 @@ class Donation extends Subscription {
 			'Active_Donation_Count'         => $this->get_active_subscription_count(),
 			'Current_Donation_Start_Date'   => $this->get_current_subscription_start_date(),
 			'Current_Donation_End_Date'     => $this->get_current_subscription_end_date(),
-			'Current_Donation_Cycle'        => $this->get_current_subscription_billing_cycle(),
+			'Current_Donation_Frequency'    => $this->get_current_subscription_billing_frequency(),
 			'Current_Recurring_Donation'    => $this->get_current_subscription_recurring_payment(),
 			'Next_Donation_Date'            => $this->get_current_subscription_next_payment_date(),
 			'Current_Donation_Product_Name' => $this->get_current_donation_product_name(),
