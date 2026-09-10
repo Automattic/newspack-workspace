@@ -190,6 +190,59 @@ class TestFields extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Characterization: image markup saved in the content keeps counting.
+	 */
+	public function test_image_count_counts_images_in_content_markup() {
+		$post_id = self::create_post(
+			[
+				'post_content' => '<!-- wp:image {"id":1} --><figure class="wp-block-image"><img src="https://example.com/a.jpg" alt="" class="wp-image-1"/></figure><!-- /wp:image --><p>Classic <img src="https://example.com/b.jpg" alt=""></p>',
+			]
+		);
+
+		$this->assertSame( 2, Fields::get_image_count( $post_id ), 'Counts the image tags saved in the content.' );
+	}
+
+	/**
+	 * A classic [gallery] shortcode without ids lists the post's own attachments.
+	 * A REST save has no global post; rendering the shortcode in that state falls
+	 * back to parent 0, which is every unattached image on the site.
+	 */
+	public function test_image_count_gallery_shortcode_counts_only_the_story_images() {
+		$post_id = self::create_post( [ 'post_content' => '<p>Photos below.</p>[gallery]' ] );
+		foreach ( [ $post_id, $post_id, 0, 0, 0 ] as $parent ) {
+			self::factory()->attachment->create(
+				[
+					'file'           => 'image.jpg',
+					'post_parent'    => $parent,
+					'post_mime_type' => 'image/jpeg',
+					'post_status'    => 'inherit',
+				]
+			);
+		}
+		unset( $GLOBALS['post'] );
+
+		$this->assertSame( 2, Fields::get_image_count( $post_id ), 'Counts the story\'s attached images, not the site\'s unattached media.' );
+	}
+
+	/**
+	 * Refreshing read-only fields on save must not run the front-end content pipeline.
+	 */
+	public function test_read_only_fields_do_not_render_the_content_on_save() {
+		$post_id = self::create_post( [ 'post_content' => '<p>Hello</p>[gallery]' ] );
+		$calls   = 0;
+		$spy     = function ( $content ) use ( &$calls ) {
+			$calls++;
+			return $content;
+		};
+
+		\add_filter( 'the_content', $spy );
+		Fields::update_read_only_fields( $post_id );
+		\remove_filter( 'the_content', $spy );
+
+		$this->assertSame( 0, $calls, 'Saving a story must not render the_content.' );
+	}
+
+	/**
 	 * Test a select dropdown field.
 	 */
 	public function test_field_with_options() {
