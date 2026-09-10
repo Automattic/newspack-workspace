@@ -82,11 +82,15 @@ class ContextualPromptSettingsTest extends WP_UnitTestCase {
 
 	/**
 	 * Saving a render-affecting field (override/control sections) flushes the
-	 * object cache — where Batcache keeps rendered pages — so the front end
-	 * reflects the new setting without waiting for entries to expire.
+	 * `batcache` group — where Batcache keeps rendered pages — so the front end
+	 * reflects the new setting without waiting for entries to expire. The flush is
+	 * group-scoped where the object cache supports it, so a probe in another group
+	 * has to survive: a plain wp_cache_flush() would clear it too, and clearing it
+	 * would leave the narrowing unproven.
 	 */
 	public function test_saving_a_control_field_flushes_the_cache_and_fires_the_action() {
 		wp_cache_set( 'nppd2249-probe', 'cached', 'batcache' );
+		wp_cache_set( 'nppd2249-probe-other', 'cached', 'options' );
 		$fired = 0;
 		add_action(
 			'newspack_contextual_prompts_render_settings_changed',
@@ -107,7 +111,8 @@ class ContextualPromptSettingsTest extends WP_UnitTestCase {
 		} finally {
 			$this->using_ext_object_cache( false );
 		}
-		$this->assertFalse( wp_cache_get( 'nppd2249-probe', 'batcache' ) );
+		$this->assertFalse( wp_cache_get( 'nppd2249-probe', 'batcache' ), 'The batcache group is flushed.' );
+		$this->assertSame( 'cached', wp_cache_get( 'nppd2249-probe-other', 'options' ), 'Another group is left intact: the flush is group-scoped.' );
 		$this->assertSame( 1, $fired );
 	}
 

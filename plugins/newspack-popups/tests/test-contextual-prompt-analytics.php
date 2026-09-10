@@ -752,4 +752,69 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'https://example.com/drive/', html_entity_decode( $rendered ) );
 		$this->assertStringContainsString( 'data-newspack-cp-condition="override"', $rendered );
 	}
+
+	/**
+	 * A prompt card the content gate hides comes back as an empty string before
+	 * the analytics filter runs — block-visibility's `render_block` filter blanks a
+	 * hidden Group, and `render_block` runs before `render_block_core/group`. The
+	 * attribution window `normalize_group()` opened has to close on the parsed
+	 * block anyway, or the next donate form on the page attributes itself to the
+	 * hidden story. Simulated with a `render_block` filter that blanks the card's
+	 * Group, since wiring the real content gate needs newspack-plugin.
+	 */
+	public function test_a_hidden_card_does_not_leak_its_source_to_a_later_form() {
+		$this->set_platform( true );
+
+		$marker = Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS;
+		add_filter(
+			'render_block',
+			function ( $content, $block ) use ( $marker ) {
+				if ( 'core/group' === ( $block['blockName'] ?? '' )
+					&& false !== strpos( (string) ( $block['attrs']['className'] ?? '' ), $marker ) ) {
+					return '';
+				}
+				return $content;
+			},
+			10,
+			2
+		);
+
+		$content  = $this->detached_markup() . "\n" . '<!-- wp:newspack-blocks/donate /-->';
+		$rendered = $this->render_post( $content );
+
+		$this->assertStringNotContainsString( 'Detached copy.', $rendered, 'The hidden card rendered nothing.' );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', $rendered, 'The standalone donate form must not inherit the hidden card source.' );
+	}
+
+	/**
+	 * Rendered off the loop — an archive, an excerpt, a REST or widget render where
+	 * get_the_ID() is 0 — a card has no story to assign, so with the control on it
+	 * is stamped no condition rather than a bare `story_aware` next to post-id="0".
+	 */
+	public function test_off_loop_render_stamps_no_condition() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		// do_blocks() outside the loop: no post is set up, so get_the_ID() is 0.
+		$rendered = do_blocks( $this->detached_markup() );
+
+		$this->assertStringContainsString( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS, $rendered, 'The card still renders.' );
+		$this->assertStringNotContainsString( 'data-newspack-cp-condition', $rendered );
+		$this->assertStringContainsString( 'data-newspack-cp-post-id="0"', $rendered, 'The card is still stamped; only the condition is withheld.' );
+	}
+
+	/**
+	 * With the admin opt-in withdrawn the feature reports nothing, so even a
+	 * detached card the publisher keeps — its content survives the strip — is no
+	 * longer stamped, and the view script emits no interaction for it.
+	 */
+	public function test_opt_in_off_leaves_a_detached_card_unstamped() {
+		$this->set_platform( true );
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+
+		$rendered = $this->render_post( $this->detached_markup() );
+
+		$this->assertStringContainsString( 'Detached copy.', $rendered, "The publisher's own card still renders." );
+		$this->assertStringNotContainsString( 'data-newspack-cp-post-id', $rendered );
+	}
 }

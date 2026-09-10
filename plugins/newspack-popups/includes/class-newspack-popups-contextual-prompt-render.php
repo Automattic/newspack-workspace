@@ -394,8 +394,36 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * @return string
 	 */
 	public static function add_analytics_attributes( $block_content, $block = [] ) {
+		// Close the attribution window normalize_group() opened, keyed on the parsed
+		// block — its className, the same signal the window opened on — not on the
+		// markup. The content gate's block-visibility filter blanks a hidden block to
+		// '' on `render_block`, which runs before this `render_block_core/group`
+		// filter, so a card hidden by a reader-visibility rule arrives here with no
+		// marker in the string. Closing on the markup instead would leave the window
+		// open, and the next donate form or same-site button on the page would
+		// attribute itself to the hidden story. Matches close_instance_window(),
+		// which also closes on the parsed block. A plain wrapper Group carries the
+		// marker in its content but not its own className, so is_prompt_card() is
+		// false for it and its inner card's own Group still closes the window.
+		$condition = null;
+		if ( self::is_prompt_card( is_array( $block ) ? $block : [] ) ) {
+			$condition                = self::$rendered_condition;
+			self::$rendered_condition = null;
+			self::$card_open          = false;
+		}
+
+		// The opt-in is the feature: with it withdrawn a detached card is still the
+		// publisher's own content and renders, but the feature reports nothing — so
+		// it is not stamped and the view script emits no interaction for it. The
+		// window above is still closed either way, so a hidden card can't leak.
+		if ( ! self::is_feature_on() ) {
+			return $block_content;
+		}
+
 		// This filter runs for every Group on the page, so the marker is looked for
-		// in the string before anything is parsed.
+		// in the string before anything is parsed. The tag-processor checks below
+		// gate *stamping* only: a blanked or marker-less render is not stamped, but
+		// its window has already been closed above.
 		if ( false === strpos( (string) $block_content, Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS ) ) {
 			return $block_content;
 		}
@@ -418,13 +446,9 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 
 		// Reported from what normalize_group() recorded, not recomputed: the label
 		// has to name the copy the reader was actually shown.
-		if ( is_string( self::$rendered_condition ) && '' !== self::$rendered_condition ) {
-			$processor->set_attribute( 'data-newspack-cp-condition', self::$rendered_condition );
+		if ( is_string( $condition ) && '' !== $condition ) {
+			$processor->set_attribute( 'data-newspack-cp-condition', $condition );
 		}
-
-		// This card is rendered: the window closes here, having stamped it.
-		self::$rendered_condition = null;
-		self::$card_open          = false;
 
 		return $processor->get_updated_html();
 	}
@@ -599,26 +623,36 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			$parsed_block = self::normalize_cta( $parsed_block );
 		}
 
-		$settings_ready = class_exists( 'Newspack_Popups_Settings' );
-		$control_on     = $settings_ready && Newspack_Popups_Settings::is_control_active();
-		$condition      = '';
+		// Seed the condition from the story's assignment, the one function the front
+		// end, the editor notice and the settings preview all read, so the swap below
+		// and the stamp can't disagree. get_condition() already resolves the
+		// override-vs-control-vs-post-id precedence and returns '' when the control is
+		// off, when a fund drive is on but the control isn't, or when there is no story
+		// to assign (get_the_ID() === 0 off the loop) — so an off-loop render is
+		// stamped nothing rather than a bare story_aware next to post-id="0".
+		$post_id   = (int) get_the_ID();
+		$condition = self::get_condition( $post_id );
 
+		$settings_ready = class_exists( 'Newspack_Popups_Settings' );
 		if ( $settings_ready && Newspack_Popups_Settings::is_override_active() ) {
-			// A fund drive replaces every card; the control test is paused for its duration.
+			// A fund drive replaces every card, and the control test is paused for its
+			// duration. `override` marks that paused test — get_condition() reports it
+			// whenever the control test and the fund drive are both on, whether or not
+			// this card actually swapped (a form-mode card with a deleted paragraph
+			// swaps nothing, but the drive is still on). The override runs regardless
+			// of the control test; the condition it reports does not.
 			$parsed_block = self::apply_override( $parsed_block );
-			// The condition is a dimension of the control test only: reported
-			// while it runs (paused by the drive), absent otherwise.
-			$condition = $control_on ? self::CONDITION_OVERRIDE : '';
-		} elseif ( $control_on ) {
-			// Story-aware unless the control copy actually replaced this card's
-			// own, so what is reported is what the reader was shown.
-			$condition = self::CONDITION_STORY_AWARE;
-			if ( self::CONDITION_GENERIC_CONTROL === self::get_condition( (int) get_the_ID() ) ) {
-				$before       = self::get_copy_html( $parsed_block );
-				$parsed_block = self::apply_control( $parsed_block );
-				if ( self::get_copy_html( $parsed_block ) !== $before ) {
-					$condition = self::CONDITION_GENERIC_CONTROL;
-				}
+		} elseif ( self::CONDITION_GENERIC_CONTROL === $condition ) {
+			// Selected for the control copy: swap it in, but report story_aware if the
+			// card had nothing to replace (a detached card whose copy paragraph was
+			// deleted), so the stamp names the copy the reader was actually shown. For
+			// a card nested in another block the swap reaches the render only because
+			// WP_Block::render() calls refresh_parsed_block_dependents() when
+			// render_block_data changed the parsed block — current-core behavior.
+			$before       = self::get_copy_html( $parsed_block );
+			$parsed_block = self::apply_control( $parsed_block );
+			if ( self::get_copy_html( $parsed_block ) === $before ) {
+				$condition = self::CONDITION_STORY_AWARE;
 			}
 		}
 
@@ -791,9 +825,9 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 				'posts'  => [],
 			];
 		}
-		$ids      = self::get_control_candidate_ids( $pattern_id );
-		$selected = [];
-		foreach ( $ids as $id ) {
+		$candidates = self::get_control_candidate_ids( $pattern_id );
+		$selected   = [];
+		foreach ( $candidates['ids'] as $id ) {
 			$id = (int) $id;
 			if ( self::is_control_story( $id, $interval ) ) {
 				$selected[] = $id;
@@ -813,7 +847,7 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		);
 		return [
 			'total'  => count( $selected ),
-			'capped' => count( $ids ) >= self::CANDIDATES_SCAN_LIMIT,
+			'capped' => $candidates['capped'],
 			'posts'  => $rows,
 		];
 	}
@@ -833,7 +867,9 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * same post.
 	 *
 	 * @param int $pattern_id The pattern id.
-	 * @return string[] Post ids, as returned by $wpdb (strings), newest first.
+	 * @return array{ids: int[], capped: bool} The candidate ids (newest first,
+	 *                                          narrowed to real prompt cards) and
+	 *                                          whether the raw scan hit its ceiling.
 	 */
 	private static function get_control_candidate_ids( $pattern_id ) {
 		$transient_key = self::candidates_transient_key( $pattern_id );
@@ -849,9 +885,9 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		// and the result is cached in a transient above rather than scoped by
 		// interval/limit, which is what the caching sniff cannot see through.
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		$ids = $wpdb->get_col(
+		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT ID FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ($in) AND ( post_content LIKE %s OR post_content LIKE %s OR post_content LIKE %s ) ORDER BY post_date DESC LIMIT %d",
+				"SELECT ID, post_content FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ($in) AND ( post_content LIKE %s OR post_content LIKE %s OR post_content LIKE %s ) ORDER BY post_date DESC LIMIT %d",
 				array_merge(
 					$types,
 					[
@@ -865,8 +901,52 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		);
 		// phpcs:enable
 
-		set_transient( $transient_key, $ids, self::CANDIDATES_CACHE_TTL );
-		return $ids;
+		// Whether the scan hit its ceiling is a property of the raw result, read
+		// before the parse filter narrows it: that is what the preview reports as
+		// `capped`, and raising the constant must not strand a filtered count there.
+		$capped = count( $rows ) >= self::CANDIDATES_SCAN_LIMIT;
+
+		// The LIKE marker needle is a coarse net: it matches the class as a
+		// substring, so a Group whose class merely starts with it
+		// (`newspack-contextual-prompt-custom`), or a post that names the class in a
+		// code block, is caught too. is_prompt_card() on the parsed content is the
+		// predicate the render actually swaps on — and restore_marker_class() can
+		// append the marker anywhere in the class list, so a whole-token SQL needle
+		// would miss real cards — so the list is narrowed by it here, once, and the
+		// cache holds the narrowed result rather than re-parsing on every keystroke.
+		$ids = [];
+		foreach ( $rows as $row ) {
+			if ( self::blocks_have_prompt_card( parse_blocks( (string) $row->post_content ) ) ) {
+				$ids[] = (int) $row->ID;
+			}
+		}
+
+		$candidates = [
+			'ids'    => $ids,
+			'capped' => $capped,
+		];
+		set_transient( $transient_key, $candidates, self::CANDIDATES_CACHE_TTL );
+		return $candidates;
+	}
+
+	/**
+	 * Whether any block in a parsed tree is a prompt card — an instance ref or a
+	 * marker Group — at any depth. The predicate the render swaps and stamps on,
+	 * so the settings preview lists exactly the stories a control will reach.
+	 *
+	 * @param array $blocks Parsed blocks.
+	 * @return bool
+	 */
+	private static function blocks_have_prompt_card( $blocks ) {
+		foreach ( $blocks as $block ) {
+			if ( self::is_prompt_card( $block ) ) {
+				return true;
+			}
+			if ( ! empty( $block['innerBlocks'] ) && self::blocks_have_prompt_card( $block['innerBlocks'] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -1167,7 +1247,10 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			return $parsed_block;
 		}
 		$post_id = (int) get_the_ID();
-		$source  = self::$card_open ? self::get_rendered_source( $post_id ) : self::get_source( $post_id );
+		// The sole caller (normalize_group()) sets $card_open two lines before it
+		// hands off here, so the window is always open at this point: the condition
+		// the card actually rendered under is what the destination has to name.
+		$source  = self::get_rendered_source( $post_id );
 		$source  = array_filter( $source, fn( $v ) => '' !== (string) $v );
 		if ( empty( $source['contextual_prompt_post_id'] ) ) {
 			return $parsed_block;
@@ -1223,6 +1306,28 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		if ( ! $host ) {
 			return true;
 		}
-		return strtolower( $host ) === strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+		// Compare with a leading `www.` stripped from both sides, and accept either
+		// home_url() or site_url() — they differ on a WordPress-in-a-subdirectory
+		// install. A button a publisher typed as www.example.org on a www-less home
+		// URL is still this site, and its attribution args are read back here.
+		$host = self::normalize_host( $host );
+		$own  = array_filter(
+			[
+				self::normalize_host( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ),
+				self::normalize_host( (string) wp_parse_url( site_url(), PHP_URL_HOST ) ),
+			]
+		);
+		return in_array( $host, $own, true );
+	}
+
+	/**
+	 * A host lowered and stripped of a leading `www.`, so the site's own address
+	 * matches whether or not either side spells the `www.`.
+	 *
+	 * @param string $host The host.
+	 * @return string
+	 */
+	private static function normalize_host( $host ) {
+		return preg_replace( '/^www\./', '', strtolower( trim( (string) $host ) ) );
 	}
 }

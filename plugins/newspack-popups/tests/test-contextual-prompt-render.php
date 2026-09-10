@@ -1751,6 +1751,82 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The site's own address reached through a `www.` the home URL omits is still
+	 * this site: a publisher who typed `https://www.example.org/donate` on a site
+	 * whose home URL is `https://example.org` gets the button tagged. A genuinely
+	 * external host, and non-web schemes, still pass through untouched.
+	 */
+	public function test_taggable_destination_matches_www_and_scheme_variants() {
+		$method = new ReflectionMethod( 'Newspack_Popups_Contextual_Prompt_Render', 'is_taggable_destination' );
+		$method->setAccessible( true );
+		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
+
+		$this->assertTrue( $method->invoke( null, 'https://www.' . $home_host . '/donate' ), 'A www. form of a www-less home host is this site.' );
+		$this->assertTrue( $method->invoke( null, home_url( '/donate' ) ), 'The bare home host is this site.' );
+		$this->assertTrue( $method->invoke( null, '/donate' ), 'A relative href is this site.' );
+		$this->assertFalse( $method->invoke( null, self::EXTERNAL_URL ), 'A genuinely external host is left alone.' );
+		$this->assertFalse( $method->invoke( null, self::MAILTO_URL ), 'mailto: is left alone.' );
+		$this->assertFalse( $method->invoke( null, 'tel:+15551234' ), 'tel: is left alone.' );
+	}
+
+	/**
+	 * A Group whose class merely starts with the marker — the publisher's own
+	 * `newspack-contextual-prompt-custom` — is not a prompt card, so the preview
+	 * that lists the stories the control will swap must not include it. The
+	 * candidate scan's LIKE needle matches the substring; is_prompt_card() on the
+	 * parsed content is what tells the real card from the look-alike.
+	 */
+	public function test_control_preview_excludes_a_marker_prefixed_class() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 1 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$marker     = Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS;
+
+		$lookalike      = '<!-- wp:group {"className":"' . $marker . '-custom"} -->'
+			. '<div class="wp-block-group ' . $marker . '-custom">'
+			. '<!-- wp:paragraph --><p>Custom copy.</p><!-- /wp:paragraph -->'
+			. '</div><!-- /wp:group -->';
+		$real           = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			]
+		) . ' /-->';
+		$lookalike_post = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $lookalike,
+			]
+		);
+		$real_post      = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $real,
+			]
+		);
+		delete_transient( 'newspack_cp_control_candidates_' . $pattern_id );
+
+		// Interval 1 selects every candidate the scan turns up, so this is purely
+		// about the is_prompt_card() filter, not the interval.
+		$ids = wp_list_pluck( Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 )['posts'], 'id' );
+		$this->assertNotContains( $lookalike_post, $ids, 'A Group whose class only starts with the marker is not a prompt card.' );
+		$this->assertContains( $real_post, $ids, 'The real instance is still listed.' );
+	}
+
+	/**
+	 * The control-preview endpoint reports the scan limit, so the settings UI can
+	 * name the newest-N ceiling from the server rather than hardcoding the number.
+	 */
+	public function test_control_preview_endpoint_returns_the_scan_limit() {
+		$response = Newspack_Popups_API::api_get_control_preview( new WP_REST_Request() );
+		$this->assertNotWPError( $response );
+		$this->assertSame(
+			Newspack_Popups_Contextual_Prompt_Render::CANDIDATES_SCAN_LIMIT,
+			$response->get_data()['scan_limit']
+		);
+	}
+
+	/**
 	 * Render a post in the loop, so get_the_ID() is set the way it is for a reader.
 	 *
 	 * @param int $post_id Post to render.

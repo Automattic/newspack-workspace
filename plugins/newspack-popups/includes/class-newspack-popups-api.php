@@ -302,12 +302,16 @@ final class Newspack_Popups_API {
 		$preview  = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( $interval, $limit, $offset );
 		return rest_ensure_response(
 			[
-				'interval' => $interval,
-				'limit'    => $limit,
-				'offset'   => $offset,
-				'total'    => $preview['total'],
-				'capped'   => $preview['capped'],
-				'posts'    => $preview['posts'],
+				'interval'   => $interval,
+				'limit'      => $limit,
+				'offset'     => $offset,
+				'total'      => $preview['total'],
+				'capped'     => $preview['capped'],
+				// The scan ceiling, so the UI can name the "newest N stories" cap from
+				// the server instead of hardcoding it and stranding a wrong number in
+				// translations when the constant changes.
+				'scan_limit' => Newspack_Popups_Contextual_Prompt_Render::CANDIDATES_SCAN_LIMIT,
+				'posts'      => $preview['posts'],
 			]
 		);
 	}
