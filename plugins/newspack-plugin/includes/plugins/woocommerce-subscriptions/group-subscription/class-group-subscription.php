@@ -32,6 +32,17 @@ class Group_Subscription {
 	const GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY = '_newspack_group_subscription_manager';
 
 	/**
+	 * Subscription meta key stamping the source WooCommerce Teams team a group
+	 * subscription was migrated from. Written by migrate-teams, which keys reuse on
+	 * it so one owner's several teams each migrate to their own group subscription
+	 * instead of merging into one. Read at runtime by
+	 * Group_Subscription_Teams_Invite, which resolves a surviving team invitation
+	 * back to the group it became. It lives here rather than on the CLI class
+	 * because the CLI is only loaded under WP-CLI.
+	 */
+	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
+
+	/**
 	 * Build the per-subscription joined-at user_meta key.
 	 *
 	 * @param int $subscription_id Subscription ID.

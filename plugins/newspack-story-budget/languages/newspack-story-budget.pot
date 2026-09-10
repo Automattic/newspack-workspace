@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Story Budget 1.2.3\n"
+"Project-Id-Version: Newspack Story Budget 1.2.4\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-story-budget\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-31T17:56:28+00:00\n"
+"POT-Creation-Date: 2026-09-09T16:37:14+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-story-budget\n"
@@ -38,7 +38,7 @@ msgstr ""
 #: includes/class-admin.php:51
 #: includes/class-budgets.php:54
 #: dist/story-budget-app.js:161
-#: src/app/index.js:82
+#: src/app/index.js:83
 msgid "Story Budget"
 msgstr ""
 
@@ -47,7 +47,7 @@ msgstr ""
 #: includes/class-admin.php:338
 #: includes/fields/class-fields.php:150
 #: dist/story-budget-app.js:158
-#: src/components/create-new-story.js:100
+#: src/components/create-new-story.js:106
 msgid "Budget"
 msgstr ""
 
@@ -149,53 +149,53 @@ msgstr ""
 msgid "Name of the budget."
 msgstr ""
 
-#: includes/class-api.php:489
+#: includes/class-api.php:505
 msgid "Story title cannot be empty."
 msgstr ""
 
-#: includes/class-api.php:497
+#: includes/class-api.php:513
 msgid "At least one budget must be selected."
 msgstr ""
 
-#: includes/class-api.php:558
+#: includes/class-api.php:575
 msgid "Invalid story."
 msgstr ""
 
-#: includes/class-api.php:645
-#: includes/class-api.php:664
+#: includes/class-api.php:662
+#: includes/class-api.php:681
 msgid "Story not found."
 msgstr ""
 
 #. translators: %d is the story ID.
-#: includes/class-api.php:728
-#: includes/class-api.php:774
+#: includes/class-api.php:745
+#: includes/class-api.php:791
 #, php-format
 msgid "Story with ID \"%d\" not found."
 msgstr ""
 
 #. Translators: field data type.
-#: includes/class-api.php:747
-#: includes/class-api.php:790
+#: includes/class-api.php:764
+#: includes/class-api.php:807
 #, php-format
 msgid "Invalid value for field type \"%s\"."
 msgstr ""
 
-#: includes/class-api.php:782
+#: includes/class-api.php:799
 msgid "Missing field."
 msgstr ""
 
-#: includes/class-api.php:868
+#: includes/class-api.php:885
 msgid "Budget name cannot be empty."
 msgstr ""
 
-#: includes/class-api.php:894
-#: includes/class-api.php:929
+#: includes/class-api.php:911
+#: includes/class-api.php:946
 #: includes/class-budget.php:118
 msgid "Budget not found."
 msgstr ""
 
 #. translators: %d is the budget ID.
-#: includes/class-api.php:990
+#: includes/class-api.php:1008
 #, php-format
 msgid "Budget with ID \"%d\" not found."
 msgstr ""
@@ -285,7 +285,7 @@ msgstr ""
 
 #: includes/fields/class-fields.php:106
 #: dist/story-budget-app.js:158
-#: src/components/create-new-story.js:89
+#: src/components/create-new-story.js:95
 msgid "Story Name"
 msgstr ""
 
@@ -315,7 +315,7 @@ msgstr ""
 
 #: includes/fields/class-fields.php:150
 #: dist/story-budget-app.js:161
-#: src/app/index.js:75
+#: src/app/index.js:76
 msgid "Budgets"
 msgstr ""
 
@@ -531,7 +531,7 @@ msgstr ""
 #: src/components/budget-field/budget-field-auto-archive-date.js:96
 #: src/components/budget-field/budget-field-name.js:65
 #: src/components/create-budget-modal.js:74
-#: src/components/create-new-story.js:147
+#: src/components/create-new-story.js:153
 #: src/components/story-field.js:183
 #: src/components/story.js:162
 msgid "Save"
@@ -544,7 +544,7 @@ msgstr ""
 #: src/components/budget-field/budget-field-auto-archive-date.js:110
 #: src/components/budget-field/budget-field-name.js:68
 #: src/components/create-budget-modal.js:71
-#: src/components/create-new-story.js:139
+#: src/components/create-new-story.js:145
 #: src/components/stories-edit.js:269
 #: src/components/story-field.js:193
 #: src/components/story.js:166
@@ -726,7 +726,7 @@ msgstr ""
 
 #: dist/story-budget-app.js:158
 #: src/components/budget-field/budget-field-auto-archive-date.js:63
-#: src/components/budget-rows.js:236
+#: src/components/budget-rows.js:242
 msgid "Auto-archive set for "
 msgstr ""
 
@@ -751,27 +751,27 @@ msgid "Reset"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budget-rows.js:159
+#: src/components/budget-rows.js:161
 msgid "View Stories"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budget-rows.js:169
+#: src/components/budget-rows.js:173
 msgid "Unarchive"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budget-rows.js:169
+#: src/components/budget-rows.js:173
 msgid "Archive"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budget-rows.js:254
+#: src/components/budget-rows.js:260
 msgid "Actions"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budget-rows.js:266
+#: src/components/budget-rows.js:272
 msgid "No budgets found."
 msgstr ""
 
@@ -786,42 +786,42 @@ msgid "Fetching Budgets…"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budgets.js:107
+#: src/components/budgets.js:108
 msgid "Search"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budgets.js:114
+#: src/components/budgets.js:115
 msgid "Budget Status"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budgets.js:118
+#: src/components/budgets.js:119
 msgid "Active"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budgets.js:122
+#: src/components/budgets.js:123
 msgid "Archived"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/budgets.js:132
+#: src/components/budgets.js:134
 msgid "Edit Mode"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/create-new-story.js:42
+#: src/components/create-new-story.js:44
 msgid "Select a budget"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/create-new-story.js:46
+#: src/components/create-new-story.js:50
 msgid "Add new budget"
 msgstr ""
 
 #: dist/story-budget-app.js:158
-#: src/components/create-new-story.js:113
+#: src/components/create-new-story.js:119
 msgid "New Budget Name"
 msgstr ""
 
@@ -858,25 +858,25 @@ msgid "Leave %s"
 msgstr ""
 
 #: dist/story-budget-app.js:161
-#: src/app/index.js:119
+#: src/app/index.js:120
 #: src/components/sites-nav.js:37
 msgid "Connect to remote site"
 msgstr ""
 
 #: dist/story-budget-app.js:161
-#: src/app/index.js:71
+#: src/app/index.js:72
 msgid "Stories"
 msgstr ""
 
 #: dist/story-budget-app.js:161
-#: src/app/index.js:110
-#: src/app/index.js:128
+#: src/app/index.js:111
+#: src/app/index.js:129
 msgid "Add Story"
 msgstr ""
 
 #: dist/story-budget-app.js:161
-#: src/app/index.js:140
-#: src/app/index.js:147
+#: src/app/index.js:142
+#: src/app/index.js:152
 msgid "Add Budget"
 msgstr ""
 

@@ -312,9 +312,11 @@ class Subscribe_Block_Response_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `gate_post_id` is never set by this block — it originates in
-	 * newspack-plugin's content gate — but `view.js` reads it defensively when
-	 * present, so a gated subscription must still carry it through.
+	 * `gate_post_id` originates in newspack-plugin's content gate, which adds it
+	 * as a hidden input to the block's form; the handler copies it into
+	 * $metadata and `view.js` puts it on the newsletter_signup and
+	 * reader_registered activities, so a gated subscription must carry it
+	 * through the response.
 	 */
 	public function test_gate_post_id_survives() {
 		$response = $this->capture_response(
