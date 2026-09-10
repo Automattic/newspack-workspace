@@ -426,13 +426,11 @@ class Group_Subscription_Teams_Invite {
 			// withdrawal itself is what records the difference, whoever minted the
 			// link: this route, or the owner in the group panel.
 			//
-			// Only withdrawals recorded from this release onwards, though. A link an
-			// owner disabled on an already-flipped site before it shipped left no
-			// marker behind, so the first click on a legacy registration URL takes the
-			// mint branch below and puts a fresh link into circulation. That window is
-			// out of scope: nothing distinguishes those groups from ones whose owner
-			// never minted a link at all, and treating them as withdrawn would leave
-			// the latter's registration URLs permanently dead.
+			// A withdrawal from before delete_link_invite() began writing
+			// LINK_REVOKED_META left no marker, so the first click on a legacy
+			// registration URL mints a replacement. Reading an unmarked absence as a
+			// withdrawal instead would permanently kill the registration URLs of every
+			// group whose owner simply never minted a link.
 			if ( Group_Subscription_Invite::link_invite_was_revoked( $subscription, $owner_id ) ) {
 				return self::invalid_link_error( 'link_invite_revoked', [ 'subscription_id' => $subscription->get_id() ] );
 			}
@@ -782,7 +780,7 @@ class Group_Subscription_Teams_Invite {
 	 */
 	private static function spend_for_existing_member( $subscription, string $email, int $invitee_id ): \WP_Error {
 		self::close_invitations_for( $subscription, [ $email ] );
-		return self::existing_member_error( $subscription, $invitee_id );
+		return self::existing_member_error( $invitee_id );
 	}
 
 	/**
@@ -794,22 +792,28 @@ class Group_Subscription_Teams_Invite {
 	 * instead: "you already have access" is false for them, and would confirm that the
 	 * invited address holds an account in this group.
 	 *
-	 * A signed-out visitor is told to sign in and carries a redirect onward to the
-	 * group's subscription view. Both halves are needed. The link is spent by the time
-	 * they read the message, so without somewhere to continue to their only move is to
-	 * click the same URL again and be told it is no longer valid. And the message
-	 * asserts nothing about the invited address, because an unauthenticated visitor may
-	 * be holding a forwarded link — the disclosure the signed-in branch above refuses.
+	 * A signed-out visitor is told to sign in and carries a redirect onward to My
+	 * Account. Both halves are needed. The link is spent by the time they read the
+	 * message, so without somewhere to continue to their only move is to click the same
+	 * URL again and be told it is no longer valid. And the message asserts nothing about
+	 * the invited address, because an unauthenticated visitor may be holding a forwarded
+	 * link — the disclosure the signed-in branch above refuses.
 	 *
-	 * @param \WC_Subscription $subscription The group subscription.
-	 * @param int              $invitee_id   The reader holding the invited address, if any.
+	 * The continuation names no group for the same reason. This is the only path here
+	 * that attaches a redirect at all, so a URL carrying the group's subscription ID
+	 * would put a weaker form of that disclosure back in the address bar: present when
+	 * the invited address is a member, absent when the link is simply dead. A
+	 * forwarded-link holder who signs in as themselves could not open that subscription
+	 * anyway, so nothing is lost by leaving them on My Account.
+	 *
+	 * @param int $invitee_id The reader holding the invited address, if any.
 	 */
-	private static function existing_member_error( $subscription, int $invitee_id ): \WP_Error {
+	private static function existing_member_error( int $invitee_id ): \WP_Error {
 		if ( ! is_user_logged_in() ) {
 			return new \WP_Error(
 				Group_Subscription_Invite::RESULT_JOIN_TEAM_SIGN_IN,
 				'',
-				[ 'redirect' => self::subscription_view_url( $subscription ) ]
+				[ 'redirect' => self::myaccount_url() ]
 			);
 		}
 		if ( $invitee_id && get_current_user_id() === $invitee_id ) {
@@ -821,21 +825,19 @@ class Group_Subscription_Teams_Invite {
 	/**
 	 * Where a reader continues to once they have signed in.
 	 *
-	 * The group's own subscription view, which is where every other invite path lands a
-	 * reader who turns out to be in the group already. Somebody who signs in as
-	 * anyone else meets WooCommerce Subscriptions' own refusal there:
-	 * Group_Subscription_MyAccount::grant_group_member_view_order_cap() grants
-	 * `view_order` to that group's members and to nobody else.
-	 *
-	 * @param \WC_Subscription $subscription The group subscription.
+	 * Account details, which is both where
+	 * WooCommerce_My_Account::redirect_to_account_details() sends a signed-in reader who
+	 * lands on the My Account root, and what Group_Subscription_Invite's own
+	 * `login_needed` handoff uses — so a reader arriving here ends up on the same page
+	 * as one arriving from any other invite they cannot act on.
 	 *
 	 * @return string The URL, or an empty string when WooCommerce cannot build one.
 	 */
-	private static function subscription_view_url( $subscription ): string {
-		if ( ! function_exists( 'wc_get_endpoint_url' ) || ! function_exists( 'wc_get_page_permalink' ) ) {
+	private static function myaccount_url(): string {
+		if ( ! function_exists( 'wc_get_account_endpoint_url' ) ) {
 			return '';
 		}
-		return (string) wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), wc_get_page_permalink( 'myaccount' ) );
+		return (string) wc_get_account_endpoint_url( 'edit-account' );
 	}
 }
 

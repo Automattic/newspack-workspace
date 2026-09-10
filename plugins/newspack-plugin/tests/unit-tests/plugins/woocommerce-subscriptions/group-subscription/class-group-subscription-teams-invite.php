@@ -359,8 +359,11 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 	 * for it, and a pending row would re-admit a reader the manager removed.
 	 *
 	 * Spending it is what makes the redirect load-bearing: the link is dead by the time
-	 * the reader reads the message, so signing in has to carry them onward to the group
-	 * itself rather than back to a URL that now answers "no longer valid".
+	 * the reader reads the message, so signing in has to carry them onward rather than
+	 * back to a URL that now answers "no longer valid". It carries them to My Account
+	 * and not to the group, because this is the only branch that attaches a redirect at
+	 * all — a URL naming the group would disclose in the address bar what the message
+	 * deliberately withholds.
 	 */
 	public function test_an_existing_member_is_told_to_sign_in_and_spends_the_invitation() {
 		$member_email = 'already-in@test.com';
@@ -380,9 +383,9 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_SIGN_IN, $result->get_error_code(), 'A signed-out member needs the sign-in message, not the generic one.' );
 		$this->assertSame( 'wcmti-accepted', get_post( $invitation_id )->post_status, 'An address that already holds what the link offers has spent it.' );
 		$this->assertSame(
-			wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), wc_get_page_permalink( 'myaccount' ) ),
+			wc_get_account_endpoint_url( 'edit-account' ),
 			$result->get_error_data()['redirect'] ?? '',
-			'Signing in must land the reader on the group, not back on the spent link.'
+			'Signing in must land the reader on My Account, not back on the spent link.'
 		);
 
 		// The manager changes their mind.
