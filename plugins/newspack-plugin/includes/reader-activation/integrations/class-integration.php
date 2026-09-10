@@ -379,6 +379,12 @@ abstract class Integration {
 	 * this method to perform additional checks on the request (e.g. verifying
 	 * custom headers, validating metadata, or enforcing integration-specific rules).
 	 *
+	 * Runs for every request that reaches the key gate, including one from an
+	 * already-authenticated caller: the endpoint's logged-in branch sits behind
+	 * this check, so rejecting here also suppresses
+	 * handle_logged_in_user_registration(). Fields like `npe` are
+	 * caller-supplied on that path too — validating them is not a session check.
+	 *
 	 * @param string           $key     The submitted key to validate.
 	 * @param \WP_REST_Request $request The full registration request.
 	 * @return bool Whether the registration request is valid.
@@ -614,6 +620,11 @@ abstract class Integration {
 	 * Integrations can override this method to update user data or perform other actions when an existing user attempts to register again via the frontend registration flow. For example, an integration might want to link the existing user account to the integration, record a new donation for a returning donor, or log this event for analytics purposes.
 	 *
 	 * The default implementation is a no-op.
+	 *
+	 * Runs only for requests that passed every registration-endpoint gate —
+	 * integration key (including this integration's own
+	 * validate_registration_request()), per-IP rate limit, and reCAPTCHA. A
+	 * request rejected by any gate never reaches this handler.
 	 *
 	 * @param \WP_User         $user    The currently logged-in user attempting to register again.
 	 * @param \WP_REST_Request $request The original registration request.

@@ -7,6 +7,7 @@
 
 use Newspack\Reader_Activation;
 use Newspack\Reader_Registration;
+use Newspack\Recaptcha;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integration;
 
@@ -351,6 +352,38 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An invalid-key rejection must emit a `newspack_log` entry.
+	 *
+	 * The clients on this path treat a key rejection as final, so the remote
+	 * entry is the only operator-visible signal when keys fail site-wide
+	 * (a rotated key, a cached page emitting a stale one).
+	 */
+	public function test_invalid_key_rejection_remote_logs() {
+		$captured = [];
+		$spy      = function ( $code, $message, $data ) use ( &$captured ) {
+			if ( 'newspack_frontend_registration_invalid_key' === $code ) {
+				$captured[] = $data;
+			}
+		};
+		add_action( 'newspack_log', $spy, 10, 3 );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'wrong-key',
+			]
+		);
+
+		remove_action( 'newspack_log', $spy );
+
+		$this->assertEquals( 403, $response->get_status() );
+		$this->assertCount( 1, $captured, 'An invalid-key rejection must fire one newspack_log entry.' );
+		$this->assertSame( 'debug', $captured[0]['type'] );
+		$this->assertSame( self::$integration_id, $captured[0]['data']['integration_id'] );
+	}
+
+	/**
 	 * Test honeypot field triggers fake success.
 	 */
 	public function test_honeypot_returns_fake_success() {
@@ -370,7 +403,37 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Order guard: the honeypot check must run before the integration key check.
+	 *
+	 * Existing honeypot coverage (test_honeypot_returns_fake_success() above)
+	 * sends a valid key, so it can't tell the two orderings apart. A request
+	 * with the honeypot filled AND an invalid key must still get the
+	 * fake-success response — if the key check ran first, it would return 403
+	 * instead.
+	 */
+	public function test_honeypot_precedes_integration_key_check() {
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'email'           => 'bot-filled@spam.com',
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'not-the-key',
+			]
+		);
+		$this->assertEquals( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertTrue( $data['success'] );
+		// Verify user was NOT actually created.
+		$this->assertFalse( get_user_by( 'email', self::$reader_email ) );
+	}
+
+	/**
 	 * Test logged-in user returns current reader data.
+	 *
+	 * Also the positive control for the gate tests below: their zero-fire
+	 * assertions on `newspack_frontend_registration_existing_user` only
+	 * guard the ordering if this spy proves the action observably fires on
+	 * the passing path, with the payload consumers receive.
 	 */
 	public function test_register_while_logged_in() {
 		$admin_id = self::factory()->user->create(
@@ -381,6 +444,12 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		);
 		wp_set_current_user( $admin_id );
 
+		$fired = [];
+		$spy   = function ( $user, $request, $integration_instance ) use ( &$fired ) {
+			$fired[] = [ $user, $request, $integration_instance ];
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy, 10, 3 );
+
 		$response = $this->do_register_request(
 			[
 				'npe'             => self::$reader_email,
@@ -388,12 +457,198 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 				'integration_key' => self::generate_key( self::$integration_id ),
 			]
 		);
+
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+
 		$this->assertEquals( 200, $response->get_status() );
 		$data = $response->get_data();
 		$this->assertTrue( $data['success'] );
 		$this->assertEquals( 'existing', $data['status'] );
 		$this->assertEquals( 'admin@test.com', $data['email'] );
 
+		$this->assertCount( 1, $fired, 'The existing-user action must fire exactly once on the valid logged-in path.' );
+		$this->assertSame( $admin_id, $fired[0][0]->ID );
+		$this->assertInstanceOf( WP_REST_Request::class, $fired[0][1] );
+		$this->assertNull( $fired[0][2], 'Filter-only integrations pass null as the integration instance.' );
+
+		wp_delete_user( $admin_id );
+	}
+
+	/**
+	 * A logged-in caller must still present a valid integration key.
+	 *
+	 * The logged-in branch used to run before the key check, so any visitor with
+	 * a session could reach integration hooks unauthenticated.
+	 *
+	 * A 403 only implies the logged-in branch was never reached; it isn't the
+	 * security property itself, and a status code could change for unrelated
+	 * reasons without this test noticing. The actual property is that
+	 * `newspack_frontend_registration_existing_user` — the hook integrations use
+	 * to act on a logged-in registration attempt — never fires behind a failed
+	 * key check, so this also spies on that action directly.
+	 */
+	public function test_register_while_logged_in_requires_valid_key() {
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-key@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		$fire_count = 0;
+		$spy        = function () use ( &$fire_count ) {
+			$fire_count++;
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'not-the-key',
+			]
+		);
+
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$this->assertEquals( 403, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'invalid_integration_key', $data['code'] );
+		$this->assertSame( 0, $fire_count, 'newspack_frontend_registration_existing_user must not fire behind a failed integration key check.' );
+
+		wp_delete_user( $admin_id );
+	}
+
+	/**
+	 * A logged-in caller is subject to the per-IP rate limit.
+	 */
+	public function test_register_while_logged_in_respects_rate_limit() {
+		$set_limit = function () {
+			return 1;
+		};
+		add_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-rate@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		$body = [
+			'npe'             => self::$reader_email,
+			'integration_id'  => self::$integration_id,
+			'integration_key' => self::generate_key( self::$integration_id ),
+		];
+
+		$first = $this->do_register_request( $body );
+		$this->assertEquals( 200, $first->get_status() );
+
+		$second = $this->do_register_request( $body );
+		$this->assertEquals( 429, $second->get_status() );
+		$data = $second->get_data();
+		$this->assertEquals( 'rate_limit_exceeded', $data['code'] );
+
+		remove_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+		wp_delete_user( $admin_id );
+	}
+
+	/**
+	 * A logged-in caller is subject to the Reader Activation gate.
+	 *
+	 * The logged-in branch used to return ahead of that check, so a session got
+	 * a 200 even with Reader Activation switched off. Reader_Registration::init()
+	 * only registers the route when Reader Activation is enabled, so this covers
+	 * the narrower case where the `newspack_reader_activation_enabled` filter
+	 * returns false after the route was already registered.
+	 */
+	public function test_register_while_logged_in_when_ras_disabled() {
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-ras@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+			]
+		);
+
+		$this->assertEquals( 403, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'reader_activation_disabled', $data['code'] );
+
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		wp_delete_user( $admin_id );
+	}
+
+	/**
+	 * Order guard: reCAPTCHA must run before the logged-in branch.
+	 *
+	 * The other logged-in guards pin the branch behind the key check, the
+	 * rate limit, and the Reader Activation gate; this pins the remaining
+	 * documented behavior change. Forcing verification via the
+	 * `newspack_recaptcha_verify_captcha` filter is not enough here —
+	 * Recaptcha::verify_captcha() returns true when can_use_captcha() is
+	 * false (see test_recaptcha_filter_forces_verification()) — so this
+	 * populates real credentials and sends no token, which is rejected as an
+	 * invalid token before any siteverify HTTP call.
+	 */
+	public function test_register_while_logged_in_requires_recaptcha() {
+		Recaptcha::update_settings(
+			[
+				'use_captcha' => true,
+				'version'     => 'v3',
+				'credentials' => [
+					'v3' => [
+						'site_key'    => 'test-site-key',
+						'site_secret' => 'test-site-secret',
+					],
+				],
+			]
+		);
+
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-recaptcha@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		$fire_count = 0;
+		$spy        = function () use ( &$fire_count ) {
+			$fire_count++;
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+			]
+		);
+
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$this->assertEquals( 403, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'recaptcha_failed', $data['code'] );
+		$this->assertSame( 0, $fire_count, 'newspack_frontend_registration_existing_user must not fire behind a failed reCAPTCHA check.' );
+
+		foreach ( [ 'use_captcha', 'version', 'credentials' ] as $key ) {
+			delete_option( 'newspack_recaptcha_' . $key );
+		}
 		wp_delete_user( $admin_id );
 	}
 
@@ -493,6 +748,103 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 			if ( $user ) {
 				wp_delete_user( $user->ID );
 			}
+		}
+	}
+
+	/**
+	 * Order guard: the rate limit must be checked before the integration key.
+	 *
+	 * Existing rate-limit coverage (test_rate_limit_exceeded() above) sends a
+	 * valid key on every request, so it can't tell the two orderings apart. A
+	 * request that is both over the limit AND carries an invalid key must
+	 * still be rejected as rate-limited — if the key check ran first, it
+	 * would return 403 instead of 429.
+	 */
+	public function test_rate_limit_precedes_integration_key_check() {
+		// Lower limit to 1 for testing.
+		$set_limit = function () {
+			return 1;
+		};
+		add_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		$base_body = [
+			'integration_id'  => self::$integration_id,
+			'integration_key' => self::generate_key( self::$integration_id ),
+		];
+
+		// First request exhausts the limit.
+		// Reset current user between requests since successful registration authenticates the reader.
+		$priming = $this->do_register_request( array_merge( $base_body, [ 'npe' => 'order-guard-rate1@test.com' ] ) );
+		$this->assertEquals( 201, $priming->get_status(), 'The priming request must succeed — the guard is about a successful request exhausting the limit.' );
+		wp_set_current_user( 0 );
+
+		// Second request is over the limit AND carries an invalid key — must
+		// be rejected as rate-limited, not as an invalid key.
+		$response = $this->do_register_request(
+			[
+				'npe'             => 'order-guard-rate2@test.com',
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'not-the-key',
+			]
+		);
+		$this->assertEquals( 429, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'rate_limit_exceeded', $data['code'] );
+
+		remove_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		// Clean up created user.
+		$user = get_user_by( 'email', 'order-guard-rate1@test.com' );
+		if ( $user ) {
+			wp_delete_user( $user->ID );
+		}
+	}
+
+	/**
+	 * Once the counter has recorded the limit crossing, over-limit requests
+	 * must not keep writing to the rate-limit store.
+	 *
+	 * Without the guard, every rejected request rewrites the transient — a
+	 * wp_options write per hit on hosts with no external object cache, and a
+	 * window that rolls forward with each hit instead of expiring. The
+	 * object-cache branch keeps its atomic incr, so this pins the transient
+	 * path explicitly.
+	 */
+	public function test_rate_limit_store_stops_writing_once_over_limit() {
+		// Force the transient branch regardless of the test environment.
+		$using_ext_cache = wp_using_ext_object_cache( false );
+
+		$set_limit = function () {
+			return 1;
+		};
+		add_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		$base_body = [
+			'integration_id'  => self::$integration_id,
+			'integration_key' => self::generate_key( self::$integration_id ),
+		];
+		$cache_key = 'newspack_reg_ip_' . md5( '127.0.0.1' );
+
+		// Exhaust the limit, then cross it: the crossing is recorded.
+		$this->do_register_request( array_merge( $base_body, [ 'npe' => 'store-write1@test.com' ] ) );
+		wp_set_current_user( 0 );
+		$crossing = $this->do_register_request( array_merge( $base_body, [ 'npe' => 'store-write2@test.com' ] ) );
+		$this->assertEquals( 429, $crossing->get_status() );
+		$this->assertSame( 2, (int) get_transient( $cache_key ) );
+
+		// Further over-limit requests are rejected without touching the store.
+		$this->do_register_request( array_merge( $base_body, [ 'npe' => 'store-write3@test.com' ] ) );
+		$rejected = $this->do_register_request( array_merge( $base_body, [ 'npe' => 'store-write4@test.com' ] ) );
+		$this->assertEquals( 429, $rejected->get_status() );
+		$this->assertSame( 2, (int) get_transient( $cache_key ), 'Over-limit requests must not rewrite the rate-limit counter.' );
+
+		remove_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+		wp_using_ext_object_cache( $using_ext_cache );
+		delete_transient( $cache_key );
+
+		$user = get_user_by( 'email', 'store-write1@test.com' );
+		if ( $user ) {
+			wp_delete_user( $user->ID );
 		}
 	}
 
