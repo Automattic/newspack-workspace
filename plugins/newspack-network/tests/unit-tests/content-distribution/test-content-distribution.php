@@ -98,4 +98,49 @@ class TestContentDistribution extends \WP_UnitTestCase {
 		// Assert that the post is still queued for full distribution.
 		$this->assertTrue( $queue[ $post_id ] );
 	}
+
+	/**
+	 * An ignored post meta write on a distributed post must not queue a
+	 * distribution, while an ordinary meta write must.
+	 *
+	 * This guards the `updated_post_meta` suppression in
+	 * handle_postmeta_update(): without it, every Spectra (UAGB) asset
+	 * regeneration would queue a redundant distribution, the reported
+	 * high-volume sync problem.
+	 */
+	public function test_ignored_meta_does_not_queue_distribution() {
+		$post_id = $this->factory->post->create();
+
+		// Mark the post as distributed to a network node.
+		update_post_meta( $post_id, Outgoing_Post::DISTRIBUTED_POST_META, [ 'https://node.test' ] );
+
+		// Clear the queue populated while marking the post distributed, so we
+		// measure only the writes under test.
+		$this->reset_distribution_queue();
+
+		// A Spectra asset-meta write must not queue a distribution.
+		update_post_meta( $post_id, '_uag_page_assets', 'version-2' );
+		$this->assertArrayNotHasKey(
+			$post_id,
+			Content_Distribution_Class::get_queued_distributions(),
+			'A Spectra asset-meta write should not queue a distribution.'
+		);
+
+		// A non-ignored meta write on the same post must queue a distribution.
+		update_post_meta( $post_id, 'some_meta_key', 'value' );
+		$this->assertArrayHasKey(
+			$post_id,
+			Content_Distribution_Class::get_queued_distributions(),
+			'A non-ignored meta write should queue a distribution.'
+		);
+	}
+
+	/**
+	 * Reset the static distribution queue so a test measures only its own writes.
+	 */
+	private function reset_distribution_queue() {
+		$property = new \ReflectionProperty( Content_Distribution_Class::class, 'queued_distributions' );
+		$property->setAccessible( true );
+		$property->setValue( null, [] );
+	}
 }
