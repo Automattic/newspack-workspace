@@ -161,6 +161,32 @@ class TestIncomingPost extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Local-only meta on the target must survive an incoming sync whose payload
+	 * omits it, while ordinary meta absent from the payload is removed.
+	 *
+	 * This guards the ignored-key preservation in Incoming_Post::update_meta():
+	 * a target's own Spectra (UAGB) asset meta must not be deleted or overwritten
+	 * by a sync, since those keys are excluded from the distributed payload.
+	 */
+	public function test_insert_preserves_ignored_local_meta() {
+		// Insert the linked post for the first time.
+		$post_id = $this->incoming_post->insert();
+
+		// Simulate the target site's own Spectra assets plus an unrelated local
+		// meta, neither of which is present in the incoming payload.
+		update_post_meta( $post_id, '_uag_page_assets', 'local-assets' );
+		update_post_meta( $post_id, 'local_only_key', 'local-value' );
+
+		// Run an update sync. The sample payload contains neither key.
+		$updated = new Incoming_Post( $this->get_sample_payload() );
+		$this->assertSame( $post_id, $updated->insert() );
+
+		// The ignored Spectra meta is preserved; the ordinary local meta is removed.
+		$this->assertSame( 'local-assets', get_post_meta( $post_id, '_uag_page_assets', true ) );
+		$this->assertEmpty( get_post_meta( $post_id, 'local_only_key', true ) );
+	}
+
+	/**
 	 * Test insert post when unlinked.
 	 */
 	public function test_insert_post_when_unlinked() {
