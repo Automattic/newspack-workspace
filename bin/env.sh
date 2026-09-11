@@ -326,6 +326,7 @@ ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - WP_CACHE_KEY_SALT=env_${env_name}_
       - WP_DOMAIN=${domain}
       - APACHE_RUN_USER=\${USE_CUSTOM_APACHE_USER:-www-data}
+      - WP_ENVIRONMENT_TYPE=local
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ## Probes memcached -- see docker-compose.yml for the rationale. Kept in step
