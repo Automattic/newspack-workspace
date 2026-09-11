@@ -247,6 +247,33 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Author/Contributor users are eligible group members by default (see
+	 * Group_Subscription::DEFAULT_ELIGIBLE_MEMBER_ROLES) precisely so they have a path
+	 * to content gated behind a group they were added to, even though they are neither
+	 * a reader nor the subscription's WooCommerce customer. A non-eligible role (editor)
+	 * added via the same raw member meta must not gain access, which proves the grant
+	 * is eligibility-scoped rather than a side effect of merely holding the meta.
+	 */
+	public function test_author_group_member_has_access_but_non_eligible_role_does_not() {
+		$author_id = $this->factory->user->create( [ 'role' => 'author' ] );
+		$editor_id = $this->factory->user->create( [ 'role' => 'editor' ] );
+
+		$subscription = $this->create_subscription();
+		$this->enable_group_subscription( $subscription );
+		$this->add_group_member( $author_id, $subscription->get_id() );
+		$this->add_group_member( $editor_id, $subscription->get_id() );
+
+		$this->assertTrue(
+			Access_Rules::has_active_subscription( $author_id, [ self::$product_id ] ),
+			'An Author group member should have access via group subscription, even though they are neither a reader nor the subscription owner.'
+		);
+		$this->assertFalse(
+			Access_Rules::has_active_subscription( $editor_id, [ self::$product_id ] ),
+			'A non-eligible role (editor) must not gain access merely by holding group-member meta -- the grant is eligibility-scoped.'
+		);
+	}
+
+	/**
 	 * Test evaluate_rules passes user_id to rule callbacks.
 	 */
 	public function test_evaluate_rules_with_explicit_user_id() {
