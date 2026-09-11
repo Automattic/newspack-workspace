@@ -3003,6 +3003,11 @@ class Teams_Migration {
 	 * larger than they strictly need. Over-provisioning by one seat is harmless; under-
 	 * provisioning (the bug this fixes) locks a paying member out of a seat.
 	 *
+	 * Note the mapping inherits map_team_seats_to_group_limit()'s 2-seat floor, so a
+	 * 1-member product never maps below a limit of 2 — including on an "Owners must be
+	 * members" site, where the owner occupies the single seat and the group strictly needs
+	 * only 1. That is one seat in the same safe over-provision direction as above.
+	 *
 	 * @param int $max_members The product's _wc_memberships_for_teams_max_member_count (0 = unlimited).
 	 *
 	 * @return int The owner-inclusive group limit (0 = unlimited).
