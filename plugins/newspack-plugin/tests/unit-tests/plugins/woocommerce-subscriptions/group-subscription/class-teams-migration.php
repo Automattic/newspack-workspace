@@ -257,6 +257,33 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The product command must set the same owner-inclusive limit migrate-teams does:
+	 * a product's "Maximum member count" gains a seat for the owner unless the global
+	 * "Owners must be members" setting already reserves one. 0 (unlimited) is untouched.
+	 */
+	public function test_map_product_max_members_to_group_limit_accounts_for_owner_seat() {
+		// Default (option unset) behaves as "no": WC Teams does not count the owner, so
+		// Access Control adds a seat — a "5 members" product becomes a 6-seat group.
+		delete_option( 'wc_memberships_for_teams_owners_must_take_seat' );
+		$this->assertSame( 6, Teams_Migration::map_product_max_members_to_group_limit( 5 ), 'Owner uncounted by default → 5-member product needs 6 group seats.' );
+
+		// Explicit "no" matches the default.
+		update_option( 'wc_memberships_for_teams_owners_must_take_seat', 'no' );
+		$this->assertSame( 6, Teams_Migration::map_product_max_members_to_group_limit( 5 ) );
+
+		// "yes": the owner already occupies one of the product's seats, so no seat is added.
+		update_option( 'wc_memberships_for_teams_owners_must_take_seat', 'yes' );
+		$this->assertSame( 5, Teams_Migration::map_product_max_members_to_group_limit( 5 ) );
+
+		// 0 = unlimited passes through unchanged, regardless of the setting.
+		$this->assertSame( 0, Teams_Migration::map_product_max_members_to_group_limit( 0 ) );
+		update_option( 'wc_memberships_for_teams_owners_must_take_seat', 'no' );
+		$this->assertSame( 0, Teams_Migration::map_product_max_members_to_group_limit( 0 ) );
+
+		delete_option( 'wc_memberships_for_teams_owners_must_take_seat' );
+	}
+
+	/**
 	 * The add_group_member() helper skips editors/admins — they are not readers and
 	 * already have full access, so they should not be recorded as group members.
 	 */
