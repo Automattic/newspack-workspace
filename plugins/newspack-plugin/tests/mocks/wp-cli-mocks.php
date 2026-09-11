@@ -174,4 +174,24 @@ namespace WP_CLI\Utils {
 			// No-op: the real helper trims caches to bound long-running CLI memory.
 		}
 	}
+
+	if ( ! function_exists( 'WP_CLI\Utils\make_progress_bar' ) ) {
+		/**
+		 * The real helper returns a cli\progress\Bar, or a silent no-op object when
+		 * output is not a TTY (as under PHPUnit). The mock always returns the no-op
+		 * shape so command code can call tick()/finish() without a terminal.
+		 *
+		 * @param string $message  Progress message (unused).
+		 * @param int    $count    Total ticks (unused).
+		 * @param int    $interval Redraw interval in ms (unused).
+		 *
+		 * @return object A tick()/finish() no-op stand-in.
+		 */
+		function make_progress_bar( $message, $count, $interval = 100 ) {
+			return new class() {
+				public function tick( $incr = 1, $msg = '' ) {}
+				public function finish() {}
+			};
+		}
+	}
 }
