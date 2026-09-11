@@ -1949,7 +1949,7 @@ class Teams_Migration {
 	 *
 	 * During a dry-run no members are added, so membership can't be read from the
 	 * data layer. A candidate would be promoted if their Teams role is `manager`,
-	 * they are a reader (so they would be added as a member), and they are not the
+	 * they are an eligible group member (so they would be added), and they are not the
 	 * owner or an existing manager.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
