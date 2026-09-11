@@ -1078,7 +1078,8 @@ HTML
 
 		$this->assertStringContainsString( 'Available only to members.', $layouts['registration'], 'The authored copy migrates rather than being dropped.' );
 		// The paid layout too, so a group whose plans require a purchase migrates as a
-		// paywall rather than as a gate any registered reader passes.
+		// paywall rather than as a gate any registered reader passes. Whether that copy
+		// lets the reader buy is pre-flight's call, not extraction's.
 		$this->assertSame( $layouts['registration'], $layouts['custom_access'], 'Both modes get a layout to activate against.' );
 	}
 
@@ -1163,40 +1164,6 @@ HTML;
 	}
 
 	/**
-	 * A container holding nothing but a dead reference is not mistaken for content.
-	 *
-	 * The group renders as an empty div, so migrating it would replace a seeded default
-	 * that does render with a wall the reader sees as blank.
-	 */
-	public function test_extract_gate_layouts_returns_empty_for_a_container_holding_a_dead_reference() {
-		$draft_pattern_id = $this->create_pattern_post( '<!-- wp:paragraph --><p>Never published.</p><!-- /wp:paragraph -->', 'draft' );
-		$gate_post        = $this->create_gate_post(
-			'<!-- wp:group --><div class="wp-block-group">'
-			. sprintf( '<!-- wp:block {"ref":%d} /-->', $draft_pattern_id )
-			. '</div><!-- /wp:group -->'
-		);
-
-		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
-
-		$this->assertSame( '', $layouts['registration'] );
-		$this->assertNull( $layouts['custom_access'] );
-	}
-
-	/**
-	 * A reference to a published but empty pattern renders nothing, and is treated as
-	 * nothing — the guard is about what reaches the reader, not what resolves.
-	 */
-	public function test_extract_gate_layouts_returns_empty_for_a_reference_to_an_empty_pattern() {
-		$empty_pattern_id = $this->create_pattern_post( '' );
-		$gate_post        = $this->create_gate_post( sprintf( '<!-- wp:block {"ref":%d} /-->', $empty_pattern_id ) );
-
-		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
-
-		$this->assertSame( '', $layouts['registration'] );
-		$this->assertNull( $layouts['custom_access'] );
-	}
-
-	/**
 	 * A dead reference sitting outside the wrappers is not carried in as unconditional
 	 * copy.
 	 *
@@ -1221,34 +1188,101 @@ HTML;
 	}
 
 	/**
-	 * An empty gate post returns an empty registration layout and a null custom_access
-	 * one. apply_layout() reads that distinction to leave the gate's seeded default
-	 * alone rather than blanking it, and there is no authored copy here to prefer.
+	 * Markup that renders nothing does not become a layout, whatever shape it takes.
+	 *
+	 * A length check would call all four of these migrated. The seeded default does
+	 * render, so swapping it for any of them shows the reader a blank wall.
 	 */
-	public function test_extract_gate_layouts_returns_empty_for_an_empty_gate_post() {
-		$gate_post = $this->create_gate_post( '' );
+	public function test_extract_gate_layouts_treats_content_that_renders_nothing_as_empty() {
+		$draft_pattern_id = $this->create_pattern_post( '<!-- wp:paragraph --><p>Never published.</p><!-- /wp:paragraph -->', 'draft' );
+		$empty_pattern_id = $this->create_pattern_post( '' );
+		$dead_reference   = sprintf( '<!-- wp:block {"ref":%d} /-->', $draft_pattern_id );
 
-		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+		$shapes = [
+			'an empty gate post'                           => '',
+			'a reference to an unpublished pattern'        => $dead_reference,
+			'a reference to a published but empty pattern' => sprintf( '<!-- wp:block {"ref":%d} /-->', $empty_pattern_id ),
+			'a container holding nothing but a dead reference' => '<!-- wp:group --><div class="wp-block-group">' . $dead_reference . '</div><!-- /wp:group -->',
+		];
 
-		$this->assertSame( '', $layouts['registration'] );
-		$this->assertNull( $layouts['custom_access'] );
+		foreach ( $shapes as $shape => $gate_content ) {
+			$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $this->create_gate_post( $gate_content ) ] );
+
+			$this->assertSame( '', $layouts['registration'], $shape . ' does not become the registration layout.' );
+			$this->assertNull( $layouts['custom_access'], $shape . ' does not become a paid layout.' );
+		}
 	}
 
 	/**
-	 * A gate post holding only a reference WordPress cannot resolve is treated as empty.
+	 * The no-wrapper fallback drops the blocks that render nothing rather than copying
+	 * the post whole.
 	 *
-	 * The markup is there, so a length check would call it migrated, but an unpublished
-	 * pattern renders nothing — so carrying it would swap a seeded default that does
-	 * render for a wall the reader sees as blank.
+	 * A reference to an unpublished pattern renders nothing today, so carrying it buys
+	 * the layout nothing — and it starts printing whatever it holds the day someone
+	 * publishes the pattern, which for a member-content wrapper means members-only copy
+	 * served from the wall built to withhold it.
 	 */
-	public function test_extract_gate_layouts_returns_empty_for_an_unresolvable_reference_only_gate() {
+	public function test_extract_gate_layouts_drops_unrenderable_blocks_from_the_no_wrapper_fallback() {
 		$draft_pattern_id = $this->create_pattern_post( '<!-- wp:paragraph --><p>Never published.</p><!-- /wp:paragraph -->', 'draft' );
-		$gate_post        = $this->create_gate_post( sprintf( '<!-- wp:block {"ref":%d} /-->', $draft_pattern_id ) );
+		$gate_post        = $this->create_gate_post(
+			'<!-- wp:paragraph --><p>Subscribe to keep reading.</p><!-- /wp:paragraph -->'
+			. sprintf( '<!-- wp:block {"ref":%d} /-->', $draft_pattern_id )
+		);
 
 		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
 
-		$this->assertSame( '', $layouts['registration'], 'A reference that renders nothing does not become the layout.' );
-		$this->assertNull( $layouts['custom_access'] );
+		$this->assertStringContainsString( 'Subscribe to keep reading.', $layouts['registration'] );
+		$this->assertStringNotContainsString( 'wp:block', $layouts['registration'], 'The dead reference is not carried into the layout.' );
+	}
+
+	/**
+	 * A wrapper the publisher left empty is not an authored view.
+	 *
+	 * Prefixing unconditional copy onto it would make it look authored, and
+	 * apply_layout() would then overwrite the seeded registration wall — the one
+	 * carrying the auth form — with a bare heading the reader cannot act on.
+	 */
+	public function test_extract_gate_layouts_leaves_an_empty_wrapper_empty() {
+		$gate_post = $this->create_gate_post(
+			'<!-- wp:heading --><h2>Members</h2><!-- /wp:heading -->'
+			. '<!-- wp:woocommerce-memberships/non-member-content --><!-- /wp:woocommerce-memberships/non-member-content -->'
+			. '<!-- wp:woocommerce-memberships/member-content -->'
+			. '<!-- wp:paragraph --><p>Thanks for supporting us.</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:woocommerce-memberships/member-content -->'
+		);
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertSame( '', $layouts['registration'], 'An empty wrapper keeps the seeded default rather than taking the heading.' );
+		$this->assertStringContainsString( 'Members', $layouts['custom_access'], 'The layout that was authored still gets the unconditional copy.' );
+		$this->assertStringContainsString( 'Thanks for supporting us.', $layouts['custom_access'] );
+	}
+
+	/**
+	 * Copy sharing a container with a wrapper is dropped, and the operator is told.
+	 *
+	 * Recovering it positionally is not feasible, so the migration discards it — but
+	 * this is the one case where it discards authored copy deliberately rather than
+	 * failing to reach it, and a silent drop gives the operator nothing to review.
+	 */
+	public function test_extract_gate_layouts_warns_when_copy_shares_a_container_with_a_wrapper() {
+		\WP_CLI::$messages = [];
+		$gate_post         = $this->create_gate_post(
+			'<!-- wp:group --><div class="wp-block-group">'
+			. '<!-- wp:heading --><h2>Standalone heading.</h2><!-- /wp:heading -->'
+			. '<!-- wp:woocommerce-memberships/non-member-content -->'
+			. '<!-- wp:paragraph --><p>Become a member.</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:woocommerce-memberships/non-member-content -->'
+			. '</div><!-- /wp:group -->'
+		);
+
+		$layouts = $this->invoke_private_static( 'extract_gate_layouts', [ $gate_post ] );
+
+		$this->assertStringContainsString( 'Become a member.', $layouts['registration'] );
+		$this->assertStringNotContainsString( 'Standalone heading.', $layouts['registration'], 'The container is skipped whole, so its other copy is lost.' );
+		$warnings = array_filter( \WP_CLI::$messages, fn( $message ) => 'warning' === $message[0] );
+		$this->assertNotEmpty( $warnings, 'The dropped copy is reported.' );
+		$this->assertStringContainsString( 'sharing a container', implode( ' ', array_column( $warnings, 1 ) ) );
 	}
 
 	/**
@@ -1396,7 +1430,7 @@ HTML;
 			$gate_id,
 			[
 				'active'         => true,
-				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid access fixture layout', '' ),
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid access fixture layout', '<!-- wp:newspack-blocks/checkout-button /-->' ),
 				'access_rules'   => [],
 			]
 		);
@@ -1405,6 +1439,83 @@ HTML;
 
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( 'no access rules', $issues[0] );
+	}
+
+	/**
+	 * What counts as a way to buy.
+	 *
+	 * A pre-flight abort turns on this answer, so the boundary is worth stating: the
+	 * seeded paywall pairs its checkout button with a "Sign in to an existing account"
+	 * anchor to #signin_modal, and counting that would report every paywall as buyable.
+	 *
+	 * @dataProvider purchase_affordance_provider
+	 *
+	 * @param bool   $expected Whether the markup offers a purchase.
+	 * @param string $content  Layout block markup.
+	 * @param string $case     What the markup stands for.
+	 */
+	public function test_layout_offers_a_purchase( bool $expected, string $content, string $case ) {
+		$this->assertSame( $expected, $this->invoke_private_static( 'layout_offers_a_purchase', [ $content ] ), $case );
+	}
+
+	/**
+	 * Markup shapes for test_layout_offers_a_purchase().
+	 *
+	 * @return array[]
+	 */
+	public function purchase_affordance_provider(): array {
+		return [
+			[ true, '<!-- wp:newspack-blocks/checkout-button /-->', 'the seeded paywall\'s checkout button' ],
+			[ true, '<!-- wp:newspack-blocks/donate /-->', 'a donate block, the other Newspack block that takes money' ],
+			[ true, '<p><a href="https://example.com/subscribe">Subscribe</a></p>', 'a publisher\'s own subscribe link' ],
+			[ false, '<p>Available only to members.</p>', 'prose with nothing to click' ],
+			[ false, '<p><a href="#signin_modal">Sign in to an existing account</a></p>', 'the seeded paywall\'s own sign-in anchor' ],
+			[ false, '<p><a href="mailto:hello@example.com">Email us</a></p>', 'a support address' ],
+			[ false, '<p><a href="/wp-login.php">Log in</a></p>', 'a log-in link' ],
+			[ false, '<p>Ask about newspack-blocks/checkout-button in your email.</p>', 'the block name appearing in copy rather than as a block' ],
+		];
+	}
+
+	/**
+	 * A written paid layout that gives the reader no way to buy is reported.
+	 *
+	 * This is the live-run half of the check: by the time verify_migrated_gate() runs,
+	 * the seeded paywall and the checkout button it carried have already been replaced.
+	 * Every other signal reads clean — the mode is active, the access rules are there,
+	 * and the layout is not empty — so without this the run reports the gate as created.
+	 */
+	public function test_verify_migrated_gate_flags_a_paid_layout_with_no_way_to_buy() {
+		$gate_id = $this->create_enforceable_gate(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			]
+		);
+		\Newspack\Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'         => true,
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout(
+					'Paid access fixture layout',
+					'<!-- wp:paragraph --><p>Available only to members.</p><!-- /wp:paragraph -->'
+				),
+				'access_rules'   => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 123 ],
+						],
+					],
+				],
+			]
+		);
+
+		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
+
+		$this->assertCount( 1, $issues );
+		$this->assertStringContainsString( 'no checkout button and no link', $issues[0] );
 	}
 
 	/**
@@ -1424,7 +1535,7 @@ HTML;
 			$gate_id,
 			[
 				'active'         => true,
-				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid access fixture layout', '' ),
+				'gate_layout_id' => \Newspack\Content_Gate::create_gate_layout( 'Paid access fixture layout', '<!-- wp:newspack-blocks/checkout-button /-->' ),
 				'access_rules'   => [
 					[
 						[
@@ -1838,7 +1949,7 @@ HTML;
 		];
 		$layouts  = [
 			'registration'  => '<p>Upsell.</p>',
-			'custom_access' => '<p>Member content.</p>',
+			'custom_access' => '<p>Member content.</p><!-- wp:newspack-blocks/checkout-button /-->',
 		];
 
 		$issues = $this->invoke_private_static(
@@ -1941,7 +2052,7 @@ HTML;
 		];
 		$layouts  = [
 			'registration'  => '<p>Upsell.</p>',
-			'custom_access' => '<p>Welcome.</p>',
+			'custom_access' => '<p>Welcome.</p><!-- wp:newspack-blocks/checkout-button /-->',
 		];
 
 		$this->assertSame(

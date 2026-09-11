@@ -229,12 +229,53 @@ class Membership_Gates_Migration {
 		// needs the split by product kind to know which access rules to build.
 		$products_by_group  = [];
 		$durations_by_group = [];
+		$layouts_by_group   = [];
 		foreach ( $plan_groups as $fingerprint => $group ) {
 			$gate_title                         = self::gate_title( $group );
 			$products_by_group[ $fingerprint ]  = self::resolve_product_ids( $group );
 			$durations_by_group[ $fingerprint ] = self::resolve_group_duration( $group, $duration_override );
+			$layouts_by_group[ $fingerprint ]   = self::resolve_group_layouts( $group );
 			self::report_dropped_product_ids( $gate_title, $products_by_group[ $fingerprint ]['dropped'], self::group_requires_purchase( $group ) );
 			self::report_duration_conflict( $gate_title, $durations_by_group[ $fingerprint ]['conflict'] );
+		}
+
+		// A paid gate whose layout gives the reader no way to buy restricts the article
+		// and then strands them there. The copy came from a WooCommerce Memberships gate
+		// post, which Newspack rendered as the whole restriction message — so a gate post
+		// with no purchase link stranded the reader before this migration too, and
+		// whether that was deliberate is not something this command can tell. It is named
+		// and refused rather than guessed at: migrating it reproduces the dead end, and
+		// substituting Newspack's seeded paywall silently discards copy the publisher
+		// wrote.
+		$needs_purchase_path = [];
+		foreach ( $plan_groups as $fingerprint => $group ) {
+			if ( ! self::group_requires_purchase( $group ) ) {
+				continue;
+			}
+			$paid_layout = $layouts_by_group[ $fingerprint ]['layouts']['custom_access'];
+			if ( null === $paid_layout || '' === trim( $paid_layout ) || self::layout_offers_a_purchase( $paid_layout ) ) {
+				continue;
+			}
+			$gate_post = $layouts_by_group[ $fingerprint ]['gate_post'];
+
+			$needs_purchase_path[ self::gate_title( $group ) ] = $gate_post ? $gate_post->ID : 0;
+		}
+		if ( ! empty( $needs_purchase_path ) ) {
+			WP_CLI::error(
+				sprintf(
+					'The paid access copy for %s offers the reader no way to buy — no checkout button, no donate block, and no link that leads anywhere. Migrating it would publish a paywall that stops the reader with nothing to click. Add a checkout button or a subscribe link to the gate post(s) named, then re-run. Nothing has been written.',
+					implode(
+						', ',
+						array_map(
+							fn( $title, $gate_post_id ) => $gate_post_id
+								? sprintf( '"%s" (gate post %d)', $title, $gate_post_id )
+								: sprintf( '"%s"', $title ),
+							array_keys( $needs_purchase_path ),
+							$needs_purchase_path
+						)
+					)
+				)
+			);
 		}
 
 		// A one-time product with no duration has no rule to write, and a gate that
@@ -310,22 +351,10 @@ class Membership_Gates_Migration {
 			$action  = array_key_exists( $gate_key, $existing_gates ) ? 'updated' : 'created';
 			$gate_id = $existing_gates[ $gate_key ] ?? null;
 
-			// Resolve layout content — try each plan in the group for a plan-specific gate.
-			$memberships_gate = null;
-			$group_plan_count = count( $group );
-			foreach ( $group as $i => $group_plan ) {
-				$is_last          = ( $i === $group_plan_count - 1 );
-				$memberships_gate = self::get_memberships_gate_for_plan( $group_plan['pid'], $is_last );
-				if ( $memberships_gate ) {
-					break;
-				}
-			}
-			$layouts = $memberships_gate
-				? self::extract_gate_layouts( $memberships_gate )
-				: [
-					'registration'  => '',
-					'custom_access' => null,
-				];
+			// Resolved in pre-flight, so the extraction warnings all landed before the
+			// prompt and this loop reads rather than re-reads.
+			$memberships_gate = $layouts_by_group[ $fingerprint ]['gate_post'];
+			$layouts          = $layouts_by_group[ $fingerprint ]['layouts'];
 
 			if ( ! $dry_run ) {
 				if ( null === $gate_id ) {
@@ -777,9 +806,96 @@ class Membership_Gates_Migration {
 			} elseif ( empty( $custom_access['access_rules'] ) ) {
 				$issues[] = 'its paid access mode is active but has no access rules, so it asks for no purchase — any registered reader would get in';
 			}
+
+			// A paid gate that restricts correctly and offers no way to pay reads as a
+			// success everywhere else in this run: the mode is active, the rules are
+			// there, and the layout is not empty.
+			$paid_layout = ( empty( $custom_access['active'] ) || empty( $custom_access['gate_layout_id'] ) )
+				? null
+				: \get_post( $custom_access['gate_layout_id'] );
+			if (
+				$paid_layout
+				&& '' !== trim( $paid_layout->post_content )
+				&& ! self::layout_offers_a_purchase( $paid_layout->post_content )
+			) {
+				$issues[] = sprintf(
+					'its paid access layout (post %d) has no checkout button and no link, so the reader is stopped with no way to buy',
+					$custom_access['gate_layout_id']
+				);
+			}
 		}
 
 		return $issues;
+	}
+
+	/**
+	 * The gate post a group migrates from, and the layouts extracted from it.
+	 *
+	 * Each plan in the group is tried in turn, so a group whose first plan has no
+	 * gate of its own still migrates from a sibling's. The last plan is allowed to
+	 * fall back to the site's primary gate.
+	 *
+	 * @param array $group The plan group.
+	 *
+	 * @return array{gate_post: \WP_Post|null, layouts: array{registration: string, custom_access: string|null}}
+	 */
+	private static function resolve_group_layouts( array $group ): array {
+		$gate_post        = null;
+		$group_plan_count = count( $group );
+		foreach ( $group as $i => $group_plan ) {
+			$gate_post = self::get_memberships_gate_for_plan( $group_plan['pid'], $i === $group_plan_count - 1 );
+			if ( $gate_post ) {
+				break;
+			}
+		}
+
+		return [
+			'gate_post' => $gate_post,
+			'layouts'   => $gate_post
+				? self::extract_gate_layouts( $gate_post )
+				: [
+					'registration'  => '',
+					'custom_access' => null,
+				],
+		];
+	}
+
+	/**
+	 * Whether a layout gives the reader a way to pay.
+	 *
+	 * Content_Gate::create_gate() seeds the paid-access layout from the pay-wall-one-tier
+	 * pattern, whose purchase affordance is a `newspack-blocks/checkout-button`. A
+	 * publisher's own "subscribe" link counts too, so long as it leads somewhere: the
+	 * reader being able to act is the thing, not the block being the Newspack one.
+	 *
+	 * @param string $content Layout block markup.
+	 *
+	 * @return bool
+	 */
+	private static function layout_offers_a_purchase( string $content ): bool {
+		foreach ( [ 'newspack-blocks/checkout-button', 'newspack-blocks/donate' ] as $purchase_block ) {
+			if ( \has_block( $purchase_block, $content ) ) {
+				return true;
+			}
+		}
+		if ( ! preg_match_all( '/<a\s[^>]*href=["\']([^"\']*)["\']/i', $content, $matches ) ) {
+			return false;
+		}
+		foreach ( $matches[1] as $href ) {
+			$href = trim( $href );
+			// An href that stays on the page or opens a mail client is not a purchase
+			// path. The seeded paywall proves the case: its "Sign in to an existing
+			// account" button is an anchor to #signin_modal, so counting any anchor
+			// would report every paywall as buyable.
+			if ( '' === $href || str_starts_with( $href, '#' ) || str_starts_with( $href, 'mailto:' ) ) {
+				continue;
+			}
+			if ( false !== strpos( $href, 'wp-login.php' ) ) {
+				continue;
+			}
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -856,6 +972,7 @@ class Membership_Gates_Migration {
 		if ( $has_purchase && null !== $layouts['custom_access'] && '' === trim( $layouts['custom_access'] ) ) {
 			$issues[] = 'its paid access layout extracted to nothing, so the paid gate will show default content rather than the authored one';
 		}
+
 
 		if ( $has_purchase ) {
 			if ( null === $layouts['custom_access'] ) {
@@ -1876,6 +1993,15 @@ class Membership_Gates_Migration {
 	 * members-only sections. Each type's wrappers are concatenated in document order so
 	 * no authored content is dropped.
 	 *
+	 * Two shapes fall outside that. Copy sitting outside the wrappers was shown to every
+	 * reader, so it joins each layout the publisher actually authored. And a gate with no
+	 * wrapper anywhere — the ordinary authoring shape — migrates its whole content into
+	 * both layouts (NPPD-2218), which is what makes a purchase-backed group come across
+	 * as a paywall rather than a gate any registered reader passes.
+	 *
+	 * A layout the publisher left empty is returned empty rather than filled, so
+	 * apply_layout() keeps the seeded default and the dry run still reports it.
+	 *
 	 * @param \WP_Post $gate_post The np_memberships_gate post.
 	 *
 	 * @return array{registration: string, custom_access: string|null}
@@ -1890,25 +2016,28 @@ class Membership_Gates_Migration {
 
 		// No wrapper anywhere (NPPD-2218). Nothing in the authoring flow adds one, so a
 		// gate written the plain way has none and its whole content is the message
-		// WooCommerce Memberships showed to non-members. The raw post content is used
-		// rather than a re-serialization of the parsed tree: there is no wrapper to
-		// remove, so there is nothing to gain from a round trip that could alter it.
+		// WooCommerce Memberships showed to non-members. It goes through the same
+		// per-block filter the prefix path below uses — no block here holds a wrapper, so
+		// that reduces to the post's renderable blocks — rather than being copied raw:
+		// the two paths otherwise disagree about a reference to a pattern that is
+		// unpublished or gone, which renders nothing today and prints whatever it holds
+		// the day someone publishes it.
 		if ( null === $layouts['registration'] && null === $layouts['custom_access'] ) {
-			$whole = trim( $gate_post->post_content );
-			// A gate post holding nothing but references WordPress cannot resolve renders
-			// nothing. Carrying it would swap the seeded default — which does render —
-			// for markup that looks migrated and shows the reader an empty wall.
-			if ( ! self::blocks_render_something( $blocks ) ) {
+			$whole = self::serialize_unconditional_blocks( $blocks, $gate_post->ID );
+			if ( '' === $whole ) {
 				return [
 					'registration'  => '',
 					'custom_access' => null,
 				];
 			}
 			return [
-				// Also the paid layout, so a group whose plans require a purchase migrates
-				// as a paywall. apply_layout() is still gated on the group requiring one,
-				// so a signup-only group is unaffected.
 				'registration'  => $whole,
+				// Also the paid layout, so a group whose plans require a purchase migrates
+				// as a paywall rather than a gate any registered reader walks through.
+				// apply_layout() is gated on the group requiring a purchase, so a
+				// signup-only group is unaffected. Whether that copy gives the reader a
+				// way to buy is settled in pre-flight, which refuses the run rather than
+				// guess.
 				'custom_access' => $whole,
 			];
 		}
@@ -1918,15 +2047,18 @@ class Membership_Gates_Migration {
 		// actually has. Relative position is not preserved: copy authored below a wrapper
 		// still lands above that wrapper's content.
 		//
-		// A null layout stays null, for both modes. Null means the publisher authored no
-		// view for that audience, and the seeded default is what the gate falls back to —
-		// for registration that default is the wall carrying the auth form, so filling it
-		// with a bare heading would leave the reader a wall with no way through it.
-		$unconditional = self::serialize_unconditional_blocks( $blocks );
+		// A layout with nothing of its own is left that way, for both modes — a wrapper
+		// the publisher never wrote (null) and one written empty ('') are both "no
+		// authored view for that audience", and the seeded default is what the gate falls
+		// back to. For registration that default is the wall carrying the auth form, so
+		// filling it with a bare heading would leave the reader a wall with no way
+		// through it. Leaving it empty is also what keeps the dry run's
+		// "no registration layout content could be extracted" warning firing.
+		$unconditional = self::serialize_unconditional_blocks( $blocks, $gate_post->ID );
 		if ( '' !== $unconditional ) {
 			foreach ( [ 'registration', 'custom_access' ] as $mode ) {
-				if ( null !== $layouts[ $mode ] ) {
-					$layouts[ $mode ] = $unconditional . $layouts[ $mode ];
+				if ( ! empty( $layouts[ $mode ] ) ) {
+					$layouts[ $mode ] = $unconditional . "\n\n" . $layouts[ $mode ];
 				}
 			}
 		}
@@ -1953,25 +2085,85 @@ class Membership_Gates_Migration {
 	 * copy twice, and would put a member-content wrapper — which prints its inner
 	 * content to everyone once Memberships is deactivated — inside the non-member wall.
 	 *
-	 * A block that renders nothing is dropped for a different reason: prefixing a dead
-	 * reference turns a layout that extracted to '' into one that looks authored, and
-	 * apply_layout() then overwrites the seeded default with a wall the reader sees as
-	 * blank. It also keeps a reference to an unpublished pattern out of the layout,
-	 * where a wrapper inside it would start leaking the day someone publishes it.
+	 * A block that renders nothing is dropped for the reason blocks_render_something()
+	 * gives, and to keep a top-level reference to an unpublished pattern out of the
+	 * layout, where a wrapper inside it would start leaking the day someone publishes it.
+	 * The test is per top-level block, so a dead reference nested beside rendering copy
+	 * still rides along; collect_gate_layout_markup() warns about it either way.
 	 *
-	 * @param array $blocks Parsed top-level blocks of the gate post.
+	 * @param array $blocks       Parsed top-level blocks of the gate post.
+	 * @param int   $gate_post_id The gate post being extracted, for warning context.
 	 *
-	 * @return string Serialized block markup, empty when every block holds a wrapper.
+	 * @return string Serialized block markup, empty when every block either holds a
+	 *                wrapper or renders nothing.
 	 */
-	private static function serialize_unconditional_blocks( array $blocks ): string {
-		$kept = [];
+	private static function serialize_unconditional_blocks( array $blocks, int $gate_post_id ): string {
+		$kept     = [];
+		$warned   = false;
 		foreach ( $blocks as $block ) {
-			if ( self::block_tree_holds_wrapper( $block ) || ! self::blocks_render_something( [ $block ] ) ) {
+			if ( self::block_tree_holds_wrapper( $block ) ) {
+				// Dropping a container drops whatever else it held. The operator is told,
+				// because this is the one case where the command discards authored copy
+				// deliberately rather than failing to reach it.
+				if ( ! $warned && self::block_holds_copy_outside_wrappers( $block ) ) {
+					$warned = true;
+					WP_CLI::warning(
+						sprintf(
+							'Gate post %d has copy sharing a container with a membership wrapper. That copy will not migrate — review the generated layouts before cutover.',
+							$gate_post_id
+						)
+					);
+				}
+				continue;
+			}
+			if ( ! self::blocks_render_something( [ $block ] ) ) {
 				continue;
 			}
 			$kept[] = $block;
 		}
-		return trim( \serialize_blocks( $kept ) );
+		return trim( implode( "\n\n", array_map( 'serialize_block', $kept ) ) );
+	}
+
+	/**
+	 * Whether a block holds content of its own alongside a membership wrapper.
+	 *
+	 * Distinguishes a container wrapping only a wrapper, which loses nothing when it is
+	 * skipped, from one that also carries copy every reader saw, which does. Only a leaf
+	 * counts: a container's own markup is chrome, so a group holding just a wrapper is
+	 * not treated as copy.
+	 *
+	 * @param array $block   A parsed block.
+	 * @param array $visited Pattern IDs already followed on this path, keyed by ID.
+	 *
+	 * @return bool
+	 */
+	private static function block_holds_copy_outside_wrappers( array $block, array $visited = [] ): bool {
+		$block_name = $block['blockName'] ?? null;
+		if ( in_array( $block_name, self::MEMBERSHIP_WRAPPER_BLOCKS, true ) ) {
+			return false;
+		}
+		if ( 'core/block' === $block_name ) {
+			$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+			if ( isset( $visited[ $ref ] ) ) {
+				return false;
+			}
+			$pattern = self::resolve_pattern_reference( $ref );
+			if ( null === $pattern ) {
+				return false;
+			}
+			foreach ( \parse_blocks( $pattern->post_content ) as $referenced_block ) {
+				if ( self::block_holds_copy_outside_wrappers( $referenced_block, $visited + [ $ref => true ] ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		foreach ( $block['innerBlocks'] ?? [] as $child ) {
+			if ( self::block_holds_copy_outside_wrappers( $child, $visited ) ) {
+				return true;
+			}
+		}
+		return empty( $block['innerBlocks'] ) && self::blocks_render_something( [ $block ], $visited );
 	}
 
 	/**
@@ -1992,8 +2184,11 @@ class Membership_Gates_Migration {
 			return true;
 		}
 		if ( 'core/block' === $block_name ) {
-			$ref     = (int) ( $block['attrs']['ref'] ?? 0 );
-			$pattern = isset( $visited[ $ref ] ) ? null : self::resolve_pattern_reference( $ref );
+			$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+			if ( isset( $visited[ $ref ] ) ) {
+				return false;
+			}
+			$pattern = self::resolve_pattern_reference( $ref );
 			if ( null === $pattern ) {
 				return false;
 			}
@@ -2015,13 +2210,19 @@ class Membership_Gates_Migration {
 	/**
 	 * Whether a block list would put anything on the page.
 	 *
+	 * This is the rule the whole extraction leans on: markup that renders as nothing must
+	 * not become a layout, because apply_layout() would then swap a seeded default that
+	 * does render for a wall the reader sees as blank.
+	 *
 	 * Only the reference case is judged closely, because it is the one where present
 	 * markup renders as nothing: a gate post holding a reference to a pattern WordPress
 	 * will not resolve is indistinguishable, by length, from one holding real copy. A
 	 * block with children is judged by them, so a group whose only child is a dead
-	 * reference does not pass as content. Anything else — including a childless block,
-	 * which may as legitimately be an image or a spacer as an empty group — is taken at
-	 * face value.
+	 * reference does not pass as content — at the cost of a block whose own markup is the
+	 * visible part, a cover with a background image whose single child is a dead
+	 * reference, which is judged to render nothing. Anything else — including a childless
+	 * block, which may as legitimately be an image or a spacer as an empty group — is
+	 * taken at face value.
 	 *
 	 * @param array $blocks  Parsed blocks.
 	 * @param array $visited Pattern IDs already followed on this path, keyed by ID.
@@ -2040,8 +2241,11 @@ class Membership_Gates_Migration {
 				continue;
 			}
 			if ( 'core/block' === $block_name ) {
-				$ref     = (int) ( $block['attrs']['ref'] ?? 0 );
-				$pattern = isset( $visited[ $ref ] ) ? null : self::resolve_pattern_reference( $ref );
+				$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+				if ( isset( $visited[ $ref ] ) ) {
+					continue;
+				}
+				$pattern = self::resolve_pattern_reference( $ref );
 				if ( null === $pattern ) {
 					continue;
 				}
@@ -2066,8 +2270,8 @@ class Membership_Gates_Migration {
 	/**
 	 * The pattern a reference resolves to, if WordPress would render it.
 	 *
-	 * The guard render_block_core_block() applies: an existing published `wp_block`
-	 * with no password.
+	 * The guard render_block_core_block() applies, so extraction sees what a reader
+	 * would.
 	 *
 	 * @param int $ref The wp_block post ID.
 	 *
