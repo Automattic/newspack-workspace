@@ -89,6 +89,27 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create an author user: holds no `_newspack_reader` meta and is not a Reader
+	 * Activation reader, but is an eligible group member under
+	 * Group_Subscription::is_eligible_member() (authors/contributors by default).
+	 *
+	 * @return int User ID.
+	 */
+	private function create_author_user(): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'author-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'author-' . wp_generate_password( 6, false ) . '@test.com',
+				'role'       => 'author',
+			]
+		);
+		$this->assertNotWPError( $user_id, 'Fixture author user creation should succeed.' );
+		$this->user_ids[] = $user_id;
+		return $user_id;
+	}
+
+	/**
 	 * Drive process_link_invite_request() while capturing the newspack_log events it emits, and
 	 * unwinding at the wp_safe_redirect() so the handler's exit does not stop the test. Asserting on
 	 * the logged event (rather than the redirect URL) is deterministic: the redirect target depends
@@ -280,6 +301,31 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 			Group_Subscription_Invite::get_invite_by_key( $subscription, $key ),
 			'The now-stale invite should be cancelled so it stops counting toward the member limit.'
 		);
+	}
+
+	/**
+	 * An existing account that is an eligible non-reader (author/contributor) must be
+	 * accepted by generate_invite(), not just a Reader Activation reader. Authors hold
+	 * no `_newspack_reader` meta, so the old is_user_reader() guard rejected them even
+	 * though Group_Subscription::is_eligible_member() treats them as eligible members.
+	 */
+	public function test_generate_invite_accepts_existing_author_account() {
+		$owner_id     = $this->create_user( true );
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		$author_id = $this->create_author_user();
+		$email     = get_userdata( $author_id )->user_email;
+
+		$invite = Group_Subscription_Invite::generate_invite( $subscription, $email );
+
+		$this->assertIsArray( $invite, 'An existing eligible author account should receive an invite, not the non-reader error.' );
 	}
 
 	/**

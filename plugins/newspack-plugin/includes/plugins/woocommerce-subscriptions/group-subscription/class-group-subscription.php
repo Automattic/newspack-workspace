@@ -637,7 +637,7 @@ class Group_Subscription {
 
 		// Remove members.
 		foreach ( $members_to_remove as $member_id ) {
-			if ( ! Reader_Activation::is_user_reader( $member_id ) ) {
+			if ( ! self::is_eligible_member( $member_id ) ) {
 				continue;
 			}
 			if ( \delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
@@ -659,7 +659,7 @@ class Group_Subscription {
 			array_filter(
 				$members_to_add,
 				function ( $member_id ) use ( $subscription ) {
-					return Reader_Activation::is_user_reader( $member_id )
+					return self::is_eligible_member( $member_id )
 						&& ! in_array( $subscription->get_id(), self::get_group_subscriptions_for_user( $member_id, true ), true );
 				}
 			)
@@ -771,6 +771,51 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Roles that are eligible to be group-subscription members by default, in addition to readers.
+	 *
+	 * Authors and Contributors can create content but are neither editors/administrators (who bypass
+	 * the content gate outright) nor readers (who satisfy access rules on their own). Without this they
+	 * fall through with no path to restricted content. Administrators/editors are intentionally absent:
+	 * they already have full access and do not need a group grant.
+	 */
+	const DEFAULT_ELIGIBLE_MEMBER_ROLES = [ 'author', 'contributor' ];
+
+	/**
+	 * Whether a user may be a member of a group subscription.
+	 *
+	 * This is the single gate for group membership on both the write path (adding/removing members)
+	 * and the read path (resolving a user's group subscriptions for access). Readers are always
+	 * eligible; Author and Contributor users are eligible by default. Publishers can opt other users
+	 * in or out via the `newspack_group_subscription_member_eligible` filter.
+	 *
+	 * @param int|\WP_User $user A user ID or WP_User object.
+	 *
+	 * @return bool Whether the user is an eligible group member.
+	 */
+	public static function is_eligible_member( $user ) {
+		$user = is_a( $user, 'WP_User' ) ? $user : \get_user_by( 'id', (int) $user );
+		if ( ! $user || ! $user->exists() ) {
+			return false;
+		}
+
+		// Readers keep their existing eligibility.
+		$eligible = Reader_Activation::is_user_reader( $user );
+
+		// Author/Contributor users are eligible by default.
+		if ( ! $eligible ) {
+			$eligible = (bool) array_intersect( (array) $user->roles, self::DEFAULT_ELIGIBLE_MEMBER_ROLES );
+		}
+
+		/**
+		 * Filters whether a user is eligible to be a member of a group subscription.
+		 *
+		 * @param bool $eligible Whether the user is an eligible group member.
+		 * @param int  $user_id  The user ID.
+		 */
+		return (bool) apply_filters( 'newspack_group_subscription_member_eligible', $eligible, $user->ID );
+	}
+
+	/**
 	 * Check if a user holds group membership (the member meta) for a subscription.
 	 *
 	 * A promoted manager keeps their membership, so this returns true for managers
@@ -842,7 +887,7 @@ class Group_Subscription {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
-		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
+		if ( ! self::is_eligible_member( $user_id ) ) {
 			return [];
 		}
 		$cache_key = $user_id . '|' . ( $ids_only ? '1' : '0' );
@@ -943,7 +988,7 @@ class Group_Subscription {
 		if ( ! $user_id || ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
-		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
+		if ( ! self::is_eligible_member( $user_id ) ) {
 			return [];
 		}
 

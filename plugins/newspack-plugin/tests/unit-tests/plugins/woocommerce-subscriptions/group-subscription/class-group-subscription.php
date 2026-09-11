@@ -83,6 +83,27 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create a user with a specific role (no reader meta) and track it for cleanup.
+	 *
+	 * @param string $role Role slug.
+	 * @return int User ID.
+	 */
+	private function create_role_user( string $role ): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => $role . '-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => $role . '-' . wp_generate_password( 6, false ) . '@test.com',
+				'role'       => $role,
+			]
+		);
+		if ( ! is_wp_error( $user_id ) ) {
+			$this->user_ids[] = $user_id;
+		}
+		return $user_id;
+	}
+
+	/**
 	 * Create an enabled group subscription owned by $customer_id, optionally with a member limit.
 	 *
 	 * @param int      $customer_id The owner user ID.
@@ -430,6 +451,55 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An Author can be added to a group and is then resolved as a member — the write path and the
+	 * read/entitlement path both recognise them.
+	 */
+	public function test_author_can_be_added_as_group_member() {
+		$owner_id  = $this->create_reader_user();
+		$author_id = $this->create_role_user( 'author' );
+		$sub       = $this->create_group_subscription( $owner_id, 3 );
+
+		$result = Group_Subscription::update_members( $sub, [ $author_id ] );
+
+		$this->assertNotWPError( $result, 'Adding an author must not error.' );
+		$this->assertArrayHasKey( $author_id, $result['members_added'], 'The author should be reported as added.' );
+		$this->assertContains( (int) $author_id, array_map( 'intval', Group_Subscription::get_members( $sub ) ), 'The author should be a member.' );
+		$this->assertContains(
+			(int) $sub->get_id(),
+			array_map( 'intval', Group_Subscription::get_group_subscriptions_for_user( $author_id, true ) ),
+			'The author\'s group subscription must resolve on the read path (this is what grants access).'
+		);
+	}
+
+	/**
+	 * A Contributor is likewise an eligible member.
+	 */
+	public function test_contributor_can_be_added_as_group_member() {
+		$owner_id       = $this->create_reader_user();
+		$contributor_id = $this->create_role_user( 'contributor' );
+		$sub            = $this->create_group_subscription( $owner_id, 3 );
+
+		$result = Group_Subscription::update_members( $sub, [ $contributor_id ] );
+
+		$this->assertNotWPError( $result );
+		$this->assertArrayHasKey( $contributor_id, $result['members_added'], 'The contributor should be reported as added.' );
+	}
+
+	/**
+	 * An editor remains a non-eligible member and is filtered out of additions.
+	 */
+	public function test_editor_is_not_added_as_group_member() {
+		$owner_id  = $this->create_reader_user();
+		$editor_id = $this->create_role_user( 'editor' );
+		$sub       = $this->create_group_subscription( $owner_id, 3 );
+
+		$result = Group_Subscription::update_members( $sub, [ $editor_id ] );
+
+		$this->assertNotWPError( $result );
+		$this->assertArrayNotHasKey( $editor_id, $result['members_added'], 'Editors must not be added as members.' );
+	}
+
+	/**
 	 * The limit check only bounds additions, so a removal-only call must succeed even on a group that
 	 * is already over its limit (e.g. after the limit was lowered) -- a removal can never push a group
 	 * further over capacity, and rejecting it would strand the already-persisted removal.
@@ -564,5 +634,46 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			'roomy five-seat group' => [ 5, 1, false, '4' ],
 			'unlimited group'       => [ 0, 3, false, '' ],
 		];
+	}
+
+	/**
+	 * Readers, authors and contributors are eligible group members by default;
+	 * administrators and editors are not (they bypass the content gate already).
+	 */
+	public function test_is_eligible_member_defaults() {
+		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_reader_user() ), 'Readers are eligible.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'author' ) ), 'Authors are eligible by default.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible by default.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible members.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible members.' );
+	}
+
+	/**
+	 * The eligibility decision is filterable in both directions.
+	 */
+	public function test_is_eligible_member_is_filterable() {
+		$author_id = $this->create_role_user( 'author' );
+		$editor_id = $this->create_role_user( 'editor' );
+
+		$deny_author = function ( $eligible, $user_id ) use ( $author_id ) {
+			return $user_id === $author_id ? false : $eligible;
+		};
+		add_filter( 'newspack_group_subscription_member_eligible', $deny_author, 10, 2 );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $author_id ), 'Filter can opt a user out.' );
+		remove_filter( 'newspack_group_subscription_member_eligible', $deny_author, 10 );
+
+		$allow_editor = function ( $eligible, $user_id ) use ( $editor_id ) {
+			return $user_id === $editor_id ? true : $eligible;
+		};
+		add_filter( 'newspack_group_subscription_member_eligible', $allow_editor, 10, 2 );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $editor_id ), 'Filter can opt a user in.' );
+		remove_filter( 'newspack_group_subscription_member_eligible', $allow_editor, 10 );
+	}
+
+	/**
+	 * A non-existent user is never eligible.
+	 */
+	public function test_is_eligible_member_rejects_missing_user() {
+		$this->assertFalse( Group_Subscription::is_eligible_member( 0 ), 'User ID 0 is not eligible.' );
 	}
 }

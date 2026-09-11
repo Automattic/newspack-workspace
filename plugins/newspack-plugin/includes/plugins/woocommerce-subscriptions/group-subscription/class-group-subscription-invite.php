@@ -582,7 +582,7 @@ class Group_Subscription_Invite {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_email', __( 'Invalid email address.', 'newspack-plugin' ) );
 		}
 		$existing_user = get_user_by( 'email', $email );
-		if ( $existing_user && ! Reader_Activation::is_user_reader( $existing_user ) ) {
+		if ( $existing_user && ! Group_Subscription::is_eligible_member( $existing_user ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_non_reader', __( 'Not a valid reader account.', 'newspack-plugin' ) );
 		}
 		if ( $existing_user && in_array( (int) $existing_user->ID, array_map( 'absint', Group_Subscription::get_members( $subscription ) ), true ) ) {

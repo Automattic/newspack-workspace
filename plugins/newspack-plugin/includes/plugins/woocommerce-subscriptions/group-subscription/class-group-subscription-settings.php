@@ -678,7 +678,7 @@ class Group_Subscription_Settings {
 				continue;
 			}
 			$member_user = get_user_by( 'id', $member_id );
-			if ( $member_user && Reader_Activation::is_user_reader( $member_user ) ) {
+			if ( $member_user && Group_Subscription::is_eligible_member( $member_user ) ) {
 				$member_rows[] = [
 					'user'       => $member_user,
 					'is_manager' => in_array( $member_id, $managers, true ),
