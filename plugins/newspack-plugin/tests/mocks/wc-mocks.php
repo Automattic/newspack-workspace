@@ -657,6 +657,29 @@ class WC_Product {
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
 	}
+	/**
+	 * Stage a meta value in memory, as WC_Data::update_meta_data() does before a
+	 * save(). Kept minimal — no meta-id bookkeeping — because callers read the
+	 * value straight back with get_meta().
+	 *
+	 * @param string $key   Meta key.
+	 * @param mixed  $value Meta value.
+	 */
+	public function update_meta_data( $key, $value ) {
+		$this->meta[ $key ] = $value;
+	}
+	/**
+	 * Persist the product back into the mock store. The object is already held by
+	 * reference, so this only matters for a product built and saved without being
+	 * registered first; it mirrors WC_Product::save() returning the product ID.
+	 *
+	 * @return int The product ID.
+	 */
+	public function save() {
+		global $products_database;
+		$products_database[ $this->get_id() ] = $this;
+		return $this->get_id();
+	}
 }
 
 class WC_Cart {

@@ -1,3 +1,10 @@
+## newspack [6.50.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.50.2...newspack@6.50.3) (2026-09-11)
+
+
+### Bug Fixes
+
+* migrate-team-products includes owner seat in group limit ([#1066](https://github.com/Automattic/newspack-workspace/issues/1066)) ([6ab810e](https://github.com/Automattic/newspack-workspace/commit/6ab810e276a17a090f1226e18cbcd614a61c1fb4))
+
 ## newspack [6.50.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.50.1...newspack@6.50.2) (2026-09-10)
 
 
