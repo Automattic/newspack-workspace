@@ -25,7 +25,6 @@ namespace Newspack\CLI;
 
 use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
-use Newspack\Reader_Activation;
 use Newspack\WooCommerce_Connection;
 use WP_CLI;
 
@@ -1968,7 +1967,7 @@ class Teams_Migration {
 				continue;
 			}
 			$role = \get_user_meta( $user_id, sprintf( self::TEAM_ROLE_META_KEY_TEMPLATE, $team_id ), true );
-			if ( 'manager' === $role && Reader_Activation::is_user_reader( $user_id ) ) {
+			if ( 'manager' === $role && Group_Subscription::is_eligible_member( $user_id ) ) {
 				++$count;
 			}
 		}

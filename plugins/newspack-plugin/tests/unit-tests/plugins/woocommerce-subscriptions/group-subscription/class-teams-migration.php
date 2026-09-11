@@ -358,6 +358,31 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A dry-run's projected manager-promotion count must match what the live path would
+	 * actually promote. The live path (promote_managers_from_team_roles()) gates only on
+	 * team-role and group membership — and add_group_member() grants membership to any
+	 * Group_Subscription::is_eligible_member() user, which includes authors/contributors
+	 * by default. count_dry_run_manager_promotions() used the narrower
+	 * Reader_Activation::is_user_reader() as its own membership stand-in (no member meta
+	 * exists yet mid dry-run), so it under-counted an author-role manager the live path
+	 * would promote.
+	 */
+	public function test_dry_run_manager_promotion_count_includes_eligible_author_manager() {
+		$owner        = $this->create_reader();
+		$author       = $this->create_author();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [ $author ], $subscription->get_id() );
+		$this->set_team_role( $author, $team_id, 'manager' );
+
+		$count_dry_run_manager_promotions_method = new \ReflectionMethod( Teams_Migration::class, 'count_dry_run_manager_promotions' );
+		$count_dry_run_manager_promotions_method->setAccessible( true );
+
+		$count = $count_dry_run_manager_promotions_method->invoke( null, $subscription, $team_id, [ $author ], $owner );
+
+		$this->assertSame( 1, $count, 'An eligible author manager should be counted among projected promotions, matching the live path.' );
+	}
+
+	/**
 	 * Promotion is idempotent — a member already managing is reported as already,
 	 * not promoted again.
 	 */
