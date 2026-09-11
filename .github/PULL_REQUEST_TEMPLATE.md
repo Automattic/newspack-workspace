@@ -8,7 +8,7 @@
 <!-- Explain the change in plain language, then add a short "With this change:" list of what now works or what someone can now do. Keep class names, file names, and other implementation details in Technical details. -->
 
 <!-- Reference the Linear issue: Closes ABC-123 marks it done at merge, Ref ABC-123 links without closing. Delete the line if there is no issue. -->
-Closes # .
+Closes ABC-123.
 
 ## How to test
 
