@@ -80,21 +80,22 @@ _**Deprecated** — prefer `woo_order_updated` or `woo_subscription_updated`. Ke
 
 For when there's a new donation processed through WooCommerce.
 
-| Name              | Type     | Obs                                                    |
-| ----------------- | -------- | ------------------------------------------------------ |
-| `user_id`         | `int`    |                                                        |
-| `email`           | `string` |                                                        |
-| `amount`          | `float`  |                                                        |
-| `currency`        | `string` |                                                        |
-| `recurrence`      | `string` |                                                        |
-| `platform`        | `string` | Always `wc` in this case                               |
-| `referer`         | `string` |                                                        |
-| `popup_id`        | `string` | If the donation was triggered by a popup, the popup ID |
-| `is_renewal`      | `bool`   | If this is a subscription renewal (recurring payment)  |
-| `subscription_id` | `int`    | The related subscription id (if any)                   |
-| `platform_data`   | `array`  |                                                        |
-| `user_first_name` | `string` | The Woocommerce customer billing first name            |
-| `user_last_name`  | `string` | The Woocommerce customer billing last name             |
+| Name                | Type     | Obs                                                                          |
+| ------------------- | -------- | ----------------------------------------------------------------------------- |
+| `user_id`           | `int`    |                                                                               |
+| `email`             | `string` |                                                                               |
+| `amount`            | `float`  |                                                                               |
+| `currency`          | `string` |                                                                               |
+| `recurrence`        | `string` |                                                                               |
+| `platform`          | `string` | Always `wc` in this case                                                     |
+| `referer`           | `string` |                                                                               |
+| `popup_id`          | `string` | If the donation was triggered by a popup, the popup ID                      |
+| `contextual_prompt` | `array`  | `post_id`, `placement`, `condition`; empty unless started from a Contextual Prompt |
+| `is_renewal`        | `bool`   | If this is a subscription renewal (recurring payment)                       |
+| `subscription_id`   | `int`    | The related subscription id (if any)                                        |
+| `platform_data`     | `array`  |                                                                               |
+| `user_first_name`   | `string` | The Woocommerce customer billing first name                                 |
+| `user_last_name`    | `string` | The Woocommerce customer billing last name                                  |
 
 ### `woocommerce_order_failed`
 
@@ -126,21 +127,22 @@ _**Deprecated** — prefer `woo_order_updated` or `woo_subscription_updated`. Ke
 
 When there's a new donation.
 
-| Name              | Type     | Obs                                                    |
-| ----------------- | -------- | ------------------------------------------------------ |
-| `user_id`         | `int`    |                                                        |
-| `email`           | `string` |                                                        |
-| `amount`          | `float`  |                                                        |
-| `currency`        | `string` |                                                        |
-| `recurrence`      | `string` |                                                        |
-| `platform`        | `string` |                                                        |
-| `referer`         | `string` |                                                        |
-| `popup_id`        | `string` | If the donation was triggered by a popup, the popup ID |
-| `is_renewal`      | `bool`   | If this is a subscription renewal (recurring payment)  |
-| `subscription_id` | `int`    | The related subscription id (if any)                   |
-| `platform_data`   | `array`  |                                                        |
-| `user_first_name` | `string` |                                                        |
-| `user_last_name`  | `string` |                                                        |
+| Name                | Type     | Obs                                                                          |
+| ------------------- | -------- | ----------------------------------------------------------------------------- |
+| `user_id`           | `int`    |                                                                               |
+| `email`             | `string` |                                                                               |
+| `amount`            | `float`  |                                                                               |
+| `currency`          | `string` |                                                                               |
+| `recurrence`        | `string` |                                                                               |
+| `platform`          | `string` |                                                                               |
+| `referer`           | `string` |                                                                               |
+| `popup_id`          | `string` | If the donation was triggered by a popup, the popup ID                      |
+| `contextual_prompt` | `array`  | `post_id`, `placement`, `condition`; empty unless started from a Contextual Prompt |
+| `is_renewal`        | `bool`   | If this is a subscription renewal (recurring payment)                       |
+| `subscription_id`   | `int`    | The related subscription id (if any)                                        |
+| `platform_data`     | `array`  |                                                                               |
+| `user_first_name`   | `string` |                                                                               |
+| `user_last_name`    | `string` |                                                                               |
 
 ### `order_completed`
 
@@ -275,6 +277,7 @@ Fires for every WooCommerce order status transition (any status → any status).
 | `recurrence`      | `string`        | `once` for one-time products, `month`/`year` for subscriptions   |
 | `referer`         | `string`        | `_newspack_referer` meta from the order                          |
 | `popup_id`        | `string`        | `_newspack_popup_id` meta from the order                         |
+| `contextual_prompt` | `array`       | `post_id`, `placement`, `condition`; empty unless started from a Contextual Prompt |
 | `is_renewal`      | `bool`          | True if the order is a subscription renewal                      |
 | `subscription_id` | `int\|null`     | First subscription tied to the order, if any                     |
 | `product_id`      | `int`           | Product ID for this line item                                    |
@@ -299,6 +302,31 @@ Fires for every WC Subscription status transition AND for switches (recurrence/a
 | `product_name`    | `string` | Product name for this line item                                                      |
 | `is_donation`     | `bool`   | True if `product_id` is a Newspack donation product                                  |
 | `is_switch`       | `bool`   | True if the event originates from a subscription switch (recurrence/amount change) rather than a status transition |
+
+### `contextual_prompt_interaction`
+
+Fires when a donation that started from a Contextual Prompt completes. Registered as two listeners in `Newspack\Data_Events\Popups`, one per donation path:
+
+| Listener hook                                                   | `action`                | When                                      |
+| ---------------------------------------------------------------- | ----------------------- | ------------------------------------------ |
+| `newspack_data_event_dispatch_donation_new`                      | `form_submission_success` | The `donation_new` event dispatches       |
+| `newspack_data_event_dispatch_woocommerce_donation_order_processed` | `form_submission`       | The `woocommerce_donation_order_processed` event dispatches |
+
+Both listeners read the triggering event's `contextual_prompt` data (see `donation_new` and `woocommerce_donation_order_processed` above) and skip dispatching when the donation didn't start from a Contextual Prompt (`contextual_prompt.post_id` empty) or is a subscription renewal.
+
+| Name                            | Type            | Obs                                                        |
+| -------------------------------- | --------------- | ----------------------------------------------------------- |
+| `action`                         | `string`        | `form_submission_success` or `form_submission`             |
+| `action_type`                    | `string`        | Always `donation`                                          |
+| `contextual_prompt_post_id`      | `int`           | The story the Contextual Prompt appeared on                |
+| `contextual_prompt_placement`    | `string`        | Where in the story the prompt rendered                     |
+| `contextual_prompt_condition`    | `string`        | `story_aware`, `generic_control` or `override`              |
+| `referer`                        | `string`        |                                                             |
+| `interaction_data.donation_order_id`   | `int\|null`     |                                                             |
+| `interaction_data.donation_amount`     | `float\|null`   |                                                             |
+| `interaction_data.donation_currency`   | `string\|null`  |                                                             |
+| `interaction_data.donation_recurrence` | `string\|null`  |                                                             |
+| `interaction_data.donation_platform`   | `string\|null`  |                                                             |
 
 ## Registering a new action
 

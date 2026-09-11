@@ -187,6 +187,9 @@ export const PICKER_CONTEXT_FIELDS = [
 	'gate_post_id',
 	'newspack_popup_id',
 	'prompt_title',
+	'contextual_prompt_post_id',
+	'contextual_prompt_placement',
+	'contextual_prompt_condition',
 	'coupon',
 	'quantity',
 ];

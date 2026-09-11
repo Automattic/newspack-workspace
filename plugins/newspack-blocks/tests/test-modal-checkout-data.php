@@ -393,6 +393,40 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
+	 * Build a WC_Order stub carrying a single line item and the given order meta.
+	 *
+	 * @param array $meta Order meta, keyed by meta key.
+	 * @return WC_Order
+	 */
+	private function order_with_meta( array $meta ) {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			82 => new WC_Product( 82, 'simple', [], '10', 'Product 82' ),
+		];
+		return new WC_Order( 951, '', [ new WC_Order_Item_Product( 82, '40', 4 ) ], $meta );
+	}
+
+	/**
+	 * Build a WC_Cart stub whose single item carries product/quantity defaults
+	 * plus whatever extra cart-item keys the test needs to assert on.
+	 *
+	 * @param array $extra Extra cart-item keys.
+	 * @return WC_Cart
+	 */
+	private function cart_with_item( array $extra ) {
+		return $this->make_cart(
+			array_merge(
+				[
+					'product_id'   => 83,
+					'variation_id' => 0,
+					'quantity'     => 1,
+					'data'         => $this->make_product( 83, 10 ),
+				],
+				$extra
+			)
+		);
+	}
+
+	/**
 	 * A cart line item's quantity flows into `quantity`, and the per-unit price is
 	 * multiplied into `amount` — a cart's price is per unit, unlike an order's.
 	 */
@@ -444,6 +478,113 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 
 		$this->assertSame( 4, $data['quantity'] );
 		$this->assertSame( '40', $data['amount'], 'The order subtotal already reflects quantity and must not be multiplied again.' );
+	}
+
+	/**
+	 * An order that started from a contextual prompt carries the source triple
+	 * in the checkout payload, so the success event can report it.
+	 */
+	public function test_order_checkout_data_carries_contextual_prompt_source() {
+		$order = $this->order_with_meta(
+			[
+				'_newspack_contextual_prompt_post_id'   => 12,
+				'_newspack_contextual_prompt_placement' => 'mid',
+				'_newspack_contextual_prompt_condition' => 'generic_control',
+			]
+		);
+		$data  = Checkout_Data::get_checkout_data( $order );
+		$this->assertSame( 12, (int) $data['contextual_prompt_post_id'] );
+		$this->assertSame( 'mid', $data['contextual_prompt_placement'] );
+		$this->assertSame( 'generic_control', $data['contextual_prompt_condition'] );
+	}
+
+	/**
+	 * The same from a cart item, before the order exists.
+	 */
+	public function test_cart_checkout_data_carries_contextual_prompt_source() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12',
+				'contextual_prompt_placement' => 'end',
+				'contextual_prompt_condition' => 'story_aware',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 'end', $data['contextual_prompt_placement'] );
+		$this->assertSame( 'story_aware', $data['contextual_prompt_condition'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt condition isn't one of the three
+	 * known values is dropped rather than passed through to the checkout
+	 * payload; the other, valid keys in the same triple still pass.
+	 */
+	public function test_cart_checkout_data_drops_invalid_contextual_prompt_condition() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12',
+				'contextual_prompt_placement' => 'end',
+				'contextual_prompt_condition' => 'winner',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertArrayNotHasKey( 'contextual_prompt_condition', $data );
+		$this->assertSame( 'end', $data['contextual_prompt_placement'] );
+		$this->assertSame( 12, (int) $data['contextual_prompt_post_id'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt placement isn't one of the known
+	 * values is dropped the same way.
+	 */
+	public function test_cart_checkout_data_drops_invalid_contextual_prompt_placement() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12',
+				'contextual_prompt_placement' => 'sidebar',
+				'contextual_prompt_condition' => 'story_aware',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertArrayNotHasKey( 'contextual_prompt_placement', $data );
+		$this->assertSame( 'story_aware', $data['contextual_prompt_condition'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt post id isn't a positive integer is
+	 * dropped the same way. Uses a non-numeric id rather than '0': that value
+	 * is already falsy and gets dropped by the pre-existing truthiness guard
+	 * before is_valid_contextual_prompt_value() ever runs, so it wouldn't
+	 * actually exercise that check.
+	 */
+	public function test_cart_checkout_data_drops_invalid_contextual_prompt_post_id() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => 'abc',
+				'contextual_prompt_placement' => 'top',
+				'contextual_prompt_condition' => 'override',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertArrayNotHasKey( 'contextual_prompt_post_id', $data );
+		$this->assertSame( 'top', $data['contextual_prompt_placement'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt post id is a mixed numeric/alpha
+	 * string still passes is_valid_contextual_prompt_value() (absint() > 0),
+	 * so the payload must carry the normalized int, not the raw string.
+	 */
+	public function test_cart_checkout_data_normalizes_contextual_prompt_post_id() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12abc',
+				'contextual_prompt_placement' => 'top',
+				'contextual_prompt_condition' => 'override',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 12, $data['contextual_prompt_post_id'] );
 	}
 
 	/**

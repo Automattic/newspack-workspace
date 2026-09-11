@@ -49,6 +49,20 @@ final class Modal_Checkout {
 	];
 
 	/**
+	 * Cart item keys carrying the contextual prompt source a donation or
+	 * purchase started from: which story, placement and test condition.
+	 * Shared by `PRESERVED_CART_ITEM_KEYS`, `pass_url_param_on_redirect()`,
+	 * and `Checkout_Data`, so the three stay in lockstep.
+	 *
+	 * @var string[]
+	 */
+	const CONTEXTUAL_PROMPT_KEYS = [
+		'contextual_prompt_post_id',
+		'contextual_prompt_placement',
+		'contextual_prompt_condition',
+	];
+
+	/**
 	 * Cart item keys the in-modal quantity form carries over when it re-adds the
 	 * product at a new quantity.
 	 *
@@ -67,6 +81,7 @@ final class Modal_Checkout {
 		'gate_post_id',
 		'newspack_popup_id',
 		'prompt_title',
+		...self::CONTEXTUAL_PROMPT_KEYS,
 	];
 
 	/**
@@ -2760,6 +2775,12 @@ final class Modal_Checkout {
 			}
 			if ( $gate_post_id ) {
 				$params['gate_post_id'] = $gate_post_id;
+			}
+			foreach ( self::CONTEXTUAL_PROMPT_KEYS as $key ) {
+				$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
+				if ( $value ) {
+					$params[ $key ] = $value;
+				}
 			}
 			$location = \add_query_arg( $params, $location );
 		}

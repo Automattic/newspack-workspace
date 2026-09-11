@@ -11,8 +11,13 @@
  * once against the stored pattern (repair, so the editor sees the truth too) and
  * again in memory for whatever the pattern's own markup happens to be at render.
  *
- * Normalization is scoped to blocks arriving from the pattern: a Group a
- * publisher detached and pasted into a post is theirs, not ours.
+ * A Group a publisher detached from the pattern is still a prompt: the fund
+ * drive and the control test swap its copy like any other card, so what the
+ * settings preview promises is what renders. A fund drive in button mode
+ * replaces its CTA too — during a drive every card carries the drive's ask and
+ * the drive's button. What stays scoped to the pattern is the CTA rebuild that
+ * reconciles a stored CTA with the site's donation platform, and the strip that
+ * hides instances while the feature is off.
  *
  * @package Newspack
  */
@@ -29,6 +34,40 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	const LAYOUT_STYLE_HANDLE = 'newspack-popups-contextual-prompt-layout';
 
 	/**
+	 * Condition a card rendered under, reported on every interaction so the
+	 * story-aware vs. generic comparison can be read. Absent while the control
+	 * override is off.
+	 */
+	const CONDITION_STORY_AWARE     = 'story_aware';
+	const CONDITION_GENERIC_CONTROL = 'generic_control';
+	const CONDITION_OVERRIDE        = 'override';
+	const CONDITIONS                = [ self::CONDITION_STORY_AWARE, self::CONDITION_GENERIC_CONTROL, self::CONDITION_OVERRIDE ];
+
+	/**
+	 * The source triple a donation carries back to the prompt that drove it.
+	 * Same names as form fields, cart item keys, checkout payload keys and GA4
+	 * params; order meta prefixes them with `_newspack_`.
+	 */
+	const SOURCE_KEYS = [ 'contextual_prompt_post_id', 'contextual_prompt_placement', 'contextual_prompt_condition' ];
+
+	/**
+	 * Placement values get_placement() can return.
+	 */
+	const PLACEMENTS = [ 'top', 'mid', 'end', 'unknown' ];
+
+	/**
+	 * How long the candidate id list is cached for, per pattern id.
+	 */
+	const CANDIDATES_CACHE_TTL = 5 * MINUTE_IN_SECONDS;
+
+	/**
+	 * How many of the newest candidate stories the preview scan reads. A ceiling
+	 * on a double-wildcard LIKE over post_content, at the cost of a count that
+	 * stops short on a large archive — which the preview reports rather than hides.
+	 */
+	const CANDIDATES_SCAN_LIMIT = 500;
+
+	/**
 	 * Whether the block being rendered came from the pattern.
 	 *
 	 * @var bool
@@ -43,6 +82,23 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	private static $repaired = false;
 
 	/**
+	 * Whether a prompt card is mid-render: set when its Group is normalized and
+	 * cleared once the Group's rendered markup comes back, so everything the card
+	 * renders in between — the donate form among it — knows it is inside a card.
+	 *
+	 * @var bool
+	 */
+	private static $card_open = false;
+
+	/**
+	 * The condition the card mid-render actually rendered under, recorded where
+	 * the swap happens rather than recomputed afterwards. Null outside a card.
+	 *
+	 * @var string|null
+	 */
+	private static $rendered_condition = null;
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
@@ -53,6 +109,9 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		add_filter( 'render_block_core/block', [ __CLASS__, 'close_instance_window' ], 999, 2 );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_layout_styles' ] );
 		add_filter( 'block_editor_settings_all', [ __CLASS__, 'add_editor_layout_styles' ] );
+		add_action( 'newspack_blocks_donate_before_form_fields', [ __CLASS__, 'print_form_hidden_fields' ] );
+		add_action( 'save_post', [ __CLASS__, 'invalidate_control_candidates_cache' ], 10, 2 );
+		add_action( 'deleted_post', [ __CLASS__, 'invalidate_control_candidates_cache' ], 10, 2 );
 	}
 
 	/**
@@ -335,8 +394,36 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * @return string
 	 */
 	public static function add_analytics_attributes( $block_content, $block = [] ) {
+		// Close the attribution window normalize_group() opened, keyed on the parsed
+		// block — its className, the same signal the window opened on — not on the
+		// markup. The content gate's block-visibility filter blanks a hidden block to
+		// '' on `render_block`, which runs before this `render_block_core/group`
+		// filter, so a card hidden by a reader-visibility rule arrives here with no
+		// marker in the string. Closing on the markup instead would leave the window
+		// open, and the next donate form or same-site button on the page would
+		// attribute itself to the hidden story. Matches close_instance_window(),
+		// which also closes on the parsed block. A plain wrapper Group carries the
+		// marker in its content but not its own className, so is_prompt_card() is
+		// false for it and its inner card's own Group still closes the window.
+		$condition = null;
+		if ( self::is_prompt_card( is_array( $block ) ? $block : [] ) ) {
+			$condition                = self::$rendered_condition;
+			self::$rendered_condition = null;
+			self::$card_open          = false;
+		}
+
+		// The opt-in is the feature: with it withdrawn a detached card is still the
+		// publisher's own content and renders, but the feature reports nothing — so
+		// it is not stamped and the view script emits no interaction for it. The
+		// window above is still closed either way, so a hidden card can't leak.
+		if ( ! self::is_feature_on() ) {
+			return $block_content;
+		}
+
 		// This filter runs for every Group on the page, so the marker is looked for
-		// in the string before anything is parsed.
+		// in the string before anything is parsed. The tag-processor checks below
+		// gate *stamping* only: a blanked or marker-less render is not stamped, but
+		// its window has already been closed above.
 		if ( false === strpos( (string) $block_content, Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS ) ) {
 			return $block_content;
 		}
@@ -356,6 +443,12 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		$processor->set_attribute( 'data-newspack-cp-post-id', (string) $post_id );
 		$processor->set_attribute( 'data-newspack-cp-cta', self::get_cta_type_from_html( $block_content ) );
 		$processor->set_attribute( 'data-newspack-cp-placement', self::get_placement( $post_id ) );
+
+		// Reported from what normalize_group() recorded, not recomputed: the label
+		// has to name the copy the reader was actually shown.
+		if ( is_string( $condition ) && '' !== $condition ) {
+			$processor->set_attribute( 'data-newspack-cp-condition', $condition );
+		}
 
 		return $processor->get_updated_html();
 	}
@@ -474,33 +567,112 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 			return self::is_instance( $block );
 		}
 
-		return 'core/group' === $name
-			&& false !== strpos( (string) ( $block['attrs']['className'] ?? '' ), Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS );
+		if ( 'core/group' !== $name ) {
+			return false;
+		}
+
+		// A whole class, not a prefix: `newspack-contextual-prompt-custom` is the
+		// publisher's own class, and the stamp downstream matches the marker the
+		// same way (WP_HTML_Tag_Processor::has_class()), so a looser test here
+		// would open a card nothing ever closes.
+		$classes = preg_split( '#\s+#', trim( (string) ( $block['attrs']['className'] ?? '' ) ) );
+
+		return in_array( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS, (array) $classes, true );
 	}
 
 	/**
-	 * Normalize the prompt card's CTA and apply the site-wide override, for blocks
-	 * coming from the pattern only.
+	 * Normalize the prompt card's CTA and apply whichever copy override is in
+	 * force. Acts on any prompt card: one arriving from the pattern (the instance
+	 * window is open) and one a publisher detached from it alike. A detached card
+	 * is still a prompt, so the fund drive and the control test treat it as one —
+	 * otherwise the settings preview would list a story whose card never swapped.
+	 * What stays scoped to instances is the CTA rebuild below, which would
+	 * otherwise throw away the label and destination a publisher chose for their
+	 * own card. A fund drive in button mode still replaces that CTA: the drive is
+	 * a deliberate, temporary, site-wide swap, and it ends when the drive does.
+	 *
+	 * The marker class is the whole test: an instance's own Group carries it too,
+	 * so the window need not be consulted here.
+	 *
+	 * Records what actually happened — the condition rendered and that a card is
+	 * open — for the two hooks that run before this card's markup comes back:
+	 * add_analytics_attributes() stamps the condition, print_form_hidden_fields()
+	 * reads the window.
 	 *
 	 * @param array $parsed_block The block being rendered.
 	 * @return array
 	 */
 	public static function normalize_group( $parsed_block ) {
-		if (
-			! self::$in_instance
-			|| 'core/group' !== ( $parsed_block['blockName'] ?? '' )
-			|| false === strpos( (string) ( $parsed_block['attrs']['className'] ?? '' ), Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS )
-		) {
+		if ( 'core/group' !== ( $parsed_block['blockName'] ?? '' ) || ! self::is_prompt_card( $parsed_block ) ) {
 			return $parsed_block;
 		}
 
-		$parsed_block = self::normalize_cta( $parsed_block );
-
-		if ( class_exists( 'Newspack_Popups_Settings' ) && Newspack_Popups_Settings::is_override_active() ) {
-			$parsed_block = self::apply_override( $parsed_block );
+		// The feature switch reaches every card. A detached card survives the strip
+		// (its copy is the publisher's), but the fund drive and the control test
+		// are the feature: with the opt-in withdrawn they stop swapping copy and
+		// stop reporting, so no card is left carrying a live override an admin has
+		// no UI to turn off.
+		if ( ! self::is_feature_on() ) {
+			return $parsed_block;
 		}
 
-		return $parsed_block;
+		if ( self::$in_instance ) {
+			// The CTA is normalized for cards the pattern supplied only: a detached
+			// card's CTA is content the publisher owns, and rebuilding it would
+			// throw away the label and destination they chose.
+			$parsed_block = self::normalize_cta( $parsed_block );
+		}
+
+		// Seed the condition from the story's assignment, the one function the front
+		// end, the editor notice and the settings preview all read, so the swap below
+		// and the stamp can't disagree. get_condition() already resolves the
+		// override-vs-control-vs-post-id precedence and returns '' when the control is
+		// off, when a fund drive is on but the control isn't, or when there is no story
+		// to assign (get_the_ID() === 0 off the loop) — so an off-loop render is
+		// stamped nothing rather than a bare story_aware next to post-id="0".
+		$post_id   = (int) get_the_ID();
+		$condition = self::get_condition( $post_id );
+
+		$settings_ready = class_exists( 'Newspack_Popups_Settings' );
+		if ( $settings_ready && Newspack_Popups_Settings::is_override_active() ) {
+			// A fund drive replaces every card, and the control test is paused for its
+			// duration. `override` marks that paused test — get_condition() reports it
+			// whenever the control test and the fund drive are both on, whether or not
+			// this card actually swapped (a form-mode card with a deleted paragraph
+			// swaps nothing, but the drive is still on). The override runs regardless
+			// of the control test; the condition it reports does not.
+			$parsed_block = self::apply_override( $parsed_block );
+		} elseif ( self::CONDITION_GENERIC_CONTROL === $condition ) {
+			// Selected for the control copy: swap it in, but report story_aware if the
+			// card had nothing to replace (a detached card whose copy paragraph was
+			// deleted), so the stamp names the copy the reader was actually shown. For
+			// a card nested in another block the swap reaches the render only because
+			// WP_Block::render() calls refresh_parsed_block_dependents() when
+			// render_block_data changed the parsed block — current-core behavior.
+			$before       = self::get_copy_html( $parsed_block );
+			$parsed_block = self::apply_control( $parsed_block );
+			if ( self::get_copy_html( $parsed_block ) === $before ) {
+				$condition = self::CONDITION_STORY_AWARE;
+			}
+		}
+
+		self::$rendered_condition = $condition;
+		self::$card_open          = true;
+
+		return self::tag_button_destination( $parsed_block );
+	}
+
+	/**
+	 * The markup of the card's copy child, for telling a swap that landed from
+	 * one that found nothing to replace.
+	 *
+	 * @param array $parsed_block Parsed prompt card.
+	 * @return string|null The copy child's innerHTML, or null when it has none.
+	 */
+	private static function get_copy_html( $parsed_block ) {
+		$index = self::find_copy( $parsed_block );
+
+		return null === $index ? null : (string) ( $parsed_block['innerBlocks'][ $index ]['innerHTML'] ?? '' );
 	}
 
 	/**
@@ -582,6 +754,251 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		}
 
 		return $parsed_block;
+	}
+
+	/**
+	 * Which condition a story renders under. Derived from the post id alone: a
+	 * counter would hand different readers different conditions for the same
+	 * story behind a full-page cache, and a story that flips condition mid-test
+	 * lands its events on both sides of the comparison.
+	 *
+	 * @param int $post_id The story.
+	 * @return string One of CONDITIONS, or '' while the control override is off.
+	 */
+	public static function get_condition( $post_id ) {
+		if ( ! class_exists( 'Newspack_Popups_Settings' ) || ! Newspack_Popups_Settings::is_control_active() ) {
+			return '';
+		}
+		if ( Newspack_Popups_Settings::is_override_active() ) {
+			return self::CONDITION_OVERRIDE;
+		}
+		$post_id = (int) $post_id;
+		if ( $post_id <= 0 ) {
+			// No story to assign, so nothing to report — the same silence the
+			// feature-off case returns.
+			return '';
+		}
+		return self::is_control_story( $post_id, Newspack_Popups_Settings::get_control_interval() )
+			? self::CONDITION_GENERIC_CONTROL
+			: self::CONDITION_STORY_AWARE;
+	}
+
+	/**
+	 * Whether a story is selected for the control copy at a given interval.
+	 * The one selection rule, shared by the front-end render and the settings
+	 * preview so what the preview lists is what readers get.
+	 *
+	 * @param int $post_id  The story.
+	 * @param int $interval Every Nth story.
+	 * @return bool
+	 */
+	public static function is_control_story( $post_id, $interval ) {
+		$post_id  = (int) $post_id;
+		$interval = max( 1, (int) $interval );
+		return $post_id > 0 && 0 === $post_id % $interval;
+	}
+
+	/**
+	 * Published stories that carry a Contextual Prompt and will show the control
+	 * copy at the interval, newest first. The instance markup is a `core/block`
+	 * ref to the pattern; a detached card carries the marker class instead, so
+	 * both needles are searched.
+	 *
+	 * @param int $interval Every Nth story.
+	 * @param int $limit    Maximum rows to return, starting at $offset.
+	 * @param int $offset   How many selected candidates to skip, for "Load more" paging.
+	 * @return array{total: int, capped: bool, posts: array[]} `total` counts the selected
+	 *                                            stories among the newest
+	 *                                            CANDIDATES_SCAN_LIMIT candidates, before
+	 *                                            $offset/$limit are applied; `capped` says
+	 *                                            the scan hit that limit, so the count and
+	 *                                            the list both stop short of the archive;
+	 *                                            `posts` is the requested page, each: id,
+	 *                                            title, edit_link, permalink.
+	 */
+	public static function get_control_preview( $interval, $limit = 10, $offset = 0 ) {
+		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id ) {
+			return [
+				'total'  => 0,
+				'capped' => false,
+				'posts'  => [],
+			];
+		}
+		$candidates = self::get_control_candidate_ids( $pattern_id );
+		$selected   = [];
+		foreach ( $candidates['ids'] as $id ) {
+			$id = (int) $id;
+			if ( self::is_control_story( $id, $interval ) ) {
+				$selected[] = $id;
+			}
+		}
+		$page = array_slice( $selected, $offset, $limit );
+		$rows = array_map(
+			function ( $id ) {
+				return [
+					'id'        => $id,
+					'title'     => get_the_title( $id ),
+					'edit_link' => (string) get_edit_post_link( $id, 'raw' ),
+					'permalink' => (string) get_permalink( $id ),
+				];
+			},
+			$page
+		);
+		return [
+			'total'  => count( $selected ),
+			'capped' => $candidates['capped'],
+			'posts'  => $rows,
+		];
+	}
+
+	/**
+	 * The raw candidate id list `get_control_preview()` filters by interval,
+	 * cached in a transient keyed on the pattern id: the underlying query is a
+	 * double-wildcard `LIKE` scan of `wp_posts.post_content`, and re-running it
+	 * on every settings-form keystroke would put a full table scan on the
+	 * debounce timer. `save_post`/`deleted_post` clear the transient for
+	 * supported post types, so a newly published or removed story shows up
+	 * without waiting for the TTL.
+	 *
+	 * The needle for the `core/block` ref is anchored on both sides of the id
+	 * (`"ref":<id>,` or `"ref":<id>}`) so a pattern id of 12 does not
+	 * prefix-match an unrelated ref of 123 or 125 serialized elsewhere in the
+	 * same post.
+	 *
+	 * @param int $pattern_id The pattern id.
+	 * @return array{ids: int[], capped: bool} The candidate ids (newest first,
+	 *                                          narrowed to real prompt cards) and
+	 *                                          whether the raw scan hit its ceiling.
+	 */
+	private static function get_control_candidate_ids( $pattern_id ) {
+		$transient_key = self::candidates_transient_key( $pattern_id );
+		$cached        = get_transient( $transient_key );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
+		global $wpdb;
+		$types = Newspack_Popups_Model::get_default_popup_post_types();
+		$in    = implode( ',', array_fill( 0, count( $types ), '%s' ) );
+		// The placeholder count sniff miscounts the dynamically-built $in list,
+		// and the result is cached in a transient above rather than scoped by
+		// interval/limit, which is what the caching sniff cannot see through.
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT ID, post_content FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ($in) AND ( post_content LIKE %s OR post_content LIKE %s OR post_content LIKE %s ) ORDER BY post_date DESC LIMIT %d",
+				array_merge(
+					$types,
+					[
+						'%' . $wpdb->esc_like( '"ref":' . $pattern_id . ',' ) . '%',
+						'%' . $wpdb->esc_like( '"ref":' . $pattern_id . '}' ) . '%',
+						'%' . $wpdb->esc_like( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS ) . '%',
+						self::CANDIDATES_SCAN_LIMIT,
+					]
+				)
+			)
+		);
+		// phpcs:enable
+
+		// Whether the scan hit its ceiling is a property of the raw result, read
+		// before the parse filter narrows it: that is what the preview reports as
+		// `capped`, and raising the constant must not strand a filtered count there.
+		$capped = count( $rows ) >= self::CANDIDATES_SCAN_LIMIT;
+
+		// The LIKE marker needle is a coarse net: it matches the class as a
+		// substring, so a Group whose class merely starts with it
+		// (`newspack-contextual-prompt-custom`), or a post that names the class in a
+		// code block, is caught too. is_prompt_card() on the parsed content is the
+		// predicate the render actually swaps on — and restore_marker_class() can
+		// append the marker anywhere in the class list, so a whole-token SQL needle
+		// would miss real cards — so the list is narrowed by it here, once, and the
+		// cache holds the narrowed result rather than re-parsing on every keystroke.
+		$ids = [];
+		foreach ( $rows as $row ) {
+			if ( self::blocks_have_prompt_card( parse_blocks( (string) $row->post_content ) ) ) {
+				$ids[] = (int) $row->ID;
+			}
+		}
+
+		$candidates = [
+			'ids'    => $ids,
+			'capped' => $capped,
+		];
+		set_transient( $transient_key, $candidates, self::CANDIDATES_CACHE_TTL );
+		return $candidates;
+	}
+
+	/**
+	 * Whether any block in a parsed tree is a prompt card — an instance ref or a
+	 * marker Group — at any depth. The predicate the render swaps and stamps on,
+	 * so the settings preview lists exactly the stories a control will reach.
+	 *
+	 * @param array $blocks Parsed blocks.
+	 * @return bool
+	 */
+	private static function blocks_have_prompt_card( $blocks ) {
+		foreach ( $blocks as $block ) {
+			if ( self::is_prompt_card( $block ) ) {
+				return true;
+			}
+			if ( ! empty( $block['innerBlocks'] ) && self::blocks_have_prompt_card( $block['innerBlocks'] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Clear the cached control-preview candidate list when a supported post
+	 * type is saved or deleted, so a story that just gained or lost its
+	 * Contextual Prompt is reflected in the settings preview immediately
+	 * instead of waiting for the cache to expire.
+	 *
+	 * @param int          $post_id The post being saved or deleted.
+	 * @param WP_Post|null $post    The post object, when the hook provides one.
+	 */
+	public static function invalidate_control_candidates_cache( $post_id, $post = null ) {
+		$post_type = $post instanceof WP_Post ? $post->post_type : get_post_type( $post_id );
+		if ( ! $post_type || ! in_array( $post_type, Newspack_Popups_Model::get_default_popup_post_types(), true ) ) {
+			return;
+		}
+		$pattern_id = (int) get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID, 0 );
+		if ( $pattern_id ) {
+			delete_transient( self::candidates_transient_key( $pattern_id ) );
+		}
+	}
+
+	/**
+	 * Where the candidate id list for a pattern is cached. One spelling, so the
+	 * reader and the invalidator cannot drift apart.
+	 *
+	 * @param int $pattern_id The pattern id.
+	 * @return string
+	 */
+	private static function candidates_transient_key( $pattern_id ) {
+		return 'newspack_cp_control_candidates_' . (int) $pattern_id;
+	}
+
+	/**
+	 * Swap the story's copy for the control copy. Copy only: the CTA must be
+	 * identical in both conditions or the test measures two things at once.
+	 *
+	 * @param array $parsed_block Parsed prompt card, already normalized.
+	 * @return array
+	 */
+	public static function apply_control( $parsed_block ) {
+		$body = trim( (string) get_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, '' ) );
+		if ( '' === $body ) {
+			return $parsed_block;
+		}
+		$copy_index = self::find_copy( $parsed_block );
+		if ( null !== $copy_index ) {
+			// Same reason as apply_override(): the instance's own copy is a pattern
+			// override resolved after this filter and would overwrite the swap.
+			unset( $parsed_block['innerBlocks'][ $copy_index ]['attrs']['metadata']['bindings'] );
+		}
+		return self::replace_copy( $parsed_block, $body );
 	}
 
 	/**
@@ -727,5 +1144,190 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		}
 
 		return $parsed_block;
+	}
+
+	/**
+	 * The source triple for a story.
+	 *
+	 * @param int $post_id The story.
+	 * @return array Keyed by SOURCE_KEYS.
+	 */
+	public static function get_source( $post_id ) {
+		$post_id = (int) $post_id;
+		return [
+			'contextual_prompt_post_id'   => $post_id,
+			'contextual_prompt_placement' => self::get_placement( $post_id ),
+			'contextual_prompt_condition' => self::get_condition( $post_id ),
+		];
+	}
+
+	/**
+	 * The source triple for the card being rendered: this story's id and
+	 * placement, and the condition normalize_group() recorded rather than the one
+	 * get_condition() derives. The two disagree when the card had nothing to swap
+	 * — a detached card with no copy paragraph on a selected story renders
+	 * story-aware copy — and the impression, the form and the button destination
+	 * all have to name the copy the reader actually saw.
+	 *
+	 * @param int $post_id The story.
+	 * @return array Keyed by SOURCE_KEYS.
+	 */
+	private static function get_rendered_source( $post_id ) {
+		$source = self::get_source( $post_id );
+
+		$source['contextual_prompt_condition'] = is_string( self::$rendered_condition ) ? self::$rendered_condition : '';
+
+		return $source;
+	}
+
+	/**
+	 * Validate a source triple from an untrusted carrier (URL, form, cart).
+	 * Insights groups by these values, so a junk id invents a story rather than
+	 * failing to attribute (the same reason gate ids are validated, NPPD-1887).
+	 *
+	 * @param array $raw Candidate values keyed by SOURCE_KEYS.
+	 * @return array Valid subset; empty unless the post id is a published post.
+	 */
+	public static function validate_source( $raw ) {
+		$post_id = absint( $raw['contextual_prompt_post_id'] ?? 0 );
+		if (
+			! $post_id
+			|| 'publish' !== get_post_status( $post_id )
+			|| ! in_array( get_post_type( $post_id ), Newspack_Popups_Model::get_default_popup_post_types(), true )
+		) {
+			return [];
+		}
+		$source    = [ 'contextual_prompt_post_id' => $post_id ];
+		$placement = (string) ( $raw['contextual_prompt_placement'] ?? '' );
+		if ( in_array( $placement, self::PLACEMENTS, true ) ) {
+			$source['contextual_prompt_placement'] = $placement;
+		}
+		$condition = (string) ( $raw['contextual_prompt_condition'] ?? '' );
+		if ( in_array( $condition, self::CONDITIONS, true ) ) {
+			$source['contextual_prompt_condition'] = $condition;
+		}
+		return $source;
+	}
+
+	/**
+	 * Print the source triple as hidden inputs in a donate form. Inside a card —
+	 * an instance or a detached one — the values are this story's. Outside one, a
+	 * request carrying the triple (a plain-button card sent the reader to the
+	 * landing page) is forwarded so both CTA modes attribute the same way. Any
+	 * other donate form gets nothing.
+	 */
+	public static function print_form_hidden_fields() {
+		if ( self::$card_open ) {
+			$source = self::get_rendered_source( (int) get_the_ID() );
+		} else {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only attribution, validated below.
+			$source = self::validate_source( array_map( 'sanitize_text_field', wp_unslash( array_intersect_key( $_GET, array_flip( self::SOURCE_KEYS ) ) ) ) );
+		}
+		if ( empty( $source['contextual_prompt_post_id'] ) ) {
+			return;
+		}
+		foreach ( $source as $name => $value ) {
+			if ( '' === (string) $value ) {
+				continue;
+			}
+			printf( '<input type="hidden" name="%s" value="%s" />', esc_attr( $name ), esc_attr( $value ) );
+		}
+	}
+
+	/**
+	 * Append the source triple to the plain button's destination, at render.
+	 * The stored pattern never carries it: the values are live.
+	 *
+	 * @param array $parsed_block Parsed prompt card.
+	 * @return array
+	 */
+	private static function tag_button_destination( $parsed_block ) {
+		$cta = self::find_cta( $parsed_block );
+		if ( null === $cta || 'core/buttons' !== $cta['name'] ) {
+			return $parsed_block;
+		}
+		$post_id = (int) get_the_ID();
+		// The sole caller (normalize_group()) sets $card_open two lines before it
+		// hands off here, so the window is always open at this point: the condition
+		// the card actually rendered under is what the destination has to name.
+		$source  = self::get_rendered_source( $post_id );
+		$source  = array_filter( $source, fn( $v ) => '' !== (string) $v );
+		if ( empty( $source['contextual_prompt_post_id'] ) ) {
+			return $parsed_block;
+		}
+		$buttons = $parsed_block['innerBlocks'][ $cta['index'] ];
+		foreach ( $buttons['innerBlocks'] as $i => $button ) {
+			if ( 'core/button' !== ( $button['blockName'] ?? '' ) ) {
+				continue;
+			}
+			$tag = function ( $html ) use ( $source ) {
+				$processor = new WP_HTML_Tag_Processor( (string) $html );
+				while ( $processor->next_tag( 'a' ) ) {
+					$href = $processor->get_attribute( 'href' );
+					if ( self::is_taggable_destination( $href ) ) {
+						$processor->set_attribute( 'href', add_query_arg( $source, $href ) );
+					}
+				}
+				return $processor->get_updated_html();
+			};
+			$button['innerHTML'] = $tag( $button['innerHTML'] );
+			foreach ( $button['innerContent'] as $k => $chunk ) {
+				if ( is_string( $chunk ) ) {
+					$button['innerContent'][ $k ] = $tag( $chunk );
+				}
+			}
+			if ( ! empty( $button['attrs']['url'] ) && self::is_taggable_destination( $button['attrs']['url'] ) ) {
+				$button['attrs']['url'] = add_query_arg( $source, $button['attrs']['url'] );
+			}
+			$buttons['innerBlocks'][ $i ] = $button;
+		}
+		$parsed_block['innerBlocks'][ $cta['index'] ] = $buttons;
+		return $parsed_block;
+	}
+
+	/**
+	 * Whether a destination is one of ours to tag. The attribution args are read
+	 * back on this site, so they are noise on another publisher's processor and
+	 * damage to a `mailto:` or `tel:` address. A relative href is this site.
+	 *
+	 * @param string|null $href The destination.
+	 * @return bool
+	 */
+	private static function is_taggable_destination( $href ) {
+		$href = trim( (string) $href );
+		if ( '' === $href ) {
+			return false;
+		}
+		$scheme = wp_parse_url( $href, PHP_URL_SCHEME );
+		if ( $scheme && ! in_array( strtolower( $scheme ), [ 'http', 'https' ], true ) ) {
+			return false;
+		}
+		$host = wp_parse_url( $href, PHP_URL_HOST );
+		if ( ! $host ) {
+			return true;
+		}
+		// Compare with a leading `www.` stripped from both sides, and accept either
+		// home_url() or site_url() — they differ on a WordPress-in-a-subdirectory
+		// install. A button a publisher typed as www.example.org on a www-less home
+		// URL is still this site, and its attribution args are read back here.
+		$host = self::normalize_host( $host );
+		$own  = array_filter(
+			[
+				self::normalize_host( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ),
+				self::normalize_host( (string) wp_parse_url( site_url(), PHP_URL_HOST ) ),
+			]
+		);
+		return in_array( $host, $own, true );
+	}
+
+	/**
+	 * A host lowered and stripped of a leading `www.`, so the site's own address
+	 * matches whether or not either side spells the `www.`.
+	 *
+	 * @param string $host The host.
+	 * @return string
+	 */
+	private static function normalize_host( $host ) {
+		return preg_replace( '/^www\./', '', strtolower( trim( (string) $host ) ) );
 	}
 }

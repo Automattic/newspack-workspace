@@ -27,6 +27,13 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	const CUSTOM_URL = 'https://example.com/custom/';
 
 	/**
+	 * Destinations the attribution args must not be appended to: another site,
+	 * and a scheme that isn't the web.
+	 */
+	const EXTERNAL_URL = 'https://donations.example.test/give/';
+	const MAILTO_URL   = 'mailto:news@example.test';
+
+	/**
 	 * The copy an instance carries as its own pattern override, so "the site-wide
 	 * override won" is provable rather than merely "the override rendered".
 	 */
@@ -86,6 +93,9 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );
 		delete_option( self::PLATFORM_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION );
 		if ( get_stylesheet() !== $this->original_stylesheet ) {
 			switch_theme( $this->original_stylesheet );
 		}
@@ -102,10 +112,16 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * between tests the way a new request would.
 	 */
 	private function reset_request_state() {
-		foreach ( [ 'in_instance', 'repaired' ] as $name ) {
+		$state = [
+			'in_instance'        => false,
+			'repaired'           => false,
+			'card_open'          => false,
+			'rendered_condition' => null,
+		];
+		foreach ( $state as $name => $value ) {
 			$property = new ReflectionProperty( 'Newspack_Popups_Contextual_Prompt_Render', $name );
 			$property->setAccessible( true );
-			$property->setValue( null, false );
+			$property->setValue( null, $value );
 		}
 	}
 
@@ -124,6 +140,49 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 			$attrs['content'] = [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => $copy ] ];
 		}
 		return do_blocks( '<!-- wp:block ' . wp_json_encode( $attrs ) . ' /-->' );
+	}
+
+	/**
+	 * Render an instance inside a post with the given id, so get_the_ID() is set
+	 * the way it is in the loop. The post id decides the condition.
+	 *
+	 * @param int         $post_id Post to render inside.
+	 * @param string|null $copy    Instance copy.
+	 * @return string Rendered markup.
+	 */
+	private function render_instance_in_post( $post_id, $copy = self::PER_POST_COPY ) {
+		global $post;
+		$post = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $post );
+		$rendered = $this->render_instance( $copy );
+		wp_reset_postdata();
+		return $rendered;
+	}
+
+	/**
+	 * A published post whose id is, or is not, a multiple of the interval.
+	 *
+	 * @param int  $interval Interval.
+	 * @param bool $selected Whether the id should be a multiple.
+	 * @return int Post id.
+	 */
+	private function post_for_interval( $interval, $selected ) {
+		do {
+			$id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		} while ( ( 0 === $id % $interval ) !== $selected );
+		return $id;
+	}
+
+	/**
+	 * Turn the control override on.
+	 *
+	 * @param string $body     Control copy.
+	 * @param int    $interval Every Nth story.
+	 */
+	private function set_control( $body = 'Support local news.', $interval = 3 ) {
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '1' );
+		update_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, $body );
+		update_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION, (string) $interval );
 	}
 
 	/**
@@ -1314,5 +1373,474 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$html = $this->render_instance( self::PER_POST_COPY );
 
 		$this->assertStringContainsString( self::PER_POST_COPY, $html );
+	}
+
+	/**
+	 * A selected story renders the control copy; its own copy is not written back.
+	 */
+	public function test_control_replaces_copy_on_a_selected_story() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$rendered = $this->render_instance_in_post( $this->post_for_interval( 3, true ) );
+		$this->assertStringContainsString( 'Support local news.', $rendered );
+		$this->assertStringNotContainsString( self::PER_POST_COPY, $rendered );
+	}
+
+	/**
+	 * A story that isn't selected renders its own copy.
+	 */
+	public function test_control_leaves_an_unselected_story_alone() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$rendered = $this->render_instance_in_post( $this->post_for_interval( 3, false ) );
+		$this->assertStringContainsString( self::PER_POST_COPY, $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+	}
+
+	/**
+	 * Copy only: the CTA is byte-identical between conditions, in both modes.
+	 */
+	public function test_control_leaves_the_cta_untouched() {
+		foreach ( [ true, false ] as $native ) {
+			$this->set_platform( $native );
+			$this->set_donor_landing_page();
+			$this->set_control( 'Support local news.', 3 );
+			$selected   = $this->render_instance_in_post( $this->post_for_interval( 3, true ) );
+			$unselected = $this->render_instance_in_post( $this->post_for_interval( 3, false ) );
+			// Strip the copy paragraph and the attributes that are expected to vary
+			// between two different posts (the post id) or between the two
+			// conditions by design (the condition itself) — what is left is the CTA,
+			// which apply_control() must leave untouched. The button's href carries
+			// the same post id and condition (`tag_button_destination()`), so those
+			// query args are stripped too.
+			$cta = function ( $html ) {
+				preg_match( '#<p\b[^>]*>.*?</p>#s', $html, $m );
+				$html = str_replace( $m[0], '', $html );
+				$html = preg_replace( '#\sdata-newspack-cp-(post-id|condition)="[^"]*"#', '', $html );
+				$html = preg_replace( '~&#0?38;contextual_prompt_(post_id|condition)=[^"&]*~', '', $html );
+				return $html;
+			};
+			$this->assertSame( $cta( $unselected ), $cta( $selected ), $native ? 'native' : 'offsite' );
+		}
+	}
+
+	/**
+	 * Turning the control off restores every story's own copy.
+	 */
+	public function test_control_off_restores_per_post_copy() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$post_id = $this->post_for_interval( 3, true );
+		$this->assertStringContainsString( 'Support local news.', $this->render_instance_in_post( $post_id ) );
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '' );
+		$this->assertStringContainsString( self::PER_POST_COPY, $this->render_instance_in_post( $post_id ) );
+	}
+
+	/**
+	 * Enabled with empty copy is inactive: the card keeps its own copy rather
+	 * than being blanked and suppressed.
+	 */
+	public function test_control_with_empty_copy_renders_per_post_copy() {
+		$this->set_platform( true );
+		$this->set_control( '', 3 );
+		$rendered = $this->render_instance_in_post( $this->post_for_interval( 3, true ) );
+		$this->assertStringContainsString( self::PER_POST_COPY, $rendered );
+	}
+
+	/**
+	 * The fund-drive override wins when both are on.
+	 */
+	public function test_fund_drive_override_wins_over_control() {
+		$this->set_platform( true );
+		$this->set_override( 'Fund drive copy', 'form' );
+		$this->set_control( 'Support local news.', 3 );
+		$rendered = $this->render_instance_in_post( $this->post_for_interval( 3, true ) );
+		$this->assertStringContainsString( 'Fund drive copy', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+	}
+
+	/**
+	 * Assignment is a function of the post id only.
+	 */
+	public function test_condition_is_stable_for_a_post() {
+		$this->set_control( 'Support local news.', 3 );
+		$selected   = $this->post_for_interval( 3, true );
+		$unselected = $this->post_for_interval( 3, false );
+		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
+		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
+		$this->assertSame( 'story_aware', Newspack_Popups_Contextual_Prompt_Render::get_condition( $unselected ) );
+		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_condition( 0 ), 'No story, no condition.' );
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '' );
+		$this->assertSame( '', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
+	}
+
+	/**
+	 * The preview lists published stories carrying a prompt whose id is a
+	 * multiple of the interval, newest first, capped, with edit links.
+	 */
+	public function test_control_preview_lists_selected_stories_with_prompts() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			] 
+		) . ' /-->';
+		$with        = [];
+		$with_count  = 0;
+		$without     = [];
+		do {
+			$id = self::factory()->post->create(
+				[
+					'post_status'  => 'publish',
+					'post_content' => $instance,
+				]
+			);
+			if ( 0 === $id % 3 ) {
+				$with[] = $id;
+				++$with_count;
+			}
+		} while ( $with_count < 2 );
+		do {
+			$id = self::factory()->post->create(
+				[
+					'post_status'  => 'publish',
+					'post_content' => '<!-- wp:paragraph --><p>No prompt.</p><!-- /wp:paragraph -->',
+				]
+			);
+			if ( 0 === $id % 3 ) {
+				$without[] = $id;
+				break;
+			}
+		} while ( true );
+		$draft = self::factory()->post->create(
+			[
+				'post_status'  => 'draft',
+				'post_content' => $instance,
+			]
+		);
+
+		$preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 3, 10 );
+		$ids     = wp_list_pluck( $preview['posts'], 'id' );
+		foreach ( $with as $id ) {
+			$this->assertContains( $id, $ids );
+		}
+		$this->assertNotContains( $without[0], $ids );
+		$this->assertNotContains( $draft, $ids );
+		foreach ( $preview['posts'] as $row ) {
+			$this->assertSame( 0, $row['id'] % 3 );
+			$this->assertStringContainsString( 'post.php?post=' . $row['id'], $row['edit_link'] );
+		}
+		$this->assertSame( $preview['total'], count( $preview['posts'] ) );
+		$this->assertCount( 1, Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 3, 1 )['posts'] );
+	}
+
+	/**
+	 * The is_control_story() rule is the single selection rule get_condition() uses.
+	 */
+	public function test_is_control_story_matches_get_condition() {
+		$this->set_control( 'Support local news.', 4 );
+		// post_for_interval() only guarantees id % 4 === 0; that id can also be a
+		// multiple of 5 (20, 40, ...), which would make the id % 5 !== 0 assertion
+		// below fail depending on autoincrement state. Loop until the id satisfies
+		// both.
+		do {
+			$selected = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		} while ( 0 !== $selected % 4 || 0 === $selected % 5 );
+		$this->assertTrue( Newspack_Popups_Contextual_Prompt_Render::is_control_story( $selected, 4 ) );
+		$this->assertFalse( Newspack_Popups_Contextual_Prompt_Render::is_control_story( $selected, 5 ) );
+		$this->assertSame( 'generic_control', Newspack_Popups_Contextual_Prompt_Render::get_condition( $selected ) );
+	}
+
+	/**
+	 * A `"ref":<id>` needle without a delimiter would prefix-match an unrelated
+	 * pattern's ref (core serializes every `core/block` the same way), listing a
+	 * story that will not actually show the prompt. The needle must be anchored
+	 * on both sides of the id.
+	 */
+	public function test_control_preview_does_not_prefix_match_ref() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$other_ref  = $pattern_id * 10 + 1; // Starts with the pattern id's digits, e.g. 12 -> 121.
+		$decoy      = '<!-- wp:block ' . wp_json_encode( [ 'ref' => $other_ref ] ) . ' /-->';
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			]
+		) . ' /-->';
+		$decoy_post = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $decoy,
+			]
+		);
+		$real_post  = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $instance,
+			]
+		);
+
+		// Interval of 1 selects every candidate the SQL scan turns up, so the
+		// assertion is purely about the LIKE needle, not the interval filter.
+		$preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$ids     = wp_list_pluck( $preview['posts'], 'id' );
+		$this->assertNotContains( $decoy_post, $ids, 'A post embedding an unrelated ref that starts with the pattern id must not be listed.' );
+		$this->assertContains( $real_post, $ids, 'A post embedding the real pattern instance must be listed.' );
+	}
+
+	/**
+	 * The candidate id scan is cached in a transient keyed on the pattern id,
+	 * so a second preview call within the TTL does not re-run the LIKE scan.
+	 * A row is inserted straight into `wp_posts`, bypassing `wp_insert_post()`
+	 * and therefore the `save_post` invalidation hook, so the only way it
+	 * could appear in the second call's result is a re-run of the query.
+	 */
+	public function test_control_preview_caches_candidate_scan() {
+		global $wpdb;
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			]
+		) . ' /-->';
+
+		$transient_key = 'newspack_cp_control_candidates_' . $pattern_id;
+		$this->assertFalse( get_transient( $transient_key ), 'No cache before the first call.' );
+
+		// Interval of 1 selects every candidate the scan turns up, isolating
+		// this test from the interval filter.
+		Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$this->assertNotFalse( get_transient( $transient_key ), 'The candidate scan is cached after the first call.' );
+
+		// Deliberately bypasses wp_insert_post() (and the save_post cache
+		// invalidation it fires) to prove the second get_control_preview() call
+		// below is served from cache, not a fresh query.
+		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->posts,
+			[
+				'post_status'   => 'publish',
+				'post_type'     => 'post',
+				'post_title'    => 'Bypasses save_post',
+				'post_name'     => 'bypasses-save-post-' . wp_generate_password( 8, false ),
+				'post_content'  => $instance,
+				'post_date'     => current_time( 'mysql' ),
+				'post_date_gmt' => current_time( 'mysql', true ),
+			]
+		);
+		$bypassed_id = $wpdb->insert_id;
+
+		$second_preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$this->assertNotContains( $bypassed_id, wp_list_pluck( $second_preview['posts'], 'id' ), 'A cached call must not reflect a row inserted after the cache was warmed.' );
+	}
+
+	/**
+	 * Publishing a post of a supported type clears the cached candidate list,
+	 * so a newly published story shows up in the preview without waiting for
+	 * the TTL.
+	 */
+	public function test_saving_post_invalidates_control_preview_cache() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			]
+		) . ' /-->';
+
+		// Warm the cache with an empty result: no matching posts exist yet.
+		Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$transient_key = 'newspack_cp_control_candidates_' . $pattern_id;
+		$this->assertNotFalse( get_transient( $transient_key ) );
+
+		$new_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $instance,
+			]
+		);
+
+		$this->assertFalse( get_transient( $transient_key ), 'Publishing a supported post type must clear the cache.' );
+
+		$preview = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 );
+		$this->assertContains( $new_id, wp_list_pluck( $preview['posts'], 'id' ), 'The newly published story is visible once the cache is rebuilt.' );
+	}
+
+	/**
+	 * The preview pages through the selected stories and reports the total,
+	 * so the settings form can offer "Load more".
+	 */
+	public function test_control_preview_paginates_with_total() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 1 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$instance   = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			]
+		) . ' /-->';
+		$ids        = [];
+		for ( $i = 0; $i < 5; $i++ ) {
+			$ids[] = self::factory()->post->create(
+				[
+					'post_status'  => 'publish',
+					'post_content' => $instance,
+					'post_date'    => gmdate( 'Y-m-d H:i:s', time() - $i * 60 ),
+				]
+			);
+		}
+		delete_transient( 'newspack_cp_control_candidates_' . $pattern_id );
+
+		$first = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 0 );
+		$this->assertSame( 5, $first['total'] );
+		$this->assertFalse( $first['capped'], 'Five stories is nowhere near the scan limit.' );
+		$this->assertCount( 2, $first['posts'] );
+		$second = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 2 );
+		$this->assertCount( 2, $second['posts'] );
+		$this->assertEmpty( array_intersect( wp_list_pluck( $first['posts'], 'id' ), wp_list_pluck( $second['posts'], 'id' ) ) );
+		$last = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 4 );
+		$this->assertCount( 1, $last['posts'] );
+		$this->assertSame( [], Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 2, 99 )['posts'] );
+	}
+
+	/**
+	 * Attribution query args belong on the site's own destinations. A publisher
+	 * who points the CTA at an external processor or a mailto: address gets that
+	 * link back untouched — the args would be noise there at best, and a mangled
+	 * address at worst.
+	 */
+	public function test_only_same_site_button_destinations_are_tagged() {
+		$this->set_platform( false );
+		$landing = $this->set_donor_landing_page();
+		$group   = $this->stored_group();
+		$cta     = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
+		$buttons = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( $landing, 'Donate' );
+		foreach ( [ self::EXTERNAL_URL, self::MAILTO_URL ] as $href ) {
+			$elsewhere = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( $href, 'Elsewhere' );
+			$buttons   = Newspack_Popups_Contextual_Prompt_Render::append_child( $buttons, $elsewhere['innerBlocks'][0] );
+		}
+		$group['innerBlocks'][ $cta['index'] ] = $buttons;
+
+		$rendered = html_entity_decode(
+			$this->render_in_loop(
+				self::factory()->post->create(
+					[
+						'post_status'  => 'publish',
+						'post_content' => serialize_block( $group ),
+					]
+				) 
+			) 
+		);
+		preg_match_all( '/href="([^"]*)"/', $rendered, $matches );
+		$hrefs = $matches[1];
+
+		$this->assertCount( 3, $hrefs );
+		$this->assertStringContainsString( 'contextual_prompt_post_id=', $hrefs[0], 'The donor landing page is this site, so it is tagged.' );
+		$this->assertSame( self::EXTERNAL_URL, $hrefs[1] );
+		$this->assertSame( self::MAILTO_URL, $hrefs[2] );
+	}
+
+	/**
+	 * The site's own address reached through a `www.` the home URL omits is still
+	 * this site: a publisher who typed `https://www.example.org/donate` on a site
+	 * whose home URL is `https://example.org` gets the button tagged. A genuinely
+	 * external host, and non-web schemes, still pass through untouched.
+	 */
+	public function test_taggable_destination_matches_www_and_scheme_variants() {
+		$method = new ReflectionMethod( 'Newspack_Popups_Contextual_Prompt_Render', 'is_taggable_destination' );
+		$method->setAccessible( true );
+		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
+
+		$this->assertTrue( $method->invoke( null, 'https://www.' . $home_host . '/donate' ), 'A www. form of a www-less home host is this site.' );
+		$this->assertTrue( $method->invoke( null, home_url( '/donate' ) ), 'The bare home host is this site.' );
+		$this->assertTrue( $method->invoke( null, '/donate' ), 'A relative href is this site.' );
+		$this->assertFalse( $method->invoke( null, self::EXTERNAL_URL ), 'A genuinely external host is left alone.' );
+		$this->assertFalse( $method->invoke( null, self::MAILTO_URL ), 'mailto: is left alone.' );
+		$this->assertFalse( $method->invoke( null, 'tel:+15551234' ), 'tel: is left alone.' );
+	}
+
+	/**
+	 * A Group whose class merely starts with the marker — the publisher's own
+	 * `newspack-contextual-prompt-custom` — is not a prompt card, so the preview
+	 * that lists the stories the control will swap must not include it. The
+	 * candidate scan's LIKE needle matches the substring; is_prompt_card() on the
+	 * parsed content is what tells the real card from the look-alike.
+	 */
+	public function test_control_preview_excludes_a_marker_prefixed_class() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 1 );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		$marker     = Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS;
+
+		$lookalike      = '<!-- wp:group {"className":"' . $marker . '-custom"} -->'
+			. '<div class="wp-block-group ' . $marker . '-custom">'
+			. '<!-- wp:paragraph --><p>Custom copy.</p><!-- /wp:paragraph -->'
+			. '</div><!-- /wp:group -->';
+		$real           = '<!-- wp:block ' . wp_json_encode(
+			[
+				'ref'     => $pattern_id,
+				'content' => [ Newspack_Popups_Contextual_Prompt_Pattern::BOUND_NAME => [ 'content' => 'Ask.' ] ],
+			]
+		) . ' /-->';
+		$lookalike_post = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $lookalike,
+			]
+		);
+		$real_post      = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $real,
+			]
+		);
+		delete_transient( 'newspack_cp_control_candidates_' . $pattern_id );
+
+		// Interval 1 selects every candidate the scan turns up, so this is purely
+		// about the is_prompt_card() filter, not the interval.
+		$ids = wp_list_pluck( Newspack_Popups_Contextual_Prompt_Render::get_control_preview( 1, 50 )['posts'], 'id' );
+		$this->assertNotContains( $lookalike_post, $ids, 'A Group whose class only starts with the marker is not a prompt card.' );
+		$this->assertContains( $real_post, $ids, 'The real instance is still listed.' );
+	}
+
+	/**
+	 * The control-preview endpoint reports the scan limit, so the settings UI can
+	 * name the newest-N ceiling from the server rather than hardcoding the number.
+	 */
+	public function test_control_preview_endpoint_returns_the_scan_limit() {
+		$response = Newspack_Popups_API::api_get_control_preview( new WP_REST_Request() );
+		$this->assertNotWPError( $response );
+		$this->assertSame(
+			Newspack_Popups_Contextual_Prompt_Render::CANDIDATES_SCAN_LIMIT,
+			$response->get_data()['scan_limit']
+		);
+	}
+
+	/**
+	 * Render a post in the loop, so get_the_ID() is set the way it is for a reader.
+	 *
+	 * @param int $post_id Post to render.
+	 * @return string Rendered markup.
+	 */
+	private function render_in_loop( $post_id ) {
+		$rendered = '';
+		$query    = new WP_Query( [ 'p' => $post_id ] );
+		while ( $query->have_posts() ) {
+			$query->the_post();
+			$rendered = do_blocks( get_the_content() );
+		}
+		wp_reset_postdata();
+
+		return $rendered;
 	}
 }

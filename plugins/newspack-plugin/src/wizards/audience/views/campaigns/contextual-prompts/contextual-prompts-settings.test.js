@@ -4,10 +4,17 @@
  * enable toggle, CTA form/button choice, conditional button fields).
  */
 
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { useState } from '@wordpress/element';
+import apiFetch from '@wordpress/api-fetch';
 import ContextualPromptsSettings from './contextual-prompts-settings';
+
+// ControlPreview (mounted whenever the control section is on) fetches the
+// preview via apiFetch; mocked so the enabled-body tests stay isolated from
+// the network and keep passing when the control toggle is on.
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+apiFetch.mockResolvedValue( { interval: 3, limit: 10, offset: 0, total: 0, posts: [] } );
 
 const FIELD_DEFAULTS = { section: 'override', value: '' };
 const ENABLE_FIELD = {
@@ -145,5 +152,271 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 		expect( screen.getByText( 'Override button label' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Override button URL' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Donate Form' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'lists the previewed stories as edit links while the control test is on', async () => {
+		const controlEnabledField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_enabled',
+			label: 'Enable control test',
+			type: 'toggle',
+			value: '1',
+		};
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 0,
+			total: 2,
+			posts: [
+				{
+					id: 3,
+					title: 'Local election results',
+					edit_link: 'https://example.test/wp-admin/post.php?post=3&action=edit',
+					permalink: 'https://example.test/?p=3',
+				},
+				{
+					id: 6,
+					title: 'City budget vote',
+					edit_link: 'https://example.test/wp-admin/post.php?post=6&action=edit',
+					permalink: 'https://example.test/?p=6',
+				},
+			],
+		} );
+
+		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
+
+		expect( await screen.findByRole( 'link', { name: 'Local election results' } ) ).toHaveAttribute(
+			'href',
+			'https://example.test/wp-admin/post.php?post=3&action=edit'
+		);
+		expect( await screen.findByRole( 'link', { name: 'City budget vote' } ) ).toHaveAttribute(
+			'href',
+			'https://example.test/wp-admin/post.php?post=6&action=edit'
+		);
+	} );
+
+	it( 'shows "Load more" while more stories remain, and appends the next page on click', async () => {
+		const controlEnabledField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_enabled',
+			label: 'Enable control test',
+			type: 'toggle',
+			value: '1',
+		};
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 0,
+			total: 3,
+			posts: [
+				{
+					id: 3,
+					title: 'Local election results',
+					edit_link: 'https://example.test/wp-admin/post.php?post=3&action=edit',
+					permalink: 'https://example.test/?p=3',
+				},
+				{
+					id: 6,
+					title: 'City budget vote',
+					edit_link: 'https://example.test/wp-admin/post.php?post=6&action=edit',
+					permalink: 'https://example.test/?p=6',
+				},
+			],
+		} );
+
+		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
+
+		const loadMoreButton = await screen.findByRole( 'button', { name: 'Load more' } );
+		expect( screen.getByText( 'Showing 2 of 3.' ) ).toBeInTheDocument();
+
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 2,
+			total: 3,
+			posts: [
+				{
+					id: 9,
+					title: 'School board meeting',
+					edit_link: 'https://example.test/wp-admin/post.php?post=9&action=edit',
+					permalink: 'https://example.test/?p=9',
+				},
+			],
+		} );
+
+		fireEvent.click( loadMoreButton );
+
+		expect( await screen.findByRole( 'link', { name: 'School board meeting' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: 'Local election results' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: 'City budget vote' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Load more' } ) ).not.toBeInTheDocument();
+		expect( apiFetch ).toHaveBeenLastCalledWith( {
+			path: '/newspack-popups/v1/contextual-prompt/control-preview?interval=3&offset=2',
+		} );
+	} );
+
+	it( 'drops a stale "Load more" response that resolves after the interval has changed', async () => {
+		const controlEnabledField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_enabled',
+			label: 'Enable control test',
+			type: 'toggle',
+			value: '1',
+		};
+		const controlIntervalField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_interval',
+			label: 'Show control copy on every Nth story',
+			type: 'number',
+			value: '3',
+		};
+
+		// Page 1 at interval 3.
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 0,
+			total: 3,
+			posts: [
+				{
+					id: 3,
+					title: 'Interval 3, story 1',
+					edit_link: 'https://example.test/wp-admin/post.php?post=3&action=edit',
+					permalink: 'https://example.test/?p=3',
+				},
+				{
+					id: 6,
+					title: 'Interval 3, story 2',
+					edit_link: 'https://example.test/wp-admin/post.php?post=6&action=edit',
+					permalink: 'https://example.test/?p=6',
+				},
+			],
+		} );
+
+		render( <EnabledHarness fields={ [ controlEnabledField, controlIntervalField ] } /> );
+
+		const loadMoreButton = await screen.findByRole( 'button', { name: 'Load more' } );
+
+		// "Load more" page 2 at interval 3: deferred, resolved manually below.
+		let resolveStalePage;
+		apiFetch.mockImplementationOnce(
+			() =>
+				new Promise( resolve => {
+					resolveStalePage = resolve;
+				} )
+		);
+		const callsBeforeClick = apiFetch.mock.calls.length;
+		fireEvent.click( loadMoreButton );
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( callsBeforeClick + 1 ) );
+
+		// Page 1 at the new interval, 5.
+		apiFetch.mockResolvedValueOnce( {
+			interval: 5,
+			limit: 10,
+			offset: 0,
+			total: 1,
+			posts: [
+				{
+					id: 15,
+					title: 'Interval 5, story 1',
+					edit_link: 'https://example.test/wp-admin/post.php?post=15&action=edit',
+					permalink: 'https://example.test/?p=15',
+				},
+			],
+		} );
+		fireEvent.change( screen.getByRole( 'spinbutton', { name: 'Show control copy on every Nth story' } ), {
+			target: { value: '5' },
+		} );
+
+		expect( await screen.findByRole( 'link', { name: 'Interval 5, story 1' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'link', { name: 'Interval 3, story 1' } ) ).not.toBeInTheDocument();
+
+		// The interval-3 "Load more" request finally resolves, after the interval
+		// change already reset the list. Its rows must not appear.
+		await act( async () => {
+			resolveStalePage( {
+				interval: 3,
+				limit: 10,
+				offset: 2,
+				total: 3,
+				posts: [
+					{
+						id: 9,
+						title: 'Interval 3, story 3 (stale)',
+						edit_link: 'https://example.test/wp-admin/post.php?post=9&action=edit',
+						permalink: 'https://example.test/?p=9',
+					},
+				],
+			} );
+		} );
+
+		expect( screen.queryByRole( 'link', { name: 'Interval 3, story 3 (stale)' } ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: 'Interval 5, story 1' } ) ).toBeInTheDocument();
+		expect( screen.getAllByRole( 'link' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'shows the true selected count with a "+" and the scan-limit cap note when the scan hit its limit', async () => {
+		const controlEnabledField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_enabled',
+			label: 'Enable control test',
+			type: 'toggle',
+			value: '1',
+		};
+		// total (167) is the selected count among the capped scan, not the scan
+		// limit itself (750, distinct from the 500 default to prove the note
+		// reads response.scan_limit rather than a hardcoded number).
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 0,
+			total: 167,
+			capped: true,
+			scan_limit: 750,
+			posts: [
+				{
+					id: 3,
+					title: 'Local election results',
+					edit_link: 'https://example.test/wp-admin/post.php?post=3&action=edit',
+					permalink: 'https://example.test/?p=3',
+				},
+			],
+		} );
+
+		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
+
+		expect( await screen.findByRole( 'button', { name: 'Load more' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Showing 1 of 167+.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Only the newest 750 stories are scanned.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'falls back to a scan limit of 500 when the response omits scan_limit', async () => {
+		const controlEnabledField = {
+			section: 'control',
+			key: 'newspack_contextual_prompts_control_enabled',
+			label: 'Enable control test',
+			type: 'toggle',
+			value: '1',
+		};
+		apiFetch.mockResolvedValueOnce( {
+			interval: 3,
+			limit: 10,
+			offset: 0,
+			total: 167,
+			capped: true,
+			posts: [
+				{
+					id: 3,
+					title: 'Local election results',
+					edit_link: 'https://example.test/wp-admin/post.php?post=3&action=edit',
+					permalink: 'https://example.test/?p=3',
+				},
+			],
+		} );
+
+		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
+
+		expect( await screen.findByRole( 'button', { name: 'Load more' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Only the newest 500 stories are scanned.' ) ).toBeInTheDocument();
 	} );
 } );
