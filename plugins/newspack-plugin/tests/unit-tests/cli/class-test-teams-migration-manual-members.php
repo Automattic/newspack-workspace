@@ -1077,6 +1077,50 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The aggregate skip/error warning must fire even when NOTHING was added.
+	 *
+	 * A plan whose only member is the non-eligible custom-role guest hits the
+	 * pre-existing "$summary is empty" early return (no table, no tally) — but the
+	 * "N member(s) skipped — not eligible" warning must still print, because an
+	 * all-skipped run is exactly the case a publisher needs surfaced: a group the
+	 * command silently declined to add anyone to. No group subscription is created
+	 * either, since one is only created lazily on the first qualifying member.
+	 */
+	public function test_as_group_reports_skips_when_no_member_is_added() {
+		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+
+		$plan_id        = $this->create_plan( 'manual-only' );
+		$group_owner_id = $this->create_reader_user();
+
+		$guest_id = wp_insert_user(
+			[
+				'user_login' => 'guest-' . wp_generate_password( 8, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'guest-' . wp_generate_password( 8, false ) . '@test.com',
+				'role'       => 'newspack_test_guest',
+			]
+		);
+		$this->user_ids[] = $guest_id;
+		$this->create_membership( $plan_id, $guest_id );
+
+		$live_output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'           => (string) $plan_id,
+				'as-group'           => true,
+				'group-owner-id'     => $group_owner_id,
+				'access-product-ids' => $this->access_products_flag(),
+				'live'               => true,
+			]
+		);
+
+		$this->assertStringContainsString( 'not eligible group members', $live_output, 'The aggregate skip warning must fire even though nothing was added.' );
+		$this->assertStringContainsString( 'No subscriptions were created.', $live_output, 'The early return still applies — the summary table is empty.' );
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $group_owner_id ), 'No group subscription is created for an all-skipped plan.' );
+
+		remove_role( 'newspack_test_guest' );
+	}
+
+	/**
 	 * The raw-argv guard: WP-CLI strips a valueless value flag (with only a
 	 * warning) before the command runs, so the in-method boolean-flag guards
 	 * never see it — the raw command line is the only place the mistake is
