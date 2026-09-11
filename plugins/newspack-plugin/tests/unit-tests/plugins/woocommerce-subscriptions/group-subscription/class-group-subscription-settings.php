@@ -904,6 +904,28 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An author holds no `_newspack_reader` meta but is an eligible group member since
+	 * the author/contributor eligibility change (Group_Subscription::is_eligible_member()).
+	 * The member-row loop must render them like a reader member, not silently drop them
+	 * for failing Reader_Activation::is_user_reader().
+	 */
+	public function test_metabox_renders_eligible_author_member() {
+		$owner_id     = self::factory()->user->create();
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ], [], [ 'customer_id' => $owner_id ] );
+		$author_id    = self::factory()->user->create( [ 'role' => 'author' ] );
+		add_user_meta( $author_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+
+		$markup = $this->render_metabox( $subscription );
+
+		$this->assertStringContainsString(
+			'data-user-id="' . $author_id . '"',
+			$markup,
+			'An eligible author member should render as a member row, like a reader member does.'
+		);
+	}
+
+	/**
 	 * Saving a changed seat count rescales the subscription. No charge is raised:
 	 * readers buy seats through the switch, and this is the support-side correction.
 	 */
