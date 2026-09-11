@@ -39,6 +39,7 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 				// Off by default: only a test about the payment-recovery grace sets it.
 				'subscription_in_payment_recovery' => false,
 				'wcsg_recipient_id'                => null,
+				'wcsg_gifted'                      => false,
 				// On by default: the gifting integration ships inside WooCommerce
 				// Subscriptions, so its absence is the exception a test opts into.
 				'gifting_integration_active'       => true,
@@ -1045,30 +1046,30 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The window Memberships itself enforces, in `is_in_active_period()`: dates
-	 * are stored as UTC strings, and an empty one means unbounded rather than
-	 * "epoch". Reading an empty end date as a boundary would expire every
+	 * The meta-reading fallback, used when Memberships cannot be asked directly.
+	 * Dates are stored as UTC strings, and an empty one means unbounded rather
+	 * than "epoch": reading an empty end date as a boundary would expire every
 	 * open-ended membership on the site.
 	 */
-	public function test_active_period_window_matches_memberships() {
+	public function test_meta_active_period_window_treats_empty_dates_as_unbounded() {
 		$this->assertFalse(
-			Memberships_Audit::is_outside_active_period( '', '' ),
+			Memberships_Audit::is_outside_meta_active_period( '', '' ),
 			'No dates at all is an unbounded membership.'
 		);
 		$this->assertFalse(
-			Memberships_Audit::is_outside_active_period( '2020-01-01 00:00:00', '' ),
+			Memberships_Audit::is_outside_meta_active_period( '2020-01-01 00:00:00', '' ),
 			'A start in the past with no end is unbounded.'
 		);
 		$this->assertTrue(
-			Memberships_Audit::is_outside_active_period( '2020-01-01 00:00:00', '2020-06-01 00:00:00' ),
+			Memberships_Audit::is_outside_meta_active_period( '2020-01-01 00:00:00', '2020-06-01 00:00:00' ),
 			'An end date in the past closes the window.'
 		);
 		$this->assertTrue(
-			Memberships_Audit::is_outside_active_period( gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ), '' ),
+			Memberships_Audit::is_outside_meta_active_period( gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ), '' ),
 			'A start date in the future has not opened the window yet.'
 		);
 		$this->assertFalse(
-			Memberships_Audit::is_outside_active_period( '2020-01-01 00:00:00', gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) ),
+			Memberships_Audit::is_outside_meta_active_period( '2020-01-01 00:00:00', gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) ),
 			'Between the two dates is inside the window.'
 		);
 	}
@@ -1104,14 +1105,35 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Gift detection has to accept either signal, because Subscriptions Gifting
+	 * does: a gift bought for someone without an account carries their email and
+	 * no recipient ID until the account is created.
+	 */
+	public function test_gift_detection_accepts_either_recipient_signal() {
+		$this->assertTrue(
+			Memberships_Audit::is_wcsg_gifted( $this->subscription_with_recipient_meta( '', 'recipient@example.com' ) ),
+			'A recipient email alone marks the subscription as a gift.'
+		);
+		$this->assertTrue(
+			Memberships_Audit::is_wcsg_gifted( $this->subscription_with_recipient_meta( '501' ) ),
+			'A recipient ID alone marks the subscription as a gift.'
+		);
+		$this->assertFalse(
+			Memberships_Audit::is_wcsg_gifted( $this->subscription_with_recipient_meta( '' ) ),
+			'Neither signal means the subscription was never gifted.'
+		);
+	}
+
+	/**
 	 * A stand-in for a subscription carrying a given `_recipient_user` value.
 	 *
-	 * @param mixed $value The recipient meta value.
+	 * @param mixed  $value The recipient meta value.
+	 * @param string $email The recipient email meta value, for an email-only gift.
 	 *
 	 * @return object Something with the `get_meta()` the reader calls.
 	 */
-	private function subscription_with_recipient_meta( $value ) {
-		return new class( $value ) {
+	private function subscription_with_recipient_meta( $value, $email = '' ) {
+		return new class( $value, $email ) {
 			/**
 			 * The subscription's `_recipient_user` meta value.
 			 *
@@ -1120,12 +1142,21 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 			private $recipient;
 
 			/**
+			 * The subscription's `_recipient_user_email_address` meta value.
+			 *
+			 * @var string
+			 */
+			private $email;
+
+			/**
 			 * Constructor.
 			 *
-			 * @param mixed $recipient The recipient meta value.
+			 * @param mixed  $recipient The recipient meta value.
+			 * @param string $email     The recipient email meta value.
 			 */
-			public function __construct( $recipient ) {
+			public function __construct( $recipient, $email ) {
 				$this->recipient = $recipient;
+				$this->email     = $email;
 			}
 
 			/**
@@ -1136,8 +1167,99 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 			 * @return mixed
 			 */
 			public function get_meta( $key ) {
-				return '_recipient_user' === $key ? $this->recipient : '';
+				if ( '_recipient_user' === $key ) {
+					return $this->recipient;
+				}
+				return '_recipient_user_email_address' === $key ? $this->email : '';
 			}
 		};
+	}
+	/**
+	 * A gift exists from checkout, but its recipient account may not. Subscriptions
+	 * Gifting accepts a recipient email as well as a recipient ID, and the runtime
+	 * resolves an email-only gift to nobody — withholding access from the buyer
+	 * without granting it to anyone. Read as "not a gift", the holder is filed as
+	 * keeping access they are about to lose, in the aggregate-only member-owned
+	 * class that produces no row to catch it.
+	 */
+	public function test_gift_addressed_only_to_an_email_is_still_a_gift() {
+		$this->assertSame(
+			Memberships_Audit::CLASS_GIFT,
+			Memberships_Audit::classify(
+				$this->facts(
+					[
+						'subscription_id'          => 90210,
+						'subscription_customer_id' => 501,
+						'subscription_status'      => 'active',
+						'wcsg_recipient_id'        => null,
+						'wcsg_gifted'              => true,
+					]
+				)
+			)
+		);
+	}
+
+	/**
+	 * The `--only` synopsis is the only one of the class lists no other test
+	 * guards, and WP-CLI reads it from the docblock, so it cannot interpolate the
+	 * constant. It is also what tells an operator a class exists at all: a class
+	 * that is selectable but unlisted is one nobody knows to ask for.
+	 */
+	public function test_every_selectable_class_is_named_in_the_only_synopsis() {
+		$audit_command = new \ReflectionMethod( Memberships_Audit::class, 'audit_membership_subscriptions' );
+		$synopsis      = $audit_command->getDocComment();
+
+		foreach ( Memberships_Audit::SELECTABLE_CLASSES as $class ) {
+			$this->assertStringContainsString(
+				$class,
+				$synopsis,
+				sprintf( 'The --only synopsis names the "%s" class.', $class )
+			);
+		}
+	}
+
+	/**
+	 * A holder who is also the subscription's customer owns their access outright,
+	 * so no runtime moves it. A recipient meta naming that same user — a gift
+	 * re-homed to its recipient — must not read as a gift they are about to lose,
+	 * which would put a covered reader in the remediation cohort.
+	 */
+	public function test_holder_who_owns_the_subscription_is_covered_even_when_named_as_recipient() {
+		$this->assertSame(
+			Memberships_Audit::CLASS_MEMBER_OWNED,
+			Memberships_Audit::classify(
+				$this->facts(
+					[
+						'subscription_id'            => 90210,
+						'subscription_customer_id'   => 501,
+						'subscription_status'        => 'active',
+						'wcsg_recipient_id'          => 501,
+						'wcsg_gifted'                => true,
+						'gifting_integration_active' => false,
+					]
+				)
+			)
+		);
+	}
+
+	/**
+	 * A team seat is migrate-teams' to handle whatever state it is in, so the
+	 * count this command reports against that cohort has to stay the count
+	 * migrate-teams reconciles — the active-period check must not quietly take
+	 * rows out of it.
+	 */
+	public function test_team_seat_outside_its_active_period_is_still_team_backed() {
+		$this->assertSame(
+			Memberships_Audit::CLASS_TEAM_BACKED,
+			Memberships_Audit::classify(
+				$this->facts(
+					[
+						'team_id'               => 77,
+						'subscription_id'       => 90210,
+						'outside_active_period' => true,
+					]
+				)
+			)
+		);
 	}
 }
