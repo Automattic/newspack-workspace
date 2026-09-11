@@ -1126,6 +1126,9 @@ class Memberships_Audit {
 	/**
 	 * The Subscriptions Gifting recipient of a subscription.
 	 *
+	 * Public so the meta-reading rules can be tested directly; nothing outside
+	 * this command should need it.
+	 *
 	 * Read off the subscription's own meta rather than through `WCS_Gifting`, so
 	 * a site carrying gifting data without the integration still reports the gift
 	 * instead of a subscription that merely looks bought by the wrong person.
@@ -1138,12 +1141,17 @@ class Memberships_Audit {
 	 *
 	 * @return int|null Recipient user ID, or null when not a gifted subscription.
 	 */
-	private static function get_wcsg_recipient_id( $subscription ) {
+	public static function get_wcsg_recipient_id( $subscription ) {
 		if ( ! method_exists( $subscription, 'get_meta' ) ) {
 			return null;
 		}
 		$recipient_id = $subscription->get_meta( '_recipient_user' );
-		return is_numeric( $recipient_id ) ? (int) $recipient_id : null;
+
+		// `! empty()` before the numeric test, matching is_gifted_subscription():
+		// a subscription that was never gifted can still carry the meta as '' or
+		// '0', and 0 is not a user. Reading it as a recipient would turn a
+		// subscription the member owns into a gift they gave away.
+		return ( ! empty( $recipient_id ) && is_numeric( $recipient_id ) ) ? (int) $recipient_id : null;
 	}
 
 	/**

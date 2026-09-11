@@ -1072,4 +1072,44 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 			'Between the two dates is inside the window.'
 		);
 	}
+
+	/**
+	 * `_recipient_user` is not always a user. Subscriptions Gifting treats an
+	 * empty or `'0'` value as "not a gift" (`is_gifted_subscription()` guards with
+	 * `! empty()`), and a subscription that was never gifted can carry one. Read
+	 * as a recipient of 0, it turns a subscription the member owns into a gift
+	 * they supposedly gave away, and the member is reported as losing access they
+	 * actually keep.
+	 */
+	public function test_non_user_recipient_meta_is_not_a_gift() {
+		$subscription_with_meta = function( $value ) {
+			return new class( $value ) {
+				/**
+				 * @var mixed
+				 */
+				private $value;
+
+				public function __construct( $value ) {
+					$this->value = $value;
+				}
+
+				public function get_meta( $key ) {
+					return '_recipient_user' === $key ? $this->value : '';
+				}
+			};
+		};
+
+		foreach ( [ '', '0', 0, 'not-a-user' ] as $value ) {
+			$this->assertNull(
+				Memberships_Audit::get_wcsg_recipient_id( $subscription_with_meta( $value ) ),
+				sprintf( 'A recipient meta of "%s" is not a gift recipient.', var_export( $value, true ) )
+			);
+		}
+
+		$this->assertSame(
+			501,
+			Memberships_Audit::get_wcsg_recipient_id( $subscription_with_meta( '501' ) ),
+			'A real user ID is read as the recipient.'
+		);
+	}
 }
