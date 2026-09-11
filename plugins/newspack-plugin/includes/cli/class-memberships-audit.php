@@ -131,6 +131,25 @@ class Memberships_Audit {
 	const CLASS_GIFT_WCSG = 'gift-wcsg';
 
 	/**
+	 * Gifting data with no gifting code behind it. The integration moved from a
+	 * standalone plugin into WooCommerce Subscriptions core, so a site can carry
+	 * `_recipient_user` meta that nothing resolves: access stays with the buyer
+	 * and the recipient is dark. Held apart from `gift` because the remedy is
+	 * restoring the integration, not granting $0 subscriptions — those would
+	 * double-grant the moment it comes back.
+	 */
+	const CLASS_GIFT_WCSG_INERT = 'gift-wcsg-inert';
+
+	/**
+	 * Status says active, but the membership's own start/end window says
+	 * otherwise. Memberships expires lazily — `is_active()` calls
+	 * `expire_membership()` the next time anything asks — so a row nobody has
+	 * asked about since its end date still reads active while granting nothing.
+	 * There is no access here to carry over, and no reader to remediate.
+	 */
+	const CLASS_OUTSIDE_ACTIVE_PERIOD = 'outside-active-period';
+
+	/**
 	 * Backed only by a paid one-off order — no subscription at all, so there is
 	 * nothing recurring for an Access Control `subscription` rule to key on.
 	 */
@@ -199,6 +218,7 @@ class Memberships_Audit {
 		self::CLASS_ORDER_ONLY,
 		self::CLASS_ORDER_ONLY_UNPAID,
 		self::CLASS_SUBSCRIPTION_MISSING,
+		self::CLASS_GIFT_WCSG_INERT,
 	];
 
 	/**
@@ -213,10 +233,12 @@ class Memberships_Audit {
 		self::CLASS_ORDER_ONLY_UNPAID,
 		self::CLASS_SUBSCRIPTION_MISSING,
 		self::CLASS_GIFT_WCSG,
+		self::CLASS_GIFT_WCSG_INERT,
 		self::CLASS_GIFT_INACTIVE,
 		self::CLASS_MEMBER_OWNED_INACTIVE,
 		self::CLASS_TEAM_BACKED,
 		self::CLASS_NO_PURCHASE_RECORD,
+		self::CLASS_OUTSIDE_ACTIVE_PERIOD,
 	];
 
 	/**
@@ -231,10 +253,12 @@ class Memberships_Audit {
 		self::CLASS_ORDER_ONLY_UNPAID     => 'backed by an unpaid/refunded order, no subscription',
 		self::CLASS_SUBSCRIPTION_MISSING  => 'linked subscription no longer exists',
 		self::CLASS_GIFT_WCSG             => 'gifted via Subscriptions Gifting — recipient keeps access',
+		self::CLASS_GIFT_WCSG_INERT       => 'gifted, but the gifting integration is not active — access sits with the buyer',
 		self::CLASS_GIFT_INACTIVE         => 'subscription owned by someone else, grants no access (lapsed/on-hold)',
 		self::CLASS_MEMBER_OWNED_INACTIVE => 'member owns the subscription, grants no access (lapsed/on-hold)',
 		self::CLASS_TEAM_BACKED           => 'team seat — handled by migrate-teams',
 		self::CLASS_NO_PURCHASE_RECORD    => 'no purchase record (comp/legacy)',
+		self::CLASS_OUTSIDE_ACTIVE_PERIOD => 'status is active but the membership is outside its own start/end window',
 	];
 
 	/**
@@ -253,6 +277,9 @@ class Memberships_Audit {
 	 *   and the buyer gains access they never had.
 	 * - **order-only**: the membership is backed by a paid one-off order with no
 	 *   subscription behind it.
+	 * - **gift-wcsg-inert**: the subscription carries Subscriptions Gifting data
+	 *   that nothing on the site resolves, so access stays with the buyer. Fixed
+	 *   by restoring the gifting integration, not by granting access.
 	 *
 	 * Every other membership is counted under a named class, so the per-plan
 	 * summary reconciles against the plan's member count rather than leaving a
@@ -270,7 +297,7 @@ class Memberships_Audit {
 	 * : Comma-delimited membership plan IDs to audit — the plans whose content the new gates cover. Omit the flag to audit every published plan (a plan in any other status is audited only when named here); passing it with no ID is an error.
 	 *
 	 * [--only=<classes>]
-	 * : Comma-delimited classes to report member-by-member: gift, order-only, order-only-unpaid, subscription-missing. Omit the flag for the default gift + order-only report; passing it with no class is an error. Counts for every class are printed regardless — on STDERR in the machine-readable formats.
+	 * : Comma-delimited classes to report member-by-member: gift, order-only, order-only-unpaid, subscription-missing, gift-wcsg-inert. Omit the flag for the default gift + order-only report; passing it with no class is an error. Counts for every class are printed regardless — on STDERR in the machine-readable formats.
 	 *
 	 * [--sleep=<seconds>]
 	 * : Seconds to pause between batches of memberships, to keep a full-table walk from monopolising the database on a live site. Pass 0 to run flat out.
@@ -457,6 +484,18 @@ class Memberships_Audit {
 		// "no gift memberships found" would read as a clean bill of health.
 		if ( 0 === $audited_plans ) {
 			WP_CLI::error( 'None of the given plan IDs are membership plans — nothing was audited.' );
+		}
+
+		// The one cohort whose fix is not a subscription. Granting these readers
+		// access papers over a missing integration, and double-grants them when it
+		// returns, so say so even when the class was not reported member-by-member.
+		if ( $total_counts[ self::CLASS_GIFT_WCSG_INERT ] > 0 ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d membership(s) are gifts whose recipient cannot be resolved: the subscriptions carry Subscriptions Gifting data, but the gifting integration is not running on this site. Access sits with the buyer until it is restored. Restore the integration rather than granting these readers subscriptions.',
+					$total_counts[ self::CLASS_GIFT_WCSG_INERT ]
+				)
+			);
 		}
 
 		$flagged_user_ids = self::flagged_user_ids( $rows );
@@ -713,6 +752,10 @@ class Memberships_Audit {
 	 *                                                 payment-recovery grace, so it decides gift vs
 	 *                                                 gift-inactive for the on-hold shape.
 	 *     @type int|null    $wcsg_recipient_id        Subscriptions Gifting recipient, null when not a gifted subscription.
+	 *     @type bool        $gifting_integration_active Whether the gifting integration is running, which decides
+	 *                                                 whether a gifted subscription resolves to its recipient.
+	 *     @type bool        $outside_active_period    Whether the membership's own start/end window has it inactive
+	 *                                                 regardless of its stored status.
 	 *     @type int         $order_id                 Linked order ID, 0 if unlinked.
 	 *     @type int|null    $order_customer_id        Order customer, null if it could not be loaded.
 	 *     @type string      $order_status             Order status, '' when no order loaded.
@@ -725,6 +768,14 @@ class Memberships_Audit {
 	 */
 	public static function classify( array $facts ) {
 		$holder_id = (int) ( $facts['holder_id'] ?? 0 );
+
+		// Before anything about the backing record: a membership outside its own
+		// start/end window grants nothing under Memberships either, whatever its
+		// stored status says. Classifying it by its subscription would report a
+		// reader losing access who does not have any.
+		if ( ! empty( $facts['outside_active_period'] ) ) {
+			return self::CLASS_OUTSIDE_ACTIVE_PERIOD;
+		}
 
 		// Teams first: the Teams integration stamps the team's subscription (owned
 		// by the team owner) onto every seat's membership, so without this every
@@ -743,9 +794,16 @@ class Memberships_Audit {
 				// Only while it still grants access, though: the runtime checks the
 				// status BEFORE the gifting rule, so a dead gift carries over nothing
 				// and the holder is losing access like any other lapsed member.
+				// Both gifting branches below turn on whether the integration is
+				// actually running. The recipient meta is durable and the code that
+				// reads it is not, so the same row means opposite things depending on
+				// the runtime: with the integration the gift resolves to the recipient,
+				// without it nothing moves and the buyer keeps the access.
+				$gifting_active    = ! empty( $facts['gifting_integration_active'] );
 				$wcsg_recipient_id = $facts['wcsg_recipient_id'] ?? null;
-				if ( $grants_access && $holder_id && null !== $wcsg_recipient_id && (int) $wcsg_recipient_id === $holder_id ) {
-					return self::CLASS_GIFT_WCSG;
+				$is_gift_to_holder = $grants_access && $holder_id && null !== $wcsg_recipient_id && (int) $wcsg_recipient_id === $holder_id;
+				if ( $is_gift_to_holder ) {
+					return $gifting_active ? self::CLASS_GIFT_WCSG : self::CLASS_GIFT_WCSG_INERT;
 				}
 
 				if ( ! $holder_id || (int) $customer_id !== $holder_id ) {
@@ -763,7 +821,7 @@ class Memberships_Audit {
 				// access at the flip — with no row anywhere to catch it, since
 				// member-owned is only ever an aggregate count. The sibling teams
 				// migration makes the same check for the same reason.
-				if ( $grants_access && $holder_id && null !== $wcsg_recipient_id && (int) $wcsg_recipient_id !== $holder_id ) {
+				if ( $gifting_active && $grants_access && $holder_id && null !== $wcsg_recipient_id && (int) $wcsg_recipient_id !== $holder_id ) {
 					return self::CLASS_GIFT;
 				}
 
@@ -987,6 +1045,16 @@ class Memberships_Audit {
 
 		$facts = [
 			'holder_id'                        => $holder_id,
+			'outside_active_period'            => self::is_outside_active_period(
+				(string) \get_post_meta( $membership_id, '_start_date', true ),
+				(string) \get_post_meta( $membership_id, '_end_date', true )
+			),
+			// The same predicate the runtime uses in
+			// WooCommerce_Connection::get_active_subscriptions_for_user(), so the
+			// audit and the access it is predicting cannot disagree about whether a
+			// gift resolves. Read per membership rather than per subscription: it is
+			// a property of the runtime, not of any one row.
+			'gifting_integration_active'       => class_exists( 'WCS_Gifting' ),
 			'team_id'                          => (int) \get_post_meta( $membership_id, '_team_id', true ),
 			'subscription_id'                  => $subscription_id,
 			'subscription_customer_id'         => null,
@@ -1056,18 +1124,49 @@ class Memberships_Audit {
 	}
 
 	/**
-	 * The WooCommerce Subscriptions Gifting recipient of a subscription, when
-	 * that plugin is active and the subscription is a gift.
+	 * The Subscriptions Gifting recipient of a subscription.
+	 *
+	 * Read off the subscription's own meta rather than through `WCS_Gifting`, so
+	 * a site carrying gifting data without the integration still reports the gift
+	 * instead of a subscription that merely looks bought by the wrong person.
+	 * This is what `WCS_Gifting::get_recipient_user()` reads, and a non-empty
+	 * numeric value is what `is_gifted_subscription()` tests. Whether the
+	 * integration is running is a separate fact, because it decides who the gift
+	 * resolves to.
 	 *
 	 * @param \WC_Subscription $subscription The subscription.
 	 *
 	 * @return int|null Recipient user ID, or null when not a gifted subscription.
 	 */
 	private static function get_wcsg_recipient_id( $subscription ) {
-		if ( ! class_exists( 'WCS_Gifting' ) || ! \WCS_Gifting::is_gifted_subscription( $subscription ) ) {
+		if ( ! method_exists( $subscription, 'get_meta' ) ) {
 			return null;
 		}
-		return (int) \WCS_Gifting::get_recipient_user( $subscription );
+		$recipient_id = $subscription->get_meta( '_recipient_user' );
+		return is_numeric( $recipient_id ) ? (int) $recipient_id : null;
+	}
+
+	/**
+	 * Whether a membership's own start/end window has it inactive.
+	 *
+	 * Mirrors `WC_Memberships_User_Membership::is_in_active_period()`: both dates
+	 * are UTC strings, and an empty one means unbounded rather than epoch — so an
+	 * open-ended membership must read as inside the window, not outside it.
+	 *
+	 * @param string $start_date Membership `_start_date` meta, '' when unset.
+	 * @param string $end_date   Membership `_end_date` meta, '' when unset.
+	 *
+	 * @return bool
+	 */
+	public static function is_outside_active_period( $start_date, $end_date ) {
+		$now   = time();
+		$start = $start_date ? strtotime( $start_date . ' UTC' ) : false;
+		$end   = $end_date ? strtotime( $end_date . ' UTC' ) : false;
+
+		if ( $start && $start > $now ) {
+			return true;
+		}
+		return (bool) ( $end && $end < $now );
 	}
 
 	/**

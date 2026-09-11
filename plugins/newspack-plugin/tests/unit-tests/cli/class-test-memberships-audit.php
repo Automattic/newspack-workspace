@@ -39,6 +39,10 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 				// Off by default: only a test about the payment-recovery grace sets it.
 				'subscription_in_payment_recovery' => false,
 				'wcsg_recipient_id'                => null,
+				// On by default: the gifting integration ships inside WooCommerce
+				// Subscriptions, so its absence is the exception a test opts into.
+				'gifting_integration_active'       => true,
+				'outside_active_period'            => false,
 				'order_id'                         => 0,
 				'order_customer_id'                => null,
 				'order_status'                     => '',
@@ -964,6 +968,108 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 				Memberships_Audit::VALUE_FLAGS
 			),
 			'A sibling command\'s flag is not one this command accepts, so it must not be reported against it.'
+		);
+	}
+
+	/**
+	 * Gifting data outlives the code that reads it: the integration moved from a
+	 * standalone plugin into WooCommerce Subscriptions core, so a site can carry
+	 * `_recipient_user` meta while nothing resolves it. Access then sits with the
+	 * buyer, and the recipient is dark — but the remedy is restoring the
+	 * integration, not granting the recipient a $0 subscription, which would
+	 * double-grant the moment the integration comes back. Reporting this as a
+	 * plain gift sends the operator to the wrong command.
+	 */
+	public function test_gift_without_the_gifting_integration_is_its_own_class() {
+		$this->assertSame(
+			Memberships_Audit::CLASS_GIFT_WCSG_INERT,
+			Memberships_Audit::classify(
+				$this->facts(
+					[
+						'subscription_id'            => 90210,
+						'subscription_customer_id'   => 500,
+						'subscription_status'        => 'active',
+						'wcsg_recipient_id'          => 501,
+						'gifting_integration_active' => false,
+					]
+				)
+			)
+		);
+	}
+
+	/**
+	 * The mirror case, and the reason the gifting classification cannot be read
+	 * off the meta alone. When the holder bought the gift, an active integration
+	 * moves their access to the recipient and the holder is losing it; with no
+	 * integration nothing moves, so the holder keeps the access they already had
+	 * and there is nothing to preserve.
+	 */
+	public function test_gift_bought_by_the_holder_stays_covered_without_the_integration() {
+		$this->assertSame(
+			Memberships_Audit::CLASS_MEMBER_OWNED,
+			Memberships_Audit::classify(
+				$this->facts(
+					[
+						'subscription_id'            => 90210,
+						'subscription_customer_id'   => 501,
+						'subscription_status'        => 'active',
+						'wcsg_recipient_id'          => 777,
+						'gifting_integration_active' => false,
+					]
+				)
+			)
+		);
+	}
+
+	/**
+	 * A membership can sit at `wcm-active` past its own end date, because
+	 * Memberships expires it lazily — `WC_Memberships_User_Membership::is_active()`
+	 * calls `expire_membership()` the next time anything asks. Nothing asked here,
+	 * so the row still reads active while the member has no access under
+	 * Memberships either. Counting it as a loss invents a reader to remediate.
+	 */
+	public function test_membership_outside_its_active_period_is_not_a_live_member() {
+		$this->assertSame(
+			Memberships_Audit::CLASS_OUTSIDE_ACTIVE_PERIOD,
+			Memberships_Audit::classify(
+				$this->facts(
+					[
+						'subscription_id'          => 90210,
+						'subscription_customer_id' => 500,
+						'subscription_status'      => 'active',
+						'outside_active_period'    => true,
+					]
+				)
+			)
+		);
+	}
+
+	/**
+	 * The window Memberships itself enforces, in `is_in_active_period()`: dates
+	 * are stored as UTC strings, and an empty one means unbounded rather than
+	 * "epoch". Reading an empty end date as a boundary would expire every
+	 * open-ended membership on the site.
+	 */
+	public function test_active_period_window_matches_memberships() {
+		$this->assertFalse(
+			Memberships_Audit::is_outside_active_period( '', '' ),
+			'No dates at all is an unbounded membership.'
+		);
+		$this->assertFalse(
+			Memberships_Audit::is_outside_active_period( '2020-01-01 00:00:00', '' ),
+			'A start in the past with no end is unbounded.'
+		);
+		$this->assertTrue(
+			Memberships_Audit::is_outside_active_period( '2020-01-01 00:00:00', '2020-06-01 00:00:00' ),
+			'An end date in the past closes the window.'
+		);
+		$this->assertTrue(
+			Memberships_Audit::is_outside_active_period( gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ), '' ),
+			'A start date in the future has not opened the window yet.'
+		);
+		$this->assertFalse(
+			Memberships_Audit::is_outside_active_period( '2020-01-01 00:00:00', gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) ),
+			'Between the two dates is inside the window.'
 		);
 	}
 }
