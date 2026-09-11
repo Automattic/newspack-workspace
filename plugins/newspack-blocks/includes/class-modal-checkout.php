@@ -16,6 +16,15 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Modal_Checkout {
 	/**
+	 * Whether the current request was accepted as validation-only by the nonce-verified
+	 * checkout handler. Kept request-scoped on purpose: the filters that consult it run on
+	 * every checkout request, so the request flag on its own is never enough.
+	 *
+	 * @var bool
+	 */
+	private static $is_validation_only_request = false;
+
+	/**
 	 * Checkout registration flag.
 	 *
 	 * @var string
@@ -337,6 +346,9 @@ final class Modal_Checkout {
 			wp_die();
 		}
 
+		// The validation-only flag is honored only here, once the nonce has been verified.
+		self::$is_validation_only_request = isset( $_POST['is_validation_only'] );
+
 		wc_nocache_headers();
 
 		if ( \WC()->cart->is_empty() ) {
@@ -357,7 +369,7 @@ final class Modal_Checkout {
 		$_REQUEST['woocommerce-process-checkout-nonce'] = wp_create_nonce( 'woocommerce-process_checkout' );
 
 		// If this is a validation-only request, set the flag that tells process_checkout() to only validate the order.
-		if ( isset( $_POST['is_validation_only'] ) ) {
+		if ( self::$is_validation_only_request ) {
 			$_POST['woocommerce_checkout_update_totals'] = '1';
 		}
 
@@ -2190,10 +2202,13 @@ final class Modal_Checkout {
 	/**
 	 * Is the current request only to validate billing field inputs on the first modal screen?
 	 *
+	 * True only after process_checkout_action() has verified the request's nonce and
+	 * accepted the flag; the request parameter is never read here directly.
+	 *
 	 * @return bool True if the request is for validation only.
 	 */
 	private static function is_validation_only() {
-		return boolval( filter_input( INPUT_POST, 'is_validation_only', FILTER_SANITIZE_NUMBER_INT ) );
+		return self::$is_validation_only_request;
 	}
 
 	/**
