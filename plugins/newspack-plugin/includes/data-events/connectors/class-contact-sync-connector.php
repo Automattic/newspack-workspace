@@ -8,9 +8,7 @@
 namespace Newspack\Data_Events\Connectors;
 
 use Newspack\Data_Events;
-use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
-use Newspack_Newsletters_Contacts;
 use Newspack\WooCommerce_Connection;
 use Newspack\Reader_Activation\Sync\WooCommerce as Sync_WooCommerce;
 use Newspack\Reader_Activation\Sync\Metadata as Sync_Metadata;
@@ -38,11 +36,9 @@ class Contact_Sync_Connector {
 			return;
 		}
 		Data_Events::register_handler( [ __CLASS__, 'reader_registered' ], 'reader_registered' );
-		if ( 'legacy' === Sync_Metadata::get_version() ) {
-			Data_Events::register_handler( [ __CLASS__, 'reader_deleted' ], 'reader_deleted' );
-		} else {
-			Data_Events::register_handler( [ __CLASS__, 'reader_delete_sync' ], 'reader_delete_sync' );
-		}
+		// Deletion always routes through Contact_Sync::handle_account_deletion(),
+		// which honors each integration's own account_deletion_handling setting.
+		Data_Events::register_handler( [ __CLASS__, 'reader_delete_sync' ], 'reader_delete_sync' );
 		Data_Events::register_handler( [ __CLASS__, 'reader_logged_in' ], 'reader_logged_in' );
 		Data_Events::register_handler( [ __CLASS__, 'order_completed' ], 'order_completed' );
 		Data_Events::register_handler( [ __CLASS__, 'subscription_updated' ], 'donation_subscription_changed' );
@@ -205,25 +201,6 @@ class Contact_Sync_Connector {
 	}
 
 	/**
-	 * Handle a user deletion.
-	 *
-	 * @param int   $timestamp Timestamp of the event.
-	 * @param array $data      Data associated with the event.
-	 * @param int   $client_id ID of the client that triggered the event.
-	 */
-	public static function reader_deleted( $timestamp, $data, $client_id ) {
-		if ( empty( $data['email'] ) ) {
-			return;
-		}
-		if ( true === Reader_Activation::get_setting( 'sync_esp_delete' ) ) {
-			$result = Newspack_Newsletters_Contacts::delete( $data['email'], 'RAS Reader deleted' );
-		} else {
-			$result = Newspack_Newsletters_Contacts::update_lists( $data['email'], [], 'Reader account deleted' );
-		}
-		return $result;
-	}
-
-	/**
 	 * Handle a reader delete sync.
 	 *
 	 * @param int   $timestamp Timestamp of the event.
@@ -263,12 +240,13 @@ class Contact_Sync_Connector {
 	 * reads, and the queued sync runs at shutdown, after both handlers.
 	 *
 	 * That field is the only synced field a list change affects, so the sync
-	 * is skipped when it is not an enabled outgoing field. Under the newer
-	 * metadata schema it never is. On legacy-schema sites it is enabled by
-	 * default, and there every list change syncs the reader, including bulk
-	 * ones such as membership activation and the membership-tied subscribers
-	 * CLI, which fan out one upsert per reader. That is what keeps the field
-	 * current; a publisher who unticks the field pays nothing per change.
+	 * is skipped when no push-enabled integration sends it. It is part of the
+	 * legacy era's default selection and off by default on new-schema sites,
+	 * where a publisher can still enable it from the Legacy panel. Where it is
+	 * sent, every list change syncs the reader, including bulk ones such as
+	 * membership activation and the membership-tied subscribers CLI, which
+	 * fan out one upsert per reader. That is what keeps the field current; a
+	 * publisher who unticks the field everywhere pays nothing per change.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
@@ -277,7 +255,7 @@ class Contact_Sync_Connector {
 		if ( empty( $data['user_id'] ) ) {
 			return;
 		}
-		if ( ! in_array( 'newsletter_selection', Sync_Metadata::get_raw_keys(), true ) ) {
+		if ( ! Sync_Metadata::is_field_push_enabled( 'newsletter_selection' ) ) {
 			return;
 		}
 		Contact_Sync::sync_contact( $data['user_id'], 'RAS Newsletter subscription updated' );

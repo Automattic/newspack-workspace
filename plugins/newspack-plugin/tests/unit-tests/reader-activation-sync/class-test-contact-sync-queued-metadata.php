@@ -21,13 +21,6 @@ require_once __DIR__ . '/../../mocks/newsletters-mocks.php';
  */
 class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 	/**
-	 * Metadata version before the test class ran.
-	 *
-	 * @var string
-	 */
-	private static $original_version;
-
-	/**
 	 * Reader under test.
 	 *
 	 * @var int
@@ -55,7 +48,6 @@ class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
-		self::$original_version = Metadata::$version;
 	}
 
 	/**
@@ -71,7 +63,8 @@ class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 		$this->actions_snapshot = $this->snapshot_data_events_actions();
 		Newspack_Newsletters_Contacts::reset_calls();
 		Newspack_Newsletters_Subscription::reset_calls();
-		Metadata::$version = 'legacy';
+		// A legacy-era site, where the field is part of the default selection.
+		update_option( Metadata::SCHEMA_ORIGIN_OPTION, 'v1' );
 		$this->reset_queue();
 
 		$this->user_id = $this->factory->user->create(
@@ -95,7 +88,7 @@ class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 			$this->restore_data_events_actions( $this->actions_snapshot );
 			$this->actions_snapshot = null;
 		}
-		Metadata::$version = self::$original_version;
+		delete_option( Metadata::SCHEMA_ORIGIN_OPTION );
 		$this->reset_queue();
 		Newspack_Newsletters_Subscription::reset_calls();
 		parent::tear_down();

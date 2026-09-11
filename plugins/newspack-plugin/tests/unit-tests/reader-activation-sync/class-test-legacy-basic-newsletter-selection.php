@@ -6,6 +6,7 @@
  */
 
 use Newspack\Reader_Data;
+use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata\Legacy_Basic;
 
@@ -17,13 +18,6 @@ require_once __DIR__ . '/../../mocks/newsletters-mocks.php';
  * @group Legacy_Basic_Newsletter_Selection
  */
 class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
-	/**
-	 * Metadata version before the test class ran.
-	 *
-	 * @var string
-	 */
-	private static $original_version;
-
 	/**
 	 * Reader under test.
 	 *
@@ -37,7 +31,6 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
-		self::$original_version = Metadata::$version;
 	}
 
 	/**
@@ -45,7 +38,13 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		Metadata::$version = 'legacy';
+		// A legacy-era site, where the field is part of the default selection.
+		update_option( Metadata::SCHEMA_ORIGIN_OPTION, 'v1' );
+		// The field guard reads the push-enabled integrations' selections, so a
+		// set-up ESP makes Metadata::update_fields() below take effect.
+		$esp = Integrations::get_integration( 'esp' );
+		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
+		Integrations::enable( 'esp' );
 		$this->reset_reported_omissions();
 		Newspack_Newsletters_Subscription::reset_calls();
 		Newspack_Newsletters_Subscription::$lists = [
@@ -72,7 +71,7 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	 * Per-test teardown.
 	 */
 	public function tear_down() {
-		Metadata::$version = self::$original_version;
+		delete_option( Metadata::SCHEMA_ORIGIN_OPTION );
 		Newspack_Newsletters_Subscription::reset_calls();
 		parent::tear_down();
 	}
@@ -96,12 +95,13 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The prefixed key the field is pushed under.
+	 * The raw key the field is built under. Legacy_Basic returns raw keys;
+	 * each integration's prepare_contact() prefixes them.
 	 *
 	 * @return string
 	 */
 	private function key() {
-		return Metadata::get_key( 'newsletter_selection' );
+		return 'newsletter_selection';
 	}
 
 	/**
@@ -135,7 +135,7 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	 */
 	public function test_no_stored_lists_omits_the_field() {
 		$metadata = $this->get_metadata();
-		$this->assertArrayHasKey( Metadata::get_key( 'account' ), $metadata, 'The other legacy fields are still built.' );
+		$this->assertArrayHasKey( 'account', $metadata, 'The other legacy fields are still built.' );
 		$this->assertArrayNotHasKey(
 			$this->key(),
 			$metadata,
@@ -189,7 +189,7 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	public function test_all_unknown_stored_ids_omit_the_field() {
 		$this->store_lists( [ 'gone', 'also-gone' ] );
 		$metadata = $this->get_metadata();
-		$this->assertArrayHasKey( Metadata::get_key( 'account' ), $metadata, 'The other legacy fields are still built.' );
+		$this->assertArrayHasKey( 'account', $metadata, 'The other legacy fields are still built.' );
 		$this->assertArrayNotHasKey( $this->key(), $metadata );
 	}
 
@@ -232,14 +232,14 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The field follows the ESP's outgoing-field selection like every other
-	 * legacy field, because it is added before normalization.
+	 * A field no push-enabled integration sends is left out of the raw
+	 * metadata, so nothing reaches an integration's prepare_contact() for it.
 	 */
 	public function test_unselected_outgoing_field_is_not_sent() {
 		$this->store_lists( [ 'list-1' ] );
 		Metadata::update_fields( array_values( array_diff( Metadata::get_default_fields(), [ 'Newsletter Selection' ] ) ) );
 		$metadata = $this->get_metadata();
-		$this->assertArrayHasKey( Metadata::get_key( 'account' ), $metadata );
+		$this->assertArrayHasKey( 'account', $metadata );
 		$this->assertArrayNotHasKey( $this->key(), $metadata );
 	}
 	/**
@@ -250,7 +250,7 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 		update_user_meta( $this->user_id, 'newspack_reader_data_keys', [ 'newsletter_subscribed_lists' ] );
 		update_user_meta( $this->user_id, Reader_Data::get_meta_key_name( 'newsletter_subscribed_lists' ), '{"1":"list-2"}' );
 		$metadata = $this->get_metadata();
-		$this->assertArrayHasKey( Metadata::get_key( 'account' ), $metadata, 'The other legacy fields are still built.' );
+		$this->assertArrayHasKey( 'account', $metadata, 'The other legacy fields are still built.' );
 		$this->assertArrayNotHasKey( $this->key(), $metadata );
 	}
 
