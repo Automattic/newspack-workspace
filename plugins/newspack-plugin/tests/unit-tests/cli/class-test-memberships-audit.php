@@ -1082,34 +1082,62 @@ class Test_Memberships_Audit extends WP_UnitTestCase {
 	 * actually keep.
 	 */
 	public function test_non_user_recipient_meta_is_not_a_gift() {
-		$subscription_with_meta = function( $value ) {
-			return new class( $value ) {
-				/**
-				 * @var mixed
-				 */
-				private $value;
+		$cases = [
+			'an empty string'     => '',
+			'the string zero'     => '0',
+			'integer zero'        => 0,
+			'a non-numeric value' => 'not-a-user',
+		];
 
-				public function __construct( $value ) {
-					$this->value = $value;
-				}
-
-				public function get_meta( $key ) {
-					return '_recipient_user' === $key ? $this->value : '';
-				}
-			};
-		};
-
-		foreach ( [ '', '0', 0, 'not-a-user' ] as $value ) {
+		foreach ( $cases as $label => $value ) {
 			$this->assertNull(
-				Memberships_Audit::get_wcsg_recipient_id( $subscription_with_meta( $value ) ),
-				sprintf( 'A recipient meta of "%s" is not a gift recipient.', var_export( $value, true ) )
+				Memberships_Audit::get_wcsg_recipient_id( $this->subscription_with_recipient_meta( $value ) ),
+				sprintf( 'Recipient meta of %s is not a gift recipient.', $label )
 			);
 		}
 
 		$this->assertSame(
 			501,
-			Memberships_Audit::get_wcsg_recipient_id( $subscription_with_meta( '501' ) ),
+			Memberships_Audit::get_wcsg_recipient_id( $this->subscription_with_recipient_meta( '501' ) ),
 			'A real user ID is read as the recipient.'
 		);
+	}
+
+	/**
+	 * A stand-in for a subscription carrying a given `_recipient_user` value.
+	 *
+	 * @param mixed $value The recipient meta value.
+	 *
+	 * @return object Something with the `get_meta()` the reader calls.
+	 */
+	private function subscription_with_recipient_meta( $value ) {
+		return new class( $value ) {
+			/**
+			 * The subscription's `_recipient_user` meta value.
+			 *
+			 * @var mixed
+			 */
+			private $recipient;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param mixed $recipient The recipient meta value.
+			 */
+			public function __construct( $recipient ) {
+				$this->recipient = $recipient;
+			}
+
+			/**
+			 * Read a meta value off the subscription.
+			 *
+			 * @param string $key Meta key.
+			 *
+			 * @return mixed
+			 */
+			public function get_meta( $key ) {
+				return '_recipient_user' === $key ? $this->recipient : '';
+			}
+		};
 	}
 }
