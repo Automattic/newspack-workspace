@@ -326,6 +326,7 @@ ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - WP_CACHE_KEY_SALT=env_${env_name}_
       - WP_DOMAIN=${domain}
       - APACHE_RUN_USER=\${USE_CUSTOM_APACHE_USER:-www-data}
+      - WP_ENVIRONMENT_TYPE=local
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ## Probes memcached -- see docker-compose.yml for the rationale. Kept in step
@@ -487,6 +488,11 @@ MIGRATE
             else
                 echo "Warning: could not add the memcached healthcheck to $compose_file (no extra_hosts anchor). Recreate the env to pick it up." >&2
             fi
+        fi
+        # --- Migration: add WP_ENVIRONMENT_TYPE if missing (same reason as above) ---
+        if ! grep -q 'WP_ENVIRONMENT_TYPE=' "$compose_file"; then
+            awk '{ print } /^      - APACHE_RUN_USER=/ { print "      - WP_ENVIRONMENT_TYPE=local" }' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+            grep -q 'WP_ENVIRONMENT_TYPE=' "$compose_file" && echo "Migrated $env_name: added WP_ENVIRONMENT_TYPE=local" || echo "Warning: could not add WP_ENVIRONMENT_TYPE to $compose_file. Recreate the env to pick it up." >&2
         fi
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")
