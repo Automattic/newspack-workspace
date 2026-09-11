@@ -1422,27 +1422,38 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$_POST['newspack_blocks_checkout_action'] = '1';
 		$_POST['newspack_checkout_nonce']         = 'not-a-nonce';
 
-		// wp_send_json_error() ends a non-AJAX request with a plain die; as AJAX it goes
-		// through the die handler this test case installs, which throws instead.
-		add_filter( 'wp_doing_ajax', '__return_true' );
-		add_filter(
-			'wp_die_ajax_handler',
-			function () {
-				return [ $this, 'wp_die_handler' ];
-			}
-		);
+		// Outside AJAX, wp_send_json_error() calls the plain PHP die() and would halt the test
+		// runner; forcing AJAX routes it through wp_die(), which this handler turns into a
+		// catchable exception. Both filters are removed in the finally so they cannot leak
+		// wp_doing_ajax()==true or this handler into later tests.
+		$doing_ajax  = '__return_true';
+		$die_handler = function () {
+			return function () {
+				throw new \WPDieException( 'wp_die' );
+			};
+		};
+		add_filter( 'wp_doing_ajax', $doing_ajax );
+		add_filter( 'wp_die_ajax_handler', $die_handler );
 
 		try {
 			\Newspack_Blocks\Modal_Checkout::process_checkout_action();
 			$this->fail( 'An invalid nonce should stop the handler.' );
 		} catch ( \WPDieException $e ) {
 			// Expected: the handler ended the request before trusting the flag.
+		} finally {
+			remove_filter( 'wp_doing_ajax', $doing_ajax );
+			remove_filter( 'wp_die_ajax_handler', $die_handler );
 		}
 
 		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::cart_needs_payment( true ) );
 		$this->assertArrayNotHasKey( 'woocommerce_checkout_update_totals', $_POST );
 	}
 
+	// Runs the handler to completion, which defines WOOCOMMERCE_CHECKOUT process-globally
+	// via wc_maybe_define_constant(). That define cannot be undone in tear_down(), so any
+	// later test that drives process_checkout_action() would hit the defined() early-return
+	// at class-modal-checkout.php and never reach process_checkout(). Keep this test last,
+	// or give a future full-flow test its own process.
 	public function test_checkout_action_with_valid_nonce_trusts_validation_only() {
 		$_REQUEST['modal_checkout']               = '1';
 		$_POST['is_validation_only']              = '1';
