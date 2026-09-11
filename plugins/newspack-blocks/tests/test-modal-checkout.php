@@ -99,6 +99,42 @@ if ( ! function_exists( 'WC' ) ) {
 				}
 
 				/**
+				 * Number of times the checkout double's process_checkout() ran.
+				 *
+				 * @var int
+				 */
+				public $process_checkout_calls = 0;
+				/**
+				 * Mimic WC()->checkout() with a double that records process_checkout() calls.
+				 *
+				 * @return object
+				 */
+				public function checkout() {
+					$container = $this;
+					return new class( $container ) {
+						/**
+						 * The container to record on.
+						 *
+						 * @var object
+						 */
+						private $container;
+						/**
+						 * Keep the container.
+						 *
+						 * @param object $container The WC() double.
+						 */
+						public function __construct( $container ) {
+							$this->container = $container;
+						}
+						/**
+						 * Record the call instead of processing a checkout.
+						 */
+						public function process_checkout() {
+							++$this->container->process_checkout_calls;
+						}
+					};
+				}
+				/**
 				 * Mimic WC()->payment_gateways() with no registered gateways.
 				 *
 				 * @return object
@@ -141,6 +177,36 @@ if ( ! class_exists( 'WC_Validation' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wc_nocache_headers' ) ) {
+	/**
+	 * Mock WooCommerce nocache headers as a no-op.
+	 */
+	function wc_nocache_headers() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+	}
+}
+if ( ! function_exists( 'wc_get_cart_url' ) ) {
+	/**
+	 * Mock WooCommerce cart URL.
+	 *
+	 * @return string
+	 */
+	function wc_get_cart_url() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		return home_url( '/cart/' );
+	}
+}
+if ( ! function_exists( 'wc_maybe_define_constant' ) ) {
+	/**
+	 * Mock WooCommerce constant helper.
+	 *
+	 * @param string $name  Constant name.
+	 * @param mixed  $value Constant value.
+	 */
+	function wc_maybe_define_constant( $name, $value ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		if ( ! defined( $name ) ) {
+			define( $name, $value );
+		}
+	}
+}
 if ( ! function_exists( 'wc_get_checkout_url' ) ) {
 	/**
 	 * Mock WooCommerce checkout URL helper.
@@ -310,6 +376,8 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		remove_all_filters( 'woocommerce_cart_item_removed_message' );
 		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
 		unset( $_POST['billing_email'], $_POST['post_data'], $_POST['express_payment_type'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'], $_SERVER['HTTP_REFERER'] );
+		unset( $_POST['is_validation_only'], $_POST['newspack_blocks_checkout_action'], $_POST['newspack_checkout_nonce'], $_POST['woocommerce_checkout_update_totals'], $_REQUEST['woocommerce-process-checkout-nonce'] );
+		$this->reset_validation_only_request();
 		parent::tear_down();
 	}
 
@@ -1303,6 +1371,106 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->assertSame(
 			'https://example.com/checkout/order-received/123/',
 			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
+	 * Helper: clear the request-scoped validation-only trust between tests.
+	 */
+	private function reset_validation_only_request() {
+		$property = new \ReflectionProperty( \Newspack_Blocks\Modal_Checkout::class, 'is_validation_only_request' );
+		$property->setAccessible( true );
+		$property->setValue( null, false );
+	}
+
+	/**
+	 * Helper: run the three filters that consult the validation-only state.
+	 *
+	 * @return array{needs_payment: bool, verify_captcha: bool, createaccount: int}
+	 */
+	private function checkout_filter_outcomes() {
+		$data = \Newspack_Blocks\Modal_Checkout::skip_account_creation(
+			[
+				'createaccount' => 1,
+				'billing_email' => 'nobody-' . wp_rand() . '@example.com',
+			]
+		);
+		return [
+			'needs_payment'  => \Newspack_Blocks\Modal_Checkout::cart_needs_payment( true ),
+			'verify_captcha' => \Newspack_Blocks\Modal_Checkout::recaptcha_verify_captcha( true, '', 'checkout' ),
+			'createaccount'  => $data['createaccount'],
+		];
+	}
+
+	public function test_validation_only_request_flags_alone_change_nothing() {
+		$_REQUEST['modal_checkout']  = '1';
+		$_POST['is_validation_only'] = '1';
+
+		$this->assertSame(
+			[
+				'needs_payment'  => true,
+				'verify_captcha' => true,
+				'createaccount'  => 1,
+			],
+			$this->checkout_filter_outcomes()
+		);
+	}
+
+	public function test_checkout_action_with_invalid_nonce_does_not_trust_validation_only() {
+		$_REQUEST['modal_checkout']               = '1';
+		$_POST['is_validation_only']              = '1';
+		$_POST['newspack_blocks_checkout_action'] = '1';
+		$_POST['newspack_checkout_nonce']         = 'not-a-nonce';
+
+		// wp_send_json_error() ends a non-AJAX request with a plain die; as AJAX it goes
+		// through the die handler this test case installs, which throws instead.
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		add_filter(
+			'wp_die_ajax_handler',
+			function () {
+				return [ $this, 'wp_die_handler' ];
+			}
+		);
+
+		try {
+			\Newspack_Blocks\Modal_Checkout::process_checkout_action();
+			$this->fail( 'An invalid nonce should stop the handler.' );
+		} catch ( \WPDieException $e ) {
+			// Expected: the handler ended the request before trusting the flag.
+		}
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::cart_needs_payment( true ) );
+		$this->assertArrayNotHasKey( 'woocommerce_checkout_update_totals', $_POST );
+	}
+
+	public function test_checkout_action_with_valid_nonce_trusts_validation_only() {
+		$_REQUEST['modal_checkout']               = '1';
+		$_POST['is_validation_only']              = '1';
+		$_POST['newspack_blocks_checkout_action'] = '1';
+		$_POST['newspack_checkout_nonce']         = wp_create_nonce( 'newspack_modal_checkout_nonce' );
+
+		WC()->cart = new class() {
+			/**
+			 * The cart has items.
+			 *
+			 * @return bool
+			 */
+			public function is_empty() {
+				return false;
+			}
+		};
+
+		\Newspack_Blocks\Modal_Checkout::process_checkout_action();
+
+		$this->assertSame( 1, WC()->process_checkout_calls );
+		$this->assertSame( '1', $_POST['woocommerce_checkout_update_totals'] );
+		$this->assertSame(
+			[
+				'needs_payment'  => false,
+				'verify_captcha' => false,
+				'createaccount'  => 0,
+			],
+			$this->checkout_filter_outcomes()
 		);
 	}
 }
