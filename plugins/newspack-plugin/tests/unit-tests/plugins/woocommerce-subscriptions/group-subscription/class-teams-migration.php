@@ -138,6 +138,26 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create an author (a non-reader who is nonetheless an eligible group member —
+	 * Group_Subscription::is_eligible_member() includes authors/contributors by default).
+	 *
+	 * @return int User ID.
+	 */
+	private function create_author(): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'author-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'author-' . wp_generate_password( 6, false ) . '@test.com',
+				'role'       => 'author',
+			]
+		);
+		$this->assertNotWPError( $user_id, 'Fixture author creation should succeed.' );
+		$this->user_ids[] = $user_id;
+		return $user_id;
+	}
+
+	/**
 	 * Create an active, group-enabled subscription owned by $owner_id.
 	 *
 	 * @param int $owner_id Owner user ID.
@@ -284,15 +304,30 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The add_group_member() helper skips editors/admins — they are not readers and
+	 * The add_group_member() helper adds an eligible author — previously skipped
+	 * as a non-reader, now eligible via Group_Subscription::is_eligible_member(),
+	 * which includes authors/contributors by default alongside readers.
+	 */
+	public function test_add_group_member_adds_author() {
+		$owner        = $this->create_reader();
+		$author       = $this->create_author();
+		$subscription = $this->create_group_subscription( $owner );
+
+		$this->assertSame( 'added', Teams_Migration::add_group_member( $subscription, $author ), 'An eligible author should be added.' );
+		$this->assertTrue( (bool) Group_Subscription::user_is_member( $author, $subscription ), 'The author should now hold group membership.' );
+	}
+
+	/**
+	 * The add_group_member() helper skips editors/admins — they are not eligible
+	 * group members (Group_Subscription::is_eligible_member() excludes them) and
 	 * already have full access, so they should not be recorded as group members.
 	 */
-	public function test_add_group_member_skips_non_readers() {
+	public function test_add_group_member_reports_not_eligible_for_editor() {
 		$owner        = $this->create_reader();
 		$editor       = $this->create_editor();
 		$subscription = $this->create_group_subscription( $owner );
 
-		$this->assertSame( 'not_reader', Teams_Migration::add_group_member( $subscription, $editor ), 'A non-reader (editor) should be skipped.' );
+		$this->assertSame( 'not_eligible', Teams_Migration::add_group_member( $subscription, $editor ), 'A non-eligible user (editor) should be skipped.' );
 		$this->assertFalse( (bool) Group_Subscription::user_is_member( $editor, $subscription ), 'The editor should not become a group member.' );
 	}
 

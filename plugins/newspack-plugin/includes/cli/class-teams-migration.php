@@ -582,14 +582,14 @@ class Teams_Migration {
 				$users_to_add[] = $owner_id;
 			}
 
-			$non_reader_skips = 0;
+			$not_eligible_skips = 0;
 			foreach ( $users_to_add as $member_id ) {
 				if ( ! $member_id || $member_id === $sub_owner_id ) {
 					continue;
 				}
 				if ( $dry_run ) {
-					// A member would be added if they are a reader and not already a member.
-					if ( Reader_Activation::is_user_reader( $member_id ) && ! Group_Subscription::user_is_member( $member_id, $subscription ) ) {
+					// A member would be added if they are eligible and not already a member.
+					if ( Group_Subscription::is_eligible_member( $member_id ) && ! Group_Subscription::user_is_member( $member_id, $subscription ) ) {
 						++$members_added;
 					}
 					continue;
@@ -599,12 +599,12 @@ class Teams_Migration {
 					$errors[] = sprintf( 'add member %d: %s', $member_id, $status->get_error_message() );
 				} elseif ( 'added' === $status ) {
 					++$members_added;
-				} elseif ( 'not_reader' === $status ) {
-					++$non_reader_skips;
+				} elseif ( 'not_eligible' === $status ) {
+					++$not_eligible_skips;
 				}
 			}
-			if ( $non_reader_skips ) {
-				WP_CLI::warning( sprintf( 'Team %d: %d team member(s) skipped — not readers (e.g. administrators/editors), who already have full access.', $team_id, $non_reader_skips ) );
+			if ( $not_eligible_skips ) {
+				WP_CLI::warning( sprintf( 'Team %d: %d team member(s) skipped — not eligible group members (e.g. administrators/editors), who already have full access.', $team_id, $not_eligible_skips ) );
 			}
 
 			// Set the seat limit now that members are in, using the owner-inclusive
@@ -1729,22 +1729,22 @@ class Teams_Migration {
 	 * Add a user as a group member via the Group_Subscription data layer.
 	 *
 	 * Routing through update_members() (rather than a raw user-meta write) records
-	 * the joined-at timestamp and auto-enables the group. Readers only — the data
-	 * layer skips administrators/editors and non-readers, who already have access.
+	 * the joined-at timestamp and auto-enables the group. Eligible members only — the
+	 * data layer skips administrators/editors, who already have full access.
 	 * Exposed for testing.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
 	 * @param int              $user_id      The user to add.
 	 *
-	 * @return string|\WP_Error 'added', 'already', 'not_reader', or a WP_Error (e.g. member limit reached).
+	 * @return string|\WP_Error 'added', 'already', 'not_eligible', or a WP_Error (e.g. member limit reached).
 	 */
 	public static function add_group_member( $subscription, $user_id ) {
 		$user_id = absint( $user_id );
 		if ( ! $user_id ) {
 			return new \WP_Error( 'newspack_migrate_add_member', 'Invalid user ID.' );
 		}
-		if ( ! Reader_Activation::is_user_reader( $user_id ) ) {
-			return 'not_reader';
+		if ( ! Group_Subscription::is_eligible_member( $user_id ) ) {
+			return 'not_eligible';
 		}
 		if ( Group_Subscription::user_is_member( $user_id, $subscription ) ) {
 			return 'already';
