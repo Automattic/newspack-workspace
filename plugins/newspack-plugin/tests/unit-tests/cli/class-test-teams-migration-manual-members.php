@@ -100,6 +100,12 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 			wp_delete_post( $gate_id, true );
 		}
 		$this->gate_ids = [];
+		// Guard against a leaked custom role if
+		// test_as_group_reports_only_added_members() fails before its own
+		// remove_role() call runs.
+		if ( \get_role( 'newspack_test_guest' ) ) {
+			remove_role( 'newspack_test_guest' );
+		}
 		parent::tear_down();
 	}
 
@@ -997,6 +1003,77 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$this->assertTrue( (bool) Group_Subscription::user_is_member( $member_without_sub, $group_subscription ), 'The residual member must join the group.' );
 		$this->assertFalse( (bool) Group_Subscription::user_is_member( $member_with_active, $group_subscription ), 'The live-subscription member must be filtered out before the group add.' );
 		$this->assertStringContainsString( 'Skipped 1 member(s) holding a live', $output, 'The live skip must be reported in group mode too.' );
+	}
+
+	/**
+	 * --as-group counts only members actually added, and dry-run agrees with the live run.
+	 *
+	 * Cohort on a manual-only plan: one author (eligible -> added) and one custom low-capability
+	 * role user that lacks edit_others_posts (so it passes the admin/editor pre-filter and actually
+	 * reaches the group add) but is not a reader/author/contributor (so add_group_member returns
+	 * 'not_eligible'). Before the fix both were counted as migrated; after it only the author is,
+	 * and the non-eligible member is reported as skipped. This is the "people the group won't take"
+	 * case (NPPD-1870).
+	 */
+	public function test_as_group_reports_only_added_members() {
+		// Custom role: has `read` only — no edit_others_posts (so not pre-filtered) and not a
+		// reader/author/contributor (so not an eligible group member).
+		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+
+		$plan_id        = $this->create_plan( 'manual-only' );
+		$group_owner_id = $this->create_reader_user();
+
+		$author_id = wp_insert_user(
+			[
+				'user_login' => 'author-' . wp_generate_password( 8, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'author-' . wp_generate_password( 8, false ) . '@test.com',
+				'role'       => 'author',
+			]
+		);
+		$this->user_ids[] = $author_id;
+		$this->create_membership( $plan_id, $author_id );
+
+		$guest_id = wp_insert_user(
+			[
+				'user_login' => 'guest-' . wp_generate_password( 8, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'guest-' . wp_generate_password( 8, false ) . '@test.com',
+				'role'       => 'newspack_test_guest',
+			]
+		);
+		$this->user_ids[] = $guest_id;
+		$this->create_membership( $plan_id, $guest_id );
+
+		$flags = [
+			'plan-ids'           => (string) $plan_id,
+			'as-group'           => true,
+			'group-owner-id'     => $group_owner_id,
+			'access-product-ids' => $this->access_products_flag(),
+		];
+
+		// Dry-run (default): project exactly ONE add (the author), not two.
+		$dry_output = $this->run_migrate_manual_members( $flags );
+		$this->assertStringContainsString( 'Done. 1 member(s) would be added to group subscription(s).', $dry_output, 'Dry-run must project only the eligible author.' );
+		$this->assertStringNotContainsString( 'Done. 2 member(s)', $dry_output, 'Dry-run must not count the non-eligible guest.' );
+
+		WP_CLI::reset();
+
+		// Live run: exactly ONE actual add; guest reported as skipped; group has one member.
+		$live_output = $this->run_migrate_manual_members( array_merge( $flags, [ 'live' => true ] ) );
+		$this->assertStringContainsString( 'Done. 1 member(s) added to group subscription(s).', $live_output, 'Live run must report only the added author.' );
+		$this->assertStringNotContainsString( 'Done. 2 member(s)', $live_output, 'Live run must not count the non-eligible guest as added.' );
+		$this->assertStringContainsString( 'not eligible group members', $live_output, 'The non-eligible member must be reported as skipped.' );
+
+		$owner_group_subscription_ids = $this->get_migration_subscription_ids_for_user( $group_owner_id );
+		$this->assertCount( 1, $owner_group_subscription_ids, 'One group subscription is created.' );
+		global $subscriptions_database;
+		$group_subscription = $subscriptions_database[ $owner_group_subscription_ids[0] ];
+		Group_Subscription::reset_cache();
+		$this->assertTrue( (bool) Group_Subscription::user_is_member( $author_id, $group_subscription ), 'The author joins the group.' );
+		$this->assertFalse( (bool) Group_Subscription::user_is_member( $guest_id, $group_subscription ), 'The non-eligible guest must not join.' );
+
+		remove_role( 'newspack_test_guest' );
 	}
 
 	/**

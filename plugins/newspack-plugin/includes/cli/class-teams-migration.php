@@ -1194,6 +1194,8 @@ class Teams_Migration {
 		WP_CLI::line( '' );
 
 		$summary                            = [];
+		$as_group_not_eligible              = 0;
+		$as_group_errors                    = 0;
 		$skipped_live_subscription_user_ids = [];
 		$granted_user_ids                   = [];
 		$matched_user_ids                   = [];
@@ -1331,6 +1333,12 @@ class Teams_Migration {
 				// Group mode: add the user as a group member.
 				if ( $as_group ) {
 					if ( $dry_run ) {
+						// Project the same outcome a live run would produce.
+						if ( ! Group_Subscription::is_eligible_member( $user_id ) ) {
+							WP_CLI::line( sprintf( '  [DRY RUN] Membership %d → user %d (%s): would skip — not an eligible group member.', $membership_id, $user_id, $user->user_email ) );
+							++$as_group_not_eligible;
+							continue;
+						}
 						$granted_user_ids[ $user_id ] = true;
 						WP_CLI::line( sprintf( '  [DRY RUN] Would add user %d (%s) as group member.', $user_id, $user->user_email ) );
 					} else {
@@ -1346,12 +1354,23 @@ class Teams_Migration {
 							WP_CLI::success( sprintf( '  Created group subscription %d for plan "%s".', $group_subscription->get_id(), $plan->post_title ) );
 						}
 						$status = self::add_group_member( $group_subscription, $user_id );
-						$note   = \is_wp_error( $status ) ? ' (error: ' . $status->get_error_message() . ')' : ( 'added' === $status ? '' : ' (' . $status . ' — skipped)' );
+						if ( \is_wp_error( $status ) ) {
+							++$as_group_errors;
+							WP_CLI::warning( sprintf( '  Membership %d → user %d (%s): error — %s.', $membership_id, $user_id, $user->user_email, $status->get_error_message() ) );
+							continue;
+						}
 						if ( 'added' === $status ) {
 							$granted_user_ids[ $user_id ] = true;
+							WP_CLI::line( sprintf( '  Membership %d → user %d (%s) added as group member.', $membership_id, $user_id, $user->user_email ) );
+						} else {
+							if ( 'not_eligible' === $status ) {
+								++$as_group_not_eligible;
+							}
+							WP_CLI::line( sprintf( '  Membership %d → user %d (%s): skipped (%s).', $membership_id, $user_id, $user->user_email, $status ) );
+							continue;
 						}
-						WP_CLI::line( sprintf( '  Membership %d → user %d (%s) added as group member%s.', $membership_id, $user_id, $user->user_email, $note ) );
 					}
+					// Only genuinely-added (or, in a dry-run, would-be-added) members reach here.
 					$summary[] = [
 						'membership_id' => $membership_id,
 						'user_id'       => $user_id,
@@ -1465,6 +1484,15 @@ class Teams_Migration {
 		);
 
 		WP_CLI::line( '' );
+		if ( $as_group && ( $as_group_not_eligible || $as_group_errors ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d member(s) skipped — not eligible group members (e.g. administrators/editors); %d error(s).',
+					$as_group_not_eligible,
+					$as_group_errors
+				)
+			);
+		}
 		if ( $as_group ) {
 			WP_CLI::success( sprintf( 'Done. %d member(s) %s group subscription(s).', count( $summary ), $dry_run ? 'would be added to' : 'added to' ) );
 		} else {
