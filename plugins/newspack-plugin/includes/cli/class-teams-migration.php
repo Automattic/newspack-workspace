@@ -751,8 +751,10 @@ class Teams_Migration {
 	 *
 	 * Updates all published subscription products that have the "Team membership"
 	 * option enabled, setting their group subscription `enabled` meta to `yes` and
-	 * their `limit` meta to match the product's "Maximum member count". For variable
-	 * subscriptions, both the parent product and each subscription variation are
+	 * their `limit` meta to the owner-inclusive group limit — the product's "Maximum
+	 * member count", plus one for the owner's seat unless the "Owners must be members"
+	 * setting already reserves one (see map_product_max_members_to_group_limit()). For
+	 * variable subscriptions, both the parent product and each subscription variation are
 	 * updated so the setting is available at whichever level WooCommerce Subscriptions
 	 * resolves the product ID.
 	 *
@@ -822,6 +824,9 @@ class Teams_Migration {
 			}
 
 			$max_members = (int) $product->get_meta( '_wc_memberships_for_teams_max_member_count', true );
+			// Match migrate-teams: the group limit counts the owner, so add their seat
+			// unless "Owners must be members" already reserves one on the product.
+			$limit = self::map_product_max_members_to_group_limit( $max_members );
 
 			// Collect the IDs to update: always the parent; plus any
 			// subscription_variation children for variable subscriptions.
@@ -842,18 +847,18 @@ class Teams_Migration {
 						continue;
 					}
 					$p->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
-					$p->update_meta_data( '_newspack_group_subscription_limit', $max_members );
+					$p->update_meta_data( '_newspack_group_subscription_limit', $limit );
 					$p->save();
 				}
 			}
 
 			$variation_count = count( $ids_to_update ) - 1;
-			WP_CLI::success( sprintf( 'Product %d ("%s"): %s enabled=yes, limit=%s%s.', $product_id, $product->get_name(), $dry_run ? 'would set' : 'set', 0 === $max_members ? 'Unlimited' : $max_members, $variation_count > 0 ? sprintf( ' (+ %d variation(s))', $variation_count ) : '' ) );
+			WP_CLI::success( sprintf( 'Product %d ("%s"): %s enabled=yes, limit=%s%s.', $product_id, $product->get_name(), $dry_run ? 'would set' : 'set', 0 === $limit ? 'Unlimited' : $limit, $variation_count > 0 ? sprintf( ' (+ %d variation(s))', $variation_count ) : '' ) );
 
 			$summary[] = [
 				'product_id'   => $product_id,
 				'product_name' => $product->get_name(),
-				'limit'        => 0 === $max_members ? 'Unlimited' : $max_members,
+				'limit'        => 0 === $limit ? 'Unlimited' : $limit,
 				'variations'   => $variation_count,
 			];
 
@@ -2970,6 +2975,29 @@ class Teams_Migration {
 			return 0;
 		}
 		return max( $seat_count + ( $owner_is_team_member ? 0 : 1 ), 2 );
+	}
+
+	/**
+	 * Map a team product's "Maximum member count" to the owner-inclusive group limit.
+	 *
+	 * Access Control always counts the team owner as a group member, but WC Teams only
+	 * reserves a seat for the owner when the global "Owners must be members" setting is on
+	 * (or the buyer opts in per order via the `team_owner_takes_seat` order-item flag). So
+	 * unless the owner already occupies one of the product's seats, the group needs one more
+	 * seat than the product's member count — the same adjustment migrate-teams makes per team.
+	 *
+	 * A product carries no order, so per-order opt-ins are invisible here: on a site whose
+	 * global setting is off, a buyer who opts their owner into a seat yields a group limit one
+	 * larger than they strictly need. Over-provisioning by one seat is harmless; under-
+	 * provisioning (the bug this fixes) locks a paying member out of a seat.
+	 *
+	 * @param int $max_members The product's _wc_memberships_for_teams_max_member_count (0 = unlimited).
+	 *
+	 * @return int The owner-inclusive group limit (0 = unlimited).
+	 */
+	public static function map_product_max_members_to_group_limit( $max_members ) {
+		$owner_takes_seat = 'yes' === \get_option( 'wc_memberships_for_teams_owners_must_take_seat', 'no' );
+		return self::map_team_seats_to_group_limit( $max_members, $owner_takes_seat );
 	}
 
 	/**
