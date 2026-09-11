@@ -489,6 +489,11 @@ MIGRATE
                 echo "Warning: could not add the memcached healthcheck to $compose_file (no extra_hosts anchor). Recreate the env to pick it up." >&2
             fi
         fi
+        # --- Migration: add WP_ENVIRONMENT_TYPE if missing (same reason as above) ---
+        if ! grep -q 'WP_ENVIRONMENT_TYPE=' "$compose_file"; then
+            awk '{ print } /^      - APACHE_RUN_USER=/ { print "      - WP_ENVIRONMENT_TYPE=local" }' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+            grep -q 'WP_ENVIRONMENT_TYPE=' "$compose_file" && echo "Migrated $env_name: added WP_ENVIRONMENT_TYPE=local" || echo "Warning: could not add WP_ENVIRONMENT_TYPE to $compose_file. Recreate the env to pick it up." >&2
+        fi
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")
         # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
