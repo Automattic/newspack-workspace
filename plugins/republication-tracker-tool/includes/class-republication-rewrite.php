@@ -86,6 +86,13 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			exit;
 		}
 
+		// url_to_postid() resolves the `?p=<id>` form to an ID without the
+		// status-filtered query a normal page load runs, so status and password
+		// must be checked explicitly here.
+		if ( ! is_post_publicly_viewable( $post_id ) || post_password_required( $post_id ) ) {
+			return $template;
+		}
+
 		// Check if the republish widget is disabled for the post.
 		$is_republish_disabled = get_post_meta( $post_id, 'republication-tracker-tool-hide-widget', true );
 
