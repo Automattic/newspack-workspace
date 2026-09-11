@@ -451,6 +451,55 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An Author can be added to a group and is then resolved as a member — the write path and the
+	 * read/entitlement path both recognise them.
+	 */
+	public function test_author_can_be_added_as_group_member() {
+		$owner_id  = $this->create_reader_user();
+		$author_id = $this->create_role_user( 'author' );
+		$sub       = $this->create_group_subscription( $owner_id, 3 );
+
+		$result = Group_Subscription::update_members( $sub, [ $author_id ] );
+
+		$this->assertNotWPError( $result, 'Adding an author must not error.' );
+		$this->assertArrayHasKey( $author_id, $result['members_added'], 'The author should be reported as added.' );
+		$this->assertContains( (int) $author_id, array_map( 'intval', Group_Subscription::get_members( $sub ) ), 'The author should be a member.' );
+		$this->assertContains(
+			(int) $sub->get_id(),
+			array_map( 'intval', Group_Subscription::get_group_subscriptions_for_user( $author_id, true ) ),
+			'The author\'s group subscription must resolve on the read path (this is what grants access).'
+		);
+	}
+
+	/**
+	 * A Contributor is likewise an eligible member.
+	 */
+	public function test_contributor_can_be_added_as_group_member() {
+		$owner_id       = $this->create_reader_user();
+		$contributor_id = $this->create_role_user( 'contributor' );
+		$sub            = $this->create_group_subscription( $owner_id, 3 );
+
+		$result = Group_Subscription::update_members( $sub, [ $contributor_id ] );
+
+		$this->assertNotWPError( $result );
+		$this->assertArrayHasKey( $contributor_id, $result['members_added'], 'The contributor should be reported as added.' );
+	}
+
+	/**
+	 * An editor remains a non-eligible member and is filtered out of additions.
+	 */
+	public function test_editor_is_not_added_as_group_member() {
+		$owner_id  = $this->create_reader_user();
+		$editor_id = $this->create_role_user( 'editor' );
+		$sub       = $this->create_group_subscription( $owner_id, 3 );
+
+		$result = Group_Subscription::update_members( $sub, [ $editor_id ] );
+
+		$this->assertNotWPError( $result );
+		$this->assertArrayNotHasKey( $editor_id, $result['members_added'], 'Editors must not be added as members.' );
+	}
+
+	/**
 	 * The limit check only bounds additions, so a removal-only call must succeed even on a group that
 	 * is already over its limit (e.g. after the limit was lowered) -- a removal can never push a group
 	 * further over capacity, and rejecting it would strand the already-persisted removal.

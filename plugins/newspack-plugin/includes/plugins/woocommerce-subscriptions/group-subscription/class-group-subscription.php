@@ -637,7 +637,7 @@ class Group_Subscription {
 
 		// Remove members.
 		foreach ( $members_to_remove as $member_id ) {
-			if ( ! Reader_Activation::is_user_reader( $member_id ) ) {
+			if ( ! self::is_eligible_member( $member_id ) ) {
 				continue;
 			}
 			if ( \delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
@@ -659,7 +659,7 @@ class Group_Subscription {
 			array_filter(
 				$members_to_add,
 				function ( $member_id ) use ( $subscription ) {
-					return Reader_Activation::is_user_reader( $member_id )
+					return self::is_eligible_member( $member_id )
 						&& ! in_array( $subscription->get_id(), self::get_group_subscriptions_for_user( $member_id, true ), true );
 				}
 			)
@@ -887,7 +887,7 @@ class Group_Subscription {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
-		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
+		if ( ! self::is_eligible_member( $user_id ) ) {
 			return [];
 		}
 		$cache_key = $user_id . '|' . ( $ids_only ? '1' : '0' );
@@ -988,7 +988,7 @@ class Group_Subscription {
 		if ( ! $user_id || ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
-		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
+		if ( ! self::is_eligible_member( $user_id ) ) {
 			return [];
 		}
 
