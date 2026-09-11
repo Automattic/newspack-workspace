@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for the Subscribers wizard subscribers read endpoint.
+ * Tests for the Subscribers wizard read endpoints (subscribers, avatars, plans).
  *
  * @package Newspack\Tests
  */
@@ -34,11 +34,25 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	private $user_ids = [];
 
 	/**
+	 * Group-product IDs by product name, so every group sold on one product shares
+	 * it — the shape the product exclusion exists for.
+	 *
+	 * @var int[]
+	 */
+	private $group_product_ids = [];
+
+	/**
 	 * Include the WC mocks before the class boots.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 3 ) . '/mocks/wc-mocks.php';
+		// Stands in for the Newsletters plugin's list registry, which the endpoint
+		// resolves subscribed list IDs against for the Newsletters column.
+		require_once dirname( __DIR__, 3 ) . '/mocks/newsletters-namespaced-mocks.php';
+		if ( ! post_type_exists( \Newspack\Newsletters\Subscription_Lists::CPT ) ) {
+			register_post_type( \Newspack\Newsletters\Subscription_Lists::CPT );
+		}
 		// The wizard rides the Access Control feature flag; enable it so its routes register.
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
@@ -55,6 +69,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$products_database      = [];
 		$orders_database        = [];
 		$this->user_ids         = [];
+		$this->group_product_ids = [];
 		$this->scope_token      = 'scope' . wp_generate_password( 8, false );
 		Group_Subscription::reset_cache();
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
@@ -122,20 +137,38 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Create a group subscription owned by $owner_id.
+	 * Create a group subscription owned by $owner_id, on a group-enabled product.
 	 *
-	 * @param int    $owner_id The owner user ID.
-	 * @param int    $limit    Seat limit.
-	 * @param string $status   Subscription status.
+	 * Shaped the way production is: a publisher sells one group product, and each
+	 * buyer names their own group, so a group's display name ("Acme Team") is not
+	 * its product's name ("Team Plan"). A fixture with no product at all — or one
+	 * whose group keeps the product's name, which is what an unnamed group falls
+	 * back to — hides the very defect the plans endpoint has to avoid, because the
+	 * group branch and the product branch of the filter then agree by accident.
+	 *
+	 * @param int    $owner_id     The owner user ID.
+	 * @param int    $limit        Seat limit.
+	 * @param string $status       Subscription status.
+	 * @param string $product_name The backing group product's name.
 	 *
 	 * @return WC_Subscription
 	 */
-	private function create_group_subscription( int $owner_id, int $limit = 5, string $status = 'active' ): WC_Subscription {
-		$sub = wcs_create_subscription(
+	private function create_group_subscription( int $owner_id, int $limit = 5, string $status = 'active', string $product_name = 'Team Plan' ): WC_Subscription {
+		// One product per name across the whole fixture, because that is the shape the
+		// exclusion exists for: many groups sold on a single product. Creating one per
+		// call would give each group its own same-named product and let a per-product
+		// bug pass.
+		if ( ! isset( $this->group_product_ids[ $product_name ] ) ) {
+			$this->group_product_ids[ $product_name ] = $this->create_subscription_product( $product_name, 'subscription', 0, true );
+		}
+		$product_id = $this->group_product_ids[ $product_name ];
+		$sub        = wcs_create_subscription(
 			[
 				'customer_id'    => $owner_id,
 				'status'         => $status,
 				'billing_period' => 'month',
+				'products'       => [ $product_id ],
+				'items'          => self::line_items_for( $product_id ),
 			]
 		);
 		$sub->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
@@ -162,8 +195,155 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		];
 		if ( $product_id ) {
 			$data['products'] = [ $product_id ];
+			$data['items']    = self::line_items_for( $product_id );
 		}
 		return wcs_create_subscription( $data );
+	}
+
+	/**
+	 * The line items a subscription on $product_id carries.
+	 *
+	 * The mock's `products` array only answers has_product(); the plan *name* a
+	 * subscription displays is resolved from its line items
+	 * (WooCommerce_Subscriptions::get_subscription_product_id), so a fixture
+	 * without them shows a blank plan and can't tell one plan from another.
+	 *
+	 * @param int $product_id The subscribed product ID.
+	 *
+	 * @return WC_Order_Item_Product[]
+	 */
+	private static function line_items_for( int $product_id ): array {
+		return [ new WC_Order_Item_Product( [ 'product_id' => $product_id ] ) ];
+	}
+
+	/**
+	 * Create a subscription product as both a published WP post and a mock
+	 * WC_Product under the same ID.
+	 *
+	 * Both halves are needed because the two sides of the plan filter read
+	 * different sources: the plans endpoint enumerates products through
+	 * wc_get_products(), while the subscribers endpoint resolves a plan name back
+	 * to product IDs with a WP_Query on the post title.
+	 *
+	 * @param string $name          The product name (its post title).
+	 * @param string $type          WooCommerce product type.
+	 * @param int    $parent_id     Parent product ID, for a variation.
+	 * @param bool   $group_enabled Whether the product is sold as a group subscription.
+	 * @param string $status        Post status, so an unpublished product can be exercised.
+	 *
+	 * @return int The product ID.
+	 */
+	private function create_subscription_product( string $name, string $type = 'subscription', int $parent_id = 0, bool $group_enabled = false, string $status = 'publish' ): int {
+		$product_id = self::factory()->post->create(
+			[
+				'post_type'   => 'subscription_variation' === $type ? 'product_variation' : 'product',
+				'post_title'  => $name,
+				'post_status' => $status,
+				'post_parent' => $parent_id,
+			]
+		);
+		$group_meta_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled';
+		if ( $group_enabled ) {
+			// On the post for the site-wide group-subscription lookup, and on the
+			// mock product for get_product_settings() — production writes both.
+			update_post_meta( $product_id, $group_meta_key, 'yes' );
+		}
+		wc_create_mock_product(
+			[
+				'id'        => $product_id,
+				'name'      => $name,
+				'type'      => $type,
+				'parent_id' => $parent_id,
+				'status'    => $status,
+				'meta'      => $group_enabled ? [ $group_meta_key => 'yes' ] : [],
+			]
+		);
+		if ( $parent_id ) {
+			// The mock product is immutable, so adding a child means re-registering
+			// the parent. Carry its status and group setting across or the rewrite
+			// silently resets them.
+			$parent         = wc_get_product( $parent_id );
+			$parent_enabled = $parent->get_meta( $group_meta_key );
+			wc_create_mock_product(
+				[
+					'id'       => $parent_id,
+					'name'     => $parent->get_name(),
+					'type'     => $parent->get_type(),
+					'status'   => $parent->get_status(),
+					'meta'     => $parent_enabled ? [ $group_meta_key => $parent_enabled ] : [],
+					'children' => array_merge( $parent->get_children(), [ $product_id ] ),
+				]
+			);
+		}
+		return $product_id;
+	}
+
+	/**
+	 * Dispatch the plans endpoint.
+	 *
+	 * @return WP_REST_Response
+	 */
+	private function dispatch_plans(): WP_REST_Response {
+		return rest_get_server()->dispatch( new WP_REST_Request( 'GET', '/newspack/v1/wizard/newspack-subscribers/plans' ) );
+	}
+
+	/**
+	 * Create a newsletter subscription list the site knows the title of.
+	 *
+	 * @param string $title The list's display title.
+	 *
+	 * @return string The list's public ID, as stored on a subscribed reader.
+	 */
+	private function create_newsletter_list( string $title ): string {
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'  => \Newspack\Newsletters\Subscription_Lists::CPT,
+				'post_title' => $title,
+			]
+		);
+		return ( new \Newspack\Newsletters\Subscription_List( $post_id ) )->get_public_id();
+	}
+
+	/**
+	 * Create a reader carrying every field this slice hydrates — tags, a newsletter
+	 * subscription and an activity record — so a query-count measurement exercises
+	 * all three lookups.
+	 *
+	 * @param string $name    Human name.
+	 * @param string $list_id Public ID of the list to subscribe them to.
+	 *
+	 * @return int The new user ID.
+	 */
+	private function create_hydrated_reader( string $name, string $list_id ): int {
+		$user_id = $this->create_reader( $name );
+		update_user_meta( $user_id, \Newspack\Subscribers_Wizard::READER_TAGS_META, [ 'vip' ] );
+		\Newspack\Reader_Data::update_item( $user_id, 'last_active', (string) ( strtotime( '2025-11-20 17:30:00' ) * 1000 ) );
+		\Newspack\Reader_Data::update_item( $user_id, 'newsletter_subscribed_lists', wp_json_encode( [ $list_id ] ) );
+		return $user_id;
+	}
+
+	/**
+	 * The number of database queries one dispatch of the subscribers endpoint costs.
+	 *
+	 * Measured from a flushed object cache, because that is the state a real
+	 * request starts in: without a persistent object cache every page load pays
+	 * for its own lookups, so a per-row lookup that a warm in-process cache would
+	 * hide is exactly what needs to show up here.
+	 *
+	 * @param array $params Query params to dispatch with.
+	 *
+	 * @return int Queries issued by the dispatch.
+	 */
+	private function measure_query_cost( array $params ): int {
+		global $wpdb;
+		// A throwaway run first, so any PHP-level static a first-ever request fills
+		// isn't charged to whichever measurement happens to go first.
+		wp_cache_flush();
+		$this->dispatch( $params );
+		wp_cache_flush();
+		$queries_before = $wpdb->num_queries;
+		$this->dispatch( $params );
+		return $wpdb->num_queries - $queries_before;
 	}
 
 	/**
@@ -674,6 +854,478 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$cancelled_ids = array_column( $this->dispatch( [ 'status' => [ 'cancelled' ] ] )->get_data()['items'], 'id' );
 		$this->assertNotContains( $late_mixed, $cancelled_ids, 'A live plan past the chunk boundary still disqualifies the reader from Cancelled.' );
+	}
+
+	/**
+	 * The plans endpoint lists the site's plan names: every group's configured name
+	 * plus the name of every published, non-group subscription product. For a
+	 * variable subscription that means its variations only, never the parent —
+	 * individual_plan_name() resolves a subscription through
+	 * wcs_get_canonical_product_id() to the variation, so a row displays
+	 * "Digital Bundle - Annual" and never "Digital Bundle". Offering the parent
+	 * would match those same subscriptions (WooCommerce matches a variation line
+	 * item's parent _product_id) and return rows whose Subscription column reads
+	 * something else, breaking the round trip this endpoint exists to guarantee.
+	 *
+	 * Names are deduplicated and alphabetised; non-subscription products are not
+	 * plans, and neither are the products groups are sold on.
+	 */
+	public function test_plans_endpoint_lists_group_and_product_plans() {
+		$this->login_admin();
+
+		// Two groups sharing one plan name plus a second name: the dropdown must
+		// list a plan once however many groups are configured with it. All three are
+		// sold on the "Team Plan" group product, which must not become an option.
+		$this->create_group_subscription( $this->create_reader( 'AcmeOwnerOne' ) ); // "Acme Team".
+		$this->create_group_subscription( $this->create_reader( 'AcmeOwnerTwo' ) ); // "Acme Team" again.
+		$beta = $this->create_group_subscription( $this->create_reader( 'BetaOwner' ) );
+		$beta->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Beta Team' );
+
+		$this->create_subscription_product( 'Digital Monthly' );
+		$variable_parent_id = $this->create_subscription_product( 'Digital Bundle', 'variable-subscription' );
+		$this->create_subscription_product( 'Digital Bundle - Annual', 'subscription_variation', $variable_parent_id );
+		$this->create_subscription_product( 'Tote Bag', 'simple' );
+
+		$plans = $this->dispatch_plans()->get_data();
+
+		$this->assertSame(
+			[ 'Acme Team', 'Beta Team', 'Digital Bundle - Annual', 'Digital Monthly' ],
+			$plans['items'],
+			'Group names and non-group subscription product/variation names, deduplicated and alphabetised.'
+		);
+		$this->assertNotContains(
+			'Digital Bundle',
+			$plans['items'],
+			'A variable subscription parent is not an option: no row ever displays it, so filtering on it would return rows showing a variation name instead.'
+		);
+		$this->assertNotContains( 'Tote Bag', $plans['items'], 'A non-subscription product is not a plan.' );
+		$this->assertNotContains(
+			'Team Plan',
+			$plans['items'],
+			'The product a group is sold on is not an option: members display the group name, so filtering on the product would return only the owners and no row would read as the filtered name.'
+		);
+		$this->assertSame( 4, $plans['total'] );
+	}
+
+	/**
+	 * A group product is excluded whether it is sold as a whole product or as a
+	 * variation of one, because group enablement is per product/variation and a
+	 * variation does not inherit its parent's setting.
+	 *
+	 * The variable parent is absent for a different reason than its group-enabled
+	 * variation: the parent name is never displayed on a row, so it is not an option
+	 * on any variable subscription, group-enabled or not.
+	 */
+	public function test_plans_endpoint_excludes_group_variations() {
+		$this->login_admin();
+
+		$bundle_id = $this->create_subscription_product( 'Campus Bundle', 'variable-subscription' );
+		$this->create_subscription_product( 'Campus Bundle - Individual', 'subscription_variation', $bundle_id );
+		$this->create_subscription_product( 'Campus Bundle - Site Licence', 'subscription_variation', $bundle_id, true );
+
+		$items = $this->dispatch_plans()->get_data()['items'];
+
+		$this->assertContains( 'Campus Bundle - Individual', $items );
+		$this->assertNotContains( 'Campus Bundle - Site Licence', $items, 'A group-enabled variation is not an option.' );
+		$this->assertNotContains( 'Campus Bundle', $items, 'The variable parent is not an option either — no row displays it.' );
+	}
+
+	/**
+	 * A retired variation is not offered as a filter option.
+	 *
+	 * WooCommerce stores a variation with "Enabled" unchecked as `private`, and
+	 * get_children() returns those alongside published ones — so a publisher
+	 * retiring one tier while its existing subscribers keep it would otherwise get a
+	 * dropdown entry that can never match: the filter's other half resolves names
+	 * through a `publish`-only query. The admin picks a plan they can see in the
+	 * Subscription column of the rows below, and is told nobody holds it.
+	 *
+	 * The sibling test above covers the same rule for a whole product; this is the
+	 * variation level, which get_children() reaches by a different path.
+	 */
+	public function test_plans_endpoint_omits_a_retired_variation() {
+		$this->login_admin();
+
+		$bundle_id = $this->create_subscription_product( 'Campus Bundle', 'variable-subscription' );
+		$this->create_subscription_product( 'Campus Bundle - Current', 'subscription_variation', $bundle_id );
+		$this->create_subscription_product( 'Campus Bundle - Retired', 'subscription_variation', $bundle_id, false, 'private' );
+
+		$items = $this->dispatch_plans()->get_data()['items'];
+
+		$this->assertContains( 'Campus Bundle - Current', $items );
+		$this->assertNotContains( 'Campus Bundle - Retired', $items, 'A disabled variation cannot be matched by the filter, so it must not be offered by it.' );
+	}
+
+	/**
+	 * Only published products are offered. The filter's other half resolves a plan
+	 * name through a `publish`-only WP_Query, so listing a draft product's name
+	 * would put an option in the dropdown that can never match a reader — and
+	 * nothing else in this suite would notice, since a dead option looks exactly
+	 * like a plan nobody holds.
+	 */
+	public function test_plans_endpoint_omits_unpublished_products() {
+		$this->login_admin();
+
+		$this->create_subscription_product( 'Published Monthly' );
+		$this->create_subscription_product( 'Draft Monthly', 'subscription', 0, false, 'draft' );
+
+		$items = $this->dispatch_plans()->get_data()['items'];
+
+		$this->assertContains( 'Published Monthly', $items );
+		$this->assertNotContains( 'Draft Monthly', $items );
+	}
+
+	/**
+	 * The contract that makes the filter work end to end: every name the plans
+	 * endpoint hands the UI filters to exactly the readers whose Subscription column
+	 * shows that name. If the two ever drift — a differently-shaped label here, a
+	 * product status the filter's title lookup won't match there — the dropdown
+	 * silently offers options that mislead, so this walks the whole list rather than
+	 * spot-checking one entry, and asserts the *displayed* plan of every row it gets
+	 * back rather than trusting the ids.
+	 *
+	 * The group here is production-shaped: sold on a "Team Plan" product and renamed
+	 * to "Acme Team" by its buyer. Offering the product would satisfy an ids-only
+	 * assertion (the owner does hold a subscription on it) while returning one of
+	 * the three members and showing "Acme Team" in the column of the one it does
+	 * return, so the display assertion below is what makes the test bite.
+	 */
+	public function test_plan_names_round_trip_through_the_subscriber_filter() {
+		$this->login_admin();
+
+		$group_owner  = $this->create_reader( 'RoundTripOwner' );
+		$group_member = $this->create_reader( 'RoundTripMember' );
+		$group        = $this->create_group_subscription( $group_owner ); // "Acme Team" on "Team Plan".
+		add_user_meta( $group_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+
+		$product_id     = $this->create_subscription_product( 'Digital Monthly' );
+		$product_reader = $this->create_reader( 'RoundTripDigital' );
+		$this->create_individual_subscription( $product_reader, 'active', $product_id );
+
+		// A variation-backed subscriber, because offering and matching a variation run
+		// through different code — get_children() offers it, and a product_variation
+		// clause in product_ids_for_names() matches it. Asserted in separate tests,
+		// either half could break while the other stayed green.
+		$bundle_id        = $this->create_subscription_product( 'Digital Bundle', 'variable-subscription' );
+		$variation_id     = $this->create_subscription_product( 'Digital Bundle - Annual', 'subscription_variation', $bundle_id );
+		$variation_reader = $this->create_reader( 'RoundTripVariation' );
+		$this->create_individual_subscription( $variation_reader, 'active', $variation_id );
+
+		$expected_holders = [
+			'Acme Team'               => [ $group_owner, $group_member ],
+			'Digital Bundle - Annual' => [ $variation_reader ],
+			'Digital Monthly'         => [ $product_reader ],
+		];
+
+		$plan_names = $this->dispatch_plans()->get_data()['items'];
+		$this->assertSame( array_keys( $expected_holders ), $plan_names, 'The group product "Team Plan" is not offered; the group name and the individual product are.' );
+
+		foreach ( $plan_names as $plan_name ) {
+			$items   = $this->dispatch( [ 'plan' => [ $plan_name ] ] )->get_data()['items'];
+			$matched = array_column( $items, 'id' );
+			sort( $matched );
+			$expected = $expected_holders[ $plan_name ];
+			sort( $expected );
+			$this->assertSame( $expected, $matched, "The '$plan_name' option returned by /plans filters to its holders." );
+
+			foreach ( $items as $item ) {
+				$displayed = array_merge( array_column( $item['groups'], 'plan' ), array_column( $item['subscriptions'], 'plan' ) );
+				$this->assertContains( $plan_name, $displayed, "A row returned for '$plan_name' displays that plan, rather than some other name." );
+			}
+		}
+	}
+
+	/**
+	 * A cancelled plan filters to the readers who still show it, and only them.
+	 *
+	 * The Subscription column hides a cancelled plan for anyone who also holds a live
+	 * one (visiblePlanEntries in SubscriberList.jsx), so a reader who churned off one
+	 * plan and onto another must not come back under the plan they left: their row
+	 * would read as the plan they moved to. A fully churned reader still shows the
+	 * cancelled plan, so they must. customer_ids_for_statuses() applies the same rule
+	 * on the status axis; this pins it on the plan axis, where an all-active fixture
+	 * cannot see it.
+	 */
+	public function test_a_cancelled_plan_matches_only_a_fully_churned_reader() {
+		$this->login_admin();
+
+		$monthly_id = $this->create_subscription_product( 'Digital Monthly' );
+		$annual_id  = $this->create_subscription_product( 'Digital Annual' );
+
+		$switcher = $this->create_reader( 'Switcher' );
+		$this->create_individual_subscription( $switcher, 'cancelled', $monthly_id );
+		$this->create_individual_subscription( $switcher, 'active', $annual_id );
+
+		$churned = $this->create_reader( 'Churned' );
+		$this->create_individual_subscription( $churned, 'cancelled', $monthly_id );
+
+		$matched = array_column( $this->dispatch( [ 'plan' => [ 'Digital Monthly' ] ] )->get_data()['items'], 'id' );
+
+		$this->assertSame( [ $churned ], $matched, 'Only the reader whose row still shows the cancelled plan is returned.' );
+		$this->assertNotContains( $switcher, $matched, 'A reader who moved to a live plan is not returned under the plan they left.' );
+	}
+
+	/**
+	 * A plan name that matches nothing on the site fails closed — an empty page,
+	 * not the unfiltered list. A stale option in a long-open tab (or a hand-typed
+	 * param) must never widen the result set. The guard predates the plan filter's
+	 * options; it is here so a change to the filter cannot quietly make an unmatched
+	 * name mean "no filter".
+	 */
+	public function test_unknown_plan_filter_returns_an_empty_page() {
+		$this->login_admin();
+		$this->create_individual_subscription( $this->create_reader( 'Subscribed' ), 'active' );
+
+		$data = $this->dispatch( [ 'plan' => [ 'No Such Plan' ] ] )->get_data();
+		$this->assertSame( [], $data['items'] );
+		$this->assertSame( 0, $data['total'] );
+		$this->assertSame( 0, $data['pages'] );
+	}
+
+	/**
+	 * The plans endpoint enforces the same manage_options gate as the list endpoints.
+	 */
+	public function test_plans_forbidden_for_non_admin() {
+		wp_set_current_user( $this->create_reader( 'NopePlans', 'subscriber' ) );
+		$this->assertSame( 403, $this->dispatch_plans()->get_status() );
+	}
+
+	/**
+	 * Tags come from the reader's own record, not from the connected ESP. A stored
+	 * array and a JSON-encoded list both read back as a list of tags — the second
+	 * is what a value written via WP-CLI or the REST meta API looks like on disk,
+	 * and reading it naively yields one tag literally named `["vip","npr"]`.
+	 */
+	public function test_tags_hydrate_from_local_reader_meta() {
+		$this->login_admin();
+		$array_reader = $this->create_reader( 'ArrayTags' );
+		$json_reader  = $this->create_reader( 'JsonTags' );
+		$bare_reader  = $this->create_reader( 'NoTags' );
+		update_user_meta( $array_reader, \Newspack\Subscribers_Wizard::READER_TAGS_META, [ 'vip', 'met-in-person', '0' ] );
+		update_user_meta( $json_reader, \Newspack\Subscribers_Wizard::READER_TAGS_META, wp_json_encode( [ 'vip', 'vip', 'lapsed' ] ) );
+
+		$tags_by_id = array_column( $this->dispatch()->get_data()['items'], 'tags', 'id' );
+
+		$this->assertSame(
+			[ 'vip', 'met-in-person', '0' ],
+			$tags_by_id[ $array_reader ],
+			'Empty tags are dropped, and only those — a tag named "0" is a tag.'
+		);
+		$this->assertSame( [ 'vip', 'lapsed' ], $tags_by_id[ $json_reader ], 'A JSON-encoded value is decoded, and duplicates collapse.' );
+		$this->assertSame( [], $tags_by_id[ $bare_reader ] );
+	}
+
+	/**
+	 * The Newsletters column reports the site's own record of what a reader is
+	 * subscribed to (the `newsletter_subscribed_lists` reader-data item), resolved
+	 * to the titles the site shows for those lists. A list the site has no
+	 * definition for reports a null title and keeps its ID, rather than vanishing
+	 * from the column or being flattened into prose the client cannot match on.
+	 */
+	public function test_newsletters_hydrate_from_local_subscription_state() {
+		$this->login_admin();
+		$daily_list_id  = $this->create_newsletter_list( 'Daily Brief' );
+		$weekly_list_id = $this->create_newsletter_list( 'Weekend Read' );
+
+		$subscribed_reader   = $this->create_reader( 'Subscribed' );
+		$unsubscribed_reader = $this->create_reader( 'Unsubscribed' );
+		// Written through the same path the newsletter data events use.
+		\Newspack\Reader_Data::update_item(
+			$subscribed_reader,
+			'newsletter_subscribed_lists',
+			wp_json_encode( [ $daily_list_id, $weekly_list_id, 'esp-only-list' ] )
+		);
+
+		$newsletters_by_id = array_column( $this->dispatch()->get_data()['items'], 'newsletters', 'id' );
+
+		$this->assertSame(
+			[
+				[
+					'id'    => (string) $daily_list_id,
+					'title' => 'Daily Brief',
+				],
+				[
+					'id'    => (string) $weekly_list_id,
+					'title' => 'Weekend Read',
+				],
+				[
+					'id'    => 'esp-only-list',
+					'title' => null,
+				],
+			],
+			$newsletters_by_id[ $subscribed_reader ],
+			'Known lists resolve to their titles; a list the site has no record of keeps its ID with a null title, so the client can tell the two apart and a filter has something to match on.'
+		);
+		$this->assertSame( [], $newsletters_by_id[ $unsubscribed_reader ] );
+	}
+
+	/**
+	 * Subscriptions are deduplicated by list ID, before the ID is resolved to a
+	 * title. Two lists can share a title — collapsing on the title would report one
+	 * subscription where the reader has two — and a list titled "0" is a list.
+	 */
+	public function test_newsletters_dedupe_by_list_id_not_by_resolved_title() {
+		$this->login_admin();
+		$morning_brief = $this->create_newsletter_list( 'Daily Brief' );
+		$evening_brief = $this->create_newsletter_list( 'Daily Brief' );
+		$zero_titled   = $this->create_newsletter_list( '0' );
+
+		$reader = $this->create_reader( 'Duplicated' );
+		\Newspack\Reader_Data::update_item(
+			$reader,
+			'newsletter_subscribed_lists',
+			wp_json_encode( [ $morning_brief, $evening_brief, $morning_brief, $zero_titled ] )
+		);
+
+		$newsletters_by_id = array_column( $this->dispatch()->get_data()['items'], 'newsletters', 'id' );
+
+		$this->assertSame(
+			[
+				[
+					'id'    => (string) $morning_brief,
+					'title' => 'Daily Brief',
+				],
+				[
+					'id'    => (string) $evening_brief,
+					'title' => 'Daily Brief',
+				],
+				[
+					'id'    => (string) $zero_titled,
+					'title' => '0',
+				],
+			],
+			$newsletters_by_id[ $reader ],
+			'The repeated list ID collapses; two same-titled lists and a list titled "0" all survive.'
+		);
+	}
+
+	/**
+	 * Last seen reports the reader's `last_active` record — the value reader
+	 * activation stamps on every page view, and the same one the ESP sync publishes
+	 * as `Last_Active`, so this column and the publisher's ESP agree about a reader.
+	 *
+	 * Reader-data timestamps are JavaScript **milliseconds**. Reading one as a Unix
+	 * timestamp doesn't fail loudly — it silently dates every active reader to the
+	 * year 57000 — so the conversion is the thing worth pinning here.
+	 */
+	public function test_last_seen_reads_the_readers_last_active_record() {
+		$this->login_admin();
+		$active_reader  = $this->create_reader( 'Active' );
+		$dormant_reader = $this->create_reader( 'Dormant' );
+		$garbled_reader = $this->create_reader( 'Garbled' );
+		\Newspack\Reader_Data::update_item( $active_reader, 'last_active', (string) ( strtotime( '2025-11-20 17:30:00' ) * 1000 ) );
+		// last_active is client-written (it is not a read-only key), so a junk value
+		// has to read as unknown rather than as 1970.
+		\Newspack\Reader_Data::update_item( $garbled_reader, 'last_active', 'not-a-timestamp' );
+
+		$last_seen_by_id = array_column( $this->dispatch()->get_data()['items'], 'lastSeen', 'id' );
+
+		$this->assertSame( '2025-11-20', $last_seen_by_id[ $active_reader ] );
+		$this->assertNull( $last_seen_by_id[ $dormant_reader ], 'A reader the site holds no activity record for reads as unknown, not as a guessed date.' );
+		$this->assertNull( $last_seen_by_id[ $garbled_reader ] );
+	}
+
+	/**
+	 * A last-seen record ahead of the site's own clock is not taken at face value.
+	 *
+	 * The browser writes this value from its own clock and the client store keeps
+	 * the larger of the stored and local values, so a device running fast writes a
+	 * timestamp nothing can lower again: without a server-side line, one visit from
+	 * a misconfigured device parks the reader in the future for good. Ordinary skew
+	 * still reads as now, so a clock a minute fast doesn't blank the column.
+	 */
+	public function test_last_seen_does_not_trust_a_clock_ahead_of_the_site() {
+		$this->login_admin();
+		$skewed_reader = $this->create_reader( 'Skewed' );
+		$future_reader = $this->create_reader( 'Future' );
+		\Newspack\Reader_Data::update_item( $skewed_reader, 'last_active', (string) ( ( time() + MINUTE_IN_SECONDS ) * 1000 ) );
+		\Newspack\Reader_Data::update_item( $future_reader, 'last_active', (string) ( strtotime( '+3 years' ) * 1000 ) );
+
+		$last_seen_by_id = array_column( $this->dispatch()->get_data()['items'], 'lastSeen', 'id' );
+
+		$this->assertSame( wp_date( 'Y-m-d' ), $last_seen_by_id[ $skewed_reader ], 'A slightly fast clock reads as now, not as tomorrow.' );
+		$this->assertNull( $last_seen_by_id[ $future_reader ], 'A record years ahead describes the device clock, not the reader, so it reads as unknown.' );
+	}
+
+	/**
+	 * Last seen is the calendar day in the PUBLISHER'S timezone, not UTC.
+	 *
+	 * It sits in the same row as Member since and Last payment, which are localized,
+	 * so formatting this one in UTC puts an evening visit on a negative-offset site
+	 * a day ahead of the others — the admin looking at the screen that evening reads
+	 * tomorrow's date, and the relative subtitle the list renders from it says the
+	 * reader was last seen "in 4 hours".
+	 *
+	 * The default-timezone test above cannot see this: with the site on UTC both
+	 * formattings agree, so it passes either way.
+	 */
+	public function test_last_seen_is_the_publishers_calendar_day_not_utc() {
+		update_option( 'timezone_string', 'America/New_York' );
+		$this->login_admin();
+		$reader = $this->create_reader( 'Evening' );
+		// 20:00 on Nov 20 in New York is already Nov 21 in UTC.
+		\Newspack\Reader_Data::update_item( $reader, 'last_active', (string) ( strtotime( '2025-11-21 01:00:00 UTC' ) * 1000 ) );
+
+		$last_seen_by_id = array_column( $this->dispatch()->get_data()['items'], 'lastSeen', 'id' );
+
+		$this->assertSame(
+			'2025-11-20',
+			$last_seen_by_id[ $reader ],
+			'An 8pm visit in the site timezone is reported as that day, not as the next day in UTC.'
+		);
+	}
+
+	/**
+	 * Hydrating a full page costs the same number of database queries as hydrating
+	 * a single row, and resolves the shared newsletter-list registry once for the
+	 * whole page rather than once per reader.
+	 *
+	 * This is the guard that keeps the list usable on a real reader base, and it
+	 * takes both assertions to hold the line. The query count catches a lookup
+	 * that genuinely re-queries per row; the registry-call count catches a per-row
+	 * lookup that an in-request cache happens to absorb today but that still
+	 * rebuilds the whole index 50 times, and would go back to being a query per
+	 * row the moment that caching changed.
+	 *
+	 * The fixture gives every reader newsletters, tags and a session, so all three
+	 * of the lookups this slice added are exercised.
+	 */
+	public function test_a_full_page_costs_no_more_queries_than_a_single_row() {
+		global $newsletter_lists_query_count;
+		$this->login_admin();
+		$list_id = $this->create_newsletter_list( 'Daily Brief' );
+		for ( $i = 0; $i < 50; $i++ ) {
+			$this->create_hydrated_reader( 'Crowd' . $i, $list_id );
+		}
+
+		// Patches::prevent_accidental_page_deletion() runs on every meta capability
+		// check and looks its first argument up as a post, so each row's
+		// get_edit_user_link() spends a post query on a user ID. That per-row cost
+		// is the guard's own and predates this endpoint; #964 restores its early
+		// bail. Detach it for the measurement so this test keeps measuring the
+		// hydration it is about.
+		remove_filter( 'map_meta_cap', [ \Newspack\Patches::class, 'prevent_accidental_page_deletion' ], 10 );
+
+		// One fixture, two page sizes, so the only thing that differs between the
+		// measurements is how many rows get hydrated.
+		$single_row_cost = $this->measure_query_cost( [ 'per_page' => 1 ] );
+		$full_page_cost  = $this->measure_query_cost( [ 'per_page' => 50 ] );
+
+		$newsletter_lists_query_count = 0;
+		$full_page                    = $this->dispatch( [ 'per_page' => 50 ] )->get_data();
+
+		$this->assertCount( 50, $full_page['items'], 'The measured page really is 50 rows.' );
+		$this->assertSame( [ 'Daily Brief' ], array_column( $full_page['items'][0]['newsletters'], 'title' ), 'The page really is hydrating the batched columns.' );
+		$this->assertSame(
+			$single_row_cost,
+			$full_page_cost,
+			'Hydrating 50 rows must not cost more queries than hydrating 1 for the columns this measures — a per-row lookup crept in. Subscription hydration is an in-memory mock here and contributes nothing to either side.'
+		);
+		$this->assertSame(
+			1,
+			$newsletter_lists_query_count,
+			'The newsletter list registry must be resolved once per request, not once per row.'
+		);
 	}
 
 	/**

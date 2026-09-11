@@ -7,6 +7,7 @@ import { getEventPayload, sendEvent } from '../reader-activation/analytics';
 import { debugLog } from '../reader-activation/utils';
 import { persistCtaAttribution } from '../shared/js/cta-attribution';
 import { propagateGatePreviewParams } from './preview-links';
+import { wireInlineVerificationBox } from '../reader-activation-auth/inline-verification';
 
 const EVENT_NAME = 'np_gate_interaction';
 
@@ -114,6 +115,74 @@ function initReloadHandler() {
 }
 
 /**
+ * Wire the email verification prompts rendered above the gate layout for a reader
+ * whose address is on a whitelisted domain but unverified.
+ *
+ * Sends the OTP, then hands the reader to the auth modal's OTP state. Verifying
+ * reloads the article, which the gate now grants.
+ */
+function initVerificationPrompts() {
+	const boxes = [ ...document.querySelectorAll( '.newspack-content-gate__verification-prompt' ) ];
+	if ( ! boxes.length ) {
+		return;
+	}
+	window.newspackRAS = window.newspackRAS || [];
+	window.newspackRAS.push( function ( ras ) {
+		// The modal reaches both onSuccess and onClose on the Continue path — it closes
+		// itself and then reports success — so the reload is claimed once rather than
+		// fired from each.
+		let reloading = false;
+		const reloadOnce = () => {
+			if ( reloading ) {
+				return;
+			}
+			reloading = true;
+			window.location.reload();
+		};
+		boxes.forEach( box => {
+			wireInlineVerificationBox( box, {
+				url: box.dataset.verificationUrl,
+				nonce: box.dataset.verificationNonce,
+				errorText: box.dataset.errorMessage,
+				onSent: () => {
+					ras.setOTPTimer();
+					// Both checks run before the call, not after: the code is already sent
+					// by this point, and openAuthModal's own early returns invoke
+					// onSuccess — so a modal that never opened would reload the page past
+					// the reader instead of handing control back. The method is absent
+					// when RAS is disabled; the container is rendered by the auth bundle,
+					// which loads on its own RAS callback with nothing ordering the two
+					// pushes, so both are read at click time.
+					if (
+						typeof ras.openAuthModal !== 'function' ||
+						! document.querySelector( '.newspack-reader-auth-modal .newspack-reader-auth' )
+					) {
+						return false;
+					}
+					ras.openAuthModal( {
+						skipAuthenticatedCheck: true,
+						skipNewslettersSignup: true,
+						backButtonClosesModal: true,
+						initialState: 'otp',
+						closeOnSuccess: true,
+						skipSuccess: false,
+						// Reload on close rather than only on success: the modal holds a
+						// success step the reader dismisses, and the gate's own reload
+						// handler stands down while an overlay is open. onSuccess covers
+						// the path where the modal closes itself. Reloading either way is
+						// safe — a reader who dismissed without verifying gets the same
+						// gate back.
+						onSuccess: reloadOnce,
+						onClose: reloadOnce,
+					} );
+					return true;
+				},
+			} );
+		} );
+	} );
+}
+
+/**
  * Adds 'gate_post_id' hidden input to every form inside the gate.
  *
  * @param {HTMLElement} gate The gate element.
@@ -124,6 +193,7 @@ function addFormInputs( gate ) {
 		...gate.querySelectorAll( '.newspack-registration form' ), // Registration block.
 		...gate.querySelectorAll( '.wp-block-newspack-blocks-checkout-button form' ), // Checkout button block.
 		...gate.querySelectorAll( '.wp-block-newspack-blocks-donate form' ), // Donate block.
+		...gate.querySelectorAll( '.newspack-newsletters-subscribe form' ), // Newsletter Subscription Form block (see getGateEventPayload).
 	];
 	forms.forEach( form => {
 		if ( ! form.querySelector( 'input[name="gate_post_id"]' ) ) {
@@ -197,6 +267,11 @@ function getGateEventPayload( payload, gate ) {
 	if ( gate ) {
 		gateInfo.gate_has_donation_block = isVisible( gate.querySelector( '.wp-block-newspack-blocks-donate' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_registration_block = isVisible( gate.querySelector( '.newspack-registration' ) ) ? 'yes' : 'no';
+		// A Newsletter Subscription Form block registers the reader as well as
+		// subscribing them (when Reader Activation is on), so a gate built from it
+		// is a registration surface too. Insights on the hub reads this flag for
+		// both its registration- and newsletter-intent definitions.
+		gateInfo.gate_has_newsletter_block = isVisible( gate.querySelector( '.newspack-newsletters-subscribe' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_checkout_button = isVisible( gate.querySelector( '.wp-block-newspack-blocks-checkout-button' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_registration_link = isVisible( gate.querySelector( 'a[href="#register_modal"]' ) ) ? 'yes' : 'no';
 		gateInfo.gate_has_signin_link = isVisible( gate.querySelector( 'a[href="#signin_modal"]' ) ) ? 'yes' : 'no';
@@ -312,6 +387,11 @@ function handleFormSubmission( evt, gate ) {
 			}
 		}
 	}
+	// Keyed on the block's own hidden field, like the siblings above: the auth
+	// modal and the Reader Registration block also post the email as `npe`.
+	if ( data.newspack_newsletters_subscribe ) {
+		payload.action_type = 'newsletters_subscription'; // Same spelling as the prompt-side listener.
+	}
 	if ( data.newspack_checkout ) {
 		payload.action_type = 'checkout_button';
 
@@ -415,6 +495,7 @@ domReady( function () {
 	// it renders, and an inline gate's 'seen' handler only runs once it scrolls into
 	// view. A CTA click must always persist attribution.
 	manageCtaClicks( gate );
+	initVerificationPrompts();
 
 	initReloadHandler();
 	if ( gate.classList.contains( 'newspack-content-gate__overlay-gate' ) ) {

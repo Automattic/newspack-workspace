@@ -36,6 +36,25 @@
 		font-weight: normal;
 	}
 
+	&__subscriptions {
+		align-items: baseline;
+		display: flex;
+		gap: wp-vars.$grid-unit-05;
+		min-width: 0;
+	}
+
+	&__subscriptions-named {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&__subscriptions-more {
+		color: wp-colors.$gray-700;
+		flex-shrink: 0;
+	}
+
 	&__preview {
 		border-collapse: collapse;
 		width: 100%;
@@ -62,6 +81,19 @@
 		del {
 			margin-right: 4px;
 		}
+	}
+
+	// An auto-layout table sizes a cell to its content, so a rule naming two long
+	// subscriptions widens this column until the ones after it are pushed
+	// off-screen. DataViews caps this wrapper itself, but at 80ch — wide enough
+	// to still overflow the table — so the cap is tightened here rather than
+	// introduced. It has to be done in CSS: `layout.styles` widths reach every
+	// other column, but the primary column is rendered by a branch that does not
+	// read them, and Subscription is the `titleField` for this view.
+	// The `:not()` repeats the one DataViews uses, so this wins on specificity
+	// rather than on which stylesheet a bundler happens to emit last.
+	.dataviews-view-table__primary-column-content:not(.dataviews-column-primary__media) {
+		max-width: 40ch;
 	}
 
 	.dataviews-title-field--clickable:focus:not(:focus-visible) {

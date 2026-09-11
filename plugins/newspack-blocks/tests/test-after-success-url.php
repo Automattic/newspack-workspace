@@ -212,6 +212,19 @@ class AfterSuccessUrlTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A block rendered outside the loop, in a widget or a footer template part, still
+	 * vouches from the post being viewed.
+	 */
+	public function test_vouches_from_the_queried_post_outside_the_loop() {
+		$post_id = $this->published_post();
+		$this->go_to( get_permalink( $post_id ) );
+		// Outside the loop there is no current post, only a queried one.
+		$GLOBALS['post'] = null;
+
+		$this->assertNotEmpty( \Newspack_Blocks\Modal_Checkout::get_after_success_token( 'https://elsewhere.example.test/thanks' ) );
+	}
+
+	/**
 	 * A token stops working once its post is no longer published.
 	 */
 	public function test_refuses_a_token_whose_post_was_unpublished() {

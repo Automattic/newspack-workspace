@@ -24,7 +24,14 @@ import {
 	getCheckoutData,
 	getFormattedAmount,
 } from './utils';
-import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields } from './checkout-button-trigger';
+import {
+	resolveCheckoutButtonForm,
+	readCheckoutData,
+	applyContextFields,
+	appendUtmFields,
+	readUtmParams,
+	getDroppedLinkContext,
+} from './checkout-button-trigger';
 import { resolveDonationTrigger } from './donate-trigger';
 import { TIERS_BASED_READY_EVENT } from '../shared/js/tiers-based-ready';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
@@ -285,6 +292,12 @@ domReady( () => {
 		newspackBlocksModal?.is_registration_required &&
 		window?.newspackReaderActivation?.openAuthModal;
 
+	// Snapshot the landing page's utm params: the form's own GET submission
+	// replaces the query string entirely, so the request the checkout sees
+	// carries only what rides the form. Captured once, applied to every form
+	// (direct, donate, picker) at submit time.
+	const landingUtmParams = readUtmParams( window.location.search );
+
 	/**
 	 * Handle checkout form submit.
 	 *
@@ -304,6 +317,11 @@ domReady( () => {
 		// (a form rendered inside the surface itself always wins) or when the form is
 		// inside a gate. Must run BEFORE getCheckoutData(), which snapshots the form.
 		applyCtaAttribution( form );
+
+		// Carry the landing page's utm params into the checkout request itself, so
+		// Modal_Checkout::merge_request_utm_params() reads them from $_GET instead
+		// of depending on the referer.
+		appendUtmFields( form, landingUtmParams );
 
 		const checkoutData = getCheckoutData( form );
 
@@ -887,6 +905,18 @@ domReady( () => {
 			iframeName: IFRAME_NAME,
 		} );
 		if ( form ) {
+			// A page-authored form wins with its own context; say so when that
+			// drops something the link carried, instead of applying list price
+			// or the default thank-you behavior with no trace.
+			const dropped = getDroppedLinkContext( form, window.location.search );
+			if ( dropped.length ) {
+				// eslint-disable-next-line no-console
+				console.warn(
+					`Newspack modal checkout: the resolved checkout form does not carry ${ dropped.join(
+						', '
+					) } from the URL. The page block's own settings apply instead.`
+				);
+			}
 			triggerFormSubmit( form );
 			return true;
 		}
@@ -961,6 +991,7 @@ domReady( () => {
 	 * @param {string}   options.title              The title to set for the modal.
 	 * @param {string}   options.actionType         The action type to set for the modal.
 	 * @param {Object}   options.afterSuccess       The after success configuration object.
+	 * @param {number}   options.quantity           Optional. Seats/quantity to purchase. Only sent when above 1.
 	 * @param {Function} options.onCheckoutComplete The callback to call when the checkout is complete.
 	 * @param {Function} options.onClose            The callback to call when the modal is closed.
 	 */
@@ -969,6 +1000,7 @@ domReady( () => {
 		title = null,
 		actionType = null,
 		afterSuccess = {},
+		quantity = null,
 		// eslint-disable-next-line @typescript-eslint/no-shadow
 		onCheckoutComplete = null,
 		onClose = null,
@@ -1004,6 +1036,15 @@ domReady( () => {
 		 */
 		if ( actionType ) {
 			url.searchParams.set( 'action_type', actionType );
+		}
+
+		/**
+		 * Seat/quantity configuration. Only sent above 1 — the server already
+		 * defaults to a single seat, so there's nothing to add to the URL when
+		 * the reader is buying just one.
+		 */
+		if ( quantity && parseInt( quantity, 10 ) > 1 ) {
+			url.searchParams.set( 'quantity', String( parseInt( quantity, 10 ) ) );
 		}
 
 		/**

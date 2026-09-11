@@ -598,7 +598,7 @@ class WooCommerce_My_Account {
 
 		$token           = isset( $_POST['token'] ) ? \sanitize_text_field( $_POST['token'] ) : '';
 		$transient_token = \get_transient( 'np_reader_account_delete_' . $user_id );
-		if ( ! $token || ! $transient_token || $token !== $transient_token ) {
+		if ( ! $token || ! $transient_token || ! hash_equals( (string) $transient_token, (string) $token ) ) {
 			\wp_die( \esc_html__( 'Invalid request.', 'newspack-plugin' ) );
 		}
 		\delete_transient( 'np_reader_account_delete_' . $user_id );

@@ -1,6 +1,6 @@
 /**
  * Resolves product, product category and subscription IDs to names for the
- * restriction list, which stores only IDs.
+ * wizard's lists, which store only IDs.
  */
 
 /**
@@ -14,7 +14,7 @@ import { addQueryArgs } from '@wordpress/url';
 /**
  * Internal dependencies.
  */
-import { WIZARD_ENDPOINT } from '../../constants';
+import { WIZARD_ENDPOINT } from './constants';
 
 type NameMap = Record< number, string >;
 

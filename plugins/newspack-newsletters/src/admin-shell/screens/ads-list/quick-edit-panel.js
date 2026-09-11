@@ -8,18 +8,25 @@
 
 import apiFetch from '@wordpress/api-fetch';
 import { FormTokenField, RadioControl, TextControl } from '@wordpress/components';
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
 
 import QuickEditPanel from '../../components/quick-edit-panel';
+import TermsUnavailableNotice from '../../components/terms-unavailable-notice';
 import { notifyError, notifySuccess } from '../../notices';
-import { fetchAllTerms, initialSelectionsForTaxonomy, resolveTokens, sortedIdsEqual } from '../../utils/terms';
+import { fetchAllTerms, idsMissingFromOptions, resolveTokens, selectionsForTaxonomy, sortedIdsEqual, unresolvedIds } from '../../utils/terms';
 
 const POSTS_PATH = '/wp/v2/newspack_nl_ads_cpt';
 
+// `hasLoaded` tracks the fetch settling rather than succeeding:
+// `fetchAllTerms` swallows request failures and returns whatever it
+// collected, so a partial list is indistinguishable from a complete one
+// here. What the panel can tell is whether the settled list accounts for
+// the ad's stored category IDs.
 function useQuickEditCategories() {
 	const [ categories, setCategories ] = useState( [] );
+	const [ hasLoaded, setHasLoaded ] = useState( false );
 	useEffect( () => {
 		let cancelled = false;
 		fetchAllTerms( '/wp/v2/categories' )
@@ -28,19 +35,45 @@ function useQuickEditCategories() {
 					setCategories( Array.isArray( terms ) ? terms : [] );
 				}
 			} )
-			.catch( () => {} );
+			.finally( () => {
+				if ( ! cancelled ) {
+					setHasLoaded( true );
+				}
+			} );
 		return () => {
 			cancelled = true;
 		};
 	}, [] );
-	return categories;
+	return { categories, hasLoaded };
 }
 
-export default function AdsQuickEditPanel( { item, advertisers, placements, onClose, onSaved } ) {
-	const categories = useQuickEditCategories();
-	const initialAdvertiserSelections = useMemo( () => initialSelectionsForTaxonomy( item, 'newspack_nl_advertiser' ), [ item ] );
-	const initialPlacementSelections = useMemo( () => initialSelectionsForTaxonomy( item, 'newspack_nl_ad_placement' ), [ item ] );
-	const initialCategorySelections = useMemo( () => initialSelectionsForTaxonomy( item, 'category' ), [ item ] );
+export default function AdsQuickEditPanel( { item, advertisers, placements, termsLoaded = false, onClose, onSaved } ) {
+	const { categories, hasLoaded: categoriesLoaded } = useQuickEditCategories();
+	// Terms are only embedded when a taxonomy column is visible, so each
+	// field also resolves the post's raw term IDs against the options
+	// list. Without this a hidden column would seed an empty field, and
+	// saving would strip the terms it never showed.
+	const initialAdvertiserSelections = useMemo(
+		() => selectionsForTaxonomy( item, item?.newspack_nl_advertiser, 'newspack_nl_advertiser', advertisers ),
+		[ item, advertisers ]
+	);
+	const initialPlacementSelections = useMemo(
+		() => selectionsForTaxonomy( item, item?.ad_placement, 'newspack_nl_ad_placement', placements ),
+		[ item, placements ]
+	);
+	const initialCategorySelections = useMemo( () => selectionsForTaxonomy( item, item?.categories, 'category', categories ), [ item, categories ] );
+	// Stored IDs the options list cannot explain. They gate the read-only
+	// state below, and ride along on save as a backstop should that gate
+	// ever be relaxed — a term the user could not see must not be dropped.
+	const unresolvedAdvertiserIds = useMemo(
+		() => unresolvedIds( item?.newspack_nl_advertiser, initialAdvertiserSelections ),
+		[ item, initialAdvertiserSelections ]
+	);
+	const unresolvedPlacementIds = useMemo(
+		() => unresolvedIds( item?.ad_placement, initialPlacementSelections ),
+		[ item, initialPlacementSelections ]
+	);
+	const unresolvedCategoryIds = useMemo( () => unresolvedIds( item?.categories, initialCategorySelections ), [ item, initialCategorySelections ] );
 	// Slice to `Y-m-d` so legacy datetime meta still fills the date input.
 	const initialStartDate = ( item?.meta?.start_date || '' ).slice( 0, 10 );
 	const initialExpiryDate = ( item?.meta?.expiry_date || '' ).slice( 0, 10 );
@@ -60,14 +93,75 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 	const [ price, setPrice ] = useState( initialPrice );
 	const [ isBusy, setIsBusy ] = useState( false );
 
+	// One ref per taxonomy: the three options lists resolve independently,
+	// so a shared flag would let an edit to one freeze another's baseline
+	// at its pre-resolution (empty) value.
+	const hasEditedAdvertiserRef = useRef( false );
+	const hasEditedPlacementRef = useRef( false );
+	const hasEditedCategoriesRef = useRef( false );
+
+	useEffect( () => {
+		if ( ! hasEditedAdvertiserRef.current ) {
+			setAdvertiserSelections( initialAdvertiserSelections );
+		}
+	}, [ initialAdvertiserSelections ] );
+	useEffect( () => {
+		if ( ! hasEditedPlacementRef.current ) {
+			setPlacementSelections( initialPlacementSelections );
+		}
+	}, [ initialPlacementSelections ] );
+	useEffect( () => {
+		if ( ! hasEditedCategoriesRef.current ) {
+			setCategorySelections( initialCategorySelections );
+		}
+	}, [ initialCategorySelections ] );
+
+	// Measured against the options list rather than the merged selections: a
+	// term the embed can render but the options list has never seen would leave
+	// the field editable yet impossible to restore once the token is removed.
+	// Gated on the fetch having settled so a slow load can't flash a warning
+	// before the options arrive.
+	const advertiserOptionGap = useMemo( () => idsMissingFromOptions( item?.newspack_nl_advertiser, advertisers ), [ item, advertisers ] );
+	const placementOptionGap = useMemo( () => idsMissingFromOptions( item?.ad_placement, placements ), [ item, placements ] );
+	const categoryOptionGap = useMemo( () => idsMissingFromOptions( item?.categories, categories ), [ item, categories ] );
+	const advertiserUnavailable = termsLoaded && advertiserOptionGap.length > 0;
+	const placementUnavailable = termsLoaded && placementOptionGap.length > 0;
+	const categoriesUnavailable = categoriesLoaded && categoryOptionGap.length > 0;
+
+	// A field is editable only once its options have settled and account
+	// for every stored term. Editing earlier would race the baseline: with
+	// no embed, or one capped at 100 terms, an edit made before the full
+	// list arrives would be diffed against a baseline that grows underneath
+	// it, and the terms resolved late would drop out of the save.
+	const advertiserReadOnly = ! termsLoaded || advertiserUnavailable;
+	const placementReadOnly = ! termsLoaded || placementUnavailable;
+	const categoriesReadOnly = ! categoriesLoaded || categoriesUnavailable;
+
+	// A disabled field drops out of the tab order, so the wait needs its own
+	// explanation.
+	// `help` lands in the field's `aria-describedby`, but it only exists from WP
+	// 7.1 and this plugin supports 6.9, where the prop is dropped. Passing
+	// `__experimentalShowHowTo={ false }` alongside it keeps the default how-to
+	// text suppressed there; on 7.1 `help` still wins, at the cost of a
+	// deprecation notice. So on 6.9/7.0 the wait goes unexplained — accepted,
+	// because `FormTokenField` offers no other described-by hook. Drop the
+	// experimental prop, and revisit the explanation, once the floor is 7.1.
+	const advertiserHelp = termsLoaded ? '' : __( 'Loading advertisers…', 'newspack-newsletters' );
+	const placementHelp = termsLoaded ? '' : __( 'Loading ad placements…', 'newspack-newsletters' );
+	const categoriesHelp = categoriesLoaded ? '' : __( 'Loading categories…', 'newspack-newsletters' );
+
+	const advertiserDirty = ! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections );
+	const placementDirty = ! sortedIdsEqual( placementSelections, initialPlacementSelections );
+	const categoriesDirty = ! sortedIdsEqual( categorySelections, initialCategorySelections );
+
 	const isDirty =
 		status !== initialStatus ||
 		startDate !== initialStartDate ||
 		expiryDate !== initialExpiryDate ||
 		price !== initialPrice ||
-		! sortedIdsEqual( advertiserSelections, initialAdvertiserSelections ) ||
-		! sortedIdsEqual( placementSelections, initialPlacementSelections ) ||
-		! sortedIdsEqual( categorySelections, initialCategorySelections );
+		advertiserDirty ||
+		placementDirty ||
+		categoriesDirty;
 
 	const advertiserSuggestions = useMemo( () => advertisers.map( t => String( t.name ) ), [ advertisers ] );
 	const placementSuggestions = useMemo( () => placements.map( t => String( t.name ) ), [ placements ] );
@@ -96,12 +190,21 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 			expiry_date: expiryDate,
 			price: price === '' ? 0 : Number( price ),
 		};
-		const data = {
-			newspack_nl_advertiser: advertiserSelections.map( s => s.id ),
-			ad_placement: placementSelections.map( s => s.id ),
-			categories: categorySelections.map( s => s.id ),
-			meta,
-		};
+		// Only send a taxonomy the user actually touched. The edited ref is
+		// the load-bearing half: a dirty diff alone would also be true in
+		// the moment a late-resolving baseline overtakes the selection
+		// state, which would let a status-only save serialise the stale
+		// value. An untouched field must never overwrite what is stored.
+		const data = { meta };
+		if ( hasEditedAdvertiserRef.current && advertiserDirty ) {
+			data.newspack_nl_advertiser = [ ...advertiserSelections.map( s => s.id ), ...unresolvedAdvertiserIds ];
+		}
+		if ( hasEditedPlacementRef.current && placementDirty ) {
+			data.ad_placement = [ ...placementSelections.map( s => s.id ), ...unresolvedPlacementIds ];
+		}
+		if ( hasEditedCategoriesRef.current && categoriesDirty ) {
+			data.categories = [ ...categorySelections.map( s => s.id ), ...unresolvedCategoryIds ];
+		}
 		if ( status !== initialStatus ) {
 			data.status = status === 'active' ? 'publish' : 'draft';
 		}
@@ -143,32 +246,56 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				label={ __( 'Advertiser', 'newspack-newsletters' ) }
 				value={ advertiserTokens }
 				suggestions={ advertiserSuggestions }
-				onChange={ next => setAdvertiserSelections( resolveTokens( next, advertiserSelections, advertisers ) ) }
+				help={ advertiserHelp }
+				disabled={ advertiserReadOnly }
+				onChange={ next => {
+					hasEditedAdvertiserRef.current = true;
+					setAdvertiserSelections( resolveTokens( next, advertiserSelections, advertisers ) );
+				} }
 				__experimentalValidateInput={ validateAdvertiser }
 				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
+			{ advertiserUnavailable && (
+				<TermsUnavailableNotice message={ __( 'Advertisers could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) } />
+			) }
 			<FormTokenField
 				label={ __( 'Ad placement', 'newspack-newsletters' ) }
 				value={ placementTokens }
 				suggestions={ placementSuggestions }
-				onChange={ next => setPlacementSelections( resolveTokens( next, placementSelections, placements ) ) }
+				help={ placementHelp }
+				disabled={ placementReadOnly }
+				onChange={ next => {
+					hasEditedPlacementRef.current = true;
+					setPlacementSelections( resolveTokens( next, placementSelections, placements ) );
+				} }
 				__experimentalValidateInput={ validatePlacement }
 				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
+			{ placementUnavailable && (
+				<TermsUnavailableNotice message={ __( 'Ad placements could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) } />
+			) }
 			<FormTokenField
 				label={ __( 'Categories', 'newspack-newsletters' ) }
 				value={ categoryTokens }
 				suggestions={ categorySuggestions }
-				onChange={ next => setCategorySelections( resolveTokens( next, categorySelections, categories ) ) }
+				help={ categoriesHelp }
+				disabled={ categoriesReadOnly }
+				onChange={ next => {
+					hasEditedCategoriesRef.current = true;
+					setCategorySelections( resolveTokens( next, categorySelections, categories ) );
+				} }
 				__experimentalValidateInput={ validateCategory }
 				__experimentalShowHowTo={ false }
 				__next40pxDefaultSize
 				__nextHasNoMarginBottom
 			/>
+			{ categoriesUnavailable && (
+				<TermsUnavailableNotice message={ __( 'Categories could not be loaded. Edit this ad to change them.', 'newspack-newsletters' ) } />
+			) }
 			<TextControl
 				type="date"
 				label={ __( 'Start date', 'newspack-newsletters' ) }

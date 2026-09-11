@@ -126,13 +126,6 @@ interface AdvancedSettings {
 	newspack_image_credits_placeholder: number | null;
 	newspack_image_credits_auto_populate: boolean;
 
-	// Accessibility Statement.
-	accessibility_statement_page?: {
-		editUrl: string;
-		status: string;
-		pageUrl: string;
-	};
-
 	// Post Date.
 	post_time_ago: boolean;
 	post_time_ago_cut_off: number;
