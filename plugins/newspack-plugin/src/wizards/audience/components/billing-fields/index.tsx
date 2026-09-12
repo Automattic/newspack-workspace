@@ -14,7 +14,11 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import WizardsSection from '../../../wizards-section';
 
 const BillingFields = () => {
-	const wizardData = useWizardData( 'newspack-audience/billing-fields' );
+	const wizardData = useWizardData< {
+		available_billing_fields?: Record< string, { label: string; required?: boolean } >;
+		order_notes_field?: { label: string } | null;
+		billing_fields: string[];
+	} >( 'newspack-audience/billing-fields' );
 	const { updateWizardSettings, saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const isQuietLoading = useSelect( ( select: any ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false, [] );
 

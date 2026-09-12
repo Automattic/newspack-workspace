@@ -27,6 +27,7 @@
 	"devDependencies": {
 		"@commitlint/cli": "^20.1.0",
 		"@commitlint/config-conventional": "^19.8.1",
+		"@types/react": "^18.3.27",
 		"@wordpress/a11y": "^4.48.0",
 		"@wordpress/api-fetch": "^7.48.0",
 		"@wordpress/base-styles": "^6.9.0",

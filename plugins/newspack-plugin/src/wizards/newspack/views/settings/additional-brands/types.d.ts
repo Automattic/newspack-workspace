@@ -17,7 +17,8 @@ type Brand = {
 	meta: {
 		_custom_url: string;
 		_show_page_on_front: number;
-		_logo: number | Attachment;
+		// A media ID, a fetched REST attachment, a media-modal selection ({ id, url, … }), or null after removal.
+		_logo: number | Attachment | { id: number; url: string } | null;
 		_theme_colors: ThemeColorsMeta[];
 		_menus: Array< {
 			location: string;
