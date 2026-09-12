@@ -10,7 +10,7 @@
 	"require": {
 		"composer/installers": "~2.0",
 		"google/auth": "^1.15",
-		"woocommerce/action-scheduler": "^3.9"
+		"woocommerce/action-scheduler": "^4.0"
 	},
 	"require-dev": {
 		"automattic/vipwpcs": "^3.0",
