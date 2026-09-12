@@ -214,6 +214,33 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Perfmatters "Delay JavaScript" executes scripts on first user interaction,
+	 * and the IP-access landing page auto-redirects with no interaction — a
+	 * delayed gtag never runs there, so no pageview or event is ever sent. The
+	 * delay is vetoed on that request; everywhere else the configured value
+	 * passes through.
+	 */
+	public function test_delay_js_vetoed_on_ip_access_landing_page() {
+		$original_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		$_SERVER['REQUEST_URI'] = '/some-article/';
+		$this->assertTrue( Perfmatters::should_delay_js( true ), 'The configured value passes through on a regular request.' );
+
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '1' );
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', 'test-university' );
+		$_SERVER['REQUEST_URI'] = '/institutional-access/test-university/';
+		$this->assertFalse( Perfmatters::should_delay_js( true ), 'JS delay is vetoed on the landing page request.' );
+
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '' );
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', '' );
+		if ( null === $original_uri ) {
+			unset( $_SERVER['REQUEST_URI'] );
+		} else {
+			$_SERVER['REQUEST_URI'] = $original_uri;
+		}
+	}
+
+	/**
 	 * A saved option that already carries the manually-applied workaround entry
 	 * doesn't end up with duplicates after the defaults merge.
 	 */
