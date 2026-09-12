@@ -1,23 +1,26 @@
-### All Submissions:
+<!-- Contributing guidelines: https://github.com/Automattic/newspack-workspace/blob/main/.github/CONTRIBUTING.md -->
+<!-- Write the opening paragraph and What changes for the whole team, including support. Each comment below explains what belongs in its section; follow it, then delete the comment. -->
 
-* [ ] Have you followed the [Newspack Contributing guidelines](https://github.com/Automattic/newspack-workspace/blob/main/.github/CONTRIBUTING.md)?
-* [ ] Does your code follow the [WordPress coding standards](https://make.wordpress.org/core/handbook/best-practices/coding-standards/) and [VIP Go coding standards](https://vip.wordpress.com/documentation/vip-go/code-review-blockers-warnings-notices/)?
-* [ ] Have you checked to ensure there aren't other open [Pull Requests](../../pulls) for the same update/change?
+<!-- Open with a short paragraph on why this PR exists: the problem it fixes or what it makes possible, in the terms of whoever it affects. Save the root cause and implementation details for Technical details. -->
 
-### Changes proposed in this Pull Request:
+## What changes
 
-<!-- Describe the changes made to this Pull Request, and the reason for such changes. -->
+<!-- Explain the change in plain language, then add a short "With this change:" list of what now works or what someone can now do. Keep class names, file names, and other implementation details in Technical details. -->
 
-Closes # .
+<!-- Reference the Linear issue: Closes ABC-123 marks it done at merge, Ref ABC-123 links without closing. Delete the line if there is no issue. -->
+Closes ABC-123.
 
-### How to test the changes in this Pull Request:
+## How to test
+
+<!-- Write numbered test steps another engineer can follow without asking you. Give one action per step and the expected result. For a fix, reproduce the problem on the base branch first, then verify the fix on this branch. Use CLI commands when they are the clearest way to verify something. -->
 
 1.
 2.
 3.
 
-### Other information:
+<details>
+<summary><strong>Technical details</strong></summary>
 
-* [ ] Have you added an explanation of what your changes do and why you'd like us to include them?
-* [ ] Have you written new tests for your changes, as applicable?
-* [ ] Have you successfully run tests with your changes locally?
+<!-- Use Technical details for what a reviewer needs beyond the main description: implementation choices and reasoning, build or CLI commands, reproduction and verification details, tests written and run, and reviewer notes. End with a short review summary: rounds, the models that reviewed, and any blockers fixed, for example: Self-review: two rounds (Fable 5.1, GPT-5.6 Sol), one blocker fixed. Delete the block if there is nothing for it. -->
+
+</details>
