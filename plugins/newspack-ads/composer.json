@@ -20,7 +20,7 @@
 	},
 	"extra": {},
 	"require": {
-		"googleads/googleads-php-lib": "^71.0"
+		"googleads/googleads-php-lib": "^73.0"
 	},
 	"config": {
 		"platform": {
