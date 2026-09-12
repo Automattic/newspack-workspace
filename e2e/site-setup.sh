@@ -280,52 +280,6 @@ log_success "Sample Page removed"
 if [ "$POSTS_ENABLED" = true ]; then
     log_info "Step 2: Creating $POSTS_COUNT posts with categories..."
     wp eval '
-        // Answer starter content-s featured-image request from disk.
-        //
-        // Newspack releases up to 6.48.22 download one image per post from
-        // picsum.photos, so provisioning pays a third-party round trip per post
-        // and stalls entirely when that host is down. Newspack 6.49 onwards uses
-        // a bundled image and never makes the request, leaving this filter inert;
-        // it can go once every site this script provisions is past 6.48.22.
-        add_filter(
-            "pre_http_request",
-            function ( $preempt, $args, $url ) {
-                if ( strpos( $url, "picsum.photos" ) === false ) {
-                    return $preempt;
-                }
-                $give_up = new WP_Error( "no_remote_images", "Remote images are disabled during provisioning." );
-                // download_url() streams to a temp file and reads it back, so the
-                // bytes go there rather than into the response body.
-                if ( empty( $args["stream"] ) || empty( $args["filename"] ) || ! function_exists( "imagecreatetruecolor" ) ) {
-                    return $give_up;
-                }
-                static $jpeg = null;
-                if ( $jpeg === null ) {
-                    $image = imagecreatetruecolor( 1200, 800 );
-                    for ( $y = 0; $y < 800; $y++ ) {
-                        $color = imagecolorallocate( $image, (int) ( 30 + $y / 20 ), (int) ( 40 + $y / 13 ), (int) ( 140 + $y / 9 ) );
-                        imageline( $image, 0, $y, 1199, $y, $color );
-                    }
-                    ob_start();
-                    imagejpeg( $image, null, 82 );
-                    $jpeg = ob_get_clean();
-                    imagedestroy( $image );
-                }
-                if ( ! $jpeg || false === file_put_contents( $args["filename"], $jpeg ) ) {
-                    return $give_up;
-                }
-                return [
-                    "headers"  => [],
-                    "body"     => "",
-                    "response" => [ "code" => 200, "message" => "OK" ],
-                    "cookies"  => [],
-                    "filename" => $args["filename"],
-                ];
-            },
-            10,
-            3
-        );
-
         if ( class_exists( "Newspack\Starter_Content_Generated" ) ) {
             Newspack\Starter_Content_Generated::create_categories();
             echo "Categories created\n";
