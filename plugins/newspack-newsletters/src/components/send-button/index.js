@@ -21,7 +21,7 @@ import { get } from 'lodash';
  */
 import { getServiceProvider } from '../../service-providers';
 import { isManualProvider } from '../../utils/service-provider';
-import { validateNewsletter } from '../../newsletter-editor/utils';
+import { getSettledSendLists, validateNewsletter } from '../../newsletter-editor/utils';
 import { useNewsletterData } from '../../newsletter-editor/store';
 import { refreshEmailHtml } from '../../editor/mjml';
 import './style.scss';
@@ -191,9 +191,10 @@ export default compose( [
 	}, [ saveDidSucceed ] );
 
 	const { is_public } = meta;
-	const { newsletterData } = useNewsletterData();
+	const newsletterDataState = useNewsletterData();
+	const { newsletterData } = newsletterDataState;
 
-	const newsletterValidationErrors = validateNewsletter( meta );
+	const newsletterValidationErrors = validateNewsletter( meta, getSettledSendLists( newsletterDataState ) );
 
 	const { renderPreSendInfo, renderPostUpdateInfo } = getServiceProvider();
 
@@ -361,15 +362,28 @@ export default compose( [
 	return (
 		<div style={ { display: 'flex' } }>
 			<PreviewHTMLButton />
-			<Button
-				className="editor-post-publish-button"
-				isBusy={ isSaving && 'publish' === status }
-				variant="primary"
-				onClick={ handleModalOpen }
-				disabled={ ! isButtonEnabled }
-			>
-				{ label }
-			</Button>
+			{ /* The button carries the reason it is disabled. A disabled control
+			     receives no pointer events, so the tooltip lives on a wrapper, and
+			     the same text is repeated for screen readers — without it the only
+			     signal is the sidebar warning, which never renders when the author
+			     has that panel collapsed. */ }
+			<span title={ newsletterValidationErrors.length ? newsletterValidationErrors.join( '\n' ) : undefined }>
+				<Button
+					className="editor-post-publish-button"
+					isBusy={ isSaving && 'publish' === status }
+					variant="primary"
+					onClick={ handleModalOpen }
+					disabled={ ! isButtonEnabled }
+					aria-describedby={ newsletterValidationErrors.length ? 'newspack-newsletters-send-blocked' : undefined }
+				>
+					{ label }
+				</Button>
+			</span>
+			{ newsletterValidationErrors.length > 0 && (
+				<p id="newspack-newsletters-send-blocked" className="screen-reader-text">
+					{ newsletterValidationErrors.join( ' ' ) }
+				</p>
+			) }
 			{ modalVisible && (
 				<Modal
 					className="newspack-newsletters__modal"
