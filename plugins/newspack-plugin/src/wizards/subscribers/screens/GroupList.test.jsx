@@ -29,7 +29,8 @@ jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/group-list' } ) );
 
 // Only the header count is under test, so DataViews renders nothing; the count
-// itself comes from filterSortAndPaginate, which stays real.
+// itself comes from filterSortAndPaginate, which stays real. The list reads the
+// router at module scope, so the proxy has to answer here too.
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
 	// A real button, because the focus restoration needs a host node to land on.
@@ -37,6 +38,7 @@ jest.mock( '../../../../packages/components/src', () => ( {
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
 	),
 	Waiting: () => null,
+	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
 
 jest.mock( '../data/use-avatars', () => ( { SHOW_AVATARS: false, useAvatars: () => ( { avatars: {}, loading: false } ) } ) );

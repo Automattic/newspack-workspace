@@ -1,0 +1,569 @@
+/**
+ * L1 — Group detail (admin management).
+ *
+ * The publisher-facing counterpart to the owner's My Account group page. Members
+ * and Invitations are sortable DataViews tables; an admin can invite on behalf of
+ * the owner, add people directly, remove members, manage invitations, adjust the
+ * seat limit and change who manages the group.
+ *
+ * THE ROLE MODEL IS ENFORCED SERVER-SIDE, NOT HERE. Owner-only may promote or
+ * demote a manager (Group_Subscription::user_can_manage_roles()), and a manager
+ * may never remove a peer manager (::can_actor_remove_member()). This screen
+ * mirrors those rules so it does not offer what would be refused, but an admin
+ * reaching this screen has already passed `manage_options`, and every write is
+ * re-authorised by the endpoint. Nothing here is a security boundary.
+ */
+
+/**
+ * WordPress dependencies.
+ */
+import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import { __, _n, sprintf } from '@wordpress/i18n';
+import { useDispatch } from '@wordpress/data';
+import { filterSortAndPaginate } from '@wordpress/dataviews';
+import {
+	Dropdown,
+	MenuGroup,
+	MenuItem,
+	Snackbar,
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
+
+/**
+ * Internal dependencies.
+ */
+import { Button, DataViews, Divider, Notice, Router, Waiting } from '../../../../packages/components/src';
+import './style.scss';
+import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
+import { useGroup, useGroupActions } from '../data/use-group';
+import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
+import { fmtDate } from '../format';
+import { GROUP_LABEL, GROUP_LABEL_PLURAL, ROLE_LABELS, ROLE_RANK } from '../labels';
+import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
+import { seatCountText, seatsRemaining } from '../flows/capacity';
+
+import AddMembersFlow from '../flows/AddMembersFlow';
+import AdjustSeatsFlow from '../flows/AdjustSeatsFlow';
+import CancelInviteFlow from '../flows/CancelInviteFlow';
+import DisableLinkFlow from '../flows/DisableLinkFlow';
+import InviteMemberFlow from '../flows/InviteMemberFlow';
+import RegenerateLinkFlow from '../flows/RegenerateLinkFlow';
+import RemoveMemberFlow from '../flows/RemoveMemberFlow';
+import ResendInviteFlow from '../flows/ResendInviteFlow';
+import SubscriptionDetailsDrawer from '../flows/SubscriptionDetailsDrawer';
+
+const { useParams } = Router;
+
+const MEMBERS_VIEW = {
+	type: 'table',
+	page: 1,
+	perPage: 10,
+	// Owner first, then managers, then members (ROLE_RANK ascending) — the order
+	// the endpoint already returns them in.
+	sort: { field: 'role', direction: 'asc' },
+	search: '',
+	fields: [ 'role', 'joinedAt' ],
+	filters: [],
+	layout: {},
+	titleField: 'name',
+};
+
+const INVITES_VIEW = {
+	type: 'table',
+	page: 1,
+	perPage: 10,
+	sort: { field: 'sentAt', direction: 'desc' },
+	search: '',
+	fields: [ 'status', 'sentAt' ],
+	filters: [],
+	layout: {},
+	titleField: 'email',
+};
+
+// Whether the group is live enough to accept member/invite changes, and whether it
+// can take on new people. These gate the UI only — every write is re-authorised and
+// state-gated server-side (409/404), so these never need to be a security boundary.
+//
+// They read the four-value status the endpoint already maps WCS onto
+// (map_subscription_status), which is why they line up with the server despite
+// looking simpler than is_subscription_manageable()/is_subscription_active():
+//   - 'cancelled' collapses WCS cancelled + expired → both non-manageable. ✔
+//   - 'active'    collapses WCS active + pending-cancel → both invite-active. ✔
+//   - 'pending' / 'on-hold' are manageable but not active, matching the server. ✔
+// The one state the client cannot distinguish is WCS `trash`: it maps to 'on-hold',
+// so isManageable() reads true while the server refuses it. That is inert — the
+// endpoint 409s — and unfixable here without a richer status field, since the map
+// has already collapsed trash into on-hold before the client sees it.
+//
+// Both also require `canManage`, the caller's own write capability as the endpoint
+// reports it. Opening this screen and writing from it are separate capabilities
+// (see api_get_group), so a role can hold the first without the second; folding it
+// in here disables the controls instead of letting them 403 on click.
+const isManageable = group => group && 'cancelled' !== group.status && group.canManage;
+const isActive = group => group && 'active' === group.status && group.canManage;
+
+function GroupDetailView() {
+	const { id } = useParams();
+	const { group, loading, error, reload } = useGroup( id );
+	const actions = useGroupActions( id );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+
+	const [ modal, setModal ] = useState( null );
+	const [ snackbar, setSnackbar ] = useState( null );
+	// A refused role change is worth reading twice — "no longer active" (409),
+	// "only an existing member can be made a manager" (400), a 403 — so it lands in
+	// a Notice that stays put, not a snackbar that auto-dismisses. `roleBusy` is
+	// the in-flight guard: these are the only writes with no modal to block a
+	// second click, which would otherwise fire a duplicate request.
+	const [ roleError, setRoleError ] = useState( '' );
+	const [ roleBusy, setRoleBusy ] = useState( false );
+	const [ membersView, setMembersView ] = useState( MEMBERS_VIEW );
+	const [ invitesView, setInvitesView ] = useState( INVITES_VIEW );
+
+	const closeModal = () => setModal( null );
+
+	// Every flow reports back through here. Mutations are awaited rather than
+	// rendered optimistically (see data/use-group.js), so completing one refetches
+	// the group and the screen re-renders from what the server actually stored.
+	const onDone = useCallback(
+		( message, options = {} ) => {
+			if ( message ) {
+				setSnackbar( { message } );
+			}
+			reload();
+			if ( ! options.keepOpen ) {
+				setModal( null );
+			}
+		},
+		[ reload ]
+	);
+
+	const changeRole = useCallback(
+		async ( member, role, message ) => {
+			setRoleBusy( true );
+			setRoleError( '' );
+			try {
+				await actions.setManagerRole( member.id, role );
+				onDone( message );
+			} catch ( e ) {
+				setRoleError( e?.message || __( 'Something went wrong.', 'newspack-plugin' ) );
+			} finally {
+				setRoleBusy( false );
+			}
+		},
+		[ actions, onDone ]
+	);
+
+	const goToOwner = useCallback( () => {
+		if ( group?.owner?.editUrl ) {
+			window.location.href = group.owner.editUrl;
+		}
+	}, [ group ] );
+
+	const memberRows = useMemo( () => group?.memberList || [], [ group ] );
+	const memberEmails = useMemo( () => memberRows.map( member => member.email ).filter( Boolean ), [ memberRows ] );
+	const { avatars: avatarsByEmail } = useAvatars( memberEmails );
+
+	// Header: the subscription leads, with the owner trailing in parentheses, so
+	// this view reads as being about the group rather than about a person.
+	useEffect( () => {
+		if ( ! group ) {
+			return;
+		}
+		const ownerName = group.owner?.name;
+		const withOwner = content => (
+			<>
+				{ content }
+				{ ownerName && (
+					<>
+						{ ' ' }
+						<span
+							className="newspack-subscribers__header-count"
+							/* translators: %s: name of the group owner. */
+							aria-label={ sprintf( __( 'Owned by %s', 'newspack-plugin' ), ownerName ) }
+						>
+							{ `(${ ownerName })` }
+						</span>
+					</>
+				) }
+			</>
+		);
+		setHeaderData( {
+			backNav: '#/groups',
+			sectionName: withOwner( `${ GROUP_LABEL_PLURAL } / ${ group.plan }` ),
+			// A function title renders its own badge: SectionHeader only auto-renders
+			// the `badges` array for string titles.
+			sectionTitle: () => (
+				<>
+					<span>{ withOwner( group.plan ) }</span>
+					<Badge intent={ STATUS_BADGE_INTENT[ group.status ] }>{ STATUS_LABELS[ group.status ] }</Badge>
+				</>
+			),
+			actions: [
+				{ type: 'more', label: __( 'View subscription', 'newspack-plugin' ), action: () => setModal( { kind: 'view-subscription' } ) },
+			],
+		} );
+	}, [ group, setHeaderData ] );
+
+	const memberFields = useMemo(
+		() => [
+			{
+				id: 'name',
+				label: __( 'Member', 'newspack-plugin' ),
+				enableGlobalSearch: true,
+				getValue: ( { item } ) => `${ item.name } ${ item.email }`,
+				render: ( { item } ) => {
+					const details = (
+						<div>
+							<span>{ item.name }</span>
+							<div className="newspack-subscribers__email">{ item.email }</div>
+						</div>
+					);
+					if ( ! SHOW_AVATARS ) {
+						return details;
+					}
+					const avatar = item.email ? avatarsByEmail[ item.email ] : undefined;
+					return (
+						<HStack spacing={ 3 } justify="flex-start" alignment="center">
+							{ avatar ? (
+								<img className="newspack-subscribers__avatar" src={ avatar } alt="" width={ 32 } height={ 32 } />
+							) : (
+								<span className="newspack-subscribers__avatar" aria-hidden="true" />
+							) }
+							{ details }
+						</HStack>
+					);
+				},
+			},
+			{
+				id: 'role',
+				label: __( 'Role', 'newspack-plugin' ),
+				// Rank, not the label: sorting the strings would slot Manager below
+				// Member and put the owner in the middle.
+				getValue: ( { item } ) => ROLE_RANK[ item.role ] ?? ROLE_RANK.member,
+				render: ( { item } ) =>
+					'member' === item.role ? (
+						<span>{ ROLE_LABELS.member }</span>
+					) : (
+						<Badge intent={ 'owner' === item.role ? 'stable' : 'informational' }>{ ROLE_LABELS[ item.role ] }</Badge>
+					),
+				enableSorting: true,
+			},
+			{
+				id: 'joinedAt',
+				label: __( 'Member since', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.joinedAt || '',
+				// The owner holds no membership record, so they have no join date.
+				render: ( { item } ) => <span>{ item.joinedAt ? fmtDate( item.joinedAt ) : '—' }</span>,
+				enableSorting: true,
+			},
+		],
+		[ avatarsByEmail ]
+	);
+
+	const memberActions = useMemo(
+		() => [
+			{
+				id: 'view-profile',
+				label: __( 'View profile', 'newspack-plugin' ),
+				isEligible: item => !! item.editUrl,
+				callback: items => {
+					window.location.href = items[ 0 ].editUrl;
+				},
+			},
+			{
+				id: 'make-manager',
+				label: __( 'Make manager', 'newspack-plugin' ),
+				disabled: roleBusy,
+				isEligible: item => 'member' === item.role && isManageable( group ),
+				callback: items =>
+					/* translators: %s: name of the member promoted to manager. */
+					changeRole( items[ 0 ], 'manager', sprintf( __( '%s is now a manager.', 'newspack-plugin' ), items[ 0 ].name ) ),
+			},
+			{
+				id: 'remove-manager',
+				label: __( 'Remove manager', 'newspack-plugin' ),
+				disabled: roleBusy,
+				isEligible: item => 'manager' === item.role && isManageable( group ),
+				callback: items =>
+					/* translators: %s: name of the manager demoted to member. */
+					changeRole( items[ 0 ], 'member', sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), items[ 0 ].name ) ),
+			},
+			{
+				id: 'remove-member',
+				label: items => _n( 'Remove member', 'Remove members', items.length, 'newspack-plugin' ),
+				isDestructive: true,
+				supportsBulk: true,
+				// The owner can never be removed from their own group.
+				isEligible: item => 'owner' !== item.role && isManageable( group ),
+				callback: items => setModal( { kind: 'remove', members: items } ),
+			},
+		],
+		[ group, changeRole, roleBusy ]
+	);
+
+	const { data: processedMembers, paginationInfo: membersPagination } = useMemo(
+		() => filterSortAndPaginate( memberRows, membersView, memberFields ),
+		[ memberRows, membersView, memberFields ]
+	);
+
+	const inviteRows = useMemo( () => group?.invites || [], [ group ] );
+
+	const inviteFields = useMemo(
+		() => [
+			{
+				id: 'email',
+				label: __( 'Sent to', 'newspack-plugin' ),
+				enableGlobalSearch: true,
+				getValue: ( { item } ) => item.email,
+				render: ( { item } ) => <span>{ item.email }</span>,
+			},
+			{
+				id: 'status',
+				label: __( 'Status', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.status,
+				render: ( { item } ) =>
+					'expired' === item.status ? (
+						<Badge intent="high">{ __( 'Expired', 'newspack-plugin' ) }</Badge>
+					) : (
+						<Badge intent="medium">{ __( 'Pending', 'newspack-plugin' ) }</Badge>
+					),
+				enableSorting: false,
+			},
+			{
+				id: 'sentAt',
+				label: __( 'Sent', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.sentAt || '',
+				render: ( { item } ) => <span>{ item.sentAt ? fmtDate( item.sentAt ) : '—' }</span>,
+				enableSorting: true,
+			},
+		],
+		[]
+	);
+
+	const inviteActions = useMemo(
+		() => [
+			{
+				id: 'resend-invite',
+				label: __( 'Resend invite', 'newspack-plugin' ),
+				// Re-issuing an invitation is a new invitation, so it needs an active
+				// group — the same gate the endpoint applies.
+				isEligible: () => isActive( group ),
+				callback: items => setModal( { kind: 'resend-invite', invite: items[ 0 ] } ),
+			},
+			{
+				id: 'cancel-invite',
+				label: __( 'Cancel invite', 'newspack-plugin' ),
+				isDestructive: true,
+				// Cancelling is a write like any other, so it needs the caller's write
+				// capability. Unlike resending it does not need an active group —
+				// clearing invitations off a lapsed group is exactly when it is useful.
+				isEligible: () => isManageable( group ),
+				callback: items => setModal( { kind: 'cancel-invite', invite: items[ 0 ] } ),
+			},
+		],
+		[ group ]
+	);
+
+	const { data: processedInvites, paginationInfo: invitesPagination } = useMemo(
+		() => filterSortAndPaginate( inviteRows, invitesView, inviteFields ),
+		[ inviteRows, invitesView, inviteFields ]
+	);
+
+	if ( loading ) {
+		return (
+			<div className="newspack-subscribers__loading">
+				<Waiting isCenter />
+			</div>
+		);
+	}
+
+	if ( error || ! group ) {
+		return (
+			<Notice
+				isError
+				/* translators: %s: singular group label (e.g. "Group", "Team"). */
+				noticeText={ error || sprintf( __( '%s not found.', 'newspack-plugin' ), GROUP_LABEL ) }
+			>
+				<Button variant="link" onClick={ reload }>
+					{ __( 'Retry', 'newspack-plugin' ) }
+				</Button>
+			</Notice>
+		);
+	}
+
+	const hasSeats = seatsRemaining( group ) > 0;
+	const canInvite = isActive( group ) && hasSeats;
+	const hasLink = !! group.inviteLink?.active;
+
+	const copyInviteLink = async () => {
+		let url = '';
+		try {
+			// An existing link is copied as-is; if there is none, creating it is
+			// implicit in the first copy, mirroring the owner's My Account flow.
+			url = ( hasLink ? group.inviteLink.url : ( await actions.generateInviteLink() )?.url ) || '';
+		} catch ( e ) {
+			setSnackbar( { message: e?.message || __( 'Could not create the invite link.', 'newspack-plugin' ) } );
+			return;
+		}
+		if ( ! url ) {
+			setSnackbar( { message: __( 'Could not create the invite link.', 'newspack-plugin' ) } );
+			return;
+		}
+		// `clipboard` is absent in an insecure context and in older browsers, where
+		// optional chaining would resolve to undefined and let the await succeed —
+		// reporting a copy that never happened. The link is minted either way, so a
+		// clipboard failure reports the link, not a failed action.
+		let copied = false;
+		try {
+			if ( window.navigator?.clipboard?.writeText ) {
+				await window.navigator.clipboard.writeText( url );
+				copied = true;
+			}
+		} catch ( e ) {
+			copied = false;
+		}
+		onDone(
+			copied
+				? __( 'Invite link copied to clipboard.', 'newspack-plugin' )
+				: __( 'Invite link ready, but it could not be copied to your clipboard.', 'newspack-plugin' )
+		);
+	};
+
+	return (
+		<div className="newspack-subscribers__profile">
+			{ roleError && <Notice isError noticeText={ roleError } /> }
+			<HStack className="newspack-subscribers__section-head" justify="space-between" alignment="center">
+				<HStack spacing={ 2 } justify="flex-start" alignment="baseline" expanded={ false }>
+					<h2 className="newspack-subscribers__section-title">{ __( 'Members', 'newspack-plugin' ) }</h2>
+					<span className="newspack-subscribers__seat-count">{ `(${ seatCountText( group ) })` }</span>
+				</HStack>
+				<HStack spacing={ 2 } justify="flex-end" expanded={ false }>
+					<Button variant="tertiary" size="compact" onClick={ () => setModal( { kind: 'seats' } ) } disabled={ ! isManageable( group ) }>
+						{ __( 'Adjust seats', 'newspack-plugin' ) }
+					</Button>
+					<Dropdown
+						placement="bottom-end"
+						renderToggle={ ( { isOpen, onToggle } ) => (
+							<Button variant="secondary" size="compact" onClick={ onToggle } aria-expanded={ isOpen } disabled={ ! isActive( group ) }>
+								{ __( 'Add members', 'newspack-plugin' ) }
+							</Button>
+						) }
+						renderContent={ ( { onClose } ) => (
+							<MenuGroup>
+								<MenuItem
+									disabled={ ! canInvite }
+									onClick={ () => {
+										onClose();
+										setModal( { kind: 'add-members' } );
+									} }
+								>
+									{ __( 'Add directly', 'newspack-plugin' ) }
+								</MenuItem>
+								<MenuItem
+									disabled={ ! canInvite }
+									onClick={ () => {
+										onClose();
+										setModal( { kind: 'invite' } );
+									} }
+								>
+									{ __( 'Invite by email', 'newspack-plugin' ) }
+								</MenuItem>
+								<MenuItem
+									onClick={ () => {
+										onClose();
+										copyInviteLink();
+									} }
+								>
+									{ hasLink ? __( 'Copy invite link', 'newspack-plugin' ) : __( 'Create invite link', 'newspack-plugin' ) }
+								</MenuItem>
+								{ hasLink && (
+									<MenuItem
+										onClick={ () => {
+											onClose();
+											setModal( { kind: 'regenerate-link' } );
+										} }
+									>
+										{ __( 'Regenerate invite link', 'newspack-plugin' ) }
+									</MenuItem>
+								) }
+								{ hasLink && (
+									<MenuItem
+										isDestructive
+										onClick={ () => {
+											onClose();
+											setModal( { kind: 'disable-link' } );
+										} }
+									>
+										{ __( 'Disable invite link', 'newspack-plugin' ) }
+									</MenuItem>
+								) }
+							</MenuGroup>
+						) }
+					/>
+				</HStack>
+			</HStack>
+			<DataViews
+				data={ processedMembers }
+				fields={ memberFields }
+				view={ membersView }
+				onChangeView={ setMembersView }
+				actions={ memberActions }
+				paginationInfo={ membersPagination }
+				defaultLayouts={ { table: {} } }
+				getItemId={ item => item.id }
+				search
+			/>
+
+			{ inviteRows.length > 0 && (
+				<>
+					<Divider alignment="full-width" variant="tertiary" />
+					<h2 className="newspack-subscribers__section-head newspack-subscribers__section-title">
+						{ __( 'Invitations', 'newspack-plugin' ) }
+					</h2>
+					<DataViews
+						data={ processedInvites }
+						fields={ inviteFields }
+						view={ invitesView }
+						onChangeView={ setInvitesView }
+						actions={ inviteActions }
+						paginationInfo={ invitesPagination }
+						defaultLayouts={ { table: {} } }
+						getItemId={ item => item.id }
+						search={ false }
+					/>
+				</>
+			) }
+
+			{ 'add-members' === modal?.kind && <AddMembersFlow group={ group } actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
+			{ 'invite' === modal?.kind && <InviteMemberFlow group={ group } actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
+			{ 'remove' === modal?.kind && (
+				<RemoveMemberFlow members={ modal.members } actions={ actions } onClose={ closeModal } onDone={ onDone } />
+			) }
+			{ 'seats' === modal?.kind && <AdjustSeatsFlow group={ group } actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
+			{ 'regenerate-link' === modal?.kind && <RegenerateLinkFlow actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
+			{ 'disable-link' === modal?.kind && <DisableLinkFlow actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
+			{ 'resend-invite' === modal?.kind && (
+				<ResendInviteFlow invite={ modal.invite } actions={ actions } onClose={ closeModal } onDone={ onDone } />
+			) }
+			{ 'cancel-invite' === modal?.kind && (
+				<CancelInviteFlow invite={ modal.invite } actions={ actions } onClose={ closeModal } onDone={ onDone } />
+			) }
+			{ 'view-subscription' === modal?.kind && <SubscriptionDetailsDrawer group={ group } onViewOwner={ goToOwner } onClose={ closeModal } /> }
+
+			{ snackbar && (
+				<div className="newspack-subscribers__snackbar">
+					<Snackbar onRemove={ () => setSnackbar( null ) }>{ snackbar.message }</Snackbar>
+				</div>
+			) }
+		</div>
+	);
+}
+
+// Remount on id change (key) so per-id state — modal, snackbar, table views —
+// resets cleanly rather than briefly showing the previous group's state.
+export default function GroupDetail() {
+	const { id } = useParams();
+	return <GroupDetailView key={ id } />;
+}
