@@ -18,6 +18,35 @@ export const getEditorCanvas = async (page) => {
   return isIframed ? page.frameLocator('iframe[name="editor-canvas"]') : page;
 };
 
+// Open the block editor's Settings sidebar, which holds both the document panels
+// and the selected block's controls. It starts closed on a phone viewport, and
+// its open state is a persisted editor preference, so it can't be assumed either
+// way -- toggle only when it's closed, so this is safe to call unconditionally.
+export const openEditorSettingsSidebar = async (page) => {
+  const sidebarToggle = page
+    .getByRole("button", { name: "Settings", exact: true })
+    .first();
+  await sidebarToggle.waitFor();
+  if ((await sidebarToggle.getAttribute("aria-expanded")) !== "true") {
+    await sidebarToggle.click();
+  }
+};
+
+// Open a named panel in the Settings sidebar and return it. The panels are
+// collapsed until opened, on top of the sidebar itself being closed.
+export const openEditorSettingsPanel = async (page, panelName) => {
+  await openEditorSettingsSidebar(page);
+  const panelToggle = page.getByRole("button", { name: panelName, exact: true });
+  await panelToggle.waitFor();
+  if ((await panelToggle.getAttribute("aria-expanded")) !== "true") {
+    await panelToggle.click();
+  }
+  return page
+    .locator(".components-panel__body")
+    .filter({ has: panelToggle })
+    .first();
+};
+
 // Log in to the admin dashboard.
 export const logIn = async (page) => {
   await page.goto("/wp-login.php");
