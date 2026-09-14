@@ -9,6 +9,7 @@ import { Draggable, ExternalLink, ToggleControl } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Icon, check, chevronDown, chevronUp, dragHandle } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -28,8 +29,7 @@ import classnames from 'classnames';
  * @return {JSX.Element} ActionCard component.
  */
 const ActionCard = ( {
-	badge,
-	badgeLevel,
+	badges,
 	className,
 	checkbox,
 	children,
@@ -78,6 +78,11 @@ const ActionCard = ( {
 	dragWrapperRef,
 	onDragCallback,
 } ) => {
+	// A badge with no label paints an empty pill, since the library Badge styles its
+	// wrapper rather than its text. Callers derive labels from data that can be absent
+	// (a gateway with no connection status, an unmapped placement), so drop those here
+	// rather than asking every caller to guard its own array.
+	const visibleBadges = ( badges || [] ).filter( badge => badge?.label );
 	const [ expanded, setExpanded ] = useState( Boolean( isExpanded ) );
 	const [ dragging, setDragging ] = useState( false );
 	const [ targetIndex, setTargetIndex ] = useState( null );
@@ -124,7 +129,6 @@ const ActionCard = ( {
 	const togglePositionClass = togglePosition === 'trailing' ? 'is-toggle-trailing' : 'is-toggle-leading';
 	const hasInternalLink = href && href.indexOf( 'http' ) !== 0;
 	const isDisplayingSecondaryAction = secondaryActionText && onSecondaryActionClick;
-	const badges = ! Array.isArray( badge ) && badge ? [ badge ] : badge;
 	const HeadingTag = `h${ heading }`;
 
 	const cardContent = (
@@ -166,15 +170,11 @@ const ActionCard = ( {
 								) }
 								{ ! titleLink && ! expandable && title }
 							</span>
-							{ badges?.length &&
-								badges.map( ( badgeText, i ) => (
-									<span
-										key={ `badge-${ i }` }
-										className={ `newspack-action-card__badge newspack-action-card__badge-level-${ badgeLevel }` }
-									>
-										{ badgeText }
-									</span>
-								) ) }
+							{ visibleBadges.map( ( { label, intent }, i ) => (
+								<Badge key={ `badge-${ i }` } intent={ intent ?? 'none' }>
+									{ label }
+								</Badge>
+							) ) }
 						</HeadingTag>
 						{ description && (
 							<p>

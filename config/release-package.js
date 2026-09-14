@@ -28,7 +28,9 @@ module.exports = {
 		'@semantic-release/commit-analyzer',
 		'@semantic-release/release-notes-generator',
 		'@semantic-release/npm',
-		[ '@semantic-release/github', { successComment: false, releasedLabels: false, failComment: false, failTitle: false } ],
+		// A release failure is surfaced by the workflow itself, so semantic-release
+		// does not also open an issue for it.
+		[ '@semantic-release/github', { failComment: false, failTitle: false } ],
 	],
 	prepare: [
 		'@semantic-release/changelog',

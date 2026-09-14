@@ -107,6 +107,14 @@
 	}
 }
 
+// This style is the one that renders a category as a chip, so it is where the
+// gap between chips belongs. A tag label is always a chip, but it takes only the
+// spacing here: its background and colour stay on `.tag-label.flag`, so a
+// per-section category rule cannot reach it (NPPM-3049).
+.tag-labels a {
+	margin: 0 #{0.25 * structure.$size__spacing-unit} #{0.25 * structure.$size__spacing-unit} 0;
+}
+
 .wpnbha,
 .wpnbpc {
 	.cat-links a {
@@ -118,6 +126,13 @@
 			background-color: transparent;
 			color: inherit;
 		}
+	}
+
+	// Categories give up the chip treatment inside these blocks, so the gap that
+	// separated the chips goes with it. Labels keep their own chip, and the
+	// `.tag-label + .tag-label` gap in the plugin partial still holds them apart.
+	.tag-labels a {
+		margin: 0;
 	}
 }
 
@@ -196,6 +211,13 @@ div.author-bio {
 			margin-bottom: 0;
 			padding: 0.25em 0.5em;
 		}
+	}
+
+	// Labels take the smaller type and lose the gap below, as the categories
+	// beside them do. Their padding stays on `.tag-label.flag`.
+	.tag-labels a {
+		font-size: 0.65rem;
+		margin-bottom: 0;
 	}
 }
 

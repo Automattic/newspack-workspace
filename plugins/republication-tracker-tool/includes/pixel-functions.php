@@ -195,6 +195,10 @@ function wprtt_get_dedup_identity(): string {
  * @return string Title of the referring URL, or empty string if we can't find it.
  */
 function wprtt_get_referring_page_title( string $url ): string {
+	if ( '' === trim( $url ) ) {
+		return '';
+	}
+
 	// The 2-second timeout bounds how long a pixel request can hold a worker on
 	// this blocking outbound call — the endpoint is public, and with the
 	// counting guards on its responses are uncacheable. The VIP helper gets the

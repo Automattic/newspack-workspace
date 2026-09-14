@@ -2,7 +2,7 @@
 
 const settings = newspack_metering_settings;
 
-const storeKey = 'metering-' + settings.gate_id || 0;
+const storeKey = 'metering-' + ( settings.meter_key || settings.gate_id || 0 );
 
 function getCurrentExpiration() {
 	const date = new Date();
