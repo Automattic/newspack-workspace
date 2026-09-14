@@ -1,3 +1,15 @@
+# newspack-popups [3.18.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.17.0...newspack-popups@3.18.0) (2026-09-14)
+
+
+### Features
+
+* **audience:** date range segmentation for ESP date fields ([#767](https://github.com/Automattic/newspack-workspace/issues/767)) ([21c4732](https://github.com/Automattic/newspack-workspace/commit/21c4732a2b8cbadea1e7d6710ca22d22b3282cef))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
 # newspack-popups [3.17.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.5...newspack-popups@3.17.0) (2026-08-31)
 
 
