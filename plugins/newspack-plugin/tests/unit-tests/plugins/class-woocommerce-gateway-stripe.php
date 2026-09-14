@@ -719,7 +719,13 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 
 		WooCommerce_Gateway_Stripe::refresh_card_token_metadata(
 			$user_id,
-			$this->stripe_card_payment_method( 'pm_rebranded', [ 'brand' => 'visa', 'last4' => '4242' ] )
+			$this->stripe_card_payment_method(
+				'pm_rebranded',
+				[
+					'brand' => 'visa',
+					'last4' => '4242',
+				]
+			)
 		);
 
 		$this->assertSame( 'visa', $token->get_card_type() );

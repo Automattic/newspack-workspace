@@ -47,6 +47,8 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 		$this->user_id   = $user_id;
 	}
 	/**
+	 * Card brand.
+	 *
 	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
 	 */
 	public function get_card_type( $context = 'view' ) {
@@ -69,6 +71,8 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	}
 	/**
 	 * WooCommerce stores the month zero-padded ('02'), so mirror that here.
+	 *
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
 	 */
 	public function get_expiry_month( $context = 'view' ) {
 		return $this->expiry_month;
