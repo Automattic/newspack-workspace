@@ -89,7 +89,7 @@ describe( 'criteria matching', () => {
 	} );
 	it( 'discards a "range" max lower than 1 as invalid, so it does not bound the value', () => {
 		// The segment editor stores max: 0 when the Max bound is unticked, and the
-		// pre-criteria migration stored it for every "at least N" segment (NPPM-3389).
+		// pre-criteria migration stored it for every "at least N" segment.
 		registerCriteria( 'range_max_zero', { matchingFunction: 'range', matchingAttribute: () => 5 } );
 		expect( getCriteria( 'range_max_zero' ).matches( { value: { min: 1, max: 0 } } ) ).toEqual( true );
 		registerCriteria( 'range_max_string_zero', { matchingFunction: 'range', matchingAttribute: () => 5 } );

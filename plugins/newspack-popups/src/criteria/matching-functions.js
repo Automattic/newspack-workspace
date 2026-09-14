@@ -97,7 +97,7 @@ export default {
 		// The segment editor stores max: 0 when the Max bound is unticked, and the
 		// pre-criteria migration stored it for every "at least N" segment; the model
 		// drops it on save and read, and this keeps a client with older stored
-		// criteria in agreement (NPPM-3389).
+		// criteria in agreement.
 		const hasMax = hasBound( max ) && Number( max ) >= 1;
 		if ( ( hasBound( min ) && criteria.value < min ) || ( hasMax && criteria.value > max ) ) {
 			return false;

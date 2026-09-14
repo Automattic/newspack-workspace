@@ -844,7 +844,7 @@ class SegmentsTest extends WP_UnitTestCase {
 	/**
 	 * A range `max` lower than 1 is invalid: the editor stores 0 when the Max bound
 	 * is unticked, and the pre-criteria migration stored it for every "at least N"
-	 * segment. Drop it on save so the front-end never has to interpret it (NPPM-3389).
+	 * segment. Drop it on save so the front-end never has to interpret it.
 	 */
 	public function test_update_segment_drops_invalid_range_max() {
 		Newspack_Popups_Segmentation::create_segment( $this->complete_and_valid );
