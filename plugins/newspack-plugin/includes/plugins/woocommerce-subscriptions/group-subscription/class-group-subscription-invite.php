@@ -42,6 +42,16 @@ class Group_Subscription_Invite {
 	const RESULT_QUERY_ARG = 'group_invite_result';
 
 	/**
+	 * Result codes for a WooCommerce Teams `join-team` link resolved after the flip.
+	 * They live here, with the rest of the invite result codes, because
+	 * render_invite_notice() is the one place that turns a code into reader-facing
+	 * text. See Group_Subscription_Teams_Invite.
+	 */
+	const RESULT_JOIN_TEAM_INVALID = 'join_team_link_invalid';
+	const RESULT_JOIN_TEAM_MEMBER  = 'join_team_already_member';
+	const RESULT_JOIN_TEAM_SIGN_IN = 'join_team_sign_in';
+
+	/**
 	 * The query arg used by invite-link URLs.
 	 *
 	 * @var string
@@ -67,6 +77,19 @@ class Group_Subscription_Invite {
 	 * @var string
 	 */
 	const LINK_META = 'newspack_group_subscription_link_invites';
+
+	/**
+	 * The subscription meta key recording when a subscription's invite link was withdrawn.
+	 * Stored as: the withdrawal timestamp.
+	 *
+	 * An absent link cannot otherwise be told from one that was never minted, because
+	 * delete_link_invite() removes the entry outright. Only the withdrawal knows the
+	 * difference, so it is what records it — and a caller minting a link on a reader's
+	 * behalf can then refuse to put a withdrawn one back into circulation.
+	 *
+	 * @var string
+	 */
+	const LINK_REVOKED_META = 'newspack_group_subscription_link_invites_revoked';
 
 	/**
 	 * Initialize hooks.
@@ -406,6 +429,8 @@ class Group_Subscription_Invite {
 		];
 
 		$subscription->update_meta_data( self::LINK_META, $entry );
+		// A fresh link supersedes any earlier withdrawal.
+		$subscription->delete_meta_data( self::LINK_REVOKED_META );
 		$subscription->save();
 
 		return array_merge(
@@ -451,8 +476,26 @@ class Group_Subscription_Invite {
 		// Delete rather than store an empty array, so a disabled link is indistinguishable from one
 		// that never existed. This clears a legacy subscription's per-manager keys in one go.
 		$subscription->delete_meta_data( self::LINK_META );
+		// Record the withdrawal alongside the removal: the entry is gone, and this is the only path
+		// that knows the absent link was disabled rather than never minted.
+		$subscription->update_meta_data( self::LINK_REVOKED_META, time() );
 		$subscription->save();
 		return true;
+	}
+
+	/**
+	 * Whether a subscription's invite link was withdrawn, rather than never minted.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return bool
+	 */
+	public static function link_invite_was_revoked( $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return false;
+		}
+		return (bool) $subscription->get_meta( self::LINK_REVOKED_META, true );
 	}
 
 	/**
@@ -506,14 +549,21 @@ class Group_Subscription_Invite {
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
 	 * @param string               $email The email address receiving the invitation.
+	 * @param bool                 $send_email Whether to email the invitation. Pass false to store
+	 *                                         the invite silently, for a caller that is about to
+	 *                                         put the reader in front of the invite itself rather
+	 *                                         than mail it to them.
 	 *
 	 * @return array|\WP_Error The invite data, or a WP_Error if the key cannot be generated.
 	 *                         The returned array carries an `email_sent` flag reporting whether
 	 *                         the invitation email actually went out — the invite row is written
 	 *                         either way, so a caller that needs to report or retry delivery must
 	 *                         read that flag rather than treat a non-error return as "delivered".
+	 *                         With `$send_email` false no send is attempted and the flag is false.
+	 *                         The key is deliberately not returned: api_invite() passes this array
+	 *                         straight to a REST response, and the key is a bearer credential.
 	 */
-	public static function generate_invite( $subscription, $email ) {
+	public static function generate_invite( $subscription, $email, $send_email = true ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_subscription', __( 'Invalid subscription.', 'newspack-plugin' ) );
@@ -532,11 +582,14 @@ class Group_Subscription_Invite {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_email', __( 'Invalid email address.', 'newspack-plugin' ) );
 		}
 		$existing_user = get_user_by( 'email', $email );
-		if ( $existing_user && ! Reader_Activation::is_user_reader( $existing_user ) ) {
-			return new \WP_Error( 'newspack_group_subscription_invite_non_reader', __( 'Not a valid reader account.', 'newspack-plugin' ) );
-		}
+		// Existing membership is a fact independent of current eligibility, so it's checked first
+		// against the raw member list -- not user_is_member(), which is eligibility-filtered and can
+		// only narrow via the newspack_group_subscription_user_is_member filter.
 		if ( $existing_user && in_array( (int) $existing_user->ID, array_map( 'absint', Group_Subscription::get_members( $subscription ) ), true ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_existing_user', __( 'User is already a member of this group subscription.', 'newspack-plugin' ) );
+		}
+		if ( $existing_user && ! Group_Subscription::is_eligible_member( $existing_user ) ) {
+			return new \WP_Error( 'newspack_group_subscription_invite_not_eligible', __( 'This account is not eligible for group membership.', 'newspack-plugin' ) );
 		}
 
 		// Delete any invites for the given email address. There should only be one invitation per
@@ -579,7 +632,7 @@ class Group_Subscription_Invite {
 		// is persisted (it was written above), so this flag never lands in meta — it
 		// exists so callers can tell "invite stored and emailed" from "invite stored,
 		// email never went out", which the send path signals by returning false.
-		$new_invite['email_sent'] = (bool) self::send_invite_email( $subscription->get_id(), $invite_key, $email );
+		$new_invite['email_sent'] = $send_email && (bool) self::send_invite_email( $subscription->get_id(), $invite_key, $email );
 
 		return $new_invite;
 	}
@@ -688,7 +741,12 @@ class Group_Subscription_Invite {
 			);
 		}
 		$invite = self::get_invite_by_key( $subscription, $key );
-		if ( ! $invite || $invite['email'] !== $email ) {
+		// Case-insensitively, as cancel_invites() already matches below: sanitize_email()
+		// preserves case and wp_insert_user() does not lowercase user_email, so a stored
+		// invite and the account it was issued to legitimately differ in case. Strictly
+		// compared, the reader is told their invitation is for a different address than
+		// their own, and nothing they can do fixes it.
+		if ( ! $invite || strtolower( $invite['email'] ) !== strtolower( $email ) ) {
 			// No need to display an error if the invite is already fulfilled: just give a success
 			// message. This covers a direct member add cancelling the invite before it is accepted.
 			// Only the acting user is checked, deliberately: every caller binds $email to the current
@@ -697,9 +755,14 @@ class Group_Subscription_Invite {
 			// Checking the $_GET-supplied $email's account instead would turn this into a "does this
 			// address belong to this group?" oracle for any future caller that skips that binding.
 			$current_user_id = get_current_user_id();
+			// Existing membership is checked against the raw member meta, not user_is_member()
+			// (which reads through get_group_subscriptions_for_user() and is filtered by current
+			// eligibility): a member who has since lost eligibility (e.g. a role change) is still
+			// a member of this group, and re-accepting a now-cancelled invite must recognise that
+			// rather than falling through to the "invalid invitation" error.
 			if (
 				Group_Subscription::user_is_manager( $current_user_id, $subscription )
-				|| Group_Subscription::user_is_member( $current_user_id, $subscription )
+				|| in_array( $current_user_id, array_map( 'intval', Group_Subscription::get_members( $subscription ) ), true )
 			) {
 				return true;
 			}
@@ -719,13 +782,14 @@ class Group_Subscription_Invite {
 			return $result;
 		}
 		// update_members() returns an empty members_added both when the user could not be added
-		// (e.g. a non-reader account) AND when they are already a member (it skips the duplicate).
+		// (e.g. an ineligible account) AND when they are already a member (it skips the duplicate).
 		// Only the genuine non-add is a failure: leave the invite intact so it can be retried.
 		// An already-member is a fulfilled invite, so fall through to cancel it (it would otherwise
 		// keep counting toward the member limit).
-		// user_is_member() returns bool here (the invite always targets a group subscription, so the
-		// null "not a group subscription" case can't occur); a falsy result means "not a member".
-		if ( empty( $result['members_added'][ $user->ID ] ) && ! Group_Subscription::user_is_member( $user->ID, $subscription ) ) {
+		// Checked against the raw member meta, not user_is_member(): existing membership is a fact
+		// independent of current eligibility, and user_is_member() is filtered by it (see the note
+		// above on the invite-already-fulfilled branch).
+		if ( empty( $result['members_added'][ $user->ID ] ) && ! in_array( (int) $user->ID, array_map( 'intval', Group_Subscription::get_members( $subscription ) ), true ) ) {
 			return new \WP_Error(
 				'newspack_group_subscription_invite_not_added',
 				__( 'Could not add this user to the group.', 'newspack-plugin' )
@@ -733,6 +797,16 @@ class Group_Subscription_Invite {
 		}
 
 		self::cancel_invite( $subscription, $email );
+
+		/**
+		 * Fires after a reader joins a group subscription by accepting an invite.
+		 *
+		 * @param \WC_Subscription $subscription The group subscription joined.
+		 * @param string           $email        The address the invite was issued to.
+		 * @param int              $user_id      The reader who joined.
+		 */
+		do_action( 'newspack_group_subscription_invite_accepted', $subscription_obj, $email, (int) $user->ID );
+
 		return true;
 	}
 
@@ -753,7 +827,7 @@ class Group_Subscription_Invite {
 			return false;
 		}
 		$invite = self::get_invite_by_key( $subscription_obj, $key );
-		if ( ! $invite || $invite['email'] !== $email || self::is_invite_expired( $invite ) ) {
+		if ( ! $invite || strtolower( $invite['email'] ) !== strtolower( $email ) || self::is_invite_expired( $invite ) ) {
 			return false;
 		}
 		return true;
@@ -819,7 +893,7 @@ class Group_Subscription_Invite {
 		// Case 1: User is logged in.
 		$current_user = wp_get_current_user();
 		if ( $current_user->ID ) {
-			if ( $current_user->user_email !== $email ) {
+			if ( strtolower( $current_user->user_email ) !== strtolower( $email ) ) {
 				self::redirect_with_result( 'error_email_mismatch' );
 				return;
 			}
@@ -1004,10 +1078,14 @@ class Group_Subscription_Invite {
 			return;
 		}
 
-		// User is already in the group? Just send them to the subscription view.
+		// User is already in the group? Just send them to the subscription view. Checked against
+		// the raw member meta, not user_is_member() (which is filtered by current eligibility):
+		// existing membership is a fact independent of eligibility, so a member who has since lost
+		// it (e.g. a role change) re-clicking their link invite must still be recognised as a
+		// member, rather than falling through to update_members() and failing to be re-added.
 		if (
 			Group_Subscription::user_is_manager( $current_user->ID, $subscription )
-			|| Group_Subscription::user_is_member( $current_user->ID, $subscription )
+			|| in_array( $current_user->ID, array_map( 'intval', Group_Subscription::get_members( $subscription ) ), true )
 		) {
 			$success_url = function_exists( 'wc_get_endpoint_url' )
 					? wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), $myaccount_url )
@@ -1031,7 +1109,7 @@ class Group_Subscription_Invite {
 		if ( is_wp_error( $result ) || empty( $result['members_added'][ $current_user->ID ] ) ) {
 			// update_members() returns either a WP_Error (subscription invalid, limit reached) or
 			// an array that can legitimately have an empty members_added (e.g. the current user is
-			// not a Reader Activation reader, so the per-member loop skipped them). Only WP_Error
+			// not an eligible member, so the per-member loop skipped them). Only WP_Error
 			// has get_error_message(); the array path needs its own message.
 			$error_message = is_wp_error( $result )
 				? $result->get_error_message()
@@ -1068,15 +1146,30 @@ class Group_Subscription_Invite {
 			return;
 		}
 
-		$messages = [
-			'link_invalid'              => __( 'This link is no longer valid. Please contact the group manager.', 'newspack-plugin' ),
-			'link_full'                 => __( 'This group already has the maximum number of members. Please contact the group manager.', 'newspack-plugin' ),
-			'link_failed'               => __( "We couldn't add you to the group. Please contact the group manager.", 'newspack-plugin' ),
-			'login_needed'              => __( 'Please log in or register an account to join the group.', 'newspack-plugin' ),
-			'error_invalid_link'        => __( 'Invalid invitation link.', 'newspack-plugin' ),
-			'error_email_mismatch'      => __( 'This invitation is for a different email address.', 'newspack-plugin' ),
-			'error_invite_invalid'      => __( 'Invalid or expired invitation.', 'newspack-plugin' ),
-			'error_registration_failed' => __( 'Could not create your account. Please try again.', 'newspack-plugin' ),
+		$group_label = Group_Subscription::get_label_lower( 'singular' );
+		$messages    = [
+			self::RESULT_JOIN_TEAM_INVALID => sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'This invitation link is no longer valid. Ask the %s\'s owner or manager to send you a new invitation.', 'newspack-plugin' ),
+				$group_label
+			),
+			self::RESULT_JOIN_TEAM_MEMBER  => sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'You already have access through this %s.', 'newspack-plugin' ),
+				$group_label
+			),
+			// Deliberately says nothing about the invited address: an unauthenticated
+			// visitor may be holding a forwarded link, and naming the group or the
+			// access would confirm to them that the invited address is a member.
+			self::RESULT_JOIN_TEAM_SIGN_IN => __( 'Sign in to continue with this invitation.', 'newspack-plugin' ),
+			'link_invalid'                 => __( 'This link is no longer valid. Please contact the group manager.', 'newspack-plugin' ),
+			'link_full'                    => __( 'This group already has the maximum number of members. Please contact the group manager.', 'newspack-plugin' ),
+			'link_failed'                  => __( "We couldn't add you to the group. Please contact the group manager.", 'newspack-plugin' ),
+			'login_needed'                 => __( 'Please log in or register an account to join the group.', 'newspack-plugin' ),
+			'error_invalid_link'           => __( 'Invalid invitation link.', 'newspack-plugin' ),
+			'error_email_mismatch'         => __( 'This invitation is for a different email address.', 'newspack-plugin' ),
+			'error_invite_invalid'         => __( 'Invalid or expired invitation.', 'newspack-plugin' ),
+			'error_registration_failed'    => __( 'Could not create your account. Please try again.', 'newspack-plugin' ),
 		];
 
 		if ( 'success' === $result ) {
@@ -1084,11 +1177,18 @@ class Group_Subscription_Invite {
 			$type    = 'success';
 		} else {
 			$message = ! empty( $messages[ $result ] ) ? $messages[ $result ] : __( 'There was a problem with your invitation.', 'newspack-plugin' );
-			// 'login_needed' is an informational call to action, not an error, so it announces politely.
-			$type = 'login_needed' === $result ? 'success' : 'error';
+			// These two are informational calls to action, not errors, so they announce politely.
+			$type = in_array( $result, [ 'login_needed', self::RESULT_JOIN_TEAM_SIGN_IN ], true ) ? 'success' : 'error';
 		}
 
-		Newspack_UI::add_notice( $message, [ 'type' => $type ] );
+		$notice_args = [ 'type' => $type ];
+		// These are the whole of what a reader stranded by a legacy invitation link is
+		// told, and they arrive on a page the reader did not ask for, so they stay put
+		// rather than erasing themselves after a few seconds.
+		if ( in_array( $result, [ self::RESULT_JOIN_TEAM_INVALID, self::RESULT_JOIN_TEAM_MEMBER, self::RESULT_JOIN_TEAM_SIGN_IN ], true ) ) {
+			$notice_args['autohide'] = false;
+		}
+		Newspack_UI::add_notice( $message, $notice_args );
 	}
 
 	/**
@@ -1099,7 +1199,7 @@ class Group_Subscription_Invite {
 	 *                                render_invite_notice() maps the code to a localized message.
 	 * @param string|null $target_url Optional redirect base. Defaults to My Account or home_url().
 	 */
-	private static function redirect_with_result( $status, $target_url = null ) {
+	public static function redirect_with_result( $status, $target_url = null ) {
 		$args = [ self::RESULT_QUERY_ARG => $status ];
 		if ( null === $target_url ) {
 			$target_url = is_user_logged_in() && function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
@@ -1158,6 +1258,15 @@ class Group_Subscription_Invite {
 		}
 		$subscription->update_meta_data( self::META, $all_invites );
 		$subscription->save();
+
+		/**
+		 * Fires after pending invites are cancelled on a group subscription.
+		 *
+		 * @param \WC_Subscription $subscription The group subscription.
+		 * @param string[]         $emails       The addresses whose invites were cancelled.
+		 */
+		do_action( 'newspack_group_subscription_invites_cancelled', $subscription, (array) $emails );
+
 		return true;
 	}
 }

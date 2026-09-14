@@ -24,9 +24,11 @@ class Group_Subscription_API {
 	/**
 	 * Rows each of the two /search-users queries returns at most. The endpoint
 	 * feeds a picker, so a term broad enough to hit the cap is one the caller
-	 * should narrow rather than page through.
+	 * should narrow rather than page through. The cap applies before the
+	 * is_eligible_member() post-filter, so it has to leave headroom for
+	 * ineligible matches.
 	 */
-	const SEARCH_USERS_LIMIT = 20;
+	const SEARCH_USERS_LIMIT = 50;
 	/**
 	 * Initialize hooks.
 	 */
@@ -529,9 +531,22 @@ class Group_Subscription_API {
 		if ( mb_strlen( $search ) < self::SEARCH_USERS_MIN_LENGTH ) {
 			return \rest_ensure_response( [] );
 		}
+		// The candidate query is intentionally NOT role-restricted. Group_Subscription::is_eligible_member()
+		// -- which runs the newspack_group_subscription_member_eligible filter -- is the sole authority on
+		// who is an eligible group member, so a publisher can opt a custom-role user in (or a normally
+		// eligible role-holder out) via that filter. A role__in allowlist here would silently exclude an
+		// opted-in user (and could never exclude an opted-out one) before the predicate ever runs, so
+		// results are post-filtered against is_eligible_member() below instead.
 		$exclude   = Group_Subscription::get_members( $subscription );
 		$exclude[] = $subscription->get_user_id();
-		$query1    = get_users(
+		// Each query is capped at SEARCH_USERS_LIMIT candidates ('number' below); results are
+		// then post-filtered through is_eligible_member() below, so a response may hold fewer
+		// than the cap. A publisher can raise the cap via the
+		// newspack_group_subscription_user_query_args filter. The cap applies before that
+		// post-filter, so on a large site a search term whose first SEARCH_USERS_LIMIT matches
+		// are all ineligible (e.g. staff) returns an empty list even though eligible matches
+		// exist further down; raise the cap via the filter above if that bites.
+		$query1 = get_users(
 			/**
 			 * Filter the user query args for searching for group subscription users.
 			 *
@@ -541,12 +556,11 @@ class Group_Subscription_API {
 			apply_filters(
 				'newspack_group_subscription_user_query_args',
 				[
+					'number'         => self::SEARCH_USERS_LIMIT,
 					'fields'         => [ 'ID', 'user_email' ],
 					'exclude'        => $exclude,
-					'number'         => self::SEARCH_USERS_LIMIT,
 					'search'         => "*$search*",
 					'search_columns' => [ 'ID', 'user_login', 'user_url', 'user_email', 'user_nicename', 'display_name' ],
-					'role__in'       => Reader_Activation::get_reader_roles(),
 				],
 				'main_query'
 			)
@@ -562,10 +576,9 @@ class Group_Subscription_API {
 			\apply_filters(
 				'newspack_group_subscription_user_query_args',
 				[
+					'number'     => self::SEARCH_USERS_LIMIT,
 					'fields'     => [ 'ID', 'user_email' ],
 					'exclude'    => $exclude,
-					'number'     => self::SEARCH_USERS_LIMIT,
-					'role__in'   => Reader_Activation::get_reader_roles(),
 					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 						'relation' => 'OR',
 						[
@@ -583,6 +596,13 @@ class Group_Subscription_API {
 				'meta_query'
 			)
 		);
+		$merged = array_merge( $query1, $query2 );
+		if ( ! empty( $merged ) ) {
+			// Prime the user and user-meta caches once, up front, so the per-candidate
+			// is_eligible_member() predicate below (get_user_by() + meta reads + user_can())
+			// hits cache instead of issuing two more queries per candidate.
+			\cache_users( array_map( 'intval', \wp_list_pluck( $merged, 'ID' ) ) );
+		}
 		$users = array_map(
 			function( $user ) {
 				return [
@@ -590,7 +610,12 @@ class Group_Subscription_API {
 					'text' => $user->user_email . ' (#' . $user->ID . ')',
 				];
 			},
-			array_merge( $query1, $query2 )
+			array_filter(
+				$merged,
+				function( $user ) {
+					return Group_Subscription::is_eligible_member( (int) $user->ID );
+				}
+			)
 		);
 
 		// Sort by ID.

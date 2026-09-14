@@ -332,6 +332,7 @@ final class GA4_Custom_Dimensions {
 			'prompt_title'                => 'Prompt Title',
 			'gate_has_donation_block'     => 'Gate Has Donation Block',
 			'gate_has_registration_block' => 'Gate Has Registration Block',
+			'gate_has_newsletter_block'   => 'Gate Has Newsletter Block',
 			'gate_has_checkout_button'    => 'Gate Has Checkout Button',
 			'gate_has_registration_link'  => 'Gate Has Registration Link',
 			'gate_has_signin_link'        => 'Gate Has Signin Link',
