@@ -583,7 +583,7 @@ class Group_Subscription_Invite {
 		}
 		$existing_user = get_user_by( 'email', $email );
 		if ( $existing_user && ! Group_Subscription::is_eligible_member( $existing_user ) ) {
-			return new \WP_Error( 'newspack_group_subscription_invite_non_reader', __( 'Not a valid reader account.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_group_subscription_invite_non_reader', __( 'This account is not eligible for group membership.', 'newspack-plugin' ) );
 		}
 		if ( $existing_user && in_array( (int) $existing_user->ID, array_map( 'absint', Group_Subscription::get_members( $subscription ) ), true ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_existing_user', __( 'User is already a member of this group subscription.', 'newspack-plugin' ) );
