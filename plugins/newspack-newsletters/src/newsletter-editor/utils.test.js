@@ -81,6 +81,16 @@ describe( 'validateNewsletter', () => {
 		);
 	} );
 
+	it( 'names the list the way the connected provider does', () => {
+		// Every other case here runs with the global deleted, so only the fallback
+		// is exercised: without this the label lookup could be dropped and the
+		// suite would stay green.
+		window.newspack_newsletters_data = { labels: { list: 'audience' } };
+		expect( validateNewsletter( validMeta, [] ) ).toContain(
+			'The saved audience isn’t available in the connected email service provider. Choose a new one before sending.'
+		);
+	} );
+
 	it( 'skips every check for the manual provider', () => {
 		window.newspack_newsletters_data = { service_provider: 'manual' };
 		expect( validateNewsletter( { send_list_id: '99' }, [ { id: '42', label: 'Weekly' } ] ) ).toEqual( [] );
