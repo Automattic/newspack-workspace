@@ -65,7 +65,7 @@ describe( 'validateNewsletter', () => {
 
 	it( 'reports a saved list that is absent from the fetched lists', () => {
 		const errors = validateNewsletter( validMeta, [ { id: '99', label: 'Somebody else' } ] );
-		expect( errors ).toContain( 'The saved list isn’t available in the connected email service provider.' );
+		expect( errors ).toContain( 'The saved list isn’t available in the connected email service provider. Choose a new one before sending.' );
 	} );
 
 	it( 'does not report an unresolved list before the lists have been fetched', () => {
@@ -76,7 +76,9 @@ describe( 'validateNewsletter', () => {
 	it( 'reports an unresolved list when the provider has no lists at all', () => {
 		// A settled empty roster is the one case where the stored id certainly
 		// cannot resolve, so it must block rather than be treated as unknown.
-		expect( validateNewsletter( validMeta, [] ) ).toContain( 'The saved list isn’t available in the connected email service provider.' );
+		expect( validateNewsletter( validMeta, [] ) ).toContain(
+			'The saved list isn’t available in the connected email service provider. Choose a new one before sending.'
+		);
 	} );
 
 	it( 'skips every check for the manual provider', () => {

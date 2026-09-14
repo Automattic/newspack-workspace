@@ -4,7 +4,7 @@
  * WordPress dependencies
  */
 import { useEffect, useRef } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -97,7 +97,21 @@ export const validateNewsletter = ( meta = {}, sendLists = null ) => {
 		// A stored list id survives an ESP switch, so a set id is not the same thing
 		// as a reachable audience — only one the connected provider still knows
 		// about counts.
-		messages.push( __( 'The saved list isn’t available in the connected email service provider.', 'newspack-newsletters' ) );
+		//
+		// The provider's own word for a list, matching the sidebar warning for this
+		// same condition: a Mailchimp publisher reading "list" here and "audience"
+		// there sees two problems where there is one.
+		const listLabel = window.newspack_newsletters_data?.labels?.list || __( 'list', 'newspack-newsletters' );
+		messages.push(
+			sprintf(
+				// Translators: Shown when a newsletter's stored list isn't available in the connected ESP. %s is the ESP's label for the list entity.
+				__(
+					'The saved %s isn’t available in the connected email service provider. Choose a new one before sending.',
+					'newspack-newsletters'
+				),
+				listLabel
+			)
+		);
 	}
 	return messages;
 };
