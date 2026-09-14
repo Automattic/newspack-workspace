@@ -247,10 +247,9 @@ class Group_Subscription_API {
 		// results are post-filtered against is_eligible_member() below instead.
 		$exclude   = Group_Subscription::get_members( $subscription );
 		$exclude[] = $subscription->get_user_id();
-		// Neither query paginates (no 'number'/'offset' is set), so post-filtering through
-		// is_eligible_member() below can't shrink a page -- there is no page to shrink. If a
-		// site adds 'number' via the newspack_group_subscription_user_query_args filter,
-		// results are still post-filtered afterward and may come back under that count.
+		// Each query is capped at 50 candidates ('number' below); results are then post-filtered
+		// through is_eligible_member() below, so a response may hold fewer than the cap. A
+		// publisher can raise the cap via the newspack_group_subscription_user_query_args filter.
 		$query1 = get_users(
 			/**
 			 * Filter the user query args for searching for group subscription users.
@@ -261,6 +260,7 @@ class Group_Subscription_API {
 			apply_filters(
 				'newspack_group_subscription_user_query_args',
 				[
+					'number'         => 50,
 					'fields'         => [ 'ID', 'user_email' ],
 					'exclude'        => $exclude,
 					'search'         => "*$search*",
@@ -280,6 +280,7 @@ class Group_Subscription_API {
 			\apply_filters(
 				'newspack_group_subscription_user_query_args',
 				[
+					'number'     => 50,
 					'fields'     => [ 'ID', 'user_email' ],
 					'exclude'    => $exclude,
 					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
@@ -299,6 +300,13 @@ class Group_Subscription_API {
 				'meta_query'
 			)
 		);
+		$merged = array_merge( $query1, $query2 );
+		if ( ! empty( $merged ) ) {
+			// Prime the user and user-meta caches once, up front, so the per-candidate
+			// is_eligible_member() predicate below (get_user_by() + meta reads + user_can())
+			// hits cache instead of issuing two more queries per candidate.
+			\cache_users( array_map( 'intval', \wp_list_pluck( $merged, 'ID' ) ) );
+		}
 		$users = array_map(
 			function( $user ) {
 				return [
@@ -307,7 +315,7 @@ class Group_Subscription_API {
 				];
 			},
 			array_filter(
-				array_merge( $query1, $query2 ),
+				$merged,
 				function( $user ) {
 					return Group_Subscription::is_eligible_member( (int) $user->ID );
 				}
