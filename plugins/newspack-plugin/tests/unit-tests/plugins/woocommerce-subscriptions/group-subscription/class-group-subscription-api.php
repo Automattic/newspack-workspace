@@ -447,6 +447,42 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Authors/contributors are eligible group members (see Group_Subscription::is_eligible_member()),
+	 * so the search that backs the admin metabox's "add member" picker must be able to surface
+	 * them, not just subscribers/customers. Otherwise an author could be invited or migrated into
+	 * a group but never found via the picker.
+	 */
+	public function test_search_users_includes_author_role() {
+		$subscription = $this->create_group_subscription( 'active' );
+		$admin_id     = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		// WooCommerce is mocked, so the capability its install would add is granted here.
+		( new WP_User( $admin_id ) )->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $admin_id );
+
+		$author_id     = self::factory()->user->create(
+			[
+				'role'       => 'author',
+				'user_login' => 'search-target-author',
+			]
+		);
+		$subscriber_id = self::factory()->user->create(
+			[
+				'role'       => 'subscriber',
+				'user_login' => 'search-target-subscriber',
+			]
+		);
+
+		$response = $this->dispatch_search( $subscription->get_id(), 'search-target' );
+		// get_users() with a 'fields' allowlist returns raw DB rows rather than WP_User objects,
+		// so ->ID comes back as a numeric string; cast for a value comparison against the
+		// factory-created (int) IDs.
+		$ids = array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
+
+		$this->assertContains( $subscriber_id, $ids, 'A subscriber should still be a searchable candidate.' );
+		$this->assertContains( $author_id, $ids, 'An author should be a searchable candidate now that authors are eligible group members.' );
+	}
+
+	/**
 	 * A group whose owner was deleted is not manageable by a caller with no account.
 	 */
 	public function test_routes_deny_anonymous_caller_on_ownerless_group() {

@@ -239,9 +239,18 @@ class Group_Subscription_API {
 		if ( ! $subscription ) {
 			return \rest_ensure_response( new \WP_Error( 'newspack_group_subscription_api_search_users', __( 'Subscription not found.', 'newspack-plugin' ) ) );
 		}
-		$exclude   = Group_Subscription::get_members( $subscription );
-		$exclude[] = $subscription->get_user_id();
-		$query1    = get_users(
+		// Search candidates include readers (subscriber/customer) plus the non-reader roles that
+		// are eligible group members by default (author/contributor, see
+		// Group_Subscription::DEFAULT_ELIGIBLE_MEMBER_ROLES), so an eligible author/contributor can
+		// be found here, not just invited/migrated in. The add-time gate (update_members() ->
+		// is_eligible_member()) still enforces the full eligibility rule -- including the
+		// newspack_group_subscription_member_eligible filter and the privileged-role exclusion --
+		// so this candidate set can stay a little broader than that rule without a member actually
+		// being addable without passing it.
+		$searchable_roles = array_values( array_unique( array_merge( Reader_Activation::get_reader_roles(), Group_Subscription::DEFAULT_ELIGIBLE_MEMBER_ROLES ) ) );
+		$exclude          = Group_Subscription::get_members( $subscription );
+		$exclude[]        = $subscription->get_user_id();
+		$query1           = get_users(
 			/**
 			 * Filter the user query args for searching for group subscription users.
 			 *
@@ -255,7 +264,7 @@ class Group_Subscription_API {
 					'exclude'        => $exclude,
 					'search'         => "*$search*",
 					'search_columns' => [ 'ID', 'user_login', 'user_url', 'user_email', 'user_nicename', 'display_name' ],
-					'role__in'       => Reader_Activation::get_reader_roles(),
+					'role__in'       => $searchable_roles,
 				],
 				'main_query'
 			)
@@ -273,7 +282,7 @@ class Group_Subscription_API {
 				[
 					'fields'     => [ 'ID', 'user_email' ],
 					'exclude'    => $exclude,
-					'role__in'   => Reader_Activation::get_reader_roles(),
+					'role__in'   => $searchable_roles,
 					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 						'relation' => 'OR',
 						[
