@@ -1,3 +1,15 @@
+# newspack-story-budget [1.3.0](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.2.5...newspack-story-budget@1.3.0) (2026-09-14)
+
+
+### Features
+
+* **components:** adopt design system badges (DSGNEWS-215) ([fc4c8f7](https://github.com/Automattic/newspack-workspace/commit/fc4c8f73ccba6ec4075e09578a43938a40eda60f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
 ## newspack-story-budget [1.2.5](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.2.4...newspack-story-budget@1.2.5) (2026-09-09)
 
 
