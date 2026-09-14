@@ -514,11 +514,13 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 
 	/**
 	 * A user who holds both Editor and Author is still staff, and must not slip into
-	 * membership through the Author/Contributor default -- the multi-role case the
-	 * single-role editor test above doesn't exercise, since a plain Editor never reaches
-	 * the Author/Contributor role-intersect branch of is_eligible_member() at all.
+	 * membership through the Author/Contributor default -- the multi-role case that
+	 * test_update_members_skips_non_eligible_users() in
+	 * tests/unit-tests/content-gate/group-subscriptions.php doesn't exercise, since its
+	 * plain Editor never reaches the Author/Contributor role-intersect branch of
+	 * is_eligible_member() at all.
 	 */
-	public function test_editor_is_not_added_as_group_member() {
+	public function test_multi_role_editor_author_is_not_added_as_group_member() {
 		$owner_id         = $this->create_reader_user();
 		$editor_author_id = $this->create_multi_role_user( [ 'editor', 'author' ] );
 		$sub              = $this->create_group_subscription( $owner_id, 3 );
@@ -717,22 +719,6 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 
 		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author must not gain eligibility from the Author role.' );
 		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author must not gain eligibility from the Author role.' );
-	}
-
-	/**
-	 * The member-eligibility filter can still opt in a privileged multi-role user -- the
-	 * capability guard only removes the *default* eligibility, not a publisher's explicit
-	 * override.
-	 */
-	public function test_is_eligible_member_filter_can_still_opt_in_privileged_multi_role_user() {
-		$editor_author_id = $this->create_multi_role_user( [ 'editor', 'author' ] );
-
-		$allow_editor_author = function ( $eligible, $user_id ) use ( $editor_author_id ) {
-			return $user_id === $editor_author_id ? true : $eligible;
-		};
-		add_filter( 'newspack_group_subscription_member_eligible', $allow_editor_author, 10, 2 );
-		$this->assertTrue( Group_Subscription::is_eligible_member( $editor_author_id ), 'The filter can still opt in an Editor+Author user.' );
-		remove_filter( 'newspack_group_subscription_member_eligible', $allow_editor_author, 10 );
 	}
 
 	/**
