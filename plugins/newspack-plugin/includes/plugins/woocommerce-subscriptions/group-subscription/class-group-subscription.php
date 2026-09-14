@@ -43,6 +43,16 @@ class Group_Subscription {
 	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
 
 	/**
+	 * Roles that are eligible to be group-subscription members by default, in addition to readers.
+	 *
+	 * Authors and Contributors can create content but are neither editors/administrators (who bypass
+	 * the content gate outright) nor readers (who satisfy access rules on their own). Without this they
+	 * fall through with no path to restricted content. Administrators/editors are intentionally absent:
+	 * they already have full access and do not need a group grant.
+	 */
+	const DEFAULT_ELIGIBLE_MEMBER_ROLES = [ 'author', 'contributor' ];
+
+	/**
 	 * Build the per-subscription joined-at user_meta key.
 	 *
 	 * @param int $subscription_id Subscription ID.
@@ -644,15 +654,19 @@ class Group_Subscription {
 				\delete_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ) );
 				// Leaving the group also ends any manager role — no orphaned managers.
 				\delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
+				// The eligibility guard that used to gate removal is gone (see the note above), so an ID
+				// whose user row was deleted out-of-band (orphaned meta) can reach here with no WP_User to
+				// read from. Resolve once and fall back to an empty email rather than dereferencing null.
+				$member_user = \get_userdata( $member_id );
 				$members_removed[ $member_id ] = [
-					'email' => \get_userdata( $member_id )->user_email,
+					'email' => $member_user ? $member_user->user_email : '',
 					'url'   => \get_edit_user_link( $member_id ),
 				];
 			}
 		}
 
-		// Narrow the additions to the IDs that would genuinely become members: non-readers and users
-		// who already hold this subscription's member meta are no-ops. Filtering them here rather
+		// Narrow the additions to the IDs that would genuinely become members: ineligible users and
+		// users who already hold this subscription's member meta are no-ops. Filtering them here rather
 		// than in the add loop below keeps the limit projection honest -- counting a no-op ID would
 		// overstate the post-add total and reject an add that in fact fits.
 		$members_to_add = array_values(
@@ -718,8 +732,8 @@ class Group_Subscription {
 		// below wants to name the affected members without carrying their addresses (see there).
 		$invites_to_cancel = [];
 
-		// Add new members. $members_to_add holds only genuinely-addable readers at this point, so the
-		// reader and duplicate-meta guards live in the filter above rather than here.
+		// Add new members. $members_to_add holds only genuinely-addable eligible members at this point,
+		// so the eligibility and duplicate-meta guards live in the filter above rather than here.
 		foreach ( $members_to_add as $member_id ) {
 			if ( \add_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\update_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ), time() );
@@ -769,16 +783,6 @@ class Group_Subscription {
 			'invites_cancelled' => array_values( $invites_to_cancel ),
 		];
 	}
-
-	/**
-	 * Roles that are eligible to be group-subscription members by default, in addition to readers.
-	 *
-	 * Authors and Contributors can create content but are neither editors/administrators (who bypass
-	 * the content gate outright) nor readers (who satisfy access rules on their own). Without this they
-	 * fall through with no path to restricted content. Administrators/editors are intentionally absent:
-	 * they already have full access and do not need a group grant.
-	 */
-	const DEFAULT_ELIGIBLE_MEMBER_ROLES = [ 'author', 'contributor' ];
 
 	/**
 	 * Whether a user may be a member of a group subscription.
