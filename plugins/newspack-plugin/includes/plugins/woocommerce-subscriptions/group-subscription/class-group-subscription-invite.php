@@ -582,11 +582,14 @@ class Group_Subscription_Invite {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_email', __( 'Invalid email address.', 'newspack-plugin' ) );
 		}
 		$existing_user = get_user_by( 'email', $email );
-		if ( $existing_user && ! Group_Subscription::is_eligible_member( $existing_user ) ) {
-			return new \WP_Error( 'newspack_group_subscription_invite_not_eligible', __( 'This account is not eligible for group membership.', 'newspack-plugin' ) );
-		}
+		// Existing membership is a fact independent of current eligibility, so it's checked first
+		// against the raw member list -- not user_is_member(), which is eligibility-filtered and can
+		// only narrow via the newspack_group_subscription_user_is_member filter.
 		if ( $existing_user && in_array( (int) $existing_user->ID, array_map( 'absint', Group_Subscription::get_members( $subscription ) ), true ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_existing_user', __( 'User is already a member of this group subscription.', 'newspack-plugin' ) );
+		}
+		if ( $existing_user && ! Group_Subscription::is_eligible_member( $existing_user ) ) {
+			return new \WP_Error( 'newspack_group_subscription_invite_not_eligible', __( 'This account is not eligible for group membership.', 'newspack-plugin' ) );
 		}
 
 		// Delete any invites for the given email address. There should only be one invitation per

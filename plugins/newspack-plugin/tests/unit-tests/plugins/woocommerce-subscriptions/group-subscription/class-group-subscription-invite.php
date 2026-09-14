@@ -371,6 +371,41 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A member who loses eligibility after joining must still be reported as an
+	 * existing member, not as ineligible, when re-invited. generate_invite() used to
+	 * check eligibility before existing membership, so this returned the "not
+	 * eligible" error instead of "already a member" -- masking the real reason the
+	 * invite could not be sent.
+	 */
+	public function test_generate_invite_reports_existing_member_before_eligibility() {
+		$owner_id     = $this->create_user( true );
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		$member_id = $this->create_author_user();
+		$email     = get_userdata( $member_id )->user_email;
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+
+		$member = get_user_by( 'id', $member_id );
+		$member->set_role( 'editor' );
+
+		$result = Group_Subscription_Invite::generate_invite( $subscription, $email );
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'Re-inviting an existing member should fail.' );
+		$this->assertSame(
+			'newspack_group_subscription_invite_existing_user',
+			$result->get_error_code(),
+			'Existing membership should be reported ahead of the eligibility check.'
+		);
+	}
+
+	/**
 	 * Run process_invite_request(), converting its terminal redirect into a
 	 * catchable signal so the test can continue.
 	 *
