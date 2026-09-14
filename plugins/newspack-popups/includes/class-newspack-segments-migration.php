@@ -152,6 +152,30 @@ final class Newspack_Segments_Migration {
 	}
 
 	/**
+	 * Build a range criterion value from a legacy min/max configuration pair.
+	 *
+	 * A bound the legacy configuration left unset is omitted rather than written as 0.
+	 * The front-end range matcher treats 0 as "no bound", but storing it is ambiguous
+	 * and once cost every "at least N" segment its prompts (NPPM-3389).
+	 *
+	 * @param array  $configuration Legacy segment configuration.
+	 * @param string $min_key       Configuration key holding the minimum.
+	 * @param string $max_key       Configuration key holding the maximum.
+	 *
+	 * @return array Range value with only the bounds that were set.
+	 */
+	private static function migrate_range( $configuration, $min_key, $max_key ) {
+		$value = [];
+		if ( ! empty( $configuration[ $min_key ] ) ) {
+			$value['min'] = $configuration[ $min_key ];
+		}
+		if ( ! empty( $configuration[ $max_key ] ) ) {
+			$value['max'] = $configuration[ $max_key ];
+		}
+		return $value;
+	}
+
+	/**
 	 * Migrate criteria configuration.
 	 *
 	 * @param array $segment Segment.
@@ -165,23 +189,19 @@ final class Newspack_Segments_Migration {
 		$configuration = $segment['configuration'];
 		$criteria      = [];
 		// Migrate posts read.
-		if ( ! empty( $configuration['min_posts'] ) || ! empty( $configuration['max_posts'] ) ) {
+		$articles_read = self::migrate_range( $configuration, 'min_posts', 'max_posts' );
+		if ( ! empty( $articles_read ) ) {
 			$criteria[] = [
 				'criteria_id' => 'articles_read',
-				'value'       => [
-					'min' => ! empty( $configuration['min_posts'] ) ? $configuration['min_posts'] : 0,
-					'max' => ! empty( $configuration['max_posts'] ) ? $configuration['max_posts'] : 0,
-				],
+				'value'       => $articles_read,
 			];
 		}
 		// Migrate posts read in session.
-		if ( ! empty( $configuration['min_session_posts'] ) || ! empty( $configuration['max_session_posts'] ) ) {
+		$articles_read_in_session = self::migrate_range( $configuration, 'min_session_posts', 'max_session_posts' );
+		if ( ! empty( $articles_read_in_session ) ) {
 			$criteria[] = [
 				'criteria_id' => 'articles_read_in_session',
-				'value'       => [
-					'min' => ! empty( $configuration['min_session_posts'] ) ? $configuration['min_session_posts'] : 0,
-					'max' => ! empty( $configuration['max_session_posts'] ) ? $configuration['max_session_posts'] : 0,
-				],
+				'value'       => $articles_read_in_session,
 			];
 		}
 		// Migrate favorite categories.

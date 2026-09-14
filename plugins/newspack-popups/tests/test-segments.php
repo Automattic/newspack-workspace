@@ -840,4 +840,27 @@ class SegmentsTest extends WP_UnitTestCase {
 		$this->assertCount( 1, $filtered );
 		$this->assertSame( 'injected', $filtered[0]['criteria_id'] );
 	}
+
+	/**
+	 * A legacy "at least N" configuration must migrate to a criteria value with no
+	 * `max` key at all. The old migration wrote `max => 0`, which the front-end range
+	 * matcher enforced from newspack-popups 3.16.0, so every prompt on such a segment
+	 * stayed hidden. Regression test for NPPM-3389.
+	 */
+	public function test_migration_omits_unset_range_bounds() {
+		$migrated = Newspack_Segments_Migration::migrate_criteria_configuration(
+			[
+				'configuration' => [
+					'min_posts'         => 1,
+					'max_session_posts' => 3,
+				],
+				'criteria'      => [],
+			]
+		);
+
+		$by_id = array_column( $migrated['criteria'], 'value', 'criteria_id' );
+
+		$this->assertSame( [ 'min' => 1 ], $by_id['articles_read'], 'An unset max must not be written as 0.' );
+		$this->assertSame( [ 'max' => 3 ], $by_id['articles_read_in_session'], 'An unset min must not be written as 0.' );
+	}
 }
