@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Campaigns plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Campaigns 3.16.5\n"
+"Project-Id-Version: Newspack Campaigns 3.17.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-popups\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-31T17:56:09+00:00\n"
+"POT-Creation-Date: 2026-09-14T18:18:21+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-popups\n"
@@ -65,7 +65,7 @@ msgstr ""
 msgid "Donate"
 msgstr ""
 
-#: includes/class-newspack-popups-criteria.php:151
+#: includes/class-newspack-popups-criteria.php:178
 msgid "Criteria already registered."
 msgstr ""
 
@@ -506,7 +506,7 @@ msgstr ""
 msgid "Segments for popups"
 msgstr ""
 
-#: includes/class-newspack-segments-model.php:711
+#: includes/class-newspack-segments-model.php:768
 msgid "Failed to sort due to outdated segment data. Please refresh and try again."
 msgstr ""
 

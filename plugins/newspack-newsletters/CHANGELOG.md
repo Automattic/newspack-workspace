@@ -1,3 +1,26 @@
+# newspack-newsletters [3.41.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.40.3...newspack-newsletters@3.41.0) (2026-09-14)
+
+
+### Bug Fixes
+
+* **newsletters:** hide abandoned auto-drafts from lists (DSGNEWS-213) ([#853](https://github.com/Automattic/newspack-workspace/issues/853)) ([cf852f4](https://github.com/Automattic/newspack-workspace/commit/cf852f4a9de86aaf3cc7481b75171fe839865953))
+* **newsletters:** hide the filter count badge in the admin lists ([#959](https://github.com/Automattic/newspack-workspace/issues/959)) ([00772c8](https://github.com/Automattic/newspack-workspace/commit/00772c8682a6ab5dbf67b0f41b5587d4507005aa))
+* **newsletters:** skip term embeds when the ads list hides those columns ([#704](https://github.com/Automattic/newspack-workspace/issues/704)) ([d730d9e](https://github.com/Automattic/newspack-workspace/commit/d730d9e4a948c2d706806798156987aeec241607))
+
+
+### Features
+
+* **audience:** date range segmentation for ESP date fields ([#767](https://github.com/Automattic/newspack-workspace/issues/767)) ([21c4732](https://github.com/Automattic/newspack-workspace/commit/21c4732a2b8cbadea1e7d6710ca22d22b3282cef))
+* **cli:** verify premium newsletter lists against the ESP (NPPD-2079, [#882](https://github.com/Automattic/newspack-workspace/issues/882)) ([f380111](https://github.com/Automattic/newspack-workspace/commit/f3801116d786b9462cc8507a8645c729f00e97be))
+* **components:** shared EmptyState component (DSGNEWS-211) ([#854](https://github.com/Automattic/newspack-workspace/issues/854)) ([6c31f8c](https://github.com/Automattic/newspack-workspace/commit/6c31f8cac683570e36f3768b0be6061b55d7c946))
+* **components:** use an icon and label for DataViews Status columns (DSGNEWS-222) ([aa1d404](https://github.com/Automattic/newspack-workspace/commit/aa1d40422ccddad0d34de67ed444f73f6d14ea49))
+* **newsletters:** show who is currently editing in the newsletters list ([#812](https://github.com/Automattic/newspack-workspace/issues/812)) ([0e802dd](https://github.com/Automattic/newspack-workspace/commit/0e802dd77db5064cbf6fa1a9c76d588d1457aed9))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
 ## newspack-newsletters [3.40.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.40.2...newspack-newsletters@3.40.3) (2026-09-09)
 
 
