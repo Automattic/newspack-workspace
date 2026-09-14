@@ -956,7 +956,10 @@ domReady( () => {
 	// activation scripts are deferred, so firing here can beat them — and then
 	// the checkout opens without the sign-in step and without registering as an
 	// overlay, which lets prompts open on top of it. Deferred scripts are done
-	// by DOMContentLoaded, so the trigger waits for that.
+	// by DOMContentLoaded, so the trigger waits for that rather than queueing on
+	// newspackRAS: that queue only flushes once newspack-plugin's reader
+	// activation script runs, and the modal needs only WooCommerce, so on a site
+	// without newspack-plugin a queued trigger would never fire.
 	afterDeferredScripts( handleModalCheckoutUrlParams );
 
 	/**
