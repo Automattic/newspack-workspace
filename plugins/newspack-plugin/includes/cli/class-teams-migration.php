@@ -1479,14 +1479,16 @@ class Teams_Migration {
 			WP_CLI::line( '' );
 		}
 
-		if ( $as_group && ( ! empty( $as_group_not_eligible_users ) || $as_group_errors ) ) {
+		if ( $as_group && ! empty( $as_group_not_eligible_users ) ) {
 			WP_CLI::warning(
 				sprintf(
-					'%d member(s) skipped — not eligible group members (e.g. administrators/editors); %d error(s).',
-					count( $as_group_not_eligible_users ),
-					$as_group_errors
+					'%d member(s) skipped — not eligible group members (e.g. administrators/editors).',
+					count( $as_group_not_eligible_users )
 				)
 			);
+		}
+		if ( $as_group && $as_group_errors > 0 ) {
+			WP_CLI::warning( sprintf( '%d error(s).', $as_group_errors ) );
 		}
 
 		if ( empty( $summary ) ) {

@@ -698,8 +698,9 @@ class Group_Subscription_Settings {
 		$seat_limit      = Group_Subscription::get_member_seat_limit( $subscription );
 		$pending_invites = Group_Subscription_Invite::get_invites( $subscription, false );
 		$is_at_limit     = null !== $seat_limit && ( count( $members ) + count( $pending_invites ) ) >= $seat_limit;
-		// Members in the raw set but not rendered as their own spot-marked row (currently just
-		// the owner, skipped above) still consume a spot; the JS adds this offset to its
+		// Members in the raw set but not rendered as their own spot-marked row (the owner,
+		// skipped above, plus any member whose get_user_by() returned null because the user
+		// was deleted out-of-band) still consume a spot; the JS adds this offset to its
 		// rendered-row tally so its live count matches this server-side one.
 		$spots_offset = count( $members ) - count( $member_rows );
 		?>
