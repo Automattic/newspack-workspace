@@ -678,7 +678,7 @@ class Group_Subscription_Settings {
 				continue;
 			}
 			$member_user = get_user_by( 'id', $member_id );
-			if ( $member_user && Group_Subscription::is_eligible_member( $member_user ) ) {
+			if ( $member_user ) {
 				$member_rows[] = [
 					'user'       => $member_user,
 					'is_manager' => in_array( $member_id, $managers, true ),
@@ -698,9 +698,9 @@ class Group_Subscription_Settings {
 		$seat_limit      = Group_Subscription::get_member_seat_limit( $subscription );
 		$pending_invites = Group_Subscription_Invite::get_invites( $subscription, false );
 		$is_at_limit     = null !== $seat_limit && ( count( $members ) + count( $pending_invites ) ) >= $seat_limit;
-		// Members in the raw set but not rendered as spot-marked rows (a manager who also carries
-		// member meta, or a non-reader member) still consume a spot; the JS adds this offset to
-		// its rendered-row tally so its live count matches this server-side one.
+		// Members in the raw set but not rendered as their own spot-marked row (currently just
+		// the owner, skipped above) still consume a spot; the JS adds this offset to its
+		// rendered-row tally so its live count matches this server-side one.
 		$spots_offset = count( $members ) - count( $member_rows );
 		?>
 		<div class="newspack-group-subscription__container<?php echo $is_at_limit ? ' is-at-limit' : ''; ?>" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>" data-member-limit="<?php echo \esc_attr( null === $seat_limit ? '' : (string) $seat_limit ); ?>" data-spots-offset="<?php echo \esc_attr( (string) $spots_offset ); ?>">
