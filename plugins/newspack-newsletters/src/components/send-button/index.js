@@ -362,28 +362,31 @@ export default compose( [
 	return (
 		<div style={ { display: 'flex' } }>
 			<PreviewHTMLButton />
-			{ /* The button carries the reason it is disabled. A disabled control
-			     receives no pointer events, so the tooltip lives on a wrapper, and
-			     the same text is repeated for screen readers — without it the only
-			     signal is the sidebar warning, which never renders when the author
-			     has that panel collapsed. */ }
-			<span title={ newsletterValidationErrors.length ? newsletterValidationErrors.join( '\n' ) : undefined }>
-				<Button
-					className="editor-post-publish-button"
-					isBusy={ isSaving && 'publish' === status }
-					variant="primary"
-					onClick={ handleModalOpen }
-					disabled={ ! isButtonEnabled }
-					aria-describedby={ newsletterValidationErrors.length ? 'newspack-newsletters-send-blocked' : undefined }
-				>
-					{ label }
-				</Button>
-			</span>
-			{ newsletterValidationErrors.length > 0 && (
-				<p id="newspack-newsletters-send-blocked" className="screen-reader-text">
-					{ newsletterValidationErrors.join( ' ' ) }
-				</p>
-			) }
+			{ /* The button carries the reason it is disabled, and has to stay
+			     focusable to deliver it: a natively disabled control leaves the tab
+			     order, where neither a tooltip nor aria-describedby ever fires for a
+			     keyboard user. `accessibleWhenDisabled` swaps `disabled` for
+			     `aria-disabled` and suppresses click and mousedown itself, so Send
+			     stays inert. `description` feeds both the tooltip and
+			     aria-describedby; `label` becomes aria-label, so it carries the
+			     button's own text rather than the reason, and `showTooltip` is
+			     required because the tooltip is otherwise suppressed on a button
+			     that has children. Without this the only signal is the sidebar
+			     warning, which never renders when the author has that panel
+			     collapsed. */ }
+			<Button
+				className="editor-post-publish-button"
+				isBusy={ isSaving && 'publish' === status }
+				variant="primary"
+				onClick={ handleModalOpen }
+				disabled={ ! isButtonEnabled }
+				accessibleWhenDisabled
+				label={ label }
+				showTooltip={ newsletterValidationErrors.length > 0 }
+				description={ newsletterValidationErrors.length ? newsletterValidationErrors.join( ' ' ) : undefined }
+			>
+				{ label }
+			</Button>
 			{ modalVisible && (
 				<Modal
 					className="newspack-newsletters__modal"
