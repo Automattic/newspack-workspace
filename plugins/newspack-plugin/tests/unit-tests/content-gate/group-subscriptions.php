@@ -746,7 +746,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 
 		$this->assertWPError( $result );
 		$this->assertEquals(
-			'newspack_group_subscription_invite_non_reader',
+			'newspack_group_subscription_invite_not_eligible',
 			$result->get_error_code()
 		);
 	}

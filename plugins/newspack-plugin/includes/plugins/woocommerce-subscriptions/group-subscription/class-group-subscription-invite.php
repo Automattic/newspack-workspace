@@ -583,7 +583,7 @@ class Group_Subscription_Invite {
 		}
 		$existing_user = get_user_by( 'email', $email );
 		if ( $existing_user && ! Group_Subscription::is_eligible_member( $existing_user ) ) {
-			return new \WP_Error( 'newspack_group_subscription_invite_non_reader', __( 'This account is not eligible for group membership.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_group_subscription_invite_not_eligible', __( 'This account is not eligible for group membership.', 'newspack-plugin' ) );
 		}
 		if ( $existing_user && in_array( (int) $existing_user->ID, array_map( 'absint', Group_Subscription::get_members( $subscription ) ), true ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_existing_user', __( 'User is already a member of this group subscription.', 'newspack-plugin' ) );
@@ -1070,7 +1070,7 @@ class Group_Subscription_Invite {
 		if ( is_wp_error( $result ) || empty( $result['members_added'][ $current_user->ID ] ) ) {
 			// update_members() returns either a WP_Error (subscription invalid, limit reached) or
 			// an array that can legitimately have an empty members_added (e.g. the current user is
-			// not a Reader Activation reader, so the per-member loop skipped them). Only WP_Error
+			// not an eligible member, so the per-member loop skipped them). Only WP_Error
 			// has get_error_message(); the array path needs its own message.
 			$error_message = is_wp_error( $result )
 				? $result->get_error_message()
