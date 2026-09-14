@@ -6,29 +6,31 @@ import { getSettledSendLists, validateNewsletter } from './utils';
 // Guards the condition that decides whether a resolution check may run at all.
 // Getting this wrong in either direction is worse than the bug it supports: too
 // eager and Send is disabled on valid newsletters, too lazy and it never fires.
-//
-// The gate is `hasRetrievedData` — the `retrieve` call — because that is the
-// request that asks the ESP for the stored id by id. `hasRetrievedLists` tracks
-// a different request that only the sidebar makes; gating on it would leave the
-// check asleep whenever the sidebar had not fetched.
+// Why the gate is `hasRetrievedData` and why it latches: see the docblock on
+// `getSettledSendLists`.
 describe( 'getSettledSendLists', () => {
 	const lists = [ { id: '42', label: 'Weekly' } ];
 	const retrieved = { newsletterData: { lists }, hasRetrievedData: true, isRetrievingData: false, isRetrievingLists: false };
 
 	it( 'returns the lists once the newsletter data has been retrieved', () => {
-		// `hasRetrievedLists` is the sidebar's flag and is deliberately absent from
-		// the gate: the send button must not wait on a panel the author may never
-		// open. Setting it false here fails if someone re-adds it to the gate.
+		// Setting `hasRetrievedLists` false here fails if someone re-adds the
+		// sidebar's flag to the gate.
 		expect( getSettledSendLists( retrieved ) ).toEqual( lists );
 		expect( getSettledSendLists( { ...retrieved, hasRetrievedLists: false } ) ).toEqual( lists );
 	} );
 
+	it( 'withholds the lists until a retrieve has succeeded', () => {
+		expect( getSettledSendLists( { ...retrieved, hasRetrievedData: false } ) ).toBeNull();
+	} );
+
 	it.each( [
-		[ 'the newsletter data is being retrieved', { isRetrievingData: true } ],
+		[ 'a retrieve is in flight', { isRetrievingData: true } ],
 		[ 'a send-list fetch is in flight', { isRetrievingLists: true } ],
-		[ 'the newsletter data has not been retrieved', { hasRetrievedData: false } ],
-	] )( 'withholds the lists while %s', ( _label, state ) => {
-		expect( getSettledSendLists( { ...retrieved, ...state } ) ).toBeNull();
+	] )( 'keeps a settled roster while %s', ( _label, state ) => {
+		// `retrieve` re-runs after every save. Withholding the answer for the
+		// duration of each one re-enabled Send on the newsletters this check
+		// exists to block, for as long as the request took.
+		expect( getSettledSendLists( { ...retrieved, ...state } ) ).toEqual( lists );
 	} );
 
 	it( 'reports a settled store with no lists key as an empty list', () => {
@@ -36,14 +38,7 @@ describe( 'getSettledSendLists', () => {
 	} );
 
 	it( 'reports a settled empty roster as an empty list, not as unknown', () => {
-		// An account with no lists is an answer: nothing can resolve against it.
-		// Collapsing that into null would skip the check in the one case where it
-		// is certain to fail.
 		expect( getSettledSendLists( { ...retrieved, newsletterData: { lists: [] } } ) ).toEqual( [] );
-	} );
-
-	it( 'tolerates an empty store state', () => {
-		expect( getSettledSendLists( {} ) ).toBeNull();
 	} );
 } );
 

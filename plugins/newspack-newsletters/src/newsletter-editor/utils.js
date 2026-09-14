@@ -40,27 +40,31 @@ export const isSupportedESP = () => {
  * Gated on the `retrieve` request rather than on the send-list fetch. Every
  * active provider's `retrieve` asks for the stored `send_list_id` by id and
  * widens only if that lookup fails, so once it has completed, a stored id still
- * absent from `lists` genuinely did not resolve. That also survives the cap on
- * how many lists `retrieve` returns for the autocomplete, since the stored id
- * is requested explicitly rather than hoped for among the first page.
+ * absent from `lists` did not resolve against the roster `retrieve` returned.
+ * That also survives the cap on how many lists `retrieve` returns for the
+ * autocomplete, since the stored id is requested explicitly rather than hoped
+ * for among the first page.
+ *
+ * The flag latches. `retrieve` runs again after every save, and withholding the
+ * answer for each in-flight request re-enabled Send on exactly the newsletters
+ * this check exists to block. A request in flight cannot change the answer
+ * anyway, because the store keeps the roster it already has across a refetch.
  *
  * `hasRetrievedLists` tracks a different request, which only the sidebar issues.
  * Gating on it would tie the send guard to whether the author had opened a panel,
  * leaving the check asleep whenever they had not.
  *
- * @param {Object}  newsletterDataState                   Result of the `useNewsletterData` hook.
- * @param {Object}  newsletterDataState.newsletterData    Newsletter data from the store.
- * @param {boolean} newsletterDataState.hasRetrievedData  Whether `retrieve` has completed.
- * @param {boolean} newsletterDataState.isRetrievingData  Whether `retrieve` is in flight.
- * @param {boolean} newsletterDataState.isRetrievingLists Whether a send-list fetch is in flight.
+ * @param {Object}  newsletterDataState                  Result of the `useNewsletterData` hook.
+ * @param {Object}  newsletterDataState.newsletterData   Newsletter data from the store.
+ * @param {boolean} newsletterDataState.hasRetrievedData Whether a `retrieve` has succeeded.
  * @return {?Object[]} The provider's lists once they are known, which may be an
  *                     empty array when the account genuinely has none. Null
  *                     while the answer is still unknown. The two are different
  *                     answers: an empty roster settles that a stored id cannot
  *                     resolve, where null settles nothing.
  */
-export const getSettledSendLists = ( { newsletterData, hasRetrievedData, isRetrievingData, isRetrievingLists } = {} ) => {
-	if ( ! hasRetrievedData || isRetrievingData || isRetrievingLists ) {
+export const getSettledSendLists = ( { newsletterData, hasRetrievedData } = {} ) => {
+	if ( ! hasRetrievedData ) {
 		return null;
 	}
 	return newsletterData?.lists ?? [];
@@ -92,10 +96,7 @@ export const validateNewsletter = ( meta = {}, sendLists = null ) => {
 	} else if ( sendLists && ! sendLists.find( item => item.id.toString() === listId.toString() ) ) {
 		// A stored list id survives an ESP switch, so a set id is not the same thing
 		// as a reachable audience — only one the connected provider still knows
-		// about counts. Null means the caller cannot answer that yet, and blocking
-		// Send on an unanswered question would disable it on perfectly valid
-		// newsletters. An empty array is an answer: the account has no lists, so
-		// nothing can resolve.
+		// about counts.
 		messages.push( __( 'The saved list isn’t available in the connected email service provider.', 'newspack-newsletters' ) );
 	}
 	return messages;
