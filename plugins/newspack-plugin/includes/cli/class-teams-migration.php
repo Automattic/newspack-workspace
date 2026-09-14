@@ -911,8 +911,10 @@ class Teams_Migration {
 	 * subscription backs.
 	 *
 	 * By default, iterates through membership plans with manual-only access and
-	 * creates free WooCommerce Subscriptions for active members who do not have
-	 * the `edit_others_posts` capability (i.e. are not administrators/editors).
+	 * creates free WooCommerce Subscriptions for active members who are eligible
+	 * group members per `Group_Subscription::is_eligible_member()` -- readers,
+	 * and Author/Contributor users without a privileged capability like
+	 * `edit_others_posts` (i.e. not administrators/editors).
 	 *
 	 * Plans with purchase/signup access can only be targeted with a member
 	 * selection flag — --only-without-live-subscription and/or
@@ -1193,7 +1195,7 @@ class Teams_Migration {
 		WP_CLI::line( '' );
 
 		$summary                            = [];
-		$as_group_not_eligible              = 0;
+		$as_group_not_eligible_users        = [];
 		$as_group_errors                    = 0;
 		$skipped_live_subscription_user_ids = [];
 		$granted_user_ids                   = [];
@@ -1262,15 +1264,27 @@ class Teams_Migration {
 					$matched_user_ids[ $user_id ] = true;
 				}
 
-				// Skip users with edit_others_posts (admins/editors).
-				if ( \user_can( $user_id, 'edit_others_posts' ) ) {
-					WP_CLI::line( sprintf( '  Membership %d (user %d): skipped — user has edit_others_posts.', $membership_id, $user_id ) );
-					continue;
-				}
-
 				$user = \get_userdata( $user_id );
 				if ( ! $user ) {
 					WP_CLI::warning( sprintf( '  Membership %d: user %d not found — skipping.', $membership_id, $user_id ) );
+					continue;
+				}
+
+				// Skip users who are not eligible group members. This is the same
+				// definition migrate_teams()/add_group_member() enforce via
+				// Group_Subscription::is_eligible_member() -- an admin/editor is
+				// skipped here exactly as there, and a reader who happens to hold a
+				// custom role granting edit_others_posts is no longer incorrectly
+				// excluded (previously this checked the raw edit_others_posts
+				// capability instead, which diverged from is_eligible_member() and
+				// skipped before the group-mode tally below could count it). Tracked
+				// per user, like $granted_user_ids below, so a user skipped across
+				// several in-scope plans is still counted once.
+				if ( ! Group_Subscription::is_eligible_member( $user ) ) {
+					WP_CLI::line( sprintf( '  Membership %d → user %d (%s): skipped — not an eligible group member.', $membership_id, $user_id, $user->user_email ) );
+					if ( $as_group ) {
+						$as_group_not_eligible_users[ $user_id ] = true;
+					}
 					continue;
 				}
 
@@ -1329,28 +1343,18 @@ class Teams_Migration {
 					}
 				}
 
-				// Group mode: add the user as a group member.
+				// Group mode: add the user as a group member. Eligibility was already
+				// confirmed by the shared pre-filter above, so every user reaching
+				// this point is guaranteed group-eligible.
 				if ( $as_group ) {
 					if ( $dry_run ) {
 						// Project the same outcome a live run would produce.
-						if ( ! Group_Subscription::is_eligible_member( $user_id ) ) {
-							WP_CLI::line( sprintf( '  [DRY RUN] Membership %d → user %d (%s): would skip — not an eligible group member.', $membership_id, $user_id, $user->user_email ) );
-							++$as_group_not_eligible;
-							continue;
-						}
 						$granted_user_ids[ $user_id ] = true;
 						WP_CLI::line( sprintf( '  [DRY RUN] Would add user %d (%s) as group member.', $user_id, $user->user_email ) );
 					} else {
-						// Checked before creating anything, so a plan whose only
-						// remaining member is not group-eligible leaves no orphan empty
-						// group subscription behind — mirrors the dry-run projection above.
-						if ( ! Group_Subscription::is_eligible_member( $user_id ) ) {
-							WP_CLI::line( sprintf( '  Membership %d → user %d (%s): skipped — not an eligible group member.', $membership_id, $user_id, $user->user_email ) );
-							++$as_group_not_eligible;
-							continue;
-						}
-						// Created here, on the first eligible member, so a plan with no
-						// eligible members creates nothing.
+						// Created here, on the first member reaching this point, so a
+						// plan whose every member was filtered out by the shared
+						// pre-filter above creates nothing.
 						if ( null === $group_subscription ) {
 							$group_subscription = self::create_group_subscription( $product_id, $product, $plan->post_title, $group_owner_id );
 							if ( \is_wp_error( $group_subscription ) ) {
@@ -1465,11 +1469,11 @@ class Teams_Migration {
 			WP_CLI::line( '' );
 		}
 
-		if ( $as_group && ( $as_group_not_eligible || $as_group_errors ) ) {
+		if ( $as_group && ( ! empty( $as_group_not_eligible_users ) || $as_group_errors ) ) {
 			WP_CLI::warning(
 				sprintf(
 					'%d member(s) skipped — not eligible group members (e.g. administrators/editors); %d error(s).',
-					$as_group_not_eligible,
+					count( $as_group_not_eligible_users ),
 					$as_group_errors
 				)
 			);

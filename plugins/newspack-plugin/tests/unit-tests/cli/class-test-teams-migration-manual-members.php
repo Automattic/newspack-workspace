@@ -1121,6 +1121,130 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A plan whose only member is an administrator/editor must still surface a
+	 * non-zero aggregate not-eligible tally. Before the fix, admins/editors were
+	 * skipped by the shared `edit_others_posts` pre-filter BEFORE the group-mode
+	 * not-eligible counter ever ran, so an all-admin/editor plan silently
+	 * produced no warning at all — contradicting the "all-skipped runs surface a
+	 * tally" guarantee covered by test_as_group_reports_skips_when_no_member_is_added()
+	 * (NPPD, ④a).
+	 */
+	public function test_as_group_all_admin_editor_plan_surfaces_a_not_eligible_tally() {
+		$plan_id        = $this->create_plan( 'manual-only' );
+		$group_owner_id = $this->create_reader_user();
+
+		$editor_id = wp_insert_user(
+			[
+				'user_login' => 'editor-' . wp_generate_password( 8, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'editor-' . wp_generate_password( 8, false ) . '@test.com',
+				'role'       => 'editor',
+			]
+		);
+		$this->user_ids[] = $editor_id;
+		$this->create_membership( $plan_id, $editor_id );
+
+		$live_output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'           => (string) $plan_id,
+				'as-group'           => true,
+				'group-owner-id'     => $group_owner_id,
+				'access-product-ids' => $this->access_products_flag(),
+				'live'               => true,
+			]
+		);
+
+		$this->assertStringContainsString( '1 member(s) skipped — not eligible group members', $live_output, 'An all-admin/editor plan must surface a non-zero aggregate not-eligible tally instead of silently skipping everyone.' );
+	}
+
+	/**
+	 * A non-eligible user active on two in-scope plans must be counted once in
+	 * the aggregate not-eligible tally, not once per membership row. Before the
+	 * fix, $as_group_not_eligible incremented per membership while the "added"
+	 * count deduped per user via $granted_user_ids, so the two bases disagreed
+	 * (④b).
+	 */
+	public function test_as_group_not_eligible_tally_counts_a_multi_plan_member_once() {
+		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+
+		$first_plan_id  = $this->create_plan( 'manual-only' );
+		$second_plan_id = $this->create_plan( 'manual-only' );
+		$group_owner_id = $this->create_reader_user();
+
+		$guest_id = wp_insert_user(
+			[
+				'user_login' => 'guest-' . wp_generate_password( 8, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'guest-' . wp_generate_password( 8, false ) . '@test.com',
+				'role'       => 'newspack_test_guest',
+			]
+		);
+		$this->user_ids[]  = $guest_id;
+		$first_membership  = $this->create_membership( $first_plan_id, $guest_id );
+		$second_membership = $this->create_membership( $second_plan_id, $guest_id );
+		$this->assertNotEmpty( $first_membership, 'Fixture guard: first membership must be created.' );
+		$this->assertNotEmpty( $second_membership, 'Fixture guard: second membership must be created.' );
+
+		$live_output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'           => $first_plan_id . ',' . $second_plan_id,
+				'as-group'           => true,
+				'group-owner-id'     => $group_owner_id,
+				'access-product-ids' => $this->access_products_flag(),
+				'live'               => true,
+			]
+		);
+
+		$this->assertStringContainsString( '1 member(s) skipped — not eligible group members', $live_output, 'A non-eligible member active on two in-scope plans must be counted once in the tally, not once per membership.' );
+		$this->assertStringNotContainsString( '2 member(s) skipped — not eligible group members', $live_output, 'The tally must not double count a repeat user across plans.' );
+
+		remove_role( 'newspack_test_guest' );
+	}
+
+	/**
+	 * A reader who happens to hold a custom role granting `edit_others_posts`
+	 * must be ADDED under --as-group, matching the eligibility definition
+	 * migrate_teams()/add_group_member() already enforce via
+	 * Group_Subscription::is_eligible_member(). Before the fix, the shared
+	 * pre-filter skipped on the raw `edit_others_posts` capability, which
+	 * diverged from is_eligible_member() and incorrectly excluded this reader
+	 * (⑨).
+	 */
+	public function test_as_group_adds_a_reader_with_a_custom_role_granting_edit_others_posts() {
+		$plan_id        = $this->create_plan( 'manual-only' );
+		$group_owner_id = $this->create_reader_user();
+
+		// create_member() sets up a reader (subscriber role, matching the default
+		// `newspack_reader_user_roles` filter is_eligible_member()/is_user_reader()
+		// consult) with an active membership on the plan.
+		$member_id = $this->create_member( $plan_id );
+		// Simulate a custom role (or an individually granted capability) that
+		// layers edit_others_posts on top of the reader's existing role --
+		// exactly the case the old raw-capability pre-filter mishandled.
+		$member = \get_userdata( $member_id );
+		$member->add_cap( 'edit_others_posts' );
+
+		$live_output = $this->run_migrate_manual_members(
+			[
+				'plan-ids'           => (string) $plan_id,
+				'as-group'           => true,
+				'group-owner-id'     => $group_owner_id,
+				'access-product-ids' => $this->access_products_flag(),
+				'live'               => true,
+			]
+		);
+
+		$this->assertStringContainsString( 'Done. 1 member(s) added to group subscription(s).', $live_output, 'A reader with an incidental edit_others_posts capability must be added, matching migrate-teams eligibility.' );
+
+		$owner_group_subscription_ids = $this->get_migration_subscription_ids_for_user( $group_owner_id );
+		$this->assertCount( 1, $owner_group_subscription_ids, 'A group subscription is created for the eligible reader.' );
+		global $subscriptions_database;
+		$group_subscription = $subscriptions_database[ $owner_group_subscription_ids[0] ];
+		Group_Subscription::reset_cache();
+		$this->assertTrue( (bool) Group_Subscription::user_is_member( $member_id, $group_subscription ), 'The reader must join the group despite holding edit_others_posts.' );
+	}
+
+	/**
 	 * The raw-argv guard: WP-CLI strips a valueless value flag (with only a
 	 * warning) before the command runs, so the in-method boolean-flag guards
 	 * never see it — the raw command line is the only place the mistake is
