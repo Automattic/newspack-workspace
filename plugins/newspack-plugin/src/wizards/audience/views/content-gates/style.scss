@@ -69,8 +69,30 @@
 		}
 	}
 
+	// Caution under a picker holding IDs the option list cannot describe.
+	.newspack-access-rule-values-notice {
+		color: wp-colors.$gray-700;
+		font-size: wp-vars.$helptext-font-size;
+		margin: wp-vars.$grid-unit-10 0 0;
+	}
+
 	.newspack-grid .newspack-section-header {
 		margin-top: 0;
 		margin-bottom: 0;
 	}
+}
+
+.newspack-countdown-banner__fields {
+	border: 0;
+	margin: 0;
+	min-width: 0;
+	padding: 0;
+
+	&:disabled {
+		opacity: 0.5;
+	}
+}
+
+.newspack-countdown-banner__preview--disabled {
+	opacity: 0.5;
 }

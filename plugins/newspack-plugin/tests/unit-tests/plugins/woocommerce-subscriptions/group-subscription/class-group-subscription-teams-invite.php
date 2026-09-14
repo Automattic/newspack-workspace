@@ -582,7 +582,7 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		$result = Group_Subscription_Teams_Invite::resolve_registration_token( 'reg-key-revoke' );
 		$this->assertWPError( $result, 'A revoked link must stay revoked.' );
 		$this->assertSame( Group_Subscription_Invite::RESULT_JOIN_TEAM_INVALID, $result->get_error_code() );
-		$this->assertNull( Group_Subscription_Invite::get_link_invite( $subscription, $owner ), 'Nothing should have been minted.' );
+		$this->assertNull( Group_Subscription_Invite::get_link_invite( $subscription ), 'Nothing should have been minted.' );
 
 		// Minting again is the owner's own decision, and it supersedes the withdrawal:
 		// the marker must not outlive the link it was recorded against.
@@ -717,7 +717,7 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 		$this->assertSame( Group_Subscription_Invite::LINK_QUERY_ARG, $args['action'] );
 		$this->assertSame( (string) $subscription->get_id(), $args['subscription'] );
 		$this->assertSame( $existing['key'], $args['key'], 'The link already in circulation must survive the redirect.' );
-		$this->assertSame( (string) $owner, $args['manager'], 'The redirect should carry the owner as the link\'s manager.' );
+		$this->assertArrayNotHasKey( 'manager', $args, 'The link belongs to the subscription, not to a manager.' );
 	}
 
 	/**
@@ -776,24 +776,23 @@ class Test_Group_Subscription_Teams_Invite extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A group that never had an invite link gets one minted for the owner — the one
-	 * manager who cannot be removed, and so whose link cannot be revoked out from
-	 * under an email that has no expiry of its own.
+	 * A group that never had an invite link gets one minted, using the owner as the
+	 * minting manager since they are guaranteed to be one.
 	 */
 	public function test_registration_key_mints_a_link_when_the_group_has_none() {
 		$owner        = $this->create_reader();
 		$team_id      = $this->create_team( $owner, 'team-no-link' );
 		$subscription = $this->create_migrated_group_subscription( $owner, $team_id );
-		$this->assertNull( Group_Subscription_Invite::get_link_invite( $subscription, $owner ), 'Fixture group should start with no link.' );
+		$this->assertNull( Group_Subscription_Invite::get_link_invite( $subscription ), 'Fixture group should start with no link.' );
 
 		$url = Group_Subscription_Teams_Invite::resolve_registration_token( 'team-no-link' );
 
 		$this->assertIsString( $url );
-		$minted = Group_Subscription_Invite::get_link_invite( $subscription, $owner );
-		$this->assertNotEmpty( $minted['key'], 'A link should have been minted for the owner.' );
+		$minted = Group_Subscription_Invite::get_link_invite( $subscription );
+		$this->assertNotEmpty( $minted['key'], 'A link should have been minted.' );
+		$this->assertSame( $owner, (int) $minted['created_by'], 'The minted link should be attributed to the owner.' );
 		$args = $this->query_args_of( $url );
 		$this->assertSame( $minted['key'], $args['key'] );
-		$this->assertSame( (string) $owner, $args['manager'], 'The link should be the owner\'s, not another manager\'s.' );
 	}
 
 	/**

@@ -333,6 +333,33 @@
 		}
 	}
 
+	// Quantity (e.g. group subscription seats) styles
+	.modal_checkout_quantity {
+		margin-bottom: var(--newspack-ui-spacer-5, 24px);
+
+		h3 {
+			color: var(--newspack-ui-label-color, inherit);
+			margin-bottom: var(--newspack-ui-spacer-base, 8px);
+		}
+
+		.input-quantity {
+			align-items: center;
+			display: flex;
+			flex-wrap: nowrap;
+			gap: 0.5em;
+			margin: 0 0 8px;
+
+			input {
+				margin: 0;
+				width: 100%;
+			}
+
+			button {
+				margin-top: 0;
+			}
+		}
+	}
+
 	// Coupon Styles
 	.woocommerce-form-coupon {
 		margin-bottom: var(--newspack-ui-spacer-5, 24px);
@@ -360,6 +387,7 @@
 
 	// Processing styles
 	.modal_checkout_nyp,
+	.modal_checkout_quantity,
 	.modal_checkout_coupon {
 		&.modal-processing {
 			opacity: 0.5;

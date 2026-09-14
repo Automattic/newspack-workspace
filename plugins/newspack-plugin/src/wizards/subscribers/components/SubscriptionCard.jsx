@@ -45,11 +45,12 @@ import {
 	MenuItem,
 } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, Card, Grid } from '../../../../packages/components/src';
+import { Button, Card, Grid } from '../../../../packages/components/src';
 // The card's classes live in the wizard's single stylesheet alongside the
 // screens that host it, so importing it here keeps the card renderable from any
 // screen without that screen having to remember to pull the styles in.
@@ -154,7 +155,7 @@ const CardActionsMenu = ( { toggleLabel, actions, onAction } ) => (
  * @param {Function}                 [props.onTitleClick] Renders the title as a link-styled button.
  * @param {string}                   [props.titleLabel]   Accessible name for the title link.
  * @param {*}                        [props.titleSuffix]  Muted text after the title, e.g. "(Group)".
- * @param {Array}                    [props.badges]       Status badges, `{ label, level }`.
+ * @param {Array}                    [props.badges]       Status badges, `{ label, intent }`.
  * @param {*}                        [props.subline]      Secondary line under the title.
  * @param {SubscriptionCardRow[]}    [props.rows]         Label/value rows, laid out in two columns.
  * @param {SubscriptionCardAction[]} [props.actions]      Actions for the "more" menu.
@@ -220,7 +221,9 @@ export default function SubscriptionCard( {
 									) }
 								</h3>
 								{ badges.map( badge => (
-									<Badge key={ badge.label } level={ badge.level || 'default' } text={ badge.label } />
+									<Badge key={ badge.label } intent={ badge.intent || 'none' }>
+										{ badge.label }
+									</Badge>
 								) ) }
 							</HStack>
 							{ subline && <span className="newspack-subscribers__muted">{ subline }</span> }

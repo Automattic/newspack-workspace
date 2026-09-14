@@ -28,7 +28,6 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 // itself comes from filterSortAndPaginate, which stays real.
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
-	Badge: () => null,
 	Button: () => null,
 	Notice: () => null,
 	Waiting: () => null,

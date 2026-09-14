@@ -159,6 +159,7 @@ export const SettingsSection = ( {
 								}
 								return (
 									<CardFeature
+										headingLevel={ 3 }
 										key={ id }
 										title={ name }
 										description={ description }

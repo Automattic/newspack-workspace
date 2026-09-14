@@ -188,6 +188,14 @@ describe( 'criteria matching', () => {
 		expect( criteria.matches( { value: 'bar' } ) ).toEqual( true );
 		expect( matchingFunction ).toHaveBeenCalledTimes( 2 );
 	} );
+	it( 'never matches when the matching function cannot be resolved', () => {
+		// A criterion registered with a matching function name that doesn't exist
+		// (e.g. an old newspack-popups build that predates a newspack-plugin
+		// criterion) must fail closed instead of throwing when matched.
+		setMatchingFunction( criteriaId, 'does_not_exist' );
+		const criteria = getCriteria( criteriaId );
+		expect( criteria.matches( { value: 'anything' } ) ).toEqual( false );
+	} );
 	it( 'should pass option params to matching function', () => {
 		registerCriteria( criteriaId, {
 			matchingAttribute: 'my-custom-attribute',

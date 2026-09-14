@@ -16,6 +16,7 @@ import { useState, useMemo, useId } from '@wordpress/element';
 import {
 	Button,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 // Not the Newspack wrapper: with-wizard-screen/style.scss gives `.newspack-dataviews`
 // a -48px page bleed that hangs this embedded table past the form column.
@@ -72,9 +73,18 @@ interface ImpactTableProps {
 	// The editor carries this note in its section header instead, where it can
 	// appear before the preview has loaded.
 	showCycleNote?: boolean;
+	framed?: boolean;
+	collapsible?: boolean;
 }
 
-export default function ImpactTable( { baseline, segmentGroups, currency, showCycleNote = true }: ImpactTableProps ) {
+export default function ImpactTable( {
+	baseline,
+	segmentGroups,
+	currency,
+	showCycleNote = true,
+	framed = true,
+	collapsible = true,
+}: ImpactTableProps ) {
 	const hasSegments = segmentGroups.length > 0;
 	const [ expanded, setExpanded ] = useState( false );
 	const tableId = useId();
@@ -171,48 +181,47 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 	}
 
 	// Sliced after the sort, so collapsing keeps the current top rows.
-	const collapsible = sorted.length > ROW_LIMIT;
-	const data = collapsible && ! expanded ? sorted.slice( 0, ROW_LIMIT ) : sorted;
+	const canCollapse = collapsible && sorted.length > ROW_LIMIT;
+	const data = canCollapse && ! expanded ? sorted.slice( 0, ROW_LIMIT ) : sorted;
+
+	const seeMore = canCollapse ? (
+		<HStack justify="flex-start">
+			<Button
+				className="newspack-pricing-rules__see-more"
+				variant="link"
+				aria-expanded={ expanded }
+				aria-controls={ tableId }
+				onClick={ () => setExpanded( ! expanded ) }
+			>
+				{ expanded ? __( 'See Less', 'newspack-plugin' ) : __( 'See More', 'newspack-plugin' ) }
+			</Button>
+		</HStack>
+	) : null;
+
+	const table = (
+		<div
+			id={ tableId }
+			className={ `newspack-pricing-rules__impact-table${ framed ? ' newspack-pricing-rules__impact-table--framed' : '' }` }
+			role="region"
+			aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
+		>
+			<DataViews
+				data={ data }
+				fields={ fields }
+				view={ tableView }
+				onChangeView={ setView }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ { table: {} } }
+				getItemId={ ( item: CatalogImpactRow ) => String( item.product_id ) }
+				empty={ <p className="newspack-pricing-rules__muted">{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
+			>
+				<DataViews.Layout />
+			</DataViews>
+		</div>
+	);
 
 	return (
-		<>
-			<TableCard
-				after={
-					collapsible ? (
-						<HStack justify="flex-start">
-							<Button
-								className="newspack-pricing-rules__see-more"
-								variant="link"
-								aria-expanded={ expanded }
-								aria-controls={ tableId }
-								onClick={ () => setExpanded( ! expanded ) }
-							>
-								{ expanded ? __( 'See Less', 'newspack-plugin' ) : __( 'See More', 'newspack-plugin' ) }
-							</Button>
-						</HStack>
-					) : undefined
-				}
-			>
-				<div
-					id={ tableId }
-					className="newspack-pricing-rules__impact-table"
-					role="region"
-					aria-label={ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }
-				>
-					<DataViews
-						data={ data }
-						fields={ fields }
-						view={ tableView }
-						onChangeView={ setView }
-						paginationInfo={ paginationInfo }
-						defaultLayouts={ { table: {} } }
-						getItemId={ ( item: CatalogImpactRow ) => String( item.product_id ) }
-						empty={ <p className="newspack-pricing-rules__muted">{ __( 'No products to show.', 'newspack-plugin' ) }</p> }
-					>
-						<DataViews.Layout />
-					</DataViews>
-				</div>
-			</TableCard>
+		<VStack spacing={ 6 }>
 			{ showCycleNote && hasCycles && <p className="newspack-pricing-rules__muted">{ cycleMarkerNote() }</p> }
 			{ hasSegments && (
 				<p className="newspack-pricing-rules__muted">
@@ -222,6 +231,14 @@ export default function ImpactTable( { baseline, segmentGroups, currency, showCy
 					) }
 				</p>
 			) }
-		</>
+			{ framed ? (
+				<TableCard after={ seeMore ?? undefined }>{ table }</TableCard>
+			) : (
+				<>
+					{ table }
+					{ seeMore }
+				</>
+			) }
+		</VStack>
 	);
 }

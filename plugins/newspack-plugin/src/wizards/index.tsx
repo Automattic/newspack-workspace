@@ -7,18 +7,15 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { createRoot, lazy, Suspense } from '@wordpress/element';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
 import * as Components from '../../packages/components/src';
-
-/**
- * Internal dependencies
- */
 import '../shared/js/public-path';
 
 const pageParam = new URLSearchParams( window.location.search ).get( 'page' ) ?? '';
@@ -78,17 +75,12 @@ if ( window.newspackAudienceIntegrations?.integrations_settings_enabled ) {
 	};
 }
 
-const AdminPageLoader = ( { label }: { label: string } ) => {
+const AdminPageLoader = () => {
 	return (
 		<div className="newspack-wizard__loader">
 			<VStack alignment="center" spacing={ 2 }>
 				<Components.Waiting noMargin />
-				<strong>
-					{
-						/* translators: %s is the label of the page */
-						sprintf( __( '%s loading…', 'newspack-plugin' ), label )
-					}
-				</strong>
+				<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
 			</VStack>
 		</div>
 	);
@@ -97,7 +89,7 @@ const AdminPageLoader = ( { label }: { label: string } ) => {
 const AdminPages = () => {
 	const PageComponent = components[ pageParam ].component;
 	return (
-		<Suspense fallback={ <AdminPageLoader label={ components[ pageParam ].label } /> }>
+		<Suspense fallback={ <AdminPageLoader /> }>
 			<PageComponent />
 		</Suspense>
 	);

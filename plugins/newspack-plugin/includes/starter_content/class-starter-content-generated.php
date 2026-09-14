@@ -461,7 +461,7 @@ class Starter_Content_Generated extends Starter_Content_Provider {
 	}
 
 	/**
-	 * Download and add a featured image to a post.
+	 * Add a featured image to a post.
 	 *
 	 * @param int $post_id The post ID.
 	 * @param int $post_index The index of the post within the set of starter content posts.
@@ -469,43 +469,15 @@ class Starter_Content_Generated extends Starter_Content_Provider {
 	 * @return string Block markup.
 	 */
 	private static function add_featured_image( $post_id, $post_index ) {
-		if ( ! function_exists( 'download_url' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-		}
 		if ( ! function_exists( 'wp_crop_image' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/image.php';
 		}
 
-		// Use same image everywhere for e2e.
-		$url = Starter_Content::is_e2e() ? 'https://picsum.photos/id/424/1200/800' : 'https://picsum.photos/1200/800';
-
-		$temp_file = download_url( $url );
-
-		if ( is_wp_error( $temp_file ) ) {
-			return false;
-		}
-
-		$mime_type = mime_content_type( $temp_file );
-
-		$file = array(
-			'name'     => 'automated_upload.jpg',
-			'type'     => $mime_type,
-			'tmp_name' => $temp_file,
-			'error'    => 0,
-			'size'     => filesize( $temp_file ),
-		);
-
-		$overrides = array(
-			'test_form'   => false,
-			'test_size'   => true,
-			'test_upload' => true,
-		);
-
-		$file_attributes = wp_handle_sideload( $file, $overrides );
-		if ( is_wp_error( $file_attributes ) || ! empty( $file_attributes['error'] ) ) {
+		$filename = Starter_Content::is_e2e() ? self::copy_bundled_image() : self::download_random_image();
+		if ( ! $filename ) {
 			return null;
 		}
-		$filename      = $file_attributes['file'];
+
 		$filetype      = wp_check_filetype( basename( $filename ), null );
 		$wp_upload_dir = wp_upload_dir();
 
@@ -523,6 +495,70 @@ class Starter_Content_Generated extends Starter_Content_Provider {
 		wp_update_attachment_metadata( $attach_id, $attach_data );
 
 		set_post_thumbnail( $post_id, $attach_id );
+	}
+
+	/**
+	 * Copy the bundled starter content image into the uploads directory.
+	 *
+	 * E2E provisioning creates dozens of posts in a single run and they all share this
+	 * image, so it ships with the plugin: nothing on that path depends on a third-party
+	 * image host being reachable.
+	 *
+	 * @return string|null Path to the copy in the uploads directory, or null on failure.
+	 */
+	private static function copy_bundled_image() {
+		if ( ! function_exists( 'wp_upload_bits' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		$file = wp_upload_bits(
+			'automated_upload.jpg',
+			null,
+			file_get_contents( NEWSPACK_ABSPATH . 'includes/raw_assets/images/starter-content-featured-image.jpg' ) // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Reads a bundled plugin asset from the local filesystem.
+		);
+
+		if ( ! $file || ! empty( $file['error'] ) || empty( $file['file'] ) ) {
+			return null;
+		}
+
+		return $file['file'];
+	}
+
+	/**
+	 * Download a random image and place it in the uploads directory.
+	 *
+	 * @return string|null Path to the downloaded file in the uploads directory, or null on failure.
+	 */
+	private static function download_random_image() {
+		if ( ! function_exists( 'download_url' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		$temp_file = download_url( 'https://picsum.photos/1200/800' );
+		if ( is_wp_error( $temp_file ) ) {
+			return null;
+		}
+
+		$file_attributes = wp_handle_sideload(
+			[
+				'name'     => 'automated_upload.jpg',
+				'type'     => mime_content_type( $temp_file ),
+				'tmp_name' => $temp_file,
+				'error'    => 0,
+				'size'     => filesize( $temp_file ),
+			],
+			[
+				'test_form'   => false,
+				'test_size'   => true,
+				'test_upload' => true,
+			]
+		);
+
+		if ( is_wp_error( $file_attributes ) || ! empty( $file_attributes['error'] ) ) {
+			return null;
+		}
+
+		return $file_attributes['file'];
 	}
 
 	/**
