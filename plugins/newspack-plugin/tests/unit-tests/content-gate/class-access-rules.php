@@ -300,8 +300,6 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		};
 		add_filter( 'newspack_group_subscription_member_eligible', $deny, 10, 2 );
 
-		Group_Subscription::reset_cache();
-
 		$this->assertFalse(
 			Access_Rules::has_active_subscription( $author_id, [ self::$product_id ] ),
 			'Revoking eligibility via the filter must remove access for a user who already holds group-member meta.'
