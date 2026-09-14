@@ -54,6 +54,11 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 		global $subscriptions_database;
 		$subscriptions_database = [];
 		wp_set_current_user( 0 );
+		// Guard against a failed assertion (in test_search_users_includes_filter_opted_in_custom_role)
+		// skipping the inline remove_role() and leaking the role into later tests.
+		if ( \get_role( 'newspack_test_guest' ) ) {
+			\remove_role( 'newspack_test_guest' );
+		}
 		parent::tear_down();
 	}
 
@@ -504,19 +509,15 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 				'user_login' => 'search-target-guest',
 			]
 		);
-		add_filter(
-			'newspack_group_subscription_member_eligible',
-			function( $eligible, $user_id ) use ( $guest_id ) {
-				return $user_id === $guest_id ? true : $eligible;
-			},
-			10,
-			2
-		);
+		$eligibility_filter = function( $eligible, $user_id ) use ( $guest_id ) {
+			return $user_id === $guest_id ? true : $eligible;
+		};
+		add_filter( 'newspack_group_subscription_member_eligible', $eligibility_filter, 10, 2 );
 
 		$response = $this->dispatch_search( $subscription->get_id(), 'search-target' );
 		$ids      = array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
 
-		remove_all_filters( 'newspack_group_subscription_member_eligible' );
+		remove_filter( 'newspack_group_subscription_member_eligible', $eligibility_filter, 10 );
 		remove_role( 'newspack_test_guest' );
 
 		$this->assertContains( $guest_id, $ids, 'A user opted in via the eligibility filter should be a searchable candidate, even with no reader/author/contributor role.' );
@@ -539,19 +540,15 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 				'user_login' => 'search-target-opted-out',
 			]
 		);
-		add_filter(
-			'newspack_group_subscription_member_eligible',
-			function( $eligible, $user_id ) use ( $subscriber_id ) {
-				return $user_id === $subscriber_id ? false : $eligible;
-			},
-			10,
-			2
-		);
+		$eligibility_filter = function( $eligible, $user_id ) use ( $subscriber_id ) {
+			return $user_id === $subscriber_id ? false : $eligible;
+		};
+		add_filter( 'newspack_group_subscription_member_eligible', $eligibility_filter, 10, 2 );
 
 		$response = $this->dispatch_search( $subscription->get_id(), 'search-target' );
 		$ids      = array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
 
-		remove_all_filters( 'newspack_group_subscription_member_eligible' );
+		remove_filter( 'newspack_group_subscription_member_eligible', $eligibility_filter, 10 );
 
 		$this->assertNotContains( $subscriber_id, $ids, 'A subscriber opted out via the eligibility filter should not be a searchable candidate.' );
 	}
