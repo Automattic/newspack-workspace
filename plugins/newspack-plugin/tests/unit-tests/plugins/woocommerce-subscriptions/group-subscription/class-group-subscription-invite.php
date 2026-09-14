@@ -304,6 +304,48 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A member who loses eligibility after joining (e.g. an author promoted to editor)
+	 * must still be recognised as an existing member when re-accepting a stale invite.
+	 * user_is_member() reads through get_group_subscriptions_for_user(), which filters
+	 * out ineligible users entirely -- so before the fix, re-accepting looked like the
+	 * user was never a member, fell through to update_members() (which also can't add
+	 * an ineligible user), and reported the "not added" failure instead of recognising
+	 * the existing membership.
+	 */
+	public function test_email_invite_acceptance_succeeds_for_member_who_lost_eligibility() {
+		$owner_id     = $this->create_user( true );
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		// Invite an eligible author, add them to the group, then have their role change
+		// to editor -- still holding the membership meta, but no longer eligible.
+		$member_id = $this->create_author_user();
+		$email     = get_userdata( $member_id )->user_email;
+		$invite    = Group_Subscription_Invite::generate_invite( $subscription, $email );
+		$this->assertIsArray( $invite, 'The fixture should create an email invite.' );
+		$key = array_key_first( Group_Subscription_Invite::get_invites( $subscription ) );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+
+		$member = get_user_by( 'id', $member_id );
+		$member->set_role( 'editor' );
+
+		wp_set_current_user( $member_id );
+		$result = Group_Subscription_Invite::accept_invite( $subscription, $key, $email );
+
+		$this->assertTrue( $result, 'Accepting when already a member should succeed even if the member is no longer eligible.' );
+		$this->assertNull(
+			Group_Subscription_Invite::get_invite_by_key( $subscription, $key ),
+			'The now-stale invite should be cancelled so it stops counting toward the member limit.'
+		);
+	}
+
+	/**
 	 * An existing account that is an eligible non-reader (author/contributor) must be
 	 * accepted by generate_invite(), not just a Reader Activation reader. Authors hold
 	 * no `_newspack_reader` meta, so the old is_user_reader() guard rejected them even

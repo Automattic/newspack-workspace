@@ -716,9 +716,14 @@ class Group_Subscription_Invite {
 			// Checking the $_GET-supplied $email's account instead would turn this into a "does this
 			// address belong to this group?" oracle for any future caller that skips that binding.
 			$current_user_id = get_current_user_id();
+			// Existing membership is checked against the raw member meta, not user_is_member()
+			// (which reads through get_group_subscriptions_for_user() and is filtered by current
+			// eligibility): a member who has since lost eligibility (e.g. a role change) is still
+			// a member of this group, and re-accepting a now-cancelled invite must recognise that
+			// rather than falling through to the "invalid invitation" error.
 			if (
 				Group_Subscription::user_is_manager( $current_user_id, $subscription )
-				|| Group_Subscription::user_is_member( $current_user_id, $subscription )
+				|| in_array( $current_user_id, array_map( 'intval', Group_Subscription::get_members( $subscription ) ), true )
 			) {
 				return true;
 			}
@@ -738,13 +743,14 @@ class Group_Subscription_Invite {
 			return $result;
 		}
 		// update_members() returns an empty members_added both when the user could not be added
-		// (e.g. a non-reader account) AND when they are already a member (it skips the duplicate).
+		// (e.g. an ineligible account) AND when they are already a member (it skips the duplicate).
 		// Only the genuine non-add is a failure: leave the invite intact so it can be retried.
 		// An already-member is a fulfilled invite, so fall through to cancel it (it would otherwise
 		// keep counting toward the member limit).
-		// user_is_member() returns bool here (the invite always targets a group subscription, so the
-		// null "not a group subscription" case can't occur); a falsy result means "not a member".
-		if ( empty( $result['members_added'][ $user->ID ] ) && ! Group_Subscription::user_is_member( $user->ID, $subscription ) ) {
+		// Checked against the raw member meta, not user_is_member(): existing membership is a fact
+		// independent of current eligibility, and user_is_member() is filtered by it (see the note
+		// above on the invite-already-fulfilled branch).
+		if ( empty( $result['members_added'][ $user->ID ] ) && ! in_array( (int) $user->ID, array_map( 'intval', Group_Subscription::get_members( $subscription ) ), true ) ) {
 			return new \WP_Error(
 				'newspack_group_subscription_invite_not_added',
 				__( 'Could not add this user to the group.', 'newspack-plugin' )
@@ -1033,10 +1039,14 @@ class Group_Subscription_Invite {
 			return;
 		}
 
-		// User is already in the group? Just send them to the subscription view.
+		// User is already in the group? Just send them to the subscription view. Checked against
+		// the raw member meta, not user_is_member() (which is filtered by current eligibility):
+		// existing membership is a fact independent of eligibility, so a member who has since lost
+		// it (e.g. a role change) re-clicking their link invite must still be recognised as a
+		// member, rather than falling through to update_members() and failing to be re-added.
 		if (
 			Group_Subscription::user_is_manager( $current_user->ID, $subscription )
-			|| Group_Subscription::user_is_member( $current_user->ID, $subscription )
+			|| in_array( $current_user->ID, array_map( 'intval', Group_Subscription::get_members( $subscription ) ), true )
 		) {
 			$success_url = function_exists( 'wc_get_endpoint_url' )
 					? wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), $myaccount_url )
