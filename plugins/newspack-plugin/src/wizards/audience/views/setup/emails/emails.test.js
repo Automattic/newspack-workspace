@@ -85,7 +85,6 @@ jest.mock( '../../../../../../packages/components/src', () => {
 		return null;
 	}
 	return {
-		Badge: ( { text } ) => <span>{ text }</span>,
 		DataViews: ( { data, fields, actions, view, onChangeView, header } ) => {
 			mockCapturedActions = actions || [];
 			mockCapturedView = view;
@@ -110,6 +109,7 @@ jest.mock( '../../../../../../packages/components/src', () => {
 		},
 		Card: ( { children } ) => <div data-testid="card">{ children }</div>,
 		Notice: ( { noticeText } ) => <div data-testid="notice">{ noticeText }</div>,
+		StatusIndicator: ( { children } ) => <span data-testid="status-indicator">{ children }</span>,
 		utils: {
 			confirmAction: jest.fn( () => true ),
 		},

@@ -116,7 +116,7 @@ class My_Account_UI_V1 {
 				'change_payment_method_title' => __( 'Change payment method', 'newspack-plugin' ),
 				'switch_subscription_title'   => __( 'Change Subscription', 'newspack-plugin' ),
 				'invite_link_copied'          => __( 'Invite link copied.', 'newspack-plugin' ),
-				'invite_link_regenerated'     => __( 'New invite link copied. The old one no longer works.', 'newspack-plugin' ),
+				'invite_link_regenerated'     => __( 'New invite link copied. Any older link no longer works.', 'newspack-plugin' ),
 				'invite_link_copy_failed'     => __( 'Couldn\'t copy the invite link to your clipboard. Copy it manually:', 'newspack-plugin' ),
 				'invite_link_disabled'        => __( 'Invite link disabled. You can create a new link any time.', 'newspack-plugin' ),
 				'group_name_updated'          => __( 'Name updated.', 'newspack-plugin' ),

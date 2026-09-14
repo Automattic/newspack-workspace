@@ -451,7 +451,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 			[ 'status' => 'publish' ],
 			[ 'status' => 'publish,private' ],
 			[ 'status' => [ 'publish', 'private' ] ],
-			[ 'status' => 'draft,pending,auto-draft' ],
+			[ 'status' => 'draft,pending' ],
 			[ 'status' => 'trash' ],
 		];
 
@@ -518,25 +518,25 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 
 	/**
 	 * Draft selection widens `post_status` to include publish/private so
-	 * scheduling_error fallthrough rows are reachable. Other selections
-	 * don't need widening.
+	 * scheduling_error fallthrough rows are reachable. The selection always
+	 * drives `post_status`, so nothing the controller wrote survives it.
 	 */
 	public function test_align_status_filter_widens_post_status_when_draft_selected() {
 		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
 			[],
-			$this->rest_request( [ 'status' => [ 'draft', 'pending', 'auto-draft' ] ] )
+			$this->rest_request( [ 'status' => [ 'draft', 'pending' ] ] )
 		);
 
 		$this->assertContains( 'publish', $args['post_status'] );
 		$this->assertContains( 'private', $args['post_status'] );
 		$this->assertContains( 'draft', $args['post_status'] );
 
-		// Sent-only doesn't need widening.
+		// Sent-only needs no widening, and still replaces the incoming value.
 		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
-			[ 'post_status' => 'preserved' ],
+			[ 'post_status' => [ 'publish', 'private', 'auto-draft' ] ],
 			$this->rest_request( [ 'status' => [ 'publish', 'private' ] ] )
 		);
-		$this->assertSame( 'preserved', $args['post_status'] );
+		$this->assertSame( [ 'publish', 'private' ], $args['post_status'] );
 	}
 
 	/**
@@ -612,10 +612,16 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 				'post_date'   => '2026-04-20 10:00:00',
 			]
 		);
+		$abandoned = $this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
 
 		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
 			[],
-			$this->rest_request( [ 'status' => [ 'draft', 'pending', 'auto-draft' ] ] )
+			$this->rest_request( [ 'status' => [ 'draft', 'pending' ] ] )
 		);
 
 		// `align_status_filter_with_scheduled_meta` widens `post_status`
@@ -628,6 +634,109 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 		$this->assertContains( $errored_draft, $query->posts, 'draft with scheduling_error surfaces' );
 		$this->assertContains( $errored_publish, $query->posts, 'publish row with scheduling_error surfaces — renders as Draft' );
 		$this->assertNotContains( $plain_publish, $query->posts, 'plain publish stays out — it renders as Sent, not Draft' );
+		$this->assertNotContains( $abandoned, $query->posts, 'auto-draft stays out — the Draft filter must not widen it back in' );
+	}
+
+	/**
+	 * The widening must not add `auto-draft` back to the default set.
+	 */
+	public function test_default_status_set_excludes_auto_draft() {
+		$plain_draft = $this->make_newsletter( [ 'post_status' => 'draft' ] );
+		$abandoned   = $this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$defaults = [ 'publish', 'private', 'future', 'draft', 'pending' ];
+		// Seed `post_status` the way the posts controller does, so the widening
+		// either leaves it or overwrites it, and the query runs on the result.
+		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => $defaults ],
+			$this->rest_request( [ 'status' => $defaults ] )
+		);
+
+		$this->assertNotContains( 'auto-draft', (array) $args['post_status'] );
+
+		$query = $this->run_newsletter_query( $args );
+		$this->assertContains( $plain_draft, $query->posts, 'saved draft still surfaces' );
+		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
+	}
+
+	/**
+	 * A request for `auto-draft` and nothing else matches nothing. It must
+	 * neither answer with a different status nor fall through to an
+	 * unfiltered `post_status = auto-draft` query.
+	 */
+	public function test_auto_draft_only_status_request_matches_nothing() {
+		$this->make_newsletter( [ 'post_status' => 'draft' ] );
+		$this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => [ 'auto-draft' ] ],
+			$this->rest_request( [ 'status' => [ 'auto-draft' ] ] )
+		);
+
+		$query = $this->run_newsletter_query( $args );
+		$this->assertSame( [], $query->posts );
+	}
+
+	/**
+	 * `auto-draft` alongside a real status is dropped rather than answered,
+	 * leaving the remaining selection to bucket as it normally would.
+	 */
+	public function test_auto_draft_is_dropped_from_a_mixed_status_request() {
+		$plain_draft = $this->make_newsletter( [ 'post_status' => 'draft' ] );
+		$abandoned   = $this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => [ 'auto-draft', 'draft' ] ],
+			$this->rest_request( [ 'status' => [ 'auto-draft', 'draft' ] ] )
+		);
+
+		$this->assertNotContains( 'auto-draft', (array) $args['post_status'] );
+
+		$query = $this->run_newsletter_query( $args );
+		$this->assertContains( $plain_draft, $query->posts, 'the Draft half of the selection still answers' );
+		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
+	}
+
+	/**
+	 * The pre-deploy default set, which a browser holding the previous
+	 * bundle still sends, carried `auto-draft`. The widening must strip it
+	 * from `post_status` even though it adds nothing else to the set.
+	 */
+	public function test_legacy_default_status_set_drops_auto_draft() {
+		$plain_draft = $this->make_newsletter( [ 'post_status' => 'draft' ] );
+		$abandoned   = $this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$legacy = [ 'publish', 'private', 'future', 'draft', 'pending', 'auto-draft' ];
+		$args   = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => $legacy ],
+			$this->rest_request( [ 'status' => $legacy ] )
+		);
+
+		$this->assertNotContains( 'auto-draft', (array) $args['post_status'] );
+
+		$query = $this->run_newsletter_query( $args );
+		$this->assertContains( $plain_draft, $query->posts, 'saved draft still surfaces' );
+		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
 	}
 
 	/**
@@ -665,11 +774,11 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 
 		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
 			[],
-			$this->rest_request( [ 'status' => [ 'publish', 'private', 'draft', 'pending', 'auto-draft' ] ] )
+			$this->rest_request( [ 'status' => [ 'publish', 'private', 'draft', 'pending' ] ] )
 		);
 
 		$query = $this->run_newsletter_query(
-			array_merge( $args, [ 'post_status' => [ 'publish', 'private', 'draft', 'pending', 'auto-draft' ] ] )
+			array_merge( $args, [ 'post_status' => [ 'publish', 'private', 'draft', 'pending' ] ] )
 		);
 
 		$this->assertContains( $plain_publish, $query->posts, 'plain published row surfaces' );
@@ -725,7 +834,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 		// Scheduled+Draft: errored_publish renders as Draft → in.
 		$args  = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
 			[],
-			$this->rest_request( [ 'status' => [ 'future', 'draft', 'pending', 'auto-draft' ] ] )
+			$this->rest_request( [ 'status' => [ 'future', 'draft', 'pending' ] ] )
 		);
 		$query = $this->run_newsletter_query( $args );
 		$this->assertContains( $future_post, $query->posts, 'Scheduled+Draft: future post surfaces' );

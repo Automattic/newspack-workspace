@@ -6,7 +6,8 @@
  */
 
 // Feature tab registrations.
-import './configuration';
+import './advanced-settings';
+import './discounts';
 import './subscriber-only';
 
 export { getTab, registerTab } from './registry';

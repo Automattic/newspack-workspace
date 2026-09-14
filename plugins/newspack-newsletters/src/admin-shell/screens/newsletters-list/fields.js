@@ -5,22 +5,26 @@
  * field so sent/scheduled is never re-derived client-side.
  */
 
-import { ExternalLink, Icon } from '@wordpress/components';
+import { ExternalLink, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { __, sprintf } from '@wordpress/i18n';
-import { commentAuthorAvatar, drafts, envelope, globe, published, scheduled, trash } from '@wordpress/icons';
+import { envelope, globe } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
+import { StatusIndicator } from 'newspack-components';
+
+import UserRow, { avatarPropsFromAuthor } from '../../../components/user-row';
+import { useLockedPost } from '../../hooks/use-locked-posts';
 import { getAdminUrl } from '../../admin-globals';
 import { isManualProvider } from '../../../utils/service-provider';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
 
-const STATUS_KIND_ICONS = {
-	sent: published,
-	scheduled,
-	draft: drafts,
-	trash,
+export const STATUS_KIND_STATUSES = {
+	sent: 'done',
+	scheduled: 'scheduled',
+	draft: 'draft',
+	trash: 'trash',
 };
 
 const formatDate = timestamp => {
@@ -41,21 +45,40 @@ const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edi
 // search / sort / display stay consistent.
 const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
 
-const renderTitle = ( { item } ) => {
+// `lock` is a `wp_check_locked_posts()` payload: pre-translated text and
+// avatar URLs for whoever holds the lock, mirroring the classic list table.
+const renderLock = lock => (
+	<UserRow
+		avatarUrl={ lock.avatar_src }
+		avatarSrcSet={ lock.avatar_src_2x ? `${ lock.avatar_src_2x } 2x` : undefined }
+		label={ lock.text }
+		className="newspack-newsletters-list__locked"
+	/>
+);
+
+// A component, not a render callback: it reads the lock for its own row from
+// context, so a lock change re-renders the affected cells instead of rebuilding
+// the field definitions DataViews uses as each cell's element type.
+const TitleCell = ( { item } ) => {
 	const raw = getTitle( item );
-	// New newsletters carry WordPress's "Auto Draft" placeholder title; show a friendly label instead.
-	const title = ! raw || 'auto-draft' === item?.status ? __( '(no subject)', 'newspack-newsletters' ) : raw;
+	const title = raw || __( '(no subject)', 'newspack-newsletters' );
+	const lock = useLockedPost( item?.id );
+	// DataViews lays the title cell out as a nowrap flex row, so the lock
+	// line needs its own column wrapper to sit under the subject.
 	return (
-		<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-			<strong>{ title }</strong>
-		</a>
+		<VStack className="newspack-newsletters-list__title-cell" spacing={ 1 }>
+			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
+				<strong>{ title }</strong>
+			</a>
+			{ lock && renderLock( lock ) }
+		</VStack>
 	);
 };
 
 const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_status || {};
 	const kind = status.kind || 'draft';
-	const icon = STATUS_KIND_ICONS[ kind ] || STATUS_KIND_ICONS.draft;
+	const statusName = STATUS_KIND_STATUSES[ kind ] || STATUS_KIND_STATUSES.draft;
 
 	let label;
 	if ( 'sent' === kind && status.sent_at ) {
@@ -79,12 +102,7 @@ const renderStatus = ( { item } ) => {
 		label = statusKindLabel( kind );
 	}
 
-	return (
-		<span className="newspack-newsletters-list__status">
-			<Icon className="newspack-newsletters-list__status-icon" icon={ icon } size={ 24 } />
-			<span>{ label }</span>
-		</span>
-	);
+	return <StatusIndicator status={ statusName }>{ label }</StatusIndicator>;
 };
 
 const renderSendDate = ( { item } ) => {
@@ -107,19 +125,7 @@ const renderAuthor = ( { item } ) => {
 	if ( ! author ) {
 		return '';
 	}
-	const avatarUrl = author.avatar_urls?.[ 48 ] || author.avatar_urls?.[ 24 ];
-	return (
-		<span className="newspack-newsletters-list__author">
-			{ avatarUrl ? (
-				<span className="newspack-newsletters-list__author-avatar">
-					<img src={ avatarUrl } width={ 16 } height={ 16 } alt="" />
-				</span>
-			) : (
-				<Icon className="newspack-newsletters-list__author-icon" icon={ commentAuthorAvatar } size={ 24 } />
-			) }
-			<span>{ author.name || '' }</span>
-		</span>
-	);
+	return <UserRow { ...avatarPropsFromAuthor( author ) } label={ author.name || '' } />;
 };
 
 const renderTerms =
@@ -138,16 +144,15 @@ const renderPublicPage = ( { item } ) => {
 	// cmd/middle-click; mirrors the `view-public-page` action's gate.
 	const publicUrl = isPublic && 'publish' === item?.status && item?.link ? item.link : null;
 	return (
-		<span className="newspack-newsletters-list__visibility">
-			<Icon className="newspack-newsletters-list__visibility-icon" icon={ icon } size={ 24 } />
+		<StatusIndicator icon={ icon }>
 			{ publicUrl ? (
 				<ExternalLink href={ publicUrl } onClickCapture={ event => event.stopPropagation() }>
 					{ label }
 				</ExternalLink>
 			) : (
-				<span>{ label }</span>
+				label
 			) }
-		</span>
+		</StatusIndicator>
 	);
 };
 
@@ -162,7 +167,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 			label: __( 'Subject', 'newspack-newsletters' ),
 			enableGlobalSearch: true,
 			getValue: ( { item } ) => getTitle( item ),
-			render: renderTitle,
+			render: TitleCell,
 		},
 		{
 			id: 'status',
@@ -171,7 +176,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				{ value: 'publish,private', label: statusLabels.sent },
 				{ value: 'future', label: statusLabels.scheduled },
 				// Match `get_status_for_post`'s draft fallthrough.
-				{ value: 'draft,pending,auto-draft', label: statusLabels.draft },
+				{ value: 'draft,pending', label: statusLabels.draft },
 				{ value: 'trash', label: statusLabels.trash },
 			],
 			filterBy: { operators: [ 'isAny' ], isPrimary: true },

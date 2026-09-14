@@ -13,7 +13,8 @@
  *   submission the vendor's JS or server later rejects may still have
  *   registered the reader.
  * - Programmatic HTMLFormElement.submit() dispatches no submit event and
- *   is not captured.
+ *   is not captured. Gravity Forms — which submits every form this way —
+ *   is captured through its own submission filter bus instead.
  * - Forms that collect somebody else's email address (e.g. "email a
  *   friend") must never be opted in.
  *

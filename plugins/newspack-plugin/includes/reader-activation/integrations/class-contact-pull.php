@@ -322,16 +322,12 @@ class Contact_Pull {
 				);
 			}
 
-			$selected_keys = array_flip(
-				array_map(
-					function( $field ) {
-						return $field->get_key();
-					},
-					$selected_fields
-				)
-			);
-			$fetched_keys  = array_keys( $data );
-			$data          = array_intersect_key( $data, $selected_keys );
+			$fields_by_key = [];
+			foreach ( $selected_fields as $field ) {
+				$fields_by_key[ $field->get_key() ] = $field;
+			}
+			$fetched_keys = array_keys( $data );
+			$data         = array_intersect_key( $data, $fields_by_key );
 			// Keys only: the values are reader data, and a full backfill runs this
 			// line once per reader across the whole base.
 			Logger::log( 'Pulled data from ' . $integration->get_id() . ': ' . wp_json_encode( array_keys( $data ) ) );
@@ -348,8 +344,8 @@ class Contact_Pull {
 						$user_id,
 						$integration->get_id(),
 						empty( $fetched_keys ) ? 'no fields' : sprintf( '%d field(s) (%s)', count( $fetched_keys ), implode( ', ', $fetched_keys ) ),
-						count( $selected_keys ),
-						implode( ', ', array_keys( $selected_keys ) )
+						count( $fields_by_key ),
+						implode( ', ', array_keys( $fields_by_key ) )
 					),
 					self::LOGGER_HEADER
 				);
@@ -362,6 +358,34 @@ class Contact_Pull {
 			// rules, segmentation) keep matching it. See the README's Pull section.
 			$write_errors = [];
 			foreach ( $data as $key => $value ) {
+				$field      = $fields_by_key[ $key ];
+				$value_type = $field->get_value_type();
+				// Only rewrite the stored value when the publisher has chosen Date range
+				// matching for this field. A date-typed field left on another operator
+				// (e.g. Text) keeps its raw provider value, so any existing content-gate
+				// rule or segment matching the literal string keeps working unless the
+				// publisher deliberately switches the operator.
+				if ( ( 'date' === $value_type || 'datetime' === $value_type ) && 'date_range' === $field->get_matching_function() ) {
+					$normalized = Date_Value::normalize( $value, $field->get_date_format(), $value_type );
+					// A non-empty value that comes back still not matcher-readable is
+					// the fail-closed path: the segment silently matches nobody, which
+					// is indistinguishable from "no reader qualifies" out in the admin —
+					// so say so here. It is the only signal that the provider's declared
+					// source format is missing or wrong.
+					if ( is_string( $normalized ) && '' !== trim( $normalized ) && null === Date_Value::to_calendar_date( $normalized ) ) {
+						Logger::log(
+							sprintf(
+								'Date field "%s" from %s could not be normalized (source format: %s); it will not match any date range.',
+								$key,
+								$integration->get_id(),
+								'' === $field->get_date_format() ? 'none declared' : $field->get_date_format()
+							),
+							self::LOGGER_HEADER
+						);
+					}
+					$value = $normalized;
+				}
+
 				$encoded = wp_json_encode( $value );
 
 				if ( $dry_run ) {

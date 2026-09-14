@@ -80,6 +80,7 @@ export default function ExperimentalTools() {
 			<Grid columns={ 2 } gutter={ 32 }>
 				{ tools.map( ( tool: Tool ) => (
 					<CardFeature
+						headingLevel={ 3 }
 						key={ tool.slug }
 						title={ tool.label }
 						description={ tool.description }
