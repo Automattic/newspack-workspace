@@ -1126,8 +1126,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	 * skipped by the shared `edit_others_posts` pre-filter BEFORE the group-mode
 	 * not-eligible counter ever ran, so an all-admin/editor plan silently
 	 * produced no warning at all — contradicting the "all-skipped runs surface a
-	 * tally" guarantee covered by test_as_group_reports_skips_when_no_member_is_added()
-	 * (NPPD, ④a).
+	 * tally" guarantee covered by test_as_group_reports_skips_when_no_member_is_added().
 	 */
 	public function test_as_group_all_admin_editor_plan_surfaces_a_not_eligible_tally() {
 		$plan_id        = $this->create_plan( 'manual-only' );
@@ -1161,8 +1160,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	 * A non-eligible user active on two in-scope plans must be counted once in
 	 * the aggregate not-eligible tally, not once per membership row. Before the
 	 * fix, $as_group_not_eligible incremented per membership while the "added"
-	 * count deduped per user via $granted_user_ids, so the two bases disagreed
-	 * (④b).
+	 * count deduped per user via $granted_user_ids, so the two bases disagreed.
 	 */
 	public function test_as_group_not_eligible_tally_counts_a_multi_plan_member_once() {
 		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
@@ -1207,8 +1205,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	 * migrate_teams()/add_group_member() already enforce via
 	 * Group_Subscription::is_eligible_member(). Before the fix, the shared
 	 * pre-filter skipped on the raw `edit_others_posts` capability, which
-	 * diverged from is_eligible_member() and incorrectly excluded this reader
-	 * (⑨).
+	 * diverged from is_eligible_member() and incorrectly excluded this reader.
 	 */
 	public function test_as_group_adds_a_reader_with_a_custom_role_granting_edit_others_posts() {
 		$plan_id        = $this->create_plan( 'manual-only' );

@@ -904,42 +904,17 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An author holds no `_newspack_reader` meta but is an eligible group member since
-	 * the author/contributor eligibility change (Group_Subscription::is_eligible_member()).
-	 * The member-row loop must render them like a reader member, not silently drop them
-	 * for failing Reader_Activation::is_user_reader().
-	 */
-	public function test_metabox_renders_eligible_author_member() {
-		$owner_id     = self::factory()->user->create();
-		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ], [], [ 'customer_id' => $owner_id ] );
-		$author_id    = self::factory()->user->create( [ 'role' => 'author' ] );
-		add_user_meta( $author_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
-		Group_Subscription::reset_cache();
-
-		$markup = $this->render_metabox( $subscription );
-
-		$this->assertStringContainsString(
-			'data-user-id="' . $author_id . '"',
-			$markup,
-			'An eligible author member should render as a member row, like a reader member does.'
-		);
-	}
-
-	/**
-	 * A member who becomes ineligible after being added (e.g. their role changes from
-	 * author to editor) must still render as a row: eligibility gates ADDITIONS, not the
-	 * display of existing members. Hiding the row would strip the only admin control
-	 * (Remove) that can free the stale seat they still occupy.
+	 * The render loop has no eligibility check left: any member holding group-subscription
+	 * meta renders as a row, regardless of role. An editor is the strongest fixture for
+	 * that, since editors are not eligible group members — if an eligibility gate crept
+	 * back into the render loop, this is the case that would regress, silently dropping
+	 * the row (and its Remove control) and stranding the still-occupied seat.
 	 */
 	public function test_metabox_renders_existing_member_who_became_ineligible() {
 		$owner_id     = self::factory()->user->create();
 		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ], [], [ 'customer_id' => $owner_id ] );
-		$member_id    = self::factory()->user->create( [ 'role' => 'author' ] );
+		$member_id    = self::factory()->user->create( [ 'role' => 'editor' ] );
 		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
-		Group_Subscription::reset_cache();
-
-		$member = get_user_by( 'id', $member_id );
-		$member->set_role( 'editor' );
 		Group_Subscription::reset_cache();
 
 		$markup = $this->render_metabox( $subscription );
