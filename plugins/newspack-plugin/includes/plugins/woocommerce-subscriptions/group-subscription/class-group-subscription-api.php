@@ -250,6 +250,9 @@ class Group_Subscription_API {
 		// Each query is capped at 50 candidates ('number' below); results are then post-filtered
 		// through is_eligible_member() below, so a response may hold fewer than the cap. A
 		// publisher can raise the cap via the newspack_group_subscription_user_query_args filter.
+		// The cap applies before that post-filter, so on a large site a search term whose first 50
+		// matches are all ineligible (e.g. staff) returns an empty list even though eligible matches
+		// exist further down; raise the cap via the filter above if that bites.
 		$query1 = get_users(
 			/**
 			 * Filter the user query args for searching for group subscription users.
