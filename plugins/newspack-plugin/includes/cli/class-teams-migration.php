@@ -1270,21 +1270,27 @@ class Teams_Migration {
 					continue;
 				}
 
-				// Skip users who are not eligible group members. This is the same
-				// definition migrate_teams()/add_group_member() enforce via
+				// Individual mode: staff who already bypass the content gate via
+				// edit_others_posts don't need a comped $0 subscription -- they can
+				// already read everything without one. This is distinct from group
+				// eligibility below: it is about whether the user *needs* a grant,
+				// not whether they qualify as a group member.
+				if ( ! $as_group && \user_can( $user_id, 'edit_others_posts' ) ) {
+					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — user has edit_others_posts.', $membership_id, $user_id, $user->user_email ) );
+					continue;
+				}
+
+				// Group mode: skip users who are not eligible group members. This is
+				// the same definition migrate_teams()/add_group_member() enforce via
 				// Group_Subscription::is_eligible_member() -- an admin/editor is
 				// skipped here exactly as there, and a reader who happens to hold a
-				// custom role granting edit_others_posts is no longer incorrectly
-				// excluded (previously this checked the raw edit_others_posts
-				// capability instead, which diverged from is_eligible_member() and
-				// skipped before the group-mode tally below could count it). Tracked
-				// per user, like $granted_user_ids below, so a user skipped across
-				// several in-scope plans is still counted once.
-				if ( ! Group_Subscription::is_eligible_member( $user ) ) {
+				// custom role granting edit_others_posts is still added (that role
+				// doesn't affect group eligibility). Tracked per user, like
+				// $granted_user_ids below, so a user skipped across several
+				// in-scope plans is still counted once.
+				if ( $as_group && ! Group_Subscription::is_eligible_member( $user ) ) {
 					WP_CLI::line( sprintf( '  Membership %d → user %d (%s): skipped — not an eligible group member.', $membership_id, $user_id, $user->user_email ) );
-					if ( $as_group ) {
-						$as_group_not_eligible_users[ $user_id ] = true;
-					}
+					$as_group_not_eligible_users[ $user_id ] = true;
 					continue;
 				}
 
@@ -1344,8 +1350,8 @@ class Teams_Migration {
 				}
 
 				// Group mode: add the user as a group member. Eligibility was already
-				// confirmed by the shared pre-filter above, so every user reaching
-				// this point is guaranteed group-eligible.
+				// confirmed by the group-scoped pre-filter above, so every user
+				// reaching this point is guaranteed group-eligible.
 				if ( $as_group ) {
 					if ( $dry_run ) {
 						// Project the same outcome a live run would produce.

@@ -1245,6 +1245,71 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	}
 
 	/**
+	 * INDIVIDUAL mode: a custom low-capability role member (no edit_others_posts,
+	 * and not a reader per is_eligible_member()) must still receive a personal $0
+	 * subscription. Group eligibility (Group_Subscription::is_eligible_member())
+	 * is a group-membership predicate and must not gate individual-subscription
+	 * creation — only edit_others_posts (staff who already bypass the content
+	 * gate) does that in individual mode. Before the fix, this member was
+	 * incorrectly skipped by the shared is_eligible_member() pre-filter.
+	 */
+	public function test_individual_mode_grants_a_custom_low_capability_role_member() {
+		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+
+		$plan_id  = $this->create_plan( 'manual-only' );
+		$guest_id = wp_insert_user(
+			[
+				'user_login' => 'guest-' . wp_generate_password( 8, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'guest-' . wp_generate_password( 8, false ) . '@test.com',
+				'role'       => 'newspack_test_guest',
+			]
+		);
+		$this->user_ids[] = $guest_id;
+		$this->create_membership( $plan_id, $guest_id );
+
+		$this->run_migrate_manual_members(
+			[
+				'plan-ids' => (string) $plan_id,
+				'live'     => true,
+			]
+		);
+
+		$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $guest_id ), 'A custom low-capability role member must receive a personal $0 subscription in individual mode.' );
+
+		remove_role( 'newspack_test_guest' );
+	}
+
+	/**
+	 * INDIVIDUAL mode regression guard: an editor (who has edit_others_posts and
+	 * so already bypasses the content gate) must still be skipped — no personal
+	 * subscription created. This is the edit_others_posts-only predicate, not
+	 * group eligibility.
+	 */
+	public function test_individual_mode_skips_an_editor() {
+		$plan_id   = $this->create_plan( 'manual-only' );
+		$editor_id = wp_insert_user(
+			[
+				'user_login' => 'editor-' . wp_generate_password( 8, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'editor-' . wp_generate_password( 8, false ) . '@test.com',
+				'role'       => 'editor',
+			]
+		);
+		$this->user_ids[] = $editor_id;
+		$this->create_membership( $plan_id, $editor_id );
+
+		$this->run_migrate_manual_members(
+			[
+				'plan-ids' => (string) $plan_id,
+				'live'     => true,
+			]
+		);
+
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $editor_id ), 'An editor must not receive a personal subscription — they already bypass the content gate.' );
+	}
+
+	/**
 	 * The raw-argv guard: WP-CLI strips a valueless value flag (with only a
 	 * warning) before the command runs, so the in-method boolean-flag guards
 	 * never see it — the raw command line is the only place the mistake is
