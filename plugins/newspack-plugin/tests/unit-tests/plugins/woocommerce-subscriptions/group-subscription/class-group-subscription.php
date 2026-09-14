@@ -104,6 +104,33 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create a user holding several roles at once (no reader meta) and track it for cleanup.
+	 *
+	 * @param string[] $roles Role slugs. The first becomes the primary role at creation;
+	 *                        the rest are added afterward via WP_User::add_role().
+	 * @return int User ID.
+	 */
+	private function create_multi_role_user( array $roles ): int {
+		$primary_role = array_shift( $roles );
+		$user_id      = wp_insert_user(
+			[
+				'user_login' => 'multi-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'multi-' . wp_generate_password( 6, false ) . '@test.com',
+				'role'       => $primary_role,
+			]
+		);
+		if ( ! is_wp_error( $user_id ) ) {
+			$user = get_user_by( 'id', $user_id );
+			foreach ( $roles as $role ) {
+				$user->add_role( $role );
+			}
+			$this->user_ids[] = $user_id;
+		}
+		return $user_id;
+	}
+
+	/**
 	 * Create an enabled group subscription owned by $customer_id, optionally with a member limit.
 	 *
 	 * @param int      $customer_id The owner user ID.
@@ -486,17 +513,20 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An editor remains a non-eligible member and is filtered out of additions.
+	 * A user who holds both Editor and Author is still staff, and must not slip into
+	 * membership through the Author/Contributor default -- the multi-role case the
+	 * single-role editor test above doesn't exercise, since a plain Editor never reaches
+	 * the Author/Contributor role-intersect branch of is_eligible_member() at all.
 	 */
 	public function test_editor_is_not_added_as_group_member() {
-		$owner_id  = $this->create_reader_user();
-		$editor_id = $this->create_role_user( 'editor' );
-		$sub       = $this->create_group_subscription( $owner_id, 3 );
+		$owner_id         = $this->create_reader_user();
+		$editor_author_id = $this->create_multi_role_user( [ 'editor', 'author' ] );
+		$sub              = $this->create_group_subscription( $owner_id, 3 );
 
-		$result = Group_Subscription::update_members( $sub, [ $editor_id ] );
+		$result = Group_Subscription::update_members( $sub, [ $editor_author_id ] );
 
 		$this->assertNotWPError( $result );
-		$this->assertArrayNotHasKey( $editor_id, $result['members_added'], 'Editors must not be added as members.' );
+		$this->assertArrayNotHasKey( $editor_author_id, $result['members_added'], 'A staff user must not be added as a member merely for also holding the Author role.' );
 	}
 
 	/**
@@ -674,6 +704,35 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible by default.' );
 		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible members.' );
 		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible members.' );
+	}
+
+	/**
+	 * A user holding a privileged role (Editor or Administrator) alongside Author must not
+	 * gain default eligibility from the Author/Contributor fallback -- that fallback exists
+	 * for plain content-creator roles, not for staff who happen to also hold one.
+	 */
+	public function test_is_eligible_member_excludes_privileged_multi_role_users() {
+		$editor_author_id = $this->create_multi_role_user( [ 'editor', 'author' ] );
+		$admin_author_id  = $this->create_multi_role_user( [ 'administrator', 'author' ] );
+
+		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author must not gain eligibility from the Author role.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author must not gain eligibility from the Author role.' );
+	}
+
+	/**
+	 * The member-eligibility filter can still opt in a privileged multi-role user -- the
+	 * capability guard only removes the *default* eligibility, not a publisher's explicit
+	 * override.
+	 */
+	public function test_is_eligible_member_filter_can_still_opt_in_privileged_multi_role_user() {
+		$editor_author_id = $this->create_multi_role_user( [ 'editor', 'author' ] );
+
+		$allow_editor_author = function ( $eligible, $user_id ) use ( $editor_author_id ) {
+			return $user_id === $editor_author_id ? true : $eligible;
+		};
+		add_filter( 'newspack_group_subscription_member_eligible', $allow_editor_author, 10, 2 );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $editor_author_id ), 'The filter can still opt in an Editor+Author user.' );
+		remove_filter( 'newspack_group_subscription_member_eligible', $allow_editor_author, 10 );
 	}
 
 	/**

@@ -801,8 +801,14 @@ class Group_Subscription {
 		// Readers keep their existing eligibility.
 		$eligible = Reader_Activation::is_user_reader( $user );
 
-		// Author/Contributor users are eligible by default.
-		if ( ! $eligible ) {
+		// Author/Contributor users are eligible by default -- but not a user who also holds
+		// a privileged role (editor, administrator, or any custom role with the same
+		// capability). Staff are meant to be excluded from default eligibility even when
+		// they also carry an Author/Contributor role; without this guard, a multi-role
+		// staff user would slip in through the Author/Contributor fallback. The
+		// newspack_group_subscription_member_eligible filter below still runs regardless,
+		// so a publisher can explicitly opt such a user in.
+		if ( ! $eligible && ! \user_can( $user, 'edit_others_posts' ) ) {
 			$eligible = (bool) array_intersect( (array) $user->roles, self::DEFAULT_ELIGIBLE_MEMBER_ROLES );
 		}
 
