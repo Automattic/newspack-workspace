@@ -1,3 +1,24 @@
+## newspack [6.50.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.50.2...newspack@6.50.3) (2026-09-11)
+
+
+### Bug Fixes
+
+* migrate-team-products includes owner seat in group limit ([#1066](https://github.com/Automattic/newspack-workspace/issues/1066)) ([6ab810e](https://github.com/Automattic/newspack-workspace/commit/6ab810e276a17a090f1226e18cbcd614a61c1fb4))
+
+## newspack [6.50.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.50.1...newspack@6.50.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **groups:** resolve Teams join-team links after the flip (NPPD-2252, [#1040](https://github.com/Automattic/newspack-workspace/issues/1040)) ([71e0b54](https://github.com/Automattic/newspack-workspace/commit/71e0b540cd9b5e555fae6f1c436647c80733d050))
+
+## newspack [6.50.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.50.0...newspack@6.50.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **newspack-plugin:** flag gates built from the newsletter block for Insights ([#1056](https://github.com/Automattic/newspack-workspace/issues/1056)) ([c8c4f64](https://github.com/Automattic/newspack-workspace/commit/c8c4f6461293ffd3f0406a21748023ba9505f523))
+
 # newspack [6.50.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.49.5...newspack@6.50.0) (2026-09-09)
 
 

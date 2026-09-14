@@ -437,6 +437,15 @@ class Access_Rules {
 	 * @return bool True if a populated, anonymous-capable rule grants access.
 	 */
 	public static function evaluate_anonymous_rules( $access_rules ) {
+		// A listing teaser is built once and served to every reader for an hour, so
+		// a grant that reads the current request belongs to the visitor who warmed
+		// the cache, and would be spent on everyone served after them. The one
+		// anonymous-capable rule (`institution`) matches on IP once the visitor
+		// carries the institutional-access cookie. The article page still honours
+		// it.
+		if ( Content_Gate::is_listing_context() ) {
+			return false;
+		}
 		if ( empty( $access_rules ) ) {
 			return false;
 		}
