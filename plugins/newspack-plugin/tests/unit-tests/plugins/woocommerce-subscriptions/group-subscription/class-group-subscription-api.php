@@ -483,6 +483,80 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The `newspack_group_subscription_member_eligible` filter is the authority on who is an
+	 * eligible group member (see Group_Subscription::is_eligible_member()), so a publisher opting
+	 * a custom low-capability role in via that filter must be able to find that user in the
+	 * admin metabox's search -- not just the static reader/author/contributor role allowlist the
+	 * search used to hard-code. Without this, a publisher-opted-in custom-role user could be
+	 * added by ID but never discovered through the picker.
+	 */
+	public function test_search_users_includes_filter_opted_in_custom_role() {
+		$subscription = $this->create_group_subscription( 'active' );
+		$admin_id     = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		// WooCommerce is mocked, so the capability its install would add is granted here.
+		( new WP_User( $admin_id ) )->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $admin_id );
+
+		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+		$guest_id = self::factory()->user->create(
+			[
+				'role'       => 'newspack_test_guest',
+				'user_login' => 'search-target-guest',
+			]
+		);
+		add_filter(
+			'newspack_group_subscription_member_eligible',
+			function( $eligible, $user_id ) use ( $guest_id ) {
+				return $user_id === $guest_id ? true : $eligible;
+			},
+			10,
+			2
+		);
+
+		$response = $this->dispatch_search( $subscription->get_id(), 'search-target' );
+		$ids      = array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
+
+		remove_all_filters( 'newspack_group_subscription_member_eligible' );
+		remove_role( 'newspack_test_guest' );
+
+		$this->assertContains( $guest_id, $ids, 'A user opted in via the eligibility filter should be a searchable candidate, even with no reader/author/contributor role.' );
+	}
+
+	/**
+	 * The eligibility filter can opt a role-eligible user OUT, too. The search must honor that
+	 * exclusion rather than surface every subscriber/customer unconditionally.
+	 */
+	public function test_search_users_excludes_filter_opted_out_subscriber() {
+		$subscription = $this->create_group_subscription( 'active' );
+		$admin_id     = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		// WooCommerce is mocked, so the capability its install would add is granted here.
+		( new WP_User( $admin_id ) )->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $admin_id );
+
+		$subscriber_id = self::factory()->user->create(
+			[
+				'role'       => 'subscriber',
+				'user_login' => 'search-target-opted-out',
+			]
+		);
+		add_filter(
+			'newspack_group_subscription_member_eligible',
+			function( $eligible, $user_id ) use ( $subscriber_id ) {
+				return $user_id === $subscriber_id ? false : $eligible;
+			},
+			10,
+			2
+		);
+
+		$response = $this->dispatch_search( $subscription->get_id(), 'search-target' );
+		$ids      = array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
+
+		remove_all_filters( 'newspack_group_subscription_member_eligible' );
+
+		$this->assertNotContains( $subscriber_id, $ids, 'A subscriber opted out via the eligibility filter should not be a searchable candidate.' );
+	}
+
+	/**
 	 * A group whose owner was deleted is not manageable by a caller with no account.
 	 */
 	public function test_routes_deny_anonymous_caller_on_ownerless_group() {

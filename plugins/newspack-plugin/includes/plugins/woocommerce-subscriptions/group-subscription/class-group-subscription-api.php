@@ -239,18 +239,17 @@ class Group_Subscription_API {
 		if ( ! $subscription ) {
 			return \rest_ensure_response( new \WP_Error( 'newspack_group_subscription_api_search_users', __( 'Subscription not found.', 'newspack-plugin' ) ) );
 		}
-		// Search candidates include readers (subscriber/customer) plus the non-reader roles that
-		// are eligible group members by default (author/contributor, see
-		// Group_Subscription::DEFAULT_ELIGIBLE_MEMBER_ROLES), so an eligible author/contributor can
-		// be found here, not just invited/migrated in. The add-time gate (update_members() ->
-		// is_eligible_member()) still enforces the full eligibility rule -- including the
-		// newspack_group_subscription_member_eligible filter and the privileged-role exclusion --
-		// so this candidate set can stay a little broader than that rule without a member actually
-		// being addable without passing it.
-		$searchable_roles = array_values( array_unique( array_merge( Reader_Activation::get_reader_roles(), Group_Subscription::DEFAULT_ELIGIBLE_MEMBER_ROLES ) ) );
-		$exclude          = Group_Subscription::get_members( $subscription );
-		$exclude[]        = $subscription->get_user_id();
-		$query1           = get_users(
+		// The candidate query is intentionally NOT role-restricted. Group_Subscription::is_eligible_member()
+		// -- which runs the newspack_group_subscription_member_eligible filter -- is the sole authority on
+		// who is an eligible group member, so a publisher can opt a custom-role user in (or a normally
+		// eligible role-holder out) via that filter. A role__in allowlist here would silently exclude an
+		// opted-in user (and could never exclude an opted-out one) before the predicate ever runs, so
+		// results are post-filtered against is_eligible_member() below instead.
+		$exclude   = Group_Subscription::get_members( $subscription );
+		$exclude[] = $subscription->get_user_id();
+		// Over-fetch modestly: post-filtering can drop candidates, and neither query paginates
+		// (no 'number'/'offset' is set), so this only widens the pool searched, not a page size.
+		$query1 = get_users(
 			/**
 			 * Filter the user query args for searching for group subscription users.
 			 *
@@ -264,7 +263,6 @@ class Group_Subscription_API {
 					'exclude'        => $exclude,
 					'search'         => "*$search*",
 					'search_columns' => [ 'ID', 'user_login', 'user_url', 'user_email', 'user_nicename', 'display_name' ],
-					'role__in'       => $searchable_roles,
 				],
 				'main_query'
 			)
@@ -282,7 +280,6 @@ class Group_Subscription_API {
 				[
 					'fields'     => [ 'ID', 'user_email' ],
 					'exclude'    => $exclude,
-					'role__in'   => $searchable_roles,
 					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 						'relation' => 'OR',
 						[
@@ -307,7 +304,12 @@ class Group_Subscription_API {
 					'text' => $user->user_email . ' (#' . $user->ID . ')',
 				];
 			},
-			array_merge( $query1, $query2 )
+			array_filter(
+				array_merge( $query1, $query2 ),
+				function( $user ) {
+					return Group_Subscription::is_eligible_member( (int) $user->ID );
+				}
+			)
 		);
 
 		// Sort by ID.
