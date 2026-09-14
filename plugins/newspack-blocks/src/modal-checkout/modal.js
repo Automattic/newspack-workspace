@@ -11,6 +11,7 @@ import * as a11y from './accessibility.js';
  */
 import { manageDismissed, manageOpened } from './analytics';
 import {
+	afterDeferredScripts,
 	domReady,
 	iframeReady,
 	onCheckoutReady,
@@ -950,7 +951,13 @@ domReady( () => {
 			stripCheckoutUrlParams();
 		}
 	};
-	handleModalCheckoutUrlParams();
+	// A click reaches a form long after every script has loaded; the URL trigger
+	// fires as soon as this bundle runs. This bundle is async and the reader
+	// activation scripts are deferred, so firing here can beat them — and then
+	// the checkout opens without the sign-in step and without registering as an
+	// overlay, which lets prompts open on top of it. Deferred scripts are done
+	// by DOMContentLoaded, so the trigger waits for that.
+	afterDeferredScripts( handleModalCheckoutUrlParams );
 
 	/**
 	 * Open the modal checkout.
