@@ -96,14 +96,32 @@ class WC_Payment_Tokens {
 		return self::$tokens[ $token_id ] ?? null;
 	}
 	/**
-	 * Faithful to WC_Payment_Tokens::get_tokens() for the args Newspack uses:
-	 * filters the registry by user_id and gateway_id without running the
-	 * woocommerce_get_customer_payment_tokens filter.
+	 * Faithful to WC_Payment_Tokens::get_tokens() for the args Newspack uses.
+	 * Like the real data store, a falsy user_id adds no user predicate (so every
+	 * user's tokens come back), and gateway_id / type filter only when non-empty.
+	 * Does not run the woocommerce_get_customer_payment_tokens filter.
 	 *
-	 * @param array $args Query args: user_id, gateway_id, limit.
+	 * @param array $args Query args: user_id, gateway_id, type, limit.
 	 */
 	public static function get_tokens( $args ) {
-		return self::get_customer_tokens( (int) ( $args['user_id'] ?? 0 ), (string) ( $args['gateway_id'] ?? '' ) );
+		$user_id    = (int) ( $args['user_id'] ?? 0 );
+		$gateway_id = (string) ( $args['gateway_id'] ?? '' );
+		$type       = (string) ( $args['type'] ?? '' );
+		return array_filter(
+			self::$tokens,
+			function ( $token ) use ( $user_id, $gateway_id, $type ) {
+				if ( $user_id && ( ! method_exists( $token, 'get_user_id' ) || (int) $token->get_user_id() !== $user_id ) ) {
+					return false;
+				}
+				if ( '' !== $gateway_id && $token->get_gateway_id() !== $gateway_id ) {
+					return false;
+				}
+				if ( 'CC' === $type && ! $token instanceof WC_Payment_Token_CC ) {
+					return false;
+				}
+				return true;
+			}
+		);
 	}
 	/**
 	 * Faithful to WC_Payment_Tokens::get_customer_tokens(): customers below 1

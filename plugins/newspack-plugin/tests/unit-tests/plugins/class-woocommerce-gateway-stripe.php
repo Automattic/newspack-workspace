@@ -690,6 +690,44 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A guest or missing user ID must never reach the token query: WooCommerce
+	 * drops the user predicate for a falsy user_id, so the lookup would span
+	 * every customer's tokens and could rewrite someone else's card.
+	 */
+	public function test_non_positive_user_id_never_touches_another_users_token() {
+		$other_user = self::factory()->user->create();
+		$token      = $this->saved_card_token( $other_user, 'pm_shared_id', '12', '2028' );
+
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata(
+			0,
+			$this->stripe_card_payment_method( 'pm_shared_id', [ 'exp_year' => 2034 ] )
+		);
+
+		$this->assertSame( '2028', $token->get_expiry_year() );
+		$this->assertSame( 0, $token->save_calls );
+	}
+
+	/**
+	 * Brand and last4 are refreshed from the PaymentMethod too, not only expiry.
+	 */
+	public function test_card_type_and_last4_are_refreshed_from_connected_payment_method() {
+		$user_id = self::factory()->user->create();
+		$token   = new WC_Payment_Token_CC( 'mastercard', '1111', 'pm_rebranded', $user_id, 'stripe' );
+		$token->set_expiry_month( '12' );
+		$token->set_expiry_year( '2034' );
+		WC_Payment_Tokens::$tokens[] = $token;
+
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata(
+			$user_id,
+			$this->stripe_card_payment_method( 'pm_rebranded', [ 'brand' => 'visa', 'last4' => '4242' ] )
+		);
+
+		$this->assertSame( 'visa', $token->get_card_type() );
+		$this->assertSame( '4242', $token->get_last4() );
+		$this->assertSame( 1, $token->save_calls );
+	}
+
+	/**
 	 * The checkout path can pass a bare PaymentMethod ID instead of an object;
 	 * that is ignored without error.
 	 */

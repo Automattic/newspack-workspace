@@ -465,7 +465,10 @@ class WooCommerce_Gateway_Stripe {
 	 * @param object|string $payment_method Stripe PaymentMethod object, or a bare PaymentMethod ID on the checkout path.
 	 */
 	public static function refresh_card_token_metadata( int $user_id, $payment_method ): void {
+		// A falsy user_id drops the user predicate from WC_Payment_Tokens::get_tokens(),
+		// which would scan every customer's tokens; guests never have saved cards.
 		if (
+			$user_id < 1 ||
 			! \is_object( $payment_method ) ||
 			empty( $payment_method->id ) ||
 			'card' !== ( $payment_method->type ?? '' ) ||
