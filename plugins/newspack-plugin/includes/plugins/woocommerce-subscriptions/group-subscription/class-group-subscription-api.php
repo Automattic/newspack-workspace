@@ -247,8 +247,10 @@ class Group_Subscription_API {
 		// results are post-filtered against is_eligible_member() below instead.
 		$exclude   = Group_Subscription::get_members( $subscription );
 		$exclude[] = $subscription->get_user_id();
-		// Over-fetch modestly: post-filtering can drop candidates, and neither query paginates
-		// (no 'number'/'offset' is set), so this only widens the pool searched, not a page size.
+		// Neither query paginates (no 'number'/'offset' is set), so post-filtering through
+		// is_eligible_member() below can't shrink a page -- there is no page to shrink. If a
+		// site adds 'number' via the newspack_group_subscription_user_query_args filter,
+		// results are still post-filtered afterward and may come back under that count.
 		$query1 = get_users(
 			/**
 			 * Filter the user query args for searching for group subscription users.

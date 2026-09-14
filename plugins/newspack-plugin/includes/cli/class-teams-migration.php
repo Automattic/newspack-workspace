@@ -911,10 +911,11 @@ class Teams_Migration {
 	 * subscription backs.
 	 *
 	 * By default, iterates through membership plans with manual-only access and
-	 * creates free WooCommerce Subscriptions for active members who are eligible
-	 * group members per `Group_Subscription::is_eligible_member()` -- readers,
-	 * and Author/Contributor users without a privileged capability like
-	 * `edit_others_posts` (i.e. not administrators/editors).
+	 * creates free WooCommerce Subscriptions for active members, skipping only
+	 * staff who bypass the content gate outright -- users with a privileged
+	 * capability like `edit_others_posts` (i.e. administrators/editors).
+	 * `Group_Subscription::is_eligible_member()` does not gate this path;
+	 * eligibility only applies to group mode, below.
 	 *
 	 * Plans with purchase/signup access can only be targeted with a member
 	 * selection flag — --only-without-live-subscription and/or
@@ -939,8 +940,11 @@ class Teams_Migration {
 	 * skipped. Dry-run by default; pass --live to write.
 	 *
 	 * Under --as-group, members are added through the group data layer, which adds
-	 * readers only — a member on a non-reader role is skipped (reported inline),
-	 * whereas individual mode gives every member their own subscription.
+	 * any user eligible per `Group_Subscription::is_eligible_member()` -- readers
+	 * plus Author/Contributor by default, filterable via
+	 * `newspack_group_subscription_member_eligible` -- and skips (and tallies,
+	 * reported inline) the rest, whereas individual mode gives every processed
+	 * member their own subscription.
 	 *
 	 * ## OPTIONS
 	 *
