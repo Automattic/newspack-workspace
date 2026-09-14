@@ -6,9 +6,10 @@
  */
 
 /**
- * The republish endpoint should serve a post through its template only when the
- * requesting visitor is entitled to read that post. A visitor who could not read
- * the post through its normal permalink must not read it through /republish/.
+ * The republish endpoint serves a post through its template only when that post
+ * is publicly viewable and not password-gated. The rule is about the post, not
+ * the requester: nobody gets a republish view of an unpublished article, an
+ * editor included. Anything else is handed back to normal WordPress handling.
  */
 class RewriteEndpointStatusTest extends WP_UnitTestCase {
 
@@ -65,7 +66,8 @@ class RewriteEndpointStatusTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A published post is served by the republish template.
+	 * A published post is served by the republish template. Positive control: it
+	 * fails if the guard declines everything.
 	 */
 	public function test_published_post_is_served() {
 		$post_id = $this->factory->post->create( array( 'post_status' => 'publish' ) );
@@ -77,55 +79,63 @@ class RewriteEndpointStatusTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A draft is not served to a logged-out visitor.
+	 * A post a logged-out visitor could not read at its permalink is handed back
+	 * to normal WordPress handling rather than served by the republish template.
+	 *
+	 * @dataProvider non_public_post_provider
+	 * @param array  $postarr Arguments for the post to create.
+	 * @param string $why     What this case is guarding, for the failure message.
 	 */
-	public function test_draft_is_not_served() {
-		$post_id = $this->factory->post->create( array( 'post_status' => 'draft' ) );
-		$this->assertNotSame(
-			$this->republish_template,
+	public function test_non_public_post_is_not_served( $postarr, $why ) {
+		$post_id = $this->factory->post->create( $postarr );
+		$this->assertSame(
+			$this->incoming_template,
 			$this->template_for_request( $post_id ),
-			'A draft must not be served by the republish template to a logged-out visitor.'
+			$why
 		);
 	}
 
 	/**
-	 * A pending post is not served to a logged-out visitor.
+	 * The statuses the endpoint reached before the guard, plus the password case.
+	 *
+	 * `future` and `trash` are here because the report named them as reachable;
+	 * they are also the two whose absence would be least obvious from reading the
+	 * guard, since neither has a test elsewhere in this plugin.
+	 *
+	 * @return array
 	 */
-	public function test_pending_post_is_not_served() {
-		$post_id = $this->factory->post->create( array( 'post_status' => 'pending' ) );
-		$this->assertNotSame(
-			$this->republish_template,
-			$this->template_for_request( $post_id ),
-			'A pending post must not be served by the republish template to a logged-out visitor.'
-		);
-	}
-
-	/**
-	 * A private post is not served to a logged-out visitor.
-	 */
-	public function test_private_post_is_not_served() {
-		$post_id = $this->factory->post->create( array( 'post_status' => 'private' ) );
-		$this->assertNotSame(
-			$this->republish_template,
-			$this->template_for_request( $post_id ),
-			'A private post must not be served by the republish template to a logged-out visitor.'
-		);
-	}
-
-	/**
-	 * A password-protected published post is not served without the password.
-	 */
-	public function test_password_protected_post_is_not_served() {
-		$post_id = $this->factory->post->create(
-			array(
-				'post_status'   => 'publish',
-				'post_password' => 'secret',
-			)
-		);
-		$this->assertNotSame(
-			$this->republish_template,
-			$this->template_for_request( $post_id ),
-			'A password-protected post must not be served without the password.'
+	public function non_public_post_provider() {
+		return array(
+			'draft'    => array(
+				array( 'post_status' => 'draft' ),
+				'A draft must not be served by the republish template to a logged-out visitor.',
+			),
+			'pending'  => array(
+				array( 'post_status' => 'pending' ),
+				'A pending post must not be served by the republish template to a logged-out visitor.',
+			),
+			'private'  => array(
+				array( 'post_status' => 'private' ),
+				'A private post must not be served by the republish template to a logged-out visitor.',
+			),
+			'future'   => array(
+				array(
+					'post_status' => 'future',
+					'post_date'   => gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ),
+				),
+				'A scheduled post must not be served before its publication date.',
+			),
+			'trash'    => array(
+				array( 'post_status' => 'trash' ),
+				'A trashed post must not be served by the republish template.',
+			),
+			'password' => array(
+				array(
+					'post_status'   => 'publish',
+					'post_password' => 'correct-horse',
+				),
+				'A password-protected post must not be served without the password.',
+			),
 		);
 	}
 }
