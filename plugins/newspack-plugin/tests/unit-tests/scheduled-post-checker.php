@@ -47,11 +47,12 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	 * Add a filter that tear_down() will remove — even an anonymous callback,
 	 * which remove_filter() otherwise can't target once its reference is lost.
 	 *
-	 * @param string   $hook     Filter hook.
-	 * @param callable $callback Callback.
+	 * @param string   $hook          Filter hook.
+	 * @param callable $callback      Callback.
+	 * @param int      $accepted_args Number of args the callback accepts.
 	 */
-	private function add_cleanup_filter( $hook, $callback ) {
-		add_filter( $hook, $callback );
+	private function add_cleanup_filter( $hook, $callback, $accepted_args = 1 ) {
+		add_filter( $hook, $callback, 10, $accepted_args );
 		$this->added_filters[] = [ $hook, $callback ];
 	}
 
@@ -84,9 +85,12 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	 * can't be produced through the normal API.
 	 *
 	 * @param string $post_type Post type.
+	 * @param array  $columns   Extra post columns to write alongside the status.
+	 *                          Goes through $wpdb too, so JSON payloads reach the
+	 *                          column unslashed and unfiltered.
 	 * @return int Post ID.
 	 */
-	private function create_overdue_future_post( $post_type ) {
+	private function create_overdue_future_post( $post_type, $columns = [] ) {
 		$post_id = self::factory()->post->create(
 			[
 				'post_type'   => $post_type,
@@ -98,11 +102,14 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 		$past = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
 		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->posts,
-			[
-				'post_status'   => 'future',
-				'post_date'     => $past,
-				'post_date_gmt' => $past,
-			],
+			array_merge(
+				[
+					'post_status'   => 'future',
+					'post_date'     => $past,
+					'post_date_gmt' => $past,
+				],
+				$columns
+			),
 			[ 'ID' => $post_id ]
 		);
 		clean_post_cache( $post_id );
@@ -124,6 +131,7 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 
 		$this->assertContains( 'newspack_popups_cpt', $post_types, 'Campaign prompts are covered.' );
 		$this->assertContains( 'newspack_spnsrs_cpt', $post_types, 'Sponsors are covered.' );
+		$this->assertContains( 'customize_changeset', $post_types, 'Scheduled Customizer changes are covered.' );
 		$this->assertContains( 'post', $post_types, 'Search-visible types are still covered.' );
 
 		// An unrelated non-public CPT is not swept in by default.
@@ -185,6 +193,66 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 		\Newspack\Scheduled_Post_Checker\nspc_run_check();
 
 		$this->assertSame( 'future', get_post_status( $post_id ), 'An unlisted hidden type is left alone.' );
+	}
+
+	/**
+	 * A scheduled Customizer change that missed its slot goes live, and its values
+	 * actually land: publishing the changeset hands off to core's
+	 * _wp_customize_publish_changeset(), which applies the stored settings.
+	 *
+	 * Theme mods the changeset never carried are untouched, which is what keeps a
+	 * late rescue from reverting settings written outside the Customizer — the
+	 * wizards' set_theme_mod() calls, for instance.
+	 */
+	public function test_rescues_missed_customizer_changeset() {
+		$scheduled_mod = 'nspc_scheduled_mod';
+		$other_mod     = 'nspc_other_mod';
+
+		/*
+		 * Register the setting the changeset carries. Hooking add_dynamic_settings(),
+		 * which _wp_customize_publish_changeset() always calls, rather than
+		 * customize_register, which it fires only if nothing else in the suite
+		 * already did.
+		 */
+		$this->add_cleanup_filter(
+			'customize_dynamic_setting_args',
+			function ( $args, $id ) use ( $scheduled_mod ) {
+				return $id === $scheduled_mod ? [ 'type' => 'theme_mod' ] : $args;
+			},
+			2
+		);
+
+		set_theme_mod( $scheduled_mod, 'before' );
+		set_theme_mod( $other_mod, 'written outside the Customizer' );
+
+		// Changeset values are namespaced per stylesheet, and only entries matching
+		// the active theme are applied.
+		$changeset_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode(
+					[
+						get_stylesheet() . '::' . $scheduled_mod => [
+							'value' => 'after',
+							'type'  => 'theme_mod',
+						],
+					]
+				),
+			]
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( 'after', get_theme_mod( $scheduled_mod ), 'The scheduled Customizer change is applied.' );
+		$this->assertSame( 'written outside the Customizer', get_theme_mod( $other_mod ), 'A theme mod the changeset never carried is left alone.' );
+
+		/*
+		 * Core trashes a published changeset — or deletes it outright where
+		 * EMPTY_TRASH_DAYS is 0 — because the CPT has no revisions support to keep
+		 * it around. Either way it is no longer stuck.
+		 */
+		$this->assertNotSame( 'future', get_post_status( $changeset_id ), 'The changeset does not stay scheduled.' );
 	}
 
 	/**

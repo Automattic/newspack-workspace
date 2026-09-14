@@ -34,20 +34,27 @@ function nspc_deactivate() {
  *
  * WordPress's `post_type => 'any'` shorthand matches only types whose
  * `exclude_from_search` is false — which it derives from `public` when the
- * argument is omitted. Editor-authored types registered `public => false`
- * (Campaign prompts, Sponsors) are therefore invisible to `'any'`, so a
- * scheduled one that misses its cron slot would otherwise sit in `future`
- * indefinitely. Start from the search-visible set and add those known editorial
- * types; the filter lets any plugin register its own schedulable type.
+ * argument is omitted. Types registered `public => false` (Campaign prompts,
+ * Sponsors, and core's own Customizer changesets) are therefore invisible to
+ * `'any'`, so a scheduled one that misses its cron slot would otherwise sit in
+ * `future` indefinitely. Start from the search-visible set and add those known
+ * schedulable types; the filter lets any plugin register its own.
+ *
+ * Rescuing a `customize_changeset` runs the same path core's own cron uses:
+ * `wp_publish_post()` fires `transition_post_status`, and core's
+ * `_wp_customize_publish_changeset()` bootstraps a `WP_Customize_Manager` and
+ * applies the stored values. A changeset carries only the settings its author
+ * actually touched, so publishing one writes those keys and leaves every other
+ * theme mod alone.
  *
  * @return string[] Post type slugs.
  */
 function nspc_get_post_types() {
 	$post_types = get_post_types( [ 'exclude_from_search' => false ] );
 
-	foreach ( [ 'newspack_popups_cpt', 'newspack_spnsrs_cpt' ] as $editorial_cpt ) {
-		if ( post_type_exists( $editorial_cpt ) ) {
-			$post_types[ $editorial_cpt ] = $editorial_cpt;
+	foreach ( [ 'newspack_popups_cpt', 'newspack_spnsrs_cpt', 'customize_changeset' ] as $hidden_cpt ) {
+		if ( post_type_exists( $hidden_cpt ) ) {
+			$post_types[ $hidden_cpt ] = $hidden_cpt;
 		}
 	}
 
