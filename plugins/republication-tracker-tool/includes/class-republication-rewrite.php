@@ -96,13 +96,7 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 		// to a capability check would widen what an unauthenticated-by-design
 		// endpoint serves, and the canonical URL this page emits would point at a
 		// permalink that 404s.
-		//
-		// nocache_headers() because declining still renders a 200: without it a
-		// full-page cache stores that response against the republish URL, and the
-		// post's own republish page serves the cached miss for the cache lifetime
-		// after it is published.
 		if ( ! is_post_publicly_viewable( $post_id ) || post_password_required( $post_id ) ) {
-			nocache_headers();
 			return $template;
 		}
 
