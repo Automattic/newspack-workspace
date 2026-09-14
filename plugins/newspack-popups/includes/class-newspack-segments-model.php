@@ -146,6 +146,14 @@ final class Newspack_Segments_Model {
 										],
 									],
 								],
+								[
+									'type'                 => 'object',
+									'additionalProperties' => false,
+									'properties'           => [
+										'start' => self::get_date_bound_schema(),
+										'end'   => self::get_date_bound_schema(),
+									],
+								],
 
 							],
 						],
@@ -259,6 +267,55 @@ final class Newspack_Segments_Model {
 						'type'     => 'boolean',
 						'required' => false,
 						'default'  => false,
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * Schema for one end of a date-range criterion value.
+	 *
+	 * A bound is either a fixed calendar date or an offset in days from today —
+	 * negative for the past, positive for the future. Absent means unbounded, so
+	 * neither key is required on the parent object.
+	 *
+	 * @return array The schema.
+	 */
+	private static function get_date_bound_schema() {
+		return [
+			'type'  => 'object',
+			'oneOf' => [
+				[
+					'type'                 => 'object',
+					'additionalProperties' => false,
+					'required'             => [ 'type', 'date' ],
+					'properties'           => [
+						'type' => [
+							'type' => 'string',
+							'enum' => [ 'absolute' ],
+						],
+						// Month and day are bounded, not just digit-shaped, so this matches
+						// the client matcher's ISO_DATE exactly. A criterion the matcher
+						// would reject (`2026-13-45`) can't be saved in the first place.
+						'date' => [
+							'type'    => 'string',
+							'pattern' => '^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$',
+						],
+					],
+				],
+				[
+					'type'                 => 'object',
+					'additionalProperties' => false,
+					'required'             => [ 'type', 'days' ],
+					'properties'           => [
+						'type' => [
+							'type' => 'string',
+							'enum' => [ 'relative' ],
+						],
+						'days' => [
+							'type' => 'integer',
+						],
 					],
 				],
 			],

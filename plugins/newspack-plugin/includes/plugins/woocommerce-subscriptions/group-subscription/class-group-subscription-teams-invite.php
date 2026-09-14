@@ -411,27 +411,28 @@ class Group_Subscription_Teams_Invite {
 			return self::invalid_link_error( self::unresolved_team_reason(), [ 'team_id' => $team_id ] );
 		}
 
-		// Invite links belong to a manager, and a link is revoked when its manager is
-		// removed from the group. The owner is the one manager who cannot be removed,
-		// so their link is the only one that lasts as long as the emails pointing at
-		// it — which have no expiry of their own.
+		// The invite link belongs to the subscription, not to whoever mints it, so it
+		// keeps working however the managers change. The owner is passed to
+		// generate_link_invite() only as the minting manager for its permission check
+		// and audit trail — they are guaranteed to be a valid manager, and are used
+		// even when a different manager minted the link this route hands back.
 		$owner_id = (int) $subscription->get_user_id();
-		$entry    = Group_Subscription_Invite::get_link_invite( $subscription, $owner_id );
+		$entry    = Group_Subscription_Invite::get_link_invite( $subscription );
 		if ( empty( $entry['key'] ) ) {
 			// An absent link means one of two things, and only one of them may be
 			// minted into. delete_link_invite() removes the entry outright, so a link
-			// the owner deliberately disabled looks exactly like one that never
+			// a manager deliberately disabled looks exactly like one that never
 			// existed — and minting here would put the revoked link back into
 			// circulation for everyone still holding an old registration URL. The
 			// withdrawal itself is what records the difference, whoever minted the
-			// link: this route, or the owner in the group panel.
+			// link: this route, or a manager in the group panel.
 			//
 			// A withdrawal from before delete_link_invite() began writing
 			// LINK_REVOKED_META left no marker, so the first click on a legacy
 			// registration URL mints a replacement. Reading an unmarked absence as a
 			// withdrawal instead would permanently kill the registration URLs of every
-			// group whose owner simply never minted a link.
-			if ( Group_Subscription_Invite::link_invite_was_revoked( $subscription, $owner_id ) ) {
+			// group whose managers simply never minted a link.
+			if ( Group_Subscription_Invite::link_invite_was_revoked( $subscription ) ) {
 				return self::invalid_link_error( 'link_invite_revoked', [ 'subscription_id' => $subscription->get_id() ] );
 			}
 			$entry = Group_Subscription_Invite::generate_link_invite( $subscription, $owner_id );
@@ -440,7 +441,7 @@ class Group_Subscription_Teams_Invite {
 			}
 		}
 
-		return Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $owner_id, $entry['key'] );
+		return Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $entry['key'] );
 	}
 
 	/**

@@ -84,10 +84,10 @@ const SidebarComponent = ( { createNotice, meta, publishDate, updateMetaValue } 
 						label={ __( 'Expiration Date', 'newspack-listings' ) }
 					>
 						<DateTimePicker
-							currentDate={ expirationDate ? new Date( expirationDate ) : null }
+							currentDate={ expirationDate || null }
 							onChange={ value => {
 								/**
-								 * If the current user is a listings customer, don't allow them to set the expiraiton date beyond the
+								 * If the current user is a listings customer, don't allow them to set the expiration date beyond the
 								 * last saved expiration date or `expirationPeriod` days from the publish date, whichever is later.
 								 */
 								if ( isListingCustomer ) {

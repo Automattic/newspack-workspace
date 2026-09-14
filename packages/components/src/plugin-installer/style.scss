@@ -2,8 +2,6 @@
  * Plugin Installer
  */
 
-@use "~@wordpress/base-styles/colors" as wp-colors;
-
 .newspack-card {
 	.newspack-plugin-installer__status {
 		align-items: center;
@@ -35,25 +33,16 @@
 	}
 
 	&.newspack-plugin-installer__status-active {
-		box-shadow: inset 4px 0 0 wp-colors.$alert-green;
-
-		.newspack-plugin-installer__checkbox {
-			background: wp-colors.$alert-green;
-			box-shadow: none;
-		}
-
-		svg {
-			fill: white;
-		}
+		box-shadow: inset 4px 0 0 var( --wpds-color-stroke-surface-success-strong, #008030 );
 	}
 
 	&.newspack-plugin-installer__status-error {
-		box-shadow: inset 4px 0 0 wp-colors.$alert-red;
+		box-shadow: inset 4px 0 0 var( --wpds-color-stroke-surface-error-strong, #cc1818 );
 	}
 
 	&.newspack-plugin-installer__status-installing,
 	&.newspack-plugin-installer__status-none {
-		box-shadow: inset 4px 0 0 wp-colors.$gray-100;
+		box-shadow: inset 4px 0 0 var( --wpds-color-stroke-surface-neutral-weak, #f0f0f0 );
 	}
 
 	// Is Small

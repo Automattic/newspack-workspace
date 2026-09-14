@@ -28,7 +28,6 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 // reads the router at module scope, so the proxy has to answer here too.
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
-	Badge: () => null,
 	Button: () => null,
 	Notice: () => null,
 	Waiting: () => null,

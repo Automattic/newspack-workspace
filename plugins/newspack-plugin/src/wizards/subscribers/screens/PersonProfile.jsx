@@ -46,7 +46,7 @@ import { useWizardNode } from '../use-portals';
 import { billingText, fmtDate, orDash, scheduleRow } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL, statusRank, displayStatuses } from '../status';
+import { STATUS_LABELS, STATUS_BADGE_INTENT, statusRank, displayStatuses } from '../status';
 
 const { useParams, useLocation } = Router;
 
@@ -104,7 +104,7 @@ const seatsSubline = group => {
  * @param {string} status The mapped status.
  * @return {Array} Badge descriptors for SubscriptionCard.
  */
-const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], level: STATUS_BADGE_LEVEL[ status ] } ] : [] );
+const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ] : [] );
 
 export default function PersonProfile() {
 	const { id } = useParams();
@@ -164,7 +164,7 @@ export default function PersonProfile() {
 				{ label: subscriber.name },
 			],
 			sectionTitle: subscriber.name,
-			badges: headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], level: STATUS_BADGE_LEVEL[ status ] } ) ),
+			badges: headlineStatuses.map( status => ( { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ) ),
 			// A newline-joined string, not markup: SectionHeader renders a
 			// description inside a `<p>`, so a stack of divs would be invalid
 			// nesting. The wizard stylesheet sets `white-space: pre-line` on that

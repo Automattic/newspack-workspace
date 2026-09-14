@@ -122,7 +122,7 @@
 			width: 100%;
 			// Compact buttons for the subscription header — modal buttons (which always carry --wide) keep the default medium size.
 			.newspack-ui__button:not(.newspack-ui__button--wide) {
-				width: auto;
+				margin-bottom: 0;
 				@media ( min-width: 768px ) {
 					font-size: var(--newspack-ui-font-size-xs);
 					line-height: var(--newspack-ui-line-height-xs);
@@ -156,5 +156,8 @@
 				background: var(--newspack-ui-color-error-50);
 			}
 		}
+	}
+	.newspack__subscription-tiers__seats {
+		margin-top: var(--newspack-ui-spacer-4);
 	}
 }

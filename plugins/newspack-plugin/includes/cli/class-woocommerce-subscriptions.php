@@ -23,20 +23,26 @@ defined( 'ABSPATH' ) || exit;
  */
 class WooCommerce_Subscriptions {
 	/**
-	 * Product statuses the gate product picker offers (mirrors the default statuses
-	 * `Access_Rules::get_subscription_products_options` -> `wc_get_products` lists). A
-	 * subscription line item on a product outside this set is not gate-selectable, so
-	 * Access Control can never reference it. Single source of truth shared by the audit
+	 * Product statuses the gate product picker offers for a parent product (mirrors the
+	 * default statuses `Access_Rules::get_subscription_products_options` -> `wc_get_products`
+	 * lists). A subscription line item whose parent product is outside this set has no
+	 * gate-selectable product behind it. Single source of truth shared by the audit
 	 * classifier and the repair target check so the two can't drift.
+	 *
+	 * Variations are the picker's other half and are deliberately not modelled here: it
+	 * lists a variable subscription's publish and private variations alongside the parent,
+	 * but only while it lists the parent, so the parent is what decides whether a line item
+	 * is reachable at all. {@see classify_subscription_product_link()}.
 	 *
 	 * @var string[]
 	 */
 	const SELECTABLE_PRODUCT_STATUSES = [ 'publish', 'private', 'draft', 'pending' ];
 
 	/**
-	 * Product types the gate product picker offers. A repair target outside this set can
-	 * never be referenced by a gate (and a non-`product` post such as a variation would
-	 * also throw in WC_Order_Item_Product::set_product_id()).
+	 * Parent product types the gate product picker offers. A repair target outside this set
+	 * is not a product a repair may point a line item at — a non-`product` post such as a
+	 * variation also throws in WC_Order_Item_Product::set_product_id(), which is why a
+	 * variation stays out of this set even though a gate can now reference one.
 	 *
 	 * @var string[]
 	 */
@@ -902,8 +908,9 @@ class WooCommerce_Subscriptions {
 	 *
 	 * Liveness keys on the line item's parent `product_id`: the picker
 	 * (`Access_Rules::get_subscription_products_options`) offers `subscription` /
-	 * `variable-subscription` parents, never variations, so it is the parent's liveness — not
-	 * the specific variation's — that decides whether a fresh gate can be configured to match.
+	 * `variable-subscription` parents, and a variable subscription's variations only
+	 * alongside the parent it lists, so it is the parent's liveness — not the specific
+	 * variation's — that decides whether a fresh gate can be configured to match.
 	 * The access-referenced check is wider: `WC_Subscription::has_product()` compares a stored
 	 * rule value against both `product_id` and `variation_id`, so an already-persisted rule
 	 * holding either ID keeps granting access and both are honored here.
@@ -1224,8 +1231,10 @@ class WooCommerce_Subscriptions {
 	/**
 	 * Fetch the gate-selectable subscription products, for guess-matching.
 	 *
-	 * Mirrors `Access_Rules::get_subscription_products_options`: the same product types and
-	 * statuses the gate product picker lists (via the shared allowlist constants).
+	 * Mirrors the parent products in `Access_Rules::get_subscription_products_options`: the
+	 * same types and statuses the gate product picker lists (via the shared allowlist
+	 * constants). The picker's variations are left out — this set feeds name-matching for a
+	 * repair, and a repair may not point a line item at a variation.
 	 *
 	 * @return array List of `[ 'id' => int, 'name' => string ]`.
 	 */
@@ -1248,9 +1257,9 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
-	 * Whether a product is one the gate picker would list — the same type + status allowlist
-	 * as `get_live_subscription_products()`, so the repair target check and the audit's
-	 * live-product set can't drift.
+	 * Whether a product is a parent product the gate picker would list — the same type +
+	 * status allowlist as `get_live_subscription_products()`, so the repair target check and
+	 * the audit's live-product set can't drift.
 	 *
 	 * @param \WC_Product $product The product to test.
 	 * @return bool
