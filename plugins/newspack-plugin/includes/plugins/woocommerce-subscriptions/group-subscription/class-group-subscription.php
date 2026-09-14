@@ -635,11 +635,11 @@ class Group_Subscription {
 		$members_added     = [];
 		$members_removed   = [];
 
-		// Remove members.
+		// Remove members. Eligibility gates additions only -- a member who has since become
+		// ineligible (a role change, or a filter opt-out) must still be removable, or their
+		// meta persists forever: it keeps consuming a seat while the read path hides them.
+		// delete_user_meta() is a harmless no-op for an ID that never held membership.
 		foreach ( $members_to_remove as $member_id ) {
-			if ( ! self::is_eligible_member( $member_id ) ) {
-				continue;
-			}
 			if ( \delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\delete_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ) );
 				// Leaving the group also ends any manager role — no orphaned managers.

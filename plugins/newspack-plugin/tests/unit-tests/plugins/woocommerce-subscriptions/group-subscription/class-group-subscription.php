@@ -519,6 +519,34 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Eligibility gates additions only. A member who becomes ineligible after joining --
+	 * here, an Author demoted to Editor -- must still be removable via update_members(),
+	 * or their meta would persist forever: consuming a seat while the read path hides them.
+	 */
+	public function test_update_members_removes_member_who_has_become_ineligible() {
+		$owner_id  = $this->create_reader_user();
+		$author_id = $this->create_role_user( 'author' );
+		$sub       = $this->create_group_subscription( $owner_id, 3 );
+
+		$added = Group_Subscription::update_members( $sub, [ $author_id ] );
+		$this->assertNotWPError( $added, 'The author should have been added as a member.' );
+		$this->assertContains( (int) $author_id, array_map( 'intval', Group_Subscription::get_members( $sub ) ), 'The author should now be a member.' );
+
+		// The member becomes ineligible: role change from author to editor.
+		$user = get_user_by( 'id', $author_id );
+		$user->set_role( 'editor' );
+
+		$result = Group_Subscription::update_members( $sub, [], [ $author_id ] );
+		$this->assertNotWPError( $result, 'Removing a now-ineligible member must not error.' );
+		$this->assertArrayHasKey( $author_id, $result['members_removed'], 'A now-ineligible member must still be reported as removed.' );
+		$this->assertNotContains(
+			(int) $author_id,
+			array_map( 'intval', Group_Subscription::get_members( $sub ) ),
+			'A now-ineligible member must actually be removed, not left holding stale member meta.'
+		);
+	}
+
+	/**
 	 * Expired invites are excluded from the count via get_invites( $sub, false ), so an expired invite
 	 * does not reserve a spot -- a direct add succeeds when only expired invites stand between the
 	 * group and its limit.
