@@ -45,22 +45,15 @@ class RewriteEndpointStatusTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Tear down.
-	 */
-	public function tear_down() {
-		set_query_var( 'republish', '' );
-		parent::tear_down();
-	}
-
-	/**
-	 * Drive the endpoint as a logged-out visitor requesting a post by numeric ID
-	 * through the query-variable form, and return the template the filter selects.
+	 * Drive the endpoint as $user_id requesting a post by numeric ID through the
+	 * query-variable form, and return the template the filter selects.
 	 *
 	 * @param int $post_id Target post ID.
+	 * @param int $user_id Requesting user, 0 for a logged-out visitor.
 	 * @return string Selected template path.
 	 */
-	private function template_for_request( $post_id ) {
-		wp_set_current_user( 0 );
+	private function template_for_request( $post_id, $user_id = 0 ) {
+		wp_set_current_user( $user_id );
 		set_query_var( 'republish', '?p=' . $post_id );
 		return $this->endpoint->filter_template_include( $this->incoming_template );
 	}
@@ -92,6 +85,27 @@ class RewriteEndpointStatusTest extends WP_UnitTestCase {
 			$this->incoming_template,
 			$this->template_for_request( $post_id ),
 			$why
+		);
+	}
+
+	/**
+	 * An editor gets no republish view of their own draft either. The guard tests
+	 * the post, not the requester, and this is the case that would start passing
+	 * silently if a capability exception were ever added: every other case here
+	 * runs logged out, so none of them would notice.
+	 */
+	public function test_editor_is_not_served_their_own_draft() {
+		$editor_id = $this->factory->user->create( array( 'role' => 'editor' ) );
+		$post_id   = $this->factory->post->create(
+			array(
+				'post_status' => 'draft',
+				'post_author' => $editor_id,
+			)
+		);
+		$this->assertSame(
+			$this->incoming_template,
+			$this->template_for_request( $post_id, $editor_id ),
+			'An editor must not be served a republish view of their own draft.'
 		);
 	}
 
