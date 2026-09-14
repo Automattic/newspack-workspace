@@ -763,4 +763,44 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	public function test_is_eligible_member_rejects_missing_user() {
 		$this->assertFalse( Group_Subscription::is_eligible_member( 0 ), 'User ID 0 is not eligible.' );
 	}
+
+	/**
+	 * An owner who is not an eligible *member* (e.g. an Administrator) must still see the
+	 * group subscription they own. Ownership and membership are different relationships to
+	 * the same group, and only the membership one is gated by is_eligible_member() -- gating
+	 * the settings map on it too would hide an admin's own group from their own account.
+	 */
+	public function test_settings_map_resolves_owned_subscription_for_ineligible_owner() {
+		$admin_id = $this->create_role_user( 'administrator' );
+		$sub      = $this->create_group_subscription( $admin_id );
+		Group_Subscription_Settings::update_subscription_settings( $sub, [ 'name' => 'Admin-Owned Group' ] );
+
+		$this->assertContains(
+			'Admin-Owned Group',
+			Group_Subscription::get_group_names_for_user( $admin_id ),
+			'An admin who owns a group subscription must still see its name in their own settings map.'
+		);
+		$this->assertContains(
+			(int) $sub->get_id(),
+			Group_Subscription::get_group_ids_for_user( $admin_id ),
+			'An admin who owns a group subscription must still see its ID.'
+		);
+	}
+
+	/**
+	 * A non-eligible user who is only a *member* (via user meta, not ownership) still gets
+	 * nothing from the settings map -- the fix to the owner branch must not loosen the
+	 * member branch's own eligibility gate.
+	 */
+	public function test_settings_map_stays_empty_for_ineligible_non_owner_member() {
+		$owner_id = $this->create_reader_user();
+		$admin_id = $this->create_role_user( 'administrator' );
+		$sub      = $this->create_group_subscription( $owner_id );
+		$this->add_member( $admin_id, $sub );
+
+		$this->assertEmpty(
+			Group_Subscription::get_group_names_for_user( $admin_id ),
+			'A non-eligible user holding only member meta (not ownership) must not see the group.'
+		);
+	}
 }

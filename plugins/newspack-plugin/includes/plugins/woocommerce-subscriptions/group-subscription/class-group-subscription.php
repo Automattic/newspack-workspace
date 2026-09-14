@@ -994,9 +994,11 @@ class Group_Subscription {
 		if ( ! $user_id || ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
-		if ( ! self::is_eligible_member( $user_id ) ) {
-			return [];
-		}
+
+		// No blanket eligibility gate here: a user who owns a group subscription sees it
+		// regardless of membership eligibility -- ownership isn't membership. The member
+		// branch below (get_group_subscriptions_for_user()) applies its own is_eligible_member()
+		// gate, so a non-eligible non-owner still contributes nothing from that side.
 
 		// Normalize the filter so [], null, and unsorted/duplicate inputs share a cache key.
 		$normalized_filter = is_array( $product_filter ) && ! empty( $product_filter )
