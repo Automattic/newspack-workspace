@@ -25,6 +25,14 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	private $last4;
 	private $token;
 	private $user_id;
+	private $expiry_month = '';
+	private $expiry_year  = '';
+	/**
+	 * Number of save() calls, so tests can assert that unchanged tokens are not written.
+	 *
+	 * @var int
+	 */
+	public $save_calls = 0;
 	public function __construct( $card_type = '', $last4 = '', $token = '', $user_id = 0, $gateway_id = '' ) {
 		parent::__construct( $gateway_id );
 		$this->card_type = $card_type;
@@ -35,8 +43,14 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	public function get_card_type() {
 		return $this->card_type;
 	}
+	public function set_card_type( $card_type ) {
+		$this->card_type = $card_type;
+	}
 	public function get_last4() {
 		return $this->last4;
+	}
+	public function set_last4( $last4 ) {
+		$this->last4 = $last4;
 	}
 	public function get_token() {
 		return $this->token;
@@ -44,12 +58,40 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	public function get_user_id() {
 		return $this->user_id;
 	}
+	/**
+	 * WooCommerce stores the month zero-padded ('02'), so mirror that here.
+	 */
+	public function get_expiry_month() {
+		return $this->expiry_month;
+	}
+	public function set_expiry_month( $month ) {
+		$this->expiry_month = str_pad( (string) $month, 2, '0', STR_PAD_LEFT );
+	}
+	public function get_expiry_year() {
+		return $this->expiry_year;
+	}
+	public function set_expiry_year( $year ) {
+		$this->expiry_year = (string) $year;
+	}
+	public function save() {
+		$this->save_calls++;
+	}
 }
 
 class WC_Payment_Tokens {
 	public static $tokens = [];
 	public static function get( $token_id ) {
 		return self::$tokens[ $token_id ] ?? null;
+	}
+	/**
+	 * Faithful to WC_Payment_Tokens::get_tokens() for the args Newspack uses:
+	 * filters the registry by user_id and gateway_id without running the
+	 * woocommerce_get_customer_payment_tokens filter.
+	 *
+	 * @param array $args Query args: user_id, gateway_id, limit.
+	 */
+	public static function get_tokens( $args ) {
+		return self::get_customer_tokens( (int) ( $args['user_id'] ?? 0 ), (string) ( $args['gateway_id'] ?? '' ) );
 	}
 	/**
 	 * Faithful to WC_Payment_Tokens::get_customer_tokens(): customers below 1

@@ -27,6 +27,7 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 		$orders_database        = [];
 		$subscriptions_database = [];
 		WC_Stripe_Helper::reset_testing_settings();
+		WC_Payment_Tokens::$tokens = [];
 		unset( $_REQUEST['modal_checkout'] );
 		delete_option( Donations::DONATION_BILLING_FIELDS_OPTION );
 	}
@@ -547,5 +548,145 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 			WC_Stripe_Helper::$settings['adaptive_pricing'],
 			'The wrapper should disable Adaptive Pricing on modal checkout requests.'
 		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Part 4: saved-card metadata refresh after re-adding the same card (NPPM-3244)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Build a Stripe PaymentMethod object the way the gateway passes it to
+	 * the woocommerce_stripe_add_payment_method action.
+	 *
+	 * @param string $id        PaymentMethod ID.
+	 * @param array  $card      Card fields to override.
+	 * @return object
+	 */
+	private function stripe_card_payment_method( $id, $card = [] ) {
+		return (object) [
+			'id'   => $id,
+			'type' => 'card',
+			'card' => (object) array_merge(
+				[
+					'brand'       => 'visa',
+					'last4'       => '4242',
+					'exp_month'   => 12,
+					'exp_year'    => 2034,
+					'fingerprint' => 'fp_same_card',
+				],
+				$card
+			),
+		];
+	}
+
+	/**
+	 * Register a saved Stripe card token for a user.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $token   Stripe PaymentMethod ID the token points at.
+	 * @param string $month   Expiry month.
+	 * @param string $year    Expiry year.
+	 * @return WC_Payment_Token_CC
+	 */
+	private function saved_card_token( $user_id, $token, $month, $year ) {
+		$wc_token = new WC_Payment_Token_CC( 'visa', '4242', $token, $user_id, 'stripe' );
+		$wc_token->set_expiry_month( $month );
+		$wc_token->set_expiry_year( $year );
+		WC_Payment_Tokens::$tokens[] = $wc_token;
+		return $wc_token;
+	}
+
+	/**
+	 * Re-adding the same card with a new expiry re-points the Woo token at the
+	 * new PaymentMethod but leaves the expiry meta behind. The refresh should
+	 * bring the meta in line with the connected PaymentMethod.
+	 */
+	public function test_card_token_expiry_is_refreshed_from_connected_payment_method() {
+		$user_id = self::factory()->user->create();
+		$token   = $this->saved_card_token( $user_id, 'pm_renewed', '12', '2028' );
+
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata(
+			$user_id,
+			$this->stripe_card_payment_method(
+				'pm_renewed',
+				[
+					'exp_month' => 12,
+					'exp_year'  => 2034,
+				] 
+			)
+		);
+
+		$this->assertSame( '12', $token->get_expiry_month() );
+		$this->assertSame( '2034', $token->get_expiry_year() );
+		$this->assertSame( 1, $token->save_calls, 'The refreshed token should be saved once.' );
+	}
+
+	/**
+	 * A token whose metadata already matches the PaymentMethod is left alone,
+	 * so the normal new-card path costs no extra write.
+	 */
+	public function test_card_token_is_not_saved_when_metadata_already_matches() {
+		$user_id = self::factory()->user->create();
+		$token   = $this->saved_card_token( $user_id, 'pm_same', '02', '2034' );
+
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata(
+			$user_id,
+			$this->stripe_card_payment_method(
+				'pm_same',
+				[
+					'exp_month' => 2,
+					'exp_year'  => 2034,
+				] 
+			)
+		);
+
+		$this->assertSame( 0, $token->save_calls, 'Matching metadata should not trigger a save.' );
+	}
+
+	/**
+	 * Only the token that points at the PaymentMethod is refreshed; other saved
+	 * cards for the same user are untouched.
+	 */
+	public function test_only_the_matching_token_is_refreshed() {
+		$user_id = self::factory()->user->create();
+		$other   = $this->saved_card_token( $user_id, 'pm_other_card', '01', '2027' );
+		$target  = $this->saved_card_token( $user_id, 'pm_target', '12', '2028' );
+
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata(
+			$user_id,
+			$this->stripe_card_payment_method(
+				'pm_target',
+				[
+					'exp_month' => 12,
+					'exp_year'  => 2034,
+				] 
+			)
+		);
+
+		$this->assertSame( '2034', $target->get_expiry_year() );
+		$this->assertSame( '2027', $other->get_expiry_year() );
+		$this->assertSame( 0, $other->save_calls );
+	}
+
+	/**
+	 * Non-card PaymentMethods and bare PaymentMethod IDs (which the checkout
+	 * path can pass) are ignored without error.
+	 */
+	public function test_non_card_payment_methods_are_ignored() {
+		$user_id = self::factory()->user->create();
+		$token   = $this->saved_card_token( $user_id, 'pm_sepa', '12', '2028' );
+
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata(
+			$user_id,
+			(object) [
+				'id'         => 'pm_sepa',
+				'type'       => 'sepa_debit',
+				'sepa_debit' => (object) [ 'last4' => '3000' ],
+			]
+		);
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata( $user_id, 'pm_sepa' );
+
+		$this->assertSame( '2028', $token->get_expiry_year() );
+		$this->assertSame( 0, $token->save_calls );
 	}
 }
