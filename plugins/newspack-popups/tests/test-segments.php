@@ -840,4 +840,72 @@ class SegmentsTest extends WP_UnitTestCase {
 		$this->assertCount( 1, $filtered );
 		$this->assertSame( 'injected', $filtered[0]['criteria_id'] );
 	}
+
+	/**
+	 * A range `max` lower than 1 is invalid: the editor stores 0 when the Max bound
+	 * is unticked, and the pre-criteria migration stored it for every "at least N"
+	 * segment. Drop it on save so the front-end never has to interpret it (NPPM-3389).
+	 */
+	public function test_update_segment_drops_invalid_range_max() {
+		Newspack_Popups_Segmentation::create_segment( $this->complete_and_valid );
+		$segment = Newspack_Popups_Segmentation::get_segments()[0];
+
+		$segment['criteria'] = [
+			[
+				'criteria_id' => 'articles_read',
+				'value'       => [
+					'min' => 1,
+					'max' => 0,
+				],
+			],
+			[
+				'criteria_id' => 'articles_read_in_session',
+				'value'       => [
+					'max' => '0',
+				],
+			],
+		];
+
+		$result = Newspack_Popups_Segmentation::update_segment( $segment );
+
+		$this->assertSame(
+			[
+				[
+					'criteria_id' => 'articles_read',
+					'value'       => [ 'min' => 1 ],
+				],
+			],
+			$result[0]['criteria'],
+			'max 0 is dropped; a criterion left with no bounds is dropped entirely.'
+		);
+		$raw_criteria = get_term_meta( $segment['id'], 'criteria', true );
+		$this->assertSame( [ 'min' => 1 ], $raw_criteria[0]['value'], 'The stored value must not carry the invalid max.' );
+	}
+
+	/**
+	 * Already-stored `max: 0` (legacy migrations, saves before this fix) must be
+	 * dropped on read as well, so no segment needs re-saving to recover.
+	 */
+	public function test_get_segment_drops_invalid_range_max() {
+		Newspack_Popups_Segmentation::create_segment( $this->complete_and_valid );
+		$segment_id = Newspack_Popups_Segmentation::get_segments()[0]['id'];
+
+		update_term_meta(
+			$segment_id,
+			'criteria',
+			[
+				[
+					'criteria_id' => 'articles_read',
+					'value'       => [
+						'min' => 1,
+						'max' => 0,
+					],
+				],
+			]
+		);
+
+		$segment = Newspack_Segments_Model::get_segment( $segment_id );
+
+		$this->assertSame( [ 'min' => 1 ], $segment['criteria'][0]['value'] );
+	}
 }

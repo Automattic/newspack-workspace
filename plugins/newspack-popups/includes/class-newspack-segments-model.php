@@ -554,7 +554,7 @@ final class Newspack_Segments_Model {
 		}
 		$filtered = array_values(
 			array_filter(
-				$criteria,
+				array_map( [ __CLASS__, 'drop_invalid_range_max' ], $criteria ),
 				function( $item ) {
 					return is_array( $item )
 						&& isset( $item['criteria_id'] )
@@ -574,6 +574,32 @@ final class Newspack_Segments_Model {
 		 * @param array $criteria Raw criteria as received.
 		 */
 		return apply_filters( 'newspack_popups_filter_segment_criteria', $filtered, $criteria );
+	}
+
+	/**
+	 * Drop a range `max` lower than 1 from a criterion, since it is invalid.
+	 *
+	 * The segment editor stores `max => 0` when the Max bound is unticked, and the
+	 * pre-criteria migration stored it for every "at least N" segment. Treating it
+	 * as a real bound leaves the segment matching nobody (NPPM-3389), so it is
+	 * removed on both save and read; a criterion left with no bounds is then
+	 * dropped by `is_criteria_value_empty()`.
+	 *
+	 * @param mixed $item Criterion entry.
+	 * @return mixed The entry, without an invalid max.
+	 */
+	private static function drop_invalid_range_max( $item ) {
+		if (
+			is_array( $item )
+			&& isset( $item['value'] )
+			&& is_array( $item['value'] )
+			&& array_key_exists( 'max', $item['value'] )
+			&& is_numeric( $item['value']['max'] )
+			&& (float) $item['value']['max'] < 1
+		) {
+			unset( $item['value']['max'] );
+		}
+		return $item;
 	}
 
 	/**
