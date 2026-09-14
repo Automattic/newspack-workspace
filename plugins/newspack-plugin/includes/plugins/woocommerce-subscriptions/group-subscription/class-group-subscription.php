@@ -783,10 +783,15 @@ class Group_Subscription {
 	/**
 	 * Whether a user may be a member of a group subscription.
 	 *
-	 * This is the single gate for group membership on both the write path (adding/removing members)
-	 * and the read path (resolving a user's group subscriptions for access). Readers are always
-	 * eligible; Author and Contributor users are eligible by default. Publishers can opt other users
-	 * in or out via the `newspack_group_subscription_member_eligible` filter.
+	 * This gates new membership grants (adding a member, accepting an invite) and the read path
+	 * (resolving a user's group subscriptions for access). Readers are always eligible; Author and
+	 * Contributor users are eligible by default. Publishers can opt other users in or out via the
+	 * `newspack_group_subscription_member_eligible` filter.
+	 *
+	 * It does not gate removal. `update_members()` removes a member by ID regardless of current
+	 * eligibility, so a member who loses eligibility after being added (e.g. a role change) can
+	 * still be removed and does not keep an unreleased seat. A caller relying on this method as a
+	 * public contract should not reinstate an eligibility check on the removal path.
 	 *
 	 * @param int|\WP_User $user A user ID or WP_User object.
 	 *
