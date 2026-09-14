@@ -33,6 +33,12 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	 * @var int
 	 */
 	public $save_calls = 0;
+	/**
+	 * When set, save() throws the way WC_Payment_Token_Data_Store::update() does on a token that fails validation.
+	 *
+	 * @var bool
+	 */
+	public $throw_on_save = false;
 	public function __construct( $card_type = '', $last4 = '', $token = '', $user_id = 0, $gateway_id = '' ) {
 		parent::__construct( $gateway_id );
 		$this->card_type = $card_type;
@@ -40,13 +46,16 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 		$this->token     = $token;
 		$this->user_id   = $user_id;
 	}
-	public function get_card_type() {
+	/**
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
+	 */
+	public function get_card_type( $context = 'view' ) {
 		return $this->card_type;
 	}
 	public function set_card_type( $card_type ) {
 		$this->card_type = $card_type;
 	}
-	public function get_last4() {
+	public function get_last4( $context = 'view' ) {
 		return $this->last4;
 	}
 	public function set_last4( $last4 ) {
@@ -61,19 +70,22 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	/**
 	 * WooCommerce stores the month zero-padded ('02'), so mirror that here.
 	 */
-	public function get_expiry_month() {
+	public function get_expiry_month( $context = 'view' ) {
 		return $this->expiry_month;
 	}
 	public function set_expiry_month( $month ) {
 		$this->expiry_month = str_pad( (string) $month, 2, '0', STR_PAD_LEFT );
 	}
-	public function get_expiry_year() {
+	public function get_expiry_year( $context = 'view' ) {
 		return $this->expiry_year;
 	}
 	public function set_expiry_year( $year ) {
 		$this->expiry_year = (string) $year;
 	}
 	public function save() {
+		if ( $this->throw_on_save ) {
+			throw new Exception( 'Invalid or missing payment token fields.' );
+		}
 		$this->save_calls++;
 	}
 }

@@ -440,6 +440,7 @@ class WooCommerce_Gateway_Stripe {
 			'debug'
 		);
 	}
+
 	/**
 	 * Refresh a saved card token's expiry, brand, and last4 from the Stripe
 	 * PaymentMethod it points at.
@@ -459,12 +460,11 @@ class WooCommerce_Gateway_Stripe {
 	 * after every save path (My Account, the UPE redirect return, and checkout
 	 * with "save card"). The checkout path can pass a bare PaymentMethod ID
 	 * instead of an object, which is why the shape is checked before use.
-	 * Idempotent: a token whose meta already matches is not written.
 	 *
-	 * @param int    $user_id        User ID.
-	 * @param object $payment_method Stripe PaymentMethod object.
+	 * @param int           $user_id        User ID.
+	 * @param object|string $payment_method Stripe PaymentMethod object, or a bare PaymentMethod ID on the checkout path.
 	 */
-	public static function refresh_card_token_metadata( $user_id, $payment_method ) {
+	public static function refresh_card_token_metadata( int $user_id, $payment_method ): void {
 		if (
 			! \is_object( $payment_method ) ||
 			empty( $payment_method->id ) ||
@@ -481,6 +481,7 @@ class WooCommerce_Gateway_Stripe {
 			[
 				'user_id'    => $user_id,
 				'gateway_id' => 'stripe',
+				'type'       => 'CC',
 				'limit'      => 100,
 			]
 		);
@@ -491,27 +492,51 @@ class WooCommerce_Gateway_Stripe {
 
 			$card       = $payment_method->card;
 			$card_type  = \strtolower( $card->display_brand ?? $card->networks->preferred ?? $card->brand ?? '' );
+			$exp_month  = (string) ( $card->exp_month ?? '' );
 			$new_values = [
-				'expiry_month' => \str_pad( (string) ( $card->exp_month ?? '' ), 2, '0', STR_PAD_LEFT ),
+				// WooCommerce stores the month zero-padded; an absent month stays '' so it is skipped below.
+				'expiry_month' => '' === $exp_month ? '' : \str_pad( $exp_month, 2, '0', STR_PAD_LEFT ),
 				'expiry_year'  => (string) ( $card->exp_year ?? '' ),
 				'last4'        => (string) ( $card->last4 ?? '' ),
 				'card_type'    => $card_type,
 			];
 			$changed    = [];
 			foreach ( $new_values as $prop => $value ) {
-				if ( '' !== $value && (string) $token->{"get_$prop"}() !== $value ) {
+				// Compare raw stored values so a site filter on the getters can't force a write.
+				if ( '' !== $value && (string) $token->{"get_$prop"}( 'edit' ) !== $value ) {
 					$token->{"set_$prop"}( $value );
 					$changed[] = $prop;
 				}
 			}
 
-			if ( ! empty( $changed ) ) {
+			if ( empty( $changed ) ) {
+				return;
+			}
+
+			// The checkout call site fires this action after Stripe has charged and before the
+			// order is marked paid, so a token that fails WooCommerce's validation must not throw.
+			try {
 				$token->save();
+			} catch ( \Exception $e ) {
 				Logger::log(
-					\sprintf( 'Refreshed saved-card token metadata (%s) for user %d from Stripe PaymentMethod %s.', \implode( ', ', $changed ), $user_id, $payment_method->id ),
+					\sprintf( 'Could not refresh saved-card token metadata for user %d from Stripe PaymentMethod %s: %s', $user_id, $payment_method->id, $e->getMessage() ),
 					'NEWSPACK-WOOCOMMERCE'
 				);
+				return;
 			}
+
+			$message = \sprintf( 'Refreshed saved-card token metadata (%s) for user %d from Stripe PaymentMethod %s.', \implode( ', ', $changed ), $user_id, $payment_method->id );
+			Logger::log( $message, 'NEWSPACK-WOOCOMMERCE' );
+			Logger::newspack_log(
+				'newspack_stripe_card_token_metadata_refreshed',
+				$message,
+				[
+					'user_id'        => $user_id,
+					'payment_method' => $payment_method->id,
+					'changed'        => $changed,
+				],
+				'debug'
+			);
 			return;
 		}
 	}

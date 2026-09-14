@@ -551,7 +551,7 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// Part 4: saved-card metadata refresh after re-adding the same card (NPPM-3244)
+	// Part 5: saved-card metadata refresh after re-adding the same card (NPPM-3244)
 	// -------------------------------------------------------------------------
 
 	/**
@@ -612,7 +612,7 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 				[
 					'exp_month' => 12,
 					'exp_year'  => 2034,
-				] 
+				]
 			)
 		);
 
@@ -636,7 +636,7 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 				[
 					'exp_month' => 2,
 					'exp_year'  => 2034,
-				] 
+				]
 			)
 		);
 
@@ -659,7 +659,7 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 				[
 					'exp_month' => 12,
 					'exp_year'  => 2034,
-				] 
+				]
 			)
 		);
 
@@ -684,9 +684,78 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 				'sepa_debit' => (object) [ 'last4' => '3000' ],
 			]
 		);
-		WooCommerce_Gateway_Stripe::refresh_card_token_metadata( $user_id, 'pm_sepa' );
 
 		$this->assertSame( '2028', $token->get_expiry_year() );
 		$this->assertSame( 0, $token->save_calls );
+	}
+
+	/**
+	 * The checkout path can pass a bare PaymentMethod ID instead of an object;
+	 * that is ignored without error.
+	 */
+	public function test_bare_payment_method_id_is_ignored() {
+		$user_id = self::factory()->user->create();
+		$token   = $this->saved_card_token( $user_id, 'pm_bare', '12', '2028' );
+
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata( $user_id, 'pm_bare' );
+
+		$this->assertSame( '2028', $token->get_expiry_year() );
+		$this->assertSame( 0, $token->save_calls );
+	}
+
+	/**
+	 * A co-badged card reports its brand under display_brand; that wins over
+	 * the plain brand, the same way the gateway derives card_type.
+	 */
+	public function test_card_type_takes_display_brand_over_brand() {
+		$user_id = self::factory()->user->create();
+		$token   = $this->saved_card_token( $user_id, 'pm_cobadged', '12', '2034' );
+
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata(
+			$user_id,
+			$this->stripe_card_payment_method(
+				'pm_cobadged',
+				[
+					'brand'         => 'visa',
+					'display_brand' => 'cartes_bancaires',
+				]
+			)
+		);
+
+		$this->assertSame( 'cartes_bancaires', $token->get_card_type() );
+		$this->assertSame( 1, $token->save_calls );
+	}
+
+	/**
+	 * A PaymentMethod with no expiry month leaves the stored month alone rather
+	 * than writing a zero-padded empty value.
+	 */
+	public function test_missing_exp_month_leaves_the_stored_month_alone() {
+		$user_id = self::factory()->user->create();
+		$token   = $this->saved_card_token( $user_id, 'pm_nomonth', '12', '2028' );
+
+		$payment_method = $this->stripe_card_payment_method( 'pm_nomonth', [ 'exp_year' => 2034 ] );
+		unset( $payment_method->card->exp_month );
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata( $user_id, $payment_method );
+
+		$this->assertSame( '12', $token->get_expiry_month() );
+		$this->assertSame( '2034', $token->get_expiry_year() );
+	}
+
+	/**
+	 * A token that fails WooCommerce's validation on save must not throw into
+	 * the gateway's checkout flow; the refresh is skipped instead.
+	 */
+	public function test_failed_token_save_is_contained() {
+		$user_id              = self::factory()->user->create();
+		$token                = $this->saved_card_token( $user_id, 'pm_bad_row', '12', '2028' );
+		$token->throw_on_save = true;
+
+		WooCommerce_Gateway_Stripe::refresh_card_token_metadata(
+			$user_id,
+			$this->stripe_card_payment_method( 'pm_bad_row', [ 'exp_year' => 2034 ] )
+		);
+
+		$this->assertSame( 0, $token->save_calls, 'No exception should escape and no save should be recorded.' );
 	}
 }
