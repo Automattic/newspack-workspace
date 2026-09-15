@@ -204,7 +204,12 @@ const ControlPreview = ( { enabled, interval } ) => {
 						<ul aria-labelledby={ PREVIEW_HEADING_ID }>
 							{ posts.map( post => (
 								<li key={ post.id }>
-									<a href={ post.edit_link }>{ post.title || `#${ post.id }` }</a>
+									{ /* Opens in a new tab so the settings page stays put: the list is a
+									     reference a publisher dips into, not a place they navigate away from. */ }
+									<a href={ post.edit_link } target="_blank" rel="noopener noreferrer">
+										{ post.title || `#${ post.id }` }
+										<span className="screen-reader-text"> { __( '(opens in a new tab)', 'newspack-plugin' ) }</span>
+									</a>
 								</li>
 							) ) }
 						</ul>

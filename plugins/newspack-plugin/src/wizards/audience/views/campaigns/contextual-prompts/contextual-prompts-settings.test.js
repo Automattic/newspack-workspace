@@ -185,11 +185,14 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 
 		render( <EnabledHarness fields={ [ controlEnabledField ] } /> );
 
-		expect( await screen.findByRole( 'link', { name: 'Local election results' } ) ).toHaveAttribute(
-			'href',
-			'https://example.test/wp-admin/post.php?post=3&action=edit'
-		);
-		expect( await screen.findByRole( 'link', { name: 'City budget vote' } ) ).toHaveAttribute(
+		// The screen-reader hint is part of the link's accessible name, so match on
+		// the title alone.
+		const firstLink = await screen.findByRole( 'link', { name: /Local election results/ } );
+		expect( firstLink ).toHaveAttribute( 'href', 'https://example.test/wp-admin/post.php?post=3&action=edit' );
+		// Opens in a new tab so the settings page stays put.
+		expect( firstLink ).toHaveAttribute( 'target', '_blank' );
+		expect( firstLink ).toHaveAttribute( 'rel', 'noopener noreferrer' );
+		expect( await screen.findByRole( 'link', { name: /City budget vote/ } ) ).toHaveAttribute(
 			'href',
 			'https://example.test/wp-admin/post.php?post=6&action=edit'
 		);
@@ -246,9 +249,9 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 
 		fireEvent.click( loadMoreButton );
 
-		expect( await screen.findByRole( 'link', { name: 'School board meeting' } ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'link', { name: 'Local election results' } ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'link', { name: 'City budget vote' } ) ).toBeInTheDocument();
+		expect( await screen.findByRole( 'link', { name: /School board meeting/ } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: /Local election results/ } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: /City budget vote/ } ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'button', { name: 'Load more' } ) ).not.toBeInTheDocument();
 		expect( apiFetch ).toHaveBeenLastCalledWith( {
 			path: '/newspack-popups/v1/contextual-prompt/control-preview?interval=3&offset=2',
@@ -328,8 +331,8 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 			target: { value: '5' },
 		} );
 
-		expect( await screen.findByRole( 'link', { name: 'Interval 5, story 1' } ) ).toBeInTheDocument();
-		expect( screen.queryByRole( 'link', { name: 'Interval 3, story 1' } ) ).not.toBeInTheDocument();
+		expect( await screen.findByRole( 'link', { name: /Interval 5, story 1/ } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'link', { name: /Interval 3, story 1/ } ) ).not.toBeInTheDocument();
 
 		// The interval-3 "Load more" request finally resolves, after the interval
 		// change already reset the list. Its rows must not appear.
@@ -350,8 +353,8 @@ describe( 'ContextualPromptsSettings enabled body', () => {
 			} );
 		} );
 
-		expect( screen.queryByRole( 'link', { name: 'Interval 3, story 3 (stale)' } ) ).not.toBeInTheDocument();
-		expect( screen.getByRole( 'link', { name: 'Interval 5, story 1' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'link', { name: /Interval 3, story 3 \(stale\)/ } ) ).not.toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: /Interval 5, story 1/ } ) ).toBeInTheDocument();
 		expect( screen.getAllByRole( 'link' ) ).toHaveLength( 1 );
 	} );
 
