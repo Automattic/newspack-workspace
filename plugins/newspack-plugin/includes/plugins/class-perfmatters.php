@@ -138,8 +138,9 @@ class Perfmatters {
 	 * path move. Jetpack relocated its social logos into `_inc/build/` in 15.7 and
 	 * the entry went dead across the fleet for months (NPPM-3167); Jetpack's Asset
 	 * CDN serves the same files from a path with no `plugins/jetpack/` segment, so a
-	 * prefixed entry stops matching wherever those assets are CDN-hosted (#3810). The
-	 * identifier survives both, since the tag's handle carries it as well as the URL.
+	 * prefixed entry stops matching wherever those assets are CDN-hosted
+	 * (Automattic/newspack-plugin#3810). The identifier survives both, since the
+	 * tag's handle carries it as well as the URL.
 	 *
 	 * @return string[] Stylesheet identifiers.
 	 */
@@ -151,8 +152,8 @@ class Perfmatters {
 			'plugins/newspack-popups', // Newspack Campaigns.
 			'modules/sharedaddy', // Jetpack's share buttons.
 			'social-logos', // Jetpack's social logos CSS.
-			'plugins/jetpack/css/jetpack.css', // Jetpack's main CSS.
-			'plugins/jetpack/_inc/blocks/swiper.css', // Jetpack's Swiper CSS.
+			'plugins/jetpack/css/jetpack.css', // Jetpack's main CSS; Jetpack no longer ships this file (NPPM-3407).
+			'plugins/jetpack/_inc/blocks/swiper.css', // Jetpack's Swiper CSS; path-based, so it misses the CDN-hosted copy (NPPM-3407).
 			'plugins/the-events-calendar', // The Events Calendar.
 			'plugins/events-calendar-pro', // The Events Calendar Pro.
 			'plugins/complianz-gdpr', // Complianz plugin CSS; substring also matches the premium plugin dir (NPPM-3052).

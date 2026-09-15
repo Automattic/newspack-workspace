@@ -241,9 +241,11 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	 * matches anything Jetpack actually serves: NPPM-3167 sat broken across the
 	 * fleet for four months because `_inc/social-logos` stopped matching when
 	 * Jetpack 15.7 relocated the file to `_inc/build/social-logos/`, and no test
-	 * noticed. These tests run the real matcher against the tag shapes Jetpack
-	 * emits, so narrowing or dropping an entry fails here rather than on a
-	 * publisher's homepage.
+	 * noticed. These tests replicate that matching, as read in Perfmatters 2.5.7,
+	 * against the tag shapes Jetpack emits, so narrowing or dropping an entry fails
+	 * here rather than on a publisher's homepage. Perfmatters is not a test
+	 * dependency, so the replica does not follow it: if a Perfmatters release
+	 * changes how it matches, these tests keep passing until the replica is updated.
 	 *
 	 * @param string $tag   Full stylesheet link tag as WordPress would emit it.
 	 * @param string $label Human-readable description used in the failure message.
@@ -275,8 +277,8 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	 *
 	 * The CDN variants are what Jetpack's Asset CDN ("Speed up static file load
 	 * times") serves, and they drop the `plugins/jetpack/` segment entirely — which
-	 * is why an exclusion entry carrying that prefix silently stops matching the
-	 * moment a publisher enables the setting. `c0.wp.com` is the CDN's real host and
+	 * is why an exclusion entry carrying that prefix silently stops matching
+	 * wherever those assets are CDN-hosted. `c0.wp.com` is the CDN's real host and
 	 * has to stay real for these rows to mean anything; the site host and the version
 	 * numbers are invented.
 	 *
