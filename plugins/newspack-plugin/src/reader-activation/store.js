@@ -107,14 +107,21 @@ const inFlight = new Map();
  *
  * @param {string} key Key to send.
  *
- * @return {Promise<void>} Settles when this attempt is over.
+ * @return {Promise<boolean>} Whether the key is off the pending list once this
+ *                            attempt is over.
  */
 function sendItem( key ) {
 	const previous = inFlight.get( key );
 	const send = () =>
 		syncItem( key )
-			.then( () => clearPendingSync( key ) )
-			.catch( () => setPendingSync( key ) );
+			.then( () => {
+				clearPendingSync( key );
+				return true;
+			} )
+			.catch( () => {
+				setPendingSync( key );
+				return false;
+			} );
 	const attempt = ( previous ? previous.then( send, send ) : send() ).finally( () => {
 		if ( inFlight.get( key ) === attempt ) {
 			inFlight.delete( key );
@@ -586,28 +593,30 @@ export default function Store() {
 		 * Send a pending key to the server now rather than on the next sync
 		 * tick, for a caller about to make a request whose server-side handling
 		 * reads that key. Resolves once the attempt settles; at once when nothing
-		 * is pending or the session is temporary, which never syncs. A failed
-		 * attempt leaves the key pending, as a failed tick does, and still
-		 * resolves: the caller only needs to know the attempt is over.
+		 * is pending or the session never syncs. A failed attempt leaves the key
+		 * pending, as a failed tick does, and still resolves, reporting the
+		 * failure so the caller can tell a synced key from a stale one.
 		 *
 		 * @param {string} key Key to flush.
 		 *
-		 * @return {Promise<void>} Settles when the attempt is over.
+		 * @return {Promise<boolean>} Whether the key is off the pending list once
+		 *                            the attempt is over: true when it was sent or
+		 *                            there was nothing to send, false when the
+		 *                            write failed and the key stays pending.
 		 */
 		flush: key => {
 			if ( ! key || newspack_reader_data?.is_temporary || isSwitchedSession() ) {
-				return Promise.resolve();
+				return Promise.resolve( true );
 			}
 			const queued = syncQueue.indexOf( key );
 			if ( -1 !== queued ) {
 				syncQueue.splice( queued, 1 );
 			}
 			const pendingKeys = _get( 'unsynced', true ) || [];
-			if ( pendingKeys.includes( key ) ) {
-				return sendItem( key );
+			if ( ! pendingKeys.includes( key ) ) {
+				return Promise.resolve( true );
 			}
-			// Nothing newer to send: a write the tick started carries the current value.
-			return inFlight.get( key ) || Promise.resolve();
+			return sendItem( key );
 		},
 		/**
 		 * Rehydrate items from server data. Must be called after all merge

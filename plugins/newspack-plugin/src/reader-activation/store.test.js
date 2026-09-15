@@ -379,36 +379,36 @@ describe( 'Store', () => {
 		} );
 		const pending = () => JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) || '[]' );
 
-		it( 'resolves without a request when nothing is pending for the key', async () => {
+		it( 'resolves true without a request when nothing is pending for the key', async () => {
 			const [ store ] = Store();
-			await store.flush( 'matched_segments' );
+			await expect( store.flush( 'matched_segments' ) ).resolves.toBe( true );
 			expect( FakeRequest.opened ).toHaveLength( 0 );
 		} );
-		it( 'sends a pending key at once and takes it off the sync interval', async () => {
+		it( 'sends a pending key at once, resolves true, and takes it off the sync interval', async () => {
 			const [ store ] = Store();
 			store.set( 'matched_segments', [ '3' ] );
 			const flushed = store.flush( 'matched_segments' );
 			expect( FakeRequest.opened ).toHaveLength( 1 );
 			FakeRequest.opened[ 0 ].settle( 200 );
-			await flushed;
+			await expect( flushed ).resolves.toBe( true );
 			expect( pending() ).not.toContain( 'matched_segments' );
 			// The interval must not send the same write a second time.
 			jest.advanceTimersByTime( 2500 );
 			expect( FakeRequest.opened ).toHaveLength( 1 );
 		} );
-		it( 'resolves without a request in a temporary session', async () => {
+		it( 'resolves true without a request in a temporary session', async () => {
 			window.newspack_reader_data.is_temporary = true;
 			const [ store ] = Store();
 			store.set( 'matched_segments', [ '3' ] );
-			await store.flush( 'matched_segments' );
+			await expect( store.flush( 'matched_segments' ) ).resolves.toBe( true );
 			expect( FakeRequest.opened ).toHaveLength( 0 );
 		} );
-		it( 'resolves when the request fails and leaves the key pending for a later retry', async () => {
+		it( 'resolves false when the request fails and leaves the key pending for a later retry', async () => {
 			const [ store ] = Store();
 			store.set( 'matched_segments', [ '3' ] );
 			const flushed = store.flush( 'matched_segments' );
 			FakeRequest.opened[ 0 ].settle( 500 );
-			await expect( flushed ).resolves.toBeUndefined();
+			await expect( flushed ).resolves.toBe( false );
 			expect( pending() ).toContain( 'matched_segments' );
 		} );
 		it( 'waits for an in-flight write of the key and sends the newer value after it', async () => {
@@ -433,7 +433,7 @@ describe( 'Store', () => {
 			await flushed;
 			expect( pending() ).not.toContain( 'matched_segments' );
 		} );
-		it( 'reuses an in-flight write of the key when nothing newer is pending', async () => {
+		it( "does not start a second write while the tick's write of the key is in flight, and settles after it", async () => {
 			const [ store ] = Store();
 			store.set( 'matched_segments', [ '3' ] );
 			jest.advanceTimersByTime( 1000 );
