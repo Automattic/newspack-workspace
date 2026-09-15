@@ -579,6 +579,25 @@ abstract class Integration {
 	abstract public function push_contact_data( $contact, $context = '', $existing_contact = null );
 
 	/**
+	 * Whether the integration already holds a record for this contact.
+	 *
+	 * Consulted by the sync framework only when a backfill runs with
+	 * `--existing-only`, before `push_contact_data()`: `false` makes the
+	 * framework skip this integration for the reader (tallied as skipped, not
+	 * failed), a `WP_Error` is treated as a failed push, and `true` lets the
+	 * push proceed. The default answers `true` so an integration that cannot
+	 * ask its external system keeps its usual upsert behaviour under the flag;
+	 * override it where the system can be asked.
+	 *
+	 * @param string $email The contact's email address.
+	 *
+	 * @return bool|\WP_Error True if the contact exists, false if it does not, WP_Error if the lookup failed.
+	 */
+	public function contact_exists( $email ) {
+		return true;
+	}
+
+	/**
 	 * Whether this integration can hard-delete a contact from its external system.
 	 *
 	 * When false, the account-deletion settings UI hides the "delete immediately"
