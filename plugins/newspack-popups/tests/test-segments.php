@@ -842,7 +842,7 @@ class SegmentsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A range `max` lower than 1 is invalid: the editor stores 0 when the Max bound
+	 * A range `max` of 0 or less is invalid: the editor stores 0 when the Max bound
 	 * is unticked, and the pre-criteria migration stored it for every "at least N"
 	 * segment. Drop it on save so the front-end never has to interpret it.
 	 */
@@ -907,5 +907,52 @@ class SegmentsTest extends WP_UnitTestCase {
 		$segment = Newspack_Segments_Model::get_segment( $segment_id );
 
 		$this->assertSame( [ 'min' => 1 ], $segment['criteria'][0]['value'] );
+	}
+
+	/**
+	 * Creating a segment filters criteria the same way updating does, so an
+	 * invalid max is not stored on the create path either.
+	 */
+	public function test_create_segment_drops_invalid_range_max() {
+		$segment             = $this->complete_and_valid;
+		$segment['criteria'] = [
+			[
+				'criteria_id' => 'articles_read',
+				'value'       => [
+					'min' => 1,
+					'max' => 0,
+				],
+			],
+		];
+
+		Newspack_Popups_Segmentation::create_segment( $segment );
+		$segment_id = Newspack_Popups_Segmentation::get_segments()[0]['id'];
+
+		$raw_criteria = get_term_meta( $segment_id, 'criteria', true );
+		$this->assertSame( [ 'min' => 1 ], $raw_criteria[0]['value'], 'The stored value must not carry the invalid max.' );
+	}
+
+	/**
+	 * A fractional max is a real bound (e.g. a numeric reader field between 0.2
+	 * and 0.8), so only a max of 0 or less is dropped.
+	 */
+	public function test_filter_criteria_keeps_fractional_range_max() {
+		$criteria = [
+			[
+				'criteria_id' => 'engagement_score',
+				'value'       => [
+					'min' => 0.2,
+					'max' => 0.8,
+				],
+			],
+			[
+				'criteria_id' => 'engagement_rate',
+				'value'       => [
+					'max' => '0.5',
+				],
+			],
+		];
+
+		$this->assertSame( $criteria, Newspack_Segments_Model::filter_criteria( $criteria ) );
 	}
 }

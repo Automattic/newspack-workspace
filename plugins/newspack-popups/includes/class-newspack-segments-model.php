@@ -315,6 +315,11 @@ final class Newspack_Segments_Model {
 			}
 		}
 
+		// Store criteria the same way update_segment() does.
+		if ( isset( $segment['criteria'] ) ) {
+			$segment['criteria'] = self::filter_criteria( $segment['criteria'] );
+		}
+
 		$term = wp_insert_term(
 			$segment['name'],
 			self::TAX_SLUG
@@ -577,13 +582,14 @@ final class Newspack_Segments_Model {
 	}
 
 	/**
-	 * Drop a range `max` lower than 1 from a criterion, since it is invalid.
+	 * Drop a range `max` of 0 or less from a criterion, since it is invalid.
 	 *
 	 * The segment editor stores `max => 0` when the Max bound is unticked, and the
 	 * pre-criteria migration stored it for every "at least N" segment. Treating it
 	 * as a real bound leaves the segment matching nobody, so it is removed on both
 	 * save and read; a criterion left with no bounds is then dropped by
-	 * `is_criteria_value_empty()`.
+	 * `is_criteria_value_empty()`. A fractional max stays valid, since numeric
+	 * reader fields can hold values between 0 and 1.
 	 *
 	 * @param mixed $item Criterion entry.
 	 * @return mixed The entry, without an invalid max.
@@ -595,7 +601,7 @@ final class Newspack_Segments_Model {
 			&& is_array( $item['value'] )
 			&& array_key_exists( 'max', $item['value'] )
 			&& is_numeric( $item['value']['max'] )
-			&& (float) $item['value']['max'] < 1
+			&& (float) $item['value']['max'] <= 0
 		) {
 			unset( $item['value']['max'] );
 		}

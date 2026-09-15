@@ -87,7 +87,7 @@ describe( 'criteria matching', () => {
 		registerCriteria( 'range_exact_zero', { matchingFunction: 'range', matchingAttribute: () => 0 } );
 		expect( getCriteria( 'range_exact_zero' ).matches( { value: { min: 0 } } ) ).toEqual( true );
 	} );
-	it( 'discards a "range" max lower than 1 as invalid, so it does not bound the value', () => {
+	it( 'discards a "range" max of 0 or less as invalid, so it does not bound the value', () => {
 		// The segment editor stores max: 0 when the Max bound is unticked, and the
 		// pre-criteria migration stored it for every "at least N" segment.
 		registerCriteria( 'range_max_zero', { matchingFunction: 'range', matchingAttribute: () => 5 } );
@@ -96,9 +96,13 @@ describe( 'criteria matching', () => {
 		expect( getCriteria( 'range_max_string_zero' ).matches( { value: { max: '0' } } ) ).toEqual( true );
 		registerCriteria( 'range_max_negative', { matchingFunction: 'range', matchingAttribute: () => 5 } );
 		expect( getCriteria( 'range_max_negative' ).matches( { value: { max: -1 } } ) ).toEqual( true );
-		// A max of 1 or more is still a bound.
+		// A positive max is still a bound, fractional ones included.
 		registerCriteria( 'range_max_one', { matchingFunction: 'range', matchingAttribute: () => 5 } );
 		expect( getCriteria( 'range_max_one' ).matches( { value: { min: 1, max: 1 } } ) ).toEqual( false );
+		registerCriteria( 'range_above_fraction', { matchingFunction: 'range', matchingAttribute: () => 0.9 } );
+		expect( getCriteria( 'range_above_fraction' ).matches( { value: { min: 0.2, max: 0.8 } } ) ).toEqual( false );
+		registerCriteria( 'range_within_fraction', { matchingFunction: 'range', matchingAttribute: () => 0.5 } );
+		expect( getCriteria( 'range_within_fraction' ).matches( { value: { min: 0.2, max: 0.8 } } ) ).toEqual( true );
 	} );
 	it( 'should match "list__in" matching function', () => {
 		setMatchingAttribute( criteriaId, () => 'bar' );
