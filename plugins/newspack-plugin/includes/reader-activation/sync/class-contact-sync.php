@@ -1462,12 +1462,15 @@ class Contact_Sync extends Sync {
 	 * @param int|\WC_order $user_id_or_order User ID or WC_Order object.
 	 * @param string        $context          The context of the sync.
 	 * @param bool          $is_dry_run       True if a dry run.
-	 * @param array         $options          Optional. Sync options: `skip_lists` (bool) and
-	 *                                        `fields` (string[]|null, canonical labels). `fields`
-	 *                                        restricts both what metadata is computed and what is
-	 *                                        pushed; `skip_lists` upserts without a master list.
-	 *                                        `integration_id` (string|null) restricts the push
-	 *                                        fan-out to a single active integration.
+	 * @param array         $options          Optional. Sync options: `skip_lists` (bool),
+	 *                                        `fields` (string[]|null, canonical labels) and
+	 *                                        `existing_only` (bool). `fields` restricts both what
+	 *                                        metadata is computed and what is pushed;
+	 *                                        `skip_lists` upserts without a master list;
+	 *                                        `existing_only` restricts the push to contacts the
+	 *                                        integration already has. `integration_id`
+	 *                                        (string|null) restricts the push fan-out to a
+	 *                                        single active integration.
 	 *
 	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise.
 	 */
@@ -1487,11 +1490,13 @@ class Contact_Sync extends Sync {
 			return \is_wp_error( $contact ) ? $contact : new \WP_Error( 'newspack_esp_sync_contact', __( 'Contact email is empty.', 'newspack-plugin' ) );
 		}
 
-		if ( $is_dry_run && ! self::options_are_default( $options ) ) {
-			self::log_dry_run_with_options( $contact, $context, $options );
+		if ( $is_dry_run ) {
+			// A preview with custom options reports the outcome the run would
+			// (an --existing-only skip included), so the CLI tally matches.
+			$result = self::options_are_default( $options ) ? true : self::log_dry_run_with_options( $contact, $context, $options );
+		} else {
+			$result = self::sync( $contact, $context, null, $options );
 		}
-
-		$result = $is_dry_run ? true : self::sync( $contact, $context, null, $options );
 
 		if ( $result && ! \is_wp_error( $result ) ) {
 			static::log(
@@ -1509,26 +1514,35 @@ class Contact_Sync extends Sync {
 
 	/**
 	 * Log, per active integration, the field/list-scoped payload a `--dry-run`
-	 * with custom options would push. Warns when scoping leaves no metadata to
-	 * send (e.g. requested fields aren't enabled as outgoing for that integration).
+	 * with custom options would push, and report the outcome the run would.
+	 * Warns when scoping leaves no metadata to send (e.g. requested fields
+	 * aren't enabled as outgoing for that integration).
+	 *
+	 * Under `existing_only` the preview performs the same existence read the
+	 * run would — that is what previewing the skip means, and it is the one
+	 * external call a push dry run makes.
 	 *
 	 * @param array  $contact The computed contact data.
 	 * @param string $context The sync context.
-	 * @param array  $options Sync options (`skip_lists`, `fields`).
+	 * @param array  $options Sync options (`skip_lists`, `fields`, `existing_only`).
 	 *
-	 * @return void
+	 * @return true|\WP_Error The outcome the run would report; see resolve_push_result().
 	 */
 	private static function log_dry_run_with_options( $contact, $context, $options ) {
 		// Mirror the real push path (push_to_integrations): run the contact filter
 		// before per-integration scoping so the preview reflects any metadata a
 		// publisher filter contributes.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
-		$contact    = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$skip_lists   = ! empty( $options['skip_lists'] );
-		$integrations = Integrations::get_active_configured_integrations();
+		$contact       = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
+		$skip_lists    = ! empty( $options['skip_lists'] );
+		$existing_only = ! empty( $options['existing_only'] );
+		$integrations  = Integrations::get_active_configured_integrations();
 		if ( ! empty( $options['integration_id'] ) ) {
 			$integrations = array_intersect_key( $integrations, [ $options['integration_id'] => true ] );
 		}
+		$errors  = [];
+		$skipped = [];
+		$pushed  = 0;
 		foreach ( $integrations as $integration_id => $integration ) {
 			// The real push path skips integrations without an (enabled) push, so
 			// report the skip rather than a payload the run would never send —
@@ -1544,13 +1558,29 @@ class Contact_Sync extends Sync {
 				continue;
 			}
 
-
 			$prepared = self::prepare_contact_for_integration( $integration, $contact, $options );
+			$email    = $prepared['email'] ?? 'unknown';
+
+			if ( $existing_only ) {
+				$exists = $integration->contact_exists( $prepared['email'] ?? '' );
+				if ( false === $exists ) {
+					$skipped[] = $integration_id;
+					static::log( sprintf( '[dry-run] SKIPPED integration "%s" for %s: no existing contact (--existing-only).', $integration_id, $email ) );
+					continue;
+				}
+				if ( \is_wp_error( $exists ) ) {
+					$errors[] = sprintf( '[%s] %s', $integration_id, $exists->get_error_message() );
+					static::log( sprintf( '[dry-run] ERROR checking for an existing contact at integration "%s" for %s: %s', $integration_id, $email, $exists->get_error_message() ) );
+					continue;
+				}
+			}
+
+			$pushed++;
 			$metadata = $prepared['metadata'] ?? [];
 			static::log(
 				sprintf(
 					'[dry-run] %s → integration "%s": lists %s, %d field(s): %s',
-					$prepared['email'] ?? 'unknown',
+					$email,
 					$integration_id,
 					$skip_lists ? 'skipped' : 'master list',
 					count( $metadata ),
@@ -1566,6 +1596,8 @@ class Contact_Sync extends Sync {
 				);
 			}
 		}
+
+		return self::resolve_push_result( $contact['email'] ?? 'unknown', $errors, $skipped, $pushed );
 	}
 
 	/**

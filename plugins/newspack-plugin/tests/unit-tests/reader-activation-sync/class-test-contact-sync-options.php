@@ -547,4 +547,45 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'The ESP still skipped its missing contact.' );
 		$this->assertSame( 1, Failing_Sample_Integration::$push_count, 'An integration that cannot check keeps its usual push under the flag.' );
 	}
+
+	/**
+	 * Previewing the skip means performing the same existence read the run
+	 * would, and reporting the same outcome so the dry-run summary tallies it.
+	 */
+	public function test_dry_run_existing_only_previews_the_skip_without_a_push() {
+		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
+		// No staged contact data: the ESP reports the reader as missing.
+
+		$result = Contact_Sync::sync_contact(
+			$this->user_id,
+			'ctx',
+			true, // dry run.
+			[
+				'existing_only' => true,
+				'fields'        => $this->content_access_labels,
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code() );
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'A dry run never pushes.' );
+	}
+
+	public function test_dry_run_existing_only_previews_an_update_as_a_sync() {
+		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = [ 'id' => '42' ];
+
+		$result = Contact_Sync::sync_contact(
+			$this->user_id,
+			'ctx',
+			true, // dry run.
+			[
+				'existing_only' => true,
+				'fields'        => $this->content_access_labels,
+			]
+		);
+
+		$this->assertTrue( $result );
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'A dry run never pushes.' );
+	}
 }
