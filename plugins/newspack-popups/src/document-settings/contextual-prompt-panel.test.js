@@ -220,13 +220,26 @@ describe( 'ContextualPromptPanel', () => {
 		);
 	} );
 
-	it( 'shows no control notice for a story-aware post', () => {
+	it( 'flags a post whose prompt the site-wide override is replacing', () => {
+		window.newspackPopupsContextualPrompt = {
+			...window.newspackPopupsContextualPrompt,
+			condition: 'override',
+			controlSettingsUrl: 'https://example.com/wp-admin/admin.php?page=newspack-audience-campaigns#/contextual-prompts',
+		};
+		useSelect.mockReturnValue( DETACHED );
+
+		render( <ContextualPromptPanel /> );
+
+		expect( screen.getByText( /site-wide override is currently replacing this prompt/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows no condition notice for a story-aware post', () => {
 		window.newspackPopupsContextualPrompt = { ...window.newspackPopupsContextualPrompt, condition: 'story_aware' };
 		useSelect.mockReturnValue( DETACHED );
 
 		render( <ContextualPromptPanel /> );
 
-		expect( screen.queryByText( /showing control test copy/ ) ).toBeNull();
+		expect( screen.queryByText( /control test copy|site-wide override/ ) ).toBeNull();
 	} );
 
 	it( "rewrites a detached card's copy rather than inserting a second prompt", async () => {

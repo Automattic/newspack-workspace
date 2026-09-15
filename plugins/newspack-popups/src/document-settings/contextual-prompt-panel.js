@@ -14,7 +14,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { createInterpolateElement, useEffect, useRef, useState } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 import { useSelect, useDispatch, select as coreSelect } from '@wordpress/data';
 import { createBlock } from '@wordpress/blocks';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
@@ -42,6 +42,7 @@ import {
 	GenerateButton,
 	CandidateList,
 } from '../blocks/contextual-prompt/candidates';
+import { ControlConditionNotice } from '../blocks/contextual-prompt/condition-notice';
 
 const ContextualPromptPanel = () => {
 	// Flat values only: the panel re-renders whenever this mapping stops being
@@ -229,17 +230,10 @@ const ContextualPromptPanel = () => {
 					</Notice>
 				) }
 
-				{ promptClientId && 'generic_control' === window.newspackPopupsContextualPrompt?.condition && (
-					<Notice status="info" isDismissible={ false }>
-						{ createInterpolateElement(
-							__(
-								'This prompt is currently showing control test copy to readers. Configure test settings in <a>Contextual Prompts</a>.',
-								'newspack-popups'
-							),
-							{ a: <a href={ window.newspackPopupsContextualPrompt?.controlSettingsUrl || '#' } /> } // eslint-disable-line jsx-a11y/anchor-has-content
-						) }
-					</Notice>
-				) }
+				{ /* The post carries a prompt, so a generic-control assignment means this
+				     card is what's swapped: name it, the same notice the selected
+				     instance's block inspector shows. */ }
+				{ promptClientId && <ControlConditionNotice /> }
 
 				<p style={ { margin: 0 } }>
 					{ promptClientId
