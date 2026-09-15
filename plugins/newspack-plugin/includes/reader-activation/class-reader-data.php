@@ -119,9 +119,11 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Add config to the data script.
+	 * The browser store's configuration.
+	 *
+	 * @return array
 	 */
-	public static function config_script() {
+	public static function get_config() {
 		/**
 		 * Filters the localStorage store item prefix.
 		 *
@@ -132,19 +134,25 @@ final class Reader_Data {
 			sprintf( 'np_reader_%d_', \get_current_blog_id() )
 		);
 
+		$is_switched_session = self::is_switched_session();
+
 		/**
 		 * Allows for "temporary" reader data for things like previews.
 		 * If true, the store will use sessionStorage instead of localStorage.
+		 * A switched session is always temporary: it hydrates the reader's stored
+		 * data but syncs nothing back, so the admin's browsing leaves no trace on
+		 * the reader (the REST route refuses it as well).
 		 */
-		$is_temporary = apply_filters( 'newspack_reader_data_store_is_temp_session', false );
+		$is_temporary = apply_filters( 'newspack_reader_data_store_is_temp_session', $is_switched_session );
 
 		$config = [
-			'store_prefix'    => $store_prefix,
-			'is_temporary'    => $is_temporary,
-			'reader_activity' => self::$reader_activity,
-			'read_only_keys'  => self::get_read_only_keys(),
-			'api_url'         => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader-data' ),
-			'session_url'     => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader/session' ),
+			'store_prefix'        => $store_prefix,
+			'is_temporary'        => (bool) $is_temporary,
+			'is_switched_session' => $is_switched_session,
+			'reader_activity'     => self::$reader_activity,
+			'read_only_keys'      => self::get_read_only_keys(),
+			'api_url'             => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader-data' ),
+			'session_url'         => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader/session' ),
 		];
 
 		if ( \is_user_logged_in() ) {
@@ -152,7 +160,14 @@ final class Reader_Data {
 			$config['items'] = self::get_data( \get_current_user_id() );
 		}
 
-		wp_localize_script( Reader_Activation::SCRIPT_HANDLE, 'newspack_reader_data', $config );
+		return $config;
+	}
+
+	/**
+	 * Add config to the data script.
+	 */
+	public static function config_script() {
+		wp_localize_script( Reader_Activation::SCRIPT_HANDLE, 'newspack_reader_data', self::get_config() );
 	}
 
 	/**
@@ -193,10 +208,34 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Whether the current user can access the API.
+	 * Whether an admin is browsing as this reader through the User Switching
+	 * plugin. Such a session reads the reader's stored data but must never write
+	 * it: the browser it runs in carries the admin's own history and device, so
+	 * anything it computes describes the admin, not the reader.
+	 *
+	 * @return bool
+	 */
+	public static function is_switched_session() {
+		return function_exists( 'current_user_switched' ) && (bool) \current_user_switched();
+	}
+
+	/**
+	 * Whether the current user can write reader data through the API.
+	 *
+	 * @return bool|WP_Error
 	 */
 	public static function permission_callback() {
-		return \is_user_logged_in();
+		if ( ! \is_user_logged_in() ) {
+			return false;
+		}
+		if ( self::is_switched_session() ) {
+			return new \WP_Error(
+				'newspack_reader_data_switched_session',
+				__( 'Reader data cannot be changed while switched into this account.', 'newspack' ),
+				[ 'status' => 403 ]
+			);
+		}
+		return true;
 	}
 
 	/**
