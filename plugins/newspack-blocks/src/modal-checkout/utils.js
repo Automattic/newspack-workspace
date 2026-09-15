@@ -96,6 +96,23 @@ export function whenReaderDataSynced( key, timeoutMs = 3000 ) {
 }
 
 /**
+ * Hold campaign prompts back until the caller releases them: reader activation
+ * shows no prompt overlay while another overlay is registered, and a checkout
+ * that has not opened yet holds none of its own. Returns the release; a no-op
+ * when reader activation or its overlays are absent.
+ *
+ * @return {Function} Releases the reservation.
+ */
+export function reserveOverlay() {
+	const overlays = window.newspackReaderActivation?.overlays;
+	if ( typeof overlays?.add !== 'function' ) {
+		return () => {};
+	}
+	const id = overlays.add();
+	return () => overlays.remove( id );
+}
+
+/**
  * Resolve once a reader who just signed in on this page has their server data
  * in the browser and the snapshot computed from it on the server. Sign-in
  * inside the checkout modal leaves the page as it was evaluated anonymously:

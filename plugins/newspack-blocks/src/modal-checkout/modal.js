@@ -13,6 +13,7 @@ import { manageDismissed, manageOpened } from './analytics';
 import {
 	afterDeferredScripts,
 	domReady,
+	reserveOverlay,
 	whenReaderDataSynced,
 	whenSignedInReaderDataSynced,
 	iframeReady,
@@ -1047,14 +1048,23 @@ domReady( () => {
 	// it on this same page load, and pricing rules read it when the checkout
 	// loads, so firing first would price against the previous visit's snapshot.
 	// Only a page that carries a trigger waits; any other page that loads this
-	// bundle leaves the store to its own sync schedule.
+	// bundle leaves the store to its own sync schedule. The checkout registers
+	// its overlay only once it opens, so a prompt due during the wait would
+	// show under it and stay: prompts are held back until the trigger has run,
+	// by which point a checkout or sign-in modal it opened holds its own
+	// overlay, and a trigger that failed leaves prompts free.
 	afterDeferredScripts( () => {
 		if ( ! hasCheckoutUrlTrigger() ) {
 			return;
 		}
+		const releaseOverlay = reserveOverlay();
 		whenReaderDataSynced( 'matched_segments' ).then( synced => {
 			warnUnlessSynced( synced );
-			handleModalCheckoutUrlParams();
+			try {
+				handleModalCheckoutUrlParams();
+			} finally {
+				releaseOverlay();
+			}
 		} );
 	} );
 

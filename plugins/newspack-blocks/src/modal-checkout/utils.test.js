@@ -2,7 +2,7 @@
  * Tests for modal-checkout utils.
  */
 
-import { afterDeferredScripts, getCheckoutData, whenReaderDataSynced, whenSignedInReaderDataSynced } from './utils';
+import { afterDeferredScripts, getCheckoutData, reserveOverlay, whenReaderDataSynced, whenSignedInReaderDataSynced } from './utils';
 
 afterEach( () => {
 	document.body.innerHTML = '';
@@ -180,6 +180,31 @@ describe( 'whenSignedInReaderDataSynced()', () => {
 		await waited;
 		expect( result ).toBe( false );
 		expect( flush ).not.toHaveBeenCalled();
+	} );
+} );
+
+describe( 'reserveOverlay()', () => {
+	afterEach( () => {
+		delete window.newspackReaderActivation;
+	} );
+
+	it( 'returns a release that does nothing when reader activation has no overlays', () => {
+		const release = reserveOverlay();
+		expect( () => release() ).not.toThrow();
+		window.newspackReaderActivation = {};
+		expect( () => reserveOverlay()() ).not.toThrow();
+	} );
+
+	it( 'registers an overlay and releases that same overlay', () => {
+		// Prompts hold back while any overlay is registered, so the reservation
+		// must be the one released, not whatever registered in the meantime.
+		const overlays = { add: jest.fn( () => 'reserved' ), remove: jest.fn() };
+		window.newspackReaderActivation = { overlays };
+		const release = reserveOverlay();
+		expect( overlays.add ).toHaveBeenCalledTimes( 1 );
+		expect( overlays.remove ).not.toHaveBeenCalled();
+		release();
+		expect( overlays.remove ).toHaveBeenCalledWith( 'reserved' );
 	} );
 } );
 
