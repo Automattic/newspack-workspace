@@ -350,15 +350,26 @@ export default function Store() {
 	const syncQueue = [];
 	initializeSyncInterval( syncQueue );
 
+	/**
+	 * Queue a key for the sync interval once. The interval sends one key per
+	 * tick, so a key queued twice would hold a slot and delay every key
+	 * behind it; its latest value goes out on the first send either way.
+	 *
+	 * @param {string} key Key to queue.
+	 */
+	function enqueueSync( key ) {
+		if ( ! syncQueue.includes( key ) ) {
+			syncQueue.push( key );
+		}
+	}
+
 	// Push unsynced items to the sync queue, pruning existing read-only
 	// keys in order to address the upgrade case.
 	const readOnlyKeys = newspack_reader_data?.read_only_keys || [];
 	const unsynced = ( _get( 'unsynced', true ) || [] ).filter( key => ! readOnlyKeys.includes( key ) );
 	_set( 'unsynced', unsynced, true );
 	for ( const key of unsynced ) {
-		if ( ! syncQueue.includes( key ) ) {
-			syncQueue.push( key );
-		}
+		enqueueSync( key );
 	}
 
 	// When session hydration provides a nonce, rehydrate server items
@@ -370,9 +381,7 @@ export default function Store() {
 		// Re-queue unsynced items.
 		const unsyncedKeys = _get( 'unsynced', true ) || [];
 		for ( const key of unsyncedKeys ) {
-			if ( ! syncQueue.includes( key ) ) {
-				syncQueue.push( key );
-			}
+			enqueueSync( key );
 		}
 	} );
 
@@ -528,7 +537,7 @@ export default function Store() {
 			_set( key, value, false );
 			if ( sync && ! neverSyncs() ) {
 				setPendingSync( key );
-				syncQueue.push( key );
+				enqueueSync( key );
 			}
 		},
 		/**
@@ -545,7 +554,7 @@ export default function Store() {
 			emit( EVENTS.data, { key, value: undefined } );
 			if ( ! neverSyncs() ) {
 				setPendingSync( key );
-				syncQueue.push( key );
+				enqueueSync( key );
 			}
 		},
 		/**
