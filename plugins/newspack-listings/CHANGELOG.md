@@ -1,3 +1,15 @@
+## newspack-listings [3.7.6](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.5...newspack-listings@3.7.6) (2026-09-14)
+
+
+### Bug Fixes
+
+* **listings:** pin expiration dates to site midnight ([#865](https://github.com/Automattic/newspack-workspace/issues/865)) ([292405b](https://github.com/Automattic/newspack-workspace/commit/292405bbc8d0a012d12e393e6ac8f556c290a7c9))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
 ## newspack-listings [3.7.5](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.4...newspack-listings@3.7.5) (2026-08-31)
 
 

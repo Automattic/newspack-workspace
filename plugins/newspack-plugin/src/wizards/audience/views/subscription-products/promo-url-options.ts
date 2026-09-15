@@ -1,0 +1,232 @@
+/**
+ * WordPress dependencies
+ */
+import { __, sprintf } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies
+ */
+import type { DonateFrequencySlug, PromoKind } from './promo-url';
+
+export type DonateFrequencyConfig = {
+	enabled: boolean;
+	amounts: number[];
+	supports_custom: boolean;
+	suggested: number | null;
+};
+
+export type PromoTargetDonateConfig = {
+	layout_param: 'tiered' | 'untiered' | 'frequency';
+	frequencies: Record< DonateFrequencySlug, DonateFrequencyConfig >;
+	default_frequency: string;
+	minimum: number;
+};
+
+// Links work over any page; the server supplies the homepage default plus the
+// options the generator must not exceed.
+export type PromoContext = {
+	homepage: { id: number; title: string; url: string };
+	// Children a picker can serve — for a grouped plan this excludes children
+	// the tiers form skips (non-subscription, private).
+	eligible_children?: number[];
+	// Children a link may name directly: published, and for grouped members
+	// subscription-shaped. Distinct from eligible_children, which describes
+	// what the reader-chooses picker renders.
+	offerable_children?: number[];
+	// Whether a link naming the row product itself yields a working button
+	// (the renderer's price gate).
+	parent_offerable?: boolean;
+	donate_config?: PromoTargetDonateConfig | null;
+};
+
+export type PromoPageChoice = { value: string; label: string; url: string };
+
+export type PromoCouponResponse = { valid: boolean; reason?: string };
+
+const FREQUENCY_LABELS: Record< DonateFrequencySlug, string > = {
+	once: __( 'One-time', 'newspack-plugin' ),
+	month: __( 'Monthly', 'newspack-plugin' ),
+	year: __( 'Annually', 'newspack-plugin' ),
+};
+
+/**
+ * Child-product choices for a plan row. Direct choices are limited to the
+ * server-derived offerable set — a private or non-subscription member would
+ * emit a URL the trigger refuses, leaving the reader on a page where nothing
+ * happens. "Reader chooses" opens the plan's picker, so it is offered only when
+ * that picker renders at least one option: always for a variable plan, and for
+ * a grouped plan only when the tiers form serves a child.
+ */
+export function getPlanChoices(
+	item: SubscriptionProduct,
+	eligibleChildren: number[],
+	offerableChildren?: number[]
+): { value: number | ''; label: string }[] {
+	const allChildren =
+		item.type === 'grouped'
+			? ( item.bundled_products || [] ).map( product => ( {
+					value: product.id,
+					label: product.price_label ? `${ product.name } (${ product.price_label })` : product.name,
+			  } ) )
+			: ( item.variations || [] ).map( variation => ( {
+					value: variation.id,
+					label: variation.plan_label || variation.name,
+			  } ) );
+	const children = Array.isArray( offerableChildren ) ? allChildren.filter( child => offerableChildren.includes( child.value ) ) : allChildren;
+	if ( ! children.length ) {
+		return [];
+	}
+	const allowChooser = item.type === 'grouped' ? eligibleChildren.length > 0 : true;
+	return allowChooser ? [ { value: '' as const, label: __( 'Let the reader choose', 'newspack-plugin' ) }, ...children ] : children;
+}
+
+/**
+ * Resolve the product_id/variation_id a URL must carry for the chosen child.
+ * Reader-chooses names the parent, a grouped member is a plain product (the
+ * trigger rejects product_id === variation_id — NPPM-2872), a variation rides on
+ * its parent.
+ */
+export function resolveProductParams( item: SubscriptionProduct, chosenChild: number | '' ): { productId: number; variationId: number | null } {
+	if ( chosenChild === '' ) {
+		return { productId: item.id, variationId: null };
+	}
+	if ( item.type === 'grouped' ) {
+		return { productId: chosenChild, variationId: null };
+	}
+	return { productId: item.id, variationId: chosenChild };
+}
+
+export function getFrequencyChoices( config: PromoTargetDonateConfig | null ): { value: DonateFrequencySlug; label: string }[] {
+	if ( ! config ) {
+		return [];
+	}
+	return ( Object.keys( FREQUENCY_LABELS ) as DonateFrequencySlug[] )
+		.filter( slug => config.frequencies[ slug ]?.enabled )
+		.map( slug => ( { value: slug, label: FREQUENCY_LABELS[ slug ] } ) );
+}
+
+export function getAmountChoices(
+	config: PromoTargetDonateConfig | null,
+	frequency: DonateFrequencySlug
+): { presets: number[]; supportsCustom: boolean; suggested: number | null } {
+	const frequencyConfig = config?.frequencies[ frequency ];
+	if ( ! frequencyConfig ) {
+		return { presets: [], supportsCustom: false, suggested: null };
+	}
+	return {
+		presets: frequencyConfig.amounts,
+		supportsCustom: frequencyConfig.supports_custom,
+		suggested: frequencyConfig.suggested,
+	};
+}
+
+export function getDefaultFrequency( item: SubscriptionProduct, config: PromoTargetDonateConfig | null ): DonateFrequencySlug {
+	const fromPeriod: DonateFrequencySlug = item.period === 'month' || item.period === 'year' ? item.period : 'once';
+	if ( config?.frequencies[ fromPeriod ]?.enabled ) {
+		return fromPeriod;
+	}
+	const fallback = config?.default_frequency as DonateFrequencySlug | undefined;
+	if ( fallback && config?.frequencies[ fallback ]?.enabled ) {
+		return fallback;
+	}
+	return getFrequencyChoices( config )[ 0 ]?.value || 'month';
+}
+
+/**
+ * Whether an after-checkout destination is on this site. The server refuses an
+ * off-site one from a URL (Modal_Checkout::sanitize_after_success_url()); the
+ * generator checks too, so the publisher is told rather than handed a link whose
+ * destination is silently dropped.
+ */
+export function isSameSiteUrl( url: string, siteOrigin: string ): boolean {
+	if ( ! url ) {
+		return false;
+	}
+	// A root-relative path stays on the site by construction.
+	if ( url.startsWith( '/' ) && ! url.startsWith( '//' ) ) {
+		return true;
+	}
+	try {
+		return new URL( url, siteOrigin ).origin === new URL( siteOrigin ).origin;
+	} catch ( e ) {
+		return false;
+	}
+}
+
+export type PromoValidationInput = {
+	kind: PromoKind;
+	hasTarget: boolean;
+	requiresChild: boolean;
+	// The plan has children, but none survived the offerable filter: a link
+	// would name the bare parent and open an empty picker.
+	hasUnservableChildren?: boolean;
+	// False when a link naming the row product itself cannot render a button.
+	parentOfferable?: boolean;
+	variationId: number | '';
+	donateConfig: PromoTargetDonateConfig | null;
+	effectiveAmount: number | 'other' | undefined;
+	customAmount: string;
+	presets: number[];
+	couponState?: 'idle' | 'checking' | 'valid' | 'invalid';
+	couponReason?: string;
+	afterSuccess?: '' | 'custom';
+	afterSuccessUrl?: string;
+	siteOrigin?: string;
+};
+
+/**
+ * The gate deciding whether a URL may be emitted: the modal shows the returned
+ * message and withholds the link. Pure so each refusal is testable. Returns null
+ * when the selections are valid.
+ */
+export function getValidationError( input: PromoValidationInput ): string | null {
+	const { kind, donateConfig, effectiveAmount, customAmount } = input;
+	if ( ! input.hasTarget ) {
+		return __( 'Choose a target page.', 'newspack-plugin' );
+	}
+	if ( kind === 'product' && input.hasUnservableChildren ) {
+		return __( 'This plan has no options a link can check out.', 'newspack-plugin' );
+	}
+	if ( kind === 'product' && input.requiresChild && input.variationId === '' ) {
+		return __( 'Choose which plan option the link should check out.', 'newspack-plugin' );
+	}
+	if ( kind === 'product' && input.variationId === '' && input.parentOfferable === false ) {
+		return __( 'This plan cannot be checked out from a link.', 'newspack-plugin' );
+	}
+	if ( kind === 'donation' ) {
+		if ( ! donateConfig ) {
+			return __( 'The Donate block on this page cannot take a promotional link.', 'newspack-plugin' );
+		}
+		if ( effectiveAmount === undefined ) {
+			return __( 'Enter a valid amount.', 'newspack-plugin' );
+		}
+		const numeric = effectiveAmount === 'other' ? parseFloat( customAmount ) : effectiveAmount;
+		if ( numeric < donateConfig.minimum ) {
+			return sprintf(
+				/* translators: %s: minimum donation amount. */
+				__( 'The amount must be at least %s.', 'newspack-plugin' ),
+				String( donateConfig.minimum )
+			);
+		}
+		if ( typeof effectiveAmount === 'number' && donateConfig.layout_param !== 'untiered' && ! input.presets.includes( effectiveAmount ) ) {
+			return __( 'Choose one of the amounts available on the target page.', 'newspack-plugin' );
+		}
+	}
+	// A pending check withholds the link: the generator's promise is that an
+	// emitted URL works, so an unanswered coupon cannot ride along.
+	if ( 'checking' === input.couponState ) {
+		return __( 'Checking the coupon…', 'newspack-plugin' );
+	}
+	if ( 'invalid' === input.couponState ) {
+		return input.couponReason || __( 'The coupon code is not valid.', 'newspack-plugin' );
+	}
+	if ( 'custom' === input.afterSuccess ) {
+		if ( ! input.afterSuccessUrl ) {
+			return __( 'Enter the URL readers should continue to after checkout.', 'newspack-plugin' );
+		}
+		if ( input.siteOrigin && ! isSameSiteUrl( input.afterSuccessUrl, input.siteOrigin ) ) {
+			return __( 'The continue URL must be on this site.', 'newspack-plugin' );
+		}
+	}
+	return null;
+}
