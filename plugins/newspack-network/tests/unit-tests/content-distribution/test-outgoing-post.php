@@ -348,6 +348,42 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Ignored post meta keys must not appear in the distributed payload.
+	 *
+	 * Covers a representative key from each ignored group, including the Spectra
+	 * (Ultimate Addons for Gutenberg) asset meta whose `_uag_page_assets` value
+	 * carries a version timestamp the plugin rewrites on every asset
+	 * regeneration; leaving it in the payload triggers a redundant distribution
+	 * each time it changes.
+	 */
+	public function test_ignored_post_meta() {
+		$post = $this->outgoing_post->get_post();
+
+		$ignored_keys = [
+			'_edit_lock',                    // WordPress editor internal.
+			'_yoast_wpseo_primary_category', // Yoast SEO.
+			'dt_unlinked',                   // Distributor.
+			'_uag_page_assets',              // Spectra / UAGB (the churning one).
+			'_uag_css_file_name',            // Spectra / UAGB.
+			'_uag_custom_page_level_css',    // Spectra / UAGB.
+			'_uagb_previous_block_counts',   // Spectra / UAGB.
+		];
+		foreach ( $ignored_keys as $ignored_key ) {
+			update_post_meta( $post->ID, $ignored_key, 'ignored_value' );
+		}
+
+		// A non-ignored key to prove exclusion is selective, not wholesale.
+		update_post_meta( $post->ID, 'test_included_key', 'included_value' );
+
+		$payload = $this->outgoing_post->get_payload();
+
+		foreach ( $ignored_keys as $ignored_key ) {
+			$this->assertArrayNotHasKey( $ignored_key, $payload['post_data']['post_meta'] );
+		}
+		$this->assertArrayHasKey( 'test_included_key', $payload['post_data']['post_meta'] );
+	}
+
+	/**
 	 * Test ignored taxonomies.
 	 */
 	public function test_ignored_taxonomies() {

@@ -409,6 +409,19 @@ class Content_Distribution {
 		];
 		$ignored_keys = array_merge( $ignored_keys, $distributor_meta );
 
+		// Always ignore Spectra (Ultimate Addons for Gutenberg) generated asset
+		// meta. These are local rendering artifacts the target regenerates on its
+		// own, and `_uag_page_assets` embeds a `uag_version` timestamp that the
+		// plugin rewrites on every asset regeneration, so leaving them in the
+		// payload triggers a redundant distribution each time they change.
+		$uagb_meta = [
+			'_uag_page_assets',
+			'_uag_css_file_name',
+			'_uag_custom_page_level_css',
+			'_uagb_previous_block_counts',
+		];
+		$ignored_keys = array_merge( $ignored_keys, $uagb_meta );
+
 		// Always ignore content distribution post meta.
 		return array_merge(
 			$ignored_keys,
