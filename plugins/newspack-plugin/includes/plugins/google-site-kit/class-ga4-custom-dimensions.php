@@ -320,6 +320,7 @@ final class GA4_Custom_Dimensions {
 			'newspack_popup_id'           => 'Newspack Popup ID',
 			'contextual_prompt_post_id'   => 'Contextual Prompt Post ID',
 			'contextual_prompt_placement' => 'Contextual Prompt Placement',
+			'contextual_prompt_condition' => 'Contextual Prompt Condition',
 			'button_text'                 => 'Button Text',
 			// prompt_text and link_url are sent on np_contextual_prompt_interaction
 			// as event params but deliberately NOT registered as custom dimensions:
@@ -332,6 +333,7 @@ final class GA4_Custom_Dimensions {
 			'prompt_title'                => 'Prompt Title',
 			'gate_has_donation_block'     => 'Gate Has Donation Block',
 			'gate_has_registration_block' => 'Gate Has Registration Block',
+			'gate_has_newsletter_block'   => 'Gate Has Newsletter Block',
 			'gate_has_checkout_button'    => 'Gate Has Checkout Button',
 			'gate_has_registration_link'  => 'Gate Has Registration Link',
 			'gate_has_signin_link'        => 'Gate Has Signin Link',

@@ -61,3 +61,7 @@ packages/*/package-lock.json
 # is the question to ask — does it fence its own output?
 CLAUDE-SECURITY-*
 .codex-security/
+
+# PHPUnit's per-run defect/timing cache. Written wherever tests are run, so it
+# is ignored workspace-wide rather than per package.
+.phpunit.result.cache
