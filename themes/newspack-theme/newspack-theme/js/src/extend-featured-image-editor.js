@@ -1,10 +1,11 @@
 'use strict';
 
 import { addFilter } from '@wordpress/hooks';
-import { RadioControl } from '@wordpress/components';
+import { RadioControl, TextControl, ToggleControl } from '@wordpress/components';
 import { withDispatch, withSelect, select } from '@wordpress/data';
 import { Component, Fragment } from '@wordpress/element';
 import { compose } from '@wordpress/compose';
+import { store as coreStore } from '@wordpress/core-data';
 import { __ } from '@wordpress/i18n';
 
 class RadioCustom extends Component {
@@ -66,6 +67,79 @@ const ComposedRadio = compose( [
 	} ) ),
 ] )( RadioCustom );
 
+const CaptionControl = compose( [
+	withSelect( _select => {
+		const { getCurrentPostAttribute, getEditedPostAttribute } = _select( 'core/editor' );
+
+		// featured_media updates live when the user swaps the featured image.
+		const featuredMediaId = getEditedPostAttribute( 'featured_media' );
+
+		// WP 6.9+: getMedia is deprecated; use the attachment entity instead.
+		// Edit context returns caption.raw (the unfiltered post_excerpt);
+		// the record resolves async and re-renders this component when the fetch lands.
+		const media = featuredMediaId ? _select( coreStore ).getEntityRecord( 'postType', 'attachment', featuredMediaId, { context: 'edit' } ) : null;
+
+		return {
+			featuredMediaId,
+			meta: {
+				...getCurrentPostAttribute( 'meta' ),
+				...getEditedPostAttribute( 'meta' ),
+			},
+			defaultCaption: media?.caption?.raw ?? '',
+		};
+	} ),
+	withDispatch( dispatch => ( {
+		updateCaption( value, meta ) {
+			dispatch( 'core/editor' ).editPost( {
+				meta: { ...meta, newspack_featured_image_caption: value },
+			} );
+		},
+		updateCaptionEnabled( value, meta ) {
+			dispatch( 'core/editor' ).editPost( {
+				meta: { ...meta, newspack_featured_image_caption_enabled: value },
+			} );
+		},
+	} ) ),
+] )( ( { featuredMediaId, meta, defaultCaption, updateCaption, updateCaptionEnabled } ) => {
+	// Only show these controls once a featured image has been selected.
+	if ( ! featuredMediaId ) {
+		return null;
+	}
+
+	const isEnabled = !! meta.newspack_featured_image_caption_enabled;
+	const value = meta.newspack_featured_image_caption || '';
+	const hasOverride = value.trim().length > 0;
+
+	return (
+		<Fragment>
+			<ToggleControl
+				label={ __( 'Enable custom caption', 'newspack-theme' ) }
+				help={ __( 'Provides flexibility to overwrite the featured image caption.', 'newspack-theme' ) }
+				checked={ isEnabled }
+				onChange={ () => updateCaptionEnabled( ! isEnabled, meta ) }
+				__nextHasNoMarginBottom
+			/>
+			{ isEnabled && (
+				<TextControl
+					label={ __( 'Featured Image Caption', 'newspack-theme' ) }
+					value={ value }
+					placeholder={
+						defaultCaption ||
+						__( 'No default caption set for this image; the image credit (if available) will be displayed.', 'newspack-theme' )
+					}
+					onChange={ v => updateCaption( v, meta ) }
+					help={
+						hasOverride
+							? __( "This caption applies to this article only. Other articles keep the image's default caption.", 'newspack-theme' )
+							: __( "Leave blank to use the image's default caption (shown above) or credit (if available).", 'newspack-theme' )
+					}
+					__nextHasNoMarginBottom
+				/>
+			) }
+		</Fragment>
+	);
+} );
+
 const wrapPostFeaturedImage = OriginalComponent => {
 	// eslint-disable-next-line react/display-name
 	return props => {
@@ -80,6 +154,7 @@ const wrapPostFeaturedImage = OriginalComponent => {
 			<Fragment>
 				<OriginalComponent { ...props } />
 				<ComposedRadio />
+				<CaptionControl />
 			</Fragment>
 		);
 	};
