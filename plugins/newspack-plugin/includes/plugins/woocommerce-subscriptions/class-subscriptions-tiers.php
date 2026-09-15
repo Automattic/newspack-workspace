@@ -764,12 +764,14 @@ class Subscriptions_Tiers {
 		if ( ! $switch_data ) {
 			$current_frequency = $frequencies[0];
 		} elseif ( ! $current_product ) {
-			// A plan a publisher has retired by setting it to Private is kept out
-			// of the tiers (nobody new may buy in), so a reader still on it matches
-			// no current tier above. Their billing period is still known from the
-			// line item they are switching away from, so open the modal on that
-			// period, or failing that on the first one, rather than on none at
-			// all: with no period selected the modal rendered as an empty box.
+			// The reader's plan matched none of the offered tiers. The case that
+			// prompted this is a plan the publisher retired by setting it to Private
+			// (kept out of the tiers so nobody new may buy in), but a product dropped
+			// from the group, a trashed product, or a variation mismatch lands here
+			// too, so don't narrow this to the Private status. The billing period
+			// is still known from the line item being switched away from, so open
+			// the modal on that period, or failing that on the first one, rather
+			// than on none: a modal with no period selected renders as an empty box.
 			$line_frequency    = $line_product ? self::get_frequency( $line_product ) : null;
 			$current_frequency = $line_frequency && isset( $tiers[ $line_frequency ] ) ? $line_frequency : $frequencies[0];
 		}
