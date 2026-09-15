@@ -1,5 +1,13 @@
 import { registerCriteria } from '../../criteria/utils';
-import { getBestPrioritySegment, getMatchingSegmentIds, syncMatchedSegments, getOverride, shouldPromptBeDisplayed, periods } from './index.js';
+import {
+	getBestPrioritySegment,
+	getBestPrioritySegmentFromSnapshot,
+	getMatchingSegmentIds,
+	syncMatchedSegments,
+	getOverride,
+	shouldPromptBeDisplayed,
+	periods,
+} from './index.js';
 
 // Mock the window.location object. See: https://developer.mozilla.org/en-US/docs/Web/API/Location
 const setWindowLocation = ( domain = 'example.com', search = '' ) => {
@@ -292,5 +300,45 @@ describe( 'segmentation API', () => {
 		// Once the reader has had the UTM suppression value, the prompt should no longer be displayed.
 		setWindowLocation( 'example.com', '' );
 		expect( shouldPromptBeDisplayed( prompt, null, ras ) ).toBeFalsy();
+	} );
+} );
+
+describe( 'switched sessions', () => {
+	// An admin who switched into a reader's account browses with the reader's
+	// stored data hydrated but their own device and history: the live match is
+	// theirs, and must never replace the reader's snapshot.
+	beforeEach( () => {
+		ras.store.clear();
+		registerCriteria( criteria );
+	} );
+
+	afterEach( () => {
+		delete window.newspack_reader_data;
+	} );
+
+	it( 'syncMatchedSegments leaves the stored snapshot alone in a switched session', () => {
+		window.newspack_reader_data = { is_switched_session: true };
+		ras.store.set( 'reader', { authenticated: true } );
+		ras.store.set( 'simple', 'simple-match' );
+		ras.store.set( 'matched_segments', [ 'segment4' ] );
+		syncMatchedSegments( ras, segments );
+		expect( ras.store.get( 'matched_segments' ) ).toEqual( [ 'segment4' ] );
+	} );
+
+	it( 'getBestPrioritySegmentFromSnapshot picks the highest-priority stored segment', () => {
+		// segment1 has priority 0, segment3 priority 1; order in the snapshot is irrelevant.
+		ras.store.set( 'matched_segments', [ 'segment3', 'segment1' ] );
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBe( 'segment1' );
+	} );
+
+	it( 'getBestPrioritySegmentFromSnapshot ignores a stored id the page does not know', () => {
+		ras.store.set( 'matched_segments', [ 'deleted-segment', 'segment3' ] );
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBe( 'segment3' );
+	} );
+
+	it( 'getBestPrioritySegmentFromSnapshot returns null with no snapshot', () => {
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBeNull();
+		ras.store.set( 'matched_segments', [] );
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBeNull();
 	} );
 } );
