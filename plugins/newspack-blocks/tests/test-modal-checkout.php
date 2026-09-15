@@ -1884,6 +1884,26 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A destination carrying its own query string reaches the thank-you page
+	 * whole, instead of its second param becoming a param of the thank-you URL.
+	 */
+	public function test_return_url_keeps_a_destination_that_carries_its_own_query_string() {
+		$this->set_modal_checkout_referer();
+		$destination                        = home_url( '/thanks/?src=a&ref=b' );
+		$_REQUEST['after_success_behavior'] = 'custom';
+		$_REQUEST['after_success_url']      = $destination;
+		$order                              = new WC_Order( 123, 'wc_order_testkey' );
+
+		$url = \Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order );
+		unset( $_REQUEST['after_success_behavior'], $_REQUEST['after_success_url'] );
+
+		$query = [];
+		wp_parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+		$this->assertSame( $destination, $query['after_success_url'] ?? null );
+		$this->assertArrayNotHasKey( 'ref', $query );
+	}
+
+	/**
 	 * The order-received URL is untouched when a request carries no modal
 	 * signals.
 	 */
