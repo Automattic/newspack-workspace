@@ -11,6 +11,10 @@ if [ -z "$version" ]; then
 fi
 
 find . -path ./node_modules -prune -o -path ./release -prune -o -path '*/languages/*.pot' -print | while read -r pot; do
-	sed -E 's/^("Project-Id-Version: .*[^ 0-9])( [0-9][^ ]*)?\\n"$/\1 '"$version"'\\n"/' "$pot" > "$pot.tmp" && mv "$pot.tmp" "$pot"
+	if sed -E 's/^("Project-Id-Version: .*[^ 0-9])( [0-9][^ ]*)?\\n"$/\1 '"$version"'\\n"/' "$pot" > "$pot.tmp"; then
+		mv "$pot.tmp" "$pot" || rm -f "$pot.tmp"
+	else
+		rm -f "$pot.tmp"
+	fi
 done
 exit 0
