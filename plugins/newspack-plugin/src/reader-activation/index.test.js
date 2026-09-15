@@ -172,6 +172,14 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		jest.isolateModules( () => require( './index' ) );
 	}
 
+	it( 'exposes hydrateSession so a consumer can await the post-sign-in session', () => {
+		// A reader who signs in mid-page has no REST nonce and no server items
+		// until the session hydrates; a consumer about to make a request whose
+		// server-side handling reads reader data must be able to wait for that.
+		bootInit();
+		expect( typeof window.newspackReaderActivation.hydrateSession ).toBe( 'function' );
+	} );
+
 	it( 'fresh-logout divergence triggers the clear (and leaves sibling namespaces alone)', () => {
 		bootInit( {
 			storage: {

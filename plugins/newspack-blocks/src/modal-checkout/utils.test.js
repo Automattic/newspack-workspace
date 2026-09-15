@@ -13,6 +13,7 @@ import {
 	preventDisabledCloseClicks,
 	removeFrameProcessingScreen,
 	whenReaderDataSynced,
+	whenSignedInReaderDataSynced,
 } from './utils';
 
 afterEach( () => {
@@ -122,6 +123,48 @@ describe( 'whenReaderDataSynced()', () => {
 		jest.advanceTimersByTime( 1 );
 		await waited;
 		expect( resolved ).toBe( true );
+	} );
+} );
+
+describe( 'whenSignedInReaderDataSynced()', () => {
+	afterEach( () => {
+		delete window.newspackReaderActivation;
+		jest.useRealTimers();
+	} );
+
+	it( 'resolves at once when reader activation is absent', async () => {
+		await expect( whenSignedInReaderDataSynced( 'matched_segments' ) ).resolves.toBeUndefined();
+	} );
+
+	it( 'flushes the key only after the session has hydrated', async () => {
+		let hydrated;
+		const hydrateSession = jest.fn( () => new Promise( resolve => ( hydrated = resolve ) ) );
+		const flush = jest.fn( () => Promise.resolve() );
+		window.newspackReaderActivation = { hydrateSession, store: { flush } };
+		let resolved = false;
+		const waited = whenSignedInReaderDataSynced( 'matched_segments' ).then( () => ( resolved = true ) );
+		await Promise.resolve();
+		expect( hydrateSession ).toHaveBeenCalledTimes( 1 );
+		expect( flush ).not.toHaveBeenCalled();
+		hydrated( 'nonce' );
+		await waited;
+		expect( flush ).toHaveBeenCalledWith( 'matched_segments' );
+		expect( resolved ).toBe( true );
+	} );
+
+	it( 'gives up at the cap when hydration never settles', async () => {
+		jest.useFakeTimers();
+		const flush = jest.fn( () => Promise.resolve() );
+		window.newspackReaderActivation = { hydrateSession: () => new Promise( () => {} ), store: { flush } };
+		let resolved = false;
+		const waited = whenSignedInReaderDataSynced( 'matched_segments', 3000 ).then( () => ( resolved = true ) );
+		jest.advanceTimersByTime( 2999 );
+		await Promise.resolve();
+		expect( resolved ).toBe( false );
+		jest.advanceTimersByTime( 1 );
+		await waited;
+		expect( resolved ).toBe( true );
+		expect( flush ).not.toHaveBeenCalled();
 	} );
 } );
 
