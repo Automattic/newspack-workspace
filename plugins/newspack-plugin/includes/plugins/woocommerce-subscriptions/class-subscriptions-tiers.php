@@ -758,8 +758,20 @@ class Subscriptions_Tiers {
 			[ $current_frequency, $current_product, $user_subscription ] = self::get_current_tier( $tiers );
 		}
 
+		// The line item being switched, when this form is a switch modal.
+		$line_product = $switch_data ? $switch_data['item']->get_product() : null;
+
 		if ( ! $switch_data ) {
 			$current_frequency = $frequencies[0];
+		} elseif ( ! $current_product ) {
+			// A plan a publisher has retired by setting it to Private is kept out
+			// of the tiers (nobody new may buy in), so a reader still on it matches
+			// no current tier above. Their billing period is still known from the
+			// line item they are switching away from, so open the modal on that
+			// period, or failing that on the first one, rather than on none at
+			// all: with no period selected the modal rendered as an empty box.
+			$line_frequency    = $line_product ? self::get_frequency( $line_product ) : null;
+			$current_frequency = $line_frequency && isset( $tiers[ $line_frequency ] ) ? $line_frequency : $frequencies[0];
 		}
 
 		if ( $switch_data && $current_product ) {
@@ -778,7 +790,6 @@ class Subscriptions_Tiers {
 		// no seats at all. Every product here is concrete — get_tiers_by_frequency()
 		// expands a variable subscription into its variations, which is where
 		// per-seat meta lives for those.
-		$line_product   = $switch_data ? $switch_data['item']->get_product() : null;
 		$line_seats     = $line_product ? Group_Subscription_Seats::get_field_args( $line_product ) : null;
 		$selected_seats = $selected_product ? Group_Subscription_Seats::get_field_args( $selected_product ) : null;
 
