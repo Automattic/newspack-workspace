@@ -937,6 +937,30 @@ domReady( () => {
 	};
 
 	/**
+	 * Whether the page URL asks this bundle to open a checkout.
+	 *
+	 * @return {boolean} Whether a trigger is present.
+	 */
+	const hasCheckoutUrlTrigger = () => new URLSearchParams( window.location.search ).has( 'checkout' );
+
+	/**
+	 * Leave a trace when a checkout opens without the reader's segment snapshot
+	 * confirmed on the server: its pricing may then follow the previous visit's
+	 * snapshot, and nothing else records that this happened.
+	 *
+	 * @param {boolean} synced Whether the snapshot reached the server in time.
+	 */
+	const warnUnlessSynced = synced => {
+		if ( synced ) {
+			return;
+		}
+		// eslint-disable-next-line no-console
+		console.warn(
+			"Newspack modal checkout: the reader's segment snapshot did not reach the server in time; the checkout may price against the previous snapshot."
+		);
+	};
+
+	/**
 	 * Handle modal checkout url param triggers.
 	 */
 	const handleModalCheckoutUrlParams = () => {
@@ -999,8 +1023,16 @@ domReady( () => {
 	// for the reader's segment snapshot to reach the server: segmentation writes
 	// it on this same page load, and pricing rules read it when the checkout
 	// loads, so firing first would price against the previous visit's snapshot.
+	// Only a page that carries a trigger waits; any other page that loads this
+	// bundle leaves the store to its own sync schedule.
 	afterDeferredScripts( () => {
-		whenReaderDataSynced( 'matched_segments' ).then( handleModalCheckoutUrlParams );
+		if ( ! hasCheckoutUrlTrigger() ) {
+			return;
+		}
+		whenReaderDataSynced( 'matched_segments' ).then( synced => {
+			warnUnlessSynced( synced );
+			handleModalCheckoutUrlParams();
+		} );
 	} );
 
 	/**

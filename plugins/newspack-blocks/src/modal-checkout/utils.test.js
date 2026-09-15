@@ -80,37 +80,64 @@ describe( 'whenReaderDataSynced()', () => {
 		jest.useRealTimers();
 	} );
 
-	it( 'resolves at once when reader activation or its flush method is absent', async () => {
-		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBeUndefined();
+	it( 'resolves true at once when reader activation or its flush method is absent', async () => {
+		// Nothing to wait for: the checkout opens with whatever the server holds.
+		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBe( true );
 		window.newspackReaderActivation = { store: {} };
-		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBeUndefined();
+		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBe( true );
 	} );
 
-	it( 'resolves once the store has flushed the key', async () => {
+	it( 'flushes only after the current task, so a key written by a later DOMContentLoaded listener is pending', async () => {
+		// When this bundle prints before the popups view script, its listener
+		// registers first and popups writes matched_segments in a later listener
+		// of the same dispatch; a flush taken synchronously would see nothing.
+		jest.useFakeTimers();
+		const flush = jest.fn( () => Promise.resolve( true ) );
+		window.newspackReaderActivation = { store: { flush } };
+		const waited = whenReaderDataSynced( 'matched_segments' );
+		await Promise.resolve();
+		expect( flush ).not.toHaveBeenCalled();
+		jest.advanceTimersByTime( 0 );
+		expect( flush ).toHaveBeenCalledWith( 'matched_segments' );
+		await expect( waited ).resolves.toBe( true );
+	} );
+
+	it( 'resolves with the flush result once the store has flushed the key', async () => {
 		let settle;
 		const flush = jest.fn( () => new Promise( resolve => ( settle = resolve ) ) );
 		window.newspackReaderActivation = { store: { flush } };
-		let resolved = false;
-		const waited = whenReaderDataSynced( 'matched_segments' ).then( () => ( resolved = true ) );
-		await Promise.resolve();
+		let result;
+		const waited = whenReaderDataSynced( 'matched_segments' ).then( synced => ( result = synced ) );
+		await new Promise( resolve => setTimeout( resolve, 0 ) );
 		expect( flush ).toHaveBeenCalledWith( 'matched_segments' );
-		expect( resolved ).toBe( false );
-		settle();
+		expect( result ).toBeUndefined();
+		settle( false );
 		await waited;
-		expect( resolved ).toBe( true );
+		expect( result ).toBe( false );
 	} );
 
-	it( 'gives up waiting at the cap so a stalled sync cannot hold the checkout', async () => {
+	it( 'resolves false when the store throws synchronously, so the checkout still opens', async () => {
+		window.newspackReaderActivation = {
+			store: {
+				flush: () => {
+					throw new Error( 'API not available.' );
+				},
+			},
+		};
+		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBe( false );
+	} );
+
+	it( 'gives up at the cap with false so a stalled sync cannot hold the checkout', async () => {
 		jest.useFakeTimers();
 		window.newspackReaderActivation = { store: { flush: () => new Promise( () => {} ) } };
-		let resolved = false;
-		const waited = whenReaderDataSynced( 'matched_segments', 3000 ).then( () => ( resolved = true ) );
+		let result;
+		const waited = whenReaderDataSynced( 'matched_segments', 3000 ).then( synced => ( result = synced ) );
 		jest.advanceTimersByTime( 2999 );
 		await Promise.resolve();
-		expect( resolved ).toBe( false );
+		expect( result ).toBeUndefined();
 		jest.advanceTimersByTime( 1 );
 		await waited;
-		expect( resolved ).toBe( true );
+		expect( result ).toBe( false );
 	} );
 } );
 
@@ -120,38 +147,38 @@ describe( 'whenSignedInReaderDataSynced()', () => {
 		jest.useRealTimers();
 	} );
 
-	it( 'resolves at once when reader activation is absent', async () => {
-		await expect( whenSignedInReaderDataSynced( 'matched_segments' ) ).resolves.toBeUndefined();
+	it( 'resolves true at once when reader activation is absent', async () => {
+		await expect( whenSignedInReaderDataSynced( 'matched_segments' ) ).resolves.toBe( true );
 	} );
 
 	it( 'flushes the key only after the session has hydrated', async () => {
 		let hydrated;
 		const hydrateSession = jest.fn( () => new Promise( resolve => ( hydrated = resolve ) ) );
-		const flush = jest.fn( () => Promise.resolve() );
+		const flush = jest.fn( () => Promise.resolve( true ) );
 		window.newspackReaderActivation = { hydrateSession, store: { flush } };
-		let resolved = false;
-		const waited = whenSignedInReaderDataSynced( 'matched_segments' ).then( () => ( resolved = true ) );
+		let result;
+		const waited = whenSignedInReaderDataSynced( 'matched_segments' ).then( synced => ( result = synced ) );
 		await Promise.resolve();
 		expect( hydrateSession ).toHaveBeenCalledTimes( 1 );
 		expect( flush ).not.toHaveBeenCalled();
 		hydrated( 'nonce' );
 		await waited;
 		expect( flush ).toHaveBeenCalledWith( 'matched_segments' );
-		expect( resolved ).toBe( true );
+		expect( result ).toBe( true );
 	} );
 
-	it( 'gives up at the cap when hydration never settles', async () => {
+	it( 'gives up at the cap with false when hydration never settles', async () => {
 		jest.useFakeTimers();
-		const flush = jest.fn( () => Promise.resolve() );
+		const flush = jest.fn( () => Promise.resolve( true ) );
 		window.newspackReaderActivation = { hydrateSession: () => new Promise( () => {} ), store: { flush } };
-		let resolved = false;
-		const waited = whenSignedInReaderDataSynced( 'matched_segments', 3000 ).then( () => ( resolved = true ) );
+		let result;
+		const waited = whenSignedInReaderDataSynced( 'matched_segments', 3000 ).then( synced => ( result = synced ) );
 		jest.advanceTimersByTime( 2999 );
 		await Promise.resolve();
-		expect( resolved ).toBe( false );
+		expect( result ).toBeUndefined();
 		jest.advanceTimersByTime( 1 );
 		await waited;
-		expect( resolved ).toBe( true );
+		expect( result ).toBe( false );
 		expect( flush ).not.toHaveBeenCalled();
 	} );
 } );

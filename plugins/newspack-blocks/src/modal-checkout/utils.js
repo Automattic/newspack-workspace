@@ -59,6 +59,11 @@ function hasDomContentLoadedFired() {
  * computed: dynamic pricing reads the reader's `matched_segments` when the
  * checkout loads, and this page's segmentation may have only just written it.
  *
+ * The flush waits for the current task to end first. When this bundle prints
+ * ahead of the popups view script, its DOMContentLoaded listener runs before
+ * the one that writes `matched_segments`, and a flush taken at once would find
+ * nothing pending.
+ *
  * Resolves at once when reader activation is absent, when its store predates
  * flush(), or when nothing is pending, and at `timeoutMs` regardless: a stalled
  * request must not hold the checkout, since the worst case is today's price.
@@ -66,20 +71,27 @@ function hasDomContentLoadedFired() {
  * @param {string} key       Reader-data key to flush.
  * @param {number} timeoutMs Longest wait before giving up.
  *
- * @return {Promise<void>} Settles when the key is synced or the wait is up.
+ * @return {Promise<boolean>} Whether the server holds the key's current value
+ *                            once the wait is over: true when it was sent or
+ *                            there was nothing to send, false when the write
+ *                            failed, threw, or the wait ran out.
  */
 export function whenReaderDataSynced( key, timeoutMs = 3000 ) {
 	const store = window.newspackReaderActivation?.store;
 	if ( typeof store?.flush !== 'function' ) {
-		return Promise.resolve();
+		return Promise.resolve( true );
 	}
 	return new Promise( resolve => {
-		const timer = setTimeout( resolve, timeoutMs );
-		const done = () => {
+		const timer = setTimeout( () => resolve( false ), timeoutMs );
+		const done = synced => {
 			clearTimeout( timer );
-			resolve();
+			resolve( synced === true );
 		};
-		Promise.resolve( store.flush( key ) ).then( done, done );
+		setTimeout( () => {
+			// A flush that throws before returning a promise counts as a failed
+			// write: the checkout still opens.
+			new Promise( settle => settle( store.flush( key ) ) ).then( done, () => done( false ) );
+		}, 0 );
 	} );
 }
 
@@ -96,23 +108,25 @@ export function whenReaderDataSynced( key, timeoutMs = 3000 ) {
  * @param {string} key       Reader-data key to flush once hydrated.
  * @param {number} timeoutMs Longest wait before giving up.
  *
- * @return {Promise<void>} Settles when the key is synced or the wait is up.
+ * @return {Promise<boolean>} Whether the server holds the key's current value
+ *                            once the wait is over, as whenReaderDataSynced()
+ *                            reports it; false when the wait ran out.
  */
 export function whenSignedInReaderDataSynced( key, timeoutMs = 3000 ) {
 	const ras = window.newspackReaderActivation;
 	if ( ! ras ) {
-		return Promise.resolve();
+		return Promise.resolve( true );
 	}
 	const started = Date.now();
 	return new Promise( resolve => {
-		const timer = setTimeout( resolve, timeoutMs );
-		const done = () => {
+		const timer = setTimeout( () => resolve( false ), timeoutMs );
+		const done = synced => {
 			clearTimeout( timer );
-			resolve();
+			resolve( synced === true );
 		};
 		Promise.resolve( ras.hydrateSession?.() )
 			.then( () => whenReaderDataSynced( key, Math.max( 0, timeoutMs - ( Date.now() - started ) ) ) )
-			.then( done, done );
+			.then( done, () => done( false ) );
 	} );
 }
 
