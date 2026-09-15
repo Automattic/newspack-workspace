@@ -20,6 +20,8 @@ import { addQueryArgs } from '@wordpress/url';
  */
 import { WIZARD_ENDPOINT } from '../constants';
 
+import './search-token-field.scss';
+
 type Item = { id: number; name: string };
 
 interface SearchTokenFieldProps {

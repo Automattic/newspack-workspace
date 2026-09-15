@@ -10,8 +10,9 @@
 
 import { buildQueryParams as baseBuildQueryParams, toQueryString } from '../../utils/build-query';
 
-// `auto-draft` so an abandoned "Add new" still shows in the list.
-const DEFAULT_STATUSES = 'publish,private,future,draft,pending,auto-draft';
+// `auto-draft` is excluded: any save promotes the row to `draft`, so one still
+// at `auto-draft` is always an abandoned "Add new" with nothing in it.
+const DEFAULT_STATUSES = 'publish,private,future,draft,pending';
 
 // `status` is handled separately by the shared util's status-filter branch, not here.
 const FIELD_TO_QUERY_PARAM = {
@@ -33,8 +34,15 @@ const SORT_FIELD_TO_ORDERBY = {
 };
 
 export function buildQueryParams( view = {} ) {
-	// Term embeds cost ~2 internal REST dispatches per row and only the
-	// (hidden-by-default) Categories/Tags columns read them.
+	// A post carries one `wp:term` link per REST-visible taxonomy on its post
+	// type, and `embed_links()` dispatches each link the `_embed` list matches,
+	// caching by href — which differs per row. So `wp:term` costs a dispatch per
+	// row per taxonomy, and it is not just the two this screen shows:
+	// newsletters also carry the advertiser taxonomy (shared with the ads CPT)
+	// and, with Co-Authors Plus active, its `author` taxonomy. Only the
+	// hidden-by-default Categories/Tags columns read `wp:term`, which is why it
+	// is gated; the `author` rel is separate and stays, since the Author column
+	// reads `_embedded.author`.
 	const visibleFields = Array.isArray( view.fields ) ? view.fields : null;
 	const needsTerms = ! visibleFields || visibleFields.includes( 'categories' ) || visibleFields.includes( 'tags' );
 

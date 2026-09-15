@@ -89,6 +89,238 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test dash-range matching, including both boundaries.
+	 */
+	public function test_dash_range_match() {
+		$range = '203.0.113.0-203.0.113.255';
+		// Both boundaries are inclusive.
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.0', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.255', $range ) );
+		// Inside the range.
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.128', $range ) );
+		// Just outside either boundary.
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.112.255', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.114.0', $range ) );
+	}
+
+	/**
+	 * Test a dash range spanning octet boundaries (not expressible as one CIDR).
+	 */
+	public function test_dash_range_spanning_octets() {
+		$range = '10.0.0.200-10.0.1.100';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.200', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.255', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.1.0', $range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.1.100', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.199', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.1.101', $range ) );
+	}
+
+	/**
+	 * Test a reversed dash range (end < start) is treated as invalid and
+	 * never matches — not even its own endpoints. A reversed range is most
+	 * likely a typo, and silently normalizing it could grant a much larger
+	 * range than intended; the UI warns about it instead.
+	 */
+	public function test_reversed_dash_range_never_matches() {
+		$range = '203.0.113.255-203.0.113.0';
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.113.0', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.113.128', $range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '203.0.113.255', $range ) );
+	}
+
+	/**
+	 * Test a single-address dash range (start === end) matches exactly that IP.
+	 */
+	public function test_single_address_dash_range() {
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.5-10.0.0.5' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.6', '10.0.0.5-10.0.0.5' ) );
+	}
+
+	/**
+	 * Test whitespace around the dash separator is tolerated, mirroring the
+	 * CIDR slash behavior.
+	 */
+	public function test_dash_range_tolerates_whitespace_around_dash() {
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1 - 10.0.0.9' ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1- 10.0.0.9' ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1 -10.0.0.9' ) );
+	}
+
+	/**
+	 * Test malformed dash ranges are inert: they never match and never
+	 * produce a PHP warning/notice/fatal.
+	 */
+	public function test_malformed_dash_range_is_inert() {
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1-' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '-10.0.0.9' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1-banana' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.1-10.0.0.4-10.0.0.9' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '-' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '999.0.0.1-10.0.0.9' ) );
+	}
+
+	/**
+	 * Test a token carrying both separators is inert.
+	 *
+	 * `parse_ip_ranges()` checks for `/` before `-`, so these are read as
+	 * malformed CIDR blocks and dropped. Pinned here because reordering that
+	 * if/elseif chain would silently change how they parse — and the wizard's
+	 * client-side validator flags them on the same assumption.
+	 */
+	public function test_token_with_both_separators_is_inert() {
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.3', '10.0.0.0/24-10.0.0.5' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.3', '10.0.0.1-10.0.0.9/24' ) );
+	}
+
+	/**
+	 * Test dash ranges spanning the `ip2long()` sign boundary.
+	 *
+	 * `ip2long()` returns a signed int, so addresses above 127.255.255.255 are
+	 * negative on 32-bit PHP builds. Ranges straddling that boundary are where
+	 * a signedness mistake surfaces, as a range silently dropped as "reversed"
+	 * or an IP that fails to match.
+	 */
+	public function test_dash_range_across_ip2long_sign_boundary() {
+		$boundary_range = '127.255.255.255-128.0.0.1';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '127.255.255.255', $boundary_range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '128.0.0.0', $boundary_range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '128.0.0.1', $boundary_range ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '128.0.0.2', $boundary_range ) );
+
+		$full_range = '0.0.0.0-255.255.255.255';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '0.0.0.0', $full_range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '200.0.0.1', $full_range ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '255.255.255.255', $full_range ) );
+
+		// A range straddling the boundary must not be read as reversed.
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '150.0.0.1', '10.0.0.0-200.0.0.0' ) );
+	}
+
+	/**
+	 * Test every entry in the shared validation fixture is classified here the
+	 * same way the wizard's client-side validator classifies it.
+	 *
+	 * `tests/fixtures/ip-range-validation-cases.json` is the single source of
+	 * truth for both suites (see `src/wizards/audience/views/content-gates/institutions/utils.test.js`).
+	 * The dangerous direction is the client calling something valid that this
+	 * parser drops: the admin sees no warning and the rule silently never
+	 * grants access. Shared cases turn that drift into a CI failure.
+	 *
+	 * @dataProvider shared_validation_case_provider
+	 *
+	 * @param string $entry    A single (comma-free) allowlist entry.
+	 * @param bool   $is_valid Whether the parser should keep it.
+	 */
+	public function test_shared_validation_fixture_parity( $entry, $is_valid ) {
+		$parse_ip_ranges_method = new ReflectionMethod( IP_Access_Rule::class, 'parse_ip_ranges' );
+		$parse_ip_ranges_method->setAccessible( true );
+		$parsed = $parse_ip_ranges_method->invoke( null, $entry );
+
+		$this->assertCount(
+			$is_valid ? 1 : 0,
+			$parsed,
+			sprintf( 'Entry %s should %sbe kept by parse_ip_ranges().', wp_json_encode( $entry ), $is_valid ? '' : 'not ' )
+		);
+	}
+
+	/**
+	 * Provide the shared client/server validation cases.
+	 *
+	 * Throws rather than returning an empty set: PHPUnit reports a provider with
+	 * no cases as a skipped test and exits 0, so a missing file or a JSON typo
+	 * would silently disarm this half of the parity guard while the jest half
+	 * still fails — making a shared problem look client-only.
+	 *
+	 * @throws RuntimeException If the fixture is unreadable, empty, or has duplicate labels.
+	 *
+	 * @return array[] Keyed by case label: [ entry, is_valid ].
+	 */
+	public function shared_validation_case_provider() {
+		$fixture_path = dirname( __DIR__, 2 ) . '/fixtures/ip-range-validation-cases.json';
+		$fixture_json = file_exists( $fixture_path ) ? file_get_contents( $fixture_path ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Local test fixture.
+		$fixture      = json_decode( $fixture_json, true );
+		if ( empty( $fixture['cases'] ) ) {
+			throw new RuntimeException( sprintf( 'Shared validation fixture %s is missing, unreadable, or has no cases.', esc_html( $fixture_path ) ) );
+		}
+		$cases = [];
+		foreach ( $fixture['cases'] as $case ) {
+			// Cases are keyed by label here but not in jest, so a duplicate would
+			// drop a case from this suite only.
+			if ( isset( $cases[ $case['label'] ] ) ) {
+				throw new RuntimeException( sprintf( 'Duplicate case label %s in the shared validation fixture.', esc_html( wp_json_encode( $case['label'] ) ) ) );
+			}
+			$cases[ $case['label'] ] = [ $case['entry'], $case['valid'] ];
+		}
+		return $cases;
+	}
+
+	/**
+	 * Test a mixed list of CIDR, dash range, and single IP entries.
+	 */
+	public function test_mixed_cidr_dash_and_single_entries() {
+		$ranges = '192.168.1.0/24, 203.0.113.0-203.0.113.255, 10.0.0.5';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '192.168.1.77', $ranges ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.42', $ranges ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', $ranges ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '172.16.0.1', $ranges ) );
+	}
+
+	/**
+	 * Test an invalid entry in a list does not disable the valid entries
+	 * around it.
+	 */
+	public function test_invalid_entry_does_not_disable_valid_neighbors() {
+		$ranges = 'garbage, 203.0.113.0-203.0.113.255, 10.0.0.0/nope';
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '203.0.113.42', $ranges ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', $ranges ) );
+	}
+
+	/**
+	 * Test IPv4-mapped IPv6 notation is out of scope: the matcher is
+	 * IPv4-only, so `::ffff:a.b.c.d` visitors do not match (documents the
+	 * current IPv6 gap rather than asserting desired behavior).
+	 */
+	public function test_ipv4_mapped_ipv6_does_not_match() {
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '::ffff:10.0.0.5', '10.0.0.0/8' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '::ffff:10.0.0.5', '10.0.0.1-10.0.0.9' ) );
+	}
+
+	/**
+	 * Test the allowlist endpoint emits dash ranges in normalized
+	 * (whitespace-stripped) form and drops reversed/malformed ones.
+	 */
+	public function test_ip_allowlist_includes_valid_dash_ranges() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$inst_id = \Newspack\Institution::create(
+			'Dash Range Library',
+			'',
+			[ 'ip_range' => '203.0.113.0 - 203.0.113.255, 10.0.0.9-10.0.0.1, 10.0.0.1-, 192.168.1.0/24' ]
+		);
+		$this->assertIsInt( $inst_id );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+
+		// Assert the status first: iterating an error payload would fail with an
+		// array-key notice instead of naming the permission regression.
+		$this->assertSame( 200, $response->get_status() );
+
+		$entry = null;
+		foreach ( $response->get_data() as $item ) {
+			if ( $item['id'] === $inst_id ) {
+				$entry = $item;
+				break;
+			}
+		}
+		$this->assertNotNull( $entry );
+		$this->assertSame( [ '203.0.113.0-203.0.113.255', '192.168.1.0/24' ], $entry['ip_ranges'] );
+	}
+
+	/**
 	 * Test the bypass cookie lifetime is long enough to keep institutional
 	 * access persistent (see the COOKIE_EXPIRATION docblock).
 	 */
@@ -273,7 +505,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$data     = $response->get_data();
 
 		$this->assertFalse( $data['valid'] );
-		$this->assertSame( 'REST Test Library', $data['institution'], 'Institution name should be returned even on failure.' );
+		$this->assertArrayNotHasKey( 'institution', $data, 'Institution name must not be disclosed to a visitor who did not match it.' );
 
 		if ( null === $original_addr ) {
 			unset( $_SERVER['REMOTE_ADDR'] ); // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
@@ -753,5 +985,50 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( '://', $url, 'Check URL should not contain a scheme or host.' );
 		$this->assertStringContainsString( 'institution_id=4242', $url );
+	}
+
+	/**
+	 * The public classifier names each entry shape. It is the single source of
+	 * truth the migration CLI delegates to, so a token carrying both separators
+	 * must read as a malformed CIDR (invalid), never as a dash range.
+	 */
+	public function test_classify_entry() {
+		$this->assertSame( 'ip', IP_Access_Rule::classify_entry( '10.0.0.5' ) );
+		$this->assertSame( 'cidr', IP_Access_Rule::classify_entry( '192.168.1.0/24' ) );
+		$this->assertSame( 'range', IP_Access_Rule::classify_entry( '203.0.113.0-203.0.113.255' ) );
+		$this->assertSame( 'range', IP_Access_Rule::classify_entry( '10.0.0.1 - 10.0.0.9' ), 'Whitespace around the dash is tolerated.' );
+		$this->assertSame( 'invalid', IP_Access_Rule::classify_entry( '203.0.113.255-203.0.113.0' ), 'A reversed range is invalid.' );
+		$this->assertSame( 'invalid', IP_Access_Rule::classify_entry( '10.0.0.0/24-10.0.0.5' ), 'Both separators read as a malformed CIDR.' );
+		$this->assertSame( 'invalid', IP_Access_Rule::classify_entry( '2001:db8::1' ), 'IPv6 is unsupported.' );
+		$this->assertSame( 'invalid', IP_Access_Rule::classify_entry( 'not-an-ip' ) );
+	}
+
+	/**
+	 * Entry size lets a caller judge breadth uniformly: a /16 CIDR and the
+	 * equivalent dash range report the same address count.
+	 */
+	public function test_get_entry_size() {
+		$this->assertSame( 1.0, IP_Access_Rule::get_entry_size( '10.0.0.5' ) );
+		$this->assertSame( 256.0, IP_Access_Rule::get_entry_size( '192.168.1.0/24' ) );
+		$this->assertSame( 65536.0, IP_Access_Rule::get_entry_size( '128.100.0.0/16' ) );
+		$this->assertSame( 256.0, IP_Access_Rule::get_entry_size( '10.0.0.0-10.0.0.255' ), 'A 256-address dash range matches its /24 equivalent.' );
+		$this->assertSame( 65536.0, IP_Access_Rule::get_entry_size( '10.0.0.0-10.0.255.255' ), 'A dash range and its /16 equivalent report the same size.' );
+		$this->assertSame( 2.0 ** 32, IP_Access_Rule::get_entry_size( '0.0.0.0-255.255.255.255' ), 'The whole IPv4 space does not overflow (float).' );
+		$this->assertSame( 0.0, IP_Access_Rule::get_entry_size( 'not-an-ip' ), 'An invalid entry has no size.' );
+	}
+
+	/**
+	 * The public normalizer accepts dash ranges (parity with the runtime check),
+	 * splits on commas and newlines, canonicalizes CIDR mask bits, and surfaces
+	 * invalid entries for reporting rather than dropping them silently.
+	 */
+	public function test_normalize_ip_ranges() {
+		$result = IP_Access_Rule::normalize_ip_ranges( "192.168.1.0/24, 10.0.0.5\n203.0.113.0-203.0.113.255" );
+		$this->assertSame( [ '192.168.1.0/24', '10.0.0.5', '203.0.113.0-203.0.113.255' ], $result['valid'], 'Dash ranges are kept alongside IPs and CIDR blocks.' );
+		$this->assertSame( [], $result['invalid'] );
+
+		$mixed = IP_Access_Rule::normalize_ip_ranges( [ '0.0.0.0/00', 'not-an-ip', '2001:db8::/32' ] );
+		$this->assertSame( [ '0.0.0.0/0' ], $mixed['valid'], 'Leading-zero mask bits are canonicalized.' );
+		$this->assertSame( [ 'not-an-ip', '2001:db8::/32' ], $mixed['invalid'], 'Invalid entries are surfaced in their trimmed original form.' );
 	}
 }

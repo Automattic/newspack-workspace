@@ -1,3 +1,10 @@
+## newspack-network [2.22.8](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.7...newspack-network@2.22.8) (2026-09-15)
+
+
+### Bug Fixes
+
+* use update_option instead of add_option in migration and setup ([cbae9a6](https://github.com/Automattic/newspack-workspace/commit/cbae9a63d0b30b6cf2ac36a46f00541dcbc94266))
+
 ## newspack-network [2.22.7](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.6...newspack-network@2.22.7) (2026-09-08)
 
 

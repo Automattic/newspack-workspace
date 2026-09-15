@@ -1,3 +1,22 @@
+## newspack-story-budget [1.3.1](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.0...newspack-story-budget@1.3.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **story-budget:** restore budget management for editors (NPPM-3199) ([#1072](https://github.com/Automattic/newspack-workspace/issues/1072)) ([e64be9f](https://github.com/Automattic/newspack-workspace/commit/e64be9f394c36f1b8240d23b26753f7f56d92dee))
+
+# newspack-story-budget [1.3.0](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.2.5...newspack-story-budget@1.3.0) (2026-09-14)
+
+
+### Features
+
+* **components:** adopt design system badges (DSGNEWS-215) ([fc4c8f7](https://github.com/Automattic/newspack-workspace/commit/fc4c8f73ccba6ec4075e09578a43938a40eda60f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
 ## newspack-story-budget [1.2.5](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.2.4...newspack-story-budget@1.2.5) (2026-09-09)
 
 

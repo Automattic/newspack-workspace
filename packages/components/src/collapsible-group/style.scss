@@ -1,0 +1,47 @@
+@use "../mixins" as mixins;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-collapsible-group {
+	&__heading {
+		margin: 0;
+	}
+
+	&__trigger {
+		@include wp-mixins.heading-large();
+		align-items: center;
+		background: none;
+		border: 0;
+		color: inherit;
+		cursor: pointer;
+		display: flex;
+		gap: wp-vars.$grid-unit-10;
+		justify-content: space-between;
+		padding: 0;
+		text-align: left;
+		width: 100%;
+
+		&:focus-visible {
+			@include mixins.wpds-focus-ring;
+			outline-offset: wp-vars.$grid-unit-05;
+		}
+
+		svg {
+			flex-shrink: 0;
+		}
+
+		&[aria-expanded="true"] svg {
+			transform: rotate(180deg);
+		}
+
+		@media (prefers-reduced-motion: no-preference) {
+			svg {
+				transition: transform 0.1s ease-out;
+			}
+		}
+	}
+
+	&__panel-inner {
+		padding-top: wp-vars.$grid-unit-30;
+	}
+}

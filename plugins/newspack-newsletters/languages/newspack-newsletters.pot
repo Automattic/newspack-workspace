@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Newsletters 3.40.2\n"
+"Project-Id-Version: Newspack Newsletters 3.40.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-newsletters\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-09T23:37:58+00:00\n"
+"POT-Creation-Date: 2026-09-14T18:15:21+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -98,7 +98,7 @@ msgstr ""
 #: includes/admin/pages/class-ads-list-page.php:90
 #: includes/admin/pages/class-advertisers-list-page.php:91
 #: includes/admin/pages/class-layouts-list-page.php:92
-#: includes/admin/pages/class-newsletters-list-page.php:82
+#: includes/admin/pages/class-newsletters-list-page.php:102
 #: includes/admin/pages/class-settings-page.php:59
 #: includes/class-newspack-newsletters-subscription.php:1339
 #: includes/class-newspack-newsletters-subscription.php:1352
@@ -113,14 +113,14 @@ msgid "Advertising"
 msgstr ""
 
 #: includes/admin/pages/class-ads-list-page.php:92
-#: includes/ads/class-ads.php:213
+#: includes/ads/class-ads.php:223
 #: src/editor/blocks/ad/edit.js:87
 msgid "Ads"
 msgstr ""
 
 #: includes/admin/pages/class-advertisers-list-page.php:37
 #: includes/admin/pages/class-advertisers-list-page.php:93
-#: includes/ads/class-ads.php:304
+#: includes/ads/class-ads.php:314
 #: dist/admin-shell.js:219
 #: src/admin-shell/screens/index.js:26
 msgid "Advertisers"
@@ -135,7 +135,7 @@ msgid "Layouts"
 msgstr ""
 
 #: includes/admin/pages/class-newsletters-list-page.php:35
-#: includes/admin/pages/class-newsletters-list-page.php:83
+#: includes/admin/pages/class-newsletters-list-page.php:103
 #: includes/class-newspack-newsletters.php:653
 #: dist/admin-shell.js:212
 #: src/admin-shell/screens/index.js:18
@@ -222,210 +222,210 @@ msgstr ""
 msgid "Filter by ad placement"
 msgstr ""
 
-#: includes/ads/class-ads.php:212
+#: includes/ads/class-ads.php:222
 msgid "Newsletters Ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:252
+#: includes/ads/class-ads.php:262
 msgid "Sorry, you are not allowed to manage newsletter advertisers."
 msgstr ""
 
-#: includes/ads/class-ads.php:253
+#: includes/ads/class-ads.php:263
 msgid "You need permission to manage newsletter ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:265
+#: includes/ads/class-ads.php:275
 msgctxt "post type general name"
 msgid "Newsletter Ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:266
+#: includes/ads/class-ads.php:276
 msgctxt "post type singular name"
 msgid "Newsletter Ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:267
+#: includes/ads/class-ads.php:277
 msgctxt "admin menu"
 msgid "Newsletter Ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:268
+#: includes/ads/class-ads.php:278
 msgctxt "add new on admin bar"
 msgid "Newsletter Ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:269
+#: includes/ads/class-ads.php:279
 msgctxt "popup"
 msgid "Add New"
 msgstr ""
 
-#: includes/ads/class-ads.php:270
+#: includes/ads/class-ads.php:280
 #: dist/admin-shell.js:217
-#: src/admin-shell/screens/ads-list/index.js:98
-#: src/admin-shell/screens/ads-list/index.js:123
+#: src/admin-shell/screens/ads-list/index.js:143
+#: src/admin-shell/screens/ads-list/index.js:173
 msgid "Add Newsletter Ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:271
+#: includes/ads/class-ads.php:281
 msgid "New Newsletter Ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:272
+#: includes/ads/class-ads.php:282
 msgid "Edit Newsletter Ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:273
+#: includes/ads/class-ads.php:283
 msgid "View Newsletter Ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:274
+#: includes/ads/class-ads.php:284
 msgid "View Newsletter Ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:275
+#: includes/ads/class-ads.php:285
 msgid "All Newsletter Ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:276
+#: includes/ads/class-ads.php:286
 msgid "Search Newsletter Ads"
 msgstr ""
 
-#: includes/ads/class-ads.php:277
+#: includes/ads/class-ads.php:287
 msgid "Parent Newsletter Ads:"
 msgstr ""
 
-#: includes/ads/class-ads.php:278
+#: includes/ads/class-ads.php:288
 msgid "No Newsletter Ads found."
 msgstr ""
 
-#: includes/ads/class-ads.php:279
+#: includes/ads/class-ads.php:289
 msgid "No Newsletter Ads found in Trash."
 msgstr ""
 
-#: includes/ads/class-ads.php:280
+#: includes/ads/class-ads.php:290
 msgid "Newsletter Ads list"
 msgstr ""
 
-#: includes/ads/class-ads.php:281
+#: includes/ads/class-ads.php:291
 msgid "Newsletter Ad published"
 msgstr ""
 
-#: includes/ads/class-ads.php:282
+#: includes/ads/class-ads.php:292
 msgid "Newsletter Ad published privately"
 msgstr ""
 
-#: includes/ads/class-ads.php:283
+#: includes/ads/class-ads.php:293
 msgid "Newsletter Ad reverted to draft"
 msgstr ""
 
-#: includes/ads/class-ads.php:284
+#: includes/ads/class-ads.php:294
 msgid "Newsletter Ad scheduled"
 msgstr ""
 
-#: includes/ads/class-ads.php:285
+#: includes/ads/class-ads.php:295
 msgid "Newsletter Ad updated"
 msgstr ""
 
-#: includes/ads/class-ads.php:305
+#: includes/ads/class-ads.php:315
 #: dist/admin-shell.js:201
 #: dist/admin-shell.js:212
-#: src/admin-shell/screens/ads-list/fields.js:185
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:143
+#: src/admin-shell/screens/ads-list/fields.js:180
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:246
 msgid "Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:306
+#: includes/ads/class-ads.php:316
 msgid "Search Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:307
+#: includes/ads/class-ads.php:317
 msgid "Popular Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:308
+#: includes/ads/class-ads.php:318
 msgid "All Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:309
+#: includes/ads/class-ads.php:319
 msgid "Parent Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:310
+#: includes/ads/class-ads.php:320
 msgid "Parent Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:311
+#: includes/ads/class-ads.php:321
 msgid "The advertiser name"
 msgstr ""
 
-#: includes/ads/class-ads.php:313
+#: includes/ads/class-ads.php:323
 msgid "Assign a parent advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:314
+#: includes/ads/class-ads.php:324
 msgid "Optional description for this advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:315
+#: includes/ads/class-ads.php:325
 msgid "Edit Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:316
+#: includes/ads/class-ads.php:326
 msgid "View Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:317
+#: includes/ads/class-ads.php:327
 msgid "Update Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:318
+#: includes/ads/class-ads.php:328
 msgid "Add New Advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:319
+#: includes/ads/class-ads.php:329
 msgid "New Advertiser Name"
 msgstr ""
 
-#: includes/ads/class-ads.php:320
+#: includes/ads/class-ads.php:330
 msgid "No advertisers found"
 msgstr ""
 
-#: includes/ads/class-ads.php:321
+#: includes/ads/class-ads.php:331
 msgid "No advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:322
+#: includes/ads/class-ads.php:332
 msgid "Filter by advertiser"
 msgstr ""
 
-#: includes/ads/class-ads.php:324
+#: includes/ads/class-ads.php:334
 msgid "Newspack Newsletters Ads Advertisers"
 msgstr ""
 
-#: includes/ads/class-ads.php:548
+#: includes/ads/class-ads.php:561
 msgid "promotion"
 msgstr ""
 
-#: includes/ads/class-ads.php:548
+#: includes/ads/class-ads.php:561
 msgid "ad"
 msgstr ""
 
-#: includes/ads/class-ads.php:753
+#: includes/ads/class-ads.php:766
 msgid "Start Date"
 msgstr ""
 
-#: includes/ads/class-ads.php:754
+#: includes/ads/class-ads.php:767
 #: dist/adsEditor.js:34
 #: src/ads/editor/index.js:333
 msgid "Expiration Date"
 msgstr ""
 
-#: includes/ads/class-ads.php:755
+#: includes/ads/class-ads.php:768
 #: dist/admin-shell.js:201
 #: dist/admin-shell.js:212
 #: dist/adsEditor.js:28
-#: src/admin-shell/screens/ads-list/fields.js:247
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:191
+#: src/admin-shell/screens/ads-list/fields.js:242
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:318
 #: src/ads/editor/index.js:166
 msgid "Price"
 msgstr ""
@@ -909,8 +909,8 @@ msgstr ""
 
 #: includes/class-newspack-newsletters.php:648
 #: dist/admin-shell.js:212
-#: src/admin-shell/screens/newsletters-list/index.js:70
-#: src/admin-shell/screens/newsletters-list/index.js:92
+#: src/admin-shell/screens/newsletters-list/index.js:68
+#: src/admin-shell/screens/newsletters-list/index.js:98
 msgid "Add Newsletter"
 msgstr ""
 
@@ -992,7 +992,7 @@ msgstr ""
 
 #: includes/class-newspack-newsletters.php:669
 #: dist/admin-shell.js:198
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:113
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:157
 msgid "Newsletter updated."
 msgstr ""
 
@@ -1735,22 +1735,22 @@ msgid "Campaign Monitor error: Must select a segment if sending in segment mode.
 msgstr ""
 
 #: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:874
-#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1393
+#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1403
 msgid "list or segment"
 msgstr ""
 
 #: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:875
-#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1394
+#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1404
 msgid "lists or segments"
 msgstr ""
 
 #: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:876
-#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1395
+#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1405
 msgid "List or Segment"
 msgstr ""
 
 #: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:877
-#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1396
+#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1406
 msgid "Lists or Segments"
 msgstr ""
 
@@ -1811,6 +1811,12 @@ msgstr ""
 
 #: includes/service-providers/class-newspack-newsletters-service-provider.php:822
 msgid "Local list not found"
+msgstr ""
+
+#. translators: %d: number of Constant Contact records matching one email address.
+#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact-sdk.php:610
+#, php-format
+msgid "Found %d contacts for this email address; expected one."
 msgstr ""
 
 #: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact-usage-reports.php:27
@@ -1893,15 +1899,15 @@ msgstr ""
 msgid "Constant Contact campaign ID not found."
 msgstr ""
 
-#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1307
+#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1317
 msgid "Contact not found."
 msgstr ""
 
-#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1391
+#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1401
 msgid "Constant Contact List"
 msgstr ""
 
-#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1392
+#: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1402
 msgid "Constant Contact Tag"
 msgstr ""
 
@@ -2349,13 +2355,13 @@ msgstr ""
 
 #: includes/tracking/class-admin.php:63
 #: dist/admin-shell.js:212
-#: src/admin-shell/screens/ads-list/fields.js:233
+#: src/admin-shell/screens/ads-list/fields.js:228
 msgid "Impressions"
 msgstr ""
 
 #: includes/tracking/class-admin.php:64
 #: dist/admin-shell.js:212
-#: src/admin-shell/screens/ads-list/fields.js:240
+#: src/admin-shell/screens/ads-list/fields.js:235
 msgid "Clicks"
 msgstr ""
 
@@ -2453,28 +2459,28 @@ msgstr ""
 
 #: dist/admin-shell.js:193
 #: dist/admin-shell.js:198
-#: src/admin-shell/screens/newsletters-list/fields.js:47
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:121
+#: src/admin-shell/screens/newsletters-list/fields.js:64
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:165
 msgid "(no subject)"
 msgstr ""
 
 #. translators: %s: formatted publish date
 #: dist/admin-shell.js:195
-#: src/admin-shell/screens/newsletters-list/fields.js:66
+#: src/admin-shell/screens/newsletters-list/fields.js:89
 #, js-format
 msgid "Published %s"
 msgstr ""
 
 #. translators: %s: formatted send date
 #: dist/admin-shell.js:195
-#: src/admin-shell/screens/newsletters-list/fields.js:69
+#: src/admin-shell/screens/newsletters-list/fields.js:92
 #, js-format
 msgid "Sent %s"
 msgstr ""
 
 #. translators: %s: formatted scheduled date
 #: dist/admin-shell.js:196
-#: src/admin-shell/screens/newsletters-list/fields.js:75
+#: src/admin-shell/screens/newsletters-list/fields.js:98
 #, js-format
 msgid "Scheduled for %s"
 msgstr ""
@@ -2482,9 +2488,9 @@ msgstr ""
 #: dist/admin-shell.js:196
 #: dist/admin-shell.js:198
 #: dist/admin-shell.js:207
-#: src/admin-shell/screens/newsletters-list/fields.js:136
-#: src/admin-shell/screens/newsletters-list/fields.js:249
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:166
+#: src/admin-shell/screens/newsletters-list/fields.js:142
+#: src/admin-shell/screens/newsletters-list/fields.js:254
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:222
 #: src/newsletter-editor/public/index.js:25
 #: src/newsletter-editor/public/index.js:68
 msgid "Email and web"
@@ -2493,9 +2499,9 @@ msgstr ""
 #: dist/admin-shell.js:196
 #: dist/admin-shell.js:198
 #: dist/admin-shell.js:207
-#: src/admin-shell/screens/newsletters-list/fields.js:136
-#: src/admin-shell/screens/newsletters-list/fields.js:250
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:171
+#: src/admin-shell/screens/newsletters-list/fields.js:142
+#: src/admin-shell/screens/newsletters-list/fields.js:255
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:227
 #: src/editor/blocks/visibility-attribute/index.js:33
 #: src/newsletter-editor/public/index.js:25
 #: src/newsletter-editor/public/index.js:73
@@ -2520,7 +2526,7 @@ msgstr ""
 #: src/newsletter-editor/layout/index.js:248
 #: src/newsletter-editor/layout/index.js:272
 #: src/newsletter-editor/layout/index.js:303
-#: src/newsletter-editor/sidebar/autocomplete.js:125
+#: src/newsletter-editor/sidebar/autocomplete.js:129
 msgid "Cancel"
 msgstr ""
 
@@ -2553,8 +2559,8 @@ msgstr ""
 #: dist/adsEditor.js:16
 #: src/admin-shell/components/quick-edit-panel/index.js:96
 #: src/admin-shell/components/rename-form/index.js:66
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:130
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:133
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:233
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:177
 #: src/admin-shell/screens/settings/options-section.js:27
 #: src/admin-shell/screens/settings/provider-section.js:71
 #: src/components/ad-placements/index.js:62
@@ -2592,6 +2598,18 @@ msgid "Close"
 msgstr ""
 
 #: dist/admin-shell.js:198
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:151
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:121
+msgid "Loading categories…"
+msgstr ""
+
+#: dist/admin-shell.js:198
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:122
+msgid "Loading tags…"
+msgstr ""
+
+#: dist/admin-shell.js:198
 #: src/utils/service-provider.js:46
 msgid "Published as an article on your site."
 msgstr ""
@@ -2613,13 +2631,13 @@ msgstr ""
 
 #: dist/admin-shell.js:198
 #: dist/admin-shell.js:201
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:122
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:126
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:225
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:170
 msgid "Quick edit"
 msgstr ""
 
 #: dist/admin-shell.js:198
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:117
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:161
 msgid "Could not update newsletter. Please try again."
 msgstr ""
 
@@ -2627,26 +2645,36 @@ msgstr ""
 #: dist/admin-shell.js:201
 #: dist/admin-shell.js:207
 #: dist/admin-shell.js:212
-#: src/admin-shell/screens/ads-list/fields.js:254
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:163
-#: src/admin-shell/screens/newsletters-list/fields.js:215
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:136
+#: src/admin-shell/screens/ads-list/fields.js:249
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:282
+#: src/admin-shell/screens/newsletters-list/fields.js:220
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:180
 msgid "Categories"
+msgstr ""
+
+#: dist/admin-shell.js:198
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:196
+msgid "Categories could not be loaded. Edit this newsletter to change them."
 msgstr ""
 
 #: dist/admin-shell.js:198
 #: dist/admin-shell.js:207
 #: dist/editorBlocks.js:16
-#: src/admin-shell/screens/newsletters-list/fields.js:231
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:149
+#: src/admin-shell/screens/newsletters-list/fields.js:236
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:200
 #: src/editor/blocks/posts-inserter/query-controls.js:268
 msgid "Tags"
 msgstr ""
 
 #: dist/admin-shell.js:198
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:215
+msgid "Tags could not be loaded. Edit this newsletter to change them."
+msgstr ""
+
+#: dist/admin-shell.js:198
 #: dist/admin-shell.js:207
-#: src/admin-shell/screens/newsletters-list/fields.js:247
-#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:162
+#: src/admin-shell/screens/newsletters-list/fields.js:252
+#: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:218
 #: src/editor/blocks/visibility-attribute/index.js:70
 #: src/editor/blocks/visibility-attribute/index.js:99
 #: src/newsletter-editor/public/index.js:42
@@ -2656,7 +2684,7 @@ msgstr ""
 #: dist/admin-shell.js:198
 #: dist/admin-shell.js:201
 #: dist/adsEditor.js:28
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:136
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:239
 #: src/admin-shell/screens/ads-list/status-label.js:14
 #: src/ads/editor/index.js:153
 msgid "Active"
@@ -2670,7 +2698,7 @@ msgstr ""
 #: dist/admin-shell.js:198
 #: dist/admin-shell.js:201
 #: dist/adsEditor.js:28
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:137
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:240
 #: src/admin-shell/screens/ads-list/status-label.js:18
 #: src/ads/editor/index.js:154
 msgid "Inactive"
@@ -2678,7 +2706,7 @@ msgstr ""
 
 #. translators: PHP date format for an ad's start/expiration day. Date tokens only — these values have no time.
 #: dist/admin-shell.js:198
-#: src/admin-shell/screens/ads-list/fields.js:41
+#: src/admin-shell/screens/ads-list/fields.js:42
 msgid "F j, Y"
 msgstr ""
 
@@ -2688,9 +2716,9 @@ msgstr ""
 #: dist/admin-shell.js:220
 #: dist/editorBlocks.js:16
 #: src/admin-shell/screens/ads-list/fields.js:79
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:118
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:221
 #: src/admin-shell/screens/layouts-list/fields.js:121
-#: src/components/init-modal/screens/layout-picker/index.js:149
+#: src/components/init-modal/screens/layout-picker/index.js:136
 #: src/editor/blocks/posts-inserter/query-controls.js:30
 #: src/editor/blocks/posts-inserter/query-controls.js:139
 #: src/editor/blocks/posts-inserter/query-controls.js:152
@@ -2715,22 +2743,32 @@ msgid "Starts %s"
 msgstr ""
 
 #: dist/admin-shell.js:201
-#: src/admin-shell/screens/ads-list/fields.js:46
+#: src/admin-shell/screens/ads-list/fields.js:47
 msgid "Runs from this day, in the site timezone."
 msgstr ""
 
 #: dist/admin-shell.js:201
-#: src/admin-shell/screens/ads-list/fields.js:47
+#: src/admin-shell/screens/ads-list/fields.js:48
 msgid "Runs through the end of this day, in the site timezone."
 msgstr ""
 
 #: dist/admin-shell.js:201
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:110
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:149
+msgid "Loading advertisers…"
+msgstr ""
+
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:150
+msgid "Loading ad placements…"
+msgstr ""
+
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:213
 msgid "Ad updated."
 msgstr ""
 
 #: dist/admin-shell.js:201
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:114
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:217
 msgid "Could not update ad. Please try again."
 msgstr ""
 
@@ -2738,48 +2776,63 @@ msgstr ""
 #: dist/admin-shell.js:207
 #: dist/admin-shell.js:212
 #: dist/adsEditor.js:28
-#: src/admin-shell/screens/ads-list/fields.js:171
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:133
-#: src/admin-shell/screens/newsletters-list/fields.js:169
+#: src/admin-shell/screens/ads-list/fields.js:166
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:236
+#: src/admin-shell/screens/newsletters-list/fields.js:174
 #: src/ads/editor/index.js:150
 msgid "Status"
 msgstr ""
 
 #: dist/admin-shell.js:201
 #: dist/adsEditor.js:28
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:140
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:243
 #: src/ads/editor/index.js:158
 msgid "Active ads run according to their start and expiration dates. Inactive ads are never shown."
 msgstr ""
 
 #: dist/admin-shell.js:201
-#: dist/admin-shell.js:212
-#: src/admin-shell/screens/ads-list/fields.js:201
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:153
-msgid "Ad placement"
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:261
+msgid "Advertisers could not be loaded. Edit this ad to change them."
 msgstr ""
 
 #: dist/admin-shell.js:201
 #: dist/admin-shell.js:212
-#: src/admin-shell/screens/ads-list/fields.js:217
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:174
+#: src/admin-shell/screens/ads-list/fields.js:196
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:264
+msgid "Ad placement"
+msgstr ""
+
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:279
+msgid "Ad placements could not be loaded. Edit this ad to change them."
+msgstr ""
+
+#: dist/admin-shell.js:201
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:297
+msgid "Categories could not be loaded. Edit this ad to change them."
+msgstr ""
+
+#: dist/admin-shell.js:201
+#: dist/admin-shell.js:212
+#: src/admin-shell/screens/ads-list/fields.js:212
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:301
 msgid "Start date"
 msgstr ""
 
 #: dist/admin-shell.js:201
 #: dist/admin-shell.js:212
-#: src/admin-shell/screens/ads-list/fields.js:225
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:182
+#: src/admin-shell/screens/ads-list/fields.js:220
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:309
 msgid "Expiration date"
 msgstr ""
 
 #: dist/admin-shell.js:201
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:185
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:312
 msgid "Expiration date must be on or after the start date."
 msgstr ""
 
 #: dist/admin-shell.js:201
-#: src/admin-shell/screens/ads-list/quick-edit-panel.js:196
+#: src/admin-shell/screens/ads-list/quick-edit-panel.js:323
 msgid "Price must be a non-negative finite number."
 msgstr ""
 
@@ -2790,8 +2843,8 @@ msgstr ""
 
 #: dist/admin-shell.js:201
 #: dist/admin-shell.js:219
-#: src/admin-shell/screens/advertisers-list/index.js:84
-#: src/admin-shell/screens/advertisers-list/index.js:111
+#: src/admin-shell/screens/advertisers-list/index.js:87
+#: src/admin-shell/screens/advertisers-list/index.js:119
 #: src/admin-shell/screens/advertisers-list/modal.js:153
 msgid "Add Advertiser"
 msgstr ""
@@ -2894,7 +2947,7 @@ msgid "Sample excerpt — additional padding for grid layouts that ask for four 
 msgstr ""
 
 #: dist/admin-shell.js:201
-#: src/admin-shell/screens/layouts-list/fields.js:226
+#: src/admin-shell/screens/layouts-list/fields.js:219
 msgid "Empty layout"
 msgstr ""
 
@@ -3174,39 +3227,39 @@ msgstr ""
 
 #: dist/admin-shell.js:207
 #: src/admin-shell/screens/newsletters-list/actions.js:122
-#: src/admin-shell/screens/newsletters-list/fields.js:162
+#: src/admin-shell/screens/newsletters-list/fields.js:167
 #: src/newsletter-editor/sidebar/index.js:206
 msgid "Subject"
 msgstr ""
 
 #: dist/admin-shell.js:207
-#: src/admin-shell/screens/newsletters-list/fields.js:184
+#: src/admin-shell/screens/newsletters-list/fields.js:189
 msgid "Publish date"
 msgstr ""
 
 #: dist/admin-shell.js:207
-#: src/admin-shell/screens/newsletters-list/fields.js:184
+#: src/admin-shell/screens/newsletters-list/fields.js:189
 msgid "Send date"
 msgstr ""
 
 #: dist/admin-shell.js:207
-#: src/admin-shell/screens/newsletters-list/fields.js:191
+#: src/admin-shell/screens/newsletters-list/fields.js:196
 msgid "Send list"
 msgstr ""
 
 #: dist/admin-shell.js:207
 #: dist/admin-shell.js:220
-#: src/admin-shell/screens/layouts-list/fields.js:157
-#: src/admin-shell/screens/newsletters-list/fields.js:203
-#: src/components/init-modal/screens/layout-picker/index.js:164
+#: src/admin-shell/screens/layouts-list/fields.js:150
+#: src/admin-shell/screens/newsletters-list/fields.js:208
+#: src/components/init-modal/screens/layout-picker/index.js:151
 msgid "Author"
 msgstr ""
 
 #: dist/admin-shell.js:207
 #: dist/admin-shell.js:212
 #: dist/editorBlocks.js:20
-#: src/admin-shell/screens/ads-list/fields.js:265
-#: src/admin-shell/screens/newsletters-list/fields.js:258
+#: src/admin-shell/screens/ads-list/fields.js:260
+#: src/admin-shell/screens/newsletters-list/fields.js:263
 #: src/editor/blocks/posts-inserter/index.js:202
 msgid "Date"
 msgstr ""
@@ -3345,9 +3398,9 @@ msgstr ""
 #: dist/admin-shell.js:212
 #: dist/admin-shell.js:220
 #: src/admin-shell/screens/ads-list/actions.js:74
-#: src/admin-shell/screens/ads-list/fields.js:164
-#: src/admin-shell/screens/layouts-list/fields.js:174
-#: src/components/init-modal/screens/layout-picker/index.js:144
+#: src/admin-shell/screens/ads-list/fields.js:159
+#: src/admin-shell/screens/layouts-list/fields.js:167
+#: src/components/init-modal/screens/layout-picker/index.js:131
 #: src/newsletter-editor/layout/index.js:238
 msgid "Title"
 msgstr ""
@@ -3424,12 +3477,12 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: dist/admin-shell.js:217
-#: src/admin-shell/screens/ads-list/index.js:118
+#: src/admin-shell/screens/ads-list/index.js:165
 msgid "Get started with newsletter ads"
 msgstr ""
 
 #: dist/admin-shell.js:217
-#: src/admin-shell/screens/ads-list/index.js:119
+#: src/admin-shell/screens/ads-list/index.js:166
 msgid "Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category."
 msgstr ""
 
@@ -3474,12 +3527,12 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: dist/admin-shell.js:219
-#: src/admin-shell/screens/advertisers-list/index.js:106
+#: src/admin-shell/screens/advertisers-list/index.js:111
 msgid "Get started with advertisers"
 msgstr ""
 
 #: dist/admin-shell.js:219
-#: src/admin-shell/screens/advertisers-list/index.js:107
+#: src/admin-shell/screens/advertisers-list/index.js:112
 msgid "Group ads by the advertiser they belong to so you can track and report on each one separately."
 msgstr ""
 
@@ -3517,13 +3570,13 @@ msgid "Failed to rename layout."
 msgstr ""
 
 #: dist/admin-shell.js:220
-#: src/admin-shell/screens/layouts-list/fields.js:183
-#: src/components/init-modal/screens/layout-picker/index.js:153
+#: src/admin-shell/screens/layouts-list/fields.js:176
+#: src/components/init-modal/screens/layout-picker/index.js:140
 msgid "Preview"
 msgstr ""
 
 #: dist/admin-shell.js:220
-#: src/admin-shell/screens/layouts-list/fields.js:191
+#: src/admin-shell/screens/layouts-list/fields.js:184
 msgid "Last modified"
 msgstr ""
 
@@ -4334,15 +4387,15 @@ msgstr ""
 msgid "Saved layouts"
 msgstr ""
 
-#: src/components/init-modal/screens/layout-picker/index.js:218
+#: src/components/init-modal/screens/layout-picker/index.js:205
 msgid "Choose a layout or start with a blank newsletter."
 msgstr ""
 
-#: src/components/init-modal/screens/layout-picker/index.js:256
+#: src/components/init-modal/screens/layout-picker/index.js:243
 msgid "Blank newsletter"
 msgstr ""
 
-#: src/components/init-modal/screens/layout-picker/index.js:259
+#: src/components/init-modal/screens/layout-picker/index.js:246
 msgid "Use selected layout"
 msgstr ""
 
@@ -4812,7 +4865,7 @@ msgstr ""
 msgid "Select %s"
 msgstr ""
 
-#: src/newsletter-editor/sidebar/autocomplete.js:119
+#: src/newsletter-editor/sidebar/autocomplete.js:123
 msgid "Error fetching send lists."
 msgstr ""
 

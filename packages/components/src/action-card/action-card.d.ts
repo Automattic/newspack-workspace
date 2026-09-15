@@ -1,3 +1,5 @@
+import type { CardBadge } from '../types';
+
 export interface ActionCardProps {
 	id?: string | number;
 	title?: string | React.ReactNode;
@@ -5,8 +7,7 @@ export interface ActionCardProps {
 	href?: string;
 	description?: string | React.ReactNode;
 	actionText?: React.ReactNode | string | null;
-	badge?: string;
-	badgeLevel?: 'success' | 'info' | 'warning' | 'error';
+	badges?: CardBadge[];
 	className?: string;
 	indent?: string;
 	notification?: string | Error | null;
