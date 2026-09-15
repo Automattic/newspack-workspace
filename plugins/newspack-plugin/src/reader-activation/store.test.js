@@ -3,6 +3,43 @@
 import Store from './store';
 import { EVENTS, on, off } from './events';
 
+// A fake transport the test can settle by hand: syncItem() builds one
+// XMLHttpRequest per attempt and waits on its onreadystatechange.
+class FakeRequest {
+	open( method, url ) {
+		this.method = method;
+		this.url = url;
+		FakeRequest.opened.push( this );
+	}
+	setRequestHeader() {}
+	send( body ) {
+		this.body = body;
+	}
+	settle( status ) {
+		this.readyState = 4;
+		this.status = status;
+		this.onreadystatechange();
+	}
+}
+
+/**
+ * Install the fake transport for every spec of the enclosing describe, with a
+ * reader-data config the sync can send through.
+ */
+const useFakeTransport = () => {
+	const RealRequest = window.XMLHttpRequest;
+	beforeEach( () => {
+		FakeRequest.opened = [];
+		window.XMLHttpRequest = FakeRequest;
+		window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
+	} );
+	afterEach( () => {
+		window.XMLHttpRequest = RealRequest;
+	} );
+};
+
+const pending = () => JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) || '[]' );
+
 describe( 'Store', () => {
 	beforeEach( () => {
 		// Each Store() registers a 1s sync setInterval. Fake timers keep those
@@ -350,34 +387,7 @@ describe( 'Store', () => {
 		} );
 	} );
 	describe( 'flush()', () => {
-		// A fake transport the test can settle by hand: syncItem() builds one
-		// XMLHttpRequest per attempt and waits on its onreadystatechange.
-		class FakeRequest {
-			open( method, url ) {
-				this.method = method;
-				this.url = url;
-				FakeRequest.opened.push( this );
-			}
-			setRequestHeader() {}
-			send( body ) {
-				this.body = body;
-			}
-			settle( status ) {
-				this.readyState = 4;
-				this.status = status;
-				this.onreadystatechange();
-			}
-		}
-		const RealRequest = window.XMLHttpRequest;
-		beforeEach( () => {
-			FakeRequest.opened = [];
-			window.XMLHttpRequest = FakeRequest;
-			window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
-		} );
-		afterEach( () => {
-			window.XMLHttpRequest = RealRequest;
-		} );
-		const pending = () => JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) || '[]' );
+		useFakeTransport();
 
 		it( 'resolves true without a request when nothing is pending for the key', async () => {
 			const [ store ] = Store();
@@ -446,6 +456,23 @@ describe( 'Store', () => {
 			FakeRequest.opened[ 0 ].settle( 200 );
 			await flushed;
 			expect( resolved ).toBe( true );
+		} );
+	} );
+	describe( 'sync interval', () => {
+		useFakeTransport();
+
+		it( 'queues a key written twice before its tick once, so the keys behind it are not delayed', () => {
+			const [ store ] = Store();
+			store.set( 'matched_segments', [ '1' ] );
+			store.set( 'matched_segments', [ '2' ] );
+			store.set( 'pageviews', { day: { count: 1 } } );
+			jest.advanceTimersByTime( 1000 );
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			expect( JSON.parse( FakeRequest.opened[ 0 ].body ) ).toEqual( { key: 'matched_segments', value: '["2"]' } );
+			FakeRequest.opened[ 0 ].settle( 200 );
+			jest.advanceTimersByTime( 1000 );
+			expect( FakeRequest.opened ).toHaveLength( 2 );
+			expect( JSON.parse( FakeRequest.opened[ 1 ].body ).key ).toBe( 'pageviews' );
 		} );
 	} );
 	describe( 'switched sessions', () => {
