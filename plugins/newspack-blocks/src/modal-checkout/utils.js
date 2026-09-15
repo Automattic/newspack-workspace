@@ -84,6 +84,39 @@ export function whenReaderDataSynced( key, timeoutMs = 3000 ) {
 }
 
 /**
+ * Resolve once a reader who just signed in on this page has their server data
+ * in the browser and the snapshot computed from it on the server. Sign-in
+ * inside the checkout modal leaves the page as it was evaluated anonymously:
+ * reader activation hydrates the session afterwards, segmentation recomputes
+ * on that hydration, and only then is there a snapshot worth flushing.
+ *
+ * Resolves at once when reader activation is absent, and at `timeoutMs`
+ * regardless, shared between the hydration and the flush.
+ *
+ * @param {string} key       Reader-data key to flush once hydrated.
+ * @param {number} timeoutMs Longest wait before giving up.
+ *
+ * @return {Promise<void>} Settles when the key is synced or the wait is up.
+ */
+export function whenSignedInReaderDataSynced( key, timeoutMs = 3000 ) {
+	const ras = window.newspackReaderActivation;
+	if ( ! ras ) {
+		return Promise.resolve();
+	}
+	const started = Date.now();
+	return new Promise( resolve => {
+		const timer = setTimeout( resolve, timeoutMs );
+		const done = () => {
+			clearTimeout( timer );
+			resolve();
+		};
+		Promise.resolve( ras.hydrateSession?.() )
+			.then( () => whenReaderDataSynced( key, Math.max( 0, timeoutMs - ( Date.now() - started ) ) ) )
+			.then( done, done );
+	} );
+}
+
+/**
  * Create a hidden input field.
  *
  * @param {string} name  The name of the input field.

@@ -682,6 +682,10 @@ const readerActivation = {
 	getAuthStrategy,
 	setPendingCheckout,
 	getPendingCheckout,
+	// Exposed so a consumer about to make a request whose server-side handling
+	// reads reader data (the modal checkout after an in-modal sign-in) can wait
+	// for the session to hydrate and flush what the page then computed.
+	hydrateSession,
 	debugLog,
 	register,
 	...( newspack_ras_config.is_ras_enabled && { openAuthModal } ),

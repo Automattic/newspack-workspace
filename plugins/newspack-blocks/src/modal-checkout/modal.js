@@ -14,6 +14,7 @@ import {
 	afterDeferredScripts,
 	domReady,
 	whenReaderDataSynced,
+	whenSignedInReaderDataSynced,
 	iframeReady,
 	onCheckoutReady,
 	onCheckoutComplete,
@@ -463,7 +464,11 @@ domReady( () => {
 			window.newspackReaderActivation.openAuthModal( {
 				title: newspackBlocksModal.labels.auth_modal_title,
 				onSuccess: ( message, authData ) => {
-					cartReq
+					// The reader was anonymous when this page evaluated their
+					// segments. Let the session hydrate and the snapshot reach the
+					// server before the checkout reads it for pricing.
+					whenSignedInReaderDataSynced( 'matched_segments' )
+						.then( () => cartReq )
 						.then( url => {
 							// If registered and in a modal checkout, append the registration flag query param to the url.
 							if ( authData?.registered && isModalCheckout ) {
