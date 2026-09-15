@@ -49,6 +49,19 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	 */
 	private function dispatch_as( $role, $method, $route, $params = [] ) {
 		wp_set_current_user( $role ? self::factory()->user->create( [ 'role' => $role ] ) : 0 );
+		return $this->dispatch( $method, $route, $params );
+	}
+
+	/**
+	 * Dispatch a request through the REST server as the current user.
+	 *
+	 * @param string $method HTTP method.
+	 * @param string $route  Route, relative to the API namespace.
+	 * @param array  $params Request parameters.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	private function dispatch( $method, $route, $params = [] ) {
 		$request = new \WP_REST_Request( $method, '/' . API::NAMESPACE . $route );
 		foreach ( $params as $key => $value ) {
 			$request->set_param( $key, $value );
@@ -57,11 +70,11 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Roles that hold edit_posts but not manage_categories.
+	 * Roles that hold edit_posts but not edit_others_posts.
 	 *
 	 * @return array
 	 */
-	public function roles_without_manage_categories() {
+	public function roles_without_edit_others_posts() {
 		return [
 			'contributor' => [ 'contributor' ],
 			'author'      => [ 'author' ],
@@ -71,11 +84,11 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	/**
 	 * Creating a budget needs the taxonomy capability, not edit_posts.
 	 *
-	 * @dataProvider roles_without_manage_categories
+	 * @dataProvider roles_without_edit_others_posts
 	 *
 	 * @param string $role Role slug.
 	 */
-	public function test_create_budget_is_forbidden_without_manage_categories( $role ) {
+	public function test_create_budget_is_forbidden_without_edit_others_posts( $role ) {
 		$response = $this->dispatch_as( $role, 'POST', '/budgets', [ 'name' => 'Unauthorized budget' ] );
 
 		$this->assertSame( 403, $response->get_status() );
@@ -86,11 +99,11 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	/**
 	 * Renaming or archiving a budget needs the taxonomy capability on that budget.
 	 *
-	 * @dataProvider roles_without_manage_categories
+	 * @dataProvider roles_without_edit_others_posts
 	 *
 	 * @param string $role Role slug.
 	 */
-	public function test_update_budget_is_forbidden_without_manage_categories( $role ) {
+	public function test_update_budget_is_forbidden_without_edit_others_posts( $role ) {
 		$budget_id = self::$budgets[0];
 		$name      = get_term( $budget_id, Budgets::TAXONOMY )->name;
 
@@ -112,11 +125,11 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	/**
 	 * Reordering budgets needs the taxonomy capability.
 	 *
-	 * @dataProvider roles_without_manage_categories
+	 * @dataProvider roles_without_edit_others_posts
 	 *
 	 * @param string $role Role slug.
 	 */
-	public function test_reorder_budgets_is_forbidden_without_manage_categories( $role ) {
+	public function test_reorder_budgets_is_forbidden_without_edit_others_posts( $role ) {
 		$response = $this->dispatch_as( $role, 'POST', '/budgets/order', [ 'ids' => array_reverse( self::$budgets ) ] );
 
 		$this->assertSame( 403, $response->get_status() );
@@ -126,7 +139,7 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An editor holds manage_categories and keeps every budget write.
+	 * An editor holds edit_others_posts and keeps every budget write.
 	 */
 	public function test_editor_can_create_update_and_reorder_budgets() {
 		$response = $this->dispatch_as( 'editor', 'POST', '/budgets', [ 'name' => 'Editor budget' ] );
@@ -144,6 +157,37 @@ class Test_API_Permissions extends \WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 1, (int) get_term_meta( $ordered[0], Budget::ORDER_META_KEY, true ) );
 		$this->assertSame( 2, (int) get_term_meta( $ordered[1], Budget::ORDER_META_KEY, true ) );
+	}
+
+	/**
+	 * Budget management does not depend on manage_categories. Newsrooms that
+	 * keep editors away from the site's category tree (a capability plugin
+	 * removing manage_categories from the role) still expect them to run
+	 * budgets, and the app's Add Budget button follows the meta flag.
+	 */
+	public function test_editor_without_manage_categories_still_manages_budgets() {
+		$editor = self::factory()->user->create_and_get( [ 'role' => 'editor' ] );
+		$editor->add_cap( 'manage_categories', false );
+		wp_set_current_user( $editor->ID );
+		$this->assertFalse( current_user_can( 'manage_categories' ) );
+		$this->assertTrue( current_user_can( 'edit_others_posts' ) );
+
+		$response = $this->dispatch( 'GET', '/stories/meta' );
+		$this->assertTrue( $response->get_data()['can_manage_budgets'] );
+
+		$response = $this->dispatch( 'POST', '/budgets', [ 'name' => 'Trimmed editor budget' ] );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotEmpty( term_exists( 'Trimmed editor budget', Budgets::TAXONOMY ) );
+
+		$budget_id = self::$budgets[0];
+		$response  = $this->dispatch( 'PUT', '/budgets/' . $budget_id, [ 'name' => 'Renamed by trimmed editor' ] );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Renamed by trimmed editor', get_term( $budget_id, Budgets::TAXONOMY )->name );
+
+		$ordered  = array_reverse( self::$budgets );
+		$response = $this->dispatch( 'POST', '/budgets/order', [ 'ids' => $ordered ] );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, (int) get_term_meta( $ordered[0], Budget::ORDER_META_KEY, true ) );
 	}
 
 	/**
