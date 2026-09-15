@@ -17,12 +17,12 @@ jest.mock( './utils', () => {
 		getIntersectionObserver: () => ( { observe: () => {} } ),
 		getBestPrioritySegment: () => mockSegment,
 		syncMatchedSegments: jest.fn(),
-		shouldPromptBeDisplayed: () => false,
+		shouldPromptBeDisplayed: jest.fn( () => false ),
 	};
 } );
 
 import { handleSegmentation } from './segmentation';
-import { syncMatchedSegments } from './utils';
+import { shouldPromptBeDisplayed, syncMatchedSegments } from './utils';
 
 describe( 'handleSegmentation on session hydration', () => {
 	let ras;
@@ -40,6 +40,7 @@ describe( 'handleSegmentation on session hydration', () => {
 		global.newspack_popups_view = { segments: { 'signed-in-match': { criteria: [], priority: 0 } } };
 		window.newspackRAS = { push: callback => callback( ras ) };
 		syncMatchedSegments.mockClear();
+		shouldPromptBeDisplayed.mockClear();
 		mockSegment = 'anonymous-match';
 	} );
 
@@ -58,5 +59,20 @@ describe( 'handleSegmentation on session hydration', () => {
 
 		expect( ras.segments.setMatch ).toHaveBeenLastCalledWith( 'signed-in-match' );
 		expect( syncMatchedSegments ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'keeps evaluating prompts on a reader activation that has no session event', () => {
+		// newspack-plugin before 6.38.0 throws on an event name it does not know;
+		// a version skew between the two plugins must not take prompts down.
+		ras.on = jest.fn( () => {
+			throw new Error( 'Invalid event' );
+		} );
+		const prompt = document.createElement( 'div' );
+		prompt.setAttribute( 'id', 'id_1' );
+
+		expect( () => handleSegmentation( [ prompt ] ) ).not.toThrow();
+
+		expect( shouldPromptBeDisplayed ).toHaveBeenCalledTimes( 1 );
+		expect( shouldPromptBeDisplayed.mock.calls[ 0 ][ 0 ] ).toBe( prompt );
 	} );
 } );
