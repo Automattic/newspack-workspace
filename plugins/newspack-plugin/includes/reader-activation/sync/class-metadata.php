@@ -8,7 +8,6 @@
 namespace Newspack\Reader_Activation\Sync;
 
 use Newspack\Donations;
-use Newspack\Logger;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Integrations;
 
@@ -1156,9 +1155,12 @@ class Metadata {
 	}
 
 	/**
-	 * Normalizes contact metadata before syncing: raw-key enrichment only.
+	 * Hands the assembled contact to the `newspack_esp_sync_normalize_contact`
+	 * filter before it goes to the integrations.
 	 *
-	 * Filtering and prefixing happen per integration in
+	 * The metadata classes produce every raw key themselves (the legacy
+	 * registration and UTM keys come from Legacy_Basic), so nothing is added
+	 * here. Filtering and prefixing happen per integration in
 	 * Integration::prepare_contact().
 	 *
 	 * @param array $contact Contact data.
@@ -1168,11 +1170,6 @@ class Metadata {
 		if ( ! isset( $contact['metadata'] ) ) {
 			$contact['metadata'] = [];
 		}
-		$contact['metadata'] = self::add_registration_data_raw( $contact['metadata'] );
-		$contact['metadata'] = self::add_utm_data_raw( $contact['metadata'] );
-
-		Logger::log( 'Normalizing contact data for reader ESP sync:' );
-		Logger::log( $contact );
 
 		/**
 		 * Filters the normalized contact data before syncing to the ESP.

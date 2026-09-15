@@ -127,8 +127,8 @@ class Legacy_Basic extends Contact_Metadata {
 	/**
 	 * Get the metadata for the given user, customer or order, as raw keys.
 	 *
-	 * Enrichment, filtering and prefixing happen centrally afterwards, in
-	 * normalize_contact_data() and the integration's prepare_contact().
+	 * Filtering and prefixing happen afterwards, per integration, in
+	 * prepare_contact().
 	 *
 	 * @return array
 	 */
@@ -142,8 +142,11 @@ class Legacy_Basic extends Contact_Metadata {
 			return [];
 		}
 
-		// Enrichment (add_registration_data_raw/add_utm_data_raw) happens
-		// centrally in Metadata::get_contact_with_metadata(); redundant here.
+		// Registration data and the UTM families are legacy-only raw keys, so
+		// they are filled in here rather than on every sync: this class only
+		// runs when a legacy field is enabled somewhere.
+		$contact['metadata'] = Metadata::add_registration_data_raw( $contact['metadata'] ?? [] );
+		$contact['metadata'] = Metadata::add_utm_data_raw( $contact['metadata'] );
 
 		// A raw key like the rest, so each integration's prepare_contact()
 		// applies its own selection and prefix to it.

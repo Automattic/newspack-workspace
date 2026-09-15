@@ -78,30 +78,26 @@ class Test_Schema_Parity extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Legacy site, hand-built partial payload (the live registration-event
-	 * flow): the pipeline must enrich, expand UTMs, filter to enabled fields
-	 * and prefix.
+	 * Legacy site, class-built payload (the live flow: every sync rebuilds the
+	 * contact from the user). Legacy_Basic fills in the registration data
+	 * and expands the signup UTMs from the registration page, then
+	 * prepare_contact() filters to the enabled fields and prefixes.
 	 */
-	public function test_legacy_normalize_golden() {
+	public function test_legacy_class_built_golden() {
 		$this->esp->update_enabled_outgoing_fields(
 			[ 'Account', 'Registration Date', 'Registration Method', 'Registration Page', 'Signup UTM: ' ]
 		);
 
-		$user_id = self::factory()->user->create( [ 'user_email' => 'reader@example.com' ] );
+		$user_id = self::factory()->user->create(
+			[
+				'user_email'      => 'reader@example.com',
+				'user_registered' => '2024-01-15 10:00:00',
+			]
+		);
 		\update_user_meta( $user_id, Reader_Activation::REGISTRATION_METHOD, 'registration-wall' );
+		\update_user_meta( $user_id, Reader_Activation::REGISTRATION_PAGE, 'https://example.com/signup?utm_source=facebook&utm_medium=social' );
 
-		$contact = [
-			'email'    => 'reader@example.com',
-			'metadata' => [
-				'account'           => $user_id,
-				'registration_date' => '2024-01-15 10:00:00',
-				'current_page_url'  => 'https://example.com/signup?utm_source=facebook&utm_medium=social',
-				'not_a_field'       => 'must-be-dropped',
-			],
-		];
-
-		$normalized = Metadata::normalize_contact_data( $contact );
-		$prepared   = $this->esp->prepare_contact( $normalized );
+		$prepared = $this->esp->prepare_contact( Metadata::get_contact_with_metadata( $user_id ) );
 
 		$this->assertSame( 'reader@example.com', $prepared['email'] );
 		$this->assertEquals(
