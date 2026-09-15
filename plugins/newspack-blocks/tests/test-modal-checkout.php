@@ -2025,6 +2025,23 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		);
 	}
 
+	public function test_validation_only_flag_is_not_set_outside_the_handler() {
+		// Belt to the filter check above: assert the stored flag directly, not only the
+		// filters that read it. A request shaped like the original exploit — the raw
+		// flags present, process_checkout_action() never reached — must leave the flag
+		// false. Bites against any future code that sets it from the raw request rather
+		// than from the nonce-verified handler.
+		$_REQUEST['modal_checkout']  = '1';
+		$_POST['is_validation_only'] = '1';
+
+		$property = new \ReflectionProperty( \Newspack_Blocks\Modal_Checkout::class, 'is_validation_only_request' );
+		$property->setAccessible( true );
+		$this->assertFalse(
+			$property->getValue(),
+			'The validation-only flag must be set only by the nonce-verified handler.'
+		);
+	}
+
 	public function test_checkout_action_with_invalid_nonce_does_not_trust_validation_only() {
 		$_REQUEST['modal_checkout']               = '1';
 		$_POST['is_validation_only']              = '1';
