@@ -46,14 +46,14 @@ export const PaymentGateway = ( { gateway } ) => {
 		}
 		return __( 'Connected', 'newspack-plugin' );
 	};
-	const getBadgeLevel = () => {
+	const getBadgeIntent = () => {
 		if ( ! gateway?.enabled || isLoading || isQuietLoading ) {
-			return 'info';
+			return 'informational';
 		}
 		if ( ! isConnected ) {
-			return 'error';
+			return 'high';
 		}
-		return 'success';
+		return 'stable';
 	};
 
 	return (
@@ -76,8 +76,7 @@ export const PaymentGateway = ( { gateway } ) => {
 				changeHandler( 'enabled', ! gateway.enabled );
 				onSave();
 			} }
-			badge={ getConnectionStatus() }
-			badgeLevel={ getBadgeLevel() }
+			badges={ [ { label: getConnectionStatus(), intent: getBadgeIntent() } ] }
 			actionContent={
 				// eslint-disable-next-line no-nested-ternary
 				! gateway?.enabled || isLoading || isQuietLoading ? null : isConnected ? (

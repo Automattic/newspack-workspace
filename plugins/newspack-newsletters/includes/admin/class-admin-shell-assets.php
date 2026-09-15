@@ -29,7 +29,11 @@ class Admin_Shell_Assets {
 	 * Enqueue the shared admin-shell bundle on registered admin pages.
 	 *
 	 * Pages contribute style deps via `get_admin_shell_style_deps()`
-	 * and sibling enqueues via `enqueue_extras()`.
+	 * and sibling enqueues via `enqueue_extras()`. Anything a page merely
+	 * enhances the screen with belongs in `enqueue_extras()`, not in the
+	 * bundle's deps: `WP_Dependencies::all_deps()` drops a handle outright
+	 * when one of its deps is unregistered, so an optional dep a site has
+	 * removed would cost the whole screen.
 	 */
 	public static function enqueue() {
 		$current_page = Admin_Shell::get_current_page();

@@ -57,8 +57,22 @@ echo "Newspack Manager site is available at https://manager.com${WP_HOST_PORT}/"
 echo "Open http://localhost:8025 to see Mailhog inbox."
 echo
 
-# Start memcached
+# Start memcached.
+#
+# memcached.conf points -P at /var/run/memcached/, a directory Debian's package
+# creates through systemd-tmpfiles -- which never runs in a container, so it is
+# absent here. init.d tracks the daemon by a separate pid file that its wrapper
+# writes, so this one is redundant; but without the directory memcached logs a
+# pid file error on every start, which reads as a startup failure when triaging.
+# Create it to keep the log honest. Neither step is worth failing the container
+# for, hence the guards.
+mkdir -p /var/run/memcached || true
+chown memcache:memcache /var/run/memcached || true
+
 /etc/init.d/memcached start
+
+# Supervise it -- see the script for why nothing else does.
+/var/scripts/watchdog-memcached.sh &
 
 # Run apache in the foreground so the container keeps running
 echo "Running Apache in the foreground"

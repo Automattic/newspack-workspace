@@ -52,6 +52,39 @@ class ConstantContactEspCommonMethodsTest extends Abstract_ESP_Tests {
 	}
 
 	/**
+	 * Get_contact_data() must tell a genuine miss apart from a failed request: the
+	 * SDK's get_contact() already does (false vs. WP_Error, see
+	 * class-newspack-newsletters-constant-contact-sdk.php), and get_contact_data()
+	 * used to discard that distinction by returning the same generic error code
+	 * for both. Reuses the get_contact_lists mock, which already simulates both
+	 * cases via 'not-found@example.com' and 'failure@example.com'.
+	 */
+	public function test_get_contact_data_distinguishes_not_found_from_failure() {
+		add_filter( 'pre_http_request', [ __CLASS__, 'get_contact_lists_mock_response' ], 10, 3 );
+
+		$provider = Newspack_Newsletters::get_service_provider();
+
+		$not_found = $provider->get_contact_data( 'not-found@example.com' );
+		$this->assertInstanceOf( WP_Error::class, $not_found );
+		$this->assertStringEndsWith(
+			'_contact_not_found',
+			$not_found->get_error_code(),
+			'A genuine miss must carry a dedicated not-found code, the convention Mailchimp and Active Campaign already use, so a caller such as Premium_Newsletters_Verify::is_contact_not_found_error() in newspack-plugin can tell it apart from a failure.'
+		);
+
+		$failure = $provider->get_contact_data( 'failure@example.com' );
+		$this->assertInstanceOf( WP_Error::class, $failure );
+		$this->assertStringEndsNotWith(
+			'_contact_not_found',
+			$failure->get_error_code(),
+			'A failed request must not carry the not-found code, or a provider outage would misreport as "no such contact".'
+		);
+		$this->assertNotSame( $not_found->get_error_code(), $failure->get_error_code() );
+
+		remove_filter( 'pre_http_request', [ __CLASS__, 'get_contact_lists_mock_response' ], 10, 3 );
+	}
+
+	/**
 	 * Mock responses
 	 *
 	 * @param array  $response The api response.

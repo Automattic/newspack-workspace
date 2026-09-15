@@ -18,7 +18,7 @@ import { Button, CardSortableList, Modal } from '../../../../../packages/compone
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
-import { getGateStatus, getGateStatusBadgeLevel } from './utils';
+import { getGateStatus, getGateStatusBadgeIntent } from './utils';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
 const ContentGatesPriority = ( {
@@ -39,8 +39,7 @@ const ContentGatesPriority = ( {
 			sortedGates.map( gate => ( {
 				id: gate.id,
 				title: gate.title,
-				badgeLevel: getGateStatusBadgeLevel( gate.status ) as 'default' | 'success' | 'info' | 'warning' | 'error',
-				badgeText: getGateStatus( gate.status ) as string,
+				badge: { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) },
 			} ) ),
 		[ sortedGates ]
 	);

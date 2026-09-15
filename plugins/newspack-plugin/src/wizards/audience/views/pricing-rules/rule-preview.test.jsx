@@ -132,7 +132,7 @@ describe( 'RulePreview', () => {
 		expect( screen.getByRole( 'region', { name: 'Resulting prices by product and reader segment' } ) ).toBeInTheDocument();
 	} );
 
-	// The stat strip reports the total, so without this the table reads as the whole set.
+	// The tiles report the total, so without this the table reads as the whole set.
 	it( 'says the table is a sample when the preview was capped', async () => {
 		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 50, total_matching: 120 } ) );
 		render( <RulePreview body={ {} } /> );

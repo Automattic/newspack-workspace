@@ -1,0 +1,89 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "../../../colors/colors.module" as colors;
+@use "../variables" as np-vars;
+
+$stat-card-min-height: wp-vars.$grid-unit * 21;
+
+.newspack-stat-card {
+	--wp-admin-theme-color: #{colors.$primary-600};
+	--wp-admin-theme-color--rgb: #{colors.$primary-600--rgb};
+	--wp-admin-theme-color-darker-10: #{colors.$primary-700};
+	--wp-admin-theme-color-darker-10--rgb: #{colors.$primary-700--rgb};
+	--wp-admin-theme-color-darker-20: #{colors.$primary-800};
+	--wp-admin-theme-color-darker-20--rgb: #{colors.$primary-800--rgb};
+	--wp-admin-theme-color-lighter-10: #{colors.$primary-000};
+	--wp-admin-theme-color-lighter-10--rgb: #{colors.$primary-000--rgb};
+
+	container-type: inline-size;
+	display: flex;
+	flex-direction: column;
+	min-height: $stat-card-min-height;
+
+	&__content {
+		flex: 1;
+	}
+
+	&__label .newspack-info-button {
+		margin-block: calc((#{wp-vars.$font-line-height-small} - #{wp-vars.$button-size-small}) / 2);
+	}
+
+	&__label-text {
+		@include wp-mixins.heading-large();
+		color: wp-colors.$gray-900;
+		margin: 0;
+	}
+
+	&__body {
+		flex: 1;
+	}
+
+	&__value {
+		color: var(--wp-admin-theme-color);
+		font-size: np-vars.$font-size-3x-large;
+		font-size: clamp(#{wp-vars.$font-size-x-large}, 14cqi, #{np-vars.$font-size-3x-large});
+		font-variant-numeric: tabular-nums;
+		font-weight: wp-vars.$font-weight-medium;
+		line-height: np-vars.$font-line-height-3x-large;
+
+		&--text {
+			font-size: wp-vars.$font-size-x-large;
+			line-height: wp-vars.$font-line-height-x-large;
+		}
+	}
+
+	&__delta {
+		@include wp-mixins.heading-medium();
+		color: wp-colors.$gray-700;
+
+		&--positive {
+			color: colors.$success-600;
+		}
+
+		&--negative {
+			color: colors.$error-600;
+		}
+	}
+
+	&__action,
+	&__action.components-button {
+		font-size: wp-vars.$helptext-font-size;
+		line-height: wp-vars.$font-line-height-x-small;
+	}
+
+	&__secondary {
+		@include wp-mixins.heading-medium();
+		color: var(--wp-admin-theme-color);
+		margin: 0;
+		text-wrap: balance;
+	}
+
+	&__description {
+		color: wp-colors.$gray-700;
+		font-size: wp-vars.$helptext-font-size;
+		line-height: wp-vars.$font-line-height-x-small;
+		margin: 0;
+		text-wrap: balance;
+	}
+}

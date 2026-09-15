@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack 1.0.0-alpha.33\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/theme/newspack-theme\n"
-"POT-Creation-Date: 2026-08-31T17:56:53+00:00\n"
+"POT-Creation-Date: 2026-09-14T18:19:32+00:00\n"
 "PO-Revision-Date: 2025-03-12 09:12-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -1276,29 +1276,29 @@ msgstr "Pokazywanie paska bocznego w pojedynczych wydarzeniach"
 msgid "Why you can trust %s"
 msgstr "Dlaczego możesz zaufać %s"
 
-#: inc/typography.php:125
+#: inc/typography.php:126
 msgid "Serif"
 msgstr "Serif"
 
-#: inc/typography.php:132
+#: inc/typography.php:133
 msgid "Sans Serif"
 msgstr "Sans Serif"
 
-#: inc/typography.php:139
+#: inc/typography.php:140
 msgid "Display"
 msgstr "Wyświetl"
 
-#: inc/typography.php:147
+#: inc/typography.php:148
 msgid "Monospace"
 msgstr "Równa szerokość"
 
-#: inc/typography.php:288
+#: inc/typography.php:289
 #, fuzzy
 msgctxt "font family name"
 msgid "Header"
 msgstr "Czcionka nagłówka"
 
-#: inc/typography.php:293
+#: inc/typography.php:294
 #, fuzzy
 msgctxt "font family name"
 msgid "Body"

@@ -13,6 +13,17 @@ import { render, screen, fireEvent, waitForElementToBeRemoved } from '@testing-l
  */
 import ImpactTable from './impact-table';
 
+// A stand-in makes framing observable and still renders the `after` slot the
+// See More button lives in.
+jest.mock( '../../../../../packages/components/src', () => ( {
+	TableCard: ( { children, after } ) => (
+		<div data-testid="table-card">
+			{ children }
+			{ after }
+		</div>
+	),
+} ) );
+
 const CURRENCY = { code: 'USD', symbol: '$', decimals: 2 };
 
 const row = ( over = {} ) => ( {
@@ -287,5 +298,25 @@ describe( 'ImpactTable', () => {
 	it( 'names the table for assistive technology', () => {
 		render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
 		expect( screen.getByRole( 'region', { name: 'Resulting prices by product and reader segment' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'frames itself in a card by default', () => {
+		render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+
+		expect( screen.getByTestId( 'table-card' ) ).toBeInTheDocument();
+	} );
+
+	it( 'drops the card when unframed, so a modal supplies the frame', () => {
+		render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
+
+		expect( screen.queryByTestId( 'table-card' ) ).not.toBeInTheDocument();
+		expect( bodyRows() ).toBe( 3 );
+	} );
+
+	it( 'renders every row and no See More when collapsing is off', () => {
+		render( <ImpactTable baseline={ sample( 25 ) } segmentGroups={ [] } currency={ CURRENCY } collapsible={ false } /> );
+
+		expect( bodyRows() ).toBe( 25 );
+		expect( toggle() ).toBeNull();
 	} );
 } );

@@ -4,7 +4,6 @@
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
-@use "../../../colors/colors.module" as colors;
 
 .newspack-card--core,
 .newspack-wizard .newspack-card--core {
@@ -45,7 +44,13 @@
 		}
 		.newspack-card--core {
 			&__header-content {
-				* {
+				h1,
+				h2,
+				h3,
+				h4,
+				h5,
+				h6,
+				p {
 					line-height: wp-vars.$font-line-height-small;
 				}
 			}
@@ -209,9 +214,6 @@
 				&:hover {
 					text-decoration: underline;
 				}
-			}
-			.newspack-badge {
-				font-weight: 400;
 			}
 		}
 	}

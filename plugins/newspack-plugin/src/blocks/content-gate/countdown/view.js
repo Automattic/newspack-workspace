@@ -14,14 +14,14 @@ domReady( () => {
 	if ( typeof newspack_metering_settings === 'undefined' ) {
 		return;
 	}
-	const { count, gate_id } = newspack_metering_settings;
+	const { count, gate_id, meter_key } = newspack_metering_settings;
 	window.newspackRAS = window.newspackRAS || [];
 	window.newspackRAS.push( ras => {
 		const { authenticated } = ras?.getReader() || { authenticated: false };
 		if ( authenticated ) {
 			return;
 		}
-		const storeKey = 'metering-' + ( gate_id || 0 );
+		const storeKey = 'metering-' + ( meter_key || gate_id || 0 );
 		const { content } = ras?.store?.get( storeKey ) || { content: [] };
 		const countdownEl = document.querySelector( '.newspack-content-gate-countdown' );
 		if ( ! countdownEl ) {
