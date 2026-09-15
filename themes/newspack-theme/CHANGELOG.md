@@ -1,3 +1,31 @@
+# newspack-theme [2.27.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.26.1...newspack-theme@2.27.0) (2026-09-14)
+
+
+### Bug Fixes
+
+* **blocks:** keep tag labels clear of cat-links styling ([#736](https://github.com/Automattic/newspack-workspace/issues/736)) ([4cb3fb7](https://github.com/Automattic/newspack-workspace/commit/4cb3fb76849ca05bf29d06788e0148afab204227))
+
+
+### Features
+
+* **subscriber-discounts:** subscriber discounts on WooCommerce products (NPPD-1794, [#760](https://github.com/Automattic/newspack-workspace/issues/760)) ([3ef9b8a](https://github.com/Automattic/newspack-workspace/commit/3ef9b8ac6f318437777027445ef835d30ec6c8c1)), closes [#8217](https://github.com/Automattic/newspack-workspace/issues/8217)
+
+## newspack-theme [2.26.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.26.0...newspack-theme@2.26.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **theme:** offer page templates on election profiles ([#1039](https://github.com/Automattic/newspack-workspace/issues/1039)) ([359b603](https://github.com/Automattic/newspack-workspace/commit/359b603c4a447720b31a568e0950c0c70b18fec6))
+
+# newspack-theme [2.26.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.25.1...newspack-theme@2.26.0) (2026-08-31)
+
+
+### Features
+
+* add tag labels to the Carousel block ([#429](https://github.com/Automattic/newspack-workspace/issues/429)) ([567e5ab](https://github.com/Automattic/newspack-workspace/commit/567e5ab9fb54b69bd6e9377eac3f3f76ca8e29c2))
+* **campaigns:** Contextual Prompts, AI-assisted story donation asks ([#686](https://github.com/Automattic/newspack-workspace/issues/686)) ([f896387](https://github.com/Automattic/newspack-workspace/commit/f896387b5c3c096b6ed0cacbf2fe89b3e7f6b703)), closes [#719](https://github.com/Automattic/newspack-workspace/issues/719)
+* **themes:** offer Header and Body fonts in the editor font picker ([#842](https://github.com/Automattic/newspack-workspace/issues/842)) ([6286f75](https://github.com/Automattic/newspack-workspace/commit/6286f75c8dc6dbf52e5f0c5fcc09bf0e75699e0e))
+
 ## newspack-theme [2.25.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.25.0...newspack-theme@2.25.1) (2026-08-17)
 
 

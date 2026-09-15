@@ -7,6 +7,7 @@
 
 namespace Newspack\Tests\Unit\Integrations;
 
+use Newspack\Access_Rules;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
 use Newspack\Reader_Activation\Promoted_Fields;
@@ -27,12 +28,21 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	private $integration;
 
 	/**
+	 * Snapshot of the access rule registry, restored after each test — registering
+	 * promoted fields writes into a static registry the whole suite shares.
+	 *
+	 * @var array
+	 */
+	private $registered_rules_snapshot;
+
+	/**
 	 * Set up test environment.
 	 */
 	public function set_up() {
 		parent::set_up();
 		$this->reset_integrations();
 		Promoted_Fields::reset_cache();
+		$this->registered_rules_snapshot = Access_Rules::get_registered_rules();
 
 		$this->integration = new Sample_Integration( 'promoted-test', 'Test ESP' );
 		Integrations::register( $this->integration );
@@ -43,6 +53,8 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	 * Tear down test environment.
 	 */
 	public function tear_down() {
+		$registry_property = new \ReflectionProperty( Access_Rules::class, 'rules' );
+		$registry_property->setValue( null, $this->registered_rules_snapshot );
 		Promoted_Fields::reset_cache();
 		$this->reset_integrations();
 		Integrations::register_integrations();
@@ -184,6 +196,46 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A provider can describe a dropdown whose choices it has not pulled yet, and
+	 * the resolved list is then empty. Registering that field as an access rule
+	 * has to say so, or the rule reads as free text: the wizard renders a text box
+	 * for a value that must be a list of option values, and the value the operator
+	 * types is one `Access_Rules::evaluate_rule()` cannot use.
+	 */
+	public function test_a_provider_dropdown_with_no_choices_registers_as_an_options_backed_rule() {
+		$integration = new class( 'choices-test', 'Test ESP' ) extends Sample_Integration {
+			/**
+			 * Promote a select field the provider has no choices for yet.
+			 *
+			 * @param \Newspack\Reader_Activation\Integrations\Incoming_Field $field The field.
+			 * @return \Newspack\Reader_Activation\Integrations\Incoming_Field
+			 */
+			protected function configure_incoming_field( $field ) {
+				if ( 'membership_tier' === $field->get_key() ) {
+					$field->set_name( 'Membership tier' )
+						->set_value_type( 'select' )
+						->set_options( [] )
+						->set_is_access_rule( true );
+				}
+				return $field;
+			}
+		};
+
+		$this->reset_integrations();
+		Integrations::register( $integration );
+		Integrations::enable( 'choices-test' );
+		$integration->update_enabled_incoming_fields( [ 'membership_tier' ] );
+		Promoted_Fields::reset_cache();
+
+		Promoted_Fields::register();
+
+		$rule = Access_Rules::get_rule( 'choices-test__membership_tier' );
+		$this->assertNotNull( $rule );
+		$this->assertTrue( $rule['has_options'], 'A select field takes option values whether or not any are loaded.' );
+		$this->assertSame( [], $rule['default'], 'The seeded default has to hold the shape the rule takes.' );
+	}
+
+	/**
 	 * Test that evaluate_field works for default matching.
 	 */
 	public function test_evaluate_default_matching() {
@@ -200,6 +252,39 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 
 		$this->assertTrue( $method->invoke( null, $field, $user_id, 'Newspack' ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, 'Other' ) );
+	}
+
+	/**
+	 * A select field's rule stores the chosen options as a list, because `has_options`
+	 * makes the sanitizer require one, while the reader holds the single value the
+	 * provider sent. Comparing those two for equality can never match, so the rule walls
+	 * out every reader it was written to admit — and a provider whose options call fails
+	 * mid-edit is enough to reach it.
+	 */
+	public function test_evaluate_default_matching_against_a_selected_option() {
+		$user_id = $this->factory->user->create();
+
+		if ( class_exists( '\Newspack\Reader_Data' ) ) {
+			\Newspack\Reader_Data::update_item( $user_id, 'org', wp_json_encode( 'Newspack' ) );
+		}
+
+		$evaluate_field = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$evaluate_field->setAccessible( true );
+
+		$select_field = ( new Incoming_Field( 'org' ) )->set_value_type( 'select' );
+
+		$this->assertTrue(
+			$evaluate_field->invoke( null, $select_field, $user_id, [ 'Newspack' ] ),
+			'A reader holding one of the selected options should match.'
+		);
+		$this->assertFalse(
+			$evaluate_field->invoke( null, $select_field, $user_id, [ 'Other' ] ),
+			'A reader holding none of them should not.'
+		);
+		$this->assertTrue(
+			$evaluate_field->invoke( null, $select_field, $user_id, [ 'Other', 'Newspack' ] ),
+			'A multi-option rule should match a reader holding any one of them.'
+		);
 	}
 
 	/**

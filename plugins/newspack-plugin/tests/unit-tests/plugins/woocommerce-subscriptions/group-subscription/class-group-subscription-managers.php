@@ -12,6 +12,7 @@
 
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_API;
+use Newspack\Group_Subscription_Invite;
 use Newspack\Group_Subscription_MyAccount;
 use Newspack\Group_Subscription_Settings;
 
@@ -121,9 +122,11 @@ class Test_Group_Subscription_Managers extends WP_UnitTestCase {
 	 * @param int    $member_id       Target member.
 	 * @param string $role            'manager' to promote, 'member' to demote.
 	 *
+	 * @return string The URL the handler redirected to, which carries the notice it wrote.
+	 *
 	 * @throws \Exception Re-throws anything other than the deliberate redirect interception.
 	 */
-	private function invoke_set_manager_role_handler( int $subscription_id, int $member_id, string $role ): void {
+	private function invoke_set_manager_role_handler( int $subscription_id, int $member_id, string $role ): string {
 		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
 		$_POST                     = [];
@@ -135,12 +138,14 @@ class Test_Group_Subscription_Managers extends WP_UnitTestCase {
 		$_SERVER['REQUEST_METHOD'] = 'POST';
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 
-		// Accept the $location the wp_redirect filter passes, matching the hook
-		// signature; the destination isn't asserted, only that a redirect happened.
-		$capture    = function ( $location ) {
+		// The handler writes its notice into the redirect URL, so hold on to the $location the
+		// wp_redirect filter passes before interrupting the exit.
+		$redirect_url = '';
+		$capture      = function ( $location ) use ( &$redirect_url ) {
+			$redirect_url = $location;
 			throw new \Exception( 'redirect_intercepted' );
 		};
-		$allow_host = fn( $hosts ) => array_merge( $hosts, [ 'example.com' ] );
+		$allow_host   = fn( $hosts ) => array_merge( $hosts, [ 'example.com' ] );
 		add_filter( 'wp_redirect', $capture, 1 );
 		add_filter( 'allowed_redirect_hosts', $allow_host );
 
@@ -161,6 +166,8 @@ class Test_Group_Subscription_Managers extends WP_UnitTestCase {
 				$_SERVER['REQUEST_METHOD'] = $original_request_method;
 			}
 		}
+
+		return $redirect_url;
 	}
 
 	/**
@@ -525,6 +532,31 @@ class Test_Group_Subscription_Managers extends WP_UnitTestCase {
 
 		$this->assertFalse( Group_Subscription::user_is_manager( $member_id, $subscription ), 'The owner demoted the manager.' );
 		$this->assertTrue( Group_Subscription::user_is_member( $member_id, $subscription ), 'The demoted manager remains a member.' );
+	}
+
+	/**
+	 * Demotion says where a link in circulation is stopped, and only when there is one.
+	 *
+	 * An invite link belongs to the subscription, so removing a manager no longer takes down the
+	 * links that person shared. The two controls sit on the same page, and an owner demoting
+	 * someone to cut off access would otherwise get no sign that the link is still live.
+	 */
+	public function test_demotion_notice_points_at_the_invite_link_control() {
+		$owner_id     = $this->create_reader();
+		$manager_id   = $this->create_reader();
+		$subscription = $this->create_group_subscription( $owner_id );
+		Group_Subscription::update_members( $subscription, [ $manager_id ] );
+		Group_Subscription::add_manager( $subscription, $manager_id );
+		wp_set_current_user( $owner_id );
+
+		$notice_without_link = rawurldecode( $this->invoke_set_manager_role_handler( $subscription->get_id(), $manager_id, 'member' ) );
+		$this->assertStringNotContainsString( 'regenerate', $notice_without_link, 'With no link to stop, the notice does not send the owner after one.' );
+
+		Group_Subscription::add_manager( $subscription, $manager_id );
+		Group_Subscription_Invite::generate_link_invite( $subscription, $owner_id );
+
+		$notice_with_link = rawurldecode( $this->invoke_set_manager_role_handler( $subscription->get_id(), $manager_id, 'member' ) );
+		$this->assertStringContainsString( 'regenerate', $notice_with_link, 'The notice names the control that stops the still-working link.' );
 	}
 
 	// ---- My Account remove-member handler enforces the peer-removal rule ----

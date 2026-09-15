@@ -29,6 +29,9 @@ type AccessRule = {
 	id?: string;
 	is_boolean?: boolean;
 	options?: { value: string; label: string }[];
+	has_options: boolean;
+	empty_grants_access?: boolean;
+	requires_value?: boolean;
 	placeholder?: string;
 	value: GateAccessRuleValue;
 };

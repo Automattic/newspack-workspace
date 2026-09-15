@@ -1,3 +1,24 @@
+## newspack-network [2.22.7](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.6...newspack-network@2.22.7) (2026-09-08)
+
+
+### Bug Fixes
+
+* **content-distribution:** authorize the post on unlink and pull ([#1049](https://github.com/Automattic/newspack-workspace/issues/1049)) ([816b1d6](https://github.com/Automattic/newspack-workspace/commit/816b1d638c127234596277ae3c6adddafe6592a2))
+
+## newspack-network [2.22.6](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.5...newspack-network@2.22.6) (2026-09-02)
+
+
+### Bug Fixes
+
+* **network:** harden remote media handling in distribution ([#885](https://github.com/Automattic/newspack-workspace/issues/885)) ([f450a66](https://github.com/Automattic/newspack-workspace/commit/f450a663c6c876d89ca26b549c9c23aac17cab7a))
+
+## newspack-network [2.22.5](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.4...newspack-network@2.22.5) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.2
+
 ## newspack-network [2.22.4](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.3...newspack-network@2.22.4) (2026-08-26)
 
 

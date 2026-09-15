@@ -58,19 +58,55 @@ class Newspack_Newsletters_Bulk_Actions {
 		$redirect_to = remove_query_arg( array( 'newsletters_public_count', 'newsletters_non_public_count' ), $redirect_to );
 		switch ( $action_name ) {
 			case 'newsletters_public':
-				foreach ( $post_ids as $post_id ) {
-					update_post_meta( $post_id, 'is_public', true );
-				}
-				$redirect_to = add_query_arg( 'newsletters_public_count', count( $post_ids ), $redirect_to );
+				$count       = self::set_public_status( $post_ids, true );
+				$redirect_to = add_query_arg( 'newsletters_public_count', $count, $redirect_to );
 				break;
 			case 'newsletters_non_public':
-				foreach ( $post_ids as $post_id ) {
-					update_post_meta( $post_id, 'is_public', false );
-				}
-				$redirect_to = add_query_arg( 'newsletters_non_public_count', count( $post_ids ), $redirect_to );
+				$count       = self::set_public_status( $post_ids, false );
+				$redirect_to = add_query_arg( 'newsletters_non_public_count', $count, $redirect_to );
 				break;
 		}
 		return $redirect_to;
+	}
+
+	/**
+	 * Set the `is_public` meta on the submitted newsletters, skipping any the
+	 * current user cannot edit or that are not newsletters.
+	 *
+	 * The bulk-actions nonce core verifies binds to the user and the action, not
+	 * to the target posts, so the submitted ids must be authorized per post here.
+	 *
+	 * @param int[] $post_ids  Submitted post IDs.
+	 * @param bool  $is_public Whether the newsletter pages should be public.
+	 *
+	 * @return int Number of newsletters the status was applied to. A newsletter
+	 *             already in the requested state counts, since the notice reports
+	 *             the resulting state rather than the number of rows changed.
+	 */
+	private static function set_public_status( $post_ids, $is_public ) {
+		$updated = 0;
+		foreach ( $post_ids as $post_id ) {
+			if ( \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT !== get_post_type( $post_id ) ) {
+				continue;
+			}
+			// The bulk actions render on the Trash view too. The service provider only
+			// moves posts whose status it controls (publish/private), so writing the
+			// meta on a trashed newsletter changes nothing now, still counts toward the
+			// notice, and takes effect silently if the newsletter is later restored.
+			if ( 'trash' === get_post_status( $post_id ) ) {
+				continue;
+			}
+			// The rule itself lives in Newspack_Newsletters::current_user_can_set_public_status(),
+			// which also backs the guard on the write. It is consulted here as well so a
+			// newsletter the user cannot act on is skipped and left out of the count,
+			// rather than attempted and blocked -- the notice reports what was applied.
+			if ( ! \Newspack_Newsletters::current_user_can_set_public_status( $post_id, (bool) $is_public ) ) {
+				continue;
+			}
+			update_post_meta( $post_id, 'is_public', (bool) $is_public );
+			$updated++;
+		}
+		return $updated;
 	}
 
 	/**

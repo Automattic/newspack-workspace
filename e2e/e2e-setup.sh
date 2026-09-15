@@ -101,6 +101,47 @@ else
   E2E_PLUGIN_SRC="$(dirname "$0")/e2e-plugin.php"
 fi
 
+# Resolve the sendbox secret BEFORE the destructive site-setup.sh run below, so a
+# misconfigured target fails as a precondition rather than after the site has been
+# wiped and switched into e2e mode. The /_email sendbox in e2e-plugin.php exposes
+# every captured outgoing email (reader password-reset / verification links), so it
+# fails closed (403) unless the NEWSPACK_E2E_SENDBOX_SECRET constant matches a
+# secret the request presents in a header. We resolve that secret here and write
+# the constant once WordPress is installed (further below).
+#
+# Host classification mirrors isLocalTarget() in tests/site-setup.ts. Normalise
+# SITE_URL to a bare, lowercased host the same way new URL().hostname does — strip
+# scheme, then path/query/fragment, then userinfo, then port, then lowercase — so a
+# stray component can't survive a naive strip and win a false "local" verdict, the
+# one direction that must not fail (local selects the committed default secret). A
+# target is local when its host is localhost / 127.* / *.test / *.local; every other
+# (non-local, internet-reachable) target must supply a strong E2E_EMAIL_SENDBOX_SECRET
+# or we refuse to run.
+SENDBOX_HOST="${SITE_URL#*://}"          # strip scheme
+SENDBOX_HOST="${SENDBOX_HOST%%[/?#]*}"   # strip path, query and fragment (first of / ? #)
+SENDBOX_HOST="${SENDBOX_HOST##*@}"       # strip userinfo (user:pass@)
+SENDBOX_HOST="${SENDBOX_HOST%%:*}"       # strip port
+SENDBOX_HOST="$( printf '%s' "$SENDBOX_HOST" | tr '[:upper:]' '[:lower:]' )"
+case "$SENDBOX_HOST" in
+  localhost|127.*|*.test|*.local)
+    SENDBOX_IS_LOCAL=true
+    ;;
+  *)
+    SENDBOX_IS_LOCAL=false
+    ;;
+esac
+if [ -n "${E2E_EMAIL_SENDBOX_SECRET:-}" ]; then
+  SENDBOX_SECRET="$E2E_EMAIL_SENDBOX_SECRET"
+elif [ "$SENDBOX_IS_LOCAL" = true ]; then
+  SENDBOX_SECRET="newspack-e2e-local"
+else
+  echo "ERROR: E2E_EMAIL_SENDBOX_SECRET must be set for the non-local target '$SITE_URL'." >&2
+  echo "       The /_email sendbox exposes captured reader emails; refusing to enable it" >&2
+  echo "       with the public default secret on an internet-reachable host. Set a strong" >&2
+  echo "       E2E_EMAIL_SENDBOX_SECRET (forwarded by the suite) and re-run." >&2
+  exit 1
+fi
+
 echo "==> Running site-setup.sh (woo=$WOO)"
 SITE_SETUP_ARGS=(
   --posts-count 20      # A handful is plenty for e2e; 40 is slow to generate.
@@ -120,6 +161,10 @@ echo "==> Applying e2e-specific configuration"
 wp --skip-plugins --skip-themes config set NEWSPACK_IS_E2E true --raw
 # Note: this flag is slated for removal upstream.
 wp --skip-plugins --skip-themes config set NEWSPACK_EMAIL_CHANGE_ENABLED true --raw
+
+# Write the sendbox secret (resolved as a precondition above, before site-setup.sh)
+# into wp-config.php, now that WordPress is installed so the constant survives.
+wp --skip-plugins --skip-themes config set NEWSPACK_E2E_SENDBOX_SECRET "$SENDBOX_SECRET"
 
 wp --skip-themes option update timezone_string 'America/New_York'
 

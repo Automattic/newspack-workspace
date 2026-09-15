@@ -169,6 +169,29 @@ function get_data_from_blocks( $blocks, $source ) {
 }
 
 /**
+ * The teaser Newspack's content gate shows in place of a withheld post's body,
+ * or null when the post is not withheld.
+ *
+ * Every call into the gate is behind the same guard: this plugin ships
+ * independently of newspack-plugin, so a site can run a version that predates
+ * the API. Anything short of the whole API answers "not withheld".
+ *
+ * @param \WP_Post|null $post The post being rendered.
+ *
+ * @return string|null
+ */
+function get_content_gate_teaser( $post ) {
+	if (
+		! $post instanceof \WP_Post
+		|| ! class_exists( '\Newspack\Content_Gate' )
+		|| ! method_exists( '\Newspack\Content_Gate', 'get_teaser_outside_article' )
+	) {
+		return null;
+	}
+	return \Newspack\Content_Gate::get_teaser_outside_article( $post );
+}
+
+/**
  * Modified excerpt generator that allows some HTML.
  * Will use the excerpt if it exists, otherwise will generate from post content.
  *
@@ -205,7 +228,24 @@ function get_listing_excerpt( $post, $excerpt_length = null ) {
 	}
 
 	// Recreate logic from wp_trim_excerpt (https://developer.wordpress.org/reference/functions/wp_trim_excerpt/).
-	$excerpt = $post->post_content;
+	// The content gate's teaser stands in for a gated post's body. The REST
+	// controller assembles listing items outside any loop, so `the_post` never
+	// fires for them and nothing has withheld the body by the time it is read
+	// here.
+	$excerpt = get_content_gate_teaser( $post );
+	if ( null === $excerpt ) {
+		// A password-protected post is core's to withhold, and the fallback below
+		// would publish its opening words. A sentence stands in for the body, not
+		// get_the_password_form(): the card echoes this excerpt through
+		// wp_kses_post() inside the link to the listing, and the `post` allowlist
+		// has held no <form> or <input> since WP 5.0.1, so the form would reach the
+		// reader as a prompt with nothing to type into. The form belongs on the
+		// listing's own page, which the card links to.
+		if ( post_password_required( $post ) ) {
+			return $the_dates . wpautop( esc_html__( 'This content is password-protected.', 'newspack-listings' ) );
+		}
+		$excerpt = $post->post_content;
+	}
 	$excerpt = strip_shortcodes( $excerpt );
 	// Strip blocks the content gate withholds from the public before
 	// excerpt_remove_blocks() flattens the block structure.

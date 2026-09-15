@@ -212,6 +212,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-content-gates.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-donations.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscriptions.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-promo-url-config.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscription-products.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-pricing-rules.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-integrations.php';
@@ -268,8 +269,10 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-api.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-teams-invite.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-myaccount.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-seats.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce-gateway-stripe.php';
 		include_once NEWSPACK_ABSPATH . 'includes/export/class-csv-exports.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-teams-for-memberships.php';

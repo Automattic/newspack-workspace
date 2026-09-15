@@ -10,6 +10,7 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-csv-batch-exporter.php';
+require_once __DIR__ . '/class-user-meta-columns.php';
 
 /**
  * Exports WP users to CSV in pages, honoring the users admin list filters
@@ -19,7 +20,7 @@ require_once __DIR__ . '/class-csv-batch-exporter.php';
  * - `newspack_users_export_headers` filters the column id => label map.
  * - `newspack_users_export_row` filters each row (keyed by column id).
  * - `newspack_users_export_query_args` filters the WP_User_Query args built
- *   from the captured list params.
+ *   from the captured list params and the chosen export options.
  *
  * This class must only be loaded after WooCommerce's WC_CSV_Batch_Exporter
  * abstract (see CSV_Exports::load_exporter_dependencies()).
@@ -71,6 +72,8 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 			self::get_address_column_labels()
 		);
 
+		$columns = array_merge( $columns, User_Meta_Columns::get_column_names( $this->get_meta_keys() ) );
+
 		/**
 		 * Filters the users export columns.
 		 *
@@ -96,15 +99,26 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 	 * degrade to "third-party filters not honored" rather than a fatal.
 	 *
 	 * @param array $params Parsed query-string params from the users list.
+	 * @param array $config Export options chosen in the export dialog.
 	 * @return array WP_User_Query args.
 	 */
-	public static function build_query_args( array $params ): array {
+	public static function build_query_args( array $params, array $config = [] ): array {
 		// Array-shaped params (a mangled ?s[]=... URL) would TypeError in the
 		// string handling below; degrade to "filter ignored" instead.
 		$params = array_filter( map_deep( $params, 'sanitize_text_field' ), 'is_scalar' );
 		$args   = [];
 
-		if ( ! empty( $params['role'] ) ) {
+		// The dialog's role selection supersedes the list's single-role filter,
+		// which is the only reason more than one role can be exported at once.
+		// Once a selection has been submitted it is authoritative even when
+		// empty — clearing every checkbox means every role, not "keep whatever
+		// the list was filtered to". The exception is a list view the dialog
+		// cannot represent, core's role-less `?role=none` among them: no box
+		// was ever shown for it, so there was nothing for the admin to clear
+		// and dropping it would silently widen the export to every user.
+		if ( ! empty( $config['roles'] ) ) {
+			$args['role__in'] = $config['roles'];
+		} elseif ( ! empty( $params['role'] ) && ( empty( $config['selection_submitted'] ) || ! self::is_offered_role( $params['role'] ) ) ) {
 			$args['role'] = $params['role'];
 		}
 		if ( ! empty( $params['s'] ) ) {
@@ -129,20 +143,73 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 			// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		}
 
+		$date_query = self::build_date_query( $config );
+		if ( ! empty( $date_query ) ) {
+			$args['date_query'] = [ $date_query ];
+		}
+
 		/**
 		 * Filters the users export query args.
 		 *
 		 * @param array $args   WP_User_Query args.
 		 * @param array $params The captured users-list params.
+		 * @param array $config The export options chosen in the export dialog.
 		 */
-		return apply_filters( 'newspack_users_export_query_args', $args, $params );
+		return apply_filters( 'newspack_users_export_query_args', $args, $params, $config );
+	}
+
+	/**
+	 * Whether the export dialog offers a checkbox for a role.
+	 *
+	 * @param string $role Role slug from the list's filter.
+	 * @return bool
+	 */
+	private static function is_offered_role( string $role ): bool {
+		return array_key_exists( $role, \wp_roles()->get_names() );
+	}
+
+	/**
+	 * Build the registration-date clause for the export's date range.
+	 *
+	 * Both bounds are inclusive whole days: `after` is the start of date_from
+	 * and `before` the end of date_to, so a single-day range returns that day.
+	 * The bounds are the publisher's days, converted to UTC because
+	 * `user_registered` is stored in UTC and WP_Date_Query compares a full
+	 * datetime string against the column as given. The subscriptions export
+	 * reads the same two dates as site-local days, so this keeps one dialog
+	 * control meaning one thing on both screens.
+	 *
+	 * @param array $config Export config.
+	 * @return array WP_Date_Query clause, or [] when no range was chosen.
+	 */
+	private static function build_date_query( array $config ): array {
+		$clause = [
+			'column'    => 'user_registered',
+			'inclusive' => true,
+		];
+		if ( ! empty( $config['date_from'] ) ) {
+			$clause['after'] = \get_gmt_from_date( $config['date_from'] . ' 00:00:00' );
+		}
+		if ( ! empty( $config['date_to'] ) ) {
+			$clause['before'] = \get_gmt_from_date( $config['date_to'] . ' 23:59:59' );
+		}
+		return isset( $clause['after'] ) || isset( $clause['before'] ) ? $clause : [];
+	}
+
+	/**
+	 * The user meta keys this export carries as extra columns.
+	 *
+	 * @return string[]
+	 */
+	private function get_meta_keys(): array {
+		return $this->export_config['meta_keys'] ?? [];
 	}
 
 	/**
 	 * Prepare one page of user rows.
 	 */
 	public function prepare_data_to_export(): void {
-		$args                = self::build_query_args( $this->list_params );
+		$args                = self::build_query_args( $this->list_params, $this->export_config );
 		$args['number']      = $this->get_limit();
 		$args['paged']       = $this->get_page();
 		$args['count_total'] = true;
@@ -184,11 +251,15 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 			'first_name'      => $user->first_name,
 			'last_name'       => $user->last_name,
 			'roles'           => implode( ', ', $user->roles ),
-			'user_registered' => $user->user_registered,
+			// Rendered in the site's timezone: the date range that selects a row
+			// is read as the publisher's days, and a boundary row printing a
+			// UTC timestamp would contradict the filter that returned it.
+			'user_registered' => $this->format_export_date( \get_date_from_gmt( (string) $user->user_registered ) ),
 		];
 		foreach ( self::get_address_meta_keys() as $meta_key ) {
 			$row[ $meta_key ] = (string) get_user_meta( $user->ID, $meta_key, true );
 		}
+		$row = array_merge( $row, User_Meta_Columns::get_row_values( (int) $user->ID, $this->get_meta_keys() ) );
 
 		/**
 		 * Filters a users export row.

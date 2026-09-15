@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Donations;
 use Newspack\GA4_Custom_Dimensions;
 use Newspack\Google_OAuth_GA4_Client;
 
@@ -20,6 +21,37 @@ use Newspack\Google_OAuth_GA4_Client;
 class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 
 	const SK_SETTINGS_OPTION = 'googlesitekit_analytics-4_settings';
+
+	/**
+	 * Mirrors the production group, so a change to it must be made here too.
+	 */
+	const WOOCOMMERCE_DIMENSIONS = [
+		'is_subscriber',
+		'product_id',
+		'product_type',
+		'recurrence',
+	];
+
+	/**
+	 * Mirrors the production group, so a change to it must be made here too.
+	 */
+	const DONATION_DIMENSIONS = [
+		'is_donor',
+		'donation_frequency',
+		'donation_amount',
+	];
+
+	/**
+	 * Mirrors the production group, so a change to it must be made here too.
+	 */
+	const ACCESS_CONTROL_DIMENSIONS = [
+		'gate_post_id',
+		'gate_has_donation_block',
+		'gate_has_registration_block',
+		'gate_has_checkout_button',
+		'gate_has_registration_link',
+		'gate_has_signin_link',
+	];
 
 	/**
 	 * Recorded HTTP requests, each `[ 'url' => string, 'method' => string, 'body' => string|null ]`.
@@ -257,6 +289,255 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A site that sells nothing must not spend slots on commerce parameters.
+	 */
+	public function test_woocommerce_dimensions_are_omitted_without_woocommerce() {
+		add_filter( 'newspack_ga4_dimensions_woocommerce_enabled', '__return_false' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		foreach ( self::WOOCOMMERCE_DIMENSIONS as $parameter_name ) {
+			$this->assertArrayNotHasKey( $parameter_name, $dimensions, "'$parameter_name' must not be provisioned without WooCommerce." );
+		}
+	}
+
+	/**
+	 * The same dimensions are provisioned once the site does sell something.
+	 */
+	public function test_woocommerce_dimensions_are_provisioned_with_woocommerce() {
+		add_filter( 'newspack_ga4_dimensions_woocommerce_enabled', '__return_true' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		foreach ( self::WOOCOMMERCE_DIMENSIONS as $parameter_name ) {
+			$this->assertArrayHasKey( $parameter_name, $dimensions, "'$parameter_name' must be provisioned on a WooCommerce site." );
+		}
+	}
+
+	/**
+	 * A site that takes no donations must not spend slots on donation parameters.
+	 */
+	public function test_donation_dimensions_are_omitted_without_donations() {
+		add_filter( 'newspack_ga4_dimensions_donations_enabled', '__return_false' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		foreach ( self::DONATION_DIMENSIONS as $parameter_name ) {
+			$this->assertArrayNotHasKey( $parameter_name, $dimensions, "'$parameter_name' must not be provisioned without donations." );
+		}
+	}
+
+	/**
+	 * The same dimensions are provisioned once the site does take donations.
+	 */
+	public function test_donation_dimensions_are_provisioned_with_donations() {
+		add_filter( 'newspack_ga4_dimensions_donations_enabled', '__return_true' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		foreach ( self::DONATION_DIMENSIONS as $parameter_name ) {
+			$this->assertArrayHasKey( $parameter_name, $dimensions, "'$parameter_name' must be provisioned on a donation site." );
+		}
+	}
+
+	/**
+	 * The donation parameters are not WooCommerce's to gate: a publisher on NRH
+	 * emits them from the Donate block and Reader Data with none installed. No
+	 * filters here, so this runs the automatic detection.
+	 */
+	public function test_donation_dimensions_survive_on_a_non_woocommerce_platform() {
+		$this->assertFalse( class_exists( 'WooCommerce' ), 'This test is only meaningful with WooCommerce absent.' );
+
+		update_option( Donations::NEWSPACK_READER_REVENUE_PLATFORM, 'nrh' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+
+		foreach ( self::DONATION_DIMENSIONS as $parameter_name ) {
+			$this->assertArrayHasKey( $parameter_name, $dimensions, "'$parameter_name' must be provisioned for a non-WooCommerce donation platform." );
+		}
+		foreach ( self::WOOCOMMERCE_DIMENSIONS as $parameter_name ) {
+			$this->assertArrayNotHasKey( $parameter_name, $dimensions, "'$parameter_name' has no emitter without WooCommerce and must not be provisioned." );
+		}
+	}
+
+	/**
+	 * The platform option defaults to `wc`, so never choosing one and never
+	 * installing WooCommerce is not a donation site.
+	 */
+	public function test_donation_dimensions_are_omitted_on_the_default_platform_without_woocommerce() {
+		$this->assertFalse( class_exists( 'WooCommerce' ), 'This test is only meaningful with WooCommerce absent.' );
+
+		delete_option( Donations::NEWSPACK_READER_REVENUE_PLATFORM );
+		$this->assertFalse( GA4_Custom_Dimensions::is_donations_enabled(), 'The default platform slug alone is not a donation site.' );
+	}
+
+	/**
+	 * The gate parameters need a rendered gate, which needs access control.
+	 */
+	public function test_gate_dimensions_are_omitted_without_access_control() {
+		add_filter( 'newspack_ga4_dimensions_access_control_enabled', '__return_false' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		foreach ( self::ACCESS_CONTROL_DIMENSIONS as $parameter_name ) {
+			$this->assertArrayNotHasKey( $parameter_name, $dimensions, "'$parameter_name' must not be provisioned without access control." );
+		}
+	}
+
+	/**
+	 * The lists above are spelled out rather than derived, so a change to the
+	 * code fails a test instead of silently following it. Compared here.
+	 */
+	public function test_gated_groups_match_the_production_constants() {
+		$this->assertSame( self::ACCESS_CONTROL_DIMENSIONS, GA4_Custom_Dimensions::ACCESS_CONTROL_DIMENSIONS, 'The access-control group changed; update the test list deliberately.' );
+		$this->assertSame( self::WOOCOMMERCE_DIMENSIONS, GA4_Custom_Dimensions::WOOCOMMERCE_DIMENSIONS, 'The WooCommerce group changed; update the test list deliberately.' );
+		$this->assertSame( self::DONATION_DIMENSIONS, GA4_Custom_Dimensions::DONATION_DIMENSIONS, 'The donation group changed; update the test list deliberately.' );
+	}
+
+	/**
+	 * Memberships alone is enough for a gate but not for `access_source`, so it
+	 * must not ride along with the gate group. Isolated because sibling suites
+	 * define NEWSPACK_CONTENT_GATES, which cannot then be unset.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_access_source_is_not_provisioned_for_the_gate_group_alone() {
+		$this->assertFalse(
+			Newspack\Content_Gate::is_gating_active(),
+			'Process isolation failed: gating leaked in, so this was never tested.'
+		);
+
+		add_filter( 'newspack_ga4_dimensions_access_control_enabled', '__return_true' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+
+		$this->assertArrayHasKey( 'gate_post_id', $dimensions, 'The gate parameters still follow the access-control predicate.' );
+		$this->assertArrayNotHasKey( 'access_source', $dimensions, "'access_source' must follow its own emitter, not the gate group." );
+	}
+
+	/**
+	 * The predicates themselves, not the filter plumbing. This environment loads
+	 * no WooCommerce, no Memberships, and defines no gating constant.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_predicates_are_false_on_a_site_running_neither_feature() {
+		$this->assertFalse( GA4_Custom_Dimensions::is_access_control_enabled(), 'No gating constant and no Memberships means no access control.' );
+		$this->assertFalse( GA4_Custom_Dimensions::is_woocommerce_enabled(), 'No WooCommerce means no checkout parameters.' );
+		$this->assertFalse( GA4_Custom_Dimensions::is_donations_enabled(), 'No WooCommerce and the default platform means no donation parameters.' );
+	}
+
+	/**
+	 * The automatic detection, not the filter over it: a detector stuck at false
+	 * would leave the suite green while every WooCommerce site lost its checkout
+	 * dimensions. Isolated because an alias cannot be undone.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_woocommerce_predicate_follows_the_woocommerce_class() {
+		$this->assertFalse( GA4_Custom_Dimensions::is_woocommerce_enabled(), 'Process isolation failed: WooCommerce leaked in, so this was never tested.' );
+
+		class_alias( self::class, 'WooCommerce' );
+
+		$this->assertTrue( GA4_Custom_Dimensions::is_woocommerce_enabled(), 'A loaded WooCommerce switches the checkout dimensions on, with no filter.' );
+		$this->assertTrue( GA4_Custom_Dimensions::is_donations_enabled(), 'A loaded WooCommerce is also a donation platform.' );
+		$this->assertArrayHasKey( 'product_id', GA4_Custom_Dimensions::get_dimensions(), 'The checkout dimensions follow the automatic detection.' );
+	}
+
+	/**
+	 * The same for access control, via the gates constant. Isolated because
+	 * NEWSPACK_CONTENT_GATES cannot be unset once defined.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_access_control_predicate_follows_the_gates_constant() {
+		$this->assertFalse( GA4_Custom_Dimensions::is_access_control_enabled(), 'Process isolation failed: gating leaked in, so this was never tested.' );
+
+		define( 'NEWSPACK_CONTENT_GATES', true );
+
+		$this->assertTrue( GA4_Custom_Dimensions::is_access_control_enabled(), 'The gates constant switches the gate dimensions on, with no filter.' );
+		$this->assertArrayHasKey( 'gate_post_id', GA4_Custom_Dimensions::get_dimensions(), 'The gate dimensions follow the automatic detection.' );
+	}
+
+	/**
+	 * And are provisioned once it does. `access_source` is checked separately.
+	 */
+	public function test_gate_dimensions_are_provisioned_with_access_control() {
+		add_filter( 'newspack_ga4_dimensions_access_control_enabled', '__return_true' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		foreach ( self::ACCESS_CONTROL_DIMENSIONS as $parameter_name ) {
+			$this->assertArrayHasKey( $parameter_name, $dimensions, "'$parameter_name' must be provisioned on an access-control site." );
+		}
+	}
+
+	/**
+	 * `price` has no emitter on any site: the modal checkout sends `amount`.
+	 */
+	public function test_unemitted_price_dimension_is_never_provisioned() {
+		add_filter( 'newspack_ga4_dimensions_woocommerce_enabled', '__return_true' );
+		add_filter( 'newspack_ga4_dimensions_donations_enabled', '__return_true' );
+		add_filter( 'newspack_ga4_dimensions_access_control_enabled', '__return_true' );
+		$this->assertArrayNotHasKey( 'price', GA4_Custom_Dimensions::get_dimensions(), "'price' has no emitter and must not be provisioned." );
+	}
+
+	/**
+	 * Gating must not touch parameters any site can populate.
+	 */
+	public function test_feature_independent_dimensions_survive_both_features_off() {
+		add_filter( 'newspack_ga4_dimensions_woocommerce_enabled', '__return_false' );
+		add_filter( 'newspack_ga4_dimensions_donations_enabled', '__return_false' );
+		add_filter( 'newspack_ga4_dimensions_access_control_enabled', '__return_false' );
+		$dimensions = GA4_Custom_Dimensions::get_dimensions();
+		$expected   = [
+			'is_reader',
+			'action_type',
+			'action',
+			'logged_in',
+			'is_newsletter_subscriber',
+			'newspack_popup_id',
+			'contextual_prompt_post_id',
+			'contextual_prompt_placement',
+			'button_text',
+			'prompt_placement',
+			'prompt_frequency',
+			'prompt_title',
+			'registration_method',
+			'lists',
+			'categories',
+			'author',
+			'segment_id',
+		];
+		foreach ( $expected as $parameter_name ) {
+			$this->assertArrayHasKey( $parameter_name, $dimensions, "'$parameter_name' is feature-independent and must always be provisioned." );
+		}
+	}
+
+	/**
+	 * Enabling a feature must provision its parameters without waiting for the
+	 * monthly recheck; GA4 never back-fills.
+	 */
+	public function test_enabling_a_feature_schedules_provisioning_for_its_dimensions() {
+		$this->connect_property( 'PROP-FEATURE' );
+
+		// Provisioned while the site ran neither feature.
+		add_filter( 'newspack_ga4_dimensions_woocommerce_enabled', '__return_false' );
+		add_filter( 'newspack_ga4_dimensions_donations_enabled', '__return_false' );
+		add_filter( 'newspack_ga4_dimensions_access_control_enabled', '__return_false' );
+		update_option(
+			GA4_Custom_Dimensions::PROVISIONED_OPTION,
+			[
+				'property_id' => 'PROP-FEATURE',
+				'dimensions'  => array_keys( GA4_Custom_Dimensions::get_dimensions() ),
+				'schema'      => GA4_Custom_Dimensions::schema_fingerprint(),
+				'created'     => [],
+			]
+		);
+		// Connecting the property queues its own run; this is about the recheck.
+		wp_clear_scheduled_hook( GA4_Custom_Dimensions::PROVISION_ACTION );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'A site whose features are unchanged is not rescheduled.' );
+
+		// The publisher switches WooCommerce on.
+		remove_filter( 'newspack_ga4_dimensions_woocommerce_enabled', '__return_false' );
+		add_filter( 'newspack_ga4_dimensions_woocommerce_enabled', '__return_true' );
+		delete_transient( GA4_Custom_Dimensions::SCHEMA_TRANSIENT );
+		GA4_Custom_Dimensions::maybe_schedule_recheck();
+		$this->assertNotFalse( wp_next_scheduled( GA4_Custom_Dimensions::PROVISION_ACTION ), 'Enabling WooCommerce schedules provisioning for its dimensions.' );
+	}
+
+	/**
 	 * Connecting / changing the GA4 property schedules background provisioning,
 	 * and the scheduler de-duplicates redundant requests.
 	 */
@@ -464,16 +745,16 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	public function test_provision_does_not_merge_across_a_property_switch() {
 		$this->connect_property( 'PROP-NEW' );
 		$this->configure_newspack_oauth( true );
-		// 'gate_post_id' already exists on the new property, so this run skips it.
-		$this->mock_admin_api( 'PROP-NEW', [ 'gate_post_id' ] );
-		// The previous run targeted a different property and created 'gate_post_id' there.
+		// 'categories' already exists on the new property, so this run skips it.
+		$this->mock_admin_api( 'PROP-NEW', [ 'categories' ] );
+		// The previous run targeted a different property and created 'categories' there.
 		update_option(
 			GA4_Custom_Dimensions::PROVISIONED_OPTION,
 			[
 				'property_id'    => 'PROP-OLD',
 				'auth_source'    => 'newspack',
 				'timestamp'      => time(),
-				'created'        => [ 'gate_post_id', 'is_reader' ],
+				'created'        => [ 'categories', 'is_reader' ],
 				'skipped_exists' => [],
 				'errors'         => [],
 			]
@@ -482,8 +763,8 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 		$summary = GA4_Custom_Dimensions::provision();
 		$expected_created = count( GA4_Custom_Dimensions::get_dimensions() ) - 1;
 		$this->assertSame( 'PROP-NEW', $summary['property_id'] );
-		$this->assertContains( 'gate_post_id', $summary['skipped_exists'], "'gate_post_id' already exists on the new property." );
-		$this->assertNotContains( 'gate_post_id', $summary['created'], "The previous property's created list is not carried over." );
+		$this->assertContains( 'categories', $summary['skipped_exists'], "'categories' already exists on the new property." );
+		$this->assertNotContains( 'categories', $summary['created'], "The previous property's created list is not carried over." );
 		$this->assertCount( $expected_created, $summary['created'] );
 		$this->assertSame( $summary, get_option( GA4_Custom_Dimensions::PROVISIONED_OPTION ), 'The summary is persisted.' );
 	}
