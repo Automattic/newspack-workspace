@@ -980,6 +980,65 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * When no public plan shares the retired plan's billing period, the modal
+	 * still opens on a period rather than on none: the first one offered, with
+	 * its first plan preselected.
+	 */
+	public function test_switch_form_falls_back_to_the_first_period_when_none_matches_a_private_plan() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		$month_meta = [
+			'_subscription_period'          => 'month',
+			'_subscription_period_interval' => 1,
+		];
+		wc_create_mock_product(
+			[
+				'id'   => 321,
+				'type' => 'subscription',
+				'name' => 'Monthly',
+				'meta' => $month_meta,
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'   => 322,
+				'type' => 'subscription',
+				'name' => 'Monthly Plus',
+				'meta' => $month_meta,
+			]
+		);
+		$switch_data = $this->make_switch_data( $user_id, [ 323 ], 323, 1 );
+		wc_create_mock_product(
+			[
+				'id'     => 323,
+				'type'   => 'subscription',
+				'name'   => 'Retired Annual',
+				'status' => 'private',
+				'meta'   => [
+					'_subscription_period'          => 'year',
+					'_subscription_period_interval' => 1,
+				],
+			]
+		);
+		$grouped = wc_create_mock_product(
+			[
+				'id'       => 320,
+				'type'     => 'grouped',
+				'name'     => 'Upgrade',
+				'children' => [ 321, 322, 323 ],
+			]
+		);
+
+		$html = $this->render_tier_form( $grouped, $switch_data );
+
+		$this->assertStringNotContainsString( 'Retired Annual', $html );
+		$this->assertStringNotContainsString( 'Yearly', $html );
+		$this->assertMatchesRegularExpression( '/<input[^>]*type="radio"[^>]*value="321"[^>]*checked/', $html );
+		$this->assertDoesNotMatchRegularExpression( '/<input[^>]*type="radio"[^>]*value="322"[^>]*checked/', $html );
+	}
+
+	/**
 	 * A purchase that isn't a switch and isn't per seat has no quantity to carry,
 	 * so no quantity is submitted at all and the checkout keeps its default of one.
 	 */
