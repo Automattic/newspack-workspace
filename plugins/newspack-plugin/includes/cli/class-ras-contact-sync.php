@@ -851,11 +851,17 @@ class RAS_Contact_Sync {
 	 * [--fields=<name1,name2>]
 	 * : Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Restricts both what is computed and what is pushed to just these fields; all other metadata — and the reader's name — is left untouched. Every requested field must be enabled as an outgoing field on each active integration. The `newspack_esp_sync_contact` filter still runs, but any metadata it adds outside `--fields` is dropped.
 	 *
+	 * [--existing-only]
+	 * : Update only the contacts an integration already has; a reader it has no contact for is skipped (tallied as skipped) instead of being created. One extra provider read per reader. Honored by integrations that implement `contact_exists()` — the built-in ESP integration does (on Mailchimp, "existing" means a member of the configured audience); other integrations push as usual. A read that fails for any other reason withholds the push and is tallied as an error.
+	 *
 	 * ## NOTES
 	 *
-	 * When `--skip-lists` or `--fields` is passed, failed pushes are NOT auto-retried
-	 * (the retry path would rebuild the full contact and push it with the master list,
-	 * undoing the intent). Re-run the affected `--offset` window instead.
+	 * When `--skip-lists`, `--fields` or `--existing-only` is passed, failed pushes are
+	 * NOT auto-retried (the retry path would rebuild the full contact and push it with
+	 * the master list, undoing the intent). Re-run the affected `--offset` window instead.
+	 *
+	 * A `--dry-run` with `--existing-only` still performs the existence read at each
+	 * integration (that is what previewing the skip means); it only skips the push.
 	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
@@ -934,6 +940,9 @@ class RAS_Contact_Sync {
 	 * [--fields=<name1,name2>]
 	 * : (push only) Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Each field must be enabled as an outgoing field on every integration taking part in the run (just the `--integration` target when scoped).
 	 *
+	 * [--existing-only]
+	 * : (push only) Update only the contacts an integration already has; a reader it has no contact for is skipped (tallied as skipped) instead of being created. One extra provider read per reader. Honored by integrations that implement `contact_exists()` — the built-in ESP integration does (on Mailchimp, "existing" means a member of the configured audience); other integrations push as usual. A read that fails for any other reason withholds the push and is tallied as an error.
+	 *
 	 * ## NOTES
 	 *
 	 * Push-only options hard-error when `--direction` includes `pull` — run a
@@ -952,12 +961,14 @@ class RAS_Contact_Sync {
 	 * Pull failures are NOT auto-retried via ActionScheduler (a bulk run against
 	 * a flaky API would flood the queue). Re-run the affected `--offset` window
 	 * instead. Push retry behavior is unchanged from `wp newspack esp sync`,
-	 * including the no-retry rule for `--skip-lists`/`--fields` runs.
+	 * including the no-retry rule for `--skip-lists`/`--fields`/`--existing-only`
+	 * runs.
 	 *
 	 * Readers the provider has no contact for are tallied as skipped, not as
-	 * errors: a pull cannot create the missing contact, so re-running the
-	 * window could never clear them — and a partially-synced site (the usual
-	 * backfill candidate) would otherwise never exit 0.
+	 * errors — on a pull, and on a push under `--existing-only`: a pull cannot
+	 * create the missing contact and an existing-only push must not, so
+	 * re-running the window could never clear them — and a partially-synced
+	 * site (the usual backfill candidate) would otherwise never exit 0.
 	 *
 	 * A run that tallies any error exits with status 1 and prints the summary as
 	 * a warning, so an unattended runbook can detect partial failure without
@@ -969,6 +980,10 @@ class RAS_Contact_Sync {
 	 * rejections without persisting, so its error tally previews what a real
 	 * run would report.
 	 *
+	 * A `--dry-run` push with `--existing-only` still performs the existence
+	 * read at each integration (that is what previewing the skip means) and
+	 * tallies the skips it previews; it only skips the push.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     # Re-push all readers to every active integration (same as the legacy `esp sync`).
@@ -979,6 +994,9 @@ class RAS_Contact_Sync {
 	 *
 	 *     # Fully catch up one integration, 500 readers per batch.
 	 *     wp newspack integrations backfill --direction=both --integration=esp --batch-size=500
+	 *
+	 *     # Refresh one field on the contacts the ESP already has, creating none.
+	 *     wp newspack integrations backfill --integration=esp --fields="Newsletter Selection" --existing-only
 	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
