@@ -466,9 +466,17 @@ domReady( () => {
 				onSuccess: ( message, authData ) => {
 					// The reader was anonymous when this page evaluated their
 					// segments. Let the session hydrate and the snapshot reach the
-					// server before the checkout reads it for pricing.
+					// server before the checkout reads it for pricing. The auth
+					// modal has already closed, so show the checkout shell and its
+					// spinner meanwhile rather than the page the reader came from.
+					if ( isModalCheckout ) {
+						openCheckoutShell();
+					}
 					whenSignedInReaderDataSynced( 'matched_segments' )
-						.then( () => cartReq )
+						.then( synced => {
+							warnUnlessSynced( synced );
+							return cartReq;
+						} )
 						.then( url => {
 							// If registered and in a modal checkout, append the registration flag query param to the url.
 							if ( authData?.registered && isModalCheckout ) {
@@ -668,6 +676,15 @@ domReady( () => {
 		document.removeEventListener( 'keydown', handleKeydown );
 	};
 
+	/**
+	 * Show the checkout modal with only its spinner, for a wait that precedes
+	 * the checkout request. openCheckout() then fills it in place.
+	 */
+	const openCheckoutShell = () => {
+		spinner.style.display = 'flex';
+		openModal( modalCheckout );
+	};
+
 	const openCheckout = url => {
 		if ( url ) {
 			iframe.src = url;
@@ -688,6 +705,12 @@ domReady( () => {
 	};
 
 	const openModal = el => {
+		// An open modal keeps its overlay: registering a second one would leave
+		// the first behind for good, and prompts would stay held back after the
+		// modal closes.
+		if ( el.getAttribute( 'data-state' ) === 'open' ) {
+			return;
+		}
 		if ( window.newspackReaderActivation?.overlays ) {
 			el.overlayId = window.newspackReaderActivation?.overlays.add();
 		}
