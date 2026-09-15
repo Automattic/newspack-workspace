@@ -88,11 +88,40 @@ function initializeSyncInterval( queue ) {
 		if ( ! queue.length || newspack_reader_data?.is_temporary || isSwitchedSession() ) {
 			return;
 		}
-		const key = queue.shift();
+		sendItem( queue.shift() );
+	}, 1000 );
+}
+
+/**
+ * Writes in flight, by key. A second write of a key must not start while one
+ * is still pending: the two could land out of order and the stale value win.
+ *
+ * @type {Map<string, Promise>}
+ */
+const inFlight = new Map();
+
+/**
+ * Send a key's current value, after any write of the same key still in flight.
+ * Both the sync tick and flush() go through here, so a flush can reuse a write
+ * the tick started instead of racing it. Runs at once when nothing is in flight.
+ *
+ * @param {string} key Key to send.
+ *
+ * @return {Promise<void>} Settles when this attempt is over.
+ */
+function sendItem( key ) {
+	const previous = inFlight.get( key );
+	const send = () =>
 		syncItem( key )
 			.then( () => clearPendingSync( key ) )
 			.catch( () => setPendingSync( key ) );
-	}, 1000 );
+	const attempt = ( previous ? previous.then( send, send ) : send() ).finally( () => {
+		if ( inFlight.get( key ) === attempt ) {
+			inFlight.delete( key );
+		}
+	} );
+	inFlight.set( key, attempt );
+	return attempt;
 }
 
 /**
@@ -566,17 +595,19 @@ export default function Store() {
 		 * @return {Promise<void>} Settles when the attempt is over.
 		 */
 		flush: key => {
-			const pendingKeys = _get( 'unsynced', true ) || [];
-			if ( ! key || newspack_reader_data?.is_temporary || ! pendingKeys.includes( key ) ) {
+			if ( ! key || newspack_reader_data?.is_temporary || isSwitchedSession() ) {
 				return Promise.resolve();
 			}
 			const queued = syncQueue.indexOf( key );
 			if ( -1 !== queued ) {
 				syncQueue.splice( queued, 1 );
 			}
-			return syncItem( key )
-				.then( () => clearPendingSync( key ) )
-				.catch( () => setPendingSync( key ) );
+			const pendingKeys = _get( 'unsynced', true ) || [];
+			if ( pendingKeys.includes( key ) ) {
+				return sendItem( key );
+			}
+			// Nothing newer to send: a write the tick started carries the current value.
+			return inFlight.get( key ) || Promise.resolve();
 		},
 		/**
 		 * Rehydrate items from server data. Must be called after all merge

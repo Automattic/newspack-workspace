@@ -359,7 +359,9 @@ describe( 'Store', () => {
 				FakeRequest.opened.push( this );
 			}
 			setRequestHeader() {}
-			send() {}
+			send( body ) {
+				this.body = body;
+			}
 			settle( status ) {
 				this.readyState = 4;
 				this.status = status;
@@ -409,6 +411,42 @@ describe( 'Store', () => {
 			await expect( flushed ).resolves.toBeUndefined();
 			expect( pending() ).toContain( 'matched_segments' );
 		} );
+		it( 'waits for an in-flight write of the key and sends the newer value after it', async () => {
+			// The interval dequeues a key before its request settles; a flush that
+			// starts a second write meanwhile could land before the first, and the
+			// stale snapshot would be what the checkout reads.
+			const [ store ] = Store();
+			store.set( 'matched_segments', [ 'old' ] );
+			jest.advanceTimersByTime( 1000 );
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			store.set( 'matched_segments', [ 'new' ] );
+			const flushed = store.flush( 'matched_segments' );
+			await Promise.resolve();
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			FakeRequest.opened[ 0 ].settle( 200 );
+			for ( let i = 0; i < 10; i++ ) {
+				await Promise.resolve();
+			}
+			expect( FakeRequest.opened ).toHaveLength( 2 );
+			expect( JSON.parse( FakeRequest.opened[ 1 ].body ).value ).toEqual( '["new"]' );
+			FakeRequest.opened[ 1 ].settle( 200 );
+			await flushed;
+			expect( pending() ).not.toContain( 'matched_segments' );
+		} );
+		it( 'reuses an in-flight write of the key when nothing newer is pending', async () => {
+			const [ store ] = Store();
+			store.set( 'matched_segments', [ '3' ] );
+			jest.advanceTimersByTime( 1000 );
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			let resolved = false;
+			const flushed = store.flush( 'matched_segments' ).then( () => ( resolved = true ) );
+			await Promise.resolve();
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			expect( resolved ).toBe( false );
+			FakeRequest.opened[ 0 ].settle( 200 );
+			await flushed;
+			expect( resolved ).toBe( true );
+		} );
 	} );
 	describe( 'switched sessions', () => {
 		// An admin switched into a reader's account: the reader's server items
@@ -418,7 +456,7 @@ describe( 'Store', () => {
 		afterEach( () => {
 			sessionStorage.clear();
 		} );
-		it( 'hydrates the server items into sessionStorage and never syncs', () => {
+		it( 'hydrates the server items into sessionStorage and never syncs', async () => {
 			window.newspack_reader_data = {
 				is_switched_session: true,
 				api_url: 'http://test/api',
@@ -437,6 +475,7 @@ describe( 'Store', () => {
 			expect( localStorage.getItem( 'np_reader_matched_segments' ) ).toBeNull();
 			store.set( 'pageviews', { day: { count: 1 } } );
 			jest.advanceTimersByTime( 2500 );
+			await store.flush( 'pageviews' );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
 		} );
