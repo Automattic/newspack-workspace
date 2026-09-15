@@ -150,8 +150,11 @@ export const isSwitchedSession = () => !! window.newspack_reader_data?.is_switch
  * @return {string|null} Segment ID, or null when the snapshot names none the page knows.
  */
 export const getBestPrioritySegmentFromSnapshot = ( ras, segments ) => {
-	const stored = ras?.store?.get( 'matched_segments' ) || [];
-	const known = stored.filter( id => segments[ id ] );
+	// The snapshot is client-asserted JSON: a non-list reads as no snapshot, and
+	// ids are compared as strings downstream, so numbers are normalized here.
+	const stored = ras?.store?.get( 'matched_segments' );
+	const ids = Array.isArray( stored ) ? stored.filter( id => [ 'string', 'number' ].includes( typeof id ) ).map( String ) : [];
+	const known = ids.filter( id => segments[ id ] );
 	if ( ! known.length ) {
 		return null;
 	}

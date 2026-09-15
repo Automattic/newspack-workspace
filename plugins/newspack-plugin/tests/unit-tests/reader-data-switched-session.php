@@ -110,14 +110,15 @@ class Newspack_Test_Reader_Data_Switched_Session extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The browser store is told to hold a switched session in memory only, and
-	 * which session it is, so the popups script can show the stored segment
-	 * instead of recomputing one from the admin's browser.
+	 * The browser store is told which session it is, so it can hydrate the
+	 * reader's stored data without syncing anything back and the popups script
+	 * can show the stored segment. It is not the preview-style temporary mode,
+	 * which skips hydration altogether.
 	 */
-	public function test_switched_session_config_is_temporary_and_flagged() {
+	public function test_switched_session_config_is_flagged_but_not_temporary() {
 		$this->switch_from_admin();
 		$config = Reader_Data::get_config();
-		self::assertTrue( $config['is_temporary'] );
+		self::assertFalse( $config['is_temporary'] );
 		self::assertTrue( $config['is_switched_session'] );
 	}
 
