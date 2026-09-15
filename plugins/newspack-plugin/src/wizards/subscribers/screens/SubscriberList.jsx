@@ -20,11 +20,12 @@ import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Notice, Router, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Notice, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
 import { fmtRelative, fmtDate } from '../format';
@@ -33,7 +34,7 @@ import { useSubscribers } from '../data/use-subscribers';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { GROUP_LABEL, ROLE_LABELS, groupRoleLabel } from '../labels';
 import { SubscriptionLink } from '../links';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL, displayStatuses, statusRank } from '../status';
+import { STATUS_INDICATORS, STATUS_LABELS, displayStatuses, statusRank } from '../status';
 
 // A subscriber's group memberships, in the shape the column helpers expect
 // ([{ group, role }]). The endpoint embeds them flat on the item as
@@ -170,12 +171,17 @@ export default function SubscriberList() {
 				// against the same reduced display set the badges use, so cancelled is
 				// hidden while any active or on-hold plan remains.
 				getValue: ( { item } ) => subscriberStatuses( item, groupEntriesOf( item ) ),
+				// A subscriber can hold several statuses at once, so they stack rather
+				// than sitting on one line, where two icon-and-label pairs would run
+				// together into one phrase.
 				render: ( { item } ) => (
-					<HStack spacing={ 2 } justify="flex-start" alignment="center" wrap>
+					<Stack direction="column" align="flex-start" gap="sm">
 						{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
-							<Badge key={ status } level={ STATUS_BADGE_LEVEL[ status ] } text={ STATUS_LABELS[ status ] } />
+							<StatusIndicator key={ status } status={ STATUS_INDICATORS[ status ] }>
+								{ STATUS_LABELS[ status ] }
+							</StatusIndicator>
 						) ) }
-					</HStack>
+					</Stack>
 				),
 			},
 			{
@@ -272,7 +278,9 @@ export default function SubscriberList() {
 				render: ( { item } ) => (
 					<HStack spacing={ 1 } justify="flex-start" wrap>
 						{ ( item.tags || [] ).map( t => (
-							<Badge key={ t } text={ t } />
+							<Badge key={ t } intent="none">
+								{ t }
+							</Badge>
 						) ) }
 					</HStack>
 				),

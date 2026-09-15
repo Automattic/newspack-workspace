@@ -41,6 +41,8 @@ type WpFetchError = Error & {
 	code: string;
 	data?: null | {
 		status: number;
+		/** Per-parameter messages sent with `rest_invalid_param`, keyed by parameter name. */
+		params?: Record<string, string>;
 	};
 };
 

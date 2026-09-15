@@ -53,12 +53,10 @@ const RESPONSE_KEYS = [
  * This list is what the block itself may emit, not what view.js reads — the two
  * differ, and applying the narrower rule would wrongly delete entries.
  * `current_page_url` and `status` are built here (see the $metadata literal
- * below) and read by no front-end code. `gate_post_id` is the reverse: nothing
- * here ever sets it, because $metadata is built from a literal that omits it.
- * newspack-plugin's content gate does produce the value — `src/content-gate/
- * gate.js` adds it as a hidden input to every form inside a gate — but this
- * handler never copies that input into $metadata, so view.js's read of it
- * (`view.js:161`) is defensive rather than live.
+ * below) and read by no front-end code. `gate_post_id` arrives as a hidden
+ * input that newspack-plugin's content gate (`src/content-gate/gate.js`) adds
+ * to every form inside a gate; the handler copies it into $metadata so
+ * view.js can put it on the reader_registered / newsletter_signup events.
  */
 const METADATA_KEYS = [
 	'current_page_url',
@@ -567,6 +565,7 @@ function process_form() {
 	$email     = \sanitize_email( $_REQUEST['npe'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	$lists     = array_map( 'sanitize_text_field', $_REQUEST['lists'] ); // phpcs:ignore
 	$popup_id  = isset( $_REQUEST['newspack_popup_id'] ) ? (int) $_REQUEST['newspack_popup_id'] : false; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$gate_post_id = isset( $_REQUEST['gate_post_id'] ) ? (int) $_REQUEST['gate_post_id'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- See METADATA_KEYS.
 	$current_page_url = \wp_get_raw_referer();
 	if ( strpos( $current_page_url, 'http' ) !== 0 ) {
 		$current_page_url = \home_url( $current_page_url );
@@ -576,6 +575,9 @@ function process_form() {
 		'newspack_popup_id'               => $popup_id,
 		'newsletters_subscription_method' => 'newsletters-subscription-block',
 	];
+	if ( $gate_post_id > 0 ) {
+		$metadata['gate_post_id'] = $gate_post_id;
+	}
 
 	// Handle Mailchimp double opt-in option.
 	$provider = \Newspack_Newsletters::get_service_provider();

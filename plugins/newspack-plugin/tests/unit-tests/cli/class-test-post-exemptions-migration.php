@@ -110,18 +110,29 @@ class Test_Post_Exemptions_Migration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The row `get_post_meta()` cannot distinguish from no row at all. It is overwritten,
-	 * not skipped, and its ID reported.
+	 * A falsy row is what turning the exemption toggle off records, so it outranks the
+	 * Memberships flag and survives the run. Only --overwrite-falsy reverses it, for the
+	 * rows that predate the toggle and mean nothing.
 	 */
-	public function test_overwrites_a_falsy_exemption_row() {
+	public function test_preserves_a_falsy_exemption_row_unless_told_to_overwrite() {
 		$post_id = $this->create_force_public_post();
 		update_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, '' );
 
 		$output = $this->run_migration( [ 'live' => true ] );
 
-		$this->assertTrue( $this->has_recorded_exemption( $post_id ) );
-		$this->assertStringContainsString( '1 post(s) carried a falsy exemption row', $output );
+		$this->assertFalse( $this->has_recorded_exemption( $post_id ) );
+		$this->assertStringContainsString( '1 post(s) are forced public by Memberships but carry a falsy exemption row', $output );
 		$this->assertStringContainsString( (string) $post_id, $output );
+
+		$output = $this->run_migration(
+			[
+				'live'            => true,
+				'overwrite-falsy' => true,
+			]
+		);
+
+		$this->assertTrue( $this->has_recorded_exemption( $post_id ) );
+		$this->assertStringContainsString( '1 falsy exemption row(s) were overwritten', $output );
 	}
 
 	/**
@@ -192,7 +203,7 @@ class Test_Post_Exemptions_Migration extends WP_UnitTestCase {
 
 	/**
 	 * Dry-run is the default: it reports the split it would write, and writes neither the
-	 * missing row nor the overwrite.
+	 * missing row nor the falsy one it leaves alone.
 	 */
 	public function test_dry_run_reports_the_split_and_writes_nothing() {
 		$missing_row_id = $this->create_force_public_post();
@@ -204,8 +215,9 @@ class Test_Post_Exemptions_Migration extends WP_UnitTestCase {
 		$this->assertFalse( metadata_exists( 'post', $missing_row_id, Content_Restriction_Control::IS_EXEMPT_META_KEY ) );
 		$this->assertFalse( $this->has_recorded_exemption( $falsy_row_id ) );
 		$this->assertStringContainsString(
-			'2 exemption(s) would be recorded (1 with no row, 1 overwriting a falsy row)',
+			'1 exemption(s) would be recorded (1 with no row, 0 overwriting a falsy row)',
 			$output
 		);
+		$this->assertStringContainsString( '1 falsy row(s) left alone', $output );
 	}
 }

@@ -16,9 +16,10 @@ interface RegistrationProps {
 	onChange: ( registration: Registration ) => void;
 	cardProps?: Partial< React.ComponentPropsWithoutRef< typeof ActionCard > >;
 	isNewsletter?: boolean;
+	siteMeter?: SiteMeterConfig;
 }
 
-export default function Registration( { registration, onChange, isNewsletter = false }: RegistrationProps ) {
+export default function Registration( { registration, onChange, isNewsletter = false, siteMeter }: RegistrationProps ) {
 	const handleChange = useCallback(
 		( value: Partial< Registration > ) => {
 			// Spread the full object so fields this screen doesn't manage
@@ -39,6 +40,8 @@ export default function Registration( { registration, onChange, isNewsletter = f
 							description={ __( 'Allow limited free views before requiring login.', 'newspack-plugin' ) }
 							metering={ registration.metering }
 							onChange={ ( metering: Metering ) => handleChange( { metering } ) }
+							siteCount={ siteMeter?.anonymous_count }
+							sitePeriod={ siteMeter?.period }
 						/>
 					</CardBody>
 					<CardDivider />

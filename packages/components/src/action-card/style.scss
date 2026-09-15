@@ -4,6 +4,7 @@
 
 @use "sass:color";
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-card.newspack-action-card {
 	padding: 0;
@@ -196,11 +197,7 @@
 		align-items: center;
 		display: flex;
 		flex-wrap: wrap;
-		margin-right: -8px;
-
-		.newspack-action-card__title {
-			margin-right: 8px;
-		}
+		gap: wp-vars.$grid-unit-10;
 
 		a {
 			color: inherit;
@@ -370,41 +367,6 @@
 	/* Icon */
 	.newspack_plugin-installer__icon {
 		margin: 0;
-	}
-
-	/* Badge */
-	.newspack-action-card__badge {
-		background: wp-colors.$gray-100;
-		border-radius: 2px;
-		color: wp-colors.$gray-900;
-		display: block;
-		flex: 0 0 auto;
-		font-size: 12px;
-		font-weight: 400;
-		line-height: 1.333;
-		margin: 0 8px 0 0;
-		padding: 2px 4px;
-
-		&.newspack-action-card__badge-level-warning {
-			background-color: color-mix(in srgb, #fff 90%, wp-colors.$alert-yellow);
-			color: color-mix(in srgb, #000 50%, wp-colors.$alert-yellow);
-		}
-		&.newspack-action-card__badge-level-error {
-			background-color: color-mix(in srgb, #fff 90%, wp-colors.$alert-red);
-			color: color-mix(in srgb, #000 50%, wp-colors.$alert-red);
-		}
-		&.newspack-action-card__badge-level-success {
-			background-color: color-mix(in srgb, #fff 90%, wp-colors.$alert-green);
-			color: color-mix(in srgb, #000 50%, wp-colors.$alert-green);
-		}
-		&.newspack-action-card__badge-level-brand {
-			background-color: color-mix(in srgb, #fff 90%, var(--wp-admin-theme-color));
-			color: color-mix(in srgb, #000 50%, var(--wp-admin-theme-color));
-		}
-
-		+ .newspack-action-card__badge {
-			margin-left: -4px;
-		}
 	}
 
 	/* Description Card */

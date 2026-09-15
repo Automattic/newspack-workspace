@@ -26,9 +26,7 @@ $wc_memberships_plan_subscription_products = [];
 $wc_memberships_membership_subscriptions = [];
 
 // Satisfies Memberships::is_active()'s class_exists( 'WC_Memberships' ) check.
-if ( ! class_exists( 'WC_Memberships' ) ) {
-	class WC_Memberships {}
-}
+require_once __DIR__ . '/wc-memberships-class-mock.php';
 
 /**
  * A membership plan: knows which product IDs grant it.
