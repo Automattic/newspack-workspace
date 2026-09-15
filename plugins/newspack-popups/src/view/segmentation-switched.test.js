@@ -5,6 +5,8 @@
  */
 
 let mockSwitched = false;
+let mockSnapshotSegment = 'snapshot-segment';
+let mockShouldDisplay = false;
 
 jest.mock( './utils', () => {
 	const actual = jest.requireActual( './utils' );
@@ -16,9 +18,9 @@ jest.mock( './utils', () => {
 		getIntersectionObserver: () => ( { observe: () => {} } ),
 		isSwitchedSession: () => mockSwitched,
 		getBestPrioritySegment: () => 'live-segment',
-		getBestPrioritySegmentFromSnapshot: () => 'snapshot-segment',
+		getBestPrioritySegmentFromSnapshot: () => mockSnapshotSegment,
 		syncMatchedSegments: jest.fn(),
-		shouldPromptBeDisplayed: () => false,
+		shouldPromptBeDisplayed: () => mockShouldDisplay,
 	};
 } );
 
@@ -43,7 +45,10 @@ describe( 'handleSegmentation in a switched session', () => {
 
 	afterEach( () => {
 		mockSwitched = false;
+		mockSnapshotSegment = 'snapshot-segment';
+		mockShouldDisplay = false;
 		delete window.newspackRAS;
+		jest.useRealTimers();
 	} );
 
 	it( 'sets the match from the stored snapshot while switched', () => {
@@ -56,5 +61,24 @@ describe( 'handleSegmentation in a switched session', () => {
 	it( "sets the match from the live evaluation for the reader's own session", () => {
 		handleSegmentation( [] );
 		expect( ras.segments.setMatch ).toHaveBeenCalledWith( 'live-segment' );
+	} );
+
+	it( 'reads the stored snapshot again when a delayed prompt re-checks before unhiding', () => {
+		// A delayed overlay re-evaluates the match when its timer fires; while
+		// switched that re-check must stay on the snapshot, whatever the live
+		// evaluation would say by then.
+		jest.useFakeTimers();
+		mockSwitched = true;
+		mockShouldDisplay = true;
+		const prompt = document.createElement( 'div' );
+		prompt.setAttribute( 'id', 'id_7' );
+		prompt.setAttribute( 'data-delay', '500' );
+		prompt.classList.add( 'newspack-lightbox', 'hidden' );
+		handleSegmentation( [ prompt ] );
+		mockSnapshotSegment = 'snapshot-later';
+		jest.advanceTimersByTime( 500 );
+		expect( ras.segments.setMatch ).toHaveBeenLastCalledWith( 'snapshot-later' );
+		expect( ras.segments.setMatch ).not.toHaveBeenCalledWith( 'live-segment' );
+		expect( prompt.classList.contains( 'hidden' ) ).toBe( false );
 	} );
 } );

@@ -336,6 +336,17 @@ describe( 'switched sessions', () => {
 		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBe( 'segment3' );
 	} );
 
+	it( 'getBestPrioritySegmentFromSnapshot normalizes numeric ids and survives a malformed snapshot', () => {
+		// The REST route accepts any JSON, and older writers stored numeric ids;
+		// prompt targeting compares ids as strings, so numbers must come back as
+		// strings and a non-list must read as no snapshot rather than throw.
+		const numericSegments = { 12: { criteria: [], priority: 1 }, 43: { criteria: [], priority: 0 } };
+		ras.store.set( 'matched_segments', [ 12, 43 ] );
+		expect( getBestPrioritySegmentFromSnapshot( ras, numericSegments ) ).toBe( '43' );
+		ras.store.set( 'matched_segments', { 0: 'segment1' } );
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBeNull();
+	} );
+
 	it( 'getBestPrioritySegmentFromSnapshot returns null with no snapshot', () => {
 		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBeNull();
 		ras.store.set( 'matched_segments', [] );

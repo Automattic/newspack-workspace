@@ -138,12 +138,12 @@ final class Reader_Data {
 
 		/**
 		 * Allows for "temporary" reader data for things like previews.
-		 * If true, the store will use sessionStorage instead of localStorage.
-		 * A switched session is always temporary: it hydrates the reader's stored
-		 * data but syncs nothing back, so the admin's browsing leaves no trace on
-		 * the reader (the REST route refuses it as well).
+		 * If true, the store will use sessionStorage instead of localStorage and
+		 * skip hydration. A switched session is flagged separately: the store
+		 * must still hydrate the reader's stored data (prompts and pricing read
+		 * it) while syncing nothing back, and the REST route refuses it as well.
 		 */
-		$is_temporary = apply_filters( 'newspack_reader_data_store_is_temp_session', $is_switched_session );
+		$is_temporary = apply_filters( 'newspack_reader_data_store_is_temp_session', false );
 
 		$config = [
 			'store_prefix'        => $store_prefix,
