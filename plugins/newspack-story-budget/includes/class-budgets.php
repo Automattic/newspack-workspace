@@ -49,7 +49,7 @@ class Budgets {
 			self::TAXONOMY,
 			self::get_post_types(),
 			[
-				'labels' => [
+				'labels'       => [
 					'name'          => __( 'Story Budgets', 'newspack-story-budget' ),
 					'singular_name' => __( 'Story Budget', 'newspack-story-budget' ),
 					'edit_item'     => __( 'Edit Story Budget', 'newspack-story-budget' ),
@@ -57,7 +57,17 @@ class Budgets {
 					'all_items'     => __( 'All Budgets', 'newspack-story-budget' ),
 					'no_items'      => __( 'No Budgets', 'newspack-story-budget' ),
 				],
-				'public' => false,
+				'public'       => false,
+				// Budgets are run by whoever edits the desk's stories, not by
+				// whoever curates the site's categories: newsrooms trim
+				// `manage_categories` from editors and still expect them to
+				// create and archive budgets. `current_user_can_manage()` and
+				// core's `edit_term` mapping both read these caps.
+				'capabilities' => [
+					'manage_terms' => 'edit_others_posts',
+					'edit_terms'   => 'edit_others_posts',
+					'delete_terms' => 'edit_others_posts',
+				],
 			]
 		);
 	}
@@ -228,10 +238,11 @@ class Budgets {
 	/**
 	 * Whether the current user may create, rename, archive or reorder budgets.
 	 *
-	 * Resolved from the taxonomy's own capabilities (`manage_categories` by
-	 * default) so the REST routes, the app's UI flag and wp-admin's term
-	 * screens share one floor (NPPM-3199). An ID that is not a budget falls
-	 * back to the floor so managers still reach the route's own 404.
+	 * Resolved from the taxonomy's own capabilities (`edit_others_posts`, set
+	 * in `register_taxonomy()`) so the REST routes, the app's UI flag and
+	 * core's term paths share one floor (NPPM-3199). An ID that is not a
+	 * budget falls back to the floor so managers still reach the route's own
+	 * 404.
 	 *
 	 * @param int|null $budget_id Optional budget (term) ID.
 	 *
