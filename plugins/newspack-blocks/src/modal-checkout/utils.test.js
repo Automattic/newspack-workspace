@@ -2,7 +2,7 @@
  * Tests for modal-checkout utils.
  */
 
-import { afterDeferredScripts, getCheckoutData } from './utils';
+import { afterDeferredScripts, getCheckoutData, whenReaderDataSynced } from './utils';
 
 afterEach( () => {
 	document.body.innerHTML = '';
@@ -71,6 +71,46 @@ describe( 'afterDeferredScripts()', () => {
 
 		document.dispatchEvent( new Event( 'DOMContentLoaded' ) );
 		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'whenReaderDataSynced()', () => {
+	afterEach( () => {
+		delete window.newspackReaderActivation;
+		jest.useRealTimers();
+	} );
+
+	it( 'resolves at once when reader activation or its flush method is absent', async () => {
+		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBeUndefined();
+		window.newspackReaderActivation = { store: {} };
+		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBeUndefined();
+	} );
+
+	it( 'resolves once the store has flushed the key', async () => {
+		let settle;
+		const flush = jest.fn( () => new Promise( resolve => ( settle = resolve ) ) );
+		window.newspackReaderActivation = { store: { flush } };
+		let resolved = false;
+		const waited = whenReaderDataSynced( 'matched_segments' ).then( () => ( resolved = true ) );
+		await Promise.resolve();
+		expect( flush ).toHaveBeenCalledWith( 'matched_segments' );
+		expect( resolved ).toBe( false );
+		settle();
+		await waited;
+		expect( resolved ).toBe( true );
+	} );
+
+	it( 'gives up waiting at the cap so a stalled sync cannot hold the checkout', async () => {
+		jest.useFakeTimers();
+		window.newspackReaderActivation = { store: { flush: () => new Promise( () => {} ) } };
+		let resolved = false;
+		const waited = whenReaderDataSynced( 'matched_segments', 3000 ).then( () => ( resolved = true ) );
+		jest.advanceTimersByTime( 2999 );
+		await Promise.resolve();
+		expect( resolved ).toBe( false );
+		jest.advanceTimersByTime( 1 );
+		await waited;
+		expect( resolved ).toBe( true );
 	} );
 } );
 

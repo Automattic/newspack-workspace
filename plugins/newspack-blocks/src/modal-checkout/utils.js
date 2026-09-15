@@ -54,6 +54,36 @@ function hasDomContentLoadedFired() {
 }
 
 /**
+ * Resolve once the reader-activation store has sent a pending reader-data key
+ * to the server, so a server-side reader of that key sees what this page just
+ * computed: dynamic pricing reads the reader's `matched_segments` when the
+ * checkout loads, and this page's segmentation may have only just written it.
+ *
+ * Resolves at once when reader activation is absent, when its store predates
+ * flush(), or when nothing is pending, and at `timeoutMs` regardless: a stalled
+ * request must not hold the checkout, since the worst case is today's price.
+ *
+ * @param {string} key       Reader-data key to flush.
+ * @param {number} timeoutMs Longest wait before giving up.
+ *
+ * @return {Promise<void>} Settles when the key is synced or the wait is up.
+ */
+export function whenReaderDataSynced( key, timeoutMs = 3000 ) {
+	const store = window.newspackReaderActivation?.store;
+	if ( typeof store?.flush !== 'function' ) {
+		return Promise.resolve();
+	}
+	return new Promise( resolve => {
+		const timer = setTimeout( resolve, timeoutMs );
+		const done = () => {
+			clearTimeout( timer );
+			resolve();
+		};
+		Promise.resolve( store.flush( key ) ).then( done, done );
+	} );
+}
+
+/**
  * Create a hidden input field.
  *
  * @param {string} name  The name of the input field.

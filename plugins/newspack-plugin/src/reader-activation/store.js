@@ -546,6 +546,31 @@ export default function Store() {
 			mergeStrategies.set( key, merge );
 		},
 		/**
+		 * Send a pending key to the server now rather than on the next sync
+		 * tick, for a caller about to make a request whose server-side handling
+		 * reads that key. Resolves once the attempt settles; at once when nothing
+		 * is pending or the session is temporary, which never syncs. A failed
+		 * attempt leaves the key pending, as a failed tick does, and still
+		 * resolves: the caller only needs to know the attempt is over.
+		 *
+		 * @param {string} key Key to flush.
+		 *
+		 * @return {Promise<void>} Settles when the attempt is over.
+		 */
+		flush: key => {
+			const pendingKeys = _get( 'unsynced', true ) || [];
+			if ( ! key || newspack_reader_data?.is_temporary || ! pendingKeys.includes( key ) ) {
+				return Promise.resolve();
+			}
+			const queued = syncQueue.indexOf( key );
+			if ( -1 !== queued ) {
+				syncQueue.splice( queued, 1 );
+			}
+			return syncItem( key )
+				.then( () => clearPendingSync( key ) )
+				.catch( () => setPendingSync( key ) );
+		},
+		/**
 		 * Rehydrate items from server data. Must be called after all merge
 		 * strategies have been registered.
 		 */

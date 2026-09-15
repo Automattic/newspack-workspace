@@ -13,6 +13,7 @@ import { manageDismissed, manageOpened } from './analytics';
 import {
 	afterDeferredScripts,
 	domReady,
+	whenReaderDataSynced,
 	iframeReady,
 	onCheckoutReady,
 	onCheckoutComplete,
@@ -989,8 +990,13 @@ domReady( () => {
 	// by DOMContentLoaded, so the trigger waits for that rather than queueing on
 	// newspackRAS: that queue only flushes once newspack-plugin's reader
 	// activation script runs, and the modal needs only WooCommerce, so on a site
-	// without newspack-plugin a queued trigger would never fire.
-	afterDeferredScripts( handleModalCheckoutUrlParams );
+	// without newspack-plugin a queued trigger would never fire. It then waits
+	// for the reader's segment snapshot to reach the server: segmentation writes
+	// it on this same page load, and pricing rules read it when the checkout
+	// loads, so firing first would price against the previous visit's snapshot.
+	afterDeferredScripts( () => {
+		whenReaderDataSynced( 'matched_segments' ).then( handleModalCheckoutUrlParams );
+	} );
 
 	/**
 	 * Open the modal checkout.
