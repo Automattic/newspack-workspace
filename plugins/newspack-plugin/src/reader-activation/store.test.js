@@ -408,6 +408,8 @@ describe( 'Store', () => {
 			FakeRequest.opened[ 0 ].settle( 500 );
 			await expect( flushed ).resolves.toBeUndefined();
 			expect( pending() ).toContain( 'matched_segments' );
+		} );
+	} );
 	describe( 'switched sessions', () => {
 		// An admin switched into a reader's account: the reader's server items
 		// must reach the browser (prompts and pricing read the stored snapshot),
