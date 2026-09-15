@@ -1354,24 +1354,11 @@ class Contact_Sync extends Sync {
 			return new \WP_Error( 'newspack_esp_sync_contact', __( 'User not found.', 'newspack-plugin' ) );
 		}
 
-		$contact = [
-			'email'    => $user->user_email,
-			'metadata' => [],
-		];
-
 		if ( ! class_exists( '\WC_Customer' ) ) {
-			// Resolve the name through Core_Contact rather than reading
-			// display_name directly, so this path applies the same rules as the
-			// metadata-bearing one: no generated placeholder, and no empty
-			// string overwriting the name the contact already has at the
-			// provider. Only in this branch — below, get_contact_with_metadata()
-			// replaces $contact wholesale, and Core_Contact's constructor
-			// hydrates a WC_Customer whose result would be discarded.
-			$name = ( new Sync\Contact_Metadata\Core_Contact( $user ) )->get_full_name();
-			if ( '' !== $name ) {
-				$contact['name'] = $name;
-			}
-			return $contact;
+			// No WooCommerce customer to read from: the providers still compute
+			// everything they can from the WordPress user alone (registration,
+			// content access, ...).
+			return Sync\Metadata::get_contact_with_metadata( $user, $fields );
 		}
 		$customer = new \WC_Customer( $user_id );
 		if ( ! $customer || ! $customer->get_id() ) {
