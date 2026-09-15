@@ -332,7 +332,12 @@ class Newspack_Newsletters_Contacts {
 		$lists_to_remove = array_diff( array_keys( $lists_config ), $lists );
 
 		/** Clean up lists to add/remove from contact's existing data. */
-		$current_lists   = Newspack_Newsletters_Subscription::get_contact_lists( $email );
+		$current_lists = Newspack_Newsletters_Subscription::get_contact_lists( $email );
+		if ( is_wp_error( $current_lists ) ) {
+			// The change is worked out against the current lists. Computing it
+			// against an empty set instead would silently drop every removal.
+			return $current_lists;
+		}
 		$lists_to_add    = array_diff( $lists_to_add, $current_lists );
 		$lists_to_remove = array_intersect( $current_lists, $lists_to_remove );
 
