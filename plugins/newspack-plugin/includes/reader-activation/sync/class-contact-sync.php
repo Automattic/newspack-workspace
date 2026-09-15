@@ -307,6 +307,41 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
+	 * Fingerprint of what a push of this contact would send to the integrations.
+	 *
+	 * Lets the recurring cron skip readers whose contact has not moved since its
+	 * last push, without making a push to find out (NEWS-3087). Mirrors
+	 * push_to_integrations(): the contact filter, then each push-enabled
+	 * integration's own preparation. Keep the two in step; if they drift, the
+	 * cron pushes unchanged contacts again or, worse, skips a real change.
+	 * Because it is built from the prepared payloads, a change in a field an
+	 * integration does not receive is not a change. The integration IDs and each
+	 * one's outgoing field selection are part of it, so activating an
+	 * integration or enabling a field forces a push even for a reader with no
+	 * value for that field yet.
+	 *
+	 * @param array  $contact The contact data, as returned by get_contact_data().
+	 * @param string $context The context the push would run under; the contact filter receives it.
+	 *
+	 * @return string The fingerprint.
+	 */
+	public static function get_push_fingerprint( $contact, $context = '' ) {
+		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
+		$contact     = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
+		$fingerprint = [];
+		foreach ( Integrations::get_active_configured_integrations() as $integration_id => $integration ) {
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
+			$fingerprint[ $integration_id ] = [
+				'fields'  => $integration->get_enabled_outgoing_fields(),
+				'contact' => self::prepare_contact_for_integration( $integration, $contact ),
+			];
+		}
+		return md5( wp_json_encode( $fingerprint ) );
+	}
+
+	/**
 	 * Push contact data to all active integrations.
 	 *
 	 * Failed integrations are scheduled for retry via ActionScheduler
