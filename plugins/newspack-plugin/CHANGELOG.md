@@ -1,3 +1,10 @@
+## newspack [6.51.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.2...newspack@6.51.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* **plugin:** open the switch modal on the period of a private current plan ([#1085](https://github.com/Automattic/newspack-workspace/issues/1085)) ([0c45222](https://github.com/Automattic/newspack-workspace/commit/0c45222d5f5db16314904bb3cb6e5e63de3e0186))
+
 ## newspack [6.51.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.1...newspack@6.51.2) (2026-09-15)
 
 
