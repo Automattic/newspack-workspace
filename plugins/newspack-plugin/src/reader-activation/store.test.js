@@ -3,6 +3,43 @@
 import Store from './store';
 import { EVENTS, on, off } from './events';
 
+// A fake transport the test can settle by hand: syncItem() builds one
+// XMLHttpRequest per attempt and waits on its onreadystatechange.
+class FakeRequest {
+	open( method, url ) {
+		this.method = method;
+		this.url = url;
+		FakeRequest.opened.push( this );
+	}
+	setRequestHeader() {}
+	send( body ) {
+		this.body = body;
+	}
+	settle( status ) {
+		this.readyState = 4;
+		this.status = status;
+		this.onreadystatechange();
+	}
+}
+
+/**
+ * Install the fake transport for every spec of the enclosing describe, with a
+ * reader-data config the sync can send through.
+ */
+const useFakeTransport = () => {
+	const RealRequest = window.XMLHttpRequest;
+	beforeEach( () => {
+		FakeRequest.opened = [];
+		window.XMLHttpRequest = FakeRequest;
+		window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
+	} );
+	afterEach( () => {
+		window.XMLHttpRequest = RealRequest;
+	} );
+};
+
+const pending = () => JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) || '[]' );
+
 describe( 'Store', () => {
 	beforeEach( () => {
 		// Each Store() registers a 1s sync setInterval. Fake timers keep those
@@ -349,6 +386,95 @@ describe( 'Store', () => {
 			delete window.newspackReaderActivation;
 		} );
 	} );
+	describe( 'flush()', () => {
+		useFakeTransport();
+
+		it( 'resolves true without a request when nothing is pending for the key', async () => {
+			const [ store ] = Store();
+			await expect( store.flush( 'matched_segments' ) ).resolves.toBe( true );
+			expect( FakeRequest.opened ).toHaveLength( 0 );
+		} );
+		it( 'sends a pending key at once, resolves true, and takes it off the sync interval', async () => {
+			const [ store ] = Store();
+			store.set( 'matched_segments', [ '3' ] );
+			const flushed = store.flush( 'matched_segments' );
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			FakeRequest.opened[ 0 ].settle( 200 );
+			await expect( flushed ).resolves.toBe( true );
+			expect( pending() ).not.toContain( 'matched_segments' );
+			// The interval must not send the same write a second time.
+			jest.advanceTimersByTime( 2500 );
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+		} );
+		it( 'resolves true without a request in a temporary session', async () => {
+			window.newspack_reader_data.is_temporary = true;
+			const [ store ] = Store();
+			store.set( 'matched_segments', [ '3' ] );
+			await expect( store.flush( 'matched_segments' ) ).resolves.toBe( true );
+			expect( FakeRequest.opened ).toHaveLength( 0 );
+		} );
+		it( 'resolves false when the request fails and leaves the key pending for a later retry', async () => {
+			const [ store ] = Store();
+			store.set( 'matched_segments', [ '3' ] );
+			const flushed = store.flush( 'matched_segments' );
+			FakeRequest.opened[ 0 ].settle( 500 );
+			await expect( flushed ).resolves.toBe( false );
+			expect( pending() ).toContain( 'matched_segments' );
+		} );
+		it( 'waits for an in-flight write of the key and sends the newer value after it', async () => {
+			// The interval dequeues a key before its request settles; a flush that
+			// starts a second write meanwhile could land before the first, and the
+			// stale snapshot would be what the checkout reads.
+			const [ store ] = Store();
+			store.set( 'matched_segments', [ 'old' ] );
+			jest.advanceTimersByTime( 1000 );
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			store.set( 'matched_segments', [ 'new' ] );
+			const flushed = store.flush( 'matched_segments' );
+			await Promise.resolve();
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			FakeRequest.opened[ 0 ].settle( 200 );
+			for ( let i = 0; i < 10; i++ ) {
+				await Promise.resolve();
+			}
+			expect( FakeRequest.opened ).toHaveLength( 2 );
+			expect( JSON.parse( FakeRequest.opened[ 1 ].body ).value ).toEqual( '["new"]' );
+			FakeRequest.opened[ 1 ].settle( 200 );
+			await flushed;
+			expect( pending() ).not.toContain( 'matched_segments' );
+		} );
+		it( "does not start a second write while the tick's write of the key is in flight, and settles after it", async () => {
+			const [ store ] = Store();
+			store.set( 'matched_segments', [ '3' ] );
+			jest.advanceTimersByTime( 1000 );
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			let resolved = false;
+			const flushed = store.flush( 'matched_segments' ).then( () => ( resolved = true ) );
+			await Promise.resolve();
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			expect( resolved ).toBe( false );
+			FakeRequest.opened[ 0 ].settle( 200 );
+			await flushed;
+			expect( resolved ).toBe( true );
+		} );
+	} );
+	describe( 'sync interval', () => {
+		useFakeTransport();
+
+		it( 'queues a key written twice before its tick once, so the keys behind it are not delayed', () => {
+			const [ store ] = Store();
+			store.set( 'matched_segments', [ '1' ] );
+			store.set( 'matched_segments', [ '2' ] );
+			store.set( 'pageviews', { day: { count: 1 } } );
+			jest.advanceTimersByTime( 1000 );
+			expect( FakeRequest.opened ).toHaveLength( 1 );
+			expect( JSON.parse( FakeRequest.opened[ 0 ].body ) ).toEqual( { key: 'matched_segments', value: '["2"]' } );
+			FakeRequest.opened[ 0 ].settle( 200 );
+			jest.advanceTimersByTime( 1000 );
+			expect( FakeRequest.opened ).toHaveLength( 2 );
+			expect( JSON.parse( FakeRequest.opened[ 1 ].body ).key ).toBe( 'pageviews' );
+		} );
+	} );
 	describe( 'switched sessions', () => {
 		// An admin switched into a reader's account: the reader's server items
 		// must reach the browser (prompts and pricing read the stored snapshot),
@@ -357,7 +483,7 @@ describe( 'Store', () => {
 		afterEach( () => {
 			sessionStorage.clear();
 		} );
-		it( 'hydrates the server items into sessionStorage and never syncs', () => {
+		it( 'hydrates the server items into sessionStorage and never syncs', async () => {
 			window.newspack_reader_data = {
 				is_switched_session: true,
 				api_url: 'http://test/api',
@@ -376,6 +502,7 @@ describe( 'Store', () => {
 			expect( localStorage.getItem( 'np_reader_matched_segments' ) ).toBeNull();
 			store.set( 'pageviews', { day: { count: 1 } } );
 			jest.advanceTimersByTime( 2500 );
+			await store.flush( 'pageviews' );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
 		} );

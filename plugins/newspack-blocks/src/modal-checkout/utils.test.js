@@ -2,7 +2,7 @@
  * Tests for modal-checkout utils.
  */
 
-import { afterDeferredScripts, getCheckoutData } from './utils';
+import { afterDeferredScripts, getCheckoutData, reserveOverlay, whenReaderDataSynced, whenSignedInReaderDataSynced } from './utils';
 
 afterEach( () => {
 	document.body.innerHTML = '';
@@ -71,6 +71,140 @@ describe( 'afterDeferredScripts()', () => {
 
 		document.dispatchEvent( new Event( 'DOMContentLoaded' ) );
 		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'whenReaderDataSynced()', () => {
+	afterEach( () => {
+		delete window.newspackReaderActivation;
+		jest.useRealTimers();
+	} );
+
+	it( 'resolves true at once when reader activation or its flush method is absent', async () => {
+		// Nothing to wait for: the checkout opens with whatever the server holds.
+		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBe( true );
+		window.newspackReaderActivation = { store: {} };
+		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBe( true );
+	} );
+
+	it( 'flushes only after the current task, so a key written by a later DOMContentLoaded listener is pending', async () => {
+		// When this bundle prints before the popups view script, its listener
+		// registers first and popups writes matched_segments in a later listener
+		// of the same dispatch; a flush taken synchronously would see nothing.
+		jest.useFakeTimers();
+		const flush = jest.fn( () => Promise.resolve( true ) );
+		window.newspackReaderActivation = { store: { flush } };
+		const waited = whenReaderDataSynced( 'matched_segments' );
+		await Promise.resolve();
+		expect( flush ).not.toHaveBeenCalled();
+		jest.advanceTimersByTime( 0 );
+		expect( flush ).toHaveBeenCalledWith( 'matched_segments' );
+		await expect( waited ).resolves.toBe( true );
+	} );
+
+	it( 'resolves with the flush result once the store has flushed the key', async () => {
+		let settle;
+		const flush = jest.fn( () => new Promise( resolve => ( settle = resolve ) ) );
+		window.newspackReaderActivation = { store: { flush } };
+		let result;
+		const waited = whenReaderDataSynced( 'matched_segments' ).then( synced => ( result = synced ) );
+		await new Promise( resolve => setTimeout( resolve, 0 ) );
+		expect( flush ).toHaveBeenCalledWith( 'matched_segments' );
+		expect( result ).toBeUndefined();
+		settle( false );
+		await waited;
+		expect( result ).toBe( false );
+	} );
+
+	it( 'resolves false when the store throws synchronously, so the checkout still opens', async () => {
+		window.newspackReaderActivation = {
+			store: {
+				flush: () => {
+					throw new Error( 'API not available.' );
+				},
+			},
+		};
+		await expect( whenReaderDataSynced( 'matched_segments' ) ).resolves.toBe( false );
+	} );
+
+	it( 'gives up at the cap with false so a stalled sync cannot hold the checkout', async () => {
+		jest.useFakeTimers();
+		window.newspackReaderActivation = { store: { flush: () => new Promise( () => {} ) } };
+		let result;
+		const waited = whenReaderDataSynced( 'matched_segments', 3000 ).then( synced => ( result = synced ) );
+		jest.advanceTimersByTime( 2999 );
+		await Promise.resolve();
+		expect( result ).toBeUndefined();
+		jest.advanceTimersByTime( 1 );
+		await waited;
+		expect( result ).toBe( false );
+	} );
+} );
+
+describe( 'whenSignedInReaderDataSynced()', () => {
+	afterEach( () => {
+		delete window.newspackReaderActivation;
+		jest.useRealTimers();
+	} );
+
+	it( 'resolves true at once when reader activation is absent', async () => {
+		await expect( whenSignedInReaderDataSynced( 'matched_segments' ) ).resolves.toBe( true );
+	} );
+
+	it( 'flushes the key only after the session has hydrated', async () => {
+		let hydrated;
+		const hydrateSession = jest.fn( () => new Promise( resolve => ( hydrated = resolve ) ) );
+		const flush = jest.fn( () => Promise.resolve( true ) );
+		window.newspackReaderActivation = { hydrateSession, store: { flush } };
+		let result;
+		const waited = whenSignedInReaderDataSynced( 'matched_segments' ).then( synced => ( result = synced ) );
+		await Promise.resolve();
+		expect( hydrateSession ).toHaveBeenCalledTimes( 1 );
+		expect( flush ).not.toHaveBeenCalled();
+		hydrated( 'nonce' );
+		await waited;
+		expect( flush ).toHaveBeenCalledWith( 'matched_segments' );
+		expect( result ).toBe( true );
+	} );
+
+	it( 'gives up at the cap with false when hydration never settles', async () => {
+		jest.useFakeTimers();
+		const flush = jest.fn( () => Promise.resolve( true ) );
+		window.newspackReaderActivation = { hydrateSession: () => new Promise( () => {} ), store: { flush } };
+		let result;
+		const waited = whenSignedInReaderDataSynced( 'matched_segments', 3000 ).then( synced => ( result = synced ) );
+		jest.advanceTimersByTime( 2999 );
+		await Promise.resolve();
+		expect( result ).toBeUndefined();
+		jest.advanceTimersByTime( 1 );
+		await waited;
+		expect( result ).toBe( false );
+		expect( flush ).not.toHaveBeenCalled();
+	} );
+} );
+
+describe( 'reserveOverlay()', () => {
+	afterEach( () => {
+		delete window.newspackReaderActivation;
+	} );
+
+	it( 'returns a release that does nothing when reader activation has no overlays', () => {
+		const release = reserveOverlay();
+		expect( () => release() ).not.toThrow();
+		window.newspackReaderActivation = {};
+		expect( () => reserveOverlay()() ).not.toThrow();
+	} );
+
+	it( 'registers an overlay and releases that same overlay', () => {
+		// Prompts hold back while any overlay is registered, so the reservation
+		// must be the one released, not whatever registered in the meantime.
+		const overlays = { add: jest.fn( () => 'reserved' ), remove: jest.fn() };
+		window.newspackReaderActivation = { overlays };
+		const release = reserveOverlay();
+		expect( overlays.add ).toHaveBeenCalledTimes( 1 );
+		expect( overlays.remove ).not.toHaveBeenCalled();
+		release();
+		expect( overlays.remove ).toHaveBeenCalledWith( 'reserved' );
 	} );
 } );
 

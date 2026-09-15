@@ -13,6 +13,9 @@ import { manageDismissed, manageOpened } from './analytics';
 import {
 	afterDeferredScripts,
 	domReady,
+	reserveOverlay,
+	whenReaderDataSynced,
+	whenSignedInReaderDataSynced,
 	iframeReady,
 	onCheckoutReady,
 	onCheckoutComplete,
@@ -462,7 +465,19 @@ domReady( () => {
 			window.newspackReaderActivation.openAuthModal( {
 				title: newspackBlocksModal.labels.auth_modal_title,
 				onSuccess: ( message, authData ) => {
-					cartReq
+					// The reader was anonymous when this page evaluated their
+					// segments. Let the session hydrate and the snapshot reach the
+					// server before the checkout reads it for pricing. The auth
+					// modal has already closed, so show the checkout shell and its
+					// spinner meanwhile rather than the page the reader came from.
+					if ( isModalCheckout ) {
+						openCheckoutShell();
+					}
+					whenSignedInReaderDataSynced( 'matched_segments' )
+						.then( synced => {
+							warnUnlessSynced( synced );
+							return cartReq;
+						} )
 						.then( url => {
 							// If registered and in a modal checkout, append the registration flag query param to the url.
 							if ( authData?.registered && isModalCheckout ) {
@@ -662,6 +677,15 @@ domReady( () => {
 		document.removeEventListener( 'keydown', handleKeydown );
 	};
 
+	/**
+	 * Show the checkout modal with only its spinner, for a wait that precedes
+	 * the checkout request. openCheckout() then fills it in place.
+	 */
+	const openCheckoutShell = () => {
+		spinner.style.display = 'flex';
+		openModal( modalCheckout );
+	};
+
 	const openCheckout = url => {
 		if ( url ) {
 			iframe.src = url;
@@ -682,6 +706,12 @@ domReady( () => {
 	};
 
 	const openModal = el => {
+		// An open modal keeps its overlay: registering a second one would leave
+		// the first behind for good, and prompts would stay held back after the
+		// modal closes.
+		if ( el.getAttribute( 'data-state' ) === 'open' ) {
+			return;
+		}
 		if ( window.newspackReaderActivation?.overlays ) {
 			el.overlayId = window.newspackReaderActivation?.overlays.add();
 		}
@@ -931,6 +961,30 @@ domReady( () => {
 	};
 
 	/**
+	 * Whether the page URL asks this bundle to open a checkout.
+	 *
+	 * @return {boolean} Whether a trigger is present.
+	 */
+	const hasCheckoutUrlTrigger = () => new URLSearchParams( window.location.search ).has( 'checkout' );
+
+	/**
+	 * Leave a trace when a checkout opens without the reader's segment snapshot
+	 * confirmed on the server: its pricing may then follow the previous visit's
+	 * snapshot, and nothing else records that this happened.
+	 *
+	 * @param {boolean} synced Whether the snapshot reached the server in time.
+	 */
+	const warnUnlessSynced = synced => {
+		if ( synced ) {
+			return;
+		}
+		// eslint-disable-next-line no-console
+		console.warn(
+			"Newspack modal checkout: the reader's segment snapshot did not reach the server in time; the checkout may price against the previous snapshot."
+		);
+	};
+
+	/**
 	 * Handle modal checkout url param triggers.
 	 */
 	const handleModalCheckoutUrlParams = () => {
@@ -989,8 +1043,30 @@ domReady( () => {
 	// by DOMContentLoaded, so the trigger waits for that rather than queueing on
 	// newspackRAS: that queue only flushes once newspack-plugin's reader
 	// activation script runs, and the modal needs only WooCommerce, so on a site
-	// without newspack-plugin a queued trigger would never fire.
-	afterDeferredScripts( handleModalCheckoutUrlParams );
+	// without newspack-plugin a queued trigger would never fire. It then waits
+	// for the reader's segment snapshot to reach the server: segmentation writes
+	// it on this same page load, and pricing rules read it when the checkout
+	// loads, so firing first would price against the previous visit's snapshot.
+	// Only a page that carries a trigger waits; any other page that loads this
+	// bundle leaves the store to its own sync schedule. The checkout registers
+	// its overlay only once it opens, so a prompt due during the wait would
+	// show under it and stay: prompts are held back until the trigger has run,
+	// by which point a checkout or sign-in modal it opened holds its own
+	// overlay, and a trigger that failed leaves prompts free.
+	afterDeferredScripts( () => {
+		if ( ! hasCheckoutUrlTrigger() ) {
+			return;
+		}
+		const releaseOverlay = reserveOverlay();
+		whenReaderDataSynced( 'matched_segments' ).then( synced => {
+			warnUnlessSynced( synced );
+			try {
+				handleModalCheckoutUrlParams();
+			} finally {
+				releaseOverlay();
+			}
+		} );
+	} );
 
 	/**
 	 * Open the modal checkout.

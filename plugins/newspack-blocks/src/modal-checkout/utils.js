@@ -54,6 +54,100 @@ function hasDomContentLoadedFired() {
 }
 
 /**
+ * Resolve once the reader-activation store has sent a pending reader-data key
+ * to the server, so a server-side reader of that key sees what this page just
+ * computed: dynamic pricing reads the reader's `matched_segments` when the
+ * checkout loads, and this page's segmentation may have only just written it.
+ *
+ * The flush waits for the current task to end first. When this bundle prints
+ * ahead of the popups view script, its DOMContentLoaded listener runs before
+ * the one that writes `matched_segments`, and a flush taken at once would find
+ * nothing pending.
+ *
+ * Resolves at once when reader activation is absent, when its store predates
+ * flush(), or when nothing is pending, and at `timeoutMs` regardless: a stalled
+ * request must not hold the checkout, since the worst case is today's price.
+ *
+ * @param {string} key       Reader-data key to flush.
+ * @param {number} timeoutMs Longest wait before giving up.
+ *
+ * @return {Promise<boolean>} Whether the server holds the key's current value
+ *                            once the wait is over: true when it was sent or
+ *                            there was nothing to send, false when the write
+ *                            failed, threw, or the wait ran out.
+ */
+export function whenReaderDataSynced( key, timeoutMs = 3000 ) {
+	const store = window.newspackReaderActivation?.store;
+	if ( typeof store?.flush !== 'function' ) {
+		return Promise.resolve( true );
+	}
+	return new Promise( resolve => {
+		const timer = setTimeout( () => resolve( false ), timeoutMs );
+		const done = synced => {
+			clearTimeout( timer );
+			resolve( synced === true );
+		};
+		setTimeout( () => {
+			// A flush that throws before returning a promise counts as a failed
+			// write: the checkout still opens.
+			new Promise( settle => settle( store.flush( key ) ) ).then( done, () => done( false ) );
+		}, 0 );
+	} );
+}
+
+/**
+ * Hold campaign prompts back until the caller releases them: reader activation
+ * shows no prompt overlay while another overlay is registered, and a checkout
+ * that has not opened yet holds none of its own. Returns the release; a no-op
+ * when reader activation or its overlays are absent.
+ *
+ * @return {Function} Releases the reservation.
+ */
+export function reserveOverlay() {
+	const overlays = window.newspackReaderActivation?.overlays;
+	if ( typeof overlays?.add !== 'function' ) {
+		return () => {};
+	}
+	const id = overlays.add();
+	return () => overlays.remove( id );
+}
+
+/**
+ * Resolve once a reader who just signed in on this page has their server data
+ * in the browser and the snapshot computed from it on the server. Sign-in
+ * inside the checkout modal leaves the page as it was evaluated anonymously:
+ * reader activation hydrates the session afterwards, segmentation recomputes
+ * on that hydration, and only then is there a snapshot worth flushing.
+ *
+ * Resolves at once when reader activation is absent, and at `timeoutMs`
+ * regardless, shared between the hydration and the flush.
+ *
+ * @param {string} key       Reader-data key to flush once hydrated.
+ * @param {number} timeoutMs Longest wait before giving up.
+ *
+ * @return {Promise<boolean>} Whether the server holds the key's current value
+ *                            once the wait is over, as whenReaderDataSynced()
+ *                            reports it; false when the wait ran out.
+ */
+export function whenSignedInReaderDataSynced( key, timeoutMs = 3000 ) {
+	const ras = window.newspackReaderActivation;
+	if ( ! ras ) {
+		return Promise.resolve( true );
+	}
+	const started = Date.now();
+	return new Promise( resolve => {
+		const timer = setTimeout( () => resolve( false ), timeoutMs );
+		const done = synced => {
+			clearTimeout( timer );
+			resolve( synced === true );
+		};
+		Promise.resolve( ras.hydrateSession?.() )
+			.then( () => whenReaderDataSynced( key, Math.max( 0, timeoutMs - ( Date.now() - started ) ) ) )
+			.then( done, () => done( false ) );
+	} );
+}
+
+/**
  * Create a hidden input field.
  *
  * @param {string} name  The name of the input field.

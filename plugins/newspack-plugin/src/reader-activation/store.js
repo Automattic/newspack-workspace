@@ -88,11 +88,47 @@ function initializeSyncInterval( queue ) {
 		if ( ! queue.length || newspack_reader_data?.is_temporary || isSwitchedSession() ) {
 			return;
 		}
-		const key = queue.shift();
-		syncItem( key )
-			.then( () => clearPendingSync( key ) )
-			.catch( () => setPendingSync( key ) );
+		sendItem( queue.shift() );
 	}, 1000 );
+}
+
+/**
+ * Writes in flight, by key. A second write of a key must not start while one
+ * is still pending: the two could land out of order and the stale value win.
+ *
+ * @type {Map<string, Promise>}
+ */
+const inFlight = new Map();
+
+/**
+ * Send a key's current value, after any write of the same key still in flight.
+ * Both the sync tick and flush() go through here, so a flush can reuse a write
+ * the tick started instead of racing it. Runs at once when nothing is in flight.
+ *
+ * @param {string} key Key to send.
+ *
+ * @return {Promise<boolean>} Whether the key is off the pending list once this
+ *                            attempt is over.
+ */
+function sendItem( key ) {
+	const previous = inFlight.get( key );
+	const send = () =>
+		syncItem( key )
+			.then( () => {
+				clearPendingSync( key );
+				return true;
+			} )
+			.catch( () => {
+				setPendingSync( key );
+				return false;
+			} );
+	const attempt = ( previous ? previous.then( send, send ) : send() ).finally( () => {
+		if ( inFlight.get( key ) === attempt ) {
+			inFlight.delete( key );
+		}
+	} );
+	inFlight.set( key, attempt );
+	return attempt;
 }
 
 /**
@@ -306,15 +342,26 @@ export default function Store() {
 	const syncQueue = [];
 	initializeSyncInterval( syncQueue );
 
+	/**
+	 * Queue a key for the sync interval once. The interval sends one key per
+	 * tick, so a key queued twice would hold a slot and delay every key
+	 * behind it; its latest value goes out on the first send either way.
+	 *
+	 * @param {string} key Key to queue.
+	 */
+	function enqueueSync( key ) {
+		if ( ! syncQueue.includes( key ) ) {
+			syncQueue.push( key );
+		}
+	}
+
 	// Push unsynced items to the sync queue, pruning existing read-only
 	// keys in order to address the upgrade case.
 	const readOnlyKeys = newspack_reader_data?.read_only_keys || [];
 	const unsynced = ( _get( 'unsynced', true ) || [] ).filter( key => ! readOnlyKeys.includes( key ) );
 	_set( 'unsynced', unsynced, true );
 	for ( const key of unsynced ) {
-		if ( ! syncQueue.includes( key ) ) {
-			syncQueue.push( key );
-		}
+		enqueueSync( key );
 	}
 
 	// When session hydration provides a nonce, rehydrate server items
@@ -326,9 +373,7 @@ export default function Store() {
 		// Re-queue unsynced items.
 		const unsyncedKeys = _get( 'unsynced', true ) || [];
 		for ( const key of unsyncedKeys ) {
-			if ( ! syncQueue.includes( key ) ) {
-				syncQueue.push( key );
-			}
+			enqueueSync( key );
 		}
 	} );
 
@@ -484,7 +529,7 @@ export default function Store() {
 			_set( key, value, false );
 			if ( sync ) {
 				setPendingSync( key );
-				syncQueue.push( key );
+				enqueueSync( key );
 			}
 		},
 		/**
@@ -500,7 +545,7 @@ export default function Store() {
 			config.storage.removeItem( getStoreItemKey( key ) );
 			emit( EVENTS.data, { key, value: undefined } );
 			setPendingSync( key );
-			syncQueue.push( key );
+			enqueueSync( key );
 		},
 		/**
 		 * Add a value to a collection.
@@ -552,6 +597,35 @@ export default function Store() {
 				console.warn( `Store key '${ key }' already has a merge strategy registered. Overwriting.` );
 			}
 			mergeStrategies.set( key, merge );
+		},
+		/**
+		 * Send a pending key to the server now rather than on the next sync
+		 * tick, for a caller about to make a request whose server-side handling
+		 * reads that key. Resolves once the attempt settles; at once when nothing
+		 * is pending or the session never syncs. A failed attempt leaves the key
+		 * pending, as a failed tick does, and still resolves, reporting the
+		 * failure so the caller can tell a synced key from a stale one.
+		 *
+		 * @param {string} key Key to flush.
+		 *
+		 * @return {Promise<boolean>} Whether the key is off the pending list once
+		 *                            the attempt is over: true when it was sent or
+		 *                            there was nothing to send, false when the
+		 *                            write failed and the key stays pending.
+		 */
+		flush: key => {
+			if ( ! key || newspack_reader_data?.is_temporary || isSwitchedSession() ) {
+				return Promise.resolve( true );
+			}
+			const queued = syncQueue.indexOf( key );
+			if ( -1 !== queued ) {
+				syncQueue.splice( queued, 1 );
+			}
+			const pendingKeys = _get( 'unsynced', true ) || [];
+			if ( ! pendingKeys.includes( key ) ) {
+				return Promise.resolve( true );
+			}
+			return sendItem( key );
 		},
 		/**
 		 * Rehydrate items from server data. Must be called after all merge

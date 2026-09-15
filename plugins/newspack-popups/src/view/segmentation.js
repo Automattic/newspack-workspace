@@ -42,6 +42,23 @@ export const handleSegmentation = prompts => {
 		// server-side consumers (dynamic pricing, available-deals) can read it.
 		syncMatchedSegments( ras, segments );
 
+		// A reader who signs in mid-page was evaluated as anonymous above. Their
+		// server data arrives with the session hydration, so the match and the
+		// stored set are computed again then, before a checkout opened right
+		// after sign-in reads them. A reader activation older than the session
+		// event rejects the name; prompts still need evaluating on such a site.
+		try {
+			ras?.on?.( 'session', () => {
+				const hydratedMatchingSegment = resolveMatchingSegment();
+				if ( ras.segments ) {
+					ras.segments.setMatch( hydratedMatchingSegment );
+				}
+				syncMatchedSegments( ras, segments );
+			} );
+		} catch ( e ) {
+			debug( 'session event unavailable', e );
+		}
+
 		let overlayDisplayed;
 
 		prompts.forEach( prompt => {
