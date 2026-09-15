@@ -37,7 +37,7 @@ class Group_Subscription_API {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_search_users' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'admin_permission_callback' ],
 				'args'                => [
 					'search'          => [
 						'type'              => 'string',
@@ -184,16 +184,42 @@ class Group_Subscription_API {
 	/**
 	 * Permission callback for managing group subscriptions.
 	 *
+	 * Shared by every route in the namespace apart from the member search, which
+	 * answers about the site's user records instead and uses
+	 * {@see self::admin_permission_callback()}.
+	 *
 	 * @param \WP_REST_Request $request The request object.
-	 * @return bool Whether the user has permission to invite to the group subscription.
+	 * @return bool Whether the caller may manage the subscription named in the request.
 	 */
 	public static function permission_callback( $request ) {
+		// Neither branch below can legitimately pass for an anonymous caller, so this
+		// turns away nothing that works today. It is the boundary at which a regression
+		// in either branch would otherwise become an unauthenticated grant.
+		if ( ! is_user_logged_in() ) {
+			return false;
+		}
 		$subscription_id = $request->get_param( 'subscription_id' );
 		$subscription    = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
 		if ( ! $subscription ) {
 			return false;
 		}
 		return current_user_can( 'manage_woocommerce' ) || Group_Subscription::user_is_manager( get_current_user_id(), $subscription );
+	}
+
+	/**
+	 * Permission callback for routes that answer about the site's user records rather
+	 * than about the subscription named in the request.
+	 *
+	 * Managing a group authorizes the caller for that subscription, which is not the
+	 * same object. Store staff are the only callers with a UI for these routes: the
+	 * subscription admin metabox calls them, while the reader-facing My Account bundle
+	 * uses /invite-link and /name.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return bool Whether the caller may search the site's readers.
+	 */
+	public static function admin_permission_callback( $request ) {
+		return current_user_can( 'manage_woocommerce' ) && self::permission_callback( $request );
 	}
 
 	/**
@@ -213,9 +239,21 @@ class Group_Subscription_API {
 		if ( ! $subscription ) {
 			return \rest_ensure_response( new \WP_Error( 'newspack_group_subscription_api_search_users', __( 'Subscription not found.', 'newspack-plugin' ) ) );
 		}
+		// The candidate query is intentionally NOT role-restricted. Group_Subscription::is_eligible_member()
+		// -- which runs the newspack_group_subscription_member_eligible filter -- is the sole authority on
+		// who is an eligible group member, so a publisher can opt a custom-role user in (or a normally
+		// eligible role-holder out) via that filter. A role__in allowlist here would silently exclude an
+		// opted-in user (and could never exclude an opted-out one) before the predicate ever runs, so
+		// results are post-filtered against is_eligible_member() below instead.
 		$exclude   = Group_Subscription::get_members( $subscription );
 		$exclude[] = $subscription->get_user_id();
-		$query1    = get_users(
+		// Each query is capped at 50 candidates ('number' below); results are then post-filtered
+		// through is_eligible_member() below, so a response may hold fewer than the cap. A
+		// publisher can raise the cap via the newspack_group_subscription_user_query_args filter.
+		// The cap applies before that post-filter, so on a large site a search term whose first 50
+		// matches are all ineligible (e.g. staff) returns an empty list even though eligible matches
+		// exist further down; raise the cap via the filter above if that bites.
+		$query1 = get_users(
 			/**
 			 * Filter the user query args for searching for group subscription users.
 			 *
@@ -225,11 +263,11 @@ class Group_Subscription_API {
 			apply_filters(
 				'newspack_group_subscription_user_query_args',
 				[
+					'number'         => 50,
 					'fields'         => [ 'ID', 'user_email' ],
 					'exclude'        => $exclude,
 					'search'         => "*$search*",
 					'search_columns' => [ 'ID', 'user_login', 'user_url', 'user_email', 'user_nicename', 'display_name' ],
-					'role__in'       => Reader_Activation::get_reader_roles(),
 				],
 				'main_query'
 			)
@@ -245,9 +283,9 @@ class Group_Subscription_API {
 			\apply_filters(
 				'newspack_group_subscription_user_query_args',
 				[
+					'number'     => 50,
 					'fields'     => [ 'ID', 'user_email' ],
 					'exclude'    => $exclude,
-					'role__in'   => Reader_Activation::get_reader_roles(),
 					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 						'relation' => 'OR',
 						[
@@ -265,6 +303,13 @@ class Group_Subscription_API {
 				'meta_query'
 			)
 		);
+		$merged = array_merge( $query1, $query2 );
+		if ( ! empty( $merged ) ) {
+			// Prime the user and user-meta caches once, up front, so the per-candidate
+			// is_eligible_member() predicate below (get_user_by() + meta reads + user_can())
+			// hits cache instead of issuing two more queries per candidate.
+			\cache_users( array_map( 'intval', \wp_list_pluck( $merged, 'ID' ) ) );
+		}
 		$users = array_map(
 			function( $user ) {
 				return [
@@ -272,7 +317,12 @@ class Group_Subscription_API {
 					'text' => $user->user_email . ' (#' . $user->ID . ')',
 				];
 			},
-			array_merge( $query1, $query2 )
+			array_filter(
+				$merged,
+				function( $user ) {
+					return Group_Subscription::is_eligible_member( (int) $user->ID );
+				}
+			)
 		);
 
 		// Sort by ID.

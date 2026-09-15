@@ -334,20 +334,33 @@ class Patches {
 	 * @return array Filtered array of capabilities.
 	 */
 	public static function prevent_accidental_page_deletion( $caps, $cap, $user_id, $args ) {
-		// If no $args to check, bail early.
-		if ( empty( $args ) ) {
+		// wp_ajax_delete_page() and the XML-RPC wp_deletePage() ask for
+		// `delete_page`, so both spellings have to match or those two routes bypass
+		// the guard. Every other capability returns here: this filter runs on every
+		// capability check in the request, and $args[0] is a post ID only for post
+		// capabilities.
+		//
+		// Both spellings suffice because every protected ID is a page. A post type
+		// registered with its own capability_type and map_meta_cap => false arrives
+		// as `delete_<singular>`, which this whitelist does not match.
+		if ( ! in_array( $cap, [ 'delete_post', 'delete_page' ], true ) ) {
 			return $caps;
 		}
 
-		$post_id = $args[0]; // First item is usually the post ID.
-
-		// If $post_id isn't a valid post, bail early.
-		if ( false === get_post_type( $post_id ) ) {
+		// Nothing to compare without an ID, and $args is empty entirely for some
+		// capability checks.
+		if ( empty( $args[0] ) ) {
 			return $caps;
 		}
 
-		// If the current page ID is protected, and the capability being checked is for deletion, do not allow.
-		if ( 'delete_post' === $cap && in_array( $post_id, self::get_protected_page_ids(), true ) ) {
+		// map_meta_cap passes on whatever the caller handed current_user_can(), which
+		// for a post capability may be the post object. Cast because the comparison
+		// below is strict against a list of ints, so a numeric string would slip past
+		// the guard silently.
+		$post_id = (int) ( $args[0] instanceof \WP_Post ? $args[0]->ID : $args[0] );
+
+		// If the current page ID is protected, do not allow it to be deleted.
+		if ( in_array( $post_id, self::get_protected_page_ids(), true ) ) {
 			$caps[] = 'do_not_allow';
 		}
 
