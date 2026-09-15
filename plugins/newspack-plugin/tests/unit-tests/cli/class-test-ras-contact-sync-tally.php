@@ -116,14 +116,18 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 	 * does not extend WC_Order, so building a subscribed reader's full metadata would
 	 * trip an unrelated mock-fidelity error. Scoping skips those classes cleanly.
 	 *
-	 * @param array $config Batch sync configuration.
+	 * @param array $config  Batch sync configuration.
+	 * @param array $options Sync options merged over the field-scoped defaults.
 	 * @return array|\WP_Error
 	 */
-	private function run_sync( array $config ) {
-		$config['options'] = [
-			'skip_lists' => false,
-			'fields'     => [ 'Content Access' ],
-		];
+	private function run_sync( array $config, array $options = [] ) {
+		$config['options'] = array_merge(
+			[
+				'skip_lists' => false,
+				'fields'     => [ 'Content Access' ],
+			],
+			$options
+		);
 		$sync_contacts_method = new \ReflectionMethod( RAS_Contact_Sync::class, 'sync_contacts' );
 		$sync_contacts_method->setAccessible( true );
 		return $sync_contacts_method->invoke( null, $config );
@@ -248,5 +252,75 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 		$this->run_sync( [ 'user_ids' => [ $this->active_user_id, $this->inactive_user_id ] ] );
 
 		$this->assertSame( 2, $this->get_unpaused_contacts(), 'Each wet-pushed contact reached the integrations and counts toward pacing.' );
+	}
+
+	/**
+	 * A reader the integration does not have is the case --existing-only exists
+	 * for: skipped, never failed, so a partially-synced site still exits 0.
+	 */
+	public function test_existing_only_tallies_missing_contacts_as_skipped() {
+		Failing_Sample_Integration::$contact_exists = false;
+		WP_CLI::reset();
+
+		$tally = $this->run_sync( [ 'user_ids' => [ $this->active_user_id ] ], [ 'existing_only' => true ] );
+
+		$this->assertSame(
+			[
+				'processed' => 0,
+				'errors'    => 0,
+				'skipped'   => 1,
+			],
+			$tally
+		);
+		$this->assertSame( 0, Failing_Sample_Integration::$push_count, 'No push reaches an integration that reports the contact missing.' );
+		$this->assertStringNotContainsString( 'Error syncing', implode( "\n", WP_CLI::$logs ), 'A deliberate skip is not logged as a sync error.' );
+	}
+
+	/**
+	 * A read the integration could not complete is an error the operator
+	 * re-runs, not a silent skip that would hide a provider outage.
+	 */
+	public function test_existing_only_tallies_failed_reads_as_errors() {
+		Failing_Sample_Integration::$contact_exists = new \WP_Error( 'mock_read_failed', 'Provider unreachable' );
+
+		$tally = $this->run_sync( [ 'user_ids' => [ $this->active_user_id ] ], [ 'existing_only' => true ] );
+
+		$this->assertSame(
+			[
+				'processed' => 0,
+				'errors'    => 1,
+				'skipped'   => 0,
+			],
+			$tally
+		);
+		$this->assertSame( 0, Failing_Sample_Integration::$push_count, 'A contact whose existence could not be confirmed is not pushed.' );
+	}
+
+	/**
+	 * A dry run under --existing-only reads each contact at the provider —
+	 * that is what previewing the skip means — so it previews the tally and
+	 * paces like a wet run.
+	 */
+	public function test_dry_run_existing_only_previews_skips_and_accrues_pacing() {
+		Failing_Sample_Integration::$contact_exists = false;
+
+		$tally = $this->run_sync(
+			[
+				'user_ids'   => [ $this->active_user_id ],
+				'is_dry_run' => true,
+			],
+			[ 'existing_only' => true ]
+		);
+
+		$this->assertSame(
+			[
+				'processed' => 0,
+				'errors'    => 0,
+				'skipped'   => 1,
+			],
+			$tally,
+			'The dry-run summary previews the skip.'
+		);
+		$this->assertSame( 1, $this->get_unpaused_contacts(), 'The existence read is provider traffic to pace.' );
 	}
 }

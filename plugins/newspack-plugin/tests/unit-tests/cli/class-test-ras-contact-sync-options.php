@@ -44,8 +44,9 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 		$options = $this->parse( [] );
 		$this->assertSame(
 			[
-				'skip_lists' => false,
-				'fields'     => null,
+				'skip_lists'    => false,
+				'fields'        => null,
+				'existing_only' => false,
 			],
 			$options
 		);
@@ -54,6 +55,13 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 	public function test_skip_lists_flag_sets_true() {
 		$options = $this->parse( [ 'skip-lists' => true ] );
 		$this->assertTrue( $options['skip_lists'] );
+		$this->assertNull( $options['fields'] );
+	}
+
+	public function test_existing_only_flag_sets_true() {
+		$options = $this->parse( [ 'existing-only' => true ] );
+		$this->assertTrue( $options['existing_only'] );
+		$this->assertFalse( $options['skip_lists'] );
 		$this->assertNull( $options['fields'] );
 	}
 

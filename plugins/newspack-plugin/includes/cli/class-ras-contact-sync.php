@@ -62,23 +62,41 @@ class RAS_Contact_Sync {
 	/**
 	 * Record the outcome of a single sync_contact() call in the results tally.
 	 *
-	 * A wet-run contact reached the integrations, so it counts toward the
-	 * inter-batch pacing regardless of whether the push succeeded. A dry-run
-	 * push short-circuits before any integration is called, so pacing it would
-	 * only slow the preview without spacing any external request.
+	 * A contact that reached the integrations counts toward the inter-batch
+	 * pacing regardless of whether the push succeeded. A plain dry-run push
+	 * short-circuits before any integration is called, so pacing it would only
+	 * slow the preview without spacing any external request — but a dry run
+	 * under `--existing-only` does perform the existence read, so the caller
+	 * says whether the contact generated provider traffic.
 	 *
-	 * @param true|\WP_Error $result     The value returned by Contact_Sync::sync_contact().
-	 * @param bool           $is_dry_run Whether the run is a dry run (no provider traffic on push).
+	 * A `WP_Error` carrying the canonical not-found code is a deliberate
+	 * `--existing-only` skip: tallied as skipped rather than as an error, as
+	 * the pull leg already does for readers the provider does not know.
+	 *
+	 * @param true|\WP_Error $result               The value returned by Contact_Sync::sync_contact().
+	 * @param bool           $reached_integrations Whether the contact generated provider traffic.
 	 */
-	protected static function record_result( $result, $is_dry_run = false ) {
-		if ( ! $is_dry_run ) {
+	protected static function record_result( $result, $reached_integrations = true ) {
+		if ( $reached_integrations ) {
 			static::$unpaused_contacts++;
 		}
-		if ( \is_wp_error( $result ) ) {
+		if ( self::is_skipped_result( $result ) ) {
+			static::$results['skipped']++;
+		} elseif ( \is_wp_error( $result ) ) {
 			static::$results['errors']++;
 		} else {
 			static::$results['processed']++;
 		}
+	}
+
+	/**
+	 * Whether a sync_contact() result is an `--existing-only` skip rather than a failure.
+	 *
+	 * @param mixed $result The value returned by Contact_Sync::sync_contact().
+	 * @return bool
+	 */
+	private static function is_skipped_result( $result ): bool {
+		return \is_wp_error( $result ) && Integration::CONTACT_NOT_FOUND_ERROR_CODE === $result->get_error_code();
 	}
 
 	/**
@@ -113,8 +131,8 @@ class RAS_Contact_Sync {
 	 *   @type int         $config['max_batches'] Maximum number of batches to process.
 	 *   @type string      $config['context'] Context of the sync.
 	 *   @type array       $config['options'] Sync options ( `skip_lists` bool, `fields`
-	 *                     string[]|null, `integration_id` string|null to scope the push
-	 *                     fan-out to a single integration ).
+	 *                     string[]|null, `existing_only` bool, `integration_id` string|null
+	 *                     to scope the push fan-out to a single integration ).
 	 * }
 	 *
 	 * @return array|\WP_Error Results tally ( `processed`, `errors`, `skipped` ) or WP_Error.
@@ -135,6 +153,10 @@ class RAS_Contact_Sync {
 		];
 		$config  = \wp_parse_args( $config, $default_config );
 		$options = $config['options'];
+
+		// A dry run under --existing-only still reads each contact at the provider,
+		// so it paces like a wet run; a plain dry run never leaves the process.
+		$reached_integrations = ! $config['is_dry_run'] || ! empty( $options['existing_only'] );
 
 		// Reset the tally at entry so the counts reflect this run only (the class is
 		// static, so a second call in the same process would otherwise accumulate).
@@ -184,7 +206,7 @@ class RAS_Contact_Sync {
 				}
 
 				$result = Contact_Sync::sync_contact( $subscription, self::$context, $config['is_dry_run'], $options );
-				if ( \is_wp_error( $result ) ) {
+				if ( \is_wp_error( $result ) && ! self::is_skipped_result( $result ) ) {
 					static::log(
 						sprintf(
 							// Translators: %1$d is the subscription ID arg passed to the script. %2$s is the error message.
@@ -194,7 +216,7 @@ class RAS_Contact_Sync {
 						)
 					);
 				}
-				static::record_result( $result, $config['is_dry_run'] );
+				static::record_result( $result, $reached_integrations );
 
 				// Get the next batch.
 				if ( $config['migrated_only'] && empty( $config['subscription_ids'] ) ) {
@@ -231,7 +253,7 @@ class RAS_Contact_Sync {
 				}
 
 				$result = Contact_Sync::sync_contact( $order, self::$context, $config['is_dry_run'], $options );
-				if ( \is_wp_error( $result ) ) {
+				if ( \is_wp_error( $result ) && ! self::is_skipped_result( $result ) ) {
 					static::log(
 						sprintf(
 							// Translators: %1$d is the order ID arg passed to the script. %2$s is the error message.
@@ -241,7 +263,7 @@ class RAS_Contact_Sync {
 						)
 					);
 				}
-				static::record_result( $result, $config['is_dry_run'] );
+				static::record_result( $result, $reached_integrations );
 			}
 		}
 
@@ -251,7 +273,7 @@ class RAS_Contact_Sync {
 			foreach ( $config['user_ids'] as $user_id ) {
 				if ( ! $config['active_only'] || self::user_has_active_subscriptions( $user_id ) ) {
 					$result = Contact_Sync::sync_contact( $user_id, self::$context, $config['is_dry_run'], $options );
-					if ( \is_wp_error( $result ) ) {
+					if ( \is_wp_error( $result ) && ! self::is_skipped_result( $result ) ) {
 						static::log(
 							sprintf(
 								// Translators: %1$d is the user ID arg passed to the script. %2$s is the error message.
@@ -261,7 +283,7 @@ class RAS_Contact_Sync {
 							)
 						);
 					}
-					static::record_result( $result, $config['is_dry_run'] );
+					static::record_result( $result, $reached_integrations );
 				} else {
 					static::$results['skipped']++;
 				}
@@ -287,7 +309,7 @@ class RAS_Contact_Sync {
 				$user_id = array_shift( $user_ids );
 				if ( ! $config['active_only'] || self::user_has_active_subscriptions( $user_id ) ) {
 					$result = Contact_Sync::sync_contact( $user_id, self::$context, $config['is_dry_run'], $options );
-					if ( \is_wp_error( $result ) ) {
+					if ( \is_wp_error( $result ) && ! self::is_skipped_result( $result ) ) {
 						static::log(
 							sprintf(
 								// Translators: %1$d is the contact's user ID. %2$s is the error message.
@@ -297,7 +319,7 @@ class RAS_Contact_Sync {
 							)
 						);
 					}
-					static::record_result( $result, $config['is_dry_run'] );
+					static::record_result( $result, $reached_integrations );
 				} else {
 					static::$results['skipped']++;
 				}
@@ -1034,7 +1056,7 @@ class RAS_Contact_Sync {
 	}
 
 	/**
-	 * Parse and validate the `--skip-lists` / `--fields` options (pre-flight).
+	 * Parse and validate the `--skip-lists` / `--fields` / `--existing-only` options (pre-flight).
 	 *
 	 * Runs even under `--dry-run` so misconfiguration surfaces before any batch.
 	 * When `--fields` is set, tokens are resolved to canonical labels and each must
@@ -1047,12 +1069,13 @@ class RAS_Contact_Sync {
 	 *                                    validation to this integration (set when
 	 *                                    `--integration` scopes the run).
 	 *
-	 * @return array|\WP_Error `[ 'skip_lists' => bool, 'fields' => string[]|null ]` or WP_Error.
+	 * @return array|\WP_Error `[ 'skip_lists' => bool, 'fields' => string[]|null, 'existing_only' => bool ]` or WP_Error.
 	 */
 	private static function parse_sync_options( $assoc_args, $integration_id = null ): array|\WP_Error {
 		$options = [
-			'skip_lists' => ! empty( $assoc_args['skip-lists'] ),
-			'fields'     => null,
+			'skip_lists'    => ! empty( $assoc_args['skip-lists'] ),
+			'fields'        => null,
+			'existing_only' => ! empty( $assoc_args['existing-only'] ),
 		];
 
 		// Mailchimp cannot do a list-less upsert: its upsert_contact() override
@@ -1228,7 +1251,7 @@ class RAS_Contact_Sync {
 		}
 
 		if ( 'push' !== $direction ) {
-			$push_only_flags = [ 'subscription-ids', 'order-ids', 'migrated-subscriptions', 'skip-lists', 'fields' ];
+			$push_only_flags = [ 'subscription-ids', 'order-ids', 'migrated-subscriptions', 'skip-lists', 'fields', 'existing-only' ];
 			foreach ( $push_only_flags as $flag ) {
 				if ( ! empty( $assoc_args[ $flag ] ) ) {
 					return new \WP_Error(

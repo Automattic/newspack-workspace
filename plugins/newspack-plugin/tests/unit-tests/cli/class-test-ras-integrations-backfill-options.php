@@ -131,6 +131,7 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 	public function test_push_only_flags_rejected_when_direction_includes_pull() {
 		$push_only = [
 			[ 'skip-lists' => true ],
+			[ 'existing-only' => true ],
 			[ 'fields' => 'Content Access' ],
 			[ 'subscription-ids' => '1,2' ],
 			[ 'order-ids' => '3' ],
@@ -148,8 +149,9 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 	public function test_push_only_flags_allowed_under_push_direction() {
 		$parsed = $this->parse(
 			[
-				'direction'  => 'push',
-				'skip-lists' => true,
+				'direction'     => 'push',
+				'skip-lists'    => true,
+				'existing-only' => true,
 			]
 		);
 		$this->assertIsArray( $parsed, 'parse_backfill_options only routes; push-only flag validity is parse_sync_options\'s job.' );
