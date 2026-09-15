@@ -331,4 +331,51 @@ class Newspack_Test_GoogleSiteKit_Group_Param extends WP_UnitTestCase {
 
 		$this->assertEquals( implode( ', ', $expected ), $params['group'] );
 	}
+
+	/**
+	 * An Author who is a group member is an eligible member by default (see
+	 * `Group_Subscription::is_eligible_member()`) even though they are not a
+	 * reader — attribution must follow that eligibility, not reader status,
+	 * or a non-reader author with genuine gated access goes unattributed.
+	 */
+	public function test_group_includes_eligible_author_member_group_subscription() {
+		$author_id = $this->factory->user->create(
+			[
+				'role'       => 'author',
+				'user_email' => 'author@example.com',
+			]
+		);
+		$this->assertFalse( Reader_Activation::is_user_reader( $author_id ), 'Precondition: a plain Author is not a reader.' );
+
+		$sub = $this->create_group_subscription( self::$owner_id, $author_id, 612, 'Author Member Group' );
+		wp_set_current_user( $author_id );
+
+		$params = GoogleSiteKit::get_custom_event_parameters();
+
+		$this->assertEquals( 'Group ' . $sub->get_id(), $params['group'] );
+	}
+
+	/**
+	 * An Editor is not an eligible group member by default — `edit_others_posts`
+	 * excludes them from the Author/Contributor fallback in
+	 * `Group_Subscription::is_eligible_member()` — so even if group-member meta
+	 * exists for them (e.g. left over from a role change), they must not be
+	 * attributed.
+	 */
+	public function test_group_excludes_non_eligible_editor_group_member() {
+		$editor_id = $this->factory->user->create(
+			[
+				'role'       => 'editor',
+				'user_email' => 'editor@example.com',
+			]
+		);
+		$this->assertFalse( Reader_Activation::is_user_reader( $editor_id ), 'Precondition: an Editor is not a reader.' );
+
+		$this->create_group_subscription( self::$owner_id, $editor_id, 613, 'Editor Member Group' );
+		wp_set_current_user( $editor_id );
+
+		$params = GoogleSiteKit::get_custom_event_parameters();
+
+		$this->assertEquals( 'none', $params['group'] );
+	}
 }
