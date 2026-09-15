@@ -12,6 +12,7 @@
 use Newspack\Content_Gate;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Reader_Activation\Sync\Legacy_Metadata;
@@ -69,6 +70,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		parent::set_up();
 		Content_Gate_Metadata::reset_cache();
 		Newspack_Newsletters_Contacts::reset_calls();
+		Newspack_Newsletters_Subscription::reset_calls();
 		Metadata::$version = 'legacy';
 
 		$this->user_id = $this->factory->user->create(
@@ -439,5 +441,110 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 			array_keys( $call['contact']['metadata'] ),
 			'Only the three prefixed Content Access fields are pushed.'
 		);
+	}
+
+	/**
+	 * Push the seeded reader through push_to_integrations() under --existing-only.
+	 *
+	 * @param array $extra_options Options merged over `existing_only => true`.
+	 * @return true|\WP_Error
+	 */
+	private function push_existing_only( array $extra_options = [] ) {
+		$contact = [
+			'email'    => 'reader@example.com',
+			'metadata' => [ 'NP_Content Access' => 'Yes' ],
+		];
+		return $this->invoke_contact_sync(
+			'push_to_integrations',
+			[ $contact, 'ctx', null, array_merge( [ 'existing_only' => true ], $extra_options ) ]
+		);
+	}
+
+	/**
+	 * Count `newspack_sync_contact_failed` firings during a callback.
+	 *
+	 * @param callable $callback The work to observe.
+	 * @return array The callback's result, then the number of firings.
+	 */
+	private function count_failed_syncs( callable $callback ) {
+		$failed   = 0;
+		$listener = function () use ( &$failed ) {
+			$failed++;
+		};
+		add_action( 'newspack_sync_contact_failed', $listener );
+		$result = $callback();
+		remove_action( 'newspack_sync_contact_failed', $listener );
+		return [ $result, $failed ];
+	}
+
+	/**
+	 * The flag's whole point: a reader the ESP does not have is left alone,
+	 * and the outcome is a skip — not a failure the alerting would count.
+	 */
+	public function test_existing_only_skips_a_reader_the_esp_does_not_have() {
+		// No staged contact data: the subscription mock reports the contact as not found.
+		list( $result, $failed ) = $this->count_failed_syncs( fn() => $this->push_existing_only() );
+
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, '--existing-only must not upsert a contact the ESP does not have.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code(), 'A skipped reader reports the canonical not-found code so the CLI tallies it as skipped.' );
+		$this->assertSame( 0, $failed, 'A deliberate skip is not a sync failure.' );
+	}
+
+	public function test_existing_only_updates_a_reader_the_esp_has() {
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = [ 'id' => '42' ];
+
+		$result = $this->push_existing_only();
+
+		$this->assertTrue( $result );
+		$this->assertCount( 1, Newspack_Newsletters_Contacts::$upsert_calls, 'An existing contact is updated as usual.' );
+	}
+
+	/**
+	 * A read the ESP could not complete is not "no contact": the push is
+	 * withheld (the conservative side), but the reader is a failure the
+	 * operator can see and re-run — and never a retry, since the retry path
+	 * rebuilds the full contact and would create it.
+	 */
+	public function test_existing_only_read_failure_is_a_failed_push_without_retry() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Error reaching to search-members endpoint' );
+
+		list( $result, $failed ) = $this->count_failed_syncs( fn() => $this->push_existing_only() );
+
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'A contact whose existence could not be confirmed is not pushed.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_esp_sync_failed', $result->get_error_code(), 'A failed read is a failed push, not a skip.' );
+		$this->assertSame( 1, $failed, 'A failed read reaches the failure alerting like any failed push.' );
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'esp' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'The retry path rebuilds the full contact and would create it.' );
+	}
+
+	/**
+	 * An integration without an existence check keeps the base default and
+	 * pushes as before; the reader was updated somewhere, so the sync succeeds.
+	 */
+	public function test_existing_only_reports_success_when_another_integration_pushed() {
+		Failing_Sample_Integration::reset();
+		Integrations::register( new Failing_Sample_Integration( 'existing_only_peer', 'Existing Only Peer' ) );
+		Integrations::enable( 'existing_only_peer' );
+		// No staged ESP contact: the ESP skips; the peer pushes.
+
+		$result = $this->push_existing_only();
+
+		Integrations::disable( 'existing_only_peer' );
+		$this->assertTrue( $result );
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'The ESP still skipped its missing contact.' );
+		$this->assertSame( 1, Failing_Sample_Integration::$push_count, 'An integration that cannot check keeps its usual push under the flag.' );
 	}
 }
