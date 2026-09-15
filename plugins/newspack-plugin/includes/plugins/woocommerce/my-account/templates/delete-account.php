@@ -28,7 +28,7 @@ if ( ! isset( $_GET['token'] ) ) {
 
 $token           = \sanitize_text_field( $_GET['token'] );
 $transient_token = get_transient( 'np_reader_account_delete_' . \get_current_user_id() );
-if ( ! $transient_token || $transient_token !== $token ) {
+if ( ! $transient_token || ! hash_equals( (string) $transient_token, (string) $token ) ) {
 	WooCommerce_Connection::add_wc_notice( __( 'Invalid token', 'newspack-plugin' ), 'error' );
 	return;
 }

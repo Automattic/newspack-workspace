@@ -372,9 +372,13 @@ class GoogleSiteKit {
 		if ( ! $user || ! $user->ID ) {
 			return $labels;
 		}
-		// Match the framing of the surrounding params (`is_reader`, `is_subscriber`):
-		// only attribute groups to actual readers, not admins/editors.
-		if ( ! Reader_Activation::is_user_reader( $user ) ) {
+		// Attribution follows group-member eligibility, not reader status: a
+		// non-reader author/contributor who is an eligible group member (by
+		// default, or via the newspack_group_subscription_member_eligible
+		// filter) still gets real gated access and should be attributed for
+		// it. Admins/editors remain non-eligible by default, so they are
+		// still excluded here.
+		if ( ! Group_Subscription::is_eligible_member( $user ) ) {
 			return $labels;
 		}
 		$user_id = (int) $user->ID;

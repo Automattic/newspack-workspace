@@ -1,3 +1,43 @@
+## newspack-popups [3.18.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.18.0...newspack-popups@3.18.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **popups:** drop a range max of 0 or less as invalid (NPPM-3389) ([#1071](https://github.com/Automattic/newspack-workspace/issues/1071)) ([193406c](https://github.com/Automattic/newspack-workspace/commit/193406c81054ec4f9a436831f25898518129e079))
+
+# newspack-popups [3.18.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.17.0...newspack-popups@3.18.0) (2026-09-14)
+
+
+### Features
+
+* **audience:** date range segmentation for ESP date fields ([#767](https://github.com/Automattic/newspack-workspace/issues/767)) ([21c4732](https://github.com/Automattic/newspack-workspace/commit/21c4732a2b8cbadea1e7d6710ca22d22b3282cef))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
+# newspack-popups [3.17.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.5...newspack-popups@3.17.0) (2026-08-31)
+
+
+### Bug Fixes
+
+* **popups:** preview ignores autosave older than saved prompt (NPPM-2940) ([#382](https://github.com/Automattic/newspack-workspace/issues/382)) ([f7e429b](https://github.com/Automattic/newspack-workspace/commit/f7e429bf86f7ae57babbe7a5398ee8f4df496b27))
+
+
+### Features
+
+* **campaigns:** Contextual Prompts, AI-assisted story donation asks ([#686](https://github.com/Automattic/newspack-workspace/issues/686)) ([f896387](https://github.com/Automattic/newspack-workspace/commit/f896387b5c3c096b6ed0cacbf2fe89b3e7f6b703)), closes [#719](https://github.com/Automattic/newspack-workspace/issues/719)
+* **campaigns:** pick donor landing page via autocomplete search ([#761](https://github.com/Automattic/newspack-workspace/issues/761)) ([01fa615](https://github.com/Automattic/newspack-workspace/commit/01fa61514954742094dff2fd0e5a4ff3bb4c04b6))
+* **popups:** move A/B variant selection into the view engine ([#656](https://github.com/Automattic/newspack-workspace/issues/656)) ([ccd81b8](https://github.com/Automattic/newspack-workspace/commit/ccd81b88373aeab92d13410c4803cdce91c2e398))
+* **segments:** report matched segments to GA4 ([#800](https://github.com/Automattic/newspack-workspace/issues/800)) ([a02c613](https://github.com/Automattic/newspack-workspace/commit/a02c613c7aae350aa7b38750e476e76eab2babf1))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.4
+* **newspack-components:** upgraded to 4.7.0
+
 ## newspack-popups [3.16.5](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.4...newspack-popups@3.16.5) (2026-08-20)
 
 

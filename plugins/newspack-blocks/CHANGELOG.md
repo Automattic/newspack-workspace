@@ -1,3 +1,64 @@
+# @automattic/newspack-blocks [4.32.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.31.2...newspack-blocks@4.32.0) (2026-09-14)
+
+
+### Bug Fixes
+
+* **blocks:** keep tag labels clear of cat-links styling ([#736](https://github.com/Automattic/newspack-workspace/issues/736)) ([4cb3fb7](https://github.com/Automattic/newspack-workspace/commit/4cb3fb76849ca05bf29d06788e0148afab204227))
+* **modal-checkout:** tiered donate URL trigger handles non-default frequency ([#202](https://github.com/Automattic/newspack-workspace/issues/202)) ([1bc89b9](https://github.com/Automattic/newspack-workspace/commit/1bc89b94e0db1110b8dc35536907cf35a98f62dd))
+
+
+### Features
+
+* **blocks:** reorder the content picked in Static mode (NPPD-946) ([#846](https://github.com/Automattic/newspack-workspace/issues/846)) ([b4b9177](https://github.com/Automattic/newspack-workspace/commit/b4b91774a4a391a9686352edda0e64ffebfce5d4))
+* **group-subscriptions:** per-seat pricing ([#955](https://github.com/Automattic/newspack-workspace/issues/955)) ([a13a858](https://github.com/Automattic/newspack-workspace/commit/a13a858cbf1570cc6a60ca61b5672758e9b3dc59))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
+## @automattic/newspack-blocks [4.31.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.31.1...newspack-blocks@4.31.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **iframe:** keep Back working on iframe block pages (NPPM-3180) ([#1042](https://github.com/Automattic/newspack-workspace/issues/1042)) ([6a87cb2](https://github.com/Automattic/newspack-workspace/commit/6a87cb2c6dcab735a81b54e87fb11b93769baac1))
+
+## @automattic/newspack-blocks [4.31.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.31.0...newspack-blocks@4.31.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **homepage-articles:** reset dedup state per render pass (NPLAUNC-242) ([#1019](https://github.com/Automattic/newspack-workspace/issues/1019)) ([0ecdc9b](https://github.com/Automattic/newspack-workspace/commit/0ecdc9b7e9511799df668738a732ef6f0d808cb4))
+
+# @automattic/newspack-blocks [4.31.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.5...newspack-blocks@4.31.0) (2026-08-31)
+
+
+### Bug Fixes
+
+* **blocks:** allow opted-in post types on the public /articles endpoint ([#522](https://github.com/Automattic/newspack-workspace/issues/522)) ([4ad30b4](https://github.com/Automattic/newspack-workspace/commit/4ad30b494bbdf5ecbb57576ddb922d9a300acb33))
+* **blocks:** escape checkout-button container class attribute ([#616](https://github.com/Automattic/newspack-workspace/issues/616)) ([f727cc2](https://github.com/Automattic/newspack-workspace/commit/f727cc209f2e50ae49f4397350d65721cb2c4b9b))
+
+
+### Features
+
+* add tag labels to the Carousel block ([#429](https://github.com/Automattic/newspack-workspace/issues/429)) ([567e5ab](https://github.com/Automattic/newspack-workspace/commit/567e5ab9fb54b69bd6e9377eac3f3f76ca8e29c2))
+* **subscriptions:** add a card to a manually created subscription ([#840](https://github.com/Automattic/newspack-workspace/issues/840)) ([3c752a0](https://github.com/Automattic/newspack-workspace/commit/3c752a00aebdfdf393ad36bc063e9df4c0c82d91))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.4
+* **newspack-icons:** upgraded to 1.1.2
+* **newspack-components:** upgraded to 4.7.0
+
+## @automattic/newspack-blocks [4.30.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.4...newspack-blocks@4.30.5) (2026-08-31)
+
+
+### Bug Fixes
+
+* **homepage-articles:** neutralize editor author links (NPPM-3165) ([#992](https://github.com/Automattic/newspack-workspace/issues/992)) ([b19c5ae](https://github.com/Automattic/newspack-workspace/commit/b19c5aeeab022ecd28afaba72999f4af1810f8e7))
+
 ## @automattic/newspack-blocks [4.30.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.3...newspack-blocks@4.30.4) (2026-08-25)
 
 

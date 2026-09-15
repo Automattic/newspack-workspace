@@ -7,6 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -14,8 +15,9 @@ import { useEffect } from '@wordpress/element';
 import { ADVANCED_SETTINGS_DEFAULTS } from '../constants';
 import WizardsTab from '../../../../wizards-tab';
 import WizardSection from '../../../../wizards-section';
-import { Button, Grid, hooks, ImageUpload, Notice, utils } from '../../../../../../packages/components/src';
+import { Button, Grid, hooks, ImageUpload, utils } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
+import { useErrorNoticeFocus } from '../../../../hooks/use-error-notice-focus';
 import Recirculation from './recirculation';
 import AuthorBio from './author-bio';
 import FeaturedImagePostsAll from './featured-image-posts-all';
@@ -44,12 +46,27 @@ export default function AdvancedSettings() {
 		relatedPostsUpdated: false,
 	} );
 
-	const { wizardApiFetch, isFetching, errorMessage } = useWizardApiFetch( 'newspack-settings/theme-mods' );
-	const { wizardApiFetch: wizardApiFetchRecirculation, isFetching: isFetchingRecirculation } = useWizardApiFetch(
-		'newspack-settings/advanced-settings/recirculation'
-	);
-	const { wizardApiFetch: wizardApiFetchPrimaryCategory, isFetching: isFetchingPrimaryCategory } =
-		useWizardApiFetch( 'newspack-settings/primary-category' );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/theme-mods' );
+	const {
+		wizardApiFetch: wizardApiFetchRecirculation,
+		isFetching: isFetchingRecirculation,
+		errorMessage: recirculationErrorMessage,
+		resetError: resetRecirculationError,
+	} = useWizardApiFetch( 'newspack-settings/advanced-settings/recirculation' );
+	const {
+		wizardApiFetch: wizardApiFetchPrimaryCategory,
+		isFetching: isFetchingPrimaryCategory,
+		errorMessage: primaryCategoryErrorMessage,
+		resetError: resetPrimaryCategoryError,
+	} = useWizardApiFetch( 'newspack-settings/primary-category' );
+
+	const saveErrorMessage = errorMessage || recirculationErrorMessage || primaryCategoryErrorMessage;
+
+	const {
+		wrapperProps: noticeWrapperProps,
+		registerSubmit,
+		spokenMessage,
+	} = useErrorNoticeFocus( saveErrorMessage, __( 'Advanced Settings error', 'newspack-plugin' ) );
 
 	const [ primaryCategoryData, setPrimaryCategoryData ] = hooks.useObjectState< PrimaryCategoryData >( {
 		enabled: true,
@@ -104,7 +121,13 @@ export default function AdvancedSettings() {
 		);
 	}, [] );
 
-	function save() {
+	function save( event?: { currentTarget: Element | null } ) {
+		registerSubmit( event );
+		// The fetch hook leaves the error in place on success, so a retry that works would
+		// otherwise keep the failed attempt's notice on screen.
+		resetError();
+		resetRecirculationError();
+		resetPrimaryCategoryError();
 		wizardApiFetchRecirculation(
 			{
 				path: '/newspack/v1/wizard/newspack-settings/related-posts-max-age',
@@ -165,6 +188,13 @@ export default function AdvancedSettings() {
 			title={ __( 'Advanced Settings', 'newspack-plugin' ) }
 			isFetching={ isFetching || isFetchingRecirculation || isFetchingPrimaryCategory }
 		>
+			{ saveErrorMessage && (
+				<div { ...noticeWrapperProps } className="newspack-advanced-settings__notice">
+					<Notice status="error" isDismissible={ false } politeness="polite" spokenMessage={ spokenMessage }>
+						{ saveErrorMessage }
+					</Notice>
+				</div>
+			) }
 			<WizardSection title={ __( 'Recirculation', 'newspack-plugin' ) }>
 				<Recirculation isFetching={ isFetchingRecirculation } update={ setRecirculationData } data={ recirculationData } />
 			</WizardSection>
@@ -232,7 +262,6 @@ export default function AdvancedSettings() {
 					<PrivateTags data={ data } update={ setData } isFetching={ isFetching } />
 				</WizardSection>
 			) : null }
-			{ errorMessage && <Notice /> }
 			<div className="newspack-buttons-card">
 				<Button variant="primary" onClick={ save }>
 					{ __( 'Save', 'newspack-plugin' ) }

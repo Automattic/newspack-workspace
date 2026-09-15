@@ -1,3 +1,22 @@
+## newspack-block-theme [1.31.4](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.3...newspack-block-theme@1.31.4) (2026-09-14)
+
+
+### Bug Fixes
+
+* **blocks:** keep tag labels clear of cat-links styling ([#736](https://github.com/Automattic/newspack-workspace/issues/736)) ([4cb3fb7](https://github.com/Automattic/newspack-workspace/commit/4cb3fb76849ca05bf29d06788e0148afab204227))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
+## newspack-block-theme [1.31.3](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.2...newspack-block-theme@1.31.3) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.7.0
+
 ## newspack-block-theme [1.31.2](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.1...newspack-block-theme@1.31.2) (2026-08-20)
 
 

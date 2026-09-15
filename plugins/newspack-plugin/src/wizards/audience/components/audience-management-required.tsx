@@ -56,10 +56,16 @@ const AudienceManagementRequired = ( {
 	description,
 	setupUrl = '',
 	learnMoreUrl = DEFAULT_LEARN_MORE_URL,
+	learnMoreLabel = /* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */ __(
+		'Learn more about Audience Management (opens in a new tab)',
+		'newspack-plugin'
+	),
 }: {
 	description: string;
 	setupUrl?: string;
 	learnMoreUrl?: string;
+	/** Accessible name for the help link. Override alongside `learnMoreUrl` so the two cannot drift. */
+	learnMoreLabel?: string;
 } ) => {
 	return (
 		<EmptyState.Root>
@@ -72,7 +78,9 @@ const AudienceManagementRequired = ( {
 						{ __( 'Set up Audience Management', 'newspack-plugin' ) }
 					</Button>
 				) }
-				<ExternalLink href={ learnMoreUrl }>{ __( 'Learn more', 'newspack-plugin' ) }</ExternalLink>
+				<ExternalLink href={ learnMoreUrl } aria-label={ learnMoreLabel }>
+					{ __( 'Learn more', 'newspack-plugin' ) }
+				</ExternalLink>
 			</EmptyState.Actions>
 		</EmptyState.Root>
 	);
@@ -86,8 +94,9 @@ const AudienceManagementRequired = ( {
  * the prerequisite state. Every other section redirects to it via
  * `redirectWithoutAudienceManagement()` rather than rendering its own copy, because
  * the Wizard draws `section.title` and `section.description` above the section
- * component: on `#/settings/countdown-banner` that produced the settings page header,
- * implying the feature was configurable, stacked directly on top of this one.
+ * component: on a route that sets them, such as `#/settings/content-gifting`, that
+ * produces the settings page header, implying the feature was configurable, stacked
+ * directly on top of this one.
  *
  * Safe to short-circuit the whole section: the Wizard resets header data on every
  * route change, so no stale header action survives into the blocked state.
