@@ -94,6 +94,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 				const $coupon = $( 'form.modal_checkout_coupon' );
 				const $nyp = $( 'form.modal_checkout_nyp' );
+				const $quantity = $( 'form.modal_checkout_quantity' );
 				const $checkout_continue = $( '#checkout_continue' );
 				const $customer_details = $( '#customer_details' );
 				const $after_customer_details = $( '#after_customer_details' );
@@ -481,6 +482,90 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				}
 
 				/**
+				 * Replace the quantity form's result line, and mark the field when the
+				 * server refused the change.
+				 *
+				 * @param {boolean} success
+				 * @param {string}  message
+				 */
+				function showQuantityResult( success, message ) {
+					$quantity.find( '.result' ).remove();
+					$quantity.append(
+						`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` + message + '</p>'
+					);
+					$quantity.find( 'h3, input[name="quantity"]' ).toggleClass( 'newspack-ui__field-error', ! success );
+				}
+
+				/**
+				 * Handle quantity form submission.
+				 *
+				 * On success the order review is refreshed to show the new total, and the
+				 * `#modal-checkout-product-details` data carrier is rewritten from the
+				 * response — `update_checkout` only replaces the review-order table and
+				 * payment box, and the carrier sits outside both.
+				 *
+				 * On failure the server has already put the original line item back, so
+				 * the review still matches the cart and must be left alone.
+				 *
+				 * @param {Event} ev
+				 */
+				function handleQuantityFormSubmit( ev ) {
+					ev.preventDefault();
+					const blocked = blockForm( $quantity );
+					if ( ! blocked ) {
+						return false;
+					}
+					const input = $quantity.find( 'input[name="quantity"]' );
+					input.attr( 'disabled', true );
+					const data = {
+						_ajax_nonce: newspackBlocksModalCheckout.quantity_nonce,
+						action: 'process_quantity_request',
+						quantity: input.val(),
+						product_id: $quantity.find( 'input[name="product_id"]' ).val(),
+					};
+					$.ajax( {
+						type: 'POST',
+						url: newspackBlocksModalCheckout.ajax_url,
+						data,
+						success: response => {
+							// A malformed request returns bare (`0`), so there is no envelope
+							// to read and nothing the reader could act on.
+							if ( ! response || typeof response.success === 'undefined' ) {
+								showQuantityResult( false, newspackBlocksModalCheckout.quantity_error );
+								return;
+							}
+							const { success, data: res } = response;
+							clearNotices();
+							showQuantityResult( success, res?.message || newspackBlocksModalCheckout.quantity_error );
+							if ( success ) {
+								if ( res.checkout_data ) {
+									$( '#modal-checkout-product-details' ).attr( 'data-checkout', JSON.stringify( res.checkout_data ) );
+									// The server may accept a quantity other than the one asked
+									// for — a product sold in bounds clamps to them. Show the
+									// count the reader is about to pay for, not the one they typed.
+									if ( res.checkout_data.quantity ) {
+										input.val( res.checkout_data.quantity );
+									}
+								}
+								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
+							} else {
+								input.focus();
+							}
+						},
+						// An expired nonce dies with a 403, which never reaches success:.
+						error: () => showQuantityResult( false, newspackBlocksModalCheckout.quantity_error ),
+						complete: () => {
+							unblockForm( $quantity );
+							input.attr( 'disabled', false );
+							input.focus();
+						},
+					} );
+				}
+				if ( $quantity.length ) {
+					$quantity.on( 'submit', handleQuantityFormSubmit );
+				}
+
+				/**
 				 * Handle form 1st step submission.
 				 *
 				 * @param {Event} ev
@@ -514,6 +599,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 						if ( $nyp.length ) {
 							$nyp.hide();
+						}
+						if ( $quantity.length ) {
+							$quantity.hide();
 						}
 						$customer_details.show();
 						$after_customer_details.hide();
@@ -549,6 +637,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 						if ( $nyp.length ) {
 							$nyp.show();
+						}
+						if ( $quantity.length ) {
+							$quantity.show();
 						}
 						$customer_details.hide();
 						$after_customer_details.show();

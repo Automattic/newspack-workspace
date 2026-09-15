@@ -17,7 +17,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import SubscriptionProductsList from './list';
+import SubscriptionProductsList, { AVAILABILITY_ICON } from './list';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -29,7 +29,6 @@ jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
 		DataViews: () => null,
-		Badge: () => null,
 		WizardBanner: ( { children } ) => <>{ children }</>,
 		Router: { useHistory: () => history },
 	};
@@ -154,5 +153,19 @@ describe( 'the Plans list header count', () => {
 		expect( publishedSection().label ).toBe( 'Subscriptions' );
 		expect( document.querySelector( '.components-notice.is-error' ) ).toHaveTextContent( 'Could not load subscription products.' );
 		expect( screen.getByRole( 'button', { name: 'Retry' } ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'AVAILABILITY_ICON', () => {
+	it( 'covers every availability tier the endpoint can report', () => {
+		expect( Object.keys( AVAILABILITY_ICON ).sort() ).toEqual( [ 'free', 'private', 'public' ] );
+		Object.values( AVAILABILITY_ICON ).forEach( icon => expect( icon ).toBeTruthy() );
+	} );
+
+	it( 'gives no two tiers the same glyph', () => {
+		// The column offers the three as separate filters, and the glyph is the only
+		// thing telling them apart: nothing here is tinted.
+		const icons = Object.values( AVAILABILITY_ICON );
+		expect( new Set( icons ).size ).toBe( icons.length );
 	} );
 } );

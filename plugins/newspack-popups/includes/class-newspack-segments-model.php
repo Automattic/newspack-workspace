@@ -146,6 +146,14 @@ final class Newspack_Segments_Model {
 										],
 									],
 								],
+								[
+									'type'                 => 'object',
+									'additionalProperties' => false,
+									'properties'           => [
+										'start' => self::get_date_bound_schema(),
+										'end'   => self::get_date_bound_schema(),
+									],
+								],
 
 							],
 						],
@@ -266,6 +274,55 @@ final class Newspack_Segments_Model {
 	}
 
 	/**
+	 * Schema for one end of a date-range criterion value.
+	 *
+	 * A bound is either a fixed calendar date or an offset in days from today —
+	 * negative for the past, positive for the future. Absent means unbounded, so
+	 * neither key is required on the parent object.
+	 *
+	 * @return array The schema.
+	 */
+	private static function get_date_bound_schema() {
+		return [
+			'type'  => 'object',
+			'oneOf' => [
+				[
+					'type'                 => 'object',
+					'additionalProperties' => false,
+					'required'             => [ 'type', 'date' ],
+					'properties'           => [
+						'type' => [
+							'type' => 'string',
+							'enum' => [ 'absolute' ],
+						],
+						// Month and day are bounded, not just digit-shaped, so this matches
+						// the client matcher's ISO_DATE exactly. A criterion the matcher
+						// would reject (`2026-13-45`) can't be saved in the first place.
+						'date' => [
+							'type'    => 'string',
+							'pattern' => '^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$',
+						],
+					],
+				],
+				[
+					'type'                 => 'object',
+					'additionalProperties' => false,
+					'required'             => [ 'type', 'days' ],
+					'properties'           => [
+						'type' => [
+							'type' => 'string',
+							'enum' => [ 'relative' ],
+						],
+						'days' => [
+							'type' => 'integer',
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
 	 * Registers each meta field.
 	 *
 	 * @return void
@@ -313,6 +370,11 @@ final class Newspack_Segments_Model {
 				$segment['name'] = $original_name . ' ' . $i;
 				$i++;
 			}
+		}
+
+		// Store criteria the same way update_segment() does.
+		if ( isset( $segment['criteria'] ) ) {
+			$segment['criteria'] = self::filter_criteria( $segment['criteria'] );
 		}
 
 		$term = wp_insert_term(
@@ -554,7 +616,7 @@ final class Newspack_Segments_Model {
 		}
 		$filtered = array_values(
 			array_filter(
-				$criteria,
+				array_map( [ __CLASS__, 'drop_invalid_range_max' ], $criteria ),
 				function( $item ) {
 					return is_array( $item )
 						&& isset( $item['criteria_id'] )
@@ -574,6 +636,33 @@ final class Newspack_Segments_Model {
 		 * @param array $criteria Raw criteria as received.
 		 */
 		return apply_filters( 'newspack_popups_filter_segment_criteria', $filtered, $criteria );
+	}
+
+	/**
+	 * Drop a range `max` of 0 or less from a criterion, since it is invalid.
+	 *
+	 * The segment editor stores `max => 0` when the Max bound is unticked, and the
+	 * pre-criteria migration stored it for every "at least N" segment. Treating it
+	 * as a real bound leaves the segment matching nobody, so it is removed on both
+	 * save and read; a criterion left with no bounds is then dropped by
+	 * `is_criteria_value_empty()`. A fractional max stays valid, since numeric
+	 * reader fields can hold values between 0 and 1.
+	 *
+	 * @param mixed $item Criterion entry.
+	 * @return mixed The entry, without an invalid max.
+	 */
+	private static function drop_invalid_range_max( $item ) {
+		if (
+			is_array( $item )
+			&& isset( $item['value'] )
+			&& is_array( $item['value'] )
+			&& array_key_exists( 'max', $item['value'] )
+			&& is_numeric( $item['value']['max'] )
+			&& (float) $item['value']['max'] <= 0
+		) {
+			unset( $item['value']['max'] );
+		}
+		return $item;
 	}
 
 	/**

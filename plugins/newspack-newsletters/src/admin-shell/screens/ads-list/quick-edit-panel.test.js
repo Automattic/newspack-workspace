@@ -21,7 +21,7 @@ jest.mock( '../../components/quick-edit-panel', () => ( {
 	),
 } ) );
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
 import AdsQuickEditPanel from './quick-edit-panel';
 
@@ -34,6 +34,7 @@ const renderPanel = ( item, extra = {} ) =>
 			item={ item }
 			advertisers={ ADVERTISERS }
 			placements={ PLACEMENTS }
+			termsLoaded
 			onClose={ jest.fn() }
 			onSaved={ jest.fn() }
 			{ ...extra }
@@ -43,6 +44,24 @@ const renderPanel = ( item, extra = {} ) =>
 const makeItem = status => ( { id: 42, status, title: { raw: 'Summer sale' }, meta: {} } );
 
 const postCall = () => apiFetch.mock.calls.find( call => call[ 0 ]?.method === 'POST' )?.[ 0 ];
+
+// Scoped to the rendered notices: `Notice` also announces through the
+// shared `a11y-speak` live region, which survives between tests in the
+// same document and would otherwise satisfy a plain text query.
+const visibleNotices = () => [ ...document.querySelectorAll( '.components-notice__content' ) ].map( n => n.textContent.trim() );
+
+const ADVERTISERS_UNAVAILABLE = 'Advertisers could not be loaded. Edit this ad to change them.';
+const CATEGORIES_UNAVAILABLE = 'Categories could not be loaded. Edit this ad to change them.';
+
+// `fetchAllTerms` reads `parse: false` responses, so the categories fetch
+// needs a Response-alike rather than a plain object.
+const mockCategoriesFetch = terms =>
+	apiFetch.mockImplementation( options => {
+		if ( typeof options?.path === 'string' && options.path.startsWith( '/wp/v2/categories' ) ) {
+			return Promise.resolve( { json: () => Promise.resolve( terms ), headers: { get: () => '1' } } );
+		}
+		return Promise.resolve( {} );
+	} );
 
 describe( 'AdsQuickEditPanel status control', () => {
 	beforeEach( () => {
@@ -130,5 +149,193 @@ describe( 'AdsQuickEditPanel status control', () => {
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'false' );
 		fireEvent.click( screen.getByRole( 'radio', { name: 'Inactive' } ) );
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'true' );
+	} );
+} );
+
+// The list only embeds terms while a taxonomy column is visible, so the
+// panel has to hydrate from the post's raw term IDs — and must never send
+// a taxonomy the user did not touch, or a status-only save would wipe the
+// terms it never displayed.
+describe( 'AdsQuickEditPanel taxonomy handling', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( {} );
+	} );
+
+	const withRawTerms = () => ( {
+		...makeItem( 'publish' ),
+		newspack_nl_advertiser: [ 10 ],
+		ad_placement: [ 20 ],
+	} );
+
+	// The embedded id is deliberately absent from `ADVERTISERS`, so the
+	// options list cannot render it and the embed is the only source.
+	const withEmbeddedTerms = () => ( {
+		...makeItem( 'publish' ),
+		newspack_nl_advertiser: [ 55 ],
+		_embedded: { 'wp:term': [ [ { id: 55, name: 'Beta Corp', taxonomy: 'newspack_nl_advertiser' } ] ] },
+	} );
+
+	it( 'hydrates the fields from raw term IDs when the embed is absent', async () => {
+		renderPanel( withRawTerms() );
+		expect( await screen.findByText( 'Acme' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Header' ) ).toBeInTheDocument();
+	} );
+
+	it( 'still reads embedded terms when they are present', async () => {
+		renderPanel( withEmbeddedTerms() );
+		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
+	} );
+
+	// The embed can render a token the options list has never seen. Editing
+	// then looks available but is a trap: the suggestions and the token
+	// validator both come from the options list, so removing the token makes it
+	// impossible to type back, and the save would write the taxonomy empty.
+	it( 'holds a field read-only when only the embed can account for a stored term', async () => {
+		renderPanel( withEmbeddedTerms() );
+		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
+		await waitFor( () => expect( visibleNotices() ).toContain( ADVERTISERS_UNAVAILABLE ) );
+		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
+	} );
+
+	// The same shape when the options request fails outright: `fetchAllTerms`
+	// swallows the failure and settles empty, which must not read as success
+	// just because the embed still renders the token.
+	it( 'holds a field read-only when its options request settled empty', async () => {
+		renderPanel( withEmbeddedTerms(), { advertisers: [] } );
+		expect( await screen.findByText( 'Beta Corp' ) ).toBeInTheDocument();
+		await waitFor( () => expect( visibleNotices() ).toContain( ADVERTISERS_UNAVAILABLE ) );
+		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
+	} );
+
+	it( 'omits untouched taxonomies from a status-only save', async () => {
+		const onSaved = jest.fn();
+		renderPanel( withRawTerms(), { onSaved } );
+		fireEvent.click( await screen.findByRole( 'radio', { name: 'Inactive' } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+
+		expect( postCall().data.status ).toBe( 'draft' );
+		expect( postCall().data ).not.toHaveProperty( 'newspack_nl_advertiser' );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+		expect( postCall().data ).not.toHaveProperty( 'categories' );
+	} );
+
+	it( 'sends only the taxonomy the user edited', async () => {
+		const onSaved = jest.fn();
+		renderPanel( { ...makeItem( 'publish' ), ad_placement: [ 20 ] }, { onSaved } );
+
+		const input = await screen.findByLabelText( 'Advertiser' );
+		fireEvent.change( input, { target: { value: 'Acme' } } );
+		fireEvent.keyDown( input, { key: 'Enter', keyCode: 13 } );
+		await screen.findByText( 'Acme' );
+
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+
+		expect( postCall().data.newspack_nl_advertiser ).toEqual( [ 10 ] );
+		expect( postCall().data ).not.toHaveProperty( 'ad_placement' );
+	} );
+
+	// The categories fetch is the only source for that field once the embed
+	// is skipped, and `fetchAllTerms` returns a partial list rather than
+	// throwing, so a failure would otherwise show an empty field on an ad
+	// that has categories.
+	it( 'flags the Categories field read-only when its options cannot account for the stored terms', async () => {
+		renderPanel( { ...makeItem( 'publish' ), categories: [ 77 ] } );
+		await waitFor( () => expect( visibleNotices() ).toContain( CATEGORIES_UNAVAILABLE ) );
+		expect( screen.getByLabelText( 'Categories' ) ).toBeDisabled();
+	} );
+
+	it( 'leaves the Categories field alone when there are no stored categories', async () => {
+		renderPanel( withRawTerms() );
+		await screen.findByText( 'Acme' );
+		await waitFor( () => expect( screen.getByLabelText( 'Categories' ) ).not.toBeDisabled() );
+		expect( visibleNotices() ).not.toContain( CATEGORIES_UNAVAILABLE );
+	} );
+
+	// The `wp:term` embed caps at 100 terms per taxonomy, so an ad with more
+	// than that arrives truncated. The fetched options list is complete and
+	// must be allowed to fill the gap, rather than the short embed making
+	// the field look broken. Exercised here with a shorter embed than the
+	// ad's stored IDs, which is the same shape at a cheaper size.
+	it( 'fills the gap when the embed arrives truncated', async () => {
+		const allCategories = Array.from( { length: 11 }, ( _, i ) => ( { id: i + 1, name: `Cat ${ i + 1 }` } ) );
+		mockCategoriesFetch( allCategories );
+		renderPanel( {
+			...makeItem( 'publish' ),
+			categories: allCategories.map( c => c.id ),
+			_embedded: { 'wp:term': [ allCategories.slice( 0, 10 ).map( c => ( { ...c, taxonomy: 'category' } ) ) ] },
+		} );
+
+		expect( await screen.findByText( 'Cat 11' ) ).toBeInTheDocument();
+		expect( visibleNotices() ).not.toContain( CATEGORIES_UNAVAILABLE );
+		expect( screen.getByLabelText( 'Categories' ) ).not.toBeDisabled();
+	} );
+
+	it( 'flags Advertiser read-only once its options have settled without the stored term', async () => {
+		renderPanel( { ...makeItem( 'publish' ), newspack_nl_advertiser: [ 99 ] }, { termsLoaded: true } );
+		await waitFor( () => expect( visibleNotices() ).toContain( ADVERTISERS_UNAVAILABLE ) );
+		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
+	} );
+
+	// Read-only rather than editable while loading: an edit made against a
+	// baseline that is still growing would drop the terms resolved late.
+	// No warning yet either — nothing has failed, it just hasn't arrived.
+	it( 'holds Advertiser read-only, and silent, while its options are still loading', async () => {
+		renderPanel( { ...makeItem( 'publish' ), newspack_nl_advertiser: [ 10 ] }, { termsLoaded: false } );
+		await screen.findByLabelText( 'Advertiser' );
+		expect( screen.getByLabelText( 'Advertiser' ) ).toBeDisabled();
+		expect( visibleNotices() ).not.toContain( ADVERTISERS_UNAVAILABLE );
+	} );
+
+	it( 'keeps Categories read-only until its fetch settles, then opens it with every term', async () => {
+		const allCategories = Array.from( { length: 11 }, ( _, i ) => ( { id: i + 1, name: `Cat ${ i + 1 }` } ) );
+		let release;
+		apiFetch.mockImplementation( options => {
+			if ( typeof options?.path === 'string' && options.path.startsWith( '/wp/v2/categories' ) ) {
+				return new Promise( resolve => {
+					release = () => resolve( { json: () => Promise.resolve( allCategories ), headers: { get: () => '1' } } );
+				} );
+			}
+			return Promise.resolve( {} );
+		} );
+
+		renderPanel( {
+			...makeItem( 'publish' ),
+			categories: allCategories.map( c => c.id ),
+			// A truncated embed: the 11th term is missing until the fetch lands.
+			_embedded: { 'wp:term': [ allCategories.slice( 0, 10 ).map( c => ( { ...c, taxonomy: 'category' } ) ) ] },
+		} );
+
+		expect( await screen.findByLabelText( 'Categories' ) ).toBeDisabled();
+		expect( screen.queryByText( 'Cat 11' ) ).toBeNull();
+
+		await act( async () => {
+			release();
+		} );
+
+		await waitFor( () => expect( screen.getByLabelText( 'Categories' ) ).not.toBeDisabled() );
+		expect( screen.getByText( 'Cat 11' ) ).toBeInTheDocument();
+		expect( visibleNotices() ).not.toContain( CATEGORIES_UNAVAILABLE );
+	} );
+
+	// A field with unresolvable stored terms is read-only, so it can never
+	// go dirty and is never sent. The ride-along in `handleSave` stays as a
+	// backstop should that guard ever be relaxed.
+	it.each( [
+		[ 'Categories', 'categories' ],
+		[ 'Advertiser', 'newspack_nl_advertiser' ],
+	] )( 'never sends %s when its stored terms could not all be resolved', async ( label, key ) => {
+		const onSaved = jest.fn();
+		renderPanel( { ...makeItem( 'publish' ), [ key ]: [ 99 ] }, { onSaved } );
+
+		await waitFor( () => expect( screen.getByLabelText( label ) ).toBeDisabled() );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Inactive' } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+
+		expect( postCall().data.status ).toBe( 'draft' );
+		expect( postCall().data ).not.toHaveProperty( key );
 	} );
 } );

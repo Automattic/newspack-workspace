@@ -6,6 +6,7 @@
  */
 
 require_once __DIR__ . '/class-newspack-donations-stub.php';
+require_once __DIR__ . '/class-newspack-group-subscription-seats-stub.php';
 require_once dirname( __DIR__ ) . '/src/blocks/checkout-button/view.php';
 
 /**
@@ -200,6 +201,23 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A `quantity` attribute above 1 should render a hidden quantity field.
+	 */
+	public function test_quantity_attribute_emits_hidden_field() {
+		$output = $this->render( [ 'quantity' => 5 ] );
+		$this->assertStringContainsString( '<input type="hidden" name="quantity" value="5" />', $output );
+	}
+
+	/**
+	 * A `quantity` attribute of 1, or no quantity attribute at all, should
+	 * render no quantity field — the server already defaults to 1.
+	 */
+	public function test_quantity_below_two_emits_no_field() {
+		$this->assertStringNotContainsString( 'name="quantity"', $this->render( [ 'quantity' => 1 ] ) );
+		$this->assertStringNotContainsString( 'name="quantity"', $this->render() );
+	}
+
+	/**
 	 * The field must be registered under the 'product' object type.
 	 *
 	 * That string is what WooCommerce's products controller resolves to, since
@@ -214,6 +232,28 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->assertSame( 'boolean', $field['schema']['type'] );
 		$this->assertTrue( $field['schema']['readonly'] );
 		$this->assertContains( 'view', $field['schema']['context'], 'The editor fetches without a context param, so it receives "view".' );
+	}
+
+	/**
+	 * The seats field must reach both object types: per-seat meta lives on the
+	 * variation for a tiered plan, and the editor fetches the chosen variation
+	 * separately from its parent. Registered on only one of them, the editor would
+	 * silently never learn that a tiered plan sells seats.
+	 */
+	public function test_seats_rest_field_registers_on_products_and_variations() {
+		\Newspack_Blocks\Checkout_Button\register_seats_rest_field();
+
+		\Newspack\Group_Subscription_Seats::$stub_per_seat_product_ids = [ 51 ];
+
+		foreach ( [ 'product', 'product_variation' ] as $object_type ) {
+			$field = $GLOBALS['wp_rest_additional_fields'][ $object_type ]['newspack_has_seats'] ?? [];
+			$this->assertNotEmpty( $field, "newspack_has_seats should be registered for the \"$object_type\" object type." );
+			$this->assertSame( 'boolean', $field['schema']['type'] );
+			$this->assertTrue( $field['schema']['readonly'] );
+			$this->assertContains( 'view', $field['schema']['context'], 'The editor fetches without a context param, so it receives "view".' );
+			$this->assertTrue( $field['get_callback']( [ 'id' => 51 ] ) );
+			$this->assertFalse( $field['get_callback']( [ 'id' => 52 ] ) );
+		}
 	}
 
 	/**

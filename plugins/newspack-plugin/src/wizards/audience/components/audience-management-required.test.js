@@ -29,20 +29,18 @@ import AudienceManagementRequired, { redirectWithoutAudienceManagement, requireA
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
 	return {
-		__experimentalVStack: ( { children } ) => React.createElement( 'div', null, children ),
 		ExternalLink: ( { children, href } ) => React.createElement( 'a', { href }, children ),
 	};
 } );
 
+// The heading and description come from the real EmptyState, which reaches Grid by path
+// rather than through this barrel, so Grid is not stubbed here.
 jest.mock( '../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
-		Grid: ( { children } ) => React.createElement( 'div', null, children ),
 		// Button must survive as a real anchor: the href assertions below are what
 		// stop a dead link shipping.
 		Button: ( { children, href } ) => React.createElement( 'a', { href }, children ),
-		SectionHeader: ( { title, description } ) =>
-			React.createElement( 'div', null, React.createElement( 'h2', null, title ), React.createElement( 'p', null, description ) ),
 	};
 } );
 
