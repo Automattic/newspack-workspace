@@ -1,3 +1,17 @@
+## newspack [6.51.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.1...newspack@6.51.2) (2026-09-15)
+
+
+### Bug Fixes
+
+* **perfmatters:** match Jetpack social logos by identifier (NPPM-3167) ([#995](https://github.com/Automattic/newspack-workspace/issues/995)) ([0eac4ba](https://github.com/Automattic/newspack-workspace/commit/0eac4bad082a26b940b7661fbf2e610053c1c927))
+
+## newspack [6.51.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.0...newspack@6.51.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **my-account:** refresh saved-card expiry after re-adding the same card ([#1075](https://github.com/Automattic/newspack-workspace/issues/1075)) ([e376217](https://github.com/Automattic/newspack-workspace/commit/e376217a96ec766ce5c6f473b634c8e89fbcf723))
+
 # newspack [6.51.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.50.3...newspack@6.51.0) (2026-09-14)
 
 
