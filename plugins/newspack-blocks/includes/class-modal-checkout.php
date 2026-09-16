@@ -16,6 +16,17 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Modal_Checkout {
 	/**
+	 * Whether the current request is a validation-only checkout that process_checkout_action()
+	 * accepted. Set true only alongside the woocommerce_checkout_update_totals write, which is
+	 * what stops process_checkout() from creating an order — that coupling is the guarantee, not
+	 * the nonce, which is only a CSRF check. Request-scoped on purpose: the filters that consult
+	 * it run on every checkout request, so the request flag on its own is never enough.
+	 *
+	 * @var bool
+	 */
+	private static $is_validation_only_request = false;
+
+	/**
 	 * Checkout registration flag.
 	 *
 	 * @var string
@@ -421,8 +432,13 @@ final class Modal_Checkout {
 		// rely on this checkout nonce requried by process checkout.
 		$_REQUEST['woocommerce-process-checkout-nonce'] = wp_create_nonce( 'woocommerce-process_checkout' );
 
-		// If this is a validation-only request, set the flag that tells process_checkout() to only validate the order.
+		// Accept the validation-only flag here, coupled with the update-totals write
+		// in the same branch. That write is what actually stops process_checkout()
+		// from creating an order, so the flag must never be true without it. Setting
+		// it before the WOOCOMMERCE_CHECKOUT early return above would let the two
+		// diverge on a request where WooCommerce has already defined the constant.
 		if ( isset( $_POST['is_validation_only'] ) ) {
+			self::$is_validation_only_request              = true;
 			$_POST['woocommerce_checkout_update_totals'] = '1';
 		}
 
@@ -2715,10 +2731,13 @@ final class Modal_Checkout {
 	/**
 	 * Is the current request only to validate billing field inputs on the first modal screen?
 	 *
+	 * True only for a request whose nonce process_checkout_action() has verified and
+	 * which it accepted as validation-only.
+	 *
 	 * @return bool True if the request is for validation only.
 	 */
 	private static function is_validation_only() {
-		return boolval( filter_input( INPUT_POST, 'is_validation_only', FILTER_SANITIZE_NUMBER_INT ) );
+		return self::$is_validation_only_request;
 	}
 
 	/**
