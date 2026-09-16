@@ -1,4 +1,4 @@
-/* eslint-disable @wordpress/i18n-translator-comments, no-bitwise */
+/* eslint-disable no-bitwise */
 /**
  * L0 — Subscriber list (DataViews, full-width).
  *
