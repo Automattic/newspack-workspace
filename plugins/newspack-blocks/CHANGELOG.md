@@ -1,3 +1,43 @@
+## @automattic/newspack-blocks [4.32.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.32.0...newspack-blocks@4.32.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **checkout:** tighten modal checkout request handling ([#1065](https://github.com/Automattic/newspack-workspace/issues/1065)) ([89e1ab3](https://github.com/Automattic/newspack-workspace/commit/89e1ab3a6655e7378647bba77fa94ceacaa88c45))
+
+# @automattic/newspack-blocks [4.32.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.31.2...newspack-blocks@4.32.0) (2026-09-14)
+
+
+### Bug Fixes
+
+* **blocks:** keep tag labels clear of cat-links styling ([#736](https://github.com/Automattic/newspack-workspace/issues/736)) ([4cb3fb7](https://github.com/Automattic/newspack-workspace/commit/4cb3fb76849ca05bf29d06788e0148afab204227))
+* **modal-checkout:** tiered donate URL trigger handles non-default frequency ([#202](https://github.com/Automattic/newspack-workspace/issues/202)) ([1bc89b9](https://github.com/Automattic/newspack-workspace/commit/1bc89b94e0db1110b8dc35536907cf35a98f62dd))
+
+
+### Features
+
+* **blocks:** reorder the content picked in Static mode (NPPD-946) ([#846](https://github.com/Automattic/newspack-workspace/issues/846)) ([b4b9177](https://github.com/Automattic/newspack-workspace/commit/b4b91774a4a391a9686352edda0e64ffebfce5d4))
+* **group-subscriptions:** per-seat pricing ([#955](https://github.com/Automattic/newspack-workspace/issues/955)) ([a13a858](https://github.com/Automattic/newspack-workspace/commit/a13a858cbf1570cc6a60ca61b5672758e9b3dc59))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
+## @automattic/newspack-blocks [4.31.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.31.1...newspack-blocks@4.31.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **iframe:** keep Back working on iframe block pages (NPPM-3180) ([#1042](https://github.com/Automattic/newspack-workspace/issues/1042)) ([6a87cb2](https://github.com/Automattic/newspack-workspace/commit/6a87cb2c6dcab735a81b54e87fb11b93769baac1))
+
+## @automattic/newspack-blocks [4.31.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.31.0...newspack-blocks@4.31.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **homepage-articles:** reset dedup state per render pass (NPLAUNC-242) ([#1019](https://github.com/Automattic/newspack-workspace/issues/1019)) ([0ecdc9b](https://github.com/Automattic/newspack-workspace/commit/0ecdc9b7e9511799df668738a732ef6f0d808cb4))
+
 # @automattic/newspack-blocks [4.31.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.30.5...newspack-blocks@4.31.0) (2026-08-31)
 
 

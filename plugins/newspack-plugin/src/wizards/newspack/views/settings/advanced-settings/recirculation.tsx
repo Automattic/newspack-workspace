@@ -9,7 +9,7 @@ export default function Recirculation( { data, update, isFetching }: ThemeModCom
 		<>
 			<WizardsActionCard
 				title={ __( 'Related Posts', 'newspack-plugin' ) }
-				badge="Jetpack"
+				badges={ [ { label: 'Jetpack' } ] }
 				description={ () => (
 					<Fragment>
 						{ isFetching

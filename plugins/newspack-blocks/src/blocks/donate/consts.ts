@@ -7,6 +7,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { DonationFrequencySlug, DonateBlockAttributes } from './types';
+import { FREQUENCY_SLUGS as DONATE_FREQUENCY_SLUGS } from './frequency-slugs';
 
 export const FREQUENCIES: Record< DonationFrequencySlug, string > = {
 	once: __( 'One-time', 'newspack-blocks' ),
@@ -14,7 +15,7 @@ export const FREQUENCIES: Record< DonationFrequencySlug, string > = {
 	year: __( 'Annually', 'newspack-blocks' ),
 };
 
-export const FREQUENCY_SLUGS: DonationFrequencySlug[] = Object.keys( FREQUENCIES ) as DonationFrequencySlug[];
+export const FREQUENCY_SLUGS = DONATE_FREQUENCY_SLUGS as DonationFrequencySlug[];
 
 export const LAYOUT_OPTIONS: { label: string; key: DonateBlockAttributes[ 'layoutOption' ] }[] = [
 	{ label: __( 'Frequency', 'newspack-blocks' ), key: 'frequency' },

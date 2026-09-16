@@ -6,6 +6,7 @@
  */
 
 use Newspack\Users_CSV_Exporter;
+use Newspack\User_Meta_Columns;
 
 require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
 require_once dirname( __DIR__, 3 ) . '/includes/export/class-users-csv-exporter.php';
@@ -17,6 +18,15 @@ require_once dirname( __DIR__, 3 ) . '/includes/export/class-users-csv-exporter.
  * @group csv-export
  */
 class Newspack_Test_Users_CSV_Exporter extends WP_UnitTestCase {
+
+	/**
+	 * The meta-key list is cached in a transient that outlives the per-test
+	 * transaction rollback.
+	 */
+	public function set_up() {
+		parent::set_up();
+		User_Meta_Columns::flush_available_keys();
+	}
 
 	/**
 	 * Create a subscriber with WC billing meta.
@@ -209,5 +219,141 @@ class Newspack_Test_Users_CSV_Exporter extends WP_UnitTestCase {
 
 		remove_filter( 'newspack_users_export_headers', $add_header );
 		remove_filter( 'newspack_users_export_row', $add_cell );
+	}
+
+	/**
+	 * The dialog's role selection supersedes the list's single-role filter —
+	 * the only way more than one role reaches one export, since core's users
+	 * list allows one role at a time.
+	 */
+	public function test_users_build_query_args_roles_supersede_the_list_filter() {
+		$args = Users_CSV_Exporter::build_query_args(
+			[ 'role' => 'subscriber' ],
+			[ 'roles' => [ 'subscriber', 'customer' ] ]
+		);
+
+		$this->assertSame( [ 'subscriber', 'customer' ], $args['role__in'] );
+		$this->assertArrayNotHasKey( 'role', $args, 'Passing both would intersect the two and export neither role fully.' );
+	}
+
+	/**
+	 * The registration range covers whole days at both ends, so a single-day
+	 * range returns that day rather than only its first instant. Either bound
+	 * can be left open.
+	 */
+	public function test_users_build_query_args_date_range() {
+		// `user_registered` is stored in UTC but the dates are the publisher's,
+		// so a site behind UTC must shift the bounds — otherwise "January" here
+		// and "January" on the subscriptions export mean different ranges.
+		update_option( 'timezone_string', 'America/New_York' );
+
+		$args = Users_CSV_Exporter::build_query_args(
+			[],
+			[
+				'date_from' => '2026-01-01',
+				'date_to'   => '2026-01-01',
+			]
+		);
+		update_option( 'timezone_string', '' );
+
+		$this->assertSame(
+			[
+				'column'    => 'user_registered',
+				'inclusive' => true,
+				'after'     => '2026-01-01 05:00:00',
+				'before'    => '2026-01-02 04:59:59',
+			],
+			$args['date_query'][0]
+		);
+
+		$open_ended = Users_CSV_Exporter::build_query_args( [], [ 'date_from' => '2026-01-01' ] );
+		$this->assertArrayNotHasKey( 'before', $open_ended['date_query'][0] );
+
+		$this->assertArrayNotHasKey( 'date_query', Users_CSV_Exporter::build_query_args( [], [] ) );
+	}
+
+	/**
+	 * Clearing every role checkbox means every role. Without the submitted-
+	 * selection marker an emptied dialog is indistinguishable from a bare
+	 * button press, and the list's own role filter silently reapplies — so the
+	 * one gesture the dialog's copy promises would do nothing.
+	 */
+	public function test_users_cleared_role_selection_beats_the_list_filter() {
+		$cleared = Users_CSV_Exporter::build_query_args(
+			[ 'role' => 'subscriber' ],
+			[
+				'roles'               => [],
+				'selection_submitted' => true,
+			]
+		);
+		$this->assertArrayNotHasKey( 'role', $cleared );
+		$this->assertArrayNotHasKey( 'role__in', $cleared );
+
+		$no_dialog = Users_CSV_Exporter::build_query_args( [ 'role' => 'subscriber' ], [] );
+		$this->assertSame( 'subscriber', $no_dialog['role'], 'Without a submitted selection the list filter still drives the export.' );
+	}
+
+	/**
+	 * A registration range actually narrows the exported rows.
+	 */
+	public function test_users_date_range_narrows_the_export() {
+		$old = self::factory()->user->create(
+			[
+				'role'            => 'subscriber',
+				'user_registered' => '2024-05-14 09:00:00',
+			]
+		);
+		$new = self::factory()->user->create(
+			[
+				'role'            => 'subscriber',
+				'user_registered' => '2026-05-14 09:00:00',
+			]
+		);
+
+		$exporter = new Users_CSV_Exporter();
+		$exporter->set_list_params( [ 'role' => 'subscriber' ] );
+		$exporter->set_export_config( [ 'date_from' => '2026-01-01' ] );
+		$exporter->prepare_data_to_export();
+
+		$exported_ids = wp_list_pluck( $exporter->get_prepared_row_data(), 'ID' );
+		$this->assertContains( $new, $exported_ids );
+		$this->assertNotContains( $old, $exported_ids );
+	}
+
+	/**
+	 * Extra meta columns are opt-in: without a chosen key the export is what it
+	 * was. With one, the column set and the row are assembled by two separate
+	 * code paths, and a divergence between them shifts every cell after it.
+	 */
+	public function test_users_meta_columns_are_opt_in() {
+		$user_id = $this->create_user_with_billing( 1 );
+		update_user_meta( $user_id, 'reader_zip_code', '07079' );
+
+		$off = new Users_CSV_Exporter();
+		$this->assertArrayNotHasKey( 'meta_reader_zip_code', $off->get_row_data( get_userdata( $user_id ) ) );
+
+		$on = new Users_CSV_Exporter();
+		$on->set_export_config( [ 'meta_keys' => [ 'reader_zip_code' ] ] );
+		$row = $on->get_row_data( get_userdata( $user_id ) );
+		$this->assertSame( '07079', $row['meta_reader_zip_code'] );
+		$this->assertSame( array_keys( $on->get_column_names() ), array_keys( $row ) );
+	}
+
+	/**
+	 * Core's users list has a role-less `?role=none` view that the dialog has
+	 * no checkbox for. A submitted-but-empty selection must not drop it:
+	 * nothing was ever shown for the admin to clear, and dropping it widens a
+	 * PII export from role-less users to every user on the site.
+	 */
+	public function test_users_a_role_view_the_dialog_cannot_represent_survives() {
+		$args = Users_CSV_Exporter::build_query_args(
+			[ 'role' => 'none' ],
+			[
+				'roles'               => [],
+				'selection_submitted' => true,
+			]
+		);
+
+		$this->assertSame( 'none', $args['role'] );
 	}
 }

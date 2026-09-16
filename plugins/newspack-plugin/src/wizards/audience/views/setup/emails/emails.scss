@@ -78,14 +78,6 @@
 	.dataviews-view-grid__media-actions {
 		opacity: 1;
 	}
-
-	// The shared Badge is `display: block` globally; in the Status column it
-	// would stretch to fill the cell. Scope `inline-block` to the Emails
-	// surface so the status badge hugs its label without shifting badges
-	// elsewhere in the app.
-	.newspack-badge {
-		display: inline-block;
-	}
 }
 
 // Preview-tile anchor — wraps the EmailPreview iframe in the

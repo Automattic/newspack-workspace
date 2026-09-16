@@ -7,16 +7,8 @@ type BlockSettings = {
 	attributes: Record< string, unknown >;
 	name: string;
 };
-type DynamicOptionItem = {
-	id: string | number;
-	title: {
-		raw: string;
-	};
-};
-type AccessRuleOption = {
-	value: string | number;
-	label: string;
-};
+// Alias the module's own type rather than restating it, so the two cannot drift.
+type AccessRuleOption = import( '../access-rule-options' ).AccessRuleOption;
 // Single source of truth for the composite value shape lives with the control.
 type EditorOneTimePurchaseRuleValue = import( '../components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
 type AccessRuleConfig = {
@@ -26,6 +18,8 @@ type AccessRuleConfig = {
 	is_boolean?: boolean;
 	placeholder?: string;
 	options?: AccessRuleOption[];
+	has_options: boolean;
+	empty_grants_access?: boolean;
 };
 type ActiveRule = {
 	slug: string;

@@ -37,6 +37,13 @@ const V3_CONFIG = { captcha_version: 'v3', captcha_site_key: 'site-key' };
 describe( 'form-capture client', () => {
 	afterEach( () => {
 		document.body.innerHTML = '';
+		// Every client load leaves once-listeners on the shared jsdom document
+		// for the GF late-hook retry (a real page runs one bootstrap, so they
+		// can't accumulate there). Drain them while window.gform is absent —
+		// the retry is inert then — so they can't fire into a later test's
+		// fakes. Runs after the nested describe's afterEach deletes the fake.
+		document.dispatchEvent( new Event( 'DOMContentLoaded', { bubbles: true } ) );
+		window.dispatchEvent( new Event( 'load' ) );
 		delete window.newspackRAS;
 		delete window.newspack_form_capture;
 		delete window.newspack_ras_config;
@@ -249,5 +256,239 @@ describe( 'form-capture client', () => {
 	it( 'getMatchedForms resolves an over-broad selector to every form (why bare selectors are rejected server-side)', () => {
 		document.body.innerHTML = `<form id="a"></form><form id="b"></form>`;
 		expect( getMatchedForms( [ 'form' ] ).map( f => f.id ) ).toEqual( [ 'a', 'b' ] );
+	} );
+
+	/**
+	 * Gravity Forms (2.9+ theme framework) submits via programmatic
+	 * form.submit(), which dispatches no submit event — and its own submit
+	 * listener cancels any native submit event as an "unsupported flow" — so
+	 * the generic submit listener can never fire on a GF form. Capture hooks
+	 * GF's public async-filter bus instead.
+	 */
+	describe( 'gravity forms adapter', () => {
+		/**
+		 * Minimal stand-in for GF's gform.utils filter bus. submitViaGform
+		 * replays what gform.submission.submitForm does: run the
+		 * pre_submission filter chain, feeding each callback the previous
+		 * one's return value — a callback that fails to return the payload
+		 * hands undefined to GF and breaks the vendor's submission.
+		 *
+		 * @return {Object} { submitViaGform, addAsyncFilter } — the chain runner and the registration spy.
+		 */
+		const installFakeGform = () => {
+			const filters = {};
+			const addAsyncFilter = jest.fn( ( event, callback ) => {
+				filters[ event ] = filters[ event ] || [];
+				filters[ event ].push( callback );
+			} );
+			window.gform = { utils: { addAsyncFilter } };
+			const submitViaGform = async ( form, data = {} ) => {
+				let payload = { form, submissionType: 'submit', submissionMethod: 'postback', displayConfirmation: true, abort: false, ...data };
+				for ( const callback of filters[ 'gform/submission/pre_submission' ] || [] ) {
+					payload = await callback( payload );
+				}
+				return payload;
+			};
+			return { submitViaGform, addAsyncFilter };
+		};
+
+		afterEach( () => {
+			delete window.gform;
+		} );
+
+		const GF_FORM = `<form id="gform_1" class="newspack-form-capture" novalidate><input type="email" name="input_2" value="gf-reader@example.com"></form>`;
+
+		it( 'captures a matched form through the pre_submission filter and returns the payload to the chain', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient( GF_FORM );
+			const form = document.querySelector( 'form' );
+			const payload = await submitViaGform( form );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+			expect( ras.register ).toHaveBeenCalledWith( 'gf-reader@example.com', 'form-capture', expect.any( Object ), expect.any( Object ) );
+			// The chain must receive the payload back intact or GF aborts.
+			expect( payload ).toEqual( expect.objectContaining( { form, abort: false } ) );
+		} );
+
+		it( 'ignores submissions from GF forms that are not opted in', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient( `${ GF_FORM }<form id="gform_2" novalidate><input type="email" value="other@example.com"></form>` );
+			await submitViaGform( document.querySelector( '#gform_2' ) );
+			expect( ras.register ).not.toHaveBeenCalled();
+			// Positive control — the adapter is live, it just skipped the
+			// un-opted-in form.
+			await submitViaGform( document.querySelector( '#gform_1' ) );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'returns the payload and keeps GF submitting even when capture throws', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient( GF_FORM );
+			ras.register.mockImplementation( () => {
+				throw new Error( 'capture exploded' );
+			} );
+			const form = document.querySelector( 'form' );
+			const payload = await submitViaGform( form );
+			// The throw happened inside the filter…
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+			// …and the chain still got its payload back.
+			expect( payload ).toEqual( expect.objectContaining( { form, abort: false } ) );
+		} );
+
+		it( 'hooks GF when its scripts land after the capture client, without double-registering', async () => {
+			const ras = loadCaptureClient( GF_FORM );
+			// GF's deferred scripts execute after ours; all are done by DOMContentLoaded.
+			const { submitViaGform, addAsyncFilter } = installFakeGform();
+			document.dispatchEvent( new Event( 'DOMContentLoaded', { bubbles: true } ) );
+			window.dispatchEvent( new Event( 'load' ) );
+			expect( addAsyncFilter ).toHaveBeenCalledTimes( 1 );
+			await submitViaGform( document.querySelector( 'form' ) );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'does not double-register when GF was present at bootstrap and lifecycle events still fire', () => {
+			const { addAsyncFilter } = installFakeGform();
+			loadCaptureClient( GF_FORM );
+			document.dispatchEvent( new Event( 'DOMContentLoaded', { bubbles: true } ) );
+			window.dispatchEvent( new Event( 'load' ) );
+			expect( addAsyncFilter ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'dedupes an email across the GF path and the generic submit path', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient( GF_FORM );
+			const form = document.querySelector( 'form' );
+			await submitViaGform( form );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+			submit( form );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'captures on any submission type — a multi-page "next" is a submission, as it is on native-submitting tools', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient( GF_FORM );
+			await submitViaGform( document.querySelector( 'form' ), { submissionType: 'next' } );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'passes the warm captcha token on the GF path', async () => {
+			window.grecaptcha = {
+				ready: callback => callback(),
+				execute: jest.fn( () => Promise.resolve( 'gf-warm-token' ) ),
+			};
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient( GF_FORM, V3_CONFIG );
+			const form = document.querySelector( 'form' );
+			focusin( form );
+			await flush();
+			await submitViaGform( form );
+			expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'gf-warm-token' );
+		} );
+
+		/**
+		 * GF awaits the pre_submission filter chain, so the adapter can hold
+		 * the submission until the registration response sets the reader's
+		 * auth cookies — the page GF navigates to then renders already
+		 * authenticated. The hold is bounded: registration must never hold
+		 * the reader's submission hostage.
+		 */
+		describe( 'bounded await of the registration', () => {
+			// Settle pending microtask chains without running timers.
+			const drain = async ( rounds = 20 ) => {
+				for ( let i = 0; i < rounds; i++ ) {
+					await Promise.resolve();
+				}
+			};
+
+			it( 'holds the GF submission until the registration settles', async () => {
+				const { submitViaGform } = installFakeGform();
+				const ras = loadCaptureClient( GF_FORM );
+				let resolveRegister;
+				ras.register.mockImplementation(
+					() =>
+						new Promise( resolve => {
+							resolveRegister = resolve;
+						} )
+				);
+				let settled = false;
+				submitViaGform( document.querySelector( 'form' ) ).then( () => {
+					settled = true;
+				} );
+				await flush();
+				expect( settled ).toBe( false );
+				resolveRegister( {} );
+				await flush();
+				expect( settled ).toBe( true );
+			} );
+
+			it( 'releases the submission after the bounded wait when the registration hangs', async () => {
+				jest.useFakeTimers();
+				try {
+					const { submitViaGform } = installFakeGform();
+					const ras = loadCaptureClient( GF_FORM );
+					ras.register.mockImplementation( () => new Promise( () => {} ) );
+					let settled = false;
+					submitViaGform( document.querySelector( 'form' ) ).then( () => {
+						settled = true;
+					} );
+					await drain();
+					expect( settled ).toBe( false );
+					jest.advanceTimersByTime( 3000 );
+					await drain();
+					expect( settled ).toBe( true );
+				} finally {
+					jest.useRealTimers();
+				}
+			} );
+
+			it( 'clears the bounding timer once the registration settles', async () => {
+				// A resolved race does not cancel the losing timer on its own;
+				// left pending, one fires per submission and holds Jest's
+				// teardown open.
+				jest.useFakeTimers();
+				try {
+					const { submitViaGform } = installFakeGform();
+					const ras = loadCaptureClient( GF_FORM );
+					let resolveRegister;
+					ras.register.mockImplementation(
+						() =>
+							new Promise( resolve => {
+								resolveRegister = resolve;
+							} )
+					);
+					// Baseline absorbs unrelated timers (stale mutation-observer
+					// debounces from earlier client loads on the shared document).
+					await drain();
+					const baseline = jest.getTimerCount();
+					const chain = submitViaGform( document.querySelector( 'form' ) );
+					await drain();
+					expect( jest.getTimerCount() ).toBe( baseline + 1 );
+					resolveRegister( {} );
+					await chain;
+					expect( jest.getTimerCount() ).toBe( baseline );
+				} finally {
+					jest.useRealTimers();
+				}
+			} );
+
+			it( 'does not delay the submission when nothing is captured', async () => {
+				// Guards the implementation shape: the wait must be on the
+				// pending registration, not an unconditional timer.
+				jest.useFakeTimers();
+				try {
+					const { submitViaGform } = installFakeGform();
+					const ras = loadCaptureClient( GF_FORM );
+					ras.getReader.mockReturnValue( { email: 'gf-reader@example.com' } );
+					let settled = false;
+					submitViaGform( document.querySelector( 'form' ) ).then( () => {
+						settled = true;
+					} );
+					await drain();
+					expect( settled ).toBe( true );
+					expect( ras.register ).not.toHaveBeenCalled();
+				} finally {
+					jest.useRealTimers();
+				}
+			} );
+		} );
 	} );
 } );

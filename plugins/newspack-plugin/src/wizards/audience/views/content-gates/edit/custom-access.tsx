@@ -24,9 +24,12 @@ interface CustomAccessProps {
 	customAccess: CustomAccess;
 	onChange: ( customAccess: CustomAccess ) => void;
 	isNewsletter?: boolean;
+	siteMeter?: SiteMeterConfig;
+	/** Whether this path also governs signed-out readers, i.e. there is no registration wall. */
+	governsSignedOut?: boolean;
 }
 
-export default function CustomAccess( { customAccess, onChange, isNewsletter = false }: CustomAccessProps ) {
+export default function CustomAccess( { customAccess, onChange, isNewsletter = false, siteMeter, governsSignedOut = false }: CustomAccessProps ) {
 	// Flatten grouped rules for display (each group has one rule in OR mode).
 	const currentRules = customAccess.access_rules.map( group => group[ 0 ] ).filter( Boolean );
 
@@ -67,7 +70,13 @@ export default function CustomAccess( { customAccess, onChange, isNewsletter = f
 			{ ! isNewsletter && (
 				<>
 					<CardBody size="small">
-						<Metering metering={ customAccess.metering } onChange={ ( metering: Metering ) => handleChange( { metering } ) } />
+						<Metering
+							metering={ customAccess.metering }
+							onChange={ ( metering: Metering ) => handleChange( { metering } ) }
+							siteCount={ siteMeter?.registered_count }
+							sitePeriod={ siteMeter?.period }
+							signedOutSiteCount={ governsSignedOut ? siteMeter?.anonymous_count : undefined }
+						/>
 					</CardBody>
 					<CardDivider />
 				</>
