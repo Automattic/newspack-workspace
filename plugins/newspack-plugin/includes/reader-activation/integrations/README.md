@@ -25,7 +25,7 @@ The framework is built on top of [Data Events](../../data-events/README.md) and 
 | `class-incoming-field.php` | Value object describing an external field returned by an integration. Carries display metadata plus flags for access rules and segmentation criteria. |
 | `class-date-value.php` | Date value helpers shared by the pull pipeline and the access-rule evaluator: source-format normalization to ISO and calendar-date validation. |
 | `class-contact-pull.php` | Pull pipeline. Per-integration synchronous loopback requests plus ActionScheduler-backed retries with exponential backoff. |
-| `class-contact-cron.php` | Recurring cron orchestration. Stages logged-in readers; every 5 minutes pushes the staged readers whose contact changed since their last push, and pulls the ones whose synchronous pull failed. |
+| `class-contact-cron.php` | Recurring cron orchestration. Stages logged-in readers; every 5 minutes pushes each staged reader to the integrations whose payload changed since they last took it, and pulls the readers whose synchronous pull failed. |
 
 The registry class is `Newspack\Reader_Activation\Integrations` (parent namespace). Classes under this folder live in `Newspack\Reader_Activation\Integrations\*`.
 
@@ -295,7 +295,7 @@ The abstract signature intentionally stays three-parameter (`push_contact_data( 
 ### When pushes are triggered
 
 - Data event handlers registered via `register_handler()` (see below).
-- Recurring cron via `Contact_Cron`. Logged-in readers are staged at most once every 5 minutes, and the batch pushes only the staged readers whose prepared contact changed since the batch last pushed them (`Contact_Sync::get_push_fingerprint()`). The fingerprint also covers the set of push-enabled integrations and each one's outgoing field selection, so activating an integration or enabling a field forces a push. The cron is a safety net behind the event-driven syncs, not a periodic rewrite.
+- Recurring cron via `Contact_Cron`, a safety net behind the event-driven syncs rather than a periodic rewrite. Logged-in readers are staged at most once every 5 minutes, and the batch pushes each staged reader only to the integrations whose prepared payload differs from the last one they took (`Contact_Sync::get_integrations_to_push()`). Every full push records what each integration took, whether it came from a data event, a retry, or the cron, so a change is not pushed twice. The integration's outgoing field selection is part of the comparison, so enabling a field or activating an integration forces a push. A push that fails as benign or with a permanent contact error counts as taken; transient and site configuration failures do not, so the cron tries again after the retries.
 - Direct calls from other Newspack subsystems via `Contact_Sync::sync_contact()`.
 
 ### Retries

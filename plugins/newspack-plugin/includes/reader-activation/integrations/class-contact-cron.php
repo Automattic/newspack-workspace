@@ -52,21 +52,13 @@ class Contact_Cron {
 	const LAST_ENQUEUE_META = 'newspack_contact_cron_last_enqueue';
 
 	/**
-	 * User meta key for the timestamp of the last pull started for the reader
-	 * from a page load, whether it ran synchronously or fell back to the batch.
-	 * Read against Contact_Pull::PULL_SYNC_THRESHOLD.
+	 * User meta key for the timestamp of the last pull started for the reader,
+	 * synchronously on a page load or by the batch fallback. Read against
+	 * Contact_Pull::PULL_SYNC_THRESHOLD.
 	 *
 	 * @var string
 	 */
 	const LAST_PULL_META = 'newspack_contact_cron_last_pull';
-
-	/**
-	 * User meta key for the fingerprint of the contact the batch last pushed
-	 * successfully for the reader. See Contact_Sync::get_push_fingerprint().
-	 *
-	 * @var string
-	 */
-	const LAST_PUSH_HASH_META = 'newspack_contact_cron_last_push_hash';
 
 	/**
 	 * WP-Cron hook for batch processing.
@@ -258,6 +250,7 @@ class Contact_Cron {
 				Logger::log( 'Batch pull skipping user ' . $user_id . ': pending pull retries.', self::LOGGER_HEADER );
 				continue;
 			}
+			update_user_meta( $user_id, self::LAST_PULL_META, time() );
 			$result = Contact_Pull::pull_all( $user_id );
 			if ( is_wp_error( $result ) ) {
 				Logger::error( 'Batch pull failed for user ' . $user_id . ': ' . $result->get_error_message(), self::LOGGER_HEADER );
@@ -270,12 +263,12 @@ class Contact_Cron {
 	/**
 	 * Process the push queue.
 	 *
-	 * Clears every staged reader's flag and pushes only those whose contact
-	 * differs from what the batch last pushed for them. Most staged readers are
-	 * merely active, not changed; without the comparison each one was rewritten
-	 * at the integrations every batch (NEWS-3087). A failed push keeps the
-	 * previous fingerprint, so the contact is not recorded as delivered and the
-	 * next batch tries again once the sync retries are no longer pending.
+	 * Clears every staged reader's flag and pushes each one only to the
+	 * integrations whose payload changed since they last took it. Most staged
+	 * readers are merely active, not changed; without the comparison each one was
+	 * rewritten at every integration every batch (NEWS-3087). What counts as
+	 * taken, including after a failure, is decided by the push path; see
+	 * Contact_Sync::get_integrations_to_push().
 	 */
 	private static function handle_batch_push() {
 		$queue = self::get_pending_users( self::PUSH_PENDING_META );
@@ -297,25 +290,26 @@ class Contact_Cron {
 			}
 
 			$contact = Contact_Sync::get_contact_data( $user_id );
-			if ( is_wp_error( $contact ) ) {
-				Logger::error( 'Batch push failed for user ' . $user_id . ': ' . $contact->get_error_message(), self::LOGGER_HEADER );
+			if ( is_wp_error( $contact ) || empty( $contact['email'] ) ) {
+				$message = is_wp_error( $contact ) ? $contact->get_error_message() : 'Contact email is empty.';
+				Logger::error( 'Batch push failed for user ' . $user_id . ': ' . $message, self::LOGGER_HEADER );
 				continue;
 			}
-			$fingerprint = Contact_Sync::get_push_fingerprint( $contact, $context );
-			if ( $fingerprint === get_user_meta( $user_id, self::LAST_PUSH_HASH_META, true ) ) {
+			$integration_ids = Contact_Sync::get_integrations_to_push( $user_id, $contact, $context );
+			if ( empty( $integration_ids ) ) {
 				$unchanged++;
 				continue;
 			}
 
-			// sync_contact() rebuilds the contact it pushes. Only readers whose
-			// contact moved pay for that second build, and it keeps the push on
-			// the same path as every other caller.
-			$result = Contact_Sync::sync_contact( $user_id, $context );
-			if ( is_wp_error( $result ) ) {
-				Logger::error( 'Batch push failed for user ' . $user_id . ': ' . $result->get_error_message(), self::LOGGER_HEADER );
-				continue;
+			// One push per changed integration, so an integration that already
+			// holds this contact is not written again because another one changed
+			// or is failing.
+			foreach ( $integration_ids as $integration_id ) {
+				$result = Contact_Sync::sync( $contact, $context, null, [ 'integration_id' => $integration_id ] );
+				if ( is_wp_error( $result ) ) {
+					Logger::error( 'Batch push failed for user ' . $user_id . ': ' . $result->get_error_message(), self::LOGGER_HEADER );
+				}
 			}
-			update_user_meta( $user_id, self::LAST_PUSH_HASH_META, $fingerprint );
 		}
 
 		Logger::log( sprintf( 'Batch push completed. Skipped %d unchanged user(s).', $unchanged ), self::LOGGER_HEADER );

@@ -84,6 +84,13 @@ class Contact_Sync extends Sync {
 	const RETRY_BACKOFF = [ 30, 120, 480, 1800, 7200 ];
 
 	/**
+	 * User meta key prefix, suffixed with an integration ID, for the fingerprint
+	 * of the last payload that integration took for the reader.
+	 * See get_integrations_to_push().
+	 */
+	const PUSH_FINGERPRINT_META_PREFIX = 'newspack_contact_sync_fingerprint_';
+
+	/**
 	 * Substring signatures (lowercase) that classify an ESP error message on
 	 * the push/upsert direction.
 	 *
@@ -307,38 +314,81 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
-	 * Fingerprint of what a push of this contact would send to the integrations.
+	 * IDs of the push-enabled integrations whose payload for this contact differs
+	 * from the last one they took for the reader.
 	 *
-	 * Lets the recurring cron skip readers whose contact has not moved since its
-	 * last push, without making a push to find out (NEWS-3087). Mirrors
-	 * push_to_integrations(): the contact filter, then each push-enabled
-	 * integration's own preparation. Keep the two in step; if they drift, the
-	 * cron pushes unchanged contacts again or, worse, skips a real change.
-	 * Because it is built from the prepared payloads, a change in a field an
-	 * integration does not receive is not a change. The integration IDs and each
-	 * one's outgoing field selection are part of it, so activating an
-	 * integration or enabling a field forces a push even for a reader with no
-	 * value for that field yet.
+	 * Lets the recurring cron push only where something moved (NEWS-3087). Every
+	 * full push records what each integration took, whether from a data event, a
+	 * retry, or the cron, so a change already delivered is not pushed again.
+	 * Payloads are built the way push_to_integrations() builds them; if the two
+	 * drift, the cron re-pushes unchanged contacts or, worse, skips a real change.
+	 * The outgoing field selection is part of the fingerprint, so enabling a field
+	 * forces a push even for a reader with no value for it yet.
 	 *
+	 * @param int    $user_id The reader's user ID.
 	 * @param array  $contact The contact data, as returned by get_contact_data().
 	 * @param string $context The context the push would run under; the contact filter receives it.
 	 *
-	 * @return string The fingerprint.
+	 * @return string[] Integration IDs.
 	 */
-	public static function get_push_fingerprint( $contact, $context = '' ) {
+	public static function get_integrations_to_push( $user_id, $contact, $context = '' ) {
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
-		$contact     = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$fingerprint = [];
+		$contact         = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
+		$integration_ids = [];
 		foreach ( Integrations::get_active_configured_integrations() as $integration_id => $integration ) {
 			if ( ! $integration->is_push_enabled() ) {
 				continue;
 			}
-			$fingerprint[ $integration_id ] = [
-				'fields'  => $integration->get_enabled_outgoing_fields(),
-				'contact' => self::prepare_contact_for_integration( $integration, $contact ),
-			];
+			$fingerprint = self::get_push_fingerprint( $integration, self::prepare_contact_for_integration( $integration, $contact ) );
+			if ( \get_user_meta( $user_id, self::PUSH_FINGERPRINT_META_PREFIX . $integration_id, true ) !== $fingerprint ) {
+				$integration_ids[] = $integration_id;
+			}
 		}
-		return md5( wp_json_encode( $fingerprint ) );
+		return $integration_ids;
+	}
+
+	/**
+	 * Fingerprint of a prepared payload together with the integration's outgoing
+	 * field selection.
+	 *
+	 * @param \Newspack\Reader_Activation\Integration $integration         The integration.
+	 * @param array                                   $integration_contact The contact as prepared for it.
+	 *
+	 * @return string The fingerprint.
+	 */
+	private static function get_push_fingerprint( $integration, $integration_contact ) {
+		return md5(
+			\wp_json_encode(
+				[
+					'fields'  => $integration->get_enabled_outgoing_fields(),
+					'contact' => $integration_contact,
+				]
+			)
+		);
+	}
+
+	/**
+	 * Record that an integration took this payload for the reader, so the
+	 * recurring cron does not push it again.
+	 *
+	 * Only for full, unscoped payloads: callers pass a push made with default
+	 * options. A benign error means the provider already holds the contact, and a
+	 * permanent contact error means it will never accept this payload, so both
+	 * count as taken; pushing again would repeat the same result every batch
+	 * until the contact changes. Transient and site configuration errors are not
+	 * recorded, so the cron tries again once the retries are done or the
+	 * configuration is fixed.
+	 *
+	 * @param int                                     $user_id             The reader's user ID.
+	 * @param \Newspack\Reader_Activation\Integration $integration         The integration pushed to.
+	 * @param array                                   $integration_contact The contact as prepared for it.
+	 * @param true|\WP_Error                          $result              The push result.
+	 */
+	private static function record_push_fingerprint( $user_id, $integration, $integration_contact, $result ) {
+		if ( \is_wp_error( $result ) && ! in_array( self::classify_error( $result ), [ 'benign', 'permanent_contact' ], true ) ) {
+			return;
+		}
+		\update_user_meta( $user_id, self::PUSH_FINGERPRINT_META_PREFIX . $integration->get_id(), self::get_push_fingerprint( $integration, $integration_contact ) );
 	}
 
 	/**
@@ -451,6 +501,10 @@ class Contact_Sync extends Sync {
 					self::$current_as_action_id,
 					sprintf( 'Sync succeeded for integration "%s" of %s.', $integration_id, $contact['email'] ?? 'unknown' )
 				);
+			}
+
+			if ( $user_id && self::options_are_default( $options ) ) {
+				self::record_push_fingerprint( $user_id, $integration, $integration_contact, $result );
 			}
 		}
 
@@ -947,6 +1001,7 @@ class Contact_Sync extends Sync {
 
 		$integration_contact = $integration->prepare_contact( $contact );
 		$result              = $integration->push_contact_data( $integration_contact, $context, $existing_contact );
+		self::record_push_fingerprint( $user_id, $integration, $integration_contact, $result );
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
 			static::log(
