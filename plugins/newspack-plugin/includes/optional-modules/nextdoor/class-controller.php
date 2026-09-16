@@ -193,6 +193,16 @@ class Controller {
 			return $account_response;
 		}
 
+		// Persist the country so subsequent calls (claim_page, articles) target the same region.
+		// Read the raw option (not Nextdoor::get_settings()) so centralized credentials
+		// injected from env/constants are not written back to the database.
+		$saved = get_option( Nextdoor::SETTINGS_SLUG, [] );
+		if ( ! is_array( $saved ) ) {
+			$saved = [];
+		}
+		$saved['country'] = strtoupper( $country );
+		Nextdoor::update_settings( $saved );
+
 		return rest_ensure_response(
 			[
 				'login_url' => isset( $account_response['login_url'] ) ? $account_response['login_url'] : '',
@@ -214,11 +224,16 @@ class Controller {
 		$result = $api->claim_page( $publication_url, $test );
 
 		if ( is_array( $result ) && isset( $result['page_id'] ) ) {
-			$settings                    = Nextdoor::get_settings();
-			$settings['page_id']         = $result['page_id'];
-			$settings['publication_url'] = $publication_url;
+			// Read the raw option (not Nextdoor::get_settings()) so centralized credentials
+			// injected from env/constants are not written back to the database.
+			$saved = get_option( Nextdoor::SETTINGS_SLUG, [] );
+			if ( ! is_array( $saved ) ) {
+				$saved = [];
+			}
+			$saved['page_id']         = $result['page_id'];
+			$saved['publication_url'] = $publication_url;
 
-			Nextdoor::update_settings( $settings );
+			Nextdoor::update_settings( $saved );
 		}
 
 		if ( is_wp_error( $result ) ) {
