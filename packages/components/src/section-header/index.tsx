@@ -1,0 +1,262 @@
+/**
+ * Section Header
+ */
+
+/**
+ * WordPress dependencies
+ */
+import { __ } from '@wordpress/i18n';
+import { useEffect, useRef } from '@wordpress/element';
+import {
+	DropdownMenu,
+	MenuItem,
+	Tooltip,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack,
+} from '@wordpress/components';
+import { Icon, chevronLeft, moreVertical } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
+
+/**
+ * Internal dependencies
+ */
+import Button from '../button';
+import Grid from '../grid';
+import type { CardBadge } from '../types';
+import './style.scss';
+
+/**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+export interface SectionHeaderMenuItem {
+	/** The menu item's label. */
+	label: React.ReactNode;
+	/** Icon displayed next to the label. */
+	icon?: React.ComponentProps< typeof MenuItem >[ 'icon' ];
+	/** URL the menu item links to. */
+	href?: string;
+	/** Called when the menu item is clicked. */
+	action?: () => void;
+	/** Whether the menu item is disabled. */
+	disabled?: boolean;
+	/** Whether the menu item is destructive. */
+	destructive?: boolean;
+}
+
+export interface SectionHeaderAction {
+	/** The action's label. */
+	label: React.ReactNode;
+	/** URL the action links to. */
+	href?: string;
+	/** Called when the action is clicked. */
+	action?: () => void;
+}
+
+export interface SectionHeaderProps {
+	/** URL to navigate back to. */
+	backNav?: string;
+	/** Badges to display beside the title. */
+	badges?: CardBadge[];
+	/** Indicates if the header is centered. */
+	centered?: boolean;
+	/** Additional CSS class name. */
+	className?: string | null;
+	/** Description of the section. */
+	description?: React.ReactNode | ( () => React.ReactNode );
+	/** HTML heading level, e.g., 1 for h1, 2 for h2, etc. */
+	heading?: 1 | 2 | 3 | 4 | 5 | 6;
+	/** Icon to display in the header. */
+	icon?: React.ComponentProps< typeof Icon >[ 'icon' ] | null;
+	/** Indicates if the header should use a white theme. */
+	isWhite?: boolean;
+	/** Indicates if the header should have no margin. */
+	noMargin?: boolean;
+	/** Indicates if the header is used as a page header. */
+	pageHeader?: boolean;
+	/** Size variant. 'small' scales the title and icon down, independently of `pageHeader`. 'hidden' drops the title and description while the back nav stays visible. */
+	size?: 'default' | 'small' | 'hidden';
+	/** The title of the section. */
+	title: string | ( () => React.ReactNode );
+	/** Optional ID for the header element. */
+	id?: string | null;
+	/** Items for the more-options dropdown menu. */
+	menu?: SectionHeaderMenuItem[];
+	/** Primary action button. */
+	primaryAction?: SectionHeaderAction;
+	/** Secondary action link. */
+	secondaryAction?: SectionHeaderAction;
+	/** Optional children to display in the header. */
+	children?: React.ReactNode;
+}
+
+/**
+ * Creates a section header.
+ *
+ * @param props                 - The properties for the section header.
+ * @param props.backNav
+ * @param props.badges
+ * @param props.centered
+ * @param props.className
+ * @param props.description
+ * @param props.heading
+ * @param props.icon
+ * @param props.isWhite
+ * @param props.noMargin
+ * @param props.pageHeader
+ * @param props.size
+ * @param props.title
+ * @param props.id
+ * @param props.menu
+ * @param props.primaryAction
+ * @param props.secondaryAction
+ * @param props.children
+ */
+const SectionHeader = ( {
+	backNav = '',
+	badges,
+	centered = false,
+	className = null,
+	description = '',
+	heading = 2,
+	icon = null,
+	isWhite = false,
+	noMargin = false,
+	pageHeader = false,
+	size = 'default',
+	title,
+	id = null,
+	menu,
+	primaryAction,
+	secondaryAction,
+	children = null,
+}: SectionHeaderProps ) => {
+	// If id is in the URL as a scrollTo param, scroll to it on render.
+	const ref = useRef< HTMLDivElement | null >( null );
+	useEffect( () => {
+		const scrollToId = new URLSearchParams( window.location.search ).get( 'scrollTo' );
+		if ( scrollToId && scrollToId === id ) {
+			// Let parent scroll action run before running this.
+			window.setTimeout( () => ref.current?.scrollIntoView( { behavior: 'smooth' } ), 250 );
+		}
+	}, [] );
+
+	const classes = classnames(
+		'newspack-section-header',
+		centered && 'newspack-section-header--is-centered',
+		isWhite && 'newspack-section-header--is-white',
+		noMargin && 'newspack-section-header--no-margin',
+		pageHeader && 'newspack-section-header--page-header',
+		size === 'small' && 'newspack-section-header--small',
+		size === 'hidden' && 'newspack-section-header--hidden'
+	);
+
+	// The breadcrumb `Page` owns the single page `<h1>`, so a `pageHeader` section
+	// is a secondary heading: its level follows `heading` (default 2). `pageHeader`
+	// controls only the enlarged, centered styling — not the tag. Pass `heading={ 1 }`
+	// on a headerless screen that needs the section header to be the page's h1.
+	const HeadingTag = `h${ heading }` as const;
+	// `hidden` drops the title rather than announcing a level no reader can see.
+	const hiddenText = size === 'hidden' ? 'newspack-section-header__hidden-text' : undefined;
+
+	let titleContent = null;
+
+	const renderBadge = ( badge: CardBadge & { label: string }, i: number ) => (
+		<Badge key={ i } className="newspack-section-header__badge" intent={ badge.intent || 'none' }>
+			{ badge.label }
+		</Badge>
+	);
+
+	if ( typeof title === 'string' ) {
+		titleContent = (
+			<div className="newspack-section-header__title-container">
+				<HeadingTag className={ classnames( 'newspack-section-header__title', hiddenText ) }>
+					{ title }
+					{ ( badges || [] ).filter( ( badge ): badge is CardBadge & { label: string } => Boolean( badge?.label ) ).map( renderBadge ) }
+				</HeadingTag>
+				{ /* Secondary action before the overflow menu, so a promoted link reads as an action rather than sitting to the right of the kebab. */ }
+				{ secondaryAction && (
+					<div className="newspack-section-header__secondary-action">
+						<Button variant="link" href={ secondaryAction.href } onClick={ secondaryAction.action }>
+							{ secondaryAction.label }
+						</Button>
+					</div>
+				) }
+				{ !! menu?.length && (
+					<DropdownMenu className="newspack-section-header__menu" icon={ moreVertical } label={ __( 'More options', 'newspack-plugin' ) }>
+						{ () => (
+							<>
+								{ menu.map( ( item, index ) => {
+									// MenuItem's type omits `href`, though its underlying Button supports it.
+									const menuItemProps = {
+										icon: item.icon,
+										href: item.href,
+										onClick: item.action,
+										disabled: item.disabled || false,
+										isDestructive: item.destructive || false,
+									};
+									return (
+										<MenuItem key={ index } { ...menuItemProps }>
+											{ item.label }
+										</MenuItem>
+									);
+								} ) }
+							</>
+						) }
+					</DropdownMenu>
+				) }
+			</div>
+		);
+	} else if ( typeof title === 'function' ) {
+		titleContent = <HeadingTag className={ classnames( 'newspack-section-header__title', hiddenText ) }>{ title() }</HeadingTag>;
+	}
+
+	return (
+		<div
+			id={ id ?? undefined }
+			className={ classnames(
+				'newspack-section-header__container',
+				backNav && 'newspack-section-header--has-back-nav',
+				primaryAction && 'newspack-section-header--has-primary-action',
+				className
+			) }
+			ref={ ref }
+		>
+			<Grid columns={ 1 } gutter={ 8 } className={ classes }>
+				{ icon && (
+					<div className="newspack-section-header__icon">
+						<Icon icon={ icon } size={ size === 'small' ? 24 : 48 } />
+					</div>
+				) }
+				{ backNav ? (
+					<HStack alignment="left" style={ { position: 'relative' } }>
+						<div className="newspack-section-header__back-nav">
+							<Tooltip text={ __( 'Go back', 'newspack-plugin' ) }>
+								<Button href={ backNav } icon={ chevronLeft } variant="tertiary" />
+							</Tooltip>
+						</div>
+						{ titleContent }
+					</HStack>
+				) : (
+					titleContent
+				) }
+				{ description && typeof description === 'string' && <p className={ hiddenText }>{ description }</p> }
+				{ typeof description === 'function' && <p className={ hiddenText }>{ description() }</p> }
+				{ description && typeof description !== 'string' && typeof description !== 'function' && (
+					<p className={ hiddenText }>{ description }</p>
+				) }
+				{ children && <div className="newspack-section-header__children">{ children }</div> }
+			</Grid>
+			{ primaryAction && (
+				<div className="newspack-section-header__primary-action">
+					<Button href={ primaryAction.href } variant="primary" onClick={ primaryAction.action }>
+						{ primaryAction.label }
+					</Button>
+				</div>
+			) }
+		</div>
+	);
+};
+
+export default SectionHeader;
