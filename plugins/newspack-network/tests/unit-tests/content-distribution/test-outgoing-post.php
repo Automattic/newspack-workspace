@@ -72,16 +72,18 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Reset the block processors registered by the tests here.
+	 * Reset the global state the tests here register.
 	 *
-	 * Blocks keeps them in a private static that the test framework does not
-	 * restore, so a test that registers one and then fails would leak it into every
-	 * test that follows.
+	 * Block processors live in a private static and shortcodes in the global
+	 * `$shortcode_tags`, neither of which the test framework restores, so a test
+	 * that registers one and then fails would leak it into every test that follows.
+	 * Filters are not listed: `_restore_hooks()` already puts those back.
 	 */
 	public function tear_down() {
 		foreach ( [ 'core/paragraph', 'core/image' ] as $block_name ) {
 			Blocks::reset_block_processors( $block_name );
 		}
+		remove_shortcode( 'np_test_image' );
 		parent::tear_down();
 	}
 
@@ -653,8 +655,6 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 
 		$outgoing_post = $this->outgoing_post_with_content( 'Before. [np_test_image] After.' );
 		$media_data    = $outgoing_post->get_payload()['post_data']['media_data'];
-
-		remove_shortcode( 'np_test_image' );
 
 		$this->assertArrayHasKey( $shortcode_image, $media_data );
 	}
