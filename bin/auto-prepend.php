@@ -25,8 +25,14 @@ if ( ! empty( $_SERVER['DOCUMENT_ROOT'] ) ) {
 	}
 }
 
-if ( '' !== $newspack_prepend_site_root && is_file( $newspack_prepend_site_root . '/custom-redirects.php' ) ) {
-	require $newspack_prepend_site_root . '/custom-redirects.php';
+$newspack_prepend_file = '' !== $newspack_prepend_site_root ? $newspack_prepend_site_root . '/custom-redirects.php' : '';
+if (
+	'' !== $newspack_prepend_file
+	&& is_file( $newspack_prepend_file )
+	// A direct request for the file itself would run it twice.
+	&& realpath( $newspack_prepend_file ) !== realpath( $_SERVER['SCRIPT_FILENAME'] ?? '' )
+) {
+	require $newspack_prepend_file;
 }
 
-unset( $newspack_prepend_site_root, $newspack_prepend_arg );
+unset( $newspack_prepend_site_root, $newspack_prepend_arg, $newspack_prepend_file );
