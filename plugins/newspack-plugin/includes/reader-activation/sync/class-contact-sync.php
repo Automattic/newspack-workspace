@@ -378,7 +378,14 @@ class Contact_Sync extends Sync {
 
 			// Under --existing-only, ask the integration before pushing: the push
 			// is an upsert at every provider, so this is the one place an
-			// "update, never create" run can be enforced.
+			// "update, never create" run can be enforced. An integration that
+			// cannot answer gets no push at all: the unknown must resolve to
+			// "do not create", or the run would create contacts and read as clean.
+			if ( ! empty( $options['existing_only'] ) && ! $integration->supports_contact_lookup() ) {
+				$errors[] = sprintf( '[%s] %s', $integration_id, __( 'cannot check whether the contact exists, so --existing-only withheld the push.', 'newspack-plugin' ) );
+				static::log( sprintf( 'Withheld integration "%s" sync of %s: it cannot check for an existing contact (--existing-only).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );
+				continue;
+			}
 			$result = empty( $options['existing_only'] ) ? true : $integration->contact_exists( $integration_contact['email'] ?? '' );
 			if ( false === $result ) {
 				$skipped[] = $integration_id;
@@ -465,7 +472,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * @return true|\WP_Error
 	 */
-	private static function resolve_push_result( $email, $errors, $skipped, $pushed ) {
+	private static function resolve_push_result( $email, $errors, $skipped, $pushed ): bool|\WP_Error {
 		if ( ! empty( $errors ) ) {
 			return new \WP_Error( 'newspack_esp_sync_failed', implode( '; ', $errors ) );
 		}
@@ -1475,8 +1482,12 @@ class Contact_Sync extends Sync {
 	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise.
 	 */
 	public static function sync_contact( $user_id_or_order, $context = '', $is_dry_run = false, $options = [] ) {
-		$can_sync = static::can_sync( true );
-		if ( ! $is_dry_run && $can_sync->has_errors() ) {
+		// A plain dry run never leaves the process, so it may run where syncing
+		// is refused; under --existing-only it reads each contact at the
+		// provider, so it is gated like the wet run it previews.
+		$reaches_provider = ! $is_dry_run || ! empty( $options['existing_only'] );
+		$can_sync         = static::can_sync( true );
+		if ( $reaches_provider && $can_sync->has_errors() ) {
 			return $can_sync;
 		}
 
@@ -1562,6 +1573,11 @@ class Contact_Sync extends Sync {
 			$email    = $prepared['email'] ?? 'unknown';
 
 			if ( $existing_only ) {
+				if ( ! $integration->supports_contact_lookup() ) {
+					$errors[] = sprintf( '[%s] %s', $integration_id, __( 'cannot check whether the contact exists, so --existing-only withheld the push.', 'newspack-plugin' ) );
+					static::log( sprintf( '[dry-run] WITHHELD integration "%s" for %s: it cannot check for an existing contact (--existing-only).', $integration_id, $email ) );
+					continue;
+				}
 				$exists = $integration->contact_exists( $prepared['email'] ?? '' );
 				if ( false === $exists ) {
 					$skipped[] = $integration_id;

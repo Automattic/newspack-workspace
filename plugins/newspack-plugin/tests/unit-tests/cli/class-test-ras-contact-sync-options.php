@@ -251,6 +251,49 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
+	 * --existing-only cannot do its job at an integration that cannot check for
+	 * an existing contact, so the run refuses to start rather than creating
+	 * contacts there while reporting a clean run.
+	 */
+	public function test_existing_only_preflight_rejects_a_push_integration_without_a_lookup() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Integrations::register( new Lookupless_Sample_Integration( 'preflight_lookupless', 'Preflight Lookupless' ) );
+		Integrations::enable( 'preflight_lookupless' );
+
+		$options = $this->parse( [ 'existing-only' => true ] );
+
+		Integrations::disable( 'preflight_lookupless' );
+		$this->assertInstanceOf( \WP_Error::class, $options );
+		$this->assertSame( 'newspack_esp_sync_existing_only_unsupported', $options->get_error_code() );
+		$this->assertStringContainsString( 'preflight_lookupless', $options->get_error_message() );
+	}
+
+	public function test_existing_only_preflight_ignores_an_integration_outside_the_scope() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Integrations::register( new Lookupless_Sample_Integration( 'preflight_lookupless', 'Preflight Lookupless' ) );
+		Integrations::enable( 'preflight_lookupless' );
+
+		$options = $this->parse( [ 'existing-only' => true ], 'esp' );
+
+		Integrations::disable( 'preflight_lookupless' );
+		$this->assertIsArray( $options, 'A run scoped to a capable integration is not blocked by an incapable one.' );
+		$this->assertTrue( $options['existing_only'] );
+	}
+
+	public function test_existing_only_preflight_ignores_a_push_disabled_integration() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		$integration = new Lookupless_Sample_Integration( 'preflight_lookupless_paused', 'Preflight Lookupless Paused' );
+		Integrations::register( $integration );
+		Integrations::enable( 'preflight_lookupless_paused' );
+		$integration->update_settings_field_value( 'outgoing_sync_enabled', false );
+
+		$options = $this->parse( [ 'existing-only' => true ] );
+
+		Integrations::disable( 'preflight_lookupless_paused' );
+		$this->assertIsArray( $options, 'A paused integration takes no part in the run and must not block the pre-flight.' );
+	}
+
+	/**
 	 * Invoke the private static build_sync_config() via reflection.
 	 *
 	 * @param array $assoc_args Associative CLI args.

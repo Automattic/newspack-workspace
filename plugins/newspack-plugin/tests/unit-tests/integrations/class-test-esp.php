@@ -833,6 +833,22 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An archived member is a record Mailchimp keeps for a subscriber the
+	 * publisher removed; the upsert would restore it, which is a create in every
+	 * way the flag cares about.
+	 */
+	public function test_contact_exists_on_mailchimp_treats_an_archived_member_as_missing() {
+		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'archived' ] ] ], 'mailchimp' ) );
+	}
+
+	/**
+	 * The ESP override of contact_exists() is what opts it into --existing-only.
+	 */
+	public function test_esp_supports_contact_lookup() {
+		$this->assertTrue( $this->make_esp_with_master_list()->supports_contact_lookup() );
+	}
+
+	/**
 	 * Off Mailchimp, contacts are account-wide entities: any returned contact
 	 * exists, list membership or not.
 	 */

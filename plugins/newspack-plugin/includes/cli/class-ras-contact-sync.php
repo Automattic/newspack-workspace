@@ -82,6 +82,8 @@ class RAS_Contact_Sync {
 		}
 		if ( self::is_skipped_result( $result ) ) {
 			static::$results['skipped']++;
+			// The summary counts skips; this line is what names the reader.
+			static::log( sprintf( 'SKIPPED: %s', $result->get_error_message() ) );
 		} elseif ( \is_wp_error( $result ) ) {
 			static::$results['errors']++;
 		} else {
@@ -155,7 +157,8 @@ class RAS_Contact_Sync {
 		$options = $config['options'];
 
 		// A dry run under --existing-only still reads each contact at the provider,
-		// so it paces like a wet run; a plain dry run never leaves the process.
+		// so it paces like a wet run and is gated like one; a plain dry run never
+		// leaves the process.
 		$reached_integrations = ! $config['is_dry_run'] || ! empty( $options['existing_only'] );
 
 		// Reset the tally at entry so the counts reflect this run only (the class is
@@ -172,7 +175,7 @@ class RAS_Contact_Sync {
 		static::log( __( 'Running ESP contact sync...', 'newspack-plugin' ) );
 
 		$can_sync = Contact_Sync::has_one_syncable_integration( true );
-		if ( ! $config['is_dry_run'] && $can_sync->has_errors() ) {
+		if ( $reached_integrations && $can_sync->has_errors() ) {
 			return $can_sync;
 		}
 
@@ -852,7 +855,7 @@ class RAS_Contact_Sync {
 	 * : Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Restricts both what is computed and what is pushed to just these fields; all other metadata — and the reader's name — is left untouched. Every requested field must be enabled as an outgoing field on each active integration. The `newspack_esp_sync_contact` filter still runs, but any metadata it adds outside `--fields` is dropped.
 	 *
 	 * [--existing-only]
-	 * : Update only the contacts an integration already has; a reader it has no contact for is skipped (tallied as skipped) instead of being created. One extra provider read per reader. Honored by integrations that implement `contact_exists()` — the built-in ESP integration does (on Mailchimp, "existing" means a member of the configured audience); other integrations push as usual. A read that fails for any other reason withholds the push and is tallied as an error.
+	 * : Update only the contacts an integration already has; a reader it has no contact for is skipped (tallied as skipped) instead of being created. One extra provider read per reader (two on ActiveCampaign, whose upsert reads the contact again). Only integrations that implement `contact_exists()` can take part — the built-in ESP integration does (on Mailchimp, "existing" means a current member of the configured audience; archived members do not count). The run refuses to start if an integration taking part cannot check, so scope it with `wp newspack integrations backfill --integration=<id>` to one that can. A read that fails for any other reason withholds the push and is tallied as an error.
 	 *
 	 * ## NOTES
 	 *
@@ -862,6 +865,8 @@ class RAS_Contact_Sync {
 	 *
 	 * A `--dry-run` with `--existing-only` still performs the existence read at each
 	 * integration (that is what previewing the skip means); it only skips the push.
+	 * Because it reaches the provider, it is refused wherever the wet run would be
+	 * (the staging guard applies), unlike a plain dry run.
 	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
@@ -941,7 +946,7 @@ class RAS_Contact_Sync {
 	 * : (push only) Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Each field must be enabled as an outgoing field on every integration taking part in the run (just the `--integration` target when scoped).
 	 *
 	 * [--existing-only]
-	 * : (push only) Update only the contacts an integration already has; a reader it has no contact for is skipped (tallied as skipped) instead of being created. One extra provider read per reader. Honored by integrations that implement `contact_exists()` — the built-in ESP integration does (on Mailchimp, "existing" means a member of the configured audience); other integrations push as usual. A read that fails for any other reason withholds the push and is tallied as an error.
+	 * : (push only) Update only the contacts an integration already has; a reader it has no contact for is skipped (tallied as skipped) instead of being created. One extra provider read per reader (two on ActiveCampaign, whose upsert reads the contact again). Only integrations that implement `contact_exists()` can take part — the built-in ESP integration does (on Mailchimp, "existing" means a current member of the configured audience; archived members do not count). The run refuses to start if an integration taking part cannot check, so scope it with `wp newspack integrations backfill --integration=<id>` to one that can. A read that fails for any other reason withholds the push and is tallied as an error.
 	 *
 	 * ## NOTES
 	 *
@@ -982,7 +987,9 @@ class RAS_Contact_Sync {
 	 *
 	 * A `--dry-run` push with `--existing-only` still performs the existence
 	 * read at each integration (that is what previewing the skip means) and
-	 * tallies the skips it previews; it only skips the push.
+	 * tallies the skips it previews; it only skips the push. Because it reaches
+	 * the provider, it is refused wherever the wet run would be (the staging
+	 * guard applies), unlike a plain dry run.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -1074,6 +1081,26 @@ class RAS_Contact_Sync {
 	}
 
 	/**
+	 * The integrations a push run fans out to: active, configured and push-enabled,
+	 * narrowed to the `--integration` target when the run is scoped.
+	 *
+	 * The sync run itself skips integrations without an (enabled) push, so a
+	 * pre-flight must judge only the ones that will take part: a paused
+	 * integration's field selection or capabilities must not block the others.
+	 *
+	 * @param string|null $integration_id Optional. The `--integration` target.
+	 *
+	 * @return Integration[] Keyed by integration id.
+	 */
+	private static function push_integrations_in_scope( $integration_id = null ): array {
+		$integrations = Integrations::get_active_configured_integrations();
+		if ( ! empty( $integration_id ) ) {
+			$integrations = array_intersect_key( $integrations, [ $integration_id => true ] );
+		}
+		return array_filter( $integrations, fn( $integration ) => $integration->is_push_enabled() );
+	}
+
+	/**
 	 * Parse and validate the `--skip-lists` / `--fields` / `--existing-only` options (pre-flight).
 	 *
 	 * Runs even under `--dry-run` so misconfiguration surfaces before any batch.
@@ -1121,6 +1148,29 @@ class RAS_Contact_Sync {
 			);
 		}
 
+		// --existing-only promises "update, never create". An integration that
+		// cannot check for an existing contact would upsert as usual under the
+		// flag and the run would read as clean, so refuse before any batch
+		// rather than create the contacts the flag exists to prevent.
+		if ( $options['existing_only'] ) {
+			$unsupported = [];
+			foreach ( self::push_integrations_in_scope( $integration_id ) as $id => $integration ) {
+				if ( ! $integration->supports_contact_lookup() ) {
+					$unsupported[] = $id;
+				}
+			}
+			if ( ! empty( $unsupported ) ) {
+				return new \WP_Error(
+					'newspack_esp_sync_existing_only_unsupported',
+					sprintf(
+						// Translators: %s is a comma-separated list of integration ids.
+						__( 'The --existing-only option is not supported by integration(s) "%s": they cannot check whether a contact already exists, so the run would create contacts there. Scope the run with `wp newspack integrations backfill --integration=<id>` to an integration that can, or run without the flag.', 'newspack-plugin' ),
+						implode( ', ', $unsupported )
+					)
+				);
+			}
+		}
+
 		if ( empty( $assoc_args['fields'] ) ) {
 			return $options;
 		}
@@ -1138,17 +1188,8 @@ class RAS_Contact_Sync {
 		// field: a disabled outgoing field is silently dropped downstream, so a run
 		// that "succeeds" while pushing empty metadata to one integration is worse
 		// than a hard error the operator can resolve by enabling the field.
-		$integrations = Integrations::get_active_configured_integrations();
-		if ( ! empty( $integration_id ) ) {
-			$integrations = array_intersect_key( $integrations, [ $integration_id => true ] );
-		}
 		// Loop variable stays `$id`: `$integration_id` is the run's scope parameter.
-		foreach ( $integrations as $id => $integration ) {
-			// The sync run itself skips integrations without an (enabled) push, so
-			// their field selection must not block the backfill of the others.
-			if ( ! $integration->is_push_enabled() ) {
-				continue;
-			}
+		foreach ( self::push_integrations_in_scope( $integration_id ) as $id => $integration ) {
 			$enabled = $integration->get_enabled_outgoing_fields();
 			$missing = array_values( array_diff( $labels, $enabled ) );
 			if ( ! empty( $missing ) ) {

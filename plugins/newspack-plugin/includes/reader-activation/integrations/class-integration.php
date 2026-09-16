@@ -585,16 +585,39 @@ abstract class Integration {
 	 * `--existing-only`, before `push_contact_data()`: `false` makes the
 	 * framework skip this integration for the reader (tallied as skipped, not
 	 * failed), a `WP_Error` is treated as a failed push, and `true` lets the
-	 * push proceed. The default answers `true` so an integration that cannot
-	 * ask its external system keeps its usual upsert behaviour under the flag;
-	 * override it where the system can be asked.
+	 * push proceed. Override it where the external system can be asked; the
+	 * override is what makes `supports_contact_lookup()` true. An integration
+	 * that cannot ask is refused under the flag rather than pushed, because a
+	 * push there is an upsert that would create the contact.
 	 *
 	 * @param string $email The contact's email address.
 	 *
-	 * @return bool|\WP_Error True if the contact exists, false if it does not, WP_Error if the lookup failed.
+	 * @return bool|\WP_Error True if the contact exists, false if it does not, WP_Error if the lookup failed or is unsupported.
 	 */
 	public function contact_exists( $email ) {
-		return true;
+		return new \WP_Error(
+			'newspack_integration_contact_lookup_unsupported',
+			sprintf(
+				// Translators: %s is the integration id.
+				__( 'Integration "%s" cannot check whether a contact exists.', 'newspack-plugin' ),
+				$this->get_id()
+			)
+		);
+	}
+
+	/**
+	 * Whether the integration can answer `contact_exists()`.
+	 *
+	 * Implementing `contact_exists()` is the opt-in: this is true as soon as a
+	 * subclass overrides it, so an integration written before the lookup
+	 * existed reports false rather than "yes". Under `--existing-only` the sync
+	 * withholds the push from an integration that reports false: an unknown
+	 * must resolve to "do not create", or the flag guarantees nothing.
+	 *
+	 * @return bool
+	 */
+	public function supports_contact_lookup(): bool {
+		return ( new \ReflectionMethod( $this, 'contact_exists' ) )->getDeclaringClass()->getName() !== self::class;
 	}
 
 	/**

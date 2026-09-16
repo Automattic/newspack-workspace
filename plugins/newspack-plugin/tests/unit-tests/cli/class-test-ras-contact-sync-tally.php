@@ -12,6 +12,7 @@
 
 use Newspack\CLI\RAS_Contact_Sync;
 use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
 
 require_once dirname( __DIR__, 3 ) . '/includes/cli/class-ras-contact-sync.php';
@@ -322,5 +323,66 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 			'The dry-run summary previews the skip.'
 		);
 		$this->assertSame( 1, $this->get_unpaused_contacts(), 'The existence read is provider traffic to pace.' );
+	}
+
+	/**
+	 * The summary counts skips; the per-reader line is what lets an operator
+	 * see which readers a run left alone.
+	 */
+	public function test_existing_only_logs_each_skipped_reader() {
+		Failing_Sample_Integration::$contact_exists = false;
+		WP_CLI::reset();
+
+		$this->run_sync( [ 'user_ids' => [ $this->active_user_id ] ], [ 'existing_only' => true ] );
+
+		$log = implode( "\n", WP_CLI::$logs );
+		$this->assertStringContainsString( 'SKIPPED', $log );
+		$this->assertStringContainsString( get_userdata( $this->active_user_id )->user_email, $log, 'The skip line names the reader.' );
+	}
+
+	/**
+	 * A plain dry run never leaves the process, so it may run where syncing is
+	 * refused; under --existing-only it reads every contact at the provider, so
+	 * it is gated like the wet run it previews.
+	 */
+	public function test_dry_run_existing_only_is_refused_where_syncing_is_not_allowed() {
+		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+
+		$plain   = $this->run_sync(
+			[
+				'user_ids'   => [ $this->active_user_id ],
+				'is_dry_run' => true,
+			]
+		);
+		$flagged = $this->run_sync(
+			[
+				'user_ids'   => [ $this->active_user_id ],
+				'is_dry_run' => true,
+			],
+			[ 'existing_only' => true ]
+		);
+
+		$this->assertIsArray( $plain, 'A plain dry run stays available on a site that cannot sync.' );
+		$this->assertInstanceOf( \WP_Error::class, $flagged );
+		$this->assertContains( 'esp_sync_not_allowed', $flagged->get_error_codes() );
+	}
+
+	public function test_sync_contact_dry_run_existing_only_is_gated_like_a_wet_run() {
+		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+
+		$flagged = Contact_Sync::sync_contact(
+			$this->active_user_id,
+			'test',
+			true,
+			[
+				'fields'        => [ 'Content Access' ],
+				'existing_only' => true,
+			]
+		);
+		$plain   = Contact_Sync::sync_contact( $this->active_user_id, 'test', true, [ 'fields' => [ 'Content Access' ] ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $flagged );
+		$this->assertContains( 'esp_sync_not_allowed', $flagged->get_error_codes() );
+		$this->assertTrue( $plain, 'A plain dry run with options previews without reaching the gate.' );
 	}
 }

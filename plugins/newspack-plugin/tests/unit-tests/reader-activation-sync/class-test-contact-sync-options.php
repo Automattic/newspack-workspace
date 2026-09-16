@@ -545,7 +545,54 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		Integrations::disable( 'existing_only_peer' );
 		$this->assertTrue( $result );
 		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'The ESP still skipped its missing contact.' );
-		$this->assertSame( 1, Failing_Sample_Integration::$push_count, 'An integration that cannot check keeps its usual push under the flag.' );
+		$this->assertSame( 1, Failing_Sample_Integration::$push_count, 'A peer that can check and reports the contact pushes as usual.' );
+	}
+
+	/**
+	 * The flag promises "update, never create". An integration that cannot say
+	 * whether it holds the contact must not push under it; failing closed here
+	 * is what keeps a programmatic caller from creating the contacts the CLI
+	 * pre-flight refuses to.
+	 */
+	public function test_existing_only_fails_closed_for_an_integration_without_a_lookup() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Lookupless_Sample_Integration::reset();
+		Integrations::register( new Lookupless_Sample_Integration( 'existing_only_lookupless', 'Existing Only Lookupless' ) );
+		Integrations::enable( 'existing_only_lookupless' );
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = [ 'id' => '42' ];
+
+		list( $result, $failed ) = $this->count_failed_syncs( fn() => $this->push_existing_only() );
+
+		Integrations::disable( 'existing_only_lookupless' );
+		$this->assertSame( 0, Lookupless_Sample_Integration::$push_count, 'An integration that cannot check must not push under --existing-only.' );
+		$this->assertCount( 1, Newspack_Newsletters_Contacts::$upsert_calls, 'The ESP, which can check, still updates its existing contact.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_esp_sync_failed', $result->get_error_code() );
+		$this->assertStringContainsString( 'existing_only_lookupless', $result->get_error_message() );
+		$this->assertSame( 0, $failed, 'A refused push is not a provider failure to alert on.' );
+	}
+
+	public function test_dry_run_existing_only_fails_closed_for_an_integration_without_a_lookup() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Lookupless_Sample_Integration::reset();
+		Integrations::register( new Lookupless_Sample_Integration( 'existing_only_lookupless', 'Existing Only Lookupless' ) );
+		Integrations::enable( 'existing_only_lookupless' );
+		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
+
+		$result = Contact_Sync::sync_contact(
+			$this->user_id,
+			'ctx',
+			true, // dry run.
+			[
+				'existing_only' => true,
+				'fields'        => $this->content_access_labels,
+			]
+		);
+
+		Integrations::disable( 'existing_only_lookupless' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_esp_sync_failed', $result->get_error_code(), 'The preview reports the refusal the run would.' );
+		$this->assertSame( 0, Lookupless_Sample_Integration::$push_count );
 	}
 
 	/**

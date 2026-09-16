@@ -505,8 +505,9 @@ class ESP extends Integration {
 	 * One provider read, the same lookup the login refresh uses. On Mailchimp a
 	 * contact is a member of one audience, so "exists" means a member of the
 	 * configured audience: an upsert for a reader who is only in another
-	 * audience would create a new member there. ActiveCampaign and Constant
-	 * Contact keep account-wide contacts, so any returned contact counts.
+	 * audience would create a new member there, and one for an archived member
+	 * would restore it, so neither counts. ActiveCampaign and Constant Contact
+	 * keep account-wide contacts, so any returned contact counts.
 	 *
 	 * @param string $email The contact's email address.
 	 *
@@ -527,7 +528,8 @@ class ESP extends Integration {
 
 		if ( 'mailchimp' === $this->get_provider_slug() ) {
 			$master_list_id = $this->get_master_list_id();
-			return ! empty( $master_list_id ) && isset( $contact_data['lists'][ $master_list_id ] );
+			$member         = empty( $master_list_id ) ? null : ( $contact_data['lists'][ $master_list_id ] ?? null );
+			return null !== $member && 'archived' !== ( $member['status'] ?? '' );
 		}
 
 		return true;
@@ -545,7 +547,7 @@ class ESP extends Integration {
 	 *
 	 * @return bool
 	 */
-	private function is_provider_not_found_error( \WP_Error $error ) {
+	private function is_provider_not_found_error( \WP_Error $error ): bool {
 		return in_array(
 			$error->get_error_code(),
 			[
@@ -566,7 +568,7 @@ class ESP extends Integration {
 	 *
 	 * @param string $email The contact's email address.
 	 */
-	private function release_provider_contact_data( $email ) {
+	private function release_provider_contact_data( $email ): void {
 		$provider = \Newspack_Newsletters::get_service_provider();
 		if ( $provider && method_exists( $provider, 'clear_contact_data' ) ) {
 			$provider->clear_contact_data( $email );
