@@ -1,3 +1,10 @@
+## newspack-ads [3.15.1](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.15.0...newspack-ads@3.15.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **ads:** bump googleads-php-lib to ^74 for Insights GAM reports ([#1091](https://github.com/Automattic/newspack-workspace/issues/1091)) ([3401dba](https://github.com/Automattic/newspack-workspace/commit/3401dbafed4804114171324da342cc1d6b03ef1a))
+
 # newspack-ads [3.15.0](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.14.4...newspack-ads@3.15.0) (2026-09-14)
 
 
