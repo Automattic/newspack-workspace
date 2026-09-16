@@ -130,9 +130,21 @@ class Content_Distribution {
 				continue;
 			}
 			if ( is_array( $post_data_keys ) ) {
-				self::distribute_post_partial( $post, array_unique( $post_data_keys ) );
+				$result = self::distribute_post_partial( $post, array_unique( $post_data_keys ) );
 			} else {
-				self::distribute_post( $post );
+				$result = self::distribute_post( $post );
+			}
+
+			// A cancelled dispatch retries on the post's next save, since no payload
+			// hash was stored. Nothing else reports it, so leave a trace here.
+			if ( is_wp_error( $result ) ) {
+				Outgoing_Post::log(
+					'Distribution was not dispatched: ' . $result->get_error_message(),
+					[
+						'post_id' => $post->ID,
+						'code'    => $result->get_error_code(),
+					]
+				);
 			}
 		}
 		self::$queued_distributions = [];

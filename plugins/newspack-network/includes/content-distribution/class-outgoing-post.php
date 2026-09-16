@@ -38,6 +38,13 @@ class Outgoing_Post {
 	protected $raw_post_content = null;
 
 	/**
+	 * The distributed content with `the_content` applied, built once per payload.
+	 *
+	 * @var string|null
+	 */
+	protected $processed_post_content = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param WP_Post|int $post The post object or post ID.
@@ -113,14 +120,13 @@ class Outgoing_Post {
 	 * Log a message about a post on its way out.
 	 *
 	 * Sends the message to the Newspack plugin's logger, which records without any
-	 * constant set, so a gallery that leaves without its images no longer does so
-	 * silently on a publisher site. This mirrors Incoming_Post::log().
+	 * constant set, so a gallery that leaves without its images is visible on a
+	 * publisher site. This mirrors Incoming_Post::log().
 	 *
-	 * The debugger runs as well rather than instead. Newspack\Logger only fires an
-	 * action, and the plugin that listens for it is not present on a development or
-	 * staging site, so preferring one over the other would swallow the message in
-	 * exactly the setup someone defines `NEWSPACK_NETWORK_DEBUG` for. Debugger::log()
-	 * is a no-op without that constant, so running both costs nothing.
+	 * The debugger runs as well. Newspack\Logger only fires an action, and the
+	 * plugin that listens for it is not present on a development site, where
+	 * `NEWSPACK_NETWORK_DEBUG` is what someone defines. Debugger::log() is a no-op
+	 * without that constant, so running both costs nothing.
 	 *
 	 * @param string $message The message to log.
 	 * @param array  $context Context for the log entry, such as the post ID.
@@ -350,7 +356,8 @@ class Outgoing_Post {
 		// One payload describes the post at one moment. Preparing the content is the
 		// expensive half and several fields below need it, so it is built once here
 		// and reused, then dropped so the next payload sees the post as it is then.
-		$this->raw_post_content = null;
+		$this->raw_post_content       = null;
+		$this->processed_post_content = null;
 
 		$post_author = self::get_outgoing_wp_user_author( $this->post->post_author );
 
@@ -442,8 +449,8 @@ class Outgoing_Post {
 	 * Get the raw post content for distribution.
 	 *
 	 * Built once per payload. Several payload fields read it, and a dynamic gallery
-	 * queries the database for its images on each pass, so a distribution used to
-	 * parse and serialize the post several times for one identical result.
+	 * queries the database for its images on each pass, so every field has to see
+	 * the same result.
 	 *
 	 * The payload is the boundary the cache follows: get_payload() drops it on the
 	 * way in, so two payloads from one Outgoing_Post each see the post as it stands
@@ -477,18 +484,28 @@ class Outgoing_Post {
 	/**
 	 * Get the processed post content for distribution.
 	 *
+	 * Built once per payload, on the same boundary as get_raw_post_content(). A
+	 * classic post reads this for both `content` and `media_data`, and a
+	 * `the_content` filter that is not deterministic, a rotating ad insert say,
+	 * would otherwise give those two fields different images.
+	 *
 	 * @return string The post content.
 	 */
 	protected function get_processed_post_content() {
+		if ( null !== $this->processed_post_content ) {
+			return $this->processed_post_content;
+		}
+
 		global $wp_embed;
 		/**
 		 * Remove autoembed filter so that actual URL will be pushed and not the generated markup.
 		 */
 		remove_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );
 		// Filter documented in WordPress core.
-		$post_content = apply_filters( 'the_content', $this->get_raw_post_content() );
+		$this->processed_post_content = apply_filters( 'the_content', $this->get_raw_post_content() );
 		add_filter( 'the_content', [ $wp_embed, 'autoembed' ], 8 );
-		return $post_content;
+
+		return $this->processed_post_content;
 	}
 
 	/**
@@ -568,17 +585,22 @@ class Outgoing_Post {
 	 * `media_data` describes the images in the post so the receiving site can size
 	 * them, which only works if it describes the images that site actually has. The
 	 * two ends have to agree on which content that is: Incoming_Post::get_post_content()
-	 * keeps the block-processed content for a block post and the filtered content
-	 * for a classic one, so this branches the same way. Reading the original post
-	 * content instead, as this used to, misses a block rewritten on its way out,
-	 * a WordPress 7.1 dynamic gallery above all, since it carries no image IDs
-	 * until distribution resolves it.
+	 * keeps the block-processed content when it carries blocks and the filtered
+	 * content otherwise, so this tests the same string it will. The original post
+	 * content is not that string: a block rewritten on its way out, a WordPress 7.1
+	 * dynamic gallery above all, carries no image IDs until distribution resolves it.
+	 *
+	 * This is a best-effort mirror. The receiving site evaluates
+	 * use_block_editor_for_post_type() against its own registrations, which can
+	 * differ from this site's for the same post type.
 	 *
 	 * @return string The content the receiving site will store.
 	 */
 	protected function get_distributed_content() {
-		if ( use_block_editor_for_post_type( $this->post->post_type ) && has_blocks( $this->post->post_content ) ) {
-			return $this->get_raw_post_content();
+		$raw_content = $this->get_raw_post_content();
+
+		if ( use_block_editor_for_post_type( $this->post->post_type ) && has_blocks( $raw_content ) ) {
+			return $raw_content;
 		}
 
 		return $this->get_processed_post_content();
@@ -592,10 +614,11 @@ class Outgoing_Post {
 	protected function get_post_media_data() {
 		$attachment_data = [];
 
-		// Read the content before the CDN override goes on. Preparing it can run a
-		// block processor that installs and removes this same filter, and WordPress
-		// keys hook callbacks by name, so the inner removal would take this one with
-		// it and the URLs below would come back rewritten to the origin's CDN.
+		// Read the content before the CDN override goes on. For a classic post that
+		// runs `the_content`, and a callback there that installs and removes this
+		// same named filter takes the outer one with it, since WordPress keys hooks
+		// by callback name. The URLs below would then come back rewritten to the
+		// origin's CDN.
 		$content = $this->get_distributed_content();
 
 		add_filter( 'jetpack_photon_override_image_downsize', '__return_true' );

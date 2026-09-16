@@ -635,9 +635,11 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 
 	/**
 	 * A classic post is stored on the receiving site as filtered content, so an
-	 * image a shortcode or a filter puts there has to be described too. Scanning
-	 * the block-processed content alone would leave the node rendering an image
-	 * the payload says nothing about.
+	 * image a shortcode or a filter puts there has to be described too.
+	 *
+	 * This is the guard for the classic branch of get_distributed_content().
+	 * Scanning the block-processed content for every post, which is the obvious
+	 * simplification, passes every other media_data test and fails this one.
 	 */
 	public function test_media_data_covers_a_classic_post() {
 		$shortcode_image = $this->image_attachment();
@@ -686,18 +688,21 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 	 * so a node gets the origin's own files rather than the origin's CDN.
 	 *
 	 * The override is a single named callback, and WordPress keys hooks by name, so
-	 * a block processor that installs and removes the same one, as the dynamic
-	 * gallery processor does, used to take this method's override down with it.
+	 * anything that installs and removes the same one while the content is being
+	 * read takes the outer override with it. On a block post the content is
+	 * already prepared by the time media_data is built, so the path that reaches
+	 * into the window is a classic post, where `the_content` runs right there.
+	 * That is the case this pins.
 	 */
 	public function test_media_data_keeps_the_cdn_override_for_every_image() {
-		Blocks::register_block_processor(
-			'core/image',
-			function ( $block ) {
-				add_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
-				remove_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
-				return $block;
-			}
-		);
+		$attachment_id = $this->image_attachment();
+
+		$toggle = function ( $content ) use ( $attachment_id ) {
+			add_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+			remove_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
+			return $content . '<img src="http://example.org/filtered.png" class="wp-image-' . $attachment_id . '"/>';
+		};
+		add_filter( 'the_content', $toggle );
 
 		// Fires once per media_data entry, and nowhere else in a payload build.
 		$overridden = [];
@@ -707,10 +712,11 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 		};
 		add_filter( 'wp_get_attachment_caption', $probe );
 
-		$outgoing_post = $this->outgoing_post_with_content( $this->image_block( $this->image_attachment() ) );
+		$outgoing_post = $this->outgoing_post_with_content( 'A classic post with no blocks.' );
 		$outgoing_post->get_payload();
 
 		remove_filter( 'wp_get_attachment_caption', $probe );
+		remove_filter( 'the_content', $toggle );
 
 		$this->assertNotEmpty( $overridden, 'The probe should have seen at least one image.' );
 		$this->assertNotContains( false, $overridden );
@@ -735,6 +741,28 @@ class TestOutgoingPost extends \WP_UnitTestCase {
 		$outgoing_post->get_payload();
 
 		$this->assertSame( 1, $calls );
+	}
+
+	/**
+	 * The classic path has the same guarantee. A classic post reads the filtered
+	 * content for both `content` and `media_data`, and running `the_content` once
+	 * is what keeps a non-deterministic filter from giving those two fields a
+	 * different set of images.
+	 */
+	public function test_classic_content_is_filtered_once_per_payload() {
+		$runs  = 0;
+		$count = function ( $content ) use ( &$runs ) {
+			++$runs;
+			return $content;
+		};
+		add_filter( 'the_content', $count );
+
+		$outgoing_post = $this->outgoing_post_with_content( 'A classic post with no blocks.' );
+		$outgoing_post->get_payload();
+
+		remove_filter( 'the_content', $count );
+
+		$this->assertSame( 1, $runs );
 	}
 
 	/**
