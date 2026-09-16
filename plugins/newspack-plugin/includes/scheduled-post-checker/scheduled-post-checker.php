@@ -32,20 +32,11 @@ function nspc_deactivate() {
 /**
  * The post types the checker rescues.
  *
- * WordPress's `post_type => 'any'` shorthand matches only types whose
- * `exclude_from_search` is false — which it derives from `public` when the
- * argument is omitted. Types registered `public => false` (Campaign prompts,
- * Sponsors, and core's own Customizer changesets) are therefore invisible to
- * `'any'`, so a scheduled one that misses its cron slot would otherwise sit in
- * `future` indefinitely. Start from the search-visible set and add those known
- * schedulable types; the filter lets any plugin register its own.
- *
- * Rescuing a `customize_changeset` runs the same path core's own cron uses:
- * `wp_publish_post()` fires `transition_post_status`, and core's
- * `_wp_customize_publish_changeset()` bootstraps a `WP_Customize_Manager` and
- * applies the stored values. A changeset carries only the settings its author
- * actually touched, so publishing one writes those keys and leaves every other
- * theme mod alone.
+ * `post_type => 'any'` matches only types whose `exclude_from_search` is false,
+ * which core derives from `public`. Types registered `public => false` (Campaign
+ * prompts, Sponsors, Customizer changesets) are invisible to it, so a scheduled
+ * one that missed its slot would sit in `future` indefinitely. Start from the
+ * search-visible set and add them; the filter lets a plugin register its own.
  *
  * @return string[] Post type slugs.
  */
@@ -69,25 +60,59 @@ function nspc_get_post_types() {
 
 /**
  * Check to see if any posts have missed schedule, and try sending them live again if so.
+ *
+ * Changesets are queried separately because only they are age-limited: publishing one
+ * rewrites site configuration and core deletes it in the same request, so a long
+ * stranded changeset is left alone. Limiting in the query rather than skipping rows
+ * afterwards keeps stale changesets from filling the row limit and starving the
+ * post backlog, which stays deliberately unbounded.
  */
 function nspc_run_check() {
-	$time = wp_date( 'Y-m-d H:i:s' );
+	$post_types                 = nspc_get_post_types();
+	$content_types              = array_values( array_diff( $post_types, [ 'customize_changeset' ] ) );
+	$posts_with_missed_schedule = [];
 
-	$posts_with_missed_schedule = get_posts(
-		[
-			'post_status'    => 'future',
-			'post_type'      => nspc_get_post_types(),
-			'fields'         => 'ids',
-			// Rescue a backlog in one run rather than the get_posts() default of 5.
-			'posts_per_page' => 100,
-			'date_query'     => [
-				[
-					'before'    => $time,
-					'inclusive' => false,
+	if ( ! empty( $content_types ) ) {
+		$posts_with_missed_schedule = get_posts(
+			[
+				'post_status'    => 'future',
+				'post_type'      => $content_types,
+				'fields'         => 'ids',
+				// Rescue a backlog in one run rather than the get_posts() default of 5.
+				'posts_per_page' => 100,
+				'date_query'     => [
+					[
+						'before'    => wp_date( 'Y-m-d H:i:s' ),
+						'inclusive' => false,
+					],
 				],
-			],
-		]
-	);
+			]
+		);
+	}
+
+	if ( in_array( 'customize_changeset', $post_types, true ) ) {
+		$posts_with_missed_schedule = array_merge(
+			$posts_with_missed_schedule,
+			get_posts(
+				[
+					'post_status'    => 'future',
+					'post_type'      => 'customize_changeset',
+					'fields'         => 'ids',
+					'posts_per_page' => 100,
+					// Oldest first, so a later changeset overwrites an earlier one.
+					'order'          => 'ASC',
+					'date_query'     => [
+						[
+							'column'    => 'post_date_gmt',
+							'after'     => gmdate( 'Y-m-d H:i:s', time() - ( 3 * DAY_IN_SECONDS ) ),
+							'before'    => gmdate( 'Y-m-d H:i:s' ),
+							'inclusive' => false,
+						],
+					],
+				]
+			)
+		);
+	}
 
 	foreach ( $posts_with_missed_schedule as $post_id ) {
 		check_and_publish_future_post( $post_id );

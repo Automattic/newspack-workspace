@@ -40,6 +40,14 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 		}
 		$this->registered_cpts = [];
 		$this->added_filters   = [];
+
+		/*
+		 * Publishing a changeset leaves a WP_Customize_Manager in the global, wired
+		 * to hooks the suite's own restore then strips. Left in place, a later
+		 * changeset test reuses a half-registered manager.
+		 */
+		unset( $GLOBALS['wp_customize'] );
+
 		parent::tear_down();
 	}
 
@@ -88,9 +96,10 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	 * @param array  $columns   Extra post columns to write alongside the status.
 	 *                          Goes through $wpdb too, so JSON payloads reach the
 	 *                          column unslashed and unfiltered.
+	 * @param int    $age       How long ago the slot was missed, in seconds.
 	 * @return int Post ID.
 	 */
-	private function create_overdue_future_post( $post_type, $columns = [] ) {
+	private function create_overdue_future_post( $post_type, $columns = [], $age = HOUR_IN_SECONDS ) {
 		$post_id = self::factory()->post->create(
 			[
 				'post_type'   => $post_type,
@@ -99,7 +108,7 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 		);
 
 		global $wpdb;
-		$past = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
+		$past = gmdate( 'Y-m-d H:i:s', time() - $age );
 		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->posts,
 			array_merge(
@@ -196,47 +205,29 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A scheduled Customizer change that missed its slot goes live, and its values
-	 * actually land: publishing the changeset hands off to core's
-	 * _wp_customize_publish_changeset(), which applies the stored settings.
-	 *
-	 * Theme mods the changeset never carried are untouched, which is what keeps a
-	 * late rescue from reverting settings written outside the Customizer — the
-	 * wizards' set_theme_mod() calls, for instance.
+	 * A scheduled homepage change that missed its slot goes live. This is the case
+	 * the checker covers changesets for, and `show_on_front` / `page_on_front` are
+	 * option-type settings, which take a different route through
+	 * unsanitized_post_values() than theme mods do.
 	 */
-	public function test_rescues_missed_customizer_changeset() {
-		$scheduled_mod = 'nspc_scheduled_mod';
-		$other_mod     = 'nspc_other_mod';
-
-		/*
-		 * Register the setting the changeset carries. Hooking add_dynamic_settings(),
-		 * which _wp_customize_publish_changeset() always calls, rather than
-		 * customize_register, which it fires only if nothing else in the suite
-		 * already did.
-		 */
-		$this->add_cleanup_filter(
-			'customize_dynamic_setting_args',
-			function ( $args, $id ) use ( $scheduled_mod ) {
-				return $id === $scheduled_mod ? [ 'type' => 'theme_mod' ] : $args;
-			},
-			2
+	public function test_rescues_missed_static_front_page_change() {
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			]
 		);
 
-		set_theme_mod( $scheduled_mod, 'before' );
-		set_theme_mod( $other_mod, 'written outside the Customizer' );
+		update_option( 'show_on_front', 'posts' );
 
-		// Changeset values are namespaced per stylesheet, and only entries matching
-		// the active theme are applied.
 		$changeset_id = $this->create_overdue_future_post(
 			'customize_changeset',
 			[
 				'post_name'    => wp_generate_uuid4(),
 				'post_content' => wp_json_encode(
 					[
-						get_stylesheet() . '::' . $scheduled_mod => [
-							'value' => 'after',
-							'type'  => 'theme_mod',
-						],
+						'show_on_front' => [ 'value' => 'page' ],
+						'page_on_front' => [ 'value' => $page_id ],
 					]
 				),
 			]
@@ -244,15 +235,71 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 
 		\Newspack\Scheduled_Post_Checker\nspc_run_check();
 
-		$this->assertSame( 'after', get_theme_mod( $scheduled_mod ), 'The scheduled Customizer change is applied.' );
-		$this->assertSame( 'written outside the Customizer', get_theme_mod( $other_mod ), 'A theme mod the changeset never carried is left alone.' );
-
-		/*
-		 * Core trashes a published changeset — or deletes it outright where
-		 * EMPTY_TRASH_DAYS is 0 — because the CPT has no revisions support to keep
-		 * it around. Either way it is no longer stuck.
-		 */
+		$this->assertSame( 'page', get_option( 'show_on_front' ), 'The scheduled homepage switch is applied.' );
+		$this->assertSame( $page_id, (int) get_option( 'page_on_front' ), 'The scheduled homepage is the page that was chosen.' );
 		$this->assertNotSame( 'future', get_post_status( $changeset_id ), 'The changeset does not stay scheduled.' );
+	}
+
+	/**
+	 * The rescue window, fenced from both sides: a changeset missed two days ago is
+	 * rescued, one missed four days ago is left alone with its values unapplied.
+	 */
+	public function test_changeset_rescue_is_age_limited() {
+		$stale_mod = 'nspc_stale_mod';
+
+		// Registered so the value assertion is real — publishing only writes settings
+		// that are registered.
+		$this->add_cleanup_filter(
+			'customize_dynamic_setting_args',
+			function ( $args, $id ) use ( $stale_mod ) {
+				return $id === $stale_mod ? [ 'type' => 'theme_mod' ] : $args;
+			},
+			2
+		);
+		set_theme_mod( $stale_mod, 'before' );
+
+		$recent_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			],
+			2 * DAY_IN_SECONDS
+		);
+
+		$stale_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode(
+					[
+						get_stylesheet() . '::' . $stale_mod => [
+							'value' => 'after',
+							'type'  => 'theme_mod',
+						],
+					]
+				),
+			],
+			4 * DAY_IN_SECONDS
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertNotSame( 'future', get_post_status( $recent_id ), 'A changeset inside the window is rescued.' );
+		$this->assertSame( 'before', get_theme_mod( $stale_mod ), 'A long-missed changeset does not apply its values.' );
+		$this->assertSame( 'future', get_post_status( $stale_id ), 'And it stays scheduled.' );
+	}
+
+	/**
+	 * The age limit is scoped to changesets — the post backlog stays unbounded, which
+	 * is what a global date bound would break.
+	 */
+	public function test_rescues_long_missed_post() {
+		$post_id = $this->create_overdue_future_post( 'post', [], 4 * DAY_IN_SECONDS );
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( 'publish', get_post_status( $post_id ), 'A long-missed post is still rescued.' );
 	}
 
 	/**
