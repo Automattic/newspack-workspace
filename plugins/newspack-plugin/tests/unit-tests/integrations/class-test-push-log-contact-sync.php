@@ -266,6 +266,28 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An email change pushes the new address while asking the provider to
+	 * match the old one. The row records which address was matched against,
+	 * so a support question about a reader whose CRM record moved can be
+	 * answered from the log.
+	 */
+	public function test_an_email_change_records_the_address_it_pushed_against() {
+		$this->register_spy( 'email-change-spy' );
+
+		Contact_Sync::sync(
+			[
+				'email'    => 'new-address@example.test',
+				'metadata' => [],
+			],
+			'Test context',
+			[ 'email' => 'old-address@example.test' ]
+		);
+
+		$row = $this->get_rows_by_integration()['email-change-spy'];
+		$this->assertSame( 'old-address@example.test', json_decode( $row['payload'], true )['previous_email'] );
+	}
+
+	/**
 	 * A reader deleted between the failure and the retry can never be rebuilt,
 	 * so the chain ends without pushing. The row must say so: left retrying it
 	 * would promise an attempt that is never coming.

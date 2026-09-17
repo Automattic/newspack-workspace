@@ -114,7 +114,9 @@ final class Push_Log {
 		dbDelta( $sql );
 
 		$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		if ( $found === $table_name ) {
+		// Some hosts store table names lowercased, so an exact match would never
+		// record the version and dbDelta would run on every request.
+		if ( strtolower( (string) $found ) === strtolower( $table_name ) ) {
 			update_option( self::TABLE_VERSION_OPTION, self::TABLE_VERSION );
 		}
 	}
@@ -197,7 +199,9 @@ final class Push_Log {
 		if ( $failed ) {
 			$data['error_class']   = $error_class;
 			$data['error_code']    = mb_substr( (string) $args['result']->get_error_code(), 0, 100 );
-			$data['error_message'] = implode( '; ', $args['result']->get_error_messages() );
+			// An oversized provider message would make the database reject the
+			// whole row, losing the record of the failure it describes.
+			$data['error_message'] = mb_substr( implode( '; ', $args['result']->get_error_messages() ), 0, 10000 );
 		}
 
 		$log_id = (int) $args['log_id'];
@@ -408,6 +412,12 @@ final class Push_Log {
 		);
 		if ( false === $updated ) {
 			self::report_write_failure();
+			return 0;
+		}
+		// repeat_count + 1 always changes the row, so nothing changed means the
+		// row was pruned between the SELECT and this UPDATE. Let the caller
+		// insert rather than return an id that no longer exists.
+		if ( 0 === (int) $updated ) {
 			return 0;
 		}
 

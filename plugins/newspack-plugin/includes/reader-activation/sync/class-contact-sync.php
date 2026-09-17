@@ -318,13 +318,16 @@ class Contact_Sync extends Sync {
 	 */
 	private static function log_push_attempt( $integration, array $args ) {
 		$result = $args['result'] ?? true;
+		// `direction` is this method's own argument, not a push log field.
+		$direction = $args['direction'] ?? 'push';
+		unset( $args['direction'] );
 		return Push_Log::record_attempt(
 			array_merge(
 				$args,
 				[
 					'integration_id' => $integration->get_id(),
 					'hash_prefix'    => $integration->get_metadata_prefix(),
-					'error_class'    => \is_wp_error( $result ) ? self::classify_error( $result, $args['direction'] ?? 'push' ) : null,
+					'error_class'    => \is_wp_error( $result ) ? self::classify_error( $result, $direction ) : null,
 				]
 			)
 		);
@@ -399,7 +402,7 @@ class Contact_Sync extends Sync {
 					'email'        => $integration_contact['email'] ?? '',
 					'user_id'      => $user_id,
 					'context'      => $context,
-					'payload'      => '' === $previous_email ? $integration_contact : array_merge( $integration_contact, [ 'previous_email' => $previous_email ] ),
+					'payload'      => '' === (string) $previous_email ? $integration_contact : array_merge( $integration_contact, [ 'previous_email' => $previous_email ] ),
 					'result'       => $result,
 					'max_attempts' => $can_retry ? self::MAX_RETRIES + 1 : 1,
 				]
@@ -714,8 +717,9 @@ class Contact_Sync extends Sync {
 				if ( \is_wp_error( $cleanup_result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
 					static::log( sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() ) );
-					// Only when the push itself landed: a failed push is already on
-					// the row, and its retry runs the cleanup again.
+					// Only when the push itself landed. A failed push is already
+					// on the row and must not be overwritten, and a transient
+					// one is retried, which runs the cleanup again.
 					if ( ! \is_wp_error( $result ) ) {
 						Push_Log::mark_failed( $log_id, 'flag_cleanup_failed', sprintf( 'The deletion flag was pushed, but removing the reader from lists failed: %s', $cleanup_result->get_error_message() ) );
 					}
@@ -1048,7 +1052,7 @@ class Contact_Sync extends Sync {
 
 		$integration_contact = $integration->prepare_contact( $contact );
 		$result              = $integration->push_contact( $integration_contact, $context, $existing_contact );
-		$log_id              = self::log_push_attempt(
+		$logged_row_id       = self::log_push_attempt(
 			$integration,
 			[
 				'log_id'       => $log_id,
@@ -1056,12 +1060,18 @@ class Contact_Sync extends Sync {
 				'email'        => $integration_contact['email'] ?? $user->user_email,
 				'user_id'      => $user_id,
 				'context'      => $context,
-				'payload'      => empty( $previous_email ) ? $integration_contact : array_merge( $integration_contact, [ 'previous_email' => $previous_email ] ),
+				'payload'      => '' === (string) $previous_email ? $integration_contact : array_merge( $integration_contact, [ 'previous_email' => $previous_email ] ),
 				'result'       => $result,
 				'attempts'     => (int) $retry_count + 1,
 				'max_attempts' => self::MAX_RETRIES + 1,
 			]
 		);
+		// A failed log write answers 0. Keep the row this chain started on, so
+		// the next retry still lands there instead of opening a second row and
+		// leaving the first stuck retrying.
+		if ( $logged_row_id > 0 ) {
+			$log_id = $logged_row_id;
+		}
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
 			static::log(
@@ -1369,7 +1379,7 @@ class Contact_Sync extends Sync {
 			return;
 		}
 
-		$log_id = self::log_push_attempt(
+		$logged_row_id = self::log_push_attempt(
 			$integration,
 			[
 				'log_id'       => $log_id,
@@ -1383,6 +1393,12 @@ class Contact_Sync extends Sync {
 				'max_attempts' => self::MAX_RETRIES + 1,
 			]
 		);
+		// A failed log write answers 0. Keep the row this chain started on, so
+		// the next retry still lands there instead of opening a second row and
+		// leaving the first stuck retrying.
+		if ( $logged_row_id > 0 ) {
+			$log_id = $logged_row_id;
+		}
 
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
