@@ -642,4 +642,29 @@ class Test_Push_Log extends \WP_UnitTestCase {
 		$this->assertTrue( $response['items_removed'] );
 		$this->assertTrue( $response['done'] );
 	}
+
+	/**
+	 * An erasure whose delete failed must not report a completed erasure: the
+	 * admin, and the reader who asked, would be told the data is gone while
+	 * every row is still there.
+	 */
+	public function test_an_erasure_that_could_not_delete_reports_the_rows_as_retained() {
+		global $wpdb;
+		$row_id        = $this->record();
+		$break_deletes = function ( $query ) {
+			$is_push_log_delete = 0 === stripos( ltrim( $query ), 'DELETE' ) && false !== strpos( $query, Push_Log::TABLE_NAME );
+			return $is_push_log_delete ? 'DELETE FROM table_that_does_not_exist' : $query;
+		};
+		add_filter( 'query', $break_deletes );
+		$errors_were_suppressed = $wpdb->suppress_errors( true );
+
+		$response = Push_Log::erase_personal_data( 'reader@example.test', 1 );
+
+		$wpdb->suppress_errors( $errors_were_suppressed );
+		remove_filter( 'query', $break_deletes );
+		$this->assertNotNull( $this->get_row( $row_id ), 'The row the erasure claimed to remove is still there.' );
+		$this->assertFalse( $response['items_removed'] );
+		$this->assertTrue( $response['items_retained'] );
+		$this->assertNotEmpty( $response['messages'] );
+	}
 }

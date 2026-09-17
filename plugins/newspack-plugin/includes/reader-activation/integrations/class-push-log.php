@@ -583,7 +583,7 @@ final class Push_Log {
 	 *
 	 * @return array The eraser response.
 	 */
-	public static function erase_personal_data( $email_address, $page = 1 ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+	public static function erase_personal_data( $email_address, $page = 1 ) {
 		global $wpdb;
 		$table_name = self::get_table_name();
 		$reader     = get_user_by( 'email', $email_address );
@@ -592,6 +592,18 @@ final class Push_Log {
 			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s OR user_id = %d', $table_name, $email_address, $reader->ID ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		} else {
 			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s', $table_name, $email_address ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		}
+
+		// A delete that failed leaves the rows in place. Reporting the erasure
+		// as done would tell the admin the data is gone while it is still here.
+		if ( false === $removed ) {
+			self::report_write_failure();
+			return [
+				'items_removed'  => false,
+				'items_retained' => true,
+				'messages'       => [ __( 'The integrations push log could not be erased. Please try again.', 'newspack-plugin' ) ],
+				'done'           => true,
+			];
 		}
 
 		return [
