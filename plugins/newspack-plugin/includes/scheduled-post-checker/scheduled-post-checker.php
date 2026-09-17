@@ -39,7 +39,7 @@ function nspc_deactivate() {
  * WordPress's `post_type => 'any'` shorthand matches only types whose
  * `exclude_from_search` is false — which it derives from `public` when the
  * argument is omitted. Editor-authored types registered `public => false`
- * (Campaign prompts, Sponsor, Customizer changesets) are therefore invisible to
+ * (Campaign prompts, Sponsors, Customizer changesets) are therefore invisible to
  * `'any'`, so a scheduled one that misses its cron slot would otherwise sit in
  * `future` indefinitely. Start from the search-visible set and add those known
  * editorial types; the filter lets any plugin register its own schedulable type.
