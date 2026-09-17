@@ -484,10 +484,11 @@ final class Push_Log {
 	 *
 	 * Deletes run one integration and status at a time so the
 	 * integration_status index serves each of them, in bounded batches so a
-	 * backlog never turns into one long delete.
+	 * backlog never turns into one long delete. Only a batch that deletes
+	 * rows counts against the cap.
 	 *
 	 * @param int $batch_size  Rows per delete.
-	 * @param int $max_batches Deletes per run.
+	 * @param int $max_batches Deleting batches per run.
 	 */
 	public static function cleanup( $batch_size = 1000, $max_batches = 20 ) {
 		global $wpdb;
@@ -510,7 +511,7 @@ final class Push_Log {
 					if ( $batches >= $max_batches ) {
 						return;
 					}
-					$deleted = (int) $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+					$deleted = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 						$wpdb->prepare(
 							'DELETE FROM %i WHERE integration_id = %s AND status = %s AND updated_at < %s LIMIT %d',
 							$table_name,
@@ -520,7 +521,15 @@ final class Push_Log {
 							(int) $batch_size
 						)
 					);
-					++$batches;
+					if ( false === $deleted ) {
+						self::report_write_failure();
+						return;
+					}
+					// The cap bounds deleting, not looking: a probe that finds nothing
+					// to prune is an index lookup and does not count.
+					if ( $deleted > 0 ) {
+						++$batches;
+					}
 				} while ( $deleted >= $batch_size );
 			}
 		}

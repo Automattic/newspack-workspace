@@ -513,4 +513,20 @@ class Test_Push_Log extends \WP_UnitTestCase {
 
 		$this->assertSame( 1, $this->count_rows() );
 	}
+
+	/**
+	 * The cap bounds deleting, not looking. Integrations with nothing to
+	 * prune must not use up the run before it reaches one that has a backlog.
+	 */
+	public function test_cleanup_reaches_a_backlog_behind_integrations_with_nothing_to_prune() {
+		foreach ( [ 'aa-first', 'bb-second', 'cc-third' ] as $integration_without_backlog ) {
+			$this->record( [ 'integration_id' => $integration_without_backlog ] );
+		}
+		$expired_row_id = $this->record( [ 'integration_id' => 'zz-backlog' ] );
+		$this->age_row( $expired_row_id, 30 );
+
+		Push_Log::cleanup( 1000, 2 );
+
+		$this->assertNull( $this->get_row( $expired_row_id ) );
+	}
 }
