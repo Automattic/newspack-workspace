@@ -449,4 +449,68 @@ class Test_Push_Log extends \WP_UnitTestCase {
 		$this->assertSame( 'Outbound sync is paused for this integration. Last error: ESP 503', $row['error_message'] );
 		$this->assertSame( 'transient', $row['error_class'] );
 	}
+
+	/**
+	 * Routine history is short-lived and failures are kept long enough for a
+	 * late support question: 14 days for successes, 90 for anything that did
+	 * not end well, including a row stuck retrying.
+	 */
+	public function test_cleanup_removes_successes_after_14_days_and_failures_after_90() {
+		$failure = [
+			'result'      => new \WP_Error( 'provider_down', 'ESP 503' ),
+			'error_class' => 'transient',
+		];
+
+		$expired_success  = $this->record( [ 'email' => 'expired-success@example.test' ] );
+		$recent_success   = $this->record( [ 'email' => 'recent-success@example.test' ] );
+		$expired_failure  = $this->record( array_merge( $failure, [ 'email' => 'expired-failure@example.test' ] ) );
+		$recent_failure   = $this->record( array_merge( $failure, [ 'email' => 'recent-failure@example.test' ] ) );
+		$expired_retrying = $this->record( array_merge( $failure, [ 'email' => 'expired-retrying@example.test' ] ) );
+		Push_Log::mark_retrying( $expired_retrying, 4321 );
+		$this->age_row( $expired_success, 15 );
+		$this->age_row( $recent_success, 13 );
+		$this->age_row( $expired_failure, 91 );
+		$this->age_row( $recent_failure, 89 );
+		$this->age_row( $expired_retrying, 91 );
+
+		Push_Log::cleanup();
+
+		$this->assertNull( $this->get_row( $expired_success ) );
+		$this->assertNotNull( $this->get_row( $recent_success ) );
+		$this->assertNull( $this->get_row( $expired_failure ) );
+		$this->assertNotNull( $this->get_row( $recent_failure ) );
+		$this->assertNull( $this->get_row( $expired_retrying ) );
+	}
+
+	/**
+	 * The windows are the knob a large site turns to keep the table small.
+	 */
+	public function test_cleanup_windows_are_filterable() {
+		$two_day_old_success = $this->record();
+		$this->age_row( $two_day_old_success, 2 );
+		$keep_one_day = function ( $retention_days ) {
+			$retention_days['success'] = 1;
+			return $retention_days;
+		};
+		add_filter( 'newspack_integrations_push_log_retention_days', $keep_one_day );
+
+		Push_Log::cleanup();
+
+		remove_filter( 'newspack_integrations_push_log_retention_days', $keep_one_day );
+		$this->assertNull( $this->get_row( $two_day_old_success ) );
+	}
+
+	/**
+	 * One run deletes a bounded amount, so a backlog cannot turn the daily
+	 * cron into a long table lock. The rest goes on the next run.
+	 */
+	public function test_cleanup_stops_at_the_batch_cap() {
+		foreach ( range( 1, 5 ) as $reader_number ) {
+			$this->age_row( $this->record( [ 'email' => "reader-{$reader_number}@example.test" ] ), 30 );
+		}
+
+		Push_Log::cleanup( 2, 2 );
+
+		$this->assertSame( 1, $this->count_rows() );
+	}
 }

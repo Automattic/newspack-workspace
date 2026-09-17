@@ -28,6 +28,7 @@ final class Push_Log {
 	const TABLE_NAME           = 'newspack_integrations_push_log';
 	const TABLE_VERSION        = '1.0';
 	const TABLE_VERSION_OPTION = '_newspack_integrations_push_log_version';
+	const CLEANUP_HOOK         = 'newspack_integrations_push_log_cleanup';
 
 	const STATUS_SUCCESS  = 'success';
 	const STATUS_RETRYING = 'retrying';
@@ -49,6 +50,10 @@ final class Push_Log {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'maybe_create_table' ] );
+		add_action( 'init', [ __CLASS__, 'schedule_cleanup' ] );
+		// Zero accepted args: a bare do_action() passes an empty string, which
+		// must not land in cleanup()'s batch size.
+		add_action( self::CLEANUP_HOOK, [ __CLASS__, 'cleanup' ], 10, 0 );
 	}
 
 	/**
@@ -423,5 +428,101 @@ final class Push_Log {
 			[ 'db_error' => $wpdb->last_error ],
 			'error'
 		);
+	}
+
+	/**
+	 * Schedule the daily cleanup, unless the site disabled it.
+	 */
+	public static function schedule_cleanup() {
+		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'unschedule_cleanup' ] );
+
+		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CLEANUP_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
+			self::unschedule_cleanup();
+		} elseif ( ! wp_next_scheduled( self::CLEANUP_HOOK ) ) {
+			wp_schedule_event( time(), 'daily', self::CLEANUP_HOOK );
+		}
+	}
+
+	/**
+	 * Unschedule the daily cleanup.
+	 */
+	public static function unschedule_cleanup() {
+		wp_clear_scheduled_hook( self::CLEANUP_HOOK );
+	}
+
+	/**
+	 * How many days rows are kept, by outcome.
+	 *
+	 * @return array{success:int,failed:int}
+	 */
+	public static function get_retention_days(): array {
+		$defaults = [
+			'success' => 14,
+			'failed'  => 90,
+		];
+
+		/**
+		 * Filters how many days push log rows are kept.
+		 *
+		 * @param array $retention_days {
+		 *     Days since a row's last update.
+		 *
+		 *     @type int $success Rows that ended in success. Default 14.
+		 *     @type int $failed  Rows that failed or are still retrying. Default 90.
+		 * }
+		 */
+		$retention_days = wp_parse_args( (array) apply_filters( 'newspack_integrations_push_log_retention_days', $defaults ), $defaults );
+
+		return [
+			'success' => max( 1, (int) $retention_days['success'] ),
+			'failed'  => max( 1, (int) $retention_days['failed'] ),
+		];
+	}
+
+	/**
+	 * Delete rows past their retention window.
+	 *
+	 * Deletes run one integration and status at a time so the
+	 * integration_status index serves each of them, in bounded batches so a
+	 * backlog never turns into one long delete.
+	 *
+	 * @param int $batch_size  Rows per delete.
+	 * @param int $max_batches Deletes per run.
+	 */
+	public static function cleanup( $batch_size = 1000, $max_batches = 20 ) {
+		global $wpdb;
+		$table_name     = self::get_table_name();
+		$retention_days = self::get_retention_days();
+		$windows        = [
+			self::STATUS_SUCCESS  => $retention_days['success'],
+			self::STATUS_FAILED   => $retention_days['failed'],
+			// A retry chain lasts under three hours, so an old retrying row is stuck.
+			self::STATUS_RETRYING => $retention_days['failed'],
+		];
+
+		$integration_ids = $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT integration_id FROM %i', $table_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$batches         = 0;
+
+		foreach ( $integration_ids as $integration_id ) {
+			foreach ( $windows as $status => $days ) {
+				$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+				do {
+					if ( $batches >= $max_batches ) {
+						return;
+					}
+					$deleted = (int) $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+						$wpdb->prepare(
+							'DELETE FROM %i WHERE integration_id = %s AND status = %s AND updated_at < %s LIMIT %d',
+							$table_name,
+							$integration_id,
+							$status,
+							$cutoff,
+							(int) $batch_size
+						)
+					);
+					++$batches;
+				} while ( $deleted >= $batch_size );
+			}
+		}
 	}
 }
