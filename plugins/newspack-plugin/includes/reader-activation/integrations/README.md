@@ -484,7 +484,7 @@ Integrations do not write to it. `Contact_Sync` does, because only it knows whic
 
 One reader, one integration, one triggering push. A fan-out to three integrations writes three rows.
 
-- **Retries update the row.** The row ID rides in the retry's ActionScheduler args as `log_id`. `attempts` counts pushes made so far; `max_attempts` is the ceiling when the row was written (`MAX_RETRIES + 1`, or 1 when nothing will retry: a CLI push scoped with `--skip-lists`/`--fields`, or a contact with no account to rebuild from).
+- **Retries update the row.** The row ID rides in the retry's ActionScheduler args as `log_id`. `attempts` counts pushes made so far; `max_attempts` is the ceiling when the row was written (`MAX_RETRIES + 1`, or 1 when nothing will retry: a CLI push scoped with `--skip-lists`/`--fields`, or a contact with no account to rebuild from). It is a ceiling, not a promise: a permanent or benign result ends a row on its first attempt. Read `status` to know whether another attempt is coming.
 - **`status` describes the sync, not an action**: `success`, `retrying` or `failed`. An error row is written as `failed` and becomes `retrying` only when a retry is actually scheduled: if Action Scheduler stores nothing, the row stays `failed`. A retry that gives up before pushing ends the row as `failed` with `error_code = retry_aborted`. A benign result is a `success` that keeps `error_class = benign`.
 - **`payload`** is the prepared contact as handed to the integration: as close to the wire as the framework sees. An integration may still reshape it internally. Hard deletes have none.
 - **Identical pushes collapse.** A clean successful first-attempt upsert whose payload matches the reader's latest row for that integration bumps `repeat_count` and `updated_at` on that row instead of adding one, so the recurring sync does not grow the table. The comparison ignores key order and volatile fields (`Last Active` by default; filter `newspack_integrations_push_log_volatile_fields`, whose names are field names as sent to the integration, without its prefix). Deletion rows never collapse.
@@ -498,6 +498,10 @@ The hourly `newspack_integrations_push_log_cleanup` cron deletes `success` rows 
 Rows hold reader emails and pushed field values. A personal-data eraser (`newspack-integrations-push-log`) deletes a reader's rows by email and by account, so rows under a previous address go too.
 
 Writing the log never breaks a sync: a database failure returns 0 to the caller and is reported once per request as `newspack_integrations_push_log_write_failed`.
+
+### Changing the schema
+
+Edit the `CREATE TABLE` in `Push_Log::maybe_create_table()` and bump `TABLE_VERSION`. The stored version no longer matches, so `dbDelta` runs on the next request and applies the change; the version is recorded only once the table is really there, so a failed run is retried rather than leaving every write to fail.
 
 ---
 
