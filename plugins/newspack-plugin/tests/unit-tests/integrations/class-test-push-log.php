@@ -239,4 +239,105 @@ class Test_Push_Log extends \WP_UnitTestCase {
 			$this->assertContains( $expected_index, $index_names );
 		}
 	}
+
+	/**
+	 * Move a row's last-update time into the past.
+	 *
+	 * @param int $row_id   The row ID.
+	 * @param int $days_ago How many days back.
+	 */
+	private function age_row( int $row_id, int $days_ago ) {
+		global $wpdb;
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			Push_Log::get_table_name(),
+			[ 'updated_at' => gmdate( 'Y-m-d H:i:s', time() - $days_ago * DAY_IN_SECONDS ) ],
+			[ 'id' => $row_id ]
+		);
+	}
+
+	/**
+	 * Most pushes change nothing at the provider. They must not add rows, or
+	 * the recurring sync alone would grow the table without bound. Field
+	 * order is not a change either.
+	 */
+	public function test_identical_successful_push_bumps_the_counter_instead_of_adding_a_row() {
+		$first_row_id = $this->record();
+		$this->age_row( $first_row_id, 2 );
+		$aged_update_time = $this->get_row( $first_row_id )['updated_at'];
+
+		$same_data_reordered             = $this->sample_payload();
+		$same_data_reordered['metadata'] = array_reverse( $same_data_reordered['metadata'], true );
+		$second_row_id                   = $this->record( [ 'payload' => $same_data_reordered ] );
+
+		$row = $this->get_row( $first_row_id );
+		$this->assertSame( $first_row_id, $second_row_id );
+		$this->assertSame( 1, $this->count_rows() );
+		$this->assertEquals( 1, $row['repeat_count'] );
+		$this->assertGreaterThan( $aged_update_time, $row['updated_at'], 'A repeat keeps the row alive for retention.' );
+	}
+
+	/**
+	 * A push that changes a value is the event the log exists to show.
+	 */
+	public function test_changed_payload_adds_a_row() {
+		$this->record();
+		$this->record( [ 'payload' => $this->sample_payload( [ 'NP_Total_Paid' => '180' ] ) ] );
+
+		$this->assertSame( 2, $this->count_rows() );
+	}
+
+	/**
+	 * Last Active changes on every visit. If it counted as a change, every
+	 * push by an active reader would add a row. The row still shows the last
+	 * value sent.
+	 */
+	public function test_volatile_fields_do_not_add_rows_and_the_row_shows_the_latest_value() {
+		$first_row_id  = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Last_Active' => '2026-09-01 10:00:00' ] ) ] );
+		$second_row_id = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Last_Active' => '2026-09-01 10:05:00' ] ) ] );
+
+		$stored_payload = json_decode( $this->get_row( $first_row_id )['payload'], true );
+		$this->assertSame( $first_row_id, $second_row_id );
+		$this->assertSame( 1, $this->count_rows() );
+		$this->assertSame( '2026-09-01 10:05:00', $stored_payload['metadata']['NP_Last_Active'] );
+	}
+
+	/**
+	 * Previous rows that must not absorb a repeat.
+	 *
+	 * @return array[]
+	 */
+	public function rows_that_do_not_absorb_a_repeat(): array {
+		return [
+			'a failed push'   => [
+				[
+					'result'      => new \WP_Error( 'provider_down', 'ESP 503' ),
+					'error_class' => 'transient',
+				],
+			],
+			'a benign result' => [
+				[
+					'result'      => new \WP_Error( 'member_exists', 'Member exists' ),
+					'error_class' => 'benign',
+				],
+			],
+			'a deletion flag' => [
+				[ 'operation' => Push_Log::OPERATION_FLAG ],
+			],
+		];
+	}
+
+	/**
+	 * Only a clean successful upsert stands for "this data is at the
+	 * provider". Anything else before a success means that success is news.
+	 *
+	 * @param array $previous_attempt Overrides for the row recorded first.
+	 *
+	 * @dataProvider rows_that_do_not_absorb_a_repeat
+	 */
+	public function test_only_a_clean_successful_upsert_absorbs_a_repeat( array $previous_attempt ) {
+		$this->record( $previous_attempt );
+		$this->record();
+
+		$this->assertSame( 2, $this->count_rows() );
+	}
 }

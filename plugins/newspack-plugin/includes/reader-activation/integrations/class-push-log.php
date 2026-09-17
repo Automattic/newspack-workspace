@@ -125,6 +125,7 @@ final class Push_Log {
 	 *     @type string         $operation      One of the OPERATION_* constants.
 	 *     @type string         $context        The sync context.
 	 *     @type array|null     $payload        The contact as handed to the integration; null for hard deletes.
+	 *     @type string         $hash_prefix    The integration's metadata prefix, to recognize volatile fields.
 	 *     @type true|\WP_Error $result         The push result.
 	 *     @type string|null    $error_class    The caller's classification of a WP_Error result:
 	 *                                          'benign', 'transient', 'permanent_contact' or
@@ -147,6 +148,7 @@ final class Push_Log {
 				'operation'      => self::OPERATION_UPSERT,
 				'context'        => '',
 				'payload'        => null,
+				'hash_prefix'    => '',
 				'result'         => true,
 				'error_class'    => null,
 				'attempts'       => 1,
@@ -178,7 +180,7 @@ final class Push_Log {
 			'attempts'        => max( 1, (int) $args['attempts'] ),
 			'max_attempts'    => max( 1, (int) $args['max_attempts'] ),
 			'payload'         => null === $payload ? null : wp_json_encode( $payload ),
-			'payload_hash'    => null === $payload ? null : self::hash_payload( $payload ),
+			'payload_hash'    => null === $payload ? null : self::hash_payload( $payload, (string) $args['hash_prefix'] ),
 			'retry_action_id' => null,
 			'updated_at'      => $now,
 		];
@@ -188,6 +190,17 @@ final class Push_Log {
 			$data['error_class']   = $error_class;
 			$data['error_code']    = mb_substr( (string) $args['result']->get_error_code(), 0, 100 );
 			$data['error_message'] = implode( '; ', $args['result']->get_error_messages() );
+		}
+
+		$is_clean_first_upsert = ! $failed
+			&& 1 === $data['attempts']
+			&& self::OPERATION_UPSERT === $args['operation']
+			&& null !== $data['payload_hash'];
+		if ( $is_clean_first_upsert ) {
+			$collapsed_into = self::collapse_into_latest( $integration_id, $email, $data );
+			if ( $collapsed_into > 0 ) {
+				return $collapsed_into;
+			}
 		}
 
 		$inserted = $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
@@ -215,12 +228,89 @@ final class Push_Log {
 	/**
 	 * Fingerprint a payload, to tell whether two pushes sent the same data.
 	 *
-	 * @param array $payload The contact as handed to the integration.
+	 * Key order is not data, and neither are fields that change on every
+	 * visit: counting those as a change would add a row for every push an
+	 * active reader triggers.
+	 *
+	 * @param array  $payload The contact as handed to the integration.
+	 * @param string $prefix  The integration's metadata prefix.
 	 *
 	 * @return string
 	 */
-	private static function hash_payload( array $payload ): string {
+	private static function hash_payload( array $payload, string $prefix ): string {
+		/**
+		 * Filters the metadata fields the push log ignores when deciding
+		 * whether a push sent the same data as the previous one.
+		 *
+		 * @param string[] $fields Metadata keys, without the integration's prefix.
+		 */
+		$volatile_fields = (array) apply_filters( 'newspack_integrations_push_log_volatile_fields', [ 'Last_Active' ] );
+
+		$metadata = isset( $payload['metadata'] ) && is_array( $payload['metadata'] ) ? $payload['metadata'] : [];
+		foreach ( array_keys( $metadata ) as $key ) {
+			$bare_key = ( '' !== $prefix && 0 === strpos( $key, $prefix ) ) ? substr( $key, strlen( $prefix ) ) : $key;
+			if ( in_array( $bare_key, $volatile_fields, true ) ) {
+				unset( $metadata[ $key ] );
+			}
+		}
+		ksort( $metadata );
+		$payload['metadata'] = $metadata;
+		ksort( $payload );
+
 		return md5( wp_json_encode( $payload ) );
+	}
+
+	/**
+	 * Fold a clean successful upsert into the reader's latest row when that
+	 * row already stands for the same data at the provider.
+	 *
+	 * The payload is refreshed so volatile values stay current, and the row's
+	 * context is kept: it names what caused this data state.
+	 *
+	 * @param string $integration_id The integration pushed to.
+	 * @param string $email          The contact's email, already truncated.
+	 * @param array  $data           The row data built by record_attempt().
+	 *
+	 * @return int The row collapsed into, or 0 when a new row is needed.
+	 */
+	private static function collapse_into_latest( string $integration_id, string $email, array $data ): int {
+		global $wpdb;
+		$table_name = self::get_table_name();
+
+		$latest = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				'SELECT id, status, error_class, operation, payload_hash FROM %i WHERE email = %s AND integration_id = %s ORDER BY id DESC LIMIT 1',
+				$table_name,
+				$email,
+				$integration_id
+			),
+			ARRAY_A
+		);
+		if (
+			! $latest
+			|| self::STATUS_SUCCESS !== $latest['status']
+			|| null !== $latest['error_class']
+			|| self::OPERATION_UPSERT !== $latest['operation']
+			|| $data['payload_hash'] !== $latest['payload_hash']
+		) {
+			return 0;
+		}
+
+		$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				'UPDATE %i SET repeat_count = repeat_count + 1, payload = %s, updated_at = %s WHERE id = %d',
+				$table_name,
+				$data['payload'],
+				$data['updated_at'],
+				(int) $latest['id']
+			)
+		);
+		if ( false === $updated ) {
+			self::report_write_failure();
+			return 0;
+		}
+
+		return (int) $latest['id'];
 	}
 
 	/**
