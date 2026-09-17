@@ -651,9 +651,12 @@ class Content_Gate_Advanced_Settings {
 	 * Replace a feed string (content or excerpt) with the gate teaser when the
 	 * current post is restricted and the feed mode is not "off".
 	 *
-	 * Uses the gate's excerpt settings (<!--more--> tag or paragraph count) to
-	 * match what logged-out visitors see on the front-end. The inline gate HTML
-	 * is intentionally omitted — feeds should not contain login prompts. In
+	 * Delegates to {@see Content_Gate::get_withheld_summary()}: the post's authored
+	 * excerpt when it has one — the WooCommerce Memberships "show excerpts" parity a
+	 * migrated site expects in its syndication feeds — otherwise the constructed
+	 * gate teaser (the gate's <!--more--> tag or paragraph count). This deliberately
+	 * diverges from the on-page reveal, which stays the paragraph teaser. The inline
+	 * gate HTML is intentionally omitted — feeds should not contain login prompts. In
 	 * "exclude" mode restricted posts are already gone from the loop; truncation
 	 * remains a backstop so a restricted body can never leak in full.
 	 *
@@ -672,7 +675,7 @@ class Content_Gate_Advanced_Settings {
 		if ( ! Content_Gate::is_post_restricted( $post->ID ) ) {
 			return $feed_string;
 		}
-		return Content_Gate::get_restricted_post_excerpt_for_gate( $post, Content_Gate::get_gate_layout_id( $post->ID ) );
+		return Content_Gate::get_withheld_summary( $post );
 	}
 }
 Content_Gate_Advanced_Settings::init();

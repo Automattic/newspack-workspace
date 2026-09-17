@@ -86,10 +86,15 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 			]
 		);
 
+		// Force an empty excerpt: the post factory otherwise auto-generates one
+		// ("Post excerpt NNNN"), which get_withheld_summary() now prefers over the
+		// constructed teaser. The teaser-fallback tests need a post with no authored
+		// excerpt; the excerpt-first tests set their own.
 		$this->post_id = $this->factory->post->create(
 			[
 				'post_status'  => 'publish',
 				'post_content' => self::POST_CONTENT,
+				'post_excerpt' => '',
 			]
 		);
 
@@ -236,6 +241,85 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		$this->assertStringContainsString( 'FREE_ONE', $feed_excerpt, 'Free preview should be present in feed excerpt.' );
 		$this->assertStringNotContainsString( 'PAID_THREE', $feed_excerpt, 'Paid paragraph 3 must not leak into feed excerpt.' );
 		$this->assertStringNotContainsString( 'PAID_FIVE', $feed_excerpt, 'Paid paragraph 5 must not leak into feed excerpt.' );
+	}
+
+	/**
+	 * A restricted post with an authored excerpt should syndicate that excerpt in
+	 * the feed <description>, not the constructed lead-paragraph teaser. This is
+	 * the WooCommerce Memberships "show excerpts" parity the truncate teaser broke.
+	 */
+	public function test_written_excerpt_is_used_for_restricted_feed_excerpt() {
+		$this->set_feed_mode( 'truncate' );
+		update_option( 'rss_use_excerpt', 1 );
+		wp_update_post(
+			[
+				'ID'           => $this->post_id,
+				'post_excerpt' => 'AUTHORED_SUMMARY written by the editor.',
+			]
+		);
+
+		$feed_excerpt = $this->render_in_feed_loop(
+			function () {
+				return apply_filters( 'the_excerpt_rss', get_the_excerpt() );
+			}
+		);
+
+		$this->assertStringContainsString( 'AUTHORED_SUMMARY', $feed_excerpt, 'The authored excerpt should be syndicated for the restricted feed item.' );
+		$this->assertStringNotContainsString( 'FREE_ONE', $feed_excerpt, 'The constructed teaser must not replace the authored excerpt.' );
+		$this->assertStringNotContainsString( 'PAID_THREE', $feed_excerpt, 'Paid content must never leak into the feed.' );
+	}
+
+	/**
+	 * The same parity on a full-text feed: <content:encoded> carries the authored
+	 * excerpt for a restricted post, never the paid body and never the teaser.
+	 */
+	public function test_written_excerpt_is_used_for_restricted_full_text_feed() {
+		$this->set_feed_mode( 'truncate' );
+		update_option( 'rss_use_excerpt', 0 );
+		wp_update_post(
+			[
+				'ID'           => $this->post_id,
+				'post_excerpt' => 'AUTHORED_SUMMARY written by the editor.',
+			]
+		);
+
+		$feed_content = $this->render_in_feed_loop(
+			function () {
+				return get_the_content_feed( 'rss2' );
+			}
+		);
+
+		$this->assertStringContainsString( 'AUTHORED_SUMMARY', $feed_content, 'The authored excerpt should be syndicated in full-text feed content.' );
+		$this->assertStringNotContainsString( 'FREE_ONE', $feed_content, 'The constructed teaser must not replace the authored excerpt.' );
+		$this->assertStringNotContainsString( 'PAID_THREE', $feed_content, 'Paid content must never leak into the feed.' );
+	}
+
+	/**
+	 * The excerpt-first behaviour is the seam a future opt-out setting hooks: with
+	 * `newspack_content_gate_prefer_written_excerpt` forced false, the constructed
+	 * teaser is restored even though the post has an authored excerpt.
+	 */
+	public function test_filter_can_restore_teaser_over_written_excerpt() {
+		$this->set_feed_mode( 'truncate' );
+		update_option( 'rss_use_excerpt', 1 );
+		wp_update_post(
+			[
+				'ID'           => $this->post_id,
+				'post_excerpt' => 'AUTHORED_SUMMARY written by the editor.',
+			]
+		);
+		add_filter( 'newspack_content_gate_prefer_written_excerpt', '__return_false' );
+
+		$feed_excerpt = $this->render_in_feed_loop(
+			function () {
+				return apply_filters( 'the_excerpt_rss', get_the_excerpt() );
+			}
+		);
+
+		remove_filter( 'newspack_content_gate_prefer_written_excerpt', '__return_false' );
+
+		$this->assertStringContainsString( 'FREE_ONE', $feed_excerpt, 'With the filter off, the constructed teaser is restored.' );
+		$this->assertStringNotContainsString( 'AUTHORED_SUMMARY', $feed_excerpt, 'With the filter off, the authored excerpt is not used.' );
 	}
 
 	/**
