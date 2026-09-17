@@ -2078,11 +2078,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Blocker: an institution rule saved with no institutions selected
-	 * (`value => []`) must not silently grant anonymous access. Without a
-	 * value, the rule is "not configured" — Institution::evaluate(0, [])
-	 * returns true as the rule's own no-constraint semantics, but for the
-	 * registration bypass we require a populated rule that actually matches.
+	 * An institution rule saved with no institutions selected (`value => []`)
+	 * must not grant anonymous access. The rule names no condition, so
+	 * Institution::evaluate() satisfies nobody with it, and the registration
+	 * bypass requires a populated rule that actually matches.
 	 */
 	public function test_anonymous_with_unpopulated_institution_rule_is_restricted() {
 		$this->configure_published_gate(
