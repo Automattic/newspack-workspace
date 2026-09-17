@@ -230,7 +230,7 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		Contact_Sync::execute_integration_retry( $retry['args'] );
 
 		$rows = $this->get_rows_by_integration();
-		$this->assertCount( 1, $rows );
+		$this->assertSame( 1, $this->count_rows() );
 		$this->assertSame( $retrying_row['id'], $rows['retry-spy']['id'] );
 		$this->assertSame( Push_Log::STATUS_SUCCESS, $rows['retry-spy']['status'] );
 		$this->assertEquals( 2, $rows['retry-spy']['attempts'] );
@@ -263,6 +263,69 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertSame( 'retry_aborted', $row['error_code'] );
 		$this->assertStringContainsString( 'paused', $row['error_message'] );
 		$this->assertStringContainsString( 'Last error: Provider down', $row['error_message'] );
+	}
+
+	/**
+	 * A reader deleted between the failure and the retry can never be rebuilt,
+	 * so the chain ends without pushing. The row must say so: left retrying it
+	 * would promise an attempt that is never coming.
+	 */
+	public function test_a_retry_whose_reader_was_deleted_ends_the_row_as_failed() {
+		$this->require_action_scheduler();
+		$reader_id        = $this->factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
+		$spy              = $this->register_spy( 'deleted-reader-spy' );
+		$spy->push_result = new \WP_Error( 'provider_down', 'Provider down' );
+		Contact_Sync::sync(
+			[
+				'email'    => 'reader@example.test',
+				'metadata' => [],
+			],
+			'Test context'
+		);
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_HOOK, 'deleted-reader-spy' );
+
+		\wp_delete_user( $reader_id );
+		Contact_Sync::execute_integration_retry( $retry['args'] );
+
+		$row = $this->get_rows_by_integration()['deleted-reader-spy'];
+		$this->assertCount( 1, $spy->push_calls, 'The retry for a deleted reader does not push.' );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'retry_aborted', $row['error_code'] );
+		$this->assertStringContainsString( 'Last error: Provider down', $row['error_message'] );
+	}
+
+	/**
+	 * The log only observes. A table that cannot be written must not change
+	 * what a sync returns or whether it retries; the retry then carries
+	 * log_id 0 and starts a fresh row rather than updating one never written.
+	 */
+	public function test_a_broken_push_log_changes_neither_the_sync_result_nor_its_retry() {
+		$this->require_action_scheduler();
+		global $wpdb;
+		$this->factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
+		$spy              = $this->register_spy( 'unlogged-spy' );
+		$spy->push_result = new \WP_Error( 'provider_down', 'Provider down' );
+		$break_inserts    = function ( $query ) {
+			$is_push_log_insert = 0 === stripos( ltrim( $query ), 'INSERT' ) && false !== strpos( $query, Push_Log::TABLE_NAME );
+			return $is_push_log_insert ? 'INSERT INTO table_that_does_not_exist VALUES (1)' : $query;
+		};
+		add_filter( 'query', $break_inserts );
+		$errors_were_suppressed = $wpdb->suppress_errors( true );
+
+		$sync_result = Contact_Sync::sync(
+			[
+				'email'    => 'reader@example.test',
+				'metadata' => [],
+			],
+			'Test context'
+		);
+
+		$wpdb->suppress_errors( $errors_were_suppressed );
+		remove_filter( 'query', $break_inserts );
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_HOOK, 'unlogged-spy' );
+		$this->assertInstanceOf( \WP_Error::class, $sync_result );
+		$this->assertSame( 0, $this->count_rows() );
+		$this->assertSame( 0, $retry['args']['log_id'] );
 	}
 
 	/**
@@ -379,9 +442,29 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		Contact_Sync::execute_deletion_retry( $retry['args'] );
 
 		$rows = $this->get_rows_by_integration();
-		$this->assertCount( 1, $rows );
+		$this->assertSame( 1, $this->count_rows() );
+		$this->assertSame( $retrying_row['id'], $rows['flag-spy']['id'] );
 		$this->assertSame( Push_Log::STATUS_SUCCESS, $rows['flag-spy']['status'] );
 		$this->assertEquals( 2, $rows['flag-spy']['attempts'] );
+	}
+
+	/**
+	 * A cleanup failure alongside a failed push must not overwrite the push's
+	 * own error: the row is still retrying, and the retry runs the cleanup
+	 * again. Overwriting would read as a chain that ended.
+	 */
+	public function test_a_failed_flag_push_keeps_its_own_error_when_the_cleanup_also_fails() {
+		$this->require_action_scheduler();
+		$spy                 = $this->register_deletion_spy( 'both-failed-spy', 'flag' );
+		$spy->push_result    = new \WP_Error( 'provider_down', 'Provider down' );
+		$spy->cleanup_result = new \WP_Error( 'lists_down', 'Lists API down' );
+
+		$this->delete_sample_reader();
+
+		$row = $this->get_rows_by_integration()['both-failed-spy'];
+		$this->assertSame( Push_Log::STATUS_RETRYING, $row['status'] );
+		$this->assertSame( 'provider_down', $row['error_code'] );
+		$this->assertStringContainsString( 'Provider down', $row['error_message'] );
 	}
 
 	/**

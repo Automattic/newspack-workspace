@@ -194,6 +194,34 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Identifiers an attempt cannot be recorded without.
+	 *
+	 * @return array[]
+	 */
+	public function identifiers_a_row_is_read_back_by(): array {
+		return [
+			'no email'          => [ [ 'email' => '' ] ],
+			'no integration ID' => [ [ 'integration_id' => '' ] ],
+		];
+	}
+
+	/**
+	 * The log is read by reader and by integration. A row missing either is
+	 * one nobody can look up, so a miswired caller must not spend a row per
+	 * push on it.
+	 *
+	 * @param array $missing_identifier Overrides that drop one identifier.
+	 *
+	 * @dataProvider identifiers_a_row_is_read_back_by
+	 */
+	public function test_an_attempt_missing_an_identifier_writes_nothing( array $missing_identifier ) {
+		$row_id = $this->record( $missing_identifier );
+
+		$this->assertSame( 0, $row_id );
+		$this->assertSame( 0, $this->count_rows() );
+	}
+
+	/**
 	 * Logging must never break a sync: a broken table returns 0 without
 	 * throwing, and reports once per request rather than once per push.
 	 */
@@ -444,7 +472,9 @@ class Test_Push_Log extends \WP_UnitTestCase {
 
 		Push_Log::mark_retrying( $row_id, 0 );
 
-		$this->assertSame( Push_Log::STATUS_FAILED, $this->get_row( $row_id )['status'] );
+		$row = $this->get_row( $row_id );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertNull( $row['retry_action_id'], 'A row with no retry behind it points at none.' );
 	}
 
 	/**
