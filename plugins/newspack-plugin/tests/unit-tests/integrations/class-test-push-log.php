@@ -391,6 +391,25 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The database reports rows changed, not rows matched, so a retry that
+	 * runs twice with the same outcome changes nothing the second time. That
+	 * must not read as "the row is gone" and add a second row for one sync.
+	 */
+	public function test_a_retry_that_changes_nothing_still_lands_on_its_row() {
+		$row_id = $this->record( [ 'attempts' => 2 ] );
+
+		$repeated_row_id = $this->record(
+			[
+				'log_id'   => $row_id,
+				'attempts' => 2,
+			]
+		);
+
+		$this->assertSame( $row_id, $repeated_row_id );
+		$this->assertSame( 1, $this->count_rows() );
+	}
+
+	/**
 	 * A retry that gives up before pushing used to leave no trace. The row
 	 * ends as failed, says why, and keeps the error that started the chain.
 	 */

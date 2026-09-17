@@ -201,10 +201,12 @@ final class Push_Log {
 				self::report_write_failure();
 				return 0;
 			}
-			if ( $updated > 0 ) {
+			// The database reports rows changed, not rows matched, so 0 also
+			// means the row already held these values. Only a row that is
+			// really gone (pruned mid-chain) gets recorded as a new one.
+			if ( $updated > 0 || self::row_exists( $log_id ) ) {
 				return $log_id;
 			}
-			// No row matched: it was pruned mid-chain. Record the attempt as a new row.
 		}
 
 		$is_clean_first_upsert = ! $failed
@@ -238,6 +240,19 @@ final class Push_Log {
 		}
 
 		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Whether a row exists.
+	 *
+	 * @param int $log_id The row ID.
+	 *
+	 * @return bool
+	 */
+	private static function row_exists( int $log_id ): bool {
+		global $wpdb;
+		$found = $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', self::get_table_name(), $log_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return null !== $found;
 	}
 
 	/**
