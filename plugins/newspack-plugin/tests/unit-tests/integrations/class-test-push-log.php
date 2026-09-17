@@ -529,4 +529,40 @@ class Test_Push_Log extends \WP_UnitTestCase {
 
 		$this->assertNull( $this->get_row( $expired_row_id ) );
 	}
+
+	/**
+	 * An erasure request must not wait for retention, and must reach rows
+	 * written under an address the reader has since changed.
+	 */
+	public function test_erasing_a_reader_removes_their_rows_under_any_address() {
+		$reader_id       = $this->factory()->user->create( [ 'user_email' => 'new-address@example.test' ] );
+		$under_old_email = $this->record(
+			[
+				'email'   => 'old-address@example.test',
+				'user_id' => $reader_id,
+			]
+		);
+		$under_new_email = $this->record(
+			[
+				'email'   => 'new-address@example.test',
+				'user_id' => $reader_id,
+			]
+		);
+		$someone_elses   = $this->record(
+			[
+				'email'   => 'someone-else@example.test',
+				'user_id' => $reader_id + 1,
+			]
+		);
+
+		$registered_eraser = apply_filters( 'wp_privacy_personal_data_erasers', [] )['newspack-integrations-push-log'];
+
+		$response = call_user_func( $registered_eraser['callback'], 'new-address@example.test', 1 );
+
+		$this->assertNull( $this->get_row( $under_old_email ) );
+		$this->assertNull( $this->get_row( $under_new_email ) );
+		$this->assertNotNull( $this->get_row( $someone_elses ) );
+		$this->assertTrue( $response['items_removed'] );
+		$this->assertTrue( $response['done'] );
+	}
 }

@@ -54,6 +54,7 @@ final class Push_Log {
 		// Zero accepted args: a bare do_action() passes an empty string, which
 		// must not land in cleanup()'s batch size.
 		add_action( self::CLEANUP_HOOK, [ __CLASS__, 'cleanup' ], 10, 0 );
+		add_filter( 'wp_privacy_personal_data_erasers', [ __CLASS__, 'register_eraser' ] );
 	}
 
 	/**
@@ -533,5 +534,50 @@ final class Push_Log {
 				} while ( $deleted >= $batch_size );
 			}
 		}
+	}
+
+	/**
+	 * Register the push log's personal-data eraser.
+	 *
+	 * @param array $erasers Registered erasers.
+	 * @return array
+	 */
+	public static function register_eraser( $erasers ) {
+		$erasers['newspack-integrations-push-log'] = [
+			'eraser_friendly_name' => __( 'Newspack integrations push log', 'newspack-plugin' ),
+			'callback'             => [ __CLASS__, 'erase_personal_data' ],
+		];
+		return $erasers;
+	}
+
+	/**
+	 * Erase a reader's rows.
+	 *
+	 * Rows hold the email and the field values that were pushed. Matching on
+	 * the account as well reaches rows written under an earlier address. A
+	 * reader has few rows, so one delete covers them and there is one page.
+	 *
+	 * @param string $email_address The reader's email.
+	 * @param int    $page          The eraser page. Unused.
+	 *
+	 * @return array The eraser response.
+	 */
+	public static function erase_personal_data( $email_address, $page = 1 ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+		global $wpdb;
+		$table_name = self::get_table_name();
+		$reader     = get_user_by( 'email', $email_address );
+
+		if ( $reader ) {
+			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s OR user_id = %d', $table_name, $email_address, $reader->ID ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		} else {
+			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s', $table_name, $email_address ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		}
+
+		return [
+			'items_removed'  => (int) $removed > 0,
+			'items_retained' => false,
+			'messages'       => [],
+			'done'           => true,
+		];
 	}
 }
