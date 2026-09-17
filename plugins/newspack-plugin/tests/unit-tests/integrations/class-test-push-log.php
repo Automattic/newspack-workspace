@@ -410,6 +410,24 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Action Scheduler answers 0 when it stored nothing. A row marked
+	 * retrying with no retry behind it would wait forever, so it stays
+	 * failed.
+	 */
+	public function test_a_retry_that_was_not_scheduled_leaves_the_row_failed() {
+		$row_id = $this->record(
+			[
+				'result'      => new \WP_Error( 'provider_down', 'ESP 503' ),
+				'error_class' => 'transient',
+			]
+		);
+
+		Push_Log::mark_retrying( $row_id, 0 );
+
+		$this->assertSame( Push_Log::STATUS_FAILED, $this->get_row( $row_id )['status'] );
+	}
+
+	/**
 	 * A retry that gives up before pushing used to leave no trace. The row
 	 * ends as failed, says why, and keeps the error that started the chain.
 	 */

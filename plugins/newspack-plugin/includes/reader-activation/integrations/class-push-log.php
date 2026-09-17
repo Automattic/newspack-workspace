@@ -258,14 +258,16 @@ final class Push_Log {
 	/**
 	 * Mark a row as waiting for a scheduled retry.
 	 *
-	 * An error row is written as failed and only becomes retrying here, so a
-	 * code path that schedules nothing can never leave a row stuck retrying.
+	 * An error row is written as failed and only becomes retrying here, and
+	 * only for a retry that was really scheduled, so a code path that
+	 * schedules nothing can never leave a row stuck retrying.
 	 *
 	 * @param int $log_id    The row ID. 0 is ignored.
-	 * @param int $action_id The pending ActionScheduler action.
+	 * @param int $action_id The pending ActionScheduler action. 0 means nothing
+	 *                       was scheduled, and is ignored.
 	 */
 	public static function mark_retrying( int $log_id, int $action_id ): void {
-		if ( $log_id <= 0 ) {
+		if ( $log_id <= 0 || $action_id <= 0 ) {
 			return;
 		}
 		global $wpdb;
@@ -273,7 +275,7 @@ final class Push_Log {
 			self::get_table_name(),
 			[
 				'status'          => self::STATUS_RETRYING,
-				'retry_action_id' => $action_id > 0 ? $action_id : null,
+				'retry_action_id' => $action_id,
 			],
 			[ 'id' => $log_id ]
 		);
