@@ -17,6 +17,8 @@ window.newspackAudienceContentGates = {
 			name: 'One-time purchase',
 			options: [ ANNUAL_188250, ANNUAL_205482, { value: 42, label: 'Founder&#8217;s Club' } ],
 		},
+		institution: { name: 'Institutional access', has_options: true, requires_value: true, options: [] },
+		email_domain: { name: 'Whitelisted email domain', has_options: false, empty_grants_access: true, requires_value: true },
 	},
 	available_content_rules: {},
 };
@@ -84,5 +86,16 @@ describe( 'gate summary, Paid access', () => {
 		);
 
 		expect( screen.getByText( '(product not listed) (#999999) (forever)' ) ).toBeInTheDocument();
+	} );
+
+	it( 'says which way an unconfigured rule fails, per rule', () => {
+		// A rule with no value renders as a blank condition, and the summary is the
+		// only place a publisher sees the whole gate at once. The two rules that can
+		// be left empty do opposite things, so one wording for both would be wrong
+		// half the time.
+		renderPaidAccess( gateWith( { slug: 'institution', value: [] }, { slug: 'email_domain', value: '' } ) );
+
+		expect( screen.getByText( 'Not set (matches no reader)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Not set (grants access to everyone)' ) ).toBeInTheDocument();
 	} );
 } );

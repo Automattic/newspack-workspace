@@ -29,7 +29,9 @@ import AudienceManagementRequired, { redirectWithoutAudienceManagement, requireA
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
 	return {
-		ExternalLink: ( { children, href } ) => React.createElement( 'a', { href }, children ),
+		// Spread the rest: the accessible name comes from `aria-label`, so a stub that
+		// drops it would let the link's naming regress without failing anything.
+		ExternalLink: ( { children, ...props } ) => React.createElement( 'a', props, children ),
 	};
 } );
 
@@ -89,6 +91,8 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 		expect( screen.queryByText( 'the real section' ) ).not.toBeInTheDocument();
 		// The action must route to the setup flow, not merely carry a label.
 		expect( screen.getByText( ACTION_LABEL ) ).toHaveAttribute( 'href', SETUP_URL );
+		// "Learn more" alone does not say what it leads to, so the accessible name carries it.
+		expect( screen.getByRole( 'link', { name: /Learn more about Audience Management/ } ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the section untouched when Audience Management is on', () => {

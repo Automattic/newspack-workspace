@@ -1,7 +1,21 @@
 @use "sass:color";
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
+.newspack-jetpack-sso__settings {
+	margin-top: 32px;
+
+	> * {
+		margin: 0;
+	}
+}
+
 /** Webhooks */
+.newspack-webhooks__requests-modal {
+	> * {
+		margin: 0;
+	}
+}
+
 .newspack-webhooks {
 	&__header {
 		margin-bottom: 32px;
