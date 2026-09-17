@@ -85,12 +85,16 @@ This package contains a configuration of [`semantic-release`](semantic-release.g
 
 1. `trunk` – ongoing development
 1. `alpha` – release candidate
+1. `hotfix/*` - for testing urgent bugfixes
+1. `epic/*` - for testing large-scale features
 1. `release` – the production-ready, released code
 
 The following assumes that CI will run:
 
-1. `npm run release` for `release` and `alpha` branches
+1. `npm run release` for `release`, `alpha`, `hotfix/*`, and `epic/*` branches
 1. `post-release.sh` script on `release` branch, after the above command completes
+
+> **Note:** this section describes the release config this package ships for standalone repos (e.g. `newspack-manager`, `newspack-manager-admin`). The `newspack-workspace` monorepo releases through its own config (`config/release.js`), where `hotfix/*` and `epic/*` branches no longer publish prerelease tags or builds — the monorepo CI's `build-zips` job already produces an installable zip for every commit. The branch prefixes remain valid there; pushes to them just don't release.
 
 ### Regular release flow
 
@@ -112,6 +116,7 @@ For large-scale features that require more than one interdependent branch throug
 1. Commit changes to your sub-branches using [structured commit messages](https://www.conventionalcommits.org/en/v1.0.0/).
 1. Open pull requests for review based on the `epic/*` branch. Changes must be tested and approved before merging.
 1. Merge approved changes to the `epic/*` branch. When merging into `epic/*`, DO NOT SQUASH the merge.
+1. A new "epic" pre-release (e.g. `1.2.0-epic-feature.1`) will be tagged and published when changes are merged via PR. Use epic releases for QA and other pre-release testing.
 1. Once all features in the `epic/*` branch have been tested and approved, open a pull request for final review based on `trunk`. Final review doesn't require full-scale functional testing, only a review of the changeset (as changes have already been tested in individual PRs).
 1. Merge the `epic/*` branch to the `trunk` branch. When merging an epic branch into `trunk`, SQUASH the merge.
 1. Once `epic/*` has been merged to `trunk`, follow the regular release flow to generate release candidates and production releases.
@@ -120,7 +125,9 @@ For large-scale features that require more than one interdependent branch throug
 
 1. Create a new `hotfix/*` branch off the `release` branch.
 1. Commit changes to your branch using [structured commit messages](https://www.conventionalcommits.org/en/v1.0.0/).
-1. Push the branch to Github and open a pull request for review based on `release`. Changes must be tested and approved before merging.
+1. Push the branch to Github, so the CI can process it – _don't create a PR just yet!\*_
+1. A new "hotfix" pre-release (e.g. `1.2.0-hotfix.1`) will be tagged and published.
+1. Open a pull request for review based on `release`. Changes must be tested and approved before merging.
 1. Merge the hotfix branch into `release` to create a release. When merging a hotfix into `release`, SQUASH the merge.
 1. `alpha` & `trunk` branches will be updated with the changes from the `release` branch.
 

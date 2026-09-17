@@ -14,15 +14,14 @@ import { decodeEntities } from '@wordpress/html-entities';
 import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, View } from '@wordpress/dataviews';
-import { termCount } from '@wordpress/icons';
+import { percent } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Notice, Waiting } from '../../../../../../../packages/components/src';
-import EmptyState from '../../../../../../../packages/components/src/empty-state';
+import { Button, DataViews, Grid, Notice, SectionHeader, Waiting } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
@@ -258,21 +257,28 @@ function SubscriberDiscounts() {
 			{ error && <Notice isError noticeText={ error } /> }
 			{ showEmptyState ? (
 				<div className="newspack-subscriber-discounts__empty">
-					<EmptyState.Root>
-						<EmptyState.Header
-							icon={ termCount }
-							title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
-							description={ __(
-								'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
-								'newspack-plugin'
-							) }
-						/>
-						<EmptyState.Actions>
-							<Button variant="primary" onClick={ () => history.push( `${ baseUrl }/new` ) }>
-								{ __( 'Add Discount', 'newspack-plugin' ) }
-							</Button>
-						</EmptyState.Actions>
-					</EmptyState.Root>
+					<Grid className="newspack-empty-state" columns={ 4 } noMargin>
+						{ /* The Grid stylesheet matches start and end as DOM attributes, so they cannot be passed as typed props. */ }
+						<VStack { ...( { start: 2, end: 4 } as React.ComponentProps< 'div' > ) } spacing={ 8 }>
+							<SectionHeader
+								className="newspack-empty-state__header"
+								icon={ percent }
+								title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
+								description={ __(
+									'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
+									'newspack-plugin'
+								) }
+								heading={ 2 }
+								pageHeader
+								noMargin
+							/>
+							<HStack alignment="center" spacing={ 2 } wrap className="newspack-empty-state__actions">
+								<Button variant="primary" onClick={ () => history.push( `${ baseUrl }/new` ) }>
+									{ __( 'Add Discount', 'newspack-plugin' ) }
+								</Button>
+							</HStack>
+						</VStack>
+					</Grid>
 				</div>
 			) : (
 				<DataViews

@@ -2,15 +2,14 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { BaseControl, CheckboxControl, ExternalLink, Notice } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
+import { BaseControl, CheckboxControl, ExternalLink } from '@wordpress/components';
 import { useEffect, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, SelectControl } from '../../../../../../packages/components/src';
+import { ActionCard, Button, Grid, Notice, SelectControl } from '../../../../../../packages/components/src';
 
 const isValidError = ( e: unknown ): e is WpRestApiError => {
 	return e instanceof Error && 'message' in e;
@@ -84,16 +83,12 @@ const JetpackSSO = () => {
 				}
 				disabled={ isLoading }
 			>
-				{ ( settings.force_2fa || error ) && (
-					<Stack className="newspack-jetpack-sso__settings" direction="column" gap="xl">
-						{ error && (
-							<Notice status="error" isDismissible={ false } politeness="polite">
-								{ error }
-							</Notice>
-						) }
-						{ settings.force_2fa && settings.jetpack_sso_force_2fa && (
+				{ settings.force_2fa && (
+					<>
+						{ error && <Notice isError noticeText={ error } /> }
+						{ settings.jetpack_sso_force_2fa && (
 							<>
-								<Notice status="warning" isDismissible={ false } spokenMessage="">
+								<Notice isWarning>
 									{ __(
 										'Two-factor authentication is currently enforced for all users via Jetpack configuration.',
 										'newspack-plugin'
@@ -110,34 +105,34 @@ const JetpackSSO = () => {
 								</p>
 							</>
 						) }
-						{ settings.force_2fa && (
-							<>
-								<BaseControl
-									id="force-2fa-cap"
-									label={ __( 'Select the user capability to enforce two-factor authentication', 'newspack-plugin' ) }
-								>
-									<SelectControl
-										label={ __( 'Capability', 'newspack-plugin' ) }
-										hideLabelFromVision
-										value={ settingsToUpdate?.force_2fa_cap || '' }
-										onChange={ ( value: JetpackSSOCaps ) => setSettingsToUpdate( { ...settingsToUpdate, force_2fa_cap: value } ) }
-										options={ Object.keys( settings.available_caps || {} ).map( ( cap: string ) => ( {
-											label: getCapLabel( cap as JetpackSSOCaps ),
-											value: cap,
-										} ) ) }
-									/>
-								</BaseControl>
-								<CheckboxControl
-									checked={ settingsToUpdate?.obfuscate_account || false }
-									onChange={ value => setSettingsToUpdate( { ...settingsToUpdate, obfuscate_account: value } ) }
-									label={ __(
-										'Obfuscate restricted accounts by throwing WP’s “user not found” errors on login form attempts.',
-										'newspack-plugin'
-									) }
+						<Grid columns={ 1 }>
+							<BaseControl
+								id="force-2fa-cap"
+								label={ __( 'Select the user capability to enforce two-factor authentication', 'newspack-plugin' ) }
+							>
+								<SelectControl
+									label={ __( 'Capability', 'newspack-plugin' ) }
+									hideLabelFromVision
+									value={ settingsToUpdate?.force_2fa_cap || '' }
+									onChange={ ( value: JetpackSSOCaps ) => setSettingsToUpdate( { ...settingsToUpdate, force_2fa_cap: value } ) }
+									options={ Object.keys( settings.available_caps || {} ).map( ( cap: string ) => ( {
+										label: getCapLabel( cap as JetpackSSOCaps ),
+										value: cap,
+									} ) ) }
 								/>
-							</>
-						) }
-					</Stack>
+							</BaseControl>
+						</Grid>
+						<Grid columns={ 1 }>
+							<CheckboxControl
+								checked={ settingsToUpdate?.obfuscate_account || false }
+								onChange={ value => setSettingsToUpdate( { ...settingsToUpdate, obfuscate_account: value } ) }
+								label={ __(
+									'Obfuscate restricted accounts by throwing WP’s “user not found” errors on login form attempts.',
+									'newspack-plugin'
+								) }
+							/>
+						</Grid>
+					</>
 				) }
 			</ActionCard>
 		</>

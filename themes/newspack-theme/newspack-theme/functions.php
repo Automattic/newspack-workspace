@@ -956,10 +956,9 @@ function newspack_register_meta() {
 		'post',
 		'newspack_post_subtitle',
 		array(
-			'show_in_rest'      => true,
-			'single'            => true,
-			'type'              => 'string',
-			'sanitize_callback' => 'newspack_sanitize_post_subtitle',
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'string',
 		)
 	);
 

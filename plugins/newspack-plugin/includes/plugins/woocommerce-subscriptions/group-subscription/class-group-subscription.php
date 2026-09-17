@@ -43,16 +43,6 @@ class Group_Subscription {
 	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
 
 	/**
-	 * Roles that are eligible to be group-subscription members by default, in addition to readers.
-	 *
-	 * Authors and Contributors can create content but are neither editors/administrators (who bypass
-	 * the content gate outright) nor readers (who satisfy access rules on their own). Without this they
-	 * fall through with no path to restricted content. Administrators/editors are intentionally absent:
-	 * they already have full access and do not need a group grant.
-	 */
-	const DEFAULT_ELIGIBLE_MEMBER_ROLES = [ 'author', 'contributor' ];
-
-	/**
 	 * Build the per-subscription joined-at user_meta key.
 	 *
 	 * @param int $subscription_id Subscription ID.
@@ -257,11 +247,8 @@ class Group_Subscription {
 		if ( isset( self::$managers_cache[ $subscription_id ] ) ) {
 			$managers = self::$managers_cache[ $subscription_id ];
 		} else {
-			// The owner is always a manager: ownership implies management. A falsy owner id
-			// is WooCommerce's tombstone for a deleted customer rather than an identity, so
-			// it seeds nothing — left in, it matches a caller who is also nobody.
-			$owner_id = $subscription ? (int) $subscription->get_user_id() : 0;
-			$managers = $owner_id ? [ $owner_id ] : [];
+			// The owner is always a manager: ownership implies management.
+			$managers = [ $subscription ? $subscription->get_user_id() : 0 ];
 			if ( $subscription ) {
 				$stored = \get_users(
 					[
@@ -645,35 +632,31 @@ class Group_Subscription {
 		$members_added     = [];
 		$members_removed   = [];
 
-		// Remove members. Eligibility gates additions only -- a member who has since become
-		// ineligible (a role change, or a filter opt-out) must still be removable, or their
-		// meta persists forever: it keeps consuming a seat while the read path hides them.
-		// delete_user_meta() is a harmless no-op for an ID that never held membership.
+		// Remove members.
 		foreach ( $members_to_remove as $member_id ) {
+			if ( ! Reader_Activation::is_user_reader( $member_id ) ) {
+				continue;
+			}
 			if ( \delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\delete_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ) );
 				// Leaving the group also ends any manager role — no orphaned managers.
 				\delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
-				// The eligibility guard that used to gate removal is gone (see the note above), so an ID
-				// whose user row was deleted out-of-band (orphaned meta) can reach here with no WP_User to
-				// read from. Resolve once and fall back to an empty email rather than dereferencing null.
-				$member_user = \get_userdata( $member_id );
 				$members_removed[ $member_id ] = [
-					'email' => $member_user ? $member_user->user_email : '',
+					'email' => \get_userdata( $member_id )->user_email,
 					'url'   => \get_edit_user_link( $member_id ),
 				];
 			}
 		}
 
-		// Narrow the additions to the IDs that would genuinely become members: ineligible users and
-		// users who already hold this subscription's member meta are no-ops. Filtering them here rather
+		// Narrow the additions to the IDs that would genuinely become members: non-readers and users
+		// who already hold this subscription's member meta are no-ops. Filtering them here rather
 		// than in the add loop below keeps the limit projection honest -- counting a no-op ID would
 		// overstate the post-add total and reject an add that in fact fits.
 		$members_to_add = array_values(
 			array_filter(
 				$members_to_add,
 				function ( $member_id ) use ( $subscription ) {
-					return self::is_eligible_member( $member_id )
+					return Reader_Activation::is_user_reader( $member_id )
 						&& ! in_array( $subscription->get_id(), self::get_group_subscriptions_for_user( $member_id, true ), true );
 				}
 			)
@@ -732,8 +715,8 @@ class Group_Subscription {
 		// below wants to name the affected members without carrying their addresses (see there).
 		$invites_to_cancel = [];
 
-		// Add new members. $members_to_add holds only genuinely-addable eligible members at this point,
-		// so the eligibility and duplicate-meta guards live in the filter above rather than here.
+		// Add new members. $members_to_add holds only genuinely-addable readers at this point, so the
+		// reader and duplicate-meta guards live in the filter above rather than here.
 		foreach ( $members_to_add as $member_id ) {
 			if ( \add_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\update_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ), time() );
@@ -785,52 +768,6 @@ class Group_Subscription {
 	}
 
 	/**
-	 * Whether a user may be a member of a group subscription.
-	 *
-	 * This gates new membership grants (adding a member, accepting an invite) and the read path
-	 * (resolving a user's group subscriptions for access). Readers are always eligible; Author and
-	 * Contributor users are eligible by default. Publishers can opt other users in or out via the
-	 * `newspack_group_subscription_member_eligible` filter.
-	 *
-	 * It does not gate removal. `update_members()` removes a member by ID regardless of current
-	 * eligibility, so a member who loses eligibility after being added (e.g. a role change) can
-	 * still be removed and does not keep an unreleased seat. A caller relying on this method as a
-	 * public contract should not reinstate an eligibility check on the removal path.
-	 *
-	 * @param int|\WP_User $user A user ID or WP_User object.
-	 *
-	 * @return bool Whether the user is an eligible group member.
-	 */
-	public static function is_eligible_member( $user ) {
-		$user = is_a( $user, 'WP_User' ) ? $user : \get_user_by( 'id', (int) $user );
-		if ( ! $user || ! $user->exists() ) {
-			return false;
-		}
-
-		// Readers keep their existing eligibility.
-		$eligible = Reader_Activation::is_user_reader( $user );
-
-		// Author/Contributor users are eligible by default -- but not a user who also holds
-		// a privileged role (editor, administrator, or any custom role with the same
-		// capability). Staff are meant to be excluded from default eligibility even when
-		// they also carry an Author/Contributor role; without this guard, a multi-role
-		// staff user would slip in through the Author/Contributor fallback. The
-		// newspack_group_subscription_member_eligible filter below still runs regardless,
-		// so a publisher can explicitly opt such a user in.
-		if ( ! $eligible && ! \user_can( $user, 'edit_others_posts' ) ) {
-			$eligible = (bool) array_intersect( (array) $user->roles, self::DEFAULT_ELIGIBLE_MEMBER_ROLES );
-		}
-
-		/**
-		 * Filters whether a user is eligible to be a member of a group subscription.
-		 *
-		 * @param bool $eligible Whether the user is an eligible group member.
-		 * @param int  $user_id  The user ID.
-		 */
-		return (bool) apply_filters( 'newspack_group_subscription_member_eligible', $eligible, $user->ID );
-	}
-
-	/**
 	 * Check if a user holds group membership (the member meta) for a subscription.
 	 *
 	 * A promoted manager keeps their membership, so this returns true for managers
@@ -872,11 +809,7 @@ class Group_Subscription {
 		if ( ! self::is_group_subscription( $subscription ) ) {
 			return null;
 		}
-		// A caller of 0 is "nobody resolved" rather than an identity, so guard before the
-		// comparison: a logged-out request must never match an ownerless group. Same
-		// reasoning as the actor guard in can_actor_remove_member().
-		$user_id    = (int) $user_id;
-		$is_manager = $user_id > 0 && in_array( $user_id, self::get_managers( $subscription ), true );
+		$is_manager = in_array( $user_id, self::get_managers( $subscription ), true );
 
 		/**
 		 * Filter whether a user is a manager of a group subscription.
@@ -902,7 +835,7 @@ class Group_Subscription {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
-		if ( ! self::is_eligible_member( $user_id ) ) {
+		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
 			return [];
 		}
 		$cache_key = $user_id . '|' . ( $ids_only ? '1' : '0' );
@@ -1003,11 +936,9 @@ class Group_Subscription {
 		if ( ! $user_id || ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
-
-		// No blanket eligibility gate here: a user who owns a group subscription sees it
-		// regardless of membership eligibility -- ownership isn't membership. The member
-		// branch below (get_group_subscriptions_for_user()) applies its own is_eligible_member()
-		// gate, so a non-eligible non-owner still contributes nothing from that side.
+		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
+			return [];
+		}
 
 		// Normalize the filter so [], null, and unsorted/duplicate inputs share a cache key.
 		$normalized_filter = is_array( $product_filter ) && ! empty( $product_filter )

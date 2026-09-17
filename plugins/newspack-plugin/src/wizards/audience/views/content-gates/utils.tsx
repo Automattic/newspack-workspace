@@ -122,7 +122,6 @@ export {
 	getAccessRuleValueNotice,
 	isAccessRulePickerInert,
 	isMalformedAccessRuleValue,
-	isUnconfiguredAccessRuleValue,
 	isUnconstrainedAccessRuleValue,
 } from '../../../../content-gate/utils/access-rule-value';
 

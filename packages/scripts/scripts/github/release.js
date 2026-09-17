@@ -42,8 +42,8 @@ const getConfig = ( { gitBranchName } ) => {
 		releasedLabels: false,
 	};
 
-	// Only post GH PR comments for alpha and release branches.
-	if ( ! [ 'alpha', 'release' ].includes( branchType ) ) {
+	// Only post GH PR comments for alpha, hotfix/*, and release branches.
+	if ( ! [ 'alpha', 'hotfix', 'release' ].includes( branchType ) ) {
 		githubConfig.successComment = false;
 		githubConfig.failComment = false;
 	}
@@ -66,6 +66,20 @@ const getConfig = ( { gitBranchName } ) => {
 			{
 				name: 'alpha',
 				prerelease: true,
+			},
+			// `hotfix/*` branches – for releases outside of the release schedule.
+			{
+				name: 'hotfix/*',
+				// With `prerelease: true`, the `name` would be used for the pre-release tag. A name with a `/`
+				// is not valid, though. See https://semver.org/#spec-item-9.
+				prerelease: '${name.replace(/\\//g, "-")}',
+			},
+			// `epic/*` branches – for beta testing/QA pre-release builds.
+			{
+				name: 'epic/*',
+				// With `prerelease: true`, the `name` would be used for the pre-release tag. A name with a `/`
+				// is not valid, though. See https://semver.org/#spec-item-9.
+				prerelease: '${name.replace(/\\//g, "-")}',
 			},
 		],
 		prepare: [ '@semantic-release/changelog', '@semantic-release/npm' ],
@@ -100,8 +114,8 @@ const getConfig = ( { gitBranchName } ) => {
 	// guard a misconfigured archive step would publish a release with no ZIP.
 	config.prepare.push( require.resolve( './verify-release-asset.js' ) );
 
-	// If on an alpha or release branch, add a commit that updates the files.
-	if ( [ 'alpha', 'release' ].indexOf( branchType ) > -1 ) {
+	// Unless on a hotfix or epic branch, add a commit that updates the files.
+	if ( [ 'hotfix', 'epic' ].indexOf( branchType ) === -1 ) {
 		let assets = filesList;
 		// These assets should be added to source control after a release.
 		if ( branchType === 'release' ) {

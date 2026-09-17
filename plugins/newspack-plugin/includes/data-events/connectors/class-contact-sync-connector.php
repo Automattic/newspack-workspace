@@ -109,12 +109,6 @@ class Contact_Sync_Connector {
 			return;
 		}
 
-		// Without WooCommerce there are no orders or subscriptions that could
-		// make a login worth a resync, and WC_Customer does not exist.
-		if ( ! class_exists( 'WC_Customer' ) ) {
-			return;
-		}
-
 		$customer = new \WC_Customer( $data['user_id'] );
 
 		// If user is not a Woo customer, don't need to sync them.

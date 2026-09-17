@@ -2,7 +2,6 @@
  * Footer
  */
 
-@use "../mixins" as mixins;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
 .newspack-footer {
@@ -32,8 +31,7 @@
 	li {
 		margin: 8px;
 
-		a,
-		button {
+		a {
 			align-items: flex-end;
 			color: inherit;
 			display: flex;
@@ -42,20 +40,6 @@
 			&:focus,
 			&:hover {
 				color: wp-colors.$gray-900;
-			}
-		}
-
-		button {
-			appearance: none;
-			background: none;
-			border: 0;
-			cursor: pointer;
-			font: inherit;
-			padding: 0;
-			text-decoration: underline;
-
-			&:focus-visible {
-				@include mixins.wpds-focus-ring;
 			}
 		}
 	}

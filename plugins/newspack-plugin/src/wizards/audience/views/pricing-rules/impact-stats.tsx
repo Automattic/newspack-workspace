@@ -131,9 +131,7 @@ export default function ImpactStats( {
 	}
 
 	return (
-		// Fixed rather than the tile count, so the catalog route's lone card keeps the
-		// width it has on the rule preview instead of stretching to the full row.
-		<Grid className="newspack-pricing-rules__stats" columns={ 4 } gutter={ 16 } noMargin>
+		<Grid className="newspack-pricing-rules__stats" columns={ tiles.length } gutter={ 16 } noMargin>
 			{ tiles.map( ( { id, label, value, valueLabel, description, note, actionLabel, onAction } ) => (
 				<StatCard.Root key={ id }>
 					<StatCard.Label>{ label }</StatCard.Label>

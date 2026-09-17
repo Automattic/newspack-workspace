@@ -23,7 +23,8 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: () => null,
-	Button: require( 'react' ).forwardRef( () => null ),
+	Button: () => null,
+	Notice: () => null,
 	Waiting: () => null,
 } ) );
 

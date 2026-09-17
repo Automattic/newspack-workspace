@@ -8,12 +8,12 @@
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { CheckboxControl, CardHeader, __experimentalHeading as Heading, CardBody, Notice } from '@wordpress/components';
+import { CheckboxControl, CardHeader, __experimentalHeading as Heading, CardBody } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Button, Card, Grid } from '../../../../../../../../packages/components/src';
+import { Button, Card, Grid, Notice } from '../../../../../../../../packages/components/src';
 import { SettingsProps } from '../types';
 
 /**
@@ -66,19 +66,18 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 
 	if ( ! status.is_connected ) {
 		return (
-			<Notice status="error" isDismissible={ false } politeness="polite">
-				{ __( 'Nextdoor is not connected. Please complete the setup process first.', 'newspack-plugin' ) }
-			</Notice>
+			<Card>
+				<Notice
+					noticeText={ __( 'Nextdoor is not connected. Please complete the setup process first.', 'newspack-plugin' ) }
+					isError={ false }
+				/>
+			</Card>
 		);
 	}
 
 	return (
 		<>
-			{ error && (
-				<Notice status="error" isDismissible={ false }>
-					{ error }
-				</Notice>
-			) }
+			{ error && <Notice noticeText={ error } isError onClose={ () => setError( null ) } /> }
 			<Card>
 				<CardHeader>
 					<Heading level={ 4 }>{ __( 'Connection Information', 'newspack-plugin' ) }</Heading>

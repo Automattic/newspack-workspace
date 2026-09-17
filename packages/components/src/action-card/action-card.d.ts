@@ -10,9 +10,8 @@ export interface ActionCardProps {
 	badges?: CardBadge[];
 	className?: string;
 	indent?: string;
-	notification?: React.ReactNode | Error | null;
-	notificationLevel?: 'error' | 'warning' | 'info' | 'success';
-	notificationHTML?: boolean;
+	notification?: string | Error | null;
+	notificationLevel?: 'error' | 'warning' | 'info';
 	isMedium?: boolean;
 	disabled?: boolean | string;
 	hasGreyHeader?: boolean;

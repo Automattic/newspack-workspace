@@ -28,12 +28,6 @@ export default function AdditionalBrands() {
 	const brandsCache = cache( '/wp/v2/brand' );
 
 	const [ brands, setBrands ] = useState< Brand[] >( [] );
-	// `isFetching` starts false and the fetch is kicked off in an effect, so an empty
-	// list alone cannot tell "nothing saved" from "not asked yet". Set from `onSuccess`
-	// rather than `onFinally`: the hook returns early on a cache hit without running
-	// its finally callback, and a failed load must not read as "no brands".
-	const [ hasLoaded, setHasLoaded ] = useState( false );
-	const [ loadError, setLoadError ] = useState( '' );
 	const history = useHistory();
 	const location = useLocation();
 	const { path } = useRouteMatch();
@@ -42,14 +36,12 @@ export default function AdditionalBrands() {
 		resetError();
 	}, [ location.pathname ] );
 
-	// Gated on `hasLoaded`: this runs before the first request is issued, and caching
-	// the initial empty list would answer the next visit with one the server never sent.
+	/**
+	 * Cache brands data.
+	 */
 	useEffect( () => {
-		if ( ! hasLoaded ) {
-			return;
-		}
 		brandsCache.set( brands );
-	}, [ brands, hasLoaded ] );
+	}, [ brands ] );
 
 	const wizardScreenProps = {
 		isFetching,
@@ -66,12 +58,7 @@ export default function AdditionalBrands() {
 				path: addQueryArgs( '/wp/v2/brand', { per_page: 100 } ),
 			},
 			{
-				onError( error: { message?: string } ) {
-					setLoadError( error?.message || __( 'Brands could not be loaded.', 'newspack-plugin' ) );
-				},
 				onSuccess( response ) {
-					setLoadError( '' );
-					setHasLoaded( true );
 					setBrands(
 						response.map( ( brand: Brand ) => ( {
 							...brand,
@@ -88,9 +75,6 @@ export default function AdditionalBrands() {
 	};
 
 	const upsertBrand = ( brandId: number, brand: Brand ) => {
-		// The fetch hook leaves the error in place on success, so a retry that works would
-		// otherwise keep the failed attempt's notice on screen.
-		resetError();
 		// BrandId is NaN when inserting new brand.
 		wizardApiFetch< Brand >(
 			{
@@ -178,24 +162,10 @@ export default function AdditionalBrands() {
 	useEffect( fetchBrands, [] );
 
 	return (
-		// No title: the breadcrumb's last crumb is the page's h1 on every route here, so
-		// a tab heading would repeat it.
-		<WizardsTab isFetching={ isFetching }>
+		<WizardsTab isFetching={ isFetching } title={ __( 'Additional Brands', 'newspack-plugin' ) }>
 			<WizardSection>
 				<Switch>
-					<Route
-						exact
-						path={ path }
-						render={ () => (
-							<Brands
-								{ ...wizardScreenProps }
-								brands={ brands }
-								hasLoaded={ hasLoaded }
-								loadError={ loadError }
-								deleteBrand={ deleteBrand }
-							/>
-						) }
-					/>
+					<Route exact path={ path } render={ () => <Brands { ...wizardScreenProps } brands={ brands } deleteBrand={ deleteBrand } /> } />
 					<Route
 						path={ `${ path }/new` }
 						render={ () => (
@@ -205,7 +175,6 @@ export default function AdditionalBrands() {
 								upsertBrand={ upsertBrand }
 								fetchLogoAttachment={ fetchLogoAttachment }
 								wizardApiFetch={ wizardApiFetch }
-								errorMessage={ errorMessage }
 							/>
 						) }
 					/>

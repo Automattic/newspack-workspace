@@ -4,7 +4,6 @@
  * Internal dependencies.
  */
 import * as a11y from './accessibility.js';
-import { sendVerificationOTP } from './inline-verification.js';
 
 /**
  * Helpers for the post-registration verification modal rendered in wp_footer
@@ -23,6 +22,38 @@ const MODAL_ID = 'newspack-my-account__newspack-reader-verification';
  * @type {AbortController|null}
  */
 let currentController = null;
+
+/**
+ * Send the verification OTP email.
+ *
+ * @param {string} nonce Verification nonce.
+ * @return {Promise<any>} Resolves with the JSON response on success, rejects on network/HTTP error.
+ */
+function sendVerificationOTP( nonce ) {
+	const body = new FormData();
+	body.set( 'action', 'newspack_reader_registration_verification' );
+	body.set( 'nonce', nonce );
+	return fetch( newspack_ras_config.verification_url, {
+		method: 'POST',
+		headers: { Accept: 'application/json' },
+		body,
+	} )
+		.then( res => {
+			if ( ! res.ok ) {
+				throw new Error( res.statusText );
+			}
+			return res.json();
+		} )
+		.then( json => {
+			// wp_send_json_error() returns HTTP 200 with { success: false }. Reject so the
+			// caller's .catch() runs and the "Send code" button is re-enabled, instead of the
+			// modal silently advancing to OTP entry for an OTP that was never sent.
+			if ( ! json?.success ) {
+				throw new Error( json?.data || 'Failed to send verification code.' );
+			}
+			return json;
+		} );
+}
 
 /**
  * Open the post-registration verification modal.
@@ -69,7 +100,7 @@ export function openVerificationModal( config = {} ) {
 
 	function handleSendClick() {
 		sendOtpButton.disabled = true;
-		sendVerificationOTP( { url: newspack_ras_config.verification_url, nonce: config.verificationNonce } )
+		sendVerificationOTP( config.verificationNonce )
 			.then( () => {
 				codeSent = true;
 				if ( typeof config.setOTPTimer === 'function' ) {
@@ -82,23 +113,13 @@ export function openVerificationModal( config = {} ) {
 					config.onSendCode();
 				}
 			} )
-			.catch( error => {
+			.catch( () => {
 				sendOtpButton.disabled = false;
 				sendOtpButton.textContent = sendOtpButton.textContent.trim();
-				sendOtpButton.focus();
-				const errorP = modal.querySelector( '[data-error-target]' );
-				if ( ! errorP ) {
-					return;
+				const errorP = modal.querySelector( '.newspack-ui__box p:not(:has(button))' );
+				if ( errorP ) {
+					errorP.textContent = newspack_reader_activation_labels?.verification_error || '';
 				}
-				// The server's own wording wherever there is one — the refusal readers
-				// actually hit is the one-minute resend limit, which has to read as "a code
-				// is already on its way" rather than as a failure.
-				const message = error?.isServerMessage ? error.message : newspack_reader_activation_labels?.verification_error || '';
-				if ( ! message ) {
-					return;
-				}
-				errorP.textContent = message;
-				errorP.hidden = false;
 			} );
 	}
 

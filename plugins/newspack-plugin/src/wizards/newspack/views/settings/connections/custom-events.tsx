@@ -7,15 +7,14 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { Notice } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
 import { WizardError } from '../../../../errors';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
-import { Button, Grid, TextControl, utils } from '../../../../../../packages/components/src';
+import { Button, Grid, Notice, TextControl, utils } from '../../../../../../packages/components/src';
 import { ERROR_MESSAGES } from './constants';
 
 /**
@@ -103,7 +102,7 @@ function CustomEvents() {
 	}
 
 	return (
-		<Stack className="newspack__analytics-configuration" direction="column" gap="xl">
+		<div className="newspack__analytics-configuration">
 			<div className="newspack__analytics-configuration__header">
 				<p>
 					{ __(
@@ -135,20 +134,16 @@ function CustomEvents() {
 					autoComplete="one-time-code"
 				/>
 			</Grid>
-			{ errorMessage && (
-				<Notice status="error" isDismissible={ false } politeness="polite">
-					{ errorMessage }
-				</Notice>
-			) }
-			<Stack direction="row" justify="flex-start" gap="sm">
+			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+			<HStack justify="flex-start" spacing={ 2 }>
 				<Button variant="primary" onClick={ updateGa4Credentials } disabled={ isInputsEmpty() || !! errorMessage }>
 					{ __( 'Save', 'newspack-plugin' ) }
 				</Button>
 				<Button variant="secondary" onClick={ resetGa4Credentials } disabled={ isInputsEmpty() }>
 					{ __( 'Reset', 'newspack-plugin' ) }
 				</Button>
-			</Stack>
-		</Stack>
+			</HStack>
+		</div>
 	);
 }
 
