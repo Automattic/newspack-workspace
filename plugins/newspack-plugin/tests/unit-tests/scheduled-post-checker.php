@@ -237,6 +237,8 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 
 		$this->assertSame( 'page', get_option( 'show_on_front' ), 'The scheduled homepage switch is applied.' );
 		$this->assertSame( $page_id, (int) get_option( 'page_on_front' ), 'The scheduled homepage is the page that was chosen.' );
+		// Not 'publish': customize_changeset doesn't support revisions, so core trashes
+		// the post in the same request it publishes it.
 		$this->assertNotSame( 'future', get_post_status( $changeset_id ), 'The changeset does not stay scheduled.' );
 	}
 
@@ -245,24 +247,33 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	 * rescued, one missed four days ago is left alone with its values unapplied.
 	 */
 	public function test_changeset_rescue_is_age_limited() {
-		$stale_mod = 'nspc_stale_mod';
+		$recent_mod = 'nspc_recent_mod';
+		$stale_mod  = 'nspc_stale_mod';
 
-		// Registered so the value assertion is real — publishing only writes settings
+		// Registered so the value assertions are real — publishing only writes settings
 		// that are registered.
 		$this->add_cleanup_filter(
 			'customize_dynamic_setting_args',
-			function ( $args, $id ) use ( $stale_mod ) {
-				return $id === $stale_mod ? [ 'type' => 'theme_mod' ] : $args;
+			function ( $args, $id ) use ( $recent_mod, $stale_mod ) {
+				return in_array( $id, [ $recent_mod, $stale_mod ], true ) ? [ 'type' => 'theme_mod' ] : $args;
 			},
 			2
 		);
+		set_theme_mod( $recent_mod, 'before' );
 		set_theme_mod( $stale_mod, 'before' );
 
 		$recent_id = $this->create_overdue_future_post(
 			'customize_changeset',
 			[
 				'post_name'    => wp_generate_uuid4(),
-				'post_content' => wp_json_encode( [] ),
+				'post_content' => wp_json_encode(
+					[
+						get_stylesheet() . '::' . $recent_mod => [
+							'value' => 'after',
+							'type'  => 'theme_mod',
+						],
+					]
+				),
 			],
 			2 * DAY_IN_SECONDS
 		);
@@ -286,8 +297,38 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 		\Newspack\Scheduled_Post_Checker\nspc_run_check();
 
 		$this->assertNotSame( 'future', get_post_status( $recent_id ), 'A changeset inside the window is rescued.' );
+		$this->assertSame( 'after', get_theme_mod( $recent_mod ), 'A rescued changeset applies its theme-mod value.' );
 		$this->assertSame( 'before', get_theme_mod( $stale_mod ), 'A long-missed changeset does not apply its values.' );
 		$this->assertSame( 'future', get_post_status( $stale_id ), 'And it stays scheduled.' );
+	}
+
+	/**
+	 * The boundary itself, not just comfortably inside/outside it: an hour under the
+	 * 3-day limit is rescued, an hour over is left alone.
+	 */
+	public function test_changeset_rescue_window_boundary() {
+		$just_inside_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			],
+			3 * DAY_IN_SECONDS - HOUR_IN_SECONDS
+		);
+
+		$just_outside_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			],
+			3 * DAY_IN_SECONDS + HOUR_IN_SECONDS
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertNotSame( 'future', get_post_status( $just_inside_id ), 'An hour inside the window is still rescued.' );
+		$this->assertSame( 'future', get_post_status( $just_outside_id ), 'An hour outside the window is left alone.' );
 	}
 
 	/**
