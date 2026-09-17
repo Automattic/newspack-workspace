@@ -783,6 +783,97 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Run contact_exists() against a staged provider payload, error, or nothing.
+	 *
+	 * @param array|\WP_Error|null $contact_data Payload get_contact_data() returns; null stages nothing (the mock reports not found).
+	 * @param string|null          $provider     Provider slug the mock reports, or null for none.
+	 * @param string               $list_id      The ESP's configured master list id.
+	 * @return bool|\WP_Error
+	 */
+	private function contact_exists_with( $contact_data, $provider = null, $list_id = 'list-123' ) {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$this->set_provider( $provider );
+		if ( null !== $contact_data ) {
+			\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => $contact_data ];
+		}
+
+		$result = $this->make_esp_with_master_list( $list_id )->contact_exists( 'reader@example.com' );
+
+		\Newspack_Newsletters_Subscription::reset_calls();
+		return $result;
+	}
+
+	/**
+	 * The provider not knowing the reader is the answer --existing-only exists
+	 * for: report it as "no", never as a failure.
+	 */
+	public function test_contact_exists_is_false_when_the_provider_has_no_contact() {
+		$this->assertFalse( $this->contact_exists_with( null ) );
+	}
+
+	/**
+	 * A read that failed for any other reason is not a missing contact; the
+	 * caller must see the error so the reader is tallied as one.
+	 */
+	public function test_contact_exists_passes_other_read_errors_through() {
+		$result = $this->contact_exists_with( new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Error reaching to search-members endpoint' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_newsletters_mailchimp_search_members', $result->get_error_code() );
+	}
+
+	/**
+	 * A Mailchimp contact is a member of one audience. A reader who exists only
+	 * in another audience has no member in the configured one, and an upsert
+	 * would create it — exactly what the flag promises not to do.
+	 */
+	public function test_contact_exists_on_mailchimp_requires_the_configured_audience() {
+		$this->assertTrue( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ], 'mailchimp' ) );
+		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-999' => [ 'status' => 'subscribed' ] ] ], 'mailchimp' ), 'A member of another audience only would be created in the configured one.' );
+	}
+
+	/**
+	 * An archived member is a record Mailchimp keeps for a subscriber the
+	 * publisher removed; the upsert would restore it, which is a create in every
+	 * way the flag cares about.
+	 */
+	public function test_contact_exists_on_mailchimp_treats_an_archived_member_as_missing() {
+		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'archived' ] ] ], 'mailchimp' ) );
+	}
+
+	/**
+	 * The ESP override of contact_exists() is what opts it into --existing-only.
+	 */
+	public function test_esp_supports_contact_lookup() {
+		$this->assertTrue( $this->make_esp_with_master_list()->supports_contact_lookup() );
+	}
+
+	/**
+	 * Off Mailchimp, contacts are account-wide entities: any returned contact
+	 * exists, list membership or not.
+	 */
+	public function test_contact_exists_is_account_wide_off_mailchimp() {
+		$contact = [
+			'id'    => '42',
+			'email' => 'reader@example.com',
+		];
+
+		$this->assertTrue( $this->contact_exists_with( $contact, 'active_campaign' ) );
+	}
+
+	/**
+	 * Same reason as the pull: a bulk run reads each contact once, and a
+	 * provider that memoizes payloads per email must not keep them all.
+	 */
+	public function test_contact_exists_releases_the_provider_contact_cache_entry() {
+		\Newspack_Newsletters_Service_Provider::$cleared_emails = [];
+
+		$this->contact_exists_with( [ 'id' => '42' ], 'active_campaign' );
+
+		$this->assertSame( [ 'reader@example.com' ], \Newspack_Newsletters_Service_Provider::$cleared_emails );
+	}
+
+	/**
 	 * Set the newsletters provider the mock reports (it reads this option).
 	 *
 	 * @param string|null $slug Provider slug, or null to unset.

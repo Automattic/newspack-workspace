@@ -146,6 +146,8 @@ class My_Integration extends Integration {
 | `get_my_account_menu_item()` | Return `[ 'slug' => ..., 'label' => ..., 'position' => ... ]` to add a tab to the WooCommerce My Account page. Default returns `null` (no tab). |
 | `render_my_account_page( $value )` | Echo markup for the integration's My Account page. Called inside the WooCommerce account template. |
 | `delete_contact( $email )` | Remove the contact identified by `$email` from the external system. Default returns a `not_implemented` WP_Error. Required only if the integration declares it can be set to `delete` mode for account-deletion handling. |
+| `contact_exists( $email )` | Whether the external system already holds this contact. Consulted by `Contact_Sync` only when a backfill runs with `--existing-only`, before `push_contact_data()`: return `false` to have the reader skipped (tallied as skipped), a `WP_Error` if the lookup failed (handled as a failed push), `true` to let the push proceed. The default returns a `WP_Error`, and `supports_contact_lookup()` is false until this method is overridden: under the flag the framework withholds the push from an integration that cannot ask (reported as an error, never retried) and the CLI pre-flight refuses the run, rather than let an upsert create the contact. The built-in ESP integration reads the contact once; on Mailchimp it requires current (not archived) membership of the configured audience. |
+| `supports_contact_lookup()` | Whether `contact_exists()` is implemented. True as soon as a subclass overrides that method, so implementing it is the opt-in; override this only to opt out explicitly. Read by the sync under `--existing-only` and by the CLI pre-flight. |
 
 ---
 
@@ -288,6 +290,7 @@ An integration that has **never saved** an Outbound selection inherits the ESP i
 
 - `skip_lists` (bool) — upsert the contact without adding it to any list, so an unsubscribed contact isn't resubscribed.
 - `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called).
+- `existing_only` (bool) — update-only: the framework asks `contact_exists()` before calling `push_contact_data()` and skips integrations that answer `false`, so an implementation never sees a contact it reported missing. An integration whose `supports_contact_lookup()` is false gets no push under the flag (withheld and reported as an error), and the CLI refuses such a run before any batch. Integrations do not need to read this key.
 - `integration_id` (string|null) — restricts the push fan-out to a single active integration. The framework acts on this key in `Contact_Sync::push_to_integrations()` before any integration is called; like the rest of `$options`, it is still visible to `push_contact_data()` overrides that declare the fourth parameter, but integrations don't need to (and shouldn't) act on it.
 
 The abstract signature intentionally stays three-parameter (`push_contact_data( $contact, $context, $existing_contact )`). `Contact_Sync::push_to_integrations()` calls every integration with the fourth `$options` argument; PHP discards surplus positional arguments to a method that declares fewer parameters (they remain available via `func_get_args()`) — there is no warning or error, so a three-parameter implementation keeps working unchanged. Adding the fourth parameter to the *abstract* instead would be a fatal "declaration must be compatible" error for every existing three-parameter override, which is why the parameter lives only on the concrete overrides that use it. Add `$options = []` to your override only if the integration needs to react to these flags (the built-in `esp` integration reads `skip_lists`). Integrations that ignore `$options` behave exactly as before.
@@ -371,7 +374,8 @@ wp newspack integrations backfill --direction=both --integration=esp --batch-siz
 
 - `--direction=push|pull|both` (default `push`). Push-only flags
   (`--subscription-ids`, `--order-ids`, `--migrated-subscriptions`,
-  `--skip-lists`, `--fields`) hard-error when the direction includes pull.
+  `--skip-lists`, `--fields`, `--existing-only`) hard-error when the direction
+  includes pull.
 - Both legs honor the per-direction toggles: the push leg skips integrations
   where `is_push_enabled()` is false, and the pull leg skips those where
   `is_pull_enabled()` is false, matching every other sync dispatch site.
@@ -395,6 +399,16 @@ wp newspack integrations backfill --direction=both --integration=esp --batch-siz
   as skipped, not as errors: a pull cannot create the missing contact, so
   re-running could never clear them and a partially-synced site would never
   exit 0.
+- `--existing-only` (push) updates only the contacts an integration already
+  has: readers it reports no contact for (`contact_exists()` returning
+  `false`) are tallied as skipped and never created; a read that fails for
+  any other reason withholds the push and is tallied as an error. Failed
+  pushes under the flag are not auto-retried, like `--skip-lists`/`--fields`.
+  The run refuses to start if any integration taking part cannot check
+  (`supports_contact_lookup()` false) — scope it with `--integration` to one
+  that can. A `--dry-run` under the flag still performs the existence read and
+  previews the skips in its tally; because it reaches the provider it is gated
+  like a wet run (the staging guard applies), unlike a plain dry run.
 - A run that tallies any error prints its summary as a warning and **exits 1**,
   so unattended runbooks can detect partial failure from the exit status. A
   clean run exits 0.
