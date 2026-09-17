@@ -264,4 +264,117 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertEquals( 1, $row['max_attempts'] );
 		$this->assertNull( $row['retry_action_id'] );
 	}
+
+	/**
+	 * Register a spy configured for account-deletion sync.
+	 *
+	 * @param string $integration_id The integration ID.
+	 * @param string $handling       'delete' or 'flag'.
+	 * @return \Deletion_Spy_Integration
+	 */
+	private function register_deletion_spy( string $integration_id, string $handling ) {
+		$spy = new \Deletion_Spy_Integration( $integration_id, 'Spy' );
+		Integrations::register( $spy );
+		$spy->update_settings_field_value( 'sync_account_deletion', true );
+		$spy->update_settings_field_value( 'account_deletion_handling', $handling );
+		Integrations::enable( $integration_id );
+		return $spy;
+	}
+
+	/**
+	 * Propagate the deletion of the sample reader.
+	 */
+	private function delete_sample_reader() {
+		Contact_Sync::handle_account_deletion(
+			'reader@example.test',
+			[
+				'email'    => 'reader@example.test',
+				'metadata' => [],
+			],
+			'Test deletion'
+		);
+	}
+
+	/**
+	 * A deleted reader's row is found by email alone: the account is gone by
+	 * the time the deletion is pushed, and a hard delete sends no contact.
+	 */
+	public function test_a_hard_delete_is_recorded_by_email_without_a_payload() {
+		$this->register_deletion_spy( 'delete-spy', 'delete' );
+
+		$this->delete_sample_reader();
+
+		$row = $this->get_rows_by_integration()['delete-spy'];
+		$this->assertSame( Push_Log::OPERATION_DELETE, $row['operation'] );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertSame( 'reader@example.test', $row['email'] );
+		$this->assertEquals( 0, $row['user_id'] );
+		$this->assertNull( $row['payload'] );
+	}
+
+	/**
+	 * A deletion flag that fails is retried on the same row, and the row
+	 * shows the flag that was pushed.
+	 */
+	public function test_a_failed_deletion_flag_is_one_row_from_first_failure_to_resolution() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'flag-spy', 'flag' );
+		$spy->push_result = new \WP_Error( 'provider_down', 'Provider down' );
+
+		$this->delete_sample_reader();
+
+		$retrying_row = $this->get_rows_by_integration()['flag-spy'];
+		$retry        = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'flag-spy' );
+		$this->assertSame( Push_Log::OPERATION_FLAG, $retrying_row['operation'] );
+		$this->assertSame( Push_Log::STATUS_RETRYING, $retrying_row['status'] );
+		$this->assertEquals( $retrying_row['id'], $retry['args']['log_id'], 'The retry carries the row it belongs to.' );
+		$this->assertArrayHasKey( $spy->get_metadata_prefix() . 'Account_Deleted', json_decode( $retrying_row['payload'], true )['metadata'] );
+
+		$spy->push_result = true;
+		Contact_Sync::execute_deletion_retry( $retry['args'] );
+
+		$rows = $this->get_rows_by_integration();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $rows['flag-spy']['status'] );
+		$this->assertEquals( 2, $rows['flag-spy']['attempts'] );
+	}
+
+	/**
+	 * Flag mode is two steps: push the flag, then stop outreach. When the
+	 * second fails the deleted reader is still on the lists, so the row must
+	 * not read as done.
+	 */
+	public function test_a_deletion_flag_whose_list_cleanup_fails_is_recorded_as_failed() {
+		$spy                 = $this->register_deletion_spy( 'cleanup-spy', 'flag' );
+		$spy->cleanup_result = new \WP_Error( 'lists_down', 'Lists API down' );
+
+		$this->delete_sample_reader();
+
+		$row = $this->get_rows_by_integration()['cleanup-spy'];
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'flag_cleanup_failed', $row['error_code'] );
+		$this->assertStringContainsString( 'Lists API down', $row['error_message'] );
+	}
+
+	/**
+	 * A deletion retry that gives up is a reader left undeleted at the
+	 * provider. It has no natural re-trigger, so the row must not stay
+	 * "retrying".
+	 */
+	public function test_a_deletion_retry_that_gives_up_ends_the_row_as_failed() {
+		$this->require_action_scheduler();
+		$spy                = $this->register_deletion_spy( 'gone-spy', 'delete' );
+		$spy->delete_result = new \WP_Error( 'provider_down', 'Provider down' );
+		$this->delete_sample_reader();
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'gone-spy' );
+
+		$spy->is_set_up = false;
+		Contact_Sync::execute_deletion_retry( $retry['args'] );
+
+		$row = $this->get_rows_by_integration()['gone-spy'];
+		$this->assertCount( 1, $spy->delete_calls, 'The abandoned retry does not call the provider.' );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'retry_aborted', $row['error_code'] );
+		$this->assertStringContainsString( 'Last error: Provider down', $row['error_message'] );
+	}
 }

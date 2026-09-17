@@ -556,10 +556,22 @@ class Contact_Sync extends Sync {
 
 			if ( 'delete' === $mode ) {
 				$result = $integration->delete_contact( $email );
+				// The WP user is already gone, so deletion rows carry the email alone.
+				$log_id = self::log_push_attempt(
+					$integration,
+					[
+						'operation'    => Push_Log::OPERATION_DELETE,
+						'email'        => $email,
+						'context'      => $context,
+						'result'       => $result,
+						'direction'    => 'deletion',
+						'max_attempts' => self::MAX_RETRIES + 1,
+					]
+				);
 				if ( \is_wp_error( $result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 					static::log( sprintf( 'Delete failed for integration "%s" of %s: %s', $integration_id, $email, $result->get_error_message() ) );
-					$error_class = self::schedule_deletion_retry( $integration_id, 'delete', $email, [], $context, 0, $result );
+					$error_class = self::schedule_deletion_retry( $integration_id, 'delete', $email, [], $context, 0, $result, $log_id );
 					/**
 					 * Fires when a contact deletion sync fails.
 					 *
@@ -647,13 +659,25 @@ class Contact_Sync extends Sync {
 				// un-retried cleanup below stays a best-effort extra rather than
 				// the only thing standing between a deleted reader and a list.
 				$result = $integration->push_contact( $integration_contact, $context, null, [ 'skip_lists' => true ] );
+				$log_id = self::log_push_attempt(
+					$integration,
+					[
+						'operation'    => Push_Log::OPERATION_FLAG,
+						'email'        => $email,
+						'context'      => $context,
+						'payload'      => $integration_contact,
+						'result'       => $result,
+						'direction'    => 'deletion',
+						'max_attempts' => self::MAX_RETRIES + 1,
+					]
+				);
 				if ( \is_wp_error( $result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 					static::log( sprintf( 'Flag-push failed for integration "%s" of %s: %s', $integration_id, $email, $result->get_error_message() ) );
 					// Stash the already-prepared payload so the retry re-pushes the
 					// exact contact (prefix + Account_Deleted re-injection) without
 					// rebuilding it from a user that no longer exists.
-					$error_class = self::schedule_deletion_retry( $integration_id, 'flag', $email, $integration_contact, $context, 0, $result );
+					$error_class = self::schedule_deletion_retry( $integration_id, 'flag', $email, $integration_contact, $context, 0, $result, $log_id );
 					/** This action is documented above in the 'delete' branch of this method. */
 					do_action(
 						'newspack_sync_contact_failed',
@@ -690,6 +714,11 @@ class Contact_Sync extends Sync {
 				if ( \is_wp_error( $cleanup_result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
 					static::log( sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() ) );
+					// Only when the push itself landed: a failed push is already on
+					// the row, and its retry runs the cleanup again.
+					if ( ! \is_wp_error( $result ) ) {
+						Push_Log::mark_failed( $log_id, 'flag_cleanup_failed', sprintf( 'The deletion flag was pushed, but removing the reader from lists failed: %s', $cleanup_result->get_error_message() ) );
+					}
 				} else {
 					static::log( sprintf( 'Flag-deletion cleanup succeeded for integration "%s" of %s.', $integration_id, $email ) );
 				}
@@ -1105,12 +1134,14 @@ class Contact_Sync extends Sync {
 	 * @param string           $context        The sync context.
 	 * @param int              $retry_count    Current retry count (0 = first failure).
 	 * @param string|\WP_Error $error          The error from the failure.
+	 * @param int              $log_id         Optional. The push log row of this deletion, carried by
+	 *                                         the retry so its attempt lands on the same row.
 	 *
 	 * @return string The error classification that decided the retry handling — one of
 	 *                'benign', 'permanent_contact', 'permanent_config' or 'transient'.
 	 *                Callers use 'benign' to detect a deliberately-ended retry chain.
 	 */
-	private static function schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $error ) {
+	private static function schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $error, $log_id = 0 ) {
 		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
 		$error_class   = self::classify_error( $error, 'deletion' );
 
@@ -1250,14 +1281,16 @@ class Contact_Sync extends Sync {
 			'retry_count'    => $next_retry,
 			'max_retries'    => self::MAX_RETRIES,
 			'reason'         => $error_message,
+			'log_id'         => (int) $log_id,
 		];
 
-		\as_schedule_single_action(
+		$action_id = \as_schedule_single_action(
 			time() + $backoff_seconds,
 			self::RETRY_DELETION_HOOK,
 			[ $retry_data ],
 			Integrations::get_action_group( $integration_id )
 		);
+		Push_Log::mark_retrying( (int) $log_id, (int) $action_id );
 
 		static::log(
 			sprintf(
@@ -1298,20 +1331,27 @@ class Contact_Sync extends Sync {
 		$contact        = isset( $retry_data['contact'] ) && is_array( $retry_data['contact'] ) ? $retry_data['contact'] : [];
 		$context        = $retry_data['context'] ?? static::$context;
 		$retry_count    = $retry_data['retry_count'] ?? 1;
+		$log_id         = (int) ( $retry_data['log_id'] ?? 0 );
 
+		// Each early return below ends the chain without reaching the provider,
+		// so it ends the push log row too: a deletion has no later event to
+		// re-trigger it.
 		$integration = Integrations::get_integration( $integration_id );
 		if ( ! $integration ) {
 			Logger::log( sprintf( 'Integration "%s" not found on deletion retry %d.', $integration_id, $retry_count ), 'NEWSPACK-SYNC', 'error' );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is no longer registered.' );
 			return;
 		}
 
 		if ( ! $integration->is_set_up() ) {
 			static::log( sprintf( 'Integration "%s" no longer set up on deletion retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is no longer set up.' );
 			return;
 		}
 
 		if ( ! $integration->is_push_enabled() ) {
 			static::log( sprintf( 'Outbound sync disabled for integration "%s" on deletion retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'Outbound sync is paused for this integration.' );
 			return;
 		}
 
@@ -1325,8 +1365,24 @@ class Contact_Sync extends Sync {
 			$result = $integration->push_contact( $contact, $context, null, [ 'skip_lists' => true ] );
 		} else {
 			Logger::log( sprintf( 'Unknown deletion retry mode "%s" for integration "%s".', $mode, $integration_id ), 'NEWSPACK-SYNC', 'error' );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The deletion handling mode is no longer recognized.' );
 			return;
 		}
+
+		$log_id = self::log_push_attempt(
+			$integration,
+			[
+				'log_id'       => $log_id,
+				'operation'    => 'delete' === $mode ? Push_Log::OPERATION_DELETE : Push_Log::OPERATION_FLAG,
+				'email'        => $email,
+				'context'      => $context,
+				'payload'      => 'flag' === $mode ? $contact : null,
+				'result'       => $result,
+				'direction'    => 'deletion',
+				'attempts'     => (int) $retry_count + 1,
+				'max_attempts' => self::MAX_RETRIES + 1,
+			]
+		);
 
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
@@ -1340,7 +1396,7 @@ class Contact_Sync extends Sync {
 					$error_messages
 				)
 			);
-			$error_class   = self::schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $result );
+			$error_class   = self::schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $result, $log_id );
 			$error_message = sprintf(
 				'Retry %d/%d failed for deletion (%s) sync of %s in integration "%s": %s',
 				$retry_count,
@@ -1384,6 +1440,7 @@ class Contact_Sync extends Sync {
 				$cleanup_result = $integration->flag_deletion_cleanup( $email );
 				if ( \is_wp_error( $cleanup_result ) ) {
 					static::log( sprintf( 'Flag-deletion cleanup failed after retry %d for integration "%s" of %s: %s', $retry_count, $integration_id, $email, $cleanup_result->get_error_message() ) );
+					Push_Log::mark_failed( $log_id, 'flag_cleanup_failed', sprintf( 'The deletion flag was pushed, but removing the reader from lists failed: %s', $cleanup_result->get_error_message() ) );
 				} else {
 					static::log( sprintf( 'Flag-deletion cleanup succeeded after retry %d for integration "%s" of %s.', $retry_count, $integration_id, $email ) );
 				}
