@@ -22,7 +22,7 @@ module.exports = {
 				// release:archive zips them — otherwise the theme's style.css Version
 				// header ships stale.
 				files: [ 'src/scss/_theme-description.scss', 'functions.php', 'style.css', 'style-rtl.css' ],
-				callback: 'bash ../../.github/scripts/stamp-pot-version.sh style.css; npm run release:archive',
+				callback: 'npm run release:archive',
 			},
 		],
 		// languages/** carries the translation files release.yml regenerates just

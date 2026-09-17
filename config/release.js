@@ -28,7 +28,7 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 				'semantic-release-version-bump',
 				{
 					files: [ phpFile ],
-					callback: `bash ../../.github/scripts/stamp-pot-version.sh ${ phpFile }; npm run release:archive`,
+					callback: 'npm run release:archive',
 				},
 			],
 			[
@@ -54,7 +54,7 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 				'semantic-release-version-bump',
 				{
 					files: [ phpFile ],
-					callback: `bash ../../.github/scripts/stamp-pot-version.sh ${ phpFile }; npm run release:archive`,
+					callback: 'npm run release:archive',
 				},
 			],
 			// languages/** carries the translation files release.yml regenerates

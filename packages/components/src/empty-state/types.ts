@@ -5,7 +5,7 @@ export type EmptyStateSize = 'default' | 'small';
 export type EmptyStateActionsOrientation = 'row' | 'column';
 
 export type EmptyStateRootProps = {
-	/** Sets the stack gap here, and is read by `EmptyState.Header` through context. */
+	/** Read by `EmptyState.Header` through context. */
 	size?: EmptyStateSize;
 	/** Merged onto the grid, which is the element consumers' `:has()` selectors look for. */
 	className?: string;

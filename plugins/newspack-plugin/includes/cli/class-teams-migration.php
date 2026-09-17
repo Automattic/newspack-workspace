@@ -25,6 +25,7 @@ namespace Newspack\CLI;
 
 use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
+use Newspack\Reader_Activation;
 use Newspack\WooCommerce_Connection;
 use WP_CLI;
 
@@ -76,22 +77,6 @@ class Teams_Migration {
 	 * @var string
 	 */
 	const MIGRATED_TEAM_ID_META_KEY = Group_Subscription::MIGRATED_TEAM_ID_META_KEY;
-
-	/**
-	 * Value-requiring flags of migrate-manual-members, for the raw-argv bare-flag
-	 * guard. See get_valueless_value_flags().
-	 *
-	 * @var string[]
-	 */
-	const MANUAL_MEMBERS_VALUE_FLAGS = [
-		'--product-id',
-		'--plan-ids',
-		'--access-product-ids',
-		'--user-ids',
-		'--user-ids-file',
-		'--skip-domains',
-		'--group-owner-id',
-	];
 
 	/**
 	 * The "nothing to reuse" group-subscription resolution, and so the shape every
@@ -581,14 +566,14 @@ class Teams_Migration {
 				$users_to_add[] = $owner_id;
 			}
 
-			$not_eligible_skips = 0;
+			$non_reader_skips = 0;
 			foreach ( $users_to_add as $member_id ) {
 				if ( ! $member_id || $member_id === $sub_owner_id ) {
 					continue;
 				}
 				if ( $dry_run ) {
-					// A member would be added if they are eligible and not already a member.
-					if ( Group_Subscription::is_eligible_member( $member_id ) && ! Group_Subscription::user_is_member( $member_id, $subscription ) ) {
+					// A member would be added if they are a reader and not already a member.
+					if ( Reader_Activation::is_user_reader( $member_id ) && ! Group_Subscription::user_is_member( $member_id, $subscription ) ) {
 						++$members_added;
 					}
 					continue;
@@ -598,12 +583,12 @@ class Teams_Migration {
 					$errors[] = sprintf( 'add member %d: %s', $member_id, $status->get_error_message() );
 				} elseif ( 'added' === $status ) {
 					++$members_added;
-				} elseif ( 'not_eligible' === $status ) {
-					++$not_eligible_skips;
+				} elseif ( 'not_reader' === $status ) {
+					++$non_reader_skips;
 				}
 			}
-			if ( $not_eligible_skips ) {
-				WP_CLI::warning( sprintf( 'Team %d: %d team member(s) skipped — not eligible group members (e.g. administrators/editors), who already have full access.', $team_id, $not_eligible_skips ) );
+			if ( $non_reader_skips ) {
+				WP_CLI::warning( sprintf( 'Team %d: %d team member(s) skipped — not readers (e.g. administrators/editors), who already have full access.', $team_id, $non_reader_skips ) );
 			}
 
 			// Set the seat limit now that members are in, using the owner-inclusive
@@ -911,11 +896,8 @@ class Teams_Migration {
 	 * subscription backs.
 	 *
 	 * By default, iterates through membership plans with manual-only access and
-	 * creates free WooCommerce Subscriptions for active members, skipping only
-	 * staff who bypass the content gate outright -- users with a privileged
-	 * capability like `edit_others_posts` (i.e. administrators/editors).
-	 * `Group_Subscription::is_eligible_member()` does not gate this path;
-	 * eligibility only applies to group mode, below.
+	 * creates free WooCommerce Subscriptions for active members who do not have
+	 * the `edit_others_posts` capability (i.e. are not administrators/editors).
 	 *
 	 * Plans with purchase/signup access can only be targeted with a member
 	 * selection flag — --only-without-live-subscription and/or
@@ -940,11 +922,8 @@ class Teams_Migration {
 	 * skipped. Dry-run by default; pass --live to write.
 	 *
 	 * Under --as-group, members are added through the group data layer, which adds
-	 * any user eligible per `Group_Subscription::is_eligible_member()` -- readers
-	 * plus Author/Contributor by default, filterable via
-	 * `newspack_group_subscription_member_eligible` -- and skips (and tallies,
-	 * reported inline) the rest, whereas individual mode gives every processed
-	 * member their own subscription.
+	 * readers only — a member on a non-reader role is skipped (reported inline),
+	 * whereas individual mode gives every member their own subscription.
 	 *
 	 * ## OPTIONS
 	 *
@@ -1199,8 +1178,6 @@ class Teams_Migration {
 		WP_CLI::line( '' );
 
 		$summary                            = [];
-		$as_group_not_eligible_users        = [];
-		$as_group_errors                    = 0;
 		$skipped_live_subscription_user_ids = [];
 		$granted_user_ids                   = [];
 		$matched_user_ids                   = [];
@@ -1268,33 +1245,15 @@ class Teams_Migration {
 					$matched_user_ids[ $user_id ] = true;
 				}
 
+				// Skip users with edit_others_posts (admins/editors).
+				if ( \user_can( $user_id, 'edit_others_posts' ) ) {
+					WP_CLI::line( sprintf( '  Membership %d (user %d): skipped — user has edit_others_posts.', $membership_id, $user_id ) );
+					continue;
+				}
+
 				$user = \get_userdata( $user_id );
 				if ( ! $user ) {
 					WP_CLI::warning( sprintf( '  Membership %d: user %d not found — skipping.', $membership_id, $user_id ) );
-					continue;
-				}
-
-				// Individual mode: staff who already bypass the content gate via
-				// edit_others_posts don't need a comped $0 subscription -- they can
-				// already read everything without one. This is distinct from group
-				// eligibility below: it is about whether the user *needs* a grant,
-				// not whether they qualify as a group member.
-				if ( ! $as_group && \user_can( $user_id, 'edit_others_posts' ) ) {
-					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — user has edit_others_posts.', $membership_id, $user_id, $user->user_email ) );
-					continue;
-				}
-
-				// Group mode: skip users who are not eligible group members. This is
-				// the same definition migrate_teams()/add_group_member() enforce via
-				// Group_Subscription::is_eligible_member() -- an admin/editor is
-				// skipped here exactly as there, and a reader who happens to hold a
-				// custom role granting edit_others_posts is still added (that role
-				// doesn't affect group eligibility). Tracked per user, like
-				// $granted_user_ids below, so a user skipped across several
-				// in-scope plans is still counted once.
-				if ( $as_group && ! Group_Subscription::is_eligible_member( $user ) ) {
-					WP_CLI::line( sprintf( '  Membership %d → user %d (%s): skipped — not an eligible group member.', $membership_id, $user_id, $user->user_email ) );
-					$as_group_not_eligible_users[ $user_id ] = true;
 					continue;
 				}
 
@@ -1353,18 +1312,14 @@ class Teams_Migration {
 					}
 				}
 
-				// Group mode: add the user as a group member. Eligibility was already
-				// confirmed by the group-scoped pre-filter above, so every user
-				// reaching this point is guaranteed group-eligible.
+				// Group mode: add the user as a group member.
 				if ( $as_group ) {
 					if ( $dry_run ) {
-						// Project the same outcome a live run would produce.
 						$granted_user_ids[ $user_id ] = true;
 						WP_CLI::line( sprintf( '  [DRY RUN] Would add user %d (%s) as group member.', $user_id, $user->user_email ) );
 					} else {
-						// Created here, on the first member reaching this point, so a
-						// plan whose every member was filtered out by the shared
-						// pre-filter above creates nothing.
+						// Created here, on the first qualifying member, so a plan with no
+						// qualifying members creates nothing.
 						if ( null === $group_subscription ) {
 							$group_subscription = self::create_group_subscription( $product_id, $product, $plan->post_title, $group_owner_id );
 							if ( \is_wp_error( $group_subscription ) ) {
@@ -1375,22 +1330,12 @@ class Teams_Migration {
 							WP_CLI::success( sprintf( '  Created group subscription %d for plan "%s".', $group_subscription->get_id(), $plan->post_title ) );
 						}
 						$status = self::add_group_member( $group_subscription, $user_id );
-						if ( \is_wp_error( $status ) ) {
-							++$as_group_errors;
-							WP_CLI::warning( sprintf( '  Membership %d → user %d (%s): error — %s.', $membership_id, $user_id, $user->user_email, $status->get_error_message() ) );
-							continue;
-						}
-						// Eligibility was already confirmed above, so $status here is
-						// only ever 'added' or 'already'.
+						$note   = \is_wp_error( $status ) ? ' (error: ' . $status->get_error_message() . ')' : ( 'added' === $status ? '' : ' (' . $status . ' — skipped)' );
 						if ( 'added' === $status ) {
 							$granted_user_ids[ $user_id ] = true;
-							WP_CLI::line( sprintf( '  Membership %d → user %d (%s) added as group member.', $membership_id, $user_id, $user->user_email ) );
-						} else {
-							WP_CLI::line( sprintf( '  Membership %d → user %d (%s): skipped (%s).', $membership_id, $user_id, $user->user_email, $status ) );
-							continue;
 						}
+						WP_CLI::line( sprintf( '  Membership %d → user %d (%s) added as group member%s.', $membership_id, $user_id, $user->user_email, $note ) );
 					}
-					// Only genuinely-added (or, in a dry-run, would-be-added) members reach here.
 					$summary[] = [
 						'membership_id' => $membership_id,
 						'user_id'       => $user_id,
@@ -1477,18 +1422,6 @@ class Teams_Migration {
 				WP_CLI::line( sprintf( 'All %d requested user id(s) were found among active members of the processed plan(s).', count( $target_user_ids ) ) );
 			}
 			WP_CLI::line( '' );
-		}
-
-		if ( $as_group && ! empty( $as_group_not_eligible_users ) ) {
-			WP_CLI::warning(
-				sprintf(
-					'%d member(s) skipped — not eligible group members (e.g. administrators/editors).',
-					count( $as_group_not_eligible_users )
-				)
-			);
-		}
-		if ( $as_group && $as_group_errors > 0 ) {
-			WP_CLI::warning( sprintf( '%d error(s).', $as_group_errors ) );
 		}
 
 		if ( empty( $summary ) ) {
@@ -1780,22 +1713,22 @@ class Teams_Migration {
 	 * Add a user as a group member via the Group_Subscription data layer.
 	 *
 	 * Routing through update_members() (rather than a raw user-meta write) records
-	 * the joined-at timestamp and auto-enables the group. Eligible members only — the
-	 * data layer skips administrators/editors, who already have full access.
+	 * the joined-at timestamp and auto-enables the group. Readers only — the data
+	 * layer skips administrators/editors and non-readers, who already have access.
 	 * Exposed for testing.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
 	 * @param int              $user_id      The user to add.
 	 *
-	 * @return string|\WP_Error 'added', 'already', 'not_eligible', or a WP_Error (e.g. member limit reached).
+	 * @return string|\WP_Error 'added', 'already', 'not_reader', or a WP_Error (e.g. member limit reached).
 	 */
 	public static function add_group_member( $subscription, $user_id ) {
 		$user_id = absint( $user_id );
 		if ( ! $user_id ) {
 			return new \WP_Error( 'newspack_migrate_add_member', 'Invalid user ID.' );
 		}
-		if ( ! Group_Subscription::is_eligible_member( $user_id ) ) {
-			return 'not_eligible';
+		if ( ! Reader_Activation::is_user_reader( $user_id ) ) {
+			return 'not_reader';
 		}
 		if ( Group_Subscription::user_is_member( $user_id, $subscription ) ) {
 			return 'already';
@@ -1965,7 +1898,7 @@ class Teams_Migration {
 	 *
 	 * During a dry-run no members are added, so membership can't be read from the
 	 * data layer. A candidate would be promoted if their Teams role is `manager`,
-	 * they are an eligible group member (so they would be added), and they are not the
+	 * they are a reader (so they would be added as a member), and they are not the
 	 * owner or an existing manager.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
@@ -1983,7 +1916,7 @@ class Teams_Migration {
 				continue;
 			}
 			$role = \get_user_meta( $user_id, sprintf( self::TEAM_ROLE_META_KEY_TEMPLATE, $team_id ), true );
-			if ( 'manager' === $role && Group_Subscription::is_eligible_member( $user_id ) ) {
+			if ( 'manager' === $role && Reader_Activation::is_user_reader( $user_id ) ) {
 				++$count;
 			}
 		}
@@ -2767,7 +2700,8 @@ class Teams_Migration {
 	}
 
 	/**
-	 * Value-requiring flags found bare (no `=value`) on the raw command line.
+	 * Value-requiring migrate-manual-members flags found bare (no `=value`) on
+	 * the raw command line.
 	 *
 	 * WP-CLI validates flags against the command synopsis before invoking the
 	 * command: a bare `--user-ids` draws only a warning, then the flag is
@@ -2778,20 +2712,23 @@ class Teams_Migration {
 	 * worst case). Reading the raw argv is the only place the mistake is still
 	 * visible.
 	 *
-	 * Shared with the read-only audit commands, which have the same exposure:
-	 * pass the flags of the command being run, so a sibling command's flag name
-	 * is never reported against an invocation that does not accept it.
-	 *
-	 * @param string[]|null $argv        Raw argument vector; defaults to $_SERVER['argv'].
-	 * @param string[]|null $value_flags Value-requiring flags to look for, each with its leading dashes; defaults to migrate-manual-members'.
+	 * @param string[]|null $argv Raw argument vector; defaults to $_SERVER['argv'].
 	 *
 	 * @return string[] The value-requiring flags present without a value.
 	 */
-	public static function get_valueless_value_flags( $argv = null, $value_flags = null ) {
+	public static function get_valueless_value_flags( $argv = null ) {
 		if ( null === $argv ) {
 			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		}
-		$value_flags = null === $value_flags ? self::MANUAL_MEMBERS_VALUE_FLAGS : $value_flags;
+		$value_flags = [
+			'--product-id',
+			'--plan-ids',
+			'--access-product-ids',
+			'--user-ids',
+			'--user-ids-file',
+			'--skip-domains',
+			'--group-owner-id',
+		];
 		$bare_flags  = [];
 		foreach ( $argv as $token ) {
 			if ( in_array( $token, $value_flags, true ) ) {

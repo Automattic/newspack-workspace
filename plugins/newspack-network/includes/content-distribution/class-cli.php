@@ -149,10 +149,7 @@ class CLI {
 				WP_CLI::error( $sites->get_error_message() );
 			}
 
-			$result = Content_Distribution_Class::distribute_post( $outgoing_post, $assoc_args['status_on_publish'] ?? 'draft' );
-			if ( is_wp_error( $result ) ) {
-				WP_CLI::error( $result->get_error_message() );
-			}
+			Content_Distribution_Class::distribute_post( $outgoing_post, $assoc_args['status_on_publish'] ?? 'draft' );
 			WP_CLI::success( sprintf( 'Post with ID %d is distributed to %d sites: %s', $post_id, count( $sites ), implode( ', ', $sites ) ) );
 
 		} catch ( \Exception $e ) {

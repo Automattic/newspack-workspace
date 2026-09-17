@@ -21,7 +21,7 @@ import { get } from 'lodash';
  */
 import { getServiceProvider } from '../../service-providers';
 import { isManualProvider } from '../../utils/service-provider';
-import { getSettledSendLists, validateNewsletter } from '../../newsletter-editor/utils';
+import { validateNewsletter } from '../../newsletter-editor/utils';
 import { useNewsletterData } from '../../newsletter-editor/store';
 import { refreshEmailHtml } from '../../editor/mjml';
 import './style.scss';
@@ -191,10 +191,9 @@ export default compose( [
 	}, [ saveDidSucceed ] );
 
 	const { is_public } = meta;
-	const newsletterDataState = useNewsletterData();
-	const { newsletterData } = newsletterDataState;
+	const { newsletterData } = useNewsletterData();
 
-	const newsletterValidationErrors = validateNewsletter( meta, getSettledSendLists( newsletterDataState ) );
+	const newsletterValidationErrors = validateNewsletter( meta );
 
 	const { renderPreSendInfo, renderPostUpdateInfo } = getServiceProvider();
 
@@ -362,28 +361,12 @@ export default compose( [
 	return (
 		<div style={ { display: 'flex' } }>
 			<PreviewHTMLButton />
-			{ /* The button carries the reason it is disabled, and has to stay
-			     focusable to deliver it: a natively disabled control leaves the tab
-			     order, where neither a tooltip nor aria-describedby ever fires for a
-			     keyboard user. `accessibleWhenDisabled` swaps `disabled` for
-			     `aria-disabled` and suppresses click and mousedown itself, so Send
-			     stays inert. `description` feeds both the tooltip and
-			     aria-describedby; `label` becomes aria-label, so it carries the
-			     button's own text rather than the reason, and `showTooltip` is
-			     required because the tooltip is otherwise suppressed on a button
-			     that has children. Without this the only signal is the sidebar
-			     warning, which never renders when the author has that panel
-			     collapsed. */ }
 			<Button
 				className="editor-post-publish-button"
 				isBusy={ isSaving && 'publish' === status }
 				variant="primary"
 				onClick={ handleModalOpen }
 				disabled={ ! isButtonEnabled }
-				accessibleWhenDisabled
-				label={ label }
-				showTooltip={ newsletterValidationErrors.length > 0 }
-				description={ newsletterValidationErrors.length ? newsletterValidationErrors.join( ' ' ) : undefined }
 			>
 				{ label }
 			</Button>

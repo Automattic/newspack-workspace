@@ -150,6 +150,5 @@ interface Window {
 		manage_products_url: string;
 		policy_source_is_mock: boolean;
 		woocommerce_subscriptions_active: boolean;
-		promo_links_supported?: boolean;
 	};
 }

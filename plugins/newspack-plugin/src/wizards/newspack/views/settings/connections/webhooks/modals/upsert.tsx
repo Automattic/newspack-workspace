@@ -5,17 +5,16 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useRef, Fragment } from '@wordpress/element';
-import { CheckboxControl as WpCheckboxControl, Notice, TextControl } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
+import { CheckboxControl as WpCheckboxControl, TextControl, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
 import { ENDPOINTS_CACHE_KEY } from '../constants';
 import { WizardApiError } from '../../../../../../errors';
-import { Button, Modal, Grid, Divider } from '../../../../../../../../packages/components/src';
+import { Button, Notice, Modal, Grid, Divider } from '../../../../../../../../packages/components/src';
 import { validateEndpoint, validateUrl } from '../utils';
 
 /**
@@ -39,9 +38,6 @@ const Upsert = ( {
 	wizardApiFetch,
 }: Omit< ModalComponentProps, 'action' > ) => {
 	const [ editing, setEditing ] = useState< Endpoint >( endpoint );
-	// Validation is synchronous, so re-failing on the same input leaves the message
-	// byte-identical and nothing keyed on it would fire again.
-	const [ submitAttempt, setSubmitAttempt ] = useState( 0 );
 	// Test request
 	const [ testResponse, setTestResponse ] = useState< {
 		success?: boolean;
@@ -58,7 +54,6 @@ const Upsert = ( {
 
 	function upsertEndpoint( endpointToUpsert: Endpoint ) {
 		const errors = validateEndpoint( endpointToUpsert );
-		setSubmitAttempt( attempt => attempt + 1 );
 		if ( errors.length ) {
 			setError( errors.join( ' ' ) );
 			return;
@@ -79,12 +74,10 @@ const Upsert = ( {
 
 	function testEndpoint( url: string, bearer_token: string | undefined ) {
 		const urlError = validateUrl( url );
-		setSubmitAttempt( attempt => attempt + 1 );
 		if ( urlError ) {
 			setError( urlError );
 			return;
 		}
-		setError( null );
 		wizardApiFetch< { success: boolean; code: number; message: string } >(
 			{
 				path: '/newspack/v1/webhooks/endpoints/test',
@@ -109,130 +102,109 @@ const Upsert = ( {
 
 	useEffect( () => {
 		if ( errorMessage ) {
-			modalRef?.current?.querySelector( '.components-modal__content' )?.scrollTo( {
-				top: 0,
-				left: 0,
-				behavior: window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth',
-			} );
+			modalRef?.current?.querySelector( '.components-modal__content' )?.scrollTo( { top: 0, left: 0, behavior: 'smooth' } );
 		}
-	}, [ errorMessage, submitAttempt ] );
+	}, [ errorMessage ] );
 
 	return (
 		<Fragment>
 			<Modal
 				ref={ modalRef }
-				size="large"
+				size="full"
 				title={ __( 'Webhook Endpoint', 'newspack-plugin' ) }
 				onRequestClose={ () => {
 					setAction( null, endpoint.id );
 				} }
 			>
-				<Stack direction="column" gap="xl">
-					{ errorMessage && (
-						<Notice key={ submitAttempt } status="error" isDismissible={ false }>
-							{ errorMessage }
-						</Notice>
-					) }
-					{ true === editing.disabled && (
-						<Notice status="info" isDismissible={ false } spokenMessage="">
-							{ __( 'This webhook endpoint is currently disabled.', 'newspack-plugin' ) }
-						</Notice>
-					) }
-					{ editing.disabled && editing.disabled_error && (
-						<Notice status="error" isDismissible={ false } politeness="polite">
-							{ sprintf(
-								// translators: %s is the error returned by the endpoint.
-								__( 'Request error: %s', 'newspack-plugin' ),
-								String( editing.disabled_error )
-							) }
-						</Notice>
-					) }
-					{ testResponse.success && (
-						<Notice status="success" isDismissible={ false }>
-							{ `${ testResponse.message }: ${ testResponse.code }` }
-						</Notice>
-					) }
-					<Grid columns={ 1 } gutter={ 16 } noMargin>
-						<TextControl
-							label={ __( 'URL', 'newspack-plugin' ) }
-							help={ __(
-								"The URL to send requests to. It's required for the URL to be under a valid TLS/SSL certificate. You can use the test button below to verify the endpoint response.",
-								'newspack-plugin'
-							) }
-							className="code"
-							value={ editing.url }
-							onChange={ ( value: string ) => setEditing( { ...editing, url: value } ) }
-							disabled={ inFlight }
-						/>
-						<TextControl
-							label={ __( 'Authentication token (optional)', 'newspack-plugin' ) }
-							help={ __(
-								'If your endpoint requires a token authentication, enter it here. It will be sent as a Bearer token in the Authorization header.',
-								'newspack-plugin'
-							) }
-							value={ editing.bearer_token ?? '' }
-							onChange={ ( value: string ) => setEditing( { ...editing, bearer_token: value } ) }
-							disabled={ inFlight }
-						/>
-						<Stack direction="row" justify="flex-end" gap="lg" wrap="wrap">
-							<Button
-								variant="secondary"
-								disabled={ inFlight || ! editing.url }
-								onClick={ () => testEndpoint( editing.url, editing.bearer_token ) }
-							>
-								{ __( 'Send a test request', 'newspack-plugin' ) }
-							</Button>
-						</Stack>
-					</Grid>
-					<Divider variant="tertiary" marginTop={ 0 } marginBottom={ 0 } />
+				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+				{ true === editing.disabled && <Notice noticeText={ __( 'This webhook endpoint is currently disabled.', 'newspack-plugin' ) } /> }
+				{ editing.disabled && editing.disabled_error && (
+					<Notice isError noticeText={ __( 'Request Error: ', 'newspack-plugin' ) + editing.disabled_error } />
+				) }
+				{ testResponse.success && <Notice isSuccess noticeText={ `${ testResponse.message }: ${ testResponse.code }` } /> }
+				<Grid columns={ 1 } gutter={ 16 } noMargin>
 					<TextControl
-						label={ __( 'Label (optional)', 'newspack-plugin' ) }
-						help={ __( 'A label to help you identify this endpoint. It will not be sent to the endpoint.', 'newspack-plugin' ) }
-						value={ editing.label }
-						onChange={ ( value: string ) => setEditing( { ...editing, label: value } ) }
+						label={ __( 'URL', 'newspack-plugin' ) }
+						help={ __(
+							"The URL to send requests to. It's required for the URL to be under a valid TLS/SSL certificate. You can use the test button below to verify the endpoint response.",
+							'newspack-plugin'
+						) }
+						className="code"
+						value={ editing.url }
+						onChange={ ( value: string ) => setEditing( { ...editing, url: value } ) }
 						disabled={ inFlight }
 					/>
-					<Grid columns={ 1 } gutter={ 16 } noMargin>
-						<h3>{ __( 'Actions', 'newspack-plugin' ) }</h3>
-						{ actions.length > 0 && (
-							<Fragment>
-								<p>{ __( 'Select which actions should trigger this endpoint:', 'newspack-plugin' ) }</p>
-								<Grid columns={ 2 } gutter={ 16 }>
-									{ actions.map( ( actionKey, i ) => (
-										<CheckboxControl
-											key={ i }
-											disabled={ inFlight }
-											label={ actionKey }
-											checked={ ( editing.actions && editing.actions.includes( actionKey ) ) || false }
-											onChange={ () => {
-												const currentActions = editing.actions || [];
-												setEditing( {
-													...editing,
-													actions: currentActions.includes( actionKey )
-														? currentActions.filter( action => action !== actionKey )
-														: [ ...currentActions, actionKey ],
-												} );
-											} }
-										/>
-									) ) }
-								</Grid>
-							</Fragment>
+					<TextControl
+						label={ __( 'Authentication token (optional)', 'newspack-plugin' ) }
+						help={ __(
+							'If your endpoint requires a token authentication, enter it here. It will be sent as a Bearer token in the Authorization header.',
+							'newspack-plugin'
 						) }
-						<Stack direction="row" justify="flex-end" gap="lg" wrap="wrap" className="newspack-modal__footer">
-							<Button
-								isPrimary
-								onClick={ () => {
-									if ( null !== editing && 'url' in editing ) {
-										upsertEndpoint( editing );
-									}
-								} }
-								disabled={ inFlight || null === editing }
-							>
-								{ __( 'Save', 'newspack-plugin' ) }
-							</Button>
-						</Stack>
-					</Grid>
-				</Stack>
+						value={ editing.bearer_token ?? '' }
+						onChange={ ( value: string ) => setEditing( { ...editing, bearer_token: value } ) }
+						disabled={ inFlight }
+					/>
+					<HStack justify="flex-end" spacing={ 4 } wrap>
+						<Button
+							variant="secondary"
+							disabled={ inFlight || ! editing.url }
+							onClick={ () => testEndpoint( editing.url, editing.bearer_token ) }
+						>
+							{ __( 'Send a test request', 'newspack-plugin' ) }
+						</Button>
+					</HStack>
+				</Grid>
+				<Divider alignment="full-width" variant="tertiary" />
+				<TextControl
+					label={ __( 'Label (optional)', 'newspack-plugin' ) }
+					help={ __( 'A label to help you identify this endpoint. It will not be sent to the endpoint.', 'newspack-plugin' ) }
+					value={ editing.label }
+					onChange={ ( value: string ) => setEditing( { ...editing, label: value } ) }
+					disabled={ inFlight }
+				/>
+				<Grid columns={ 1 } gutter={ 16 }>
+					<h3>{ __( 'Actions', 'newspack-plugin' ) }</h3>
+					{ actions.length > 0 && (
+						<Fragment>
+							<p>{ __( 'Select which actions should trigger this endpoint:', 'newspack-plugin' ) }</p>
+							<Grid columns={ 2 } gutter={ 16 }>
+								{ actions.map( ( actionKey, i ) => (
+									<CheckboxControl
+										key={ i }
+										disabled={ inFlight }
+										label={ actionKey }
+										checked={ ( editing.actions && editing.actions.includes( actionKey ) ) || false }
+										onChange={ () => {
+											const currentActions = editing.actions || [];
+											if ( currentActions.includes( actionKey ) ) {
+												currentActions.splice( currentActions.indexOf( actionKey ), 1 );
+											} else {
+												currentActions.push( actionKey );
+											}
+											setEditing( {
+												...editing,
+												actions: currentActions,
+											} );
+										} }
+									/>
+								) ) }
+							</Grid>
+						</Fragment>
+					) }
+					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
+						<Button
+							isPrimary
+							onClick={ () => {
+								if ( null !== editing && 'url' in editing ) {
+									upsertEndpoint( editing );
+								}
+							} }
+							disabled={ inFlight || null === editing }
+						>
+							{ __( 'Save', 'newspack-plugin' ) }
+						</Button>
+					</HStack>
+				</Grid>
 			</Modal>
 		</Fragment>
 	);

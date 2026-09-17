@@ -1,9 +1,3 @@
-@use "~@wordpress/base-styles/variables" as wp-vars;
-
-.newspack-brand__notice {
-	margin-bottom: wp-vars.$grid-unit-40;
-}
-
 .newspack-brand {
 	&__header {
 		&__logo {

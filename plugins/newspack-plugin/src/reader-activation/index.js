@@ -152,10 +152,6 @@ const authStrategies = [ 'pwd', 'link' ];
 /**
  * Start the authentication modal with an optional custom callback.
  *
- * Pass `skipAuthenticatedCheck` to open the modal for a reader who is already
- * logged in — the content gate's verification prompt needs it, since an
- * unverified reader is authenticated but still has to enter an OTP.
- *
  * @param {Object} config Config.
  */
 export function openAuthModal( config = {} ) {
@@ -165,7 +161,6 @@ export function openAuthModal( config = {} ) {
 		onError: null,
 		initialState: null,
 		skipSuccess: false,
-		skipAuthenticatedCheck: false,
 		skipNewslettersSignup: false,
 		labels: {
 			signin: {
@@ -181,7 +176,7 @@ export function openAuthModal( config = {} ) {
 		...config,
 	};
 
-	if ( ! config.skipAuthenticatedCheck && newspack_ras_config.is_logged_in ) {
+	if ( newspack_ras_config.is_logged_in ) {
 		if ( config.onSuccess && typeof config.onSuccess === 'function' ) {
 			config.onSuccess();
 		}

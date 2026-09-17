@@ -53,7 +53,8 @@ describe( 'ImpactStats', () => {
 		expect( screen.getByText( 'At least 500' ) ).toHaveAttribute( 'data-visually-hidden' );
 	} );
 
-	it( 'renders one tile and keeps the four-column track', () => {
+	// Grid ships no `columns-1` rule; one tile goes full width off the base `1fr`.
+	it( 'renders one tile and passes the count through as the column count', () => {
 		const { container } = render( stats( { totalMatching: 36, countLimited: false } ) );
 
 		expect( screen.getByText( 'Products affected' ) ).toBeInTheDocument();
@@ -61,7 +62,7 @@ describe( 'ImpactStats', () => {
 		expect( screen.queryByText( 'Eligible at renewal' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Protected' ) ).not.toBeInTheDocument();
 		expect( container.querySelectorAll( '.newspack-stat-card' ) ).toHaveLength( 1 );
-		expect( container.querySelector( '.newspack-pricing-rules__stats' ) ).toHaveClass( 'newspack-grid__columns-4' );
+		expect( container.querySelector( '.newspack-pricing-rules__stats' ) ).toHaveClass( 'newspack-grid__columns-1' );
 	} );
 
 	it( 'renders four tiles when the audience arrives', () => {
