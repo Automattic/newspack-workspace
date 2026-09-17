@@ -289,16 +289,36 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	/**
 	 * Last Active changes on every visit. If it counted as a change, every
 	 * push by an active reader would add a row. The row still shows the last
-	 * value sent.
+	 * value sent. The key is the one an integration really receives: the
+	 * prefixed field name, spaces and all.
 	 */
 	public function test_volatile_fields_do_not_add_rows_and_the_row_shows_the_latest_value() {
-		$first_row_id  = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Last_Active' => '2026-09-01 10:00:00' ] ) ] );
-		$second_row_id = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Last_Active' => '2026-09-01 10:05:00' ] ) ] );
+		$first_row_id  = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Last Active' => '2026-09-01 10:00:00' ] ) ] );
+		$second_row_id = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Last Active' => '2026-09-01 10:05:00' ] ) ] );
 
 		$stored_payload = json_decode( $this->get_row( $first_row_id )['payload'], true );
 		$this->assertSame( $first_row_id, $second_row_id );
 		$this->assertSame( 1, $this->count_rows() );
-		$this->assertSame( '2026-09-01 10:05:00', $stored_payload['metadata']['NP_Last_Active'] );
+		$this->assertSame( '2026-09-01 10:05:00', $stored_payload['metadata']['NP_Last Active'] );
+	}
+
+	/**
+	 * A site that pushes a field of its own that changes on every visit needs
+	 * the same exemption, or that field alone would add a row per push.
+	 */
+	public function test_the_volatile_field_list_is_filterable() {
+		$exempt_engagement_score = function ( $volatile_fields ) {
+			$volatile_fields[] = 'Engagement Score';
+			return $volatile_fields;
+		};
+		add_filter( 'newspack_integrations_push_log_volatile_fields', $exempt_engagement_score );
+
+		$first_row_id  = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Engagement Score' => '12' ] ) ] );
+		$second_row_id = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Engagement Score' => '48' ] ) ] );
+
+		remove_filter( 'newspack_integrations_push_log_volatile_fields', $exempt_engagement_score );
+		$this->assertSame( $first_row_id, $second_row_id );
+		$this->assertSame( 1, $this->count_rows() );
 	}
 
 	/**

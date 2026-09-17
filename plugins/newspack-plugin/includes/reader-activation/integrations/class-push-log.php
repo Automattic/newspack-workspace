@@ -339,9 +339,13 @@ final class Push_Log {
 		 * Filters the metadata fields the push log ignores when deciding
 		 * whether a push sent the same data as the previous one.
 		 *
-		 * @param string[] $fields Metadata keys, without the integration's prefix.
+		 * Names are the field names as sent to the integration, without the
+		 * integration's prefix — so "Last Active", not the raw "Last_Active"
+		 * metadata key the contact arrives with.
+		 *
+		 * @param string[] $fields Field names as sent, without the integration's prefix.
 		 */
-		$volatile_fields = (array) apply_filters( 'newspack_integrations_push_log_volatile_fields', [ 'Last_Active' ] );
+		$volatile_fields = (array) apply_filters( 'newspack_integrations_push_log_volatile_fields', [ 'Last Active' ] );
 
 		$metadata = isset( $payload['metadata'] ) && is_array( $payload['metadata'] ) ? $payload['metadata'] : [];
 		foreach ( array_keys( $metadata ) as $key ) {

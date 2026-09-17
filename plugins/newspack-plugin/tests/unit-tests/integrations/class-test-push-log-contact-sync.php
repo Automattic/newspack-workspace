@@ -102,6 +102,19 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Count every row in the table.
+	 *
+	 * Rows keyed by integration cannot show a chain that split into two rows
+	 * for one integration, so the chain tests count the table itself.
+	 *
+	 * @return int
+	 */
+	private function count_rows(): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', Push_Log::get_table_name() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	}
+
+	/**
 	 * The args of the single pending retry for an integration.
 	 *
 	 * @param string $hook           The retry hook.
@@ -152,6 +165,38 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 			$this->assertSame( 'Test context', $row['context'] );
 			$this->assertSame( $spy->push_calls[0]['contact'], json_decode( $row['payload'], true ) );
 		}
+	}
+
+	/**
+	 * Last Active changes on every visit, so it must not count as a change.
+	 * The key the integration really receives is the prefixed field name
+	 * ("NP_Last Active"), not the raw metadata key, and the exclusion has to
+	 * match that spelling — otherwise every push by an active reader adds a
+	 * row and the collapse that keeps the table small never fires.
+	 */
+	public function test_a_changed_last_active_alone_does_not_add_a_row() {
+		$spy = $this->register_spy( 'last-active-spy' );
+		$spy->update_enabled_outgoing_fields( [ 'Last Active' ] );
+		$last_active_key = $spy->get_metadata_prefix() . 'Last Active';
+
+		foreach ( [ '2026-09-01 10:00:00', '2026-09-01 10:05:00' ] as $last_active ) {
+			Contact_Sync::sync(
+				[
+					'email'    => 'reader@example.test',
+					'metadata' => [ 'Last_Active' => $last_active ],
+				],
+				'Test context'
+			);
+		}
+
+		// Assert the field really reached the integration under that key, so
+		// the test cannot pass because it was dropped on the way.
+		$this->assertSame( '2026-09-01 10:00:00', $spy->push_calls[0]['contact']['metadata'][ $last_active_key ] ?? null );
+		$this->assertSame( '2026-09-01 10:05:00', $spy->push_calls[1]['contact']['metadata'][ $last_active_key ] ?? null );
+		$this->assertSame( 1, $this->count_rows() );
+		$row = $this->get_rows_by_integration()['last-active-spy'];
+		$this->assertEquals( 1, $row['repeat_count'] );
+		$this->assertSame( '2026-09-01 10:05:00', json_decode( $row['payload'], true )['metadata'][ $last_active_key ] );
 	}
 
 	/**
