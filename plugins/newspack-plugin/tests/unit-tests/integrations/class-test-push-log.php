@@ -21,6 +21,211 @@ use Newspack\Reader_Activation\Integrations\Push_Log;
 class Test_Push_Log extends \WP_UnitTestCase {
 
 	/**
+	 * Reset the once-per-request failure report, so a test that breaks the
+	 * table on purpose does not silence the report in a later test.
+	 */
+	public function set_up() {
+		parent::set_up();
+		$write_failure_reported = new \ReflectionProperty( Push_Log::class, 'write_failure_reported' );
+		$write_failure_reported->setAccessible( true );
+		$write_failure_reported->setValue( null, false );
+	}
+
+	/**
+	 * The contact a sample integration would receive.
+	 *
+	 * @param array $metadata Metadata to merge over the defaults.
+	 * @return array
+	 */
+	private function sample_payload( array $metadata = [] ): array {
+		return [
+			'email'    => 'reader@example.test',
+			'name'     => 'Sample Reader',
+			'metadata' => array_merge(
+				[
+					'NP_Membership_Status' => 'active',
+					'NP_Total_Paid'        => '120',
+				],
+				$metadata
+			),
+		];
+	}
+
+	/**
+	 * Record an attempt, overriding only what the test is about.
+	 *
+	 * @param array $overrides Arguments to override.
+	 * @return int The row ID.
+	 */
+	private function record( array $overrides = [] ): int {
+		return Push_Log::record_attempt(
+			array_merge(
+				[
+					'integration_id' => 'sample',
+					'email'          => 'reader@example.test',
+					'user_id'        => 7,
+					'operation'      => Push_Log::OPERATION_UPSERT,
+					'context'        => 'Test context',
+					'payload'        => $this->sample_payload(),
+					'hash_prefix'    => 'NP_',
+					'result'         => true,
+					'attempts'       => 1,
+					'max_attempts'   => 6,
+				],
+				$overrides
+			)
+		);
+	}
+
+	/**
+	 * Read one row.
+	 *
+	 * @param int $row_id The row ID.
+	 * @return array|null
+	 */
+	private function get_row( int $row_id ) {
+		global $wpdb;
+		return $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', Push_Log::get_table_name(), $row_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	}
+
+	/**
+	 * Count every row in the table.
+	 *
+	 * @return int
+	 */
+	private function count_rows(): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', Push_Log::get_table_name() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	}
+
+	/**
+	 * A successful push leaves a row a publisher can read back: who, where,
+	 * why, and the exact contact the integration was handed.
+	 */
+	public function test_successful_push_is_recorded_with_the_payload_it_sent() {
+		$row = $this->get_row( $this->record() );
+
+		$this->assertSame( 'sample', $row['integration_id'] );
+		$this->assertSame( 'reader@example.test', $row['email'] );
+		$this->assertEquals( 7, $row['user_id'] );
+		$this->assertSame( Push_Log::OPERATION_UPSERT, $row['operation'] );
+		$this->assertSame( 'Test context', $row['context'] );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertEquals( 1, $row['attempts'] );
+		$this->assertEquals( 6, $row['max_attempts'] );
+		$this->assertSame( $this->sample_payload(), json_decode( $row['payload'], true ) );
+		$this->assertNull( $row['error_class'] );
+		$this->assertNull( $row['error_message'] );
+	}
+
+	/**
+	 * The ESP layer stacks messages ahead of the provider's own, so a failed
+	 * row keeps all of them, not only the first.
+	 */
+	public function test_failed_push_is_recorded_as_failed_with_every_error_message() {
+		$push_error = new \WP_Error( 'provider_down', 'Invalid list' );
+		$push_error->add( 'provider_down', 'ESP 503' );
+
+		$row = $this->get_row(
+			$this->record(
+				[
+					'result'      => $push_error,
+					'error_class' => 'transient',
+				]
+			)
+		);
+
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'transient', $row['error_class'] );
+		$this->assertSame( 'provider_down', $row['error_code'] );
+		$this->assertSame( 'Invalid list; ESP 503', $row['error_message'] );
+	}
+
+	/**
+	 * A benign error means the provider already holds the contact, so the
+	 * sync reached its end state: the row reads as a success and still says
+	 * what the provider answered.
+	 */
+	public function test_benign_error_is_recorded_as_a_success_that_keeps_the_error() {
+		$row = $this->get_row(
+			$this->record(
+				[
+					'result'      => new \WP_Error( 'member_exists', 'Member exists' ),
+					'error_class' => 'benign',
+				]
+			)
+		);
+
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertSame( 'benign', $row['error_class'] );
+		$this->assertSame( 'Member exists', $row['error_message'] );
+	}
+
+	/**
+	 * A hard delete sends no contact data, so its row carries no payload.
+	 */
+	public function test_hard_delete_is_recorded_without_a_payload() {
+		$row = $this->get_row(
+			$this->record(
+				[
+					'operation' => Push_Log::OPERATION_DELETE,
+					'payload'   => null,
+				]
+			)
+		);
+
+		$this->assertSame( Push_Log::OPERATION_DELETE, $row['operation'] );
+		$this->assertNull( $row['payload'] );
+		$this->assertNull( $row['payload_hash'] );
+	}
+
+	/**
+	 * The database rejects a value longer than the column, which would drop
+	 * the whole row. A guest checkout can carry an address longer than the
+	 * 100 characters WordPress allows its own users.
+	 */
+	public function test_an_overlong_email_is_truncated_rather_than_losing_the_row() {
+		$overlong_email = str_repeat( 'a', 200 ) . '@example.test';
+
+		$row = $this->get_row( $this->record( [ 'email' => $overlong_email ] ) );
+
+		$this->assertNotNull( $row );
+		$this->assertSame( substr( $overlong_email, 0, 191 ), $row['email'] );
+	}
+
+	/**
+	 * Logging must never break a sync: a broken table returns 0 without
+	 * throwing, and reports once per request rather than once per push.
+	 */
+	public function test_a_failed_write_never_throws_and_is_reported_once_per_request() {
+		global $wpdb;
+		$reported_codes = [];
+		$capture_report = function ( $code ) use ( &$reported_codes ) {
+			if ( 'newspack_integrations_push_log_write_failed' === $code ) {
+				$reported_codes[] = $code;
+			}
+		};
+		$break_inserts  = function ( $query ) {
+			$is_push_log_insert = 0 === stripos( ltrim( $query ), 'INSERT' ) && false !== strpos( $query, Push_Log::TABLE_NAME );
+			return $is_push_log_insert ? 'INSERT INTO table_that_does_not_exist VALUES (1)' : $query;
+		};
+		add_action( 'newspack_log', $capture_report );
+		add_filter( 'query', $break_inserts );
+		$errors_were_suppressed = $wpdb->suppress_errors( true );
+
+		$first_row_id  = $this->record();
+		$second_row_id = $this->record( [ 'email' => 'other@example.test' ] );
+
+		$wpdb->suppress_errors( $errors_were_suppressed );
+		remove_filter( 'query', $break_inserts );
+		remove_action( 'newspack_log', $capture_report );
+
+		$this->assertSame( 0, $first_row_id );
+		$this->assertSame( 0, $second_row_id );
+		$this->assertCount( 1, $reported_codes, 'A broken table reports once, not once per push.' );
+	}
+
+	/**
 	 * The lookups the log exists for (by reader email, by account, and the
 	 * per-integration lists) each rely on an index. Without one they scan the
 	 * whole table on every admin page load.
