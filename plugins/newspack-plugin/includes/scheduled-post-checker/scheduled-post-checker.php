@@ -32,11 +32,13 @@ function nspc_deactivate() {
 /**
  * The post types the checker rescues.
  *
- * `post_type => 'any'` matches only types whose `exclude_from_search` is false,
- * which core derives from `public`. Types registered `public => false` (Campaign
- * prompts, Sponsors, Customizer changesets) are invisible to it, so a scheduled
- * one that missed its slot would sit in `future` indefinitely. Start from the
- * search-visible set and add them; the filter lets a plugin register its own.
+ * WordPress's `post_type => 'any'` shorthand matches only types whose
+ * `exclude_from_search` is false — which it derives from `public` when the
+ * argument is omitted. Editor-authored types registered `public => false`
+ * (Campaign prompts, Sponsor, Customizer changesets) are therefore invisible to
+ * `'any'`, so a scheduled one that misses its cron slot would otherwise sit in
+ * `future` indefinitely. Start from the search-visible set and add those known
+ * editorial types; the filter lets any plugin register its own schedulable type.
  *
  * @return string[] Post type slugs.
  */
@@ -61,10 +63,10 @@ function nspc_get_post_types() {
 /**
  * Check to see if any posts have missed schedule, and try sending them live again if so.
  *
- * Changesets are queried separately because only they are age-limited: publishing one
- * rewrites site configuration and core deletes it in the same request, so a long
- * stranded changeset is left alone. Limiting in the query rather than skipping rows
- * afterwards keeps stale changesets from filling the row limit and starving the
+ * Customizer changesets are queried separately because only they are age-limited:
+ * publishing one rewrites site configuration and core deletes it in the same request,
+ * so a long stranded changeset is left alone. Limiting in the query rather than skipping
+ * rows afterwards keeps stale changesets from filling the row limit and starving the
  * post backlog, which stays deliberately unbounded.
  */
 function nspc_run_check() {
