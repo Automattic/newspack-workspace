@@ -20,6 +20,7 @@ import {
 	Divider,
 	Grid,
 	Notice,
+	PageControl,
 	SectionHeader,
 	SelectControl,
 	TextControl,
@@ -76,6 +77,18 @@ const saveErrorMessage = ( failedTitle, savedTitles ) => {
 const SettingsScreen = withWizardScreen( ( { children } ) => <>{ children }</> );
 
 const SettingField = ( { setting, onChange, disabled } ) => {
+	// An explicit `control` overrides the control implied by the setting's data type.
+	if ( 'page' === setting.control ) {
+		return (
+			<PageControl
+				label={ setting.description }
+				help={ setting.help || undefined }
+				selected={ setting.selected || null }
+				onChange={ onChange }
+				disabled={ disabled }
+			/>
+		);
+	}
 	if ( Array.isArray( setting.options ) && setting.options.length ) {
 		return (
 			<SelectControl

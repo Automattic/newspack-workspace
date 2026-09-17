@@ -1,3 +1,10 @@
+## newspack [6.51.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.3...newspack@6.51.4) (2026-09-16)
+
+
+### Bug Fixes
+
+* **campaigns:** render the donor landing page as a page autocomplete ([#1093](https://github.com/Automattic/newspack-workspace/issues/1093)) ([eaec5b2](https://github.com/Automattic/newspack-workspace/commit/eaec5b258873b8c27ecd518cb8a0e1c5be9b3a06)), closes [#686](https://github.com/Automattic/newspack-workspace/issues/686)
+
 ## newspack [6.51.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.2...newspack@6.51.3) (2026-09-15)
 
 
