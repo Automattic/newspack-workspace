@@ -493,7 +493,7 @@ One reader, one integration, one triggering push. A fan-out to three integration
 
 ### Retention and privacy
 
-The daily `newspack_integrations_push_log_cleanup` cron deletes `success` rows 14 days after their last update and `failed` or `retrying` rows after 90, in batches of 1,000, and stops after 20 batches that deleted rows (looking at an integration with nothing to prune does not count). Tune the windows with `newspack_integrations_push_log_retention_days`; add the hook name to `NEWSPACK_CRON_DISABLE` to turn the cron off. A collapsed row keeps refreshing `updated_at`, so an active reader whose data has not changed holds one live row per integration.
+The hourly `newspack_integrations_push_log_cleanup` cron deletes `success` rows 14 days after their last update and `failed` or `retrying` rows after 90, in batches of 1,000. Each run stops after 20 batches that deleted rows (looking at an integration with nothing to prune does not count) and logs `newspack_integrations_push_log_cleanup_capped` when it does, so a backlog that outgrows the cron is visible; the rest goes on the next run. Tune the windows with `newspack_integrations_push_log_retention_days`; add the hook name to `NEWSPACK_CRON_DISABLE` to turn the cron off. A collapsed row keeps refreshing `updated_at`, so an active reader whose data has not changed holds one live row per integration.
 
 Rows hold reader emails and pushed field values. A personal-data eraser (`newspack-integrations-push-log`) deletes a reader's rows by email and by account, so rows under a previous address go too.
 

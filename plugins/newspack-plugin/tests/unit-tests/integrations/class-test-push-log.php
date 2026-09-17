@@ -535,6 +535,63 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A run that stops at its cap leaves expired rows behind. It has to say
+	 * so, or a site whose backlog outgrows the cron never catches up and
+	 * nothing anywhere reports it. One line per run, not one per batch.
+	 */
+	public function test_a_capped_cleanup_run_reports_the_rows_it_left_behind() {
+		foreach ( range( 1, 5 ) as $reader_number ) {
+			$this->age_row( $this->record( [ 'email' => "reader-{$reader_number}@example.test" ] ), 30 );
+		}
+		$capped_reports = [];
+		$capture_report = function ( $code ) use ( &$capped_reports ) {
+			if ( 'newspack_integrations_push_log_cleanup_capped' === $code ) {
+				$capped_reports[] = $code;
+			}
+		};
+		add_action( 'newspack_log', $capture_report );
+
+		Push_Log::cleanup( 2, 1 );
+
+		remove_action( 'newspack_log', $capture_report );
+		$this->assertCount( 1, $capped_reports );
+	}
+
+	/**
+	 * The report means "there is more to prune than a run can take". A run
+	 * that cleared its backlog must stay silent, or the signal is noise.
+	 */
+	public function test_a_cleanup_run_that_finishes_reports_nothing() {
+		$this->age_row( $this->record(), 30 );
+		$capped_reports = [];
+		$capture_report = function ( $code ) use ( &$capped_reports ) {
+			if ( 'newspack_integrations_push_log_cleanup_capped' === $code ) {
+				$capped_reports[] = $code;
+			}
+		};
+		add_action( 'newspack_log', $capture_report );
+
+		Push_Log::cleanup();
+
+		remove_action( 'newspack_log', $capture_report );
+		$this->assertCount( 0, $capped_reports );
+	}
+
+	/**
+	 * A batch size of 0 deletes nothing while still satisfying the loop's
+	 * "the batch was full" condition, so the run would never end. The
+	 * arguments are clamped instead, so a bad call cannot hang the cron.
+	 */
+	public function test_cleanup_clamps_a_zero_batch_size_instead_of_looping_forever() {
+		$expired_row_id = $this->record();
+		$this->age_row( $expired_row_id, 30 );
+
+		Push_Log::cleanup( 0, 1 );
+
+		$this->assertNull( $this->get_row( $expired_row_id ) );
+	}
+
+	/**
 	 * The cap bounds deleting, not looking. Integrations with nothing to
 	 * prune must not use up the run before it reaches one that has a backlog.
 	 */

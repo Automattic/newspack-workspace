@@ -436,7 +436,11 @@ final class Push_Log {
 	}
 
 	/**
-	 * Schedule the daily cleanup, unless the site disabled it.
+	 * Schedule the hourly cleanup, unless the site disabled it.
+	 *
+	 * Hourly rather than daily because the cap is per run: a large site, or a
+	 * CLI backfill that expires a day's rows at once, needs more than one run
+	 * a day to keep up.
 	 */
 	public static function schedule_cleanup() {
 		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'unschedule_cleanup' ] );
@@ -444,12 +448,12 @@ final class Push_Log {
 		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CLEANUP_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
 			self::unschedule_cleanup();
 		} elseif ( ! wp_next_scheduled( self::CLEANUP_HOOK ) ) {
-			wp_schedule_event( time(), 'daily', self::CLEANUP_HOOK );
+			wp_schedule_event( time(), 'hourly', self::CLEANUP_HOOK );
 		}
 	}
 
 	/**
-	 * Unschedule the daily cleanup.
+	 * Unschedule the cleanup.
 	 */
 	public static function unschedule_cleanup() {
 		wp_clear_scheduled_hook( self::CLEANUP_HOOK );
@@ -487,16 +491,20 @@ final class Push_Log {
 	/**
 	 * Delete rows past their retention window.
 	 *
-	 * Deletes run one integration and status at a time so the
-	 * integration_status index serves each of them, in bounded batches so a
+	 * Deletes run one integration and status at a time, the shape the
+	 * integration_status index is there to serve, in bounded batches so a
 	 * backlog never turns into one long delete. Only a batch that deletes
-	 * rows counts against the cap.
+	 * rows counts against the cap, which is per run.
 	 *
 	 * @param int $batch_size  Rows per delete.
 	 * @param int $max_batches Deleting batches per run.
 	 */
 	public static function cleanup( $batch_size = 1000, $max_batches = 20 ) {
 		global $wpdb;
+		// A batch size of 0 deletes nothing while still looking like a full
+		// batch, which would loop forever.
+		$batch_size     = max( 1, (int) $batch_size );
+		$max_batches    = max( 1, (int) $max_batches );
 		$table_name     = self::get_table_name();
 		$retention_days = self::get_retention_days();
 		$windows        = [
@@ -514,6 +522,15 @@ final class Push_Log {
 				$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
 				do {
 					if ( $batches >= $max_batches ) {
+						Logger::newspack_log(
+							'newspack_integrations_push_log_cleanup_capped',
+							'The integrations push log cleanup stopped at its batch cap; remaining expired rows are left for the next run.',
+							[
+								'max_batches' => $max_batches,
+								'batch_size'  => $batch_size,
+							],
+							'debug'
+						);
 						return;
 					}
 					$deleted = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
