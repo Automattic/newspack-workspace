@@ -340,4 +340,76 @@ class Test_Push_Log extends \WP_UnitTestCase {
 
 		$this->assertSame( 2, $this->count_rows() );
 	}
+
+	/**
+	 * A retry chain reads as one entry: the retry updates the row its first
+	 * attempt wrote, and the row keeps what the earlier attempt hit.
+	 */
+	public function test_a_retry_updates_its_row_instead_of_adding_one() {
+		$row_id = $this->record(
+			[
+				'result'      => new \WP_Error( 'provider_down', 'ESP 503' ),
+				'error_class' => 'transient',
+			]
+		);
+		Push_Log::mark_retrying( $row_id, 4321 );
+		$retrying_row = $this->get_row( $row_id );
+
+		$retried_row_id = $this->record(
+			[
+				'log_id'   => $row_id,
+				'attempts' => 2,
+			]
+		);
+
+		$row = $this->get_row( $row_id );
+		$this->assertSame( Push_Log::STATUS_RETRYING, $retrying_row['status'] );
+		$this->assertEquals( 4321, $retrying_row['retry_action_id'] );
+		$this->assertSame( $row_id, $retried_row_id );
+		$this->assertSame( 1, $this->count_rows() );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertEquals( 2, $row['attempts'] );
+		$this->assertNull( $row['retry_action_id'] );
+		$this->assertSame( 'ESP 503', $row['error_message'], 'A resolved row still says what the earlier attempt hit.' );
+	}
+
+	/**
+	 * A row can be pruned, or a retry can predate the log, while its chain is
+	 * still running. The attempt is recorded anyway, with its real number.
+	 */
+	public function test_a_retry_whose_row_is_gone_adds_a_row_with_the_right_attempt_number() {
+		$row_id = $this->record(
+			[
+				'log_id'   => 999999,
+				'attempts' => 3,
+			]
+		);
+
+		$row = $this->get_row( $row_id );
+		$this->assertNotSame( 999999, $row_id );
+		$this->assertEquals( 3, $row['attempts'] );
+	}
+
+	/**
+	 * A retry that gives up before pushing used to leave no trace. The row
+	 * ends as failed, says why, and keeps the error that started the chain.
+	 */
+	public function test_an_aborted_retry_ends_as_failed_and_keeps_the_last_push_error() {
+		$row_id = $this->record(
+			[
+				'result'      => new \WP_Error( 'provider_down', 'ESP 503' ),
+				'error_class' => 'transient',
+			]
+		);
+		Push_Log::mark_retrying( $row_id, 4321 );
+
+		Push_Log::mark_failed( $row_id, 'retry_aborted', 'Outbound sync is paused for this integration.' );
+
+		$row = $this->get_row( $row_id );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertNull( $row['retry_action_id'] );
+		$this->assertSame( 'retry_aborted', $row['error_code'] );
+		$this->assertSame( 'Outbound sync is paused for this integration. Last error: ESP 503', $row['error_message'] );
+		$this->assertSame( 'transient', $row['error_class'] );
+	}
 }

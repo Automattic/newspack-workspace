@@ -119,6 +119,7 @@ final class Push_Log {
 	 * @param array $args {
 	 *     The attempt.
 	 *
+	 *     @type int            $log_id         The row this attempt belongs to, when it is a retry.
 	 *     @type string         $integration_id The integration pushed to. Required.
 	 *     @type string         $email          The contact's email at push time. Required.
 	 *     @type int            $user_id        The WP user, 0 when none resolves.
@@ -142,6 +143,7 @@ final class Push_Log {
 		$args = wp_parse_args(
 			$args,
 			[
+				'log_id'         => 0,
 				'integration_id' => '',
 				'email'          => '',
 				'user_id'        => 0,
@@ -192,6 +194,19 @@ final class Push_Log {
 			$data['error_message'] = implode( '; ', $args['result']->get_error_messages() );
 		}
 
+		$log_id = (int) $args['log_id'];
+		if ( $log_id > 0 ) {
+			$updated = $wpdb->update( self::get_table_name(), $data, [ 'id' => $log_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			if ( false === $updated ) {
+				self::report_write_failure();
+				return 0;
+			}
+			if ( $updated > 0 ) {
+				return $log_id;
+			}
+			// No row matched: it was pruned mid-chain. Record the attempt as a new row.
+		}
+
 		$is_clean_first_upsert = ! $failed
 			&& 1 === $data['attempts']
 			&& self::OPERATION_UPSERT === $args['operation']
@@ -223,6 +238,65 @@ final class Push_Log {
 		}
 
 		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Mark a row as waiting for a scheduled retry.
+	 *
+	 * An error row is written as failed and only becomes retrying here, so a
+	 * code path that schedules nothing can never leave a row stuck retrying.
+	 *
+	 * @param int $log_id    The row ID. 0 is ignored.
+	 * @param int $action_id The pending ActionScheduler action.
+	 */
+	public static function mark_retrying( int $log_id, int $action_id ): void {
+		if ( $log_id <= 0 ) {
+			return;
+		}
+		global $wpdb;
+		$updated = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			self::get_table_name(),
+			[
+				'status'          => self::STATUS_RETRYING,
+				'retry_action_id' => $action_id > 0 ? $action_id : null,
+			],
+			[ 'id' => $log_id ]
+		);
+		if ( false === $updated ) {
+			self::report_write_failure();
+		}
+	}
+
+	/**
+	 * End a row as failed for a reason other than a push result: a retry that
+	 * gave up before pushing, or a follow-up step that failed.
+	 *
+	 * The reason comes first and the last push error is kept after it, so the
+	 * row still says what the sync was hitting.
+	 *
+	 * @param int    $log_id     The row ID. 0 is ignored.
+	 * @param string $error_code A code naming the reason.
+	 * @param string $reason     A sentence a publisher can read.
+	 */
+	public static function mark_failed( int $log_id, string $error_code, string $reason ): void {
+		if ( $log_id <= 0 ) {
+			return;
+		}
+		global $wpdb;
+		$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"UPDATE %i SET status = %s, retry_action_id = NULL, error_code = %s, error_message = CONCAT( %s, IF( error_message IS NULL OR error_message = '', '', CONCAT( ' Last error: ', error_message ) ) ), updated_at = %s WHERE id = %d",
+				self::get_table_name(),
+				self::STATUS_FAILED,
+				mb_substr( $error_code, 0, 100 ),
+				$reason,
+				current_time( 'mysql', true ),
+				$log_id
+			)
+		);
+		if ( false === $updated ) {
+			self::report_write_failure();
+		}
 	}
 
 	/**
