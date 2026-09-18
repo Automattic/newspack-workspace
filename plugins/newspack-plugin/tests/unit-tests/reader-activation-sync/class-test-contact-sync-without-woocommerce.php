@@ -13,7 +13,6 @@
 
 use Newspack\Data_Events\Connectors\Contact_Sync_Connector;
 use Newspack\Reader_Activation\Contact_Sync;
-use Newspack\Reader_Activation\Sync\Metadata;
 
 /**
  * Contact sync without WooCommerce.
@@ -70,16 +69,16 @@ class Test_Contact_Sync_Without_WooCommerce extends WP_UnitTestCase {
 	 * Without WooCommerce, the contact data still carries the metadata that the
 	 * providers compute from the WordPress user alone.
 	 *
-	 * Pinned to the v1 schema: the legacy metadata classes read everything from
-	 * a WooCommerce customer, so they have nothing to say about a user without
-	 * one either way.
+	 * No integration is configured here, so compute is not scoped to a field
+	 * selection and every available provider runs, the legacy pair included:
+	 * those read from a WooCommerce customer and must stay quiet about a user
+	 * without one rather than fail.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
 	public function test_get_contact_data_includes_provider_metadata_without_woocommerce() {
 		$this->assert_no_woocommerce();
-		Metadata::$version = '1.0';
 
 		$user_id = self::factory()->user->create(
 			[
