@@ -10,11 +10,16 @@ namespace Newspack\Tests\Unit\Integrations;
 use Newspack\Data_Events;
 use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations\Contact_Cron;
 use Newspack\Reader_Activation\Integrations\Contact_Pull;
 use Newspack\Reader_Activation\Integrations\Date_Value;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
+use Newspack\Reader_Activation\Sync\Metadata;
+use Failing_Sample_Integration;
 use Sample_Integration;
+
+require_once __DIR__ . '/class-failing-sample-integration.php';
 
 /**
  * Tests for the Integrations class.
@@ -39,6 +44,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->reset_integrations();
 		$this->reset_handler_map();
 		Sample_Integration::reset();
+		Failing_Sample_Integration::reset();
 	}
 
 	/**
@@ -48,6 +54,11 @@ class Test_Integrations extends \WP_UnitTestCase {
 		if ( $this->loopback_filter ) {
 			remove_filter( 'pre_http_request', $this->loopback_filter );
 			$this->loopback_filter = null;
+		}
+		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+		Failing_Sample_Integration::reset();
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 		}
 		Integrations::register_integrations(); // recover core integrations for future tests.
 		parent::tear_down();
@@ -533,8 +544,8 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$user_id = $this->factory()->user->create();
 		wp_set_current_user( $user_id );
 
-		// Set last enqueue to beyond the 24h threshold.
-		update_user_meta( $user_id, Contact_Cron::LAST_ENQUEUE_META, time() - Contact_Pull::PULL_SYNC_THRESHOLD - 1 );
+		// Set the last pull to beyond the 24h threshold.
+		update_user_meta( $user_id, Contact_Cron::LAST_PULL_META, time() - Contact_Pull::PULL_SYNC_THRESHOLD - 1 );
 
 		// Create an integration that returns data from pull.
 		$integration = new class( 'pull-test', 'Pull Test' ) extends Sample_Integration {
@@ -560,9 +571,11 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$stored = get_user_meta( $user_id, 'newspack_reader_data_item_favorite_color', true );
 		$this->assertSame( wp_json_encode( 'blue' ), $stored );
 
-		// Verify enqueue timestamp was updated.
+		// Verify enqueue and pull timestamps were updated.
 		$last_enqueue = (int) get_user_meta( $user_id, Contact_Cron::LAST_ENQUEUE_META, true );
 		$this->assertGreaterThanOrEqual( time() - 2, $last_enqueue );
+		$last_pull = (int) get_user_meta( $user_id, Contact_Cron::LAST_PULL_META, true );
+		$this->assertGreaterThanOrEqual( time() - 2, $last_pull );
 	}
 
 	/**
@@ -572,7 +585,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$user_id = $this->factory()->user->create();
 		wp_set_current_user( $user_id );
 
-		update_user_meta( $user_id, Contact_Cron::LAST_ENQUEUE_META, time() - Contact_Pull::PULL_SYNC_THRESHOLD - 1 );
+		update_user_meta( $user_id, Contact_Cron::LAST_PULL_META, time() - Contact_Pull::PULL_SYNC_THRESHOLD - 1 );
 
 		$integration = new class( 'filter-test', 'Filter Test' ) extends Sample_Integration {
 			/**
@@ -613,7 +626,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$user_id = $this->factory()->user->create();
 		wp_set_current_user( $user_id );
 
-		update_user_meta( $user_id, Contact_Cron::LAST_ENQUEUE_META, time() - Contact_Pull::PULL_SYNC_THRESHOLD - 1 );
+		update_user_meta( $user_id, Contact_Cron::LAST_PULL_META, time() - Contact_Pull::PULL_SYNC_THRESHOLD - 1 );
 
 		$integration = new class( 'throw-test', 'Throw Test' ) extends Sample_Integration {
 			/**
@@ -641,18 +654,21 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test async pull is scheduled when data is fresh (< 24h but past interval).
+	 * A reader whose last pull is fresh (< 24h) is neither pulled synchronously
+	 * nor staged for the batch pull. The batch pull is the fallback for a
+	 * synchronous pull that failed, not a recurring refresh.
 	 */
-	public function test_async_pull_scheduled_when_fresh() {
+	public function test_fresh_pull_is_not_repeated_by_the_batch() {
 		$user_id = $this->factory()->user->create();
 		wp_set_current_user( $user_id );
 
-		// Last enqueue 10 minutes ago — past interval but within 24h.
+		// Last pull 10 minutes ago — past the enqueue throttle but within the staleness threshold.
 		update_user_meta( $user_id, Contact_Cron::LAST_ENQUEUE_META, time() - 600 );
+		update_user_meta( $user_id, Contact_Cron::LAST_PULL_META, time() - 600 );
 
 		$integration = new class( 'async-test', 'Async Test' ) extends Sample_Integration {
 			/**
-			 * Pull contact data (should NOT be called synchronously).
+			 * Pull contact data (should NOT be called).
 			 *
 			 * @param int $user_id WordPress user ID.
 			 * @return array
@@ -668,12 +684,45 @@ class Test_Integrations extends \WP_UnitTestCase {
 
 		Contact_Cron::maybe_enqueue_contact();
 
-		// Data should NOT have been stored synchronously.
-		$stored = get_user_meta( $user_id, 'newspack_reader_data_item_city', true );
-		$this->assertEmpty( $stored );
+		// Not pulled synchronously.
+		$this->assertEmpty( get_user_meta( $user_id, 'newspack_reader_data_item_city', true ) );
+		// Not staged for the batch pull either; only for push.
+		$this->assertEmpty( get_user_meta( $user_id, Contact_Cron::PULL_PENDING_META, true ) );
+		$this->assertNotEmpty( get_user_meta( $user_id, Contact_Cron::PUSH_PENDING_META, true ) );
+	}
 
-		// Verify user was staged for pull.
-		$this->assertNotEmpty( get_user_meta( $user_id, Contact_Cron::PULL_PENDING_META, true ) );
+	/**
+	 * A reader staged before the pull stamp existed carries only an enqueue time,
+	 * which back then was also when their last pull was started or staged. It
+	 * seeds the stamp, so a reader pulled within the threshold does not pay for a
+	 * synchronous pull on their first page load after the upgrade.
+	 */
+	public function test_missing_pull_stamp_is_seeded_from_the_last_enqueue() {
+		$user_id = $this->factory()->user->create();
+		wp_set_current_user( $user_id );
+		$last_enqueue = time() - 600;
+		update_user_meta( $user_id, Contact_Cron::LAST_ENQUEUE_META, $last_enqueue );
+		$this->mock_pull_loopback( $user_id );
+
+		$integration = new class( 'seed-test', 'Seed Test' ) extends Sample_Integration {
+			/**
+			 * Pull contact data (should NOT be called).
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				return [ 'city' => 'Portland' ];
+			}
+		};
+		$integration->update_enabled_incoming_fields( [ 'city' ] );
+		Integrations::register( $integration );
+		Integrations::enable( 'seed-test' );
+
+		Contact_Cron::maybe_enqueue_contact();
+
+		$this->assertEmpty( get_user_meta( $user_id, 'newspack_reader_data_item_city', true ), 'Not pulled synchronously.' );
+		$this->assertSame( $last_enqueue, (int) get_user_meta( $user_id, Contact_Cron::LAST_PULL_META, true ) );
 	}
 
 	/**
@@ -698,7 +747,8 @@ class Test_Integrations extends \WP_UnitTestCase {
 		Integrations::register( $integration );
 		Integrations::enable( 'handle-test' );
 
-		// Stage the user for pull.
+		// Stage the user for pull, as a failed synchronous pull 10 minutes ago would.
+		update_user_meta( $user_id, Contact_Cron::LAST_PULL_META, time() - 600 );
 		Contact_Cron::enqueue_for_pull( $user_id );
 
 		Contact_Cron::handle_batch();
@@ -708,6 +758,10 @@ class Test_Integrations extends \WP_UnitTestCase {
 
 		// User meta flag should be cleared after processing.
 		$this->assertEmpty( get_user_meta( $user_id, Contact_Cron::PULL_PENDING_META, true ) );
+
+		// The fallback pull restarts the staleness window, so the next synchronous
+		// pull is a full threshold after this one rather than after the failed attempt.
+		$this->assertGreaterThanOrEqual( time() - 2, (int) get_user_meta( $user_id, Contact_Cron::LAST_PULL_META, true ) );
 	}
 
 	/**
@@ -780,7 +834,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$user_id = $this->factory()->user->create();
 		wp_set_current_user( $user_id );
 
-		update_user_meta( $user_id, Contact_Cron::LAST_ENQUEUE_META, time() - Contact_Pull::PULL_SYNC_THRESHOLD - 1 );
+		update_user_meta( $user_id, Contact_Cron::LAST_PULL_META, time() - Contact_Pull::PULL_SYNC_THRESHOLD - 1 );
 
 		$integration = new class( 'timeout-test', 'Timeout Test' ) extends Sample_Integration {
 			/**
@@ -814,6 +868,355 @@ class Test_Integrations extends \WP_UnitTestCase {
 
 		// User should still be staged for push.
 		$this->assertNotEmpty( get_user_meta( $user_id, Contact_Cron::PUSH_PENDING_META, true ) );
+
+		// The attempt is recorded so the next visit within the threshold does not
+		// pay for another synchronous pull; the batch and its retries own the failure.
+		$last_pull = (int) get_user_meta( $user_id, Contact_Cron::LAST_PULL_META, true );
+		$this->assertGreaterThanOrEqual( time() - 2, $last_pull );
+	}
+
+	/**
+	 * Allow contact syncing for the batch push tests. Without it the test site
+	 * counts as staging and every push is refused before reaching an integration.
+	 */
+	private function allow_sync() {
+		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+	}
+
+	/**
+	 * Register and enable a push-counting integration.
+	 *
+	 * @param string $id Integration ID.
+	 * @return Failing_Sample_Integration
+	 */
+	private function register_push_integration( $id = 'push-test' ) {
+		$integration = new Failing_Sample_Integration( $id, 'Push Test' );
+		Integrations::register( $integration );
+		Integrations::enable( $id );
+		return $integration;
+	}
+
+	/**
+	 * Register and enable an integration that accepts every push, whatever the
+	 * shared failure flag says, so a test can fail one integration and not the other.
+	 */
+	private function register_healthy_integration() {
+		$healthy = new class( 'healthy', 'Healthy' ) extends Failing_Sample_Integration {
+			/**
+			 * Always accept the contact.
+			 *
+			 * @param array      $contact          The contact data.
+			 * @param string     $context          The sync context.
+			 * @param array|null $existing_contact Existing contact data if available.
+			 * @return true
+			 */
+			public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
+				self::$push_ids[] = $this->get_id();
+				return true;
+			}
+		};
+		Integrations::register( $healthy );
+		Integrations::enable( 'healthy' );
+	}
+
+	/**
+	 * Stage a user for push, run the batch, and return how many pushes it made.
+	 *
+	 * @param int $user_id WordPress user ID.
+	 * @return int Number of pushes made by this batch.
+	 */
+	private function run_batch_push( $user_id ) {
+		Failing_Sample_Integration::$push_count = 0;
+		Failing_Sample_Integration::$push_ids   = [];
+		Contact_Cron::enqueue_for_push( $user_id );
+		Contact_Cron::handle_batch();
+		return Failing_Sample_Integration::$push_count;
+	}
+
+	/**
+	 * Drop the retries a failed push scheduled, as if their chain had run out,
+	 * so the next batch does not leave the failed integration to a pending retry.
+	 */
+	private function clear_push_retries() {
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+	}
+
+	/**
+	 * The fingerprint an integration last recorded for a reader.
+	 *
+	 * @param int    $user_id        WordPress user ID.
+	 * @param string $integration_id Integration ID.
+	 * @return string
+	 */
+	private function get_push_fingerprint( $user_id, $integration_id = 'push-test' ) {
+		return get_user_meta( $user_id, Contact_Sync::PUSH_FINGERPRINT_META_PREFIX . $integration_id, true );
+	}
+
+	/**
+	 * The batch pushes a staged reader once, then skips them while the contact
+	 * it would send is unchanged.
+	 */
+	public function test_batch_push_skips_unchanged_contact() {
+		$this->allow_sync();
+		$this->register_push_integration();
+		$user_id = $this->factory()->user->create();
+
+		$this->assertSame( 1, $this->run_batch_push( $user_id ), 'The first staging pushes the contact.' );
+		$this->assertNotEmpty( $this->get_push_fingerprint( $user_id ) );
+		$this->assertSame( 0, $this->run_batch_push( $user_id ), 'An unchanged contact is not pushed again.' );
+		$this->assertEmpty( get_user_meta( $user_id, Contact_Cron::PUSH_PENDING_META, true ), 'The staging flag is cleared even when the push is skipped.' );
+	}
+
+	/**
+	 * On a site that cannot sync, such as a staging clone, the batch clears the
+	 * staged readers without building their contacts. No push can follow there,
+	 * so no fingerprint would ever be recorded to stop the rebuilds.
+	 */
+	public function test_batch_push_builds_no_contact_when_the_site_cannot_sync() {
+		$this->register_push_integration();
+		$user_id        = $this->factory()->user->create();
+		$contacts_built = 0;
+		$count_builds   = function ( $contact ) use ( &$contacts_built ) {
+			$contacts_built++;
+			return $contact;
+		};
+		add_filter( 'newspack_esp_sync_contact', $count_builds );
+
+		$pushes = $this->run_batch_push( $user_id );
+
+		remove_filter( 'newspack_esp_sync_contact', $count_builds );
+		$this->assertSame( 0, $contacts_built );
+		$this->assertSame( 0, $pushes );
+		$this->assertEmpty( get_user_meta( $user_id, Contact_Cron::PUSH_PENDING_META, true ), 'The staging flag is still cleared.' );
+	}
+
+	/**
+	 * A change to the reader's contact data produces exactly one push.
+	 */
+	public function test_batch_push_runs_when_contact_changes() {
+		$this->allow_sync();
+		$this->register_push_integration();
+		$user_id = $this->factory()->user->create();
+		$this->run_batch_push( $user_id );
+
+		wp_update_user(
+			[
+				'ID'         => $user_id,
+				'user_email' => 'moved@example.com',
+			]
+		);
+
+		$this->assertSame( 1, $this->run_batch_push( $user_id ), 'A changed contact is pushed once.' );
+		$this->assertSame( 0, $this->run_batch_push( $user_id ), 'Then skipped again until it changes.' );
+	}
+
+	/**
+	 * Changing an integration's outgoing field selection forces a fresh push,
+	 * even when the reader has no value for the newly enabled field.
+	 */
+	public function test_batch_push_runs_when_outgoing_fields_change() {
+		$this->allow_sync();
+		$integration = $this->register_push_integration();
+		$user_id     = $this->factory()->user->create();
+		$this->run_batch_push( $user_id );
+
+		$fields = Metadata::get_default_fields();
+		$integration->update_enabled_outgoing_fields( [ reset( $fields ) ] );
+
+		$this->assertSame( 1, $this->run_batch_push( $user_id ) );
+	}
+
+	/**
+	 * A setting the push depends on, such as the list it writes to, is part of
+	 * what an integration took: changing it pushes a reader whose own data is
+	 * unchanged. A server-managed field is not, since tokens rotate without the
+	 * destination moving.
+	 *
+	 * @dataProvider push_setting_provider
+	 *
+	 * @param string $key             Settings field to change.
+	 * @param int    $expected_pushes Pushes the next batch should make.
+	 */
+	public function test_batch_push_after_a_setting_changes( $key, $expected_pushes ) {
+		$this->allow_sync();
+		$integration = new class( 'push-test', 'Push Test' ) extends Failing_Sample_Integration {
+			/**
+			 * Declare a destination setting and a server-managed one.
+			 *
+			 * @return array
+			 */
+			public function register_settings_fields() {
+				return [
+					[
+						'key'     => 'list_id',
+						'type'    => 'text',
+						'default' => '',
+					],
+					[
+						'key'     => 'access_token',
+						'type'    => 'hidden',
+						'default' => '',
+					],
+				];
+			}
+		};
+		Integrations::register( $integration );
+		Integrations::enable( 'push-test' );
+		$user_id = $this->factory()->user->create();
+		$this->run_batch_push( $user_id );
+
+		$integration->update_settings_field_value( $key, 'changed' );
+
+		$this->assertSame( $expected_pushes, $this->run_batch_push( $user_id ) );
+		$this->assertSame( 0, $this->run_batch_push( $user_id ), 'Skipped again once the integration took it under the new setting.' );
+	}
+
+	/**
+	 * Settings fields by whether changing them should force a push.
+	 *
+	 * @return array
+	 */
+	public function push_setting_provider() {
+		return [
+			'destination setting forces a push' => [ 'list_id', 1 ],
+			'server-managed field does not'     => [ 'access_token', 0 ],
+		];
+	}
+
+	/**
+	 * A newly activated integration receives the reader, and the integration
+	 * that already holds them is not written again.
+	 */
+	public function test_batch_push_reaches_only_a_newly_activated_integration() {
+		$this->allow_sync();
+		$this->register_push_integration( 'first' );
+		$user_id = $this->factory()->user->create();
+		$this->run_batch_push( $user_id );
+
+		$this->register_push_integration( 'second' );
+		$this->run_batch_push( $user_id );
+
+		$this->assertSame( [ 'second' ], Failing_Sample_Integration::$push_ids );
+	}
+
+	/**
+	 * A push made by an event-driven sync counts, so the batch does not repeat it
+	 * on the reader's next page view.
+	 */
+	public function test_batch_push_does_not_repeat_an_event_driven_push() {
+		$this->allow_sync();
+		$this->register_push_integration();
+		$user_id = $this->factory()->user->create();
+
+		Contact_Sync::sync_contact( $user_id, 'RAS Reader login' );
+		$this->assertSame( 1, Failing_Sample_Integration::$push_count );
+
+		$this->assertSame( 0, $this->run_batch_push( $user_id ) );
+	}
+
+	/**
+	 * A retry that succeeds counts, so the batch does not push the contact again
+	 * once the retry chain is done.
+	 */
+	public function test_batch_push_does_not_repeat_a_successful_retry() {
+		$this->allow_sync();
+		$this->register_push_integration();
+		$user_id = $this->factory()->user->create();
+
+		Failing_Sample_Integration::$should_fail = true;
+		$this->run_batch_push( $user_id );
+		$this->clear_push_retries();
+
+		Failing_Sample_Integration::$should_fail = false;
+		Contact_Sync::execute_integration_retry(
+			[
+				'integration_id' => 'push-test',
+				'user_id'        => $user_id,
+				'context'        => 'Recurring sync routine',
+				'retry_count'    => 1,
+			]
+		);
+
+		$this->assertSame( 0, $this->run_batch_push( $user_id ) );
+	}
+
+	/**
+	 * When one integration fails, the next batch pushes to that integration only.
+	 * The one that took the contact is not written again because another failed.
+	 */
+	public function test_batch_push_retries_only_the_failing_integration() {
+		$this->allow_sync();
+		$this->register_healthy_integration();
+		$this->register_push_integration( 'broken' );
+		$user_id = $this->factory()->user->create();
+
+		Failing_Sample_Integration::$should_fail = true;
+		$this->run_batch_push( $user_id );
+		$this->clear_push_retries();
+
+		Failing_Sample_Integration::$should_fail = false;
+		$this->run_batch_push( $user_id );
+
+		$this->assertSame( [ 'broken' ], Failing_Sample_Integration::$push_ids );
+	}
+
+	/**
+	 * A retry pending for one integration holds back that integration only. A
+	 * change meant for a healthy one does not wait out another's backoff.
+	 */
+	public function test_batch_push_reaches_healthy_integrations_while_another_retries() {
+		$this->allow_sync();
+		$this->register_healthy_integration();
+		$this->register_push_integration( 'broken' );
+		$user_id = $this->factory()->user->create();
+
+		Failing_Sample_Integration::$should_fail = true;
+		$this->run_batch_push( $user_id );
+		wp_update_user(
+			[
+				'ID'         => $user_id,
+				'user_email' => 'moved@example.test',
+			]
+		);
+		$this->run_batch_push( $user_id );
+
+		$this->assertSame( [ 'healthy' ], Failing_Sample_Integration::$push_ids );
+	}
+
+	/**
+	 * Whether a failed push counts as taken depends on whether pushing the same
+	 * contact again could turn out differently.
+	 *
+	 * @dataProvider push_failure_provider
+	 *
+	 * @param string $message         Error message the integration returns.
+	 * @param int    $expected_pushes Pushes the next batch should make.
+	 */
+	public function test_batch_push_after_a_failure( $message, $expected_pushes ) {
+		$this->allow_sync();
+		$this->register_push_integration();
+		$user_id = $this->factory()->user->create();
+
+		Failing_Sample_Integration::$should_fail  = true;
+		Failing_Sample_Integration::$fail_message = $message;
+		$this->run_batch_push( $user_id );
+		$this->clear_push_retries();
+
+		$this->assertSame( $expected_pushes, $this->run_batch_push( $user_id ) );
+	}
+
+	/**
+	 * Failures by class, with the pushes the next batch should make.
+	 *
+	 * @return array
+	 */
+	public function push_failure_provider() {
+		return [
+			'transient failure is tried again'          => [ 'Service unavailable', 1 ],
+			'configuration failure is tried again'      => [ 'Payment required', 1 ],
+			'permanent contact failure is not repeated' => [ 'Contact was permanently deleted', 0 ],
+			'benign failure is not repeated'            => [ 'Member Exists', 0 ],
+		];
 	}
 
 	/**

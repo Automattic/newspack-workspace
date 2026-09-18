@@ -17,17 +17,32 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Contact Cron Class.
  *
- * Manages recurring contact data synchronization: queues users for
- * pull (from integrations) and push (to integrations), processes
- * them in batch via WP-Cron.
+ * Manages recurring contact data synchronization: stages logged-in readers,
+ * then a WP-Cron batch pushes the ones whose contact changed since their last
+ * push and pulls the ones whose synchronous pull failed. A safety net behind
+ * the event-driven syncs, which already cover every change that matters, so
+ * it is built to be cheap when nothing changed.
  */
 class Contact_Cron {
 	/**
-	 * Cron interval in seconds (5 minutes).
+	 * Cron interval in seconds (5 minutes): how often the batch runs.
 	 *
 	 * @var int
 	 */
 	const CRON_INTERVAL = 300;
+
+	/**
+	 * Minimum seconds between two stagings of the same logged-in reader.
+	 *
+	 * Bounds how often a reader is re-staged, and so how often the batch
+	 * rebuilds their contact to compare it. It is not a freshness rule: whether
+	 * a staging turns into a push is decided by the change detection in
+	 * handle_batch_push(), and whether it turns into a pull by
+	 * Contact_Pull::PULL_SYNC_THRESHOLD.
+	 *
+	 * @var int
+	 */
+	const ENQUEUE_THROTTLE = 300;
 
 	/**
 	 * User meta key for last enqueue timestamp.
@@ -35,6 +50,15 @@ class Contact_Cron {
 	 * @var string
 	 */
 	const LAST_ENQUEUE_META = 'newspack_contact_cron_last_enqueue';
+
+	/**
+	 * User meta key for the timestamp of the last pull started for the reader,
+	 * synchronously on a page load or by the batch fallback. Read against
+	 * Contact_Pull::PULL_SYNC_THRESHOLD.
+	 *
+	 * @var string
+	 */
+	const LAST_PULL_META = 'newspack_contact_cron_last_pull';
 
 	/**
 	 * WP-Cron hook for batch processing.
@@ -96,9 +120,14 @@ class Contact_Cron {
 	}
 
 	/**
-	 * Enqueue contact data for pull and push for the current logged-in user.
+	 * Stage the current logged-in reader for the batch push and, once per
+	 * staleness threshold, refresh their pulled data.
 	 *
-	 * If the last pull is stale (> 24 h), the pull runs synchronously.
+	 * Push staging is cheap and happens every throttle window; the batch decides
+	 * whether the contact actually changed. The pull is the expensive side (one
+	 * provider read per integration), so it starts at most once per
+	 * Contact_Pull::PULL_SYNC_THRESHOLD: synchronously when the reader's data is
+	 * stale, falling back to the batch only when that fails.
 	 */
 	public static function maybe_enqueue_contact() {
 		if ( ! is_user_logged_in() ) {
@@ -108,19 +137,32 @@ class Contact_Cron {
 		$user_id      = get_current_user_id();
 		$last_enqueue = (int) get_user_meta( $user_id, self::LAST_ENQUEUE_META, true );
 
-		if ( ( time() - $last_enqueue ) < self::CRON_INTERVAL ) {
+		if ( ( time() - $last_enqueue ) < self::ENQUEUE_THROTTLE ) {
 			return;
 		}
 		update_user_meta( $user_id, self::LAST_ENQUEUE_META, time() );
 
 		self::enqueue_for_push( $user_id );
 
-		if ( Contact_Pull::is_stale( $last_enqueue ) ) {
-			$result = Contact_Pull::pull_sync();
-			if ( is_wp_error( $result ) ) {
-				self::enqueue_for_pull( $user_id );
-			}
-		} else {
+		$last_pull = (int) get_user_meta( $user_id, self::LAST_PULL_META, true );
+		if ( ! $last_pull && $last_enqueue ) {
+			// Readers staged before this stamp existed carry only an enqueue time,
+			// which was also when their last pull started. Seeding from it keeps
+			// every active reader from starting a synchronous pull on their first
+			// page load after the upgrade. Stored rather than read as a fallback,
+			// because an active reader's enqueue time never goes stale.
+			$last_pull = $last_enqueue;
+			update_user_meta( $user_id, self::LAST_PULL_META, $last_pull );
+		}
+		if ( ! Contact_Pull::is_stale( $last_pull ) ) {
+			return;
+		}
+		// Recorded before the outcome is known: a failing pull belongs to the
+		// batch and its retries, not to a new synchronous attempt on every page
+		// load once the throttle elapses.
+		update_user_meta( $user_id, self::LAST_PULL_META, time() );
+		$result = Contact_Pull::pull_sync();
+		if ( is_wp_error( $result ) ) {
 			self::enqueue_for_pull( $user_id );
 		}
 	}
@@ -217,6 +259,7 @@ class Contact_Cron {
 				Logger::log( 'Batch pull skipping user ' . $user_id . ': pending pull retries.', self::LOGGER_HEADER );
 				continue;
 			}
+			update_user_meta( $user_id, self::LAST_PULL_META, time() );
 			$result = Contact_Pull::pull_all( $user_id );
 			if ( is_wp_error( $result ) ) {
 				Logger::error( 'Batch pull failed for user ' . $user_id . ': ' . $result->get_error_message(), self::LOGGER_HEADER );
@@ -229,8 +272,11 @@ class Contact_Cron {
 	/**
 	 * Process the push queue.
 	 *
-	 * Queries users staged for push, processes each one,
-	 * and removes the flag per-user after processing.
+	 * Clears every staged reader's flag and pushes each one only to the
+	 * integrations whose payload changed since they last took it. Most staged
+	 * readers are merely active, not changed (NEWS-3087). What counts as taken,
+	 * including after a failure, is decided by the push path; see
+	 * Contact_Sync::get_integrations_to_push().
 	 */
 	private static function handle_batch_push() {
 		$queue = self::get_pending_users( self::PUSH_PENDING_META );
@@ -238,22 +284,56 @@ class Contact_Cron {
 			return;
 		}
 
+		// Where no push can happen (a staging clone, Audience Management off),
+		// nothing would ever record a fingerprint, so every batch would build and
+		// compare every staged contact again.
+		$can_sync = Contact_Sync::can_sync( true );
+		if ( $can_sync->has_errors() ) {
+			delete_metadata( 'user', 0, self::PUSH_PENDING_META, '', true );
+			Logger::log( 'Batch push skipped for ' . count( $queue ) . ' user(s): ' . $can_sync->get_error_message(), self::LOGGER_HEADER );
+			return;
+		}
+
 		Logger::log( 'Batch push started for ' . count( $queue ) . ' user(s).', self::LOGGER_HEADER );
 
-		$pending_retries = Contact_Sync::get_pending_retry_user_ids();
+		$pending_retries = Contact_Sync::get_pending_retries();
+		$context         = 'Recurring sync routine';
+		$unchanged       = 0;
 
 		foreach ( $queue as $user_id ) {
 			delete_user_meta( $user_id, self::PUSH_PENDING_META );
-			if ( isset( $pending_retries[ $user_id ] ) ) {
-				Logger::log( 'Batch push skipping user ' . $user_id . ': pending sync retries.', self::LOGGER_HEADER );
+
+			$contact = Contact_Sync::get_contact_data( $user_id );
+			if ( is_wp_error( $contact ) || empty( $contact['email'] ) ) {
+				$message = is_wp_error( $contact ) ? $contact->get_error_message() : 'Contact email is empty.';
+				Logger::error( 'Batch push failed for user ' . $user_id . ': ' . $message, self::LOGGER_HEADER );
 				continue;
 			}
-			$result = Contact_Sync::sync_contact( $user_id, 'Recurring sync routine' );
-			if ( is_wp_error( $result ) ) {
-				Logger::error( 'Batch push failed for user ' . $user_id . ': ' . $result->get_error_message(), self::LOGGER_HEADER );
+			$integration_ids = Contact_Sync::get_integrations_to_push( $user_id, $contact, $context );
+			if ( empty( $integration_ids ) ) {
+				$unchanged++;
+				continue;
+			}
+
+			// An integration with a retry pending for this reader is left to it:
+			// the retry builds the contact again when it runs, so it delivers this
+			// change too.
+			$awaiting_retry = array_intersect( $integration_ids, array_keys( $pending_retries[ $user_id ] ?? [] ) );
+			if ( ! empty( $awaiting_retry ) ) {
+				Logger::log( 'Batch push leaving user ' . $user_id . ' to pending sync retries for: ' . implode( ', ', $awaiting_retry ) . '.', self::LOGGER_HEADER );
+			}
+
+			// One push per changed integration, so an integration that already
+			// holds this contact is not written again because another one changed
+			// or is failing.
+			foreach ( array_diff( $integration_ids, $awaiting_retry ) as $integration_id ) {
+				$result = Contact_Sync::sync( $contact, $context, null, [ 'integration_id' => $integration_id ] );
+				if ( is_wp_error( $result ) ) {
+					Logger::error( 'Batch push failed for user ' . $user_id . ': ' . $result->get_error_message(), self::LOGGER_HEADER );
+				}
 			}
 		}
 
-		Logger::log( 'Batch push completed.', self::LOGGER_HEADER );
+		Logger::log( sprintf( 'Batch push completed. Skipped %d unchanged user(s).', $unchanged ), self::LOGGER_HEADER );
 	}
 }

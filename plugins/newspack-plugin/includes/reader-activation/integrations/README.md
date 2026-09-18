@@ -25,7 +25,7 @@ The framework is built on top of [Data Events](../../data-events/README.md) and 
 | `class-incoming-field.php` | Value object describing an external field returned by an integration. Carries display metadata plus flags for access rules and segmentation criteria. |
 | `class-date-value.php` | Date value helpers shared by the pull pipeline and the access-rule evaluator: source-format normalization to ISO and calendar-date validation. |
 | `class-contact-pull.php` | Pull pipeline. Per-integration synchronous loopback requests plus ActionScheduler-backed retries with exponential backoff. |
-| `class-contact-cron.php` | Recurring cron orchestration. Stages users for pull/push and processes both queues every 5 minutes. |
+| `class-contact-cron.php` | Recurring cron orchestration. Stages logged-in readers; every 5 minutes pushes each staged reader to the integrations whose payload changed since they last took it, and pulls the readers whose synchronous pull failed. |
 
 The registry class is `Newspack\Reader_Activation\Integrations` (parent namespace). Classes under this folder live in `Newspack\Reader_Activation\Integrations\*`.
 
@@ -302,7 +302,7 @@ The abstract signature intentionally stays three-parameter (`push_contact_data( 
 ### When pushes are triggered
 
 - Data event handlers registered via `register_handler()` (see below).
-- Recurring cron via `Contact_Cron` (every 5 minutes for logged-in users).
+- Recurring cron via `Contact_Cron`, a safety net behind the event-driven syncs. Logged-in readers are staged at most once every 5 minutes, and the batch pushes each staged reader only to the integrations whose prepared payload differs from the last one they took (`Contact_Sync::get_integrations_to_push()`). Every full push records what each integration took, whether it came from a data event, a retry, or the cron, so a change is not pushed twice. The comparison also covers the integration's outgoing field selection and the settings its push depends on (`Integration::get_push_settings()`: the list or publication it writes to, the ESP's active provider), so enabling a field, activating an integration, or pointing one at a new destination forces a push. A push that fails as benign or with a permanent contact error counts as taken; transient and site configuration failures do not, so the cron tries again after the retries. An integration with a retry pending for a reader is left to that retry, and the reader's other integrations are still pushed. On a site that cannot sync, the batch clears the staged readers without building their contacts. Known limit: on the v1 metadata schema, Last Active moves on every visit, so a reader with that field enabled is still pushed on every batch.
 - Direct calls from other Newspack subsystems via `Contact_Sync::sync_contact()`.
 
 ### Retries
@@ -321,10 +321,10 @@ When the provider has no contact for the reader at all, return a `WP_Error` with
 
 ### When pulls are triggered
 
-The pull pipeline (`Contact_Pull` + `Contact_Cron`) runs on every logged-in pageview, throttled per user:
+The pull pipeline (`Contact_Pull` + `Contact_Cron`) runs on every logged-in pageview, throttled per user, and starts a pull at most once per `PULL_SYNC_THRESHOLD` (24 hours):
 
-- If the user's last enqueue was more than 24 hours ago (`PULL_SYNC_THRESHOLD`), all enabled integrations are pulled synchronously via per-integration loopback `admin-ajax.php` requests. The request timeout defaults to 1 second per integration — anything that overruns falls back to the cron queue.
-- Otherwise, the user is staged for pull on the next 5-minute batch (`Contact_Cron::CRON_INTERVAL`).
+- If the user's last pull started more than 24 hours ago, all enabled integrations are pulled synchronously via per-integration loopback `admin-ajax.php` requests. The request timeout defaults to 1 second per integration — anything that overruns or fails falls back to the next 5-minute batch (`Contact_Cron::CRON_INTERVAL`), whose failures are then retried as described below.
+- Otherwise nothing is pulled: the batch is the fallback for a failed synchronous pull, not a recurring refresh.
 
 ### Retries
 

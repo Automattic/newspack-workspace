@@ -84,6 +84,13 @@ class Contact_Sync extends Sync {
 	const RETRY_BACKOFF = [ 30, 120, 480, 1800, 7200 ];
 
 	/**
+	 * User meta key prefix, suffixed with an integration ID, for the fingerprint
+	 * of the last payload that integration took for the reader.
+	 * See get_integrations_to_push().
+	 */
+	const PUSH_FINGERPRINT_META_PREFIX = 'newspack_contact_sync_fingerprint_';
+
+	/**
 	 * Substring signatures (lowercase) that classify an ESP error message on
 	 * the push/upsert direction.
 	 *
@@ -302,6 +309,88 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
+	 * IDs of the push-enabled integrations whose payload for this contact differs
+	 * from the last one they took for the reader.
+	 *
+	 * Lets the recurring cron push only where something moved (NEWS-3087). Every
+	 * full push records what each integration took, whether from a data event, a
+	 * retry, or the cron, so a change already delivered is not pushed again.
+	 * Payloads are built the way push_to_integrations() builds them; if the two
+	 * drift, the cron re-pushes unchanged contacts or, worse, skips a real change.
+	 * The outgoing field selection is part of the fingerprint, so enabling a field
+	 * forces a push even for a reader with no value for it yet. So are the
+	 * settings the push depends on (Integration::get_push_settings()): a reader
+	 * delivered to one list is not skipped as delivered after the list changes.
+	 *
+	 * @param int    $user_id The reader's user ID.
+	 * @param array  $contact The contact data, as returned by get_contact_data().
+	 * @param string $context The context the push would run under; the contact filter receives it.
+	 *
+	 * @return string[] Integration IDs.
+	 */
+	public static function get_integrations_to_push( $user_id, $contact, $context = '' ): array {
+		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
+		$contact         = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
+		$integration_ids = [];
+		foreach ( Integrations::get_active_configured_integrations() as $integration_id => $integration ) {
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
+			$fingerprint = self::get_push_fingerprint( $integration, self::prepare_contact_for_integration( $integration, $contact ) );
+			if ( \get_user_meta( $user_id, self::PUSH_FINGERPRINT_META_PREFIX . $integration_id, true ) !== $fingerprint ) {
+				$integration_ids[] = $integration_id;
+			}
+		}
+		return $integration_ids;
+	}
+
+	/**
+	 * Fingerprint of a prepared payload together with what the integration would
+	 * do with it: its outgoing field selection and the settings the push depends
+	 * on, including where it lands.
+	 *
+	 * @param \Newspack\Reader_Activation\Integration $integration         The integration.
+	 * @param array                                   $integration_contact The contact as prepared for it.
+	 *
+	 * @return string The fingerprint.
+	 */
+	private static function get_push_fingerprint( $integration, $integration_contact ): string {
+		return md5(
+			\wp_json_encode(
+				[
+					'fields'   => $integration->get_enabled_outgoing_fields(),
+					'settings' => $integration->get_push_settings(),
+					'contact'  => $integration_contact,
+				]
+			)
+		);
+	}
+
+	/**
+	 * Record that an integration took this payload for the reader, so the
+	 * recurring cron does not push it again.
+	 *
+	 * Only for full, unscoped payloads: callers pass a push made with default
+	 * options. A benign error means the provider already holds the contact, and a
+	 * permanent contact error means it will never accept this payload, so both
+	 * count as taken; pushing again would repeat the same result every batch
+	 * until the contact changes. Transient and site configuration errors are not
+	 * recorded, so the cron tries again once the retries are done or the
+	 * configuration is fixed.
+	 *
+	 * @param int                                     $user_id             The reader's user ID.
+	 * @param \Newspack\Reader_Activation\Integration $integration         The integration pushed to.
+	 * @param array                                   $integration_contact The contact as get_integrations_to_push() prepares it for the integration.
+	 * @param true|\WP_Error                          $result              The push result.
+	 */
+	private static function record_push_fingerprint( $user_id, $integration, $integration_contact, $result ): void {
+		if ( \is_wp_error( $result ) && ! in_array( self::classify_error( $result ), [ 'benign', 'permanent_contact' ], true ) ) {
+			return;
+		}
+		\update_user_meta( $user_id, self::PUSH_FINGERPRINT_META_PREFIX . $integration->get_id(), self::get_push_fingerprint( $integration, $integration_contact ) );
+	}
+
+	/**
 	 * Push contact data to all active integrations.
 	 *
 	 * Failed integrations are scheduled for retry via ActionScheduler
@@ -405,6 +494,10 @@ class Contact_Sync extends Sync {
 					self::$current_as_action_id,
 					sprintf( 'Sync succeeded for integration "%s" of %s.', $integration_id, $contact['email'] ?? 'unknown' )
 				);
+			}
+
+			if ( $user_id && self::options_are_default( $options ) ) {
+				self::record_push_fingerprint( $user_id, $integration, $integration_contact, $result );
 			}
 		}
 
@@ -961,6 +1054,7 @@ class Contact_Sync extends Sync {
 
 		$integration_contact = $integration->prepare_contact( $contact );
 		$result              = $integration->push_contact( $integration_contact, $context, $existing_contact );
+		self::record_push_fingerprint( $user_id, $integration, $integration_contact, $result );
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
 			static::log(
@@ -1319,14 +1413,14 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
-	 * Get the set of user IDs with pending sync retries in ActionScheduler.
+	 * Get the integrations with a pending sync retry in ActionScheduler, per user.
 	 *
-	 * Useful for batch processing: fetch once, then check membership with isset()
-	 * instead of calling has_pending_retries() per user.
+	 * A retry belongs to one integration, so a caller can leave that one to its
+	 * retry without holding back the reader's other integrations.
 	 *
-	 * @return array<int, bool> Map keyed by user ID for O(1) lookup.
+	 * @return array<int, array<string, bool>> Map keyed by user ID, then by integration ID.
 	 */
-	public static function get_pending_retry_user_ids() {
+	public static function get_pending_retries(): array {
 		if ( ! function_exists( 'as_get_scheduled_actions' ) ) {
 			return [];
 		}
@@ -1337,14 +1431,26 @@ class Contact_Sync extends Sync {
 				'per_page' => -1,
 			]
 		);
-		$user_ids = [];
+		$pending = [];
 		foreach ( $actions as $action ) {
 			$args = $action->get_args();
 			if ( ! empty( $args[0]['user_id'] ) ) {
-				$user_ids[ (int) $args[0]['user_id'] ] = true;
+				$pending[ (int) $args[0]['user_id'] ][ (string) ( $args[0]['integration_id'] ?? '' ) ] = true;
 			}
 		}
-		return $user_ids;
+		return $pending;
+	}
+
+	/**
+	 * Get the set of user IDs with pending sync retries in ActionScheduler.
+	 *
+	 * Useful for batch processing: fetch once, then check membership with isset()
+	 * instead of calling has_pending_retries() per user.
+	 *
+	 * @return array<int, bool> Map keyed by user ID for O(1) lookup.
+	 */
+	public static function get_pending_retry_user_ids() {
+		return array_map( '__return_true', self::get_pending_retries() );
 	}
 
 	/**

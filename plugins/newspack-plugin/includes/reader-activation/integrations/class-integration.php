@@ -1675,6 +1675,30 @@ abstract class Integration {
 	}
 
 	/**
+	 * The settings a push depends on beyond its payload: where it lands
+	 * (account, list, publication) and how the integration handles it.
+	 *
+	 * Part of the push fingerprint (Contact_Sync::get_integrations_to_push()),
+	 * so changing one makes the recurring cron push readers again instead of
+	 * treating them as already delivered to a destination they never reached.
+	 * Server-managed fields are left out: tokens rotate without the destination
+	 * moving. Override to add state kept outside the integration's own settings
+	 * fields, such as the ESP's active provider.
+	 *
+	 * @return array Setting values keyed by field key.
+	 */
+	public function get_push_settings(): array {
+		$settings = [];
+		foreach ( $this->settings_fields as $field ) {
+			if ( in_array( $field['type'] ?? 'text', self::MANAGED_FIELD_TYPES, true ) ) {
+				continue;
+			}
+			$settings[ $field['key'] ] = $this->get_settings_field_value( $field['key'] );
+		}
+		return $settings;
+	}
+
+	/**
 	 * Lazily migrate an account-deletion setting from the legacy `sync_esp_delete` option.
 	 *
 	 * The legacy flag was effectively three-way in behavior:

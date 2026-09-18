@@ -370,6 +370,20 @@ class ESP extends Integration {
 	}
 
 	/**
+	 * Add the active provider to the settings a push depends on.
+	 *
+	 * The provider is chosen in Newspack Newsletters rather than in this
+	 * integration's settings fields, and `esp` keeps one ID across providers, so
+	 * nothing else tells a push to Mailchimp from a push to the provider that
+	 * replaced it.
+	 *
+	 * @return array Setting values keyed by field key.
+	 */
+	public function get_push_settings(): array {
+		return array_merge( parent::get_push_settings(), [ 'provider' => $this->get_provider_slug() ] );
+	}
+
+	/**
 	 * Get the enabled outgoing metadata fields for the ESP integration.
 	 *
 	 * Overrides the parent to lazily migrate the legacy global option
