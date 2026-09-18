@@ -692,9 +692,10 @@ final class Reader_Data {
 		// second lookup only happens for readers on no lists. A contact that
 		// does not exist is treated like one that could not be read, so a reader
 		// deleted at the ESP keeps their stored lists: the conservative side,
-		// since a blank pushed by mistake cannot be recovered. Known gap:
-		// ActiveCampaign fetches the lists in a second request and answers []
-		// when that one fails, which this check cannot tell from a real empty.
+		// since a blank pushed by mistake cannot be recovered. ActiveCampaign
+		// reads the lists in a second request and reports that one's failure
+		// as a WP_Error, which the check above returns on, so this re-read is
+		// only about the contact lookup.
 		if ( empty( $subscribed_lists ) && is_wp_error( \Newspack_Newsletters_Subscription::get_contact_data( $data['email'] ) ) ) {
 			return;
 		}
