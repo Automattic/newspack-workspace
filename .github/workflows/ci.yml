@@ -65,7 +65,7 @@ jobs:
           # Exclude the root workspace package — it has no plugin-shaped
           # lint/build/test scripts, and changes to .github/ or root configs
           # otherwise spawn a job that just fails.
-          CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.PNPM_PACKAGE_NAME)' 2>/dev/null | grep -v '^newspack-workspace$' | sort -u || true)
+          CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.PNPM_PACKAGE_NAME)' 2>/dev/null | grep -vE '^newspack-workspace$|^No projects matched the filters in ' | sort -u || true)
 
           # Root-level dependency files don't appear in pnpm's --filter graph
           # (no source package owns them), so a Dependabot PR that only bumps
