@@ -27,8 +27,10 @@ window.newspackRAS.push( readerActivation => {
 				...config,
 			} );
 		/**
-		 * Expose the maybeConfirmRegistration helper on the RAS scope (consumed
-		 * cross-plugin by registration entry points).
+		 * Expose the maybeConfirmRegistration helper on the RAS scope. Nothing in
+		 * this workspace reads it here — both in-plugin callers import the module
+		 * directly — but older newspack-newsletters builds look it up on the global,
+		 * so removing it would break that version skew.
 		 */
 		readerActivation.maybeConfirmRegistration = maybeConfirmRegistrationImpl;
 

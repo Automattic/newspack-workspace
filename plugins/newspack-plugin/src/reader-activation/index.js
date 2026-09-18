@@ -671,7 +671,9 @@ const readerActivation = {
 	// the reader-activation-auth bundle (see reader-activation-auth/index.js). They
 	// aren't included in this literal because they depend on auth-modal markup that
 	// only ships when the auth modal is rendered. Cross-plugin consumers gate access
-	// with `typeof ras?.openVerificationModal === 'function'`.
+	// with `typeof ras?.openVerificationModal === 'function'` — newspack-newsletters
+	// does this for openVerificationModal; maybeConfirmRegistration is kept for older
+	// newsletters builds rather than any current caller.
 	hasAuthLink,
 	getOTPHash,
 	setOTPTimer,
