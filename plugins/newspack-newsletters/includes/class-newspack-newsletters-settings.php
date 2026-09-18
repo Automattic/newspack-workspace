@@ -121,6 +121,25 @@ class Newspack_Newsletters_Settings {
 				'onboarding'        => false,
 			),
 			array(
+				'description' => esc_html__( 'Where newsletters are edited', 'newspack-newsletters' ),
+				'key'         => Newspack_Newsletters_Mailpoet_Campaigns::STRATEGY_OPTION,
+				'type'        => 'select',
+				'default'     => Newspack_Newsletters_Mailpoet_Campaigns::DEFAULT_STRATEGY,
+				'provider'    => 'mailpoet',
+				'options'     => array_map(
+					function ( $value, $label ) {
+						return [
+							'name'  => $label,
+							'value' => $value,
+						];
+					},
+					array_keys( Newspack_Newsletters_Mailpoet_Campaigns::get_strategies() ),
+					array_values( Newspack_Newsletters_Mailpoet_Campaigns::get_strategies() )
+				),
+				'help'        => esc_html__( 'Newsletters are always composed in Newspack and sent by MailPoet. This chooses which editor opens when a newsletter is edited from the MailPoet screen.', 'newspack-newsletters' ),
+				'onboarding'  => false,
+			),
+			array(
 				'description' => esc_html__( 'Constant Contact API Key', 'newspack-newsletters' ),
 				'key'         => 'newspack_newsletters_constant_contact_api_key',
 				'type'        => 'text',
@@ -213,7 +232,9 @@ class Newspack_Newsletters_Settings {
 				if ( ! empty( $item['provider'] ) && ! in_array( $item['provider'], $supported_providers, true ) ) {
 					return $acc;
 				}
-				if ( 'select' === $item['type'] && ! empty( $item['options'] ) ) {
+				// Only the provider dropdown lists providers. Other selects carry
+				// their own values, which would otherwise be filtered away here.
+				if ( 'newspack_newsletters_service_provider' === $item['key'] && 'select' === $item['type'] && ! empty( $item['options'] ) ) {
 					$item['options'] = array_values(
 						array_filter(
 							$item['options'],
