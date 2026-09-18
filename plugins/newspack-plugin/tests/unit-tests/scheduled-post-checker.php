@@ -40,6 +40,14 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 		}
 		$this->registered_cpts = [];
 		$this->added_filters   = [];
+
+		/*
+		 * Publishing a changeset leaves a WP_Customize_Manager in the global, wired
+		 * to hooks the suite's own restore then strips. Left in place, a later
+		 * changeset test reuses a half-registered manager.
+		 */
+		unset( $GLOBALS['wp_customize'] );
+
 		parent::tear_down();
 	}
 
@@ -47,11 +55,12 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	 * Add a filter that tear_down() will remove — even an anonymous callback,
 	 * which remove_filter() otherwise can't target once its reference is lost.
 	 *
-	 * @param string   $hook     Filter hook.
-	 * @param callable $callback Callback.
+	 * @param string   $hook          Filter hook.
+	 * @param callable $callback      Callback.
+	 * @param int      $accepted_args Number of args the callback accepts.
 	 */
-	private function add_cleanup_filter( $hook, $callback ) {
-		add_filter( $hook, $callback );
+	private function add_cleanup_filter( $hook, $callback, $accepted_args = 1 ) {
+		add_filter( $hook, $callback, 10, $accepted_args );
 		$this->added_filters[] = [ $hook, $callback ];
 	}
 
@@ -84,9 +93,13 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	 * can't be produced through the normal API.
 	 *
 	 * @param string $post_type Post type.
+	 * @param array  $columns   Extra post columns to write alongside the status.
+	 *                          Goes through $wpdb too, so JSON payloads reach the
+	 *                          column unslashed and unfiltered.
+	 * @param int    $age       How long ago the slot was missed, in seconds.
 	 * @return int Post ID.
 	 */
-	private function create_overdue_future_post( $post_type ) {
+	private function create_overdue_future_post( $post_type, $columns = [], $age = HOUR_IN_SECONDS ) {
 		$post_id = self::factory()->post->create(
 			[
 				'post_type'   => $post_type,
@@ -95,14 +108,17 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 		);
 
 		global $wpdb;
-		$past = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
+		$past = gmdate( 'Y-m-d H:i:s', time() - $age );
 		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->posts,
-			[
-				'post_status'   => 'future',
-				'post_date'     => $past,
-				'post_date_gmt' => $past,
-			],
+			array_merge(
+				[
+					'post_status'   => 'future',
+					'post_date'     => $past,
+					'post_date_gmt' => $past,
+				],
+				$columns
+			),
 			[ 'ID' => $post_id ]
 		);
 		clean_post_cache( $post_id );
@@ -124,6 +140,7 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 
 		$this->assertContains( 'newspack_popups_cpt', $post_types, 'Campaign prompts are covered.' );
 		$this->assertContains( 'newspack_spnsrs_cpt', $post_types, 'Sponsors are covered.' );
+		$this->assertContains( 'customize_changeset', $post_types, 'Scheduled Customizer changes are covered.' );
 		$this->assertContains( 'post', $post_types, 'Search-visible types are still covered.' );
 
 		// An unrelated non-public CPT is not swept in by default.
@@ -185,6 +202,145 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 		\Newspack\Scheduled_Post_Checker\nspc_run_check();
 
 		$this->assertSame( 'future', get_post_status( $post_id ), 'An unlisted hidden type is left alone.' );
+	}
+
+	/**
+	 * A scheduled homepage change that missed its slot goes live. This is the case
+	 * the checker covers changesets for, and `show_on_front` / `page_on_front` are
+	 * option-type settings, which take a different route through
+	 * unsanitized_post_values() than theme mods do.
+	 */
+	public function test_rescues_missed_static_front_page_change() {
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			]
+		);
+
+		update_option( 'show_on_front', 'posts' );
+
+		$changeset_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode(
+					[
+						'show_on_front' => [ 'value' => 'page' ],
+						'page_on_front' => [ 'value' => $page_id ],
+					]
+				),
+			]
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( 'page', get_option( 'show_on_front' ), 'The scheduled homepage switch is applied.' );
+		$this->assertSame( $page_id, (int) get_option( 'page_on_front' ), 'The scheduled homepage is the page that was chosen.' );
+		// Not 'publish': customize_changeset doesn't support revisions, so core trashes
+		// the post in the same request it publishes it.
+		$this->assertNotSame( 'future', get_post_status( $changeset_id ), 'The changeset does not stay scheduled.' );
+	}
+
+	/**
+	 * The rescue window, fenced from both sides: a changeset missed two days ago is
+	 * rescued, one missed four days ago is left alone with its values unapplied.
+	 */
+	public function test_changeset_rescue_is_age_limited() {
+		$recent_mod = 'nspc_recent_mod';
+		$stale_mod  = 'nspc_stale_mod';
+
+		// Registered so the value assertions are real — publishing only writes settings
+		// that are registered.
+		$this->add_cleanup_filter(
+			'customize_dynamic_setting_args',
+			function ( $args, $id ) use ( $recent_mod, $stale_mod ) {
+				return in_array( $id, [ $recent_mod, $stale_mod ], true ) ? [ 'type' => 'theme_mod' ] : $args;
+			},
+			2
+		);
+		set_theme_mod( $recent_mod, 'before' );
+		set_theme_mod( $stale_mod, 'before' );
+
+		$recent_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode(
+					[
+						get_stylesheet() . '::' . $recent_mod => [
+							'value' => 'after',
+							'type'  => 'theme_mod',
+						],
+					]
+				),
+			],
+			2 * DAY_IN_SECONDS
+		);
+
+		$stale_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode(
+					[
+						get_stylesheet() . '::' . $stale_mod => [
+							'value' => 'after',
+							'type'  => 'theme_mod',
+						],
+					]
+				),
+			],
+			4 * DAY_IN_SECONDS
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertNotSame( 'future', get_post_status( $recent_id ), 'A changeset inside the window is rescued.' );
+		$this->assertSame( 'after', get_theme_mod( $recent_mod ), 'A rescued changeset applies its theme-mod value.' );
+		$this->assertSame( 'before', get_theme_mod( $stale_mod ), 'A long-missed changeset does not apply its values.' );
+		$this->assertSame( 'future', get_post_status( $stale_id ), 'And it stays scheduled.' );
+	}
+
+	/**
+	 * The boundary itself, not just comfortably inside/outside it: an hour under the
+	 * 3-day limit is rescued, an hour over is left alone.
+	 */
+	public function test_changeset_rescue_window_boundary() {
+		$just_inside_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			],
+			3 * DAY_IN_SECONDS - HOUR_IN_SECONDS
+		);
+
+		$just_outside_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			],
+			3 * DAY_IN_SECONDS + HOUR_IN_SECONDS
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertNotSame( 'future', get_post_status( $just_inside_id ), 'An hour inside the window is still rescued.' );
+		$this->assertSame( 'future', get_post_status( $just_outside_id ), 'An hour outside the window is left alone.' );
+	}
+
+	/**
+	 * The age limit is scoped to changesets — the post backlog stays unbounded, which
+	 * is what a global date bound would break.
+	 */
+	public function test_rescues_long_missed_post() {
+		$post_id = $this->create_overdue_future_post( 'post', [], 4 * DAY_IN_SECONDS );
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( 'publish', get_post_status( $post_id ), 'A long-missed post is still rescued.' );
 	}
 
 	/**
