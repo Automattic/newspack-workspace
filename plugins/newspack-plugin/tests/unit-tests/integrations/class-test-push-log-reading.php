@@ -444,4 +444,183 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 
 		$this->assertSame( [], $this->query_ids( [ 'needs_attention' => true ] ) );
 	}
+
+	/**
+	 * Opening a row returns what was sent. A row is only readable through the
+	 * integration it belongs to, so one integration's screen cannot open
+	 * another's rows.
+	 */
+	public function test_get_returns_the_row_with_its_payload_decoded() {
+		$row_id = $this->record();
+
+		$row = Push_Log::get( $row_id, 'sample' );
+
+		$this->assertSame( $row_id, $row['id'] );
+		$this->assertSame( $this->sample_payload(), $row['payload'] );
+		$this->assertArrayNotHasKey( 'payload_hash', $row );
+		$this->assertNull( Push_Log::get( $row_id, 'other' ) );
+		$this->assertNull( Push_Log::get( $row_id + 1000, 'sample' ) );
+	}
+
+	/**
+	 * A row is compared with the last push that reached the provider: a failed
+	 * push never arrived, and another reader's push is not this reader's data.
+	 */
+	public function test_predecessor_is_the_previous_successful_push_for_the_reader() {
+		$first = $this->record();
+		$this->record(
+			[
+				'payload' => $this->sample_payload( [ 'NP_Total Paid' => '150' ] ),
+				'result'  => new \WP_Error( 'provider_down', 'ESP 503' ),
+			]
+		);
+		$this->record(
+			[
+				'email'   => 'other@example.test',
+				'user_id' => 8,
+			]
+		);
+		$latest = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Total Paid' => '180' ] ) ] );
+
+		$predecessor = Push_Log::get_predecessor( Push_Log::get( $latest, 'sample' ) );
+
+		$this->assertSame( $first, $predecessor['id'] );
+		$this->assertSame( '120', $predecessor['payload']['metadata']['NP_Total Paid'] );
+		$this->assertNull( Push_Log::get_predecessor( Push_Log::get( $first, 'sample' ) ) );
+	}
+
+	/**
+	 * A change of address does not cut the history: the predecessor follows
+	 * the account.
+	 */
+	public function test_predecessor_follows_the_account_across_an_email_change() {
+		$before_change = $this->record( [ 'email' => 'old@example.test' ] );
+		$after_change  = $this->record( [ 'email' => 'new@example.test' ] );
+
+		$predecessor = Push_Log::get_predecessor( Push_Log::get( $after_change, 'sample' ) );
+
+		$this->assertSame( $before_change, $predecessor['id'] );
+	}
+
+	/**
+	 * The comparison names what changed, what is new and what was dropped,
+	 * with real changes first, fields that change on every visit after them,
+	 * and everything else last.
+	 */
+	public function test_compare_orders_real_changes_before_volatile_ones() {
+		$predecessor = [
+			'payload' => [
+				'email'    => 'reader@example.test',
+				'name'     => 'Sample Reader',
+				'metadata' => [
+					'NP_Membership Status' => 'active',
+					'NP_Total Paid'        => '120',
+					'NP_Last Active'       => '2026-09-03',
+					'NP_Dropped'           => 'gone',
+				],
+			],
+		];
+		$row         = [
+			'payload' => [
+				'email'    => 'reader@example.test',
+				'name'     => 'Sample Reader',
+				'metadata' => [
+					'NP_Membership Status' => 'active',
+					'NP_Total Paid'        => '180',
+					'NP_Last Active'       => '2026-09-10',
+					'NP_New Field'         => 'added',
+				],
+			],
+		];
+
+		$fields = Push_Log::compare_payloads( $row, $predecessor, 'NP_' );
+
+		$this->assertSame(
+			[ 'NP_Total Paid', 'NP_New Field', 'NP_Dropped', 'NP_Last Active', 'email', 'name', 'NP_Membership Status' ],
+			wp_list_pluck( $fields, 'key' )
+		);
+		$this->assertSame(
+			[
+				'key'      => 'NP_Total Paid',
+				'label'    => 'Total Paid',
+				'before'   => '120',
+				'after'    => '180',
+				'changed'  => true,
+				'volatile' => false,
+			],
+			$fields[0]
+		);
+		$this->assertNull( $fields[1]['before'] );
+		$this->assertNull( $fields[2]['after'] );
+		$this->assertTrue( $fields[3]['volatile'] );
+		$this->assertTrue( $fields[3]['changed'] );
+		$this->assertSame( 'Email', $fields[4]['label'] );
+		$this->assertFalse( $fields[4]['changed'] );
+	}
+
+	/**
+	 * With nothing to compare against, nothing is claimed to have changed.
+	 */
+	public function test_compare_without_a_predecessor_claims_no_changes() {
+		$fields = Push_Log::compare_payloads( [ 'payload' => $this->sample_payload() ], null, 'NP_' );
+
+		$this->assertCount( 4, $fields );
+		foreach ( $fields as $field ) {
+			$this->assertNull( $field['before'] );
+			$this->assertFalse( $field['changed'] );
+		}
+	}
+
+	/**
+	 * A hard delete sends no data, so there is nothing to list.
+	 */
+	public function test_compare_of_a_hard_delete_is_empty() {
+		$this->assertSame( [], Push_Log::compare_payloads( [ 'payload' => null ], [ 'payload' => $this->sample_payload() ], 'NP_' ) );
+	}
+
+	/**
+	 * The previous address is log context, not data sent: it is listed, never
+	 * reported as a change. A value that is not text is compared as text.
+	 */
+	public function test_compare_lists_previous_email_without_comparing_it() {
+		$row = [
+			'payload' => array_merge(
+				$this->sample_payload( [ 'NP_Lists' => [ 'daily', 'weekly' ] ] ),
+				[ 'previous_email' => 'old@example.test' ]
+			),
+		];
+
+		$fields = array_column( Push_Log::compare_payloads( $row, [ 'payload' => $this->sample_payload() ], 'NP_' ), null, 'key' );
+
+		$this->assertFalse( $fields['previous_email']['changed'] );
+		$this->assertNull( $fields['previous_email']['before'] );
+		$this->assertSame( 'old@example.test', $fields['previous_email']['after'] );
+		$this->assertSame( '["daily","weekly"]', $fields['NP_Lists']['after'] );
+		$this->assertTrue( $fields['NP_Lists']['changed'] );
+	}
+
+	/**
+	 * The comparison mutes the same fields the collapse check ignores, so a
+	 * site that extends the list sees it on the screen too.
+	 */
+	public function test_compare_honors_the_volatile_fields_filter() {
+		$add_field = function ( $fields ) {
+			$fields[] = 'Total Paid';
+			return $fields;
+		};
+		add_filter( 'newspack_integrations_push_log_volatile_fields', $add_field );
+
+		$fields = array_column(
+			Push_Log::compare_payloads(
+				[ 'payload' => $this->sample_payload( [ 'NP_Total Paid' => '180' ] ) ],
+				[ 'payload' => $this->sample_payload() ],
+				'NP_'
+			),
+			null,
+			'key'
+		);
+		remove_filter( 'newspack_integrations_push_log_volatile_fields', $add_field );
+
+		$this->assertTrue( $fields['NP_Total Paid']['volatile'] );
+	}
 }

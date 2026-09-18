@@ -535,6 +535,181 @@ final class Push_Log {
 	}
 
 	/**
+	 * One row, with the payload it sent.
+	 *
+	 * @param int    $id             The row ID.
+	 * @param string $integration_id The integration the caller is reading. A row of
+	 *                               another integration reads as missing.
+	 *
+	 * @return array|null
+	 */
+	public static function get( int $id, string $integration_id ): ?array {
+		global $wpdb;
+		$row = self::quietly(
+			fn() => $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND integration_id = %s', self::get_table_name(), $id, $integration_id ), ARRAY_A ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		);
+
+		return is_array( $row ) ? self::decode_row( $row ) : null;
+	}
+
+	/**
+	 * The push a row is compared with: the reader's previous one that reached
+	 * the provider. A failed push never arrived, so it says nothing about what
+	 * the provider holds.
+	 *
+	 * @param array $row A row, as get() returns it.
+	 *
+	 * @return array|null
+	 */
+	public static function get_predecessor( array $row ): ?array {
+		global $wpdb;
+		$table_name = self::get_table_name();
+		$user_id    = (int) ( $row['user_id'] ?? 0 );
+
+		// Guests share account 0, which would link every guest to every other.
+		if ( $user_id > 0 ) {
+			$sql = $wpdb->prepare( 'SELECT * FROM %i WHERE integration_id = %s AND status = %s AND id < %d AND ( email = %s OR user_id = %d ) ORDER BY id DESC LIMIT 1', $table_name, $row['integration_id'], self::STATUS_SUCCESS, (int) $row['id'], $row['email'], $user_id );
+		} else {
+			$sql = $wpdb->prepare( 'SELECT * FROM %i WHERE integration_id = %s AND status = %s AND id < %d AND email = %s ORDER BY id DESC LIMIT 1', $table_name, $row['integration_id'], self::STATUS_SUCCESS, (int) $row['id'], $row['email'] );
+		}
+		$predecessor = self::quietly( fn() => $wpdb->get_row( $sql, ARRAY_A ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+
+		return is_array( $predecessor ) ? self::decode_row( $predecessor ) : null;
+	}
+
+	/**
+	 * Type a full row and decode its payload.
+	 *
+	 * @param array $row A table row.
+	 *
+	 * @return array
+	 */
+	private static function decode_row( array $row ): array {
+		$row     = self::format_row( $row );
+		$payload = null === $row['payload'] ? null : json_decode( $row['payload'], true );
+
+		$row['payload'] = is_array( $payload ) ? $payload : null;
+		unset( $row['payload_hash'] );
+
+		return $row;
+	}
+
+	/**
+	 * Compare what a row sent with what its predecessor sent, field by field.
+	 *
+	 * Computed here rather than on the screen because both inputs live here:
+	 * the volatile fields are a PHP filter, and the prefix is the integration's.
+	 *
+	 * @param array      $row         A row, as get() returns it.
+	 * @param array|null $predecessor The row to compare with, or null when there is none.
+	 * @param string     $prefix      The integration's metadata prefix.
+	 *
+	 * @return array[] One entry per field in either payload: key, label, before,
+	 *                 after, changed, volatile. Real changes first, then volatile
+	 *                 ones, then the rest. Empty for a hard delete.
+	 */
+	public static function compare_payloads( array $row, ?array $predecessor, string $prefix ): array {
+		if ( ! isset( $row['payload'] ) || ! is_array( $row['payload'] ) ) {
+			return [];
+		}
+
+		$after  = self::flatten_payload( $row['payload'] );
+		$before = null !== $predecessor && isset( $predecessor['payload'] ) && is_array( $predecessor['payload'] ) ? self::flatten_payload( $predecessor['payload'] ) : [];
+
+		$volatile_fields = self::get_volatile_fields();
+		$labels          = [
+			'email'          => __( 'Email', 'newspack-plugin' ),
+			'name'           => __( 'Name', 'newspack-plugin' ),
+			'previous_email' => __( 'Previous email', 'newspack-plugin' ),
+		];
+
+		$real_changes     = [];
+		$volatile_changes = [];
+		$unchanged        = [];
+		foreach ( array_unique( array_merge( array_keys( $after ), array_keys( $before ) ) ) as $key ) {
+			$key = (string) $key;
+			// The previous address is log context, not data sent.
+			$is_compared = null !== $predecessor && 'previous_email' !== $key;
+			$bare_key    = self::strip_prefix( $key, $prefix );
+			$field       = [
+				'key'      => $key,
+				'label'    => $labels[ $key ] ?? $bare_key,
+				'before'   => $is_compared ? ( $before[ $key ] ?? null ) : null,
+				'after'    => $after[ $key ] ?? null,
+				'changed'  => $is_compared && ( $before[ $key ] ?? null ) !== ( $after[ $key ] ?? null ),
+				'volatile' => in_array( $bare_key, $volatile_fields, true ),
+			];
+
+			if ( ! $field['changed'] ) {
+				$unchanged[] = $field;
+			} elseif ( $field['volatile'] ) {
+				$volatile_changes[] = $field;
+			} else {
+				$real_changes[] = $field;
+			}
+		}
+
+		return array_merge( $real_changes, $volatile_changes, $unchanged );
+	}
+
+	/**
+	 * A payload as one list of text values: its top-level fields, then its
+	 * metadata. Text, because that is how the two sides are compared.
+	 *
+	 * @param array $payload The contact as handed to the integration.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function flatten_payload( array $payload ): array {
+		$metadata = isset( $payload['metadata'] ) && is_array( $payload['metadata'] ) ? $payload['metadata'] : [];
+		unset( $payload['metadata'] );
+
+		$fields = [];
+		foreach ( array_merge( $payload, $metadata ) as $key => $value ) {
+			if ( is_array( $value ) || is_object( $value ) ) {
+				$value = wp_json_encode( $value );
+			} elseif ( is_bool( $value ) ) {
+				$value = $value ? 'true' : 'false';
+			}
+			$fields[ (string) $key ] = (string) $value;
+		}
+
+		return $fields;
+	}
+
+	/**
+	 * A field's name without the integration's prefix.
+	 *
+	 * @param string $key    The field name as sent.
+	 * @param string $prefix The integration's metadata prefix.
+	 *
+	 * @return string
+	 */
+	private static function strip_prefix( string $key, string $prefix ): string {
+		return ( '' !== $prefix && 0 === strpos( $key, $prefix ) ) ? substr( $key, strlen( $prefix ) ) : $key;
+	}
+
+	/**
+	 * The metadata fields that change on every visit.
+	 *
+	 * @return string[] Field names as sent, without the integration's prefix.
+	 */
+	private static function get_volatile_fields(): array {
+		/**
+		 * Filters the metadata fields the push log ignores when deciding
+		 * whether a push sent the same data as the previous one, and mutes
+		 * when it shows what changed.
+		 *
+		 * Names are the field names as sent to the integration, without the
+		 * integration's prefix — so "Last Active", not the raw "Last_Active"
+		 * metadata key the contact arrives with.
+		 *
+		 * @param string[] $fields Field names as sent, without the integration's prefix.
+		 */
+		return (array) apply_filters( 'newspack_integrations_push_log_volatile_fields', [ 'Last Active' ] );
+	}
+
+	/**
 	 * Fingerprint a payload, to tell whether two pushes sent the same data.
 	 *
 	 * Key order is not data, and neither are fields that change on every
@@ -547,22 +722,11 @@ final class Push_Log {
 	 * @return string
 	 */
 	private static function hash_payload( array $payload, string $prefix ): string {
-		/**
-		 * Filters the metadata fields the push log ignores when deciding
-		 * whether a push sent the same data as the previous one.
-		 *
-		 * Names are the field names as sent to the integration, without the
-		 * integration's prefix — so "Last Active", not the raw "Last_Active"
-		 * metadata key the contact arrives with.
-		 *
-		 * @param string[] $fields Field names as sent, without the integration's prefix.
-		 */
-		$volatile_fields = (array) apply_filters( 'newspack_integrations_push_log_volatile_fields', [ 'Last Active' ] );
+		$volatile_fields = self::get_volatile_fields();
 
 		$metadata = isset( $payload['metadata'] ) && is_array( $payload['metadata'] ) ? $payload['metadata'] : [];
 		foreach ( array_keys( $metadata ) as $key ) {
-			$bare_key = ( '' !== $prefix && 0 === strpos( $key, $prefix ) ) ? substr( $key, strlen( $prefix ) ) : $key;
-			if ( in_array( $bare_key, $volatile_fields, true ) ) {
+			if ( in_array( self::strip_prefix( (string) $key, $prefix ), $volatile_fields, true ) ) {
 				unset( $metadata[ $key ] );
 			}
 		}
