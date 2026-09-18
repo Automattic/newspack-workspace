@@ -29,6 +29,29 @@ export const STATUS_MAP = {
 	canceled: { label: __( 'Canceled', 'newspack-plugin' ), status: 'cancelled', intent: 'none' },
 };
 
+// The push log's statuses describe the sync itself, so `success` keeps the
+// badge the scheduled actions list gave up.
+/** @type {Record< string, { label: string, status: import('../../../../../packages/components/src/status-indicator').StatusName, intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
+export const PUSH_LOG_STATUS_MAP = {
+	success: { label: __( 'Synced', 'newspack-plugin' ), status: 'done', intent: 'stable' },
+	retrying: { label: __( 'Retrying', 'newspack-plugin' ), status: 'progress', intent: 'informational' },
+	failed: { label: __( 'Failed', 'newspack-plugin' ), status: 'error', intent: 'high' },
+};
+
+export const PUSH_LOG_OPERATION_LABELS = {
+	upsert: __( 'Update', 'newspack-plugin' ),
+	flag: __( 'Deletion flag', 'newspack-plugin' ),
+	delete: __( 'Deletion', 'newspack-plugin' ),
+};
+
+// What the sync made of an error, in words that say who can act on it.
+export const PUSH_LOG_ERROR_CLASS_LABELS = {
+	transient: __( 'Temporary error', 'newspack-plugin' ),
+	permanent_contact: __( 'Rejected by the provider', 'newspack-plugin' ),
+	permanent_config: __( 'Account problem', 'newspack-plugin' ),
+	benign: __( 'Already up to date', 'newspack-plugin' ),
+};
+
 export function formatTimestamp( gmt ) {
 	if ( ! gmt ) {
 		return '';
