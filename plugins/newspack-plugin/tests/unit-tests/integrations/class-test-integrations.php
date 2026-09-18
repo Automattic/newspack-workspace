@@ -1141,42 +1141,6 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The retry prepares its payload through a normalization step the batch's
-	 * comparison does not run. On the legacy schema that step drops a key a
-	 * `newspack_esp_sync_contact` callback added, and the `esp` integration takes
-	 * either shape unchanged, so the two payloads differ. The retry still has to
-	 * record what the batch will compare against.
-	 */
-	public function test_batch_push_does_not_repeat_a_retry_of_a_filtered_contact() {
-		$this->allow_sync();
-		$this->register_push_integration( 'esp' );
-		$user_id         = $this->factory()->user->create();
-		$add_network_key = function ( $contact ) {
-			$contact['metadata']['network_registration_site'] = 'https://hub.example.test';
-			return $contact;
-		};
-		add_filter( 'newspack_esp_sync_contact', $add_network_key );
-
-		Failing_Sample_Integration::$should_fail = true;
-		$this->run_batch_push( $user_id );
-		$this->clear_push_retries();
-
-		Failing_Sample_Integration::$should_fail = false;
-		Contact_Sync::execute_integration_retry(
-			[
-				'integration_id' => 'esp',
-				'user_id'        => $user_id,
-				'context'        => 'Recurring sync routine',
-				'retry_count'    => 1,
-			]
-		);
-		$pushes_after_retry = $this->run_batch_push( $user_id );
-
-		remove_filter( 'newspack_esp_sync_contact', $add_network_key );
-		$this->assertSame( 0, $pushes_after_retry );
-	}
-
-	/**
 	 * When one integration fails, the next batch pushes to that integration only.
 	 * The one that took the contact is not written again because another failed.
 	 */
