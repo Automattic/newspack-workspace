@@ -323,7 +323,6 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	 */
 	public function test_a_broken_push_log_changes_neither_the_sync_result_nor_its_retry() {
 		$this->require_action_scheduler();
-		global $wpdb;
 		$this->factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
 		$spy              = $this->register_spy( 'unlogged-spy' );
 		$spy->push_result = new \WP_Error( 'provider_down', 'Provider down' );
@@ -332,7 +331,6 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 			return $is_push_log_insert ? 'INSERT INTO table_that_does_not_exist VALUES (1)' : $query;
 		};
 		add_filter( 'query', $break_inserts );
-		$errors_were_suppressed = $wpdb->suppress_errors( true );
 
 		$sync_result = Contact_Sync::sync(
 			[
@@ -342,7 +340,6 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 			'Test context'
 		);
 
-		$wpdb->suppress_errors( $errors_were_suppressed );
 		remove_filter( 'query', $break_inserts );
 		$retry = $this->get_pending_retry( Contact_Sync::RETRY_HOOK, 'unlogged-spy' );
 		$this->assertInstanceOf( \WP_Error::class, $sync_result );
@@ -504,6 +501,25 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
 		$this->assertSame( 'flag_cleanup_failed', $row['error_code'] );
 		$this->assertStringContainsString( 'Lists API down', $row['error_message'] );
+	}
+
+	/**
+	 * A provider that answers the flag push with "already deleted" ends the
+	 * chain as a success with no retry behind it. A failed cleanup is then the
+	 * only thing left that can say the reader is still on a list.
+	 */
+	public function test_an_already_deleted_contact_whose_list_cleanup_fails_is_recorded_as_failed() {
+		$spy                 = $this->register_deletion_spy( 'gone-cleanup-spy', 'flag' );
+		$spy->push_result    = new \WP_Error( 'gone', 'reader@example.test was permanently deleted and cannot be re-imported.' );
+		$spy->cleanup_result = new \WP_Error( 'lists_down', 'Lists API down' );
+
+		$this->delete_sample_reader();
+
+		$row = $this->get_rows_by_integration()['gone-cleanup-spy'];
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'flag_cleanup_failed', $row['error_code'] );
+		$this->assertStringContainsString( 'Lists API down', $row['error_message'] );
+		$this->assertStringContainsString( 'permanently deleted', $row['error_message'], 'The row keeps what the provider answered.' );
 	}
 
 	/**

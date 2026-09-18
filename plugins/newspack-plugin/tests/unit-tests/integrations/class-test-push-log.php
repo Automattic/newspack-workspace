@@ -226,7 +226,6 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	 * throwing, and reports once per request rather than once per push.
 	 */
 	public function test_a_failed_write_never_throws_and_is_reported_once_per_request() {
-		global $wpdb;
 		$reported_codes = [];
 		$capture_report = function ( $code ) use ( &$reported_codes ) {
 			if ( 'newspack_integrations_push_log_write_failed' === $code ) {
@@ -239,18 +238,153 @@ class Test_Push_Log extends \WP_UnitTestCase {
 		};
 		add_action( 'newspack_log', $capture_report );
 		add_filter( 'query', $break_inserts );
-		$errors_were_suppressed = $wpdb->suppress_errors( true );
 
 		$first_row_id  = $this->record();
 		$second_row_id = $this->record( [ 'email' => 'other@example.test' ] );
 
-		$wpdb->suppress_errors( $errors_were_suppressed );
 		remove_filter( 'query', $break_inserts );
 		remove_action( 'newspack_log', $capture_report );
 
 		$this->assertSame( 0, $first_row_id );
 		$this->assertSame( 0, $second_row_id );
 		$this->assertCount( 1, $reported_codes, 'A broken table reports once, not once per push.' );
+	}
+
+	/**
+	 * Make the table look gone, the way a restore or a manual drop leaves it:
+	 * statements against it fail, and the existence probe finds nothing.
+	 *
+	 * @return callable The query filter, for the test to remove.
+	 */
+	private function lose_the_table(): callable {
+		$lose_the_table = function ( $query ) {
+			$is_existence_probe = 0 === stripos( ltrim( $query ), 'SHOW TABLES' ) && false !== strpos( str_replace( '\\', '', $query ), Push_Log::TABLE_NAME );
+			return $is_existence_probe
+				? "SHOW TABLES LIKE 'table_that_does_not_exist'"
+				: str_replace( Push_Log::get_table_name(), 'table_that_does_not_exist', $query );
+		};
+		add_filter( 'query', $lose_the_table );
+		return $lose_the_table;
+	}
+
+	/**
+	 * Count how many times the table's creation ran.
+	 *
+	 * @param callable $requests What to run while counting.
+	 * @return int
+	 */
+	private function count_creation_runs( callable $requests ): int {
+		$creation_runs  = 0;
+		$count_each_run = function ( $queries ) use ( &$creation_runs ) {
+			++$creation_runs;
+			return $queries;
+		};
+		add_filter( 'dbdelta_queries', $count_each_run );
+		$requests();
+		remove_filter( 'dbdelta_queries', $count_each_run );
+		return $creation_runs;
+	}
+
+	/**
+	 * A host that refuses the table, a database user without CREATE for one,
+	 * refuses it on every request. Creation is tried again later, not on each
+	 * of them.
+	 */
+	public function test_a_table_that_cannot_be_created_is_not_retried_on_every_request() {
+		delete_option( Push_Log::TABLE_VERSION_OPTION );
+		$table_never_appears = function ( $query ) {
+			$is_existence_probe = 0 === stripos( ltrim( $query ), 'SHOW TABLES' ) && false !== strpos( str_replace( '\\', '', $query ), Push_Log::TABLE_NAME );
+			return $is_existence_probe ? "SHOW TABLES LIKE 'table_that_does_not_exist'" : $query;
+		};
+		add_filter( 'query', $table_never_appears );
+
+		$creation_runs = $this->count_creation_runs(
+			function () {
+				Push_Log::maybe_create_table();
+				Push_Log::maybe_create_table();
+			}
+		);
+
+		remove_filter( 'query', $table_never_appears );
+		$this->assertSame( 1, $creation_runs );
+	}
+
+	/**
+	 * The recorded version stops creation from running again, so a table that
+	 * disappears afterwards would stay gone and every push would go unlogged.
+	 * The first failed write notices, and the next request creates the table.
+	 */
+	public function test_a_table_that_disappeared_is_created_again_on_the_next_request() {
+		$lose_the_table = $this->lose_the_table();
+		$this->record();
+		remove_filter( 'query', $lose_the_table );
+
+		$creation_runs = $this->count_creation_runs( [ Push_Log::class, 'maybe_create_table' ] );
+
+		$this->assertSame( 1, $creation_runs );
+	}
+
+	/**
+	 * A write can fail with the table in place. Rebuilding would not help, and
+	 * a failure that persists would rebuild on every request.
+	 */
+	public function test_a_failed_write_on_a_table_that_is_still_there_does_not_rebuild_it() {
+		$break_inserts = function ( $query ) {
+			$is_push_log_insert = 0 === stripos( ltrim( $query ), 'INSERT' ) && false !== strpos( $query, Push_Log::TABLE_NAME );
+			return $is_push_log_insert ? 'INSERT INTO table_that_does_not_exist VALUES (1)' : $query;
+		};
+		add_filter( 'query', $break_inserts );
+		$this->record();
+		remove_filter( 'query', $break_inserts );
+
+		$creation_runs = $this->count_creation_runs( [ Push_Log::class, 'maybe_create_table' ] );
+
+		$this->assertSame( 0, $creation_runs );
+	}
+
+	/**
+	 * A failed write still has the reader's email and payload in its SQL, and
+	 * the database layer copies a failed statement into the PHP error log, and
+	 * into the response when errors are displayed. The once-per-request report
+	 * is the signal; the statement itself stays out of both.
+	 */
+	public function test_a_failed_write_keeps_the_readers_data_out_of_the_error_log_and_the_response() {
+		global $wpdb;
+		$error_log_file         = get_temp_dir() . 'push-log-errors-' . wp_generate_password( 8, false ) . '.log';
+		$previous_error_log     = ini_set( 'error_log', $error_log_file ); // phpcs:ignore WordPress.PHP.IniSet.Risky
+		$errors_were_suppressed = $wpdb->suppress_errors( false );
+		$lose_the_table         = $this->lose_the_table();
+		ob_start();
+
+		$row_id = $this->record();
+
+		$displayed = ob_get_clean();
+		remove_filter( 'query', $lose_the_table );
+		$wpdb->suppress_errors( $errors_were_suppressed );
+		ini_set( 'error_log', $previous_error_log ); // phpcs:ignore WordPress.PHP.IniSet.Risky
+		// The file only exists when something was logged.
+		$logged = '';
+		if ( file_exists( $error_log_file ) ) {
+			$logged = file_get_contents( $error_log_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Local temp file.
+			unlink( $error_log_file ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		}
+
+		$this->assertSame( 0, $row_id, 'The write did fail.' );
+		$this->assertStringNotContainsString( 'reader@example.test', $logged . $displayed );
+	}
+
+	/**
+	 * Quiet writes must not silence the rest of the request: whatever runs
+	 * after a push keeps the database error reporting it had.
+	 */
+	public function test_a_write_leaves_database_error_reporting_as_it_found_it() {
+		global $wpdb;
+		$errors_were_suppressed = $wpdb->suppress_errors( false );
+
+		$this->record();
+
+		$suppressed_after_the_write = $wpdb->suppress_errors( $errors_were_suppressed );
+		$this->assertFalse( $suppressed_after_the_write );
 	}
 
 	/**
@@ -749,23 +883,65 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An erasure request can arrive after the account was deleted, when the
+	 * address no longer resolves to a user. The reader's own rows still name
+	 * the account, which reaches the rows under an earlier address. Guest and
+	 * deletion rows name no account, and must not drag every other guest's
+	 * rows along.
+	 */
+	public function test_erasing_a_reader_whose_account_is_gone_reaches_their_earlier_address_and_no_one_elses_rows() {
+		$deleted_account_id = 987654;
+		$under_old_email    = $this->record(
+			[
+				'email'   => 'old-address@example.test',
+				'user_id' => $deleted_account_id,
+			]
+		);
+		$under_new_email    = $this->record(
+			[
+				'email'   => 'new-address@example.test',
+				'user_id' => $deleted_account_id,
+			]
+		);
+		$account_deletion   = $this->record(
+			[
+				'email'     => 'new-address@example.test',
+				'user_id'   => 0,
+				'operation' => Push_Log::OPERATION_DELETE,
+				'payload'   => null,
+			]
+		);
+		$another_guests     = $this->record(
+			[
+				'email'   => 'guest@example.test',
+				'user_id' => 0,
+			]
+		);
+
+		$response = Push_Log::erase_personal_data( 'new-address@example.test' );
+
+		$this->assertNull( $this->get_row( $under_old_email ), 'The row under the earlier address is reached through the account.' );
+		$this->assertNull( $this->get_row( $under_new_email ) );
+		$this->assertNull( $this->get_row( $account_deletion ) );
+		$this->assertNotNull( $this->get_row( $another_guests ), 'Rows without an account belong to whoever owns their address.' );
+		$this->assertTrue( $response['items_removed'] );
+	}
+
+	/**
 	 * An erasure whose delete failed must not report a completed erasure: the
 	 * admin, and the reader who asked, would be told the data is gone while
 	 * every row is still there.
 	 */
 	public function test_an_erasure_that_could_not_delete_reports_the_rows_as_retained() {
-		global $wpdb;
 		$row_id        = $this->record();
 		$break_deletes = function ( $query ) {
 			$is_push_log_delete = 0 === stripos( ltrim( $query ), 'DELETE' ) && false !== strpos( $query, Push_Log::TABLE_NAME );
 			return $is_push_log_delete ? 'DELETE FROM table_that_does_not_exist' : $query;
 		};
 		add_filter( 'query', $break_deletes );
-		$errors_were_suppressed = $wpdb->suppress_errors( true );
 
 		$response = Push_Log::erase_personal_data( 'reader@example.test', 1 );
 
-		$wpdb->suppress_errors( $errors_were_suppressed );
 		remove_filter( 'query', $break_deletes );
 		$this->assertNotNull( $this->get_row( $row_id ), 'The row the erasure claimed to remove is still there.' );
 		$this->assertFalse( $response['items_removed'] );

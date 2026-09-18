@@ -28,6 +28,7 @@ final class Push_Log {
 	const TABLE_NAME           = 'newspack_integrations_push_log';
 	const TABLE_VERSION        = '1.0';
 	const TABLE_VERSION_OPTION = '_newspack_integrations_push_log_version';
+	const CREATION_RETRY_AFTER = 'newspack_integrations_push_log_creation_retry_after';
 	const CLEANUP_HOOK         = 'newspack_integrations_push_log_cleanup';
 
 	const STATUS_SUCCESS  = 'success';
@@ -71,10 +72,15 @@ final class Push_Log {
 	 * Create or update the table when the stored schema version differs.
 	 *
 	 * The version is recorded only once the table exists, so a failed creation
-	 * is retried on the next request instead of leaving every write to fail.
+	 * is retried instead of leaving every write to fail. It is retried hourly,
+	 * not on every request: a host that refuses the table, a database user
+	 * without CREATE for one, refuses it each time.
 	 */
 	public static function maybe_create_table() {
 		if ( self::TABLE_VERSION === get_option( self::TABLE_VERSION_OPTION ) ) {
+			return;
+		}
+		if ( get_transient( self::CREATION_RETRY_AFTER ) ) {
 			return;
 		}
 
@@ -113,12 +119,25 @@ final class Push_Log {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
 
-		$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		// Some hosts store table names lowercased, so an exact match would never
-		// record the version and dbDelta would run on every request.
-		if ( strtolower( (string) $found ) === strtolower( $table_name ) ) {
+		if ( self::table_exists() ) {
 			update_option( self::TABLE_VERSION_OPTION, self::TABLE_VERSION );
+		} else {
+			set_transient( self::CREATION_RETRY_AFTER, 1, HOUR_IN_SECONDS );
 		}
+	}
+
+	/**
+	 * Whether the table is there.
+	 *
+	 * @return bool
+	 */
+	private static function table_exists(): bool {
+		global $wpdb;
+		$table_name = self::get_table_name();
+		$found      = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// Some hosts store table names lowercased, so an exact match would never
+		// find the table and its creation would never be recorded.
+		return strtolower( (string) $found ) === strtolower( $table_name );
 	}
 
 	/**
@@ -146,6 +165,40 @@ final class Push_Log {
 	 * @return int The row ID, or 0 when nothing was written.
 	 */
 	public static function record_attempt( array $args ): int {
+		return self::quietly( fn() => self::write_attempt( $args ) );
+	}
+
+	/**
+	 * Run statements that carry reader data without the database layer's own
+	 * error output.
+	 *
+	 * A failed statement is copied whole into the PHP error log, and into the
+	 * response when errors are displayed, email and payload included.
+	 * report_write_failure() is the signal instead. The previous setting is
+	 * restored, so the rest of the request keeps its own error reporting.
+	 *
+	 * @param callable $statements The statements to run.
+	 *
+	 * @return mixed What the callable returns.
+	 */
+	private static function quietly( callable $statements ) {
+		global $wpdb;
+		$errors_were_suppressed = $wpdb->suppress_errors( true );
+		try {
+			return $statements();
+		} finally {
+			$wpdb->suppress_errors( $errors_were_suppressed );
+		}
+	}
+
+	/**
+	 * Write the row for record_attempt().
+	 *
+	 * @param array $args The attempt, as record_attempt() documents it.
+	 *
+	 * @return int The row ID, or 0 when nothing was written.
+	 */
+	private static function write_attempt( array $args ): int {
 		global $wpdb;
 
 		$args = wp_parse_args(
@@ -325,15 +378,18 @@ final class Push_Log {
 			return;
 		}
 		global $wpdb;
-		$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->prepare(
-				"UPDATE %i SET status = %s, retry_action_id = NULL, error_code = %s, error_message = CONCAT( %s, IF( error_message IS NULL OR error_message = '', '', CONCAT( ' Last error: ', error_message ) ) ), updated_at = %s WHERE id = %d",
-				self::get_table_name(),
-				self::STATUS_FAILED,
-				mb_substr( $error_code, 0, 100 ),
-				$reason,
-				current_time( 'mysql', true ),
-				$log_id
+		// The reason can quote a provider message, which can name the reader.
+		$updated = self::quietly(
+			fn() => $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->prepare(
+					"UPDATE %i SET status = %s, retry_action_id = NULL, error_code = %s, error_message = CONCAT( %s, IF( error_message IS NULL OR error_message = '', '', CONCAT( ' Last error: ', error_message ) ) ), updated_at = %s WHERE id = %d",
+					self::get_table_name(),
+					self::STATUS_FAILED,
+					mb_substr( $error_code, 0, 100 ),
+					$reason,
+					current_time( 'mysql', true ),
+					$log_id
+				)
 			)
 		);
 		if ( false === $updated ) {
@@ -452,10 +508,21 @@ final class Push_Log {
 		self::$write_failure_reported = true;
 
 		global $wpdb;
+		$db_error = $wpdb->last_error;
+
+		// A table that disappears after its version was recorded (a restore, a
+		// manual drop) would stay gone, because the recorded version stops
+		// creation from running. Forgetting it lets the next request create the
+		// table. Only when it is really gone: rebuilding does not help any other
+		// failure, and one that persists would rebuild on every request.
+		if ( ! self::table_exists() ) {
+			delete_option( self::TABLE_VERSION_OPTION );
+		}
+
 		Logger::newspack_log(
 			'newspack_integrations_push_log_write_failed',
 			'Could not write to the integrations push log.',
-			[ 'db_error' => $wpdb->last_error ],
+			[ 'db_error' => $db_error ],
 			'error'
 		);
 	}
@@ -650,16 +717,9 @@ final class Push_Log {
 	 * @return array The eraser response.
 	 */
 	public static function erase_personal_data( $email_address, $page = 1 ) {
-		global $wpdb;
-		$table_name   = self::get_table_name();
 		$reader       = get_user_by( 'email', $email_address );
 		$stored_email = self::normalize_email( (string) $email_address );
-
-		if ( $reader ) {
-			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s OR user_id = %d', $table_name, $stored_email, $reader->ID ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		} else {
-			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s', $table_name, $stored_email ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		}
+		$removed      = self::quietly( fn() => self::delete_reader_rows( $stored_email, $reader ? (int) $reader->ID : 0 ) );
 
 		// A delete that failed leaves the rows in place. Reporting the erasure
 		// as done would tell the admin the data is gone while it is still here.
@@ -679,5 +739,38 @@ final class Push_Log {
 			'messages'       => [],
 			'done'           => true,
 		];
+	}
+
+	/**
+	 * Delete the rows under an address, and under every account those rows name.
+	 *
+	 * A request can arrive after the account was deleted, when the address no
+	 * longer resolves to a user, so the reader's own rows are asked for the
+	 * account too. Guest and deletion rows name no account (0): matching on
+	 * that would erase every other guest along with this one.
+	 *
+	 * @param string $stored_email The reader's email, as the table stores it.
+	 * @param int    $account_id   The WP user the address resolves to, 0 when none does.
+	 *
+	 * @return int|false Rows deleted, false when the database refused.
+	 */
+	private static function delete_reader_rows( string $stored_email, int $account_id ) {
+		global $wpdb;
+		$table_name = self::get_table_name();
+
+		$account_ids = $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT user_id FROM %i WHERE email = %s AND user_id > 0', $table_name, $stored_email ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( $account_id > 0 ) {
+			$account_ids[] = $account_id;
+		}
+		$account_ids = array_unique( array_map( 'intval', $account_ids ) );
+
+		if ( ! $account_ids ) {
+			return $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s', $table_name, $stored_email ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		}
+
+		$account_placeholders = implode( ', ', array_fill( 0, count( $account_ids ), '%d' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $account_placeholders carries only %d, one per account; the IDs are bound below.
+		$delete_sql = "DELETE FROM %i WHERE email = %s OR user_id IN ( {$account_placeholders} )";
+		return $wpdb->query( $wpdb->prepare( $delete_sql, array_merge( [ $table_name, $stored_email ], $account_ids ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 	}
 }
