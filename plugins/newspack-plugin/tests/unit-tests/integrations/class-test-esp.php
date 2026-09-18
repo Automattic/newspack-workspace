@@ -919,4 +919,19 @@ class Test_ESP extends \WP_UnitTestCase {
 
 		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
 	}
+
+	/**
+	 * The active provider is chosen in Newspack Newsletters, outside this
+	 * integration's settings fields, and `esp` keeps one ID across providers.
+	 * Switching it has to change what a push is fingerprinted with, or the
+	 * recurring cron treats readers as already delivered to the new provider.
+	 */
+	public function test_push_settings_change_with_the_provider() {
+		$this->set_provider( 'mailchimp' );
+		$under_mailchimp = ( new ESP() )->get_push_settings();
+
+		$this->set_provider( 'active_campaign' );
+
+		$this->assertNotSame( $under_mailchimp, ( new ESP() )->get_push_settings() );
+	}
 }

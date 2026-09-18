@@ -946,6 +946,63 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A setting the push depends on, such as the list it writes to, is part of
+	 * what an integration took: changing it pushes a reader whose own data is
+	 * unchanged. A server-managed field is not, since tokens rotate without the
+	 * destination moving.
+	 *
+	 * @dataProvider push_setting_provider
+	 *
+	 * @param string $key             Settings field to change.
+	 * @param int    $expected_pushes Pushes the next batch should make.
+	 */
+	public function test_batch_push_after_a_setting_changes( $key, $expected_pushes ) {
+		$this->allow_sync();
+		$integration = new class( 'push-test', 'Push Test' ) extends Failing_Sample_Integration {
+			/**
+			 * Declare a destination setting and a server-managed one.
+			 *
+			 * @return array
+			 */
+			public function register_settings_fields() {
+				return [
+					[
+						'key'     => 'list_id',
+						'type'    => 'text',
+						'default' => '',
+					],
+					[
+						'key'     => 'access_token',
+						'type'    => 'hidden',
+						'default' => '',
+					],
+				];
+			}
+		};
+		Integrations::register( $integration );
+		Integrations::enable( 'push-test' );
+		$user_id = $this->factory()->user->create();
+		$this->run_batch_push( $user_id );
+
+		$integration->update_settings_field_value( $key, 'changed' );
+
+		$this->assertSame( $expected_pushes, $this->run_batch_push( $user_id ) );
+		$this->assertSame( 0, $this->run_batch_push( $user_id ), 'Skipped again once the integration took it under the new setting.' );
+	}
+
+	/**
+	 * Settings fields by whether changing them should force a push.
+	 *
+	 * @return array
+	 */
+	public function push_setting_provider() {
+		return [
+			'destination setting forces a push' => [ 'list_id', 1 ],
+			'server-managed field does not'     => [ 'access_token', 0 ],
+		];
+	}
+
+	/**
 	 * A newly activated integration receives the reader, and the integration
 	 * that already holds them is not written again.
 	 */

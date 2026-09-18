@@ -323,7 +323,9 @@ class Contact_Sync extends Sync {
 	 * Payloads are built the way push_to_integrations() builds them; if the two
 	 * drift, the cron re-pushes unchanged contacts or, worse, skips a real change.
 	 * The outgoing field selection is part of the fingerprint, so enabling a field
-	 * forces a push even for a reader with no value for it yet.
+	 * forces a push even for a reader with no value for it yet. So are the
+	 * settings the push depends on (Integration::get_push_settings()): a reader
+	 * delivered to one list is not skipped as delivered after the list changes.
 	 *
 	 * @param int    $user_id The reader's user ID.
 	 * @param array  $contact The contact data, as returned by get_contact_data().
@@ -348,8 +350,9 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
-	 * Fingerprint of a prepared payload together with the integration's outgoing
-	 * field selection.
+	 * Fingerprint of a prepared payload together with what the integration would
+	 * do with it: its outgoing field selection and the settings the push depends
+	 * on, including where it lands.
 	 *
 	 * @param \Newspack\Reader_Activation\Integration $integration         The integration.
 	 * @param array                                   $integration_contact The contact as prepared for it.
@@ -360,8 +363,9 @@ class Contact_Sync extends Sync {
 		return md5(
 			\wp_json_encode(
 				[
-					'fields'  => $integration->get_enabled_outgoing_fields(),
-					'contact' => $integration_contact,
+					'fields'   => $integration->get_enabled_outgoing_fields(),
+					'settings' => $integration->get_push_settings(),
+					'contact'  => $integration_contact,
 				]
 			)
 		);
