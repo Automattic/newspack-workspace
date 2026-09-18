@@ -1031,4 +1031,236 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$this->assertSame( [ '0.0.0.0/0' ], $mixed['valid'], 'Leading-zero mask bits are canonicalized.' );
 		$this->assertSame( [ 'not-an-ip', '2001:db8::/32' ], $mixed['invalid'], 'Invalid entries are surfaced in their trimmed original form.' );
 	}
+
+	/**
+	 * Site Kit modules register their GA4/GTM tag printing on template_redirect at
+	 * priority 10. The landing page renders and exits, so it must run after them —
+	 * at priority 10 the page exits before the publisher's tag is registered and
+	 * sends no pageview to the publisher's property. The query-param redirect
+	 * emits no HTML and stays at the default priority, so other redirect handlers
+	 * on template_redirect can't pre-empt the check.
+	 */
+	public function test_landing_page_renders_after_third_party_tag_registration() {
+		$handle_landing_page_priority = has_action( 'template_redirect', [ IP_Access_Rule::class, 'handle_landing_page' ] );
+		$this->assertNotFalse( $handle_landing_page_priority );
+		$this->assertGreaterThan( 10, $handle_landing_page_priority );
+
+		$handle_redirect_priority = has_action( 'template_redirect', [ IP_Access_Rule::class, 'handle_redirect' ] );
+		$this->assertSame( 10, $handle_redirect_priority );
+	}
+
+	/**
+	 * The landing-page request check is true only for the dedicated endpoint
+	 * (the rendered loading page), not for the query-param flow on a regular URL
+	 * and not for unrelated requests. Perfmatters JS delay is vetoed based on it.
+	 */
+	public function test_landing_page_request_detection() {
+		$original_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$original_get = $_GET; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		// Dedicated endpoint with an institution slug.
+		set_query_var( IP_Access_Rule::ENDPOINT, '1' );
+		set_query_var( IP_Access_Rule::ENDPOINT . '-slug', 'test-university' );
+		$_SERVER['REQUEST_URI'] = '/institutional-access/test-university/';
+		$this->assertTrue( IP_Access_Rule::is_landing_page_request() );
+
+		// Dedicated generic endpoint.
+		set_query_var( IP_Access_Rule::ENDPOINT . '-slug', '' );
+		$_SERVER['REQUEST_URI'] = '/institutional-access/';
+		$this->assertTrue( IP_Access_Rule::is_landing_page_request() );
+
+		// Subdirectory install: the path carries the home path prefix, but the
+		// classification must not depend on the path at all.
+		$_SERVER['REQUEST_URI'] = '/blog/institutional-access/';
+		$this->assertTrue( IP_Access_Rule::is_landing_page_request() );
+
+		// Query-param flow on a regular URL: redirects, never renders the page.
+		// WP mirrors the registered query var from $_GET, so both are set.
+		$_GET                   = [ IP_Access_Rule::ENDPOINT => '1' ];
+		$_SERVER['REQUEST_URI'] = '/some-article/?institutional-access=1';
+		$this->assertFalse( IP_Access_Rule::is_landing_page_request() );
+		set_query_var( IP_Access_Rule::ENDPOINT, '' );
+
+		// Unrelated request.
+		$_GET                   = [];
+		$_SERVER['REQUEST_URI'] = '/some-article/';
+		$this->assertFalse( IP_Access_Rule::is_landing_page_request() );
+
+		if ( null === $original_uri ) {
+			unset( $_SERVER['REQUEST_URI'] );
+		} else {
+			$_SERVER['REQUEST_URI'] = $original_uri;
+		}
+		$_GET = $original_get;
+	}
+
+	/**
+	 * The loading page fires a np_institutional_access GA4 event for the outcomes
+	 * that never leave the page (not_verified, timeout, error), labeled with the
+	 * anonymized institution identifier used by the GA4 `group` dimension.
+	 */
+	public function test_loading_page_outputs_outcome_events() {
+		$inst_id = \Newspack\Institution::create(
+			'Events Test University',
+			'',
+			[ 'ip_range' => '192.168.1.0/24' ]
+		);
+		$this->assertIsInt( $inst_id );
+
+		ob_start();
+		IP_Access_Rule::render_loading_page( $inst_id );
+		$html = ob_get_clean();
+
+		$this->assertStringContainsString( 'np_institutional_access', $html );
+		$this->assertMatchesRegularExpression( '/sendEvent\(\s*["\']not_verified["\']\s*\)/', $html );
+		$this->assertMatchesRegularExpression( '/sendEvent\(\s*["\']timeout["\']\s*\)/', $html );
+		$this->assertMatchesRegularExpression( '/sendEvent\(\s*["\']error["\']\s*\)/', $html );
+		$this->assertDoesNotMatchRegularExpression(
+			'/sendEvent\(\s*["\']connected["\']/',
+			$html,
+			'A success redirects and the destination page fires `connected` — firing it here too would double-count every verification.'
+		);
+		$this->assertStringContainsString( 'Institution ' . $inst_id, $html );
+
+		wp_delete_post( $inst_id, true );
+	}
+
+	/**
+	 * The REST check response carries the matched institution's ID, so the landing
+	 * page can label the destination-page GA4 event without disclosing anything a
+	 * non-matching visitor could not already see.
+	 */
+	public function test_rest_response_includes_institution_id() {
+		$original_addr = isset( $_SERVER['REMOTE_ADDR'] ) ? $_SERVER['REMOTE_ADDR'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+
+		$inst_id = \Newspack\Institution::create(
+			'REST ID Test Library',
+			'',
+			[ 'ip_range' => '192.168.1.0/24' ]
+		);
+		$this->assertIsInt( $inst_id );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$_SERVER['REMOTE_ADDR'] = '192.168.1.50'; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+
+		$request = new WP_REST_Request( 'GET', '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE );
+		$request->set_param( 'institution_id', $inst_id );
+		$response = @rest_do_request( $request ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- nocache_headers cannot send headers in tests.
+		$data     = $response->get_data();
+
+		$this->assertTrue( $data['valid'] );
+		$this->assertSame( $inst_id, $data['institution_id'] );
+
+		// A non-matching visitor gets no institution_id, mirroring the name rule.
+		$_SERVER['REMOTE_ADDR'] = '10.0.0.1'; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		$response               = @rest_do_request( $request ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- nocache_headers cannot send headers in tests.
+		$this->assertArrayNotHasKey( 'institution_id', $response->get_data() );
+
+		if ( null === $original_addr ) {
+			unset( $_SERVER['REMOTE_ADDR'] ); // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		} else {
+			$_SERVER['REMOTE_ADDR'] = $original_addr; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		}
+		wp_delete_post( $inst_id, true );
+	}
+
+	/**
+	 * The query-param flow's redirect URL carries the matched institution's ID, so
+	 * the destination page can label its GA4 event.
+	 */
+	public function test_result_redirect_url_includes_institution_id() {
+		$original_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$original_get = $_GET; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		$inst_id = \Newspack\Institution::create(
+			'Redirect Test University',
+			'',
+			[ 'ip_range' => '192.168.1.0/24' ]
+		);
+		$this->assertIsInt( $inst_id );
+
+		$_SERVER['REQUEST_URI'] = '/some-article/?institutional-access=1';
+		$_GET                   = [ IP_Access_Rule::ENDPOINT => '1' ];
+
+		$get_result_redirect_url_method = new ReflectionMethod( IP_Access_Rule::class, 'get_result_redirect_url' );
+		$get_result_redirect_url_method->setAccessible( true );
+
+		$success_url = $get_result_redirect_url_method->invoke( null, $inst_id );
+		$this->assertStringContainsString( IP_Access_Rule::RESULT_PARAM . '=success', $success_url );
+		$this->assertStringContainsString( 'institution-id=' . $inst_id, $success_url );
+
+		// A failed re-check on a URL still carrying a previous success's
+		// institution params must not pass them through — the destination page
+		// would label its not_verified event with an institution the visitor
+		// did not match.
+		$_GET = [
+			IP_Access_Rule::ENDPOINT => '1',
+			'institution'            => 'Stale University',
+			'institution-id'         => '123',
+		];
+		$failure_url = $get_result_redirect_url_method->invoke( null, false );
+		$this->assertStringContainsString( IP_Access_Rule::RESULT_PARAM . '=failure', $failure_url );
+		$this->assertStringNotContainsString( 'institution-id', $failure_url );
+		$this->assertStringNotContainsString( 'Stale', $failure_url );
+
+		if ( null === $original_uri ) {
+			unset( $_SERVER['REQUEST_URI'] );
+		} else {
+			$_SERVER['REQUEST_URI'] = $original_uri;
+		}
+		$_GET = $original_get;
+		wp_delete_post( $inst_id, true );
+	}
+
+	/**
+	 * The destination page fires the redirect-borne outcome as a GA4 event: the
+	 * result notice handler registers a footer printer whose script sends
+	 * np_institutional_access with the action and institution from the URL params.
+	 * Redirect outcomes fire only here — the loading page does not also send a
+	 * `connected` event, so a success is never double-counted.
+	 */
+	public function test_result_notice_prints_ga_event() {
+		$original_get    = $_GET; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$original_cookie = $_COOKIE; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+
+		$_GET = [
+			IP_Access_Rule::RESULT_PARAM => 'success',
+			'institution-id'             => '37',
+		];
+		IP_Access_Rule::handle_result_notice();
+		$this->assertNotFalse( has_action( 'wp_footer', [ IP_Access_Rule::class, 'print_result_event' ] ) );
+
+		// Without the bypass cookie the success param is a shared or
+		// hand-crafted URL: no event may be injected from it, but the URL
+		// cleanup still runs so the params don't survive reloads.
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		ob_start();
+		IP_Access_Rule::print_result_event();
+		$gated_script = ob_get_clean();
+		$this->assertStringContainsString( 'var payload = null', $gated_script, 'No connected event without the bypass cookie.' );
+		$this->assertStringContainsString( 'replaceState', $gated_script, 'URL cleanup runs even when the event is withheld.' );
+
+		$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		ob_start();
+		IP_Access_Rule::print_result_event();
+		$success_script = ob_get_clean();
+		$this->assertStringContainsString( 'np_institutional_access', $success_script );
+		$this->assertStringContainsString( '"connected"', $success_script );
+		$this->assertStringContainsString( 'Institution 37', $success_script );
+		$this->assertStringContainsString( 'replaceState', $success_script, 'The result params must be stripped from the URL, or a reload or shared link fires another event.' );
+
+		// A failure sets no cookie, so its event is not cookie-gated.
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_GET = [
+			IP_Access_Rule::RESULT_PARAM => 'failure',
+		];
+		ob_start();
+		IP_Access_Rule::print_result_event();
+		$failure_script = ob_get_clean();
+		$this->assertStringContainsString( '"not_verified"', $failure_script );
+		$this->assertStringNotContainsString( 'Institution ', $failure_script );
+
+		$_GET    = $original_get;
+		$_COOKIE = $original_cookie; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
 }
