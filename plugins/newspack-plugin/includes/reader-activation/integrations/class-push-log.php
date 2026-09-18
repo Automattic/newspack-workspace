@@ -538,7 +538,7 @@ final class Push_Log {
 				// neither the statement nor the database's own text: both quote
 				// the reader's address.
 				if ( $read_failed ) {
-					return new \WP_Error( 'newspack_push_log_read_failed', __( 'The push log could not be read.', 'newspack-plugin' ) );
+					return new \WP_Error( 'newspack_push_log_read_failed', __( 'Could not read the push log.', 'newspack-plugin' ) );
 				}
 
 				return [

@@ -183,7 +183,7 @@ describe( 'SyncActivity', () => {
 		await waitFor( () => expect( lastPath() ).toContain( 'search=' ) );
 
 		render( mockDataViewsProps.current.empty );
-		expect( screen.getByText( /7 days for the ones that worked, 14 for the ones that failed/ ) ).toBeTruthy();
+		expect( screen.getByText( /7 days for the ones that worked, 14 days for the ones that failed/ ) ).toBeTruthy();
 	} );
 
 	it( 'keeps a slow response from replacing a newer one', async () => {
@@ -236,7 +236,7 @@ describe( 'SyncActivity', () => {
 		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
 
 		render( mockDataViewsProps.current.empty );
-		expect( screen.getByText( 'The sync activity could not be loaded.' ) ).toBeTruthy();
+		expect( screen.getByText( 'The sync activity did not load.' ) ).toBeTruthy();
 		expect( screen.queryByText( 'No pushes recorded yet.' ) ).toBeNull();
 	} );
 } );

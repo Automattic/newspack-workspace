@@ -238,9 +238,7 @@ export const SyncActivity = ( { integrationId } ) => {
 			defaultLayouts={ { table: {} } }
 			isLoading={ isLoading }
 			getItemId={ item => item.id }
-			empty={
-				<p>{ hasFailed ? __( 'The sync activity could not be loaded.', 'newspack-plugin' ) : getEmptyMessage( view, retentionDays ) }</p>
-			}
+			empty={ <p>{ hasFailed ? __( 'The sync activity did not load.', 'newspack-plugin' ) : getEmptyMessage( view, retentionDays ) }</p> }
 			search
 		>
 			<div className="dataviews__view-actions">

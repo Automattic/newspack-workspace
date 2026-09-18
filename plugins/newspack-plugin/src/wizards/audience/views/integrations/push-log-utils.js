@@ -6,7 +6,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -20,6 +20,17 @@ export const NEEDS_ATTENTION_VALUE = 'yes';
 const DEFAULT_RETENTION_DAYS = { success: 30, failed: 90 };
 
 const getFilterValue = ( view, field ) => view.filters?.find( filter => filter.field === field )?.value;
+
+/**
+ * A retention window worded with its own unit, so a one-day window reads as
+ * "1 day" rather than "1 days".
+ *
+ * @param {number} days How many days.
+ * @return {string} "%d day" or "%d days", with the number filled in.
+ */
+const formatRetentionDuration = days =>
+	/* translators: %d: number of days in the window. */
+	sprintf( _n( '%d day', '%d days', days, 'newspack-plugin' ), days );
 
 /**
  * The REST args for a DataViews view. Undefined args are left out of the URL.
@@ -132,13 +143,13 @@ export function getEmptyMessage( view, retentionDays ) {
 	}
 	if ( view.search ) {
 		return sprintf(
-			/* translators: 1: days a successful push is kept. 2: days a failed push is kept. */
+			/* translators: 1: how long a successful push is kept, e.g. "30 days". 2: how long a failed push is kept, e.g. "90 days". */
 			__(
-				'No pushes recorded for this reader. The log holds pushes made while the integration was enabled with outbound sync on: %1$d days for the ones that worked, %2$d for the ones that failed.',
+				'No pushes recorded for this reader. The log holds pushes made while the integration was enabled with outbound sync on: %1$s for the ones that worked, %2$s for the ones that failed.',
 				'newspack-plugin'
 			),
-			retentionDays?.success ?? DEFAULT_RETENTION_DAYS.success,
-			retentionDays?.failed ?? DEFAULT_RETENTION_DAYS.failed
+			formatRetentionDuration( retentionDays?.success ?? DEFAULT_RETENTION_DAYS.success ),
+			formatRetentionDuration( retentionDays?.failed ?? DEFAULT_RETENTION_DAYS.failed )
 		);
 	}
 	return __( 'No pushes recorded yet.', 'newspack-plugin' );

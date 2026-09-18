@@ -14,7 +14,8 @@ import { API_BASE, PUSH_LOG_OPERATION_LABELS, formatTimestamp } from './constant
 import { getAttemptLabel, getErrorKindLabel, getRetryNote, getStatusDisplay } from './push-log-utils';
 
 // The flag push reached the provider; the list cleanup after it did not, so
-// the fields it sent did arrive.
+// the fields it sent did arrive. A benign push instead found no contact to
+// change, so cleanup failing the same way left nothing delivered.
 const DELIVERED_ERROR_CODES = [ 'flag_cleanup_failed' ];
 
 /**
@@ -26,7 +27,7 @@ const DELIVERED_ERROR_CODES = [ 'flag_cleanup_failed' ];
  * @return {string} The heading.
  */
 function getFieldsHeading( entry, comparedTo ) {
-	const delivered = entry.status === 'success' || DELIVERED_ERROR_CODES.includes( entry.error_code );
+	const delivered = entry.status === 'success' || ( DELIVERED_ERROR_CODES.includes( entry.error_code ) && entry.error_class !== 'benign' );
 	if ( ! delivered ) {
 		return __( 'Not delivered', 'newspack-plugin' );
 	}
@@ -38,17 +39,35 @@ function getFieldsHeading( entry, comparedTo ) {
 }
 
 /**
- * The heading over what the provider said. A benign result is a success on
- * its first attempt, so calling it an earlier failure would invent one.
+ * The heading over what the provider said. A row that did not end in success
+ * is an error regardless of what it is classified as; only on a success does
+ * a benign classification mean the row never actually failed.
  *
  * @param {Object} entry The push log entry.
  * @return {string} The heading.
  */
 function getErrorHeading( entry ) {
-	if ( entry.error_class === 'benign' ) {
-		return __( 'Provider response', 'newspack-plugin' );
+	if ( entry.status !== 'success' ) {
+		return __( 'Error', 'newspack-plugin' );
 	}
-	return entry.status === 'success' ? __( 'Earlier attempts failed with', 'newspack-plugin' ) : __( 'Error', 'newspack-plugin' );
+	return entry.error_class === 'benign' ? __( 'Provider response', 'newspack-plugin' ) : __( 'Earlier attempts failed with', 'newspack-plugin' );
+}
+
+/**
+ * What to say about a push with no fields to show. Only a hard delete really
+ * sends none; anything else with none is a payload the log could not read
+ * back, and calling that a deletion would misname it.
+ *
+ * @param {Object} entry The push log entry.
+ * @return {string} The message.
+ */
+function getEmptyFieldsMessage( entry ) {
+	if ( entry.operation !== 'delete' ) {
+		return __( 'No fields were recorded for this push.', 'newspack-plugin' );
+	}
+	return entry.status === 'success'
+		? __( 'The contact was deleted. No data was sent.', 'newspack-plugin' )
+		: __( 'The deletion did not reach the provider. A deletion sends no data.', 'newspack-plugin' );
 }
 
 // A field the push left out is not a field it cleared, and a field sent empty
@@ -190,7 +209,7 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 
 				{ attemptLabel && (
 					<>
-						<dt>{ __( 'Attempts', 'newspack-plugin' ) }</dt>
+						<dt>{ __( 'Retries', 'newspack-plugin' ) }</dt>
 						<dd>{ attemptLabel }</dd>
 					</>
 				) }
@@ -253,11 +272,7 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 
 			<section className="newspack-integration-log-details__section">
 				{ fields.length === 0 ? (
-					<p>
-						{ entry.status === 'success'
-							? __( 'The contact was deleted. No data was sent.', 'newspack-plugin' )
-							: __( 'The deletion did not reach the provider. A deletion sends no data.', 'newspack-plugin' ) }
-					</p>
+					<p>{ getEmptyFieldsMessage( entry ) }</p>
 				) : (
 					<>
 						<h4 id={ fieldsHeadingId }>{ getFieldsHeading( entry, comparedTo ) }</h4>

@@ -145,6 +145,13 @@ describe( 'SyncActivityDetails', () => {
 		expect( screen.getByText( 'The contact was deleted. No data was sent.' ) ).toBeTruthy();
 	} );
 
+	it( 'says fields were not recorded rather than calling it a deletion, when a non-delete row has none', async () => {
+		await renderDetails( { entry: entry(), compared_to: null, fields: [] } );
+
+		expect( screen.getByText( 'No fields were recorded for this push.' ) ).toBeTruthy();
+		expect( screen.queryByText( 'The contact was deleted. No data was sent.' ) ).toBeNull();
+	} );
+
 	it( 'does not call a deletion that failed a deletion that happened', async () => {
 		await renderDetails( {
 			entry: entry( { operation: 'delete', status: 'failed', error_code: 'provider_down', error_message: 'ESP 503' } ),
@@ -174,6 +181,7 @@ describe( 'SyncActivityDetails', () => {
 			entry: entry( {
 				operation: 'flag',
 				status: 'failed',
+				error_class: 'transient',
 				error_code: 'flag_cleanup_failed',
 				error_message: 'The deletion flag was pushed, but removing the reader from lists failed.',
 			} ),
@@ -183,6 +191,44 @@ describe( 'SyncActivityDetails', () => {
 
 		expect( screen.getByRole( 'heading', { name: 'Fields sent' } ) ).toBeTruthy();
 		expect( screen.queryByRole( 'heading', { name: 'Not delivered' } ) ).toBeNull();
+	} );
+
+	it( 'reads a benign flag cleanup failure as data that did not arrive', async () => {
+		// A benign result means the provider had no contact to change, so the
+		// cleanup failure that follows it never removed anything either.
+		await renderDetails( {
+			entry: entry( {
+				operation: 'flag',
+				status: 'failed',
+				error_class: 'benign',
+				error_code: 'flag_cleanup_failed',
+				error_message: 'The deletion flag was pushed, but removing the reader from lists failed.',
+			} ),
+			compared_to: null,
+			fields,
+		} );
+
+		expect( screen.getByRole( 'heading', { name: 'Not delivered' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'heading', { name: 'Fields sent' } ) ).toBeNull();
+	} );
+
+	it( 'heads a failed row as an error, even one classified benign', async () => {
+		// The row failed on cleanup, not on the push itself, but a publisher
+		// reading "Provider response" here would take the row for a success.
+		await renderDetails( {
+			entry: entry( {
+				operation: 'flag',
+				status: 'failed',
+				error_class: 'benign',
+				error_code: 'flag_cleanup_failed',
+				error_message: 'The deletion flag was pushed, but removing the reader from lists failed.',
+			} ),
+			compared_to: null,
+			fields,
+		} );
+
+		expect( screen.getByRole( 'heading', { name: 'Error' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'heading', { name: 'Provider response' } ) ).toBeNull();
 	} );
 
 	it( 'offers the full list only while it holds something back', async () => {

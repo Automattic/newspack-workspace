@@ -138,10 +138,16 @@ describe( 'getEmptyMessage', () => {
 
 	it( 'names the windows the site actually keeps, and falls back to the defaults', () => {
 		expect( getEmptyMessage( view( { search: 'reader@example.test' } ), { success: 7, failed: 14 } ) ).toContain(
-			'7 days for the ones that worked, 14 for the ones that failed'
+			'7 days for the ones that worked, 14 days for the ones that failed'
 		);
 		expect( getEmptyMessage( view( { search: 'reader@example.test' } ) ) ).toContain(
-			'30 days for the ones that worked, 90 for the ones that failed'
+			'30 days for the ones that worked, 90 days for the ones that failed'
+		);
+	} );
+
+	it( 'keeps a one-day window singular', () => {
+		expect( getEmptyMessage( view( { search: 'reader@example.test' } ), { success: 1, failed: 90 } ) ).toContain(
+			'1 day for the ones that worked, 90 days for the ones that failed'
 		);
 	} );
 
