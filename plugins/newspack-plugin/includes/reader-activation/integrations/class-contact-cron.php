@@ -274,9 +274,8 @@ class Contact_Cron {
 	 *
 	 * Clears every staged reader's flag and pushes each one only to the
 	 * integrations whose payload changed since they last took it. Most staged
-	 * readers are merely active, not changed; without the comparison each one was
-	 * rewritten at every integration every batch (NEWS-3087). What counts as
-	 * taken, including after a failure, is decided by the push path; see
+	 * readers are merely active, not changed (NEWS-3087). What counts as taken,
+	 * including after a failure, is decided by the push path; see
 	 * Contact_Sync::get_integrations_to_push().
 	 */
 	private static function handle_batch_push() {
