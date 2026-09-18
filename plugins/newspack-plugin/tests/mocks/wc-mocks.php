@@ -38,6 +38,18 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 		'user_id'      => 0,
 		'default'      => false,
 	];
+	/**
+	 * Number of save() calls, so tests can assert that unchanged tokens are not written.
+	 *
+	 * @var int
+	 */
+	public $save_calls = 0;
+	/**
+	 * When set, save() throws the way WC_Payment_Token_Data_Store::update() does on a token that fails validation.
+	 *
+	 * @var bool
+	 */
+	public $throw_on_save = false;
 	public function __construct( $card_type = '', $last4 = '', $token = '', $user_id = 0, $gateway_id = '' ) {
 		parent::__construct( $gateway_id );
 		$this->data['card_type']  = $card_type;
@@ -61,29 +73,54 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	public function set_gateway_id( $gateway_id ) {
 		$this->data['gateway_id'] = $gateway_id;
 	}
-	public function get_card_type() {
+	/**
+	 * Card brand.
+	 *
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
+	 */
+	public function get_card_type( $context = 'view' ) {
 		return $this->data['card_type'];
 	}
 	public function set_card_type( $card_type ) {
 		$this->data['card_type'] = $card_type;
 	}
-	public function get_last4() {
+	/**
+	 * Last four digits of the card.
+	 *
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
+	 */
+	public function get_last4( $context = 'view' ) {
 		return $this->data['last4'];
 	}
 	public function set_last4( $last4 ) {
 		$this->data['last4'] = $last4;
 	}
-	public function get_expiry_month() {
+	/**
+	 * Expiry month.
+	 *
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
+	 */
+	public function get_expiry_month( $context = 'view' ) {
 		return $this->data['expiry_month'];
 	}
+	/**
+	 * WooCommerce stores the month zero-padded ('02'), so mirror that here.
+	 *
+	 * @param string|int $month Expiry month.
+	 */
 	public function set_expiry_month( $month ) {
-		$this->data['expiry_month'] = $month;
+		$this->data['expiry_month'] = str_pad( (string) $month, 2, '0', STR_PAD_LEFT );
 	}
-	public function get_expiry_year() {
+	/**
+	 * Expiry year.
+	 *
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
+	 */
+	public function get_expiry_year( $context = 'view' ) {
 		return $this->data['expiry_year'];
 	}
 	public function set_expiry_year( $year ) {
-		$this->data['expiry_year'] = $year;
+		$this->data['expiry_year'] = (string) $year;
 	}
 	public function get_user_id() {
 		return $this->data['user_id'];
@@ -100,9 +137,21 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	public function get_display_name() {
 		return trim( $this->data['card_type'] . ' ending in ' . $this->data['last4'] );
 	}
+	/**
+	 * Writes the token into the store, assigning an ID the way the real data
+	 * store does. A token a fixture staged into the store directly keeps the key
+	 * it was staged under, so a save never duplicates it.
+	 *
+	 * @throws Exception When $throw_on_save is set.
+	 */
 	public function save() {
+		if ( $this->throw_on_save ) {
+			throw new Exception( 'Invalid or missing payment token fields.' );
+		}
+		$this->save_calls++;
 		if ( ! $this->data['id'] ) {
-			$this->data['id'] = count( WC_Payment_Tokens::$tokens ) + 1;
+			$staged_key       = array_search( $this, WC_Payment_Tokens::$tokens, true );
+			$this->data['id'] = false !== $staged_key ? $staged_key : count( WC_Payment_Tokens::$tokens ) + 1;
 		}
 		WC_Payment_Tokens::$tokens[ $this->data['id'] ] = $this;
 		return $this->data['id'];
@@ -113,6 +162,34 @@ class WC_Payment_Tokens {
 	public static $tokens = [];
 	public static function get( $token_id ) {
 		return self::$tokens[ $token_id ] ?? null;
+	}
+	/**
+	 * Faithful to WC_Payment_Tokens::get_tokens() for the args Newspack uses.
+	 * Like the real data store, a falsy user_id adds no user predicate (so every
+	 * user's tokens come back), and gateway_id / type filter only when non-empty.
+	 * Does not run the woocommerce_get_customer_payment_tokens filter.
+	 *
+	 * @param array $args Query args: user_id, gateway_id, type, limit.
+	 */
+	public static function get_tokens( $args ) {
+		$user_id    = (int) ( $args['user_id'] ?? 0 );
+		$gateway_id = (string) ( $args['gateway_id'] ?? '' );
+		$type       = (string) ( $args['type'] ?? '' );
+		return array_filter(
+			self::$tokens,
+			function ( $token ) use ( $user_id, $gateway_id, $type ) {
+				if ( $user_id && ( ! method_exists( $token, 'get_user_id' ) || (int) $token->get_user_id() !== $user_id ) ) {
+					return false;
+				}
+				if ( '' !== $gateway_id && $token->get_gateway_id() !== $gateway_id ) {
+					return false;
+				}
+				if ( 'CC' === $type && ! $token instanceof WC_Payment_Token_CC ) {
+					return false;
+				}
+				return true;
+			}
+		);
 	}
 	/**
 	 * Faithful to WC_Payment_Tokens::get_customer_tokens(): customers below 1
@@ -650,6 +727,16 @@ class WC_Product {
 	public function get_description() {
 		return $this->data['description'] ?? '';
 	}
+	/**
+	 * Keyed by attribute slug, as WooCommerce stores it. An "Any <attribute>"
+	 * variation keeps the key with an empty value rather than dropping it.
+	 */
+	public function get_variation_attributes() {
+		return $this->data['variation_attributes'] ?? [];
+	}
+	public function get_category_ids() {
+		return $this->data['category_ids'] ?? [];
+	}
 	public function get_status() {
 		return $this->data['status'] ?? 'publish';
 	}
@@ -723,6 +810,29 @@ class WC_Product {
 	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
+	}
+	/**
+	 * Stage a meta value in memory, as WC_Data::update_meta_data() does before a
+	 * save(). Kept minimal — no meta-id bookkeeping — because callers read the
+	 * value straight back with get_meta().
+	 *
+	 * @param string $key   Meta key.
+	 * @param mixed  $value Meta value.
+	 */
+	public function update_meta_data( $key, $value ) {
+		$this->meta[ $key ] = $value;
+	}
+	/**
+	 * Persist the product back into the mock store. The object is already held by
+	 * reference, so this only matters for a product built and saved without being
+	 * registered first; it mirrors WC_Product::save() returning the product ID.
+	 *
+	 * @return int The product ID.
+	 */
+	public function save() {
+		global $products_database;
+		$products_database[ $this->get_id() ] = $this;
+		return $this->get_id();
 	}
 }
 
@@ -881,6 +991,9 @@ class WC_Order {
 	}
 	public function get_id() {
 		return $this->data['id'];
+	}
+	public function get_edit_order_url() {
+		return admin_url( 'post.php?post=' . $this->get_id() . '&action=edit' );
 	}
 	public function get_customer_id() {
 		return $this->data['customer_id'];
@@ -1831,10 +1944,13 @@ function wcs_get_subscriptions( $args = [] ) {
 function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args = [] ) {
 	// Minimal mock mirroring the real return shape: subscriptions keyed by their
 	// ID (so array_keys() yields subscription IDs), matched via WC_Subscription's
-	// `products` array (has_product()). `subscription_status`/paging args are
-	// ignored — extend here if a test needs them.
+	// `products` array (has_product()), ordered by ID as the real function's
+	// `ORDER BY order_items.order_id` does. `limit` is honoured because the plan
+	// filter relies on it to bound its scan in SQL; `offset` and
+	// `subscription_status` are ignored — extend here if a test needs them.
 	global $subscriptions_database;
 	$product_ids   = array_map( 'absint', (array) $product_ids );
+	$limit         = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
 	$subscriptions = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
 		if ( ! method_exists( $subscription, 'has_product' ) ) {
@@ -1846,6 +1962,10 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 				break;
 			}
 		}
+	}
+	ksort( $subscriptions );
+	if ( $limit > 0 ) {
+		$subscriptions = array_slice( $subscriptions, 0, $limit, true );
 	}
 	return $subscriptions;
 }
@@ -1948,12 +2068,9 @@ function wc_get_is_paid_statuses() {
 	return [ 'processing', 'completed' ];
 }
 function wc_get_orders( $args ) {
-	global $orders_database;
-	// For simplicity, this mock will only return a single page of results.
-	if ( isset( $args['page'] ) && $args['page'] > 1 ) {
-		return [];
-	}
-	$orders = $orders_database;
+	global $orders_database, $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
+	$wc_mocks_get_orders_calls = (int) $wc_mocks_get_orders_calls + 1;
+	$orders                    = $orders_database;
 	if ( isset( $args['customer_id'] ) ) {
 		// Filter by customer.
 		$orders = array_filter(
@@ -2024,7 +2141,11 @@ function wc_get_orders( $args ) {
 		}
 	);
 	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
-		$orders = array_slice( $orders, 0, (int) $args['limit'] );
+		// Real WC pages with `page` as a 1-based offset into the limited set. A test
+		// can set $wc_mocks_orders_ignore_page to model a store (or a filter on the
+		// query args) that hands back the same rows for every page.
+		$page   = ( empty( $wc_mocks_orders_ignore_page ) && isset( $args['page'] ) ) ? max( 1, (int) $args['page'] ) : 1;
+		$orders = array_slice( $orders, ( $page - 1 ) * (int) $args['limit'], (int) $args['limit'] );
 	}
 	return $orders;
 }

@@ -2,14 +2,14 @@
 # This file is distributed under the GNU General Public License v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 2.25.1\n"
+"Project-Id-Version: Newspack 2.26.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/theme/newspack-theme\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-31T17:56:53+00:00\n"
+"POT-Creation-Date: 2026-09-14T18:19:32+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-theme\n"
@@ -1190,28 +1190,28 @@ msgstr ""
 msgid "Why you can trust %s"
 msgstr ""
 
-#: inc/typography.php:125
+#: inc/typography.php:126
 msgid "Serif"
 msgstr ""
 
-#: inc/typography.php:132
+#: inc/typography.php:133
 msgid "Sans Serif"
 msgstr ""
 
-#: inc/typography.php:139
+#: inc/typography.php:140
 msgid "Display"
 msgstr ""
 
-#: inc/typography.php:147
+#: inc/typography.php:148
 msgid "Monospace"
 msgstr ""
 
-#: inc/typography.php:288
+#: inc/typography.php:289
 msgctxt "font family name"
 msgid "Header"
 msgstr ""
 
-#: inc/typography.php:293
+#: inc/typography.php:294
 msgctxt "font family name"
 msgid "Body"
 msgstr ""

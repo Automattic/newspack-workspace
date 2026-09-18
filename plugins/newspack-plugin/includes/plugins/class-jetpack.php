@@ -15,6 +15,41 @@ defined( 'ABSPATH' ) || exit;
 class Jetpack {
 
 	/**
+	 * Seed identifying the share-token HMAC. Global (not post-scoped) so the gate can verify a
+	 * token at `plugins_loaded`, before the main query resolves which post is being requested.
+	 *
+	 * @var string
+	 */
+	const SHARE_TOKEN_ACTION = 'newspack_share';
+
+	/**
+	 * Query arg carrying the share token on a restored share URL.
+	 *
+	 * @var string
+	 */
+	const SHARE_TOKEN_QUERY_ARG = '_newspack_share_token';
+
+	/**
+	 * Original `?share=` queries blanked by obfuscate_share_query(), keyed by the sharing-source
+	 * object's spl_object_id(). add_obfuscation_data_attribute() reads and clears each entry to
+	 * rebuild the data attributes. Both filters receive the same source object, so this carries
+	 * the query between them even on Jetpack's block Sharing Buttons, whose data-attributes filter
+	 * runs in a separate method that never receives the query in its args.
+	 *
+	 * @var array<int,string>
+	 */
+	private static $blanked_queries = [];
+
+	/**
+	 * Whether at least one share button has been obfuscated during this request. Gates the
+	 * restore script: it is printed only when there is something to restore, which is the right
+	 * signal on the block theme, where the classic sharedaddy module may be inactive.
+	 *
+	 * @var bool
+	 */
+	private static $did_obfuscate = false;
+
+	/**
 	 * Modules scripts handles.
 	 *
 	 * @var string[]
@@ -165,6 +200,19 @@ class Jetpack {
 
 		// Modify the related posts timeframe.
 		add_filter( 'jetpack_relatedposts_filter_date_range', [ __CLASS__, 'restrict_age_of_related_posts' ] );
+
+		// Hide social share links from bots by deferring the un-cacheable share URL until real user interaction.
+		add_filter( 'jetpack_sharing_display_query', [ __CLASS__, 'obfuscate_share_query' ], 10, 4 );
+		add_filter( 'jetpack_sharing_data_attributes', [ __CLASS__, 'add_obfuscation_data_attribute' ], 10, 4 );
+		// The block Sharing Buttons discard the data-attributes filter, so the restore data is
+		// added to the rendered block anchor instead.
+		add_filter( 'render_block_jetpack/sharing-button', [ __CLASS__, 'add_block_share_data_attributes' ], 10, 2 );
+		add_action( 'wp_footer', [ __CLASS__, 'print_share_obfuscation_script' ] );
+
+		// Reject fabricated `?share=` requests as early as possible, before WordPress resolves
+		// the query or loads the theme. `plugins_loaded` is the earliest hook where the token
+		// signing functions are available (pluggable functions are loaded just before it fires).
+		add_action( 'plugins_loaded', [ __CLASS__, 'gate_share_request' ] );
 
 		// Disable Jetpack Image Studio as late as possible so dequeues cannot be overridden.
 		add_action( 'admin_print_scripts', [ __CLASS__, 'disable_image_studio' ], 999 );
@@ -375,6 +423,290 @@ class Jetpack {
 		}
 
 		return $date_range;
+	}
+
+	/**
+	 * Whether the social share-link bot obfuscation is enabled.
+	 *
+	 * Jetpack's "official" share buttons (X, Facebook, LinkedIn, Reddit, Print, Email…)
+	 * point at the post's own permalink with a `?share=<service>` query. Requesting that
+	 * URL is un-cacheable by construction: it carries a query string and returns a dynamic
+	 * redirect, so it boots full WordPress every time. Bots crawling the links in bulk turn
+	 * that into real origin load. When enabled, the share query is deferred out of the
+	 * rendered markup and rebuilt on genuine user interaction, so crawlers never see a
+	 * fetchable `?share=` URL and hit the cacheable permalink instead.
+	 *
+	 * @return bool
+	 */
+	private static function is_share_obfuscation_enabled() {
+		/**
+		 * Filters whether Jetpack social share links are obfuscated to discourage bot traffic.
+		 *
+		 * @param bool $enabled Whether the obfuscation is enabled. Default true.
+		 */
+		return (bool) apply_filters( 'newspack_jetpack_obfuscate_share_links', true );
+	}
+
+	/**
+	 * Whether a Jetpack share-link query is one of the un-cacheable, origin round-trip
+	 * "official" services (e.g. `share=twitter`) as opposed to a direct off-site link.
+	 *
+	 * @param mixed $query The query string passed to Sharing_Source::get_link().
+	 * @return bool
+	 */
+	private static function is_share_roundtrip_query( $query ) {
+		return is_string( $query ) && 0 === strpos( $query, 'share=' );
+	}
+
+	/**
+	 * Blank the `?share=` query on the rendered share-button href.
+	 *
+	 * With the query removed, the visible href is the bare (cacheable) post permalink,
+	 * so a crawler following it gets a cache hit rather than the un-cacheable share
+	 * handler. The real query is stashed against the source object so
+	 * add_obfuscation_data_attribute() can hand it to the client script.
+	 *
+	 * @param string       $query  The sharing service URL query parameter.
+	 * @param object       $source Sharing service instance; the key the stashed query is filed under.
+	 * @param string|false $id     Sharing ID. Unused.
+	 * @param array        $args   Array of sharing service options. Unused.
+	 * @return string The (possibly blanked) query.
+	 */
+	public static function obfuscate_share_query( $query, $source = null, $id = false, $args = [] ) {
+		if ( self::is_share_obfuscation_enabled() && self::is_share_roundtrip_query( $query ) ) {
+			if ( is_object( $source ) ) {
+				self::$blanked_queries[ spl_object_id( $source ) ] = $query;
+			}
+			return '';
+		}
+		return $query;
+	}
+
+	/**
+	 * Stash the original `?share=` query in a data attribute so the client script can
+	 * rebuild the real share URL on genuine user interaction.
+	 *
+	 * The query comes from the stash obfuscate_share_query() filed against this same source
+	 * object, not from $args: Jetpack's block Sharing Buttons fire this filter from a separate
+	 * method whose args never include the query. The value written is the raw query token
+	 * (e.g. `share=twitter`), not a URL, so no fetchable `?share=` URL string is left in the DOM
+	 * for URL-scraping bots to follow.
+	 *
+	 * @param array        $data_attributes Attributes supplied from the sharing source. Keys are
+	 *                                      rendered with a `data-` prefix.
+	 * @param object       $source          Sharing service instance; the key the blanked query is filed under.
+	 * @param string|false $id        Sharing ID. Unused.
+	 * @param array        $args            Array of sharing service options. Unused.
+	 * @return array The (possibly augmented) data attributes.
+	 */
+	public static function add_obfuscation_data_attribute( $data_attributes, $source = null, $id = false, $args = [] ) {
+		$data_attributes = (array) $data_attributes;
+		if ( ! is_object( $source ) ) {
+			return $data_attributes;
+		}
+		$source_id = spl_object_id( $source );
+		$query     = self::$blanked_queries[ $source_id ] ?? '';
+		unset( self::$blanked_queries[ $source_id ] );
+		if ( self::is_share_obfuscation_enabled() && self::is_share_roundtrip_query( $query ) ) {
+			$data_attributes['share-query'] = $query;
+			// Sign the restored request so the server-side gate can tell a real, JS-restored
+			// share URL from one a crawler fabricated by appending `?share=…` to a permalink.
+			$data_attributes['share-token'] = self::share_token();
+			self::$did_obfuscate            = true;
+		}
+		// The email button's mailto: href is left intact, but Jetpack pings an on-site tracking
+		// URL (`?share=email`) via XHR on click. Sign that URL so the ping clears the gate; an
+		// unsigned, fabricated `?share=email` request is still turned away.
+		if ( self::is_share_obfuscation_enabled() && isset( $data_attributes['email-share-track-url'] ) ) {
+			$data_attributes['email-share-track-url'] = add_query_arg(
+				self::SHARE_TOKEN_QUERY_ARG,
+				self::share_token(),
+				$data_attributes['email-share-track-url']
+			);
+		}
+		return $data_attributes;
+	}
+
+	/**
+	 * Add the restore data attributes to a Jetpack block Sharing Button's rendered anchor.
+	 *
+	 * The block builds its anchor from a hardcoded template and uses only the URL from get_link(),
+	 * discarding the jetpack_sharing_data_attributes filter, so the classic filter path cannot
+	 * place the data attributes on it. We post-process the block HTML instead: obfuscate_share_query()
+	 * has already blanked the anchor's href, and the block derives its `data-service` from the same
+	 * slug as the `?share=` query, so the query to restore is `share=<service>&nb=1`. The native
+	 * Web Share button and the mailto: email button are not on-site round-trips and are left alone.
+	 *
+	 * @param string $block_content The block's rendered HTML.
+	 * @param array  $block         The parsed block. Unused.
+	 * @return string The (possibly augmented) block HTML.
+	 */
+	public static function add_block_share_data_attributes( $block_content, $block = [] ) {
+		if ( ! self::is_share_obfuscation_enabled() ) {
+			return $block_content;
+		}
+		$processor = new \WP_HTML_Tag_Processor( $block_content );
+		if ( ! $processor->next_tag( 'a' ) ) {
+			return $block_content;
+		}
+		$service = $processor->get_attribute( 'data-service' );
+		$href    = (string) $processor->get_attribute( 'href' );
+		// Skip the native Web Share button and the mailto: email button; neither is an on-site
+		// `?share=` round-trip, so there is nothing to obfuscate or restore.
+		if ( ! is_string( $service ) || '' === $service || 'share' === $service || 0 === stripos( $href, 'mailto:' ) ) {
+			return $block_content;
+		}
+		$processor->set_attribute( 'data-share-query', 'share=' . $service . '&nb=1' );
+		$processor->set_attribute( 'data-share-token', self::share_token() );
+		self::$did_obfuscate = true;
+		return $processor->get_updated_html();
+	}
+
+	/**
+	 * A rotating, signed token proving a share URL came from our own markup rather than being
+	 * fabricated by a crawler.
+	 *
+	 * Deliberately not a WordPress nonce. Nonces are session-scoped and live only 12-24h, but
+	 * this token is baked into page-cacheable HTML that Batcache can serve for up to a day, so a
+	 * nonce would expire while the cached page is still live and reject genuine share clicks. The
+	 * token instead rotates on a daily bucket and is accepted for a few buckets (see
+	 * is_valid_share_token()), comfortably outlasting the cache. It carries no CSRF duty: sharing
+	 * is not a state-changing authenticated action. And since the token sits in the cached markup
+	 * any HTML-parsing bot can read it anyway, so its lifetime does not weaken the deterrent,
+	 * which only ever stopped crawlers that fabricate `?share=` without parsing the page.
+	 *
+	 * @param int $bucket_offset How many daily buckets back to compute the token for. 0 is current.
+	 * @return string
+	 */
+	public static function share_token( $bucket_offset = 0 ) {
+		$bucket = (int) floor( time() / DAY_IN_SECONDS ) - (int) $bucket_offset;
+		return wp_hash( self::SHARE_TOKEN_ACTION . '|' . $bucket, 'nonce' );
+	}
+
+	/**
+	 * Whether a token matches the current or a recent daily bucket. The window (current plus the
+	 * previous two buckets, so two-to-three days) is wider than the 24h maximum page-cache TTL,
+	 * so a share click on a day-old cached page still verifies, with margin for clock skew.
+	 *
+	 * @param string $token The token from the request.
+	 * @return bool
+	 */
+	public static function is_valid_share_token( $token ) {
+		if ( ! is_string( $token ) || '' === $token ) {
+			return false;
+		}
+		for ( $offset = 0; $offset <= 2; $offset++ ) {
+			if ( hash_equals( self::share_token( $offset ), $token ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the current request is an un-cacheable `?share=` round-trip that lacks a valid
+	 * Newspack share token, and so should be turned away before it reaches Jetpack's handler.
+	 *
+	 * Reads only request globals, so it can run at `plugins_loaded` without the main query. A
+	 * genuine share click carries the token that add_obfuscation_data_attribute() minted and the
+	 * client script appended on restore; a crawler that fabricated the URL does not. Non-front-end
+	 * contexts and sites where Jetpack sharing is off are left alone, since their `?share=` (if
+	 * any) is not ours to intercept.
+	 *
+	 * @return bool
+	 */
+	public static function should_block_share_request() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Only detecting a share request; the token is verified below.
+		if ( ! isset( $_GET['share'] ) ) {
+			return false;
+		}
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
+			return false;
+		}
+		// Jetpack's presence (not the classic sharedaddy module) is the signal: its block Sharing
+		// Buttons produce and process `?share=` round-trips without that module active.
+		if ( ! self::is_share_obfuscation_enabled() || ! class_exists( 'Jetpack' ) ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- The share token below is our own signed verification, not a WordPress nonce.
+		$token = isset( $_GET[ self::SHARE_TOKEN_QUERY_ARG ] ) ? sanitize_text_field( wp_unslash( $_GET[ self::SHARE_TOKEN_QUERY_ARG ] ) ) : '';
+		return ! self::is_valid_share_token( $token );
+	}
+
+	/**
+	 * The URL a blocked share request is redirected to: the current request stripped of the
+	 * share args, i.e. the bare, page-cacheable permalink.
+	 *
+	 * @return string
+	 */
+	public static function get_share_redirect_url() {
+		return remove_query_arg( [ 'share', 'nb', self::SHARE_TOKEN_QUERY_ARG ] );
+	}
+
+	/**
+	 * Turn away fabricated `?share=` requests with a redirect to the cacheable permalink.
+	 *
+	 * Hooked early (`plugins_loaded`) so a crawler that guessed the `?share=` pattern is
+	 * bounced before WordPress resolves the query or renders the theme, rather than booting
+	 * Jetpack's un-cacheable share pipeline. Genuine clicks carry a valid token and pass through.
+	 *
+	 * @return void
+	 */
+	public static function gate_share_request() {
+		if ( ! self::should_block_share_request() ) {
+			return;
+		}
+		wp_safe_redirect( self::get_share_redirect_url() );
+		exit;
+	}
+
+	/**
+	 * Print the small progressive-enhancement script that restores the real share URL.
+	 *
+	 * On the first genuine interaction (hover, focus or touch) with a share link, the
+	 * original `?share=…` query is appended back onto its permalink href. From that point
+	 * the anchor behaves exactly as Jetpack renders it, so native navigation, popup
+	 * handlers and share-stat counting are untouched. Bots that neither run this script nor
+	 * dispatch interaction events only ever see the bare, cacheable permalink. The token is
+	 * appended so the restored URL clears the server-side gate, and `&nb=1` mirrors what
+	 * Jetpack's own sharing.js appends for real user clicks.
+	 */
+	public static function print_share_obfuscation_script() {
+		// Print only when a button was actually blanked this request, so the script accompanies
+		// obfuscated links whether they came from the classic module or the block Sharing Buttons.
+		if ( ! self::$did_obfuscate ) {
+			return;
+		}
+		$token_arg = self::SHARE_TOKEN_QUERY_ARG;
+		wp_print_inline_script_tag(
+			<<<JS
+( function () {
+	function restore( event ) {
+		var anchor = event.target && event.target.closest ? event.target.closest( 'a[data-share-query]' ) : null;
+		if ( ! anchor ) {
+			return;
+		}
+		var query = anchor.getAttribute( 'data-share-query' );
+		if ( ! query ) {
+			return;
+		}
+		var token = anchor.getAttribute( 'data-share-token' );
+		var href = anchor.getAttribute( 'href' ) || '';
+		var url = href + ( href.indexOf( '?' ) === -1 ? '?' : '&' ) + query;
+		if ( token ) {
+			url += '&{$token_arg}=' + encodeURIComponent( token );
+		}
+		url += ( url.indexOf( 'nb=' ) === -1 ? '&nb=1' : '' );
+		anchor.setAttribute( 'href', url );
+		anchor.removeAttribute( 'data-share-query' );
+		anchor.removeAttribute( 'data-share-token' );
+	}
+	[ 'pointerover', 'focusin', 'touchstart' ].forEach( function ( type ) {
+		document.addEventListener( type, restore, true );
+	} );
+} )();
+JS
+		);
 	}
 
 	/**
