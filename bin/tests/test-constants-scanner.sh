@@ -118,6 +118,40 @@ else
 fi
 
 echo
+echo "a documented @default 0 is kept, not treated as empty:"
+json_delta=$(php "$SCANNER" --source=delta="$FIXTURES/delta" --format=json)
+default_zero=$(jq '.constants[] | select(.name == "NEWSPACK_FIXTURE_DEFAULT_ZERO")' <<<"$json_delta")
+assert_eq "default is the string \"0\", not dropped" "0" "$(jq -r '.default' <<<"$default_zero")"
+assert_eq "type still parses alongside a zero default" "int" "$(jq -r '.type' <<<"$default_zero")"
+
+echo
+echo "a defined() guard quoted inside a string literal is not a real guard:"
+json_gamma_strings=$(php "$SCANNER" --source=gamma="$FIXTURES/gamma" --format=json)
+assert_eq "absent from the catalog" "" "$(jq -r '.constants[] | select(.name == "NEWSPACK_FIXTURE_INSIDE_STRING")' <<<"$json_gamma_strings")"
+undocumented_gamma_strings_md=$(php "$SCANNER" --source=gamma="$FIXTURES/gamma" --undocumented)
+if [[ "$undocumented_gamma_strings_md" == *"NEWSPACK_FIXTURE_INSIDE_STRING"* ]]; then
+	echo "  FAIL: NEWSPACK_FIXTURE_INSIDE_STRING was reported as undocumented; a string literal was mistaken for a real guard"
+	failures=$((failures + 1))
+else
+	echo "  ok: absent from the undocumented list too — no constant invented from a quoted string"
+fi
+
+echo
+echo "a defined() guard quoted inside a heredoc body is not a real guard:"
+assert_eq "absent from the catalog" "" "$(jq -r '.constants[] | select(.name == "NEWSPACK_FIXTURE_INSIDE_HEREDOC")' <<<"$json_gamma_strings")"
+if [[ "$undocumented_gamma_strings_md" == *"NEWSPACK_FIXTURE_INSIDE_HEREDOC"* ]]; then
+	echo "  FAIL: NEWSPACK_FIXTURE_INSIDE_HEREDOC was reported as undocumented; a heredoc body was mistaken for a real guard"
+	failures=$((failures + 1))
+else
+	echo "  ok: absent from the undocumented list too — no constant invented from a heredoc body"
+fi
+
+echo
+echo "real guards are still matched after the string/heredoc fix:"
+assert_eq "NEWSPACK_FIXTURE_COMMENT_GAP still found" "true" "$(jq -r 'any(.constants[]; .name == "NEWSPACK_FIXTURE_COMMENT_GAP")' <<<"$json_gamma_strings")"
+assert_eq "NEWSPACK_FIXTURE_QUOTES_GUARD still found" "true" "$(jq -r 'any(.constants[]; .name == "NEWSPACK_FIXTURE_QUOTES_GUARD")' <<<"$json_gamma_strings")"
+
+echo
 echo "the envelope carries schema_version, generated_at, sources and constants:"
 assert_eq "schema_version" "1" "$(jq -r '.schema_version' <<<"$json_ab")"
 assert_match "generated_at is an ISO-8601 UTC timestamp" '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$(jq -r '.generated_at' <<<"$json_ab")"
