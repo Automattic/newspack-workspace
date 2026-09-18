@@ -37,6 +37,16 @@
 	}
 }
 
+.newspack-integration-logs-tabs__panel {
+	padding-top: 24px;
+}
+
+.newspack-integration-logs__loading {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
 .newspack-integration-log-details {
 	&--loading {
 		display: flex;

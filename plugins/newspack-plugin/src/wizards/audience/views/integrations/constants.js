@@ -16,9 +16,13 @@ export const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/sett
 // design system files terminal, non-actionable states under `none`.
 //
 // `canceled` is Action Scheduler's own spelling, so it stays as the library writes it.
+//
+// A finished action only says the job ran: a retry can run to the end while
+// the push inside it fails again. So `complete` reads "Ran" on a neutral badge,
+// and the push log's own status is what says whether the sync worked.
 /** @type {Record< string, { label: string, status: import('../../../../../packages/components/src/status-indicator').StatusName, intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
 export const STATUS_MAP = {
-	complete: { label: __( 'Complete', 'newspack-plugin' ), status: 'done', intent: 'stable' },
+	complete: { label: __( 'Ran', 'newspack-plugin' ), status: 'done', intent: 'draft' },
 	failed: { label: __( 'Failed', 'newspack-plugin' ), status: 'error', intent: 'high' },
 	pending: { label: __( 'Pending', 'newspack-plugin' ), status: 'pending', intent: 'low' },
 	'in-progress': { label: __( 'In progress', 'newspack-plugin' ), status: 'progress', intent: 'informational' },
