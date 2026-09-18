@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useCallback } from '@wordpress/element';
+import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -29,6 +29,14 @@ const DEFAULT_COMPLETE_NOTICE = { message: __( 'Action completed.', 'newspack-pl
 export function useRunAction( integrationId, { onSettled, completeNotice = DEFAULT_COMPLETE_NOTICE } = {} ) {
 	const { addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ runningActionIds, setRunningActionIds ] = useState( () => new Set() );
+
+	// The run outlives the render that started it. Held in a ref, the refresh
+	// belongs to the view the reader is on when the request ends, so a view
+	// changed mid-request is not filled with the previous one's rows.
+	const onSettledRef = useRef( onSettled );
+	useEffect( () => {
+		onSettledRef.current = onSettled;
+	} );
 
 	const runAction = useCallback(
 		actionId => {
@@ -71,12 +79,12 @@ export function useRunAction( integrationId, { onSettled, completeNotice = DEFAU
 						next.delete( actionId );
 						return next;
 					} );
-					if ( onSettled ) {
-						onSettled();
+					if ( onSettledRef.current ) {
+						onSettledRef.current();
 					}
 				} );
 		},
-		[ integrationId, addNotice, removeNotice, onSettled, completeNotice ]
+		[ integrationId, addNotice, removeNotice, completeNotice ]
 	);
 
 	return { runAction, runningActionIds };

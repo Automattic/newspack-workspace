@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
@@ -65,16 +65,28 @@ export const SyncActivity = ( { integrationId } ) => {
 	// must not refetch.
 	const queryKey = JSON.stringify( buildPushLogQuery( view ) );
 
+	// Requests answer in whatever order the server gets to them, so each one
+	// takes a number and only the newest may speak for the table.
+	const latestRequest = useRef( 0 );
+
 	const fetchEntries = useCallback( () => {
+		const request = ++latestRequest.current;
+		const isCurrent = () => request === latestRequest.current;
 		setIsLoading( true );
 		return apiFetch( { path: addQueryArgs( `${ API_BASE }/${ integrationId }/push-log`, JSON.parse( queryKey ) ) } )
 			.then( response => {
+				if ( ! isCurrent() ) {
+					return;
+				}
 				setData( response.items );
 				setTotal( response.total );
 				setRetentionDays( response.retention_days ?? null );
 				setHasFailed( false );
 			} )
 			.catch( () => {
+				if ( ! isCurrent() ) {
+					return;
+				}
 				// A load that failed left the table empty; the empty message
 				// says so rather than reporting a log with nothing in it.
 				setHasFailed( true );
@@ -85,6 +97,9 @@ export const SyncActivity = ( { integrationId } ) => {
 				} );
 			} )
 			.finally( () => {
+				if ( ! isCurrent() ) {
+					return;
+				}
 				setIsLoading( false );
 				setHasLoadedOnce( true );
 			} );

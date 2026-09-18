@@ -179,6 +179,41 @@ describe( 'SyncActivity', () => {
 		expect( screen.getByText( /7 days for the ones that worked, 14 for the ones that failed/ ) ).toBeTruthy();
 	} );
 
+	it( 'keeps a slow response from replacing a newer one', async () => {
+		await renderLoaded();
+		const deferred = () => {
+			let settle;
+			const promise = new Promise( resolve => ( settle = resolve ) );
+			return { promise, settle };
+		};
+		const superseded = deferred();
+		const newest = deferred();
+		mockApiFetch.mockReturnValueOnce( superseded.promise ).mockReturnValueOnce( newest.promise );
+
+		act( () => {
+			mockDataViewsProps.current.onChangeView( { ...mockDataViewsProps.current.view, page: 2 } );
+		} );
+		await waitFor( () => expect( mockApiFetch ).toHaveBeenCalledTimes( 2 ) );
+		act( () => {
+			mockDataViewsProps.current.onChangeView( { ...mockDataViewsProps.current.view, page: 3 } );
+		} );
+		await waitFor( () => expect( mockApiFetch ).toHaveBeenCalledTimes( 3 ) );
+
+		const newestRow = { ...retryingItem, id: 99 };
+		await act( async () => {
+			newest.settle( { items: [ newestRow ], total: 1, retention_days: { success: 30, failed: 90 } } );
+			await newest.promise;
+		} );
+		await act( async () => {
+			superseded.settle( { items: [ retryingItem ], total: 5, retention_days: { success: 30, failed: 90 } } );
+			await superseded.promise;
+		} );
+
+		expect( mockDataViewsProps.current.data ).toEqual( [ newestRow ] );
+		expect( mockDataViewsProps.current.paginationInfo.totalItems ).toBe( 1 );
+		expect( mockDataViewsProps.current.isLoading ).toBe( false );
+	} );
+
 	it( 'reports a load that failed', async () => {
 		mockApiFetch.mockRejectedValue( new Error( 'nope' ) );
 		render( <SyncActivity integrationId="sample" /> );
