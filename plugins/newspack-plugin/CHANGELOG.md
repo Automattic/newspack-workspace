@@ -1,3 +1,10 @@
+# newspack [6.52.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.4...newspack@6.52.0) (2026-09-18)
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([49a00c4](https://github.com/Automattic/newspack-workspace/commit/49a00c4e1bfa141c9c67cc1786f9d80b1eee5863))
+
 ## newspack [6.51.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.3...newspack@6.51.4) (2026-09-16)
 
 
