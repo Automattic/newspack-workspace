@@ -166,6 +166,31 @@ else
 fi
 
 echo
+echo "a mixed-case Defined() guard is found — PHP function names are case-insensitive:"
+assert_eq "NEWSPACK_FIXTURE_MIXEDCASE found" "true" "$(jq -r 'any(.constants[]; .name == "NEWSPACK_FIXTURE_MIXEDCASE")' <<<"$json_gamma_strings")"
+
+echo
+echo "the constant name itself stays case-sensitive (the (?i:defined) group is scoped, not a bare /i flag):"
+assert_eq "absent from the catalog" "" "$(jq -r '.constants[] | select(.name == "newspack_fixture_lowercase_name")' <<<"$json_gamma_strings")"
+assert_eq "absent from the catalog under its uppercased form either" "" "$(jq -r '.constants[] | select(.name == "NEWSPACK_FIXTURE_LOWERCASE_NAME")' <<<"$json_gamma_strings")"
+if [[ "$undocumented_gamma_strings_md" == *"lowercase"* || "$undocumented_gamma_strings_md" == *"LOWERCASE"* ]]; then
+	echo "  FAIL: a lowercase constant name leaked into the undocumented list; /i must be scoped to (?i:defined), not applied to the whole pattern"
+	failures=$((failures + 1))
+else
+	echo "  ok: absent from the undocumented list too — defined( 'newspack_fixture_lowercase_name' ) is not a guard at all"
+fi
+
+echo
+echo "a mixed-case Defined() guard quoted inside a string literal is still not a real guard:"
+assert_eq "absent from the catalog" "" "$(jq -r '.constants[] | select(.name == "NEWSPACK_FIXTURE_INSIDE_STRING_MIXEDCASE")' <<<"$json_gamma_strings")"
+if [[ "$undocumented_gamma_strings_md" == *"NEWSPACK_FIXTURE_INSIDE_STRING_MIXEDCASE"* ]]; then
+	echo "  FAIL: NEWSPACK_FIXTURE_INSIDE_STRING_MIXEDCASE was reported as undocumented; a string literal quoting Defined() was mistaken for a real guard"
+	failures=$((failures + 1))
+else
+	echo "  ok: absent from the undocumented list too — no constant invented from a string quoting Defined()"
+fi
+
+echo
 echo "the envelope carries schema_version, generated_at, sources and constants:"
 assert_eq "schema_version" "1" "$(jq -r '.schema_version' <<<"$json_ab")"
 assert_match "generated_at is an ISO-8601 UTC timestamp" '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$(jq -r '.generated_at' <<<"$json_ab")"

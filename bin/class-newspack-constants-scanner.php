@@ -144,7 +144,10 @@ class Newspack_Constants_Scanner {
 
 		$code_only = $this->strip_non_matchable( $content );
 
-		$pattern = '/\bdefined\s*\(\s*[\'"]NEWSPACK_([A-Z0-9_]+)[\'"]\s*\)/';
+		// (?i:defined) case-folds only the function name — PHP function names
+		// are case-insensitive, so Defined()/DEFINED() are real guards too —
+		// without folding the constant name, which stays case-sensitive.
+		$pattern = '/\b(?i:defined)\s*\(\s*[\'"]NEWSPACK_([A-Z0-9_]+)[\'"]\s*\)/';
 		if ( ! preg_match_all( $pattern, $code_only, $matches, PREG_OFFSET_CAPTURE ) ) {
 			return;
 		}

@@ -7,4 +7,5 @@
 
 $doc = "Check it with defined( 'NEWSPACK_FIXTURE_INSIDE_STRING' ) before use.";
 $doc_fq = "Or with \\defined( 'NEWSPACK_FIXTURE_INSIDE_STRING_FQ' ) before use.";
-echo $doc . $doc_fq;
+$doc_mc = "Or with Defined( 'NEWSPACK_FIXTURE_INSIDE_STRING_MIXEDCASE' ) before use.";
+echo $doc . $doc_fq . $doc_mc;
