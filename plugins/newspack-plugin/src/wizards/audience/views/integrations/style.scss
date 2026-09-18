@@ -35,6 +35,12 @@
 	.dataviews-item-actions .components-button:not(:disabled) {
 		cursor: pointer;
 	}
+
+	&__status-note {
+		display: block;
+		color: #757575;
+		font-size: 12px;
+	}
 }
 
 .newspack-integration-logs-tabs__panel {
