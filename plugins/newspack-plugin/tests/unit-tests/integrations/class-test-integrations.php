@@ -44,6 +44,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->reset_integrations();
 		$this->reset_handler_map();
 		Sample_Integration::reset();
+		Failing_Sample_Integration::reset();
 	}
 
 	/**
@@ -1248,7 +1249,9 @@ class Test_Integrations extends \WP_UnitTestCase {
 	public function push_failure_provider() {
 		return [
 			'transient failure is tried again'          => [ 'Service unavailable', 1 ],
+			'configuration failure is tried again'      => [ 'Payment required', 1 ],
 			'permanent contact failure is not repeated' => [ 'Contact was permanently deleted', 0 ],
+			'benign failure is not repeated'            => [ 'Member Exists', 0 ],
 		];
 	}
 
