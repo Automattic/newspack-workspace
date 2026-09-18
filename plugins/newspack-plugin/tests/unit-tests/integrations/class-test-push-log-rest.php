@@ -175,6 +175,10 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		$this->assertSame( 1, $data['total'] );
 		$this->assertSame( 1, $data['page'] );
 		$this->assertSame( 25, $data['per_page'] );
+		// The screen names the windows when it finds nothing, and a site can
+		// filter them, so they travel with the list rather than being repeated
+		// in the JavaScript.
+		$this->assertSame( Push_Log::get_retention_days(), $data['retention_days'] );
 		$item = $data['items'][0];
 		$this->assertSame( $row_id, $item['id'] );
 		$this->assertSame( 'reader@example.test', $item['email'] );
@@ -182,6 +186,25 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'payload', $item );
 		$this->assertArrayNotHasKey( 'retry_action_id', $item );
 		$this->assertArrayNotHasKey( 'integration_id', $item );
+	}
+
+	/**
+	 * A log that cannot be read is a failure, not an empty list: the screen
+	 * would otherwise say nothing was ever sent.
+	 */
+	public function test_a_log_that_cannot_be_read_is_an_error() {
+		$break_reads = function ( $query ) {
+			return str_replace( Push_Log::get_table_name(), 'table_that_does_not_exist', $query );
+		};
+		add_filter( 'query', $break_reads );
+
+		$response = ( new Audience_Integrations() )->api_get_push_log( $this->list_request() );
+
+		remove_filter( 'query', $break_reads );
+
+		$this->assertWPError( $response );
+		$this->assertSame( 500, $response->get_error_data()['status'] );
+		$this->assertStringNotContainsString( 'table_that_does_not_exist', $response->get_error_message() );
 	}
 
 	/**

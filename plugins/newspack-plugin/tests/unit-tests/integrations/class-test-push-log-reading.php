@@ -503,6 +503,47 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The address and the account are asked separately, and the later of the
+	 * two answers wins: a push logged under an address the reader has already
+	 * left is still compared with the newest push that reached the provider.
+	 */
+	public function test_predecessor_takes_the_later_of_the_address_and_the_account() {
+		$under_old_address = $this->record( [ 'email' => 'old@example.test' ] );
+		$under_new_address = $this->record( [ 'email' => 'new@example.test' ] );
+		$back_under_old    = $this->record(
+			[
+				'email'   => 'old@example.test',
+				'payload' => $this->sample_payload( [ 'NP_Total Paid' => '180' ] ),
+			]
+		);
+
+		$predecessor = Push_Log::get_predecessor( Push_Log::get( $back_under_old, 'sample' ) );
+
+		$this->assertNotSame( $under_old_address, $predecessor['id'] );
+		$this->assertSame( $under_new_address, $predecessor['id'] );
+	}
+
+	/**
+	 * A table that cannot be read is not an empty log. The failure reaches the
+	 * caller, without the statement, which carries the reader's address.
+	 */
+	public function test_query_reports_a_table_it_cannot_read() {
+		$this->record();
+		$break_reads = function ( $query ) {
+			return str_replace( Push_Log::get_table_name(), 'table_that_does_not_exist', $query );
+		};
+		add_filter( 'query', $break_reads );
+
+		$result = Push_Log::query( [ 'integration_id' => 'sample' ] );
+
+		remove_filter( 'query', $break_reads );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_push_log_read_failed', $result->get_error_code() );
+		$this->assertStringNotContainsString( 'table_that_does_not_exist', $result->get_error_message() );
+	}
+
+	/**
 	 * The comparison names what changed, what is new and what was dropped,
 	 * with real changes first, fields that change on every visit after them,
 	 * and everything else last.
@@ -597,6 +638,46 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 		$this->assertSame( 'old@example.test', $fields['previous_email']['after'] );
 		$this->assertSame( '["daily","weekly"]', $fields['NP_Lists']['after'] );
 		$this->assertTrue( $fields['NP_Lists']['changed'] );
+	}
+
+	/**
+	 * A deletion flag carries the address and a couple of deletion fields by
+	 * design. The rest of the contact was not cleared at the provider, so the
+	 * comparison keeps to what the flag itself sent.
+	 */
+	public function test_compare_of_a_flag_keeps_to_the_fields_it_sent() {
+		$row = [
+			'operation' => Push_Log::OPERATION_FLAG,
+			'payload'   => [
+				'email'    => 'reader@example.test',
+				'metadata' => [ 'NP_Deleted' => 'yes' ],
+			],
+		];
+
+		$keys = wp_list_pluck( Push_Log::compare_payloads( $row, [ 'payload' => $this->sample_payload() ], 'NP_' ), 'key' );
+		sort( $keys );
+
+		$this->assertSame( [ 'NP_Deleted', 'email' ], $keys );
+	}
+
+	/**
+	 * An upsert sends the whole contact, so a field it stopped sending is a
+	 * field the provider no longer hears about: it stays on the list.
+	 */
+	public function test_compare_of_an_upsert_still_lists_a_dropped_field() {
+		$row = [
+			'operation' => Push_Log::OPERATION_UPSERT,
+			'payload'   => [
+				'email'    => 'reader@example.test',
+				'metadata' => [ 'NP_Membership Status' => 'active' ],
+			],
+		];
+
+		$fields = array_column( Push_Log::compare_payloads( $row, [ 'payload' => $this->sample_payload() ], 'NP_' ), null, 'key' );
+
+		$this->assertArrayHasKey( 'NP_Total Paid', $fields );
+		$this->assertNull( $fields['NP_Total Paid']['after'] );
+		$this->assertTrue( $fields['NP_Total Paid']['changed'] );
 	}
 
 	/**

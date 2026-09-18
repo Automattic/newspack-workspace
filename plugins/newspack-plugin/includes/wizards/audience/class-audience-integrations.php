@@ -673,7 +673,7 @@ class Audience_Integrations extends Wizard {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function api_get_push_log( WP_REST_Request $request ) {
+	public function api_get_push_log( WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$integration_id = (string) $request->get_param( 'integration_id' );
 		if ( ! Integrations::get_integration( $integration_id ) ) {
 			return new WP_Error(
@@ -698,12 +698,19 @@ class Audience_Integrations extends Wizard {
 			]
 		);
 
+		if ( is_wp_error( $result ) ) {
+			return new WP_Error( $result->get_error_code(), $result->get_error_message(), [ 'status' => 500 ] );
+		}
+
 		return rest_ensure_response(
 			[
-				'items'    => array_map( [ __CLASS__, 'format_push_log_item' ], $result['items'] ),
-				'total'    => $result['total'],
-				'page'     => $page,
-				'per_page' => $per_page,
+				'items'          => array_map( [ __CLASS__, 'format_push_log_item' ], $result['items'] ),
+				'total'          => $result['total'],
+				'page'           => $page,
+				'per_page'       => $per_page,
+				// The screen names the windows when it finds nothing, and a
+				// site can filter them.
+				'retention_days' => Push_Log::get_retention_days(),
 			]
 		);
 	}
@@ -715,7 +722,7 @@ class Audience_Integrations extends Wizard {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function api_get_push_log_entry( WP_REST_Request $request ) {
+	public function api_get_push_log_entry( WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$integration_id = (string) $request->get_param( 'integration_id' );
 		$integration    = Integrations::get_integration( $integration_id );
 		if ( ! $integration ) {
@@ -785,7 +792,18 @@ class Audience_Integrations extends Wizard {
 			'scheduled_at' => null,
 		];
 		$action = $action_id > 0 ? Integrations::get_integration_action( $action_id, $integration_id ) : null;
-		if ( ! $action || \ActionScheduler_Store::STATUS_PENDING !== \ActionScheduler_Store::instance()->get_status( $action_id ) ) {
+		if ( ! $action ) {
+			return $state;
+		}
+
+		try {
+			// The action can be pruned between the fetch and the status read;
+			// one row must not take the page down.
+			$status = \ActionScheduler_Store::instance()->get_status( $action_id );
+		} catch ( \Throwable $e ) {
+			return $state;
+		}
+		if ( \ActionScheduler_Store::STATUS_PENDING !== $status ) {
 			return $state;
 		}
 
