@@ -333,7 +333,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * @return string[] Integration IDs.
 	 */
-	public static function get_integrations_to_push( $user_id, $contact, $context = '' ) {
+	public static function get_integrations_to_push( $user_id, $contact, $context = '' ): array {
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
 		$contact         = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
 		$integration_ids = [];
@@ -359,7 +359,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * @return string The fingerprint.
 	 */
-	private static function get_push_fingerprint( $integration, $integration_contact ) {
+	private static function get_push_fingerprint( $integration, $integration_contact ): string {
 		return md5(
 			\wp_json_encode(
 				[
@@ -388,7 +388,7 @@ class Contact_Sync extends Sync {
 	 * @param array                                   $integration_contact The contact as get_integrations_to_push() prepares it for the integration.
 	 * @param true|\WP_Error                          $result              The push result.
 	 */
-	private static function record_push_fingerprint( $user_id, $integration, $integration_contact, $result ) {
+	private static function record_push_fingerprint( $user_id, $integration, $integration_contact, $result ): void {
 		if ( \is_wp_error( $result ) && ! in_array( self::classify_error( $result ), [ 'benign', 'permanent_contact' ], true ) ) {
 			return;
 		}
