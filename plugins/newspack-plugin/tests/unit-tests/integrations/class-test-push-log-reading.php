@@ -317,4 +317,131 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 
 		$this->assertSame( [ $guest_failure ], $this->query_ids( [ 'needs_attention' => true ] ) );
 	}
+
+	/**
+	 * A deletion sends no contact data, so a reader signing up again under the
+	 * same address is not evidence the deletion reached the provider: only a
+	 * flag or deletion that itself succeeded closes one out.
+	 */
+	public function test_a_later_upsert_does_not_resolve_a_failed_deletion() {
+		$error = new \WP_Error( 'provider_down', 'ESP 503' );
+
+		$failed_deletion = $this->record(
+			[
+				'email'     => 'gone@example.test',
+				'user_id'   => 0,
+				'operation' => Push_Log::OPERATION_DELETE,
+				'payload'   => null,
+				'result'    => $error,
+			]
+		);
+		$this->record(
+			[
+				'email'   => 'gone@example.test',
+				'user_id' => 0,
+			]
+		);
+
+		$this->assertSame( [ $failed_deletion ], $this->query_ids( [ 'needs_attention' => true ] ) );
+
+		$this->record(
+			[
+				'email'     => 'gone@example.test',
+				'user_id'   => 0,
+				'operation' => Push_Log::OPERATION_FLAG,
+			]
+		);
+
+		$this->assertSame( [], $this->query_ids( [ 'needs_attention' => true ] ) );
+	}
+
+	/**
+	 * Every optional filter appends its own placeholders to the query.
+	 * Combining all of them catches a filter whose value landed out of order,
+	 * which exercising one filter at a time would miss.
+	 */
+	public function test_query_combines_search_status_operation_and_needs_attention() {
+		$error     = new \WP_Error( 'provider_down', 'ESP 503' );
+		$reader_id = self::factory()->user->create( [ 'user_email' => 'match@example.test' ] );
+
+		// Wrong address and account: excluded by search.
+		$this->record(
+			[
+				'email'  => 'other@example.test',
+				'result' => $error,
+			]
+		);
+
+		// Succeeded: excluded by status.
+		$this->record(
+			[
+				'email'   => 'match@example.test',
+				'user_id' => $reader_id,
+			]
+		);
+
+		// A flag, not an upsert: excluded by operation.
+		$this->record(
+			[
+				'email'     => 'match@example.test',
+				'user_id'   => $reader_id,
+				'operation' => Push_Log::OPERATION_FLAG,
+				'result'    => $error,
+			]
+		);
+
+		// Failed, but a later success for the reader made up for it: excluded by needs_attention.
+		$this->record(
+			[
+				'email'   => 'match@example.test',
+				'user_id' => $reader_id,
+				'result'  => $error,
+			]
+		);
+		$this->record(
+			[
+				'email'   => 'match@example.test',
+				'user_id' => $reader_id,
+			]
+		);
+
+		// Matches every filter, and nothing later resolves it.
+		$match = $this->record(
+			[
+				'email'   => 'match@example.test',
+				'user_id' => $reader_id,
+				'result'  => $error,
+			]
+		);
+
+		$found = $this->query_ids(
+			[
+				'search'          => 'match@example.test',
+				'status'          => Push_Log::STATUS_FAILED,
+				'operation'       => Push_Log::OPERATION_UPSERT,
+				'needs_attention' => true,
+			]
+		);
+
+		$this->assertSame( [ $match ], $found );
+	}
+
+	/**
+	 * A resolving success is later by clock time, not only by insertion order:
+	 * a failure can be logged after the success that already made up for it,
+	 * when a retry chain and a fresh push interleave.
+	 */
+	public function test_needs_attention_follows_clock_time_over_row_order() {
+		$success = $this->record( [ 'email' => 'a@example.test' ] );
+		$failure = $this->record(
+			[
+				'email'  => 'a@example.test',
+				'result' => new \WP_Error( 'provider_down', 'ESP 503' ),
+			]
+		);
+		$this->set_updated_at( $success, '2026-09-10 12:00:00' );
+		$this->set_updated_at( $failure, '2026-09-10 11:00:00' );
+
+		$this->assertSame( [], $this->query_ids( [ 'needs_attention' => true ] ) );
+	}
 }

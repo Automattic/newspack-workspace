@@ -472,11 +472,22 @@ final class Push_Log {
 		}
 
 		if ( $args['needs_attention'] ) {
-			// Every push sends the full contact, so a later success for the same
-			// reader supersedes a failure. "Same reader" follows the account as
-			// well as the address; guests share account 0, which links no one.
-			$where[] = '( l.status = %s OR ( l.status = %s AND NOT EXISTS ( SELECT 1 FROM %i s WHERE s.integration_id = l.integration_id AND s.status = %s AND ( s.email = l.email OR ( l.user_id > 0 AND s.user_id = l.user_id ) ) AND ( s.updated_at > l.updated_at OR ( s.updated_at = l.updated_at AND s.id > l.id ) ) ) ) )';
-			array_push( $values, self::STATUS_RETRYING, self::STATUS_FAILED, $table_name, self::STATUS_SUCCESS );
+			// A redundant range on the status this filter already narrows to, so
+			// the plan can use the integration_status index instead of scanning
+			// every row of the integration through integration_updated.
+			$where[]  = 'l.status IN ( %s, %s )';
+			$values[] = self::STATUS_RETRYING;
+			$values[] = self::STATUS_FAILED;
+
+			// An upsert sends the full contact, so any later success for the same
+			// reader supersedes a failed one. A deletion sends no contact data, so
+			// a later signup is not evidence it reached the provider: only a flag
+			// or deletion that itself succeeded closes one out. "Same reader"
+			// follows the account as well as the address; guests share account 0,
+			// which links no one. The IN() above already limits this row to
+			// retrying or failed, so "not retrying" here means failed.
+			$where[] = '( l.status = %s OR NOT EXISTS ( SELECT 1 FROM %i s WHERE s.integration_id = l.integration_id AND s.status = %s AND ( s.email = l.email OR ( l.user_id > 0 AND s.user_id = l.user_id ) ) AND ( s.updated_at > l.updated_at OR ( s.updated_at = l.updated_at AND s.id > l.id ) ) AND ( l.operation = %s OR s.operation <> %s ) ) )';
+			array_push( $values, self::STATUS_RETRYING, $table_name, self::STATUS_SUCCESS, self::OPERATION_UPSERT, self::OPERATION_UPSERT );
 		}
 
 		$where_sql = implode( ' AND ', $where );
