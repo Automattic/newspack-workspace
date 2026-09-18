@@ -1,7 +1,15 @@
 /**
  * Internal dependencies
  */
-import { NEEDS_ATTENTION_VALUE, buildPushLogQuery, getAttemptLabel, getRetryNote, getEmptyMessage } from './push-log-utils';
+import {
+	NEEDS_ATTENTION_VALUE,
+	buildPushLogQuery,
+	getAttemptLabel,
+	getErrorKindLabel,
+	getRetryNote,
+	getStatusDisplay,
+	getEmptyMessage,
+} from './push-log-utils';
 
 const view = overrides => ( { page: 1, perPage: 25, sort: { field: 'updated_at', direction: 'desc' }, search: '', filters: [], ...overrides } );
 
@@ -57,6 +65,51 @@ describe( 'getAttemptLabel', () => {
 	it( 'drops the ceiling when the row does not have a usable one', () => {
 		expect( getAttemptLabel( { attempts: 3, max_attempts: 1 } ) ).toBe( 'Retry 2' );
 	} );
+
+	it( 'names the retry a waiting row is waiting for, as its scheduled action does', () => {
+		// The pending action is titled "… Retry 3 of 5", so the row it belongs
+		// to has to count the same retry.
+		const waiting = { status: 'retrying', attempts: 3, max_attempts: 6, retry: { is_pending: true } };
+		expect( getAttemptLabel( waiting ) ).toBe( 'Waiting for retry 3 of 5' );
+		expect( getAttemptLabel( { ...waiting, attempts: 1 } ) ).toBe( 'Waiting for retry 1 of 5' );
+		expect( getAttemptLabel( { ...waiting, max_attempts: 1 } ) ).toBe( 'Waiting for retry 3' );
+	} );
+
+	it( 'leaves a stalled row to the retry note', () => {
+		expect( getAttemptLabel( { status: 'retrying', attempts: 3, max_attempts: 6, retry: { is_pending: false } } ) ).toBe( '' );
+	} );
+} );
+
+describe( 'getErrorKindLabel', () => {
+	it( 'reads a benign deletion as a contact that was already gone', () => {
+		expect( getErrorKindLabel( { error_class: 'benign', operation: 'flag' } ) ).toBe( 'Already removed' );
+		expect( getErrorKindLabel( { error_class: 'benign', operation: 'delete' } ) ).toBe( 'Already removed' );
+	} );
+
+	it( 'reads a benign update as a contact the provider already held', () => {
+		expect( getErrorKindLabel( { error_class: 'benign', operation: 'upsert' } ) ).toBe( 'Already up to date' );
+	} );
+
+	it( 'names the other kinds, and falls back to the raw class', () => {
+		expect( getErrorKindLabel( { error_class: 'transient', operation: 'upsert' } ) ).toBe( 'Temporary error' );
+		expect( getErrorKindLabel( { error_class: 'something_new', operation: 'upsert' } ) ).toBe( 'something_new' );
+	} );
+} );
+
+describe( 'getStatusDisplay', () => {
+	it( 'draws a stalled retry as something to look at', () => {
+		const stalled = getStatusDisplay( { status: 'retrying', retry: { action_id: 9, is_pending: false } } );
+		expect( stalled ).toEqual( { label: 'Retrying', status: 'attention', intent: 'medium' } );
+	} );
+
+	it( 'leaves a retry that is still coming alone', () => {
+		expect( getStatusDisplay( { status: 'retrying', retry: { action_id: 9, is_pending: true } } ).status ).toBe( 'progress' );
+		expect( getStatusDisplay( { status: 'success' } ).label ).toBe( 'Synced' );
+	} );
+
+	it( 'shows a status it does not know rather than nothing', () => {
+		expect( getStatusDisplay( { status: 'something_new' } ) ).toEqual( { label: 'something_new', status: 'attention', intent: 'none' } );
+	} );
 } );
 
 describe( 'getRetryNote', () => {
@@ -81,6 +134,15 @@ describe( 'getEmptyMessage', () => {
 
 	it( 'explains what the log holds when a reader is not found', () => {
 		expect( getEmptyMessage( view( { search: 'reader@example.test' } ) ) ).toContain( 'No pushes recorded for this reader.' );
+	} );
+
+	it( 'names the windows the site actually keeps, and falls back to the defaults', () => {
+		expect( getEmptyMessage( view( { search: 'reader@example.test' } ), { success: 7, failed: 14 } ) ).toContain(
+			'7 days for the ones that worked, 14 for the ones that failed'
+		);
+		expect( getEmptyMessage( view( { search: 'reader@example.test' } ) ) ).toContain(
+			'30 days for the ones that worked, 90 for the ones that failed'
+		);
 	} );
 
 	it( 'says nothing was recorded yet otherwise', () => {

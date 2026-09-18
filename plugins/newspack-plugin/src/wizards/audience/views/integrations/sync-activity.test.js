@@ -63,7 +63,7 @@ const retryingItem = {
 	retry: { action_id: 9001, is_pending: true, scheduled_at: '2026-09-10 10:02:30' },
 };
 
-const renderLoaded = async ( response = { items: [ retryingItem ], total: 1 } ) => {
+const renderLoaded = async ( response = { items: [ retryingItem ], total: 1, retention_days: { success: 30, failed: 90 } } ) => {
 	mockApiFetch.mockResolvedValue( response );
 	render( <SyncActivity integrationId="sample" /> );
 	await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
@@ -120,14 +120,15 @@ describe( 'SyncActivity', () => {
 		expect( lastPath() ).toContain( 'needs_attention=true' );
 	} );
 
-	it( 'says which retry a row is on, next to its status', async () => {
+	it( 'says which retry a row is waiting for, next to its status', async () => {
 		await renderLoaded();
 
 		const statusField = mockDataViewsProps.current.fields.find( field => field.id === 'status' );
 		render( statusField.render( { item: retryingItem } ) );
 
 		expect( screen.getByText( 'Retrying' ) ).toBeTruthy();
-		expect( screen.getByText( 'Retry 2 of 5' ) ).toBeTruthy();
+		// The same retry its pending scheduled action is titled with.
+		expect( screen.getByText( 'Waiting for retry 3 of 5' ) ).toBeTruthy();
 	} );
 
 	it( 'offers to run a retry only while there is one to run', async () => {
@@ -160,10 +161,22 @@ describe( 'SyncActivity', () => {
 	} );
 
 	it( 'says why the table is empty', async () => {
-		await renderLoaded( { items: [], total: 0 } );
+		await renderLoaded( { items: [], total: 0, retention_days: { success: 30, failed: 90 } } );
 
 		render( mockDataViewsProps.current.empty );
 		expect( screen.getByText( 'No pushes recorded yet.' ) ).toBeTruthy();
+	} );
+
+	it( 'names the windows the site keeps when a reader is not found', async () => {
+		await renderLoaded( { items: [], total: 0, retention_days: { success: 7, failed: 14 } } );
+
+		act( () => {
+			mockDataViewsProps.current.onChangeView( { ...mockDataViewsProps.current.view, search: 'reader@example.test' } );
+		} );
+		await waitFor( () => expect( lastPath() ).toContain( 'search=' ) );
+
+		render( mockDataViewsProps.current.empty );
+		expect( screen.getByText( /7 days for the ones that worked, 14 for the ones that failed/ ) ).toBeTruthy();
 	} );
 
 	it( 'reports a load that failed', async () => {
@@ -173,5 +186,15 @@ describe( 'SyncActivity', () => {
 		await waitFor( () =>
 			expect( mockAddNotice ).toHaveBeenCalledWith( expect.objectContaining( { type: 'error', id: 'integration-push-log-fetch-error' } ) )
 		);
+	} );
+
+	it( 'does not read a failed load as a log with nothing in it', async () => {
+		mockApiFetch.mockRejectedValue( new Error( 'nope' ) );
+		render( <SyncActivity integrationId="sample" /> );
+		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
+
+		render( mockDataViewsProps.current.empty );
+		expect( screen.getByText( 'The sync activity could not be loaded.' ) ).toBeTruthy();
+		expect( screen.queryByText( 'No pushes recorded yet.' ) ).toBeNull();
 	} );
 } );

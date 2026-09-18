@@ -142,6 +142,59 @@ describe( 'SyncActivityDetails', () => {
 		expect( screen.getByText( 'The contact was deleted. No data was sent.' ) ).toBeTruthy();
 	} );
 
+	it( 'does not call a deletion that failed a deletion that happened', async () => {
+		await renderDetails( {
+			entry: entry( { operation: 'delete', status: 'failed', error_code: 'provider_down', error_message: 'ESP 503' } ),
+			compared_to: null,
+			fields: [],
+		} );
+
+		expect( screen.queryByText( 'The contact was deleted. No data was sent.' ) ).toBeNull();
+		expect( screen.getByText( 'The deletion did not reach the provider. A deletion sends no data.' ) ).toBeTruthy();
+	} );
+
+	it( 'reads a benign result as what the provider said, not as an earlier failure', async () => {
+		// A benign result is a success on its first attempt: nothing failed.
+		await renderDetails( {
+			entry: entry( { operation: 'flag', error_class: 'benign', error_code: 'contact_not_found', error_message: 'No such contact' } ),
+			compared_to: null,
+			fields,
+		} );
+
+		expect( screen.getByRole( 'heading', { name: 'Provider response' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'heading', { name: 'Earlier attempts failed with' } ) ).toBeNull();
+		expect( screen.getByText( 'Already removed' ) ).toBeTruthy();
+	} );
+
+	it( 'reads a flag whose list cleanup failed as data that did arrive', async () => {
+		await renderDetails( {
+			entry: entry( {
+				operation: 'flag',
+				status: 'failed',
+				error_code: 'flag_cleanup_failed',
+				error_message: 'The deletion flag was pushed, but removing the reader from lists failed.',
+			} ),
+			compared_to: null,
+			fields,
+		} );
+
+		expect( screen.getByRole( 'heading', { name: 'Fields sent' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'heading', { name: 'Not delivered' } ) ).toBeNull();
+	} );
+
+	it( 'tells a field that was not sent from one that was sent empty', async () => {
+		const mixed = [
+			{ key: 'NP_Dropped', label: 'Dropped', before: 'gone', after: null, changed: true, volatile: false },
+			{ key: 'NP_Cleared', label: 'Cleared', before: 'was here', after: '', changed: true, volatile: false },
+			{ key: 'NP_Added', label: 'Added', before: null, after: 'new', changed: true, volatile: false },
+		];
+		await renderDetails( { entry: entry(), compared_to: { id: 41, updated_at: '2026-09-03 10:42:00' }, fields: mixed } );
+
+		expect( screen.getByText( 'Not sent' ) ).toBeTruthy();
+		expect( screen.getByText( '(empty)' ) ).toBeTruthy();
+		expect( screen.getByText( '—' ) ).toBeTruthy();
+	} );
+
 	it( 'says so when the entry is gone', async () => {
 		mockApiFetch.mockRejectedValue( { data: { status: 404 } } );
 		render( <SyncActivityDetails integrationId="sample" entryId={ 57 } /> );

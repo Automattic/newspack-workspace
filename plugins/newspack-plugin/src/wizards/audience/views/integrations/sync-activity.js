@@ -15,7 +15,7 @@ import { DataViews as WPDataViews } from '@wordpress/dataviews';
 import { DataViews, StatusIndicator } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, PUSH_LOG_STATUS_MAP, PUSH_LOG_OPERATION_LABELS, formatTimestamp } from './constants';
-import { NEEDS_ATTENTION_VALUE, buildPushLogQuery, getAttemptLabel, getRetryNote, getEmptyMessage } from './push-log-utils';
+import { NEEDS_ATTENTION_VALUE, buildPushLogQuery, getAttemptLabel, getRetryNote, getStatusDisplay, getEmptyMessage } from './push-log-utils';
 import { SyncActivityDetails } from './sync-activity-details';
 import { useRunAction } from './use-run-action';
 
@@ -55,6 +55,8 @@ export const SyncActivity = ( { integrationId } ) => {
 
 	const [ data, setData ] = useState( [] );
 	const [ total, setTotal ] = useState( 0 );
+	const [ retentionDays, setRetentionDays ] = useState( null );
+	const [ hasFailed, setHasFailed ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ hasLoadedOnce, setHasLoadedOnce ] = useState( false );
 	const [ view, setView ] = useState( DEFAULT_VIEW );
@@ -69,8 +71,13 @@ export const SyncActivity = ( { integrationId } ) => {
 			.then( response => {
 				setData( response.items );
 				setTotal( response.total );
+				setRetentionDays( response.retention_days ?? null );
+				setHasFailed( false );
 			} )
 			.catch( () => {
+				// A load that failed left the table empty; the empty message
+				// says so rather than reporting a log with nothing in it.
+				setHasFailed( true );
 				addNotice( {
 					message: __( 'Failed to load the sync activity. Please try again.', 'newspack-plugin' ),
 					type: 'error',
@@ -116,7 +123,7 @@ export const SyncActivity = ( { integrationId } ) => {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				render: ( { item } ) => {
-					const mapped = PUSH_LOG_STATUS_MAP[ item.status ] || { label: item.status, status: 'attention' };
+					const mapped = getStatusDisplay( item );
 					const notes = [ getAttemptLabel( item ), getRetryNote( item ) ].filter( Boolean );
 					return (
 						<>
@@ -159,7 +166,7 @@ export const SyncActivity = ( { integrationId } ) => {
 				getValue: () => '',
 				enableSorting: false,
 				enableHiding: false,
-				elements: [ { value: NEEDS_ATTENTION_VALUE, label: __( 'Retrying, or failed and not fixed since', 'newspack-plugin' ) } ],
+				elements: [ { value: NEEDS_ATTENTION_VALUE, label: __( 'Retrying, or failed with no later success', 'newspack-plugin' ) } ],
 				filterBy: { operators: [ 'is' ] },
 			},
 		],
@@ -212,7 +219,9 @@ export const SyncActivity = ( { integrationId } ) => {
 			defaultLayouts={ { table: {} } }
 			isLoading={ isLoading }
 			getItemId={ item => item.id }
-			empty={ <p>{ getEmptyMessage( view ) }</p> }
+			empty={
+				<p>{ hasFailed ? __( 'The sync activity could not be loaded.', 'newspack-plugin' ) : getEmptyMessage( view, retentionDays ) }</p>
+			}
 			search
 		>
 			<div className="dataviews__view-actions">

@@ -10,19 +10,24 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { API_BASE, PUSH_LOG_STATUS_MAP, PUSH_LOG_OPERATION_LABELS, PUSH_LOG_ERROR_CLASS_LABELS, formatTimestamp } from './constants';
-import { getAttemptLabel, getRetryNote } from './push-log-utils';
+import { API_BASE, PUSH_LOG_OPERATION_LABELS, formatTimestamp } from './constants';
+import { getAttemptLabel, getErrorKindLabel, getRetryNote, getStatusDisplay } from './push-log-utils';
+
+// The flag push reached the provider; the list cleanup after it did not, so
+// the fields it sent did arrive.
+const DELIVERED_ERROR_CODES = [ 'flag_cleanup_failed' ];
 
 /**
- * The heading over the fields. A push that did not succeed never reached the
- * provider, so its fields are what did not arrive, not what changed there.
+ * The heading over the fields. A push that did not reach the provider never
+ * changed anything there, so its fields are what did not arrive.
  *
  * @param {Object}      entry      The push log entry.
  * @param {Object|null} comparedTo The push it was compared with.
  * @return {string} The heading.
  */
 function getFieldsHeading( entry, comparedTo ) {
-	if ( entry.status !== 'success' ) {
+	const delivered = entry.status === 'success' || DELIVERED_ERROR_CODES.includes( entry.error_code );
+	if ( ! delivered ) {
 		return __( 'Not delivered', 'newspack-plugin' );
 	}
 	if ( ! comparedTo ) {
@@ -31,6 +36,36 @@ function getFieldsHeading( entry, comparedTo ) {
 	/* translators: %s: date and time of the reader's previous successful push. */
 	return sprintf( __( 'Changed since %s', 'newspack-plugin' ), formatTimestamp( comparedTo.updated_at ) );
 }
+
+/**
+ * The heading over what the provider said. A benign result is a success on
+ * its first attempt, so calling it an earlier failure would invent one.
+ *
+ * @param {Object} entry The push log entry.
+ * @return {string} The heading.
+ */
+function getErrorHeading( entry ) {
+	if ( entry.error_class === 'benign' ) {
+		return __( 'Provider response', 'newspack-plugin' );
+	}
+	return entry.status === 'success' ? __( 'Earlier attempts failed with', 'newspack-plugin' ) : __( 'Error', 'newspack-plugin' );
+}
+
+// A field the push left out is not a field it cleared, and a field sent empty
+// is not a field missing: the three read differently.
+const formatAfter = value => {
+	if ( value === null || value === undefined ) {
+		return __( 'Not sent', 'newspack-plugin' );
+	}
+	return value === '' ? __( '(empty)', 'newspack-plugin' ) : value;
+};
+
+const formatBefore = value => {
+	if ( value === null || value === undefined ) {
+		return '—';
+	}
+	return value === '' ? __( '(empty)', 'newspack-plugin' ) : value;
+};
 
 const FieldsTable = ( { fields, showBefore } ) => (
 	<table className="newspack-integration-log-details__fields">
@@ -45,8 +80,8 @@ const FieldsTable = ( { fields, showBefore } ) => (
 			{ fields.map( field => (
 				<tr key={ field.key } className={ field.volatile ? 'newspack-integration-log-details__field--volatile' : undefined }>
 					<th scope="row">{ field.label }</th>
-					{ showBefore && <td>{ field.before ?? '—' }</td> }
-					<td>{ field.after ?? '—' }</td>
+					{ showBefore && <td>{ formatBefore( field.before ) }</td> }
+					<td>{ formatAfter( field.after ) }</td>
 				</tr>
 			) ) }
 		</tbody>
@@ -120,7 +155,7 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 	}
 
 	const { entry, compared_to: comparedTo, fields } = data;
-	const status = PUSH_LOG_STATUS_MAP[ entry.status ] || { label: entry.status, intent: 'none' };
+	const status = getStatusDisplay( entry );
 	const attemptLabel = getAttemptLabel( entry );
 	const retryNote = getRetryNote( entry );
 	const hasError = Boolean( entry.error_code || entry.error_message );
@@ -185,14 +220,12 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 
 			{ hasError && (
 				<section className="newspack-integration-log-details__section">
-					<h4>
-						{ entry.status === 'success' ? __( 'Earlier attempts failed with', 'newspack-plugin' ) : __( 'Error', 'newspack-plugin' ) }
-					</h4>
+					<h4>{ getErrorHeading( entry ) }</h4>
 					<dl className="newspack-integration-log-details__meta">
 						{ entry.error_class && (
 							<>
 								<dt>{ __( 'Kind', 'newspack-plugin' ) }</dt>
-								<dd>{ PUSH_LOG_ERROR_CLASS_LABELS[ entry.error_class ] || entry.error_class }</dd>
+								<dd>{ getErrorKindLabel( entry ) }</dd>
 							</>
 						) }
 						{ entry.error_code && (
@@ -215,7 +248,11 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 
 			<section className="newspack-integration-log-details__section">
 				{ fields.length === 0 ? (
-					<p>{ __( 'The contact was deleted. No data was sent.', 'newspack-plugin' ) }</p>
+					<p>
+						{ entry.status === 'success'
+							? __( 'The contact was deleted. No data was sent.', 'newspack-plugin' )
+							: __( 'The deletion did not reach the provider. A deletion sends no data.', 'newspack-plugin' ) }
+					</p>
 				) : (
 					<>
 						<h4>{ getFieldsHeading( entry, comparedTo ) }</h4>
