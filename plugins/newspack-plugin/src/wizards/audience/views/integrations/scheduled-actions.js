@@ -7,6 +7,7 @@ import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { Spinner } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { DataViews as WPDataViews } from '@wordpress/dataviews';
 
 /**
@@ -162,9 +163,9 @@ export const ScheduledActions = ( { integrationId } ) => {
 
 	if ( ! hasLoadedOnce ) {
 		return (
-			<div className="newspack-integration-logs__loading">
+			<Stack justify="center" align="center">
 				<Spinner />
-			</div>
+			</Stack>
 		);
 	}
 

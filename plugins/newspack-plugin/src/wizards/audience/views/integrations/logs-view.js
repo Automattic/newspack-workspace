@@ -56,7 +56,7 @@ export const LogsView = ( { integrations, match } ) => {
 
 	return (
 		<Tabs.Root value={ activeTab } onValueChange={ setActiveTab } className="newspack-integration-logs-tabs">
-			<Tabs.List>
+			<Tabs.List className="newspack-integration-logs-tabs__list" aria-label={ __( 'Logs', 'newspack-plugin' ) }>
 				{ TABS.map( ( { value, label } ) => (
 					<Tabs.Tab key={ value } value={ value }>
 						{ label }

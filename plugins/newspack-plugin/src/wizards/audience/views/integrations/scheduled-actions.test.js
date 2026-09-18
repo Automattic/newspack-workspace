@@ -19,6 +19,13 @@ jest.mock( '@wordpress/data', () => {
 
 jest.mock( '@wordpress/components', () => ( { Spinner: () => 'Loading' } ) );
 
+// A passthrough: the real package does not load in this jsdom env, and the
+// layout it brings is not what these tests are about.
+jest.mock( '@wordpress/ui', () => {
+	const React = require( 'react' );
+	return { Stack: ( { children } ) => React.createElement( 'div', null, children ) };
+} );
+
 jest.mock( '@wordpress/dataviews', () => {
 	const Part = () => null;
 	return { DataViews: { Search: Part, FiltersToggle: Part, FiltersToggled: Part, Layout: Part, Footer: Part } };

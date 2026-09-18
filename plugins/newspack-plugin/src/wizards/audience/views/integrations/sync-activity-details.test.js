@@ -65,6 +65,9 @@ describe( 'SyncActivityDetails', () => {
 
 		expect( mockApiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( '/settings/sample/push-log/57' ) } );
 		expect( screen.getByRole( 'heading', { name: /^Changed since / } ) ).toBeTruthy();
+		// The table is named by the heading over it, so it is not announced as
+		// an unlabelled table among the others in the dialog.
+		expect( screen.getByRole( 'table', { name: /^Changed since / } ) ).toBeTruthy();
 		expect( screen.getByText( 'Total Paid' ) ).toBeTruthy();
 		expect( screen.getByText( '120' ) ).toBeTruthy();
 		expect( screen.getByText( '180' ) ).toBeTruthy();
@@ -180,6 +183,20 @@ describe( 'SyncActivityDetails', () => {
 
 		expect( screen.getByRole( 'heading', { name: 'Fields sent' } ) ).toBeTruthy();
 		expect( screen.queryByRole( 'heading', { name: 'Not delivered' } ) ).toBeNull();
+	} );
+
+	it( 'offers the full list only while it holds something back', async () => {
+		const allChanged = fields.map( field => ( { ...field, changed: true } ) );
+		await renderDetails( { entry: entry(), compared_to: { id: 41, updated_at: '2026-09-03 10:42:00' }, fields: allChanged } );
+
+		expect( screen.queryByRole( 'button', { name: /Show all/ } ) ).toBeNull();
+	} );
+
+	it( 'mutes a field that changes on every visit, and only that field', async () => {
+		await renderDetails( { entry: entry(), compared_to: { id: 41, updated_at: '2026-09-03 10:42:00' }, fields } );
+
+		expect( screen.getByText( 'Last Active' ).closest( 'tr' ).className ).toContain( 'newspack-integration-log-details__field--volatile' );
+		expect( screen.getByText( 'Total Paid' ).closest( 'tr' ).className ).not.toContain( 'newspack-integration-log-details__field--volatile' );
 	} );
 
 	it( 'tells a field that was not sent from one that was sent empty', async () => {

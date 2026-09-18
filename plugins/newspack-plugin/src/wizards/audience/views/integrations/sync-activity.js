@@ -7,6 +7,7 @@ import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { Spinner } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { DataViews as WPDataViews } from '@wordpress/dataviews';
 
 /**
@@ -140,15 +141,18 @@ export const SyncActivity = ( { integrationId } ) => {
 				render: ( { item } ) => {
 					const mapped = getStatusDisplay( item );
 					const notes = [ getAttemptLabel( item ), getRetryNote( item ) ].filter( Boolean );
+					// The cell DataViews renders this into lays its children
+					// out in a row and does not wrap, so the notes need a
+					// column of their own to sit under the status.
 					return (
-						<>
+						<Stack direction="column" gap="xs">
 							<StatusIndicator status={ mapped.status }>{ mapped.label }</StatusIndicator>
 							{ notes.map( note => (
 								<span key={ note } className="newspack-integration-logs__status-note">
 									{ note }
 								</span>
 							) ) }
-						</>
+						</Stack>
 					);
 				},
 				enableSorting: false,
@@ -216,9 +220,9 @@ export const SyncActivity = ( { integrationId } ) => {
 
 	if ( ! hasLoadedOnce ) {
 		return (
-			<div className="newspack-integration-logs__loading">
+			<Stack justify="center" align="center">
 				<Spinner />
-			</div>
+			</Stack>
 		);
 	}
 

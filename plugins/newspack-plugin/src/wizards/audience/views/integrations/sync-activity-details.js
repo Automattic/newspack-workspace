@@ -67,8 +67,8 @@ const formatBefore = value => {
 	return value === '' ? __( '(empty)', 'newspack-plugin' ) : value;
 };
 
-const FieldsTable = ( { fields, showBefore } ) => (
-	<table className="newspack-integration-log-details__fields">
+const FieldsTable = ( { fields, showBefore, labelledBy } ) => (
+	<table className="newspack-integration-log-details__fields" aria-labelledby={ labelledBy }>
 		<thead>
 			<tr>
 				<th scope="col">{ __( 'Field', 'newspack-plugin' ) }</th>
@@ -143,8 +143,10 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 	}
 
 	if ( error ) {
+		// Raised by the mount GET, so it can render as the dialog opens:
+		// assertive would cut off the title being announced.
 		return (
-			<Notice status="error" isDismissible={ false }>
+			<Notice status="error" isDismissible={ false } politeness="polite">
 				{ error }
 			</Notice>
 		);
@@ -162,6 +164,9 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 	const changedFields = fields.filter( field => field.changed );
 	// With nothing to compare against there is no "changed" subset to open on.
 	const listsEverything = ! comparedTo || showAll;
+	// The toggle only has something to reveal while some field is held back.
+	const canShowMore = Boolean( comparedTo ) && changedFields.length < fields.length;
+	const fieldsHeadingId = `newspack-integration-log-details__fields-heading-${ entryId }`;
 
 	return (
 		<div className="newspack-integration-log-details">
@@ -255,12 +260,16 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 					</p>
 				) : (
 					<>
-						<h4>{ getFieldsHeading( entry, comparedTo ) }</h4>
+						<h4 id={ fieldsHeadingId }>{ getFieldsHeading( entry, comparedTo ) }</h4>
 						{ ! listsEverything && changedFields.length === 0 && <p>{ __( 'No fields changed.', 'newspack-plugin' ) }</p> }
 						{ ( listsEverything || changedFields.length > 0 ) && (
-							<FieldsTable fields={ listsEverything ? fields : changedFields } showBefore={ Boolean( comparedTo ) } />
+							<FieldsTable
+								fields={ listsEverything ? fields : changedFields }
+								showBefore={ Boolean( comparedTo ) }
+								labelledBy={ fieldsHeadingId }
+							/>
 						) }
-						{ comparedTo && (
+						{ canShowMore && (
 							<Button variant="link" onClick={ () => setShowAll( ! showAll ) }>
 								{ showAll
 									? __( 'Show changed fields only', 'newspack-plugin' )
