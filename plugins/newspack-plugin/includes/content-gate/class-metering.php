@@ -448,6 +448,12 @@ class Metering {
 		$gate_layout_id = Content_Gate::get_gate_layout_id();
 		$gate_post_id   = Content_Gate::get_gate_post_id();
 		$handle         = 'newspack-content-gate-metering';
+		// The queried post, not the global one: this runs at wp_footer, where a
+		// widget or sidebar query that skipped wp_reset_postdata() has left the
+		// global on its own last post. Everything else in the payload below —
+		// the gate, the meter key, the count — is resolved against the queried
+		// object, so the post the payload names has to be that post too.
+		$metered_post = \get_post( \get_queried_object_id() );
 		\wp_enqueue_script(
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate-metering.js',
@@ -470,12 +476,91 @@ class Metering {
 				'period'             => $settings['period'],
 				'gate_id'            => $gate_post_id,
 				'meter_key'          => self::get_meter_key( $gate_post_id, false ),
-				'post_id'            => get_the_ID(),
+				'post_id'            => $metered_post->ID,
 				'article_view'       => self::$article_view,
-				'excerpt'            => apply_filters( 'newspack_gate_content', Content_Gate::get_restricted_post_excerpt( get_post() ) ),
+				'excerpt'            => self::get_metered_excerpt( $metered_post ),
 				'other_settings'     => Content_Gate_Advanced_Settings::get_settings(),
 			]
 		);
+	}
+
+	/**
+	 * The content the frontend metering strategy swaps in once a reader's views are spent.
+	 *
+	 * Built as the locked view, to match the teaser the server-side path substitutes
+	 * for a reader with no access. Two things follow from that and neither is
+	 * cosmetic, because for an anonymous reader this string is the only gated markup
+	 * the site ever produces — the response itself carries the whole post, and the
+	 * browser is what decides between them:
+	 *
+	 * - Metering is short-circuited off while it is built. is_metering() answers for
+	 *   the request, where the frontend strategy's answer is "the browser will
+	 *   decide"; an integration reading that as "this reader has access" leaves its
+	 *   embed unlocked. The reader's own spent-or-not state is not knowable here and
+	 *   is not the question: this excerpt is only ever rendered to a reader who is
+	 *   out of views.
+	 * - The 'the_content' callbacks above Content_Gate::RESTRICTION_PRIORITY are
+	 *   applied, the ones the server-side teaser gets by being substituted into that
+	 *   chain. Without them a third-party gate never sees this string at all.
+	 * - The metered post is made the current post for the build. A per-post
+	 *   integration keys its gating on get_the_ID() or the global post, and
+	 *   server-side it reads them inside a real 'the_content' pass, where they are
+	 *   the article. At wp_footer they are whatever the last query to skip
+	 *   wp_reset_postdata() left behind, so a callback would decline to gate an
+	 *   excerpt it believes belongs to another post.
+	 *
+	 * @param \WP_Post $metered_post Post being metered.
+	 *
+	 * @return string
+	 */
+	public static function get_metered_excerpt( \WP_Post $metered_post ): string {
+		// The short-circuit is removed only by whoever put it there. apply_late_content_filters()
+		// below hands the excerpt to third-party callbacks, and one calling back into this method
+		// would otherwise take the filter off on its way out and leave the outer excerpt — the one
+		// actually served — built with metering answering true again, which is the leak this
+		// method exists to close.
+		$is_ours = ! has_filter( 'newspack_content_gate_metering_short_circuit', [ __CLASS__, 'short_circuit_metering_for_excerpt' ] );
+		if ( $is_ours ) {
+			add_filter( 'newspack_content_gate_metering_short_circuit', [ __CLASS__, 'short_circuit_metering_for_excerpt' ] );
+		}
+
+		// The late callbacks below read get_the_ID() and the global post to decide
+		// whose embed they are gating, so the metered post has to be the current one
+		// for the build. Restored to whatever was there rather than reset to the main
+		// query's post: this runs at wp_footer, inside whatever loop state the page
+		// has reached, and changing that state is the drift this method works around.
+		$previous_post   = $GLOBALS['post'] ?? null;
+		$GLOBALS['post'] = $metered_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored in the finally below.
+		setup_postdata( $metered_post );
+
+		try {
+			$excerpt = apply_filters( 'newspack_gate_content', Content_Gate::get_restricted_post_excerpt( $metered_post ) );
+			return Content_Gate::apply_late_content_filters( $excerpt );
+		} finally {
+			$GLOBALS['post'] = $previous_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restoring the global this method displaced.
+			if ( $previous_post instanceof \WP_Post ) {
+				setup_postdata( $previous_post );
+			}
+			if ( $is_ours ) {
+				remove_filter( 'newspack_content_gate_metering_short_circuit', [ __CLASS__, 'short_circuit_metering_for_excerpt' ] );
+			}
+		}
+	}
+
+	/**
+	 * Report metering as not applying, for the duration of an excerpt build.
+	 *
+	 * A named callback rather than '__return_true' so that removing it cannot take
+	 * another caller's identical callable off the filter with it. Named apart from
+	 * {@see Content_Gifting::short_circuit_metering()} because the two answer for
+	 * different reasons and only one of them is scoped to a single call.
+	 *
+	 * @param mixed $short_circuit Incoming short-circuit value.
+	 *
+	 * @return true
+	 */
+	public static function short_circuit_metering_for_excerpt( $short_circuit ) {
+		return true;
 	}
 
 	/**
