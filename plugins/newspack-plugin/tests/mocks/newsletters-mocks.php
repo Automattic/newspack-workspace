@@ -109,7 +109,10 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 				'lists'           => $lists,
 				'context'         => $context,
 			];
-			return true;
+			// Honors $next_return like its siblings, so tests can drive the
+			// provider-error branches (e.g. the 'not supported' answer a
+			// provider without list management returns).
+			return null === self::$next_return ? true : self::$next_return;
 		}
 
 		public static function get_fields( $list_id = null ) {

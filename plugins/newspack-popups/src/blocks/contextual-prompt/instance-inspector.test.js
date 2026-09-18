@@ -101,4 +101,39 @@ describe( 'withPromptInstanceInspector', () => {
 		expect( mockInspectorProps ).toHaveLength( 0 );
 		expect( container.textContent ).toBe( 'Block edit' );
 	} );
+
+	// The editor draws the card from its stored copy, so a selected instance shows
+	// its own copy even while readers get swapped copy. The inspector says which.
+	describe( 'the condition notice', () => {
+		afterEach( () => {
+			delete window.newspackPopupsContextualPrompt;
+		} );
+
+		it( 'names the control copy when this story is showing it', () => {
+			window.newspackPopupsContextualPrompt = { condition: 'generic_control', controlSettingsUrl: 'https://example.test/settings' };
+			const Wrapped = withPromptInstanceInspector( BlockEdit );
+
+			const { container } = render( <Wrapped { ...instanceProps } /> );
+
+			expect( container.textContent ).toMatch( /showing control test copy/ );
+		} );
+
+		it( 'names the site-wide override when it is replacing this prompt', () => {
+			window.newspackPopupsContextualPrompt = { condition: 'override', controlSettingsUrl: 'https://example.test/settings' };
+			const Wrapped = withPromptInstanceInspector( BlockEdit );
+
+			const { container } = render( <Wrapped { ...instanceProps } /> );
+
+			expect( container.textContent ).toMatch( /site-wide override is currently replacing this prompt/ );
+		} );
+
+		it( 'stays quiet when the story is showing its own copy', () => {
+			window.newspackPopupsContextualPrompt = { condition: 'story_aware' };
+			const Wrapped = withPromptInstanceInspector( BlockEdit );
+
+			const { container } = render( <Wrapped { ...instanceProps } /> );
+
+			expect( container.textContent ).not.toMatch( /control test copy|site-wide override/ );
+		} );
+	} );
 } );

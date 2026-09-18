@@ -1,3 +1,10 @@
+## newspack-newsletters [3.41.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.0...newspack-newsletters@3.41.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* use update_option instead of add_option in migration and setup ([cbae9a6](https://github.com/Automattic/newspack-workspace/commit/cbae9a63d0b30b6cf2ac36a46f00541dcbc94266))
+
 # newspack-newsletters [3.41.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.40.3...newspack-newsletters@3.41.0) (2026-09-14)
 
 

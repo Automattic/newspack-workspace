@@ -34,6 +34,9 @@ const eventKeys = [
 	'newspack_popup_id',
 	'prompt_title',
 	'gate_post_id',
+	'contextual_prompt_post_id',
+	'contextual_prompt_placement',
+	'contextual_prompt_condition',
 	'recurrence',
 	'referrer',
 ];
