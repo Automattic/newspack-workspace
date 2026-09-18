@@ -123,7 +123,7 @@ final class Reader_Data {
 	 *
 	 * @return array
 	 */
-	public static function get_config() {
+	public static function get_config(): array {
 		/**
 		 * Filters the localStorage store item prefix.
 		 *
@@ -139,9 +139,8 @@ final class Reader_Data {
 		/**
 		 * Allows for "temporary" reader data for things like previews.
 		 * If true, the store will use sessionStorage instead of localStorage and
-		 * skip hydration. A switched session is flagged separately: the store
-		 * must still hydrate the reader's stored data (prompts and pricing read
-		 * it) while syncing nothing back, and the REST route refuses it as well.
+		 * skip hydration, which is why a switched session has its own flag: it
+		 * must still hydrate the reader's stored data.
 		 */
 		$is_temporary = apply_filters( 'newspack_reader_data_store_is_temp_session', false );
 
@@ -215,7 +214,7 @@ final class Reader_Data {
 	 *
 	 * @return bool
 	 */
-	public static function is_switched_session() {
+	public static function is_switched_session(): bool {
 		return function_exists( 'current_user_switched' ) && (bool) \current_user_switched();
 	}
 
@@ -224,14 +223,14 @@ final class Reader_Data {
 	 *
 	 * @return bool|WP_Error
 	 */
-	public static function permission_callback() {
+	public static function permission_callback(): bool|\WP_Error {
 		if ( ! \is_user_logged_in() ) {
 			return false;
 		}
 		if ( self::is_switched_session() ) {
 			return new \WP_Error(
 				'newspack_reader_data_switched_session',
-				__( 'Reader data cannot be changed while switched into this account.', 'newspack' ),
+				__( 'Reader data cannot be changed while switched into this account.', 'newspack-plugin' ),
 				[ 'status' => 403 ]
 			);
 		}
