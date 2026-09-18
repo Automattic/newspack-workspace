@@ -40,6 +40,12 @@ final class Push_Log {
 	const OPERATION_DELETE = 'delete';
 
 	/**
+	 * What a list returns for each row. The payload and its hash stay out, so
+	 * a page of rows stays light; get() returns them for one row.
+	 */
+	const LIST_COLUMNS = [ 'id', 'integration_id', 'email', 'user_id', 'operation', 'context', 'status', 'attempts', 'max_attempts', 'repeat_count', 'error_class', 'error_code', 'error_message', 'retry_action_id', 'created_at', 'updated_at' ];
+
+	/**
 	 * Whether a write failure was already reported during this request.
 	 *
 	 * @var bool
@@ -395,6 +401,126 @@ final class Push_Log {
 		if ( false === $updated ) {
 			self::report_write_failure();
 		}
+	}
+
+	/**
+	 * List one integration's rows.
+	 *
+	 * @param array $args {
+	 *     The query.
+	 *
+	 *     @type string $integration_id  The integration. Required.
+	 *     @type string $search          A full email, which also matches the rows of the account it
+	 *                                   belongs to, or the start of an address.
+	 *     @type string $status          One of the STATUS_* constants.
+	 *     @type string $operation       One of the OPERATION_* constants.
+	 *     @type bool   $needs_attention Only rows that are retrying, or failed with no later
+	 *                                   successful push for the same reader.
+	 *     @type int    $per_page        1 to 100. Default 25.
+	 *     @type int    $page            Default 1.
+	 *     @type string $order           'ASC' or 'DESC' on the last update. Default 'DESC'.
+	 * }
+	 *
+	 * @return array{items:array[],total:int}
+	 */
+	public static function query( array $args ): array {
+		global $wpdb;
+
+		$args = wp_parse_args(
+			$args,
+			[
+				'integration_id'  => '',
+				'search'          => '',
+				'status'          => '',
+				'operation'       => '',
+				'needs_attention' => false,
+				'per_page'        => 25,
+				'page'            => 1,
+				'order'           => 'DESC',
+			]
+		);
+
+		$table_name = self::get_table_name();
+		$where      = [ 'l.integration_id = %s' ];
+		$values     = [ $table_name, (string) $args['integration_id'] ];
+
+		if ( in_array( $args['status'], [ self::STATUS_SUCCESS, self::STATUS_RETRYING, self::STATUS_FAILED ], true ) ) {
+			$where[]  = 'l.status = %s';
+			$values[] = $args['status'];
+		}
+		if ( in_array( $args['operation'], [ self::OPERATION_UPSERT, self::OPERATION_FLAG, self::OPERATION_DELETE ], true ) ) {
+			$where[]  = 'l.operation = %s';
+			$values[] = $args['operation'];
+		}
+
+		$search = trim( (string) $args['search'] );
+		if ( '' !== $search && is_email( $search ) ) {
+			$reader = get_user_by( 'email', $search );
+			if ( $reader ) {
+				$where[]  = '( l.email = %s OR l.user_id = %d )';
+				$values[] = self::normalize_email( $search );
+				$values[] = (int) $reader->ID;
+			} else {
+				$where[]  = 'l.email = %s';
+				$values[] = self::normalize_email( $search );
+			}
+		} elseif ( '' !== $search ) {
+			// Start of the address only: a match in the middle cannot use the
+			// email index, and this table is the largest one the screen reads.
+			$where[]  = 'l.email LIKE %s';
+			$values[] = $wpdb->esc_like( self::normalize_email( $search ) ) . '%';
+		}
+
+		if ( $args['needs_attention'] ) {
+			// Every push sends the full contact, so a later success for the same
+			// reader supersedes a failure. "Same reader" follows the account as
+			// well as the address; guests share account 0, which links no one.
+			$where[] = '( l.status = %s OR ( l.status = %s AND NOT EXISTS ( SELECT 1 FROM %i s WHERE s.integration_id = l.integration_id AND s.status = %s AND ( s.email = l.email OR ( l.user_id > 0 AND s.user_id = l.user_id ) ) AND ( s.updated_at > l.updated_at OR ( s.updated_at = l.updated_at AND s.id > l.id ) ) ) ) )';
+			array_push( $values, self::STATUS_RETRYING, self::STATUS_FAILED, $table_name, self::STATUS_SUCCESS );
+		}
+
+		$where_sql = implode( ' AND ', $where );
+		$columns   = 'l.' . implode( ', l.', self::LIST_COLUMNS );
+		$order     = 'ASC' === strtoupper( (string) $args['order'] ) ? 'ASC' : 'DESC';
+		$per_page  = min( 100, max( 1, (int) $args['per_page'] ) );
+		$offset    = ( max( 1, (int) $args['page'] ) - 1 ) * $per_page;
+
+		// $columns is a class constant, $order an allowlisted literal, and
+		// $where_sql holds only placeholders; every value is bound below.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$list_sql = "SELECT {$columns} FROM %i l WHERE {$where_sql} ORDER BY l.updated_at {$order}, l.id {$order} LIMIT %d OFFSET %d";
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$count_sql = "SELECT COUNT(*) FROM %i l WHERE {$where_sql}";
+
+		return self::quietly(
+			function () use ( $wpdb, $list_sql, $count_sql, $values, $per_page, $offset ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+				$rows = $wpdb->get_results( $wpdb->prepare( $list_sql, array_merge( $values, [ $per_page, $offset ] ) ), ARRAY_A );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+				$total = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $values ) );
+
+				return [
+					'items' => array_map( [ __CLASS__, 'format_row' ], is_array( $rows ) ? $rows : [] ),
+					'total' => $total,
+				];
+			}
+		);
+	}
+
+	/**
+	 * Give a row's numbers their types; the database returns strings.
+	 *
+	 * @param array $row A table row.
+	 *
+	 * @return array
+	 */
+	private static function format_row( array $row ): array {
+		foreach ( [ 'id', 'user_id', 'attempts', 'max_attempts', 'repeat_count' ] as $column ) {
+			$row[ $column ] = (int) $row[ $column ];
+		}
+		$row['retry_action_id'] = null === $row['retry_action_id'] ? null : (int) $row['retry_action_id'];
+
+		return $row;
 	}
 
 	/**
