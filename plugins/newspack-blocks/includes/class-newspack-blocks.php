@@ -29,6 +29,15 @@ class Newspack_Blocks {
 	private static $content_render_depth = 0;
 
 	/**
+	 * The route of the REST request currently being served, captured on
+	 * `rest_pre_dispatch` and cleared on `rest_post_dispatch`. Null when no REST
+	 * request is in flight.
+	 *
+	 * @var string|null
+	 */
+	private static $current_rest_route = null;
+
+	/**
 	 * Add hooks and filters.
 	 */
 	public static function init() {
@@ -42,6 +51,8 @@ class Newspack_Blocks {
 		add_filter( 'the_content', [ __CLASS__, 'end_content_render_pass' ], PHP_INT_MAX );
 		add_filter( 'body_class', [ __CLASS__, 'add_body_classes' ] );
 		add_filter( 'admin_body_class', [ __CLASS__, 'add_body_classes' ] );
+		add_filter( 'rest_pre_dispatch', [ __CLASS__, 'capture_rest_route' ], 10, 3 );
+		add_filter( 'rest_post_dispatch', [ __CLASS__, 'clear_rest_route' ], 10, 3 );
 
 		/**
 		 * Disable NextGEN's `C_NextGen_Shortcode_Manager`.
@@ -677,6 +688,53 @@ class Newspack_Blocks {
 			&& ! ( defined( 'WP_CLI' ) && WP_CLI );
 
 		return ! $is_front_end;
+	}
+
+	/**
+	 * Remember the route of the REST request being served.
+	 *
+	 * WordPress has no accessor for the request currently in flight, so capture it
+	 * as the server begins to dispatch. Passes the filtered value through unchanged.
+	 *
+	 * @param mixed           $result  Dispatch result to be replaced, unused here.
+	 * @param WP_REST_Server  $server  Server instance, unused here.
+	 * @param WP_REST_Request $request The request being dispatched.
+	 * @return mixed The unchanged $result.
+	 */
+	public static function capture_rest_route( $result, $server, $request ) {
+		self::$current_rest_route = $request->get_route();
+		return $result;
+	}
+
+	/**
+	 * Forget the captured route once the REST request has been served, so it never
+	 * leaks into later work in a long-running process.
+	 *
+	 * @param mixed           $response Response to be served, passed through.
+	 * @param WP_REST_Server  $server   Server instance, unused here.
+	 * @param WP_REST_Request $request  The request that was dispatched, unused here.
+	 * @return mixed The unchanged $response.
+	 */
+	public static function clear_rest_route( $response, $server, $request ) {
+		self::$current_rest_route = null;
+		return $response;
+	}
+
+	/**
+	 * Whether the current render is happening while a revision or autosave is being
+	 * prepared for the REST API.
+	 *
+	 * The revisions and autosaves endpoints render a revision's `content.rendered`
+	 * through `the_content`, which runs every dynamic block's render callback. That
+	 * output is never displayed, so a Content Loop or Carousel block can skip its
+	 * query entirely, which matters on sites where the editor autosaves against a
+	 * large post set.
+	 *
+	 * @return bool
+	 */
+	public static function is_rest_revision_or_autosave_render() {
+		return ! empty( self::$current_rest_route )
+			&& (bool) preg_match( '#/(?:revisions|autosaves)(?:/\d+)?$#', self::$current_rest_route );
 	}
 
 	/**
