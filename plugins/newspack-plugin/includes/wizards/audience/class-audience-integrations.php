@@ -453,7 +453,7 @@ class Audience_Integrations extends Wizard {
 				return [
 					'id'        => $action->action_id,
 					'timestamp' => $action->scheduled_date_gmt,
-					'event'     => $hook_labels[ $action->hook ] ?? $action->hook,
+					'event'     => self::get_event_title( $hook_labels[ $action->hook ] ?? $action->hook, $decoded_args[ $action->action_id ] ?? null ),
 					'status'    => $action->status,
 					'email'     => self::extract_email_from_payload( $decoded_args[ $action->action_id ] ?? null ),
 				];
@@ -534,7 +534,7 @@ class Audience_Integrations extends Wizard {
 
 		$hook_labels = Action_Scheduler::get_hook_labels();
 		$hook        = $action->get_hook();
-		$event       = $hook_labels[ $hook ] ?? $hook;
+		$event       = self::get_event_title( $hook_labels[ $hook ] ?? $hook, $args );
 
 		return rest_ensure_response(
 			[
@@ -822,6 +822,33 @@ class Audience_Integrations extends Wizard {
 			return null;
 		}
 		return $decoded;
+	}
+
+	/**
+	 * Add the retry number to a scheduled action's title.
+	 *
+	 * The retries of one sync are separate actions with the same hook, so
+	 * without the number they read as identical lines.
+	 *
+	 * @param string $label The hook's label.
+	 * @param mixed  $args  The action's decoded args.
+	 * @return string
+	 */
+	private static function get_event_title( $label, $args ) {
+		$retry_data  = is_array( $args ) && isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : [];
+		$retry_count = isset( $retry_data['retry_count'] ) ? (int) $retry_data['retry_count'] : 0;
+		if ( $retry_count < 1 ) {
+			return $label;
+		}
+
+		$max_retries = isset( $retry_data['max_retries'] ) ? (int) $retry_data['max_retries'] : 0;
+		if ( $max_retries < $retry_count ) {
+			/* translators: 1: scheduled action name, ending in "Retry". 2: which retry this is. */
+			return sprintf( __( '%1$s %2$d', 'newspack-plugin' ), $label, $retry_count );
+		}
+
+		/* translators: 1: scheduled action name, ending in "Retry". 2: which retry this is. 3: how many retries a sync gets. */
+		return sprintf( __( '%1$s %2$d of %3$d', 'newspack-plugin' ), $label, $retry_count, $max_retries );
 	}
 
 	/**

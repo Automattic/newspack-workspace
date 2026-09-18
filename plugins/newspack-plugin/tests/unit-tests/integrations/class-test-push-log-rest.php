@@ -262,4 +262,65 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		$this->assertSame( 'newspack_push_log_entry_not_found', $response->get_error_code() );
 		$this->assertSame( 404, $response->get_error_data()['status'] );
 	}
+
+	/**
+	 * Five retries of one sync used to read as five identical lines. The
+	 * title now says which retry an action is.
+	 */
+	public function test_a_scheduled_retry_is_titled_with_its_number() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		$group        = Integrations::get_action_group( 'sample' );
+		$with_ceiling = \as_schedule_single_action(
+			time() + 120,
+			Contact_Sync::RETRY_HOOK,
+			[
+				[
+					'integration_id' => 'sample',
+					'user_id'        => 7,
+					'retry_count'    => 2,
+					'max_retries'    => 5,
+				],
+			],
+			$group
+		);
+		$no_ceiling   = \as_schedule_single_action(
+			time() + 240,
+			Contact_Sync::RETRY_HOOK,
+			[
+				[
+					'integration_id' => 'sample',
+					'user_id'        => 7,
+					'retry_count'    => 3,
+				],
+			],
+			$group
+		);
+
+		$request = new \WP_REST_Request( 'GET' );
+		foreach (
+			[
+				'integration_id' => 'sample',
+				'per_page'       => 25,
+				'page'           => 1,
+				'orderby'        => 'scheduled_date_gmt',
+				'order'          => 'ASC',
+				'search'         => '',
+				'status'         => '',
+			] as $name => $value
+		) {
+			$request->set_param( $name, $value );
+		}
+		$wizard = new Audience_Integrations();
+		$events = array_column( $wizard->api_get_integration_logs( $request )->get_data()['items'], 'event', 'id' );
+
+		$this->assertSame( 'Contact Sync Retry 2 of 5', $events[ $with_ceiling ] );
+		$this->assertSame( 'Contact Sync Retry 3', $events[ $no_ceiling ] );
+
+		$detail = new \WP_REST_Request( 'GET' );
+		$detail->set_param( 'integration_id', 'sample' );
+		$detail->set_param( 'action_id', $with_ceiling );
+		$this->assertSame( 'Contact Sync Retry 2 of 5', $wizard->api_get_integration_log_detail( $detail )->get_data()['action']['event'] );
+	}
 }
