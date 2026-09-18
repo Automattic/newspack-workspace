@@ -479,7 +479,7 @@ final class Push_Log {
 			$values[] = self::STATUS_RETRYING;
 			$values[] = self::STATUS_FAILED;
 
-			// An upsert sends the full contact, so any later success for the same
+			// An upsert normally sends the full contact, so any later success for the same
 			// reader supersedes a failed one. A deletion sends no contact data, so
 			// a later signup is not evidence it reached the provider: only a flag
 			// or deletion that itself succeeded closes one out. The IN() above
@@ -695,7 +695,7 @@ final class Push_Log {
 		$after  = self::flatten_payload( $row['payload'] );
 		$before = null !== $predecessor && isset( $predecessor['payload'] ) && is_array( $predecessor['payload'] ) ? self::flatten_payload( $predecessor['payload'] ) : [];
 
-		// An upsert sends the whole contact, so a field it stopped sending is
+		// An upsert normally sends the whole contact, so a field it stopped sending is
 		// one the provider no longer hears about and belongs on the list. A
 		// deletion flag carries the address and a few deletion fields by
 		// design: the rest were never cleared, and listing them as emptied

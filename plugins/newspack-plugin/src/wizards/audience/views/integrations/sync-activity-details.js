@@ -41,7 +41,7 @@ function getFieldsHeading( entry, comparedTo ) {
 /**
  * The heading over what the provider said. A row that did not end in success
  * is an error regardless of what it is classified as; only on a success does
- * a benign classification mean the row never actually failed.
+ * a benign classification mean the row never failed.
  *
  * @param {Object} entry The push log entry.
  * @return {string} The heading.
