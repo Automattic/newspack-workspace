@@ -501,11 +501,11 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Routine history is short-lived and failures are kept long enough for a
-	 * late support question: 14 days for successes, 90 for anything that did
-	 * not end well, including a row stuck retrying.
+	 * A month of routine history covers a support question that arrives late,
+	 * and failures are kept longer still: 30 days for successes, 90 for
+	 * anything that did not end well, including a row stuck retrying.
 	 */
-	public function test_cleanup_removes_successes_after_14_days_and_failures_after_90() {
+	public function test_cleanup_removes_successes_after_30_days_and_failures_after_90() {
 		$failure = [
 			'result'      => new \WP_Error( 'provider_down', 'ESP 503' ),
 			'error_class' => 'transient',
@@ -517,8 +517,8 @@ class Test_Push_Log extends \WP_UnitTestCase {
 		$recent_failure   = $this->record( array_merge( $failure, [ 'email' => 'recent-failure@example.test' ] ) );
 		$expired_retrying = $this->record( array_merge( $failure, [ 'email' => 'expired-retrying@example.test' ] ) );
 		Push_Log::mark_retrying( $expired_retrying, 4321 );
-		$this->age_row( $expired_success, 15 );
-		$this->age_row( $recent_success, 13 );
+		$this->age_row( $expired_success, 31 );
+		$this->age_row( $recent_success, 29 );
 		$this->age_row( $expired_failure, 91 );
 		$this->age_row( $recent_failure, 89 );
 		$this->age_row( $expired_retrying, 91 );
@@ -551,12 +551,27 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * One run deletes a bounded amount, so a backlog cannot turn the daily
-	 * cron into a long table lock. The rest goes on the next run.
+	 * Four runs a day. WordPress has no six-hour schedule of its own, and
+	 * scheduling an event on a schedule nobody registered schedules nothing,
+	 * without an error: the table would then never be pruned.
+	 */
+	public function test_the_cleanup_is_scheduled_four_times_a_day() {
+		wp_clear_scheduled_hook( Push_Log::CLEANUP_HOOK );
+
+		Push_Log::schedule_cleanup();
+
+		$cleanup_event = wp_get_scheduled_event( Push_Log::CLEANUP_HOOK );
+		$this->assertNotFalse( $cleanup_event, 'The cleanup event is scheduled.' );
+		$this->assertSame( 6 * HOUR_IN_SECONDS, $cleanup_event->interval );
+	}
+
+	/**
+	 * One run deletes a bounded amount, so a backlog cannot turn the cron
+	 * into a long table lock. The rest goes on the next run.
 	 */
 	public function test_cleanup_stops_at_the_batch_cap() {
 		foreach ( range( 1, 5 ) as $reader_number ) {
-			$this->age_row( $this->record( [ 'email' => "reader-{$reader_number}@example.test" ] ), 30 );
+			$this->age_row( $this->record( [ 'email' => "reader-{$reader_number}@example.test" ] ), 45 );
 		}
 
 		Push_Log::cleanup( 2, 2 );
@@ -571,7 +586,7 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	 */
 	public function test_a_capped_cleanup_run_reports_the_rows_it_left_behind() {
 		foreach ( range( 1, 5 ) as $reader_number ) {
-			$this->age_row( $this->record( [ 'email' => "reader-{$reader_number}@example.test" ] ), 30 );
+			$this->age_row( $this->record( [ 'email' => "reader-{$reader_number}@example.test" ] ), 45 );
 		}
 		$capped_reports = [];
 		$capture_report = function ( $code ) use ( &$capped_reports ) {
@@ -592,7 +607,7 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	 * that cleared its backlog must stay silent, or the signal is noise.
 	 */
 	public function test_a_cleanup_run_that_finishes_reports_nothing() {
-		$this->age_row( $this->record(), 30 );
+		$this->age_row( $this->record(), 45 );
 		$capped_reports = [];
 		$capture_report = function ( $code ) use ( &$capped_reports ) {
 			if ( 'newspack_integrations_push_log_cleanup_capped' === $code ) {
@@ -614,7 +629,7 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	 */
 	public function test_cleanup_clamps_a_zero_batch_size_instead_of_looping_forever() {
 		$expired_row_id = $this->record();
-		$this->age_row( $expired_row_id, 30 );
+		$this->age_row( $expired_row_id, 45 );
 
 		Push_Log::cleanup( 0, 1 );
 
@@ -630,7 +645,7 @@ class Test_Push_Log extends \WP_UnitTestCase {
 			$this->record( [ 'integration_id' => $integration_without_backlog ] );
 		}
 		$expired_row_id = $this->record( [ 'integration_id' => 'zz-backlog' ] );
-		$this->age_row( $expired_row_id, 30 );
+		$this->age_row( $expired_row_id, 45 );
 
 		Push_Log::cleanup( 1000, 2 );
 
