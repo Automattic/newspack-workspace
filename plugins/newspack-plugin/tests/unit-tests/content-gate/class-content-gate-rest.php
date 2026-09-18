@@ -589,6 +589,33 @@ class Test_Content_Gate_Rest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A gated post with an authored excerpt exposes that excerpt over REST, rather
+	 * than the constructed teaser — the same syndication parity as the feed path.
+	 */
+	public function test_written_excerpt_is_used_for_a_gated_post() {
+		wp_set_current_user( 0 );
+		wp_update_post(
+			[
+				'ID'           => $this->gated_post_id,
+				'post_excerpt' => 'AUTHORED_SUMMARY the editor wrote this.',
+			]
+		);
+
+		$data = $this->rest_get( '/wp/v2/posts/' . $this->gated_post_id );
+
+		$this->assertStringContainsString(
+			'AUTHORED_SUMMARY',
+			$data['excerpt']['rendered'],
+			'A gated post with an authored excerpt should expose that excerpt over REST.'
+		);
+		$this->assertStringNotContainsString(
+			self::BODY_SENTINEL,
+			$data['excerpt']['rendered'],
+			'The withheld body must never leak into the excerpt.'
+		);
+	}
+
+	/**
 	 * A gated post reports comments closed, matching the front end.
 	 */
 	public function test_comment_status_matches_the_front_end() {
