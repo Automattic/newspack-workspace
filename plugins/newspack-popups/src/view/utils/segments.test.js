@@ -308,8 +308,11 @@ describe( 'switched sessions', () => {
 	// stored data hydrated but their own device and history: the live match is
 	// theirs, and must never replace the reader's snapshot.
 	beforeEach( () => {
+		window.newspackPopupsCriteria = { criteria: {} };
+		for ( const criteriaId in criteria ) {
+			registerCriteria( criteriaId, criteria[ criteriaId ] );
+		}
 		ras.store.clear();
-		registerCriteria( criteria );
 	} );
 
 	afterEach( () => {
