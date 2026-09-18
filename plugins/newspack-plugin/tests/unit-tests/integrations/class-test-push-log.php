@@ -551,18 +551,19 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Four runs a day. WordPress has no six-hour schedule of its own, and
-	 * scheduling an event on a schedule nobody registered schedules nothing,
-	 * without an error: the table would then never be pruned.
+	 * The cap is per run, so how often the cleanup runs sets how much it can
+	 * prune in a day: 20,000 rows a run is 480,000 a day hourly. Fewer runs
+	 * fall behind on a large site, or after a backfill expires a day's rows
+	 * at once.
 	 */
-	public function test_the_cleanup_is_scheduled_four_times_a_day() {
+	public function test_the_cleanup_runs_hourly() {
 		wp_clear_scheduled_hook( Push_Log::CLEANUP_HOOK );
 
 		Push_Log::schedule_cleanup();
 
 		$cleanup_event = wp_get_scheduled_event( Push_Log::CLEANUP_HOOK );
 		$this->assertNotFalse( $cleanup_event, 'The cleanup event is scheduled.' );
-		$this->assertSame( 6 * HOUR_IN_SECONDS, $cleanup_event->interval );
+		$this->assertSame( HOUR_IN_SECONDS, $cleanup_event->interval );
 	}
 
 	/**

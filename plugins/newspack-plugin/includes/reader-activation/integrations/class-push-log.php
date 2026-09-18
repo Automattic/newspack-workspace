@@ -29,7 +29,6 @@ final class Push_Log {
 	const TABLE_VERSION        = '1.0';
 	const TABLE_VERSION_OPTION = '_newspack_integrations_push_log_version';
 	const CLEANUP_HOOK         = 'newspack_integrations_push_log_cleanup';
-	const CLEANUP_SCHEDULE     = 'newspack_integrations_push_log_cleanup_interval';
 
 	const STATUS_SUCCESS  = 'success';
 	const STATUS_RETRYING = 'retrying';
@@ -51,7 +50,6 @@ final class Push_Log {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'maybe_create_table' ] );
-		add_filter( 'cron_schedules', [ __CLASS__, 'add_cleanup_schedule' ] ); // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected
 		add_action( 'init', [ __CLASS__, 'schedule_cleanup' ] );
 		// Zero accepted args: a bare do_action() passes an empty string, which
 		// must not land in cleanup()'s batch size.
@@ -448,28 +446,11 @@ final class Push_Log {
 	}
 
 	/**
-	 * Register the cleanup's schedule: every six hours.
+	 * Schedule the hourly cleanup, unless the site disabled it.
 	 *
-	 * WordPress has no schedule between hourly and twice daily, and an event
-	 * scheduled on an unregistered schedule is silently not scheduled at all.
-	 *
-	 * @param array $schedules Registered cron schedules.
-	 * @return array
-	 */
-	public static function add_cleanup_schedule( $schedules ) {
-		$schedules[ self::CLEANUP_SCHEDULE ] = [
-			'interval' => 6 * HOUR_IN_SECONDS,
-			'display'  => __( 'Newspack integrations push log cleanup interval', 'newspack-plugin' ),
-		];
-		return $schedules;
-	}
-
-	/**
-	 * Schedule the cleanup four times a day, unless the site disabled it.
-	 *
-	 * More than once a day because the cap is per run: a large site, or a CLI
-	 * backfill that expires a day's rows at once, needs several runs a day to
-	 * keep up.
+	 * Hourly rather than daily because the cap is per run: a large site, or a
+	 * CLI backfill that expires a day's rows at once, needs more than one run
+	 * a day to keep up.
 	 */
 	public static function schedule_cleanup() {
 		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'unschedule_cleanup' ] );
@@ -477,7 +458,7 @@ final class Push_Log {
 		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CLEANUP_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
 			self::unschedule_cleanup();
 		} elseif ( ! wp_next_scheduled( self::CLEANUP_HOOK ) ) {
-			wp_schedule_event( time(), self::CLEANUP_SCHEDULE, self::CLEANUP_HOOK );
+			wp_schedule_event( time(), 'hourly', self::CLEANUP_HOOK );
 		}
 	}
 
