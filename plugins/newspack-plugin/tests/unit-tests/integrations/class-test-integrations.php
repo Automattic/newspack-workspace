@@ -910,6 +910,29 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * On a site that cannot sync, such as a staging clone, the batch clears the
+	 * staged readers without building their contacts. No push can follow there,
+	 * so no fingerprint would ever be recorded to stop the rebuilds.
+	 */
+	public function test_batch_push_builds_no_contact_when_the_site_cannot_sync() {
+		$this->register_push_integration();
+		$user_id        = $this->factory()->user->create();
+		$contacts_built = 0;
+		$count_builds   = function ( $contact ) use ( &$contacts_built ) {
+			$contacts_built++;
+			return $contact;
+		};
+		add_filter( 'newspack_esp_sync_contact', $count_builds );
+
+		$pushes = $this->run_batch_push( $user_id );
+
+		remove_filter( 'newspack_esp_sync_contact', $count_builds );
+		$this->assertSame( 0, $contacts_built );
+		$this->assertSame( 0, $pushes );
+		$this->assertEmpty( get_user_meta( $user_id, Contact_Cron::PUSH_PENDING_META, true ), 'The staging flag is still cleared.' );
+	}
+
+	/**
 	 * A change to the reader's contact data produces exactly one push.
 	 */
 	public function test_batch_push_runs_when_contact_changes() {

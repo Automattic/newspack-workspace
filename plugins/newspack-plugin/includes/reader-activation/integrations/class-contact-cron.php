@@ -276,6 +276,16 @@ class Contact_Cron {
 			return;
 		}
 
+		// Where no push can happen (a staging clone, Audience Management off),
+		// nothing would ever record a fingerprint, so every batch would build and
+		// compare every staged contact again.
+		$can_sync = Contact_Sync::can_sync( true );
+		if ( $can_sync->has_errors() ) {
+			delete_metadata( 'user', 0, self::PUSH_PENDING_META, '', true );
+			Logger::log( 'Batch push skipped for ' . count( $queue ) . ' user(s): ' . $can_sync->get_error_message(), self::LOGGER_HEADER );
+			return;
+		}
+
 		Logger::log( 'Batch push started for ' . count( $queue ) . ' user(s).', self::LOGGER_HEADER );
 
 		$pending_retries = Contact_Sync::get_pending_retry_user_ids();
