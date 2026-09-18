@@ -71,12 +71,16 @@ jobs:
           coverage: none
 
       - name: Scan
+        env:
+          SOURCE: ${{ inputs.source }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           php scanner/bin/constants-scanner.php \
-            --source="${{ inputs.source }}"=source \
-            --branch="${{ inputs.source }}"="${{ github.ref_name }}" \
-            --sha="${{ inputs.source }}"="${{ github.sha }}" \
+            --source="$SOURCE"=source \
+            --branch="$SOURCE"="$REF_NAME" \
+            --sha="$SOURCE"="$SHA" \
             --format=json --output=catalog.json
           jq '{schema_version, generated_at, sources, count: (.constants | length)}' catalog.json
 

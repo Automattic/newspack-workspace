@@ -23,5 +23,8 @@ jobs:
     with:
       source: newspack-workspace
       hub-url: ${{ vars.CONSTANTS_CATALOG_HUB_URL }}
+      # This repository's own runs scan with the scanner from the same commit,
+      # while private callers keep the main default
+      scanner-ref: ${{ github.sha }}
     secrets:
       signing-secret: ${{ secrets.CONSTANTS_CATALOG_SIGNING_SECRET }}
