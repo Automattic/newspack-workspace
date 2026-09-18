@@ -142,7 +142,7 @@ class Newspack_Constants_Scanner {
 			return;
 		}
 
-		$code_only = $this->strip_comments( $content );
+		$code_only = $this->strip_non_matchable( $content );
 
 		$pattern = '/\bdefined\s*\(\s*[\'"]NEWSPACK_([A-Z0-9_]+)[\'"]\s*\)/';
 		if ( ! preg_match_all( $pattern, $code_only, $matches, PREG_OFFSET_CAPTURE ) ) {
@@ -182,7 +182,7 @@ class Newspack_Constants_Scanner {
 				$constant               = &$this->found[ $constant_name ];
 				$constant['documented'] = true;
 				foreach ( [ 'type', 'default', 'status', 'description', 'example' ] as $field ) {
-					if ( empty( $constant[ $field ] ) && ! empty( $parsed[ $field ] ) ) {
+					if ( null === $constant[ $field ] && null !== $parsed[ $field ] ) {
 						$constant[ $field ] = $parsed[ $field ];
 					}
 				}
@@ -192,34 +192,105 @@ class Newspack_Constants_Scanner {
 	}
 
 	/**
-	 * Replace every comment (block, doc block, `//` and `#` line comments)
-	 * with whitespace, keeping newlines in place.
+	 * Replace every comment, string literal, heredoc/nowdoc body and stretch
+	 * of inline HTML with whitespace, keeping newlines in place, so the
+	 * `defined()` guard regex only ever runs over real code.
 	 *
-	 * Used to run the `defined()` guard regex over code only, so a docblock's
-	 * own example or description text is never mistaken for a real guard.
+	 * Comments never contained a real guard to begin with. Strings, heredocs
+	 * and inline HTML can *quote* a guard (e.g. an error message or docblock
+	 * example built as a string) without the code actually checking it, which
+	 * would otherwise be catalogued as a phantom constant.
+	 *
+	 * The one string that must survive is the quoted constant name inside a
+	 * real guard, e.g. `defined( 'NEWSPACK_X' )` — that argument is itself a
+	 * `T_CONSTANT_ENCAPSED_STRING`. Blanking it like any other string would
+	 * defeat the scanner entirely, so a string literal is only blanked when
+	 * it is not immediately preceded (ignoring whitespace and comments) by
+	 * `defined (`; heredoc/nowdoc bodies and inline HTML are always blanked,
+	 * since PHP's own tokenizer never presents either as that argument.
+	 *
 	 * Byte length and line numbers stay identical to the input, so offsets
 	 * found in the result still apply to the original content and `$lines`.
 	 *
 	 * @param string $content PHP source.
 	 * @return string
 	 */
-	private function strip_comments( string $content ): string {
+	private function strip_non_matchable( string $content ): string {
 		$stripped = '';
+		$recent   = []; // Last two significant (non-whitespace, non-comment) tokens.
+
+		$track = function ( $id, $text ) use ( &$recent ) {
+			$recent[] = [
+				'id'   => $id,
+				'text' => $text,
+			];
+			if ( count( $recent ) > 2 ) {
+				array_shift( $recent );
+			}
+		};
+
+		$blank = function ( string $text ): string {
+			return preg_replace( '/[^\n]/', ' ', $text );
+		};
+
 		foreach ( token_get_all( $content ) as $token ) {
 			if ( ! is_array( $token ) ) {
 				$stripped .= $token;
+				if ( '' !== trim( $token ) ) {
+					$track( null, $token );
+				}
 				continue;
 			}
 
 			list( $id, $text ) = $token;
+
 			if ( T_COMMENT === $id || T_DOC_COMMENT === $id ) {
-				$stripped .= preg_replace( '/[^\n]/', ' ', $text );
+				$stripped .= $blank( $text );
+				continue;
+			}
+
+			if ( T_WHITESPACE === $id ) {
+				$stripped .= $text;
+				continue;
+			}
+
+			if ( T_CONSTANT_ENCAPSED_STRING === $id && $this->is_defined_guard_argument( $recent ) ) {
+				$stripped .= $text;
+				$track( $id, $text );
+				continue;
+			}
+
+			if ( in_array( $id, [ T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE, T_INLINE_HTML ], true ) ) {
+				$stripped .= $blank( $text );
+				$track( $id, $text );
 				continue;
 			}
 
 			$stripped .= $text;
+			$track( $id, $text );
 		}
+
 		return $stripped;
+	}
+
+	/**
+	 * Whether the last two significant tokens before a string literal are
+	 * `defined` followed by `(`, i.e. the string is that call's argument.
+	 *
+	 * @param array $recent Up to the last two significant tokens, each
+	 *                       [ 'id' => int|null, 'text' => string ]; a plain
+	 *                       (non-token) character carries a null id.
+	 * @return bool
+	 */
+	private function is_defined_guard_argument( array $recent ): bool {
+		if ( 2 !== count( $recent ) ) {
+			return false;
+		}
+
+		list( $callee, $paren ) = $recent;
+
+		return null === $paren['id'] && '(' === $paren['text']
+			&& T_STRING === $callee['id'] && 'defined' === $callee['text'];
 	}
 
 	/**
