@@ -351,7 +351,7 @@ describe( 'Store', () => {
 	} );
 	describe( 'switched sessions', () => {
 		// An admin switched into a reader's account: the reader's server items
-		// must reach the browser (prompts and pricing read the stored snapshot),
+		// must reach the browser (prompts read the stored snapshot),
 		// but nothing this browser does may be written back, and nothing may
 		// land in the admin's own localStorage namespace.
 		afterEach( () => {
@@ -378,6 +378,20 @@ describe( 'Store', () => {
 			jest.advanceTimersByTime( 2500 );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
+		} );
+		it.each( [
+			[ 'written', store => store.set( 'pageviews', { day: { count: 9 } } ) ],
+			[ 'deleted', store => store.delete( 'pageviews' ) ],
+		] )( 'still hydrates a key the switched tab has %s', ( _, write ) => {
+			window.newspack_reader_data = { is_switched_session: true, items: {} };
+			let store;
+			jest.isolateModules( () => {
+				store = require( './store' ).default()[ 0 ];
+			} );
+			write( store );
+			// The next page load in the same tab.
+			store.rehydrate( { pageviews: '{"day":{"count":1}}' } );
+			expect( store.get( 'pageviews' ) ).toEqual( { day: { count: 1 } } );
 		} );
 	} );
 } );
