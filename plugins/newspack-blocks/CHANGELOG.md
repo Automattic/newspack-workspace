@@ -1,3 +1,10 @@
+# @automattic/newspack-blocks [4.33.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.32.1...newspack-blocks@4.33.0) (2026-09-18)
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([49a00c4](https://github.com/Automattic/newspack-workspace/commit/49a00c4e1bfa141c9c67cc1786f9d80b1eee5863))
+
 ## @automattic/newspack-blocks [4.32.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.32.0...newspack-blocks@4.32.1) (2026-09-16)
 
 
