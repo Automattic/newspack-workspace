@@ -385,7 +385,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * @param int                                     $user_id             The reader's user ID.
 	 * @param \Newspack\Reader_Activation\Integration $integration         The integration pushed to.
-	 * @param array                                   $integration_contact The contact as prepared for it.
+	 * @param array                                   $integration_contact The contact as get_integrations_to_push() prepares it for the integration.
 	 * @param true|\WP_Error                          $result              The push result.
 	 */
 	private static function record_push_fingerprint( $user_id, $integration, $integration_contact, $result ) {
@@ -994,6 +994,13 @@ class Contact_Sync extends Sync {
 
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
+
+		// The fingerprint has to be the one get_integrations_to_push() computes
+		// for this reader, and that path does not normalize. On the legacy schema
+		// the normalized payload pushed below can differ from it, and recording
+		// that one would send the reader through the cron once more.
+		$fingerprint_contact = self::prepare_contact_for_integration( $integration, $contact );
+
 		$contact = Sync\Metadata::normalize_contact_data( $contact );
 
 		// Reconstruct existing_contact for email-change retries so integrations
@@ -1005,7 +1012,7 @@ class Contact_Sync extends Sync {
 
 		$integration_contact = $integration->prepare_contact( $contact );
 		$result              = $integration->push_contact_data( $integration_contact, $context, $existing_contact );
-		self::record_push_fingerprint( $user_id, $integration, $integration_contact, $result );
+		self::record_push_fingerprint( $user_id, $integration, $fingerprint_contact, $result );
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
 			static::log(
