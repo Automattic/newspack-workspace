@@ -1355,14 +1355,14 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
-	 * Get the set of user IDs with pending sync retries in ActionScheduler.
+	 * Get the integrations with a pending sync retry in ActionScheduler, per user.
 	 *
-	 * Useful for batch processing: fetch once, then check membership with isset()
-	 * instead of calling has_pending_retries() per user.
+	 * A retry belongs to one integration, so a caller can leave that one to its
+	 * retry without holding back the reader's other integrations.
 	 *
-	 * @return array<int, bool> Map keyed by user ID for O(1) lookup.
+	 * @return array<int, array<string, bool>> Map keyed by user ID, then by integration ID.
 	 */
-	public static function get_pending_retry_user_ids() {
+	public static function get_pending_retries(): array {
 		if ( ! function_exists( 'as_get_scheduled_actions' ) ) {
 			return [];
 		}
@@ -1373,14 +1373,26 @@ class Contact_Sync extends Sync {
 				'per_page' => -1,
 			]
 		);
-		$user_ids = [];
+		$pending = [];
 		foreach ( $actions as $action ) {
 			$args = $action->get_args();
 			if ( ! empty( $args[0]['user_id'] ) ) {
-				$user_ids[ (int) $args[0]['user_id'] ] = true;
+				$pending[ (int) $args[0]['user_id'] ][ (string) ( $args[0]['integration_id'] ?? '' ) ] = true;
 			}
 		}
-		return $user_ids;
+		return $pending;
+	}
+
+	/**
+	 * Get the set of user IDs with pending sync retries in ActionScheduler.
+	 *
+	 * Useful for batch processing: fetch once, then check membership with isset()
+	 * instead of calling has_pending_retries() per user.
+	 *
+	 * @return array<int, bool> Map keyed by user ID for O(1) lookup.
+	 */
+	public static function get_pending_retry_user_ids() {
+		return array_map( '__return_true', self::get_pending_retries() );
 	}
 
 	/**

@@ -288,16 +288,12 @@ class Contact_Cron {
 
 		Logger::log( 'Batch push started for ' . count( $queue ) . ' user(s).', self::LOGGER_HEADER );
 
-		$pending_retries = Contact_Sync::get_pending_retry_user_ids();
+		$pending_retries = Contact_Sync::get_pending_retries();
 		$context         = 'Recurring sync routine';
 		$unchanged       = 0;
 
 		foreach ( $queue as $user_id ) {
 			delete_user_meta( $user_id, self::PUSH_PENDING_META );
-			if ( isset( $pending_retries[ $user_id ] ) ) {
-				Logger::log( 'Batch push skipping user ' . $user_id . ': pending sync retries.', self::LOGGER_HEADER );
-				continue;
-			}
 
 			$contact = Contact_Sync::get_contact_data( $user_id );
 			if ( is_wp_error( $contact ) || empty( $contact['email'] ) ) {
@@ -311,10 +307,18 @@ class Contact_Cron {
 				continue;
 			}
 
+			// An integration with a retry pending for this reader is left to it:
+			// the retry builds the contact again when it runs, so it delivers this
+			// change too.
+			$awaiting_retry = array_intersect( $integration_ids, array_keys( $pending_retries[ $user_id ] ?? [] ) );
+			if ( ! empty( $awaiting_retry ) ) {
+				Logger::log( 'Batch push leaving user ' . $user_id . ' to pending sync retries for: ' . implode( ', ', $awaiting_retry ) . '.', self::LOGGER_HEADER );
+			}
+
 			// One push per changed integration, so an integration that already
 			// holds this contact is not written again because another one changed
 			// or is failing.
-			foreach ( $integration_ids as $integration_id ) {
+			foreach ( array_diff( $integration_ids, $awaiting_retry ) as $integration_id ) {
 				$result = Contact_Sync::sync( $contact, $context, null, [ 'integration_id' => $integration_id ] );
 				if ( is_wp_error( $result ) ) {
 					Logger::error( 'Batch push failed for user ' . $user_id . ': ' . $result->get_error_message(), self::LOGGER_HEADER );

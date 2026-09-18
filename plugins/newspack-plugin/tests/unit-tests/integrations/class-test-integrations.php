@@ -862,6 +862,29 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Register and enable an integration that accepts every push, whatever the
+	 * shared failure flag says, so a test can fail one integration and not the other.
+	 */
+	private function register_healthy_integration() {
+		$healthy = new class( 'healthy', 'Healthy' ) extends Failing_Sample_Integration {
+			/**
+			 * Always accept the contact.
+			 *
+			 * @param array      $contact          The contact data.
+			 * @param string     $context          The sync context.
+			 * @param array|null $existing_contact Existing contact data if available.
+			 * @return true
+			 */
+			public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
+				self::$push_ids[] = $this->get_id();
+				return true;
+			}
+		};
+		Integrations::register( $healthy );
+		Integrations::enable( 'healthy' );
+	}
+
+	/**
 	 * Stage a user for push, run the batch, and return how many pushes it made.
 	 *
 	 * @param int $user_id WordPress user ID.
@@ -877,7 +900,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 
 	/**
 	 * Drop the retries a failed push scheduled, as if their chain had run out,
-	 * so the next batch does not skip the reader for pending retries.
+	 * so the next batch does not leave the failed integration to a pending retry.
 	 */
 	private function clear_push_retries() {
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
@@ -1124,22 +1147,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 	 */
 	public function test_batch_push_retries_only_the_failing_integration() {
 		$this->allow_sync();
-		$healthy = new class( 'healthy', 'Healthy' ) extends Failing_Sample_Integration {
-			/**
-			 * Always accept the contact, whatever the shared failure flag says.
-			 *
-			 * @param array      $contact          The contact data.
-			 * @param string     $context          The sync context.
-			 * @param array|null $existing_contact Existing contact data if available.
-			 * @return true
-			 */
-			public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
-				self::$push_ids[] = $this->get_id();
-				return true;
-			}
-		};
-		Integrations::register( $healthy );
-		Integrations::enable( 'healthy' );
+		$this->register_healthy_integration();
 		$this->register_push_integration( 'broken' );
 		$user_id = $this->factory()->user->create();
 
@@ -1151,6 +1159,29 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->run_batch_push( $user_id );
 
 		$this->assertSame( [ 'broken' ], Failing_Sample_Integration::$push_ids );
+	}
+
+	/**
+	 * A retry pending for one integration holds back that integration only. A
+	 * change meant for a healthy one does not wait out another's backoff.
+	 */
+	public function test_batch_push_reaches_healthy_integrations_while_another_retries() {
+		$this->allow_sync();
+		$this->register_healthy_integration();
+		$this->register_push_integration( 'broken' );
+		$user_id = $this->factory()->user->create();
+
+		Failing_Sample_Integration::$should_fail = true;
+		$this->run_batch_push( $user_id );
+		wp_update_user(
+			[
+				'ID'         => $user_id,
+				'user_email' => 'moved@example.test',
+			]
+		);
+		$this->run_batch_push( $user_id );
+
+		$this->assertSame( [ 'healthy' ], Failing_Sample_Integration::$push_ids );
 	}
 
 	/**
