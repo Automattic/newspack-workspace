@@ -900,6 +900,12 @@ class Content_Gate {
 	 * either would otherwise decline to run, which for a gate means declining to
 	 * gate — and each callback is passed the argument count it registered for.
 	 *
+	 * The result is cast on the way out rather than relied on to be a string. Core's
+	 * 'the_content' is untyped and carries a callback's non-string return onward
+	 * without fataling; a declared string return here would turn one misbehaving
+	 * third-party callback into a TypeError at wp_footer, on exactly the callbacks
+	 * this method exists to run.
+	 *
 	 * Two consequences of running a second time over content the request has already
 	 * filtered once. A callback that guards against running twice will no-op here,
 	 * and so will not gate the teaser; one with side effects — an enqueue, a counter,
@@ -951,7 +957,7 @@ class Content_Gate {
 			array_pop( $GLOBALS['wp_current_filter'] );
 		}
 
-		return $teaser;
+		return (string) $teaser;
 	}
 
 	/**
