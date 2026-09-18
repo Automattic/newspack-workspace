@@ -129,4 +129,37 @@
 		color: #757575;
 		font-variant-numeric: tabular-nums;
 	}
+
+	&__fields {
+		width: 100%;
+		border-collapse: collapse;
+		margin-bottom: 8px;
+
+		th,
+		td {
+			padding: 6px 12px 6px 0;
+			border-bottom: 1px solid #e0e0e0;
+			text-align: left;
+			vertical-align: top;
+			word-break: break-word;
+		}
+
+		thead th {
+			color: #757575;
+			font-weight: 400;
+		}
+
+		tbody th {
+			font-weight: 600;
+		}
+	}
+
+	// Fields that change on every visit are listed, but are not the news.
+	&__field--volatile {
+		th,
+		td {
+			color: #757575;
+			font-weight: 400;
+		}
+	}
 }
