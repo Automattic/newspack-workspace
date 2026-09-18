@@ -509,7 +509,7 @@ final class Push_Log {
 	 * @param int $batch_size  Rows per delete.
 	 * @param int $max_batches Deleting batches per run.
 	 */
-	public static function cleanup( $batch_size = 1000, $max_batches = 20 ) {
+	public static function cleanup( $batch_size = 1000, $max_batches = 5 ) {
 		global $wpdb;
 		// A batch size of 0 deletes nothing while still looking like a full
 		// batch, which would loop forever.

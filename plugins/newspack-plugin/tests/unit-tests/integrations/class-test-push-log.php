@@ -552,7 +552,7 @@ class Test_Push_Log extends \WP_UnitTestCase {
 
 	/**
 	 * The cap is per run, so how often the cleanup runs sets how much it can
-	 * prune in a day: 20,000 rows a run is 480,000 a day hourly. Fewer runs
+	 * prune in a day: 5,000 rows a run is 120,000 a day hourly. Fewer runs
 	 * fall behind on a large site, or after a backfill expires a day's rows
 	 * at once.
 	 */
@@ -578,6 +578,21 @@ class Test_Push_Log extends \WP_UnitTestCase {
 		Push_Log::cleanup( 2, 2 );
 
 		$this->assertSame( 1, $this->count_rows() );
+	}
+
+	/**
+	 * Five deleting batches a run by default: 5,000 rows at the default batch
+	 * size, in deletes short enough not to hold the table. The hourly cron
+	 * takes the rest.
+	 */
+	public function test_a_run_stops_after_five_batches_by_default() {
+		foreach ( range( 1, 7 ) as $reader_number ) {
+			$this->age_row( $this->record( [ 'email' => "reader-{$reader_number}@example.test" ] ), 45 );
+		}
+
+		Push_Log::cleanup( 1 );
+
+		$this->assertSame( 2, $this->count_rows() );
 	}
 
 	/**
