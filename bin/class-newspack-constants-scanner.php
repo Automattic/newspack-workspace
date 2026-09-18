@@ -274,8 +274,16 @@ class Newspack_Constants_Scanner {
 	}
 
 	/**
-	 * Whether the last two significant tokens before a string literal are
-	 * `defined` followed by `(`, i.e. the string is that call's argument.
+	 * Whether the last two significant tokens before a string literal are a
+	 * call to `defined` followed by `(`, i.e. the string is that call's
+	 * argument.
+	 *
+	 * The callee can tokenize as plain `T_STRING` (`defined(...)`), or as
+	 * `T_NAME_FULLY_QUALIFIED` / `T_NAME_QUALIFIED` when it carries a
+	 * namespace prefix (`\defined(...)`, `Foo\defined(...)`) — PHP folds the
+	 * leading backslash and any namespace segments into that single token,
+	 * so only its tail is checked. Matched case-insensitively, since PHP
+	 * function names are.
 	 *
 	 * @param array $recent Up to the last two significant tokens, each
 	 *                       [ 'id' => int|null, 'text' => string ]; a plain
@@ -289,8 +297,19 @@ class Newspack_Constants_Scanner {
 
 		list( $callee, $paren ) = $recent;
 
-		return null === $paren['id'] && '(' === $paren['text']
-			&& T_STRING === $callee['id'] && 'defined' === $callee['text'];
+		if ( null !== $paren['id'] || '(' !== $paren['text'] ) {
+			return false;
+		}
+
+		if ( T_STRING === $callee['id'] ) {
+			return 0 === strcasecmp( $callee['text'], 'defined' );
+		}
+
+		if ( in_array( $callee['id'], [ T_NAME_FULLY_QUALIFIED, T_NAME_QUALIFIED ], true ) ) {
+			return (bool) preg_match( '/(?:^|\\\\)defined$/i', $callee['text'] );
+		}
+
+		return false;
 	}
 
 	/**

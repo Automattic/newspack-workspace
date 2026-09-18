@@ -152,6 +152,20 @@ assert_eq "NEWSPACK_FIXTURE_COMMENT_GAP still found" "true" "$(jq -r 'any(.const
 assert_eq "NEWSPACK_FIXTURE_QUOTES_GUARD still found" "true" "$(jq -r 'any(.constants[]; .name == "NEWSPACK_FIXTURE_QUOTES_GUARD")' <<<"$json_gamma_strings")"
 
 echo
+echo "a fully-qualified \\defined() guard is still found (T_NAME_FULLY_QUALIFIED, not T_STRING):"
+assert_eq "NEWSPACK_FIXTURE_FULLY_QUALIFIED found" "true" "$(jq -r 'any(.constants[]; .name == "NEWSPACK_FIXTURE_FULLY_QUALIFIED")' <<<"$json_gamma_strings")"
+
+echo
+echo "a \\defined() guard quoted inside a string literal is still not a real guard:"
+assert_eq "absent from the catalog" "" "$(jq -r '.constants[] | select(.name == "NEWSPACK_FIXTURE_INSIDE_STRING_FQ")' <<<"$json_gamma_strings")"
+if [[ "$undocumented_gamma_strings_md" == *"NEWSPACK_FIXTURE_INSIDE_STRING_FQ"* ]]; then
+	echo "  FAIL: NEWSPACK_FIXTURE_INSIDE_STRING_FQ was reported as undocumented; a string literal quoting \\defined() was mistaken for a real guard"
+	failures=$((failures + 1))
+else
+	echo "  ok: absent from the undocumented list too — no constant invented from a string quoting \\defined()"
+fi
+
+echo
 echo "the envelope carries schema_version, generated_at, sources and constants:"
 assert_eq "schema_version" "1" "$(jq -r '.schema_version' <<<"$json_ab")"
 assert_match "generated_at is an ISO-8601 UTC timestamp" '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$(jq -r '.generated_at' <<<"$json_ab")"
