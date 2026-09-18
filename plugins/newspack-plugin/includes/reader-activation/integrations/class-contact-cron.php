@@ -145,6 +145,15 @@ class Contact_Cron {
 		self::enqueue_for_push( $user_id );
 
 		$last_pull = (int) get_user_meta( $user_id, self::LAST_PULL_META, true );
+		if ( ! $last_pull && $last_enqueue ) {
+			// Readers staged before this stamp existed carry only an enqueue time,
+			// which was also when their last pull started. Seeding from it keeps
+			// every active reader from starting a synchronous pull on their first
+			// page load after the upgrade. Stored rather than read as a fallback,
+			// because an active reader's enqueue time never goes stale.
+			$last_pull = $last_enqueue;
+			update_user_meta( $user_id, self::LAST_PULL_META, $last_pull );
+		}
 		if ( ! Contact_Pull::is_stale( $last_pull ) ) {
 			return;
 		}

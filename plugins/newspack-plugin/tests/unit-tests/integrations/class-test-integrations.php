@@ -691,6 +691,40 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A reader staged before the pull stamp existed carries only an enqueue time,
+	 * which back then was also when their last pull was started or staged. It
+	 * seeds the stamp, so a reader pulled within the threshold does not pay for a
+	 * synchronous pull on their first page load after the upgrade.
+	 */
+	public function test_missing_pull_stamp_is_seeded_from_the_last_enqueue() {
+		$user_id = $this->factory()->user->create();
+		wp_set_current_user( $user_id );
+		$last_enqueue = time() - 600;
+		update_user_meta( $user_id, Contact_Cron::LAST_ENQUEUE_META, $last_enqueue );
+		$this->mock_pull_loopback( $user_id );
+
+		$integration = new class( 'seed-test', 'Seed Test' ) extends Sample_Integration {
+			/**
+			 * Pull contact data (should NOT be called).
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				return [ 'city' => 'Portland' ];
+			}
+		};
+		$integration->update_enabled_incoming_fields( [ 'city' ] );
+		Integrations::register( $integration );
+		Integrations::enable( 'seed-test' );
+
+		Contact_Cron::maybe_enqueue_contact();
+
+		$this->assertEmpty( get_user_meta( $user_id, 'newspack_reader_data_item_city', true ), 'Not pulled synchronously.' );
+		$this->assertSame( $last_enqueue, (int) get_user_meta( $user_id, Contact_Cron::LAST_PULL_META, true ) );
+	}
+
+	/**
 	 * Test handle_batch_pull processes data for queued users.
 	 */
 	public function test_handle_batch_pull() {
