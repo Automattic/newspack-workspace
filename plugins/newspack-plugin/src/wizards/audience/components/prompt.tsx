@@ -273,7 +273,7 @@ export default function Prompt( { inFlight, prompt, setInFlight, setPrompts }: P
 											buttonLabel={ __( 'Select file', 'newspack-plugin' ) }
 											disabled={ inFlight }
 											image={ image }
-											onChange={ ( attachment: Attachment ) => {
+											onChange={ ( attachment: Attachment | null ) => {
 												const toUpdate = {
 													...values,
 												};

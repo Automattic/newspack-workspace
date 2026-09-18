@@ -101,7 +101,7 @@ function ConfirmDialog(
 		if ( ! when || ! history ) {
 			return;
 		}
-		const unblock = history.block( ( location: string, action: string ) => {
+		const unblock = history.block( ( location, action ) => {
 			// Let our own confirmed navigation through instead of re-blocking it.
 			if ( bypassBlock.current ) {
 				return undefined;

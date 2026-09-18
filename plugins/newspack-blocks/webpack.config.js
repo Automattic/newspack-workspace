@@ -61,14 +61,18 @@ const webpackConfig = getBaseWebpackConfig( {
 	entry,
 } );
 
-// Add rule to handle JSX files from newspack-icons
+// Add rule to handle TSX/JSX files from newspack-icons
 webpackConfig.module.rules.push( {
-	test: /\.jsx?$/,
+	test: /\.(j|t)sx?$/,
 	include: [ path.resolve( __dirname, 'node_modules/newspack-icons' ) ],
 	use: {
 		loader: 'babel-loader',
 		options: {
-			presets: [ '@babel/preset-env', [ '@babel/preset-react', { runtime: 'automatic' } ] ],
+			presets: [
+				'@babel/preset-env',
+				[ '@babel/preset-react', { runtime: 'automatic' } ],
+				'@babel/preset-typescript',
+			],
 		},
 	},
 } );

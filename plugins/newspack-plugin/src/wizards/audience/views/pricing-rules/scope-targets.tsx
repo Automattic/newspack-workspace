@@ -125,9 +125,11 @@ export default function ScopeTargets( { scopeType, value, onChange }: ScopeTarge
 			// Remount when the scope type changes so saved-info fetch re-runs for the new source.
 			key={ scopeType }
 			tokens={ value }
-			onChange={ onChange }
+			// Scope targets are always numeric IDs, narrower than the tokenfield's
+			// general string|number|Suggestion contract.
+			onChange={ values => onChange( values as number[] ) }
 			fetchSuggestions={ fetchSuggestions }
-			fetchSavedInfo={ fetchSavedInfo }
+			fetchSavedInfo={ tokens => fetchSavedInfo( tokens as number[] ) }
 			label={ source.label }
 			placeholder={ source.placeholder }
 			__next40pxDefaultSize

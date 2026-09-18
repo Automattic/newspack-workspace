@@ -82,7 +82,7 @@ export default function Header( { themeMods, updateHeader }: { themeMods: ThemeM
 					} }
 					label={ __( 'Logo', 'newspack' ) }
 					image={ themeMods.custom_logo }
-					onChange={ ( custom_logo: string ) =>
+					onChange={ custom_logo =>
 						updateHeader( {
 							...themeMods,
 							custom_logo,
