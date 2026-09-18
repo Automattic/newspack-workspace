@@ -194,7 +194,7 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Identifiers an attempt cannot be recorded without.
+	 * The identifiers without which an attempt cannot be recorded.
 	 *
 	 * @return array[]
 	 */
@@ -619,6 +619,30 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A run whose last batch was exactly full looks like one that was cut
+	 * short, but it may have nothing left. Reporting it as capped would raise
+	 * a backlog alarm on a site that is keeping up.
+	 */
+	public function test_a_run_that_ends_exactly_at_its_cap_with_nothing_left_reports_nothing() {
+		foreach ( range( 1, 2 ) as $reader_number ) {
+			$this->age_row( $this->record( [ 'email' => "reader-{$reader_number}@example.test" ] ), 45 );
+		}
+		$capped_reports = [];
+		$capture_report = function ( $code ) use ( &$capped_reports ) {
+			if ( 'newspack_integrations_push_log_cleanup_capped' === $code ) {
+				$capped_reports[] = $code;
+			}
+		};
+		add_action( 'newspack_log', $capture_report );
+
+		Push_Log::cleanup( 2, 1 );
+
+		remove_action( 'newspack_log', $capture_report );
+		$this->assertSame( 0, $this->count_rows() );
+		$this->assertCount( 0, $capped_reports );
+	}
+
+	/**
 	 * The report means "there is more to prune than a run can take". A run
 	 * that cleared its backlog must stay silent, or the signal is noise.
 	 */
@@ -666,6 +690,26 @@ class Test_Push_Log extends \WP_UnitTestCase {
 		Push_Log::cleanup( 1000, 2 );
 
 		$this->assertNull( $this->get_row( $expired_row_id ) );
+	}
+
+	/**
+	 * An address longer than the column is stored shortened. The eraser has
+	 * to shorten the address it is given the same way, or a guest with a long
+	 * address, who has no account to match on, could never be erased.
+	 */
+	public function test_a_guest_whose_address_was_stored_shortened_can_still_be_erased() {
+		$overlong_email = str_repeat( 'a', 200 ) . '@example.test';
+		$guest_row_id   = $this->record(
+			[
+				'email'   => $overlong_email,
+				'user_id' => 0,
+			]
+		);
+
+		$response = Push_Log::erase_personal_data( $overlong_email );
+
+		$this->assertNull( $this->get_row( $guest_row_id ) );
+		$this->assertTrue( $response['items_removed'] );
 	}
 
 	/**

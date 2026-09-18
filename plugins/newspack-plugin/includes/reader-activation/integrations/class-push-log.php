@@ -168,7 +168,7 @@ final class Push_Log {
 
 		// Truncate rather than let the database reject the row over a length.
 		$integration_id = mb_substr( (string) $args['integration_id'], 0, 64 );
-		$email          = mb_substr( (string) $args['email'], 0, 191 );
+		$email          = self::normalize_email( (string) $args['email'] );
 		if ( '' === $integration_id || '' === $email ) {
 			return 0;
 		}
@@ -250,6 +250,21 @@ final class Push_Log {
 		}
 
 		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * The email as the table stores it.
+	 *
+	 * Shortened to the column's length, because the database rejects a longer
+	 * value and the whole row with it. Anything that looks a row up by email
+	 * has to shorten the address the same way, or it never matches.
+	 *
+	 * @param string $email An email address.
+	 *
+	 * @return string
+	 */
+	private static function normalize_email( string $email ): string {
+		return mb_substr( $email, 0, 191 );
 	}
 
 	/**
@@ -524,23 +539,32 @@ final class Push_Log {
 			self::STATUS_RETRYING => $retention_days['failed'],
 		];
 
+		$cutoffs = [];
+		foreach ( $windows as $status => $days ) {
+			$cutoffs[ $status ] = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+		}
+
 		$integration_ids = $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT integration_id FROM %i', $table_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$batches         = 0;
 
 		foreach ( $integration_ids as $integration_id ) {
-			foreach ( $windows as $status => $days ) {
-				$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+			foreach ( $cutoffs as $status => $cutoff ) {
 				do {
 					if ( $batches >= $max_batches ) {
-						Logger::newspack_log(
-							'newspack_integrations_push_log_cleanup_capped',
-							'The integrations push log cleanup stopped at its batch cap; remaining expired rows are left for the next run.',
-							[
-								'max_batches' => $max_batches,
-								'batch_size'  => $batch_size,
-							],
-							'debug'
-						);
+						// A run whose last batch was exactly full stops here with
+						// nothing left. Only one that leaves expired rows behind is
+						// falling behind, and only that is worth reporting.
+						if ( self::has_expired_rows( $integration_ids, $cutoffs ) ) {
+							Logger::newspack_log(
+								'newspack_integrations_push_log_cleanup_capped',
+								'The integrations push log cleanup stopped at its batch cap; remaining expired rows are left for the next run.',
+								[
+									'max_batches' => $max_batches,
+									'batch_size'  => $batch_size,
+								],
+								'debug'
+							);
+						}
 						return;
 					}
 					$deleted = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -565,6 +589,38 @@ final class Push_Log {
 				} while ( $deleted >= $batch_size );
 			}
 		}
+	}
+
+	/**
+	 * Whether any row is past its retention window.
+	 *
+	 * @param string[] $integration_ids The integrations that have rows.
+	 * @param string[] $cutoffs         The cutoff time for each status.
+	 *
+	 * @return bool
+	 */
+	private static function has_expired_rows( array $integration_ids, array $cutoffs ): bool {
+		global $wpdb;
+		$table_name = self::get_table_name();
+
+		foreach ( $integration_ids as $integration_id ) {
+			foreach ( $cutoffs as $status => $cutoff ) {
+				$found = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+					$wpdb->prepare(
+						'SELECT 1 FROM %i WHERE integration_id = %s AND status = %s AND updated_at < %s LIMIT 1',
+						$table_name,
+						$integration_id,
+						$status,
+						$cutoff
+					)
+				);
+				if ( null !== $found ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -595,13 +651,14 @@ final class Push_Log {
 	 */
 	public static function erase_personal_data( $email_address, $page = 1 ) {
 		global $wpdb;
-		$table_name = self::get_table_name();
-		$reader     = get_user_by( 'email', $email_address );
+		$table_name   = self::get_table_name();
+		$reader       = get_user_by( 'email', $email_address );
+		$stored_email = self::normalize_email( (string) $email_address );
 
 		if ( $reader ) {
-			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s OR user_id = %d', $table_name, $email_address, $reader->ID ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s OR user_id = %d', $table_name, $stored_email, $reader->ID ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		} else {
-			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s', $table_name, $email_address ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$removed = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE email = %s', $table_name, $stored_email ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
 
 		// A delete that failed leaves the rows in place. Reporting the erasure
