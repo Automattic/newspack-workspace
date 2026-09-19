@@ -510,8 +510,17 @@ class RSS {
 			table th, table td {
 				padding-bottom: 10px;
 			}
+			/*
+			Scoped, unlike the bare selectors above: a row whose control carries
+			help text is much taller than its label, and centring leaves the
+			label floating beside it.
+			*/
+			.newspack-rss-content-settings th,
+			.newspack-rss-content-settings td {
+				vertical-align: top;
+			}
 		</style>
-		<table>
+		<table class="newspack-rss-content-settings">
 			<tr>
 				<th><?php esc_html_e( 'Number of posts to display in feed:', 'newspack-plugin' ); ?></th>
 				<td>
