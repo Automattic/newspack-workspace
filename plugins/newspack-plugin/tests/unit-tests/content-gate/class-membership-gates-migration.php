@@ -2714,4 +2714,32 @@ HTML;
 			'A null mode must be omitted so the stored feed_restriction_mode is left untouched.'
 		);
 	}
+
+	/**
+	 * The guard that stops a --live run from overwriting a configured site reads raw
+	 * option rows. get_settings() substitutes the shipped defaults for an absent row,
+	 * so through it a site that never configured feeds and one deliberately set to
+	 * the default value look identical — and only the first is a default worth
+	 * correcting.
+	 */
+	public function test_has_stored_ac_feed_config_distinguishes_unset_from_default_valued() {
+		delete_option( 'newspack_content_gate_restrict_feeds' );
+		delete_option( 'newspack_content_gate_feed_restriction_mode' );
+
+		$defaults = \Newspack\Content_Gate_Advanced_Settings::get_settings();
+		$this->assertFalse(
+			Membership_Gates_Migration::has_stored_ac_feed_config(),
+			'With no option rows the site is running the shipped defaults, not a configuration.'
+		);
+
+		// Store exactly the value get_settings() already reported, so the only thing
+		// that changes is that a row now exists.
+		update_option( 'newspack_content_gate_feed_restriction_mode', $defaults['feed_restriction_mode'] );
+		$this->assertTrue(
+			Membership_Gates_Migration::has_stored_ac_feed_config(),
+			'A stored row is a decision even when its value matches the default.'
+		);
+
+		delete_option( 'newspack_content_gate_feed_restriction_mode' );
+	}
 }
