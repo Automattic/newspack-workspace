@@ -245,9 +245,7 @@ class RSS {
 		}
 		$override = self::get_restriction_override();
 
-		// An unrecognized stored value inherits rather than disabling
-		// restriction: a corrupt setting must not open a gated feed.
-		return in_array( $override, self::get_overridable_restriction_modes(), true ) ? $override : $mode;
+		return self::FEED_RESTRICTION_INHERIT === $override ? $mode : $override;
 	}
 
 	/**
@@ -280,11 +278,35 @@ class RSS {
 		$feed_post = get_page_by_path( sanitize_text_field( $query_feed ), OBJECT, self::FEED_CPT ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_page_by_path_get_page_by_path
 		if ( $feed_post && 'publish' === $feed_post->post_status ) {
 			$settings = self::get_feed_settings( $feed_post );
-			$override = $settings[ self::FEED_RESTRICTION_SETTING ] ?? self::FEED_RESTRICTION_INHERIT;
+			$override = self::normalize_stored_restriction_mode( $settings[ self::FEED_RESTRICTION_SETTING ] ?? null );
 		}
 
 		self::$restriction_override_cache[ $query_feed ] = $override;
 		return $override;
+	}
+
+	/**
+	 * Reduce a stored restriction mode to one this class recognizes.
+	 *
+	 * The single place a raw stored value is judged, so the editor warning and
+	 * the feed itself can never disagree about what a feed is set to.
+	 *
+	 * Anything unrecognized becomes inherit rather than a restricting mode:
+	 * a corrupt setting must not quietly change what a feed serves. The value
+	 * need not even be a string — it reaches here from post meta and from the
+	 * `newspack_rss_saved_settings` filter, so a migration or another plugin can
+	 * put an array or null in it. The strict in_array() rejects those without
+	 * comparing them, which is what keeps every caller's declared return type
+	 * honest; passing one straight through used to fatal the feed request.
+	 *
+	 * @param mixed $mode Raw stored value.
+	 *
+	 * @return string An overridable mode, or FEED_RESTRICTION_INHERIT.
+	 */
+	private static function normalize_stored_restriction_mode( $mode ): string {
+		return in_array( $mode, self::get_overridable_restriction_modes(), true )
+			? $mode
+			: self::FEED_RESTRICTION_INHERIT;
 	}
 
 	/**
@@ -336,7 +358,11 @@ class RSS {
 		if ( empty( $settings['full_content'] ) ) {
 			return false;
 		}
-		$mode = $settings[ self::FEED_RESTRICTION_SETTING ] ?? self::FEED_RESTRICTION_INHERIT;
+		// Normalized, not read raw: an unrecognized stored mode inherits at
+		// runtime, so the warning has to follow it there too. Reading it raw
+		// left the one combination that leaks — unrecognized mode inheriting an
+		// unrestricted site — as the one the editor stayed silent about.
+		$mode = self::normalize_stored_restriction_mode( $settings[ self::FEED_RESTRICTION_SETTING ] ?? null );
 		if ( self::FEED_RESTRICTION_INHERIT === $mode ) {
 			$mode = $inherited_mode;
 		}
@@ -1078,9 +1104,7 @@ class RSS {
 		// it whether or not the form that was served held the control.
 		$restriction_mode = filter_input( INPUT_POST, self::FEED_RESTRICTION_SETTING, FILTER_SANITIZE_SPECIAL_CHARS );
 		if ( null !== $restriction_mode && self::current_user_can_set_restriction_mode() ) {
-			$settings[ self::FEED_RESTRICTION_SETTING ] = in_array( $restriction_mode, self::get_overridable_restriction_modes(), true )
-				? $restriction_mode
-				: self::FEED_RESTRICTION_INHERIT;
+			$settings[ self::FEED_RESTRICTION_SETTING ] = self::normalize_stored_restriction_mode( $restriction_mode );
 		}
 
 		$content_featured_image             = filter_input( INPUT_POST, 'content_featured_image', FILTER_SANITIZE_NUMBER_INT );

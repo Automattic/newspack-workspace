@@ -422,6 +422,45 @@ class Test_Feed_Restriction_Per_Feed extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A stored mode that is not even a string — meta written by a migration, a
+	 * filter, or WP-CLI rather than by the editor — resolves like any other
+	 * unrecognized value instead of failing the whole feed request.
+	 */
+	public function test_non_string_stored_mode_does_not_break_the_feed() {
+		$this->set_feed_restriction_mode( [ 'corrupt' ] );
+
+		$resolved_mode = $this->in_partner_feed(
+			function () {
+				return RSS::apply_feed_restriction_override(
+					Content_Gate_Advanced_Settings::FEED_MODE_TRUNCATE,
+					[ 'query' => $GLOBALS['wp_query'] ]
+				);
+			}
+		);
+
+		$this->assertSame( Content_Gate_Advanced_Settings::FEED_MODE_TRUNCATE, $resolved_mode );
+	}
+
+	/**
+	 * The warning has to agree with what the feed actually serves. An
+	 * unrecognized stored mode falls back to the inherited one at runtime, so
+	 * inheriting an unrestricted site means the feed does publish restricted
+	 * articles in full — and the editor has to say so.
+	 */
+	public function test_warning_follows_an_unrecognized_mode_to_its_inherited_result() {
+		$this->assertTrue(
+			RSS::feed_serves_unrestricted_full_content(
+				[
+					RSS::FEED_RESTRICTION_SETTING => 'nonsense',
+					'full_content'                => true,
+				],
+				Content_Gate_Advanced_Settings::FEED_MODE_OFF
+			),
+			'An unrecognized mode inherits, so an unrestricted site should still warn.'
+		);
+	}
+
+	/**
 	 * The editor warning fires exactly when a feed both opts out of restriction
 	 * and asks for full content — the combination that publishes complete gated
 	 * articles at a public URL.
