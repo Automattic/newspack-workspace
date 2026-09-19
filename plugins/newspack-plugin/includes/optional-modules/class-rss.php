@@ -169,17 +169,29 @@ class RSS {
 	/**
 	 * The restriction modes a partner feed can store, as select-control options.
 	 *
-	 * Inherit leads and is the default. The three explicit modes reuse
-	 * Content_Gate_Advanced_Settings' vocabulary so "restricted article" means
-	 * the same thing in both screens.
+	 * Four in all: inherit leads and is the default, then "off", then the two
+	 * the site-wide control itself stores. The last two reuse
+	 * Content_Gate_Advanced_Settings' labels so "restricted article" means the
+	 * same thing in both screens.
+	 *
+	 * The inherit option names what it currently resolves to, so a publisher
+	 * can see what leaving the feed alone does without opening the Audience
+	 * wizard in another tab.
+	 *
+	 * @param string $inherited_mode Mode inherit resolves to, from
+	 *                               Content_Gate_Advanced_Settings::get_site_feed_restriction_mode().
 	 *
 	 * @return array[] Array of [ 'value' => string, 'label' => string ].
 	 */
-	public static function get_feed_restriction_options(): array {
+	public static function get_feed_restriction_options( string $inherited_mode ): array {
 		$options = [
 			[
 				'value' => self::FEED_RESTRICTION_INHERIT,
-				'label' => __( 'Use the site-wide feed setting', 'newspack-plugin' ),
+				'label' => sprintf(
+					/* translators: %s: what the site-wide setting currently does, e.g. "teaser only". */
+					__( 'Use the site-wide setting (%s)', 'newspack-plugin' ),
+					self::get_restriction_mode_summary( $inherited_mode )
+				),
 			],
 			[
 				'value' => Content_Gate_Advanced_Settings::FEED_MODE_OFF,
@@ -187,6 +199,27 @@ class RSS {
 			],
 		];
 		return array_merge( $options, Content_Gate_Advanced_Settings::get_feed_restriction_mode_options() );
+	}
+
+	/**
+	 * A mode in two or three words, for naming it inside another label.
+	 *
+	 * The full option labels are whole sentences, which read as nonsense in a
+	 * parenthetical.
+	 *
+	 * @param string $mode One of the overridable modes.
+	 *
+	 * @return string
+	 */
+	private static function get_restriction_mode_summary( string $mode ): string {
+		switch ( $mode ) {
+			case Content_Gate_Advanced_Settings::FEED_MODE_OFF:
+				return __( 'articles in full', 'newspack-plugin' );
+			case Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE:
+				return __( 'articles removed', 'newspack-plugin' );
+			default:
+				return __( 'teaser only', 'newspack-plugin' );
+		}
 	}
 
 	/**
@@ -823,7 +856,7 @@ class RSS {
 					id="newspack-rss-content-restriction-mode"
 					data-inherited-mode="<?php echo esc_attr( $inherited_mode ); ?>"
 				>
-					<?php foreach ( self::get_feed_restriction_options() as $option ) : ?>
+					<?php foreach ( self::get_feed_restriction_options( $inherited_mode ) as $option ) : ?>
 						<option value="<?php echo esc_attr( $option['value'] ); ?>" <?php selected( $current_mode, $option['value'] ); ?>>
 							<?php echo esc_html( $option['label'] ); ?>
 						</option>
