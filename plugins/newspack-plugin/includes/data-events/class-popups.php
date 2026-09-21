@@ -78,6 +78,18 @@ final class Popups {
 			'prompt_interaction',
 			[ __CLASS__, 'donation_submission_woocommerce_error' ]
 		);
+
+		Data_Events::register_listener(
+			'newspack_data_event_dispatch_donation_new',
+			'contextual_prompt_interaction',
+			[ __CLASS__, 'contextual_prompt_donation_success' ]
+		);
+
+		Data_Events::register_listener(
+			'newspack_data_event_dispatch_woocommerce_donation_order_processed',
+			'contextual_prompt_interaction',
+			[ __CLASS__, 'contextual_prompt_donation_woocommerce' ]
+		);
 	}
 
 	/**
@@ -287,6 +299,59 @@ final class Popups {
 		$popup_data['interaction_data']['donation_recurrence'] = $data['recurrence'];
 		$popup_data['interaction_data']['donation_platform']   = $data['platform'];
 		return $popup_data;
+	}
+
+	/**
+	 * Shape a contextual prompt donation payload, or null when the donation
+	 * didn't start from one. Keyed by the same names the client event uses so
+	 * consumers see one schema for seen, clicked and the conversion.
+	 *
+	 * @param string $action Action name.
+	 * @param array  $data   The donation event data.
+	 * @return ?array
+	 */
+	private static function contextual_prompt_donation( $action, $data ) {
+		$source = $data['contextual_prompt'] ?? [];
+		if ( empty( $source['post_id'] ) || ! empty( $data['is_renewal'] ) ) {
+			return null;
+		}
+		return [
+			'action'                      => $action,
+			'action_type'                 => 'donation',
+			'contextual_prompt_post_id'   => (int) $source['post_id'],
+			'contextual_prompt_placement' => (string) ( $source['placement'] ?? '' ),
+			'contextual_prompt_condition' => (string) ( $source['condition'] ?? '' ),
+			'referer'                     => $data['referer'] ?? '',
+			'interaction_data'            => [
+				'donation_order_id'   => $data['platform_data']['order_id'] ?? null,
+				'donation_amount'     => $data['amount'] ?? null,
+				'donation_currency'   => $data['currency'] ?? null,
+				'donation_recurrence' => $data['recurrence'] ?? null,
+				'donation_platform'   => $data['platform'] ?? null,
+			],
+		];
+	}
+
+	/**
+	 * A donation completed from a contextual prompt.
+	 *
+	 * @param int   $timestamp Event timestamp.
+	 * @param array $data      The donation_new event data.
+	 * @return ?array
+	 */
+	public static function contextual_prompt_donation_success( $timestamp, $data ) {
+		return self::contextual_prompt_donation( self::FORM_SUBMISSION_SUCCESS, $data );
+	}
+
+	/**
+	 * WooCommerce processed a donation from a contextual prompt.
+	 *
+	 * @param int   $timestamp Event timestamp.
+	 * @param array $data      The event data.
+	 * @return ?array
+	 */
+	public static function contextual_prompt_donation_woocommerce( $timestamp, $data ) {
+		return self::contextual_prompt_donation( self::FORM_SUBMISSION, $data );
 	}
 }
 
