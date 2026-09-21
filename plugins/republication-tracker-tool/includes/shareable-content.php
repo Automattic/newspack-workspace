@@ -32,9 +32,16 @@ $content_footer = Republication_Tracker_Tool::create_content_footer( $post );
  * @var HTML $article_info The article title, etc.
  */
 $article_info = sprintf(
-	// translators: %1$s is the post title, %2$s is the byline, %3$s is the site name, %4$s is the date in the format F j, Y.
-	__( '<h1>%1$s</h1><p class="byline">by %2$s, %3$s <br />%4$s</p>', 'republication-tracker-tool' ),
+	// translators: %1$s is the post title, %2$s is the byline prefix, %3$s is the byline, %4$s is the site name, %5$s is the date in the format F j, Y.
+	__( '<h1>%1$s</h1><p class="byline">%2$s%3$s, %4$s <br />%5$s</p>', 'republication-tracker-tool' ),
 	wp_kses_post( get_the_title( $post ) ),
+	/**
+	 * Allow filtering of the byline prefix (e.g. "by ") output in the share
+	 * dialog and the copyable plaintext.
+	 *
+	 * @param string $prefix The byline prefix. Defaults to "by ".
+	 */
+	wp_kses_post( apply_filters( 'republication_tracker_tool_byline_prefix', __( 'by ', 'republication-tracker-tool' ) ) ),
 	/**
 	 * Allow filtering of the byline that is output in the share dialog and the copyable plaintext.
 	 *

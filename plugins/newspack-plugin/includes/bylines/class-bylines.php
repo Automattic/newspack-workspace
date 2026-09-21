@@ -37,6 +37,7 @@ class Bylines {
 		add_filter( 'pre_newspack_posted_by', [ __CLASS__, 'pre_newspack_posted_by' ] );
 		add_filter( 'newspack_blocks_post_authors', [ __CLASS__, 'newspack_blocks_post_authors' ] );
 		add_filter( 'newspack_blocks_post_byline', [ __CLASS__, 'newspack_blocks_post_byline' ] );
+		add_filter( 'republication_tracker_tool_byline_prefix', [ __CLASS__, 'republication_tracker_tool_byline_prefix' ] );
 
 		// Newspack Network compatibility.
 		add_filter( 'newspack_network_distributed_post_meta', [ __CLASS__, 'newspack_network_distributed_post_meta' ], 10, 2 );
@@ -202,6 +203,23 @@ class Bylines {
 			return false;
 		}
 		return wp_kses_post( $byline );
+	}
+
+	/**
+	 * Suppress Republication Tracker Tool's own byline prefix (e.g. "by ")
+	 * when the post has an active Custom Byline, since that text already
+	 * includes its own leading text.
+	 *
+	 * @param string $prefix The byline prefix.
+	 *
+	 * @return string
+	 */
+	public static function republication_tracker_tool_byline_prefix( $prefix ) {
+		if ( ! self::get_post_byline_html( false, false ) ) {
+			return $prefix;
+		}
+
+		return '';
 	}
 
 	/**
