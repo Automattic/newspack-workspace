@@ -31,29 +31,46 @@ $content_footer = Republication_Tracker_Tool::create_content_footer( $post );
  *
  * @var HTML $article_info The article title, etc.
  */
+/**
+ * Allow filtering of the byline format (e.g. "by %s") output in the share
+ * dialog and the copyable plaintext. Must contain exactly one %s
+ * placeholder for the byline itself.
+ *
+ * @param string $format The byline format. Defaults to "by %s".
+ */
+$byline_format = apply_filters(
+	'republication_tracker_tool_byline_format',
+	// translators: %s is the byline (e.g. an author name or attribution).
+	__( 'by %s', 'republication-tracker-tool' )
+);
+
+$byline_text = sprintf(
+	// translators: %1$s is the formatted byline (e.g. "by John Doe"), %2$s is the site name.
+	__( '%1$s, %2$s', 'republication-tracker-tool' ),
+	wp_kses_post(
+		sprintf(
+			$byline_format,
+			/**
+			 * Allow filtering of the byline that is output in the share dialog and the copyable plaintext.
+			 *
+			 * This is to provide support for plugins that do not implement
+			 * a filter on 'the_author', or in cases where the 'the_author'
+			 * filter returns incomplete information.
+			 *
+			 * @link https://developer.wordpress.org/reference/functions/get_the_author/
+			 * @link https://github.com/INN/republication-tracker-tool/issues/46
+			 */
+			wp_kses_post( apply_filters( 'republication_tracker_tool_byline', get_the_author() ) )
+		)
+	),
+	wp_kses_post( get_bloginfo( 'name' ) )
+);
+
+// Not translatable — layout markup only.
 $article_info = sprintf(
-	// translators: %1$s is the post title, %2$s is the byline prefix, %3$s is the byline, %4$s is the site name, %5$s is the date in the format F j, Y.
-	__( '<h1>%1$s</h1><p class="byline">%2$s%3$s, %4$s <br />%5$s</p>', 'republication-tracker-tool' ),
+	'<h1>%1$s</h1><p class="byline">%2$s <br />%3$s</p>',
 	wp_kses_post( get_the_title( $post ) ),
-	/**
-	 * Allow filtering of the byline prefix (e.g. "by ") output in the share
-	 * dialog and the copyable plaintext.
-	 *
-	 * @param string $prefix The byline prefix. Defaults to "by ".
-	 */
-	wp_kses_post( apply_filters( 'republication_tracker_tool_byline_prefix', __( 'by ', 'republication-tracker-tool' ) ) ),
-	/**
-	 * Allow filtering of the byline that is output in the share dialog and the copyable plaintext.
-	 *
-	 * This is to provide support for plugins that do not implement
-	 * a filter on 'the_author', or in cases where the 'the_author'
-	 * filter returns incomplete information.
-	 *
-	 * @link https://developer.wordpress.org/reference/functions/get_the_author/
-	 * @link https://github.com/INN/republication-tracker-tool/issues/46
-	 */
-	wp_kses_post( apply_filters( 'republication_tracker_tool_byline', get_the_author() ) ),
-	wp_kses_post( get_bloginfo( 'name' ) ),
+	$byline_text,
 	wp_kses_post( gmdate( 'F j, Y', strtotime( $post->post_date ) ) )
 );
 // strip empty tags after automatically applying p tags.

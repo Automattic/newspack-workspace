@@ -2,11 +2,10 @@
 /**
  * Compatibility functionality for Newspack's Custom Bylines feature.
  *
- * Registers unconditionally (unlike the sibling Co-Authors Plus compatibility
- * file, which gates registration on function_exists() at load time) and
- * checks Newspack\Bylines's existence inside each callback instead. That's
- * the more robust choice here, since load order between this plugin and
- * newspack-plugin isn't guaranteed.
+ * Checks Newspack\Bylines's existence inside each callback rather than
+ * gating add_filter() at load time (unlike the sibling CAP compatibility
+ * file), since load order between this plugin and newspack-plugin isn't
+ * guaranteed.
  *
  * @link https://github.com/Automattic/newspack-plugin/blob/trunk/includes/bylines/class-bylines.php
  * @package Republication_Tracker_Tool
@@ -51,20 +50,21 @@ function republication_tracker_tool_byline_filter_newspack_bylines( $author_stri
 add_filter( 'republication_tracker_tool_byline', 'republication_tracker_tool_byline_filter_newspack_bylines', 20, 1 );
 
 /**
- * Filter the Republication Tracker Tool Byline Prefix
+ * Filter the Republication Tracker Tool Byline Format
  *
- * Suppresses this plugin's own "by " prefix when a Custom Byline is active,
- * since that text already includes its own leading text.
+ * Suppresses this plugin's own "by %s" format when a Custom Byline is
+ * active, since that text already includes its own leading word (e.g.
+ * "By ...").
  *
- * @param string $prefix The byline prefix.
+ * @param string $format The byline format (must contain one %s placeholder).
  * @return string
  */
-function republication_tracker_tool_byline_prefix_filter_newspack_bylines( $prefix ) {
+function republication_tracker_tool_byline_format_filter_newspack_bylines( $format ) {
 	if ( empty( republication_tracker_tool_get_newspack_custom_byline() ) ) {
-		return $prefix;
+		return $format;
 	}
 
-	return '';
+	return '%s';
 }
 
-add_filter( 'republication_tracker_tool_byline_prefix', 'republication_tracker_tool_byline_prefix_filter_newspack_bylines', 20, 1 );
+add_filter( 'republication_tracker_tool_byline_format', 'republication_tracker_tool_byline_format_filter_newspack_bylines', 20, 1 );
