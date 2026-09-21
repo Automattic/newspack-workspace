@@ -65,7 +65,13 @@ class RSS {
 		add_filter( 'wpseo_include_rss_footer', [ __CLASS__, 'maybe_suppress_yoast' ] );
 		add_action( 'rss2_ns', [ __CLASS__, 'maybe_inject_yahoo_namespace' ] );
 		add_filter( 'the_title_rss', [ __CLASS__, 'maybe_wrap_titles_in_cdata' ] );
-		add_filter( 'newspack_content_gate_feed_restriction_mode', [ __CLASS__, 'apply_feed_restriction_override' ], 10, 2 );
+		// Priority 5, ahead of the default, so an integration that must force a
+		// feed's mode still has the last word. A per-feed setting is a
+		// publisher's preference; an integration's exemption is a requirement —
+		// newspack-manager forces "off" for the Pugpig app feed because the app
+		// handles entitlement itself and breaks on a truncated body. At equal
+		// priority the winner would be whichever plugin loaded second.
+		add_filter( 'newspack_content_gate_feed_restriction_mode', [ __CLASS__, 'apply_feed_restriction_override' ], 5, 2 );
 
 		add_filter( 'newspack_capabilities_map', [ __CLASS__, 'newspack_capabilities_map' ] );
 	}
@@ -607,7 +613,7 @@ class RSS {
 					</select>
 				</td>
 			</tr>
-			<?php self::render_restriction_mode_setting( $settings ); ?>
+			<?php self::render_restriction_mode_setting( $settings, $feed_post ); ?>
 			<tr>
 				<th><?php esc_html_e( 'Update frequency:', 'newspack-plugin' ); ?></th>
 				<td>
@@ -859,9 +865,10 @@ class RSS {
 	 * absent field as "leave the stored value alone" so nothing is lost if
 	 * gating is later switched off and on again.
 	 *
-	 * @param array $settings Feed settings.
+	 * @param array         $settings  Feed settings.
+	 * @param \WP_Post|null $feed_post The feed being edited.
 	 */
-	private static function render_restriction_mode_setting( array $settings ): void {
+	private static function render_restriction_mode_setting( array $settings, $feed_post = null ): void {
 		if ( ! Content_Gate::is_gating_active() || ! self::current_user_can_set_restriction_mode() ) {
 			return;
 		}
@@ -871,6 +878,30 @@ class RSS {
 		if ( Memberships::is_active() ) {
 			return;
 		}
+
+		/**
+		 * Filters whether an integration owns this feed's restriction mode.
+		 *
+		 * An integration that forces a mode on `newspack_content_gate_feed_restriction_mode`
+		 * — newspack-manager does for the Pugpig app feed — should say so here
+		 * too, or the editor offers a choice that silently does nothing.
+		 *
+		 * @param false|string $locked False when the publisher may choose, or a
+		 *                             sentence naming what controls the feed and
+		 *                             why, shown in place of the control.
+		 * @param \WP_Post|null $feed_post The feed being edited.
+		 */
+		$locked = apply_filters( 'newspack_rss_feed_restriction_locked', false, $feed_post );
+		if ( is_string( $locked ) && '' !== $locked ) {
+			?>
+			<tr>
+				<th><?php esc_html_e( 'Restricted articles in this feed:', 'newspack-plugin' ); ?></th>
+				<td><p class="description"><?php echo esc_html( $locked ); ?></p></td>
+			</tr>
+			<?php
+			return;
+		}
+
 		$inherited_mode = Content_Gate_Advanced_Settings::get_site_feed_restriction_mode();
 		$current_mode   = $settings[ self::FEED_RESTRICTION_SETTING ] ?? self::FEED_RESTRICTION_INHERIT;
 		?>
