@@ -208,6 +208,30 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An entry the table cannot return is a failed load, like the list's, not
+	 * "Entry not found".
+	 */
+	public function test_an_entry_that_cannot_be_read_is_an_error() {
+		$row_id      = $this->record();
+		$break_reads = function ( $query ) {
+			return str_replace( Push_Log::get_table_name(), 'table_that_does_not_exist', $query );
+		};
+		add_filter( 'query', $break_reads );
+
+		$request = new \WP_REST_Request( 'GET' );
+		$request->set_param( 'integration_id', 'sample' );
+		$request->set_param( 'id', $row_id );
+		$response = ( new Audience_Integrations() )->api_get_push_log_entry( $request );
+
+		remove_filter( 'query', $break_reads );
+
+		$this->assertWPError( $response );
+		$this->assertSame( 'newspack_push_log_read_failed', $response->get_error_code() );
+		$this->assertSame( 500, $response->get_error_data()['status'] );
+		$this->assertStringNotContainsString( 'table_that_does_not_exist', $response->get_error_message() );
+	}
+
+	/**
 	 * A retrying row says whether its retry is still there to run, and when.
 	 */
 	public function test_a_retrying_row_reports_its_pending_retry() {

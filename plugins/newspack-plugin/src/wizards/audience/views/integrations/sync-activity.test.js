@@ -230,6 +230,20 @@ describe( 'SyncActivity', () => {
 		);
 	} );
 
+	it( 'does not leave the previous rows up when a load fails', async () => {
+		await renderLoaded();
+		mockApiFetch.mockRejectedValue( new Error( 'nope' ) );
+
+		act( () => {
+			mockDataViewsProps.current.onChangeView( { ...mockDataViewsProps.current.view, search: 'someone-else@example.test' } );
+		} );
+
+		// The rows on screen answered an earlier question; under the new search
+		// they would read as its results.
+		await waitFor( () => expect( mockDataViewsProps.current.data ).toEqual( [] ) );
+		expect( mockDataViewsProps.current.paginationInfo ).toEqual( { totalItems: 0, totalPages: 0 } );
+	} );
+
 	it( 'does not read a failed load as a log with nothing in it', async () => {
 		mockApiFetch.mockRejectedValue( new Error( 'nope' ) );
 		render( <SyncActivity integrationId="sample" /> );

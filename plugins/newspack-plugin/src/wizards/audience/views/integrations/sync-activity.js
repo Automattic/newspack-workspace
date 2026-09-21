@@ -88,8 +88,12 @@ export const SyncActivity = ( { integrationId } ) => {
 				if ( ! isCurrent() ) {
 					return;
 				}
-				// A load that failed left the table empty; the empty message
-				// says so rather than reporting a log with nothing in it.
+				// The rows on screen answered an earlier request, and under a new
+				// search or filter they would read as its results. An empty table
+				// says the load failed rather than reporting a log with nothing
+				// in it.
+				setData( [] );
+				setTotal( 0 );
 				setHasFailed( true );
 				addNotice( {
 					message: __( 'Failed to load the sync activity. Please try again.', 'newspack-plugin' ),

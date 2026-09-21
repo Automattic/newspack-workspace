@@ -699,7 +699,7 @@ class Audience_Integrations extends Wizard {
 		);
 
 		if ( is_wp_error( $result ) ) {
-			return new WP_Error( $result->get_error_code(), $result->get_error_message(), [ 'status' => 500 ] );
+			return self::get_push_log_read_error( $result );
 		}
 
 		return rest_ensure_response(
@@ -734,6 +734,9 @@ class Audience_Integrations extends Wizard {
 		}
 
 		$row = Push_Log::get( (int) $request->get_param( 'id' ), $integration_id );
+		if ( is_wp_error( $row ) ) {
+			return self::get_push_log_read_error( $row );
+		}
 		if ( ! $row ) {
 			return new WP_Error(
 				'newspack_push_log_entry_not_found',
@@ -743,6 +746,9 @@ class Audience_Integrations extends Wizard {
 		}
 
 		$predecessor = Push_Log::get_predecessor( $row );
+		if ( is_wp_error( $predecessor ) ) {
+			return self::get_push_log_read_error( $predecessor );
+		}
 
 		return rest_ensure_response(
 			[
@@ -754,6 +760,19 @@ class Audience_Integrations extends Wizard {
 				'fields'      => Push_Log::compare_payloads( $row, $predecessor, (string) $integration->get_metadata_prefix() ),
 			]
 		);
+	}
+
+	/**
+	 * Answer a push log read that failed as a server error.
+	 *
+	 * A table that did not answer is neither an empty log nor a missing
+	 * entry, and the screen reports a failed load for a 500.
+	 *
+	 * @param WP_Error $error The error Push_Log returned.
+	 * @return WP_Error
+	 */
+	private static function get_push_log_read_error( WP_Error $error ): WP_Error {
+		return new WP_Error( $error->get_error_code(), $error->get_error_message(), [ 'status' => 500 ] );
 	}
 
 	/**

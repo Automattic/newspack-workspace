@@ -40,10 +40,12 @@ final class Push_Log {
 	const OPERATION_DELETE = 'delete';
 
 	/**
-	 * What a list returns for each row. The payload and its hash stay out, so
-	 * a page of rows stays light; get() returns them for one row.
+	 * What a list returns for each row. The payload, its hash and the error
+	 * message stay out, so a page of rows stays light: a provider's message
+	 * can run to thousands of characters and a list does not show it. get()
+	 * returns all three for one row.
 	 */
-	const LIST_COLUMNS = [ 'id', 'integration_id', 'email', 'user_id', 'operation', 'context', 'status', 'attempts', 'max_attempts', 'repeat_count', 'error_class', 'error_code', 'error_message', 'retry_action_id', 'created_at', 'updated_at' ];
+	const LIST_COLUMNS = [ 'id', 'integration_id', 'email', 'user_id', 'operation', 'context', 'status', 'attempts', 'max_attempts', 'repeat_count', 'error_class', 'error_code', 'retry_action_id', 'created_at', 'updated_at' ];
 
 	/**
 	 * Whether a write failure was already reported during this request.
@@ -455,7 +457,9 @@ final class Push_Log {
 
 		$search = trim( (string) $args['search'] );
 		if ( '' !== $search && is_email( $search ) ) {
-			$reader = get_user_by( 'email', $search );
+			// The users table is asked about the same address, so its statement
+			// stays out of the error log like the ones against this table.
+			$reader = self::quietly( fn() => get_user_by( 'email', $search ) );
 			if ( $reader ) {
 				$where[]  = '( l.email = %s OR l.user_id = %d )';
 				$values[] = self::normalize_email( $search );
@@ -533,12 +537,8 @@ final class Push_Log {
 				$total       = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $values ) );
 				$read_failed = $read_failed || '' !== $wpdb->last_error;
 
-				// Errors are suppressed here, so a broken or missing table would
-				// otherwise read as a log with nothing in it. The message carries
-				// neither the statement nor the database's own text: both quote
-				// the reader's address.
 				if ( $read_failed ) {
-					return new \WP_Error( 'newspack_push_log_read_failed', __( 'Could not read the push log.', 'newspack-plugin' ) );
+					return self::read_failure();
 				}
 
 				return [
@@ -547,6 +547,20 @@ final class Push_Log {
 				];
 			}
 		);
+	}
+
+	/**
+	 * What a read returns when the table did not answer.
+	 *
+	 * Reads run with the database layer's error output off, so without this a
+	 * broken or missing table would read as an empty log, or as a row that is
+	 * not there. The message carries neither the statement nor the database's
+	 * own text: either can quote the reader's address.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function read_failure(): \WP_Error {
+		return new \WP_Error( 'newspack_push_log_read_failed', __( 'Could not read the push log.', 'newspack-plugin' ) );
 	}
 
 	/**
@@ -572,15 +586,21 @@ final class Push_Log {
 	 * @param string $integration_id The integration the caller is reading. A row of
 	 *                               another integration reads as missing.
 	 *
-	 * @return array|null
+	 * @return array|\WP_Error|null The row, null when there is none, or an error when the table could not be read.
 	 */
-	public static function get( int $id, string $integration_id ): ?array {
+	public static function get( int $id, string $integration_id ): array|\WP_Error|null {
 		global $wpdb;
-		$row = self::quietly(
-			fn() => $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND integration_id = %s', self::get_table_name(), $id, $integration_id ), ARRAY_A ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		);
 
-		return is_array( $row ) ? self::decode_row( $row ) : null;
+		return self::quietly(
+			function () use ( $wpdb, $id, $integration_id ) {
+				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND integration_id = %s', self::get_table_name(), $id, $integration_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				if ( '' !== $wpdb->last_error ) {
+					return self::read_failure();
+				}
+
+				return is_array( $row ) ? self::decode_row( $row ) : null;
+			}
+		);
 	}
 
 	/**
@@ -590,12 +610,12 @@ final class Push_Log {
 	 *
 	 * @param array $row A row, as get() returns it.
 	 *
-	 * @return array|null
+	 * @return array|\WP_Error|null The row, null when there is none, or an error when the table could not be read.
 	 */
-	public static function get_predecessor( array $row ): ?array {
+	public static function get_predecessor( array $row ): array|\WP_Error|null {
 		$predecessor = self::quietly( fn() => self::read_predecessor( $row ) );
 
-		return is_array( $predecessor ) ? self::decode_row( $predecessor ) : null;
+		return is_array( $predecessor ) ? self::decode_row( $predecessor ) : $predecessor;
 	}
 
 	/**
@@ -608,9 +628,9 @@ final class Push_Log {
 	 *
 	 * @param array $row A row, as get() returns it.
 	 *
-	 * @return array|null
+	 * @return array|\WP_Error|null
 	 */
-	private static function read_predecessor( array $row ): ?array {
+	private static function read_predecessor( array $row ): array|\WP_Error|null {
 		global $wpdb;
 		$table_name = self::get_table_name();
 		$user_id    = (int) ( $row['user_id'] ?? 0 );
@@ -626,6 +646,9 @@ final class Push_Log {
 			),
 			ARRAY_A
 		);
+		if ( '' !== $wpdb->last_error ) {
+			return self::read_failure();
+		}
 
 		// Guests share account 0, which would link every guest to every other.
 		if ( $user_id <= 0 ) {
@@ -643,6 +666,9 @@ final class Push_Log {
 			),
 			ARRAY_A
 		);
+		if ( '' !== $wpdb->last_error ) {
+			return self::read_failure();
+		}
 
 		if ( ! is_array( $by_address ) ) {
 			return is_array( $by_account ) ? $by_account : null;

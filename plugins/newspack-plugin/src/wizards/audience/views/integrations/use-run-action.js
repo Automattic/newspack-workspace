@@ -59,6 +59,10 @@ export function useRunAction( integrationId, { onSettled, completeNotice = DEFAU
 						notice = completeNotice;
 					} else if ( response.status === 'failed' ) {
 						notice = { message: response.message || __( 'Action failed.', 'newspack-plugin' ), type: 'error' };
+					} else if ( response.status === 'pending' ) {
+						// Still pending after the attempt means nothing ran, and the
+						// message asks to try again: that is not a result to confirm.
+						notice = { message: response.message || __( 'Could not run action.', 'newspack-plugin' ), type: 'error' };
 					} else {
 						notice = { message: response.message || __( 'Action processed.', 'newspack-plugin' ), type: 'success' };
 					}

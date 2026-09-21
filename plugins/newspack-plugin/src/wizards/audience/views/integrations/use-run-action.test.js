@@ -80,9 +80,18 @@ describe( 'useRunAction', () => {
 	} );
 
 	it( 'reports any other outcome as processed rather than as a success or a failure', async () => {
+		await runToCompletion( { status: 'in-progress', message: '' } );
+
+		expect( lastNotice() ).toEqual( expect.objectContaining( { type: 'success', message: 'Action processed.' } ) );
+	} );
+
+	it( 'reports an action that did not run as an error, not as a result', async () => {
+		// The run route answers this way when the action is still pending after
+		// the attempt, with a message asking to try again. Nothing ran, so a
+		// success notice would be reporting something that did not happen.
 		await runToCompletion( { status: 'pending', message: 'Could not run; please refresh and try again.' } );
 
-		expect( lastNotice() ).toEqual( expect.objectContaining( { type: 'success', message: 'Could not run; please refresh and try again.' } ) );
+		expect( lastNotice() ).toEqual( expect.objectContaining( { type: 'error', message: 'Could not run; please refresh and try again.' } ) );
 	} );
 
 	it( 'reports a request that never arrived', async () => {

@@ -544,6 +544,74 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Opening a row the table cannot return is a failure, not a missing row:
+	 * "not found" would send someone looking for an entry that is still there.
+	 * The same holds for the push it is compared with.
+	 */
+	public function test_get_and_get_predecessor_report_a_table_they_cannot_read() {
+		$row_id      = $this->record();
+		$row         = Push_Log::get( $row_id, 'sample' );
+		$break_reads = function ( $query ) {
+			return str_replace( Push_Log::get_table_name(), 'table_that_does_not_exist', $query );
+		};
+		add_filter( 'query', $break_reads );
+
+		$unread      = Push_Log::get( $row_id, 'sample' );
+		$predecessor = Push_Log::get_predecessor( $row );
+
+		remove_filter( 'query', $break_reads );
+
+		$this->assertWPError( $unread );
+		$this->assertSame( 'newspack_push_log_read_failed', $unread->get_error_code() );
+		$this->assertStringNotContainsString( 'table_that_does_not_exist', $unread->get_error_message() );
+		$this->assertWPError( $predecessor );
+		$this->assertSame( 'newspack_push_log_read_failed', $predecessor->get_error_code() );
+	}
+
+	/**
+	 * A full email is looked up among the site's users before the log is
+	 * read. That lookup carries the reader's address too, so it runs with the
+	 * database layer's error output off like every other read here.
+	 */
+	public function test_the_account_lookup_of_a_search_runs_with_database_errors_suppressed() {
+		global $wpdb;
+		$suppressed_during_lookup = null;
+		$watch_lookup             = function ( $query ) use ( &$suppressed_during_lookup, $wpdb ) {
+			// The statement that names the address without touching the log.
+			if ( false === strpos( $query, Push_Log::get_table_name() ) && false !== strpos( $query, 'uncached-reader@example.test' ) ) {
+				$suppressed_during_lookup = $wpdb->suppress_errors;
+			}
+			return $query;
+		};
+		add_filter( 'query', $watch_lookup );
+
+		Push_Log::query(
+			[
+				'integration_id' => 'sample',
+				'search'         => 'uncached-reader@example.test',
+			]
+		);
+
+		remove_filter( 'query', $watch_lookup );
+
+		$this->assertTrue( $suppressed_during_lookup );
+	}
+
+	/**
+	 * A provider's error message can run to thousands of characters and the
+	 * list never shows it, so a page of rows leaves it to the row's own view.
+	 */
+	public function test_query_leaves_error_messages_to_the_single_row() {
+		$row_id = $this->record( [ 'result' => new \WP_Error( 'provider_down', str_repeat( 'x', 5000 ) ) ] );
+
+		$item = Push_Log::query( [ 'integration_id' => 'sample' ] )['items'][0];
+
+		$this->assertArrayNotHasKey( 'error_message', $item );
+		$this->assertSame( 'provider_down', $item['error_code'] );
+		$this->assertSame( 5000, strlen( Push_Log::get( $row_id, 'sample' )['error_message'] ) );
+	}
+
+	/**
 	 * The comparison names what changed, what is new and what was dropped,
 	 * with real changes first, fields that change on every visit after them,
 	 * and everything else last.
