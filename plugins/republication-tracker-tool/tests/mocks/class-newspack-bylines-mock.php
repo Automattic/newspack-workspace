@@ -42,7 +42,36 @@ if ( ! class_exists( 'Newspack\Bylines' ) ) {
 				return null;
 			}
 
-			return $byline;
+			return self::replace_author_shortcodes( $byline );
+		}
+
+		/**
+		 * Replace author shortcodes with author links, mirroring the real
+		 * class's markup so tests exercise the same output shape production
+		 * renders.
+		 *
+		 * @param string $byline Byline with author shortcodes on it.
+		 * @return string
+		 */
+		private static function replace_author_shortcodes( $byline ) {
+			return preg_replace_callback(
+				'/\[Author id=(\d+)\](.*?)\[\/Author\]/',
+				function ( $matches ) {
+					$author_id = $matches[1];
+
+					$author = \get_user_by( 'id', $author_id );
+					if ( ! $author ) {
+						return $matches[2];
+					}
+
+					return sprintf(
+						'<span class="author vcard"><a class="url fn n" href="%1$s">%2$s</a></span>',
+						\esc_url( \get_author_posts_url( $author_id ) ),
+						\esc_html( \get_the_author_meta( 'display_name', $author_id ) )
+					);
+				},
+				$byline
+			);
 		}
 	}
 }

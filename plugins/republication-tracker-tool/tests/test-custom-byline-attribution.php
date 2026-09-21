@@ -41,6 +41,12 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 			)
 		);
 
+		$custom_byline_author_id = $this->factory->user->create(
+			array(
+				'display_name' => 'Jane Smith',
+			)
+		);
+
 		$this->test_post = $this->factory->post->create_and_get(
 			array(
 				'post_title'   => 'Test Post with Custom Byline',
@@ -51,7 +57,11 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 		);
 
 		update_post_meta( $this->test_post->ID, '_newspack_byline_active', true );
-		update_post_meta( $this->test_post->ID, '_newspack_byline', 'Jane Smith' );
+		update_post_meta(
+			$this->test_post->ID,
+			'_newspack_byline',
+			sprintf( 'By [Author id=%d]Jane Smith[/Author]', $custom_byline_author_id )
+		);
 	}
 
 	/**
@@ -95,5 +105,42 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'Jane Smith', $output, 'Modal should attribute the post to the Custom Byline value.' );
 		$this->assertStringNotContainsString( 'John Doe', $output, 'Modal should not fall back to the WP post author when a Custom Byline is active.' );
+		$this->assertStringNotContainsString( 'by By', $output, 'Modal should not double up its own "by" prefix with a Custom Byline that already includes one.' );
+	}
+
+	/**
+	 * A post with Custom Byline meta present but inactive should fall back
+	 * to the WP post author, with the plugin's own "by" prefix intact.
+	 */
+	public function test_republish_modal_falls_back_to_post_author_when_custom_byline_inactive() {
+		global $post, $wp_query;
+
+		update_post_meta( $this->test_post->ID, '_newspack_byline_active', false );
+
+		$post                     = $this->test_post;
+		$wp_query->is_single      = true;
+		$wp_query->queried_object = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+		setup_postdata( $this->test_post );
+
+		$args = array(
+			'before_widget' => '<div class="widget">',
+			'after_widget'  => '</div>',
+			'before_title'  => '<h2>',
+			'after_title'   => '</h2>',
+		);
+
+		$instance = array(
+			'title' => 'Republish This Story',
+			'text'  => 'Republish this story',
+		);
+
+		ob_start();
+		$this->widget->widget( $args, $instance );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'John Doe', $output, 'Modal should fall back to the WP post author when the Custom Byline is inactive.' );
+		$this->assertStringNotContainsString( 'Jane Smith', $output, 'Modal should not use an inactive Custom Byline.' );
+		$this->assertStringContainsString( 'by John Doe', $output, 'The plugin\'s own "by" prefix should still apply for the WP post author.' );
 	}
 }
