@@ -461,6 +461,111 @@ class Test_Feed_Restriction_Per_Feed extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Remove the override callback whichever priority it is registered at, so a
+	 * test can re-register it in a chosen order. Spans both the shipped priority
+	 * and the default, so the helper survives a change to either.
+	 */
+	private function unhook_restriction_override() {
+		foreach ( [ 5, 10 ] as $priority ) {
+			remove_filter( 'newspack_content_gate_feed_restriction_mode', [ RSS::class, 'apply_feed_restriction_override' ], $priority );
+		}
+	}
+
+	/**
+	 * An integration that must force a feed's mode — typically an app that
+	 * authenticates its own readers and breaks on a truncated body — has to
+	 * outrank a publisher's per-feed setting, or a publisher can close that
+	 * feed from the RSS editor and break the app.
+	 *
+	 * Asserted for both registration orders: the guarantee is priority, not the
+	 * order two plugins happen to load in.
+	 *
+	 * @dataProvider integration_registration_orders
+	 *
+	 * @param bool $integration_first Whether the integration hooks on first.
+	 */
+	public function test_an_integration_outranks_the_per_feed_mode( $integration_first ) {
+		$this->set_feed_restriction_mode( Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE );
+		$force_off = function () {
+			return Content_Gate_Advanced_Settings::FEED_MODE_OFF;
+		};
+
+		$this->unhook_restriction_override();
+		if ( $integration_first ) {
+			add_filter( 'newspack_content_gate_feed_restriction_mode', $force_off );
+			RSS::init();
+		} else {
+			RSS::init();
+			add_filter( 'newspack_content_gate_feed_restriction_mode', $force_off );
+		}
+
+		$resolved_mode = $this->in_partner_feed(
+			function () {
+				return Content_Gate_Advanced_Settings::get_feed_restriction_mode( [ 'query' => $GLOBALS['wp_query'] ] );
+			}
+		);
+		remove_filter( 'newspack_content_gate_feed_restriction_mode', $force_off );
+
+		$this->assertSame( Content_Gate_Advanced_Settings::FEED_MODE_OFF, $resolved_mode );
+	}
+
+	/**
+	 * Cases for test_an_integration_outranks_the_per_feed_mode.
+	 *
+	 * @return array[]
+	 */
+	public function integration_registration_orders() {
+		return [
+			'integration hooks first' => [ true ],
+			'override hooks first'    => [ false ],
+		];
+	}
+
+	/**
+	 * Capture the Content Settings metabox as an administrator sees it.
+	 *
+	 * @return string
+	 */
+	private function render_content_settings() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		ob_start();
+		RSS::render_content_settings_metabox( get_post( $this->feed_post_id ) );
+		$markup = ob_get_clean();
+		wp_set_current_user( 0 );
+		return $markup;
+	}
+
+	/**
+	 * A feed whose mode an integration forces still shows the control, so a
+	 * publisher can see where the setting lives and what it holds — but
+	 * disabled, and with the integration's reason in place of the help text.
+	 */
+	public function test_a_locked_feed_disables_the_control_and_gives_the_reason() {
+		$lock_reason = 'LOCK_REASON from the integration.';
+		$lock        = function () use ( $lock_reason ) {
+			return $lock_reason;
+		};
+		add_filter( 'newspack_rss_feed_restriction_locked', $lock );
+		$markup = $this->render_content_settings();
+		remove_filter( 'newspack_rss_feed_restriction_locked', $lock );
+
+		$this->assertStringContainsString( 'newspack-rss-content-restriction-mode', $markup, 'The control should still be shown.' );
+		$this->assertMatchesRegularExpression( '/id="newspack-rss-content-restriction-mode"[^>]*disabled/', $markup, 'The control should be disabled.' );
+		$this->assertStringContainsString( $lock_reason, $markup );
+	}
+
+	/**
+	 * The companion: with nothing locking it, the control is editable and
+	 * carries its usual help text.
+	 */
+	public function test_an_unlocked_feed_offers_an_editable_control() {
+		$markup = $this->render_content_settings();
+
+		$this->assertStringContainsString( 'newspack-rss-content-restriction-mode', $markup );
+		$this->assertDoesNotMatchRegularExpression( '/id="newspack-rss-content-restriction-mode"[^>]*disabled/', $markup );
+	}
+
+	/**
 	 * The editor warning fires exactly when a feed both opts out of restriction
 	 * and asks for full content — the combination that publishes complete gated
 	 * articles at a public URL.
