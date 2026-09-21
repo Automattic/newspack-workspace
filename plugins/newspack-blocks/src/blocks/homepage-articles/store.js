@@ -11,7 +11,7 @@ import { set } from 'lodash';
  */
 import { register, select } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
-import { addQueryArgs } from '@wordpress/url';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -86,28 +86,84 @@ const POSTS_QUERIES_CACHE = {};
 const createCacheKey = JSON.stringify;
 
 /**
- * Get posts for a single block.
+ * The query a block's posts are cached under. A deduplicating block's result depends on
+ * the posts shown above it, so the exclusion list is part of its key.
+ *
+ * @param {Object} block   an object with a postsQuery and a deduplicate flag
+ * @param {Array}  exclude IDs of posts already shown above the block
+ * @return {Object} posts query
+ */
+const effectiveQuery = ( block, exclude ) => ( block.deduplicate ? { ...block.postsQuery, exclude } : block.postsQuery );
+
+/**
+ * Fetch posts for blocks in document order, carrying the exclusion list from each
+ * deduplicating block to the next.
+ *
+ * Blocks answered from the cache are dispatched without a request. From the first block
+ * that isn't cached, the rest go to the batch endpoint, which applies the exclusion list
+ * server-side, so a page costs one request instead of one per block.
  *
  * @yield
- * @param {Object} block an object with a postsQuery and a clientId
+ * @param {Array} blockQueries objects with clientId, postsQuery and deduplicate, in document order
+ * @param {Array} exclude      IDs of posts to exclude from the first deduplicating block
  */
-function* getPostsForBlock( block ) {
-	const cacheKey = createCacheKey( block.postsQuery );
-	const restUrl = window.newspack_blocks_data.posts_rest_url;
-	let posts = POSTS_QUERIES_CACHE[ cacheKey ];
-	if ( posts === undefined ) {
-		const url = addQueryArgs( restUrl, {
-			...block.postsQuery,
-			// `context=edit` is needed, so that custom REST fields are returned.
-			context: 'edit',
-		} );
-		posts = yield call( apiFetch, { url } );
-		POSTS_QUERIES_CACHE[ cacheKey ] = posts;
-	}
+export function* fetchPostsForBlocks( blockQueries, exclude ) {
+	const { posts_batch_rest_url: url, posts_batch_max_queries: maxQueries = 50 } = window.newspack_blocks_data;
+	const pending = [ ...blockQueries ];
 
-	const postsIds = posts.map( post => post.id );
-	yield put( { type: 'UPDATE_BLOCK_POSTS', clientId: block.clientId, posts } );
-	return postsIds;
+	const showPosts = function* ( block, posts ) {
+		POSTS_QUERIES_CACHE[ createCacheKey( effectiveQuery( block, exclude ) ) ] = posts;
+		yield put( { type: 'UPDATE_BLOCK_POSTS', clientId: block.clientId, posts } );
+		if ( block.deduplicate ) {
+			exclude = [ ...exclude, ...posts.map( post => post.id ) ];
+		}
+	};
+
+	while ( pending.length ) {
+		const cached = POSTS_QUERIES_CACHE[ createCacheKey( effectiveQuery( pending[ 0 ], exclude ) ) ];
+		if ( cached !== undefined ) {
+			yield* showPosts( pending.shift(), cached );
+			continue;
+		}
+
+		const batch = pending.splice( 0, maxQueries );
+		let results;
+		try {
+			results = yield call( apiFetch, {
+				url,
+				method: 'POST',
+				data: {
+					exclude,
+					queries: batch.map( ( { clientId, postsQuery, deduplicate } ) => ( {
+						clientId,
+						// `context=edit` is needed, so that custom REST fields are returned.
+						postsQuery: { ...postsQuery, context: 'edit' },
+						deduplicate,
+					} ) ),
+				},
+			} );
+		} catch ( e ) {
+			// Without this batch's posts the exclusion list for later blocks is unknown.
+			for ( const block of [ ...batch, ...pending ] ) {
+				yield put( { type: 'UPDATE_BLOCK_ERROR', clientId: block.clientId, error: e.message } );
+			}
+			return;
+		}
+
+		const resultsByClientId = Object.fromEntries( results.map( result => [ result.clientId, result ] ) );
+		for ( const block of batch ) {
+			const result = resultsByClientId[ block.clientId ];
+			if ( result?.posts ) {
+				yield* showPosts( block, result.posts );
+			} else {
+				yield put( {
+					type: 'UPDATE_BLOCK_ERROR',
+					clientId: block.clientId,
+					error: result?.error || __( 'The posts for this block could not be loaded.', 'newspack-blocks' ),
+				} );
+			}
+		}
+	}
 }
 
 /**
@@ -140,33 +196,20 @@ const createFetchPostsSaga = blockNames => {
 
 		const blocks = recursivelyGetBlocks( getBlocks );
 
-		const blockQueries = getBlockQueries( blocks, blockNames );
+		const blockQueries = getBlockQueries( blocks, blockNames ).map( block => ( {
+			...block,
+			deduplicate: Boolean( shouldDeduplicate( block.clientId ) ),
+		} ) );
 
 		// Use requested specific posts ids as the starting state of exclusion list.
-		const specificPostsId = blockQueries.reduce( ( acc, { clientId, postsQuery } ) => {
-			if ( shouldDeduplicate( clientId ) && postsQuery.include ) {
+		const specificPostsId = blockQueries.reduce( ( acc, { deduplicate, postsQuery } ) => {
+			if ( deduplicate && postsQuery.include ) {
 				acc = [ ...acc, ...postsQuery.include ];
 			}
 			return acc;
 		}, [] );
 
-		let exclude = sanitizePostList( [ ...specificPostsId, getCurrentPostId() ] );
-		while ( blockQueries.length ) {
-			const nextBlock = blockQueries.shift();
-			const deduplicate = shouldDeduplicate( nextBlock.clientId );
-			if ( deduplicate ) {
-				nextBlock.postsQuery.exclude = exclude;
-			}
-			let fetchedPostIds = [];
-			try {
-				fetchedPostIds = yield call( getPostsForBlock, nextBlock );
-			} catch ( e ) {
-				yield put( { type: 'UPDATE_BLOCK_ERROR', clientId: nextBlock.clientId, error: e.message } );
-			}
-			if ( deduplicate ) {
-				exclude = [ ...exclude, ...fetchedPostIds ];
-			}
-		}
+		yield call( fetchPostsForBlocks, blockQueries, sanitizePostList( [ ...specificPostsId, getCurrentPostId() ] ) );
 
 		yield put( { type: 'ENABLE_UI' } );
 	}

@@ -80,6 +80,50 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 			]
 		);
 
+		// Endpoint to get articles for every block on a page in one request, in document order.
+		register_rest_route(
+			$this->namespace,
+			'/newspack-blocks-posts-batch',
+			[
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => [ 'Newspack_Blocks_API', 'posts_batch_endpoint' ],
+				'args'                => [
+					'queries' => [
+						'type'     => 'array',
+						'required' => true,
+						'maxItems' => Newspack_Blocks_API::POSTS_BATCH_MAX_QUERIES,
+						'items'    => [
+							'type'       => 'object',
+							'properties' => [
+								'clientId'    => [
+									'type'     => 'string',
+									'required' => true,
+								],
+								'postsQuery'  => [
+									'type'    => 'object',
+									'default' => [],
+								],
+								'deduplicate' => [
+									'type'    => 'boolean',
+									'default' => false,
+								],
+							],
+						],
+					],
+					'exclude' => [ // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude
+						'type'    => 'array',
+						'items'   => [
+							'type' => 'integer',
+						],
+						'default' => [],
+					],
+				],
+				'permission_callback' => function() {
+					return current_user_can( 'edit_posts' );
+				},
+			]
+		);
+
 		// Endpoint to get articles in the editor, in specific posts mode.
 		register_rest_route(
 			$this->namespace,

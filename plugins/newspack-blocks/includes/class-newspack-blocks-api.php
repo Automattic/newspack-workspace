@@ -10,6 +10,12 @@
  */
 class Newspack_Blocks_API {
 	/**
+	 * Most block queries one batch request may carry. Bounds the work a single request can
+	 * ask for; the editor splits a larger page into consecutive batches.
+	 */
+	const POSTS_BATCH_MAX_QUERIES = 50;
+
+	/**
 	 * Get thumbnail featured image source for the rest field.
 	 *
 	 * @param array $object_info The object info.
@@ -228,6 +234,70 @@ class Newspack_Blocks_API {
 	public static function video_playlist_endpoint( $request ) {
 		$args = $request->get_params();
 		return new \WP_REST_Response( newspack_blocks_get_video_playlist( $args ), 200 );
+	}
+
+	/**
+	 * Posts batch endpoint.
+	 *
+	 * Answers every Homepage Posts block on a page in one request. Deduplication makes each
+	 * block depend on the posts every block above it shows, so the editor used to wait for one
+	 * request before sending the next; on a page with dozens of blocks the per-request startup
+	 * cost added up to most of the load time. Each query still goes through the single-block
+	 * route, so its argument schema, defaults, and permission check apply unchanged.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response List of { clientId, posts } or { clientId, error }, in request order.
+	 */
+	public static function posts_batch_endpoint( $request ) {
+		$exclude = array_map( 'intval', (array) $request->get_param( 'exclude' ) );
+		$results = [];
+		// posts_endpoint() leaves the global post on the last post it formatted. Restoring it
+		// after each query gives every query the state a standalone request would start from.
+		$original_post = $GLOBALS['post'] ?? null;
+
+		foreach ( $request->get_param( 'queries' ) as $query ) {
+			$client_id   = $query['clientId'];
+			$deduplicate = ! empty( $query['deduplicate'] );
+			$params      = (array) ( $query['postsQuery'] ?? [] );
+			if ( $deduplicate ) {
+				$params['exclude'] = $exclude; // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude
+			}
+
+			$single = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+			$single->set_query_params( $params );
+
+			try {
+				$response = rest_do_request( $single );
+			} catch ( \Throwable $e ) {
+				$GLOBALS['post'] = $original_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				// One bad query must not cost the rest of the page its posts.
+				$results[] = [
+					'clientId' => $client_id,
+					'error'    => $e->getMessage(),
+				];
+				continue;
+			}
+			$GLOBALS['post'] = $original_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+			if ( $response->is_error() ) {
+				$results[] = [
+					'clientId' => $client_id,
+					'error'    => $response->as_error()->get_error_message(),
+				];
+				continue;
+			}
+
+			$posts = $response->get_data();
+			if ( $deduplicate ) {
+				$exclude = array_merge( $exclude, array_map( 'intval', wp_list_pluck( $posts, 'id' ) ) );
+			}
+			$results[] = [
+				'clientId' => $client_id,
+				'posts'    => $posts,
+			];
+		}
+
+		return new \WP_REST_Response( $results );
 	}
 
 	/**
