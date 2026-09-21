@@ -33,14 +33,18 @@ const foreignPattern = ( clientId, innerBlocks = [] ) => ( { clientId, name: 'co
 const detached = ( clientId, innerBlocks = [], attributes = {} ) => ( {
 	clientId,
 	name: 'core/group',
-	attributes: { className: 'wp-block-group newspack-contextual-prompt has-background', templateLock: 'insert', ...attributes },
+	attributes: { className: 'wp-block-group newspack-contextual-prompt has-background', ...attributes },
 	innerBlocks,
 } );
 const group = ( clientId, innerBlocks = [] ) => ( { clientId, name: 'core/group', attributes: { className: 'wp-block-group' }, innerBlocks } );
-const paragraph = ( clientId, attributes = { lock: CHILD_LOCK } ) => ( { clientId, name: 'core/paragraph', attributes, innerBlocks: [] } );
+const paragraph = ( clientId, attributes = {} ) => ( { clientId, name: 'core/paragraph', attributes, innerBlocks: [] } );
+// The generated copy: the one named child, held locked in place.
+const copyChild = ( clientId, attributes = { lock: CHILD_LOCK, metadata: { name: 'Prompt Copy' } } ) => paragraph( clientId, attributes );
+// The call to action: an unnamed block the publisher may replace.
+const ctaChild = ( clientId, attributes = {} ) => ( { clientId, name: 'newspack-blocks/donate', attributes, innerBlocks: [] } );
 
-// A detached card as the guard has already reconciled it: nothing left to do.
-const settled = clientId => detached( clientId, [ paragraph( `${ clientId }-copy` ), paragraph( `${ clientId }-cta` ) ] );
+// A detached card as the guard has already reconciled it: copy held, CTA free.
+const settled = clientId => detached( clientId, [ copyChild( `${ clientId }-copy` ), ctaChild( `${ clientId }-cta` ) ] );
 
 describe( 'planPromptCorrections: surplus cards', () => {
 	it.each( [
@@ -127,58 +131,77 @@ describe( 'planPromptCorrections: detached card locks', () => {
 			remove: [],
 			unlockRemovals: [],
 			stripGroupLock: [],
-			pinTemplateLock: [],
+			stripTemplateLock: [],
 			lockChildren: [],
+			unlockChildren: [],
 		} );
 	} );
 
 	// The detach copies the pattern's own lock down with the markup, which would
 	// leave the publisher unable to move or delete the prompt they own.
-	it( 'strips the lock the detach copied onto the card', () => {
+	it( 'strips the group lock the detach copied onto the card', () => {
 		const { planPromptCorrections } = loadGuard();
-		const card = detached( 'card', [ paragraph( 'copy' ) ], { lock: CHILD_LOCK } );
+		const card = detached( 'card', [ copyChild( 'copy' ) ], { lock: CHILD_LOCK } );
 
 		expect( planPromptCorrections( [ card ] ).stripGroupLock ).toEqual( [ 'card' ] );
 	} );
 
+	// templateLock comes down with the detach and blocks removing the CTA; strip
+	// it whatever it carries, and leave a card that has none alone.
 	it.each( [
-		[ 'lifted', { templateLock: undefined } ],
-		[ 'changed', { templateLock: 'all' } ],
-		[ 'false', { templateLock: false } ],
-	] )( 're-pins templateLock when it is %s', ( label, attributes ) => {
+		[ 'insert', { templateLock: 'insert' } ],
+		[ 'all', { templateLock: 'all' } ],
+	] )( 'strips a %s templateLock', ( label, attributes ) => {
 		const { planPromptCorrections } = loadGuard();
-		const card = detached( 'card', [ paragraph( 'copy' ) ], attributes );
+		const card = detached( 'card', [ copyChild( 'copy' ) ], attributes );
 
-		expect( planPromptCorrections( [ card ] ).pinTemplateLock ).toEqual( [ 'card' ] );
+		expect( planPromptCorrections( [ card ] ).stripTemplateLock ).toEqual( [ 'card' ] );
 	} );
 
-	// Core's Unlock modal writes the child's own lock attribute, so re-asserting
-	// it is what makes unlocking ineffective.
+	it( 'leaves a card without a templateLock alone', () => {
+		const { planPromptCorrections } = loadGuard();
+
+		expect( planPromptCorrections( [ detached( 'card', [ copyChild( 'copy' ) ] ) ] ).stripTemplateLock ).toEqual( [] );
+	} );
+
+	// Core's Unlock modal writes the copy's own lock attribute, so re-asserting it
+	// holds the copy in place however the modal was used.
 	it.each( [
 		[ 'unlocked outright', {} ],
 		[ 'lifted by the unlock modal', { lock: { move: false, remove: false } } ],
 		[ 'only half locked', { lock: { move: true, remove: false } } ],
-	] )( 're-locks a child %s', ( label, attributes ) => {
+	] )( 're-locks the copy %s', ( label, lock ) => {
 		const { planPromptCorrections } = loadGuard();
-		const card = detached( 'card', [ paragraph( 'copy', attributes ), paragraph( 'cta' ) ] );
+		const card = detached( 'card', [ copyChild( 'copy', { ...lock, metadata: { name: 'Prompt Copy' } } ), ctaChild( 'cta' ) ] );
+		const plan = planPromptCorrections( [ card ] );
 
-		expect( planPromptCorrections( [ card ] ).lockChildren ).toEqual( [ 'copy' ] );
+		expect( plan.lockChildren ).toEqual( [ 'copy' ] );
+		expect( plan.unlockChildren ).toEqual( [] );
 	} );
 
-	it( 're-locks every child that needs it', () => {
+	// The CTA and anything the publisher adds are theirs to arrange: a lock the
+	// detach left on one is lifted, while the copy stays held.
+	it( 'frees the CTA and holds the copy together', () => {
 		const { planPromptCorrections } = loadGuard();
-		const card = detached( 'card', [ paragraph( 'copy', {} ), paragraph( 'cta', {} ) ] );
+		const card = detached( 'card', [ copyChild( 'copy', { metadata: { name: 'Prompt Copy' } } ), ctaChild( 'cta', { lock: CHILD_LOCK } ) ] );
+		const plan = planPromptCorrections( [ card ] );
 
-		expect( planPromptCorrections( [ card ] ).lockChildren ).toEqual( [ 'copy', 'cta' ] );
+		expect( plan.lockChildren ).toEqual( [ 'copy' ] );
+		expect( plan.unlockChildren ).toEqual( [ 'cta' ] );
 	} );
 
-	// Only the card's own children are held: a locked child cannot be
-	// restructured, so what sits under one is the publisher's to arrange.
+	// Only the card's own children are touched: what sits under one is the
+	// publisher's to arrange.
 	it( 'leaves blocks below the card alone', () => {
 		const { planPromptCorrections } = loadGuard();
-		const card = detached( 'card', [ paragraph( 'copy' ), { ...paragraph( 'cta' ), innerBlocks: [ paragraph( 'nested', {} ) ] } ] );
+		const card = detached( 'card', [
+			copyChild( 'copy' ),
+			{ ...ctaChild( 'cta' ), innerBlocks: [ paragraph( 'nested', { lock: CHILD_LOCK } ) ] },
+		] );
+		const plan = planPromptCorrections( [ card ] );
 
-		expect( planPromptCorrections( [ card ] ).lockChildren ).toEqual( [] );
+		expect( plan.lockChildren ).toEqual( [] );
+		expect( plan.unlockChildren ).toEqual( [] );
 	} );
 
 	// An instance's structure lives in the pattern, not the post.
@@ -191,8 +214,9 @@ describe( 'planPromptCorrections: detached card locks', () => {
 			remove: [],
 			unlockRemovals: [],
 			stripGroupLock: [],
-			pinTemplateLock: [],
+			stripTemplateLock: [],
 			lockChildren: [],
+			unlockChildren: [],
 		} );
 	} );
 
@@ -213,8 +237,9 @@ describe( 'createPromptCorrectionApplier', () => {
 		remove: [],
 		unlockRemovals: [],
 		stripGroupLock: [],
-		pinTemplateLock: [],
+		stripTemplateLock: [],
 		lockChildren: [],
+		unlockChildren: [],
 	};
 
 	const setUp = ( { canRemoveBlocks = () => true, removed = true } = {} ) => {
@@ -280,6 +305,22 @@ describe( 'createPromptCorrectionApplier', () => {
 
 		expect( guard.updateBlockAttributes ).toHaveBeenCalledWith( [ 'copy' ], { lock: CHILD_LOCK } );
 		expect( guard.canRemoveBlocks ).not.toHaveBeenCalled();
+	} );
+
+	it( 'strips the templateLock the detach copied onto the card', () => {
+		const guard = setUp();
+
+		guard.apply( { ...emptyPlan, stripTemplateLock: [ 'card' ] } );
+
+		expect( guard.updateBlockAttributes ).toHaveBeenCalledWith( [ 'card' ], { templateLock: undefined } );
+	} );
+
+	it( 'lifts the lock the detach left on a freed child', () => {
+		const guard = setUp();
+
+		guard.apply( { ...emptyPlan, unlockChildren: [ 'cta' ] } );
+
+		expect( guard.updateBlockAttributes ).toHaveBeenCalledWith( [ 'cta' ], { lock: undefined } );
 	} );
 } );
 

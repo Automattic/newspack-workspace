@@ -199,17 +199,19 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The seeded structure: a marker-classed Group that accepts no inserts, the
-	 * bound copy paragraph, and the CTA — all unmovable and unremovable.
+	 * The seeded structure: a marker-classed Group open to inserts so a detached
+	 * card can take blocks beside its prompt, the bound copy paragraph held in
+	 * place, and the CTA left unlocked for the publisher to replace.
 	 */
-	public function test_pattern_structure_is_locked_and_bound() {
+	public function test_pattern_group_and_copy_are_held_cta_is_free() {
 		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
 
 		$group = $this->seeded_group();
 
 		$this->assertSame( 'core/group', $group['blockName'] );
 		$this->assertStringContainsString( 'newspack-contextual-prompt', $group['attrs']['className'] );
-		$this->assertSame( 'insert', $group['attrs']['templateLock'] );
+		// No templateLock: a detached card can add and remove its own blocks.
+		$this->assertArrayNotHasKey( 'templateLock', $group['attrs'] );
 		$this->assertSame(
 			[
 				'move'   => true,
@@ -233,13 +235,8 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 		$cta = $group['innerBlocks'][1];
 		$this->assertSame( 'newspack-blocks/donate', $cta['blockName'] );
 		$this->assertSame( 'is-style-modern', $cta['attrs']['className'] );
-		$this->assertSame(
-			[
-				'move'   => true,
-				'remove' => true,
-			],
-			$cta['attrs']['lock']
-		);
+		// No lock: a detached card can delete or replace the CTA.
+		$this->assertArrayNotHasKey( 'lock', $cta['attrs'] );
 	}
 
 	/**
