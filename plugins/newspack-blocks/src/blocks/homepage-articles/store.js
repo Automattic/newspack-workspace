@@ -12,6 +12,7 @@ import { set } from 'lodash';
 import { register, select } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
+import { addQueryArgs } from '@wordpress/url';
 
 /**
  * Internal dependencies
@@ -101,14 +102,15 @@ const effectiveQuery = ( block, exclude ) => ( block.deduplicate ? { ...block.po
  *
  * Blocks answered from the cache are dispatched without a request. From the first block
  * that isn't cached, the rest go to the batch endpoint, which applies the exclusion list
- * server-side, so a page costs one request instead of one per block.
+ * server-side, so a page costs one request instead of one per block. When only one block
+ * needs posts, it uses the single-block endpoint instead.
  *
  * @yield
  * @param {Array} blockQueries objects with clientId, postsQuery and deduplicate, in document order
  * @param {Array} exclude      IDs of posts to exclude from the first deduplicating block
  */
 export function* fetchPostsForBlocks( blockQueries, exclude ) {
-	const { posts_batch_rest_url: url, posts_batch_max_queries: maxQueries = 50 } = window.newspack_blocks_data;
+	const { posts_rest_url: singleUrl, posts_batch_rest_url: url, posts_batch_max_queries: maxQueries = 50 } = window.newspack_blocks_data;
 	const pending = [ ...blockQueries ];
 
 	const showPosts = function* ( block, posts ) {
@@ -127,6 +129,22 @@ export function* fetchPostsForBlocks( blockQueries, exclude ) {
 		}
 
 		const batch = pending.splice( 0, maxQueries );
+
+		if ( batch.length === 1 ) {
+			const [ block ] = batch;
+			try {
+				const posts = yield call( apiFetch, {
+					// `context=edit` is needed, so that custom REST fields are returned.
+					url: addQueryArgs( singleUrl, { ...effectiveQuery( block, exclude ), context: 'edit' } ),
+				} );
+				yield* showPosts( block, posts );
+			} catch ( e ) {
+				// A failed block adds nothing to the exclusion list, so later blocks can still load.
+				yield put( { type: 'UPDATE_BLOCK_ERROR', clientId: block.clientId, error: e.message } );
+			}
+			continue;
+		}
+
 		let results;
 		try {
 			results = yield call( apiFetch, {
