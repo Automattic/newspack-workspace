@@ -472,9 +472,9 @@ class Test_Feed_Restriction_Per_Feed extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An integration that must force a feed's mode — newspack-manager does this
-	 * for the Pugpig app feed, whose entitlement the app handles itself — has to
-	 * outrank a publisher's per-feed setting, or a publisher can close the app's
+	 * An integration that must force a feed's mode — typically an app that
+	 * authenticates its own readers and breaks on a truncated body — has to
+	 * outrank a publisher's per-feed setting, or a publisher can close that
 	 * feed from the RSS editor and break the app.
 	 *
 	 * Asserted for both registration orders: the guarantee is priority, not the
@@ -536,10 +536,11 @@ class Test_Feed_Restriction_Per_Feed extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A feed whose mode an integration forces gets the reason, not a control
-	 * that silently does nothing.
+	 * A feed whose mode an integration forces still shows the control, so a
+	 * publisher can see where the setting lives and what it holds — but
+	 * disabled, and with the integration's reason in place of the help text.
 	 */
-	public function test_a_locked_feed_shows_the_reason_instead_of_the_control() {
+	public function test_a_locked_feed_disables_the_control_and_gives_the_reason() {
 		$lock_reason = 'The app integration controls this feed.';
 		$lock        = function () use ( $lock_reason ) {
 			return $lock_reason;
@@ -548,15 +549,20 @@ class Test_Feed_Restriction_Per_Feed extends \WP_UnitTestCase {
 		$markup = $this->render_content_settings();
 		remove_filter( 'newspack_rss_feed_restriction_locked', $lock );
 
+		$this->assertStringContainsString( 'newspack-rss-content-restriction-mode', $markup, 'The control should still be shown.' );
+		$this->assertMatchesRegularExpression( '/id="newspack-rss-content-restriction-mode"[^>]*disabled/', $markup, 'The control should be disabled.' );
 		$this->assertStringContainsString( $lock_reason, $markup );
-		$this->assertStringNotContainsString( 'newspack-rss-content-restriction-mode', $markup, 'A locked feed should not offer the select.' );
 	}
 
 	/**
-	 * The companion: with nothing locking it, the control renders.
+	 * The companion: with nothing locking it, the control is editable and
+	 * carries its usual help text.
 	 */
-	public function test_an_unlocked_feed_offers_the_control() {
-		$this->assertStringContainsString( 'newspack-rss-content-restriction-mode', $this->render_content_settings() );
+	public function test_an_unlocked_feed_offers_an_editable_control() {
+		$markup = $this->render_content_settings();
+
+		$this->assertStringContainsString( 'newspack-rss-content-restriction-mode', $markup );
+		$this->assertDoesNotMatchRegularExpression( '/id="newspack-rss-content-restriction-mode"[^>]*disabled/', $markup );
 	}
 
 	/**
