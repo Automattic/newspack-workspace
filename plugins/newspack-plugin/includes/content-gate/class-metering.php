@@ -454,6 +454,12 @@ class Metering {
 	}
 
 	/**
+	 * ID of the element carrying the metering settings. The frontend reads the payload
+	 * from this element, so the value is shared with `src/content-gate/utils/metering-settings.js`.
+	 */
+	const SETTINGS_ELEMENT_ID = 'newspack-metering-settings';
+
+	/**
 	 * Enqueue frontend scripts and styles for gated content.
 	 */
 	public static function enqueue_scripts() {
@@ -478,20 +484,37 @@ class Metering {
 		);
 
 		$settings = self::get_effective_settings( $gate_post_id, false );
-		\wp_localize_script(
-			$handle,
-			'newspack_metering_settings',
+
+		/*
+		 * The allowance travels as a JSON data island rather than a `wp_localize_script`
+		 * variable, because the meter must be able to read it whatever order the page's
+		 * scripts end up running in.
+		 *
+		 * A localized variable only exists once its inline `<script>` has executed, and a
+		 * performance optimizer is free to hold that tag back while letting the metering
+		 * file through. Metering makes the server send the whole article, so a meter that
+		 * cannot read its allowance hands every metered article to anonymous readers
+		 * (NPPD-2281). `type="application/json"` is not executable, so optimizers skip it
+		 * and the payload is in the DOM from parse onwards.
+		 */
+		\wp_print_inline_script_tag(
+			(string) \wp_json_encode(
+				[
+					'visible_paragraphs' => \get_post_meta( $gate_layout_id, 'visible_paragraphs', true ),
+					'use_more_tag'       => \get_post_meta( $gate_layout_id, 'use_more_tag', true ),
+					'count'              => $settings['count'],
+					'period'             => $settings['period'],
+					'gate_id'            => $gate_post_id,
+					'meter_key'          => self::get_meter_key( $gate_post_id, false ),
+					'post_id'            => get_the_ID(),
+					'article_view'       => self::$article_view,
+					'excerpt'            => Content_Gate::get_restricted_post_excerpt( get_post() ),
+					'other_settings'     => Content_Gate_Advanced_Settings::get_settings(),
+				]
+			),
 			[
-				'visible_paragraphs' => \get_post_meta( $gate_layout_id, 'visible_paragraphs', true ),
-				'use_more_tag'       => \get_post_meta( $gate_layout_id, 'use_more_tag', true ),
-				'count'              => $settings['count'],
-				'period'             => $settings['period'],
-				'gate_id'            => $gate_post_id,
-				'meter_key'          => self::get_meter_key( $gate_post_id, false ),
-				'post_id'            => get_the_ID(),
-				'article_view'       => self::$article_view,
-				'excerpt'            => Content_Gate::get_restricted_post_excerpt( get_post() ),
-				'other_settings'     => Content_Gate_Advanced_Settings::get_settings(),
+				'type' => 'application/json',
+				'id'   => self::SETTINGS_ELEMENT_ID,
 			]
 		);
 	}

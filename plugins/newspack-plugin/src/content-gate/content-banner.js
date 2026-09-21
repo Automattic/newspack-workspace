@@ -1,22 +1,11 @@
 /* globals newspack_content_gifting */
 import domReady from '@wordpress/dom-ready';
 import { queuePageReload } from '../reader-activation/utils';
+import { getMeteringSettings, getMeteringStoreKey } from './utils/metering-settings';
 
 import './content-banner.scss';
 
 window.newspackRAS = window.newspackRAS || [];
-
-/**
- * Read the localized metering settings on demand. An optimizer that delays scripts
- * can replay the inline settings tag after this file has run, so a read at module
- * evaluation yields an empty object and the countdown reads the wrong store key.
- *
- * @return {string} The reader-data store key the meter counts views under.
- */
-function getMeteringStoreKey() {
-	const settings = window.newspack_metering_settings || {};
-	return 'metering-' + ( settings.meter_key || settings.gate_id || 0 );
-}
 
 domReady( () => {
 	const cta = document.querySelector( '.newspack-content-gifting__cta,.newspack-countdown-banner__cta' );
@@ -51,7 +40,8 @@ domReady( () => {
 		if ( ! views || 0 < parseInt( views.textContent ) ) {
 			return;
 		}
-		const data = ras?.store?.get( getMeteringStoreKey() ) || {
+		const settings = getMeteringSettings();
+		const data = ( settings && ras?.store?.get( getMeteringStoreKey( settings ) ) ) || {
 			content: [],
 		};
 		const total = parseInt( document.querySelector( '.newspack-countdown-banner__total_views' )?.textContent || 0 );

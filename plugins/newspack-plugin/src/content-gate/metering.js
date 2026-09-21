@@ -1,29 +1,4 @@
-/**
- * The localized settings object is read on demand rather than at module evaluation.
- * An optimizer that delays scripts (Perfmatters' "Delay JavaScript", and anything
- * like it) can replay the inline settings tag after this file has already run, so a
- * read at parse time throws and the meter never runs — which serves every metered
- * article in full. By the time the reader-activation queue drains, the settings are
- * there.
- *
- * @return {Object|null} The metering settings, or null when they are unavailable.
- */
-function getSettings() {
-	const settings = window.newspack_metering_settings;
-	if ( ! settings || 'object' !== typeof settings ) {
-		if ( ! getSettings.warned ) {
-			getSettings.warned = true;
-			// eslint-disable-next-line no-console
-			console.warn( 'Newspack: metering settings are unavailable, so the meter did not run.' );
-		}
-		return null;
-	}
-	return settings;
-}
-
-function getStoreKey( settings ) {
-	return 'metering-' + ( settings.meter_key || settings.gate_id || 0 );
-}
+import { getMeteringSettings, getMeteringStoreKey } from './utils/metering-settings';
 
 function getCurrentExpiration( settings ) {
 	const date = new Date();
@@ -50,7 +25,7 @@ function getCurrentExpiration( settings ) {
 }
 
 function getUserData( store, settings ) {
-	const storeKey = getStoreKey( settings );
+	const storeKey = getMeteringStoreKey( settings );
 	const currentExpiration = getCurrentExpiration( settings );
 	const data = store.get( storeKey ) || {
 		content: [],
@@ -110,9 +85,9 @@ function lockContent( ras, settings ) {
 }
 
 function meter( ras ) {
-	const settings = getSettings();
-	// Without settings there is no allowance to spend, so leave the server-rendered
-	// gate in place instead of removing it.
+	const settings = getMeteringSettings();
+	// No settings means the server did not render a meter for this post, so there is
+	// no allowance to spend and nothing for the meter to do.
 	if ( ! settings ) {
 		return;
 	}
@@ -137,7 +112,7 @@ function meter( ras ) {
 		// Add current content to read content.
 		if ( ! data.content.includes( settings.post_id ) ) {
 			data.content.push( settings.post_id );
-			ras.store.set( getStoreKey( settings ), data );
+			ras.store.set( getMeteringStoreKey( settings ), data );
 		}
 	}
 }

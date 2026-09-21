@@ -1058,15 +1058,17 @@ class Test_Metering extends \WP_UnitTestCase {
 		};
 		add_filter( 'newspack_gate_content', $count_applications, 1 );
 
+		// The settings travel as a printed JSON element, so capture what enqueue_scripts() echoes.
+		ob_start();
 		try {
 			Metering::enqueue_scripts();
 		} finally {
+			$printed_settings = ob_get_clean();
 			remove_filter( 'newspack_gate_content', $count_applications, 1 );
 		}
 
-		$localized_settings = wp_scripts()->get_data( 'newspack-content-gate-metering', 'data' );
-
-		$this->assertStringContainsString( 'First paragraph.', (string) $localized_settings, 'The metering script should be localized with the restricted post excerpt' );
+		$this->assertStringContainsString( 'newspack-metering-settings', $printed_settings, 'The metering settings element should be printed' );
+		$this->assertStringContainsString( 'First paragraph.', $printed_settings, 'The metering settings element should carry the restricted post excerpt' );
 		$this->assertSame( 1, $applications, 'The metering excerpt should pass through the newspack_gate_content pipeline exactly once' );
 	}
 
