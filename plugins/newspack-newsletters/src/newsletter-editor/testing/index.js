@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { withSelect, withDispatch } from '@wordpress/data';
 import { compose } from '@wordpress/compose';
 import { useEffect, useRef, useState } from '@wordpress/element';
@@ -44,6 +44,28 @@ export default compose( [
 	const [ localMessage, setLocalMessage ] = useState( '' );
 	const { newsletterData } = useNewsletterData();
 	const supportsMultipleTestEmailRecipients = !! newsletterData?.supports_multiple_test_recipients;
+	const maxTestRecipients = parseInt( newsletterData?.max_test_recipients ) || 0;
+	const recipientCount = ( testEmail || '' ).split( ',' ).filter( email => email.trim() ).length;
+	const hasTooManyRecipients = maxTestRecipients > 0 && recipientCount > maxTestRecipients;
+
+	const getHelpText = () => {
+		if ( ! supportsMultipleTestEmailRecipients ) {
+			return __( 'Any unsaved changes will be saved.', 'newspack-newsletters' );
+		}
+		if ( maxTestRecipients > 0 ) {
+			return sprintf(
+				// translators: %d is the maximum number of test email recipients.
+				_n(
+					'Use commas to separate up to %d email. Any unsaved changes will be saved.',
+					'Use commas to separate up to %d emails. Any unsaved changes will be saved.',
+					maxTestRecipients,
+					'newspack-newsletters'
+				),
+				maxTestRecipients
+			);
+		}
+		return __( 'Use commas to separate multiple emails. Any unsaved changes will be saved.', 'newspack-newsletters' );
+	};
 
 	// Deps intentionally narrow — fire on refresh transitions only.
 	// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -116,11 +138,7 @@ export default compose( [
 			<TextControl
 				className="newspack-newsletters__no-margin-bottom"
 				label={ __( 'Send a test to', 'newspack-newsletters' ) }
-				help={
-					supportsMultipleTestEmailRecipients
-						? __( 'Use commas to separate multiple emails. Any unsaved changes will be saved.', 'newspack-newsletters' )
-						: __( 'Any unsaved changes will be saved.', 'newspack-newsletters' )
-				}
+				help={ getHelpText() }
 				value={ testEmail }
 				type="email"
 				onChange={ onChangeEmail }
@@ -132,7 +150,7 @@ export default compose( [
 					variant="secondary"
 					onClick={ triggerSave }
 					isBusy={ inFlight || localInFlight }
-					disabled={ disabled || ! hasValidEmail( testEmail ) }
+					disabled={ disabled || ! hasValidEmail( testEmail ) || hasTooManyRecipients }
 					__next40pxDefaultSize
 				>
 					{ inFlight || localInFlight
