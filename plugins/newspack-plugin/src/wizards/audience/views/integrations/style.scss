@@ -43,6 +43,19 @@
 		color: wp-colors.$gray-700;
 		font-size: wp-vars.$helptext-font-size;
 	}
+
+	// DataViews keeps cell text on one line, so a push that several events
+	// share would run its trigger into the next column. It wraps inside its
+	// own instead, up to two lines; the full text is in the title and in the
+	// entry's details.
+	&__trigger {
+		display: -webkit-box;
+		overflow: hidden;
+		white-space: normal;
+		overflow-wrap: anywhere;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+	}
 }
 
 .newspack-integration-logs-tabs {

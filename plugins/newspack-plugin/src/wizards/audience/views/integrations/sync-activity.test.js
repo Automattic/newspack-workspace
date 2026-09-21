@@ -127,6 +127,20 @@ describe( 'SyncActivity', () => {
 		expect( lastPath() ).toContain( 'needs_attention=true' );
 	} );
 
+	it( 'keeps a long trigger to its own column, with the whole of it on hover', async () => {
+		// Several events can share one push, and their names add up to a trigger
+		// longer than the column; it must not run into the status beside it.
+		const trigger = 'RAS Reader registration; RAS Order completed; RAS Woo Subscription updated. Status changed from pending to active.';
+		await renderLoaded();
+
+		const triggerField = mockDataViewsProps.current.fields.find( field => field.id === 'context' );
+		render( triggerField.render( { item: { ...retryingItem, context: trigger } } ) );
+
+		const cell = screen.getByText( trigger );
+		expect( cell.className ).toBe( 'newspack-integration-logs__trigger' );
+		expect( cell.getAttribute( 'title' ) ).toBe( trigger );
+	} );
+
 	it( 'says which retry a row is waiting for, next to its status', async () => {
 		await renderLoaded();
 

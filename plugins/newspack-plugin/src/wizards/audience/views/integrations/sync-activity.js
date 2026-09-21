@@ -167,7 +167,14 @@ export const SyncActivity = ( { integrationId } ) => {
 			{
 				id: 'context',
 				label: __( 'Trigger', 'newspack-plugin' ),
-				render: ( { item } ) => item.context || '—',
+				render: ( { item } ) =>
+					item.context ? (
+						<span className="newspack-integration-logs__trigger" title={ item.context }>
+							{ item.context }
+						</span>
+					) : (
+						'—'
+					),
 				enableSorting: false,
 			},
 			{
