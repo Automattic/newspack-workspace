@@ -229,7 +229,7 @@ export function targetingLabel( rule: TargetingFieldsOnly ): string {
  * @param rule Draft rule.
  */
 export function isValidRule( rule: Partial< DiscountRule > ): boolean {
-	if ( ! rule.subscription_product_ids?.length ) {
+	if ( 'all' !== rule.subscription_targeting && ! rule.subscription_product_ids?.length ) {
 		return false;
 	}
 	const amount = Number( rule.amount );

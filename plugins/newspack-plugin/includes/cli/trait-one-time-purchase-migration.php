@@ -172,11 +172,9 @@ trait One_Time_Purchase_Migration {
 	 * writes a condition its buyers can never satisfy, so the split has to happen
 	 * here rather than being assumed.
 	 *
-	 * WooCommerce Subscriptions is asked directly when it is loaded, because it is
-	 * the authority on its own product types and handles variations. The type check
-	 * is the fallback for a site whose plan products outlived the plugin: those
-	 * products read as simple, and a one-time rule over them at least grants the
-	 * readers who bought them, where a subscription rule would grant nobody.
+	 * A product the site can no longer resolve is treated as one-time: a one-time rule
+	 * over it at least grants the readers who bought it, where a subscription rule
+	 * would grant nobody.
 	 *
 	 * @param int $product_id Product or variation post ID.
 	 *
@@ -184,13 +182,7 @@ trait One_Time_Purchase_Migration {
 	 */
 	private static function is_subscription_product( int $product_id ): bool {
 		$product = \wc_get_product( $product_id );
-		if ( ! $product instanceof \WC_Product ) {
-			return false;
-		}
-		if ( class_exists( 'WC_Subscriptions_Product' ) ) {
-			return (bool) \WC_Subscriptions_Product::is_subscription( $product );
-		}
-		return $product->is_type( [ 'subscription', 'variable-subscription', 'subscription_variation' ] );
+		return $product instanceof \WC_Product && \Newspack\Subscriber_Commerce::is_subscription_product( $product );
 	}
 
 	/**

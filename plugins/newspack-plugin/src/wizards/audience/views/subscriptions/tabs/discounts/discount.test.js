@@ -141,7 +141,13 @@ describe( 'isValidRule', () => {
 		expect( isValidRule( { ...valid, targeting: 'category' } ) ).toBe( false );
 	} );
 
+	// Each half of a rule has a mode that carries its own scope, so an empty
+	// selection under either one is a complete rule rather than a missing answer.
 	it( 'accepts an all-products rule with no selection', () => {
 		expect( isValidRule( { ...valid, targeting: 'all', product_ids: [] } ) ).toBe( true );
+	} );
+
+	it( 'accepts an all-subscriptions rule with no subscription selected', () => {
+		expect( isValidRule( { ...valid, subscription_targeting: 'all', subscription_product_ids: [] } ) ).toBe( true );
 	} );
 } );
