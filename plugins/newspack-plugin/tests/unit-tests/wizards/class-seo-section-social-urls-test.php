@@ -242,6 +242,7 @@ class SEO_Section_Social_Urls_Test extends WP_UnitTestCase {
 		return [
 			'a cleared field'              => [ [ 'bluesky' => '' ] ],
 			'a www. prefix and mixed case' => [ [ 'bluesky' => 'https://WWW.Bsky.App/profile/example' ] ],
+			'a pasted leading space'       => [ [ 'bluesky' => ' https://bsky.app/profile/example' ] ],
 			'a Threads profile on .com'    => [ [ 'threads' => 'https://threads.com/@example' ] ],
 			'a Threads profile on .net'    => [ [ 'threads' => 'https://threads.net/@example' ] ],
 		];

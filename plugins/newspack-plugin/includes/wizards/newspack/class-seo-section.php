@@ -226,8 +226,9 @@ class SEO_Section extends Wizard_Section {
 			if ( '' === $url ) {
 				continue;
 			}
-			$host   = $this->get_host( $url );
-			$scheme = strtolower( (string) wp_parse_url( (string) $url, PHP_URL_SCHEME ) );
+			$trimmed = trim( (string) $url );
+			$host    = $this->get_host( $trimmed );
+			$scheme  = strtolower( (string) wp_parse_url( $trimmed, PHP_URL_SCHEME ) );
 			if ( ! in_array( $scheme, [ 'http', 'https' ], true ) || ! in_array( $host, self::OTHER_SOCIAL_HOSTS[ $key ], true ) ) {
 				return new WP_Error(
 					'newspack_seo_invalid_social_url',
@@ -338,7 +339,7 @@ class SEO_Section extends Wizard_Section {
 	 * @return string Host, lowercased, or an empty string.
 	 */
 	private function get_host( $url ) {
-		$host = wp_parse_url( (string) $url, PHP_URL_HOST );
+		$host = wp_parse_url( trim( (string) $url ), PHP_URL_HOST );
 		if ( ! is_string( $host ) ) {
 			return '';
 		}
