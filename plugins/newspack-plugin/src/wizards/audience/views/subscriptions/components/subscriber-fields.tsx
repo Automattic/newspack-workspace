@@ -14,6 +14,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
+import { speak } from '@wordpress/a11y';
 import { RadioControl } from '@wordpress/components';
 
 /**
@@ -45,7 +46,15 @@ export default function SubscriberFields( { value, onChange, label, specificHelp
 				label={ label }
 				help={ isAll ? allHelp : specificHelp }
 				selected={ subscriberTargeting }
-				onChange={ ( next: string ) => onChange( { subscription_targeting: next as SubscriberTargeting } ) }
+				onChange={ ( next: string ) => {
+					// RadioControl puts `help` in the fieldset's description, which a
+					// screen reader announces once, on entry. Selecting the other
+					// option rewrites that string with nothing to re-read it, so the
+					// reader would never hear what the mode they just chose means —
+					// and for this field the help text is the whole meaning.
+					speak( 'all' === next ? allHelp : specificHelp, 'polite' );
+					onChange( { subscription_targeting: next as SubscriberTargeting } );
+				} }
 				options={ [
 					{ value: 'subscriptions', label: __( 'Specific subscriptions', 'newspack-plugin' ) },
 					{ value: 'all', label: allSubscriptionsLabel() },

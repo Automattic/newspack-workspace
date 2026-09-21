@@ -589,7 +589,13 @@ class Subscriber_Discounts_Pricing {
 		// carry the rule set — and must not, since hashing it on every call
 		// would do the work the memo exists to avoid, several times per product
 		// on a shop archive.
-		$cache_key = $user_id . ':' . $product->get_id();
+		//
+		// The cart is the one input a write does not flush. With "apply at
+		// checkout" on, what the reader qualifies for depends on it, and
+		// WooCommerce changes it mid request and then prices the page again, so
+		// the verdict has to be keyed on the cart that produced it or the reader
+		// keeps a price they have stopped being entitled to.
+		$cache_key = $user_id . ':' . $product->get_id() . ':' . self::cart_signature();
 		if ( isset( self::$rules_for_product[ $cache_key ] ) ) {
 			return self::$rules_for_product[ $cache_key ];
 		}
@@ -608,6 +614,23 @@ class Subscriber_Discounts_Pricing {
 		self::$rules_for_product[ $cache_key ] = $qualifying_rules;
 
 		return $qualifying_rules;
+	}
+
+	/**
+	 * What the cart contributes to a memoized eligibility verdict.
+	 *
+	 * Empty while "apply at checkout" is off, because nothing then reads the cart
+	 * to decide eligibility and a signature would only fragment the memo.
+	 *
+	 * @return string
+	 */
+	private static function cart_signature() {
+		if ( empty( Subscriber_Discounts::get_settings()['apply_at_checkout'] ) ) {
+			return '';
+		}
+		$cart_product_ids = self::get_cart_product_ids();
+		sort( $cart_product_ids );
+		return implode( ',', $cart_product_ids );
 	}
 
 	/**

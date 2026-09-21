@@ -655,6 +655,36 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The same product, priced twice in one request either side of a cart change.
+	 * This is the path the per-product memo covers and the cart memo does not: its
+	 * key is the reader and the product, both unchanged, so without the cart in it
+	 * the second pricing serves the first one's verdict and the reader keeps a
+	 * discount they no longer qualify for.
+	 */
+	public function test_a_cart_change_repricing_the_same_product_is_not_served_from_the_memo() {
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+			]
+		);
+		$subscription = $this->create_product( 50.0, null, 0, 'subscription' );
+
+		$this->set_cart_contents( [ $subscription->get_id() ] );
+		$this->assertSame( 90.0, Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ) );
+
+		// Empty the cart the way WooCommerce does mid-request, leaving every memo
+		// in place, then price the very same product again.
+		remove_all_filters( 'newspack_subscriber_discounts_cart_product_ids' );
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'The discount goes away as soon as the cart no longer grants it.'
+		);
+	}
+
+	/**
 	 * A discount never cuts the price of the thing that grants it. With no named
 	 * grantor the guard widens to every subscription, so an "all subscriptions,
 	 * all products" rule cannot quietly discount every renewal on the site.
