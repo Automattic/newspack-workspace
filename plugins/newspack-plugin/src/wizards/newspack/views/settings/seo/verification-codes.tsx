@@ -24,13 +24,13 @@ function VerificationCodes( { data, setData }: { data: SeoData[ 'verification' ]
 				withMargin={ false }
 				help={
 					<Fragment>
-						{ __( 'Get your verification code in', 'newspack' ) + ' ' }
+						{ __( 'Get your verification code in', 'newspack-plugin' ) + ' ' }
 						<ExternalLink
 							href={ `https://search.google.com/search-console/ownership?resource_id=${ encodeURIComponent(
 								window.location.origin
 							) }` }
 						>
-							{ __( 'Google Search Console', 'newspack' ) }
+							{ __( 'Google Search Console', 'newspack-plugin' ) }
 						</ExternalLink>
 					</Fragment>
 				}
@@ -42,9 +42,9 @@ function VerificationCodes( { data, setData }: { data: SeoData[ 'verification' ]
 				withMargin={ false }
 				help={
 					<Fragment>
-						{ `${ __( 'Get your verification code in', 'newspack' ) } ` }
+						{ `${ __( 'Get your verification code in', 'newspack-plugin' ) } ` }
 						<ExternalLink href="https://www.bing.com/toolbox/webmaster/#/Dashboard/">
-							{ __( 'Bing Webmaster Tools', 'newspack' ) }
+							{ __( 'Bing Webmaster Tools', 'newspack-plugin' ) }
 						</ExternalLink>
 					</Fragment>
 				}

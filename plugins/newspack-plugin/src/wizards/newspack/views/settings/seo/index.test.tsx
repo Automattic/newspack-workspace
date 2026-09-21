@@ -12,7 +12,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
  * WordPress dependencies
  */
 import { speak } from '@wordpress/a11y';
-import { select } from '@wordpress/data';
+import { dispatch, select } from '@wordpress/data';
 
 /**
  * Internal dependencies
@@ -20,10 +20,12 @@ import { select } from '@wordpress/data';
 import Seo from './index';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 
+const mockWizardApiFetch = jest.fn();
+
 jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
 	useWizardApiFetch: () => ( {
-		wizardApiFetch: jest.fn(),
+		wizardApiFetch: mockWizardApiFetch,
 		isFetching: false,
 		errorMessage: null,
 		resetError: jest.fn(),
@@ -38,7 +40,10 @@ const save = () =>
 		select( WIZARD_STORE_NAMESPACE ).getHeaderData().actions[ 0 ].action();
 	} );
 
-beforeEach( () => jest.clearAllMocks() );
+beforeEach( () => {
+	jest.clearAllMocks();
+	( dispatch( WIZARD_STORE_NAMESPACE ) as { resetHeaderData: () => void } ).resetHeaderData();
+} );
 
 describe( 'saving SEO settings with more than one invalid field', () => {
 	it( 'announces every message that blocked the save, in one announcement', () => {
@@ -83,5 +88,8 @@ describe( 'profiles stored in Yoast’s catch-all list', () => {
 		save();
 
 		expect( speak ).not.toHaveBeenCalled();
+		const post = mockWizardApiFetch.mock.calls.find( ( [ request ] ) => request.method === 'POST' );
+		expect( post ).toBeDefined();
+		expect( post[ 0 ].data.urls.bluesky ).toBe( 'https://bsky.app/profile/example' );
 	} );
 } );

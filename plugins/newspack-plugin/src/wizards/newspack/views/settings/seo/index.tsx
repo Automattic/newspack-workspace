@@ -19,7 +19,7 @@ import Accounts from './accounts';
 import { ACCOUNTS } from './constants';
 import WizardsTab from '../../../../wizards-tab';
 import VerificationCodes from './verification-codes';
-import { Divider, Grid, Handoff, SectionHeader } from '../../../../../../packages/components/src';
+import { Divider, Grid, Handoff, SectionHeader, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import useFieldsValidation from '../../../../hooks/use-fields-validation';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
@@ -33,7 +33,6 @@ const EMPTY_DATA: SeoData = {
 		facebook: '',
 		instagram: '',
 		linkedin: '',
-		mastodon: '',
 		pinterest: '',
 		threads: '',
 		tiktok: '',
@@ -162,8 +161,13 @@ function Seo() {
 		} );
 	}, [ isFetching, isDirty, setHeaderData ] );
 
+	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
+		when: isDirty && ! isFetching,
+	} );
+
 	return (
 		<WizardsTab className={ isFetching ? 'is-fetching' : '' }>
+			{ navBlockDialog }
 			{ errorMessage && (
 				<Notice status="error" isDismissible={ false } politeness="polite">
 					{ errorMessage }

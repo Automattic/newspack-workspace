@@ -8,7 +8,6 @@ type SeoData = {
 		facebook: string;
 		instagram: string;
 		linkedin: string;
-		mastodon: string;
 		pinterest: string;
 		threads: string;
 		tiktok: string;
