@@ -99,9 +99,9 @@ describe( 'SyncActivity', () => {
 	it( 'shows the working columns and keeps the rest a click away', async () => {
 		await renderLoaded();
 
-		expect( mockDataViewsProps.current.view.fields ).toEqual( [ 'updated_at', 'email', 'operation', 'status' ] );
+		expect( mockDataViewsProps.current.view.fields ).toEqual( [ 'updated_at', 'email', 'operation', 'context', 'status' ] );
 		const ids = mockDataViewsProps.current.fields.map( field => field.id );
-		expect( ids ).toEqual( expect.arrayContaining( [ 'context', 'created_at', 'repeat_count', 'needs_attention' ] ) );
+		expect( ids ).toEqual( expect.arrayContaining( [ 'created_at', 'repeat_count', 'needs_attention' ] ) );
 	} );
 
 	it( 'sends the search, the filters and the page to the request', async () => {

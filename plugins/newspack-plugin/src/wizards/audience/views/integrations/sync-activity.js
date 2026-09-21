@@ -26,14 +26,15 @@ const DEFAULT_VIEW = {
 	perPage: 25,
 	sort: { field: 'updated_at', direction: 'desc' },
 	search: '',
-	fields: [ 'updated_at', 'email', 'operation', 'status' ],
+	fields: [ 'updated_at', 'email', 'operation', 'context', 'status' ],
 	filters: [],
 	layout: {
 		styles: {
-			updated_at: { width: '25%' },
-			email: { width: '35%' },
-			operation: { width: '15%' },
-			status: { width: '25%' },
+			updated_at: { width: '20%' },
+			email: { width: '26%' },
+			operation: { width: '14%' },
+			context: { width: '20%' },
+			status: { width: '20%' },
 		},
 	},
 };
