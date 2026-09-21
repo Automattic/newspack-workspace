@@ -19,7 +19,7 @@ export const MAX_SELECTABLE_PER_PAGE = 100;
 
 // Mirrors `Admin_Shell_Collection_Params::MAX_PER_PAGE`, the ceiling
 // those collections accept — change both together.
-export const FETCH_ALL_CHUNK_SIZE = 1000;
+export const FETCH_ALL_CHUNK_SIZE = 500;
 
 // Layouts are the one screen whose `_fields` ships `content.raw`, so a
 // chunk of them is whole block markup rather than the trimmed rows the

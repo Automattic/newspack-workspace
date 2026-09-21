@@ -37,7 +37,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * The raise is gated on the capability the list screens already require:
  * the newsletters CPT is public, so without a gate any anonymous caller
- * could ask one request to render ten times as many rows through the
+ * could ask one request to render five times as many rows through the
  * full `the_content` chain as core's ceiling allows.
  *
  * This is not the per-page value the controls offer — that stays at 100
@@ -49,7 +49,7 @@ class Admin_Shell_Collection_Params {
 	 * side by `FETCH_ALL_CHUNK_SIZE` in `utils/per-page.js`; change both
 	 * together.
 	 */
-	const MAX_PER_PAGE = 1000;
+	const MAX_PER_PAGE = 500;
 
 	/**
 	 * Core's own ceiling, and the most an unprivileged caller may ask for.
