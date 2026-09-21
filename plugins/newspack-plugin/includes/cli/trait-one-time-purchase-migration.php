@@ -172,9 +172,12 @@ trait One_Time_Purchase_Migration {
 	 * writes a condition its buyers can never satisfy, so the split has to happen
 	 * here rather than being assumed.
 	 *
-	 * A product the site can no longer resolve is treated as one-time: a one-time rule
-	 * over it at least grants the readers who bought it, where a subscription rule
-	 * would grant nobody.
+	 * Both ways of failing to recognize a subscription land on one-time, and that is
+	 * the useful direction: a one-time rule over the product at least grants the
+	 * readers who bought it, where a subscription rule would grant nobody. The cases
+	 * are a product the site can no longer resolve, and a site whose plan products
+	 * outlived WooCommerce Subscriptions — see
+	 * {@see \Newspack\Subscriber_Commerce::is_subscription_product()} for the second.
 	 *
 	 * @param int $product_id Product or variation post ID.
 	 *

@@ -171,9 +171,13 @@ class Subscriber_Commerce {
 	/**
 	 * Whether a rule names an audience at all.
 	 *
-	 * A rule under the default mode naming no subscription names no way in. What
-	 * each feature does about that is its own call — discounts refuse to save one,
-	 * purchase restrictions skip it — but the question is the same.
+	 * A rule under the default mode naming no subscription names no way in, so
+	 * purchase restrictions skip it rather than making its products unbuyable.
+	 *
+	 * This asks the question of a rule already stored. Discounts reject the same
+	 * shape at the door instead, and deliberately do not call this: validation runs
+	 * on the raw REST payload and re-sanitizes the ids, so a list of `['abc']`
+	 * is refused there, where the `! empty()` below would wave it through.
 	 *
 	 * @param array $rule The rule.
 	 *

@@ -184,6 +184,29 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Create a subscription product plus its mock.
+	 *
+	 * @return \WC_Product
+	 */
+	private function create_subscription_product() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_type'  => 'product',
+				'post_title' => 'Subscription ' . wp_rand(),
+			]
+		);
+		$product = new \WC_Product(
+			[
+				'id'   => $post_id,
+				'type' => 'subscription',
+			]
+		);
+		global $products_database;
+		$products_database[ $post_id ] = $product; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		return $product;
+	}
+
+	/**
 	 * A reader who doesn't subscribe cannot buy a restricted product.
 	 */
 	public function test_non_subscriber_cannot_purchase() {
@@ -598,6 +621,92 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		Subscriber_Only_Products::delete_rule( 'rule' );
 
 		$this->assertTrue( Product_Purchase_Restriction::filter_is_purchasable( true, $this->restricted_product ) );
+	}
+
+	/**
+	 * A restriction open to every subscriber leaves the subscriptions themselves on
+	 * sale. Without that, "all subscribers" plus "all products" bricks the store:
+	 * the only way to satisfy the rule is to buy a subscription, and the rule
+	 * covers those too, so a reader is told to subscribe and then refused the
+	 * subscription. The discount side already answers this question the same way.
+	 */
+	public function test_an_all_subscriptions_restriction_leaves_subscriptions_on_sale() {
+		$subscription = $this->create_subscription_product();
+		$this->set_rules(
+			[
+				[
+					'id'                     => 'lockdown',
+					'subscription_targeting' => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+					'targeting'              => 'all',
+					'active'                 => true,
+				],
+			]
+		);
+
+		$this->assertFalse(
+			Product_Purchase_Restriction::can_purchase( $this->restricted_product, $this->non_subscriber_id ),
+			'An ordinary product is still subscriber-only.'
+		);
+		$this->assertTrue(
+			Product_Purchase_Restriction::can_purchase( $subscription, $this->non_subscriber_id ),
+			'The subscription that would satisfy the rule stays purchasable.'
+		);
+	}
+
+	/**
+	 * A named restriction is unchanged: naming a subscription and restricting it is
+	 * a deliberate pair of choices, not the incidental sweep the exemption exists for.
+	 */
+	public function test_a_named_restriction_can_still_cover_a_subscription() {
+		$subscription = $this->create_subscription_product();
+		$this->set_rules(
+			[
+				[
+					'id'                       => 'named',
+					'subscription_product_ids' => [ $this->subscription->get_id() ],
+					'targeting'                => 'all',
+					'active'                   => true,
+				],
+			]
+		);
+
+		$this->assertFalse(
+			Product_Purchase_Restriction::can_purchase( $subscription, $this->non_subscriber_id ),
+			'A rule naming its subscriptions still covers whatever its targeting reaches.'
+		);
+	}
+
+	/**
+	 * The reader-facing half of the same rule. A restriction open to everyone names
+	 * no subscription, and naming only what a narrower rule beside it lists would
+	 * send the reader to buy one particular subscription when any would do — so one
+	 * such rule suppresses the whole list, whichever order the rules are in.
+	 */
+	public function test_an_all_subscriptions_restriction_suppresses_the_subscription_links() {
+		$this->set_rules(
+			[
+				[
+					'id'                       => 'named',
+					'subscription_product_ids' => [ $this->subscription->get_id() ],
+					'targeting'                => 'products',
+					'product_ids'              => [ $this->restricted_product->get_id() ],
+					'active'                   => true,
+				],
+				[
+					'id'                     => 'open',
+					'subscription_targeting' => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+					'targeting'              => 'products',
+					'product_ids'            => [ $this->restricted_product->get_id() ],
+					'active'                 => true,
+				],
+			]
+		);
+
+		$this->assertSame(
+			'This product is available to subscribers.',
+			Product_Purchase_Restriction::get_restricted_message( $this->restricted_product ),
+			'The notice does not point at one subscription when any of them unlocks the product.'
+		);
 	}
 
 	/**

@@ -33,7 +33,8 @@ class Subscriber_Eligibility {
 
 	/**
 	 * Eligibility verdicts, keyed by
-	 * "{blog_id}:{user_id}:{sorted product IDs}:{payment-recovery grace}".
+	 * "{blog_id}:{user_id}:{question}:{payment-recovery grace}", where the question
+	 * is the sorted product ids a rule names, or "any" when it names none.
 	 *
 	 * @var array<string, bool>
 	 */
@@ -60,7 +61,7 @@ class Subscriber_Eligibility {
 
 		sort( $product_ids );
 
-		return self::verdict( $user_id, $product_ids, implode( ',', $product_ids ) );
+		return self::verdict( $user_id, $product_ids );
 	}
 
 	/**
@@ -79,7 +80,7 @@ class Subscriber_Eligibility {
 		if ( ! $user_id ) {
 			return false;
 		}
-		return self::verdict( $user_id, [], 'any' );
+		return self::verdict( $user_id, [] );
 	}
 
 	/**
@@ -99,13 +100,18 @@ class Subscriber_Eligibility {
 	/**
 	 * Ask the subscription lookup once per distinct question in a request.
 	 *
-	 * @param int    $user_id     The user ID, already known to be non-zero.
-	 * @param int[]  $product_ids Subscription products to match, or an empty list for any.
-	 * @param string $signature   What distinguishes this question in the cache key.
+	 * @param int   $user_id     The user ID, already known to be non-zero.
+	 * @param int[] $product_ids Subscription products to match, sorted; empty for any.
 	 *
 	 * @return bool
 	 */
-	private static function verdict( int $user_id, array $product_ids, string $signature ): bool {
+	private static function verdict( int $user_id, array $product_ids ): bool {
+		// The two questions are different questions, so they cannot share an entry:
+		// a rule naming one subscription must not answer for a rule naming all of
+		// them. An empty list only ever reaches here from user_has_any(), since
+		// user_has() refuses it before the call.
+		$signature = $product_ids ? implode( ',', $product_ids ) : 'any';
+
 		// The verdict is not a function of the arguments alone:
 		// has_active_subscription() also reads `payment_recovery_grace` from the
 		// ambient evaluation context, which with_evaluation_context() swaps in and

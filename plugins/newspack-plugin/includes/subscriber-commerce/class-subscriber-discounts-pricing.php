@@ -32,6 +32,9 @@ class Subscriber_Discounts_Pricing {
 	/**
 	 * Memoized per-product rule lookups, keyed by "user_id:product_id".
 	 *
+	 * Qualifying rules, keyed by reader, product, cart and payment-recovery grace —
+	 * every input that changes the verdict and is not flushed by a rule write.
+	 *
 	 * @var array
 	 */
 	private static $rules_for_product = [];
@@ -214,7 +217,7 @@ class Subscriber_Discounts_Pricing {
 
 	/**
 	 * Discard every memoized lookup: the per-product rule sets, the variation base
-	 * prices, and the reader's cart.
+	 * prices, and whether the cart holds a subscription.
 	 */
 	public static function flush_cache() {
 		self::$rules_for_product       = [];
@@ -590,12 +593,22 @@ class Subscriber_Discounts_Pricing {
 		// would do the work the memo exists to avoid, several times per product
 		// on a shop archive.
 		//
-		// The cart is the one input a write does not flush. With "apply at
-		// checkout" on, what the reader qualifies for depends on it, and
-		// WooCommerce changes it mid request and then prices the page again, so
-		// the verdict has to be keyed on the cart that produced it or the reader
-		// keeps a price they have stopped being entitled to.
-		$cache_key = $user_id . ':' . $product->get_id() . ':' . self::cart_signature();
+		// Two inputs a write does not flush, both of which change what the reader
+		// qualifies for, so both belong in the key. The cart: with "apply at
+		// checkout" on, WooCommerce changes it mid request and then prices the page
+		// again, and a verdict keyed without it leaves the reader a price they have
+		// stopped being entitled to. The payment-recovery grace: the sibling memos
+		// key on it for the same reason, since a reader mid-retry is eligible
+		// inside a gate's evaluation context and not outside it.
+		$cache_key = implode(
+			':',
+			[
+				$user_id,
+				$product->get_id(),
+				self::cart_signature(),
+				Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) ? 'grace' : 'strict',
+			]
+		);
 		if ( isset( self::$rules_for_product[ $cache_key ] ) ) {
 			return self::$rules_for_product[ $cache_key ];
 		}

@@ -193,7 +193,27 @@ class Product_Purchase_Restriction {
 		if ( null === self::$rules ) {
 			self::$rules = Subscriber_Only_Products::get_active_rules();
 		}
-		return Product_Targeting::get_matching_rules( self::$rules, $product );
+		$matching_rules = Product_Targeting::get_matching_rules( self::$rules, $product );
+
+		// A rule open to every subscriber leaves the subscriptions themselves on
+		// sale, whatever its targeting reaches. Otherwise "all subscribers" plus
+		// "all products" is a store nobody can enter: the only way to satisfy the
+		// rule is to hold a subscription, and the rule refuses the sale of one.
+		// A rule that names its subscriptions is not exempted — naming a
+		// subscription and restricting it is two deliberate choices, where this is
+		// the incidental sweep of a mode that names nothing.
+		if ( Subscriber_Commerce::is_subscription_product( $product ) ) {
+			$matching_rules = array_values(
+				array_filter(
+					$matching_rules,
+					function ( $rule ) {
+						return ! Subscriber_Commerce::covers_all_subscriptions( $rule );
+					}
+				)
+			);
+		}
+
+		return $matching_rules;
 	}
 
 	/**
