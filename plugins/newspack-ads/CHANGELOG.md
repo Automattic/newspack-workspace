@@ -1,3 +1,22 @@
+## newspack-ads [3.15.1](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.15.0...newspack-ads@3.15.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **ads:** bump googleads-php-lib to ^74 for Insights GAM reports ([#1091](https://github.com/Automattic/newspack-workspace/issues/1091)) ([3401dba](https://github.com/Automattic/newspack-workspace/commit/3401dbafed4804114171324da342cc1d6b03ef1a))
+
+# newspack-ads [3.15.0](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.14.4...newspack-ads@3.15.0) (2026-09-14)
+
+
+### Features
+
+* **components:** adopt design system badges (DSGNEWS-215) ([fc4c8f7](https://github.com/Automattic/newspack-workspace/commit/fc4c8f73ccba6ec4075e09578a43938a40eda60f))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
 ## newspack-ads [3.14.4](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.14.3...newspack-ads@3.14.4) (2026-08-31)
 
 
