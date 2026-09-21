@@ -1,9 +1,9 @@
 /**
  * The meter reads its allowance from a `type="application/json"` element the server
- * prints, not from a global set by an inline script. A performance optimizer can hold
- * an inline script back while letting the metering file through, and the meter running
- * without its allowance leaves every metered article readable, because metering makes
- * the server send the whole article.
+ * prints, and reads it when it runs rather than when the file loads. A performance
+ * optimizer can hold an inline script back while letting the metering file through, and
+ * a meter running without its allowance leaves every metered article readable, because
+ * metering makes the server send the whole article.
  */
 
 const SETTINGS = {
@@ -17,16 +17,31 @@ const SETTINGS = {
 
 /**
  * Render the page the server sends for a metered post: the whole article, the gate
- * hidden, and optionally the settings element.
+ * hidden, and optionally the allowance element.
  *
- * @param {Object|null} settings Settings to print, or null to print none.
+ * @param {Object|null} settings Allowance to print, or null to print none.
  */
 function renderMeteredPage( settings ) {
 	document.body.innerHTML =
 		'<div class="entry-content"><p>Full article.</p></div>' +
-		'<div style="display:none"><div class="newspack-content-gate__gate newspack-content-gate__inline-gate">Gate</div></div>' +
-		( settings ? '<script type="application/json" id="newspack-metering-settings">' + JSON.stringify( settings ) + '</script>' : '' );
+		'<div style="display:none"><div class="newspack-content-gate__gate newspack-content-gate__inline-gate">Gate</div></div>';
 	document.body.className = '';
+	if ( settings ) {
+		printSettings( settings );
+	}
+}
+
+/**
+ * Append the allowance element to the page.
+ *
+ * @param {Object} settings Allowance to print.
+ */
+function printSettings( settings ) {
+	const element = document.createElement( 'script' );
+	element.type = 'application/json';
+	element.id = 'newspack-content-gate-metering-settings';
+	element.textContent = JSON.stringify( settings );
+	document.body.appendChild( element );
 }
 
 /**
@@ -64,16 +79,15 @@ function createRAS( stored = {} ) {
 
 describe( 'content gate metering', () => {
 	beforeEach( () => {
-		delete window.newspack_metering_settings;
 		window.newspackRAS = [];
 	} );
 
-	it( 'reads the allowance from the DOM, not from a global set at load time', () => {
-		renderMeteredPage( SETTINGS );
+	it( 'reads the allowance that only reaches the page after the module has loaded', () => {
+		// The page the optimizer serves: the article and the gate, no allowance yet.
+		renderMeteredPage( null );
 		const meter = loadMeterCallback();
-		// Nothing ever assigns the global; the settings element is the only source.
-		expect( window.newspack_metering_settings ).toBeUndefined();
 
+		printSettings( SETTINGS );
 		const ras = createRAS();
 		meter( ras );
 
@@ -93,7 +107,7 @@ describe( 'content gate metering', () => {
 		expect( document.querySelector( '.entry-content' ).innerHTML ).toContain( 'Teaser.' );
 	} );
 
-	it( 'leaves an unmetered page alone when no settings element is present', () => {
+	it( 'leaves an unmetered page alone when no allowance element is present', () => {
 		renderMeteredPage( null );
 		const meter = loadMeterCallback();
 

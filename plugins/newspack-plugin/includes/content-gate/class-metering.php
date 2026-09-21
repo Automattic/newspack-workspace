@@ -15,6 +15,13 @@ class Metering {
 	const METERING_META_KEY = 'np_content_metering';
 
 	/**
+	 * ID of the element the allowance is printed into. A DOM contract: the frontend
+	 * reads the payload from it (`src/content-gate/utils/metering-settings.js`), and
+	 * a site's optimizer allowlist may name it, so renaming it breaks both.
+	 */
+	const SETTINGS_ELEMENT_ID = 'newspack-content-gate-metering-settings';
+
+	/**
 	 * Article view activity to be handled by frontend metering.
 	 *
 	 * @var array|null
@@ -454,12 +461,6 @@ class Metering {
 	}
 
 	/**
-	 * ID of the element carrying the metering settings. The frontend reads the payload
-	 * from this element, so the value is shared with `src/content-gate/utils/metering-settings.js`.
-	 */
-	const SETTINGS_ELEMENT_ID = 'newspack-metering-settings';
-
-	/**
 	 * Enqueue frontend scripts and styles for gated content.
 	 */
 	public static function enqueue_scripts() {
@@ -486,32 +487,41 @@ class Metering {
 		$settings = self::get_effective_settings( $gate_post_id, false );
 
 		/*
-		 * The allowance travels as a JSON data island rather than a `wp_localize_script`
-		 * variable, because the meter must be able to read it whatever order the page's
-		 * scripts end up running in.
+		 * The tag must stay non-executable. Metering makes the server send the whole
+		 * article, so the meter is the only thing withholding it, and a meter that cannot
+		 * read its allowance hands every metered article to anonymous readers. An
+		 * executable tag is one an optimizer may reorder or hold back; `application/json`
+		 * is data the parser puts in the DOM.
 		 *
-		 * A localized variable only exists once its inline `<script>` has executed, and a
-		 * performance optimizer is free to hold that tag back while letting the metering
-		 * file through. Metering makes the server send the whole article, so a meter that
-		 * cannot read its allowance hands every metered article to anonymous readers
-		 * (NPPD-2281). `type="application/json"` is not executable, so optimizers skip it
-		 * and the payload is in the DOM from parse onwards.
+		 * JSON_HEX_TAG because `excerpt` carries post HTML: a literal `<script` after an
+		 * HTML comment opener would otherwise put the tokenizer into script-data-escaped
+		 * state on cores whose `wp_get_inline_script_tag()` predates the HTML API.
 		 */
+		$payload = \wp_json_encode(
+			[
+				'visible_paragraphs' => \get_post_meta( $gate_layout_id, 'visible_paragraphs', true ),
+				'use_more_tag'       => \get_post_meta( $gate_layout_id, 'use_more_tag', true ),
+				'count'              => $settings['count'],
+				'period'             => $settings['period'],
+				'gate_id'            => $gate_post_id,
+				'meter_key'          => self::get_meter_key( $gate_post_id, false ),
+				'post_id'            => get_the_ID(),
+				'article_view'       => self::$article_view,
+				'excerpt'            => Content_Gate::get_restricted_post_excerpt( get_post() ),
+				'other_settings'     => Content_Gate_Advanced_Settings::get_settings(),
+			],
+			JSON_HEX_TAG
+		);
+
+		// An unencodable payload (invalid UTF-8 in the post, most often) would print an
+		// empty element, which reads to the frontend exactly like an unmetered page.
+		if ( false === $payload ) {
+			Logger::error( 'Could not encode metering settings for post ' . get_the_ID() . '; the meter will not run.', 'CONTENT-GATE-METERING' );
+			return;
+		}
+
 		\wp_print_inline_script_tag(
-			(string) \wp_json_encode(
-				[
-					'visible_paragraphs' => \get_post_meta( $gate_layout_id, 'visible_paragraphs', true ),
-					'use_more_tag'       => \get_post_meta( $gate_layout_id, 'use_more_tag', true ),
-					'count'              => $settings['count'],
-					'period'             => $settings['period'],
-					'gate_id'            => $gate_post_id,
-					'meter_key'          => self::get_meter_key( $gate_post_id, false ),
-					'post_id'            => get_the_ID(),
-					'article_view'       => self::$article_view,
-					'excerpt'            => Content_Gate::get_restricted_post_excerpt( get_post() ),
-					'other_settings'     => Content_Gate_Advanced_Settings::get_settings(),
-				]
-			),
+			$payload,
 			[
 				'type' => 'application/json',
 				'id'   => self::SETTINGS_ELEMENT_ID,
