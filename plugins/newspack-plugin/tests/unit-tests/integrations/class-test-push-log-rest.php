@@ -250,6 +250,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 			[
 				'action_id'    => $action_id,
 				'is_pending'   => true,
+				'is_running'   => false,
 				'scheduled_at' => gmdate( 'Y-m-d H:i:s', $run_at ),
 			],
 			$item['retry']
@@ -258,7 +259,28 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		\as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 		$item = $wizard->api_get_push_log( $this->list_request() )->get_data()['items'][0];
 		$this->assertFalse( $item['retry']['is_pending'] );
+		$this->assertFalse( $item['retry']['is_running'] );
 		$this->assertNull( $item['retry']['scheduled_at'] );
+	}
+
+	/**
+	 * While Action Scheduler runs a retry, the row keeps pointing at it until
+	 * the push returns, so it has to read as running, not as a retry that is
+	 * gone.
+	 */
+	public function test_a_retry_being_run_reads_as_running_not_as_gone() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		$row_id    = $this->record( [ 'result' => new \WP_Error( 'provider_down', 'ESP 503' ) ] );
+		$action_id = \as_schedule_single_action( time() + 120, Contact_Sync::RETRY_HOOK, [ [ 'log_id' => $row_id ] ], Integrations::get_action_group( 'sample' ) );
+		Push_Log::mark_retrying( $row_id, $action_id );
+		\ActionScheduler_Store::instance()->log_execution( $action_id );
+
+		$item = ( new Audience_Integrations() )->api_get_push_log( $this->list_request() )->get_data()['items'][0];
+
+		$this->assertFalse( $item['retry']['is_pending'] );
+		$this->assertTrue( $item['retry']['is_running'] );
 	}
 
 	/**

@@ -190,7 +190,7 @@ export const SyncActivity = ( { integrationId } ) => {
 				getValue: () => '',
 				enableSorting: false,
 				enableHiding: false,
-				elements: [ { value: NEEDS_ATTENTION_VALUE, label: __( 'Retrying, or failed with no later success', 'newspack-plugin' ) } ],
+				elements: [ { value: NEEDS_ATTENTION_VALUE, label: __( 'Retrying or failed, with no later success', 'newspack-plugin' ) } ],
 				filterBy: { operators: [ 'is' ] },
 			},
 		],

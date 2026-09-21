@@ -795,19 +795,22 @@ class Audience_Integrations extends Wizard {
 	}
 
 	/**
-	 * Whether a row's scheduled retry is still there to run, and when.
+	 * Whether a row's scheduled retry is still there to run, is running now,
+	 * and when it is due.
 	 *
 	 * A row can outlive its action: someone cancelled it, or Action Scheduler
-	 * already ran or pruned it. Then there is nothing to run.
+	 * already ran or pruned it. Then there is nothing to run. While the retry
+	 * runs, the row points at it until the push returns.
 	 *
 	 * @param int    $action_id      The Action Scheduler action.
 	 * @param string $integration_id The integration the row belongs to.
-	 * @return array{action_id:int,is_pending:bool,scheduled_at:?string}
+	 * @return array{action_id:int,is_pending:bool,is_running:bool,scheduled_at:?string}
 	 */
 	private static function get_retry_state( int $action_id, string $integration_id ): array {
 		$state  = [
 			'action_id'    => $action_id,
 			'is_pending'   => false,
+			'is_running'   => false,
 			'scheduled_at' => null,
 		];
 		$action = $action_id > 0 ? Integrations::get_integration_action( $action_id, $integration_id ) : null;
@@ -820,6 +823,10 @@ class Audience_Integrations extends Wizard {
 			// one row must not take the page down.
 			$status = \ActionScheduler_Store::instance()->get_status( $action_id );
 		} catch ( \Throwable $e ) {
+			return $state;
+		}
+		if ( \ActionScheduler_Store::STATUS_RUNNING === $status ) {
+			$state['is_running'] = true;
 			return $state;
 		}
 		if ( \ActionScheduler_Store::STATUS_PENDING !== $status ) {

@@ -177,7 +177,9 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 
 	/**
 	 * A reader who changed address keeps one history: a full email also
-	 * matches rows written under the account it belongs to.
+	 * matches rows written under the account it belongs to now, and under the
+	 * accounts its own rows name. The email-change push is logged under the
+	 * new address, so the address the reader left must still find it.
 	 */
 	public function test_search_by_full_email_follows_the_account() {
 		$reader_id = self::factory()->user->create( [ 'user_email' => 'new@example.test' ] );
@@ -204,8 +206,30 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 		sort( $found );
 		$this->assertSame( [ $old_row, $new_row ], $found );
 
-		// An address no account holds matches by address alone.
-		$this->assertSame( [ $old_row ], $this->query_ids( [ 'search' => 'old@example.test' ] ) );
+		$found = $this->query_ids( [ 'search' => 'old@example.test' ] );
+		sort( $found );
+		$this->assertSame( [ $old_row, $new_row ], $found );
+	}
+
+	/**
+	 * Guests share account 0, which links no one: a guest's address finds
+	 * that guest's rows alone.
+	 */
+	public function test_search_by_a_guest_address_does_not_link_other_guests() {
+		$guest = $this->record(
+			[
+				'email'   => 'guest@example.test',
+				'user_id' => 0,
+			]
+		);
+		$this->record(
+			[
+				'email'   => 'other-guest@example.test',
+				'user_id' => 0,
+			]
+		);
+
+		$this->assertSame( [ $guest ], $this->query_ids( [ 'search' => 'guest@example.test' ] ) );
 	}
 
 	/**
@@ -284,6 +308,19 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 				]
 			)['total']
 		);
+	}
+
+	/**
+	 * A later success makes up for a retrying row as it does for a failed
+	 * one. Nothing rewrites a row whose retry is gone, so otherwise it would
+	 * stay on the list after the reader's data had reached the provider.
+	 */
+	public function test_a_later_success_makes_up_for_a_retrying_row() {
+		$retrying = $this->record( [ 'result' => new \WP_Error( 'provider_down', 'ESP 503' ) ] );
+		Push_Log::mark_retrying( $retrying, 9001 );
+		$this->record();
+
+		$this->assertSame( [], $this->query_ids( [ 'needs_attention' => true ] ) );
 	}
 
 	/**
@@ -569,21 +606,21 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A full email is looked up among the site's users before the log is
-	 * read. That lookup carries the reader's address too, so it runs with the
-	 * database layer's error output off like every other read here.
+	 * A full email is looked up among the site's users and among the accounts
+	 * the log names before the list is read. Every one of those statements
+	 * carries the reader's address, so each runs with the database layer's
+	 * error output off.
 	 */
-	public function test_the_account_lookup_of_a_search_runs_with_database_errors_suppressed() {
+	public function test_every_statement_of_a_full_email_search_runs_with_database_errors_suppressed() {
 		global $wpdb;
-		$suppressed_during_lookup = null;
-		$watch_lookup             = function ( $query ) use ( &$suppressed_during_lookup, $wpdb ) {
-			// The statement that names the address without touching the log.
-			if ( false === strpos( $query, Push_Log::get_table_name() ) && false !== strpos( $query, 'uncached-reader@example.test' ) ) {
-				$suppressed_during_lookup = $wpdb->suppress_errors;
+		$suppressed_by_statement = [];
+		$watch_statements        = function ( $query ) use ( &$suppressed_by_statement, $wpdb ) {
+			if ( false !== strpos( $query, 'uncached-reader@example.test' ) ) {
+				$suppressed_by_statement[ $query ] = $wpdb->suppress_errors;
 			}
 			return $query;
 		};
-		add_filter( 'query', $watch_lookup );
+		add_filter( 'query', $watch_statements );
 
 		Push_Log::query(
 			[
@@ -592,9 +629,11 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 			]
 		);
 
-		remove_filter( 'query', $watch_lookup );
+		remove_filter( 'query', $watch_statements );
 
-		$this->assertTrue( $suppressed_during_lookup );
+		// The users table, the accounts the log names, the list and its count.
+		$this->assertCount( 4, $suppressed_by_statement );
+		$this->assertNotContains( false, $suppressed_by_statement );
 	}
 
 	/**

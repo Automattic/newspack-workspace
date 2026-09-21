@@ -413,10 +413,11 @@ final class Push_Log {
 	 *
 	 *     @type string $integration_id  The integration. Required.
 	 *     @type string $search          A full email, which also matches the rows of the account it
-	 *                                   belongs to, or the start of an address.
+	 *                                   belongs to and of the accounts its own rows name, or the
+	 *                                   start of an address.
 	 *     @type string $status          One of the STATUS_* constants.
 	 *     @type string $operation       One of the OPERATION_* constants.
-	 *     @type bool   $needs_attention Only rows that are retrying, or failed with no later
+	 *     @type bool   $needs_attention Only rows that are retrying or failed, with no later
 	 *                                   successful push for the same reader.
 	 *     @type int    $per_page        1 to 100. Default 25.
 	 *     @type int    $page            Default 1.
@@ -457,16 +458,28 @@ final class Push_Log {
 
 		$search = trim( (string) $args['search'] );
 		if ( '' !== $search && is_email( $search ) ) {
+			$stored_email = self::normalize_email( $search );
 			// The users table is asked about the same address, so its statement
 			// stays out of the error log like the ones against this table.
 			$reader = self::quietly( fn() => get_user_by( 'email', $search ) );
+			// The accounts the address's own rows name, so the address a reader
+			// left still finds the email-change push, which is logged under the
+			// new one. Guests name account 0, which links no one.
+			$account_ids = (array) self::quietly(
+				fn() => $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT user_id FROM %i WHERE email = %s AND integration_id = %s AND user_id > 0', $table_name, $stored_email, (string) $args['integration_id'] ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			);
 			if ( $reader ) {
-				$where[]  = '( l.email = %s OR l.user_id = %d )';
-				$values[] = self::normalize_email( $search );
-				$values[] = (int) $reader->ID;
+				$account_ids[] = $reader->ID;
+			}
+			$account_ids = array_values( array_unique( array_map( 'intval', $account_ids ) ) );
+
+			if ( $account_ids ) {
+				$account_placeholders = implode( ', ', array_fill( 0, count( $account_ids ), '%d' ) );
+				$where[]              = "( l.email = %s OR l.user_id IN ( {$account_placeholders} ) )";
+				$values               = array_merge( $values, [ $stored_email ], $account_ids );
 			} else {
 				$where[]  = 'l.email = %s';
-				$values[] = self::normalize_email( $search );
+				$values[] = $stored_email;
 			}
 		} elseif ( '' !== $search ) {
 			// Start of the address only: a match in the middle cannot use the
@@ -476,19 +489,19 @@ final class Push_Log {
 		}
 
 		if ( $args['needs_attention'] ) {
-			// A redundant range on the status this filter already narrows to, so
-			// the plan can use the integration_status index instead of scanning
-			// every row of the integration through integration_updated.
+			// Only a push that did not end in success can need attention. As a
+			// range on the leading columns of integration_status, it also keeps
+			// the plan off a scan of every row of the integration.
 			$where[]  = 'l.status IN ( %s, %s )';
 			$values[] = self::STATUS_RETRYING;
 			$values[] = self::STATUS_FAILED;
 
 			// An upsert normally sends the full contact, so any later success for the same
-			// reader supersedes a failed one. A deletion sends no contact data, so
-			// a later signup is not evidence it reached the provider: only a flag
-			// or deletion that itself succeeded closes one out. The IN() above
-			// already limits this row to retrying or failed, so "not retrying"
-			// here means failed.
+			// reader supersedes a failed or retrying one. A retry that still runs
+			// writes its row again, so a new failure puts it back on the list,
+			// while a row whose retry is gone is never rewritten. A deletion sends
+			// no contact data, so a later signup is not evidence it reached the
+			// provider: only a flag or deletion that itself succeeded closes one out.
 			$resolving_success        = 's.status = %s'
 				. ' AND ( s.updated_at > l.updated_at OR ( s.updated_at = l.updated_at AND s.id > l.id ) )'
 				. ' AND ( l.operation = %s OR s.operation <> %s )';
@@ -500,13 +513,11 @@ final class Push_Log {
 			// table has, which an OR inside a dependent subquery cannot use.
 			// Guests share account 0, which links no one, so an account of 0
 			// answers for the address alone.
-			$where[] = '( l.status = %s OR ('
-				. ' NOT EXISTS ( SELECT 1 FROM %i s WHERE s.email = l.email AND s.integration_id = l.integration_id AND ' . $resolving_success . ' )'
-				. ' AND ( l.user_id = 0 OR NOT EXISTS ( SELECT 1 FROM %i s WHERE s.user_id = l.user_id AND s.integration_id = l.integration_id AND ' . $resolving_success . ' ) )'
-				. ' ) )';
+			$where[] = '( NOT EXISTS ( SELECT 1 FROM %i s WHERE s.email = l.email AND s.integration_id = l.integration_id AND ' . $resolving_success . ' )'
+				. ' AND ( l.user_id = 0 OR NOT EXISTS ( SELECT 1 FROM %i s WHERE s.user_id = l.user_id AND s.integration_id = l.integration_id AND ' . $resolving_success . ' ) ) )';
 			$values  = array_merge(
 				$values,
-				[ self::STATUS_RETRYING, $table_name ],
+				[ $table_name ],
 				$resolving_success_values,
 				[ $table_name ],
 				$resolving_success_values

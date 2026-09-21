@@ -78,6 +78,12 @@ describe( 'getAttemptLabel', () => {
 	it( 'leaves a stalled row to the retry note', () => {
 		expect( getAttemptLabel( { status: 'retrying', attempts: 3, max_attempts: 6, retry: { is_pending: false } } ) ).toBe( '' );
 	} );
+
+	it( 'names the retry that is running right now', () => {
+		const running = { status: 'retrying', attempts: 3, max_attempts: 6, retry: { is_pending: false, is_running: true } };
+		expect( getAttemptLabel( running ) ).toBe( 'Running retry 3 of 5' );
+		expect( getAttemptLabel( { ...running, max_attempts: 1 } ) ).toBe( 'Running retry 3' );
+	} );
 } );
 
 describe( 'getErrorKindLabel', () => {
@@ -104,6 +110,7 @@ describe( 'getStatusDisplay', () => {
 
 	it( 'leaves a retry that is still coming alone', () => {
 		expect( getStatusDisplay( { status: 'retrying', retry: { action_id: 9, is_pending: true } } ).status ).toBe( 'progress' );
+		expect( getStatusDisplay( { status: 'retrying', retry: { action_id: 9, is_pending: false, is_running: true } } ).status ).toBe( 'progress' );
 		expect( getStatusDisplay( { status: 'success' } ).label ).toBe( 'Synced' );
 	} );
 
@@ -119,21 +126,40 @@ describe( 'getRetryNote', () => {
 		);
 	} );
 
-	it( 'stays quiet while the retry is pending, and on any other status', () => {
+	it( 'stays quiet while the retry is pending or running, and on any other status', () => {
 		expect( getRetryNote( { status: 'retrying', retry: { action_id: 9, is_pending: true, scheduled_at: '2026-09-10 10:02:30' } } ) ).toBe( '' );
+		expect( getRetryNote( { status: 'retrying', retry: { action_id: 9, is_pending: false, is_running: true, scheduled_at: null } } ) ).toBe( '' );
 		expect( getRetryNote( { status: 'failed', retry: null } ) ).toBe( '' );
 	} );
 } );
 
 describe( 'getEmptyMessage', () => {
-	it( 'reads an empty "needs attention" list as good news', () => {
+	it( 'reads an empty "needs attention" list as what the log holds, not as an all-clear', () => {
+		// A push that sent only some fields still closes a failed one, so an
+		// empty list does not prove every reader's data reached the provider.
 		expect( getEmptyMessage( view( { filters: [ { field: 'needs_attention', operator: 'is', value: NEEDS_ATTENTION_VALUE } ] } ) ) ).toBe(
-			'No sync problems.'
+			'Nothing in the log needs attention.'
 		);
+	} );
+
+	it( 'says a status or operation filter matched nothing, rather than that the log is empty', () => {
+		expect( getEmptyMessage( view( { filters: [ { field: 'status', operator: 'is', value: 'failed' } ] } ) ) ).toBe(
+			'No pushes match these filters.'
+		);
+		expect(
+			getEmptyMessage( view( { search: 'reader@example.test', filters: [ { field: 'operation', operator: 'is', value: 'flag' } ] } ) )
+		).toBe( 'No pushes match these filters.' );
+	} );
+
+	it( 'says a partial search matched no address start, rather than that the reader has no pushes', () => {
+		// Anything short of a full address matches the start of one only.
+		expect( getEmptyMessage( view( { search: 'smith' } ) ) ).toBe( 'No address in the log starts with “smith”.' );
 	} );
 
 	it( 'explains what the log holds when a reader is not found', () => {
 		expect( getEmptyMessage( view( { search: 'reader@example.test' } ) ) ).toContain( 'No pushes recorded for this reader.' );
+		// The server trims the search before deciding it is a full address.
+		expect( getEmptyMessage( view( { search: ' reader@example.test ' } ) ) ).toContain( 'No pushes recorded for this reader.' );
 	} );
 
 	it( 'names the windows the site actually keeps, and falls back to the defaults', () => {

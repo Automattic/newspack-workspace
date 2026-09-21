@@ -7,6 +7,7 @@
  * WordPress dependencies
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
+import { isEmail } from '@wordpress/url';
 
 /**
  * Internal dependencies
@@ -58,14 +59,23 @@ export function buildPushLogQuery( view ) {
  *
  * @param {Object} item A push log item.
  * @return {string} "Waiting for retry 3 of 5" or "Waiting for retry 3" while a
- *                  retry is due, "Retry 2 of 5" or "Retry 2" for the last one
- *                  made, and '' on a first attempt or a retry that is gone.
+ *                  retry is due, "Running retry 3 of 5" while it runs, "Retry 2
+ *                  of 5" or "Retry 2" for the last one made, and '' on a first
+ *                  attempt or a retry that is gone.
  */
 export function getAttemptLabel( item ) {
 	const attempts = item.attempts || 1;
 	const maxRetries = ( item.max_attempts || 1 ) - 1;
 
 	if ( item.status === 'retrying' ) {
+		if ( item.retry?.is_running ) {
+			if ( maxRetries < attempts ) {
+				/* translators: %d: which retry is running. */
+				return sprintf( __( 'Running retry %d', 'newspack-plugin' ), attempts );
+			}
+			/* translators: 1: which retry is running. 2: how many retries a sync gets. */
+			return sprintf( __( 'Running retry %1$d of %2$d', 'newspack-plugin' ), attempts, maxRetries );
+		}
 		// A retry that is gone is not coming: getRetryNote() says so instead.
 		if ( ! item.retry?.is_pending ) {
 			return '';
@@ -112,7 +122,8 @@ export function getErrorKindLabel( entry ) {
  * @return {string} The note, or ''.
  */
 export function getRetryNote( item ) {
-	return item.status === 'retrying' && item.retry && ! item.retry.is_pending ? __( 'Retry no longer scheduled', 'newspack-plugin' ) : '';
+	const isGone = item.status === 'retrying' && item.retry && ! item.retry.is_pending && ! item.retry.is_running;
+	return isGone ? __( 'Retry no longer scheduled', 'newspack-plugin' ) : '';
 }
 
 /**
@@ -138,10 +149,22 @@ export function getStatusDisplay( item ) {
  * @return {string} The message.
  */
 export function getEmptyMessage( view, retentionDays ) {
+	// Worded as what the log holds, not as an all-clear: a push that sent
+	// only some fields still closes a failed one.
 	if ( getFilterValue( view, 'needs_attention' ) === NEEDS_ATTENTION_VALUE ) {
-		return __( 'No sync problems.', 'newspack-plugin' );
+		return __( 'Nothing in the log needs attention.', 'newspack-plugin' );
 	}
-	if ( view.search ) {
+	if ( getFilterValue( view, 'status' ) || getFilterValue( view, 'operation' ) ) {
+		return __( 'No pushes match these filters.', 'newspack-plugin' );
+	}
+	// The server matches anything short of a full address on its start only,
+	// and trims the search before telling the two apart.
+	const search = ( view.search || '' ).trim();
+	if ( search && ! isEmail( search ) ) {
+		/* translators: %s: the text searched for. */
+		return sprintf( __( 'No address in the log starts with “%s”.', 'newspack-plugin' ), search );
+	}
+	if ( search ) {
 		return sprintf(
 			/* translators: 1: how long a successful push is kept, e.g. "30 days". 2: how long a failed push is kept, e.g. "90 days". */
 			__(
