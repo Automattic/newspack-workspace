@@ -34,8 +34,20 @@ class SEO_Section extends Wizard_Section {
 	 */
 	const OTHER_SOCIAL_HOSTS = [
 		'bluesky' => [ 'bsky.app' ],
-		'threads' => [ 'threads.net', 'threads.com' ],
+		'threads' => [ 'threads.com', 'threads.net' ],
 		'tiktok'  => [ 'tiktok.com' ],
+	];
+
+	/**
+	 * Display names for the profiles in self::OTHER_SOCIAL_HOSTS. Brand names, so they
+	 * are not translated.
+	 *
+	 * @var array
+	 */
+	const OTHER_SOCIAL_LABELS = [
+		'bluesky' => 'Bluesky',
+		'threads' => 'Threads',
+		'tiktok'  => 'TikTok',
 	];
 
 	/**
@@ -61,8 +73,18 @@ class SEO_Section extends Wizard_Section {
 				'callback'            => [ $this, 'api_update_seo_settings' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
-					'verification' => [],
-					'urls'         => [],
+					'verification' => [
+						'type'                 => 'object',
+						'additionalProperties' => [ 'type' => 'string' ],
+						'validate_callback'    => 'rest_validate_request_arg',
+						'sanitize_callback'    => 'rest_sanitize_request_arg',
+					],
+					'urls'         => [
+						'type'                 => 'object',
+						'additionalProperties' => [ 'type' => 'string' ],
+						'validate_callback'    => 'rest_validate_request_arg',
+						'sanitize_callback'    => 'rest_sanitize_request_arg',
+					],
 				],
 			]
 		);
@@ -82,10 +104,32 @@ class SEO_Section extends Wizard_Section {
 	 * Update SEO wizard settings.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
-	 * @return WP_REST_Response with the info.
+	 * @return WP_REST_Response|WP_Error with the info.
 	 */
 	public function api_update_seo_settings( $request ) {
 		$cm = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'wordpress_seo' );
+		if ( ! $cm->is_configured() ) {
+			return new WP_Error(
+				'newspack_missing_required_plugin',
+				__( 'The Yoast SEO plugin must be installed and activated to save these settings.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		if ( isset( $request['urls'] ) ) {
+			$valid = $this->validate_social_hosts( $request['urls'] );
+			if ( is_wp_error( $valid ) ) {
+				return $valid;
+			}
+		}
+		if ( isset( $request['verification'] ) ) {
+			$verification = $request['verification'];
+			if ( isset( $verification['bing'] ) ) {
+				$cm->set_option( 'msverify', $verification['bing'] );
+			}
+			if ( isset( $verification['google'] ) ) {
+				$cm->set_option( 'googleverify', $verification['google'] );
+			}
+		}
 		if ( isset( $request['urls'] ) ) {
 			$urls = $request['urls'];
 			if ( isset( $urls['facebook'] ) ) {
@@ -106,18 +150,15 @@ class SEO_Section extends Wizard_Section {
 			if ( isset( $urls['pinterest'] ) ) {
 				$cm->set_option( 'pinterest_url', $urls['pinterest'] );
 			}
-			if ( isset( $urls['mastodon'] ) ) {
-				$cm->set_option( 'mastodon_url', $urls['mastodon'] );
-			}
-			$cm->set_option( 'other_social_urls', $this->merge_other_social_urls( $cm, $urls ) );
-		}
-		if ( isset( $request['verification'] ) ) {
-			$verification = $request['verification'];
-			if ( isset( $verification['bing'] ) ) {
-				$cm->set_option( 'msverify', $verification['bing'] );
-			}
-			if ( isset( $verification['google'] ) ) {
-				$cm->set_option( 'googleverify', $verification['google'] );
+			$stored = $this->get_other_social_urls( $cm );
+			$merged = $this->merge_other_social_urls( $stored, $urls );
+			$cm->set_option( 'other_social_urls', $merged );
+			if ( $this->social_urls_reverted( $stored, $merged, $this->get_other_social_urls( $cm ) ) ) {
+				return new WP_Error(
+					'newspack_seo_social_urls_not_saved',
+					__( 'The Yoast SEO plugin rejected one of the social profile URLs, so that list was left unchanged. Check the addresses and try again.', 'newspack-plugin' ),
+					[ 'status' => 400 ]
+				);
 			}
 		}
 		$response = $this->get_seo_settings();
@@ -133,25 +174,36 @@ class SEO_Section extends Wizard_Section {
 		$cm          = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'wordpress_seo' );
 		$other_urls  = $this->get_other_social_urls( $cm );
 		$response    = [
-			'search_engines_discouraged' => ! get_option( 'blog_public', 1 ),
+			'search_engines_discouraged' => get_option( 'blog_public', 1 ) < 1,
 			'verification'               => [
-				'bing'   => $cm->get_option( 'msverify', '' ),
-				'google' => $cm->get_option( 'googleverify', '' ),
+				'bing'   => $this->get_string_option( $cm, 'msverify' ),
+				'google' => $this->get_string_option( $cm, 'googleverify' ),
 			],
 			'urls'                       => [
-				'facebook'  => $cm->get_option( 'facebook_site', '' ),
-				'twitter'   => $cm->get_option( 'twitter_site', '' ),
-				'instagram' => $cm->get_option( 'instagram_url', '' ),
-				'linkedin'  => $cm->get_option( 'linkedin_url', '' ),
-				'youtube'   => $cm->get_option( 'youtube_url', '' ),
-				'pinterest' => $cm->get_option( 'pinterest_url', '' ),
-				'mastodon'  => $cm->get_option( 'mastodon_url', '' ),
+				'facebook'  => $this->get_string_option( $cm, 'facebook_site' ),
+				'twitter'   => $this->get_string_option( $cm, 'twitter_site' ),
+				'instagram' => $this->get_string_option( $cm, 'instagram_url' ),
+				'linkedin'  => $this->get_string_option( $cm, 'linkedin_url' ),
+				'youtube'   => $this->get_string_option( $cm, 'youtube_url' ),
+				'pinterest' => $this->get_string_option( $cm, 'pinterest_url' ),
 			],
 		];
 		foreach ( array_keys( self::OTHER_SOCIAL_HOSTS ) as $key ) {
 			$response['urls'][ $key ] = $this->find_social_url( $other_urls, $key );
 		}
 		return $response;
+	}
+
+	/**
+	 * Read a Yoast option as a string, tolerating an unconfigured Yoast.
+	 *
+	 * @param object $cm  Yoast configuration manager.
+	 * @param string $key Key of the option to return.
+	 * @return string The option value, or an empty string.
+	 */
+	private function get_string_option( $cm, $key ) {
+		$value = $cm->get_option( $key, '' );
+		return is_string( $value ) ? $value : '';
 	}
 
 	/**
@@ -163,6 +215,51 @@ class SEO_Section extends Wizard_Section {
 	private function get_other_social_urls( $cm ) {
 		$urls = $cm->get_option( 'other_social_urls', [] );
 		return is_array( $urls ) ? array_values( array_filter( $urls, 'is_string' ) ) : [];
+	}
+
+	/**
+	 * Reject a submitted profile URL whose scheme or host we can't read back.
+	 *
+	 * @param array $urls Submitted URLs, keyed by profile.
+	 * @return true|WP_Error True when every submitted profile is on a known host.
+	 */
+	private function validate_social_hosts( $urls ) {
+		foreach ( array_intersect_key( $urls, self::OTHER_SOCIAL_HOSTS ) as $key => $url ) {
+			if ( '' === $url ) {
+				continue;
+			}
+			$host   = $this->get_host( $url );
+			$scheme = strtolower( (string) wp_parse_url( (string) $url, PHP_URL_SCHEME ) );
+			if ( ! in_array( $scheme, [ 'http', 'https' ], true ) || ! in_array( $host, self::OTHER_SOCIAL_HOSTS[ $key ], true ) ) {
+				return new WP_Error(
+					'newspack_seo_invalid_social_url',
+					sprintf(
+						/* translators: 1: social network name, 2: the host the profile must be on. */
+						__( 'The %1$s profile URL must be on %2$s.', 'newspack-plugin' ),
+						self::OTHER_SOCIAL_LABELS[ $key ] ?? $key,
+						self::OTHER_SOCIAL_HOSTS[ $key ][0]
+					),
+					[ 'status' => 400 ]
+				);
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Detect Yoast reverting `other_social_urls` instead of storing what we sent.
+	 *
+	 * Yoast validates the list as a unit and, when an entry fails, writes the previously
+	 * stored entries back over the new ones. A URL it merely normalizes still changes the
+	 * stored list, so only an intended change that leaves the list untouched is a revert.
+	 *
+	 * @param string[] $before List as stored before the write.
+	 * @param string[] $merged List handed to Yoast.
+	 * @param string[] $after  List as stored after the write.
+	 * @return bool True when Yoast kept the previously stored list.
+	 */
+	private function social_urls_reverted( $before, $merged, $after ) {
+		return $merged !== $before && $after === $before;
 	}
 
 	/**
@@ -185,17 +282,21 @@ class SEO_Section extends Wizard_Section {
 	 * Rebuild Yoast's `other_social_urls` with the submitted profiles, leaving URLs
 	 * Yoast's own settings screen added in place.
 	 *
-	 * Yoast validates the list as a unit: one invalid URL reverts every entry, so the
-	 * client validates each field before submitting.
+	 * Yoast validates the list as a unit: when one URL fails it writes the previously
+	 * stored entries back over the new ones, so an entry past the end of that older list
+	 * survives. The client validates each field before submitting.
 	 *
-	 * @param object $cm   Yoast configuration manager.
-	 * @param array  $urls Submitted URLs, keyed by profile.
+	 * Only the first entry on a host is ours to edit, so clearing a field removes that
+	 * one and a second entry on the same host becomes what the next read reports.
+	 *
+	 * @param string[] $stored Yoast's list as currently stored.
+	 * @param array    $urls   Submitted URLs, keyed by profile.
 	 * @return string[] The list to save.
 	 */
-	private function merge_other_social_urls( $cm, $urls ) {
+	private function merge_other_social_urls( $stored, $urls ) {
 		$submitted = array_intersect_key( $urls, self::OTHER_SOCIAL_HOSTS );
 		$merged    = [];
-		foreach ( $this->get_other_social_urls( $cm ) as $url ) {
+		foreach ( $stored as $url ) {
 			$key = $this->match_profile( $url );
 			if ( null === $key ) {
 				$merged[] = $url;
@@ -204,6 +305,8 @@ class SEO_Section extends Wizard_Section {
 					$merged[] = $submitted[ $key ];
 				}
 				unset( $submitted[ $key ] );
+			} else {
+				$merged[] = $url;
 			}
 		}
 		foreach ( $submitted as $url ) {
