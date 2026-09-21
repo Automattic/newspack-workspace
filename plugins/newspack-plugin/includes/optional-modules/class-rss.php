@@ -18,6 +18,26 @@ class RSS {
 	const FEED_SETTINGS_META = 'partner_feed_settings';
 
 	/**
+	 * Feed setting holding this feed's own content restriction mode.
+	 */
+	const FEED_RESTRICTION_SETTING = 'content_restriction_mode';
+
+	/**
+	 * Restriction mode value meaning "whatever the site-wide setting says".
+	 *
+	 * The shipped default, so a feed created before this setting existed keeps
+	 * behaving exactly as it did.
+	 */
+	const FEED_RESTRICTION_INHERIT = '';
+
+	/**
+	 * Resolved restriction override per requested feed slug, for this request.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $restriction_override_cache = [];
+
+	/**
 	 * Initialise.
 	 */
 	public static function init() {
@@ -45,6 +65,7 @@ class RSS {
 		add_filter( 'wpseo_include_rss_footer', [ __CLASS__, 'maybe_suppress_yoast' ] );
 		add_action( 'rss2_ns', [ __CLASS__, 'maybe_inject_yahoo_namespace' ] );
 		add_filter( 'the_title_rss', [ __CLASS__, 'maybe_wrap_titles_in_cdata' ] );
+		add_filter( 'newspack_content_gate_feed_restriction_mode', [ __CLASS__, 'apply_feed_restriction_override' ], 10, 2 );
 
 		add_filter( 'newspack_capabilities_map', [ __CLASS__, 'newspack_capabilities_map' ] );
 	}
@@ -71,30 +92,31 @@ class RSS {
 	 */
 	public static function get_feed_settings( $feed_post = null ) {
 		$default_settings = [
-			'category_include'          => [],
-			'category_exclude'          => [],
-			'category_inner_relation'   => 'IN',
-			'tag_include'               => [],
-			'tag_inner_relation'        => 'IN',
-			'taxonomy_filters_relation' => 'AND',
-			'use_image_tags'            => false,
-			'use_media_tags'            => false,
-			'use_updated_tags'          => false,
-			'use_tags_tags'             => false,
-			'full_content'              => true,
-			'num_items_in_feed'         => 10,
-			'offset'                    => 0,
-			'timeframe'                 => false,
-			'content_featured_image'    => false,
-			'suppress_yoast'            => false,
-			'yahoo_namespace'           => false,
-			'update_frequency'          => false,
-			'use_post_id_as_guid'       => false,
-			'cdata_titles'              => false,
-			'republication_tracker'     => false,
-			'only_republishable'        => false,
-			'only_distributable_images' => false,
-			'custom_tracking_snippet'   => '',
+			'category_include'             => [],
+			'category_exclude'             => [],
+			'category_inner_relation'      => 'IN',
+			'tag_include'                  => [],
+			'tag_inner_relation'           => 'IN',
+			'taxonomy_filters_relation'    => 'AND',
+			'use_image_tags'               => false,
+			'use_media_tags'               => false,
+			'use_updated_tags'             => false,
+			'use_tags_tags'                => false,
+			'full_content'                 => true,
+			self::FEED_RESTRICTION_SETTING => self::FEED_RESTRICTION_INHERIT,
+			'num_items_in_feed'            => 10,
+			'offset'                       => 0,
+			'timeframe'                    => false,
+			'content_featured_image'       => false,
+			'suppress_yoast'               => false,
+			'yahoo_namespace'              => false,
+			'update_frequency'             => false,
+			'use_post_id_as_guid'          => false,
+			'cdata_titles'                 => false,
+			'republication_tracker'        => false,
+			'only_republishable'           => false,
+			'only_distributable_images'    => false,
+			'custom_tracking_snippet'      => '',
 		];
 
 		/**
@@ -142,6 +164,209 @@ class RSS {
 		$saved_settings = apply_filters( 'newspack_rss_saved_settings', $saved_settings, $feed_post_id );
 
 		return shortcode_atts( $default_settings, $saved_settings );
+	}
+
+	/**
+	 * The restriction modes a partner feed can store, as select-control options.
+	 *
+	 * Four in all: inherit leads and is the default, then "off", then the two
+	 * the site-wide control itself stores. The last two reuse
+	 * Content_Gate_Advanced_Settings' labels so "restricted article" means the
+	 * same thing in both screens.
+	 *
+	 * The inherit option names what it currently resolves to, so a publisher
+	 * can see what leaving the feed alone does without opening the Audience
+	 * wizard in another tab.
+	 *
+	 * @param string $inherited_mode Mode inherit resolves to, from
+	 *                               Content_Gate_Advanced_Settings::get_site_feed_restriction_mode().
+	 *
+	 * @return array[] Array of [ 'value' => string, 'label' => string ].
+	 */
+	public static function get_feed_restriction_options( string $inherited_mode ): array {
+		$options = [
+			[
+				'value' => self::FEED_RESTRICTION_INHERIT,
+				'label' => sprintf(
+					/* translators: %s: what the site-wide setting currently does, e.g. "teaser only". */
+					__( 'Use the site-wide setting (%s)', 'newspack-plugin' ),
+					self::get_restriction_mode_summary( $inherited_mode )
+				),
+			],
+			[
+				'value' => Content_Gate_Advanced_Settings::FEED_MODE_OFF,
+				'label' => __( 'Include restricted articles in full', 'newspack-plugin' ),
+			],
+		];
+		return array_merge( $options, Content_Gate_Advanced_Settings::get_feed_restriction_mode_options() );
+	}
+
+	/**
+	 * A mode in two or three words, for naming it inside another label.
+	 *
+	 * The full option labels are whole sentences, which read as nonsense in a
+	 * parenthetical.
+	 *
+	 * @param string $mode One of the overridable modes.
+	 *
+	 * @return string
+	 */
+	private static function get_restriction_mode_summary( string $mode ): string {
+		switch ( $mode ) {
+			case Content_Gate_Advanced_Settings::FEED_MODE_OFF:
+				return __( 'articles in full', 'newspack-plugin' );
+			case Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE:
+				return __( 'articles removed', 'newspack-plugin' );
+			default:
+				return __( 'teaser only', 'newspack-plugin' );
+		}
+	}
+
+	/**
+	 * Let a partner feed override the site-wide content restriction mode.
+	 *
+	 * A publisher licensing one feed to a syndication partner can exempt that
+	 * feed without opening every feed on the site, and can close a feed the
+	 * site-wide setting leaves open.
+	 *
+	 * Scoped to the main query of a feed request, matching modify_feed_query()
+	 * — the override must not reach further than the settings it overrides.
+	 * Anything narrower than the whole feed falls back to the site-wide mode.
+	 *
+	 * @param string $mode    Effective mode resolved so far ('off'|'truncate'|'exclude').
+	 * @param array  $context [ 'query' => \WP_Query|null, 'post' => \WP_Post|null ].
+	 *
+	 * @return string
+	 */
+	public static function apply_feed_restriction_override( $mode, $context = [] ): string {
+		$query = $context['query'] ?? null;
+		if ( ! $query instanceof \WP_Query || ! $query->is_feed() || ! $query->is_main_query() ) {
+			return $mode;
+		}
+		$override = self::get_restriction_override();
+
+		return self::FEED_RESTRICTION_INHERIT === $override ? $mode : $override;
+	}
+
+	/**
+	 * The requested partner feed's stored restriction mode, or inherit.
+	 *
+	 * Memoized for the request: the mode is resolved once per rendered feed
+	 * item (see Content_Gate_Advanced_Settings::maybe_truncate_feed_string), and
+	 * get_feed_settings() is not cheap — it rebuilds the defaults array, walks
+	 * the site's custom taxonomies and runs two filters before it even looks at
+	 * the query arg. The `partner-feed` arg cannot change mid-request, so one
+	 * lookup answers for all of them.
+	 *
+	 * Only a published feed is honoured. get_page_by_path() matches on slug and
+	 * post type alone, so a draft or trashed feed resolves like any other — and
+	 * an override is the one partner-feed setting that can switch the paywall
+	 * off, which must not be reachable from a post nobody has published.
+	 *
+	 * @return string One of the overridable modes, or FEED_RESTRICTION_INHERIT.
+	 */
+	private static function get_restriction_override(): string {
+		$query_feed = filter_input( INPUT_GET, self::FEED_QUERY_ARG, FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		if ( ! $query_feed ) {
+			return self::FEED_RESTRICTION_INHERIT;
+		}
+		if ( isset( self::$restriction_override_cache[ $query_feed ] ) ) {
+			return self::$restriction_override_cache[ $query_feed ];
+		}
+
+		$override  = self::FEED_RESTRICTION_INHERIT;
+		$feed_post = get_page_by_path( sanitize_text_field( $query_feed ), OBJECT, self::FEED_CPT ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_page_by_path_get_page_by_path
+		if ( $feed_post && 'publish' === $feed_post->post_status ) {
+			$settings = self::get_feed_settings( $feed_post );
+			$override = self::normalize_stored_restriction_mode( $settings[ self::FEED_RESTRICTION_SETTING ] ?? null );
+		}
+
+		self::$restriction_override_cache[ $query_feed ] = $override;
+		return $override;
+	}
+
+	/**
+	 * Reduce a stored restriction mode to one this class recognizes.
+	 *
+	 * The single place a raw stored value is judged, so the editor warning and
+	 * the feed itself can never disagree about what a feed is set to.
+	 *
+	 * Anything unrecognized becomes inherit rather than a restricting mode:
+	 * a corrupt setting must not quietly change what a feed serves. The value
+	 * need not even be a string — it reaches here from post meta and from the
+	 * `newspack_rss_saved_settings` filter, so a migration or another plugin can
+	 * put an array or null in it. The strict in_array() rejects those without
+	 * comparing them, which is what keeps every caller's declared return type
+	 * honest; passing one straight through used to fatal the feed request.
+	 *
+	 * @param mixed $mode Raw stored value.
+	 *
+	 * @return string An overridable mode, or FEED_RESTRICTION_INHERIT.
+	 */
+	private static function normalize_stored_restriction_mode( $mode ): string {
+		return in_array( $mode, self::get_overridable_restriction_modes(), true )
+			? $mode
+			: self::FEED_RESTRICTION_INHERIT;
+	}
+
+	/**
+	 * The restriction modes a feed can explicitly store, inherit excluded.
+	 *
+	 * Deliberately not the same set as
+	 * Content_Gate_Advanced_Settings::get_feed_restriction_modes(), which the
+	 * site-wide control stores: a feed can additionally opt out of restriction
+	 * entirely, which the site-wide control expresses with its separate
+	 * `restrict_feeds` toggle.
+	 *
+	 * @return string[]
+	 */
+	private static function get_overridable_restriction_modes(): array {
+		return array_merge(
+			[ Content_Gate_Advanced_Settings::FEED_MODE_OFF ],
+			Content_Gate_Advanced_Settings::get_feed_restriction_modes()
+		);
+	}
+
+	/**
+	 * Whether the current user may change a feed's restriction mode.
+	 *
+	 * The site-wide setting this overrides lives in the Audience wizard, behind
+	 * `manage_options`. Editing a partner feed needs only the CPT's mapped
+	 * `edit_posts`, which Contributors and Authors hold — so without this the
+	 * field would let a role that cannot reach Access Control at all switch the
+	 * paywall off for a feed.
+	 *
+	 * @return bool
+	 */
+	private static function current_user_can_set_restriction_mode(): bool {
+		return current_user_can( 'manage_options' );
+	}
+
+	/**
+	 * Whether a feed's settings put complete restricted articles at a public URL.
+	 *
+	 * The combination the editor warns about: no restriction — set on the feed
+	 * or inherited — together with full content rather than excerpts.
+	 *
+	 * @param array  $settings       Feed settings.
+	 * @param string $inherited_mode Mode the feed inherits when it stores none,
+	 *                               from Content_Gate_Advanced_Settings::get_site_feed_restriction_mode().
+	 *
+	 * @return bool
+	 */
+	public static function feed_serves_unrestricted_full_content( array $settings, string $inherited_mode ): bool {
+		if ( empty( $settings['full_content'] ) ) {
+			return false;
+		}
+		// Normalized, not read raw: an unrecognized stored mode inherits at
+		// runtime, so the warning has to follow it there too. Reading it raw
+		// left the one combination that leaks — unrecognized mode inheriting an
+		// unrestricted site — as the one the editor stayed silent about.
+		$mode = self::normalize_stored_restriction_mode( $settings[ self::FEED_RESTRICTION_SETTING ] ?? null );
+		if ( self::FEED_RESTRICTION_INHERIT === $mode ) {
+			$mode = $inherited_mode;
+		}
+		return Content_Gate_Advanced_Settings::FEED_MODE_OFF === $mode;
 	}
 
 	/**
@@ -344,8 +569,17 @@ class RSS {
 			table th, table td {
 				padding-bottom: 10px;
 			}
+			/*
+			Scoped, unlike the bare selectors above: a row whose control carries
+			help text is much taller than its label, and centring leaves the
+			label floating beside it.
+			*/
+			.newspack-rss-content-settings th,
+			.newspack-rss-content-settings td {
+				vertical-align: top;
+			}
 		</style>
-		<table>
+		<table class="newspack-rss-content-settings">
 			<tr>
 				<th><?php esc_html_e( 'Number of posts to display in feed:', 'newspack-plugin' ); ?></th>
 				<td>
@@ -367,12 +601,13 @@ class RSS {
 			<tr>
 				<th><?php esc_html_e( 'Use post full content or excerpt:', 'newspack-plugin' ); ?></th>
 				<td>
-					<select name="full_content">
+					<select name="full_content" id="newspack-rss-full-content">
 						<option value="1" <?php selected( $settings['full_content'] ); ?> ><?php esc_html_e( 'Full content', 'newspack-plugin' ); ?></option>
 						<option value="0" <?php selected( ! $settings['full_content'] ); ?> ><?php esc_html_e( 'Excerpt', 'newspack-plugin' ); ?></option>
 					</select>
 				</td>
 			</tr>
+			<?php self::render_restriction_mode_setting( $settings ); ?>
 			<tr>
 				<th><?php esc_html_e( 'Update frequency:', 'newspack-plugin' ); ?></th>
 				<td>
@@ -616,6 +851,82 @@ class RSS {
 	}
 
 	/**
+	 * Render the per-feed content restriction control, plus the warning for the
+	 * one combination that publishes complete restricted articles publicly.
+	 *
+	 * Only rendered where gating can restrict something: on a site with no
+	 * Access Control the control would be inert, and save_settings() treats an
+	 * absent field as "leave the stored value alone" so nothing is lost if
+	 * gating is later switched off and on again.
+	 *
+	 * @param array $settings Feed settings.
+	 */
+	private static function render_restriction_mode_setting( array $settings ): void {
+		if ( ! Content_Gate::is_gating_active() || ! self::current_user_can_set_restriction_mode() ) {
+			return;
+		}
+		// While Memberships is active, Content_Gate_Advanced_Settings resolves
+		// every feed to "off" before the filter this control writes to — see
+		// NPPM-3204. Rendering it there would offer a choice that does nothing.
+		if ( Memberships::is_active() ) {
+			return;
+		}
+		$inherited_mode = Content_Gate_Advanced_Settings::get_site_feed_restriction_mode();
+		$current_mode   = $settings[ self::FEED_RESTRICTION_SETTING ] ?? self::FEED_RESTRICTION_INHERIT;
+		?>
+		<tr>
+			<th><?php esc_html_e( 'Restricted articles in this feed:', 'newspack-plugin' ); ?></th>
+			<td>
+				<select
+					name="<?php echo esc_attr( self::FEED_RESTRICTION_SETTING ); ?>"
+					id="newspack-rss-content-restriction-mode"
+					data-inherited-mode="<?php echo esc_attr( $inherited_mode ); ?>"
+				>
+					<?php foreach ( self::get_feed_restriction_options( $inherited_mode ) as $option ) : ?>
+						<option value="<?php echo esc_attr( $option['value'] ); ?>" <?php selected( $current_mode, $option['value'] ); ?>>
+							<?php echo esc_html( $option['label'] ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+				<p class="description">
+					<?php esc_html_e( 'Overrides the site-wide feed setting for this feed only, so a feed licensed to a syndication partner can carry articles the rest of the site keeps gated.', 'newspack-plugin' ); ?>
+					<?php esc_html_e( 'A change here can take up to an hour to reach readers, because feeds are cached.', 'newspack-plugin' ); ?>
+				</p>
+				<p
+					id="newspack-rss-restriction-warning"
+					class="notice notice-warning inline"
+					role="status"
+					<?php echo self::feed_serves_unrestricted_full_content( $settings, $inherited_mode ) ? '' : 'hidden'; ?>
+				>
+					<?php esc_html_e( 'This feed publishes restricted articles in full at a public URL. Anyone who has the URL can read them.', 'newspack-plugin' ); ?>
+				</p>
+			</td>
+		</tr>
+		<?php
+		// Restates feed_serves_unrestricted_full_content() so the warning tracks
+		// the two selects as the publisher changes them. That method stays the
+		// authoritative copy: it decides the state the page is served in.
+		wp_print_inline_script_tag(
+			sprintf(
+				'( function () {
+					var mode = document.getElementById( "newspack-rss-content-restriction-mode" );
+					var fullContent = document.getElementById( "newspack-rss-full-content" );
+					var warning = document.getElementById( "newspack-rss-restriction-warning" );
+					if ( ! mode || ! fullContent || ! warning ) { return; }
+					function update() {
+						var effective = mode.value || mode.dataset.inheritedMode;
+						warning.hidden = ! ( %s === effective && "1" === fullContent.value );
+					}
+					mode.addEventListener( "change", update );
+					fullContent.addEventListener( "change", update );
+					update();
+				} )();',
+				wp_json_encode( Content_Gate_Advanced_Settings::FEED_MODE_OFF )
+			)
+		);
+	}
+
+	/**
 	 * Render technical settings metabox for CPT.
 	 *
 	 * @param WP_Post $feed_post RSS feed post object.
@@ -785,6 +1096,17 @@ class RSS {
 		$full_content             = filter_input( INPUT_POST, 'full_content', FILTER_SANITIZE_NUMBER_INT );
 		$settings['full_content'] = (bool) $full_content;
 
+		// Absent rather than empty means the control was not rendered — no
+		// gating on the site, or a user without the capability to change it — so
+		// leave any stored override alone instead of clearing it on every
+		// unrelated save. The capability is re-checked here rather than trusted
+		// from the render: the field is a paywall switch, and a POST can carry
+		// it whether or not the form that was served held the control.
+		$restriction_mode = filter_input( INPUT_POST, self::FEED_RESTRICTION_SETTING, FILTER_SANITIZE_SPECIAL_CHARS );
+		if ( null !== $restriction_mode && self::current_user_can_set_restriction_mode() ) {
+			$settings[ self::FEED_RESTRICTION_SETTING ] = self::normalize_stored_restriction_mode( $restriction_mode );
+		}
+
 		$content_featured_image             = filter_input( INPUT_POST, 'content_featured_image', FILTER_SANITIZE_NUMBER_INT );
 		$settings['content_featured_image'] = (bool) $content_featured_image;
 
@@ -812,9 +1134,11 @@ class RSS {
 		$cdata_titles             = filter_input( INPUT_POST, 'cdata_titles', FILTER_SANITIZE_NUMBER_INT );
 		$settings['cdata_titles'] = (bool) $cdata_titles;
 
-		$custom_tracking_snippet             = filter_input( INPUT_POST, 'custom_tracking_snippet', FILTER_DEFAULT ); // phpcs:ignore WordPressVIPMinimum.Security.PHPFilterFunctions.RestrictedFilter
+		$custom_tracking_snippet = filter_input( INPUT_POST, 'custom_tracking_snippet', FILTER_DEFAULT ); // phpcs:ignore WordPressVIPMinimum.Security.PHPFilterFunctions.RestrictedFilter
+		// Cast at the boundary: filter_input() returns null for a field the
+		// submitted form did not carry, and wp_kses() deprecates a null subject.
 		$settings['custom_tracking_snippet'] = wp_kses(
-			$custom_tracking_snippet,
+			(string) $custom_tracking_snippet,
 			[
 				'script'   => [
 					'id'          => true,

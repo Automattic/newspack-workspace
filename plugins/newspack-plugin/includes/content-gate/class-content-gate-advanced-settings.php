@@ -335,6 +335,22 @@ class Content_Gate_Advanced_Settings {
 	}
 
 	/**
+	 * The site-wide feed restriction mode, before any per-request override.
+	 *
+	 * Collapses the master `restrict_feeds` toggle and the stored mode into one
+	 * value. Deliberately skips `newspack_content_gate_feed_restriction_mode`,
+	 * whose callbacks answer for one feed request rather than for the site — so
+	 * a caller offering an "inherit the site-wide setting" choice can name what
+	 * inherit resolves to.
+	 *
+	 * @return string FEED_MODE_OFF or a storable mode.
+	 */
+	public static function get_site_feed_restriction_mode(): string {
+		$settings = self::get_settings();
+		return empty( $settings['restrict_feeds'] ) ? self::FEED_MODE_OFF : $settings['feed_restriction_mode'];
+	}
+
+	/**
 	 * Resolve the effective feed restriction mode for the current request.
 	 *
 	 * Collapses the master `restrict_feeds` toggle and the stored mode into a
@@ -370,8 +386,7 @@ class Content_Gate_Advanced_Settings {
 		if ( Memberships::is_active() ) {
 			return self::FEED_MODE_OFF;
 		}
-		$settings = self::get_settings();
-		$mode     = empty( $settings['restrict_feeds'] ) ? self::FEED_MODE_OFF : $settings['feed_restriction_mode'];
+		$mode = self::get_site_feed_restriction_mode();
 
 		/**
 		 * Filters the effective feed restriction mode.
