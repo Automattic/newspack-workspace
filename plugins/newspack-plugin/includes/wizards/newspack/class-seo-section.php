@@ -115,11 +115,9 @@ class SEO_Section extends Wizard_Section {
 				[ 'status' => 400 ]
 			);
 		}
-		if ( isset( $request['urls'] ) ) {
-			$valid = $this->validate_social_hosts( $request['urls'] );
-			if ( is_wp_error( $valid ) ) {
-				return $valid;
-			}
+		$valid = $this->validate_social_hosts( $request['urls'] ?? [] );
+		if ( is_wp_error( $valid ) ) {
+			return $valid;
 		}
 		if ( isset( $request['verification'] ) ) {
 			$verification = $request['verification'];
