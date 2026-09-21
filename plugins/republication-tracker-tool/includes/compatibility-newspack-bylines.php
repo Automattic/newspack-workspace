@@ -56,7 +56,7 @@ add_filter( 'republication_tracker_tool_byline', 'republication_tracker_tool_byl
  * active, since that text already includes its own leading word (e.g.
  * "By ...").
  *
- * @param string $format The byline format (must contain one %s placeholder).
+ * @param string $format The byline format (should contain a %s placeholder).
  * @return string
  */
 function republication_tracker_tool_byline_format_filter_newspack_bylines( $format ) {

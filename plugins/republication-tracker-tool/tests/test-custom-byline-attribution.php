@@ -143,4 +143,45 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'Jane Smith', $output, 'Modal should not use an inactive Custom Byline.' );
 		$this->assertStringContainsString( 'by John Doe', $output, 'The plugin\'s own "by" prefix should still apply for the WP post author.' );
 	}
+
+	/**
+	 * A malformed byline format (e.g. from a misbehaving third-party
+	 * filter) should degrade gracefully, not fatal.
+	 */
+	public function test_republish_modal_survives_malformed_byline_format() {
+		global $post, $wp_query;
+
+		update_post_meta( $this->test_post->ID, '_newspack_byline_active', false );
+
+		$malformed_format = function () {
+			return 'by %s %s';
+		};
+		add_filter( 'republication_tracker_tool_byline_format', $malformed_format );
+
+		$post                     = $this->test_post;
+		$wp_query->is_single      = true;
+		$wp_query->queried_object = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+		setup_postdata( $this->test_post );
+
+		$args = array(
+			'before_widget' => '<div class="widget">',
+			'after_widget'  => '</div>',
+			'before_title'  => '<h2>',
+			'after_title'   => '</h2>',
+		);
+
+		$instance = array(
+			'title' => 'Republish This Story',
+			'text'  => 'Republish this story',
+		);
+
+		ob_start();
+		$this->widget->widget( $args, $instance );
+		$output = ob_get_clean();
+
+		remove_filter( 'republication_tracker_tool_byline_format', $malformed_format );
+
+		$this->assertStringContainsString( 'John Doe', $output, 'Modal should still render the byline when the format is malformed.' );
+	}
 }
