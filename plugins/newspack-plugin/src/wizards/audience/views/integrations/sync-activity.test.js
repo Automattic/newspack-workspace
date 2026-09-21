@@ -135,7 +135,7 @@ describe( 'SyncActivity', () => {
 
 		expect( screen.getByText( 'Retrying' ) ).toBeTruthy();
 		// The same retry its pending scheduled action is titled with.
-		expect( screen.getByText( 'Waiting for retry 3 of 5' ) ).toBeTruthy();
+		expect( screen.getByText( 'Failed. Waiting for retry 3 of 5' ) ).toBeTruthy();
 	} );
 
 	it( 'offers to run a retry only while there is one to run', async () => {

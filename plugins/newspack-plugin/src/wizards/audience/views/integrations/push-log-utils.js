@@ -54,11 +54,11 @@ export function buildPushLogQuery( view ) {
 /**
  * Which retry a row is on. The log counts attempts; a publisher counts
  * retries, so the first attempt is left out of both numbers. A row still
- * waiting names the retry ahead of it, the one its scheduled action is
- * titled with, rather than the last one it made.
+ * waiting says its last attempt failed and names the retry ahead of it, the
+ * one its scheduled action is titled with, rather than the last one it made.
  *
  * @param {Object} item A push log item.
- * @return {string} "Waiting for retry 3 of 5" or "Waiting for retry 3" while a
+ * @return {string} "Failed. Waiting for retry 3 of 5" or "Failed. Waiting for retry 3" while a
  *                  retry is due, "Running retry 3 of 5" while it runs, "Retry 2
  *                  of 5" or "Retry 2" for the last one made, and '' on a first
  *                  attempt or a retry that is gone.
@@ -82,10 +82,10 @@ export function getAttemptLabel( item ) {
 		}
 		if ( maxRetries < attempts ) {
 			/* translators: %d: which retry the row is waiting for. */
-			return sprintf( __( 'Waiting for retry %d', 'newspack-plugin' ), attempts );
+			return sprintf( __( 'Failed. Waiting for retry %d', 'newspack-plugin' ), attempts );
 		}
 		/* translators: 1: which retry the row is waiting for. 2: how many retries a sync gets. */
-		return sprintf( __( 'Waiting for retry %1$d of %2$d', 'newspack-plugin' ), attempts, maxRetries );
+		return sprintf( __( 'Failed. Waiting for retry %1$d of %2$d', 'newspack-plugin' ), attempts, maxRetries );
 	}
 
 	const retries = attempts - 1;

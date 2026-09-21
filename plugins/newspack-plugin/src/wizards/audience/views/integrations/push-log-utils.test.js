@@ -70,9 +70,9 @@ describe( 'getAttemptLabel', () => {
 		// The pending action is titled "… Retry 3 of 5", so the row it belongs
 		// to has to count the same retry.
 		const waiting = { status: 'retrying', attempts: 3, max_attempts: 6, retry: { is_pending: true } };
-		expect( getAttemptLabel( waiting ) ).toBe( 'Waiting for retry 3 of 5' );
-		expect( getAttemptLabel( { ...waiting, attempts: 1 } ) ).toBe( 'Waiting for retry 1 of 5' );
-		expect( getAttemptLabel( { ...waiting, max_attempts: 1 } ) ).toBe( 'Waiting for retry 3' );
+		expect( getAttemptLabel( waiting ) ).toBe( 'Failed. Waiting for retry 3 of 5' );
+		expect( getAttemptLabel( { ...waiting, attempts: 1 } ) ).toBe( 'Failed. Waiting for retry 1 of 5' );
+		expect( getAttemptLabel( { ...waiting, max_attempts: 1 } ) ).toBe( 'Failed. Waiting for retry 3' );
 	} );
 
 	it( 'leaves a stalled row to the retry note', () => {
