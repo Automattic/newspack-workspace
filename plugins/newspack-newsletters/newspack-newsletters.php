@@ -109,12 +109,16 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/pages/class-ads
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/pages/class-advertisers-list-page.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/pages/class-layouts-list-page.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/pages/class-settings-page.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/trait-rest-author-field.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/trait-rest-status-field.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/trait-rest-terms-field.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/trait-status-filter-builder.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-newsletters-list-rest.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-ads-list-rest.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-advertisers-list-rest.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-layouts-list-rest.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-settings-rest.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-collection-params.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-preferences.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-asset-loader.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-menu.php';
@@ -148,5 +152,7 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-wizard-bridge.p
 \Newspack\Newsletters\Admin\Newsletters_List_REST::init();
 \Newspack\Newsletters\Admin\Ads_List_REST::init();
 \Newspack\Newsletters\Admin\Advertisers_List_REST::init();
+\Newspack\Newsletters\Admin\Layouts_List_REST::init();
 \Newspack\Newsletters\Admin\Settings_REST::init();
+\Newspack\Newsletters\Admin\Admin_Shell_Collection_Params::init();
 \Newspack\Newsletters\Admin\Admin_Shell_Preferences::init();
