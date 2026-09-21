@@ -541,7 +541,7 @@ class Test_Feed_Restriction_Per_Feed extends \WP_UnitTestCase {
 	 * disabled, and with the integration's reason in place of the help text.
 	 */
 	public function test_a_locked_feed_disables_the_control_and_gives_the_reason() {
-		$lock_reason = 'The app integration controls this feed.';
+		$lock_reason = 'LOCK_REASON from the integration.';
 		$lock        = function () use ( $lock_reason ) {
 			return $lock_reason;
 		};
