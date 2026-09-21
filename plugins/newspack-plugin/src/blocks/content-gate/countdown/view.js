@@ -1,5 +1,3 @@
-/* globals newspack_metering_settings */
-
 /**
  * WordPress dependencies
  */
@@ -11,12 +9,15 @@ import { __, sprintf } from '@wordpress/i18n';
 import { domReady } from '../../../utils';
 
 domReady( () => {
-	if ( typeof newspack_metering_settings === 'undefined' ) {
-		return;
-	}
-	const { count, gate_id, meter_key } = newspack_metering_settings;
 	window.newspackRAS = window.newspackRAS || [];
 	window.newspackRAS.push( ras => {
+		// Read the settings here rather than at module evaluation: an optimizer that
+		// delays scripts can replay the inline settings tag after this file has run.
+		const settings = window.newspack_metering_settings;
+		if ( ! settings ) {
+			return;
+		}
+		const { count, gate_id, meter_key } = settings;
 		const { authenticated } = ras?.getReader() || { authenticated: false };
 		if ( authenticated ) {
 			return;
