@@ -6,17 +6,19 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 /**
  * WordPress dependencies
  */
 import { speak } from '@wordpress/a11y';
+import { select } from '@wordpress/data';
 
 /**
  * Internal dependencies
  */
 import Seo from './index';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 
 jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
@@ -30,7 +32,11 @@ jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
 
 const typeInto = ( label: string, value: string ) => fireEvent.change( screen.getByLabelText( label ), { target: { value } } );
 
-const save = () => fireEvent.click( screen.getByRole( 'button', { name: 'Save Settings' } ) );
+// Save lives in the wizard header, so the test submits through the action the tab published.
+const save = () =>
+	act( () => {
+		select( WIZARD_STORE_NAMESPACE ).getHeaderData().actions[ 0 ].action();
+	} );
 
 beforeEach( () => jest.clearAllMocks() );
 
@@ -56,5 +62,26 @@ describe( 'saving SEO settings with more than one invalid field', () => {
 		save();
 
 		expect( speak ).toHaveBeenCalledTimes( 2 );
+	} );
+} );
+
+describe( 'profiles stored in Yoast’s catch-all list', () => {
+	it( 'blocks a save when the URL is not on the network’s own domain', () => {
+		render( <Seo /> );
+
+		typeInto( 'Bluesky', 'https://example.com/me' );
+		save();
+
+		const [ announcement ] = ( speak as jest.Mock ).mock.calls[ 0 ];
+		expect( announcement ).toContain( 'bsky.app' );
+	} );
+
+	it( 'accepts a URL on the network’s own domain', () => {
+		render( <Seo /> );
+
+		typeInto( 'Bluesky', 'https://bsky.app/profile/example' );
+		save();
+
+		expect( speak ).not.toHaveBeenCalled();
 	} );
 } );

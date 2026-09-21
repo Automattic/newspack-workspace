@@ -2,14 +2,18 @@
  * SEO data type.
  */
 type SeoData = {
-	under_construction: boolean;
+	search_engines_discouraged: boolean;
 	urls: {
+		bluesky: string;
 		facebook: string;
-		twitter: string;
 		instagram: string;
-		youtube: string;
 		linkedin: string;
+		mastodon: string;
 		pinterest: string;
+		threads: string;
+		tiktok: string;
+		twitter: string;
+		youtube: string;
 	};
 	verification: {
 		bing: string;
