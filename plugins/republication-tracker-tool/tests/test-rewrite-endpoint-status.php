@@ -110,11 +110,113 @@ class RewriteEndpointStatusTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The statuses the endpoint reached before the guard, plus the password case.
+	 * A password-protected post stays declined for a visitor who has entered its
+	 * password. The rule reads the post, not the password cookie, so this is the
+	 * case that would start passing silently if the check were ever switched to
+	 * post_password_required(), which honors the cookie.
+	 */
+	public function test_password_post_is_not_served_with_valid_password_cookie() {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_status'   => 'publish',
+				'post_password' => 'correct-horse',
+			)
+		);
+		$cookie  = 'wp-postpass_' . COOKIEHASH;
+		require_once ABSPATH . WPINC . '/class-phpass.php';
+		$hasher             = new PasswordHash( 8, true );
+		$_COOKIE[ $cookie ] = $hasher->HashPassword( 'correct-horse' ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE -- the cookie is the fixture under test.
+
+		try {
+			$this->assertFalse( post_password_required( $post_id ), 'Fixture check: the cookie should satisfy WordPress\'s own password check.' );
+			$template = $this->template_for_request( $post_id );
+		} finally {
+			unset( $_COOKIE[ $cookie ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		}
+
+		$this->assertSame(
+			$this->incoming_template,
+			$template,
+			'A password-protected post must not be served for republication, even with its password.'
+		);
+	}
+
+	/**
+	 * Drive the endpoint through the rewrite rule, as a `/republish/<value>`
+	 * request, and return the template the filter selects. The value reaches
+	 * the resolver as a path segment rather than a query variable.
 	 *
-	 * `future` and `trash` are here because the report named them as reachable;
-	 * they are also the two whose absence would be least obvious from reading the
-	 * guard, since neither has a test elsewhere in this plugin.
+	 * @param string $value Path segment after `/republish/`.
+	 * @return string Selected template path.
+	 */
+	private function template_for_path_request( $value ) {
+		$this->endpoint->register_endpoint();
+		$this->set_permalink_structure( '/%postname%/' );
+		wp_set_current_user( 0 );
+		$this->go_to( home_url( '/republish/' . $value ) );
+		return $this->endpoint->filter_template_include( $this->incoming_template );
+	}
+
+	/**
+	 * Positive control for the path form: a published post requested by its
+	 * permalink path is served. Fails if the path form never reaches the
+	 * endpoint, which would make the negative path cases below pass vacuously.
+	 */
+	public function test_published_post_is_served_through_path_form() {
+		$this->factory->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => 'rtt-path-published',
+			)
+		);
+		$this->assertSame(
+			$this->republish_template,
+			$this->template_for_path_request( 'rtt-path-published/' ),
+			'A published post should be served when requested through the path form.'
+		);
+	}
+
+	/**
+	 * A path-form value that carries a post ID is held to the same rule as the
+	 * query-variable form.
+	 *
+	 * @dataProvider path_form_non_public_provider
+	 * @param array  $postarr Arguments for the post to create.
+	 * @param string $why     What this case is guarding, for the failure message.
+	 */
+	public function test_non_public_post_is_not_served_through_path_form( $postarr, $why ) {
+		$post_id = $this->factory->post->create( $postarr );
+		$this->assertSame(
+			$this->incoming_template,
+			$this->template_for_path_request( 'x&p=' . $post_id ),
+			$why
+		);
+	}
+
+	/**
+	 * Non-public cases for the path form.
+	 *
+	 * @return array
+	 */
+	public function path_form_non_public_provider() {
+		return array(
+			'draft'    => array(
+				array( 'post_status' => 'draft' ),
+				'A draft must not be served through the path form.',
+			),
+			'password' => array(
+				array(
+					'post_status'   => 'publish',
+					'post_password' => 'correct-horse',
+				),
+				'A password-protected post must not be served through the path form.',
+			),
+		);
+	}
+
+	/**
+	 * Every non-public status a post can carry, plus a password-protected
+	 * published post.
 	 *
 	 * @return array
 	 */

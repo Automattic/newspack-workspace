@@ -248,18 +248,26 @@ final class Republication_Tracker_Tool {
 	}
 
 	/**
-	 * Whether a post may be offered for republication to the current visitor.
+	 * Whether a post may be offered for republication.
 	 *
-	 * Every republish surface (the `/republish/` page, the widget and the block)
-	 * builds its copy from `post_content` directly and never runs `the_content`,
-	 * so WordPress's own status and password handling does not apply to them.
-	 * They must all ask this instead, so the rule stays the same across surfaces.
+	 * One rule for every republish surface (the `/republish/` page, the widget
+	 * and the block), since each copies `post_content` without WordPress's own
+	 * visibility handling: only what a logged-out visitor could read at the
+	 * permalink, and never a password-protected post.
+	 *
+	 * The password test reads the post rather than the visitor's password
+	 * cookie. The copy carries a republication license, and a post password
+	 * limits who may read a post, not who may redistribute it, so entering the
+	 * password must not unlock the copy.
 	 *
 	 * @param int|\WP_Post $post Post ID or object.
 	 * @return bool
 	 */
-	public static function is_post_republishable( $post ) {
-		return is_post_publicly_viewable( $post ) && ! post_password_required( $post );
+	public static function is_post_republishable( $post ): bool {
+		$post = get_post( $post );
+		return $post instanceof \WP_Post
+			&& is_post_publicly_viewable( $post )
+			&& '' === (string) $post->post_password;
 	}
 
 	/**

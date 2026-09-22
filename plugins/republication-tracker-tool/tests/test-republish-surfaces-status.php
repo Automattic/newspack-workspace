@@ -141,8 +141,8 @@ class RepublishSurfacesStatusTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The same cases RewriteEndpointStatusTest uses, so the three surfaces are
-	 * held to one rule.
+	 * The non-public cases a single-post view can reach. RewriteEndpointStatusTest
+	 * also covers `trash`, which has no single view for these surfaces to render on.
 	 *
 	 * @return array
 	 */

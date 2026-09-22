@@ -86,9 +86,9 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			exit;
 		}
 
-		// url_to_postid() resolves the `?p=<id>` form to an ID without the
-		// status-filtered query a normal page load runs, so status and password
-		// must be checked explicitly here.
+		// Resolving a post ID says nothing about whether the post may be served,
+		// so the republish view needs its own check, whatever form the request
+		// took.
 		//
 		// The test is deliberately about the post rather than the requester: this
 		// endpoint hands out a redistributable copy of a public article, so an
