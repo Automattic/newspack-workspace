@@ -142,6 +142,8 @@ The main container is `newspack_dev`; an isolated env is `newspack_env_<name>`, 
 
 **Services** — `wordpress` (`newspack_dev`, Apache + PHP), `db` (MariaDB 11.8.6), `mailhog` (http://localhost:8025), `adminer` (http://localhost:8088). Memcached object cache and Batcache page cache are enabled. Xdebug is on port 9003 with IDE key `DOCKERDEBUG`, mapping `/newspack-plugins/<project>` to `plugins/<project>`.
 
+**`custom-redirects.php`**: when present in a site's root it runs before WordPress on every request, as in production. The env wires this via PHP's `auto_prepend_file` (`config/php.ini` → `bin/auto-prepend.php`) for `html/`, additional sites and each env's `html/`, for web requests and for `wp` run from the site root. Baked into the image, so it takes effect after `./build-image.sh`.
+
 To customise the **main** stack without touching the tracked `docker-compose.yml`, create a gitignored `docker-compose.override.yml` at the root; `n start` merges it over the base stack. It does not apply to isolated envs, which layer their own generated files.
 
 ### Isolated environments

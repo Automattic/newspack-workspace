@@ -1,3 +1,17 @@
+# newspack-popups [3.19.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.18.1...newspack-popups@3.19.0) (2026-09-18)
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([49a00c4](https://github.com/Automattic/newspack-workspace/commit/49a00c4e1bfa141c9c67cc1786f9d80b1eee5863))
+
+## newspack-popups [3.18.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.18.0...newspack-popups@3.18.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **popups:** drop a range max of 0 or less as invalid (NPPM-3389) ([#1071](https://github.com/Automattic/newspack-workspace/issues/1071)) ([193406c](https://github.com/Automattic/newspack-workspace/commit/193406c81054ec4f9a436831f25898518129e079))
+
 # newspack-popups [3.18.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.17.0...newspack-popups@3.18.0) (2026-09-14)
 
 

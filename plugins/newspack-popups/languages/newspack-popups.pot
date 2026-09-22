@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Campaigns plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Campaigns 3.17.0\n"
+"Project-Id-Version: Newspack Campaigns 3.18.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-popups\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-14T18:18:21+00:00\n"
+"POT-Creation-Date: 2026-09-18T15:37:24+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-popups\n"
@@ -35,11 +35,11 @@ msgstr ""
 msgid "Automattic"
 msgstr ""
 
-#: includes/class-newspack-popups-api.php:254
+#: includes/class-newspack-popups-api.php:275
 msgid "The design could not be reset. Try again."
 msgstr ""
 
-#: includes/class-newspack-popups-api.php:277
+#: includes/class-newspack-popups-api.php:334
 msgid "Contextual Prompts is not enabled for this site."
 msgstr ""
 
@@ -49,7 +49,7 @@ msgstr ""
 
 #: includes/class-newspack-popups-contextual-prompt-pattern.php:418
 #: dist/documentSettings.js:12
-#: src/document-settings/contextual-prompt-panel.js:224
+#: src/document-settings/contextual-prompt-panel.js:225
 msgid "Contextual Prompt"
 msgstr ""
 
@@ -74,25 +74,25 @@ msgid "Invalid custom placement ID."
 msgstr ""
 
 #. Translators: %d is the number of pageviews in between prompt displays, if greater than 0 (every pageview).
-#: includes/class-newspack-popups-data-api.php:53
+#: includes/class-newspack-popups-data-api.php:54
 #, php-format
 msgid "every %d pageviews"
 msgstr ""
 
 #. Translators: %d is the pageview when the prompt starts to be displayed, if greater than 0 (first pageview).
-#: includes/class-newspack-popups-data-api.php:57
+#: includes/class-newspack-popups-data-api.php:58
 #, php-format
 msgid "starting on pageview %d"
 msgstr ""
 
 #. Translators: %d is the max number number of displays for the prompt, if greater than 0 (no max).
-#: includes/class-newspack-popups-data-api.php:61
+#: includes/class-newspack-popups-data-api.php:62
 #, php-format
 msgid "max %d times"
 msgstr ""
 
 #. Translators: %s is the time period for when the prompt can be displayed again after the max number of displays.
-#: includes/class-newspack-popups-data-api.php:64
+#: includes/class-newspack-popups-data-api.php:65
 #, php-format
 msgid "resetting every %s"
 msgstr ""
@@ -218,91 +218,115 @@ msgstr ""
 msgid "Error creating preset prompts and segments. Please try again."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:239
+#: includes/class-newspack-popups-settings.php:290
 msgid "Publisher name"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:240
+#: includes/class-newspack-popups-settings.php:291
 msgid "How your newsroom is named in donation appeals. Defaults to the site title when empty."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:245
+#: includes/class-newspack-popups-settings.php:296
 msgid "Coverage area"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:246
+#: includes/class-newspack-popups-settings.php:297
 msgid "The place or beat your newsroom covers, e.g. \"San Diego County\". Helps ground the appeal."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:251
+#: includes/class-newspack-popups-settings.php:302
 msgid "Voice and tone"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:252
+#: includes/class-newspack-popups-settings.php:303
 msgid "A short note on how appeals should sound, e.g. \"plainspoken and investigative, no hype\"."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:257
+#: includes/class-newspack-popups-settings.php:308
 msgid "Additional guidance"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:258
+#: includes/class-newspack-popups-settings.php:309
 msgid "Optional house do/don'ts appended to the AI guidance. Never overrides the non-advocacy guardrail."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:265
+#: includes/class-newspack-popups-settings.php:316
 msgid "Enable site-wide override"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:266
+#: includes/class-newspack-popups-settings.php:317
 msgid "Temporarily replace every Contextual Prompt with the call-to-action below — for example during a fund drive. Turn off to restore each story's own prompt."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:272
+#: includes/class-newspack-popups-settings.php:323
 msgid "Override copy"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:273
+#: includes/class-newspack-popups-settings.php:324
 msgid "The call-to-action shown in place of every Contextual Prompt while the override is on."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:279
+#: includes/class-newspack-popups-settings.php:330
 msgid "Override call to action"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:280
+#: includes/class-newspack-popups-settings.php:331
 msgid "What the override shows under its copy: your donation form, or a button — for example to route a fund drive to a campaign landing page."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:285
+#: includes/class-newspack-popups-settings.php:336
 msgid "Donate Form"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:289
+#: includes/class-newspack-popups-settings.php:340
 msgid "Donate Button"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:296
+#: includes/class-newspack-popups-settings.php:347
 msgid "Override button label"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:297
+#: includes/class-newspack-popups-settings.php:348
 msgid "The label for the override button."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:303
+#: includes/class-newspack-popups-settings.php:354
 msgid "Override button URL"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:304
+#: includes/class-newspack-popups-settings.php:355
 msgid "Where the override button links."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:401
+#: includes/class-newspack-popups-settings.php:364
+msgid "Enable control test"
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:365
+msgid "Show a generic control ask on a slice of stories so it can be compared against story-aware copy. Turn it off to restore every story's own copy."
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:371
+msgid "Control copy"
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:372
+msgid "The generic ask shown in place of story-aware copy. The call to action is not changed."
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:378
+msgid "Show control copy on every Nth story"
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:379
+msgid "Between 2 and 20. Which stories are selected depends on this number, so changing it mid-test starts a new test."
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:518
 msgid "Campaigns Settings"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:402
+#: includes/class-newspack-popups-settings.php:519
 #: dist/editor.js:62
 #: dist/settings.js:16
 #: src/editor/index.js:80
@@ -311,47 +335,47 @@ msgid "Settings"
 msgstr ""
 
 #. Translators: error message if trying to update an invalid setting key.
-#: includes/class-newspack-popups-settings.php:444
+#: includes/class-newspack-popups-settings.php:561
 #, php-format
 msgid "Option %s does not exist."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:490
+#: includes/class-newspack-popups-settings.php:607
 msgid "Invalid setting."
 msgstr ""
 
 #. translators: %s is the description of the option.
-#: includes/class-newspack-popups-settings.php:501
-#: includes/class-newspack-popups-settings.php:521
+#: includes/class-newspack-popups-settings.php:618
+#: includes/class-newspack-popups-settings.php:638
 #, php-format
 msgid "Invalid setting value for \"%s\"."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:639
+#: includes/class-newspack-popups-settings.php:756
 msgid "Donor Settings"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:654
+#: includes/class-newspack-popups-settings.php:771
 msgid "Donor landing page"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:655
+#: includes/class-newspack-popups-settings.php:772
 msgid "Set a page on your site as a donation landing page. Once a reader views this page, they will be considered a donor. This is helpful if you're using an off-site donation platform but still want to target donors as an audience segment."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:667
+#: includes/class-newspack-popups-settings.php:784
 msgid "Mailchimp donor merge fields"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:668
+#: includes/class-newspack-popups-settings.php:785
 msgid "A comma-delimited list of strings to match against Mailchimp merge field names. If a Mailchimp merge field name contains one of these strings and a subscriber has a true value in this field, the subscriber will be considered a donor for segmentation purposes."
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:688
+#: includes/class-newspack-popups-settings.php:805
 msgid "Dismiss overlays on background tap"
 msgstr ""
 
-#: includes/class-newspack-popups-settings.php:689
+#: includes/class-newspack-popups-settings.php:806
 msgid "If enabled, readers can dismiss overlay prompts by tapping on the colored overlay background underneath the prompt content. This will make it easier for readers to dismiss prompts, but potentially result in less reader engagement."
 msgstr ""
 
@@ -362,96 +386,96 @@ msgstr ""
 msgid "post"
 msgstr ""
 
-#: includes/class-newspack-popups.php:188
+#: includes/class-newspack-popups.php:199
 #: dist/blocks.js:31
 #: dist/documentSettings.js:1
 #: src/blocks/contextual-prompt/candidates.js:30
 msgid "Post"
 msgstr ""
 
-#: includes/class-newspack-popups.php:224
+#: includes/class-newspack-popups.php:235
 msgctxt "post type general name"
 msgid "Prompts"
 msgstr ""
 
-#: includes/class-newspack-popups.php:225
+#: includes/class-newspack-popups.php:236
 msgctxt "post type singular name"
 msgid "Prompt"
 msgstr ""
 
-#: includes/class-newspack-popups.php:226
+#: includes/class-newspack-popups.php:237
 msgctxt "admin menu"
 msgid "Prompts"
 msgstr ""
 
-#: includes/class-newspack-popups.php:227
+#: includes/class-newspack-popups.php:238
 msgctxt "add new on admin bar"
 msgid "Prompt"
 msgstr ""
 
-#: includes/class-newspack-popups.php:228
+#: includes/class-newspack-popups.php:239
 msgctxt "popup"
 msgid "Add New"
 msgstr ""
 
-#: includes/class-newspack-popups.php:229
+#: includes/class-newspack-popups.php:240
 msgid "Add New Prompt"
 msgstr ""
 
-#: includes/class-newspack-popups.php:230
+#: includes/class-newspack-popups.php:241
 msgid "New Prompt"
 msgstr ""
 
-#: includes/class-newspack-popups.php:231
+#: includes/class-newspack-popups.php:242
 msgid "Edit Prompt"
 msgstr ""
 
-#: includes/class-newspack-popups.php:232
+#: includes/class-newspack-popups.php:243
 msgid "View Prompt"
 msgstr ""
 
-#: includes/class-newspack-popups.php:233
+#: includes/class-newspack-popups.php:244
 msgid "All Prompts"
 msgstr ""
 
-#: includes/class-newspack-popups.php:234
+#: includes/class-newspack-popups.php:245
 msgid "Search Prompts"
 msgstr ""
 
-#: includes/class-newspack-popups.php:235
+#: includes/class-newspack-popups.php:246
 msgid "Parent Prompts:"
 msgstr ""
 
-#: includes/class-newspack-popups.php:236
+#: includes/class-newspack-popups.php:247
 msgid "No Prompts found."
 msgstr ""
 
-#: includes/class-newspack-popups.php:237
+#: includes/class-newspack-popups.php:248
 msgid "No Prompts found in Trash."
 msgstr ""
 
-#: includes/class-newspack-popups.php:714
+#: includes/class-newspack-popups.php:725
 msgid "Campaigns"
 msgstr ""
 
-#: includes/class-newspack-popups.php:715
+#: includes/class-newspack-popups.php:726
 msgid "Campaign"
 msgstr ""
 
-#: includes/class-newspack-popups.php:716
+#: includes/class-newspack-popups.php:727
 msgid "Add Campaign"
 msgstr ""
 
-#: includes/class-newspack-popups.php:1021
+#: includes/class-newspack-popups.php:1036
 #: dist/editor.js:58
 #: src/editor/Sidebar.js:75
 msgid "Inline"
 msgstr ""
 
 #. translators: %s: Duplicate prompt title
-#: includes/class-newspack-popups.php:1502
-#: includes/class-newspack-popups.php:1508
-#: includes/class-newspack-popups.php:1535
+#: includes/class-newspack-popups.php:1517
+#: includes/class-newspack-popups.php:1523
+#: includes/class-newspack-popups.php:1550
 #, php-format
 msgid "%s copy"
 msgstr ""
@@ -506,7 +530,7 @@ msgstr ""
 msgid "Segments for popups"
 msgstr ""
 
-#: includes/class-newspack-segments-model.php:768
+#: includes/class-newspack-segments-model.php:800
 msgid "Failed to sort due to outdated segment data. Please refresh and try again."
 msgstr ""
 
@@ -1068,12 +1092,24 @@ msgid "Apply"
 msgstr ""
 
 #: dist/blocks.js:40
+#: dist/documentSettings.js:10
+#: src/blocks/contextual-prompt/condition-notice.js:35
+msgid "This prompt is currently showing control test copy to readers. Configure test settings in <a>Contextual Prompts</a>."
+msgstr ""
+
+#: dist/blocks.js:40
+#: dist/documentSettings.js:10
+#: src/blocks/contextual-prompt/condition-notice.js:40
+msgid "The site-wide override is currently replacing this prompt for all readers. Manage it in <a>Contextual Prompts</a>."
+msgstr ""
+
+#: dist/blocks.js:40
 #: dist/documentSettings.js:7
 #: dist/documentSettings.js:10
 #: dist/documentSettings.js:14
 #: src/blocks/contextual-prompt/candidates.js:99
-#: src/blocks/contextual-prompt/instance.js:262
-#: src/document-settings/contextual-prompt-panel.js:174
+#: src/blocks/contextual-prompt/instance.js:263
+#: src/document-settings/contextual-prompt-panel.js:175
 msgid "Could not generate suggestions."
 msgstr ""
 
@@ -1082,22 +1118,22 @@ msgstr ""
 #: dist/documentSettings.js:10
 #: dist/documentSettings.js:12
 #: dist/documentSettings.js:14
-#: src/blocks/contextual-prompt/instance.js:315
-#: src/blocks/contextual-prompt/instance.js:333
-#: src/document-settings/contextual-prompt-panel.js:168
+#: src/blocks/contextual-prompt/instance.js:316
+#: src/blocks/contextual-prompt/instance.js:334
+#: src/document-settings/contextual-prompt-panel.js:169
 msgid "No suggestions were returned. Try generating again."
 msgstr ""
 
 #: dist/blocks.js:40
 #: dist/documentSettings.js:10
-#: src/blocks/contextual-prompt/instance.js:359
+#: src/blocks/contextual-prompt/instance.js:360
 msgid "Prompt Copy"
 msgstr ""
 
 #. translators: %1$s: the edited content's post type label. %2$s: the prompt's position.
 #: dist/blocks.js:41
 #: dist/documentSettings.js:11
-#: src/blocks/contextual-prompt/instance.js:370
+#: src/blocks/contextual-prompt/instance.js:372
 #, js-format
 msgid "Copy is generated from this %1$s, framed for its position (%2$s). Review a suggestion and apply it to replace the current copy."
 msgstr ""
@@ -1105,7 +1141,7 @@ msgstr ""
 #. translators: %s: the edited content's post type label.
 #: dist/blocks.js:42
 #: dist/documentSettings.js:12
-#: src/blocks/contextual-prompt/instance.js:379
+#: src/blocks/contextual-prompt/instance.js:381
 #, js-format
 msgid "Copy is generated from this %s. Review a suggestion and apply it to replace the current copy."
 msgstr ""
@@ -1113,15 +1149,15 @@ msgstr ""
 #: dist/blocks.js:42
 #: dist/documentSettings.js:12
 #: dist/documentSettings.js:14
-#: src/blocks/contextual-prompt/instance.js:388
-#: src/document-settings/contextual-prompt-panel.js:248
+#: src/blocks/contextual-prompt/instance.js:390
+#: src/document-settings/contextual-prompt-panel.js:254
 msgid "The Contextual Prompt pattern has no editable copy field, so generated copy cannot be applied."
 msgstr ""
 
 #: dist/blocks.js:42
 #: dist/documentSettings.js:12
-#: src/blocks/contextual-prompt/instance.js:405
-#: src/document-settings/contextual-prompt-panel.js:220
+#: src/blocks/contextual-prompt/instance.js:407
+#: src/document-settings/contextual-prompt-panel.js:221
 msgid "Regenerate Suggestions"
 msgstr ""
 
@@ -1175,26 +1211,26 @@ msgid "single"
 msgstr ""
 
 #: dist/documentSettings.js:12
-#: src/document-settings/contextual-prompt-panel.js:220
+#: src/document-settings/contextual-prompt-panel.js:221
 msgid "Generate Suggestions"
 msgstr ""
 
 #. translators: %1$s: the edited content's post type label, e.g. "post", "page".
 #: dist/documentSettings.js:13
-#: src/document-settings/contextual-prompt-panel.js:236
+#: src/document-settings/contextual-prompt-panel.js:242
 #, js-format
 msgid "This %1$s has a Contextual Prompt. Edit its copy directly in the %1$s."
 msgstr ""
 
 #. translators: %s: the edited content's post type label, e.g. "post", "page".
 #: dist/documentSettings.js:14
-#: src/document-settings/contextual-prompt-panel.js:241
+#: src/document-settings/contextual-prompt-panel.js:247
 #, js-format
 msgid "Generate a donation prompt specific to this %s."
 msgstr ""
 
 #: dist/documentSettings.js:14
-#: src/document-settings/contextual-prompt-panel.js:257
+#: src/document-settings/contextual-prompt-panel.js:263
 msgid "Contextual Prompt added."
 msgstr ""
 

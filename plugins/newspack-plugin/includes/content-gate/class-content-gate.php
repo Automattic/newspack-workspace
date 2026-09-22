@@ -1669,7 +1669,8 @@ class Content_Gate {
 		if ( Content_Gifting::should_enqueue_assets() || Metering_Countdown::is_enabled() ) {
 			$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-banner.asset.php';
 
-			// Ensure the content gate metering script is enqueued first.
+			// Order the banner after the meter so the meter has already locked or unlocked
+			// the article by the time the banner reads the view count.
 			if ( is_singular() && self::has_gate() && self::is_post_restricted() && Metering::is_frontend_metering() ) {
 				$asset['dependencies'][] = 'newspack-content-gate-metering';
 			}

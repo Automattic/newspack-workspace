@@ -474,6 +474,10 @@ class Membership_Gates_Migration {
 				$dry_run ? 'would be created/updated' : 'created/updated'
 			)
 		);
+		// The gate migration does not carry over the site's RSS feed policy; that is
+		// a separate command. Point at it here so it is not skipped, which would let
+		// a migrated site fall back to the shipped feed defaults.
+		WP_CLI::line( 'Next: run `wp newspack migrate-feed-settings` to carry the site\'s RSS feed policy over to Access Control.' );
 		// Written but wrong is worse than not written at all — it looks migrated. Call
 		// it out after the success line so it is not lost in the table.
 		//
@@ -2811,5 +2815,305 @@ class Membership_Gates_Migration {
 			return 'missing';
 		}
 		return \get_post_meta( $post_id, $meta_key, true ) ? 'already' : 'falsy';
+	}
+
+	/**
+	 * Migrate a site's WooCommerce Memberships RSS feed configuration into the
+	 * equivalent Access Control feed settings.
+	 *
+	 * Access Control governs feeds from its own `restrict_feeds` /
+	 * `feed_restriction_mode` options, which the gate migration does not set — so
+	 * without this a migrated site falls back to the shipped defaults regardless of
+	 * how its feeds behaved under Memberships. The mapping:
+	 *
+	 * - "Skip content restriction in RSS feeds" on → feeds were unrestricted →
+	 *   restrict_feeds off.
+	 * - Restriction mode "Hide content only" (hide_content) → item kept with a
+	 *   teaser → feed_restriction_mode truncate.
+	 * - Restriction mode "Hide completely" / "Redirect" (hide/redirect) → item
+	 *   dropped from the feed → feed_restriction_mode exclude.
+	 *
+	 * Best run before Memberships is deactivated, while its options are still the
+	 * live feed policy. Access Control yields feeds to Memberships until cutover,
+	 * so the written values take effect only once Memberships is deactivated. It
+	 * also runs on an already-flipped site: WCM's options outlive the plugin, so
+	 * the pre-flip policy is still recoverable, and those sites are the ones now
+	 * running defaults nobody chose.
+	 *
+	 * Nothing is written on a site that already has Access Control feed settings of
+	 * its own — a stored value is a decision, and only the absent case is a default
+	 * worth correcting. Such a site is reported and skipped.
+	 *
+	 * The mapping reads options only. A site whose feeds are governed at runtime by
+	 * a `wc_memberships_is_feed_restricted` filter (Google Extended Access, PugPig)
+	 * is not reflected in the stored mode — verify those sites before cutover.
+	 *
+	 * Dry-run by default; pass --live to write.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--live]
+	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp newspack migrate-feed-settings
+	 *     wp newspack migrate-feed-settings --live
+	 *
+	 * @param array $args       Positional args (unused).
+	 * @param array $assoc_args Named args.
+	 *
+	 * @return void
+	 */
+	public function migrate_feed_settings( $args, $assoc_args ) {
+		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+
+		if ( ! class_exists( 'Newspack\Content_Gate_Advanced_Settings' ) ) {
+			WP_CLI::error( 'Newspack\Content_Gate_Advanced_Settings class not found, so the Access Control feed settings cannot be written. Aborting.' );
+		}
+
+		if ( $dry_run ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to write. ***' );
+			WP_CLI::line( '' );
+		}
+
+		$wcm         = self::get_wcm_feed_config();
+		$target      = self::map_wcm_feed_config_to_ac( $wcm['restriction_mode'], $wcm['skip_feeds'] );
+		$current     = \Newspack\Content_Gate_Advanced_Settings::get_settings();
+		$configured  = self::has_stored_ac_feed_config();
+		$will_write  = ! $dry_run && ! $configured;
+
+		// No stored restriction mode means the target below is derived purely from
+		// WCM's defaults, not a real prior policy — worth flagging before a --live
+		// run on what might not be a Memberships site.
+		if ( false === \get_option( 'wc_memberships_restriction_mode', false ) && ! $wcm['skip_feeds'] ) {
+			WP_CLI::warning( 'No stored WooCommerce Memberships feed configuration was found; the target below comes from WCM\'s own defaults. Confirm this is a Memberships site before running --live.' );
+		}
+
+		WP_CLI::line( '=== WooCommerce Memberships feed configuration ===' );
+		\WP_CLI\Utils\format_items(
+			'table',
+			[
+				[
+					'Setting' => 'Restriction mode',
+					'Value'   => $wcm['restriction_mode'],
+				],
+				[
+					'Setting' => 'Skip restriction in RSS feeds',
+					'Value'   => $wcm['skip_feeds'] ? 'yes' : 'no',
+				],
+				[
+					'Setting' => 'Show excerpts',
+					'Value'   => $wcm['show_excerpts'] ? 'yes' : 'no',
+				],
+			],
+			[ 'Setting', 'Value' ]
+		);
+		WP_CLI::line( '' );
+
+		// When feeds are left unrestricted the mode is not written, so report it as
+		// unchanged rather than implying a value was chosen.
+		$mode_target = null === $target['feed_restriction_mode']
+			? $current['feed_restriction_mode'] . ' (unchanged — feeds unrestricted)'
+			: $target['feed_restriction_mode'];
+
+		WP_CLI::line( $will_write ? '=== ACCESS CONTROL SETTINGS WRITTEN ===' : '=== ACCESS CONTROL TARGET ===' );
+		\WP_CLI\Utils\format_items(
+			'table',
+			[
+				[
+					'Setting' => 'restrict_feeds',
+					'Current' => (int) $current['restrict_feeds'],
+					'Target'  => $target['restrict_feeds'],
+				],
+				[
+					'Setting' => 'feed_restriction_mode',
+					'Current' => $current['feed_restriction_mode'],
+					'Target'  => $mode_target,
+				],
+			],
+			[ 'Setting', 'Current', 'Target' ]
+		);
+		WP_CLI::line( '' );
+
+		if ( $wcm['skip_feeds'] ) {
+			self::report_open_feeds_decision();
+		}
+
+		// Stored option rows are a decision somebody made; the shipped defaults this
+		// command exists to correct are the absent case. Overwriting a configured site
+		// would repeat the failure that created the ticket, so report and stop.
+		if ( $configured ) {
+			WP_CLI::warning( 'This site already has stored Access Control feed settings, so nothing was written. Compare them against the target above and reconcile by hand if they disagree.' );
+			WP_CLI::success( 'No changes. Existing Access Control feed settings left in place.' );
+			return;
+		}
+
+		if ( $will_write ) {
+			\Newspack\Content_Gate_Advanced_Settings::update_settings( self::feed_settings_write_payload( $target ) );
+		}
+
+		WP_CLI::success(
+			$dry_run
+				? 'Dry run complete. Re-run with --live to write these Access Control feed settings.'
+				: 'Access Control feed settings updated from the WooCommerce Memberships configuration.'
+		);
+	}
+
+	/**
+	 * Whether the site has stored Access Control feed settings of its own.
+	 *
+	 * Read as raw option rows rather than through get_settings(), which substitutes
+	 * the shipped defaults for an absent row and so cannot tell "never configured"
+	 * from "configured, and the value happens to match the default".
+	 *
+	 * @return bool
+	 */
+	public static function has_stored_ac_feed_config(): bool {
+		$prefix = \Newspack\Content_Gate_Advanced_Settings::OPTION_PREFIX;
+		foreach ( [ 'restrict_feeds', 'feed_restriction_mode' ] as $key ) {
+			if ( false !== \get_option( $prefix . $key, false ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Report what leaving feeds unrestricted exposes, for the operator to decide on.
+	 *
+	 * "Skip content restriction in RSS feeds" maps faithfully to restrict_feeds off,
+	 * and that also puts the whole paywalled archive back in the main feed — one
+	 * global switch covers every feed. The command does not substitute a safer
+	 * value: an unrequested default change is what degraded these feeds in the first
+	 * place. So it names the exposure and leaves the call to a human.
+	 *
+	 * @return void
+	 */
+	public static function report_open_feeds_decision(): void {
+		$partner_feeds = self::count_published_partner_feeds();
+		$full_content  = ! (int) \get_option( 'rss_use_excerpt', 0 );
+
+		WP_CLI::line( '=== DECISION REQUIRED: feeds were unrestricted under Memberships ===' );
+		WP_CLI::line( 'Mapping "Skip content restriction in RSS feeds" faithfully means restrict_feeds off, which opens every feed on the site, not only the one the exemption was added for.' );
+		\WP_CLI\Utils\format_items(
+			'table',
+			[
+				[
+					'Check' => 'Published partner RSS feeds',
+					'Value' => $partner_feeds,
+				],
+				[
+					'Check' => 'Main feed serves full content (rss_use_excerpt off)',
+					'Value' => $full_content ? 'yes' : 'no',
+				],
+			],
+			[ 'Check', 'Value' ]
+		);
+		if ( $partner_feeds > 0 ) {
+			WP_CLI::line( 'A partner feed usually means a syndication contract. Confirm which feeds are meant to stay open before running --live.' );
+		}
+		if ( $full_content ) {
+			WP_CLI::warning( 'With feeds unrestricted and the main feed set to full content, complete gated articles are served at a public URL.' );
+		}
+		WP_CLI::line( '' );
+	}
+
+	/**
+	 * Count published partner RSS feeds.
+	 *
+	 * Queried directly because the post type is registered only while the RSS
+	 * optional module is on, and the feeds still exist — and still matter to this
+	 * decision — when it is off.
+	 *
+	 * @return int
+	 */
+	private static function count_published_partner_feeds(): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status = 'publish'",
+				'partner_rss_feed'
+			)
+		);
+	}
+
+	/**
+	 * Read the WooCommerce Memberships feed configuration that governs how
+	 * restricted posts appear in RSS feeds.
+	 *
+	 * The show_excerpts value is read for the operator's report only — the mapping
+	 * does not consult it. Under hide_content, WCM shows the membership message
+	 * (optionally excerpt-prefixed); Access Control's truncate shows the gate
+	 * teaser. Truncate is the closest equivalent either way, so excerpts on or off
+	 * does not change it.
+	 *
+	 * @return array{restriction_mode:string,skip_feeds:bool,show_excerpts:bool}
+	 */
+	public static function get_wcm_feed_config(): array {
+		return [
+			// WCM validates this option against hide/hide_content/redirect and falls
+			// back to hide_content for anything else (its Restrictions::get_restriction_mode()),
+			// so an unset value behaves as hide_content — the fallback used here too.
+			'restriction_mode' => (string) \get_option( 'wc_memberships_restriction_mode', 'hide_content' ),
+			// Newspack's addition: when on, restricted posts are public in feeds.
+			'skip_feeds'       => 'yes' === \get_option( 'newspack_skip_content_restriction_in_rss_feeds', 'no' ),
+			'show_excerpts'    => 'yes' === \get_option( 'wc_memberships_show_excerpts', 'no' ),
+		];
+	}
+
+	/**
+	 * Map a WooCommerce Memberships feed configuration to the equivalent Access
+	 * Control feed settings.
+	 *
+	 * @param string $restriction_mode WCM restriction mode: hide_content, hide, or redirect.
+	 * @param bool   $skip_feeds       Whether "Skip content restriction in RSS feeds" is on.
+	 *
+	 * @return array{restrict_feeds:int,feed_restriction_mode:?string} feed_restriction_mode
+	 *               is null when feeds are left unrestricted (nothing to write).
+	 */
+	public static function map_wcm_feed_config_to_ac( string $restriction_mode, bool $skip_feeds ): array {
+		// "Skip content restriction in RSS feeds" makes restricted posts public in
+		// feeds, so Access Control should leave feeds unrestricted too.
+		if ( $skip_feeds ) {
+			return [
+				'restrict_feeds'        => 0,
+				'feed_restriction_mode' => null,
+			];
+		}
+		// hide and redirect drop the item from the feed entirely — the Access
+		// Control "exclude" equivalent. hide_content keeps the item with a teaser
+		// (WCM's is_feed_restricted() is false for it) — "truncate". Match only the
+		// two dropping modes and treat everything else as truncate: WCM itself
+		// normalizes an unrecognized restriction mode back to its hide_content
+		// default, so a legacy or corrupt value must not migrate to the stricter
+		// exclude.
+		$mode = in_array( $restriction_mode, [ 'hide', 'redirect' ], true )
+			? \Newspack\Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE
+			: \Newspack\Content_Gate_Advanced_Settings::FEED_MODE_TRUNCATE;
+		return [
+			'restrict_feeds'        => 1,
+			'feed_restriction_mode' => $mode,
+		];
+	}
+
+	/**
+	 * Build the settings payload a --live run writes from a mapping result.
+	 *
+	 * The feed_restriction_mode key is included only when the mapping chose one. A
+	 * null mode (feeds left unrestricted) is omitted so update_settings() leaves
+	 * the stored mode untouched rather than resetting it.
+	 *
+	 * @param array{restrict_feeds:int,feed_restriction_mode:?string} $target Mapping result.
+	 *
+	 * @return array<string,int|string>
+	 */
+	public static function feed_settings_write_payload( array $target ): array {
+		$payload = [ 'restrict_feeds' => $target['restrict_feeds'] ];
+		if ( null !== $target['feed_restriction_mode'] ) {
+			$payload['feed_restriction_mode'] = $target['feed_restriction_mode'];
+		}
+		return $payload;
 	}
 }

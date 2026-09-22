@@ -25,6 +25,20 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	private $last4;
 	private $token;
 	private $user_id;
+	private $expiry_month = '';
+	private $expiry_year  = '';
+	/**
+	 * Number of save() calls, so tests can assert that unchanged tokens are not written.
+	 *
+	 * @var int
+	 */
+	public $save_calls = 0;
+	/**
+	 * When set, save() throws the way WC_Payment_Token_Data_Store::update() does on a token that fails validation.
+	 *
+	 * @var bool
+	 */
+	public $throw_on_save = false;
 	public function __construct( $card_type = '', $last4 = '', $token = '', $user_id = 0, $gateway_id = '' ) {
 		parent::__construct( $gateway_id );
 		$this->card_type = $card_type;
@@ -32,11 +46,22 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 		$this->token     = $token;
 		$this->user_id   = $user_id;
 	}
-	public function get_card_type() {
+	/**
+	 * Card brand.
+	 *
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
+	 */
+	public function get_card_type( $context = 'view' ) {
 		return $this->card_type;
 	}
-	public function get_last4() {
+	public function set_card_type( $card_type ) {
+		$this->card_type = $card_type;
+	}
+	public function get_last4( $context = 'view' ) {
 		return $this->last4;
+	}
+	public function set_last4( $last4 ) {
+		$this->last4 = $last4;
 	}
 	public function get_token() {
 		return $this->token;
@@ -44,12 +69,63 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	public function get_user_id() {
 		return $this->user_id;
 	}
+	/**
+	 * WooCommerce stores the month zero-padded ('02'), so mirror that here.
+	 *
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
+	 */
+	public function get_expiry_month( $context = 'view' ) {
+		return $this->expiry_month;
+	}
+	public function set_expiry_month( $month ) {
+		$this->expiry_month = str_pad( (string) $month, 2, '0', STR_PAD_LEFT );
+	}
+	public function get_expiry_year( $context = 'view' ) {
+		return $this->expiry_year;
+	}
+	public function set_expiry_year( $year ) {
+		$this->expiry_year = (string) $year;
+	}
+	public function save() {
+		if ( $this->throw_on_save ) {
+			throw new Exception( 'Invalid or missing payment token fields.' );
+		}
+		$this->save_calls++;
+	}
 }
 
 class WC_Payment_Tokens {
 	public static $tokens = [];
 	public static function get( $token_id ) {
 		return self::$tokens[ $token_id ] ?? null;
+	}
+	/**
+	 * Faithful to WC_Payment_Tokens::get_tokens() for the args Newspack uses.
+	 * Like the real data store, a falsy user_id adds no user predicate (so every
+	 * user's tokens come back), and gateway_id / type filter only when non-empty.
+	 * Does not run the woocommerce_get_customer_payment_tokens filter.
+	 *
+	 * @param array $args Query args: user_id, gateway_id, type, limit.
+	 */
+	public static function get_tokens( $args ) {
+		$user_id    = (int) ( $args['user_id'] ?? 0 );
+		$gateway_id = (string) ( $args['gateway_id'] ?? '' );
+		$type       = (string) ( $args['type'] ?? '' );
+		return array_filter(
+			self::$tokens,
+			function ( $token ) use ( $user_id, $gateway_id, $type ) {
+				if ( $user_id && ( ! method_exists( $token, 'get_user_id' ) || (int) $token->get_user_id() !== $user_id ) ) {
+					return false;
+				}
+				if ( '' !== $gateway_id && $token->get_gateway_id() !== $gateway_id ) {
+					return false;
+				}
+				if ( 'CC' === $type && ! $token instanceof WC_Payment_Token_CC ) {
+					return false;
+				}
+				return true;
+			}
+		);
 	}
 	/**
 	 * Faithful to WC_Payment_Tokens::get_customer_tokens(): customers below 1
@@ -189,9 +265,15 @@ class WC_DateTime extends DateTime {
 class WC_Customer {
 	public $data = [];
 	public function __construct( $user_id ) {
+		// Real WC_Customer is backed by the WP user, and its date_created IS
+		// that user's user_registered. Deriving it here rather than stamping
+		// "now" keeps the two readings of a reader's registration date (the
+		// legacy pipeline reads the customer, the new one reads the user)
+		// from disagreeing by a second at a boundary.
+		$user = get_userdata( $user_id );
 		$this->data = [
 			'user_id'      => $user_id,
-			'date_created' => gmdate( 'Y-m-d H:i:s' ),
+			'date_created' => $user && ! empty( $user->user_registered ) ? $user->user_registered : gmdate( 'Y-m-d H:i:s' ),
 		];
 	}
 	public function get_id() {
@@ -842,7 +924,9 @@ class WC_Order {
 		return admin_url( 'post.php?post=' . $this->get_id() . '&action=edit' );
 	}
 	public function get_customer_id() {
-		return $this->data['customer_id'];
+		// Real WC returns 0 for a guest order; a fixture built without a
+		// customer must read the same way when another suite's query walks it.
+		return $this->data['customer_id'] ?? 0;
 	}
 	public function get_meta( $field_name ) {
 		return isset( $this->meta[ $field_name ] ) ? $this->meta[ $field_name ] : '';

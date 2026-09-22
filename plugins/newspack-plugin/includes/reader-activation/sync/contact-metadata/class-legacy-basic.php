@@ -10,7 +10,6 @@ namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 use Newspack\Logger;
 use Newspack\Reader_Data;
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Reader_Activation\Sync\WooCommerce;
 
@@ -47,7 +46,7 @@ class Legacy_Basic extends Contact_Metadata {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return ''; // Legacy fields are not separated into sections.
+		return __( 'Legacy', 'newspack-plugin' );
 	}
 
 	/**
@@ -56,14 +55,80 @@ class Legacy_Basic extends Contact_Metadata {
 	 * @return array
 	 */
 	public static function get_fields() {
-		return Legacy_Metadata::get_basic_fields();
+		return [
+			'account'              => 'Account',
+			'registration_date'    => 'Registration Date',
+			'connected_account'    => 'Connected Account',
+			'signup_page_utm'      => 'Signup UTM: ',
+			'newsletter_selection' => 'Newsletter Selection',
+			'referer'              => 'Referrer Path',
+			'registration_page'    => 'Registration Page',
+			'current_page_url'     => 'Registration Page',
+			'registration_method'  => 'Registration Method',
+		];
 	}
 
 	/**
-	 * Get the metadata for the given user, customer or order.
+	 * Per-field configuration for the fields handled by this class.
 	 *
-	 * Delegates to the legacy WooCommerce and normalization logic to build
-	 * the full set of legacy metadata fields.
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'account'              => [
+				'name'        => 'Account',
+				'description' => __( 'WordPress user account ID of the reader.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'registration_date'    => [
+				'name'        => 'Registration Date',
+				'description' => __( 'Date the reader created their account.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'connected_account'    => [
+				'name'        => 'Connected Account',
+				'description' => __( 'SSO service used to register, if applicable (e.g. google, apple).', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'signup_page_utm'      => [
+				'name'           => 'Signup UTM: ',
+				'description'    => __( 'UTM parameters present on the signup page, synced as one field per parameter.', 'newspack-plugin' ),
+				'status'         => 'legacy',
+				'dynamic_suffix' => true,
+			],
+			'newsletter_selection' => [
+				'name'        => 'Newsletter Selection',
+				'description' => __( 'Comma-separated list of the newsletter lists the reader is subscribed to.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'referer'              => [
+				'name'        => 'Referrer Path',
+				'description' => __( 'Referring page URL captured when the reader submitted a signup or donation form.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'registration_page'    => [
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page where the reader registered.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'current_page_url'     => [
+				'name'        => 'Registration Page',
+				'description' => __( 'URL of the page the reader was on when they registered; an alternate source for the same value as Registration Page.', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+			'registration_method'  => [
+				'name'        => 'Registration Method',
+				'description' => __( 'How the reader registered (e.g. registration wall, newsletter, checkout, popup, manual, or an SSO provider).', 'newspack-plugin' ),
+				'status'      => 'legacy',
+			],
+		];
+	}
+
+	/**
+	 * Get the metadata for the given user, customer or order, as raw keys.
+	 *
+	 * Filtering and prefixing happen afterwards, per integration, in
+	 * prepare_contact().
 	 *
 	 * @return array
 	 */
@@ -77,14 +142,18 @@ class Legacy_Basic extends Contact_Metadata {
 			return [];
 		}
 
-		// Added before normalization so the field follows the outgoing-field
-		// selection and prefix rules like every other legacy field.
+		// Registration data and the UTM families are legacy-only raw keys, so
+		// they are filled in here rather than on every sync: this class only
+		// runs when a legacy field is enabled somewhere.
+		$contact['metadata'] = Metadata::add_registration_data_raw( $contact['metadata'] ?? [] );
+		$contact['metadata'] = Metadata::add_utm_data_raw( $contact['metadata'] );
+
+		// A raw key like the rest, so each integration's prepare_contact()
+		// applies its own selection and prefix to it.
 		$newsletter_selection = $this->get_newsletter_selection();
 		if ( null !== $newsletter_selection ) {
 			$contact['metadata']['newsletter_selection'] = $newsletter_selection;
 		}
-
-		$contact = Legacy_Metadata::normalize_contact_data( $contact );
 
 		return $contact['metadata'] ?? [];
 	}
@@ -116,9 +185,11 @@ class Legacy_Basic extends Contact_Metadata {
 			return null;
 		}
 
-		// The same selection normalize_contact_data() filters by, checked first
-		// so a disabled field does not cost a lists lookup per contact.
-		if ( ! in_array( 'newsletter_selection', Metadata::get_raw_keys(), true ) ) {
+		// Checked first so a field no integration sends costs neither a lists
+		// lookup per contact nor an omission log entry. This class runs for
+		// any of its enabled fields, so the per-field check belongs here;
+		// prepare_contact() would drop the value per integration either way.
+		if ( ! Metadata::is_field_push_enabled( 'newsletter_selection' ) ) {
 			return null;
 		}
 

@@ -40,6 +40,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	 * Cleanup state set up by individual tests so failures don't leak across cases.
 	 */
 	public function tear_down() {
+		\Newspack\Reader_Activation\Sync\Metadata::flush_fields_cache();
 		\Newspack_Newsletters_Contacts::reset_calls();
 		\Newspack_Newsletters::$is_service_provider_configured = true;
 		remove_all_filters( 'newspack_ras_metadata_keys' );
@@ -918,5 +919,26 @@ class Test_ESP extends \WP_UnitTestCase {
 		$this->assertTrue( $this->make_restricted_esp()->is_set_up() );
 
 		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+	}
+
+	/**
+	 * The `newspack_ras_metadata_prefix` filter is applied once across the ESP
+	 * accessor and Metadata::get_prefix(). A compositional callback must give
+	 * the push path (the ESP accessor) and the audit and get_key() paths
+	 * (Metadata::get_prefix()) the same prefix.
+	 */
+	public function test_prefix_filter_applies_once_across_accessors() {
+		add_filter(
+			'newspack_ras_metadata_prefix',
+			function ( $prefix ) {
+				return 'CUSTOM_' . $prefix;
+			}
+		);
+
+		$esp = \Newspack\Reader_Activation\Integrations::get_integration( 'esp' );
+		$this->assertInstanceOf( ESP::class, $esp, 'Precondition: the ESP integration is registered, so Metadata::get_prefix() reads through it.' );
+		$this->assertSame( 'CUSTOM_NP_', $esp->get_metadata_prefix() );
+		$this->assertSame( 'CUSTOM_NP_', \Newspack\Reader_Activation\Sync\Metadata::get_prefix() );
+		$this->assertSame( 'CUSTOM_NP_Account', \Newspack\Reader_Activation\Sync\Metadata::get_key( 'account' ) );
 	}
 }
