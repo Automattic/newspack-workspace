@@ -234,7 +234,21 @@ class Metadata {
 		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			return 'legacy' === NEWSPACK_SYNC_METADATA_VERSION ? 'v1' : 'v2';
 		}
-		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
+		/**
+		 * Forces the 'v2' schema origin, overriding both the stored
+		 * SCHEMA_ORIGIN_OPTION stamp and the one-time derivation from era
+		 * evidence. Note the constant name does not match the schema era it
+		 * selects. NEWSPACK_SYNC_METADATA_VERSION, checked just above, takes
+		 * precedence over this one.
+		 *
+		 * @constant NEWSPACK_SYNC_METADATA_VERSION_1
+		 * @type     bool
+		 * @default  Origin read from the stored stamp, else derived once
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_SYNC_METADATA_VERSION_1', true );
+		 */
+		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) {
 			return 'v2';
 		}
 		$stored = \get_option( self::SCHEMA_ORIGIN_OPTION, false );

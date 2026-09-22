@@ -87,9 +87,20 @@ class Wizards {
 		if ( Memberships::is_active() || Subscriber_Commerce::is_admin_available() ) {
 			self::$wizards['audience-subscriptions'] = new Audience_Subscriptions();
 		}
-		// Plans (Subscription Products) page, gated behind NEWSPACK_PLANS_UI and available
-		// where Woo Subscriptions is active.
-		if ( defined( 'NEWSPACK_PLANS_UI' ) && NEWSPACK_PLANS_UI && ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
+		/**
+		 * Enables the Plans (Subscription Products) page under Audience. The
+		 * page additionally requires WooCommerce Subscriptions to be active,
+		 * so defining this alone does not surface it on a site without Woo
+		 * Subscriptions.
+		 *
+		 * @constant NEWSPACK_PLANS_UI
+		 * @type     bool
+		 * @default  Page not registered
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_PLANS_UI', true );
+		 */
+		if ( defined( 'NEWSPACK_PLANS_UI' ) && NEWSPACK_PLANS_UI && ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) ) {
 			self::$wizards['audience-subscription-products'] = new Audience_Subscription_Products();
 		}
 		// Pricing Rules manager, available when the dynamic-pricing engine
