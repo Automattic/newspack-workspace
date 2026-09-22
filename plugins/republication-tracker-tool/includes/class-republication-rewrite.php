@@ -96,7 +96,7 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 		// to a capability check would widen what an unauthenticated-by-design
 		// endpoint serves, and the canonical URL this page emits would point at a
 		// permalink that 404s.
-		if ( ! is_post_publicly_viewable( $post_id ) || post_password_required( $post_id ) ) {
+		if ( ! Republication_Tracker_Tool::is_post_republishable( $post_id ) ) {
 			return $template;
 		}
 

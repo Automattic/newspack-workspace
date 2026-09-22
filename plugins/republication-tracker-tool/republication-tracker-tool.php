@@ -248,6 +248,21 @@ final class Republication_Tracker_Tool {
 	}
 
 	/**
+	 * Whether a post may be offered for republication to the current visitor.
+	 *
+	 * Every republish surface (the `/republish/` page, the widget and the block)
+	 * builds its copy from `post_content` directly and never runs `the_content`,
+	 * so WordPress's own status and password handling does not apply to them.
+	 * They must all ask this instead, so the rule stays the same across surfaces.
+	 *
+	 * @param int|\WP_Post $post Post ID or object.
+	 * @return bool
+	 */
+	public static function is_post_republishable( $post ) {
+		return is_post_publicly_viewable( $post ) && ! post_password_required( $post );
+	}
+
+	/**
 	 * Create tracking pixel HTML markup.
 	 *
 	 * @param int $post_id ID of the post to track.
