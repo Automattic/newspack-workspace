@@ -184,4 +184,41 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'John Doe', $output, 'Modal should still render the byline when the format is malformed.' );
 	}
+
+	/**
+	 * An active Custom Byline should take precedence over Co-Authors Plus
+	 * guest authors when both are present on the same post.
+	 */
+	public function test_republish_modal_prefers_custom_byline_over_cap_guest_author() {
+		global $post, $wp_query;
+
+		$GLOBALS['_test_cap_coauthors'] = 'CAP Guest Author';
+
+		$post                     = $this->test_post;
+		$wp_query->is_single      = true;
+		$wp_query->queried_object = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+		setup_postdata( $this->test_post );
+
+		$args = array(
+			'before_widget' => '<div class="widget">',
+			'after_widget'  => '</div>',
+			'before_title'  => '<h2>',
+			'after_title'   => '</h2>',
+		);
+
+		$instance = array(
+			'title' => 'Republish This Story',
+			'text'  => 'Republish this story',
+		);
+
+		ob_start();
+		$this->widget->widget( $args, $instance );
+		$output = ob_get_clean();
+
+		unset( $GLOBALS['_test_cap_coauthors'] );
+
+		$this->assertStringContainsString( 'Jane Smith', $output, 'Modal should attribute the post to the Custom Byline value when both CAP and Custom Byline are active.' );
+		$this->assertStringNotContainsString( 'CAP Guest Author', $output, 'Modal should not use the CAP guest author when a Custom Byline is also active.' );
+	}
 }
