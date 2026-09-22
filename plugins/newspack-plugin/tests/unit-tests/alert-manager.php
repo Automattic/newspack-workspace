@@ -1059,6 +1059,119 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A pass after broken fires the recovered transition, logs at warning
+	 * severity, and clears the record so a fresh outage can page again.
+	 */
+	public function test_health_check_passed_after_broken_reports_recovery() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$this->capture_alerts( 'integration_health_check_recovered' );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		$failure = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		$pass    = [
+			'integration_id'   => 'esp',
+			'integration_name' => 'Mock esp',
+		];
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $failure );
+		}
+		do_action( 'newspack_integration_health_check_passed', $pass );
+
+		$this->assertCount( 2, $changed );
+		$this->assertSame( 'recovered', $changed[1]['state'] );
+		$this->assertSame( 'esp', $changed[1]['integration_id'] );
+		$this->assertSame( Alert_Manager::HEALTH_BROKEN_THRESHOLD, $changed[1]['failures'] );
+		$this->assertSame( 'Mock: connection_failed', $changed[1]['error'] );
+
+		$this->assertCount( 1, $this->captured['integration_health_check_recovered']['warning'], 'Recovery reaches the log without paging.' );
+		$this->assertCount( 0, $this->captured['integration_health_check_recovered']['error'] );
+		$this->assertStringContainsString( 'passing again', $this->captured['integration_health_check_recovered']['warning'][0]['message'] );
+
+		$this->assertFalse( get_option( Alert_Manager::HEALTH_STATE_OPTION ), 'The last record clears the option.' );
+
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $failure );
+		}
+		$this->assertCount( 2, $this->captured['integration_health_check_failed']['error'], 'A new outage after recovery pages again.' );
+	}
+
+	/**
+	 * A pass while merely failing (below the threshold) resets the record
+	 * silently: nothing was reported, so there is nothing to recover from.
+	 */
+	public function test_health_check_passed_while_failing_resets_silently() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$this->capture_alerts( 'integration_health_check_recovered' );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		$failure = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		$pass    = [
+			'integration_id'   => 'esp',
+			'integration_name' => 'Mock esp',
+		];
+		do_action( 'newspack_integration_health_check_failed', $failure );
+		do_action( 'newspack_integration_health_check_failed', $failure );
+		do_action( 'newspack_integration_health_check_passed', $pass );
+
+		$this->assertCount( 0, $changed, 'No transition below the threshold.' );
+		$this->assertCount( 0, $this->captured['integration_health_check_recovered']['warning'] );
+		$this->assertFalse( get_option( Alert_Manager::HEALTH_STATE_OPTION ) );
+
+		// The count restarted: two more failures do not reach the threshold.
+		do_action( 'newspack_integration_health_check_failed', $failure );
+		do_action( 'newspack_integration_health_check_failed', $failure );
+		$this->assertCount( 0, $this->captured['integration_health_check_failed']['error'] );
+	}
+
+	/**
+	 * A pass with no record is the hourly steady state and must not write
+	 * the option.
+	 */
+	public function test_health_check_passed_when_healthy_writes_nothing() {
+		$writes  = 0;
+		$counter = function () use ( &$writes ) {
+			$writes++;
+		};
+		add_action( 'add_option_' . Alert_Manager::HEALTH_STATE_OPTION, $counter );
+		add_action( 'update_option_' . Alert_Manager::HEALTH_STATE_OPTION, $counter );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		try {
+			do_action(
+				'newspack_integration_health_check_passed',
+				[
+					'integration_id'   => 'esp',
+					'integration_name' => 'Mock esp',
+				]
+			);
+		} finally {
+			remove_action( 'add_option_' . Alert_Manager::HEALTH_STATE_OPTION, $counter );
+			remove_action( 'update_option_' . Alert_Manager::HEALTH_STATE_OPTION, $counter );
+		}
+
+		$this->assertSame( 0, $writes );
+		$this->assertCount( 0, $changed );
+	}
+
+	/**
 	 * Health-check errors classify as publisher-side when the ESP account
 	 * itself is the problem, and as other for anything else.
 	 *

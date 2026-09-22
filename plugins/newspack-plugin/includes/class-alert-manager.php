@@ -149,6 +149,7 @@ class Alert_Manager {
 		add_action( 'newspack_sync_permanent_failure', [ __CLASS__, 'handle_sync_permanent_failure' ] );
 		add_action( 'newspack_data_event_retry_exhausted', [ __CLASS__, 'handle_data_event_retry_exhausted' ] );
 		add_action( 'newspack_integration_health_check_failed', [ __CLASS__, 'handle_health_check_failed' ] );
+		add_action( 'newspack_integration_health_check_passed', [ __CLASS__, 'handle_health_check_passed' ] );
 		add_action( 'newspack_alert', [ __CLASS__, 'forward_alert_to_log' ] );
 		add_action( self::PATTERN_SCAN_HOOK, [ __CLASS__, 'scan_failure_patterns' ] );
 		add_action( 'init', [ __CLASS__, 'schedule_pattern_scan' ] );
@@ -692,6 +693,66 @@ class Alert_Manager {
 				'severity'  => 'error',
 				'message'   => $alert_message,
 				'context'   => $context,
+				'timestamp' => time(),
+			]
+		);
+	}
+
+	/**
+	 * Handle an integration health check pass.
+	 *
+	 * A pass after 'broken' is the other half of the transition: it fires
+	 * `newspack_integration_health_changed` with 'recovered' and a warning-
+	 * severity alert for the log, then drops the record. A pass while merely
+	 * 'failing' drops the record silently, since nothing was reported. A pass
+	 * with no record is the hourly steady state and costs no option write.
+	 *
+	 * @param array $payload Health check pass data (integration_id, integration_name).
+	 */
+	public static function handle_health_check_passed( $payload ) {
+		$integration_id = (string) ( $payload['integration_id'] ?? 'unknown' );
+		$state          = get_option( self::HEALTH_STATE_OPTION, [] );
+		if ( ! is_array( $state ) || ! isset( $state[ $integration_id ] ) ) {
+			return;
+		}
+
+		$record = $state[ $integration_id ];
+		unset( $state[ $integration_id ] );
+		if ( empty( $state ) ) {
+			delete_option( self::HEALTH_STATE_OPTION );
+		} else {
+			update_option( self::HEALTH_STATE_OPTION, $state, false );
+		}
+
+		if ( 'broken' !== ( $record['status'] ?? '' ) ) {
+			return;
+		}
+
+		$integration_name = (string) ( $payload['integration_name'] ?? 'unknown' );
+		$failures         = (int) ( $record['failures'] ?? 0 );
+
+		/** This action is documented in includes/class-alert-manager.php */
+		do_action(
+			'newspack_integration_health_changed',
+			[
+				'integration_id'   => $integration_id,
+				'integration_name' => $integration_name,
+				'state'            => 'recovered',
+				'error_class'      => (string) ( $record['error_class'] ?? 'other' ),
+				'error'            => (string) ( $record['last_error'] ?? '' ),
+				'first_failed_at'  => (int) ( $record['first_failed_at'] ?? 0 ),
+				'failures'         => $failures,
+			]
+		);
+
+		/** This action is documented in includes/class-alert-manager.php */
+		do_action(
+			'newspack_alert',
+			[
+				'type'      => 'integration_health_check_recovered',
+				'severity'  => 'warning',
+				'message'   => sprintf( 'Integration "%s" health check is passing again after %d failed checks.', $integration_name, $failures ),
+				'context'   => array_merge( $payload, [ 'health' => $record ] ),
 				'timestamp' => time(),
 			]
 		);
