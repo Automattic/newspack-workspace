@@ -57,9 +57,9 @@ class Alert_Manager {
 	 * publisher-side: the ESP account is disabled, unpaid, or holding a dead
 	 * key, so the fix belongs to the publisher and retrying on our side
 	 * changes nothing. Matched against the joined, lowercased WP_Error
-	 * messages, as Contact_Sync::ERROR_SIGNATURES does for push errors,
-	 * because the ESP layer discards HTTP status codes and only a
-	 * "{Title}: {detail}" string survives.
+	 * messages, as Contact_Sync::ERROR_SIGNATURES does for push errors. A
+	 * bare 401, 402 or 403 status marks it publisher-side too, whether the
+	 * provider put it in the message or in the error code.
 	 *
 	 * Anything unmatched is 'other': a provider outage, a timeout, or an
 	 * error not seen before, which stays an engineering signal.
@@ -774,6 +774,14 @@ class Alert_Manager {
 		// lookahead keeps "timed out after 401.5 seconds" from matching.
 		if ( preg_match( '/\b40[123]\b(?!\.\d)/', $haystack ) ) {
 			return 'publisher';
+		}
+		// The Newsletters ActiveCampaign provider keeps the status as the error
+		// code when the response has no error body, leaving only the reason
+		// phrase as the message: "Forbidden" with code 403.
+		foreach ( $error->get_error_codes() as $code ) {
+			if ( is_numeric( $code ) && in_array( (int) $code, [ 401, 402, 403 ], true ) ) {
+				return 'publisher';
+			}
 		}
 		return 'other';
 	}

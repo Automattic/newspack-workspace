@@ -1210,18 +1210,23 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	 *
 	 * @dataProvider data_health_error_classification
 	 *
-	 * @param string $message  The WP_Error message.
-	 * @param string $expected 'publisher' or 'other'.
+	 * @param string     $message  The WP_Error message.
+	 * @param string     $expected 'publisher' or 'other'.
+	 * @param string|int $code     The WP_Error code.
 	 */
-	public function test_classify_health_error( $message, $expected ) {
+	public function test_classify_health_error( $message, $expected, $code = 'newspack_newsletters_connection_error' ) {
 		$method = new \ReflectionMethod( Alert_Manager::class, 'classify_health_error' );
 		$method->setAccessible( true );
 
-		$this->assertSame( $expected, $method->invoke( null, new \WP_Error( 'newspack_newsletters_connection_error', $message ) ) );
+		$this->assertSame( $expected, $method->invoke( null, new \WP_Error( $code, $message ) ) );
 	}
 
 	/**
-	 * Messages seen in the alerts channel during the week of 2026-09-16.
+	 * Messages seen in the alerts channel during the week of 2026-09-16, plus
+	 * the Newsletters ActiveCampaign provider's dead-key response. The rows
+	 * with a numeric code have that provider's shape for a response without
+	 * an error body: the HTTP status as the code and its reason phrase as the
+	 * message.
 	 */
 	public function data_health_error_classification() {
 		return [
@@ -1231,11 +1236,12 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			'mailchimp unpaid'              => [ 'Payment Required', 'publisher' ],
 			'account deactivated'           => [ 'User Disabled: This account has been deactivated.', 'publisher' ],
 			'bare 401 from activecampaign'  => [ 'ActiveCampaign REST returned status 401 for /api/3/users/me.', 'publisher' ],
+			'status only in the code'       => [ 'Forbidden', 'publisher', 403 ],
 			'mailchimp timeout'             => [ 'Request timed out after 20.001555 seconds.', 'other' ],
 			'timeout with a 401-like float' => [ 'Request timed out after 401.5 seconds.', 'other' ],
-			'service unavailable'           => [ 'Service Unavailable', 'other' ],
+			'service unavailable'           => [ 'Service Unavailable', 'other', 503 ],
 			'activecampaign 503'            => [ 'ActiveCampaign REST returned status 503 for /api/3/users/me.', 'other' ],
-			'too many requests'             => [ 'Too Many Requests', 'other' ],
+			'too many requests'             => [ 'Too Many Requests', 'other', 429 ],
 		];
 	}
 
