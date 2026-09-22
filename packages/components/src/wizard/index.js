@@ -339,6 +339,21 @@ const Wizard = (
 	const headerActions =
 		actions?.length > 0 ? (
 			<>
+				{ mainActions.map( ( action, index ) => (
+					<Button
+						key={ index }
+						aria-label={ action.ariaLabel }
+						className="newspack-wizard__actions__main"
+						href={ action.href }
+						icon={ resolveIcon( action.icon ) }
+						variant={ action.type }
+						onClick={ action.action }
+						disabled={ action.disabled || false }
+						isDestructive={ action.destructive || false }
+					>
+						{ action.label }
+					</Button>
+				) ) }
 				<DropdownMenu
 					className={ moreActions?.length === 0 ? 'newspack-wizard__actions__more--primary-only' : '' }
 					icon={ moreVertical }
@@ -380,21 +395,6 @@ const Wizard = (
 							) )
 					}
 				</DropdownMenu>
-				{ mainActions.map( ( action, index ) => (
-					<Button
-						key={ index }
-						aria-label={ action.ariaLabel }
-						className="newspack-wizard__actions__main"
-						href={ action.href }
-						icon={ resolveIcon( action.icon ) }
-						variant={ action.type }
-						onClick={ action.action }
-						disabled={ action.disabled || false }
-						isDestructive={ action.destructive || false }
-					>
-						{ action.label }
-					</Button>
-				) ) }
 			</>
 		) : undefined;
 
