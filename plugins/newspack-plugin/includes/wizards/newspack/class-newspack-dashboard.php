@@ -15,6 +15,16 @@ defined( 'ABSPATH' ) || exit;
 class Newspack_Dashboard extends Wizard {
 
 	/**
+	 * Insights' own top-level page, registered by newspack-manager. Shadows
+	 * `\Newspack_Manager\Insights\Loader::PAGE_SLUG`, which this plugin cannot
+	 * reference: renaming it there silently falls this dashboard back to the
+	 * external report.
+	 *
+	 * @var string
+	 */
+	const INSIGHTS_PAGE_SLUG = 'newspack-insights';
+
+	/**
 	 * The slug of this wizard.
 	 *
 	 * @var string
@@ -62,7 +72,7 @@ class Newspack_Dashboard extends Wizard {
 			$audience_cards[] = [
 				'icon'  => 'gift',
 				'title' => __( 'Donations', 'newspack-plugin' ),
-				'desc'  => __( 'Bring in revenue through voluntary gifts.', 'newspack-plugin' ),
+				'desc'  => __( 'Bring in revenue through voluntary gifts from readers.', 'newspack-plugin' ),
 				'href'  => admin_url( 'admin.php?page=newspack-audience-donations' ),
 			];
 		}
@@ -104,7 +114,7 @@ class Newspack_Dashboard extends Wizard {
 						'href'  => admin_url( 'edit.php?post_type=newspack_nl_ads_cpt' ),
 					],
 					[
-						'icon'  => 'tool',
+						'icon'  => 'cog',
 						'title' => __( 'Settings', 'newspack-plugin' ),
 						'desc'  => __( 'Configure tracking and other newsletter settings.', 'newspack-plugin' ),
 						'href'  => admin_url( 'edit.php?post_type=newspack_nl_cpt&page=newspack-newsletters' ),
@@ -169,7 +179,7 @@ class Newspack_Dashboard extends Wizard {
 						'href'  => admin_url( 'edit.php?post_type=newspack_lst_place' ),
 					],
 					[
-						'icon'  => 'tool',
+						'icon'  => 'cog',
 						'title' => __( 'Settings', 'newspack-plugin' ),
 						'desc'  => __( 'Configure the way that Listings work on your site.', 'newspack-plugin' ),
 						'href'  => admin_url( 'admin.php?page=newspack-listings-settings-admin' ),
@@ -205,7 +215,7 @@ class Newspack_Dashboard extends Wizard {
 
 		// Reusable card.
 		$settings_card = [
-			'icon'  => 'tool',
+			'icon'  => 'cog',
 			'title' => __( 'Settings', 'newspack-plugin' ),
 			'desc'  => __( 'Configure how Newspack Network functions.', 'newspack-plugin' ),
 			'href'  => admin_url( 'admin.php?page=newspack-network' ),
@@ -308,27 +318,66 @@ class Newspack_Dashboard extends Wizard {
 			'quickActions' => [],
 		];
 
-		$local_data['quickActions'][] = [
-			'href'  => admin_url( 'post-new.php' ),
-			'title' => __( 'Start a new post', 'newspack-plugin' ),
-			'icon'  => 'post',
-		];
-
-		if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) {
+		if ( $this->can_open_editor_for( 'post' ) ) {
 			$local_data['quickActions'][] = [
-				'href'  => admin_url( 'post-new.php?post_type=newspack_nl_cpt' ),
-				'title' => __( 'Draft a newsletter', 'newspack-plugin' ),
-				'icon'  => 'envelope',
+				'href'  => admin_url( 'post-new.php' ),
+				'title' => __( 'Start a New Post', 'newspack-plugin' ),
+				'icon'  => 'post',
 			];
 		}
 
-		$local_data['quickActions'][] = [
-			'href'  => 'https://lookerstudio.google.com/u/0/reporting/b7026fea-8c2c-4c4b-be95-f582ed94f097/page/p_3eqlhk5odd',
-			'title' => __( 'Open data dashboard', 'newspack-plugin' ),
-			'icon'  => 'chartBar',
-		];
+		if ( $this->can_open_editor_for( 'newspack_nl_cpt' ) ) {
+			$local_data['quickActions'][] = [
+				'href'  => admin_url( 'post-new.php?post_type=newspack_nl_cpt' ),
+				'title' => __( 'Draft a Newsletter', 'newspack-plugin' ),
+				'icon'  => 'envelope',
+			];
+		} elseif ( $this->can_open_editor_for( 'page' ) ) {
+			$local_data['quickActions'][] = [
+				'href'  => admin_url( 'post-new.php?post_type=page' ),
+				'title' => __( 'Create a Page', 'newspack-plugin' ),
+				'icon'  => 'page',
+			];
+		}
+
+		// Insights registers its own top-level page, so its absence here also covers
+		// the feature flag and the setup-complete gate.
+		$insights_url = menu_page_url( self::INSIGHTS_PAGE_SLUG, false );
+		if ( $insights_url ) {
+			$local_data['quickActions'][] = [
+				// `menu_page_url()` escapes whether or not it echoes, and every sibling
+				// href here is raw, so undo it rather than ship one entity-encoded URL.
+				'href'  => wp_specialchars_decode( $insights_url ),
+				'title' => __( 'Explore Insights', 'newspack-plugin' ),
+				'icon'  => 'chartReport',
+			];
+		} else {
+			$local_data['quickActions'][] = [
+				'href'  => 'https://lookerstudio.google.com/u/0/reporting/b7026fea-8c2c-4c4b-be95-f582ed94f097/page/p_3eqlhk5odd',
+				'title' => __( 'Open Data Dashboard', 'newspack-plugin' ),
+				'icon'  => 'chartBar',
+			];
+		}
 
 		return $local_data;
+	}
+
+	/**
+	 * Whether a post type's editor is worth offering: registered with a UI, and
+	 * openable by this user. The capabilities are the pair `post-new.php` checks,
+	 * so a card that passes here cannot land on that screen's permission notice.
+	 *
+	 * @param string $post_type Post type name.
+	 *
+	 * @return bool
+	 */
+	private function can_open_editor_for( $post_type ) {
+		$post_type_object = get_post_type_object( $post_type );
+
+		return $post_type_object
+			&& $post_type_object->show_ui
+			&& current_user_can( $post_type_object->cap->edit_posts )
+			&& current_user_can( $post_type_object->cap->create_posts );
 	}
 
 	/**

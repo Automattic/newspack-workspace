@@ -131,7 +131,7 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 	};
 
 	const renderAuthor = ( { item } ) => {
-		const author = item?._embedded?.author?.[ 0 ];
+		const author = item?.newspack_newsletters_author;
 		if ( ! author ) {
 			return null;
 		}
@@ -149,7 +149,8 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 		id: 'author',
 		label: __( 'Author', 'newspack-newsletters' ),
 		enableSorting: false,
-		getValue: ( { item } ) => ( item?.is_prebuilt ? PREBUILT_AUTHOR_VALUE : String( item?._embedded?.author?.[ 0 ]?.id ?? item?.author ?? '' ) ),
+		getValue: ( { item } ) =>
+			item?.is_prebuilt ? PREBUILT_AUTHOR_VALUE : String( item?.newspack_newsletters_author?.id ?? item?.author ?? '' ),
 		render: renderAuthor,
 	};
 
@@ -238,3 +239,5 @@ function PreviewCard( { item } ) {
 		</LazyPreview>
 	);
 }
+
+export const FIELD_IDS = getFields().map( field => field.id );

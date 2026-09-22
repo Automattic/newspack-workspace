@@ -134,6 +134,37 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A brand-new reader must not receive WordPress core's "set your password" email.
+	 *
+	 * Reproduces NPPD-2261: on sites without WooCommerce, register_reader() falls back
+	 * to wp_insert_user(), and that fallback also sent wp_new_user_notification(). A
+	 * WooCommerce site never sends an account-created email (Newspack removes
+	 * WooCommerce's trigger), so both paths must agree: only Newspack's own
+	 * verification, magic link, or OTP emails reach a reader.
+	 *
+	 * The plugin's test environment has no WooCommerce, so this exercises the fallback.
+	 */
+	public function test_register_new_reader_sends_no_wordpress_registration_email() {
+		$this->assertFalse( function_exists( 'wc_create_new_customer' ), 'Test precondition: the non-WooCommerce registration path must be the one under test.' );
+
+		$sent_emails   = 0;
+		$email_counter = function ( $args ) use ( &$sent_emails ) {
+			$sent_emails++;
+			return $args;
+		};
+		add_filter( 'wp_mail', $email_counter );
+
+		$user_id = Reader_Activation::register_reader( 'brand-new@test.com', 'Brand New Reader', true );
+
+		remove_filter( 'wp_mail', $email_counter );
+
+		$this->assertIsInt( $user_id );
+		$this->assertSame( 0, $sent_emails, 'Registering a new reader must not send the WordPress core registration email.' );
+
+		wp_delete_user( $user_id ); // Clean up.
+	}
+
+	/**
 	 * Test that verifying a reader register the proper meta.
 	 */
 	public function test_verify_reader_email() {

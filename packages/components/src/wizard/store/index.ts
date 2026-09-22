@@ -38,6 +38,8 @@ export interface WizardHeaderAction {
 	type: 'primary' | 'secondary' | 'more';
 	/** The action's label. */
 	label: React.ReactNode;
+	/** Accessible label, when the visible label needs more context. */
+	ariaLabel?: string;
 	/** URL the action links to. */
 	href?: string;
 	/** The action's icon: an element, or the name of a registered icon. */

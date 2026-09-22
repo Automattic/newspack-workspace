@@ -70,3 +70,5 @@ export function getFields( { onEdit } = {} ) {
 		},
 	];
 }
+
+export const FIELD_IDS = getFields().map( field => field.id );

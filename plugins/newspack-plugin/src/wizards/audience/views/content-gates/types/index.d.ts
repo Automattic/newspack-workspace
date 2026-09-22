@@ -6,6 +6,7 @@ declare module '@wordpress/block-editor';
 type HeaderAction = {
 	type: 'primary' | 'secondary' | 'more';
 	label: string;
+	ariaLabel?: string;
 	icon?: import('@wordpress/icons').Icon | string;
 	disabled?: boolean;
 	destructive?: boolean;

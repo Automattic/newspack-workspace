@@ -292,6 +292,14 @@ class Newspack_Blocks_API {
 				],
 			];
 
+			// The meta bag is returned verbatim, and the Homepage Posts editor component
+			// assigns the subtitle with RawHTML. A value stored before the theme gained a
+			// sanitize_callback is still raw, so it is filtered here rather than at that
+			// sink -- this endpoint is the only thing between the two.
+			if ( isset( $data['meta']['newspack_post_subtitle'] ) ) {
+				$data['meta']['newspack_post_subtitle'] = Newspack_Blocks::sanitize_post_subtitle( $data['meta']['newspack_post_subtitle'] );
+			}
+
 			$sponsors = Newspack_Blocks::get_all_sponsors( $post->ID );
 			$author_info = Newspack_Blocks::prepare_authors();
 			$add_ons  = [
