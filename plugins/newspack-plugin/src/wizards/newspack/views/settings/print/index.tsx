@@ -153,7 +153,13 @@ function Print() {
 
 	if ( ! isEnabled ) {
 		return (
-			<WizardsTab ref={ bodyRef } tabIndex={ -1 } isFetching={ isFetching }>
+			<WizardsTab
+				ref={ bodyRef }
+				tabIndex={ -1 }
+				role="group"
+				aria-label={ __( 'Adobe InDesign export', 'newspack-plugin' ) }
+				isFetching={ isFetching }
+			>
 				{ navBlockDialog }
 				{ errorNotice }
 				<EmptyState.Root>
@@ -179,7 +185,13 @@ function Print() {
 	}
 
 	return (
-		<WizardsTab ref={ bodyRef } tabIndex={ -1 } isFetching={ isFetching }>
+		<WizardsTab
+			ref={ bodyRef }
+			tabIndex={ -1 }
+			role="group"
+			aria-label={ __( 'Adobe InDesign export settings', 'newspack-plugin' ) }
+			isFetching={ isFetching }
+		>
 			{ navBlockDialog }
 			{ disableDialog }
 			{ errorNotice }

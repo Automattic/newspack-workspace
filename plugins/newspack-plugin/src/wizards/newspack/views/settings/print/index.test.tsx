@@ -173,6 +173,17 @@ describe( 'when InDesign export is on', () => {
 		expect( headerAction( 'Save' ).disabled ).toBe( false );
 	} );
 
+	it( 'surfaces an API error, announced politely rather than assertively', async () => {
+		mockState.errorMessage = 'Request failed.';
+		await renderPrint();
+
+		// The message lands twice: once in the notice, once in the live region it was spoken into.
+		const matches = screen.getAllByText( 'Request failed.' );
+		expect( matches.some( ( el: HTMLElement ) => el.classList.contains( 'components-notice__content' ) ) ).toBe( true );
+		expect( matches.some( ( el: HTMLElement ) => el.id === 'a11y-speak-polite' ) ).toBe( true );
+		expect( matches.some( ( el: HTMLElement ) => el.id === 'a11y-speak-assertive' ) ).toBe( false );
+	} );
+
 	it( 'confirms before disabling, and writes only once confirmed', async () => {
 		await renderPrint();
 
@@ -199,6 +210,19 @@ describe( 'when InDesign export is on', () => {
 		expect( screen.getByText( /unsaved changes will be lost/ ) ).toBeInTheDocument();
 	} );
 
+	it( 'names the body that focus lands on', async () => {
+		await renderPrint();
+
+		expect( screen.getByRole( 'group', { name: 'Adobe InDesign export settings' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'leaves focus alone when the tab is merely arrived at', async () => {
+		await renderPrint();
+
+		const platform = screen.getByLabelText( 'Platform' );
+		expect( platform.ownerDocument.activeElement ).toBe( platform.ownerDocument.body );
+	} );
+
 	it( 'moves focus to the body it reveals, rather than dropping it on the document', async () => {
 		await renderPrint();
 
@@ -210,7 +234,6 @@ describe( 'when InDesign export is on', () => {
 		const emptyState = screen.getByText( 'Export articles to Adobe InDesign' );
 		const { activeElement } = emptyState.ownerDocument;
 		expect( activeElement ).toHaveClass( 'newspack-wizard__sections' );
-		expect( activeElement ).not.toBe( emptyState.ownerDocument.body );
 	} );
 
 	it( 'keeps the settings when the disable is cancelled', async () => {

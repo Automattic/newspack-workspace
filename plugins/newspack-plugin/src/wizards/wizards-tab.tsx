@@ -17,13 +17,11 @@ import { WIZARD_STORE_NAMESPACE } from '../../packages/components/src/wizard/sto
  */
 const WizardsTab = forwardRef<
 	HTMLDivElement,
-	{
+	Omit< React.ComponentPropsWithoutRef< 'div' >, 'title' > & {
 		title?: string;
 		children: React.ReactNode;
 		isFetching?: boolean;
-		className?: string;
 		description?: React.ReactNode;
-		tabIndex?: number;
 	}
 >( ( { title, children, isFetching, description, className = '', ...props }, ref ) => {
 	const isWizardLoading = useSelect( ( select: ( namespace: string ) => WizardSelector ) => select( WIZARD_STORE_NAMESPACE ).isLoading(), [] );
