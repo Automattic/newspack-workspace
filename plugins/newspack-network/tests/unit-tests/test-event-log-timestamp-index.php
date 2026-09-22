@@ -80,17 +80,16 @@ class TestEventLogTimestampIndex extends \WP_UnitTestCase {
 	 */
 	private function create_version_2_table() {
 		global $wpdb;
-		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
-			"CREATE TABLE {$this->table_name()} (
-				id int(11) NOT NULL AUTO_INCREMENT,
-				action_name varchar(100) NOT NULL,
-				node_id int(11) NOT NULL,
-				email varchar(100) NULL,
-				data longtext NOT NULL,
-				timestamp int(11) NOT NULL,
-				PRIMARY KEY  (id)
-			) {$wpdb->get_charset_collate()}" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		);
+		$sql = "CREATE TABLE {$this->table_name()} (
+			id int(11) NOT NULL AUTO_INCREMENT,
+			action_name varchar(100) NOT NULL,
+			node_id int(11) NOT NULL,
+			email varchar(100) NULL,
+			data longtext NOT NULL,
+			timestamp int(11) NOT NULL,
+			PRIMARY KEY  (id)
+		) {$wpdb->get_charset_collate()}";
+		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared
 		update_option( self::VERSION_OPTION, 2 );
 	}
 
@@ -141,7 +140,7 @@ class TestEventLogTimestampIndex extends \WP_UnitTestCase {
 		$duplicate_check = $wpdb->last_query;
 		$this->assertStringContainsString( 'AND timestamp >=', $duplicate_check, 'The captured query is the duplicate check.' );
 
-		$plan = $wpdb->get_row( "EXPLAIN $duplicate_check" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$plan = $wpdb->get_row( "EXPLAIN $duplicate_check" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$this->assertNotSame( 'ALL', $plan->type, 'The duplicate check must not read the whole table.' );
 		$this->assertSame( 'timestamp', $plan->key, 'The duplicate check looks rows up through the timestamp index.' );
 	}
@@ -165,6 +164,7 @@ class TestEventLogTimestampIndex extends \WP_UnitTestCase {
 	 */
 	public function test_scheduled_upgrade_builds_the_index_and_records_the_version() {
 		$this->create_version_2_table();
+		Event_Log_Database::init();
 
 		do_action( self::UPGRADE_HOOK );
 
