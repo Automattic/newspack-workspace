@@ -323,6 +323,69 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Both feed strings land inside CDATA, so a literal "]]>" in an authored
+	 * excerpt would end the section early and break the whole feed document.
+	 */
+	public function test_cdata_terminator_in_authored_excerpt_is_escaped() {
+		$this->set_feed_mode( 'truncate' );
+		// Save as an editor with unfiltered_html, as a newsroom would: KSES would
+		// otherwise encode the ">" on save and the raw sequence never reaches the feed.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		wp_update_post(
+			[
+				'ID'           => $this->post_id,
+				'post_excerpt' => 'AUTHORED_SUMMARY with a CDATA end ]]> inside.',
+			]
+		);
+		wp_set_current_user( 0 );
+		$this->assertStringContainsString( ']]>', get_post( $this->post_id )->post_excerpt, 'The raw sequence should be stored.' );
+
+		update_option( 'rss_use_excerpt', 1 );
+		$feed_excerpt = $this->render_in_feed_loop(
+			function () {
+				return apply_filters( 'the_excerpt_rss', get_the_excerpt() );
+			}
+		);
+		update_option( 'rss_use_excerpt', 0 );
+		$feed_content = $this->render_in_feed_loop(
+			function () {
+				return get_the_content_feed( 'rss2' );
+			}
+		);
+
+		foreach ( [ $feed_excerpt, $feed_content ] as $feed_string ) {
+			$this->assertStringContainsString( 'AUTHORED_SUMMARY', $feed_string, 'The authored excerpt should still be syndicated.' );
+			$this->assertStringNotContainsString( ']]>', $feed_string, 'A raw CDATA terminator must not reach the feed.' );
+		}
+	}
+
+	/**
+	 * A password-protected post keeps core's withheld output in the feed, as the
+	 * REST path does: feeds are read anonymously, so the password is never held.
+	 */
+	public function test_password_protected_post_keeps_core_withheld_excerpt() {
+		$this->set_feed_mode( 'truncate' );
+		update_option( 'rss_use_excerpt', 1 );
+		wp_update_post(
+			[
+				'ID'            => $this->post_id,
+				'post_excerpt'  => 'AUTHORED_SUMMARY written by the editor.',
+				'post_password' => 'example-password',
+			]
+		);
+
+		$feed_excerpt = $this->render_in_feed_loop(
+			function () {
+				return apply_filters( 'the_excerpt_rss', get_the_excerpt() );
+			}
+		);
+
+		$this->assertNotSame( '', $feed_excerpt, 'The loop should have captured the post.' );
+		$this->assertStringNotContainsString( 'AUTHORED_SUMMARY', $feed_excerpt, 'A password-protected excerpt must not be syndicated.' );
+		$this->assertStringNotContainsString( 'FREE_ONE', $feed_excerpt, 'A password-protected body must not be syndicated as a teaser.' );
+	}
+
+	/**
 	 * When the setting is off, the feed is left untouched: the filters become a
 	 * no-op and the full content flows through.
 	 */

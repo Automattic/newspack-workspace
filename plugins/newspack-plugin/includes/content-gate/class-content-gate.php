@@ -649,7 +649,7 @@ class Content_Gate {
 			// excerpt.rendered is a summary surface, like the feed <description>:
 			// prefer the author's excerpt over the teaser. content.rendered above
 			// stays the teaser — it is the body-substitute the front end renders.
-			$data['excerpt']['rendered'] = self::get_withheld_summary( $post );
+			$data['excerpt']['rendered'] = self::get_withheld_summary( $post, $restriction['teaser'] );
 		}
 		if ( isset( $data['comment_status'] ) ) {
 			$data['comment_status'] = 'closed';
@@ -1994,10 +1994,12 @@ class Content_Gate {
 	 * question ("how much of the body may an anonymous reader see") and keeps its
 	 * configured paragraph reveal, so the two are not merged.
 	 *
-	 * @param \WP_Post $post Restricted post.
+	 * @param \WP_Post    $post     Restricted post.
+	 * @param string|null $fallback Teaser the caller already built, if any. Passing
+	 *                              it avoids rendering the post body a second time.
 	 * @return string Authored excerpt, or the gate teaser as a fallback.
 	 */
-	public static function get_withheld_summary( $post ) {
+	public static function get_withheld_summary( $post, $fallback = null ) {
 		/**
 		 * Filters whether a restricted post's authored excerpt is preferred over
 		 * the constructed teaser on syndication surfaces (feeds, REST excerpt).
@@ -2015,6 +2017,9 @@ class Content_Gate {
 			return $post->post_excerpt;
 		}
 
+		if ( null !== $fallback ) {
+			return $fallback;
+		}
 		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id( $post->ID ) );
 	}
 
