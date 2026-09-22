@@ -221,4 +221,42 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Jane Smith', $output, 'Modal should attribute the post to the Custom Byline value when both CAP and Custom Byline are active.' );
 		$this->assertStringNotContainsString( 'CAP Guest Author', $output, 'Modal should not use the CAP guest author when a Custom Byline is also active.' );
 	}
+
+	/**
+	 * When the Plain Text tab is enabled, it should also attribute the post
+	 * to the active Custom Byline value, not the WP post author.
+	 */
+	public function test_republish_modal_plain_text_tab_uses_custom_byline() {
+		global $post, $wp_query;
+
+		update_option( 'republication_tracker_tool_enable_plain_text', 'on' );
+
+		$post                     = $this->test_post;
+		$wp_query->is_single      = true;
+		$wp_query->queried_object = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+		setup_postdata( $this->test_post );
+
+		$args = array(
+			'before_widget' => '<div class="widget">',
+			'after_widget'  => '</div>',
+			'before_title'  => '<h2>',
+			'after_title'   => '</h2>',
+		);
+
+		$instance = array(
+			'title' => 'Republish This Story',
+			'text'  => 'Republish this story',
+		);
+
+		ob_start();
+		$this->widget->widget( $args, $instance );
+		$output = ob_get_clean();
+
+		delete_option( 'republication_tracker_tool_enable_plain_text' );
+
+		$this->assertStringContainsString( 'id="republication-tracker-tool-plain-text-content"', $output, 'The Plain Text tab should be rendered when enabled.' );
+		$this->assertStringContainsString( 'By Jane Smith, Test Blog', $output, 'The Plain Text tab should attribute the post to the Custom Byline value.' );
+		$this->assertStringNotContainsString( 'By John Doe', $output, 'The Plain Text tab should not fall back to the WP post author when a Custom Byline is active.' );
+	}
 }
