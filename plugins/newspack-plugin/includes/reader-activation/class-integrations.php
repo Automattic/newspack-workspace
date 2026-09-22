@@ -934,7 +934,29 @@ class Integrations {
 						'error'            => $result,
 					]
 				);
+				continue;
 			}
+
+			/**
+			 * Fires when an integration health check passes.
+			 *
+			 * Recovery is only observable through this signal: without it, an
+			 * integration that stopped failing would stay recorded as broken.
+			 *
+			 * @param array $payload {
+			 *     Health check pass data.
+			 *
+			 *     @type string $integration_id   The integration ID.
+			 *     @type string $integration_name The integration display name.
+			 * }
+			 */
+			do_action(
+				'newspack_integration_health_check_passed',
+				[
+					'integration_id'   => $integration->get_id(),
+					'integration_name' => $integration->get_name(),
+				]
+			);
 		}
 	}
 }

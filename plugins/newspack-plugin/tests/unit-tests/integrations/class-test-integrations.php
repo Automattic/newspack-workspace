@@ -1007,6 +1007,38 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test run_health_checks fires the passed action for a healthy
+	 * integration, so the Alert Manager can observe recovery.
+	 */
+	public function test_run_health_checks_fires_passed_when_healthy() {
+		$integration = new Sample_Integration( 'healthy', 'Healthy' );
+		Integrations::register( $integration );
+		Integrations::enable( 'healthy' );
+
+		$passed          = null;
+		$failed          = false;
+		$passed_listener = function ( $data ) use ( &$passed ) {
+			$passed = $data;
+		};
+		$failed_listener = function () use ( &$failed ) {
+			$failed = true;
+		};
+		add_action( 'newspack_integration_health_check_passed', $passed_listener );
+		add_action( 'newspack_integration_health_check_failed', $failed_listener );
+
+		try {
+			Integrations::run_health_checks();
+			$this->assertFalse( $failed, 'A healthy integration must not fire the failed action.' );
+			$this->assertNotNull( $passed, 'A healthy integration must fire the passed action.' );
+			$this->assertSame( 'healthy', $passed['integration_id'] );
+			$this->assertSame( 'Healthy', $passed['integration_name'] );
+		} finally {
+			remove_action( 'newspack_integration_health_check_passed', $passed_listener );
+			remove_action( 'newspack_integration_health_check_failed', $failed_listener );
+		}
+	}
+
+	/**
 	 * Test Contact_Pull::pull_sync defaults to set-up integrations only.
 	 *
 	 * The synchronous loopback path (run from Contact_Cron when the user's
