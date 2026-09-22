@@ -64,7 +64,7 @@ const click = async name => {
 };
 
 describe( 'sending invitations', () => {
-	it( 'reports an invitation the server stored but could not email', async () => {
+	it( 'reports an invitation the server stored but could not email, and refreshes for it', async () => {
 		const onDone = jest.fn();
 		const invite = jest.fn().mockResolvedValue( { email: 'nobody@example.com', email_sent: false } );
 		await act( async () => {
@@ -75,9 +75,11 @@ describe( 'sending invitations', () => {
 		await click( 'Send invites' );
 
 		// The row exists and holds a seat, so silence here would let the admin fill
-		// the group with invitations nobody received.
+		// the group with invitations nobody received. The error says the seat is held
+		// until they cancel it, which needs the invitation in the table behind the
+		// modal — hence a refresh with no snackbar, rather than no refresh at all.
 		expect( screen.getByRole( 'alert' ).textContent ).toMatch( /could not be sent/ );
-		expect( onDone ).not.toHaveBeenCalled();
+		expect( onDone ).toHaveBeenCalledWith( '', { keepOpen: true } );
 	} );
 
 	it( 'counts an invitation the server both stored and emailed', async () => {

@@ -49,6 +49,10 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 		const readerIds = [];
 		const toInvite = [];
 		let added = 0;
+		// Two counters for invitations, because one can exist without having been
+		// delivered: `invitesCreated` decides whether the screen has to refresh,
+		// `invited` is the only number worth reporting to the admin.
+		let invitesCreated = 0;
 		let invited = 0;
 
 		try {
@@ -90,6 +94,7 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 					// invitations nobody received and then meet the seat limit with
 					// nothing pointing at mail delivery.
 					const invite = await actions.invite( email );
+					invitesCreated++;
 					if ( invite?.email_sent ) {
 						invited++;
 					} else {
@@ -136,7 +141,12 @@ export default function AddMembersFlow( { group, actions, onClose, onDone } ) {
 		if ( failures.length ) {
 			setError( failures.join( ' ' ) );
 			setBusy( false );
-			if ( parts.length ) {
+			// An invitation that was created changed the group whether or not it was
+			// delivered, and the error tells the admin it holds a seat until they
+			// cancel it — which needs it in the Invitations table. So refresh on that
+			// too, not only on what there is to report, and keep the modal open over
+			// the error.
+			if ( parts.length || invitesCreated ) {
 				onDone( parts.join( ' ' ), { keepOpen: true } );
 			}
 			return;

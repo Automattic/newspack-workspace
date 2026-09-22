@@ -738,13 +738,26 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An ownerless group has nobody to hold an invite link, so the routes that mint
-	 * and delete one refuse rather than writing under user 0 — a link attached to no
-	 * account, which no invitee could ever redeem.
+	 * An ownerless group has nobody to hold an invite link, so minting refuses rather
+	 * than writing under user 0 — a link attached to no account, which no invitee
+	 * could ever redeem. Revoking is the asymmetry: the owner's account going away
+	 * does not stop the link working, and the screen still offers Disable on it, so a
+	 * store admin must be able to turn it off without a manager to act as.
 	 */
-	public function test_invite_link_routes_refuse_an_ownerless_group() {
+	public function test_ownerless_group_refuses_minting_but_lets_a_store_admin_revoke() {
 		$admin_id = $this->create_store_admin();
 		$group    = $this->create_group( 0 );
+		// Stand in for a link the owner minted before their account was deleted.
+		$key = 'ownerless-live-key';
+		$group->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				'key'        => $key,
+				'created_at' => time(),
+				'created_by' => 0,
+			]
+		);
+		$group->save();
 		wp_set_current_user( $admin_id );
 
 		$this->assertSame(
@@ -753,14 +766,25 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 			'An ownerless group resolves to no link manager, even for a store admin.'
 		);
 
-		foreach ( [ 'POST', 'DELETE' ] as $method ) {
-			$request = new WP_REST_Request( $method, '/newspack-group-subscription/v1/invite-link' );
-			$request->set_param( 'subscription_id', $group->get_id() );
-			$this->assertSame(
-				403,
-				rest_get_server()->dispatch( $request )->get_status(),
-				sprintf( '%s /invite-link must refuse an ownerless group rather than minting under user 0.', $method )
-			);
-		}
+		$mint = new WP_REST_Request( 'POST', '/newspack-group-subscription/v1/invite-link' );
+		$mint->set_param( 'subscription_id', $group->get_id() );
+		$this->assertSame(
+			403,
+			rest_get_server()->dispatch( $mint )->get_status(),
+			'POST /invite-link must refuse an ownerless group rather than minting under user 0.'
+		);
+
+		$revoke = new WP_REST_Request( 'DELETE', '/newspack-group-subscription/v1/invite-link' );
+		$revoke->set_param( 'subscription_id', $group->get_id() );
+		$this->assertSame(
+			200,
+			rest_get_server()->dispatch( $revoke )->get_status(),
+			'DELETE /invite-link must let a store admin revoke an ownerless group\'s link.'
+		);
+
+		$this->assertWPError(
+			Group_Subscription_Invite::validate_link_invite( $group, $key ),
+			'The revoked link must stop working, not merely disappear from the screen.'
+		);
 	}
 }

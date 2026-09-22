@@ -1,13 +1,10 @@
 /**
  * Flow — disable the group's shareable invite link.
  *
- * Links are stored per manager, and the caller is placed in one slot by
- * Group_Subscription_API::resolve_link_manager_id — their own if they manage this
- * group, otherwise the owner's. That is the slot the screen reads, so this removes
- * the link the screen shows and every copy of it stops working. A link in any other
- * manager's slot survives, and the screen does not surface those either (see
- * NPPD-2120). The confirm copy is scoped to the link this acts on rather than
- * promising the group has none left.
+ * The link belongs to the subscription rather than to whoever minted it, so a group
+ * has one link and this removes it. Every copy already shared stops working, no
+ * matter which manager sent it out, and a group still on the older per-manager shape
+ * has those keys cleared in the same write.
  */
 
 /**
@@ -35,7 +32,7 @@ export default function DisableLinkFlow( { actions, onClose, onDone } ) {
 			onConfirm={ disable }
 		>
 			{ __(
-				'This disables the invite link shown above, including any copy already sent out. Nobody can join through it. A link created by another manager is not affected. You can create a new link at any time.',
+				'This disables the invite link shown above, including any copy already sent out. Nobody can join through it, whoever shared it. You can create a new link at any time.',
 				'newspack-plugin'
 			) }
 		</ConfirmFlow>

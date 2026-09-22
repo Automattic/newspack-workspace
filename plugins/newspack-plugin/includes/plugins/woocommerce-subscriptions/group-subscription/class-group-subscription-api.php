@@ -326,7 +326,9 @@ class Group_Subscription_API {
 	 * The link itself belongs to the subscription, but Group_Subscription_Invite
 	 * still requires a manager to act as, and refuses anyone else. An admin is not
 	 * a manager of the groups they administer, so minting under their own ID would
-	 * be refused; they act as the owner instead.
+	 * be refused; they act as the owner instead. When this returns 0 minting is
+	 * refused outright, while a store admin may still revoke — see
+	 * api_delete_invite_link().
 	 *
 	 * For an owner or a manager this returns their own ID, so the reader-facing
 	 * path is unchanged.
@@ -364,8 +366,9 @@ class Group_Subscription_API {
 	 *
 	 * There is nobody to act as when resolve_link_manager_id() returns 0 — an
 	 * ownerless subscription, or a caller who is neither a manager nor a store
-	 * admin. Minting or deleting a link under user 0 would attach it to no
-	 * account, so the call is refused rather than passed through.
+	 * admin. Minting a link under user 0 would attach it to no account, so the
+	 * call is refused rather than passed through. Revoking is not refused for a
+	 * store admin: see api_delete_invite_link().
 	 *
 	 * @return \WP_Error
 	 */
@@ -793,17 +796,22 @@ class Group_Subscription_API {
 	/**
 	 * Delete an invite-link for a group subscription.
 	 *
+	 * Unlike minting, this does not require a manager to act as. A store admin may revoke the
+	 * link of a group whose owner account is gone: the screen shows that link as active with
+	 * Disable enabled, and refusing here would leave it working with no way to turn it off.
+	 *
 	 * @param \WP_REST_Request $request The request object.
 	 *
 	 * @return \WP_REST_Response The response object.
 	 */
 	public static function api_delete_invite_link( $request ) {
 		$subscription_id = $request->get_param( 'subscription_id' );
-		$manager_id = self::resolve_link_manager_id( $subscription_id );
-		if ( ! $manager_id ) {
+		$manager_id      = self::resolve_link_manager_id( $subscription_id );
+		$is_store_admin  = current_user_can( 'manage_woocommerce' );
+		if ( ! $manager_id && ! $is_store_admin ) {
 			return \rest_ensure_response( self::no_link_manager_error() );
 		}
-		$result = Group_Subscription_Invite::delete_link_invite( $subscription_id, $manager_id );
+		$result = Group_Subscription_Invite::delete_link_invite( $subscription_id, $manager_id, $is_store_admin );
 		return \rest_ensure_response( $result );
 	}
 }

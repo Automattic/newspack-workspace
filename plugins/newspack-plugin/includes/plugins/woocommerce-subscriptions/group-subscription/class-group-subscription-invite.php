@@ -442,12 +442,22 @@ class Group_Subscription_Invite {
 	/**
 	 * Delete a subscription's invite link.
 	 *
-	 * @param \WC_Subscription|int $subscription The subscription object or ID.
-	 * @param int                  $user_id      The manager user ID performing the deletion.
+	 * `$is_store_admin` is the one way in without a manager to act as. The link belongs to the
+	 * subscription rather than to whoever minted it, so revoking it needs authority over the
+	 * group, and a store admin has that even when the owner's account is gone and the group has
+	 * no manager left. Without it such a link stays live with no way to turn it off short of
+	 * cancelling the subscription or editing meta by hand. Minting is not symmetrical and stays
+	 * manager-only: a new entry records a `created_by`, and there is nobody to record.
+	 *
+	 * The capability itself is the caller's to check — this only skips the manager requirement.
+	 *
+	 * @param \WC_Subscription|int $subscription   The subscription object or ID.
+	 * @param int                  $user_id        The manager user ID performing the deletion, or 0 for a store admin with no manager to act as.
+	 * @param bool                 $is_store_admin Whether the caller has already been authorized as a store admin.
 	 *
 	 * @return true|\WP_Error True if deleted, or WP_Error.
 	 */
-	public static function delete_link_invite( $subscription, $user_id ) {
+	public static function delete_link_invite( $subscription, $user_id, bool $is_store_admin = false ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error(
@@ -457,7 +467,7 @@ class Group_Subscription_Invite {
 			);
 		}
 		$user_id = (int) $user_id;
-		if ( ! Group_Subscription::user_is_manager( $user_id, $subscription ) ) {
+		if ( ! $is_store_admin && ! Group_Subscription::user_is_manager( $user_id, $subscription ) ) {
 			return new \WP_Error(
 				'newspack_group_subscription_link_invite_not_manager',
 				__( 'You do not have permission to manage this group subscription.', 'newspack-plugin' ),
@@ -643,11 +653,13 @@ class Group_Subscription_Invite {
 	 * `added_by` is the person who issued the invitation, which is who a recipient
 	 * should see and reply to -- an admin inviting from the Subscribers screen is
 	 * named, not hidden behind the group's owner. That is deliberately different
-	 * from how an invite LINK is attributed: a link is minted in a manager's slot
-	 * and re-validated against that manager when it is clicked, so an admin acts on
-	 * the owner's link instead (Group_Subscription_API::resolve_link_manager_id()).
-	 * An email invitation is a message from a person; a link is an artifact of the
-	 * group. The two answer to different owners on purpose.
+	 * from how an invite LINK is attributed: a link belongs to the subscription and
+	 * validate_link_invite() ignores who minted it, but generate_link_invite() still
+	 * mints under a manager identity, and an admin is not a manager of the groups
+	 * they administer -- so an admin mints the owner's link instead
+	 * (Group_Subscription_API::resolve_link_manager_id()). An email invitation is a
+	 * message from a person; a link is an artifact of the group. The two answer to
+	 * different owners on purpose.
 	 *
 	 * Both fallbacks exist because the placeholders are publisher-editable: a
 	 * template reading "*SENDER_NAME* invited you" produces a headless sentence if

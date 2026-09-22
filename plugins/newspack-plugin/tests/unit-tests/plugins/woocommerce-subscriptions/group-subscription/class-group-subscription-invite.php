@@ -568,11 +568,12 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 	 * reading "*SENDER_NAME* invited you" renders a headless sentence on an empty
 	 * value: resolution falls through the owner to the site instead.
 	 *
-	 * This is deliberately unlike how an invite LINK is attributed. A link lives in
-	 * a manager\'s slot and is re-validated against that manager when it is clicked,
-	 * so an admin acts on the owner\'s link rather than minting a dead one of their
-	 * own. See Group_Subscription_API::resolve_link_manager_id(). An email is a
-	 * message from a person; a link is an artifact of the group.
+	 * This is deliberately unlike how an invite LINK is attributed. A link belongs to
+	 * the subscription and is validated without regard to who minted it, but minting
+	 * one still takes a manager identity, so an admin mints the owner\'s link rather
+	 * than a dead one of their own. See
+	 * Group_Subscription_API::resolve_link_manager_id(). An email is a message from a
+	 * person; a link is an artifact of the group.
 	 */
 	public function test_invite_email_always_names_a_sender() {
 		$owner_id  = $this->create_user( true );

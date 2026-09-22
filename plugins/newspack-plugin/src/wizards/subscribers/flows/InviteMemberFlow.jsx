@@ -41,6 +41,10 @@ export default function InviteMemberFlow( { group, actions, onClose, onDone } ) 
 		setBusy( true );
 		setError( '' );
 		const failures = [];
+		// Two counters, because an invitation can exist without having been
+		// delivered: `created` decides whether the screen has to refresh, `sent` is
+		// the only number worth reporting to the admin.
+		let created = 0;
 		let sent = 0;
 		for ( const email of accepted ) {
 			try {
@@ -55,6 +59,7 @@ export default function InviteMemberFlow( { group, actions, onClose, onDone } ) 
 				// invitations nobody received and then meet the seat limit with
 				// nothing pointing at mail delivery.
 				const invite = await actions.invite( email );
+				created++;
 				if ( invite?.email_sent ) {
 					sent++;
 				} else {
@@ -76,11 +81,16 @@ export default function InviteMemberFlow( { group, actions, onClose, onDone } ) 
 		if ( failures.length ) {
 			setError( failures.join( ' ' ) );
 			setBusy( false );
-			// A partial send still changed the group, so let the screen refresh
-			// without closing the modal over the error.
-			if ( sent > 0 ) {
+			// Any invitation that was created changed the group, delivered or not, so
+			// refresh the screen without closing the modal over the error — the error
+			// tells the admin an undelivered invitation holds a seat until they cancel
+			// it, and the Invitations table has to show it for them to do that. With
+			// nothing delivered there is no good news to report, so the refresh runs
+			// without a snackbar.
+			if ( created > 0 ) {
 				/* translators: %d: number of invitations sent. */
-				onDone( sprintf( _n( '%d invitation sent.', '%d invitations sent.', sent, 'newspack-plugin' ), sent ), { keepOpen: true } );
+				const message = sent > 0 ? sprintf( _n( '%d invitation sent.', '%d invitations sent.', sent, 'newspack-plugin' ), sent ) : '';
+				onDone( message, { keepOpen: true } );
 			}
 			return;
 		}
