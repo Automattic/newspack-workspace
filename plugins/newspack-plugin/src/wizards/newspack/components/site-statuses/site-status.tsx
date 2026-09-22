@@ -124,7 +124,7 @@ const SiteStatus = ( { label = '', isPreflightValid = true, dependencies: depend
 					{ /* eslint-disable-next-line jsx-a11y/anchor-has-content -- content is supplied via the Card children through @wordpress/ui's render prop. */ }
 					<StatusPill className={ classes } render={ <a href={ configLink } /> }>
 						{ label }: <span>{ parsedStatusLabels[ requestStatus ] }</span>
-						<span className="hidden">{ __( 'Configure?' ) }</span>
+						<span className="hidden">{ __( 'Configure?', 'newspack-plugin' ) }</span>
 					</StatusPill>
 				</Tooltip>
 			) }
@@ -133,7 +133,7 @@ const SiteStatus = ( { label = '', isPreflightValid = true, dependencies: depend
 				<Tooltip
 					text={ sprintf(
 						// translators: %s is a comma separated list of needed dependencies.
-						__( '%s must be installed & activated!' ),
+						__( '%s must be installed & activated!', 'newspack-plugin' ),
 						failedDependencies.map( dep => dependencies[ dep ].label ).join( ', ' )
 					) }
 				>
