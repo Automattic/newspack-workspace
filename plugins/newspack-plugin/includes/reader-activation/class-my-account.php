@@ -83,7 +83,7 @@ class My_Account {
 	 * @return bool
 	 */
 	protected static function reader_must_verify(): bool {
-		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			return false;
 		}
 		if ( ! \class_exists( 'Newspack\WooCommerce_My_Account' ) ) {

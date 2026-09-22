@@ -48,6 +48,18 @@ class Audience_Integrations extends Wizard {
 	 * @return bool
 	 */
 	public static function is_enabled() {
+		/**
+		 * Enables the Audience / Integrations settings screen and its REST
+		 * endpoints. The wizard does not register itself at all while this is
+		 * unset, so the screen is absent rather than empty.
+		 *
+		 * @constant NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED
+		 * @type     bool
+		 * @default  Screen and endpoints not registered
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED', true );
+		 */
 		return defined( 'NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED' ) && NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED;
 	}
 

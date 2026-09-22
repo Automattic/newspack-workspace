@@ -878,6 +878,20 @@ class WooCommerce_Subscriptions {
 	 * @return bool
 	 */
 	private static function should_count_signup_fee_on_switch( $subscription, $existing_item ) {
+		/**
+		 * Counts a paid one-time sign-up fee toward the proration baseline when
+		 * a subscription is switched, for publishers selling stepped pricing as
+		 * a sign-up fee plus a free trial. The
+		 * newspack_wc_subs_switch_include_signup_fee filter is applied after
+		 * this and can scope the decision per subscription or product.
+		 *
+		 * @constant NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE
+		 * @type     bool
+		 * @default  Sign-up fee excluded from the proration baseline
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE', true );
+		 */
 		$enabled = defined( 'NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE' ) && NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE;
 
 		/**

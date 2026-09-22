@@ -399,7 +399,7 @@ final class Newspack_Popups_AB_Tests {
 	 * @return string Client ID, or empty string.
 	 */
 	public static function get_client_id() {
-		$cookie_name = defined( 'NEWSPACK_CLIENT_ID_COOKIE_NAME' ) ? NEWSPACK_CLIENT_ID_COOKIE_NAME : 'newspack-cid';
+		$cookie_name = defined( 'NEWSPACK_CLIENT_ID_COOKIE_NAME' ) ? NEWSPACK_CLIENT_ID_COOKIE_NAME : 'newspack-cid'; // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal constant owned by newspack-plugin, not publisher-configurable.
 		return isset( $_COOKIE[ $cookie_name ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ $cookie_name ] ) ) : ''; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 
