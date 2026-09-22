@@ -15,6 +15,16 @@ defined( 'ABSPATH' ) || exit;
 class Newspack_Dashboard extends Wizard {
 
 	/**
+	 * Insights' own top-level page, registered by newspack-manager. Shadows
+	 * `\Newspack_Manager\Insights\Loader::PAGE_SLUG`, which this plugin cannot
+	 * reference: renaming it there silently falls this dashboard back to the
+	 * external report.
+	 *
+	 * @var string
+	 */
+	const INSIGHTS_PAGE_SLUG = 'newspack-insights';
+
+	/**
 	 * The slug of this wizard.
 	 *
 	 * @var string
@@ -308,40 +318,38 @@ class Newspack_Dashboard extends Wizard {
 			'quickActions' => [],
 		];
 
-		$local_data['quickActions'][] = [
-			'href'  => admin_url( 'post-new.php' ),
-			'title' => __( 'Start a New Post', 'newspack-plugin' ),
-			'icon'  => 'post',
-		];
+		if ( $this->can_open_editor_for( 'post' ) ) {
+			$local_data['quickActions'][] = [
+				'href'  => admin_url( 'post-new.php' ),
+				'title' => __( 'Start a New Post', 'newspack-plugin' ),
+				'icon'  => 'post',
+			];
+		}
 
-		// The card opens the newsletter editor, so it is gated on the post type being
-		// registered and this user being able to create one. A loaded plugin guarantees
-		// neither. Without Newsletters, creating a page takes the slot: it is the one
-		// alternative that assumes nothing about the site's plugins, theme or settings.
-		$newsletter_cpt = get_post_type_object( 'newspack_nl_cpt' );
-		if ( $newsletter_cpt && current_user_can( $newsletter_cpt->cap->create_posts ) ) {
+		// A loaded plugin guarantees neither a registered post type nor a user who
+		// can open its editor.
+		if ( $this->can_open_editor_for( 'newspack_nl_cpt' ) ) {
 			$local_data['quickActions'][] = [
 				'href'  => admin_url( 'post-new.php?post_type=newspack_nl_cpt' ),
 				'title' => __( 'Draft a Newsletter', 'newspack-plugin' ),
 				'icon'  => 'envelope',
 			];
-		} else {
-			$page_cpt = get_post_type_object( 'page' );
-			if ( $page_cpt && current_user_can( $page_cpt->cap->create_posts ) ) {
-				$local_data['quickActions'][] = [
-					'href'  => admin_url( 'post-new.php?post_type=page' ),
-					'title' => __( 'Create a Page', 'newspack-plugin' ),
-					'icon'  => 'page',
-				];
-			}
+		} elseif ( $this->can_open_editor_for( 'page' ) ) {
+			$local_data['quickActions'][] = [
+				'href'  => admin_url( 'post-new.php?post_type=page' ),
+				'title' => __( 'Create a Page', 'newspack-plugin' ),
+				'icon'  => 'page',
+			];
 		}
 
 		// Insights registers its own top-level page, so its absence here also covers
-		// the feature flag, the setup-complete gate and the capability check.
-		$insights_url = menu_page_url( 'newspack-insights', false );
+		// the feature flag and the setup-complete gate.
+		$insights_url = menu_page_url( self::INSIGHTS_PAGE_SLUG, false );
 		if ( $insights_url ) {
 			$local_data['quickActions'][] = [
-				'href'  => $insights_url,
+				// `menu_page_url()` escapes whether or not it echoes, and every sibling
+				// href here is raw, so undo it rather than ship one entity-encoded URL.
+				'href'  => wp_specialchars_decode( $insights_url ),
 				'title' => __( 'Explore Insights', 'newspack-plugin' ),
 				'icon'  => 'chartReport',
 			];
@@ -354,6 +362,24 @@ class Newspack_Dashboard extends Wizard {
 		}
 
 		return $local_data;
+	}
+
+	/**
+	 * Whether a post type's editor is worth offering: registered with a UI, and
+	 * openable by this user. The capabilities are the pair `post-new.php` checks,
+	 * so a card that passes here cannot land on that screen's permission notice.
+	 *
+	 * @param string $post_type Post type name.
+	 *
+	 * @return bool
+	 */
+	private function can_open_editor_for( $post_type ) {
+		$post_type_object = get_post_type_object( $post_type );
+
+		return $post_type_object
+			&& $post_type_object->show_ui
+			&& current_user_can( $post_type_object->cap->edit_posts )
+			&& current_user_can( $post_type_object->cap->create_posts );
 	}
 
 	/**

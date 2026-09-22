@@ -24,6 +24,20 @@ class Dashboard_Quick_Actions_Test extends WP_UnitTestCase {
 	private $dashboard;
 
 	/**
+	 * Admin menu globals as they were before the test registered anything.
+	 *
+	 * @var array
+	 */
+	private $menu_globals = [];
+
+	/**
+	 * Whether the newsletter post type was already registered by something else.
+	 *
+	 * @var bool
+	 */
+	private $had_newsletter_post_type = false;
+
+	/**
 	 * Set up an administrator and a dashboard instance.
 	 */
 	public function set_up() {
@@ -31,37 +45,55 @@ class Dashboard_Quick_Actions_Test extends WP_UnitTestCase {
 
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 
+		foreach ( [ 'menu', 'submenu', 'admin_page_hooks', '_registered_pages', '_parent_pages', '_wp_real_parent_file', '_wp_submenu_nopriv' ] as $key ) {
+			$this->menu_globals[ $key ] = isset( $GLOBALS[ $key ] ) ? $GLOBALS[ $key ] : null;
+		}
+		$this->had_newsletter_post_type = post_type_exists( 'newspack_nl_cpt' );
+
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 
 		$this->dashboard = new Newspack_Dashboard();
 	}
 
 	/**
-	 * Leave the newsletter post type and the Insights menu entry as they were
-	 * found, so neither leaks into another test.
+	 * Put the newsletter post type and the admin menu back as they were found, so
+	 * neither leaks into another test.
 	 */
 	public function tear_down() {
-		if ( post_type_exists( 'newspack_nl_cpt' ) ) {
+		if ( ! $this->had_newsletter_post_type && post_type_exists( 'newspack_nl_cpt' ) ) {
 			unregister_post_type( 'newspack_nl_cpt' );
 		}
-		unset( $GLOBALS['_parent_pages']['newspack-insights'] );
+		foreach ( $this->menu_globals as $key => $value ) {
+			if ( null === $value ) {
+				unset( $GLOBALS[ $key ] );
+			} else {
+				$GLOBALS[ $key ] = $value;
+			}
+		}
 
 		parent::tear_down();
 	}
 
 	/**
-	 * Stand in for newspack-newsletters, which the test suite does not load.
+	 * Stand in for newspack-newsletters, which the test suite does not load. The
+	 * real plugin registers the type with an editor UI, which is what the quick
+	 * action needs.
+	 *
+	 * @param array $args Overrides for the registration arguments.
 	 */
-	private function register_newsletter_post_type() {
-		register_post_type( 'newspack_nl_cpt', [ 'public' => false ] );
+	private function register_newsletter_post_type( $args = [] ) {
+		register_post_type( 'newspack_nl_cpt', array_merge( [ 'show_ui' => true ], $args ) );
 	}
 
 	/**
-	 * Stand in for newspack-manager registering the Insights page. `menu_page_url()`
-	 * reads this global, so populating it is what "the page exists" means here.
+	 * Stand in for newspack-manager registering the Insights page, through the same
+	 * call it makes, so the test exercises `menu_page_url()` rather than the global
+	 * it happens to read. The slug is written out rather than read from
+	 * `Newspack_Dashboard::INSIGHTS_PAGE_SLUG` on purpose: it is newspack-manager's
+	 * to choose, so a rename on this side has to fail here.
 	 */
 	private function register_insights_page() {
-		$GLOBALS['_parent_pages']['newspack-insights'] = false;
+		add_menu_page( 'Insights', 'Insights', 'manage_options', 'newspack-insights', '__return_null' );
 	}
 
 	/**
@@ -72,16 +104,6 @@ class Dashboard_Quick_Actions_Test extends WP_UnitTestCase {
 	private function get_quick_actions() {
 		$data = $this->dashboard->get_local_data();
 		return array_column( $data['quickActions'], null, 'title' );
-	}
-
-	/**
-	 * Composing a post is always offered.
-	 */
-	public function test_new_post_action_is_always_present() {
-		$actions = $this->get_quick_actions();
-
-		$this->assertArrayHasKey( 'Start a New Post', $actions );
-		$this->assertSame( 'post', $actions['Start a New Post']['icon'] );
 	}
 
 	/**
@@ -109,16 +131,32 @@ class Dashboard_Quick_Actions_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A contributor cannot create newsletters, so the fallback applies to them even
-	 * when the post type is registered.
+	 * A post type registered without an editor UI cannot be opened by `post-new.php`,
+	 * so offering it would hand the user an "Invalid post type." screen.
 	 */
-	public function test_newsletter_action_is_withheld_without_the_capability() {
+	public function test_newsletter_action_is_withheld_without_an_editor_ui() {
+		$this->register_newsletter_post_type( [ 'show_ui' => false ] );
+
+		$actions = $this->get_quick_actions();
+
+		$this->assertArrayNotHasKey( 'Draft a Newsletter', $actions );
+		$this->assertArrayHasKey( 'Create a Page', $actions );
+	}
+
+	/**
+	 * A subscriber can open no editor at all, so every card that leads to one is
+	 * withheld and only the external report is left.
+	 */
+	public function test_editor_actions_are_withheld_without_the_capability() {
 		$this->register_newsletter_post_type();
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
 
 		$actions = $this->get_quick_actions();
 
+		$this->assertArrayNotHasKey( 'Start a New Post', $actions );
 		$this->assertArrayNotHasKey( 'Draft a Newsletter', $actions );
+		$this->assertArrayNotHasKey( 'Create a Page', $actions );
+		$this->assertCount( 1, $actions );
 	}
 
 	/**
@@ -132,7 +170,24 @@ class Dashboard_Quick_Actions_Test extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'Explore Insights', $actions );
 		$this->assertArrayNotHasKey( 'Open Data Dashboard', $actions );
 		$this->assertSame( 'chartReport', $actions['Explore Insights']['icon'] );
-		$this->assertStringContainsString( 'page=newspack-insights', $actions['Explore Insights']['href'] );
+		$this->assertSame( admin_url( 'admin.php?page=newspack-insights' ), $actions['Explore Insights']['href'] );
+	}
+
+	/**
+	 * Under a parent carrying a query string, `menu_page_url()` returns an
+	 * entity-encoded ampersand, and `wp_localize_script()` leaves values nested
+	 * inside `quickActions` alone. The href still has to reach the browser usable.
+	 */
+	public function test_insights_href_survives_a_parent_with_a_query_string() {
+		add_submenu_page( 'edit.php?post_type=page', 'Insights', 'Insights', 'manage_options', 'newspack-insights', '__return_null' );
+
+		$actions = $this->get_quick_actions();
+
+		$this->assertArrayHasKey( 'Explore Insights', $actions );
+		$this->assertSame(
+			admin_url( 'edit.php?post_type=page&page=newspack-insights' ),
+			$actions['Explore Insights']['href']
+		);
 	}
 
 	/**
