@@ -15,7 +15,6 @@
 	position: relative;
 	transition: background-color var(--wpds-motion-duration-xl);
 
-	// Status text i.e. Connected/Disconnected
 	span {
 		color: var(--np-sa-txt-color);
 	}
@@ -57,8 +56,7 @@
 		--np-sa-txt-color: var(--wpds-color-foreground-content-warning-weak);
 
 		cursor: pointer;
-		font: inherit;
-		font-weight: wp-vars.$font-weight-medium;
+		font-family: inherit;
 		text-align: left;
 	}
 }
@@ -69,7 +67,6 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 
-	// Dot
 	&::before {
 		background-color: var(--np-sa-txt-color);
 		border-radius: wp-vars.$radius-round;
