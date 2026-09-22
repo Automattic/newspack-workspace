@@ -942,6 +942,20 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Helper: move an integration's whole failure streak into the past, as if
+	 * the checks had stopped running after its last failure.
+	 *
+	 * @param string $integration_id Integration ID.
+	 * @param int    $seconds        How far back to move the streak.
+	 */
+	private function age_health_record( $integration_id, $seconds ) {
+		$state = get_option( Alert_Manager::HEALTH_STATE_OPTION );
+		$state[ $integration_id ]['first_failed_at'] -= $seconds;
+		$state[ $integration_id ]['last_failed_at']   = time() - $seconds;
+		update_option( Alert_Manager::HEALTH_STATE_OPTION, $state, false );
+	}
+
+	/**
 	 * Failures below the threshold reach the log at warning severity and
 	 * never page.
 	 */
@@ -1092,6 +1106,49 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A failing streak interrupted by a gap longer than
+	 * HEALTH_STREAK_MAX_GAP starts over, so the next failure neither
+	 * completes the old streak nor reports a start date from before the gap.
+	 */
+	public function test_health_check_failed_restarts_a_streak_after_a_gap() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+
+		$payload = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD - 1; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+		$this->age_health_record( 'esp', Alert_Manager::HEALTH_STREAK_MAX_GAP + 1 );
+
+		do_action( 'newspack_integration_health_check_failed', $payload );
+
+		$this->assertCount( 0, $this->captured['integration_health_check_failed']['error'], 'A failure after a gap must not complete the old streak.' );
+		$record = get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp'];
+		$this->assertSame( 1, $record['failures'] );
+		$this->assertGreaterThan( time() - HOUR_IN_SECONDS, $record['first_failed_at'] );
+	}
+
+	/**
+	 * A broken record survives a gap: the outage is already reported and no
+	 * passing check observed it end, so failures after the gap page nothing.
+	 */
+	public function test_health_check_failed_keeps_a_broken_outage_across_a_gap() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+
+		$payload = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+		$this->age_health_record( 'esp', Alert_Manager::HEALTH_STREAK_MAX_GAP + 1 );
+
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+
+		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'], 'One outage pages once, gap or not.' );
+		$this->assertSame( 'broken', get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp']['status'] );
+	}
+
+	/**
 	 * A pass after broken fires the recovered transition, logs at warning
 	 * severity, and clears the record so a fresh outage can page again.
 	 */
@@ -1201,6 +1258,63 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		}
 
 		$this->assertSame( 0, $writes );
+		$this->assertCount( 0, $changed );
+	}
+
+	/**
+	 * A run that no longer checks a broken integration (disabled, or no
+	 * longer set up) drops its record and closes the outage as disconnected,
+	 * so the integration's next outage pages again.
+	 */
+	public function test_health_check_run_closes_a_broken_integration_it_no_longer_checks() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$this->capture_alerts( 'integration_health_check_disconnected' );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		$failure = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $failure );
+		}
+		do_action( 'newspack_integration_health_checks_completed', [] );
+
+		$this->assertFalse( get_option( Alert_Manager::HEALTH_STATE_OPTION ), 'The unchecked integration loses its record.' );
+		$this->assertCount( 2, $changed );
+		$this->assertSame( 'disconnected', $changed[1]['state'] );
+		$this->assertSame( 'esp', $changed[1]['integration_id'] );
+		$this->assertSame( 'Mock esp', $changed[1]['integration_name'] );
+		$this->assertCount( 1, $this->captured['integration_health_check_disconnected']['warning'], 'The closure reaches the log without paging.' );
+
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $failure );
+		}
+		$this->assertCount( 2, $this->captured['integration_health_check_failed']['error'], 'Its next outage pages again.' );
+	}
+
+	/**
+	 * A run keeps the records of the integrations it checked, and drops the
+	 * failing record of one it no longer checks without reporting anything,
+	 * since that streak never paged.
+	 */
+	public function test_health_check_run_keeps_only_the_records_it_checked() {
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		do_action( 'newspack_integration_health_check_failed', $this->make_health_check_payload( 'esp', [ 'connection_failed' ] ) );
+		do_action( 'newspack_integration_health_check_failed', $this->make_health_check_payload( 'crm', [ 'connection_failed' ] ) );
+		do_action( 'newspack_integration_health_checks_completed', [ 'esp' ] );
+
+		$this->assertSame( [ 'esp' ], array_keys( get_option( Alert_Manager::HEALTH_STATE_OPTION ) ) );
 		$this->assertCount( 0, $changed );
 	}
 
