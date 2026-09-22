@@ -25,11 +25,18 @@ class ActiveCampaignTestEmailsTest extends WP_UnitTestCase {
 	private $failing = [];
 
 	/**
-	 * Number of HTTP requests made during a test.
+	 * Number of ActiveCampaign API requests made during a test.
 	 *
 	 * @var int
 	 */
 	private $request_count = 0;
+
+	/**
+	 * Mocked ActiveCampaign API URL.
+	 *
+	 * @var string
+	 */
+	const API_URL = 'https://example.api-us1.com';
 
 	/**
 	 * Set up.
@@ -42,7 +49,7 @@ class ActiveCampaignTestEmailsTest extends WP_UnitTestCase {
 		add_filter( 'pre_http_request', [ $this, 'filter_api_response' ], 10, 3 );
 		Newspack_Newsletters_Active_Campaign::instance()->set_api_credentials(
 			[
-				'url' => 'https://example.api-us1.com',
+				'url' => self::API_URL,
 				'key' => 'doesnt_matter',
 			]
 		);
@@ -57,22 +64,27 @@ class ActiveCampaignTestEmailsTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Mock the v1 campaign_send endpoint.
+	 * Mock the ActiveCampaign v1 campaign_send endpoint. Other requests pass
+	 * through untouched.
 	 *
 	 * @param array|false $response    Short-circuit response.
 	 * @param array       $parsed_args HTTP request arguments.
 	 * @param string      $url         The request URL.
 	 *
-	 * @return array
+	 * @return array|false
 	 */
 	public function filter_api_response( $response, $parsed_args, $url ) {
+		if ( 0 !== strpos( $url, self::API_URL . '/' ) ) {
+			return $response;
+		}
 		++$this->request_count;
 		parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
-		$email = $query['email'] ?? '';
-		if ( 'campaign_send' === ( $query['api_action'] ?? '' ) ) {
-			$this->sent_to[] = $email;
+		if ( '/admin/api.php' !== wp_parse_url( $url, PHP_URL_PATH ) || 'campaign_send' !== ( $query['api_action'] ?? '' ) ) {
+			return $response;
 		}
-		$failed = in_array( $email, $this->failing, true );
+		$email           = $query['email'] ?? '';
+		$this->sent_to[] = $email;
+		$failed          = in_array( $email, $this->failing, true );
 		return [
 			'response' => [
 				'code'    => 200,

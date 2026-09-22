@@ -44,7 +44,7 @@ export default compose( [
 	const [ localMessage, setLocalMessage ] = useState( '' );
 	const { newsletterData } = useNewsletterData();
 	const supportsMultipleTestEmailRecipients = !! newsletterData?.supports_multiple_test_recipients;
-	const maxTestRecipients = parseInt( newsletterData?.max_test_recipients ) || 0;
+	const maxTestRecipients = parseInt( newsletterData?.max_test_recipients, 10 ) || 0;
 	const recipientCount = ( testEmail || '' ).split( ',' ).filter( email => email.trim() ).length;
 	const hasTooManyRecipients = maxTestRecipients > 0 && recipientCount > maxTestRecipients;
 
