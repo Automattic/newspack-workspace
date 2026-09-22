@@ -7,28 +7,22 @@
 
 namespace Newspack\Tests\Subscriber_Commerce;
 
-use Newspack\Product_Targeting;
 use Newspack\Subscriber_Discounts;
 use Newspack\Subscriber_Discounts_Pricing;
-use Newspack\Subscriber_Eligibility;
+use Newspack\Tests\Subscriber_Commerce\Traits\Trait_Subscriber_Discounts_Fixtures;
 
 /**
  * Pricing decisions: who gets a discount, on what, and how it is presented.
  *
- * WooCommerce is not loaded in the test suite, so products are the repo's
- * `WC_Product` mocks backed by real `product` posts, following the same pattern
- * as the shared targeting tests. Subscription ownership is simulated through
- * the access-rules filter rather than by building real subscriptions.
+ * The store and the subscription are the shared fixtures — see
+ * {@see Trait_Subscriber_Discounts_Fixtures}.
  *
  * @group subscriber-commerce
  * @group Subscriber_Discounts
  */
 class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 
-	/**
-	 * The subscription product that grants the discount.
-	 */
-	const GRANTING_SUBSCRIPTION_ID = 4242;
+	use Trait_Subscriber_Discounts_Fixtures;
 
 	/**
 	 * A discounted store product.
@@ -36,13 +30,6 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	 * @var \WC_Product
 	 */
 	private $book;
-
-	/**
-	 * Reader who holds the granting subscription.
-	 *
-	 * @var int
-	 */
-	private $subscriber_id;
 
 	/**
 	 * Reader who holds no subscription.
@@ -92,21 +79,8 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		$this->clear_rest_route();
 		remove_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10 );
 		$this->flush_caches();
-		global $products_database;
-		$products_database = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->reset_products_database();
 		parent::tear_down();
-	}
-
-	/**
-	 * Only the subscriber holds the granting subscription.
-	 *
-	 * @param bool  $has_subscription Whether the reader has one.
-	 * @param int   $user_id          Reader.
-	 * @param int[] $product_ids      Subscription products that would grant it.
-	 * @return bool
-	 */
-	public function grant_subscription_to_subscriber( $has_subscription, $user_id, $product_ids ) {
-		return (int) $user_id === $this->subscriber_id && in_array( self::GRANTING_SUBSCRIPTION_ID, array_map( 'absint', $product_ids ), true );
 	}
 
 	/**
@@ -144,40 +118,6 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		remove_all_filters( 'wp_is_rest_endpoint' );
 		unset( $GLOBALS['wp']->query_vars['rest_route'] );
 		$this->flush_caches();
-	}
-
-	/**
-	 * Reset every memoized layer between assertions.
-	 */
-	private function flush_caches() {
-		Product_Targeting::flush_cache();
-		Subscriber_Eligibility::flush_cache();
-		Subscriber_Discounts_Pricing::flush_cache();
-	}
-
-	/**
-	 * Create a product post plus its mock, registered so wc_get_product() finds it.
-	 *
-	 * @param float $price      Product price.
-	 * @param float $sale_price Sale price, when the product is on sale.
-	 * @param int   $product_id Explicit post ID, when the test needs a known one.
-	 * @return \WC_Product
-	 */
-	private function create_product( $price, $sale_price = null, $product_id = 0 ) {
-		$post_id = $product_id ? $product_id : $this->factory->post->create( [ 'post_type' => 'product' ] );
-		$data    = [
-			'id'            => $post_id,
-			'price'         => $price,
-			'regular_price' => $price,
-		];
-		if ( null !== $sale_price ) {
-			$data['price']      = $sale_price;
-			$data['sale_price'] = $sale_price;
-		}
-		$product = new \WC_Product( $data );
-		global $products_database;
-		$products_database[ $post_id ] = $product; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-		return $product;
 	}
 
 	/**
