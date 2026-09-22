@@ -6,6 +6,9 @@
  * Listens for data event handler and integration sync retry exhaustion and
  * fires a unified alert action for each.
  *
+ * Keeps one health record per integration so a broken integration pages
+ * once, on the transition, and reports its recovery.
+ *
  * Also scans the failure log for recurring patterns and fires an alert when a
  * threshold is exceeded within the configured time window.
  *
