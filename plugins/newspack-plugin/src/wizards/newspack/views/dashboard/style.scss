@@ -2,8 +2,7 @@
  * Dashboard
  */
 
-@use "~@wordpress/base-styles/colors" as wp-colors;
-@use "../../../../../packages/colors/colors.module" as colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-wizard__content {
 	margin: 0;
@@ -33,60 +32,55 @@
 }
 
 .newspack-dashboard__card {
-	align-items: center;
-	background-color: transparent;
-	border-color: wp-colors.$gray-300;
-	border-radius: 4px;
-	display: grid;
-	grid-gap: var(--newspack-wizard-section-child-space);
-	grid-template: "icon text" auto / var(--np-dash-card-icon-size) auto;
-	margin: 0;
-	overflow: hidden;
-	padding: var(--newspack-wizard-section-child-space);
-	transition: border-color 125ms ease-in-out, background-color 125ms ease-in-out;
+	--wp-ui-card-padding: var(--wpds-dimension-padding-lg);
+
+	color: inherit;
+	height: 100%;
+	text-decoration: none;
+	transition: border-color var(--wpds-motion-duration-sm) ease-in-out;
 
 	h4 {
-		font-size: 16px;
-		font-weight: 600;
-		grid-area: text;
-		line-height: 24px;
-		margin: 0 0 calc(var(--newspack-wizard-section-child-space) / 2);
-		text-shadow: 0 0 1px #fff;
-	}
-
-	p {
-		color: wp-colors.$gray-700;
-		grid-area: text;
-		line-height: 16px;
-		margin: 0;
-		opacity: 1;
-		transition: transform 0.15s ease-out, opacity 0.15s;
-	}
-
-	&:not(:has(p)) h4 {
 		margin: 0;
 	}
 
-}
-
-.newspack-dashboard__card-icon {
-	background-color: #{colors.$primary-000};
-	border-radius: 2px;
-	display: grid;
-	fill: var(--wp-admin-theme-color);
-	grid-area: icon;
-	height: var(--np-dash-card-icon-size);
-	width: var(--np-dash-card-icon-size);
-	place-items: center;
-}
-
-a {
 	&:hover,
-	&:focus {
-		.newspack-dashboard__card {
-			background-color: rgba(colors.$primary-000, 0.25);
-			border-color: transparent;
+	&:focus-visible {
+		border-color: var(--wpds-color-stroke-surface-neutral);
+
+		h4,
+		.newspack-dashboard__card-description {
 			color: var(--wp-admin-theme-color);
 		}
 	}
+
+	&:focus-visible {
+		outline: var(--wpds-border-width-focus) solid var(--wpds-color-stroke-focus);
+		outline-offset: var(--wpds-border-width-focus);
+	}
+}
+
+.newspack-dashboard__card-content {
+	display: flex;
+	flex: 1;
+}
+
+.newspack-dashboard__card-layout {
+	flex: 1;
+}
+
+.newspack-dashboard__card-description {
+	color: var(--wpds-color-foreground-content-neutral-weak);
+	margin: 0;
+	text-wrap: balance;
+}
+
+.newspack-dashboard__card-icon {
+	background-color: var(--wpds-color-background-surface-brand);
+	border-radius: wp-vars.$radius-round;
+	display: grid;
+	fill: var(--wp-admin-theme-color);
+	flex-shrink: 0;
+	height: var(--wpds-dimension-size-lg);
+	place-items: center;
+	width: var(--wpds-dimension-size-lg);
 }

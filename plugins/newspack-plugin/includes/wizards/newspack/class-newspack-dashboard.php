@@ -62,7 +62,7 @@ class Newspack_Dashboard extends Wizard {
 			$audience_cards[] = [
 				'icon'  => 'gift',
 				'title' => __( 'Donations', 'newspack-plugin' ),
-				'desc'  => __( 'Bring in revenue through voluntary gifts.', 'newspack-plugin' ),
+				'desc'  => __( 'Bring in revenue through voluntary gifts from readers.', 'newspack-plugin' ),
 				'href'  => admin_url( 'admin.php?page=newspack-audience-donations' ),
 			];
 		}
@@ -104,7 +104,7 @@ class Newspack_Dashboard extends Wizard {
 						'href'  => admin_url( 'edit.php?post_type=newspack_nl_ads_cpt' ),
 					],
 					[
-						'icon'  => 'tool',
+						'icon'  => 'cog',
 						'title' => __( 'Settings', 'newspack-plugin' ),
 						'desc'  => __( 'Configure tracking and other newsletter settings.', 'newspack-plugin' ),
 						'href'  => admin_url( 'edit.php?post_type=newspack_nl_cpt&page=newspack-newsletters' ),
@@ -169,7 +169,7 @@ class Newspack_Dashboard extends Wizard {
 						'href'  => admin_url( 'edit.php?post_type=newspack_lst_place' ),
 					],
 					[
-						'icon'  => 'tool',
+						'icon'  => 'cog',
 						'title' => __( 'Settings', 'newspack-plugin' ),
 						'desc'  => __( 'Configure the way that Listings work on your site.', 'newspack-plugin' ),
 						'href'  => admin_url( 'admin.php?page=newspack-listings-settings-admin' ),
@@ -205,7 +205,7 @@ class Newspack_Dashboard extends Wizard {
 
 		// Reusable card.
 		$settings_card = [
-			'icon'  => 'tool',
+			'icon'  => 'cog',
 			'title' => __( 'Settings', 'newspack-plugin' ),
 			'desc'  => __( 'Configure how Newspack Network functions.', 'newspack-plugin' ),
 			'href'  => admin_url( 'admin.php?page=newspack-network' ),
@@ -310,23 +310,48 @@ class Newspack_Dashboard extends Wizard {
 
 		$local_data['quickActions'][] = [
 			'href'  => admin_url( 'post-new.php' ),
-			'title' => __( 'Start a new post', 'newspack-plugin' ),
+			'title' => __( 'Start a New Post', 'newspack-plugin' ),
 			'icon'  => 'post',
 		];
 
-		if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) {
+		// The card opens the newsletter editor, so it is gated on the post type being
+		// registered and this user being able to create one. A loaded plugin guarantees
+		// neither. Without Newsletters, creating a page takes the slot: it is the one
+		// alternative that assumes nothing about the site's plugins, theme or settings.
+		$newsletter_cpt = get_post_type_object( 'newspack_nl_cpt' );
+		if ( $newsletter_cpt && current_user_can( $newsletter_cpt->cap->create_posts ) ) {
 			$local_data['quickActions'][] = [
 				'href'  => admin_url( 'post-new.php?post_type=newspack_nl_cpt' ),
-				'title' => __( 'Draft a newsletter', 'newspack-plugin' ),
+				'title' => __( 'Draft a Newsletter', 'newspack-plugin' ),
 				'icon'  => 'envelope',
 			];
+		} else {
+			$page_cpt = get_post_type_object( 'page' );
+			if ( $page_cpt && current_user_can( $page_cpt->cap->create_posts ) ) {
+				$local_data['quickActions'][] = [
+					'href'  => admin_url( 'post-new.php?post_type=page' ),
+					'title' => __( 'Create a Page', 'newspack-plugin' ),
+					'icon'  => 'page',
+				];
+			}
 		}
 
-		$local_data['quickActions'][] = [
-			'href'  => 'https://lookerstudio.google.com/u/0/reporting/b7026fea-8c2c-4c4b-be95-f582ed94f097/page/p_3eqlhk5odd',
-			'title' => __( 'Open data dashboard', 'newspack-plugin' ),
-			'icon'  => 'chartBar',
-		];
+		// Insights registers its own top-level page, so its absence here also covers
+		// the feature flag, the setup-complete gate and the capability check.
+		$insights_url = menu_page_url( 'newspack-insights', false );
+		if ( $insights_url ) {
+			$local_data['quickActions'][] = [
+				'href'  => $insights_url,
+				'title' => __( 'Explore Insights', 'newspack-plugin' ),
+				'icon'  => 'chartReport',
+			];
+		} else {
+			$local_data['quickActions'][] = [
+				'href'  => 'https://lookerstudio.google.com/u/0/reporting/b7026fea-8c2c-4c4b-be95-f582ed94f097/page/p_3eqlhk5odd',
+				'title' => __( 'Open Data Dashboard', 'newspack-plugin' ),
+				'icon'  => 'chartBar',
+			];
+		}
 
 		return $local_data;
 	}
