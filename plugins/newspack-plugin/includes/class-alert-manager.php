@@ -32,13 +32,22 @@ class Alert_Manager {
 	const FAILURE_LOG_OPTION = 'newspack_alert_failure_log';
 
 	/**
-	 * Window during which a repeating health-check failure for the same
-	 * integration + error-code signature emits at most one Slack alert.
+	 * Option holding one health record per integration ID.
 	 *
-	 * Private because no external caller needs to read it; keeping the
-	 * surface minimal lets the value evolve without breaking consumers.
+	 * An option rather than a transient: the previous dedup lived in
+	 * transients, and a site's object cache evicting one re-paged the same
+	 * failure hours later. A record exists only while an integration is
+	 * failing or broken, so a healthy integration's hourly pass costs no
+	 * write.
 	 */
-	private const HEALTH_CHECK_DEDUP_INTERVAL = DAY_IN_SECONDS;
+	const HEALTH_STATE_OPTION = 'newspack_integration_health_state';
+
+	/**
+	 * Consecutive failed hourly checks before an integration counts as
+	 * broken and pages once. Three outlasts the provider blips seen in the
+	 * alerts channel, which cleared within a single check.
+	 */
+	const HEALTH_BROKEN_THRESHOLD = 3;
 
 	/**
 	 * Window during which repeat permanent config-level sync failures for the
@@ -574,55 +583,106 @@ class Alert_Manager {
 	}
 
 	/**
-	 * Handle integration health check failure.
+	 * Handle an integration health check failure.
 	 *
-	 * Deduplicates by integration + error-code + error-message signature
-	 * for HEALTH_CHECK_DEDUP_INTERVAL so an hourly cron does not repeat
-	 * the same Slack alert all day. A new error code OR a changed message
-	 * on the same integration (e.g. "list missing" escalating to "auth
-	 * fully revoked") falls outside the key and alerts immediately.
+	 * Keeps a per-integration record and pages only on the transition to
+	 * broken, the HEALTH_BROKEN_THRESHOLD-th consecutive failure. Every
+	 * failure is still forwarded at warning severity so the log keeps the
+	 * hourly history, and failures after the transition add nothing to
+	 * Slack: the condition is already reported, and the record carries it
+	 * until handle_health_check_passed() clears it.
 	 *
-	 * Known boundaries of the dedup contract:
-	 * - Message text is part of the key, so locale shifts between cron
-	 *   passes (e.g. `switch_to_locale()` in a multilingual context) can
-	 *   produce a different key for the same underlying error and
-	 *   re-alert. Newspack ESP error messages are static per code today,
-	 *   so this is theoretical; revisit if dynamic content lands in
-	 *   error strings.
-	 * - The dedup key is stored as a transient, so on hosts backed by a
-	 *   persistent object cache (memcached) the entry can be evicted
-	 *   under LRU pressure before HEALTH_CHECK_DEDUP_INTERVAL elapses.
-	 *   The failure mode is re-alerting on the next hourly cron — the
-	 *   alternative (writing to the options table on every cron tick)
-	 *   has its own cost; transient + accepted re-alert risk is the
-	 *   intentional trade-off here.
+	 * The record is written before dispatch so a `newspack_alert` handler
+	 * that throws cannot leave the transition unrecorded and page again on
+	 * the next hourly cron.
 	 *
 	 * @param array $payload Health check failure data.
 	 */
 	public static function handle_health_check_failed( $payload ) {
-		$error          = $payload['error'] ?? null;
-		$integration_id = $payload['integration_id'] ?? 'unknown';
-		$error_codes    = is_wp_error( $error ) ? $error->get_error_codes() : [];
-		if ( empty( $error_codes ) ) {
-			$error_codes = [ 'unknown' ];
-		}
-		$error_messages = is_wp_error( $error ) ? $error->get_error_messages() : [];
+		$integration_id   = (string) ( $payload['integration_id'] ?? 'unknown' );
+		$integration_name = (string) ( $payload['integration_name'] ?? 'unknown' );
+		$error            = $payload['error'] ?? null;
+		$message          = is_wp_error( $error ) ? implode( '; ', $error->get_error_messages() ) : 'unknown error';
 
-		$dedup_key = self::get_health_check_dedup_key( $integration_id, $error_codes, $error_messages );
-		if ( get_transient( $dedup_key ) ) {
+		$state = get_option( self::HEALTH_STATE_OPTION, [] );
+		if ( ! is_array( $state ) ) {
+			$state = [];
+		}
+		$record = is_array( $state[ $integration_id ] ?? null ) ? $state[ $integration_id ] : [
+			'status'          => 'failing',
+			'failures'        => 0,
+			'first_failed_at' => time(),
+		];
+		$record['failures']   = (int) ( $record['failures'] ?? 0 ) + 1;
+		$record['last_error'] = $message;
+
+		$is_transition = 'broken' !== ( $record['status'] ?? 'failing' ) && $record['failures'] >= self::HEALTH_BROKEN_THRESHOLD;
+		if ( $is_transition ) {
+			$record['status']      = 'broken';
+			$record['error_class'] = self::classify_health_error( $error );
+		}
+
+		$state[ $integration_id ] = $record;
+		update_option( self::HEALTH_STATE_OPTION, $state, false );
+
+		$context = array_merge( $payload, [ 'health' => $record ] );
+
+		if ( ! $is_transition ) {
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_alert',
+				[
+					'type'      => 'integration_health_check_failed',
+					'severity'  => 'warning',
+					'message'   => sprintf( 'Integration "%s" health check failed: %s', $integration_name, $message ),
+					'context'   => $context,
+					'timestamp' => time(),
+				]
+			);
 			return;
 		}
 
-		// Set the dedup transient BEFORE dispatch so a `newspack_alert`
-		// handler that throws (e.g. transient Slack POST failure) cannot
-		// defeat dedup by leaving the key unset for the next hourly cron.
-		set_transient( $dedup_key, time(), self::HEALTH_CHECK_DEDUP_INTERVAL );
-
-		$message = sprintf(
-			'Integration "%s" health check failed: %s',
-			$payload['integration_name'] ?? 'unknown',
-			is_wp_error( $error ) ? implode( '; ', $error_messages ) : 'unknown error'
+		/**
+		 * Fires when an integration's health changes state: it has failed
+		 * HEALTH_BROKEN_THRESHOLD consecutive checks ('broken'), or a check
+		 * passed after that ('recovered'). One event per outage in each
+		 * direction, so a consumer can open and close a ticket without
+		 * deduplicating hourly repeats itself.
+		 *
+		 * @param array $payload {
+		 *     @type string $integration_id   The integration ID.
+		 *     @type string $integration_name The integration display name.
+		 *     @type string $state            'broken' or 'recovered'.
+		 *     @type string $error_class      'publisher' when the ESP account itself is the
+		 *                                    problem, 'other' for provider outages and unknowns.
+		 *     @type string $error            The last health-check error message.
+		 *     @type int    $first_failed_at  Unix timestamp of the first failure in this outage.
+		 *     @type int    $failures         Consecutive failed checks so far.
+		 * }
+		 */
+		do_action(
+			'newspack_integration_health_changed',
+			[
+				'integration_id'   => $integration_id,
+				'integration_name' => $integration_name,
+				'state'            => 'broken',
+				'error_class'      => $record['error_class'],
+				'error'            => $message,
+				'first_failed_at'  => (int) $record['first_failed_at'],
+				'failures'         => $record['failures'],
+			]
 		);
+
+		$alert_message = sprintf(
+			'Integration "%s" has failed %d consecutive health checks since %s. Last error: %s',
+			$integration_name,
+			$record['failures'],
+			gmdate( 'Y-m-d H:i', (int) $record['first_failed_at'] ) . ' UTC',
+			$message
+		);
+		if ( 'publisher' === $record['error_class'] ) {
+			$alert_message .= ' The ESP account itself is the problem, so the fix is on the publisher side.';
+		}
 
 		/** This action is documented in includes/class-alert-manager.php */
 		do_action(
@@ -630,29 +690,13 @@ class Alert_Manager {
 			[
 				'type'      => 'integration_health_check_failed',
 				'severity'  => 'error',
-				'message'   => $message,
-				'context'   => $payload,
+				'message'   => $alert_message,
+				'context'   => $context,
 				'timestamp' => time(),
 			]
 		);
 	}
 
-	/**
-	 * Get the deduplication transient key for a health-check failure.
-	 *
-	 * @param string   $integration_id The integration identifier.
-	 * @param string[] $error_codes    The WP_Error codes from the failure.
-	 * @param string[] $error_messages The WP_Error messages from the failure.
-	 *
-	 * @return string Transient key.
-	 */
-	private static function get_health_check_dedup_key( $integration_id, $error_codes, $error_messages = [] ) {
-		$codes = array_map( 'strval', $error_codes );
-		sort( $codes );
-		$messages = array_map( 'strval', $error_messages );
-		sort( $messages );
-		return 'newspack_alert_hc_' . md5( $integration_id . ':' . implode( ',', $codes ) . ':' . implode( '|', $messages ) );
-	}
 	/**
 	 * Classify a health-check failure as publisher-side or other.
 	 *
