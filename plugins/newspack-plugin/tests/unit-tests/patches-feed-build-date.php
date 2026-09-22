@@ -118,4 +118,17 @@ class Test_Patches_Feed_Build_Date extends \WP_UnitTestCase {
 
 		$this->assertSame( '2026-08-11 12:00:00', get_feed_build_date( 'Y-m-d H:i:s' ) );
 	}
+	/**
+	 * A zeroed modified date, which legacy imports leave behind, gives way to
+	 * the publish date. Core formats the zeroed value instead of discarding it,
+	 * because `date_create_immutable_from_format()` parses
+	 * `0000-00-00 00:00:00` into year -001 rather than failing, so the feed
+	 * advertises `Tue, 30 Nov -001` as its build date.
+	 */
+	public function test_zeroed_modified_date_gives_way_to_the_publish_date() {
+		$this->create_post( '2026-08-12 09:00:00', '0000-00-00 00:00:00' );
+		$this->query_feed();
+
+		$this->assertSame( '2026-08-12 09:00:00', get_feed_build_date( 'Y-m-d H:i:s' ) );
+	}
 }
