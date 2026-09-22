@@ -98,6 +98,24 @@ class Test_Subscriber_Discounts_Display extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The one case the ceiling does not cover, recorded so it stays a known limit
+	 * rather than a surprise. WordPress runs equal priorities in registration
+	 * order, so a site registering at PHP_INT_MAX after the plugin has — that is,
+	 * after `wp_loaded` priority 15 — runs later and hides the badge again.
+	 * Suppressing it deliberately goes through
+	 * `newspack_subscriber_discounts_badge`, which no priority can outrun.
+	 */
+	public function test_a_site_registering_at_the_same_priority_later_still_wins() {
+		Subscriber_Discounts_Display::register_display_hooks();
+		add_filter( 'woocommerce_sale_flash', '__return_false', PHP_INT_MAX );
+
+		$this->assertFalse(
+			$this->apply_sale_flash( $this->book ),
+			'A tie at PHP_INT_MAX is broken by registration order, so the later callback wins.'
+		);
+	}
+
+	/**
 	 * The badge does not turn a site's suppressed "Sale!" badge back on for
 	 * products no subscriber discount touches. Running last makes this the case
 	 * to protect: ours is now the callback that receives the site's `false` and
