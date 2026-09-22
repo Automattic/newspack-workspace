@@ -28,11 +28,6 @@ use Newspack_Network\Hub\Stores\Event_Log;
 class TestEventLogTimestampIndex extends \WP_UnitTestCase {
 
 	/**
-	 * The cron hook that runs the deferred upgrade.
-	 */
-	const UPGRADE_HOOK = 'newspack_network_event_log_upgrade_db';
-
-	/**
 	 * The option recording the table's schema version.
 	 */
 	const VERSION_OPTION = 'newspack_db_version_event_log';
@@ -61,8 +56,8 @@ class TestEventLogTimestampIndex extends \WP_UnitTestCase {
 		global $wpdb;
 		$wpdb->query( "DROP TABLE IF EXISTS {$this->table_name()}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		delete_option( self::VERSION_OPTION );
-		delete_transient( self::UPGRADE_HOOK . '_lock' );
-		wp_clear_scheduled_hook( self::UPGRADE_HOOK );
+		delete_transient( Event_Log_Database::UPGRADE_LOCK );
+		wp_clear_scheduled_hook( Event_Log_Database::UPGRADE_HOOK );
 	}
 
 	/**
@@ -125,7 +120,6 @@ class TestEventLogTimestampIndex extends \WP_UnitTestCase {
 				]
 			);
 		}
-		$wpdb->query( "ANALYZE TABLE $table" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		// The same arguments Event_Log::persist() passes to its duplicate check.
 		Event_Log::get(
@@ -155,7 +149,7 @@ class TestEventLogTimestampIndex extends \WP_UnitTestCase {
 		Event_Log_Database::get_table_name();
 
 		$this->assertFalse( $this->has_timestamp_index(), 'The web request does not build the index.' );
-		$this->assertNotFalse( wp_next_scheduled( self::UPGRADE_HOOK ), 'The web request schedules the upgrade.' );
+		$this->assertNotFalse( wp_next_scheduled( Event_Log_Database::UPGRADE_HOOK ), 'The web request schedules the upgrade.' );
 		$this->assertSame( 2, absint( get_option( self::VERSION_OPTION ) ), 'The version is not recorded before the index exists.' );
 	}
 
@@ -166,23 +160,68 @@ class TestEventLogTimestampIndex extends \WP_UnitTestCase {
 		$this->create_version_2_table();
 		Event_Log_Database::init();
 
-		do_action( self::UPGRADE_HOOK );
+		do_action( Event_Log_Database::UPGRADE_HOOK );
 
 		$this->assertTrue( $this->has_timestamp_index(), 'The scheduled upgrade builds the index.' );
 		$this->assertSame( 3, absint( get_option( self::VERSION_OPTION ) ), 'The version is recorded once the index exists.' );
-		$this->assertFalse( get_transient( self::UPGRADE_HOOK . '_lock' ), 'A finished upgrade releases its lock.' );
+		$this->assertFalse( get_transient( Event_Log_Database::UPGRADE_LOCK ), 'A finished upgrade releases its lock.' );
 	}
 
 	/**
-	 * While an upgrade holds its lock, web requests do not queue another one.
+	 * While an upgrade holds its lock, web requests do not queue another one and
+	 * a second cron run does not start a second index build.
 	 */
-	public function test_upgrade_is_not_rescheduled_while_one_is_running() {
+	public function test_upgrade_does_not_run_twice_while_locked() {
 		$this->create_version_2_table();
-		set_transient( self::UPGRADE_HOOK . '_lock', time(), HOUR_IN_SECONDS );
+		Event_Log_Database::init();
+		set_transient( Event_Log_Database::UPGRADE_LOCK, time(), HOUR_IN_SECONDS );
+
+		Event_Log_Database::get_table_name();
+		do_action( Event_Log_Database::UPGRADE_HOOK );
+
+		$this->assertFalse( wp_next_scheduled( Event_Log_Database::UPGRADE_HOOK ), 'No second upgrade is queued behind a running one.' );
+		$this->assertFalse( $this->has_timestamp_index(), 'A locked cron run does not build the index.' );
+	}
+
+	/**
+	 * An index on `timestamp` added by hand, under another name, is accepted as
+	 * is: no second index is built on the table.
+	 */
+	public function test_existing_timestamp_index_under_another_name_is_accepted() {
+		global $wpdb;
+		$this->create_version_2_table();
+		$wpdb->query( "ALTER TABLE {$this->table_name()} ADD KEY manual_ts (timestamp)" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		Event_Log_Database::get_table_name();
 
-		$this->assertFalse( wp_next_scheduled( self::UPGRADE_HOOK ), 'No second upgrade is queued behind a running one.' );
+		$indexes = $wpdb->get_col( "SHOW INDEX FROM {$this->table_name()} WHERE Column_name = 'timestamp'", 2 ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$this->assertSame( [ 'manual_ts' ], $indexes, 'No second timestamp index is built.' );
+		$this->assertSame( 3, absint( get_option( self::VERSION_OPTION ) ), 'The existing index satisfies the upgrade.' );
+		$this->assertFalse( wp_next_scheduled( Event_Log_Database::UPGRADE_HOOK ), 'No upgrade is scheduled.' );
+	}
+
+	/**
+	 * An index build that fails keeps its lock, so the retry waits for the lock
+	 * to expire, and does not record the new version.
+	 */
+	public function test_failed_upgrade_keeps_the_lock_and_the_old_version() {
+		$this->create_version_2_table();
+		Event_Log_Database::init();
+		$drop_index_from_schema = function( $create_queries ) {
+			return array_map(
+				function( $query ) {
+					return preg_replace( '/,\s*KEY timestamp \(timestamp\)/', '', $query );
+				},
+				$create_queries
+			);
+		};
+		add_filter( 'dbdelta_create_queries', $drop_index_from_schema );
+
+		do_action( Event_Log_Database::UPGRADE_HOOK );
+
+		$this->assertFalse( $this->has_timestamp_index(), 'The index build did not run.' );
+		$this->assertNotFalse( get_transient( Event_Log_Database::UPGRADE_LOCK ), 'A failed upgrade keeps its lock as backoff.' );
+		$this->assertSame( 2, absint( get_option( self::VERSION_OPTION ) ), 'A failed upgrade does not record the new version.' );
 	}
 
 	/**

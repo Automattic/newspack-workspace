@@ -88,6 +88,12 @@ class Event_Log {
 			return;
 		}
 
+		// An index added by hand, under any name, already serves the duplicate check.
+		if ( self::has_timestamp_index() ) {
+			update_option( self::get_current_option_name(), self::DB_VERSION );
+			return;
+		}
+
 		if ( ! self::table_exists() ) {
 			self::update_db();
 			return;
@@ -101,18 +107,40 @@ class Event_Log {
 	/**
 	 * Upgrades an existing table. Runs from cron.
 	 *
+	 * The index build waits at most a few seconds for its table lock: while an
+	 * ALTER waits, every later query on the table queues behind it, checkout
+	 * inserts included. A build that gives up is retried once the lock expires.
+	 *
 	 * @return void
 	 */
 	public static function run_scheduled_upgrade() {
+		global $wpdb;
+
 		if ( get_transient( self::UPGRADE_LOCK ) ) {
 			return;
 		}
 		set_transient( self::UPGRADE_LOCK, time(), HOUR_IN_SECONDS );
 
-		self::update_db();
+		$error = '';
+		if ( ! self::has_timestamp_index() ) {
+			$lock_wait_timeout = $wpdb->get_var( 'SELECT @@SESSION.lock_wait_timeout' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query( 'SET SESSION lock_wait_timeout = 10' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$error = self::update_db();
+			if ( $lock_wait_timeout ) {
+				$wpdb->query( $wpdb->prepare( 'SET SESSION lock_wait_timeout = %d', $lock_wait_timeout ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			}
+		}
 
 		if ( self::has_timestamp_index() ) {
+			update_option( self::get_current_option_name(), self::DB_VERSION );
 			delete_transient( self::UPGRADE_LOCK );
+			return;
+		}
+
+		$message = sprintf( 'Event log upgrade did not add the timestamp index; retrying in an hour. Database error: %s', $error ? $error : 'none' );
+		Debugger::log( $message );
+		if ( method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+			\Newspack\Logger::newspack_log( 'newspack_network_event_log_upgrade', $message );
 		}
 	}
 
@@ -123,7 +151,7 @@ class Event_Log {
 	 * records the new version only once the table has the timestamp index, so
 	 * an upgrade that did not finish is retried.
 	 *
-	 * @return void
+	 * @return string The last database error dbDelta left, or an empty string.
 	 */
 	protected static function update_db() {
 		Debugger::log( 'Creating or updating the database table' );
@@ -146,10 +174,13 @@ class Event_Log {
 		) $charset_collate;";
 
 		dbDelta( $sql );
+		$error = $wpdb->last_error;
 
 		if ( self::has_timestamp_index() ) {
 			update_option( self::get_current_option_name(), self::DB_VERSION );
 		}
+
+		return $error;
 	}
 
 	/**
