@@ -24,7 +24,7 @@ function useWizardApiFetchToggle< T >( {
 	apiNamespace: string;
 	refreshOn?: ApiMethods[];
 	data: T;
-	description: string;
+	description?: string;
 } ) {
 	const [ apiData, setApiData ] = useState< T >( data );
 

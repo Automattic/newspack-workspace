@@ -81,12 +81,6 @@ describe( 'when InDesign export is off', () => {
 		expect( screen.queryByLabelText( 'Platform' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'publishes no header actions, so there is nothing to save or disable', async () => {
-		await renderPrint();
-
-		expect( headerActions() ).toHaveLength( 0 );
-	} );
-
 	it( 'enables the module on click and reveals the settings', async () => {
 		await renderPrint();
 
@@ -114,6 +108,16 @@ describe( 'when InDesign export is on', () => {
 		expect( headerAction( 'Save' ).disabled ).toBe( false );
 	} );
 
+	it( 'ignores post-type order, so re-checking a box leaves the draft clean', async () => {
+		server = { ...SETTINGS, module_enabled_print: true, indesign_post_types: [ 'post', 'page' ] };
+		await renderPrint();
+
+		fireEvent.click( screen.getByLabelText( 'Posts' ) );
+		fireEvent.click( screen.getByLabelText( 'Posts' ) );
+
+		expect( headerAction( 'Save' ).disabled ).toBe( true );
+	} );
+
 	it( 'writes nothing until Save is pressed, then sends the whole draft', async () => {
 		await renderPrint();
 
@@ -138,6 +142,7 @@ describe( 'when InDesign export is on', () => {
 
 		await runHeaderAction( 'Disable' );
 
+		expect( screen.queryByText( /unsaved changes will be lost/ ) ).not.toBeInTheDocument();
 		expect( lastPost() ).toBeUndefined();
 
 		await act( async () => {
@@ -146,6 +151,17 @@ describe( 'when InDesign export is on', () => {
 
 		expect( lastPost() ).toEqual( { module_enabled_print: false } );
 		expect( screen.getByText( 'Export articles to Adobe InDesign' ) ).toBeInTheDocument();
+		// Cleared by the view, not merely absent: the store held both actions a moment ago.
+		expect( headerActions() ).toHaveLength( 0 );
+	} );
+
+	it( 'says the unsaved draft will be lost when disabling with one pending', async () => {
+		await renderPrint();
+
+		fireEvent.click( screen.getByLabelText( 'Pages' ) );
+		await runHeaderAction( 'Disable' );
+
+		expect( screen.getByText( /unsaved changes will be lost/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'keeps the settings when the disable is cancelled', async () => {

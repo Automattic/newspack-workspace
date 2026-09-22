@@ -34,6 +34,9 @@ const toSettings = ( data: PrintData ): PrintSettings => ( {
 	indesign_exclude_captions: data.indesign_exclude_captions,
 } );
 
+// Post-type order carries no meaning, so re-checking a box must not read as a change.
+const comparable = ( value: PrintSettings ) => JSON.stringify( { ...value, indesign_post_types: [ ...value.indesign_post_types ].sort() } );
+
 function Print() {
 	const { apiData, hasLoaded, isFetching, apiFetchToggle, errorMessage, resetError } = useWizardApiFetchToggle< PrintData >( {
 		path: '/newspack/v1/wizard/newspack-settings/print',
@@ -45,7 +48,6 @@ function Print() {
 			available_post_types: [],
 			indesign_exclude_captions: false,
 		},
-		description: __( 'Allows editors to export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ),
 	} );
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -56,16 +58,18 @@ function Print() {
 		setSettings( toSettings( apiData ) );
 	}, [ apiData ] );
 
-	const isDirty = JSON.stringify( settings ) !== JSON.stringify( toSettings( apiData ) );
+	const isDirty = comparable( settings ) !== comparable( toSettings( apiData ) );
 
+	// Failures reach the publisher through `errorMessage`, so the rejection the
+	// API layer re-throws has no second consumer here.
 	const setModuleEnabled = ( value: boolean ) => {
 		resetError();
-		return apiFetchToggle( { module_enabled_print: value }, true );
+		return apiFetchToggle( { module_enabled_print: value }, true ).catch( () => undefined );
 	};
 
 	const saveSettings = () => {
 		resetError();
-		return apiFetchToggle( { module_enabled_print: true, ...settings }, true );
+		return apiFetchToggle( { module_enabled_print: true, ...settings }, true ).catch( () => undefined );
 	};
 
 	const togglePostType = ( slug: string, checked: boolean ) =>
@@ -78,7 +82,12 @@ function Print() {
 	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
 		title: __( 'Disable InDesign export?', 'newspack-plugin' ),
 		confirmButtonText: __( 'Disable', 'newspack-plugin' ),
-		message: __( 'The export actions will no longer appear on post lists. Your settings are kept.', 'newspack-plugin' ),
+		message: isDirty
+			? __(
+					'The export actions will no longer appear on post lists. Your saved settings are kept, but unsaved changes will be lost.',
+					'newspack-plugin'
+			  )
+			: __( 'The export actions will no longer appear on post lists. Your settings are kept.', 'newspack-plugin' ),
 	} );
 
 	// The header keeps whichever callbacks it was handed, so publishing these
@@ -113,6 +122,7 @@ function Print() {
 	if ( ! hasLoaded ) {
 		return (
 			<WizardsTab>
+				{ navBlockDialog }
 				<Waiting isCenter />
 			</WizardsTab>
 		);
@@ -127,6 +137,7 @@ function Print() {
 	if ( ! isEnabled ) {
 		return (
 			<WizardsTab>
+				{ navBlockDialog }
 				{ errorNotice }
 				<EmptyState.Root>
 					<EmptyState.Header
@@ -135,7 +146,7 @@ function Print() {
 						description={ __( 'Let editors export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ) }
 					/>
 					<EmptyState.Actions>
-						<Button variant="primary" disabled={ isFetching } onClick={ () => setModuleEnabled( true ) }>
+						<Button variant="primary" accessibleWhenDisabled disabled={ isFetching } onClick={ () => setModuleEnabled( true ) }>
 							{ __( 'Enable', 'newspack-plugin' ) }
 						</Button>
 					</EmptyState.Actions>
@@ -161,6 +172,7 @@ function Print() {
 				/>
 				<Stack direction="column" gap="xl">
 					<SelectControl
+						__nextHasNoMarginBottom
 						label={ __( 'Platform', 'newspack-plugin' ) }
 						value={ settings.indesign_platform }
 						disabled={ isFetching }
@@ -194,7 +206,7 @@ function Print() {
 						) ) }
 					</Stack>
 					{ settings.indesign_post_types.length === 0 && (
-						<Notice status="warning" isDismissible={ false }>
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
 							{ __(
 								'No post types are selected. The "Export as Adobe InDesign" actions will not appear anywhere until you select at least one.',
 								'newspack-plugin'
