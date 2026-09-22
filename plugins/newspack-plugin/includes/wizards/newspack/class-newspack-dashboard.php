@@ -326,8 +326,6 @@ class Newspack_Dashboard extends Wizard {
 			];
 		}
 
-		// A loaded plugin guarantees neither a registered post type nor a user who
-		// can open its editor.
 		if ( $this->can_open_editor_for( 'newspack_nl_cpt' ) ) {
 			$local_data['quickActions'][] = [
 				'href'  => admin_url( 'post-new.php?post_type=newspack_nl_cpt' ),

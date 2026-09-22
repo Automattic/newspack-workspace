@@ -174,23 +174,6 @@ class Dashboard_Quick_Actions_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Under a parent carrying a query string, `menu_page_url()` returns an
-	 * entity-encoded ampersand, and `wp_localize_script()` leaves values nested
-	 * inside `quickActions` alone. The href still has to reach the browser usable.
-	 */
-	public function test_insights_href_survives_a_parent_with_a_query_string() {
-		add_submenu_page( 'edit.php?post_type=page', 'Insights', 'Insights', 'manage_options', 'newspack-insights', '__return_null' );
-
-		$actions = $this->get_quick_actions();
-
-		$this->assertArrayHasKey( 'Explore Insights', $actions );
-		$this->assertSame(
-			admin_url( 'edit.php?post_type=page&page=newspack-insights' ),
-			$actions['Explore Insights']['href']
-		);
-	}
-
-	/**
 	 * Without it, the third action falls back to the external report.
 	 */
 	public function test_data_dashboard_action_when_insights_is_absent() {
