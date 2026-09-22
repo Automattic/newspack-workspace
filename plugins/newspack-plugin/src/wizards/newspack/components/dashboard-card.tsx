@@ -15,6 +15,7 @@ import { Card, Stack, Text } from '@wordpress/ui';
  */
 /* eslint import/namespace: ['error', { allowComputed: true }] */
 import { icons } from './icons';
+import './dashboard-card.scss';
 
 type DashboardCardProps = {
 	href: string;
