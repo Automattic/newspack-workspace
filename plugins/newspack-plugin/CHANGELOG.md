@@ -1,3 +1,11 @@
+## newspack [6.52.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.4...newspack@6.52.5) (2026-09-22)
+
+
+### Bug Fixes
+
+* **content-gate:** honor written excerpt in feeds and REST ([96a6ba4](https://github.com/Automattic/newspack-workspace/commit/96a6ba49fa09bb1d6ad50b1daae197b1f23798c4))
+* **content-gate:** keep feed summaries XML-safe and password-aware ([11193f9](https://github.com/Automattic/newspack-workspace/commit/11193f94e3e8dfc67f5b4c7acbee3b56290388b6))
+
 ## newspack [6.52.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.3...newspack@6.52.4) (2026-09-22)
 
 
