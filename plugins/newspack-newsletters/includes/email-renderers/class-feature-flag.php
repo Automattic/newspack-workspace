@@ -22,7 +22,7 @@ class Feature_Flag {
 	 */
 	public static function is_enabled(): bool {
 		$enabled = (bool) get_option( self::OPTION, false );
-		if ( defined( 'NEWSPACK_NEWSLETTERS_WOO_RENDERER' ) ) {
+		if ( defined( 'NEWSPACK_NEWSLETTERS_WOO_RENDERER' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			$enabled = (bool) constant( 'NEWSPACK_NEWSLETTERS_WOO_RENDERER' );
 		}
 		/**

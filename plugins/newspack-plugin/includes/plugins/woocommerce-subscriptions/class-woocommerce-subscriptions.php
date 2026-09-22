@@ -878,7 +878,7 @@ class WooCommerce_Subscriptions {
 	 * @return bool
 	 */
 	private static function should_count_signup_fee_on_switch( $subscription, $existing_item ) {
-		$enabled = defined( 'NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE' ) && NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE;
+		$enabled = defined( 'NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE' ) && NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE; // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 
 		/**
 		 * Filters whether a paid one-time sign-up fee is counted toward the

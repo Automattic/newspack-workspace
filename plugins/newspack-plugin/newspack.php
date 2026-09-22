@@ -17,12 +17,12 @@ defined( 'ABSPATH' ) || exit;
 define( 'NEWSPACK_PLUGIN_VERSION', '6.52.2' );
 
 // Path to the main Newspack plugin file.
-if ( ! defined( 'NEWSPACK_PLUGIN_FILE' ) ) {
+if ( ! defined( 'NEWSPACK_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_PLUGIN_FILE', __FILE__ );
 }
 
 // Base directory name for the Newspack plugin.
-if ( ! defined( 'NEWSPACK_PLUGIN_BASEDIR' ) ) {
+if ( ! defined( 'NEWSPACK_PLUGIN_BASEDIR' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_PLUGIN_BASEDIR', dirname( plugin_basename( NEWSPACK_PLUGIN_FILE ) ) );
 }
 

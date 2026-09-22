@@ -231,10 +231,10 @@ class Metadata {
 	 * @return string 'v1' or 'v2'.
 	 */
 	public static function get_schema_origin() {
-		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) {
+		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			return 'legacy' === NEWSPACK_SYNC_METADATA_VERSION ? 'v1' : 'v2';
 		}
-		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) {
+		if ( defined( 'NEWSPACK_SYNC_METADATA_VERSION_1' ) && NEWSPACK_SYNC_METADATA_VERSION_1 ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			return 'v2';
 		}
 		$stored = \get_option( self::SCHEMA_ORIGIN_OPTION, false );
@@ -294,7 +294,7 @@ class Metadata {
 		if ( false !== \get_option( self::SCHEMA_ORIGIN_OPTION, false ) ) {
 			return;
 		}
-		if ( defined( 'NEWSPACK_SETUP_COMPLETE' ) && false !== \get_option( NEWSPACK_SETUP_COMPLETE, false ) ) {
+		if ( defined( 'NEWSPACK_SETUP_COMPLETE' ) && false !== \get_option( NEWSPACK_SETUP_COMPLETE, false ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal constant owned by newspack-plugin, not publisher-configurable.
 			return;
 		}
 		\update_option( self::SCHEMA_ORIGIN_OPTION, self::derive_schema_origin(), true );

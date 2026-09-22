@@ -76,7 +76,7 @@ class Admin {
 				'apiNamespace'       => API::NAMESPACE,
 				'siteUrl'            => get_site_url(),
 				'refreshCache'       => isset( $_GET['page'] ) && 'newspack-story-budget' === $_GET['page'], // phpcs:ignore WordPress.Security.NonceVerification.Recommended,
-				'alwaysFetchStories' => defined( 'NEWSPACK_STORY_BUDGET_ALWAYS_FETCH_STORIES' ) && NEWSPACK_STORY_BUDGET_ALWAYS_FETCH_STORIES,
+				'alwaysFetchStories' => defined( 'NEWSPACK_STORY_BUDGET_ALWAYS_FETCH_STORIES' ) && NEWSPACK_STORY_BUDGET_ALWAYS_FETCH_STORIES, // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			]
 		);
 

@@ -89,7 +89,7 @@ class Wizards {
 		}
 		// Plans (Subscription Products) page, gated behind NEWSPACK_PLANS_UI and available
 		// where Woo Subscriptions is active.
-		if ( defined( 'NEWSPACK_PLANS_UI' ) && NEWSPACK_PLANS_UI && ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) ) {
+		if ( defined( 'NEWSPACK_PLANS_UI' ) && NEWSPACK_PLANS_UI && ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			self::$wizards['audience-subscription-products'] = new Audience_Subscription_Products();
 		}
 		// Pricing Rules manager, available when the dynamic-pricing engine

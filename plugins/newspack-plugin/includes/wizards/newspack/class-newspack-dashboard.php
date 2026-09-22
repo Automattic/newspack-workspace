@@ -93,7 +93,7 @@ class Newspack_Dashboard extends Wizard {
 		];
 
 		// Newspack Newsletters Plugin.
-		if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) {
+		if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 			$dashboard['newsletters'] = [
 				'title'        => __( 'Newsletters', 'newspack-plugin' ),
 				'desc'         => __( 'Engage your readers directly in their email inbox.', 'newspack-plugin' ),
@@ -146,7 +146,7 @@ class Newspack_Dashboard extends Wizard {
 		];
 
 		// Newspack Listings Plugin.
-		if ( defined( 'NEWSPACK_LISTINGS_FILE' ) ) {
+		if ( defined( 'NEWSPACK_LISTINGS_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 			$dashboard['listings'] = [
 				'title'        => __( 'Listings', 'newspack-plugin' ),
 				'desc'         => __( 'Build databases of reusable or user-generated content to use on your site.', 'newspack-plugin' ),
