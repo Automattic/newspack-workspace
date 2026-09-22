@@ -48,12 +48,13 @@ class Rest_Authenticaton {
 	 * mapped to the endpoint ID it was accepted for.
 	 *
 	 * Core calls a route's permission callback a second time with the same request
-	 * object while building the Allow header, and that call must see the signature
-	 * as valid. A later HTTP request is always a new object, so it is not covered.
+	 * object while building the Allow header. Without this, that call finds the nonce
+	 * already claimed and the route's methods drop out of the header. The request
+	 * itself is unaffected, and a later HTTP request is always a new object.
 	 *
 	 * @var \WeakMap|null
 	 */
-	private static $verified_requests = null;
+	private static ?\WeakMap $verified_requests = null;
 
 	/**
 	 * Initializes the hook used in the Node to override the authentication to some REST endpoints.
@@ -118,15 +119,15 @@ class Rest_Authenticaton {
 		$verified = json_decode( $verified, true );
 
 		if ( ! is_array( $verified ) ) {
-			return new \WP_Error( 'newspack-network-authentication-error', 'Invalid Signature' );
+			return new \WP_Error( 'newspack-network-authentication-error', 'Invalid Signature', [ 'status' => 401 ] );
 		}
 
 		if ( ( $verified['endpoint_id'] ?? null ) !== $endpoint_id ) {
-			return new \WP_Error( 'newspack-network-authentication-error', 'Signature mismatch' );
+			return new \WP_Error( 'newspack-network-authentication-error', 'Signature mismatch', [ 'status' => 401 ] );
 		}
 
 		if ( ! is_int( $verified['timestamp'] ?? null ) || time() - $verified['timestamp'] > 60 ) {
-			return new \WP_Error( 'newspack-network-authentication-error', 'Signature expired' );
+			return new \WP_Error( 'newspack-network-authentication-error', 'Signature expired', [ 'status' => 401 ] );
 		}
 
 		// Claimed last, so only a signature that passed every other check uses up
@@ -134,10 +135,10 @@ class Rest_Authenticaton {
 		// could not record it: accepting then would make the signature reusable.
 		$claim = Used_Nonces::claim( $nonce );
 		if ( null === $claim ) {
-			return new \WP_Error( 'newspack-network-authentication-error', 'Could not record signature' );
+			return new \WP_Error( 'newspack-network-authentication-error', 'Could not record signature', [ 'status' => 500 ] );
 		}
 		if ( Used_Nonces::CLAIMED !== $claim ) {
-			return new \WP_Error( 'newspack-network-authentication-error', 'Signature already used' );
+			return new \WP_Error( 'newspack-network-authentication-error', 'Signature already used', [ 'status' => 401 ] );
 		}
 		// Nothing follows the claim that could fail, so it is final at once rather
 		// than left pending for a later outcome.

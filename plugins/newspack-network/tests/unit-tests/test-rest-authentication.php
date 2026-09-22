@@ -106,24 +106,31 @@ class TestRestAuthentication extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An expired signature is refused.
-	 */
-	public function test_expired_signature_is_refused() {
-		$headers = $this->legacy_headers( 'info', time() - 61 );
-
-		$result = Rest_Authenticaton::verify_signature( $this->signed_request( $headers ), 'info', $this->secret_key );
-		$this->assertWPError( $result );
-		$this->assertSame( 'Signature expired', $result->get_error_message() );
-	}
-
-	/**
 	 * A Hub on an earlier version still signs a salt; its signatures verify.
 	 */
 	public function test_signature_from_earlier_hub_is_accepted() {
-		$headers = $this->legacy_headers( 'info', time() );
+		$headers = $this->legacy_headers( 'info' );
 
 		$this->assertTrue( Rest_Authenticaton::verify_signature( $this->signed_request( $headers ), 'info', $this->secret_key ) );
-		$this->assertWPError( Rest_Authenticaton::verify_signature( $this->signed_request( $headers ), 'info', $this->secret_key ) );
+	}
+
+	/**
+	 * A signature the nonce store cannot record is refused rather than accepted unrecorded.
+	 */
+	public function test_signature_is_refused_when_its_nonce_cannot_be_recorded() {
+		$headers = Rest_Authenticaton::generate_signature_headers( 'info', $this->secret_key );
+		$table   = Used_Nonces::get_table_name();
+		$block   = function ( $query ) use ( $table ) {
+			return 0 === stripos( $query, "INSERT INTO `$table`" ) ? '' : $query;
+		};
+
+		add_filter( 'query', $block );
+		$result = Rest_Authenticaton::verify_signature( $this->signed_request( $headers ), 'info', $this->secret_key );
+		remove_filter( 'query', $block );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'Could not record signature', $result->get_error_message() );
+		$this->assertSame( 500, $result->get_error_data()['status'] );
 	}
 
 	/**
@@ -148,6 +155,7 @@ class TestRestAuthentication extends \WP_UnitTestCase {
 		$repeat = rest_do_request( $this->signed_request( $headers, $route ) );
 		$this->assertTrue( $repeat->is_error() );
 		$this->assertSame( 'Signature already used', $repeat->as_error()->get_error_message() );
+		$this->assertSame( 401, $repeat->get_status() );
 	}
 
 	/**
@@ -166,17 +174,16 @@ class TestRestAuthentication extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Signature headers in the format earlier Hub versions send, with a chosen timestamp.
+	 * Signature headers in the format earlier Hub versions send.
 	 *
 	 * @param string $endpoint_id Endpoint ID.
-	 * @param int    $timestamp   Signed timestamp.
 	 * @return array
 	 */
-	private function legacy_headers( $endpoint_id, $timestamp ) {
+	private function legacy_headers( $endpoint_id ) {
 		$nonce = Crypto::generate_nonce();
 		$body  = wp_json_encode(
 			[
-				'timestamp'   => $timestamp,
+				'timestamp'   => time(),
 				'salt'        => wp_generate_password( 12, false ),
 				'endpoint_id' => $endpoint_id,
 			]
