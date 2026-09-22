@@ -90,6 +90,22 @@ function Print() {
 			: __( 'The export actions will no longer appear on post lists. Your settings are kept.', 'newspack-plugin' ),
 	} );
 
+	// Each swap unmounts whatever held focus, which would otherwise strand the
+	// keyboard user at the top of the document.
+	const bodyRef = useRef< HTMLDivElement >( null );
+	const focusedFor = useRef< boolean | null >( null );
+	useEffect( () => {
+		if ( ! hasLoaded ) {
+			return;
+		}
+		if ( focusedFor.current === null || focusedFor.current === isEnabled ) {
+			focusedFor.current = isEnabled;
+			return;
+		}
+		focusedFor.current = isEnabled;
+		bodyRef.current?.focus();
+	}, [ hasLoaded, isEnabled ] );
+
 	// The header keeps whichever callbacks it was handed, so publishing these
 	// directly would pin the state of the render that published them.
 	const actionHandlers = useRef( { saveSettings, setModuleEnabled } );
@@ -111,6 +127,7 @@ function Print() {
 				{
 					type: 'more',
 					label: __( 'Disable', 'newspack-plugin' ),
+					/* translators: must contain the menu item's visible label, "Disable" (WCAG 2.5.3, Label in Name). */
 					ariaLabel: __( 'Disable InDesign export', 'newspack-plugin' ),
 					action: () => requestDisable( () => actionHandlers.current.setModuleEnabled( false ) ),
 					disabled: isFetching,
@@ -136,7 +153,7 @@ function Print() {
 
 	if ( ! isEnabled ) {
 		return (
-			<WizardsTab>
+			<WizardsTab ref={ bodyRef } tabIndex={ -1 } isFetching={ isFetching }>
 				{ navBlockDialog }
 				{ errorNotice }
 				<EmptyState.Root>
@@ -146,7 +163,13 @@ function Print() {
 						description={ __( 'Let editors export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ) }
 					/>
 					<EmptyState.Actions>
-						<Button variant="primary" accessibleWhenDisabled disabled={ isFetching } onClick={ () => setModuleEnabled( true ) }>
+						<Button
+							variant="primary"
+							accessibleWhenDisabled
+							loading={ isFetching }
+							disabled={ isFetching }
+							onClick={ () => setModuleEnabled( true ) }
+						>
 							{ __( 'Enable', 'newspack-plugin' ) }
 						</Button>
 					</EmptyState.Actions>
@@ -156,7 +179,7 @@ function Print() {
 	}
 
 	return (
-		<WizardsTab isFetching={ isFetching }>
+		<WizardsTab ref={ bodyRef } tabIndex={ -1 } isFetching={ isFetching }>
 			{ navBlockDialog }
 			{ disableDialog }
 			{ errorNotice }

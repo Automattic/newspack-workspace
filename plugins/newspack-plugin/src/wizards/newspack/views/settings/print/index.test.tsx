@@ -1,9 +1,4 @@
 /**
- * The module flag and the settings are saved on different terms: enabling and
- * disabling write on click, everything else waits for Save.
- */
-
-/**
  * External dependencies
  */
 import { render, screen, fireEvent, act } from '@testing-library/react';
@@ -32,8 +27,15 @@ const SETTINGS: PrintData = {
 
 let server: PrintData;
 
+const mockState = { isFetching: false, errorMessage: null as string | null, rejectNext: false };
+
 const mockWizardApiFetch = jest.fn(
 	( options: { method?: string; data?: Partial< PrintData > }, callbacks: { onSuccess?: ( data: PrintData ) => void; onFinally?: () => void } ) => {
+		if ( mockState.rejectNext ) {
+			mockState.rejectNext = false;
+			callbacks?.onFinally?.();
+			return Promise.reject( new Error( 'Request failed.' ) );
+		}
 		if ( options.method === 'POST' ) {
 			server = { ...server, ...options.data };
 		}
@@ -43,12 +45,14 @@ const mockWizardApiFetch = jest.fn(
 	}
 );
 
+const mockResetError = jest.fn();
+
 jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
 	useWizardApiFetch: () => ( {
 		wizardApiFetch: mockWizardApiFetch,
-		isFetching: false,
-		errorMessage: null,
-		resetError: jest.fn(),
+		isFetching: mockState.isFetching,
+		errorMessage: mockState.errorMessage,
+		resetError: mockResetError,
 	} ),
 } ) );
 
@@ -69,6 +73,9 @@ const lastPost = () => {
 
 beforeEach( () => {
 	jest.clearAllMocks();
+	mockState.isFetching = false;
+	mockState.errorMessage = null;
+	mockState.rejectNext = false;
 	server = { ...SETTINGS };
 	( dispatch( WIZARD_STORE_NAMESPACE ) as { resetHeaderData: () => void } ).resetHeaderData();
 } );
@@ -79,6 +86,15 @@ describe( 'when InDesign export is off', () => {
 
 		expect( screen.getByText( 'Export articles to Adobe InDesign' ) ).toBeInTheDocument();
 		expect( screen.queryByLabelText( 'Platform' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps the Enable button reachable while its request is in flight', async () => {
+		mockState.isFetching = true;
+		await renderPrint();
+
+		const enable = screen.getByRole( 'button', { name: 'Enable' } );
+		expect( enable ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( enable ).not.toBeDisabled();
 	} );
 
 	it( 'enables the module on click and reveals the settings', async () => {
@@ -137,6 +153,26 @@ describe( 'when InDesign export is on', () => {
 		expect( headerAction( 'Save' ).disabled ).toBe( true );
 	} );
 
+	it( 'keeps the draft when a save fails, and settles rather than rejecting', async () => {
+		await renderPrint();
+
+		fireEvent.click( screen.getByLabelText( 'Pages' ) );
+		mockState.rejectNext = true;
+
+		let rejection: unknown = null;
+		await act( async () => {
+			await headerAction( 'Save' )
+				.action()
+				.then( undefined, ( error: unknown ) => {
+					rejection = error;
+				} );
+		} );
+
+		expect( rejection ).toBeNull();
+		expect( screen.getByLabelText( 'Pages' ) ).toBeChecked();
+		expect( headerAction( 'Save' ).disabled ).toBe( false );
+	} );
+
 	it( 'confirms before disabling, and writes only once confirmed', async () => {
 		await renderPrint();
 
@@ -151,7 +187,6 @@ describe( 'when InDesign export is on', () => {
 
 		expect( lastPost() ).toEqual( { module_enabled_print: false } );
 		expect( screen.getByText( 'Export articles to Adobe InDesign' ) ).toBeInTheDocument();
-		// Cleared by the view, not merely absent: the store held both actions a moment ago.
 		expect( headerActions() ).toHaveLength( 0 );
 	} );
 
@@ -162,6 +197,20 @@ describe( 'when InDesign export is on', () => {
 		await runHeaderAction( 'Disable' );
 
 		expect( screen.getByText( /unsaved changes will be lost/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'moves focus to the body it reveals, rather than dropping it on the document', async () => {
+		await renderPrint();
+
+		await runHeaderAction( 'Disable' );
+		await act( async () => {
+			fireEvent.click( screen.getByRole( 'button', { name: 'Disable' } ) );
+		} );
+
+		const emptyState = screen.getByText( 'Export articles to Adobe InDesign' );
+		const { activeElement } = emptyState.ownerDocument;
+		expect( activeElement ).toHaveClass( 'newspack-wizard__sections' );
+		expect( activeElement ).not.toBe( emptyState.ownerDocument.body );
 	} );
 
 	it( 'keeps the settings when the disable is cancelled', async () => {
