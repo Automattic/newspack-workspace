@@ -1039,6 +1039,30 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test run_health_checks reports which integrations it checked, so the
+	 * Alert Manager can let go of the records of integrations that dropped
+	 * out of the run.
+	 */
+	public function test_run_health_checks_reports_the_integrations_it_checked() {
+		Integrations::register( new Sample_Integration( 'enabled', 'Enabled' ) );
+		Integrations::register( new Sample_Integration( 'disabled', 'Disabled' ) );
+		Integrations::enable( 'enabled' );
+
+		$checked  = null;
+		$listener = function ( $integration_ids ) use ( &$checked ) {
+			$checked = $integration_ids;
+		};
+		add_action( 'newspack_integration_health_checks_completed', $listener );
+
+		try {
+			Integrations::run_health_checks();
+			$this->assertSame( [ 'enabled' ], $checked );
+		} finally {
+			remove_action( 'newspack_integration_health_checks_completed', $listener );
+		}
+	}
+
+	/**
 	 * Test Contact_Pull::pull_sync defaults to set-up integrations only.
 	 *
 	 * The synchronous loopback path (run from Contact_Cron when the user's

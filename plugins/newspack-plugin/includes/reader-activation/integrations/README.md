@@ -480,7 +480,7 @@ The framework schedules an hourly cron hook `newspack_integration_health_check` 
 1. `can_sync( true )` — settings validation as a `WP_Error`.
 2. `test_connection()` — live API check.
 
-`Integration::health_check()` is `final` and returns either `true` or a `WP_Error` aggregating failures. Each run fires one of two actions per integration:
+`Integration::health_check()` is `final` and returns either `true` or a `WP_Error` aggregating failures. Each run fires one of two actions per integration, then one for the run:
 
 ```php
 // On failure, after logging the error under `NEWSPACK-INTEGRATION`:
@@ -501,9 +501,12 @@ do_action(
         'integration_name' => $integration->get_name(),
     ]
 );
+
+// After the run, with the IDs of the integrations it checked:
+do_action( 'newspack_integration_health_checks_completed', [ 'esp' ] );
 ```
 
-`Newspack\Alert_Manager` consumes both and keeps one health record per integration in the `newspack_integration_health_state` option. Every failure reaches the log at warning severity, but Slack is paged once, on the `Alert_Manager::HEALTH_BROKEN_THRESHOLD`-th consecutive failure. That transition, and the pass that ends it, fire:
+`Newspack\Alert_Manager` consumes all three and keeps one health record per integration in the `newspack_integration_health_state` option. Every failure reaches the log at warning severity, but Slack is paged once, on the `Alert_Manager::HEALTH_BROKEN_THRESHOLD`-th consecutive failure; a gap longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP` between failures restarts a count that has not paged yet. That transition, the pass that ends it, and a run that stops checking a broken integration (disabled, or no longer set up) fire:
 
 ```php
 do_action(
@@ -511,7 +514,7 @@ do_action(
     [
         'integration_id'   => 'esp',
         'integration_name' => 'Newsletter ESP',
-        'state'            => 'broken', // or 'recovered'
+        'state'            => 'broken', // or 'recovered', or 'disconnected' when a run no longer checks it
         'error_class'      => 'publisher', // the ESP account is the problem; 'other' for outages and unknowns
         'error'            => '403: API Access has been disabled for this account.',
         'first_failed_at'  => 1790000000,

@@ -53,6 +53,15 @@ class Alert_Manager {
 	const HEALTH_BROKEN_THRESHOLD = 3;
 
 	/**
+	 * Longest gap between two failed checks that still extends a failing
+	 * streak. The check runs hourly, so this allows for one skipped run. A
+	 * longer silence (a cron stall, or checks switched off for a while) says
+	 * nothing about the hours in between, and a streak carried across it
+	 * would page on the next single failure, dated from before the gap.
+	 */
+	const HEALTH_STREAK_MAX_GAP = 3 * HOUR_IN_SECONDS;
+
+	/**
 	 * Substring signatures (lowercase) that mark a health-check failure as
 	 * publisher-side: the ESP account is disabled, unpaid, or holding a dead
 	 * key, so the fix belongs to the publisher and retrying on our side
@@ -139,6 +148,7 @@ class Alert_Manager {
 		add_action( 'newspack_data_event_retry_exhausted', [ __CLASS__, 'handle_data_event_retry_exhausted' ] );
 		add_action( 'newspack_integration_health_check_failed', [ __CLASS__, 'handle_health_check_failed' ] );
 		add_action( 'newspack_integration_health_check_passed', [ __CLASS__, 'handle_health_check_passed' ] );
+		add_action( 'newspack_integration_health_checks_completed', [ __CLASS__, 'prune_health_state' ] );
 		add_action( 'newspack_alert', [ __CLASS__, 'forward_alert_to_log' ] );
 		add_action( self::PATTERN_SCAN_HOOK, [ __CLASS__, 'scan_failure_patterns' ] );
 		add_action( 'init', [ __CLASS__, 'schedule_pattern_scan' ] );
@@ -586,7 +596,8 @@ class Alert_Manager {
 	 * failure is still forwarded at warning severity so the log keeps the
 	 * hourly history, and failures after the transition add nothing to
 	 * Slack: the condition is already reported, and the record carries it
-	 * until handle_health_check_passed() clears it.
+	 * until a passing check, or a run that no longer checks the integration,
+	 * clears it.
 	 *
 	 * The record is written before dispatch so a `newspack_alert` handler
 	 * that throws cannot leave the transition unrecorded and page again on
@@ -604,13 +615,24 @@ class Alert_Manager {
 		if ( ! is_array( $state ) ) {
 			$state = [];
 		}
-		$record = is_array( $state[ $integration_id ] ?? null ) ? $state[ $integration_id ] : [
+		$now    = time();
+		$record = is_array( $state[ $integration_id ] ?? null ) ? $state[ $integration_id ] : null;
+		// A failing streak interrupted by a long gap starts over. A broken
+		// record is kept: its outage is already reported, and no passing check
+		// observed it end.
+		if ( null !== $record && 'broken' !== ( $record['status'] ?? '' ) && $now - (int) ( $record['last_failed_at'] ?? 0 ) > self::HEALTH_STREAK_MAX_GAP ) {
+			$record = null;
+		}
+		$record = $record ?? [
 			'status'          => 'failing',
 			'failures'        => 0,
-			'first_failed_at' => time(),
+			'first_failed_at' => $now,
 		];
-		$record['failures']   = (int) ( $record['failures'] ?? 0 ) + 1;
-		$record['last_error'] = $message;
+
+		$record['failures']         = (int) ( $record['failures'] ?? 0 ) + 1;
+		$record['last_error']       = $message;
+		$record['last_failed_at']   = $now;
+		$record['integration_name'] = $integration_name;
 
 		$is_transition = 'broken' !== ( $record['status'] ?? 'failing' ) && $record['failures'] >= self::HEALTH_BROKEN_THRESHOLD;
 		if ( $is_transition ) {
@@ -640,15 +662,17 @@ class Alert_Manager {
 
 		/**
 		 * Fires when an integration's health changes state: it has failed
-		 * HEALTH_BROKEN_THRESHOLD consecutive checks ('broken'), or a check
-		 * passed after that ('recovered'). One event per outage in each
-		 * direction, so a consumer can open and close a ticket without
-		 * deduplicating hourly repeats itself.
+		 * HEALTH_BROKEN_THRESHOLD consecutive checks ('broken'), a check
+		 * passed after that ('recovered'), or a run stopped checking it while
+		 * broken because it was disabled or is no longer set up
+		 * ('disconnected'). One event per outage in each direction, so a
+		 * consumer can open and close a ticket without deduplicating hourly
+		 * repeats itself.
 		 *
 		 * @param array $payload {
 		 *     @type string $integration_id   The integration ID.
 		 *     @type string $integration_name The integration display name.
-		 *     @type string $state            'broken' or 'recovered'.
+		 *     @type string $state            'broken', 'recovered' or 'disconnected'.
 		 *     @type string $error_class      'publisher' when the ESP account itself is the
 		 *                                    problem, 'other' for provider outages and unknowns.
 		 *     @type string $error            The last health-check error message.
@@ -751,6 +775,72 @@ class Alert_Manager {
 				'timestamp' => time(),
 			]
 		);
+	}
+
+	/**
+	 * Drop the records of integrations a health-check run no longer checks.
+	 *
+	 * A record changes only while its integration is checked, so one that is
+	 * disabled or no longer set up would keep its record, and a stale
+	 * `broken` one would swallow the page for the integration's next outage.
+	 * A broken record closes as 'disconnected' rather than 'recovered', since
+	 * no passing check observed a fix.
+	 *
+	 * @param string[] $checked_ids IDs of the integrations the run checked.
+	 */
+	public static function prune_health_state( $checked_ids ) {
+		$state = get_option( self::HEALTH_STATE_OPTION, [] );
+		if ( ! is_array( $state ) || empty( $state ) ) {
+			return;
+		}
+		$stale = array_diff_key( $state, array_flip( array_map( 'strval', (array) $checked_ids ) ) );
+		if ( empty( $stale ) ) {
+			return;
+		}
+
+		$state = array_diff_key( $state, $stale );
+		if ( empty( $state ) ) {
+			delete_option( self::HEALTH_STATE_OPTION );
+		} else {
+			update_option( self::HEALTH_STATE_OPTION, $state, false );
+		}
+
+		foreach ( $stale as $integration_id => $record ) {
+			if ( 'broken' !== ( $record['status'] ?? '' ) ) {
+				continue;
+			}
+			$integration_name = (string) ( $record['integration_name'] ?? $integration_id );
+			$failures         = (int) ( $record['failures'] ?? 0 );
+
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_integration_health_changed',
+				[
+					'integration_id'   => (string) $integration_id,
+					'integration_name' => $integration_name,
+					'state'            => 'disconnected',
+					'error_class'      => (string) ( $record['error_class'] ?? 'other' ),
+					'error'            => (string) ( $record['last_error'] ?? '' ),
+					'first_failed_at'  => (int) ( $record['first_failed_at'] ?? 0 ),
+					'failures'         => $failures,
+				]
+			);
+
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_alert',
+				[
+					'type'      => 'integration_health_check_disconnected',
+					'severity'  => 'warning',
+					'message'   => sprintf( 'Integration "%s" is no longer checked, so its outage is closed after %d failed checks.', $integration_name, $failures ),
+					'context'   => [
+						'integration_id' => (string) $integration_id,
+						'health'         => $record,
+					],
+					'timestamp' => time(),
+				]
+			);
+		}
 	}
 
 	/**
