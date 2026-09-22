@@ -55,6 +55,26 @@ class Alert_Manager {
 	private const PERMANENT_FAILURE_DEDUP_INTERVAL = HOUR_IN_SECONDS;
 
 	/**
+	 * Substring signatures (lowercase) that mark a health-check failure as
+	 * publisher-side: the ESP account is disabled, unpaid, or holding a dead
+	 * key, so the fix belongs to the publisher and retrying on our side
+	 * changes nothing. Matched against the joined, lowercased WP_Error
+	 * messages, as Contact_Sync::ERROR_SIGNATURES does for push errors,
+	 * because the ESP layer discards HTTP status codes and only a
+	 * "{Title}: {detail}" string survives.
+	 *
+	 * Anything unmatched is 'other': a provider outage, a timeout, or an
+	 * error not seen before, which stays an engineering signal.
+	 */
+	private const PUBLISHER_ERROR_SIGNATURES = [
+		'api access has been disabled',
+		'payment required',
+		'api key',
+		'account has been deactivated',
+		'user disabled',
+	];
+
+	/**
 	 * Default pattern rules.
 	 * Each rule defines a grouping dimension, threshold, and time interval.
 	 */
@@ -632,6 +652,30 @@ class Alert_Manager {
 		$messages = array_map( 'strval', $error_messages );
 		sort( $messages );
 		return 'newspack_alert_hc_' . md5( $integration_id . ':' . implode( ',', $codes ) . ':' . implode( '|', $messages ) );
+	}
+	/**
+	 * Classify a health-check failure as publisher-side or other.
+	 *
+	 * @param \WP_Error|mixed $error The health-check error.
+	 * @return string 'publisher' or 'other'.
+	 */
+	private static function classify_health_error( $error ) {
+		if ( ! is_wp_error( $error ) ) {
+			return 'other';
+		}
+		$haystack = strtolower( implode( ' ', $error->get_error_messages() ) );
+		foreach ( self::PUBLISHER_ERROR_SIGNATURES as $signature ) {
+			if ( str_contains( $haystack, $signature ) ) {
+				return 'publisher';
+			}
+		}
+		// A bare auth or payment status with no recognisable text, e.g.
+		// "ActiveCampaign REST returned status 401 for /api/3/users/me". The
+		// lookahead keeps "timed out after 401.5 seconds" from matching.
+		if ( preg_match( '/\b40[123]\b(?!\.\d)/', $haystack ) ) {
+			return 'publisher';
+		}
+		return 'other';
 	}
 }
 Alert_Manager::init();

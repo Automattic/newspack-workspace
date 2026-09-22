@@ -1028,4 +1028,49 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			delete_transient( $key ?? '' );
 		}
 	}
+
+	/**
+	 * Health-check errors classify as publisher-side when the ESP account
+	 * itself is the problem, and as other for anything else.
+	 *
+	 * @dataProvider data_health_error_classification
+	 *
+	 * @param string $message  The WP_Error message.
+	 * @param string $expected 'publisher' or 'other'.
+	 */
+	public function test_classify_health_error( $message, $expected ) {
+		$method = new \ReflectionMethod( Alert_Manager::class, 'classify_health_error' );
+		$method->setAccessible( true );
+
+		$this->assertSame( $expected, $method->invoke( null, new \WP_Error( 'newspack_newsletters_connection_error', $message ) ) );
+	}
+
+	/**
+	 * Messages seen in the alerts channel during the week of 2026-09-16.
+	 */
+	public function data_health_error_classification() {
+		return [
+			'mailchimp invalid key'         => [ "401: Your API key may be invalid, or you've attempted to access the wrong datacenter.", 'publisher' ],
+			'mailchimp key disabled'        => [ '401: API key has been disabled', 'publisher' ],
+			'mailchimp access disabled'     => [ '403: API Access has been disabled for this account. Please contact customer support.', 'publisher' ],
+			'mailchimp unpaid'              => [ 'Payment Required', 'publisher' ],
+			'account deactivated'           => [ 'User Disabled: This account has been deactivated.', 'publisher' ],
+			'bare 401 from activecampaign'  => [ 'ActiveCampaign REST returned status 401 for /api/3/users/me.', 'publisher' ],
+			'mailchimp timeout'             => [ 'Request timed out after 20.001555 seconds.', 'other' ],
+			'timeout with a 401-like float' => [ 'Request timed out after 401.5 seconds.', 'other' ],
+			'service unavailable'           => [ 'Service Unavailable', 'other' ],
+			'activecampaign 503'            => [ 'ActiveCampaign REST returned status 503 for /api/3/users/me.', 'other' ],
+			'too many requests'             => [ 'Too Many Requests', 'other' ],
+		];
+	}
+
+	/**
+	 * A non-WP_Error value classifies as other rather than throwing.
+	 */
+	public function test_classify_health_error_without_wp_error() {
+		$method = new \ReflectionMethod( Alert_Manager::class, 'classify_health_error' );
+		$method->setAccessible( true );
+
+		$this->assertSame( 'other', $method->invoke( null, null ) );
+	}
 }
