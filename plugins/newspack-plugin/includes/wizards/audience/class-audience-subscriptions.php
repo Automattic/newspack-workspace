@@ -337,7 +337,7 @@ class Audience_Subscriptions extends Wizard {
 			// A rule open to every subscriber never discounts a subscription, so the
 			// editor's price preview has to know which of the products it lists are
 			// ones. `type_label` is display copy and cannot answer that.
-			'is_subscription' => Subscriber_Commerce::is_subscription_product( $product ),
+			'is_subscription' => WooCommerce_Subscriptions::is_subscription_product( $product ),
 		];
 	}
 

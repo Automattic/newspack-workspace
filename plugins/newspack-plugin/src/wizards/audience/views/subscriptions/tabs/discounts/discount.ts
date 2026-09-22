@@ -3,10 +3,10 @@
  * discount arithmetic the price preview shows, and the summary labels the list
  * renders.
  *
- * The arithmetic mirrors `Newspack\Subscriber_Discounts::discounted_price()`.
- * The preview is what a publisher tunes a fixed amount against, so the two must
- * agree. They can differ by one minor unit at an exact half-cent boundary, where
- * PHP's `round()` pre-rounds to 15 significant digits and this does not.
+ * The arithmetic mirrors `Newspack\Subscriber_Discounts::discounted_price()`,
+ * including both halves of PHP's rounding. The preview is what a publisher tunes
+ * a fixed amount against and the storefront charges the server's number, so a
+ * minor unit of disagreement is one the reader watches change at checkout.
  */
 
 /**
@@ -76,8 +76,12 @@ export function subscriberPrice(
 	}
 	const raw = 'percent' === rule.discount_type ? basePrice * ( 1 - Math.min( rule.amount, 100 ) / 100 ) : basePrice - rule.amount;
 	const factor = Math.pow( 10, decimals );
-	// Round half down, matching how the server rounds a subscriber price.
-	const rounded = Math.max( 0, -Math.round( -raw * factor ) / factor );
+	// Both halves of the server's rounding, in order. PHP's `round()` first
+	// discards the binary representation error by taking 15 significant digits —
+	// without that, 0.18 - 0.015 is 0.16499999999999998 and rounds a cent low —
+	// and then rounds a true half away from zero, which is what Math.round does
+	// for the non-negative values that survive the clamp below.
+	const rounded = Math.max( 0, Math.round( Number( ( raw * factor ).toPrecision( 15 ) ) ) / factor );
 	return rounded < basePrice ? rounded : null;
 }
 

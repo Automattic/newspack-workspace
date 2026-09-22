@@ -38,7 +38,24 @@ describe( 'subscriberPrice', () => {
 		expect( subscriberPrice( 1450, { discount_type: 'fixed', amount: 151 } ) ).toBe( 1299 );
 	} );
 
-	it( 'rounds half down to the currency precision', () => {
+	// The publisher tunes the amount against this preview and then the storefront
+	// charges the server's number, so a cent of disagreement is a cent the reader
+	// sees change at checkout. Both halves of each pair are verified against
+	// Subscriber_Discounts::discounted_price().
+	it( 'rounds a half-cent away from zero, as the server does', () => {
+		expect( subscriberPrice( 0.25, { discount_type: 'percent', amount: 50 } ) ).toBe( 0.13 );
+		expect( subscriberPrice( 0.75, { discount_type: 'percent', amount: 50 } ) ).toBe( 0.38 );
+	} );
+
+	// 0.18 - 0.015 is 0.16499999999999998 in binary floating point. PHP's round()
+	// pre-rounds to 15 significant digits and so sees 0.165; without the same
+	// pre-rounding the preview reads the stored error and lands a cent low.
+	it( 'corrects the float error the server corrects', () => {
+		expect( subscriberPrice( 0.18, { discount_type: 'fixed', amount: 0.015 } ) ).toBe( 0.17 );
+		expect( subscriberPrice( 0.24, { discount_type: 'fixed', amount: 0.015 } ) ).toBe( 0.23 );
+	} );
+
+	it( 'rounds to the currency precision', () => {
 		expect( subscriberPrice( 9.99, { discount_type: 'percent', amount: 10 } ) ).toBe( 8.99 );
 	} );
 

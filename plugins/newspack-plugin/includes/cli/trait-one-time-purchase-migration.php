@@ -177,7 +177,7 @@ trait One_Time_Purchase_Migration {
 	 * readers who bought it, where a subscription rule would grant nobody. The cases
 	 * are a product the site can no longer resolve, and a site whose plan products
 	 * outlived WooCommerce Subscriptions — see
-	 * {@see \Newspack\Subscriber_Commerce::is_subscription_product()} for the second.
+	 * {@see \Newspack\WooCommerce_Subscriptions::is_subscription_product()} for the second.
 	 *
 	 * @param int $product_id Product or variation post ID.
 	 *
@@ -185,7 +185,7 @@ trait One_Time_Purchase_Migration {
 	 */
 	private static function is_subscription_product( int $product_id ): bool {
 		$product = \wc_get_product( $product_id );
-		return $product instanceof \WC_Product && \Newspack\Subscriber_Commerce::is_subscription_product( $product );
+		return $product instanceof \WC_Product && \Newspack\WooCommerce_Subscriptions::is_subscription_product( $product );
 	}
 
 	/**

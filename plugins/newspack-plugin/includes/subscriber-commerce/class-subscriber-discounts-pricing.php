@@ -450,7 +450,7 @@ class Subscriber_Discounts_Pricing {
 	 */
 	private static function product_grants( \WC_Product $product, array $rule ) {
 		return Subscriber_Commerce::covers_all_subscriptions( $rule )
-			? Subscriber_Commerce::is_subscription_product( $product )
+			? WooCommerce_Subscriptions::is_subscription_product( $product )
 			: self::product_is_one_of( $product, $rule['subscription_product_ids'] );
 	}
 
@@ -495,7 +495,7 @@ class Subscriber_Discounts_Pricing {
 		$holds_subscription = false;
 		foreach ( $cart_product_ids as $cart_product_id ) {
 			$cart_product = \wc_get_product( $cart_product_id );
-			if ( $cart_product instanceof \WC_Product && Subscriber_Commerce::is_subscription_product( $cart_product ) ) {
+			if ( $cart_product instanceof \WC_Product && WooCommerce_Subscriptions::is_subscription_product( $cart_product ) ) {
 				$holds_subscription = true;
 				break;
 			}
