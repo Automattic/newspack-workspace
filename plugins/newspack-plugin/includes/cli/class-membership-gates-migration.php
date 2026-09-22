@@ -31,8 +31,13 @@ class Membership_Gates_Migration {
 	 * The WooCommerce Memberships wrapper blocks, which are conditional and must
 	 * never be carried into a migrated layout's content.
 	 */
+	private const MEMBERSHIP_WRAPPER_BLOCKS = [
+		'woocommerce-memberships/member-content',
+		'woocommerce-memberships/non-member-content',
+	];
+
 	/**
-	 * Active membership counts, keyed by plan post ID.
+	 * Membership counts, keyed by plan post ID.
 	 *
 	 * Filled by {@see plan_member_count()} on first read. One command run is one process,
 	 * so the cache lives as long as the migration it serves.
@@ -40,11 +45,6 @@ class Membership_Gates_Migration {
 	 * @var array<int,int>
 	 */
 	private static $member_counts = [];
-
-	private const MEMBERSHIP_WRAPPER_BLOCKS = [
-		'woocommerce-memberships/member-content',
-		'woocommerce-memberships/non-member-content',
-	];
 
 	/**
 	 * Create or update Newspack Access Control content gates from WooCommerce
@@ -272,7 +272,7 @@ class Membership_Gates_Migration {
 			$durations_by_group[ $fingerprint ] = self::resolve_group_duration( $group, $duration_override, $carried['sources'] ?? [] );
 			$layouts_by_group[ $fingerprint ]   = self::resolve_group_layouts( $group );
 			self::report_dropped_product_ids( $gate_title, $products_by_group[ $fingerprint ]['dropped'], self::group_requires_purchase( $group ) );
-			self::report_duration_conflict( $gate_title, $durations_by_group[ $fingerprint ]['conflict'] );
+			self::report_mixed_one_time_durations( $gate_title, $durations_by_group[ $fingerprint ] );
 		}
 
 		// A paid gate whose layout gives the reader no way to buy restricts the article
@@ -485,7 +485,7 @@ class Membership_Gates_Migration {
 				// Custom access layout — only when every plan in the group requires a
 				// purchase (see $has_purchase). A mixed group is left registration-gated.
 				if ( $has_purchase && null !== $layouts['custom_access'] ) {
-					$access_rules = self::build_access_rules( $products, $durations_by_group[ $fingerprint ]['duration'] );
+					$access_rules = self::build_access_rules( $products, $durations_by_group[ $fingerprint ] );
 					if ( ! self::apply_layout( $gate_id, $gate_title, 'custom_access', $layouts['custom_access'], $access_rules ) ) {
 						$layout_errors[] = 'paid access layout';
 					}
@@ -511,7 +511,7 @@ class Membership_Gates_Migration {
 					$has_purchase,
 					$layouts,
 					null !== $memberships_gate,
-					! empty( self::build_access_rules( $products, $durations_by_group[ $fingerprint ]['duration'] ) )
+					! empty( self::build_access_rules( $products, $durations_by_group[ $fingerprint ] ) )
 				);
 				foreach ( $verification_issues as $issue ) {
 					WP_CLI::warning( sprintf( '"%s" will not migrate correctly: %s', $gate_title, $issue ) );
@@ -535,7 +535,7 @@ class Membership_Gates_Migration {
 			$gate_holds[ $fingerprint ] = empty( $layout_errors )
 				&& (
 					! $has_purchase
-					|| ( null !== $layouts['custom_access'] && ! empty( self::build_access_rules( $products, $durations_by_group[ $fingerprint ]['duration'] ) ) )
+					|| ( null !== $layouts['custom_access'] && ! empty( self::build_access_rules( $products, $durations_by_group[ $fingerprint ] ) ) )
 				);
 
 			$summary[ $fingerprint ] = [
@@ -859,7 +859,7 @@ class Membership_Gates_Migration {
 			if ( ! self::group_requires_purchase( $group ) ) {
 				continue;
 			}
-			if ( empty( self::build_access_rules( $products_by_group[ $key ], $durations_by_group[ $key ]['duration'] ) ) ) {
+			if ( empty( self::build_access_rules( $products_by_group[ $key ], $durations_by_group[ $key ] ) ) ) {
 				$titles[] = self::gate_title( $group );
 			}
 		}
@@ -889,7 +889,7 @@ class Membership_Gates_Migration {
 				continue;
 			}
 			$written = [];
-			foreach ( self::build_access_rules( $products_by_group[ $key ], $durations_by_group[ $key ]['duration'] ) as $rule_group ) {
+			foreach ( self::build_access_rules( $products_by_group[ $key ], $durations_by_group[ $key ] ) as $rule_group ) {
 				foreach ( $rule_group as $rule ) {
 					$written = array_merge(
 						$written,
@@ -1705,7 +1705,9 @@ class Membership_Gates_Migration {
 	 * A gate can host only one carve-out per slug, so on a site with one site-wide plan
 	 * and several section plans most pairs stay unrepaired — and which one is repaired
 	 * must not turn on the order get_plans() happened to return, which moves when a
-	 * plan is published between the approved dry run and the live run.
+	 * plan is published between the approved dry run and the live run. Only the pairs a
+	 * carve-out could reach are ordered that way: reading a member count for a pair that
+	 * can never be repaired buys the run a query and the ordering nothing.
 	 *
 	 * @param array[] $groups     Consolidated groups, keyed by root index.
 	 * @param array   $overlaps   [i, j] index pairs that could not be merged.
@@ -1726,8 +1728,22 @@ class Membership_Gates_Migration {
 		// one that was never repairable.
 		$arriving = array_map( fn( $group ) => $group[0]['ac_rules'], $groups );
 
+		// A pair with a signup group on either side is never carved, so it is set aside
+		// before the ordering rather than sorted alongside the candidates.
+		$candidates = [];
+		foreach ( $overlaps as $pair ) {
+			if ( self::group_requires_purchase( $groups[ $pair[0] ] ) && self::group_requires_purchase( $groups[ $pair[1] ] ) ) {
+				$candidates[] = $pair;
+			} else {
+				$surviving[] = [
+					'pair'                 => $pair,
+					'blocked_by_carve_out' => false,
+				];
+			}
+		}
+
 		usort(
-			$overlaps,
+			$candidates,
 			function ( $a, $b ) use ( $groups ) {
 				$members_a = self::group_member_count( $groups[ $a[0] ] ) + self::group_member_count( $groups[ $a[1] ] );
 				$members_b = self::group_member_count( $groups[ $b[0] ] ) + self::group_member_count( $groups[ $b[1] ] );
@@ -1737,17 +1753,14 @@ class Membership_Gates_Migration {
 			}
 		);
 
-		foreach ( $overlaps as $pair ) {
+		foreach ( $candidates as $pair ) {
 			list( $i, $j ) = $pair;
 
-			$both_paid = self::group_requires_purchase( $groups[ $i ] ) && self::group_requires_purchase( $groups[ $j ] );
-			$direction = $both_paid
-				? self::carve_out_direction( $groups[ $i ][0]['ac_rules'], $groups[ $j ][0]['ac_rules'] )
-				: null;
+			$direction = self::carve_out_direction( $groups[ $i ][0]['ac_rules'], $groups[ $j ][0]['ac_rules'] );
 			if ( null === $direction ) {
 				$surviving[] = [
 					'pair'                 => $pair,
-					'blocked_by_carve_out' => $both_paid && null !== self::carve_out_direction( $arriving[ $i ], $arriving[ $j ] ),
+					'blocked_by_carve_out' => null !== self::carve_out_direction( $arriving[ $i ], $arriving[ $j ] ),
 				];
 				continue;
 			}
@@ -1772,13 +1785,16 @@ class Membership_Gates_Migration {
 			$post_count = self::count_carved_posts( $groups[ $narrow ][0]['ac_rules'], $arriving[ $broad ] );
 
 			$carve_outs[] = [
-				'narrow'       => $narrow,
-				'broad'        => $broad,
-				'source'       => self::gate_title( $groups[ $broad ] ),
-				'product_ids'  => $broad_products['product_ids'],
-				'one_time_ids' => $broad_products['one_time_ids'],
-				'duration'     => $broad_duration['duration'],
-				'rules'        => $exclusion_rules,
+				'narrow'               => $narrow,
+				'broad'                => $broad,
+				'source'               => self::gate_title( $groups[ $broad ] ),
+				'product_ids'          => $broad_products['product_ids'],
+				'one_time_ids'         => $broad_products['one_time_ids'],
+				'duration'             => $broad_duration['duration'],
+				// The broad group's own plans can have sold the same products for
+				// different lengths, and each has to survive the transfer intact.
+				'durations_by_product' => $broad_duration['durations_by_product'],
+				'rules'                => $exclusion_rules,
 			];
 
 			$carved[] = sprintf(
@@ -1888,9 +1904,10 @@ class Membership_Gates_Migration {
 				array_unique( array_merge( $carried[ $narrow ]['product_ids'] ?? [], $record['product_ids'] ) )
 			);
 			$carried[ $narrow ]['sources'][]   = [
-				'name'         => $record['source'],
-				'one_time_ids' => $record['one_time_ids'],
-				'duration'     => $record['duration'],
+				'name'                 => $record['source'],
+				'one_time_ids'         => $record['one_time_ids'],
+				'duration'             => $record['duration'],
+				'durations_by_product' => $record['durations_by_product'] ?? [],
 			];
 		}
 		return $carried;
@@ -2237,7 +2254,7 @@ class Membership_Gates_Migration {
 	}
 
 	/**
-	 * A gate group's active memberships, summed across its plans.
+	 * A gate group's memberships, summed across its plans.
 	 *
 	 * A reader holding two of the group's plans is counted twice, so this is a count
 	 * of memberships rather than of people. It is a scale figure for the operator, not
@@ -2252,13 +2269,22 @@ class Membership_Gates_Migration {
 	}
 
 	/**
-	 * Active memberships on one plan, resolved once per plan and only when read.
+	 * The memberships on one plan that reach its content, resolved once per plan and
+	 * only when read.
 	 *
-	 * `WC_Memberships_Membership_Plan::get_memberships_count()` is not a COUNT query: it
-	 * runs an unpaged `get_posts()` for every membership on the plan and counts the IDs in
-	 * PHP. Only the overlap warnings and the order they are reported in ever read the
-	 * number, so resolving it while grouping would materialise every active membership on
-	 * the site for a figure most runs never print.
+	 * Every status WooCommerce Memberships grants access on is counted, not `active`
+	 * alone: a complimentary, free-trial or pending member reads the plan's content
+	 * today, and a split gate denies them exactly as it denies an active one. Counting
+	 * `active` alone would put a number to the operator that understates the population
+	 * the warning is about, and — since the count decides which overlap a carve-out
+	 * repairs — could hand the repair to the smaller pair.
+	 *
+	 * Counted with a paged query reading `found_posts`, rather than
+	 * `WC_Memberships_Membership_Plan::get_memberships_count()`, which is not a COUNT
+	 * query: it runs an unpaged `get_posts()` for every membership on the plan and
+	 * counts the IDs in PHP. Only the overlap warnings and the carve-out ordering ever
+	 * read the number, and the site-wide plan those catalogues turn on is the likeliest
+	 * to be large.
 	 *
 	 * A descriptor that already carries the count is taken at its word, so a caller
 	 * holding the number does not pay for it twice.
@@ -2273,16 +2299,61 @@ class Membership_Gates_Migration {
 		}
 
 		$plan_id = (int) ( $plan['pid'] ?? 0 );
-		if ( ! $plan_id || ! function_exists( 'wc_memberships_get_membership_plan' ) ) {
+		if ( ! $plan_id ) {
 			return 0;
 		}
 
 		if ( ! array_key_exists( $plan_id, self::$member_counts ) ) {
-			$membership_plan                 = \wc_memberships_get_membership_plan( $plan_id );
-			self::$member_counts[ $plan_id ] = $membership_plan ? (int) $membership_plan->get_memberships_count( 'active' ) : 0;
+			$memberships                     = new \WP_Query(
+				[
+					'post_type'              => 'wc_user_membership',
+					'post_status'            => self::access_granting_membership_statuses(),
+					'post_parent'            => $plan_id,
+					'fields'                 => 'ids',
+					'posts_per_page'         => 1,
+					'ignore_sticky_posts'    => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+				]
+			);
+			self::$member_counts[ $plan_id ] = (int) $memberships->found_posts;
 		}
 
 		return self::$member_counts[ $plan_id ];
+	}
+
+	/**
+	 * The user-membership post statuses a reader reaches the plan's content under.
+	 *
+	 * Asked of Memberships itself: the list is filterable
+	 * (`wc_memberships_active_access_membership_statuses`), and a site that has added a
+	 * status to it has members this count would otherwise miss. The literals are the
+	 * shipped defaults, kept as a fallback so a site whose memberships outlived the
+	 * plugin still gets a population figure rather than a zero.
+	 *
+	 * Returned with the `wcm-` prefix the membership posts carry.
+	 *
+	 * @return string[]
+	 */
+	private static function access_granting_membership_statuses(): array {
+		$statuses = [ 'active', 'complimentary', 'free_trial', 'pending' ];
+
+		$memberships      = function_exists( 'wc_memberships' ) ? \wc_memberships() : null;
+		$user_memberships = is_object( $memberships ) && method_exists( $memberships, 'get_user_memberships_instance' )
+			? $memberships->get_user_memberships_instance()
+			: null;
+		if ( is_object( $user_memberships ) && method_exists( $user_memberships, 'get_active_access_membership_statuses' ) ) {
+			$statuses = (array) $user_memberships->get_active_access_membership_statuses();
+		}
+
+		return array_values(
+			array_unique(
+				array_map(
+					fn( $status ) => str_starts_with( (string) $status, 'wcm-' ) ? (string) $status : 'wcm-' . $status,
+					$statuses
+				)
+			)
+		);
 	}
 
 	/**
@@ -2418,27 +2489,33 @@ class Membership_Gates_Migration {
 	}
 
 	/**
-	 * Warn when a group's plans granted one-time access for different lengths.
+	 * Tell the operator when a gate's one-time products were granted for different
+	 * lengths.
 	 *
-	 * The gate stores one duration, so the command picks the longest and says so.
-	 * Staying silent would leave an operator to discover at cutover that a gate
-	 * grants longer than the plan they are reading it against.
+	 * A line rather than a warning: the gate writes a purchase rule per length, so
+	 * every buyer keeps what their own plan gave them and there is nothing to weigh.
+	 * It is said at all because the gate is reviewed against the plans it came from,
+	 * and several purchase rules on one gate would otherwise read as a mistake.
 	 *
-	 * @param string      $gate_title The gate title, for the message.
-	 * @param string|null $conflict   The 'conflict' element of a resolve_group_duration()
-	 *                                result; null when the group's plans agree.
+	 * @param string $gate_title The gate title, for the message.
+	 * @param array  $duration   A resolve_group_duration() result.
 	 *
 	 * @return void
 	 */
-	private static function report_duration_conflict( string $gate_title, ?string $conflict ): void {
-		if ( empty( $conflict ) ) {
+	private static function report_mixed_one_time_durations( string $gate_title, array $duration ): void {
+		$lengths = array_values(
+			array_unique(
+				array_map( fn( $length ) => self::describe_duration( $length ), $duration['durations_by_product'] ?? [] )
+			)
+		);
+		if ( count( $lengths ) < 2 ) {
 			return;
 		}
-		WP_CLI::warning(
+		WP_CLI::line(
 			sprintf(
-				'"%s": its plans grant one-time access for different lengths — %s. WooCommerce Memberships grants access from any one of them, so the shortest would have taken the content from readers the plans admitted.',
+				'"%s": its one-time products were sold for different lengths — %s. The gate carries one purchase rule per length, so each product keeps the one its own plan granted.',
 				$gate_title,
-				$conflict
+				implode( ' and ', $lengths )
 			)
 		);
 	}
@@ -2452,17 +2529,20 @@ class Membership_Gates_Migration {
 	 * which is what the plan granted. Flattening them into a single group would demand
 	 * both and admit nobody.
 	 *
+	 * One one-time group per access length, for the same reason: a group's plans can
+	 * grant for different lengths, and so can a carve-out handing its products over, so
+	 * a single rule would have to sell every buyer the longest of them.
+	 *
 	 * A one-time product with no duration writes no rule: the caller refuses such a
 	 * run before the first write, so this is the shape that never reaches a gate
 	 * rather than a silent drop.
 	 *
-	 * @param array      $products A resolve_product_ids() result.
-	 * @param array|null $duration The group's one-time duration, or null when none is
-	 *                             available.
+	 * @param array $products A resolve_product_ids() result.
+	 * @param array $duration A resolve_group_duration() result.
 	 *
 	 * @return array[] Access rule groups, in the shape custom_access settings store.
 	 */
-	private static function build_access_rules( array $products, ?array $duration ): array {
+	private static function build_access_rules( array $products, array $duration ): array {
 		$access_rules = [];
 		if ( ! empty( $products['subscription_ids'] ) ) {
 			$access_rules[] = [
@@ -2472,16 +2552,24 @@ class Membership_Gates_Migration {
 				],
 			];
 		}
-		if ( ! empty( $products['one_time_ids'] ) && null !== $duration ) {
-			$access_rules[] = [
-				[
-					'slug'  => 'one_time_purchase',
-					'value' => array_merge(
-						[ 'product_ids' => $products['one_time_ids'] ],
-						$duration
-					),
-				],
-			];
+		$group_duration = $duration['duration'] ?? null;
+		if ( ! empty( $products['one_time_ids'] ) && null !== $group_duration ) {
+			$buckets = self::group_one_time_ids_by_duration(
+				$products['one_time_ids'],
+				$group_duration,
+				$duration['durations_by_product'] ?? []
+			);
+			foreach ( $buckets as $bucket ) {
+				$access_rules[] = [
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => array_merge(
+							[ 'product_ids' => $bucket['product_ids'] ],
+							$bucket['duration']
+						),
+					],
+				];
+			}
 		}
 		return $access_rules;
 	}

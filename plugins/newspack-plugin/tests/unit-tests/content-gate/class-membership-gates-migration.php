@@ -74,6 +74,19 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	private $original_products_database;
 
 	/**
+	 * The membership statuses the count fixtures use, without the `wcm-` prefix.
+	 */
+	private const MEMBERSHIP_STATUSES = [ 'active', 'complimentary', 'free_trial', 'pending', 'expired', 'cancelled' ];
+
+	/**
+	 * Whether this test registered the user-membership post type, which the suite does
+	 * not reset between tests outside WordPress core.
+	 *
+	 * @var bool
+	 */
+	private $registered_membership_post_type = false;
+
+	/**
 	 * Remember the argument vector the bare-flag tests overwrite, and the mock product
 	 * database the product fixtures write into.
 	 */
@@ -94,6 +107,13 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	public function tear_down() {
 		global $products_database;
 		$products_database = $this->original_products_database;
+		if ( $this->registered_membership_post_type ) {
+			\unregister_post_type( 'wc_user_membership' );
+			foreach ( self::MEMBERSHIP_STATUSES as $status ) {
+				\_unregister_post_status( 'wcm-' . $status );
+			}
+			$this->registered_membership_post_type = false;
+		}
 		if ( null === $this->original_argv ) {
 			unset( $_SERVER['argv'] );
 		} else {
@@ -358,7 +378,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	private function build_group_access_rules( array $group, ?array $override = null ): array {
 		$products = $this->invoke_private_static( 'resolve_product_ids', [ $group ] );
 		$duration = $this->invoke_private_static( 'resolve_group_duration', [ $group, $override ] );
-		return $this->invoke_private_static( 'build_access_rules', [ $products, $duration['duration'] ] );
+		return $this->invoke_private_static( 'build_access_rules', [ $products, $duration ] );
 	}
 
 	/**
@@ -2905,8 +2925,89 @@ HTML;
 					],
 				],
 			],
-			$this->invoke_private_static( 'build_access_rules', [ $products, $duration['duration'] ] ),
+			$this->invoke_private_static( 'build_access_rules', [ $products, $duration ] ),
 			'The carved-out gate grants its own subscription and the excluding plan\'s one-time product, for as long as that plan granted it.'
+		);
+	}
+
+	/**
+	 * The transfer must not resell one plan's buyers another plan's length. The narrow
+	 * gate here has one-time buyers of its own, and a single rule would have to name one
+	 * length for both sets — the longest, which hands the narrow plan's 7-day buyers the
+	 * 30 days the broad plan charged for, on content the carve-out just made this gate
+	 * the only thing over. Rule groups are OR'd, so a group per length still opens the
+	 * gate to either purchase while each buyer keeps what their own plan sold them.
+	 */
+	public function test_a_carve_out_writes_a_one_time_rule_per_access_length() {
+		$category  = self::factory()->category->create();
+		$broad_id  = $this->create_product( 'simple' );
+		$narrow_id = $this->create_product( 'simple' );
+
+		$broad  = $this->make_plan_group(
+			'All Posts',
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+			],
+			$broad_id,
+			'purchase',
+			0,
+			$this->duration( 30, 'days' )
+		);
+		$narrow = $this->make_plan_group(
+			'Premium Section',
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ (string) $category ],
+				],
+			],
+			$narrow_id,
+			'purchase',
+			0,
+			$this->duration( 7, 'days' )
+		);
+
+		$carved     = [];
+		$carve_outs = [];
+		$widened    = [];
+		$overlaps   = [];
+		$merged     = $this->invoke_private_static(
+			'consolidate_plan_groups',
+			[ [ $broad, $narrow ], &$widened, &$overlaps, &$carved, &$carve_outs ]
+		);
+
+		$carried  = $this->invoke_private_static( 'carried_access_by_group', [ $carve_outs ] );
+		$products = $this->invoke_private_static( 'resolve_product_ids', [ $merged[1], $carried[1]['product_ids'] ] );
+		$duration = $this->invoke_private_static( 'resolve_group_duration', [ $merged[1], null, $carried[1]['sources'] ] );
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ $broad_id ],
+							'duration_value' => 30,
+							'duration_unit'  => 'days',
+						],
+					],
+				],
+				[
+					[
+						'slug'  => 'one_time_purchase',
+						'value' => [
+							'product_ids'    => [ $narrow_id ],
+							'duration_value' => 7,
+							'duration_unit'  => 'days',
+						],
+					],
+				],
+			],
+			$this->invoke_private_static( 'build_access_rules', [ $products, $duration ] ),
+			'Each plan\'s buyers keep the length that plan sold them.'
 		);
 	}
 
@@ -3229,29 +3330,90 @@ HTML;
 	}
 
 	/**
-	 * Only the overlap warnings and their ordering read a plan's member count, and
-	 * `get_memberships_count()` pulls every active membership ID into PHP to produce it.
-	 * So it is resolved on first read rather than while grouping, and cached per plan —
-	 * two descriptors on one plan, read twice, cost a single lookup.
+	 * Register the user-membership post type and the statuses a membership carries, so
+	 * a test can create memberships the count has to find. WooCommerce Memberships is
+	 * not loaded in the suite, and WP_Query builds a status clause only from registered
+	 * statuses — an unregistered one silently falls back to `publish` and the count
+	 * comes back 0 whatever the fixtures say.
+	 *
+	 * @return void
+	 */
+	private function register_membership_post_type(): void {
+		\register_post_type( 'wc_user_membership', [ 'public' => false ] );
+		foreach ( self::MEMBERSHIP_STATUSES as $status ) {
+			\register_post_status( 'wcm-' . $status, [ 'public' => false ] );
+		}
+		$this->registered_membership_post_type = true;
+	}
+
+	/**
+	 * Create a membership on a plan.
+	 *
+	 * @param int    $plan_id The plan post ID.
+	 * @param string $status  The membership status, without the `wcm-` prefix.
+	 *
+	 * @return int The membership post ID.
+	 */
+	private function create_membership( int $plan_id, string $status ): int {
+		return self::factory()->post->create(
+			[
+				'post_type'   => 'wc_user_membership',
+				'post_status' => 'wcm-' . $status,
+				'post_parent' => $plan_id,
+			]
+		);
+	}
+
+	/**
+	 * The count is the population a split gate would deny, and it decides which
+	 * overlap a carve-out repairs — so it has to be every membership that reaches the
+	 * plan's content today. WooCommerce Memberships grants access on `complimentary`,
+	 * `free_trial` and `pending` as well as `active`; an expired or cancelled
+	 * membership reaches nothing and must not inflate it.
+	 */
+	public function test_plan_member_count_covers_every_status_that_grants_access() {
+		$this->register_membership_post_type();
+		$plan_id = self::factory()->post->create();
+
+		foreach ( [ 'active', 'complimentary', 'free_trial', 'pending' ] as $status ) {
+			$this->create_membership( $plan_id, $status );
+		}
+		$this->create_membership( $plan_id, 'expired' );
+		$this->create_membership( $plan_id, 'cancelled' );
+		$this->create_membership( self::factory()->post->create(), 'active' );
+
+		$this->reset_member_counts();
+
+		$this->assertSame( 4, $this->invoke_private_static( 'plan_member_count', [ [ 'pid' => $plan_id ] ] ) );
+	}
+
+	/**
+	 * Only the overlap warnings and the carve-out ordering read a plan's member count,
+	 * and resolving it costs a query. So it is resolved on first read rather than while
+	 * grouping, and cached per plan — two descriptors on one plan, read twice, cost a
+	 * single query.
 	 */
 	public function test_plan_member_count_is_resolved_lazily_and_cached_per_plan() {
-		require_once __DIR__ . '/../../mocks/wc-memberships-plan-lookup-mock.php';
+		$this->register_membership_post_type();
+		$plan_id = self::factory()->post->create();
+		$this->create_membership( $plan_id, 'active' );
 
-		global $newspack_mock_counted_plans, $newspack_mock_plan_lookups;
-		$newspack_mock_counted_plans = [ 4242 => new \Newspack_Mock_Counted_Membership_Plan( 4242, 37 ) ];
-		$newspack_mock_plan_lookups  = [];
+		$this->reset_member_counts();
 
-		$reflected_member_counts = new \ReflectionProperty( Membership_Gates_Migration::class, 'member_counts' );
-		$reflected_member_counts->setAccessible( true );
-		$reflected_member_counts->setValue( null, [] );
+		$queries                       = 0;
+		$count_membership_queries      = function ( $query ) use ( &$queries ) {
+			if ( 'wc_user_membership' === $query->get( 'post_type' ) ) {
+				++$queries;
+			}
+		};
+		$two_plans_one_membership_plan = [ [ 'pid' => $plan_id ], [ 'pid' => $plan_id ] ];
 
-		$two_plans_one_membership_plan = [ [ 'pid' => 4242 ], [ 'pid' => 4242 ] ];
+		add_action( 'pre_get_posts', $count_membership_queries );
+		$this->assertSame( 2, $this->invoke_private_static( 'group_member_count', [ $two_plans_one_membership_plan ] ) );
+		$this->assertSame( 2, $this->invoke_private_static( 'group_member_count', [ $two_plans_one_membership_plan ] ) );
+		$this->assertSame( 1, $queries, 'The plan is counted once, however often the count is read.' );
 
-		$this->assertSame( 74, $this->invoke_private_static( 'group_member_count', [ $two_plans_one_membership_plan ] ) );
-		$this->assertSame( 74, $this->invoke_private_static( 'group_member_count', [ $two_plans_one_membership_plan ] ) );
-		$this->assertSame( [ 4242 ], $newspack_mock_plan_lookups, 'The plan is looked up once, however often the count is read.' );
-
-		$newspack_mock_plan_lookups = [];
+		$queries = 0;
 		$this->assertSame(
 			5,
 			$this->invoke_private_static(
@@ -3259,14 +3421,27 @@ HTML;
 				[
 					[
 						[
-							'pid'          => 4242,
+							'pid'          => $plan_id,
 							'member_count' => 5,
 						],
 					],
-				] 
+				]
 			)
 		);
-		$this->assertSame( [], $newspack_mock_plan_lookups, 'A descriptor carrying the count is taken at its word.' );
+		remove_action( 'pre_get_posts', $count_membership_queries );
+
+		$this->assertSame( 0, $queries, 'A descriptor carrying the count is taken at its word.' );
+	}
+
+	/**
+	 * Empty the per-plan count cache, which outlives a test because it is static.
+	 *
+	 * @return void
+	 */
+	private function reset_member_counts(): void {
+		$reflected_member_counts = new \ReflectionProperty( Membership_Gates_Migration::class, 'member_counts' );
+		$reflected_member_counts->setAccessible( true );
+		$reflected_member_counts->setValue( null, [] );
 	}
 
 	/**
