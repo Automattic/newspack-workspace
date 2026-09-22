@@ -1,3 +1,17 @@
+## newspack [6.52.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.3...newspack@6.52.4) (2026-09-22)
+
+
+### Bug Fixes
+
+* **feeds:** keep build date in step with scheduled posts (NPPD-2284, [#1124](https://github.com/Automattic/newspack-workspace/issues/1124)) ([c2694d6](https://github.com/Automattic/newspack-workspace/commit/c2694d6e9ae4fffdf1ba8794783bc712bdd8faf3))
+
+## newspack [6.52.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.2...newspack@6.52.3) (2026-09-22)
+
+
+### Bug Fixes
+
+* **content-gate:** gate the frontend metering excerpt (NPPD-2254, [#1044](https://github.com/Automattic/newspack-workspace/issues/1044)) ([fda4d75](https://github.com/Automattic/newspack-workspace/commit/fda4d758fbd311a5d2d399dd06738d6217600b29))
+
 ## newspack [6.52.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.1...newspack@6.52.2) (2026-09-21)
 
 
