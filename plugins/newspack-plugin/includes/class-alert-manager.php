@@ -50,20 +50,6 @@ class Alert_Manager {
 	const HEALTH_BROKEN_THRESHOLD = 3;
 
 	/**
-	 * Window during which repeat permanent config-level sync failures for the
-	 * same integration emit at most one Slack alert.
-	 *
-	 * A config failure (disabled/unpaid ESP account) is site-level rather than
-	 * per-contact, and — unlike the retry-exhausted path, which is naturally
-	 * rate-limited by the retry backoff — the permanent-failure path fires on
-	 * the first failure of every contact, so an account-wide outage on a busy
-	 * site would otherwise page once per contact for a single problem.
-	 *
-	 * Private for the same reason as HEALTH_CHECK_DEDUP_INTERVAL.
-	 */
-	private const PERMANENT_FAILURE_DEDUP_INTERVAL = HOUR_IN_SECONDS;
-
-	/**
 	 * Substring signatures (lowercase) that mark a health-check failure as
 	 * publisher-side: the ESP account is disabled, unpaid, or holding a dead
 	 * key, so the fix belongs to the publisher and retrying on our side
@@ -343,17 +329,16 @@ class Alert_Manager {
 	/**
 	 * Handle a permanent (non-retryable) contact-sync failure.
 	 *
-	 * Severity derives from the failure class carried in the payload:
+	 * Both classes forward at 'warning' severity, which reaches the log but
+	 * not Slack:
 	 *
-	 * - `permanent_config` (disabled/unpaid ESP account — actionable and
-	 *   site-level): 'error' severity, routed to Slack by
-	 *   forward_alert_to_log(). Deduped per integration for
-	 *   PERMANENT_FAILURE_DEDUP_INTERVAL, since per-contact repeats of a
-	 *   site-level condition add no signal.
+	 * - `permanent_config` (disabled or unpaid ESP account) is site-level.
+	 *   The hourly health check observes the same account state within the
+	 *   hour and owns the escalation through handle_health_check_failed(),
+	 *   so a per-contact repeat here would only duplicate it.
 	 * - `permanent_contact` (fired by the deletion path only, where a skipped
 	 *   retry has no natural re-trigger and the dropped deletion signal is
-	 *   GDPR-relevant): 'warning' severity — surfaced in Watch without
-	 *   paging. Not deduped: each alert concerns a distinct contact.
+	 *   GDPR-relevant) concerns one contact each and stays observable.
 	 *
 	 * Contact_Sync skips permanent contact-data failures silently on the
 	 * regular sync path (the contact re-syncs on the reader's next event), so
@@ -365,35 +350,24 @@ class Alert_Manager {
 		$integration_id = $payload['integration_id'] ?? 'unknown';
 		$is_config      = 'permanent_contact' !== ( $payload['error_class'] ?? 'permanent_config' );
 
-		if ( $is_config ) {
-			$dedup_key = 'newspack_alert_pf_' . md5( (string) $integration_id );
-			if ( get_transient( $dedup_key ) ) {
-				return;
-			}
-			// Set the dedup transient BEFORE dispatch so a `newspack_alert`
-			// handler that throws cannot defeat dedup by leaving the key unset
-			// (see handle_health_check_failed for the same rationale).
-			set_transient( $dedup_key, time(), self::PERMANENT_FAILURE_DEDUP_INTERVAL );
-
-			$message = sprintf(
+		$message = $is_config
+			? sprintf(
 				'Permanent config sync failure for integration "%s" (no retry). Last error: %s',
 				$integration_id,
 				$payload['reason'] ?? 'unknown'
-			);
-		} else {
-			$message = sprintf(
+			)
+			: sprintf(
 				'Permanent contact-data failure for integration "%s" account-deletion sync; the deletion signal was not propagated (no retry). Last error: %s',
 				$integration_id,
 				$payload['reason'] ?? 'unknown'
 			);
-		}
 
 		/** This action is documented in includes/class-alert-manager.php */
 		do_action(
 			'newspack_alert',
 			[
 				'type'      => 'sync_permanent_failure',
-				'severity'  => $is_config ? 'error' : 'warning',
+				'severity'  => 'warning',
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),

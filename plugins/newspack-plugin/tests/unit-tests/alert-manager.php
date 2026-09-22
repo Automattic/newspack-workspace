@@ -69,8 +69,9 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a permanent config-level failure fires an error-severity alert
-	 * (routed to Slack).
+	 * Test that a permanent config-level failure forwards at warning severity
+	 * (Watch). The hourly health check observes the same account state and
+	 * owns the Slack escalation, so this path no longer pages.
 	 */
 	public function test_permanent_failure_alert() {
 		$alerts = [];
@@ -93,15 +94,16 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $alerts, 'The permanent failure should fire newspack_alert.' );
 		$this->assertEquals( 'sync_permanent_failure', $alerts[0]['type'] );
-		$this->assertEquals( 'error', $alerts[0]['severity'], 'Permanent config failure should be error severity (Slack).' );
+		$this->assertEquals( 'warning', $alerts[0]['severity'], 'Permanent config failures reach the log, not Slack.' );
+		$this->assertStringContainsString( 'Permanent config sync failure for integration "esp"', $alerts[0]['message'] );
 	}
 
 	/**
-	 * Test that repeat permanent config failures for the same integration are
-	 * deduped within the alert window — a config failure is site-level, so an
-	 * account-wide ESP outage must not page once per contact.
+	 * Test that repeat permanent config failures are no longer deduped: at
+	 * warning severity each one is a log entry, and per-contact history in
+	 * the log is useful.
 	 */
-	public function test_permanent_config_failure_alert_deduped_per_integration() {
+	public function test_permanent_config_failure_is_not_deduped() {
 		$alerts = [];
 		add_action(
 			'newspack_alert',
@@ -120,23 +122,15 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		do_action( 'newspack_sync_permanent_failure', $payload );
 		do_action( 'newspack_sync_permanent_failure', $payload );
 
-		$this->assertCount( 1, $alerts, 'Repeat config failures for the same integration should emit one alert.' );
-
-		do_action(
-			'newspack_sync_permanent_failure',
-			array_merge( $payload, [ 'integration_id' => 'other_esp' ] )
-		);
-
-		$this->assertCount( 2, $alerts, 'A different integration should alert independently.' );
+		$this->assertCount( 2, $alerts );
+		$this->assertEquals( 'warning', $alerts[1]['severity'] );
 	}
 
 	/**
-	 * Test that severity derives from the failure class: config failures page
-	 * (error → Slack) while deletion-path contact-data failures surface as
-	 * warnings (Watch), observable without paging — and are not deduped, since
-	 * each concerns a distinct contact.
+	 * Test that both permanent-failure classes stay out of Slack, and that
+	 * the deletion-path message still names the dropped deletion signal.
 	 */
-	public function test_permanent_failure_severity_derives_from_class() {
+	public function test_permanent_failure_classes_both_stay_out_of_slack() {
 		$alerts = [];
 		add_action(
 			'newspack_alert',
@@ -145,20 +139,17 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			}
 		);
 
-		$contact_payload = [
-			'integration_id' => 'esp',
-			'email'          => 'gone@example.com',
-			'mode'           => 'flag',
-			'context'        => 'Account deletion',
-			'reason'         => 'Your merge fields were invalid.',
-			'error_class'    => 'permanent_contact',
-		];
-		do_action( 'newspack_sync_permanent_failure', $contact_payload );
-		do_action( 'newspack_sync_permanent_failure', $contact_payload );
-
-		$this->assertCount( 2, $alerts, 'Contact-class permanent failures should not be deduped.' );
-		$this->assertEquals( 'warning', $alerts[0]['severity'], 'Contact-class permanent failures should not page.' );
-
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'email'          => 'gone@example.com',
+				'mode'           => 'flag',
+				'context'        => 'Account deletion',
+				'reason'         => 'Your merge fields were invalid.',
+				'error_class'    => 'permanent_contact',
+			]
+		);
 		do_action(
 			'newspack_sync_permanent_failure',
 			[
@@ -170,8 +161,10 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			]
 		);
 
-		$this->assertCount( 3, $alerts );
-		$this->assertEquals( 'error', $alerts[2]['severity'], 'Config-class permanent failures should page.' );
+		$this->assertCount( 2, $alerts );
+		$this->assertEquals( 'warning', $alerts[0]['severity'] );
+		$this->assertStringContainsString( 'deletion signal was not propagated', $alerts[0]['message'] );
+		$this->assertEquals( 'warning', $alerts[1]['severity'] );
 	}
 
 	/**
