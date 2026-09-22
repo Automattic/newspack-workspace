@@ -358,18 +358,18 @@ final class Reader_Activation {
 			*/
 			$filtered_labels = apply_filters( 'newspack_reader_activation_auth_labels', $default_labels );
 
-			foreach ( $default_labels as $key => $label ) {
-				if ( isset( $filtered_labels[ $key ] ) ) {
-					if ( is_array( $label ) && is_array( $filtered_labels[ $key ] ) ) {
-						self::$reader_activation_labels[ $key ] = array_merge( $label, $filtered_labels[ $key ] );
-					} elseif ( is_string( $label ) && is_string( $filtered_labels[ $key ] ) ) {
-						self::$reader_activation_labels[ $key ] = $filtered_labels[ $key ];
+			foreach ( $default_labels as $label_key => $label ) {
+				if ( isset( $filtered_labels[ $label_key ] ) ) {
+					if ( is_array( $label ) && is_array( $filtered_labels[ $label_key ] ) ) {
+						self::$reader_activation_labels[ $label_key ] = array_merge( $label, $filtered_labels[ $label_key ] );
+					} elseif ( is_string( $label ) && is_string( $filtered_labels[ $label_key ] ) ) {
+						self::$reader_activation_labels[ $label_key ] = $filtered_labels[ $label_key ];
 					} else {
 						// If filtered label type doesn't match, fallback to default.
-						self::$reader_activation_labels[ $key ] = $label;
+						self::$reader_activation_labels[ $label_key ] = $label;
 					}
 				} else {
-					self::$reader_activation_labels[ $key ] = $label;
+					self::$reader_activation_labels[ $label_key ] = $label;
 				}
 			}
 		}
