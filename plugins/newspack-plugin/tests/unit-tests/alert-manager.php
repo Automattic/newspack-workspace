@@ -650,6 +650,46 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Alerts from a staging host are capped at Watch (log_level 2), so a
+	 * broken sandbox never pages the on-call channel but still reaches the
+	 * log.
+	 */
+	public function test_staging_site_alerts_are_capped_at_watch() {
+		add_action( 'newspack_alert', [ Alert_Manager::class, 'forward_alert_to_log' ] );
+		$staging = function () {
+			return 'https://sandbox.newspackstaging.com';
+		};
+		add_filter( 'home_url', $staging );
+
+		$captured = null;
+		add_action(
+			'newspack_log',
+			function ( $code, $message, $params ) use ( &$captured ) {
+				$captured = compact( 'code', 'message', 'params' );
+			},
+			10,
+			3
+		);
+
+		try {
+			do_action(
+				'newspack_alert',
+				[
+					'type'     => 'integration_health_check_failed',
+					'severity' => 'error',
+					'message'  => 'Boom',
+				]
+			);
+		} finally {
+			remove_filter( 'home_url', $staging );
+		}
+
+		$this->assertNotNull( $captured, 'The entry must still reach the log.' );
+		$this->assertSame( 2, $captured['params']['log_level'] );
+		$this->assertSame( 'debug', $captured['params']['type'] );
+	}
+
+	/**
 	 * Test that a numeric-zero message is still forwarded (it casts to the
 	 * non-empty string '0'), unlike (bool) false which casts to ''.
 	 */
