@@ -149,6 +149,7 @@ class Alert_Manager {
 	 *     (Alert — Slack)
 	 *   - anything else (incl. 'warning', unknown, or missing severity) →
 	 *     type 'debug', log_level 2 (Watch — logstash only)
+	 *   - a Newspack staging host (`*.newspackstaging.com`) → always Watch
 	 *
 	 * Only known error severities escalate to Slack so an unanticipated
 	 * alert shape (e.g. a third-party `newspack_alert` with no severity)
@@ -176,6 +177,13 @@ class Alert_Manager {
 
 		$severity = is_scalar( $alert['severity'] ?? null ) ? (string) $alert['severity'] : '';
 		$is_error = in_array( $severity, [ 'error', 'critical' ], true );
+
+		// Staging sites report to the same on-call channel as production,
+		// and a broken sandbox is never an incident. Watch keeps the entry
+		// in the log.
+		if ( $is_error && self::is_staging_site() ) {
+			$is_error = false;
+		}
 
 		$params = [
 			'type'      => $is_error ? 'error' : 'debug',
@@ -219,6 +227,16 @@ class Alert_Manager {
 		}
 
 		return '';
+	}
+
+	/**
+	 * Whether this site is a Newspack staging site, judged by its host.
+	 *
+	 * @return bool
+	 */
+	private static function is_staging_site() {
+		$host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+		return str_ends_with( $host, '.newspackstaging.com' );
 	}
 
 	/**
