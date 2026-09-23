@@ -645,20 +645,23 @@ abstract class Integration {
 	abstract public function push_contact_data( $contact, $context = '', $existing_contact = null );
 
 	/**
-	 * Whether the integration already holds a record for this contact.
+	 * Whether pushing this contact would update a live record the integration holds.
 	 *
 	 * Consulted by the sync framework only when a backfill runs with
 	 * `--existing-only`, before `push_contact_data()`: `false` makes the
 	 * framework skip this integration for the reader (tallied as skipped, not
 	 * failed), a `WP_Error` is treated as a failed push, and `true` lets the
-	 * push proceed. Override it where the external system can be asked; the
-	 * override is what makes `supports_contact_lookup()` true. An integration
-	 * that cannot ask is refused under the flag rather than pushed, because a
-	 * push there is an upsert that would create the contact.
+	 * push proceed. Answer by what the push would do: `true` only when it would
+	 * update a live record, `false` when it would create one or restore an
+	 * archived or deleted one. Any answer other than a boolean or a `WP_Error`
+	 * is treated as a failed check. Override it where the external system can be
+	 * asked; the override is what makes `supports_contact_lookup()` true. An
+	 * integration that cannot ask is refused under the flag rather than pushed,
+	 * because a push there is an upsert that would create the contact.
 	 *
 	 * @param string $email The contact's email address.
 	 *
-	 * @return bool|\WP_Error True if the contact exists, false if it does not, WP_Error if the lookup failed or is unsupported.
+	 * @return bool|\WP_Error True if the push would update a live record, false if it would create or restore one, WP_Error if the lookup failed or is unsupported.
 	 */
 	public function contact_exists( $email ) {
 		return new \WP_Error(
