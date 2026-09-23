@@ -228,11 +228,13 @@ export default function ConfigureView( {
 		}
 		return value === field.default;
 	} );
+	const [ errors, setErrors ] = useState< Record< string, string > >( {} );
 	const restoreDefaults = () => {
 		const previous = initialValues;
 		const defaults = Object.fromEntries( fieldsWithDefault.map( ( field: ToolField ) => [ field.key, field.default ?? '' ] ) );
 		const restored = { ...previous, ...defaults };
 		setValues( restored );
+		setErrors( {} );
 		save( restored, {
 			message: __( 'Restored to default.', 'newspack-plugin' ),
 			actions: [
@@ -244,7 +246,6 @@ export default function ConfigureView( {
 		} ).catch( () => undefined );
 	};
 
-	const [ errors, setErrors ] = useState< Record< string, string > >( {} );
 	const [ failedSaveCount, setFailedSaveCount ] = useState( 0 );
 	const fieldRefs = useRef< Record< string, HTMLInputElement | HTMLTextAreaElement | null > >( {} );
 

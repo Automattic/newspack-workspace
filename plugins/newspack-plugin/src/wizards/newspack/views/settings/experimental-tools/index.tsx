@@ -85,6 +85,8 @@ export default function ExperimentalTools() {
 	const handleSaveFields = useCallback(
 		( slug: string, fields: Record< string, string | boolean >, notice?: SaveNotice ) => {
 			resetError();
+			// A request to the same path joins one already in flight and its data is dropped, so an Undo left on screen would report a restore it never sent.
+			removeNotice( 'experimental-tools-saved' );
 			requestPathname.current = history.location.pathname;
 			return wizardApiFetch< Tool[] >(
 				{
