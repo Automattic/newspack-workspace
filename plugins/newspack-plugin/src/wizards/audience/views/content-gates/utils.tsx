@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, _n, sprintf } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 
 /**
@@ -158,9 +158,10 @@ const getRuleValues = ( rule: GateContentRule ): string[] => {
 };
 
 type ContentScope = {
-	matchesNothing: boolean;
-	hasSpecificPosts: boolean;
-	required: GateContentRule[];
+	// Ways into the gate by rule. A post meeting every rule in any one clause is covered.
+	clauses: GateContentRule[][];
+	// Posts listed by ID, covered whatever the other rules say.
+	specificPosts: string[];
 	exclusions: GateContentRule[];
 };
 
@@ -171,54 +172,84 @@ type ContentScope = {
  */
 const getContentScope = ( gate: Gate ): ContentScope => {
 	const rules = ( gate.content_rules ?? [] ).filter( rule => getRuleValues( rule ).length > 0 );
-	const specificPosts = rules.filter( rule => rule.slug === 'specific_posts' );
 	const otherRules = rules.filter( rule => rule.slug !== 'specific_posts' );
 	const inclusions = otherRules.filter( rule => ! rule.exclusion );
+	let clauses: GateContentRule[][] = [ inclusions ];
+	if ( otherRules.length === 0 ) {
+		// With no rules beyond specific posts, only the listed posts match, and with no rules at all, nothing does.
+		clauses = [];
+	} else if ( gate.content_rules_match === 'any' && inclusions.length > 1 ) {
+		// Under "any", each inclusion rule is a way in on its own.
+		clauses = inclusions.map( rule => [ rule ] );
+	}
 	return {
-		// A gate with no rules beyond specific posts matches only those posts, and one with no rules at all matches nothing.
-		matchesNothing: otherRules.length === 0 && specificPosts.length === 0,
-		hasSpecificPosts: specificPosts.length > 0,
-		// Under "any", one inclusion rule is enough, so none is required unless it is the only one.
-		required: gate.content_rules_match === 'any' && inclusions.length > 1 ? [] : inclusions,
+		clauses,
+		specificPosts: rules.filter( rule => rule.slug === 'specific_posts' ).flatMap( getRuleValues ),
 		exclusions: otherRules.filter( rule => rule.exclusion ),
 	};
 };
 
 /**
- * Whether one gate's exclusions carve out everything a required rule of the other gate matches.
- * Exclusions and inclusions both extend to child terms, so a subset of IDs is a subset of posts.
+ * The values a post needs, rule by rule, to fall under two clauses at once: the shared values where
+ * both clauses set a rule, and one clause's values where only it does.
  *
- * @param required   Inclusion rules every matching post satisfies.
- * @param exclusions Exclusion rules of the other gate.
+ * @param a One gate's clause.
+ * @param b The other gate's clause.
+ * @return The combined values by rule slug, or null when a rule both clauses set shares no value.
  */
-const isCarvedOut = ( required: GateContentRule[], exclusions: GateContentRule[] ) =>
-	required.some( inclusion =>
-		exclusions.some(
-			exclusion =>
-				exclusion.slug === inclusion.slug && getRuleValues( inclusion ).every( value => getRuleValues( exclusion ).includes( value ) )
-		)
+const combineClauses = ( a: GateContentRule[], b: GateContentRule[] ): Map< string, string[] > | null => {
+	const combined = new Map< string, string[] >();
+	for ( const rule of [ ...a, ...b ] ) {
+		const values = getRuleValues( rule );
+		const current = combined.get( rule.slug );
+		const next = current ? current.filter( value => values.includes( value ) ) : values;
+		if ( ! next.length ) {
+			return null;
+		}
+		combined.set( rule.slug, next );
+	}
+	return combined;
+};
+
+/**
+ * Whether exclusions carve out everything a post needs to fall under both clauses, which happens
+ * when an exclusion covers every value a rule allows.
+ *
+ * @param combined   The combined values, from combineClauses().
+ * @param exclusions Both gates' exclusion rules.
+ */
+const isCarvedOut = ( combined: Map< string, string[] >, exclusions: GateContentRule[] ) =>
+	[ ...combined ].some( ( [ slug, values ] ) =>
+		exclusions.some( exclusion => exclusion.slug === slug && values.every( value => getRuleValues( exclusion ).includes( value ) ) )
 	);
 
 /**
- * Whether two gates could match the same post. Answers false only when that is certain: a post
- * can carry several categories and tags at once, so different terms prove nothing.
+ * Whether two gates cover some of the same content, judged from the values their rules store.
+ *
+ * Where both gates set a rule, they must share a value. Where only one does, its content counts as
+ * falling inside the other's: a category gate above an all-posts gate covers posts in both. The
+ * page doesn't load the posts or terms themselves, so two things go unseen. A post filed under two
+ * different categories falls under gates on each, and a parent term covers its child terms. A post
+ * listed by ID counts as shared with any content the other gate covers, since its type and terms
+ * aren't known here.
  *
  * @param a One gate's content scope.
  * @param b The other gate's content scope.
  */
-const mayShareContent = ( a: ContentScope, b: ContentScope ) => {
-	if ( a.matchesNothing || b.matchesNothing ) {
-		return false;
-	}
-	if ( a.hasSpecificPosts || b.hasSpecificPosts ) {
+const sharesContent = ( a: ContentScope, b: ContentScope ) => {
+	if ( a.specificPosts.some( id => b.specificPosts.includes( id ) ) ) {
 		return true;
 	}
-	const aPostTypes = a.required.find( rule => rule.slug === 'post_types' );
-	const bPostTypes = b.required.find( rule => rule.slug === 'post_types' );
-	if ( aPostTypes && bPostTypes && ! getRuleValues( aPostTypes ).some( type => getRuleValues( bPostTypes ).includes( type ) ) ) {
-		return false;
+	if ( ( a.specificPosts.length > 0 && b.clauses.length > 0 ) || ( b.specificPosts.length > 0 && a.clauses.length > 0 ) ) {
+		return true;
 	}
-	return ! isCarvedOut( a.required, b.exclusions ) && ! isCarvedOut( b.required, a.exclusions );
+	const exclusions = [ ...a.exclusions, ...b.exclusions ];
+	return a.clauses.some( aClause =>
+		b.clauses.some( bClause => {
+			const combined = combineClauses( aClause, bClause );
+			return combined !== null && ! isCarvedOut( combined, exclusions );
+		} )
+	);
 };
 
 /**
@@ -242,24 +273,12 @@ export const getPriorityWarnings = ( gates: Gate[] ): Record< number, string > =
 		if ( ! takesPart || requiresPaidAccess( gate ) ) {
 			return;
 		}
-		const skipped = ranked.filter(
-			( lower, lowerIndex ) => lowerIndex > index && requiresPaidAccess( lower ) && mayShareContent( scopes[ index ], scopes[ lowerIndex ] )
+		const opensPaidContent = ranked.some(
+			( lower, lowerIndex ) => lowerIndex > index && requiresPaidAccess( lower ) && sharesContent( scopes[ index ], scopes[ lowerIndex ] )
 		);
-		if ( ! skipped.length ) {
-			return;
+		if ( opensPaidContent ) {
+			warnings[ gate.id ] = __( 'This grants registered readers access to content also restricted by paid access rules.', 'newspack-plugin' );
 		}
-		// translators: %s: a gate title.
-		const titles = skipped.map( lower => sprintf( __( '“%s”', 'newspack-plugin' ), lower.title ) ).join( ', ' );
-		warnings[ gate.id ] = sprintf(
-			// translators: %s: one or more gate titles.
-			_n(
-				'Ranked above %s, which requires paid access. Where both gates cover the same content, this gate decides, so readers there won’t need paid access.',
-				'Ranked above %s, which require paid access. Where these gates cover the same content, this gate decides, so readers there won’t need paid access.',
-				skipped.length,
-				'newspack-plugin'
-			),
-			titles
-		);
 	} );
 	return warnings;
 };

@@ -145,12 +145,12 @@ describe( 'Content Gates Priority modal', () => {
 		const ContentGatesPriority = require( './content-gates-priority' ).default;
 		render( <ContentGatesPriority showModal={ true } closeModal={ () => {} } updateGatesData={ () => {} } /> );
 
-		expect( screen.getByText( /Ranked above “Paid wall”/ ) ).toBeTruthy();
+		expect( screen.getByText( /also restricted by paid access rules/ ) ).toBeTruthy();
 
 		// Drag the registration wall below the paid wall; the warning goes with the old order.
 		fireEvent.click( screen.getByTestId( 'drag' ) );
 
-		expect( screen.queryByText( /Ranked above/ ) ).toBeNull();
+		expect( screen.queryByText( /also restricted by paid access rules/ ) ).toBeNull();
 	} );
 
 	it( 'warns from the latest gates each time it opens, not the ones it first saw', () => {
@@ -181,6 +181,6 @@ describe( 'Content Gates Priority modal', () => {
 		mockGates = [ { ...registrationWall, status: 'publish' }, paidWall ];
 		rerender( <ContentGatesPriority showModal={ true } closeModal={ () => {} } updateGatesData={ () => {} } /> );
 
-		expect( screen.getByText( /Ranked above “Paid wall”/ ) ).toBeTruthy();
+		expect( screen.getByText( /also restricted by paid access rules/ ) ).toBeTruthy();
 	} );
 } );
