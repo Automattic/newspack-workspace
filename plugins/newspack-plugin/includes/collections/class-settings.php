@@ -218,7 +218,7 @@ class Settings {
 	 * @return string The plural collection label.
 	 */
 	public static function get_collection_label() {
-		return self::get_custom_name( 'custom_name', _x( 'Collections', 'collections general label', 'newspack' ) );
+		return self::get_custom_name( 'custom_name', _x( 'Collections', 'collections general label', 'newspack-plugin' ) );
 	}
 
 	/**
@@ -227,7 +227,7 @@ class Settings {
 	 * @return string The singular collection label.
 	 */
 	public static function get_collection_singular_label() {
-		return self::get_custom_name( 'custom_singular_name', _x( 'Collection', 'collections singular label', 'newspack' ) );
+		return self::get_custom_name( 'custom_singular_name', _x( 'Collection', 'collections singular label', 'newspack-plugin' ) );
 	}
 
 	/**

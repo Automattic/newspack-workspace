@@ -11,6 +11,7 @@ use Newspack\Collections\Post_Type;
 use Newspack\Collections\Collection_Meta;
 use Newspack\Collections\Collection_Taxonomy;
 use Newspack\Collections\Collection_Category_Taxonomy;
+use Newspack\Collections\Collection_Section_Taxonomy;
 use Newspack\Collections\Template_Helper;
 use Newspack\Collections\Enqueuer;
 use Newspack\Collections\Settings;
@@ -493,6 +494,33 @@ class Test_Template_Helper extends \WP_UnitTestCase {
 
 		$unmodified_title_parts = Template_Helper::update_document_title( $original_title_parts );
 		$this->assertEquals( $original_title_parts['title'], $unmodified_title_parts['title'], 'Title should not be modified.' );
+	}
+
+	/**
+	 * Test the custom collection names reach the labels that front-end titles are built from.
+	 *
+	 * @covers \Newspack\Collections\Template_Helper::apply_reader_facing_labels
+	 */
+	public function test_custom_naming_reaches_front_end_labels() {
+		Collection_Section_Taxonomy::register_taxonomy();
+		$this->go_to( get_post_type_archive_link( Post_Type::get_post_type() ) );
+
+		Template_Helper::apply_reader_facing_labels();
+		$this->assertEquals( 'Collections', post_type_archive_title( '', false ), 'Labels should be unchanged without custom naming.' );
+
+		Settings::update_settings(
+			[
+				'custom_naming_enabled' => true,
+				'custom_name'           => 'Issues',
+				'custom_singular_name'  => 'Issue',
+			]
+		);
+		Template_Helper::apply_reader_facing_labels();
+
+		$this->assertEquals( 'Issues', post_type_archive_title( '', false ) );
+		$this->assertEquals( 'Issue', get_post_type_object( Post_Type::get_post_type() )->labels->singular_name );
+		$this->assertEquals( 'Issue Category', get_taxonomy( Collection_Category_Taxonomy::get_taxonomy() )->labels->singular_name );
+		$this->assertEquals( 'Issue Section', get_taxonomy( Collection_Section_Taxonomy::get_taxonomy() )->labels->singular_name );
 	}
 
 	/**

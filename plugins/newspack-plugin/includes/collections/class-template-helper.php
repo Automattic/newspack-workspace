@@ -31,6 +31,74 @@ class Template_Helper {
 		add_action( 'pre_get_posts', [ __CLASS__, 'archive_filters' ] );
 		add_filter( 'jetpack_relatedposts_filter_enabled_for_request', [ __CLASS__, 'disable_jetpack_related_posts' ] );
 		add_filter( 'document_title_parts', [ __CLASS__, 'update_document_title' ] );
+		add_action( 'template_redirect', [ __CLASS__, 'apply_reader_facing_labels' ] );
+	}
+
+	/**
+	 * Swap the custom collection names into the post type and taxonomy labels for front-end requests.
+	 *
+	 * Titles, breadcrumbs, feeds and SEO plugins read these labels, so this is what makes custom naming
+	 * reach readers everywhere. The dashboard and REST API keep the registered "Collections" labels.
+	 */
+	public static function apply_reader_facing_labels() {
+		if ( ! Settings::get_setting( 'custom_naming_enabled', false ) ) {
+			return;
+		}
+
+		$plural   = Settings::get_collection_label();
+		$singular = Settings::get_collection_singular_label();
+
+		$post_type = get_post_type_object( Post_Type::get_post_type() );
+		if ( $post_type ) {
+			$post_type->label = $plural;
+			$labels           = [
+				/* translators: %s: plural collection name, e.g. "Issues". */
+				'all_items'      => sprintf( _x( 'All %s', 'collection post type label', 'newspack-plugin' ), $plural ),
+				/* translators: %s: singular collection name, e.g. "Issue". */
+				'edit_item'      => sprintf( _x( 'Edit %s', 'collection post type label', 'newspack-plugin' ), $singular ),
+				/* translators: %s: plural collection name, e.g. "Issues". */
+				'not_found'      => sprintf( _x( 'No %s found.', 'collection post type label', 'newspack-plugin' ), $plural ),
+				/* translators: %s: plural collection name, e.g. "Issues". */
+				'search_items'   => sprintf( _x( 'Search %s', 'collection post type label', 'newspack-plugin' ), $plural ),
+				/* translators: %s: singular collection name, e.g. "Issue". */
+				'view_item'      => sprintf( _x( 'View %s', 'collection post type label', 'newspack-plugin' ), $singular ),
+				/* translators: %s: plural collection name, e.g. "Issues". */
+				'view_items'     => sprintf( _x( 'View %s', 'collection post type label', 'newspack-plugin' ), $plural ),
+				'menu_name'      => $plural,
+				'name'           => $plural,
+				'name_admin_bar' => $singular,
+				'singular_name'  => $singular,
+			];
+			$labels['archives'] = $labels['all_items'];
+			foreach ( $labels as $key => $label ) {
+				$post_type->labels->$key = $label;
+			}
+		}
+
+		$taxonomy_labels = [
+			Collection_Category_Taxonomy::get_taxonomy() => [
+				/* translators: %s: singular collection name, e.g. "Issue". */
+				'name'          => sprintf( _x( '%s Categories', 'collection category taxonomy label', 'newspack-plugin' ), $singular ),
+				/* translators: %s: singular collection name, e.g. "Issue". */
+				'singular_name' => sprintf( _x( '%s Category', 'collection category taxonomy label', 'newspack-plugin' ), $singular ),
+			],
+			Collection_Section_Taxonomy::get_taxonomy()  => [
+				/* translators: %s: singular collection name, e.g. "Issue". */
+				'name'          => sprintf( _x( '%s Sections', 'collection section taxonomy label', 'newspack-plugin' ), $singular ),
+				/* translators: %s: singular collection name, e.g. "Issue". */
+				'singular_name' => sprintf( _x( '%s Section', 'collection section taxonomy label', 'newspack-plugin' ), $singular ),
+			],
+		];
+		foreach ( $taxonomy_labels as $taxonomy_name => $labels ) {
+			$taxonomy = get_taxonomy( $taxonomy_name );
+			if ( ! $taxonomy ) {
+				continue;
+			}
+			$taxonomy->label = $labels['name'];
+			foreach ( $labels as $key => $label ) {
+				$taxonomy->labels->$key = $label;
+			}
+		}
 	}
 
 	/**
