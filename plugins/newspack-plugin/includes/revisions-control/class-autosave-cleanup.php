@@ -18,7 +18,7 @@ final class Autosave_Cleanup {
 
 	const DEFAULT_DAYS  = 1;
 	const BATCH_SIZE    = 100;
-	const MAX_PER_RUN   = 500;
+	const MAX_PER_RUN   = 1000;
 	const CRON_HOOK     = 'newspack_autosave_cleanup';
 	const LOGGER_HEADER = 'NEWSPACK-AUTOSAVE-CLEANUP';
 
@@ -51,24 +51,25 @@ final class Autosave_Cleanup {
 	}
 
 	/**
-	 * Delete up to $max eligible autosaves in batches. Autosaves whose deletion
-	 * is vetoed by another filter are skipped rather than retried.
+	 * Delete up to $max eligible autosaves in batches, newest first, so pages
+	 * being edited now are cleared before an old backlog. Autosaves whose
+	 * deletion is vetoed by another filter are skipped rather than retried.
 	 *
 	 * @param int $max Maximum autosaves to delete in this run.
 	 * @return int Number deleted.
 	 */
 	public static function run_cron( int $max = self::MAX_PER_RUN ): int {
 		$days     = self::get_days();
-		$after_id = 0;
+		$before_id = 0;
 		$deleted  = 0;
 
 		while ( $deleted < $max ) {
-			$ids = self::get_eligible_ids( $days, min( self::BATCH_SIZE, $max - $deleted ), 0, $after_id );
+			$ids = self::get_eligible_ids( $days, min( self::BATCH_SIZE, $max - $deleted ), 0, $before_id );
 			if ( empty( $ids ) ) {
 				break;
 			}
 			$deleted += count( self::delete_autosaves( $ids ) );
-			$after_id = end( $ids );
+			$before_id = end( $ids );
 		}
 
 		if ( $deleted ) {
@@ -113,10 +114,10 @@ final class Autosave_Cleanup {
 	 * @param int $days     Minimum days stale.
 	 * @param int $limit    Maximum IDs to return.
 	 * @param int $post_id  Limit to one parent post, 0 for all.
-	 * @param int $after_id Only return IDs greater than this, for paging.
-	 * @return int[] Autosave IDs, ascending.
+	 * @param int $before_id Only return IDs less than this, for paging; 0 for no bound.
+	 * @return int[] Autosave IDs, newest first.
 	 */
-	public static function get_eligible_ids( int $days, int $limit, int $post_id = 0, int $after_id = 0 ): array {
+	public static function get_eligible_ids( int $days, int $limit, int $post_id = 0, int $before_id = 0 ): array {
 		global $wpdb;
 
 		$cutoff = gmdate( 'Y-m-d H:i:s', time() - ( (int) $days * DAY_IN_SECONDS ) );
@@ -153,8 +154,8 @@ final class Autosave_Cleanup {
 					)
 					AND ( '' = %s OR a.post_date <= %s )
 					AND ( 0 = %d OR p.ID = %d )
-					AND a.ID > %d
-				ORDER BY a.ID
+					AND ( 0 = %d OR a.ID < %d )
+				ORDER BY a.ID DESC
 				LIMIT %d",
 				$cutoff,
 				$cutoff,
@@ -164,7 +165,8 @@ final class Autosave_Cleanup {
 				$min_age,
 				$post_id,
 				$post_id,
-				$after_id,
+				$before_id,
+				$before_id,
 				$limit
 			)
 		);

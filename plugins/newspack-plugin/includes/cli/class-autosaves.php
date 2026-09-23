@@ -55,10 +55,10 @@ final class Autosaves {
 			$days = (int) $assoc_args['older-than'];
 		}
 
-		$after_id = 0;
+		$before_id = 0;
 		$count    = 0;
 		while ( true ) {
-			$ids = Autosave_Cleanup::get_eligible_ids( $days, Autosave_Cleanup::BATCH_SIZE, $post_id, $after_id );
+			$ids = Autosave_Cleanup::get_eligible_ids( $days, Autosave_Cleanup::BATCH_SIZE, $post_id, $before_id );
 			if ( empty( $ids ) ) {
 				break;
 			}
@@ -80,7 +80,7 @@ final class Autosaves {
 				);
 			}
 			$count   += $dry_run ? count( $ids ) : count( Autosave_Cleanup::delete_autosaves( $ids ) );
-			$after_id = end( $ids );
+			$before_id = end( $ids );
 		}
 
 		WP_CLI::success(

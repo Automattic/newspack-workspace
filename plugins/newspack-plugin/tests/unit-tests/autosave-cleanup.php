@@ -104,9 +104,9 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 	 * A major autosave is excluded in SQL, so it can't fill a batch.
 	 */
 	public function test_major_autosave_is_excluded_and_does_not_block_batch() {
+		[ , $eligible_autosave ]         = $this->create_eligible_autosave();
 		[ $major_post, $major_autosave ] = $this->create_eligible_autosave();
 		add_post_meta( $major_post, '_major_revision', $major_autosave );
-		[ , $eligible_autosave ] = $this->create_eligible_autosave();
 
 		$this->assertSame( [ $eligible_autosave ], Autosave_Cleanup::get_eligible_ids( 7, 1 ) );
 	}
@@ -130,12 +130,13 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The after_id argument pages through results.
+	 * The before_id argument pages through results, newest first.
 	 */
-	public function test_after_id_pages_results() {
+	public function test_before_id_pages_results() {
 		[ , $first ]  = $this->create_eligible_autosave();
 		[ , $second ] = $this->create_eligible_autosave();
-		$this->assertSame( [ $second ], Autosave_Cleanup::get_eligible_ids( 7, 100, 0, $first ) );
+		$this->assertSame( [ $second, $first ], Autosave_Cleanup::get_eligible_ids( 7, 100 ) );
+		$this->assertSame( [ $first ], Autosave_Cleanup::get_eligible_ids( 7, 100, 0, $second ) );
 	}
 
 	/**
@@ -187,6 +188,20 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 
 		$this->assertSame( 2, Autosave_Cleanup::run_cron( 2 ) );
 		$this->assertCount( 1, Autosave_Cleanup::get_eligible_ids( 7, 100 ) );
+	}
+
+	/**
+	 * A capped run deletes the newest autosaves and leaves the oldest backlog.
+	 */
+	public function test_run_cron_deletes_newest_first() {
+		[ , $oldest ] = $this->create_eligible_autosave();
+		[ , $middle ] = $this->create_eligible_autosave();
+		[ , $newest ] = $this->create_eligible_autosave();
+
+		$this->assertSame( 2, Autosave_Cleanup::run_cron( 2 ) );
+		$this->assertNull( get_post( $newest ) );
+		$this->assertNull( get_post( $middle ) );
+		$this->assertNotNull( get_post( $oldest ) );
 	}
 
 	/**
@@ -260,8 +275,8 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 	 * A vetoed deletion is skipped, not retried forever or allowed to stop the run.
 	 */
 	public function test_run_cron_walks_past_vetoed_deletions() {
-		[ , $vetoed ] = $this->create_eligible_autosave();
 		[ , $other ]  = $this->create_eligible_autosave();
+		[ , $vetoed ] = $this->create_eligible_autosave();
 
 		$veto = function ( $check, $post ) use ( $vetoed ) {
 			return $post->ID === $vetoed ? false : $check;
