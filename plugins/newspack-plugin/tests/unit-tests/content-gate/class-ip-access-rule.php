@@ -1249,10 +1249,13 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Institution 37', $success_script );
 		$this->assertStringContainsString( 'replaceState', $success_script, 'The result params must be stripped from the URL, or a reload or shared link fires another event.' );
 
-		// A failure sets no cookie, so its event is not cookie-gated.
+		// A failure sets no cookie, so its event is not cookie-gated — but a
+		// legitimate failure redirect strips the institution params, so one
+		// arriving here can only be crafted or stale and must not label the event.
 		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$_GET = [
 			IP_Access_Rule::RESULT_PARAM => 'failure',
+			'institution-id'             => '55',
 		];
 		ob_start();
 		IP_Access_Rule::print_result_event();
@@ -1262,5 +1265,25 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 
 		$_GET    = $original_get;
 		$_COOKIE = $original_cookie; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * The landing page renders its own document on this same hook and reports
+	 * its own outcomes, so a result param there — necessarily crafted — must
+	 * not also register the redirect-borne event printer: `connected` would
+	 * fire twice for one verification.
+	 */
+	public function test_result_notice_skips_landing_page_requests() {
+		$original_get = $_GET; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		set_query_var( IP_Access_Rule::ENDPOINT, '1' );
+		$_GET = [
+			IP_Access_Rule::RESULT_PARAM => 'success',
+		];
+		IP_Access_Rule::handle_result_notice();
+		$this->assertFalse( has_action( 'wp_footer', [ IP_Access_Rule::class, 'print_result_event' ] ) );
+
+		set_query_var( IP_Access_Rule::ENDPOINT, '' );
+		$_GET = $original_get;
 	}
 }

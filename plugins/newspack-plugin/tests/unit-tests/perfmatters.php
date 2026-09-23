@@ -221,23 +221,15 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	 * passes through.
 	 */
 	public function test_delay_js_vetoed_on_ip_access_landing_page() {
-		$original_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-
-		$_SERVER['REQUEST_URI'] = '/some-article/';
 		$this->assertTrue( Perfmatters::should_delay_js( true ), 'The configured value passes through on a regular request.' );
 
+		// The landing page is identified by its query var alone — no path involved.
 		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '1' );
 		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', 'test-university' );
-		$_SERVER['REQUEST_URI'] = '/institutional-access/test-university/';
 		$this->assertFalse( Perfmatters::should_delay_js( true ), 'JS delay is vetoed on the landing page request.' );
 
 		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '' );
 		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', '' );
-		if ( null === $original_uri ) {
-			unset( $_SERVER['REQUEST_URI'] );
-		} else {
-			$_SERVER['REQUEST_URI'] = $original_uri;
-		}
 	}
 
 	/**

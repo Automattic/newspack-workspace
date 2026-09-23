@@ -460,6 +460,12 @@ class IP_Access_Rule {
 		if ( empty( $_GET[ self::RESULT_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
+		// The landing page renders its own document later on this hook and
+		// reports its own outcomes; a result param there can only be crafted,
+		// and the redirect-borne printer must not double-fire on it.
+		if ( self::is_landing_page_request() ) {
+			return;
+		}
 
 		// Prevent this response from being cached so other users don't see the snackbar.
 		if ( function_exists( 'batcache_cancel' ) ) {
@@ -517,9 +523,11 @@ class IP_Access_Rule {
 		];
 		// The event param uses the same anonymized identifier as the GA4 `group`
 		// dimension, not the institution's display name (which the URL still
-		// carries for the snackbar).
+		// carries for the snackbar). Success only: legitimate failure redirects
+		// strip the institution params, so on a failure the param can only be
+		// crafted or stale and must not label the event.
 		$institution_id = isset( $_GET['institution-id'] ) ? absint( $_GET['institution-id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( $institution_id ) {
+		if ( 'success' === $result && $institution_id ) {
 			$payload['institution'] = 'Institution ' . $institution_id;
 		}
 		// Both legitimate flows set the bypass cookie before redirecting here,
