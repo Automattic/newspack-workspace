@@ -81,6 +81,11 @@ final class Autosaves {
 			}
 			$count   += $dry_run ? count( $ids ) : count( Autosave_Cleanup::delete_autosaves( $ids ) );
 			$before_id = end( $ids );
+
+			// Pause between full batches of deletions to ease database load on a large backlog.
+			if ( ! $dry_run && count( $ids ) === Autosave_Cleanup::BATCH_SIZE ) {
+				usleep( 500000 );
+			}
 		}
 
 		WP_CLI::success(
