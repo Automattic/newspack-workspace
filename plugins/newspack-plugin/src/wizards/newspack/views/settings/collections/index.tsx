@@ -72,9 +72,6 @@ const comparable = ( settings: CollectionsSettingsData ) =>
 		articles_block_attrs: { showCategory: Boolean( settings.articles_block_attrs?.showCategory ) },
 	} );
 
-// These rename the post type and its admin menu, which only a fresh page load picks up.
-const NAMING_KEYS: ( keyof CollectionsSettingsData )[] = [ 'custom_naming_enabled', 'custom_name', 'custom_singular_name', 'custom_slug' ];
-
 type Section = {
 	key: string;
 	title: string;
@@ -129,13 +126,8 @@ function Collections() {
 
 	const saveSettings = () => {
 		resetError();
-		const renamed = NAMING_KEYS.some( key => JSON.stringify( settings[ key ] ) !== JSON.stringify( savedSettings[ key ] ) );
 		return apiFetchToggle( { module_enabled_collections: true, ...settings }, true )
 			.then( () => {
-				if ( renamed ) {
-					reload();
-					return;
-				}
 				removeNotice( 'collections-saved' );
 				addNotice( {
 					id: 'collections-saved',
@@ -241,7 +233,10 @@ function Collections() {
 		{
 			key: 'naming',
 			title: __( 'Naming', 'newspack-plugin' ),
-			description: __( 'Rename collections to match how your publication refers to them, such as issues or magazines.', 'newspack-plugin' ),
+			description: __(
+				'Choose what readers see collections called on the site, such as issues or magazines. The dashboard keeps calling them Collections.',
+				'newspack-plugin'
+			),
 			content: (
 				<>
 					<ToggleGroupControl
@@ -252,7 +247,7 @@ function Collections() {
 						help={
 							settings.custom_naming_enabled
 								? __( 'Use your own names and URL slug, set below.', 'newspack-plugin' )
-								: __( 'Collections are called "Collections" and "Collection", with URLs under /collections/.', 'newspack-plugin' )
+								: __( 'Readers see "Collections" and "Collection", with URLs under /collections/.', 'newspack-plugin' )
 						}
 						value={ settings.custom_naming_enabled ? 'custom' : 'default' }
 						onChange={ value => update( { custom_naming_enabled: value === 'custom' } ) }

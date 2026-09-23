@@ -150,13 +150,21 @@ describe( 'when Collections is on', () => {
 		expect( headerAction( 'Save' ).disabled ).toBe( false );
 	} );
 
-	it( 'saves only its own settings and confirms without reloading', async () => {
+	it( 'saves only its own settings, naming included, and confirms without reloading', async () => {
 		await renderCollections();
 
-		fireEvent.click( screen.getByRole( 'radio', { name: '18' } ) );
+		fireEvent.click( screen.getByRole( 'radio', { name: '30' } ) );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Custom' } ) );
+		fireEvent.change( screen.getByLabelText( 'Plural name' ), { target: { value: 'Issues' } } );
 		await runHeaderAction( 'Save' );
 
-		expect( lastPost() ).toEqual( { ...SETTINGS, module_enabled_collections: true, posts_per_page: 18 } );
+		expect( lastPost() ).toEqual( {
+			...SETTINGS,
+			module_enabled_collections: true,
+			posts_per_page: 30,
+			custom_naming_enabled: true,
+			custom_name: 'Issues',
+		} );
 		expect( mockReload ).not.toHaveBeenCalled();
 		expect( headerAction( 'Save' ).disabled ).toBe( true );
 		expect(
@@ -164,17 +172,6 @@ describe( 'when Collections is on', () => {
 				.getNotices()
 				.map( ( notice: { message: string } ) => notice.message )
 		).toContain( 'Settings saved.' );
-	} );
-
-	it( 'reloads after a naming change, since it renames the admin menu', async () => {
-		await renderCollections();
-
-		fireEvent.click( screen.getByRole( 'radio', { name: 'Custom' } ) );
-		fireEvent.change( screen.getByLabelText( 'Plural name' ), { target: { value: 'Issues' } } );
-		await runHeaderAction( 'Save' );
-
-		expect( lastPost() ).toMatchObject( { custom_naming_enabled: true, custom_name: 'Issues' } );
-		expect( mockReload ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'shows the card message only for the card indicator', async () => {
