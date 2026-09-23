@@ -6,14 +6,14 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useState, useCallback, useEffect } from '@wordpress/element';
+import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 import { Notice } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 
 /**
  * Internal dependencies
  */
-import { CardFeature, Grid, Router } from '../../../../../../packages/components/src';
+import { CardFeature, Grid, Router, useConfirmDialog } from '../../../../../../packages/components/src';
 import WizardsTab from '../../../../wizards-tab';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
@@ -22,35 +22,38 @@ import ConfigureView from './configure-view';
 import type { SaveNotice, Tool } from './types';
 import './style.scss';
 
-const { useHistory, useRouteMatch, Redirect, Route, Switch } = Router;
+const { useHistory, useLocation, useRouteMatch, Redirect, Route, Switch } = Router;
 
 const { 'experimental-tools': experimentalToolsData } = window.newspackSettings;
 const initialTools: Tool[] = experimentalToolsData?.sections?.tools ?? [];
-const tabLabel: string = experimentalToolsData?.label ?? __( 'Experimental Tools', 'newspack-plugin' );
-
-function ListBreadcrumb() {
-	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
-	useEffect( () => {
-		setHeaderData( { sectionName: tabLabel } );
-	}, [ setHeaderData ] );
-	return null;
-}
 
 export default function ExperimentalTools() {
-	const { wizardApiFetch, isFetching } = useWizardApiFetch( 'newspack-settings/experimental-tools' );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/experimental-tools' );
 	const [ tools, setTools ] = useState< Tool[] >( initialTools );
 	const [ enableSlug, setEnableSlug ] = useState< string | null >( null );
+	const [ disableSlug, setDisableSlug ] = useState< string | null >( null );
 	const history = useHistory();
+	const { pathname } = useLocation();
 	const match = useRouteMatch();
 	const { addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+
+	// The list and each tool screen share one fetch hook, so an error is shown only on the screen whose request raised it. The
+	// effect clears it too late for the next screen, which would already have announced it, but stops it returning on a later visit.
+	const requestPathname = useRef< string | null >( null );
+	useEffect( () => {
+		resetError();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ pathname ] );
 
 	const updateTools = useCallback( ( updatedTools: Tool[] ) => {
 		setTools( updatedTools );
 	}, [] );
 
 	const handleToggle = useCallback(
-		( slug: string, enabled: boolean ) =>
-			wizardApiFetch< Tool[] >(
+		( slug: string, enabled: boolean ) => {
+			resetError();
+			requestPathname.current = history.location.pathname;
+			return wizardApiFetch< Tool[] >(
 				{
 					path: `/newspack/v1/experimental-tools/${ slug }/toggle`,
 					method: 'POST',
@@ -74,13 +77,16 @@ export default function ExperimentalTools() {
 						}
 					},
 				}
-			),
-		[ wizardApiFetch, updateTools, addNotice, removeNotice ]
+			);
+		},
+		[ wizardApiFetch, updateTools, addNotice, removeNotice, resetError, history ]
 	);
 
 	const handleSaveFields = useCallback(
-		( slug: string, fields: Record< string, string | boolean >, notice?: SaveNotice ) =>
-			wizardApiFetch< Tool[] >(
+		( slug: string, fields: Record< string, string | boolean >, notice?: SaveNotice ) => {
+			resetError();
+			requestPathname.current = history.location.pathname;
+			return wizardApiFetch< Tool[] >(
 				{
 					path: `/newspack/v1/experimental-tools/${ slug }/settings`,
 					method: 'POST',
@@ -99,8 +105,28 @@ export default function ExperimentalTools() {
 						} );
 					},
 				}
-			),
-		[ wizardApiFetch, updateTools, addNotice, removeNotice ]
+			);
+		},
+		[ wizardApiFetch, updateTools, addNotice, removeNotice, resetError, history ]
+	);
+
+	const disableTool = tools.find( t => t.slug === disableSlug );
+	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
+		title: disableTool
+			? sprintf(
+					/* translators: %s: tool name. */
+					__( 'Disable %s?', 'newspack-plugin' ),
+					disableTool.label
+			  )
+			: undefined,
+		confirmButtonText: __( 'Disable', 'newspack-plugin' ),
+		message: __( 'Your settings are kept. You can enable the tool again at any time.', 'newspack-plugin' ),
+	} );
+
+	const errorNotice = errorMessage && requestPathname.current === pathname && (
+		<Notice status="error" isDismissible={ false }>
+			{ errorMessage }
+		</Notice>
 	);
 
 	const enableTool = tools.find( t => t.slug === enableSlug );
@@ -108,7 +134,8 @@ export default function ExperimentalTools() {
 
 	const toolList = (
 		<WizardsTab isFetching={ isFetching }>
-			<ListBreadcrumb />
+			{ disableDialog }
+			{ errorNotice }
 			<Notice status="info" isDismissible={ false } spokenMessage="">
 				{ __(
 					"These tools are early-stage features we're developing based on publisher feedback. They're functional and supported, but still evolving. Your experience using them directly shapes what they become. Enable any tool below to try it in your newsroom. You can turn tools off at any time, and nothing changes in your published content.",
@@ -129,7 +156,11 @@ export default function ExperimentalTools() {
 						moreControls={ [
 							{
 								title: __( 'Disable', 'newspack-plugin' ),
-								onClick: () => handleToggle( tool.slug, false ),
+								onClick: () => {
+									setDisableSlug( tool.slug );
+									// Failures surface through `errorNotice`, so the rejection has no second consumer here.
+									requestDisable( () => handleToggle( tool.slug, false ).catch( () => undefined ) );
+								},
 							},
 						] }
 					/>
@@ -141,7 +172,7 @@ export default function ExperimentalTools() {
 					tool={ enableTool }
 					disabled={ isFetching }
 					onConfirm={ () => {
-						handleToggle( enableTool.slug, true );
+						handleToggle( enableTool.slug, true ).catch( () => undefined );
 						setEnableSlug( null );
 					} }
 					onClose={ () => setEnableSlug( null ) }
@@ -152,7 +183,7 @@ export default function ExperimentalTools() {
 
 	const renderToolConfigure = ( { match: toolMatch }: { match: { params: { toolSlug: string } } } ) => {
 		const tool = tools.find( t => t.slug === toolMatch.params.toolSlug );
-		if ( ! tool ) {
+		if ( ! tool?.enabled || ! hasConfigurableFields( tool ) ) {
 			return <Redirect to={ match.url } />;
 		}
 		return (
@@ -160,10 +191,10 @@ export default function ExperimentalTools() {
 				key={ tool.slug }
 				tool={ tool }
 				isFetching={ isFetching }
-				tabLabel={ tabLabel }
+				errorNotice={ errorNotice }
 				tabUrl={ `#${ match.url }` }
 				onSave={ ( fields, notice ) => handleSaveFields( tool.slug, fields, notice ) }
-				onDisable={ () => handleToggle( tool.slug, false ).then( () => history.push( match.url ) ) }
+				onDisable={ () => handleToggle( tool.slug, false ) }
 			/>
 		);
 	};

@@ -6,7 +6,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { Fragment, useState, useEffect, useRef } from '@wordpress/element';
 import { TextareaControl, TextControl, SelectControl, ToggleControl, Spinner, Notice } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
@@ -67,7 +67,7 @@ function LogsField( { field }: { field: ToolField } ) {
 						/* translators: 1: request date and time, 2: model name, 3: response time in seconds. */
 						__( '%1$s · %2$s · %3$ss', 'newspack-plugin' ),
 						new Date( log.datetime.replace( ' ', 'T' ) + 'Z' ).toLocaleString(),
-						log.settings?.model ?? 'unknown',
+						log.settings?.model ?? __( 'Unknown model', 'newspack-plugin' ),
 						String( log.response_time )
 					) }
 				>
@@ -98,22 +98,45 @@ function FieldRenderer( {
 	value,
 	onChange,
 	error,
+	inputRef,
 }: {
 	field: ToolField;
 	value: string | number | boolean | undefined;
 	onChange: ( val: string | boolean ) => void;
 	error?: string;
+	inputRef?: React.Ref< HTMLInputElement | HTMLTextAreaElement >;
 } ) {
 	const help = error ? <span style={ { color: '#cc1818' } }>{ error }</span> : field.help;
 
 	switch ( field.type ) {
 		case 'textarea':
-			return <TextareaControl label={ field.label } help={ help } value={ String( value ?? '' ) } onChange={ onChange } />;
+			return (
+				<TextareaControl
+					__nextHasNoMarginBottom
+					ref={ inputRef as React.Ref< HTMLTextAreaElement > }
+					aria-invalid={ !! error }
+					label={ field.label }
+					help={ help }
+					value={ String( value ?? '' ) }
+					onChange={ onChange }
+				/>
+			);
 		case 'text':
-			return <TextControl label={ field.label } help={ help } value={ String( value ?? '' ) } onChange={ onChange } />;
+			return (
+				<TextControl
+					__nextHasNoMarginBottom
+					ref={ inputRef as React.Ref< HTMLInputElement > }
+					aria-invalid={ !! error }
+					label={ field.label }
+					help={ help }
+					value={ String( value ?? '' ) }
+					onChange={ onChange }
+				/>
+			);
 		case 'select':
 			return (
 				<SelectControl
+					__nextHasNoMarginBottom
 					label={ field.label }
 					help={ help }
 					value={ String( value ?? '' ) }
@@ -122,7 +145,7 @@ function FieldRenderer( {
 				/>
 			);
 		case 'toggle':
-			return <ToggleControl label={ field.label } help={ help } checked={ !! value } onChange={ onChange } />;
+			return <ToggleControl __nextHasNoMarginBottom label={ field.label } help={ help } checked={ !! value } onChange={ onChange } />;
 		case 'display':
 			return (
 				<div className="experimental-tools__display-field">
@@ -147,14 +170,14 @@ type Section = {
 export default function ConfigureView( {
 	tool,
 	isFetching,
-	tabLabel,
+	errorNotice,
 	tabUrl,
 	onSave,
 	onDisable,
 }: {
 	tool: Tool;
 	isFetching?: boolean;
-	tabLabel: string;
+	errorNotice?: React.ReactNode;
 	tabUrl: string;
 	onSave: ( fields: Record< string, string | boolean >, notice?: SaveNotice ) => Promise< unknown >;
 	onDisable: () => Promise< unknown >;
@@ -178,7 +201,13 @@ export default function ConfigureView( {
 	const isDirty = JSON.stringify( values ) !== JSON.stringify( initialValues );
 
 	const fieldsWithDefault = editableFields.filter( ( field: ToolField ) => field.default !== undefined );
-	const isDefault = fieldsWithDefault.every( ( field: ToolField ) => String( values[ field.key ] ?? '' ) === field.default );
+	const isDefault = fieldsWithDefault.every( ( field: ToolField ) => {
+		const value = String( initialValues[ field.key ] ?? '' );
+		if ( field.validation && value.trim() !== '' ) {
+			return Number( value ) === Number( field.default );
+		}
+		return value === field.default;
+	} );
 	const restoreDefaults = () => {
 		const previous = initialValues;
 		const defaults = Object.fromEntries( fieldsWithDefault.map( ( field: ToolField ) => [ field.key, field.default ?? '' ] ) );
@@ -197,6 +226,20 @@ export default function ConfigureView( {
 	};
 
 	const [ errors, setErrors ] = useState< Record< string, string > >( {} );
+	const [ failedSaveCount, setFailedSaveCount ] = useState( 0 );
+	const fieldRefs = useRef< Record< string, HTMLInputElement | HTMLTextAreaElement | null > >( {} );
+
+	// Save sits in the page header, far from the fields, so a failed check moves focus to the first field it rejected.
+	useEffect( () => {
+		if ( ! failedSaveCount ) {
+			return;
+		}
+		const firstInvalid = editableFields.find( ( field: ToolField ) => errors[ field.key ] );
+		if ( firstInvalid ) {
+			fieldRefs.current[ firstInvalid.key ]?.focus();
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ failedSaveCount ] );
 
 	const handleChange = ( key: string, value: string | boolean ) => {
 		setValues( prev => ( { ...prev, [ key ]: value } ) );
@@ -231,14 +274,18 @@ export default function ConfigureView( {
 		return Object.keys( newErrors ).length === 0;
 	};
 
-	// Failures surface through the wizard's error handling, so the rejection has no second consumer here.
+	// Failures surface through `errorNotice`, so the rejection has no second consumer here.
 	const handleSave = () => {
 		if ( validate() ) {
 			onSave( values ).catch( () => undefined );
+		} else {
+			setFailedSaveCount( count => count + 1 );
 		}
 	};
 
-	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( { when: isDirty && ! isFetching } );
+	// Disabling leaves this screen once it succeeds, so the guard stands down before the request, not after it.
+	const [ isDisabling, setIsDisabling ] = useState( false );
+	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( { when: isDirty && ! isFetching && ! isDisabling } );
 
 	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
 		/* translators: %s: tool name. */
@@ -257,14 +304,18 @@ export default function ConfigureView( {
 			: __( 'Your customizations are replaced with the defaults and saved.', 'newspack-plugin' ),
 	} );
 
+	const disable = () => {
+		setIsDisabling( true );
+		onDisable().catch( () => setIsDisabling( false ) );
+	};
 	// The header keeps whichever callbacks it was handed, so publishing these
 	// directly would pin the state of the render that published them.
-	const actionHandlers = useRef( { handleSave, onDisable, restoreDefaults } );
-	actionHandlers.current = { handleSave, onDisable, restoreDefaults };
+	const actionHandlers = useRef( { handleSave, disable, restoreDefaults } );
+	actionHandlers.current = { handleSave, disable, restoreDefaults };
 
 	useEffect( () => {
 		setHeaderData( {
-			sectionName: [ { label: tabLabel, url: tabUrl }, { label: tool.label } ],
+			sectionName: tool.label,
 			actions: [
 				{
 					type: 'primary',
@@ -290,15 +341,13 @@ export default function ConfigureView( {
 								label: __( 'Disable', 'newspack-plugin' ),
 								/* translators: %s: tool name. Must contain the menu item's visible label, "Disable" (WCAG 2.5.3, Label in Name). */
 								ariaLabel: sprintf( __( 'Disable %s', 'newspack-plugin' ), tool.label ),
-								action: () => requestDisable( () => actionHandlers.current.onDisable().catch( () => undefined ) ),
+								action: () => requestDisable( () => actionHandlers.current.disable() ),
 								disabled: isFetching,
 							},
 					  ] ),
 			],
 		} );
 	}, [
-		tabLabel,
-		tabUrl,
 		tool.label,
 		tool.constant_active,
 		isDirty,
@@ -313,14 +362,24 @@ export default function ConfigureView( {
 	const usageNote = tool.llm
 		? sprintf(
 				/* translators: 1: tool name, 2: usage count, 3: LLM model name. */
-				__( '%1$s was used %2$s times in the last 30 days. Powered by %3$s.', 'newspack-plugin' ),
+				_n(
+					'%1$s was used %2$s time in the last 30 days. Powered by %3$s.',
+					'%1$s was used %2$s times in the last 30 days. Powered by %3$s.',
+					tool.usage_count,
+					'newspack-plugin'
+				),
 				tool.label,
 				String( tool.usage_count ),
 				tool.llm
 		  )
 		: sprintf(
 				/* translators: 1: tool name, 2: usage count. */
-				__( '%1$s was used %2$s times in the last 30 days.', 'newspack-plugin' ),
+				_n(
+					'%1$s was used %2$s time in the last 30 days.',
+					'%1$s was used %2$s times in the last 30 days.',
+					tool.usage_count,
+					'newspack-plugin'
+				),
 				tool.label,
 				String( tool.usage_count )
 		  );
@@ -342,6 +401,9 @@ export default function ConfigureView( {
 					{ editableFields.map( ( field: ToolField ) => (
 						<FieldRenderer
 							key={ field.key }
+							inputRef={ element => {
+								fieldRefs.current[ field.key ] = element;
+							} }
 							field={ field }
 							value={ values[ field.key ] }
 							onChange={ ( val: string | boolean ) => handleChange( field.key, val ) }
@@ -368,6 +430,7 @@ export default function ConfigureView( {
 			{ navBlockDialog }
 			{ disableDialog }
 			{ restoreDialog }
+			{ errorNotice }
 			<Notice status="info" isDismissible={ false } spokenMessage="" className="experimental-tools__usage">
 				{ usageNote }
 			</Notice>
