@@ -192,7 +192,7 @@ class Newspack_Blocks_Caching {
 	 * @param string $message Message to log.
 	 */
 	protected static function debug_log( $message ) {
-		if ( defined( 'NEWSPACK_LOG_LEVEL' ) && (int) NEWSPACK_LOG_LEVEL >= 4 && class_exists( 'Newspack\Logger' ) ) {
+		if ( defined( 'NEWSPACK_LOG_LEVEL' ) && (int) NEWSPACK_LOG_LEVEL >= 4 && class_exists( 'Newspack\Logger' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			Newspack\Logger::log( $message );
 		}
 	}

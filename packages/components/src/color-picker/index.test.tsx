@@ -51,4 +51,29 @@ describe( 'ColorPicker', () => {
 		const { getByRole } = render( <ColorPicker label="Background color" onChange={ () => {} } /> );
 		expect( getByRole( 'button' ) ).not.toHaveAttribute( 'aria-describedby' );
 	} );
+
+	describe( 'when disabled', () => {
+		it( 'should not open on click', () => {
+			const { getByRole } = render( <ColorPicker label="Background color" disabled onChange={ () => {} } /> );
+			const expander = getByRole( 'button' );
+			fireEvent.click( expander );
+			expect( expander ).toHaveAttribute( 'aria-expanded', 'false' );
+			expect( expander ).toHaveAttribute( 'aria-disabled', 'true' );
+		} );
+
+		it( 'should not open on Enter', () => {
+			const { getByRole } = render( <ColorPicker label="Background color" disabled onChange={ () => {} } /> );
+			const expander = getByRole( 'button' );
+			fireEvent.keyDown( expander, { key: 'Enter', keyCode: 13 } );
+			expect( expander ).toHaveAttribute( 'aria-expanded', 'false' );
+		} );
+
+		it( 'should stay closed once re-enabled if it was open when disabled', () => {
+			const { getByRole, rerender } = render( <ColorPicker label="Background color" onChange={ () => {} } /> );
+			fireEvent.click( getByRole( 'button' ) );
+			rerender( <ColorPicker label="Background color" disabled onChange={ () => {} } /> );
+			rerender( <ColorPicker label="Background color" onChange={ () => {} } /> );
+			expect( getByRole( 'button' ) ).toHaveAttribute( 'aria-expanded', 'false' );
+		} );
+	} );
 } );

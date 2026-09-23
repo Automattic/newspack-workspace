@@ -7,6 +7,7 @@
 
 namespace Newspack\Tests\Subscriber_Commerce;
 
+use Newspack\Subscriber_Commerce;
 use Newspack\Subscriber_Discounts;
 use Newspack\Subscriber_Discounts_Pricing;
 use Newspack\Tests\Subscriber_Commerce\Traits\Trait_Subscriber_Discounts_Fixtures;
@@ -494,6 +495,152 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		$this->assertNull(
 			Subscriber_Discounts_Pricing::get_subscriber_price( '', $this->book, $this->subscriber_id ),
 			'A product with no price has nothing to discount.'
+		);
+	}
+
+	/**
+	 * The point of the "all subscriptions" mode: a publisher marks a product
+	 * discounted for subscribers without naming the tiers, and every subscriber
+	 * gets it — including ones on a subscription no rule mentions.
+	 */
+	public function test_all_subscriptions_rule_discounts_every_subscriber() {
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+			]
+		);
+
+		$this->assertSame(
+			90.0,
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id ),
+			'Any reader with an active subscription gets the discount.'
+		);
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'A reader holding no subscription still pays the list price.'
+		);
+	}
+
+	/**
+	 * With "apply at checkout" on, a subscription in the cart grants an
+	 * "all subscriptions" discount before the reader has finished buying it —
+	 * the cart branch asks WooCommerce what each line *is*, where the named mode
+	 * only compares ids.
+	 */
+	public function test_all_subscriptions_rule_reads_a_subscription_in_the_cart() {
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+			]
+		);
+		$subscription    = $this->create_product( 50.0, null, 0, 'subscription' );
+		$ordinary_pledge = $this->create_product( 50.0 );
+
+		$this->set_cart_contents( [ $ordinary_pledge->get_id() ] );
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'An ordinary product in the cart is not a subscription.'
+		);
+
+		$this->set_cart_contents( [ $subscription->get_id() ] );
+		$this->assertSame(
+			90.0,
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'A subscription in the cart grants the discount before checkout completes.'
+		);
+	}
+
+	/**
+	 * The cart is not fixed for the life of a request — WooCommerce mutates it and
+	 * then prices the rest of the page. A reader who removes the subscription from
+	 * their cart must lose the discount on everything priced afterwards, and the
+	 * per-product memo does not cover that: the next product priced is a different
+	 * key, so only the cart answer itself stands between them and a price they are
+	 * no longer entitled to. The variation-price hash folds in that same answer.
+	 */
+	public function test_an_all_subscriptions_rule_follows_a_cart_changed_mid_request() {
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+				'targeting'                => 'all',
+				'product_ids'              => [],
+			]
+		);
+		$subscription   = $this->create_product( 50.0, null, 0, 'subscription' );
+		$second_product = $this->create_product( 100.0 );
+
+		$this->set_cart_contents( [ $subscription->get_id() ] );
+		$this->assertSame( 90.0, Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ) );
+
+		// Swap the cart the way WooCommerce does mid-request, without touching the
+		// pricing memos, then price a product nothing has priced yet.
+		remove_all_filters( 'newspack_subscriber_discounts_cart_product_ids' );
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $second_product, $this->non_subscriber_id ),
+			'Emptying the cart takes the discount away for whatever is priced next.'
+		);
+	}
+
+	/**
+	 * The same product, priced twice in one request either side of a cart change.
+	 * This is the path the per-product memo covers and the cart memo does not: its
+	 * key is the reader and the product, both unchanged, so without the cart in it
+	 * the second pricing serves the first one's verdict and the reader keeps a
+	 * discount they no longer qualify for.
+	 */
+	public function test_a_cart_change_repricing_the_same_product_is_not_served_from_the_memo() {
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+			]
+		);
+		$subscription = $this->create_product( 50.0, null, 0, 'subscription' );
+
+		$this->set_cart_contents( [ $subscription->get_id() ] );
+		$this->assertSame( 90.0, Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ) );
+
+		// Empty the cart the way WooCommerce does mid-request, leaving every memo
+		// in place, then price the very same product again.
+		remove_all_filters( 'newspack_subscriber_discounts_cart_product_ids' );
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'The discount goes away as soon as the cart no longer grants it.'
+		);
+	}
+
+	/**
+	 * A discount never cuts the price of the thing that grants it. With no named
+	 * grantor the guard widens to every subscription, so an "all subscriptions,
+	 * all products" rule cannot quietly discount every renewal on the site.
+	 */
+	public function test_all_subscriptions_rule_never_discounts_a_subscription() {
+		$subscription = $this->create_product( 100.0, null, 0, 'subscription' );
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+				'targeting'                => 'all',
+				'product_ids'              => [],
+			]
+		);
+
+		$this->assertSame(
+			90.0,
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id ),
+			'The store-wide rule still discounts an ordinary product.'
+		);
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $subscription, $this->subscriber_id ),
+			'A subscription product keeps its price.'
 		);
 	}
 }

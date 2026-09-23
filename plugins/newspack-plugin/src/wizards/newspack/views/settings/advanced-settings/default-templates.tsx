@@ -6,11 +6,12 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { SelectControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Grid, SelectControl } from '../../../../../../packages/components/src';
+import OverwriteWarning from './overwrite-warning';
 
 interface TemplateOption {
 	label: string;
@@ -22,23 +23,47 @@ export interface TemplateOptions {
 	page: TemplateOption[];
 }
 
-export default function DefaultTemplates( { data, update, options }: ThemeModComponentProps< AdvancedSettings > & { options: TemplateOptions } ) {
+const ALL_POSTS_OPTIONS = [
+	{ label: __( 'Select to change all posts', 'newspack-plugin' ), value: 'none' },
+	{ label: __( 'With sidebar', 'newspack-plugin' ), value: 'default' },
+	{ label: __( 'One Column', 'newspack-plugin' ), value: 'single-feature.php' },
+	{ label: __( 'One Column Wide', 'newspack-plugin' ), value: 'single-wide.php' },
+];
+
+export default function DefaultTemplates( {
+	data,
+	update,
+	isFetching,
+	options,
+	postCount,
+}: ThemeModComponentProps< AdvancedSettings > & { options: TemplateOptions; postCount?: string } ) {
 	return (
-		<Grid gutter={ 32 }>
+		<>
 			<SelectControl
-				label={ __( 'Default template for new posts', 'newspack-plugin' ) }
-				help={ __( 'Set a default template for new posts.', 'newspack-plugin' ) }
+				__nextHasNoMarginBottom
+				label={ __( 'Default for new posts', 'newspack-plugin' ) }
 				value={ data.post_template_default }
 				options={ options.post }
+				disabled={ isFetching }
 				onChange={ ( post_template_default: string ) => update( { post_template_default } ) }
 			/>
 			<SelectControl
-				label={ __( 'Default template for new pages', 'newspack-plugin' ) }
-				help={ __( 'Set a default template for new pages.', 'newspack-plugin' ) }
+				__nextHasNoMarginBottom
+				label={ __( 'Default for new pages', 'newspack-plugin' ) }
 				value={ data.page_template_default }
 				options={ options.page }
+				disabled={ isFetching }
 				onChange={ ( page_template_default: string ) => update( { page_template_default } ) }
 			/>
-		</Grid>
+			<SelectControl
+				__nextHasNoMarginBottom
+				label={ __( 'Apply to all existing posts', 'newspack-plugin' ) }
+				value={ data.post_template_all_posts }
+				options={ ALL_POSTS_OPTIONS }
+				disabled={ isFetching }
+				onChange={ ( post_template_all_posts: string ) => update( { post_template_all_posts } ) }
+			/>
+			{ data.post_template_all_posts !== 'none' && <OverwriteWarning postCount={ postCount } /> }
+		</>
 	);
 }

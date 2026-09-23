@@ -69,7 +69,7 @@ declare global {
 			};
 			connections: WizardTab;
 			syndication: WizardTab;
-			'theme-and-brand': WizardTab;
+			'theme-and-brand'?: WizardTab;
 			seo: WizardTab;
 			print: WizardTab;
 			'additional-brands': WizardTab & {

@@ -141,7 +141,7 @@ interface AdvancedSettings {
 	post_content_fallback_image?: string | null;
 
 	// Private Tags settings (present unless the feature is opted out via the NEWSPACK_PRIVATE_TAGS_DISABLED constant or the newspack_private_tags_enabled filter).
-	// Individual keys are optional because updates are deep-merged (via useObjectState), so a single-key payload is a valid update.
+	// Individual keys are optional because updates are deep-merged, so a single-key payload is a valid update.
 	newspack_private_tags_settings?: {
 		all?: boolean;
 		archives?: boolean;

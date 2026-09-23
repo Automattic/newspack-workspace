@@ -65,10 +65,12 @@ type ImageUploadProps = {
 	disabled?: boolean;
 	help?: ReactNode;
 	image?: ImageAttachment | string | number | null;
+	imageStyle?: CSSProperties;
 	isCovering?: boolean;
 	label?: ReactNode;
 	onChange: ( image: SelectedImageAttachment | null ) => void;
 	style?: CSSProperties;
+	withMargin?: boolean;
 };
 
 type ImageUploadState = {
@@ -128,7 +130,7 @@ class ImageUpload extends Component< ImageUploadProps, ImageUploadState > {
 	 * Render.
 	 */
 	render = () => {
-		const { buttonLabel, className, disabled, help, image, isCovering, label, onChange, style = {} } = this.props;
+		const { buttonLabel, className, disabled, help, image, imageStyle, isCovering, label, onChange, style = {}, withMargin = true } = this.props;
 		// Raw (id/url) image values never carry a previewable url property.
 		const imageObject = image && typeof image === 'object' ? image : undefined;
 		const classes = classnames(
@@ -137,12 +139,21 @@ class ImageUpload extends Component< ImageUploadProps, ImageUploadState > {
 			{ 'newspack-image-upload__image--covering': isCovering }
 		);
 		return (
-			<BaseControl __nextHasNoMarginBottom className={ classnames( 'newspack-image-upload', className ) } help={ help }>
+			<BaseControl
+				__nextHasNoMarginBottom
+				className={ classnames( 'newspack-image-upload', { 'newspack-image-upload--no-margin': ! withMargin }, className ) }
+				help={ help }
+			>
 				{ label && <BaseControl.VisualLabel>{ label }</BaseControl.VisualLabel> }
 				<div className={ classes } style={ style }>
 					{ imageObject?.url ? (
 						<>
-							<img data-testid="image-upload" src={ imageObject.url } alt={ __( 'Image preview', 'newspack-plugin' ) } />
+							<img
+								data-testid="image-upload"
+								src={ imageObject.url }
+								alt={ __( 'Image preview', 'newspack-plugin' ) }
+								style={ imageStyle }
+							/>
 							<div className="newspack-image-upload__controls">
 								<Button disabled={ disabled } onClick={ this.openModal } variant="tertiary">
 									{ __( 'Replace', 'newspack-plugin' ) }

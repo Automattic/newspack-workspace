@@ -41,7 +41,9 @@ const rule = ( id, subscriptionIds ) => ( {
 	created_at: '2026-01-01',
 } );
 
-const RULES = [ rule( 'a', [ 10 ] ), rule( 'b', [ 11 ] ), rule( 'c', [ 12 ] ), rule( 'd', [ 13 ] ) ];
+const allSubscriptionsRule = { ...rule( 'e', [] ), subscription_targeting: 'all' };
+
+const RULES = [ rule( 'a', [ 10 ] ), rule( 'b', [ 11 ] ), rule( 'c', [ 12 ] ), rule( 'd', [ 13 ] ), allSubscriptionsRule ];
 
 const fields = discountFields( DEFAULT_CURRENCY, SUBSCRIPTIONS );
 const view = { type: 'table', page: 1, perPage: 25, sort: { field: 'created_at', direction: 'desc' }, search: '', filters: [], fields: [] };
@@ -69,5 +71,13 @@ describe( 'discountFields', () => {
 	it( 'keeps subscriptions sharing a name apart in the filter', () => {
 		expect( idsFor( { filters: [ { field: 'subscription', operator: 'isAny', value: [ 12 ] } ] } ) ).toEqual( [ 'c' ] );
 		expect( fields.find( field => field.id === 'subscription_names' ).enableHiding ).toBe( false );
+	} );
+
+	// A rule reaching every subscriber names no subscription, so without its own
+	// filter value and search text it would be unreachable by either.
+	it( 'keeps an all-subscriptions rule searchable and filterable', () => {
+		expect( idsFor( { search: 'All subscriptions' } ) ).toEqual( [ 'e' ] );
+		expect( idsFor( { filters: [ { field: 'subscription', operator: 'isAny', value: [ 0 ] } ] } ) ).toEqual( [ 'e' ] );
+		expect( idsFor( { filters: [ { field: 'subscription', operator: 'isAny', value: [ 10 ] } ] } ) ).toEqual( [ 'a' ] );
 	} );
 } );

@@ -44,6 +44,7 @@ export default function TargetingFields( { value, onChange, appliesHelp, categor
 					{ value: 'category', label: __( 'Category', 'newspack-plugin' ) },
 					{ value: 'all', label: __( 'All products', 'newspack-plugin' ) },
 				] }
+				disabled={ disabled }
 			/>
 			{ 'products' === targeting && (
 				<SearchTokenField
