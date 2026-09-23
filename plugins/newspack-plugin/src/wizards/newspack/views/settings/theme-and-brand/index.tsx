@@ -20,6 +20,7 @@ import { HomepageSelect } from './homepage-select';
 import { Button, Divider, Grid, Router, SectionHeader, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
+import { useErrorNoticeFocus } from '../../../../hooks/use-error-notice-focus';
 import Header from './header';
 import Footer from './footer';
 import Colors from './colors';
@@ -44,6 +45,12 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 
 	const history = useHistory();
 
+	const {
+		wrapperProps: noticeWrapperProps,
+		registerSubmit,
+		spokenMessage,
+	} = useErrorNoticeFocus( errorMessage, __( 'Theme and Brand error', 'newspack-plugin' ) );
+
 	function setData( newData: ThemeData ) {
 		setDataState( { ...data, ...newData } );
 	}
@@ -67,7 +74,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 					history.push( '/completed' );
 				},
 			}
-		);
+		).catch( () => {} );
 	};
 
 	async function save() {
@@ -110,7 +117,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 			{
 				onSuccess: setFetchedData,
 			}
-		);
+		).catch( () => {} );
 	}, [] );
 
 	// The header keeps whichever callback it was handed, so publishing `save`
@@ -184,9 +191,11 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 		<WizardsTab isFetching={ isFetching }>
 			{ navBlockDialog }
 			{ errorMessage && (
-				<Notice status="error" isDismissible={ false } politeness="polite">
-					{ errorMessage }
-				</Notice>
+				<div { ...noticeWrapperProps }>
+					<Notice status="error" isDismissible={ false } politeness="polite" spokenMessage={ spokenMessage }>
+						{ errorMessage }
+					</Notice>
+				</div>
 			) }
 			{ ! isPartOfSetup && (
 				<WizardSection title={ __( 'Theme', 'newspack-plugin' ) } description={ __( 'Update your site’s theme.', 'newspack-plugin' ) }>
@@ -225,7 +234,13 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 			) ) }
 			{ isPartOfSetup && (
 				<div className="newspack-buttons-card">
-					<Button variant="primary" onClick={ () => save().then( finishSetup, () => {} ) }>
+					<Button
+						variant="primary"
+						onClick={ event => {
+							registerSubmit( event );
+							save().then( finishSetup, () => {} );
+						} }
+					>
 						{ __( 'Finish', 'newspack-plugin' ) }
 					</Button>
 				</div>

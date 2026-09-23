@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -49,6 +49,8 @@ const mockWizardApiFetch = jest.fn( ( options: { method?: string; data?: ThemeDa
 	return Promise.resolve( response );
 } );
 
+const mockResetError = jest.fn();
+
 jest.mock( './theme-select', () => () => null );
 jest.mock( './homepage-select', () => ( { HomepageSelect: () => null } ) );
 jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
@@ -56,7 +58,7 @@ jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
 		wizardApiFetch: mockWizardApiFetch,
 		isFetching: false,
 		errorMessage: mockState.errorMessage,
-		resetError: jest.fn(),
+		resetError: mockResetError,
 	} ),
 } ) );
 
@@ -143,6 +145,34 @@ describe( 'Theme and Brand', () => {
 		expect( rejection ).toBeNull();
 		expect( notices() ).not.toContain( 'Settings saved.' );
 		expect( headerAction( 'Save' ).disabled ).toBe( false );
+	} );
+
+	it( 'clears the previous error before each save, so a repeated failure is announced again', async () => {
+		await renderThemeBrand();
+
+		pick( 'Left' );
+		await act( async () => {
+			await headerAction( 'Save' ).action();
+		} );
+
+		const post = mockWizardApiFetch.mock.calls.findIndex( ( [ request ] ) => request.method === 'POST' );
+		expect( mockResetError ).toHaveBeenCalled();
+		expect( mockResetError.mock.invocationCallOrder[ 0 ] ).toBeLessThan( mockWizardApiFetch.mock.invocationCallOrder[ post ] );
+	} );
+
+	it( 'switching the footer to Custom stores the color the picker shows', async () => {
+		await renderThemeBrand();
+
+		const footerBackground = screen.getAllByRole( 'radiogroup', { name: 'Background' } )[ 1 ];
+		await act( async () => {
+			fireEvent.click( within( footerBackground ).getByRole( 'radio', { name: 'Custom' } ) );
+		} );
+		await act( async () => {
+			await headerAction( 'Save' ).action();
+		} );
+
+		expect( server.theme_mods.footer_color ).toBe( 'custom' );
+		expect( server.theme_mods.footer_color_hex ).toBe( SERVER.theme_mods.secondary_color_hex );
 	} );
 
 	it( 'surfaces an API error', async () => {

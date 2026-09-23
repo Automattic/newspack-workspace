@@ -23,6 +23,8 @@ export default function Footer( { themeMods, onUpdate }: { themeMods: ThemeMods;
 	function updateThemeMods( themeModChanges: Partial< ThemeMods > ) {
 		onUpdate( { ...themeMods, ...themeModChanges } );
 	}
+	// Nothing is stored until a color is chosen, so the picker would otherwise show an empty swatch.
+	const footerColor = themeMods.footer_color_hex || themeMods.secondary_color_hex;
 	return (
 		<Stack direction="column" gap="xl">
 			<TextControl
@@ -37,14 +39,18 @@ export default function Footer( { themeMods, onUpdate }: { themeMods: ThemeMods;
 				isBlock
 				label={ __( 'Background', 'newspack-plugin' ) }
 				value={ themeMods.footer_color === 'custom' ? 'custom' : 'default' }
-				onChange={ value => updateThemeMods( { footer_color: value === 'custom' ? 'custom' : 'default' } ) }
+				onChange={ value =>
+					value === 'custom'
+						? updateThemeMods( { footer_color: 'custom', footer_color_hex: footerColor } )
+						: updateThemeMods( { footer_color: 'default' } )
+				}
 			>
 				<ToggleGroupControlOption value="default" label={ __( 'Default', 'newspack-plugin' ) } />
 				<ToggleGroupControlOption value="custom" label={ __( 'Custom', 'newspack-plugin' ) } />
 			</ToggleGroupControl>
 			<ColorPicker
 				label={ __( 'Background color', 'newspack-plugin' ) }
-				color={ themeMods.footer_color_hex }
+				color={ footerColor }
 				disabled={ themeMods.footer_color !== 'custom' }
 				onChange={ ( footer_color_hex: string ) => updateThemeMods( { footer_color_hex } ) }
 			/>

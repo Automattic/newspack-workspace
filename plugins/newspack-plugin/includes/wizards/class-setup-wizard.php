@@ -362,10 +362,6 @@ class Setup_Wizard extends Wizard {
 
 		// Footer.
 		$theme_mods['footer_color']     = get_theme_mod( 'footer_color', 'default' );
-		$theme_mods['footer_color_hex'] = get_theme_mod( 'footer_color_hex', '' );
-		if ( empty( $theme_mods['footer_color_hex'] ) ) {
-			$theme_mods['footer_color_hex'] = $theme_mods['secondary_color_hex'] ?? '#666666';
-		}
 		$theme_mods['footer_logo_size'] = get_theme_mod( 'footer_logo_size', 'medium' );
 		$theme_mods['footer_copyright'] = get_theme_mod( 'footer_copyright', false );
 		if ( false === $theme_mods['footer_copyright'] ) {
