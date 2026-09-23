@@ -242,9 +242,9 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 	}
 
 	/**
-	 * With the revision limit active, autosaves younger than its minimum age are not selected.
+	 * The revision limit's minimum age doesn't hold back stale autosaves.
 	 */
-	public function test_revisions_control_min_age_is_respected() {
+	public function test_revisions_control_min_age_does_not_apply_to_autosaves() {
 		[ , $autosave_id ] = $this->create_eligible_autosave();
 
 		update_option(
@@ -255,18 +255,8 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 				'min_age' => '-60 days',
 			]
 		);
-		$this->assertNotContains( $autosave_id, Autosave_Cleanup::get_eligible_ids( 7, 100 ) );
-
-		update_option(
-			'newspack_revisions_control',
-			[
-				'active'  => true,
-				'number'  => 10,
-				'min_age' => '-1 week',
-			]
-		);
-		$this->assertContains( $autosave_id, Autosave_Cleanup::get_eligible_ids( 7, 100 ) );
 		$this->assertSame( 1, Autosave_Cleanup::run_cron() );
+		$this->assertNull( get_post( $autosave_id ) );
 
 		delete_option( 'newspack_revisions_control' );
 	}

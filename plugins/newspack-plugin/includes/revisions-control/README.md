@@ -47,7 +47,7 @@ When setting the option you can define the maximum number of revisions to be kep
 
 ## Autosave cleanup
 
-WordPress keeps one autosave per user per post and only cleans up an autosave when its own author opens the editor. Every other autosave stays, and the editor renders all of them each time it loads.
+WordPress keeps one autosave per user per post. When anyone opens the editor, WordPress checks only the newest autosave on the post and deletes it if it's stale, so older autosaves pile up behind it. The editor renders all of them each time it loads.
 
 A daily cron (`newspack_autosave_cleanup`) deletes an autosave when:
 
@@ -55,7 +55,7 @@ A daily cron (`newspack_autosave_cleanup`) deletes an autosave when:
 - that happened at least a day ago, and
 - it isn't marked as a major revision.
 
-Fresh autosaves are never deleted. The cron deletes up to 1,000 autosaves per run, newest first, so pages being edited now are cleared before an older backlog. It runs whether or not the revision limit above is enabled; when the limit is enabled, autosaves younger than its minimum age are also kept.
+Fresh autosaves are never deleted. The cron deletes up to 1,000 autosaves per run, newest first, so pages being edited now are cleared before an older backlog. It runs whether or not the revision limit above is enabled, and the limit's minimum age doesn't apply to autosaves: WordPress only deletes an autosave it no longer needs (stale, identical to the post, or with its parent).
 
 Change the wait in `wp-config.php`:
 
@@ -75,4 +75,4 @@ Run it by hand with WP-CLI:
 wp newspack autosaves prune [--dry-run] [--post=<id>] [--older-than=<days>]
 ```
 
-`--older-than=0` removes every stale autosave on the targeted posts, except any the revision limit protects. Fresh autosaves are still kept.
+`--older-than=0` removes every stale autosave on the targeted posts. Fresh autosaves are still kept.

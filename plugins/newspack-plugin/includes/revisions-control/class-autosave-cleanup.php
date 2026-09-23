@@ -119,8 +119,7 @@ final class Autosave_Cleanup {
 	 * Stale means the parent was saved after the autosave. The wait starts at
 	 * the first regular revision after the autosave, so later saves don't
 	 * reset it; the parent's modified date is the fallback when revisions are
-	 * disabled or pruned. Autosaves marked as major are never returned, nor are
-	 * autosaves younger than the revision limit's minimum age when it's active.
+	 * disabled or pruned. Autosaves marked as major are never returned.
 	 *
 	 * @param int $days     Minimum days stale.
 	 * @param int $limit    Maximum IDs to return.
@@ -132,8 +131,6 @@ final class Autosave_Cleanup {
 		global $wpdb;
 
 		$cutoff = gmdate( 'Y-m-d H:i:s', time() - ( (int) $days * DAY_IN_SECONDS ) );
-		// Skip what Revisions_Control::pre_delete_revision() would refuse, so it isn't re-selected every run.
-		$min_age = Revisions_Control::get_min_age() ?? '9999-12-31 23:59:59';
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$ids = $wpdb->get_col(
@@ -163,7 +160,6 @@ final class Autosave_Cleanup {
 							AND m.meta_key = '_major_revision'
 							AND m.meta_value = CAST( a.ID AS CHAR )
 					)
-					AND a.post_date <= %s
 					AND ( 0 = %d OR p.ID = %d )
 					AND ( 0 = %d OR a.ID < %d )
 				ORDER BY a.ID DESC
@@ -172,7 +168,6 @@ final class Autosave_Cleanup {
 				$cutoff,
 				'%' . $wpdb->esc_like( '-autosave-v' ) . '%',
 				$cutoff,
-				$min_age,
 				$post_id,
 				$post_id,
 				$before_id,
