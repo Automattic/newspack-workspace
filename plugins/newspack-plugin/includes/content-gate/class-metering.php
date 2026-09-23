@@ -595,9 +595,6 @@ class Metering {
 		$GLOBALS['post'] = $metered_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored in the finally below.
 
 		try {
-			// Not wrapped in 'newspack_gate_content': get_restricted_post_excerpt()
-			// has already run that pipeline, and a second pass re-renders blocks and
-			// re-expands shortcodes over the rendered output.
 			$excerpt = Content_Gate::get_restricted_post_excerpt( $metered_post );
 			return Content_Gate::apply_late_content_filters( $excerpt );
 		} finally {
