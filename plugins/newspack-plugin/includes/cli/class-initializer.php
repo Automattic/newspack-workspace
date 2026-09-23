@@ -42,6 +42,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-verify.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-convert-subscription-variation.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-autosaves.php';
 	}
 
 	/**
@@ -165,6 +166,11 @@ class Initializer {
 		// after WooCommerce Memberships is deactivated, so gating it on Memberships
 		// would remove it at exactly the moment it is needed.
 		WP_CLI::add_command( 'newspack verify-premium-newsletters', [ 'Newspack\CLI\Premium_Newsletters_Verify', 'verify_premium_newsletters' ] );
+
+		WP_CLI::add_command(
+			'newspack autosaves prune',
+			[ 'Newspack\CLI\Autosaves', 'cmd_prune' ]
+		);
 
 		Optional_Modules::register_commands();
 	}

@@ -11,6 +11,7 @@ use DateTime;
 use WP_Post;
 
 require_once 'class-major-revisions.php';
+require_once 'class-autosave-cleanup.php';
 
 /**
  * Revisions Control class

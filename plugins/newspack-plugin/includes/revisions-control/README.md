@@ -44,3 +44,35 @@ update_option(
 ```
 
 When setting the option you can define the maximum number of revisions to be kept as well as the minimum age a revision must have to be deleted. Accepted values are string compatible with the PHP DateTime modifiers. Example: '-1 day', '-1 month', '-2 months'.
+
+## Autosave cleanup
+
+WordPress keeps one autosave per user per post and only cleans up an autosave when its own author opens the editor. Every other autosave stays, and the editor renders all of them each time it loads.
+
+A daily cron (`newspack_autosave_cleanup`) deletes an autosave when:
+
+- the post was saved after it (so the editor will never offer it back), and
+- that happened at least 7 days ago, and
+- it isn't marked as a major revision.
+
+Fresh autosaves are never deleted. The cron deletes up to 500 autosaves per run. It runs whether or not the revision limit above is enabled.
+
+Change the wait in `wp-config.php`:
+
+```php
+define( 'NEWSPACK_AUTOSAVE_CLEANUP_DAYS', 30 );
+```
+
+Disable the cron:
+
+```php
+define( 'NEWSPACK_CRON_DISABLE', [ 'newspack_autosave_cleanup' ] );
+```
+
+Run it by hand with WP-CLI:
+
+```
+wp newspack autosaves prune [--dry-run] [--post=<id>] [--older-than=<days>]
+```
+
+`--older-than=0` removes every stale autosave on the targeted posts. Fresh autosaves are still kept.
