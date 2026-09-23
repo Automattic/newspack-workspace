@@ -69,7 +69,7 @@ declare global {
 			};
 			connections: WizardTab;
 			syndication: WizardTab;
-			'theme-and-brand': WizardTab;
+			'theme-and-brand'?: WizardTab;
 			seo: WizardTab;
 			print: WizardTab;
 			'additional-brands': WizardTab & {
@@ -95,9 +95,6 @@ declare global {
 					tools: Tool[];
 				};
 			};
-		};
-		newspack_aux_data: {
-			is_debug_mode: boolean;
 		};
 		newspack_urls: {
 			site: string;

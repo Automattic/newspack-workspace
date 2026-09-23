@@ -2,14 +2,14 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Network 2.22.4\n"
+"Project-Id-Version: Newspack Network 2.22.8\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-network\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-31T17:54:02+00:00\n"
+"POT-Creation-Date: 2026-09-22T23:09:46+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-network\n"
@@ -55,7 +55,7 @@ msgstr ""
 msgid "This site acts as the Network Hub"
 msgstr ""
 
-#: includes/class-initializer.php:82
+#: includes/class-initializer.php:83
 msgid "Network Reader"
 msgstr ""
 
@@ -203,34 +203,34 @@ msgstr ""
 msgid "Note: Editors will still be able to modify the status upon distribution of a post."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:158
+#: includes/content-distribution/class-api.php:167
 msgid "A post received from the network cannot be distributed."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:162
+#: includes/content-distribution/class-api.php:171
 msgid "Data Events class not found."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:172
+#: includes/content-distribution/class-api.php:181
 #: includes/content-distribution/class-distributor-migrator.php:141
 #: includes/content-distribution/class-distributor-migrator.php:385
 msgid "Post not found."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:175
+#: includes/content-distribution/class-api.php:184
 msgid "Post is currently an auto-draft. Save before distributing it."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:343
+#: includes/content-distribution/class-api.php:352
 msgid "The payload post data must be an object."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:372
+#: includes/content-distribution/class-api.php:381
 msgid "The payload must carry a post type unless it is a partial update."
 msgstr ""
 
 #. translators: unsupported post type for content distribution
-#: includes/content-distribution/class-api.php:390
+#: includes/content-distribution/class-api.php:399
 #, php-format
 msgid "Post type %s is not supported as a distributed incoming post."
 msgstr ""
@@ -368,40 +368,40 @@ msgid_plural "This post has been distributed to %d network sites."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/content-distribution/class-incoming-post.php:130
+#: includes/content-distribution/class-incoming-post.php:131
 msgid "Missing email on incoming author creation"
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:217
+#: includes/content-distribution/class-incoming-post.php:218
 msgid "Invalid post payload."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:221
+#: includes/content-distribution/class-incoming-post.php:222
 msgid "Post is not configured for distribution."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:226
+#: includes/content-distribution/class-incoming-post.php:227
 msgid "Post is not configured for distribution on this site."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:252
+#: includes/content-distribution/class-incoming-post.php:253
 msgid "Partial payload requires an existing post."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:354
+#: includes/content-distribution/class-incoming-post.php:355
 #: includes/content-distribution/class-outgoing-post.php:42
 msgid "Invalid post."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:564
+#: includes/content-distribution/class-incoming-post.php:568
 msgid "Mismatched post ID."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:664
+#: includes/content-distribution/class-incoming-post.php:668
 msgid "Linked post content is newer than the post payload."
 msgstr ""
 
-#: includes/content-distribution/class-incoming-post.php:842
+#: includes/content-distribution/class-incoming-post.php:846
 msgid "Error inserting post."
 msgstr ""
 
@@ -1192,6 +1192,15 @@ msgstr ""
 
 #: includes/node/class-settings.php:576
 msgid "Error connecting the site"
+msgstr ""
+
+#: includes/utils/class-network.php:97
+msgid "Refused a sideload request to a private or reserved address."
+msgstr ""
+
+#: includes/utils/class-network.php:144
+#: includes/utils/class-network.php:147
+msgid "Refused a sideload redirect to a private or reserved address."
 msgstr ""
 
 #: includes/utils/class-requests.php:73

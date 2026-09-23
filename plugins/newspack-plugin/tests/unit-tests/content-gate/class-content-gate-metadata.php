@@ -10,7 +10,6 @@ use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Institution;
 use Newspack\Reader_Activation;
-use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Gate_Metadata;
 
 /**
@@ -43,13 +42,6 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	private $institution_ids = [];
 
 	/**
-	 * Schema version restored in tear_down().
-	 *
-	 * @var string
-	 */
-	private $original_version;
-
-	/**
 	 * Set up the WC mocks once for the class.
 	 */
 	public static function set_up_before_class() {
@@ -60,10 +52,10 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	/**
 	 * Set up before each test.
 	 *
-	 * Forces the v1 schema so get_metadata() returns the raw key shape these
-	 * tests assert against — legacy mode now normalizes to prefixed keys
-	 * (matching the other Legacy_* classes), which is exercised in
-	 * Test_Content_Gate_Legacy.
+	 * Content_Gate::get_metadata() always returns the raw key shape these
+	 * tests assert against; prefixing is applied later by the integration's
+	 * prepare_contact() (exercised separately in Test_Content_Gate_Legacy),
+	 * so no schema-version or origin simulation is needed here.
 	 */
 	public function set_up() {
 		parent::set_up();
@@ -76,9 +68,7 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 		$subscriptions_database = [];
 		$products_database      = [];
 
-		$this->original_version = Metadata::$version;
-		Metadata::$version      = '1.0';
-		self::$user_id          = $this->factory->user->create(
+		self::$user_id = $this->factory->user->create(
 			[
 				'role'       => 'subscriber',
 				'user_email' => 'reader@example.com',
@@ -108,7 +98,6 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 
 		Group_Subscription::reset_cache();
 		Institution::reset_matching_cache();
-		Metadata::$version = $this->original_version;
 		Content_Gate_Metadata::reset_cache();
 		parent::tear_down();
 	}
@@ -882,19 +871,19 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that an empty institution rule value imposes no constraint and
+	 * Test that an institution rule naming nothing withholds access and
 	 * contributes no group label.
 	 *
-	 * Institution::evaluate() treats an empty $value as "no constraint," so the
-	 * rule passes — but there's no specific institution to attribute, so
-	 * Content_Access_Group must come back empty (and crucially: no TypeError on
-	 * a `foreach` over a non-iterable).
+	 * The synced field is the reason this is worth pinning separately from the
+	 * evaluator: it is what a publisher's ESP segments on, so a rule that matches
+	 * nobody has to read as Content_Access "No" rather than as an unattributed
+	 * pass. The empty group label also covers the `foreach` over a non-iterable.
 	 *
 	 * @dataProvider empty_institution_value_provider
 	 *
 	 * @param mixed $value Empty rule value.
 	 */
-	public function test_group_label_empty_for_empty_institution_rule( $value ) {
+	public function test_no_access_and_no_group_label_for_empty_institution_rule( $value ) {
 		// An institution must exist so the rule evaluation has something to consider.
 		$this->create_institution( 'Test University', [ 'email_domain' => 'example.com' ] );
 
@@ -910,7 +899,7 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 
 		$result = $this->get_metadata_for_user( self::$user_id );
 
-		$this->assertEquals( 'Yes', $result['Content_Access'], 'Empty institution rule imposes no constraint per Institution::evaluate().' );
+		$this->assertEquals( 'No', $result['Content_Access'], 'An institution rule naming nothing matches no reader.' );
 		$this->assertEmpty( $result['Content_Access_Group'], 'Empty institution rule should yield no group label.' );
 	}
 

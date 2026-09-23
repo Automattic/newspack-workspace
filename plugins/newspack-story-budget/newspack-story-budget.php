@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Newspack Story Budget
  * Description: Story budgeting by Newspack.
- * Version: 1.2.4
+ * Version: 1.3.1
  * Author: Automattic
  * Author URI: https://newspack.com/
  * License: GPL2
@@ -14,15 +14,15 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'NEWSPACK_STORY_BUDGET_VERSION', '1.2.4' );
+define( 'NEWSPACK_STORY_BUDGET_VERSION', '1.3.1' );
 
 // Define NEWSPACK_STORY_BUDGET_PLUGIN_DIR.
-if ( ! defined( 'NEWSPACK_STORY_BUDGET_PLUGIN_DIR' ) ) {
+if ( ! defined( 'NEWSPACK_STORY_BUDGET_PLUGIN_DIR' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_STORY_BUDGET_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 }
 
 // Define NEWSPACK_STORY_BUDGET_PLUGIN_FILE.
-if ( ! defined( 'NEWSPACK_STORY_BUDGET_PLUGIN_FILE' ) ) {
+if ( ! defined( 'NEWSPACK_STORY_BUDGET_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_STORY_BUDGET_PLUGIN_FILE', __FILE__ );
 }
 

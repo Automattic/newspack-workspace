@@ -8,6 +8,10 @@
 namespace Test\Content_Distribution;
 
 // The payloads below carry absolute image URLs that get sideloaded on import.
+// Their host is a literal public IP rather than a hostname: sideload-safety
+// validation resolves a URL's host before any HTTP fires -- upstream of where
+// the mock answers -- and refuses anything unresolvable, which a .test name
+// always is. An IP literal skips resolution, so these import with no DNS at all.
 require_once __DIR__ . '/mock-remote-images.php';
 
 /**
@@ -44,7 +48,7 @@ function get_sample_payload( $origin = '', $destination = '' ) {
 			'raw_content'    => '<!-- wp:paragraph --><p>Content</p><!-- /wp:paragraph -->',
 			'content'        => '<p>Content</p>',
 			'excerpt'        => 'Excerpt',
-			'thumbnail_url'  => 'https://example.test/image-1.jpg',
+			'thumbnail_url'  => 'https://93.184.216.34/image-1.jpg',
 			'comment_status' => 'open',
 			'ping_status'    => 'open',
 			'taxonomy'       => [
@@ -76,7 +80,7 @@ function get_sample_payload( $origin = '', $destination = '' ) {
 			],
 			'media_data'     => [
 				[
-					'url'        => 'https://example.test/image-1.jpg',
+					'url'        => 'https://93.184.216.34/image-1.jpg',
 					'caption'    => 'Caption',
 					'credit'     => 'Credit',
 					'credit_url' => 'https://credit.url',

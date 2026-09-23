@@ -7,26 +7,38 @@
  */
 import { __ } from '@wordpress/i18n';
 import { CheckboxControl, Notice, SelectControl } from '@wordpress/components';
+import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import WizardsTab from '../../../../wizards-tab';
-import WizardSection from '../../../../wizards-section';
-import WizardsActionCard from '../../../../wizards-action-card';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
+import EmptyState from '../../../../../../packages/components/src/empty-state';
+import { Button, Divider, Grid, SectionHeader, Waiting, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import { print } from '../../../../../../packages/icons';
 
 const PLATFORM_OPTIONS: { label: string; value: IndesignPlatform }[] = [
 	{ label: __( 'Windows (ASCII-WIN)', 'newspack-plugin' ), value: 'win' },
 	{ label: __( 'Mac (ASCII-MAC)', 'newspack-plugin' ), value: 'mac' },
 ];
 
-// Coalesce a rapid series of post-type checkbox clicks into a single save.
-const POST_TYPES_SAVE_DEBOUNCE_MS = 500;
+type PrintSettings = Pick< PrintData, 'indesign_platform' | 'indesign_post_types' | 'indesign_exclude_captions' >;
+
+const toSettings = ( data: PrintData ): PrintSettings => ( {
+	indesign_platform: data.indesign_platform,
+	indesign_post_types: data.indesign_post_types,
+	indesign_exclude_captions: data.indesign_exclude_captions,
+} );
+
+// Post-type order carries no meaning, so re-checking a box must not read as a change.
+const comparable = ( value: PrintSettings ) => JSON.stringify( { ...value, indesign_post_types: [ ...value.indesign_post_types ].sort() } );
 
 function Print() {
-	const { description, apiData, isFetching, actionText, apiFetchToggle, errorMessage } = useWizardApiFetchToggle< PrintData >( {
+	const { apiData, hasLoaded, isFetching, apiFetchToggle, errorMessage, resetError } = useWizardApiFetchToggle< PrintData >( {
 		path: '/newspack/v1/wizard/newspack-settings/print',
 		apiNamespace: 'newspack-settings/print',
 		data: {
@@ -36,145 +48,238 @@ function Print() {
 			available_post_types: [],
 			indesign_exclude_captions: false,
 		},
-		description: __( 'Allows editors to export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ),
 	} );
+	const { setHeaderData, addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	// Latest server-acknowledged settings, readable from timers and promise
-	// callbacks without closing over a render-time snapshot.
-	const apiDataRef = useRef( apiData );
+	const isEnabled = apiData.module_enabled_print;
+
+	const [ settings, setSettings ] = useState< PrintSettings >( toSettings( apiData ) );
 	useEffect( () => {
-		apiDataRef.current = apiData;
+		setSettings( toSettings( apiData ) );
 	}, [ apiData ] );
 
-	// Optimistic mirror of the post-type selection so a checkbox flips on click
-	// instead of waiting for the round trip. Kept in sync with the server value
-	// on load and after every successful save.
-	const [ selectedPostTypes, setSelectedPostTypes ] = useState< string[] >( apiData.indesign_post_types );
-	useEffect( () => {
-		setSelectedPostTypes( apiData.indesign_post_types );
-	}, [ apiData.indesign_post_types ] );
+	const isDirty = comparable( settings ) !== comparable( toSettings( apiData ) );
 
-	const saveTimer = useRef< ReturnType< typeof setTimeout > | undefined >();
-	const pendingSave = useRef< ( () => void ) | undefined >();
-	useEffect(
-		() => () => {
-			if ( saveTimer.current ) {
-				clearTimeout( saveTimer.current );
-			}
-			// Flush rather than drop a pending save, so a change made within the
-			// debounce window of leaving the view still persists.
-			pendingSave.current?.();
-		},
-		[]
-	);
-
-	/**
-	 * Persist a change. The payload carries only the module flag (which the
-	 * endpoint requires) plus the explicitly changed fields — never a full
-	 * snapshot — so a save can't write back other settings from a stale render
-	 * or timer closure. The module flag is read at send time for the same
-	 * reason. The response (always the full settings object) re-syncs state.
-	 */
-	const save = ( overrides: Partial< PrintData > ) =>
-		apiFetchToggle( { module_enabled_print: apiDataRef.current.module_enabled_print, ...overrides }, true );
-
-	const togglePostType = ( slug: string, checked: boolean ) => {
-		const next = new Set( selectedPostTypes );
-		if ( checked ) {
-			next.add( slug );
-		} else {
-			next.delete( slug );
-		}
-		const nextPostTypes = Array.from( next );
-		// Reflect the click immediately, then debounce the save. The API layer
-		// dedupes concurrent requests to the same path, so firing one request per
-		// click would drop all but the first and revert the boxes to that first
-		// response. Debouncing sends a single request carrying the final selection.
-		setSelectedPostTypes( nextPostTypes );
-		if ( saveTimer.current ) {
-			clearTimeout( saveTimer.current );
-		}
-		pendingSave.current = () => {
-			pendingSave.current = undefined;
-			// A failed save leaves `apiData` untouched, so the optimistic mirror
-			// would keep showing a selection that never persisted — snap it back
-			// to the last server-acknowledged value.
-			save( { indesign_post_types: nextPostTypes } ).catch( () => setSelectedPostTypes( apiDataRef.current.indesign_post_types ) );
-		};
-		saveTimer.current = setTimeout( () => pendingSave.current?.(), POST_TYPES_SAVE_DEBOUNCE_MS );
+	// Failures reach the publisher through `errorMessage`, so the rejection the
+	// API layer re-throws has no second consumer here.
+	const setModuleEnabled = ( value: boolean ) => {
+		resetError();
+		return apiFetchToggle( { module_enabled_print: value }, true ).catch( () => undefined );
 	};
 
-	return (
-		<WizardsTab title={ __( 'Adobe InDesign', 'newspack-plugin' ) }>
-			<WizardSection>
-				<WizardsActionCard
-					title={ __( 'Enable InDesign Export', 'newspack-plugin' ) }
-					description={ description }
-					disabled={ isFetching }
-					actionText={ actionText }
-					error={ errorMessage }
-					toggleChecked={ apiData.module_enabled_print }
-					toggleOnChange={ ( value: boolean ) => save( { module_enabled_print: value } ) }
-				/>
-			</WizardSection>
-			{ apiData.module_enabled_print && (
-				<>
-					<WizardSection
-						title={ __( 'Header platform', 'newspack-plugin' ) }
-						description={ __(
-							'Exports declare their format on the first line and end every line to match. Windows places correctly in most InDesign installs; if placed files show tags as literal text, switch to Mac.',
-							'newspack-plugin'
-						) }
-					>
-						<SelectControl
-							label={ __( 'Platform', 'newspack-plugin' ) }
-							value={ apiData.indesign_platform }
+	const saveSettings = () => {
+		resetError();
+		return apiFetchToggle( { module_enabled_print: true, ...settings }, true )
+			.then( () => {
+				removeNotice( 'print-saved' );
+				addNotice( {
+					id: 'print-saved',
+					type: 'success',
+					message: __( 'Settings saved.', 'newspack-plugin' ),
+				} );
+			} )
+			.catch( () => undefined );
+	};
+
+	const togglePostType = ( slug: string, checked: boolean ) =>
+		setSettings( current => ( {
+			...current,
+			indesign_post_types: checked ? [ ...current.indesign_post_types, slug ] : current.indesign_post_types.filter( type => type !== slug ),
+		} ) );
+
+	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( { when: isDirty && ! isFetching } );
+	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
+		title: __( 'Disable InDesign export?', 'newspack-plugin' ),
+		confirmButtonText: __( 'Disable', 'newspack-plugin' ),
+		message: isDirty
+			? __(
+					'The export actions will no longer appear on post lists. Your saved settings are kept, but unsaved changes will be lost.',
+					'newspack-plugin'
+			  )
+			: __( 'The export actions will no longer appear on post lists. Your settings are kept.', 'newspack-plugin' ),
+	} );
+
+	// Each swap unmounts whatever held focus, which would otherwise strand the
+	// keyboard user at the top of the document.
+	const bodyRef = useRef< HTMLDivElement >( null );
+	const focusedFor = useRef< boolean | null >( null );
+	useEffect( () => {
+		if ( ! hasLoaded ) {
+			return;
+		}
+		if ( focusedFor.current === null || focusedFor.current === isEnabled ) {
+			focusedFor.current = isEnabled;
+			return;
+		}
+		focusedFor.current = isEnabled;
+		bodyRef.current?.focus();
+	}, [ hasLoaded, isEnabled ] );
+
+	// The header keeps whichever callbacks it was handed, so publishing these
+	// directly would pin the state of the render that published them.
+	const actionHandlers = useRef( { saveSettings, setModuleEnabled } );
+	actionHandlers.current = { saveSettings, setModuleEnabled };
+
+	useEffect( () => {
+		if ( ! isEnabled ) {
+			setHeaderData( { actions: [] } );
+			return;
+		}
+		setHeaderData( {
+			actions: [
+				{
+					type: 'primary',
+					label: __( 'Save', 'newspack-plugin' ),
+					action: () => actionHandlers.current.saveSettings(),
+					disabled: isFetching || ! isDirty,
+				},
+				{
+					type: 'more',
+					label: __( 'Disable', 'newspack-plugin' ),
+					/* translators: must contain the menu item's visible label, "Disable" (WCAG 2.5.3, Label in Name). */
+					ariaLabel: __( 'Disable InDesign export', 'newspack-plugin' ),
+					action: () => requestDisable( () => actionHandlers.current.setModuleEnabled( false ) ),
+					disabled: isFetching,
+				},
+			],
+		} );
+	}, [ isEnabled, isDirty, isFetching, requestDisable, setHeaderData ] );
+
+	if ( ! hasLoaded ) {
+		return (
+			<WizardsTab>
+				{ navBlockDialog }
+				<Waiting isCenter />
+			</WizardsTab>
+		);
+	}
+
+	const errorNotice = errorMessage && (
+		<Notice status="error" isDismissible={ false } politeness="polite">
+			{ errorMessage }
+		</Notice>
+	);
+
+	if ( ! isEnabled ) {
+		return (
+			<WizardsTab
+				ref={ bodyRef }
+				tabIndex={ -1 }
+				role="group"
+				aria-label={ __( 'Adobe InDesign export', 'newspack-plugin' ) }
+				isFetching={ isFetching }
+			>
+				{ navBlockDialog }
+				{ errorNotice }
+				<EmptyState.Root>
+					<EmptyState.Header
+						icon={ print }
+						title={ __( 'Export articles to Adobe InDesign', 'newspack-plugin' ) }
+						description={ __( 'Let editors export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ) }
+					/>
+					<EmptyState.Actions>
+						<Button
+							variant="primary"
+							accessibleWhenDisabled
+							loading={ isFetching }
 							disabled={ isFetching }
-							options={ PLATFORM_OPTIONS }
-							onChange={ ( value: IndesignPlatform ) => save( { indesign_platform: value } ) }
-						/>
-					</WizardSection>
-					<WizardSection
-						title={ __( 'Available post types', 'newspack-plugin' ) }
-						description={ __(
-							'Choose which post types show the "Export as Adobe InDesign" bulk and row actions on their admin list screens.',
-							'newspack-plugin'
-						) }
-					>
+							onClick={ () => setModuleEnabled( true ) }
+						>
+							{ __( 'Enable', 'newspack-plugin' ) }
+						</Button>
+					</EmptyState.Actions>
+				</EmptyState.Root>
+			</WizardsTab>
+		);
+	}
+
+	return (
+		<WizardsTab
+			ref={ bodyRef }
+			tabIndex={ -1 }
+			role="group"
+			aria-label={ __( 'Adobe InDesign export settings', 'newspack-plugin' ) }
+			isFetching={ isFetching }
+		>
+			{ navBlockDialog }
+			{ disableDialog }
+			{ errorNotice }
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					noMargin
+					heading={ 2 }
+					title={ __( 'Header Platform', 'newspack-plugin' ) }
+					description={ __(
+						'Exports declare their format on the first line and end every line to match. Windows places correctly in most InDesign installs; if placed files show tags as literal text, switch to Mac.',
+						'newspack-plugin'
+					) }
+				/>
+				<Stack direction="column" gap="xl">
+					<SelectControl
+						__nextHasNoMarginBottom
+						label={ __( 'Platform', 'newspack-plugin' ) }
+						value={ settings.indesign_platform }
+						disabled={ isFetching }
+						options={ PLATFORM_OPTIONS }
+						onChange={ ( value: IndesignPlatform ) => setSettings( current => ( { ...current, indesign_platform: value } ) ) }
+					/>
+				</Stack>
+			</Grid>
+			<Divider alignment="full-width" variant="tertiary" />
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					noMargin
+					heading={ 2 }
+					title={ __( 'Available Post Types', 'newspack-plugin' ) }
+					description={ __(
+						'Choose which post types show the "Export as Adobe InDesign" bulk and row actions on their admin list screens.',
+						'newspack-plugin'
+					) }
+				/>
+				<Stack direction="column" gap="xl">
+					<Stack direction="column" gap="xs">
 						{ apiData.available_post_types.map( option => (
 							<CheckboxControl
+								__nextHasNoMarginBottom
 								key={ option.value }
 								label={ option.label }
-								checked={ selectedPostTypes.includes( option.value ) }
+								checked={ settings.indesign_post_types.includes( option.value ) }
 								disabled={ isFetching }
 								onChange={ ( checked: boolean ) => togglePostType( option.value, checked ) }
 							/>
 						) ) }
-						{ selectedPostTypes.length === 0 && (
-							<Notice status="warning" isDismissible={ false }>
-								{ __(
-									'No post types are selected. The "Export as Adobe InDesign" actions will not appear anywhere until you select at least one.',
-									'newspack-plugin'
-								) }
-							</Notice>
-						) }
-					</WizardSection>
-					<WizardSection
-						title={ __( 'Photo captions and credits', 'newspack-plugin' ) }
-						description={ __(
-							'Photo captions and credits are appended to the end of each export. Enable this to leave them out.',
-							'newspack-plugin'
-						) }
-					>
-						<CheckboxControl
-							label={ __( 'Exclude photo captions and credits', 'newspack-plugin' ) }
-							checked={ apiData.indesign_exclude_captions }
-							disabled={ isFetching }
-							onChange={ ( checked: boolean ) => save( { indesign_exclude_captions: checked } ) }
-						/>
-					</WizardSection>
-				</>
-			) }
+					</Stack>
+					{ settings.indesign_post_types.length === 0 && (
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
+							{ __(
+								'No post types are selected. The "Export as Adobe InDesign" actions will not appear anywhere until you select at least one.',
+								'newspack-plugin'
+							) }
+						</Notice>
+					) }
+				</Stack>
+			</Grid>
+			<Divider alignment="full-width" variant="tertiary" />
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					noMargin
+					heading={ 2 }
+					title={ __( 'Photo Captions and Credits', 'newspack-plugin' ) }
+					description={ __(
+						'Photo captions and credits are appended to the end of each export. Enable this to leave them out.',
+						'newspack-plugin'
+					) }
+				/>
+				<Stack direction="column" gap="xl">
+					<CheckboxControl
+						__nextHasNoMarginBottom
+						label={ __( 'Exclude photo captions and credits', 'newspack-plugin' ) }
+						checked={ settings.indesign_exclude_captions }
+						disabled={ isFetching }
+						onChange={ ( checked: boolean ) => setSettings( current => ( { ...current, indesign_exclude_captions: checked } ) ) }
+					/>
+				</Stack>
+			</Grid>
 		</WizardsTab>
 	);
 }

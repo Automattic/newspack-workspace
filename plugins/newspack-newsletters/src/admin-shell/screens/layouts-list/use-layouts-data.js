@@ -3,7 +3,7 @@ import { __ } from '@wordpress/i18n';
 import { LAYOUT_CPT_SLUG } from '../../../utils/consts';
 import useCollectionData from '../../hooks/use-collection-data';
 import { buildQueryParams, toQueryString } from '../../utils/build-query';
-import { isFetchAllPerPage } from '../../utils/per-page';
+import { isFetchAllPerPage, LAYOUTS_FETCH_ALL_CHUNK_SIZE } from '../../utils/per-page';
 
 const COLLECTION_PATH = `/wp/v2/${ LAYOUT_CPT_SLUG }`;
 // `future` is excluded: layouts don't surface scheduling.
@@ -15,16 +15,15 @@ export function buildPath( view ) {
 	}
 	const params = buildQueryParams( view, {
 		defaultPerPage: 12,
+		fetchAllChunkSize: LAYOUTS_FETCH_ALL_CHUNK_SIZE,
 		defaultStatuses: DEFAULT_STATUSES,
 		// `offset` overrides `page` so page 1 can reserve slots for prebuilts.
 		supportsOffset: true,
 		// `content.raw` (not `.rendered`) — previews parse blocks client-side,
-		// so skip the whole `the_content` chain. Term embeds aren't consumed.
-		// `_links` stays in the list — `_embed` only expands links that
-		// survive the `_fields` filter.
+		// so skip the whole `the_content` chain. No `_links` either: see
+		// the newsletters-list note for what it costs.
 		extraParams: {
-			_embed: 'author',
-			_fields: 'id,status,title,date,modified,author,content.raw,meta,_links',
+			_fields: 'id,status,title,date,modified,author,content.raw,meta,newspack_newsletters_author',
 		},
 		arrayParams: [ { viewKey: 'author', param: 'author' } ],
 	} );

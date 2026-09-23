@@ -1,3 +1,31 @@
+## newspack-network [2.22.9](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.8...newspack-network@2.22.9) (2026-09-22)
+
+
+### Bug Fixes
+
+* **event-log:** index timestamp so checkout skips a full-table scan ([#1132](https://github.com/Automattic/newspack-workspace/issues/1132)) ([c2ecf7c](https://github.com/Automattic/newspack-workspace/commit/c2ecf7cd8b9f0d7dd29b29e85171a7c79d8d3a94))
+
+## newspack-network [2.22.8](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.7...newspack-network@2.22.8) (2026-09-15)
+
+
+### Bug Fixes
+
+* use update_option instead of add_option in migration and setup ([cbae9a6](https://github.com/Automattic/newspack-workspace/commit/cbae9a63d0b30b6cf2ac36a46f00541dcbc94266))
+
+## newspack-network [2.22.7](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.6...newspack-network@2.22.7) (2026-09-08)
+
+
+### Bug Fixes
+
+* **content-distribution:** authorize the post on unlink and pull ([#1049](https://github.com/Automattic/newspack-workspace/issues/1049)) ([816b1d6](https://github.com/Automattic/newspack-workspace/commit/816b1d638c127234596277ae3c6adddafe6592a2))
+
+## newspack-network [2.22.6](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.5...newspack-network@2.22.6) (2026-09-02)
+
+
+### Bug Fixes
+
+* **network:** harden remote media handling in distribution ([#885](https://github.com/Automattic/newspack-workspace/issues/885)) ([f450a66](https://github.com/Automattic/newspack-workspace/commit/f450a663c6c876d89ca26b549c9c23aac17cab7a))
+
 ## newspack-network [2.22.5](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.4...newspack-network@2.22.5) (2026-08-31)
 
 

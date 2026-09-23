@@ -1,3 +1,23 @@
+# newspack-components [4.8.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.7.0...newspack-components@4.8.0) (2026-09-14)
+
+
+### Bug Fixes
+
+* **editor:** stop console warnings from Button, cards and Collections ([#907](https://github.com/Automattic/newspack-workspace/issues/907)) ([70e41cd](https://github.com/Automattic/newspack-workspace/commit/70e41cd116a295a391af966f924c269c567967a2))
+
+
+### Features
+
+* **audience:** date range segmentation for ESP date fields ([#767](https://github.com/Automattic/newspack-workspace/issues/767)) ([21c4732](https://github.com/Automattic/newspack-workspace/commit/21c4732a2b8cbadea1e7d6710ca22d22b3282cef))
+* **components:** Accordion becomes CollapsibleGroup (DSGNEWS-215) ([e6639f2](https://github.com/Automattic/newspack-workspace/commit/e6639f2214d591bba3bc38fb7f042719ca58d3ea))
+* **components:** adopt design system badges (DSGNEWS-215) ([fc4c8f7](https://github.com/Automattic/newspack-workspace/commit/fc4c8f73ccba6ec4075e09578a43938a40eda60f))
+* **components:** rebuild the info button on Popover (DSGNEWS-215) ([#887](https://github.com/Automattic/newspack-workspace/issues/887)) ([31f996d](https://github.com/Automattic/newspack-workspace/commit/31f996d25051a5f861e94cc03b42bb7d9afc10da))
+* **components:** shared EmptyState component (DSGNEWS-211) ([#854](https://github.com/Automattic/newspack-workspace/issues/854)) ([6c31f8c](https://github.com/Automattic/newspack-workspace/commit/6c31f8cac683570e36f3768b0be6061b55d7c946))
+* **components:** shared StatCard component (DSGNEWS-212) ([#864](https://github.com/Automattic/newspack-workspace/issues/864)) ([ac434c2](https://github.com/Automattic/newspack-workspace/commit/ac434c2bc6777f99b65e18fa70e10100ed077ca2))
+* **components:** use an icon and label for DataViews Status columns (DSGNEWS-222) ([aa1d404](https://github.com/Automattic/newspack-workspace/commit/aa1d40422ccddad0d34de67ed444f73f6d14ea49))
+* **content-gate:** share one metering allowance across gates (NPPD-2191, [#919](https://github.com/Automattic/newspack-workspace/issues/919)) ([cb79f9a](https://github.com/Automattic/newspack-workspace/commit/cb79f9a79990975d48acde04b57e2746fd694bdd))
+* **subscriber-discounts:** subscriber discounts on WooCommerce products (NPPD-1794, [#760](https://github.com/Automattic/newspack-workspace/issues/760)) ([3ef9b8a](https://github.com/Automattic/newspack-workspace/commit/3ef9b8ac6f318437777027445ef835d30ec6c8c1)), closes [#8217](https://github.com/Automattic/newspack-workspace/issues/8217)
+
 # newspack-components [4.7.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.6.3...newspack-components@4.7.0) (2026-08-31)
 
 

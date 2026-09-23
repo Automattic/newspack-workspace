@@ -6,6 +6,7 @@ declare module '@wordpress/block-editor';
 type HeaderAction = {
 	type: 'primary' | 'secondary' | 'more';
 	label: string;
+	ariaLabel?: string;
 	icon?: import('@wordpress/icons').Icon | string;
 	disabled?: boolean;
 	destructive?: boolean;
@@ -31,6 +32,7 @@ type AccessRule = {
 	options?: { value: string; label: string }[];
 	has_options: boolean;
 	empty_grants_access?: boolean;
+	requires_value?: boolean;
 	placeholder?: string;
 	value: GateAccessRuleValue;
 };

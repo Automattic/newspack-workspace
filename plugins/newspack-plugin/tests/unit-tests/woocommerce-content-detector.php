@@ -357,7 +357,7 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 		WooCommerce_Content_Detector::reset_memo();
 		try {
 			$this->assertTrue( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
-			$this->assertSame( 'newspack_perfmatters_wc_detection_error', $logged_code );
+			$this->assertSame( 'newspack_wc_content_detection_error', $logged_code );
 		} finally {
 			// Remove the throwing filter so it can't make later tests order-dependent,
 			// even if an assertion above fails.

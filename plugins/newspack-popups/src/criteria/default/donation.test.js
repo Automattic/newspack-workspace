@@ -30,8 +30,8 @@ describe( 'donation criteria matching', () => {
 	} );
 
 	it( 'matches the former-donors value from the store', () => {
-		expect( matchDonation( { value: 'formers-donors' }, ras( { isFormerDonor: true } ) ) ).toBe( true );
-		expect( matchDonation( { value: 'formers-donors' }, ras() ) ).toBe( false );
+		expect( matchDonation( { value: 'former-donors' }, ras( { isFormerDonor: true } ) ) ).toBe( true );
+		expect( matchDonation( { value: 'former-donors' }, ras() ) ).toBe( false );
 	} );
 
 	it.each( [ 'true', 'Yes', '1', 'monthly', '$50.00' ] )( 'treats a reader arriving with np_seg_donor=%s as a donor', value => {

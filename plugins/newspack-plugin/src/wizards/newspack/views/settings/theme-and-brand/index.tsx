@@ -6,7 +6,9 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, Fragment } from '@wordpress/element';
+import { useState, useEffect, useRef, Fragment } from '@wordpress/element';
+import { useDispatch } from '@wordpress/data';
+import { Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -15,13 +17,17 @@ import ThemeSelection from './theme-select';
 import WizardsTab from '../../../../wizards-tab';
 import WizardSection from '../../../../wizards-section';
 import { HomepageSelect } from './homepage-select';
-import { Button, Router } from '../../../../../../packages/components/src';
+import { Button, Divider, Grid, Router, SectionHeader, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
+import { useErrorNoticeFocus } from '../../../../hooks/use-error-notice-focus';
 import Header from './header';
 import Footer from './footer';
 import Colors from './colors';
+import Logos from './logos';
 import Typography from './typography';
 import { DEFAULT_THEME_MODS } from '../constants';
+import { footerColor } from './utils';
 
 const { useHistory } = Router;
 
@@ -33,13 +39,26 @@ const DEFAULT_DATA: ThemeData = {
 };
 
 const ThemeBrand = ( { isPartOfSetup = false } ) => {
-	const { wizardApiFetch, isFetching } = useWizardApiFetch( 'newspack-settings/theme-mods' );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/theme-mods' );
+	const { setHeaderData, addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setDataState ] = useState< ThemeData >( DEFAULT_DATA );
+	const [ savedData, setSavedData ] = useState< ThemeData >( DEFAULT_DATA );
 
 	const history = useHistory();
 
+	const {
+		wrapperProps: noticeWrapperProps,
+		registerSubmit,
+		spokenMessage,
+	} = useErrorNoticeFocus( errorMessage, __( 'Theme and Brand error', 'newspack-plugin' ) );
+
 	function setData( newData: ThemeData ) {
 		setDataState( { ...data, ...newData } );
+	}
+
+	function setFetchedData( res: ThemeData ) {
+		setData( res );
+		setSavedData( { ...data, ...res } );
 	}
 
 	const finishSetup = () => {
@@ -56,25 +75,52 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 					history.push( '/completed' );
 				},
 			}
-		);
+		).catch( () => {} );
 	};
 
 	async function save() {
-		return new Promise( resolve =>
+		resetError();
+		const requestData = data;
+		const { theme_mods: themeMods } = requestData;
+		const payload =
+			themeMods.footer_color === 'custom' && ! themeMods.footer_color_hex
+				? { ...requestData, theme_mods: { ...themeMods, footer_color_hex: footerColor( themeMods ) } }
+				: requestData;
+		return new Promise( ( resolve, reject ) =>
 			wizardApiFetch(
 				{
-					data,
+					data: payload,
 					path: '/newspack/v1/wizard/newspack-setup-wizard/theme',
 					method: 'POST',
 					updateCacheMethods: [ 'GET' ],
 				},
 				{
 					onSuccess: res => {
-						setData( res );
+						const saved = { ...payload, ...res };
+						setSavedData( saved );
+						// Controls stay editable mid-request; keep any edit made meanwhile, unsaved.
+						setDataState( current => {
+							if ( current === requestData ) {
+								return saved;
+							}
+							// Carry over a footer color the save filled in, or undoing that edit would still read as unsaved.
+							const filledHex = payload !== requestData && saved.theme_mods?.footer_color_hex;
+							return filledHex && current.theme_mods.footer_color === 'custom' && ! current.theme_mods.footer_color_hex
+								? { ...current, theme_mods: { ...current.theme_mods, footer_color_hex: filledHex } }
+								: current;
+						} );
+						if ( ! isPartOfSetup ) {
+							removeNotice( 'theme-and-brand-saved' );
+							addNotice( {
+								id: 'theme-and-brand-saved',
+								type: 'success',
+								message: __( 'Settings saved.', 'newspack-plugin' ),
+							} );
+						}
 						resolve( res );
 					},
 				}
-			)
+			).catch( reject )
 		);
 	}
 
@@ -84,22 +130,95 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 				path: '/newspack/v1/wizard/newspack-setup-wizard/theme',
 			},
 			{
-				onSuccess: setData,
+				onSuccess: setFetchedData,
 			}
-		);
+		).catch( () => {} );
 	}, [] );
 
+	// The header keeps whichever callback it was handed, so publishing `save`
+	// directly would pin the state of the render that published it.
+	const submit = useRef( save );
+	submit.current = save;
+
+	const isDirty = data.theme !== savedData.theme || JSON.stringify( data.theme_mods ) !== JSON.stringify( savedData.theme_mods );
+
+	useEffect( () => {
+		if ( isPartOfSetup ) {
+			return;
+		}
+		setHeaderData( {
+			actions: [
+				{
+					type: 'primary',
+					label: __( 'Save', 'newspack-plugin' ),
+					action: () => submit.current().catch( () => {} ),
+					disabled: isFetching || ! isDirty,
+				},
+				{
+					type: 'more',
+					label: __( 'Open Customizer', 'newspack-plugin' ),
+					href: `customize.php?return=${ encodeURIComponent( window.location.href ) }`,
+				},
+			],
+		} );
+	}, [ isPartOfSetup, isFetching, isDirty, setHeaderData ] );
+
+	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
+		when: ! isPartOfSetup && isDirty && ! isFetching,
+	} );
+
+	const updateThemeMods = ( theme_mods: Partial< ThemeMods > ) => setData( { ...data, theme_mods: { ...data.theme_mods, ...theme_mods } } );
+
+	const sections = [
+		{
+			key: 'logos',
+			title: __( 'Logos', 'newspack-plugin' ),
+			description: __( 'Upload your site logo and an optional alternative for the footer.', 'newspack-plugin' ),
+			content: <Logos themeMods={ data.theme_mods } onUpdate={ updateThemeMods } />,
+		},
+		{
+			key: 'colors',
+			title: __( 'Colors', 'newspack-plugin' ),
+			description: __( 'Pick your primary and secondary colors.', 'newspack-plugin' ),
+			content: <Colors themeMods={ data.theme_mods } updateColors={ updateThemeMods } />,
+		},
+		{
+			key: 'typography',
+			title: __( 'Typography', 'newspack-plugin' ),
+			description: __( 'Define the font pairing to use throughout your site.', 'newspack-plugin' ),
+			content: <Typography data={ data.theme_mods } update={ updateThemeMods } />,
+		},
+		{
+			key: 'header',
+			title: __( 'Header', 'newspack-plugin' ),
+			description: __( 'Set the header layout and background.', 'newspack-plugin' ),
+			content: <Header themeMods={ data.theme_mods } updateHeader={ updateThemeMods } />,
+		},
+		{
+			key: 'footer',
+			title: __( 'Footer', 'newspack-plugin' ),
+			description: __( 'Personalize the footer of your site.', 'newspack-plugin' ),
+			content: <Footer themeMods={ data.theme_mods } onUpdate={ updateThemeMods } />,
+		},
+	];
+
 	return (
-		<WizardsTab title={ __( 'Theme and Brand', 'newspack-plugin' ) } isFetching={ isFetching }>
+		<WizardsTab isFetching={ isFetching }>
+			{ navBlockDialog }
+			{ errorMessage && (
+				<div { ...noticeWrapperProps }>
+					<Notice status="error" isDismissible={ false } politeness="polite" spokenMessage={ spokenMessage }>
+						{ errorMessage }
+					</Notice>
+				</div>
+			) }
 			{ ! isPartOfSetup && (
-				<Fragment>
-					<WizardSection title={ __( 'Theme', 'newspack-plugin' ) } description={ __( 'Update your sites theme.', 'newspack-plugin' ) }>
-						<ThemeSelection
-							theme={ isFetching ? '' : data.theme || 'newspack-theme' }
-							updateTheme={ theme => setData( { ...data, theme } ) }
-						/>
-					</WizardSection>
-				</Fragment>
+				<WizardSection title={ __( 'Theme', 'newspack-plugin' ) } description={ __( 'Update your site’s theme.', 'newspack-plugin' ) }>
+					<ThemeSelection
+						theme={ isFetching ? '' : data.theme || 'newspack-theme' }
+						updateTheme={ theme => setData( { ...data, theme } ) }
+					/>
+				</WizardSection>
 			) }
 			{ isPartOfSetup && (
 				<WizardSection title={ __( 'Homepage', 'newspack-plugin' ) } description={ __( 'Select a homepage layout.', 'newspack-plugin' ) }>
@@ -119,74 +238,28 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 					/>
 				</WizardSection>
 			) }
-			<WizardSection
-				title={ __( 'Colors', 'newspack-plugin' ) }
-				description={ __( 'Pick your primary and secondary colors.', 'newspack-plugin' ) }
-			>
-				<Colors
-					themeMods={ data.theme_mods }
-					updateColors={ theme_mods => {
-						setData( {
-							...data,
-							theme_mods,
-						} );
-					} }
-				/>
-			</WizardSection>
-			<WizardSection
-				title={ __( 'Typography', 'newspack-plugin' ) }
-				description={ __( 'Define the font pairing to use throughout your site', 'newspack-plugin' ) }
-			>
-				<Typography
-					data={ data.theme_mods }
-					isFetching={ isFetching }
-					update={ theme_mods => {
-						setData( {
-							...data,
-							theme_mods,
-						} );
-					} }
-				/>
-			</WizardSection>
-			<WizardSection
-				title={ __( 'Header', 'newspack-plugin' ) }
-				description={ __( 'Update the header and add your logo.', 'newspack-plugin' ) }
-			>
-				<Header
-					themeMods={ data.theme_mods }
-					updateHeader={ theme_mods => {
-						setData( {
-							...data,
-							theme_mods,
-						} );
-					} }
-				/>
-			</WizardSection>
-			<WizardSection
-				title={ __( 'Footer', 'newspack-plugin' ) }
-				description={ __( 'Personalize the footer of your site.', 'newspack-plugin' ) }
-			>
-				<Footer
-					themeMods={ data.theme_mods }
-					onUpdate={ theme_mods => {
-						setData( {
-							...data,
-							theme_mods,
-						} );
-					} }
-				/>
-			</WizardSection>
-			<div className="newspack-buttons-card">
-				{ isPartOfSetup ? (
-					<Button variant="primary" onClick={ () => save().then( finishSetup ) }>
+			{ sections.map( ( { key, title, description, content } ) => (
+				<Fragment key={ key }>
+					<Divider alignment="full-width" variant="tertiary" />
+					<Grid columns={ 2 } gutter={ 32 } noMargin>
+						<SectionHeader noMargin heading={ 2 } title={ title } description={ description } />
+						{ content }
+					</Grid>
+				</Fragment>
+			) ) }
+			{ isPartOfSetup && (
+				<div className="newspack-buttons-card">
+					<Button
+						variant="primary"
+						onClick={ ( event?: { currentTarget: Element | null } ) => {
+							registerSubmit( event );
+							save().then( finishSetup, () => {} );
+						} }
+					>
 						{ __( 'Finish', 'newspack-plugin' ) }
 					</Button>
-				) : (
-					<Button variant="primary" onClick={ save }>
-						{ __( 'Save', 'newspack-plugin' ) }
-					</Button>
-				) }
-			</div>
+				</div>
+			) }
 		</WizardsTab>
 	);
 };

@@ -13,23 +13,38 @@ use Newspack\Reader_Activation\Integrations;
 use Newspack_Newsletters_Contacts;
 use Newspack_Newsletters_Subscription;
 use Newspack\Configuration_Managers;
+use Newspack\Audience_Integrations;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * ESP Integration Class.
+ * Mailchimp Integration Class (id `esp`).
  *
- * Generic integration for ESPs using Newspack Newsletters plugin.
+ * Reader-data sync through the Newspack Newsletters Mailchimp provider. This
+ * was the generic ESP integration; the `esp` id — and every option keyed on
+ * it — is retained so no stored settings move. The legacy provider paths
+ * (ActiveCampaign, Constant Contact) keep syncing until the Integrations
+ * screen is live for the site (see is_mailchimp_only()), after which
+ * dedicated integrations own everything that is not Mailchimp.
  */
 class ESP extends Integration {
+
+	/**
+	 * Newspack Newsletters' code for "this provider has no list management".
+	 * Campaign Monitor is the current example.
+	 *
+	 * @var string
+	 */
+	const LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE = 'newspack_newsletters_not_supported';
+
 	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		parent::__construct(
 			'esp',
-			__( 'Newsletter ESP', 'newspack-plugin' ),
-			__( 'Syncs reader data with your Newspack Newsletters email service provider.', 'newspack-plugin' )
+			__( 'Mailchimp', 'newspack-plugin' ),
+			__( 'Syncs reader data with your Mailchimp audience.', 'newspack-plugin' )
 		);
 	}
 
@@ -50,30 +65,46 @@ class ESP extends Integration {
 	}
 
 	/**
-	 * Why the ESP integration cannot operate with the current provider.
+	 * Why the integration cannot operate with the current provider.
 	 *
-	 * The "manual" provider is valid for authoring newsletters but exposes no
-	 * API for contact syncing: no lists, no master list, no contact upsert.
+	 * This card is Mailchimp-only: any other selected provider (including the
+	 * API-less `manual` one) renders it unavailable. No provider selected is
+	 * the Connect state, not an unsupported one.
 	 *
-	 * @return string|null Reason string when the provider is manual, null otherwise.
+	 * @return string|null Reason string when a non-Mailchimp provider is selected, null otherwise.
 	 */
 	public function get_unsupported_reason() {
-		if ( class_exists( 'Newspack_Newsletters' ) && 'manual' === \Newspack_Newsletters::service_provider() ) {
-			return __( 'Requires an API-based ESP', 'newspack-plugin' );
+		$provider = $this->get_provider_slug();
+		if ( $provider && 'mailchimp' !== $provider ) {
+			return __( 'Requires Mailchimp as the newsletter provider', 'newspack-plugin' );
 		}
 		return null;
 	}
 
 	/**
-	 * The remedy for the manual provider: swap it for an API-based one.
+	 * The remedy for a non-Mailchimp provider: swap it in Newsletters settings.
 	 *
 	 * "Connect" would be wrong here — the site is connected, just to a provider
-	 * that exposes no contact-sync API.
+	 * this card does not serve.
 	 *
 	 * @return string The action label.
 	 */
 	public function get_unsupported_action_label() {
 		return __( 'Change provider', 'newspack-plugin' );
+	}
+
+	/**
+	 * Whether reader sync through this integration is restricted to Mailchimp.
+	 *
+	 * Tied to the Integrations screen flag: sites where the screen is not live
+	 * still sync ActiveCampaign or Constant Contact through this generic path,
+	 * and cutting them off before the dedicated integrations take over would
+	 * silently stop their reader sync.
+	 *
+	 * @return bool
+	 */
+	protected function is_mailchimp_only() {
+		return Audience_Integrations::is_enabled();
 	}
 
 	/**
@@ -90,9 +121,18 @@ class ESP extends Integration {
 	 * state; "is the provider reachable right now?" is `health_check()`'s
 	 * job.
 	 *
+	 * Under the Mailchimp-only restriction a non-Mailchimp provider is never
+	 * set up, which keeps this integration out of
+	 * get_active_configured_integrations(): a flag-on site mid-migration gets
+	 * a clean stop instead of a sync attempt whose provider error would be
+	 * classified transient and retried forever.
+	 *
 	 * @return bool True if a provider is selected and a master list ID is stored.
 	 */
 	public function is_set_up() {
+		if ( $this->is_mailchimp_only() && 'mailchimp' !== $this->get_provider_slug() ) {
+			return false;
+		}
 		return $this->is_connected() && (bool) $this->get_master_list_id();
 	}
 
@@ -152,7 +192,9 @@ class ESP extends Integration {
 	 *
 	 * Returns ALL possible ESP fields unconditionally as static
 	 * declarations. No provider check, no API calls. Provider options
-	 * are added in get_settings_config().
+	 * are added in get_settings_config(). The ActiveCampaign and Constant Contact declarations remain for the
+	 * legacy generic path (its sync reads and option migration) even though
+	 * the settings UI no longer offers them; they go when that path retires.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
@@ -224,36 +266,21 @@ class ESP extends Integration {
 			return [];
 		}
 
-		$enriched     = [];
-		$config       = parent::get_settings_config();
-		$config       = array_combine(
+		$enriched = [];
+		$config   = parent::get_settings_config();
+		$config   = array_combine(
 			array_column( $config, 'key' ),
 			$config
 		);
-		$list_options = [
-			'options' => $this->get_list_options(),
-		];
 
-		switch ( $provider->service ) {
-			case 'mailchimp':
-				$enriched[] = array_merge(
-					$config['mailchimp_audience_id'],
-					$list_options
-				);
-				$enriched[] = $config['mailchimp_reader_default_status'];
-				break;
-			case 'active_campaign':
-				$enriched[] = array_merge(
-					$config['active_campaign_master_list'],
-					$list_options
-				);
-				break;
-			case 'constant_contact':
-				$enriched[] = array_merge(
-					$config['constant_contact_list_id'],
-					$list_options
-				);
-				break;
+		if ( 'mailchimp' === $this->get_provider_slug() ) {
+			// get_list_options() hits the provider API — only fetch when the
+			// audience field is actually offered.
+			$enriched[] = array_merge(
+				$config['mailchimp_audience_id'],
+				[ 'options' => $this->get_list_options() ]
+			);
+			$enriched[] = $config['mailchimp_reader_default_status'];
 		}
 		$auto_keys = array_merge(
 			array_column( $this->get_account_deletion_fields(), 'key' ),
@@ -345,25 +372,34 @@ class ESP extends Integration {
 	/**
 	 * Get the enabled outgoing metadata fields for the ESP integration.
 	 *
-	 * Overrides the parent to provide lazy migration from the legacy global
-	 * option (Metadata::FIELDS_OPTION) to the per-integration option.
+	 * Overrides the parent to lazily migrate the legacy global option
+	 * (Metadata::FIELDS_OPTION) into the per-integration option. Copied
+	 * verbatim, not through update_enabled_outgoing_fields(): validating
+	 * here would permanently drop any currently-unavailable name (e.g.
+	 * payment fields while WooCommerce is inactive) from the publisher's
+	 * selection.
 	 *
 	 * @return string[] List of enabled field names.
 	 */
 	public function get_enabled_outgoing_fields() {
 		$fields = \get_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, null );
 		if ( null !== $fields && is_array( $fields ) ) {
-			return $fields;
+			return array_values( $fields );
 		}
 
 		// Migrate from legacy global option.
 		$legacy = \get_option( Sync\Metadata::FIELDS_OPTION, null );
 		if ( null !== $legacy && is_array( $legacy ) ) {
-			$this->update_enabled_outgoing_fields( $legacy );
-			return $legacy;
+			$migrated_fields = array_values( array_unique( array_map( 'strval', $legacy ) ) );
+			\update_option(
+				self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id,
+				$migrated_fields,
+				false
+			);
+			return $migrated_fields;
 		}
 
-		return Sync\Metadata::get_default_fields();
+		return Sync\Metadata::get_default_enabled_fields();
 	}
 
 	/**
@@ -408,6 +444,13 @@ class ESP extends Integration {
 			$errors->add(
 				'ras_esp_master_list_id_not_found',
 				__( 'ESP master list ID is not set.', 'newspack-plugin' )
+			);
+		}
+
+		if ( $this->is_mailchimp_only() && 'mailchimp' !== $this->get_provider_slug() ) {
+			$errors->add(
+				'ras_esp_provider_not_supported',
+				__( 'Sync requires Mailchimp as the newsletter provider.', 'newspack-plugin' )
 			);
 		}
 
@@ -468,6 +511,61 @@ class ESP extends Integration {
 			return $can_sync;
 		}
 		return \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
+	}
+
+	/**
+	 * Remove the deleted reader from every ESP list when flagged instead of
+	 * hard-deleted.
+	 *
+	 * For legacy `sync_esp_delete=false` sites, this keeps the contact record
+	 * (carrying the Account_Deleted / Membership_Status flags from the
+	 * flag-mode metadata push) but stops further outreach by clearing all
+	 * list membership.
+	 *
+	 * A provider without list management (Campaign Monitor) has no lists to
+	 * clear, so its "not supported" answer is success, not failure — returning
+	 * the error would schedule five retries that can never succeed and alert
+	 * on every reader deletion.
+	 *
+	 * @param string $email Email address of the deleted reader.
+	 *
+	 * @return true|false|\WP_Error True or false on success — update_lists()
+	 *                              returns false when there was nothing to
+	 *                              do — WP_Error on failure. The caller only
+	 *                              checks is_wp_error(), so anything else is
+	 *                              treated as success.
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_contacts_not_found',
+				__( 'Newspack Newsletters is not available.', 'newspack-plugin' )
+			);
+		}
+		$result = \Newspack_Newsletters_Contacts::update_lists( $email, [], 'Reader account deleted' );
+		if ( \is_wp_error( $result ) && self::LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE === $result->get_error_code() ) {
+			return true;
+		}
+		return $result;
+	}
+
+	/**
+	 * Get the metadata prefix for the ESP integration.
+	 *
+	 * Applies the site-wide `newspack_ras_metadata_prefix` filter on top of
+	 * the per-integration option, preserving the pre-unification push
+	 * behavior: the legacy pipeline built every outgoing ESP key through
+	 * Metadata::get_prefix(), which runs this filter, so a site customizing
+	 * its prefix by code snippet (no stored option) must keep pushing under
+	 * the filtered prefix. The CLI duplicates audit resolves through the
+	 * same filter, so audit and push agree on live key names. Scoped to the
+	 * ESP: other integrations' prefixes never passed the filter.
+	 *
+	 * @return string The metadata prefix.
+	 */
+	public function get_metadata_prefix() {
+		/** This filter is documented in includes/reader-activation/sync/class-metadata.php */
+		return \apply_filters( 'newspack_ras_metadata_prefix', parent::get_metadata_prefix() );
 	}
 
 	/**

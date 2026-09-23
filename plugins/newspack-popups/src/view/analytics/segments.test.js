@@ -5,6 +5,7 @@ import { getCriteria } from '../../criteria/utils';
 jest.mock( '../utils', () => ( {
 	getMatchingSegmentIds: jest.fn(),
 	getPreviewedPromptId: jest.fn(),
+	isSwitchedSession: jest.requireActual( '../utils/segments' ).isSwitchedSession,
 	sendEvent: jest.fn(),
 } ) );
 
@@ -45,6 +46,7 @@ describe( 'reportMatchedSegments', () => {
 			segments: { 12: { criteria: [], priority: 0 }, 45: { criteria: [], priority: 1 } },
 		};
 		window.history.replaceState( {}, '', '/' );
+		delete window.newspack_reader_data;
 		clearGaCookies();
 	} );
 
@@ -169,6 +171,14 @@ describe( 'reportMatchedSegments', () => {
 		window.history.replaceState( {}, '', '/?view_as=segment:12' );
 		reportMatchedSegments();
 		expect( sendEvent ).not.toHaveBeenCalled();
+	} );
+
+	it( 'does not count a switched session toward reach', () => {
+		window.newspack_reader_data = { is_switched_session: true };
+		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
+		reportMatchedSegments();
+		expect( sendEvent ).not.toHaveBeenCalled();
+		expect( storedState() ).toBeNull();
 	} );
 
 	it( 'withholds segments whose criteria are not registered on this site', () => {

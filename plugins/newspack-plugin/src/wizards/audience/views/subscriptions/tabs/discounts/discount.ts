@@ -3,10 +3,10 @@
  * discount arithmetic the price preview shows, and the summary labels the list
  * renders.
  *
- * The arithmetic mirrors `Newspack\Subscriber_Discounts::discounted_price()`.
- * The preview is what a publisher tunes a fixed amount against, so the two must
- * agree. They can differ by one minor unit at an exact half-cent boundary, where
- * PHP's `round()` pre-rounds to 15 significant digits and this does not.
+ * The arithmetic mirrors `Newspack\Subscriber_Discounts::discounted_price()`,
+ * including both halves of PHP's rounding. The preview is what a publisher tunes
+ * a fixed amount against and the storefront charges the server's number, so a
+ * minor unit of disagreement is one the reader watches change at checkout.
  */
 
 /**
@@ -18,6 +18,7 @@ import { decodeEntities } from '@wordpress/html-entities';
 /**
  * Internal dependencies.
  */
+import { MAX_NAMED_ITEMS } from '../../constants';
 import type { DiscountCurrency, DiscountRule } from './types';
 
 export const DEFAULT_CURRENCY: DiscountCurrency = {
@@ -75,8 +76,12 @@ export function subscriberPrice(
 	}
 	const raw = 'percent' === rule.discount_type ? basePrice * ( 1 - Math.min( rule.amount, 100 ) / 100 ) : basePrice - rule.amount;
 	const factor = Math.pow( 10, decimals );
-	// Round half down, matching how the server rounds a subscriber price.
-	const rounded = Math.max( 0, -Math.round( -raw * factor ) / factor );
+	// Both halves of the server's rounding, in order. PHP's `round()` first
+	// discards the binary representation error by taking 15 significant digits —
+	// without that, 0.18 - 0.015 is 0.16499999999999998 and rounds a cent low —
+	// and then rounds a true half away from zero, which is what Math.round does
+	// for the non-negative values that survive the clamp below.
+	const rounded = Math.max( 0, Math.round( Number( ( raw * factor ).toPrecision( 15 ) ) ) / factor );
 	return rounded < basePrice ? rounded : null;
 }
 
@@ -97,35 +102,60 @@ export function discountLabel( rule: Pick< DiscountRule, 'discount_type' | 'amou
 }
 
 /**
- * The rule's audience, as shown in the list's Subscription column.
+ * The rule's subscription names, in rule order.
  *
- * Names the subscriptions where the options list can resolve them; ids it
- * cannot resolve (a deleted product, or a site with more subscriptions than
- * one options page) fall back to a count so the cell never goes blank.
+ * Ids the options list cannot resolve (a deleted product, or a site with more
+ * subscriptions than one options page) are skipped, so the result is shorter
+ * than `ids` whenever the tab could not name everything a rule covers.
  *
  * @param ids     The rule's subscription product ids.
  * @param options Known subscription products.
  */
-export function subscriptionsLabel( ids: number[], options: { id: number; name: string }[] ): string {
-	const names = ids.map( id => options.find( option => option.id === id )?.name ).filter( ( name ): name is string => !! name );
+export function subscriptionNames( ids: number[], options: { id: number; name: string }[] ): string[] {
+	return ids
+		.map( id => options.find( option => option.id === id )?.name )
+		.filter( ( name ): name is string => !! name )
+		.map( decodeEntities );
+}
+
+/**
+ * The rule's audience, split for the list's Subscription column.
+ *
+ * A rule can cover dozens of subscriptions, so the cell names a couple and
+ * counts the rest. The parts are separate because the cell is one line: the
+ * names truncate and the count must not.
+ *
+ * `more` counts everything the cell does not name, whether it was capped away
+ * or could not be resolved, so the two are never separate numbers. Where
+ * nothing resolves, `named` carries the count rather than going blank.
+ *
+ * @param ids     The rule's subscription product ids.
+ * @param options Known subscription products.
+ */
+export function subscriptionsSummary( ids: number[], options: { id: number; name: string }[] ): { named: string; more: string } {
+	const names = subscriptionNames( ids, options );
 	if ( ! names.length ) {
-		return sprintf(
-			/* translators: %d: number of subscriptions whose subscribers get the discount. */
-			_n( '%d subscription', '%d subscriptions', ids.length, 'newspack-plugin' ),
-			ids.length
-		);
+		return {
+			named: sprintf(
+				/* translators: %d: number of subscriptions whose subscribers get the discount. */
+				_n( '%d subscription', '%d subscriptions', ids.length, 'newspack-plugin' ),
+				ids.length
+			),
+			more: '',
+		};
 	}
-	const listed = names.map( decodeEntities ).join( ', ' );
-	const unresolved = ids.length - names.length;
-	if ( unresolved > 0 ) {
-		return sprintf(
-			/* translators: %1$s: subscription names, %2$d: number of further subscriptions the rule also covers. */
-			_n( '%1$s + %2$d more', '%1$s + %2$d more', unresolved, 'newspack-plugin' ),
-			listed,
-			unresolved
-		);
-	}
-	return listed;
+	const shown = names.slice( 0, MAX_NAMED_ITEMS );
+	const remaining = ids.length - shown.length;
+	return {
+		named: shown.join( ', ' ),
+		more: remaining
+			? sprintf(
+					/* translators: %d: number of further subscriptions the rule covers beyond the ones named beside this. */
+					_n( '+%d more', '+%d more', remaining, 'newspack-plugin' ),
+					remaining
+			  )
+			: '',
+	};
 }
 
 type TargetingFieldsOnly = Pick< DiscountRule, 'targeting' | 'product_ids' | 'category_ids' | 'excluded_product_ids' >;
@@ -203,7 +233,7 @@ export function targetingLabel( rule: TargetingFieldsOnly ): string {
  * @param rule Draft rule.
  */
 export function isValidRule( rule: Partial< DiscountRule > ): boolean {
-	if ( ! rule.subscription_product_ids?.length ) {
+	if ( 'all' !== rule.subscription_targeting && ! rule.subscription_product_ids?.length ) {
 		return false;
 	}
 	const amount = Number( rule.amount );

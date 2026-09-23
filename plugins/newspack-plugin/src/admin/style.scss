@@ -280,26 +280,8 @@ h1 {
 .newspack-dashboard__section {
 	@include wizard-column;
 
-	> h3 {
-		font-size: 1.25rem;
-		font-weight: normal;
-		line-height: 1.75;
-		margin-bottom: calc(var(--newspack-wizard-section-child-space) / 2);
-	}
-
-	> p {
-		color: wp-colors.$gray-700;
-		margin: 0;
-	}
-
 	a {
 		text-decoration: none;
-	}
-
-	.newspack-grid:not(.newspack-grid--no-margin) {
-		--np-dash-card-icon-size: 80px;
-
-		margin: 1.5rem 0 2rem;
 	}
 }
 
@@ -347,14 +329,6 @@ h1 {
 	}
 
 	&.newspack-action-card {
-		.newspack-action-card__notification {
-			&.newspack-action-card__region-children {
-				.newspack-notice {
-					margin-top: 1rem;
-				}
-			}
-		}
-
 		.newspack-action-card__region-children:not(:last-child) {
 			padding-bottom: 0;
 			padding-top: 2rem;

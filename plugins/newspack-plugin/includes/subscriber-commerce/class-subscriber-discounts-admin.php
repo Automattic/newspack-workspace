@@ -135,6 +135,10 @@ class Subscriber_Discounts_Admin {
 		return [
 			'id'                       => [ 'type' => 'string' ],
 			'created_at'               => [ 'type' => 'string' ],
+			'subscription_targeting'   => [
+				'type' => 'string',
+				'enum' => [ Subscriber_Commerce::SUBSCRIPTION_TARGETING_SPECIFIC, Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL ],
+			],
 			'subscription_product_ids' => $id_list,
 			'targeting'                => [
 				'type' => 'string',
@@ -195,6 +199,7 @@ class Subscriber_Discounts_Admin {
 				// posts the whole rule back — doesn't restamp its creation date
 				// and reshuffle the list's "newest first" order.
 				'created_at'               => $request->get_param( 'created_at' ),
+				'subscription_targeting'   => $request->get_param( 'subscription_targeting' ),
 				'subscription_product_ids' => $request->get_param( 'subscription_product_ids' ),
 				'targeting'                => $request->get_param( 'targeting' ),
 				'product_ids'              => $request->get_param( 'product_ids' ),
