@@ -47,6 +47,16 @@ class Newspack_Constants_Scanner {
 	private $found = [];
 
 	/**
+	 * Every `@constant` docblock seen anywhere in the scan, keyed by constant
+	 * name. Collected across files because a constant is often documented in
+	 * the class that owns the feature while the guard that reads it lives
+	 * elsewhere; the first docblock seen for a name wins.
+	 *
+	 * @var array
+	 */
+	private $docs = [];
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $sources Map of source name => [ 'path' => string, 'branch' => ?string, 'sha' => ?string ].
@@ -69,13 +79,37 @@ class Newspack_Constants_Scanner {
 	 */
 	public function scan(): array {
 		$this->found = [];
+		$this->docs  = [];
 		foreach ( $this->sources as $name => $source ) {
 			if ( is_dir( $source['path'] ) ) {
 				$this->scan_directory( $source['path'], $name );
 			}
 		}
+		$this->apply_documentation();
 		ksort( $this->found );
 		return $this->get_documented();
+	}
+
+	/**
+	 * Attach the docblocks collected across the scan to the constants that
+	 * have at least one guard.
+	 *
+	 * A docblock alone never creates a catalog entry: a constant nothing
+	 * guards is not in use, and inventing a row for it would hand the hub a
+	 * constant with no locations.
+	 */
+	private function apply_documentation(): void {
+		foreach ( $this->found as $name => $constant ) {
+			if ( ! isset( $this->docs[ $name ] ) ) {
+				continue;
+			}
+			$this->found[ $name ]['documented'] = true;
+			foreach ( [ 'type', 'default', 'status', 'description', 'example' ] as $field ) {
+				if ( null === $this->found[ $name ][ $field ] && null !== $this->docs[ $name ][ $field ] ) {
+					$this->found[ $name ][ $field ] = $this->docs[ $name ][ $field ];
+				}
+			}
+		}
 	}
 
 	/**
@@ -142,22 +176,62 @@ class Newspack_Constants_Scanner {
 			return;
 		}
 
+		$this->collect_docblocks( $content );
+
 		$code_only = $this->strip_non_matchable( $content );
 
 		// (?i:defined) case-folds only the function name — PHP function names
 		// are case-insensitive, so Defined()/DEFINED() are real guards too —
 		// without folding the constant name, which stays case-sensitive.
 		$pattern = '/\b(?i:defined)\s*\(\s*[\'"]NEWSPACK_([A-Z0-9_]+)[\'"]\s*\)/';
-		if ( ! preg_match_all( $pattern, $code_only, $matches, PREG_OFFSET_CAPTURE ) ) {
+		$guards  = [];
+		if ( preg_match_all( $pattern, $code_only, $matches, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $matches[0] as $index => $match ) {
+				$guards[] = [
+					'name'   => 'NEWSPACK_' . $matches[1][ $index ][0],
+					'offset' => $match[1],
+				];
+			}
+		}
+
+		// A guard can also name its constant indirectly, through a class
+		// constant: `defined( self::FEATURE_FLAG_NAME )`. Resolve those
+		// against the class constants declared in the same file, so the
+		// feature flags written that way are catalogued rather than invisible.
+		$class_constants = $this->collect_class_constants( $content );
+		if ( ! empty( $class_constants ) ) {
+			$indirect = '/\b(?i:defined)\s*\(\s*(?:self|static|parent|[A-Za-z_\\\\][A-Za-z0-9_\\\\]*)\s*::\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/';
+			if ( preg_match_all( $indirect, $code_only, $matches, PREG_OFFSET_CAPTURE ) ) {
+				foreach ( $matches[0] as $index => $match ) {
+					$held = $class_constants[ $matches[1][ $index ][0] ] ?? null;
+					if ( null === $held ) {
+						continue;
+					}
+					$guards[] = [
+						'name'   => $held,
+						'offset' => $match[1],
+					];
+				}
+			}
+		}
+
+		if ( empty( $guards ) ) {
 			return;
 		}
+
+		usort(
+			$guards,
+			function ( $a, $b ) {
+				return $a['offset'] <=> $b['offset'];
+			}
+		);
 
 		$lines         = explode( "\n", $content );
 		$relative_path = substr( $file_path, strlen( $this->sources[ $source ]['path'] ) + 1 );
 
-		foreach ( $matches[0] as $index => $match ) {
-			$constant_name = 'NEWSPACK_' . $matches[1][ $index ][0];
-			$line_number   = substr_count( substr( $code_only, 0, $match[1] ), "\n" ) + 1;
+		foreach ( $guards as $guard ) {
+			$constant_name = $guard['name'];
+			$line_number   = substr_count( substr( $code_only, 0, $guard['offset'] ), "\n" ) + 1;
 			$docblock      = $this->extract_docblock( $lines, $line_number - 1 );
 			$parsed        = $docblock ? $this->parse_docblock( $docblock, $constant_name ) : null;
 
@@ -192,6 +266,85 @@ class Newspack_Constants_Scanner {
 				unset( $constant );
 			}
 		}
+	}
+
+	/**
+	 * Record every `@constant` docblock in a file.
+	 *
+	 * Collected per file but stored for the whole scan, so a docblock keeps
+	 * documenting its constant however far the guard that reads it sits from
+	 * it -- in another function, below intervening code, or in another file
+	 * entirely. The first docblock seen for a name wins, so a second one
+	 * elsewhere cannot silently change a constant's recorded metadata.
+	 *
+	 * @param string $content PHP source.
+	 */
+	private function collect_docblocks( string $content ): void {
+		foreach ( token_get_all( $content ) as $token ) {
+			if ( ! is_array( $token ) || T_DOC_COMMENT !== $token[0] ) {
+				continue;
+			}
+			$parsed = $this->parse_docblock_any( $token[1] );
+			if ( null === $parsed || isset( $this->docs[ $parsed['name'] ] ) ) {
+				continue;
+			}
+			$this->docs[ $parsed['name'] ] = $parsed['fields'];
+		}
+	}
+
+	/**
+	 * Map the class constants in a file that hold a NEWSPACK_ constant name.
+	 *
+	 * Only a plain string literal counts: `const FLAG = 'NEWSPACK_X';` is
+	 * resolvable, `const FLAG = self::PREFIX . '_X';` is not, and guessing at
+	 * a concatenation would invent constants that do not exist.
+	 *
+	 * Keyed by the class constant's own name, which is what the guard writes,
+	 * so `defined( self::FLAG )` looks up `FLAG`. Two classes in one file
+	 * declaring the same constant name with different values is not
+	 * distinguished; the first declaration wins.
+	 *
+	 * @param string $content PHP source.
+	 * @return array Map of class constant name => NEWSPACK_ constant name.
+	 */
+	private function collect_class_constants( string $content ): array {
+		$tokens = array_values(
+			array_filter(
+				token_get_all( $content ),
+				function ( $token ) {
+					return ! is_array( $token ) || ! in_array( $token[0], [ T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ], true );
+				}
+			)
+		);
+
+		$map = [];
+		foreach ( $tokens as $index => $token ) {
+			if ( ! is_array( $token ) || T_CONST !== $token[0] ) {
+				continue;
+			}
+			$name  = $tokens[ $index + 1 ] ?? null;
+			$equal = $tokens[ $index + 2 ] ?? null;
+			$value = $tokens[ $index + 3 ] ?? null;
+			if ( ! is_array( $name ) || T_STRING !== $name[0] || '=' !== $equal ) {
+				continue;
+			}
+			if ( ! is_array( $value ) || T_CONSTANT_ENCAPSED_STRING !== $value[0] ) {
+				continue;
+			}
+			// The declaration must end right after the literal, so a
+			// concatenation is not read as though it were the whole value.
+			$next = $tokens[ $index + 4 ] ?? null;
+			if ( ';' !== $next && ',' !== $next ) {
+				continue;
+			}
+			$held = trim( $value[1], "'\"" );
+			if ( ! preg_match( '/^NEWSPACK_[A-Z0-9_]+$/', $held ) || isset( $map[ $name[1] ] ) ) {
+				continue;
+			}
+			$map[ $name[1] ] = $held;
+		}
+
+		return $map;
 	}
 
 	/**
@@ -370,9 +523,25 @@ class Newspack_Constants_Scanner {
 	 * @return array|null Parsed fields, or null when @constant is missing or names another constant.
 	 */
 	private function parse_docblock( string $docblock, string $constant_name ): ?array {
-		if ( ! preg_match( '/@constant\s+(\S+)/', $docblock, $matches ) || $matches[1] !== $constant_name ) {
+		$parsed = $this->parse_docblock_any( $docblock );
+		return ( null !== $parsed && $parsed['name'] === $constant_name ) ? $parsed['fields'] : null;
+	}
+
+	/**
+	 * Parse a docblock without knowing which constant it should name.
+	 *
+	 * The `@constant` value is matched whole: a malformed tag such as
+	 * `@constant NEWSPACK_FOO,` names no constant rather than silently
+	 * documenting NEWSPACK_FOO.
+	 *
+	 * @param string $docblock Raw docblock.
+	 * @return array|null [ 'name' => string, 'fields' => array ], or null without a usable @constant tag.
+	 */
+	private function parse_docblock_any( string $docblock ): ?array {
+		if ( ! preg_match( '/@constant\s+(NEWSPACK_[A-Z0-9_]+)\s*$/m', $docblock, $matches ) ) {
 			return null;
 		}
+		$constant_name = $matches[1];
 
 		$result = [
 			'type'        => null,
@@ -411,7 +580,10 @@ class Newspack_Constants_Scanner {
 			$result['description'] = $description;
 		}
 
-		return $result;
+		return [
+			'name'   => $constant_name,
+			'fields' => $result,
+		];
 	}
 
 	/**
