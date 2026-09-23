@@ -386,7 +386,6 @@ function Dashboard() {
 				sections={ sections }
 				renderAboveSections={ () => (
 					<>
-						<BrandHeader />
 						<SiteStatuses />
 					</>
 				) }
