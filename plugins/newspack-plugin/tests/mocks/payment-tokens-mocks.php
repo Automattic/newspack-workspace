@@ -72,20 +72,6 @@ if ( ! function_exists( 'wc_create_refund' ) ) {
 	}
 }
 
-if ( ! function_exists( 'wc_get_payment_gateway_by_order' ) ) {
-	/**
-	 * Stage $wc_mock_gateways_by_order[ order_id ] with an object exposing
-	 * supports( $feature ); unstaged orders have no gateway (manual payment).
-	 *
-	 * @param WC_Order $order The order.
-	 */
-	function wc_get_payment_gateway_by_order( $order ) {
-		global $wc_mock_gateways_by_order;
-		$order_id = is_object( $order ) ? $order->get_id() : (int) $order;
-		return $wc_mock_gateways_by_order[ $order_id ] ?? false;
-	}
-}
-
 if ( ! class_exists( 'Mock_Refundable_Gateway' ) ) {
 	/**
 	 * A gateway double whose feature support is staged at construction.

@@ -15,15 +15,16 @@
  * content right), and every card is the shared SubscriptionCard so this screen
  * and the group detail cannot drift apart.
  *
- * Each individual subscription card carries its per-status money actions in
- * the "more" menu — change plan and change payment method for a live plan,
- * refund/cancel where there is a payment to give back — and the saved cards
- * are listed below the subscriptions with their Default/Expired state. Every
- * mutation is awaited and followed by a profile refetch (the wizard's write
- * convention, see data/use-group.js on the group-detail slice): the server
- * recalculates totals and can refuse, so the response is the truth. On-hold
- * recovery (reactivate) and resubscribe are separate workstreams and stay
- * absent rather than present-but-inert.
+ * Each individual subscription card carries its per-status actions in the
+ * "more" menu — reactivate for an on-hold plan (charge now, send a payment
+ * link, or reactivate for free), change plan and change payment method for a
+ * live plan, refund/cancel where there is a payment to give back — and the
+ * saved cards are listed below the subscriptions with their Default/Expired
+ * state. Every mutation is awaited and followed by a profile refetch (the
+ * wizard's write convention, see data/use-group.js on the group-detail slice):
+ * the server recalculates totals and can refuse, so the response is the truth.
+ * Resubscribe is a separate workstream and stays absent rather than
+ * present-but-inert.
  */
 
 /**
@@ -51,8 +52,10 @@ import PaymentMethodsList, { cardLabel } from '../components/PaymentMethodsList'
 import ChangePaymentMethodFlow from '../flows/ChangePaymentMethodFlow';
 import PlanChangeFlow from '../flows/PlanChangeFlow';
 import RefundFlow from '../flows/RefundFlow';
+import ReactivateFlow from '../flows/ReactivateFlow';
 import { useSubscriber } from '../data/use-subscriber';
 import { usePaymentActions, canChangePaymentMethod } from '../data/use-payments';
+import { useSubscriptionActions } from '../data/use-subscription-actions';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useWizardNode } from '../use-portals';
 import { billingText, fmtDate, orDash, scheduleRow } from '../format';
@@ -148,6 +151,7 @@ export default function PersonProfile() {
 	const [ snackbar, setSnackbar ] = useState( null );
 	const [ promotedCardId, setPromotedCardId ] = useState( 0 );
 	const paymentActions = usePaymentActions( id );
+	const subscriptionActions = useSubscriptionActions();
 
 	const showSnackbar = ( message, isError = false ) => setSnackbar( { message, isError, id: Date.now() } );
 
@@ -289,6 +293,19 @@ export default function PersonProfile() {
 			const isActive = 'active' === subscription.status;
 			const isLive = isActive || 'on-hold' === subscription.status;
 			const menuActions = [];
+			// Reactivate is offered when the server says so. `canReactivate`
+			// reflects the write endpoint's own raw-status rule — the mapped status
+			// can't be trusted here, because unknown WCS statuses map into the
+			// "on-hold" bucket the endpoint would refuse.
+			if ( subscription.canReactivate ) {
+				menuActions.push( {
+					key: 'reactivate',
+					label: __( 'Reactivate', 'newspack-plugin' ),
+					// translators: %s is a subscription/plan name.
+					ariaLabel: sprintf( __( 'Reactivate: %s', 'newspack-plugin' ), name ),
+					onClick: () => setModal( { kind: 'reactivate', subscription } ),
+				} );
+			}
 			// canChangePlan is resolved server-side with the same rule the endpoint
 			// enforces (strictly active — the wizard's "Active" badge also covers
 			// WCS pending-cancel — and no coupon/fee/shipping items), so the menu
@@ -497,6 +514,15 @@ export default function PersonProfile() {
 					subscription={ modal.subscription }
 					subscriberName={ subscriber.name }
 					actions={ paymentActions }
+					onClose={ () => setModal( null ) }
+					onDone={ completeFlow }
+				/>
+			) }
+			{ 'reactivate' === modal?.kind && (
+				<ReactivateFlow
+					subscription={ modal.subscription }
+					email={ subscriber.email }
+					actions={ subscriptionActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }
 				/>

@@ -49,7 +49,7 @@ function Print() {
 			indesign_exclude_captions: false,
 		},
 	} );
-	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData, addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const isEnabled = apiData.module_enabled_print;
 
@@ -64,12 +64,32 @@ function Print() {
 	// API layer re-throws has no second consumer here.
 	const setModuleEnabled = ( value: boolean ) => {
 		resetError();
-		return apiFetchToggle( { module_enabled_print: value }, true ).catch( () => undefined );
+		return apiFetchToggle( { module_enabled_print: value }, true )
+			.then( () => {
+				if ( ! value ) {
+					removeNotice( 'print-disabled' );
+					addNotice( {
+						id: 'print-disabled',
+						type: 'success',
+						message: __( 'InDesign export disabled.', 'newspack-plugin' ),
+					} );
+				}
+			} )
+			.catch( () => undefined );
 	};
 
 	const saveSettings = () => {
 		resetError();
-		return apiFetchToggle( { module_enabled_print: true, ...settings }, true ).catch( () => undefined );
+		return apiFetchToggle( { module_enabled_print: true, ...settings }, true )
+			.then( () => {
+				removeNotice( 'print-saved' );
+				addNotice( {
+					id: 'print-saved',
+					type: 'success',
+					message: __( 'Settings saved.', 'newspack-plugin' ),
+				} );
+			} )
+			.catch( () => undefined );
 	};
 
 	const togglePostType = ( slug: string, checked: boolean ) =>
