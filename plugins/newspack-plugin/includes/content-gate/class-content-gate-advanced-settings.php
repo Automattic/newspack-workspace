@@ -663,12 +663,11 @@ class Content_Gate_Advanced_Settings {
 	}
 
 	/**
-	 * Replace a feed string (content or excerpt) with the gate teaser when the
-	 * current post is restricted and the feed mode is not "off".
+	 * Replace a feed string (content or excerpt) with the restricted post's
+	 * syndication summary when the feed mode is not "off".
 	 *
-	 * Uses the gate's excerpt settings (<!--more--> tag or paragraph count) to
-	 * match what logged-out visitors see on the front-end. The inline gate HTML
-	 * is intentionally omitted — feeds should not contain login prompts. In
+	 * The summary comes from {@see Content_Gate::get_withheld_summary()}. The inline
+	 * gate HTML is intentionally omitted — feeds should not contain login prompts. In
 	 * "exclude" mode restricted posts are already gone from the loop; truncation
 	 * remains a backstop so a restricted body can never leak in full.
 	 *
@@ -687,7 +686,15 @@ class Content_Gate_Advanced_Settings {
 		if ( ! Content_Gate::is_post_restricted( $post->ID ) ) {
 			return $feed_string;
 		}
-		return Content_Gate::get_restricted_post_excerpt_for_gate( $post, Content_Gate::get_gate_layout_id( $post->ID ) );
+		// Core already withholds a password-protected post's excerpt and body, and
+		// feeds are read without the password. Keep that, as the REST path does.
+		if ( post_password_required( $post ) ) {
+			return $feed_string;
+		}
+		// Both feed strings are CDATA-wrapped. Core escapes "]]>" before the
+		// the_content_feed filters run, so this late replacement has to redo it,
+		// or one excerpt containing it breaks the whole feed document.
+		return str_replace( ']]>', ']]&gt;', Content_Gate::get_withheld_summary( $post ) );
 	}
 }
 Content_Gate_Advanced_Settings::init();

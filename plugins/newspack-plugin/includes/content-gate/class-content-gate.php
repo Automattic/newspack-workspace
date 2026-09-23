@@ -758,7 +758,10 @@ class Content_Gate {
 			$data['content']['rendered'] = $restriction['teaser'] . $restriction['gate'];
 		}
 		if ( isset( $data['excerpt']['rendered'] ) ) {
-			$data['excerpt']['rendered'] = $restriction['teaser'];
+			// excerpt.rendered is a summary surface, like the feed <description>:
+			// prefer the author's excerpt over the teaser. content.rendered above
+			// stays the teaser — it is the body-substitute the front end renders.
+			$data['excerpt']['rendered'] = self::get_withheld_summary( $post, $restriction['teaser'] );
 		}
 		if ( isset( $data['comment_status'] ) ) {
 			$data['comment_status'] = 'closed';
@@ -2637,6 +2640,48 @@ class Content_Gate {
 		// guard and keys its restriction check on $post->ID too, so passing
 		// it here keeps the layout lookup consistent with that decision
 		// instead of risking a mismatched fallback and an empty gate.
+		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id( $post->ID ) );
+	}
+
+	/**
+	 * Resolve the summary shown for a restricted post on syndication surfaces —
+	 * RSS feeds and the REST `excerpt` field: the author's own excerpt when the
+	 * post has one, otherwise the constructed gate teaser.
+	 *
+	 * Deliberately distinct from get_restricted_post_excerpt_for_gate(), which
+	 * builds the on-page reveal from the gate layout's visible-paragraph count. A
+	 * summary surface answers "what is this post about", and an authored excerpt
+	 * is the best answer — this is the WooCommerce Memberships "show excerpts"
+	 * behaviour a migrated site expects. The on-page gate answers a different
+	 * question ("how much of the body may an anonymous reader see") and keeps its
+	 * configured paragraph reveal, so the two are not merged.
+	 *
+	 * @param \WP_Post    $post     Restricted post.
+	 * @param string|null $fallback Teaser the caller already built, if any. Passing
+	 *                              it avoids rendering the post body a second time.
+	 * @return string Authored excerpt, or the gate teaser as a fallback.
+	 */
+	public static function get_withheld_summary( $post, $fallback = null ) {
+		/**
+		 * Filters whether a restricted post's authored excerpt is preferred over
+		 * the constructed teaser on syndication surfaces (feeds, REST excerpt).
+		 *
+		 * The seam a future "show written excerpt in feeds" setting hooks into:
+		 * returning false falls back to the paragraph teaser everywhere this
+		 * resolves, restoring the pre-parity behaviour without touching call sites.
+		 *
+		 * @param bool     $prefer_written_excerpt Whether to prefer the authored excerpt.
+		 * @param \WP_Post $post                   The restricted post.
+		 */
+		$prefer_written_excerpt = apply_filters( 'newspack_content_gate_prefer_written_excerpt', true, $post );
+
+		if ( $prefer_written_excerpt && '' !== trim( (string) $post->post_excerpt ) ) {
+			return $post->post_excerpt;
+		}
+
+		if ( null !== $fallback ) {
+			return $fallback;
+		}
 		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id( $post->ID ) );
 	}
 
