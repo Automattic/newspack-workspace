@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -148,6 +148,36 @@ describe( 'when Collections is on', () => {
 		fireEvent.click( screen.getByRole( 'radio', { name: 'Card' } ) );
 
 		expect( headerAction( 'Save' ).disabled ).toBe( false );
+	} );
+
+	it( 'treats a setting changed and changed back as unchanged, whatever type PHP returned it as', async () => {
+		server = {
+			...server,
+			posts_per_page: '18' as unknown as number,
+			articles_block_attrs: [] as CollectionsSettingsData[ 'articles_block_attrs' ],
+		};
+		await renderCollections();
+
+		fireEvent.click( screen.getByRole( 'radio', { name: '12' } ) );
+		fireEvent.click( screen.getByRole( 'radio', { name: '18' } ) );
+		const postCategories = screen.getByRole( 'radiogroup', { name: 'Post categories' } );
+		fireEvent.click( within( postCategories ).getByRole( 'radio', { name: 'Show' } ) );
+		fireEvent.click( within( postCategories ).getByRole( 'radio', { name: 'Hide' } ) );
+
+		expect( headerAction( 'Save' ).disabled ).toBe( true );
+	} );
+
+	it( 'ignores edits to fields the current choices hide', async () => {
+		await renderCollections();
+
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Custom' } ) );
+		fireEvent.change( screen.getByLabelText( 'Plural name' ), { target: { value: 'Issues' } } );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Default' } ) );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Card' } ) );
+		fireEvent.change( screen.getByLabelText( 'Card message' ), { target: { value: 'More to read.' } } );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Link' } ) );
+
+		expect( headerAction( 'Save' ).disabled ).toBe( true );
 	} );
 
 	it( 'saves only its own settings, naming included, and confirms without reloading', async () => {

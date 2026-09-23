@@ -14,7 +14,7 @@ Readers are also able to browse the archive of issues (collections), with a nice
 
 1. Navigate to Newspack > Settings in the admin dashboard.
 2. Select the Collections tab.
-3. Click on the toggle to enable the Collections module.
+3. Click Enable.
 
 ### Creating a collection
 

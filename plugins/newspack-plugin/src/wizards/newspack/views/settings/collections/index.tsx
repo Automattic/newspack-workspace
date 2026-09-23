@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import {
 	ExternalLink,
 	Notice,
@@ -65,9 +65,12 @@ const toSettings = ( data: Partial< CollectionsSettingsData > ): CollectionsSett
 		( Object.keys( DEFAULT_SETTINGS ) as ( keyof CollectionsSettingsData )[] ).map( key => [ key, data[ key ] ?? DEFAULT_SETTINGS[ key ] ] )
 	) as CollectionsSettingsData;
 
+// Edits to fields the current choices hide are not changes the publisher can see, so they don't count.
 const comparable = ( settings: CollectionsSettingsData ) =>
 	JSON.stringify( {
 		...settings,
+		...( settings.custom_naming_enabled ? {} : { custom_name: '', custom_singular_name: '', custom_slug: '' } ),
+		...( settings.post_indicator_style === 'card' ? {} : { card_message: '' } ),
 		posts_per_page: Number( settings.posts_per_page ),
 		articles_block_attrs: { showCategory: Boolean( settings.articles_block_attrs?.showCategory ) },
 	} );
@@ -180,11 +183,13 @@ function Collections() {
 	}, [ isEnabled, isDirty, isBusy, requestDisable, setHeaderData ] );
 
 	const archiveUrl = useMemo( () => {
-		const slug = cleanForSlug( settings.custom_naming_enabled && settings.custom_slug ? settings.custom_slug : DEFAULT_SLUG ) || DEFAULT_SLUG;
+		const slug =
+			cleanForSlug( savedSettings.custom_naming_enabled && savedSettings.custom_slug ? savedSettings.custom_slug : DEFAULT_SLUG ) ||
+			DEFAULT_SLUG;
 		const base = new URL( window.newspack_urls?.site || window.location.origin );
 		base.pathname = base.pathname + ( ! base.pathname.endsWith( '/' ) ? '/' : '' );
 		return new URL( slug, base ).toString();
-	}, [ settings.custom_naming_enabled, settings.custom_slug ] );
+	}, [ savedSettings.custom_naming_enabled, savedSettings.custom_slug ] );
 
 	if ( ! hasLoaded ) {
 		return (
@@ -247,7 +252,11 @@ function Collections() {
 						help={
 							settings.custom_naming_enabled
 								? __( 'Use your own names and URL slug, set below.', 'newspack-plugin' )
-								: __( 'Readers see "Collections" and "Collection", with URLs under /collections/.', 'newspack-plugin' )
+								: sprintf(
+										/* translators: %s: the default URL slug, "collections". */
+										__( 'Readers see "Collections" and "Collection", with URLs under /%s/.', 'newspack-plugin' ),
+										DEFAULT_SLUG
+								  )
 						}
 						value={ settings.custom_naming_enabled ? 'custom' : 'default' }
 						onChange={ value => update( { custom_naming_enabled: value === 'custom' } ) }
@@ -264,7 +273,7 @@ function Collections() {
 								value={ settings.custom_name }
 								disabled={ isBusy }
 								onChange={ ( custom_name: string ) => update( { custom_name } ) }
-								placeholder="Collections"
+								placeholder={ _x( 'Collections', 'collections general label', 'newspack-plugin' ) }
 							/>
 							<TextControl
 								withMargin={ false }
@@ -273,15 +282,12 @@ function Collections() {
 								value={ settings.custom_singular_name }
 								disabled={ isBusy }
 								onChange={ ( custom_singular_name: string ) => update( { custom_singular_name } ) }
-								placeholder="Collection"
+								placeholder={ _x( 'Collection', 'collections singular label', 'newspack-plugin' ) }
 							/>
 							<TextControl
 								withMargin={ false }
 								label={ __( 'Permalink slug', 'newspack-plugin' ) }
-								help={ __(
-									'Used in collection URLs and the REST API, for example "issues". Defaults to "collections".',
-									'newspack-plugin'
-								) }
+								help={ __( 'Used in collection URLs, for example "issues". Defaults to "collections".', 'newspack-plugin' ) }
 								value={ settings.custom_slug }
 								disabled={ isBusy }
 								onChange={ ( custom_slug: string ) => update( { custom_slug } ) }
