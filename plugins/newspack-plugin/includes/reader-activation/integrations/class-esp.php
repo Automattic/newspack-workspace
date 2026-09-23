@@ -580,7 +580,10 @@ class ESP extends Integration {
 	 * configured audience: an upsert for a reader who is only in another
 	 * audience would create a new member there, and one for an archived member
 	 * would restore it, so neither counts. ActiveCampaign and Constant Contact
-	 * keep account-wide contacts, so any returned contact counts.
+	 * keep account-wide contacts, so any returned contact counts, with one
+	 * exception: Constant Contact's lookup also returns deleted contacts
+	 * (`deleted_at` set) and an update revives them, so a deleted contact counts
+	 * as missing.
 	 *
 	 * @param string $email The contact's email address.
 	 *
@@ -603,6 +606,10 @@ class ESP extends Integration {
 			$master_list_id = $this->get_master_list_id();
 			$member         = empty( $master_list_id ) ? null : ( $contact_data['lists'][ $master_list_id ] ?? null );
 			return null !== $member && 'archived' !== ( $member['status'] ?? '' );
+		}
+
+		if ( 'constant_contact' === $this->get_provider_slug() ) {
+			return empty( $contact_data['deleted_at'] );
 		}
 
 		return true;

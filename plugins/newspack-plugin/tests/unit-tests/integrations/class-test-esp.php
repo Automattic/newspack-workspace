@@ -863,6 +863,17 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Constant Contact's lookup also returns deleted contacts, and the upsert's
+	 * update would revive one: a create in every way the flag cares about.
+	 */
+	public function test_contact_exists_on_constant_contact_treats_a_deleted_contact_as_missing() {
+		$contact = [ 'contact_id' => 'cc-42' ];
+
+		$this->assertTrue( $this->contact_exists_with( $contact, 'constant_contact' ) );
+		$this->assertFalse( $this->contact_exists_with( $contact + [ 'deleted_at' => '2026-09-01' ], 'constant_contact' ) );
+	}
+
+	/**
 	 * Same reason as the pull: a bulk run reads each contact once, and a
 	 * provider that memoizes payloads per email must not keep them all.
 	 */
