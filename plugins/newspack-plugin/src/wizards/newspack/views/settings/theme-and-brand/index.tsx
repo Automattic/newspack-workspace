@@ -99,7 +99,16 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 						const saved = { ...payload, ...res };
 						setSavedData( saved );
 						// Controls stay editable mid-request; keep any edit made meanwhile, unsaved.
-						setDataState( current => ( current === requestData ? saved : current ) );
+						setDataState( current => {
+							if ( current === requestData ) {
+								return saved;
+							}
+							// Carry over a footer color the save filled in, or undoing that edit would still read as unsaved.
+							const filledHex = payload !== requestData && saved.theme_mods?.footer_color_hex;
+							return filledHex && current.theme_mods.footer_color === 'custom' && ! current.theme_mods.footer_color_hex
+								? { ...current, theme_mods: { ...current.theme_mods, footer_color_hex: filledHex } }
+								: current;
+						} );
 						if ( ! isPartOfSetup ) {
 							removeNotice( 'theme-and-brand-saved' );
 							addNotice( {

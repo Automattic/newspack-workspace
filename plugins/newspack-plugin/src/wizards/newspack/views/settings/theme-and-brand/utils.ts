@@ -172,7 +172,7 @@ export function headerLogoSize( { width, height }: LogoSize, percent: number ): 
 }
 
 /**
- * The footer color a Custom background applies. Nothing is stored until a color is
- * chosen, so an unset one falls back to the secondary color.
+ * The footer color a Custom background applies. With no stored color it falls back to
+ * the secondary color, which is also what saving stores.
  */
 export const footerColor = ( themeMods: ThemeMods ) => themeMods.footer_color_hex || themeMods.secondary_color_hex;

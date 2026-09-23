@@ -160,7 +160,7 @@ describe( 'Theme and Brand', () => {
 		expect( mockResetError.mock.invocationCallOrder[ 0 ] ).toBeLessThan( mockWizardApiFetch.mock.invocationCallOrder[ post ] );
 	} );
 
-	it( 'switching the footer to Custom stores the color the picker shows', async () => {
+	it( 'saving a Custom footer with no color stores the color the picker shows', async () => {
 		await renderThemeBrand();
 
 		const footerBackground = screen.getAllByRole( 'radiogroup', { name: 'Background' } )[ 1 ];
@@ -181,6 +181,26 @@ describe( 'Theme and Brand', () => {
 		const footerBackground = screen.getAllByRole( 'radiogroup', { name: 'Background' } )[ 1 ];
 		fireEvent.click( within( footerBackground ).getByRole( 'radio', { name: 'Custom' } ) );
 		fireEvent.click( within( footerBackground ).getByRole( 'radio', { name: 'Default' } ) );
+
+		expect( headerAction( 'Save' ).disabled ).toBe( true );
+	} );
+
+	it( 'keeps the filled-in footer color when an edit is made during the save that stored it', async () => {
+		server.theme_mods = { ...server.theme_mods, footer_color: 'custom', footer_color_hex: '' };
+		await renderThemeBrand();
+
+		pick( 'Left' );
+		mockState.holdNext = true;
+		let saving: Promise< unknown > = Promise.resolve();
+		act( () => {
+			saving = headerAction( 'Save' ).action();
+		} );
+		pick( 'Small' );
+		await act( async () => {
+			releaseHeld();
+			await saving;
+		} );
+		pick( 'Large' );
 
 		expect( headerAction( 'Save' ).disabled ).toBe( true );
 	} );
