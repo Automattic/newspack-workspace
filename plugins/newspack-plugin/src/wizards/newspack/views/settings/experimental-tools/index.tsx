@@ -7,6 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useCallback } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -69,14 +70,13 @@ export default function ExperimentalTools() {
 	const hasConfigurableFields = ( tool: Tool ) => tool.fields.length > 0;
 
 	const ToolList = () => (
-		<WizardsTab
-			title={ __( 'Experimental Tools', 'newspack-plugin' ) }
-			description={ __(
-				"These tools are early-stage features we're developing based on publisher feedback. They're functional and supported, but still evolving. Your experience using them directly shapes what they become. Enable any tool below to try it in your newsroom. You can turn tools off at any time, and nothing changes in your published content.",
-				'newspack-plugin'
-			) }
-			isFetching={ isFetching }
-		>
+		<WizardsTab isFetching={ isFetching }>
+			<Notice status="info" isDismissible={ false } spokenMessage="">
+				{ __(
+					"These tools are early-stage features we're developing based on publisher feedback. They're functional and supported, but still evolving. Your experience using them directly shapes what they become. Enable any tool below to try it in your newsroom. You can turn tools off at any time, and nothing changes in your published content.",
+					'newspack-plugin'
+				) }
+			</Notice>
 			<Grid columns={ 2 } gutter={ 32 }>
 				{ tools.map( ( tool: Tool ) => (
 					<CardFeature
