@@ -65,7 +65,13 @@ class RSS {
 		add_filter( 'wpseo_include_rss_footer', [ __CLASS__, 'maybe_suppress_yoast' ] );
 		add_action( 'rss2_ns', [ __CLASS__, 'maybe_inject_yahoo_namespace' ] );
 		add_filter( 'the_title_rss', [ __CLASS__, 'maybe_wrap_titles_in_cdata' ] );
-		add_filter( 'newspack_content_gate_feed_restriction_mode', [ __CLASS__, 'apply_feed_restriction_override' ], 10, 2 );
+		// Priority 5, ahead of the default, so an integration that must force a
+		// feed's mode still has the last word. A per-feed setting is a
+		// publisher's preference; an integration's exemption is a requirement,
+		// typically an app that authenticates its own readers and breaks on a
+		// truncated body. At equal priority the winner would be whichever
+		// plugin happened to load second.
+		add_filter( 'newspack_content_gate_feed_restriction_mode', [ __CLASS__, 'apply_feed_restriction_override' ], 5, 2 );
 
 		add_filter( 'newspack_capabilities_map', [ __CLASS__, 'newspack_capabilities_map' ] );
 	}
@@ -607,7 +613,7 @@ class RSS {
 					</select>
 				</td>
 			</tr>
-			<?php self::render_restriction_mode_setting( $settings ); ?>
+			<?php self::render_restriction_mode_setting( $settings, $feed_post ); ?>
 			<tr>
 				<th><?php esc_html_e( 'Update frequency:', 'newspack-plugin' ); ?></th>
 				<td>
@@ -859,9 +865,10 @@ class RSS {
 	 * absent field as "leave the stored value alone" so nothing is lost if
 	 * gating is later switched off and on again.
 	 *
-	 * @param array $settings Feed settings.
+	 * @param array         $settings  Feed settings.
+	 * @param \WP_Post|null $feed_post The feed being edited.
 	 */
-	private static function render_restriction_mode_setting( array $settings ): void {
+	private static function render_restriction_mode_setting( array $settings, $feed_post = null ): void {
 		if ( ! Content_Gate::is_gating_active() || ! self::current_user_can_set_restriction_mode() ) {
 			return;
 		}
@@ -871,6 +878,24 @@ class RSS {
 		if ( Memberships::is_active() ) {
 			return;
 		}
+
+		/**
+		 * Filters whether an integration owns this feed's restriction mode.
+		 *
+		 * An integration that forces a mode on
+		 * `newspack_content_gate_feed_restriction_mode` should say so here too,
+		 * or the editor offers a choice that silently does nothing. The control
+		 * is then shown disabled, so a publisher can still see where the setting
+		 * lives and what it is stored as.
+		 *
+		 * @param false|string $locked False when the publisher may choose, or a
+		 *                             sentence naming what controls the feed and
+		 *                             why, shown in place of the usual help text.
+		 * @param \WP_Post|null $feed_post The feed being edited.
+		 */
+		$locked = apply_filters( 'newspack_rss_feed_restriction_locked', false, $feed_post );
+		$locked = is_string( $locked ) && '' !== $locked ? $locked : false;
+
 		$inherited_mode = Content_Gate_Advanced_Settings::get_site_feed_restriction_mode();
 		$current_mode   = $settings[ self::FEED_RESTRICTION_SETTING ] ?? self::FEED_RESTRICTION_INHERIT;
 		?>
@@ -881,6 +906,7 @@ class RSS {
 					name="<?php echo esc_attr( self::FEED_RESTRICTION_SETTING ); ?>"
 					id="newspack-rss-content-restriction-mode"
 					data-inherited-mode="<?php echo esc_attr( $inherited_mode ); ?>"
+					<?php disabled( false !== $locked ); ?>
 				>
 					<?php foreach ( self::get_feed_restriction_options( $inherited_mode ) as $option ) : ?>
 						<option value="<?php echo esc_attr( $option['value'] ); ?>" <?php selected( $current_mode, $option['value'] ); ?>>
@@ -889,14 +915,22 @@ class RSS {
 					<?php endforeach; ?>
 				</select>
 				<p class="description">
-					<?php esc_html_e( 'Overrides the site-wide feed setting for this feed only, so a feed licensed to a syndication partner can carry articles the rest of the site keeps gated.', 'newspack-plugin' ); ?>
-					<?php esc_html_e( 'A change here can take up to an hour to reach readers, because feeds are cached.', 'newspack-plugin' ); ?>
+					<?php if ( false !== $locked ) : ?>
+						<?php echo esc_html( $locked ); ?>
+					<?php else : ?>
+						<?php esc_html_e( 'Overrides the site-wide feed setting for this feed only, so a feed licensed to a syndication partner can carry articles the rest of the site keeps gated.', 'newspack-plugin' ); ?>
+						<?php esc_html_e( 'A change here can take up to an hour to reach readers, because feeds are cached.', 'newspack-plugin' ); ?>
+					<?php endif; ?>
 				</p>
 				<p
 					id="newspack-rss-restriction-warning"
 					class="notice notice-warning inline"
 					role="status"
-					<?php echo self::feed_serves_unrestricted_full_content( $settings, $inherited_mode ) ? '' : 'hidden'; ?>
+					<?php
+					// Silent on a locked feed: the stored mode is not what the
+					// feed serves there, so this warning would be guessing.
+					echo false === $locked && self::feed_serves_unrestricted_full_content( $settings, $inherited_mode ) ? '' : 'hidden';
+					?>
 				>
 					<?php esc_html_e( 'This feed publishes restricted articles in full at a public URL. Anyone who has the URL can read them.', 'newspack-plugin' ); ?>
 				</p>
@@ -912,7 +946,7 @@ class RSS {
 					var mode = document.getElementById( "newspack-rss-content-restriction-mode" );
 					var fullContent = document.getElementById( "newspack-rss-full-content" );
 					var warning = document.getElementById( "newspack-rss-restriction-warning" );
-					if ( ! mode || ! fullContent || ! warning ) { return; }
+					if ( ! mode || ! fullContent || ! warning || mode.disabled ) { return; }
 					function update() {
 						var effective = mode.value || mode.dataset.inheritedMode;
 						warning.hidden = ! ( %s === effective && "1" === fullContent.value );

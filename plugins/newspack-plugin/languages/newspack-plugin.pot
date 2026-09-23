@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.52.0\n"
+"Project-Id-Version: Newspack 6.52.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-21T08:43:13+00:00\n"
+"POT-Creation-Date: 2026-09-21T13:54:50+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -4285,330 +4285,330 @@ msgid "Australia"
 msgstr ""
 
 #. translators: %s: what the site-wide setting currently does, e.g. "teaser only".
-#: includes/optional-modules/class-rss.php:192
+#: includes/optional-modules/class-rss.php:198
 #, php-format
 msgid "Use the site-wide setting (%s)"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:198
+#: includes/optional-modules/class-rss.php:204
 msgid "Include restricted articles in full"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:217
+#: includes/optional-modules/class-rss.php:223
 msgid "articles in full"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:219
+#: includes/optional-modules/class-rss.php:225
 msgid "articles removed"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:221
+#: includes/optional-modules/class-rss.php:227
 msgid "teaser only"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:377
+#: includes/optional-modules/class-rss.php:383
 msgctxt "post type general name"
 msgid "RSS Feeds"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:378
+#: includes/optional-modules/class-rss.php:384
 msgctxt "post type singular name"
 msgid "RSS Feed"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:379
+#: includes/optional-modules/class-rss.php:385
 msgctxt "admin menu"
 msgid "RSS Feeds"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:380
+#: includes/optional-modules/class-rss.php:386
 msgctxt "add new on admin bar"
 msgid "RSS Feed"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:381
+#: includes/optional-modules/class-rss.php:387
 msgctxt "rss feed"
 msgid "Add New"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:382
+#: includes/optional-modules/class-rss.php:388
 msgid "Add New RSS Feed"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:383
+#: includes/optional-modules/class-rss.php:389
 msgid "New RSS Feed"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:384
+#: includes/optional-modules/class-rss.php:390
 msgid "Edit RSS Feed"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:385
+#: includes/optional-modules/class-rss.php:391
 msgid "View RSS Feed"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:386
+#: includes/optional-modules/class-rss.php:392
 msgid "All RSS Feeds"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:387
+#: includes/optional-modules/class-rss.php:393
 msgid "Search RSS Feeds"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:388
+#: includes/optional-modules/class-rss.php:394
 msgid "Parent RSS Feeds:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:389
+#: includes/optional-modules/class-rss.php:395
 msgid "No RSS feeds found."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:390
+#: includes/optional-modules/class-rss.php:396
 msgid "No RSS feeds found in Trash."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:391
+#: includes/optional-modules/class-rss.php:397
 msgid "RSS Feed published"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:392
+#: includes/optional-modules/class-rss.php:398
 msgid "RSS Feed updated"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:397
+#: includes/optional-modules/class-rss.php:403
 msgid "RSS feeds customized for third-party services."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:426
-#: includes/optional-modules/class-rss.php:466
+#: includes/optional-modules/class-rss.php:432
+#: includes/optional-modules/class-rss.php:472
 msgid "Feed URLs"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:442
+#: includes/optional-modules/class-rss.php:448
 msgid "RSS:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:449
+#: includes/optional-modules/class-rss.php:455
 msgid "Atom:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:472
+#: includes/optional-modules/class-rss.php:478
 msgid "Content Settings"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:478
+#: includes/optional-modules/class-rss.php:484
 msgid "Technical Settings"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:521
+#: includes/optional-modules/class-rss.php:527
 msgid "A URL will be generated for this feed once published"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:532
+#: includes/optional-modules/class-rss.php:538
 msgid "RSS -"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:542
+#: includes/optional-modules/class-rss.php:548
 msgid "Atom -"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:584
+#: includes/optional-modules/class-rss.php:590
 msgid "Number of posts to display in feed:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:590
+#: includes/optional-modules/class-rss.php:596
 msgid "Offset posts by:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:596
+#: includes/optional-modules/class-rss.php:602
 msgid "Limit timeframe to last # of hours:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:602
+#: includes/optional-modules/class-rss.php:608
 msgid "Use post full content or excerpt:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:605
+#: includes/optional-modules/class-rss.php:611
 msgid "Full content"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:606
+#: includes/optional-modules/class-rss.php:612
 msgid "Excerpt"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:612
+#: includes/optional-modules/class-rss.php:618
 msgid "Update frequency:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:615
+#: includes/optional-modules/class-rss.php:621
 msgid "Every hour"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:616
+#: includes/optional-modules/class-rss.php:622
 msgid "Every 1 minute"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:617
+#: includes/optional-modules/class-rss.php:623
 msgid "Every 5 minutes"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:618
+#: includes/optional-modules/class-rss.php:624
 msgid "Every 3 hours"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:619
+#: includes/optional-modules/class-rss.php:625
 #: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:1165
 #: includes/plugins/woocommerce/class-woocommerce-connection.php:771
 msgid "Daily"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:624
+#: includes/optional-modules/class-rss.php:630
 msgid "Use post ID as the guid instead of post URL:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:632
+#: includes/optional-modules/class-rss.php:638
 msgid "Taxonomy Filters:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:637
-#: includes/optional-modules/class-rss.php:691
-#: includes/optional-modules/class-rss.php:737
+#: includes/optional-modules/class-rss.php:643
+#: includes/optional-modules/class-rss.php:697
+#: includes/optional-modules/class-rss.php:743
 msgid "Include only posts that have"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:639
+#: includes/optional-modules/class-rss.php:645
 msgid "any of these categories"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:640
+#: includes/optional-modules/class-rss.php:646
 msgid "all of these categories"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:666
+#: includes/optional-modules/class-rss.php:672
 msgid "Exclude posts from these categories:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:693
+#: includes/optional-modules/class-rss.php:699
 msgid "any of these tags"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:694
+#: includes/optional-modules/class-rss.php:700
 msgid "all of these tags"
 msgstr ""
 
 #. translators: %s is a taxonomy label.
-#: includes/optional-modules/class-rss.php:740
+#: includes/optional-modules/class-rss.php:746
 #, php-format
 msgid "any of these %s"
 msgstr ""
 
 #. translators: %s is a taxonomy label.
-#: includes/optional-modules/class-rss.php:742
+#: includes/optional-modules/class-rss.php:748
 #, php-format
 msgid "all of these %s"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:764
+#: includes/optional-modules/class-rss.php:770
 msgid "Taxonomies relationship:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:769
+#: includes/optional-modules/class-rss.php:775
 msgid "AND - Posts must match all taxonomies filters"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:770
+#: includes/optional-modules/class-rss.php:776
 msgid "OR - Posts can match at least one taxonomy filter"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:791
+#: includes/optional-modules/class-rss.php:797
 msgid "Republication Tracker Tool Options:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:796
+#: includes/optional-modules/class-rss.php:802
 msgid "Only include republishable posts"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:797
+#: includes/optional-modules/class-rss.php:803
 msgctxt "help text for only republishable setting"
 msgid "When toggled on, posts which have republication disabled will be excluded from the feed."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:806
+#: includes/optional-modules/class-rss.php:812
 msgid "Include only distributable images"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:808
+#: includes/optional-modules/class-rss.php:814
 msgctxt "help text for remove non-distributable images setting"
 msgid "When toggled on, images not marked as distributable will be excluded from feed content."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:810
+#: includes/optional-modules/class-rss.php:816
 msgid "Note: this will respect the same settings for distributable images RTT uses for other distributiion purposes"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:845
+#: includes/optional-modules/class-rss.php:851
 msgid "Search and select terms..."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:878
+#: includes/optional-modules/class-rss.php:903
 msgid "Restricted articles in this feed:"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:892
+#: includes/optional-modules/class-rss.php:921
 msgid "Overrides the site-wide feed setting for this feed only, so a feed licensed to a syndication partner can carry articles the rest of the site keeps gated."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:893
+#: includes/optional-modules/class-rss.php:922
 msgid "A change here can take up to an hour to reach readers, because feeds are cached."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:901
+#: includes/optional-modules/class-rss.php:935
 msgid "This feed publishes restricted articles in full at a public URL. Anyone who has the URL can read them."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:963
+#: includes/optional-modules/class-rss.php:997
 msgid "Add post featured images in <image> tags"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:970
+#: includes/optional-modules/class-rss.php:1004
 msgid "Add post featured images in <media:> tags"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:977
+#: includes/optional-modules/class-rss.php:1011
 msgid "Add post updated time in <updated> tags"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:984
+#: includes/optional-modules/class-rss.php:1018
 msgid "Add categories and tags in <tags> element"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:991
+#: includes/optional-modules/class-rss.php:1025
 msgid "Add featured image at the top of feed content"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:998
+#: includes/optional-modules/class-rss.php:1032
 msgid "Add Yahoo namespace to RSS namespace: xmlns:media=\"http://search.yahoo.com/mrss/\""
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:1005
+#: includes/optional-modules/class-rss.php:1039
 msgid "Wrap the content of <title> elements in CDATA tags"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:1013
+#: includes/optional-modules/class-rss.php:1047
 msgid "Custom tracking snippet"
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:1015
+#: includes/optional-modules/class-rss.php:1049
 msgctxt "help text for custom tracking snippet"
 msgid "Tracking snippet that will be appended to the end of each post in the feed. You can use {{post-id}} and {{post-url}} as dynamic variables."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:1017
+#: includes/optional-modules/class-rss.php:1051
 msgctxt "help text for allowed HTML in tracking snippet"
 msgid "Allowed HTML: script, img, iframe, noscript, div, span with safe attributes only."
 msgstr ""
 
-#: includes/optional-modules/class-rss.php:1055
+#: includes/optional-modules/class-rss.php:1089
 msgid "Add republication tracker snippet to posts"
 msgstr ""
 

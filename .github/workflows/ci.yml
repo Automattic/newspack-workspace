@@ -280,6 +280,12 @@ jobs:
           coverage: none
       - name: composer install (root)
         run: composer install --no-interaction --no-progress --prefer-dist
+      # Runs here rather than in the shell-specs job, which checks out without
+      # composer dependencies and so has no phpcs to drive. This job is gated on
+      # phpcsSniffs/ and phpcs.xml (both are non-workspace <file> paths), which
+      # is exactly when a custom sniff can regress.
+      - name: Custom sniff tests
+        run: bash phpcsSniffs/tests/constant-docblock-test.sh
       - name: phpcs
         # Unquoted on purpose: the value is a space-separated path list that must
         # split into separate arguments. Shell parameter expansion does not re-run

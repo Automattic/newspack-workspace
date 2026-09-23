@@ -171,7 +171,7 @@ class Contact_Cron {
 	public static function schedule_cron() {
 		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'deactivate_cron' ] );
 
-		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CRON_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
+		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CRON_HOOK, NEWSPACK_CRON_DISABLE, true ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			self::deactivate_cron();
 		} elseif ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
 			wp_schedule_event( time(), self::CRON_SCHEDULE, self::CRON_HOOK );

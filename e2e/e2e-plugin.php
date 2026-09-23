@@ -28,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  * e2e-setup.sh writes both constants to wp-config.php before it installs and
  * activates this plugin, so a correctly provisioned site always has them.
  */
-if ( ! defined( 'NEWSPACK_IS_E2E' ) || ! NEWSPACK_IS_E2E ) {
+if ( ! defined( 'NEWSPACK_IS_E2E' ) || ! NEWSPACK_IS_E2E ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 	return;
 }
 
@@ -145,7 +145,7 @@ add_action(
 			// branches send no-cache headers so an intermediary — the managed edge in
 			// front of a non-local target, which this repo can't inspect or pin —
 			// can't retain either the dump or the refusal.
-			$configured_secret = defined( 'NEWSPACK_E2E_SENDBOX_SECRET' ) ? (string) constant( 'NEWSPACK_E2E_SENDBOX_SECRET' ) : '';
+			$configured_secret = defined( 'NEWSPACK_E2E_SENDBOX_SECRET' ) ? (string) constant( 'NEWSPACK_E2E_SENDBOX_SECRET' ) : ''; // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Compared via hash_equals against a configured secret and never output; sanitizing would alter the string being matched.
 			$provided_secret = isset( $_SERVER['HTTP_X_NEWSPACK_E2E_SENDBOX_SECRET'] ) && is_string( $_SERVER['HTTP_X_NEWSPACK_E2E_SENDBOX_SECRET'] ) ? (string) wp_unslash( $_SERVER['HTTP_X_NEWSPACK_E2E_SENDBOX_SECRET'] ) : '';
 			if ( '' === $configured_secret || ! hash_equals( $configured_secret, $provided_secret ) ) {

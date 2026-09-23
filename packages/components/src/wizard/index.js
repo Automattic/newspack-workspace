@@ -342,6 +342,7 @@ const Wizard = (
 				{ mainActions.map( ( action, index ) => (
 					<Button
 						key={ index }
+						aria-label={ action.ariaLabel }
 						className="newspack-wizard__actions__main"
 						href={ action.href }
 						icon={ resolveIcon( action.icon ) }
@@ -375,6 +376,7 @@ const Wizard = (
 									{ group.map( ( action, index ) => (
 										<MenuItem
 											key={ index }
+											aria-label={ action.ariaLabel }
 											className={
 												action.type === 'primary' || action.type === 'secondary'
 													? 'newspack-wizard__actions__more__main'

@@ -59,62 +59,101 @@ trait One_Time_Purchase_Migration {
 	 * subscription-only plan sharing the group has no say in how long a purchase
 	 * lasts, and letting it vote would refuse groups that have no ambiguity.
 	 *
-	 * Plans disagreeing on the length is resolved the way this command resolves every
-	 * other disagreement within a group — most permissive wins, because WooCommerce
-	 * Memberships grants access from any one plan and the gate has a single rule to
-	 * say it with. The caller reports the choice rather than making it silently.
+	 * Two answers, because a caller can write one one-time rule or several.
+	 * 'durations_by_product' says what each product's own plan granted, which
+	 * {@see group_one_time_ids_by_duration()} turns into a rule group per length — so a
+	 * plan's buyers keep the length that plan gave them. 'duration' is the single most
+	 * permissive length, for a caller writing one rule, and 'conflict' describes the
+	 * choice for the operator; most permissive because WooCommerce Memberships grants
+	 * access from any one plan, so the shortest would take content from readers the
+	 * plans admitted.
+	 *
+	 * A one-time product handed over by a carve-out brings its own length, like a plan
+	 * of the group's own. Transferring the products without the length they need would
+	 * leave the gate no one-time rule to write, and a group with no one-time plan of
+	 * its own would have no length to fall back on — the entitlement would be dropped
+	 * with nothing in the run's output to say so.
 	 *
 	 * @param array[]    $group    Plan descriptors.
 	 * @param array|null $override Operator-supplied duration, or null to derive.
+	 * @param array[]    $carried  One entry per gate whose content this group is carved
+	 *                             out of, each [ 'name', 'one_time_ids', 'duration',
+	 *                             'durations_by_product' ].
 	 *
-	 * @return array{duration:?array,plans:string[],conflict:?string} 'duration' is null
-	 *         when 'plans' is non-empty and no length could be derived: the caller stops
-	 *         the run over that.
+	 * @return array{duration:?array,plans:string[],conflict:?string,durations_by_product:array<int,array>}
+	 *         'duration' is null when 'plans' is non-empty and no length could be
+	 *         derived: the caller stops the run over that. 'durations_by_product' is
+	 *         empty when an override applies, because the override is every product's
+	 *         length.
 	 */
-	private static function resolve_group_duration( array $group, ?array $override ): array {
-		$plans     = [];
-		$durations = [];
+	private static function resolve_group_duration( array $group, ?array $override, array $carried = [] ): array {
+		$plans      = [];
+		$durations  = [];
+		$by_product = [];
 		// A group that does not require a purchase writes no paid access rules at all,
 		// so it has no one-time rule to give a duration to. Asking anyway makes a plan
 		// with no derivable duration stop a run over a rule that was never going to be
 		// written. What such a group loses is reported on its own terms instead.
 		if ( ! self::group_requires_purchase( $group ) ) {
 			return [
-				'duration' => null,
-				'plans'    => [],
-				'conflict' => null,
+				'duration'             => null,
+				'plans'                => [],
+				'conflict'             => null,
+				'durations_by_product' => [],
 			];
 		}
 		foreach ( $group as $plan ) {
 			if ( 'purchase' !== $plan['access_method'] ) {
 				continue;
 			}
-			if ( empty( self::resolve_product_ids( [ $plan ] )['one_time_ids'] ) ) {
+			$one_time_ids = self::resolve_product_ids( [ $plan ] )['one_time_ids'];
+			if ( empty( $one_time_ids ) ) {
 				continue;
 			}
 			$plans[]     = $plan['name'];
 			$durations[] = $plan['one_time_duration'] ?? null;
+			$by_product  = self::record_product_durations( $by_product, $one_time_ids, $plan['one_time_duration'] ?? null );
+		}
+		foreach ( $carried as $source ) {
+			if ( empty( $source['one_time_ids'] ) ) {
+				continue;
+			}
+			$plans[]     = $source['name'];
+			$durations[] = $source['duration'] ?? null;
+			// The excluding gate's own plans may have sold its products for different
+			// lengths, so each product's own length is preferred over the gate's single
+			// most-permissive one.
+			foreach ( $source['one_time_ids'] as $product_id ) {
+				$by_product = self::record_product_durations(
+					$by_product,
+					[ $product_id ],
+					$source['durations_by_product'][ (int) $product_id ] ?? ( $source['duration'] ?? null )
+				);
+			}
 		}
 
 		if ( empty( $plans ) ) {
 			return [
-				'duration' => null,
-				'plans'    => [],
-				'conflict' => null,
+				'duration'             => null,
+				'plans'                => [],
+				'conflict'             => null,
+				'durations_by_product' => [],
 			];
 		}
 		if ( null !== $override ) {
 			return [
-				'duration' => $override,
-				'plans'    => $plans,
-				'conflict' => null,
+				'duration'             => $override,
+				'plans'                => $plans,
+				'conflict'             => null,
+				'durations_by_product' => [],
 			];
 		}
 		if ( in_array( null, $durations, true ) ) {
 			return [
-				'duration' => null,
-				'plans'    => $plans,
-				'conflict' => null,
+				'duration'             => null,
+				'plans'                => $plans,
+				'conflict'             => null,
+				'durations_by_product' => [],
 			];
 		}
 
@@ -123,12 +162,77 @@ trait One_Time_Purchase_Migration {
 		$distinct = array_unique( array_map( fn( $d ) => self::describe_duration( $d ), $durations ) );
 
 		return [
-			'duration' => $chosen,
-			'plans'    => $plans,
-			'conflict' => count( $distinct ) > 1
+			'duration'             => $chosen,
+			'plans'                => $plans,
+			'conflict'             => count( $distinct ) > 1
 				? sprintf( '%s, so the gate keeps the longest (%s)', implode( ' and ', $distinct ), self::describe_duration( $chosen ) )
 				: null,
+			'durations_by_product' => $by_product,
 		];
+	}
+
+	/**
+	 * Record the access length a set of one-time products was granted for.
+	 *
+	 * The longest length wins where two plans grant the same product: a reader who
+	 * bought it holds both plans, and WooCommerce Memberships grants access from
+	 * either, so the longer one is the access they have today.
+	 *
+	 * @param array<int,array> $durations_by_product The lengths recorded so far.
+	 * @param int[]            $one_time_ids         The products this length applies to.
+	 * @param array|null       $duration             The length, or null when the plan has none.
+	 *
+	 * @return array<int,array>
+	 */
+	private static function record_product_durations( array $durations_by_product, array $one_time_ids, ?array $duration ): array {
+		if ( null === $duration ) {
+			return $durations_by_product;
+		}
+		foreach ( $one_time_ids as $product_id ) {
+			$product_id = (int) $product_id;
+			$recorded   = $durations_by_product[ $product_id ] ?? null;
+			if ( null === $recorded || self::duration_rank( $duration ) > self::duration_rank( $recorded ) ) {
+				$durations_by_product[ $product_id ] = $duration;
+			}
+		}
+		return $durations_by_product;
+	}
+
+	/**
+	 * Split one-time products into one bucket per access length.
+	 *
+	 * Access rule groups are OR'd, so a bucket each lets every buyer keep the length
+	 * their own plan granted. One rule for all of them would have to pick a single
+	 * length, and picking the longest hands a 7-day plan's buyers the 30 days a
+	 * different plan sold — access WooCommerce Memberships never gave them. That is the
+	 * shape a carve-out creates on purpose, by handing one gate's one-time products to
+	 * another gate that has its own.
+	 *
+	 * @param int[]            $one_time_ids         The products the gate's rules must name.
+	 * @param array            $group_duration       The length for a product no plan recorded
+	 *                                               one for, which is every product when an
+	 *                                               override applies.
+	 * @param array<int,array> $durations_by_product Lengths by product, from
+	 *                                               {@see resolve_group_duration()}.
+	 *
+	 * @return array[] One entry per distinct length, in the order the products appear:
+	 *                 [ 'duration' => pair, 'product_ids' => int[] ].
+	 */
+	private static function group_one_time_ids_by_duration( array $one_time_ids, array $group_duration, array $durations_by_product ): array {
+		$buckets = [];
+		foreach ( $one_time_ids as $product_id ) {
+			$product_id = (int) $product_id;
+			$duration   = $durations_by_product[ $product_id ] ?? $group_duration;
+			$key        = self::describe_duration( $duration );
+			if ( ! isset( $buckets[ $key ] ) ) {
+				$buckets[ $key ] = [
+					'duration'    => $duration,
+					'product_ids' => [],
+				];
+			}
+			$buckets[ $key ]['product_ids'][] = $product_id;
+		}
+		return array_values( $buckets );
 	}
 
 	/**
