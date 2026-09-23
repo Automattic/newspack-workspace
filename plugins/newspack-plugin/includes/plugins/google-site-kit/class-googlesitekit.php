@@ -402,10 +402,10 @@ class GoogleSiteKit {
 	 * reported by `is_reader` and `logged_in`, and naming a regwall pass as an
 	 * access source would mean reimplementing verification logic that lives in
 	 * Content_Restriction_Control. The *blocked* outcome reflects the whole
-	 * restriction path, so `gated` and `metering_eligible` can originate from a
-	 * registration wall or a Woo Memberships plan on a post that also carries a
-	 * custom-access gate. That is the reader's experience either way — the post
-	 * has a custom-access gate on it and they did not get in.
+	 * restriction path, so `gated` and `metering_eligible` can originate from the
+	 * deciding gate's own registration wall, or from a Woo Memberships plan, as
+	 * long as the deciding gate has custom access. A post whose deciding gate has
+	 * no custom access reports `no_custom_access_gate`, whatever gates rank below it.
 	 *
 	 * Every call here is free of side effects. In particular it must never
 	 * reach Metering::is_logged_in_metering_allowed(), which records a metered

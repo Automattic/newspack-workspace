@@ -521,6 +521,26 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A registration-only gate ranked first decides for the post, so a reader it
+	 * admits is reported as `no_custom_access_gate`, even when a lower
+	 * custom-access gate would have admitted them too. That lower gate is never
+	 * consulted, so it can't be how the reader got in.
+	 */
+	public function test_registration_only_gate_ranked_first_reports_no_custom_access_gate() {
+		$post_id = $this->create_gated_post(
+			[
+				'gate_priority' => 0,
+				'registration'  => [ 'active' => true ],
+			]
+		);
+		$this->attach_gate( $post_id, $this->email_domain_gate( 'example.org', 1 ) );
+		$this->sign_in_verified_reader( 'reader@example.org' );
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'no_custom_access_gate', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
 	 * The metering half of the blocking case above: a blocked reader on a post
 	 * whose deciding gate meters is metering_eligible, not the label of a lower
 	 * gate they would have passed. Blocked is blocked; only the flavour of the
