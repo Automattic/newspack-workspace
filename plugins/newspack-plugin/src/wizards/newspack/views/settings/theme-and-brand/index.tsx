@@ -70,17 +70,21 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 	};
 
 	async function save() {
+		const requestData = data;
 		return new Promise( resolve =>
 			wizardApiFetch(
 				{
-					data,
+					data: requestData,
 					path: '/newspack/v1/wizard/newspack-setup-wizard/theme',
 					method: 'POST',
 					updateCacheMethods: [ 'GET' ],
 				},
 				{
 					onSuccess: res => {
-						setFetchedData( res );
+						const saved = { ...requestData, ...res };
+						setSavedData( saved );
+						// Controls stay editable mid-request; keep any edit made meanwhile, unsaved.
+						setDataState( current => ( current === requestData ? saved : current ) );
 						if ( ! isPartOfSetup ) {
 							removeNotice( 'theme-and-brand-saved' );
 							addNotice( {

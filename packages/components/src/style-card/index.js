@@ -7,7 +7,7 @@
  */
 import { Component } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { Button } from '@wordpress/components';
+import { Button, VisuallyHidden } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -36,6 +36,7 @@ class StyleCard extends Component {
 						<img src={ image } alt={ cardTitle + ' ' + __( 'Thumbnail', 'newspack-plugin' ) } />
 					) }
 					<div className="newspack-style-card__actions">
+						{ isActive && <VisuallyHidden>{ __( 'Selected', 'newspack-plugin' ) }</VisuallyHidden> }
 						{ ! isActive && (
 							<Button
 								variant="tertiary"
