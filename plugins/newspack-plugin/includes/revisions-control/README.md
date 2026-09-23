@@ -75,4 +75,4 @@ Run it by hand with WP-CLI:
 wp newspack autosaves prune [--dry-run] [--post=<id>] [--older-than=<days>]
 ```
 
-`--older-than=0` removes every stale autosave on the targeted posts. Fresh autosaves are still kept.
+`--older-than=0` removes every stale autosave on the targeted posts, except any the revision limit protects. Fresh autosaves are still kept.
