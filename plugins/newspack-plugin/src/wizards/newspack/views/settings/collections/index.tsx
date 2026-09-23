@@ -41,6 +41,7 @@ import ChoiceToggle from '../advanced-settings/choice-toggle';
 
 const COLLECTIONS_PER_PAGE_OPTIONS = [ 12, 18, 24, 30 ];
 const DEFAULT_SLUG = 'collections';
+const DISABLED_NOTICE_KEY = 'newspack-collections-disabled';
 const DEFAULT_CARD_MESSAGE = __( "Keep reading. There's plenty more to discover.", 'newspack-plugin' );
 
 const DEFAULT_SETTINGS: CollectionsSettingsData = {
@@ -103,6 +104,23 @@ function Collections() {
 	} );
 	const { setHeaderData, addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
+	// Disabling reloads the page to update the admin menu, so its confirmation is raised on the next load.
+	useEffect( () => {
+		try {
+			if ( ! window.sessionStorage.getItem( DISABLED_NOTICE_KEY ) ) {
+				return;
+			}
+			window.sessionStorage.removeItem( DISABLED_NOTICE_KEY );
+		} catch {
+			return;
+		}
+		addNotice( {
+			id: 'collections-disabled',
+			type: 'success',
+			message: __( 'Collections disabled.', 'newspack-plugin' ),
+		} );
+	}, [ addNotice ] );
+
 	const isEnabled = apiData.module_enabled_collections;
 	const savedSettings = useMemo( () => toSettings( apiData ), [ apiData ] );
 
@@ -132,7 +150,14 @@ function Collections() {
 	const setModuleEnabled = ( value: boolean ) => {
 		resetError();
 		return apiFetchToggle( { module_enabled_collections: value }, true )
-			.then( reload )
+			.then( () => {
+				if ( ! value ) {
+					try {
+						window.sessionStorage.setItem( DISABLED_NOTICE_KEY, '1' );
+					} catch {}
+				}
+				reload();
+			} )
 			.catch( () => undefined );
 	};
 

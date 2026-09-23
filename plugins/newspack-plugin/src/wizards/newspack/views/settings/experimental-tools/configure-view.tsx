@@ -1,5 +1,5 @@
 /**
- * Inline configure view for an experimental tool.
+ * Configure view for an experimental tool.
  * Replaces the tab content; the Settings nav tabs remain visible.
  */
 
@@ -7,16 +7,19 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useState, useEffect } from '@wordpress/element';
+import { Fragment, useState, useEffect, useRef } from '@wordpress/element';
 import { TextareaControl, TextControl, SelectControl, ToggleControl, Spinner, Notice } from '@wordpress/components';
-import { Icon, chevronLeft, chevronDown, chevronUp } from '@wordpress/icons';
+import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { Stack, Text } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Button } from '../../../../../../packages/components/src';
-import type { Tool, ToolField } from './types';
+import WizardsTab from '../../../../wizards-tab';
+import { CollapsibleGroup, Divider, Grid, SectionHeader, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import type { SaveNotice, Tool, ToolField } from './types';
 
 interface LogEntry {
 	datetime: string;
@@ -33,7 +36,6 @@ interface LogEntry {
 function LogsField( { field }: { field: ToolField } ) {
 	const [ logs, setLogs ] = useState< LogEntry[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
-	const [ expandedIndex, setExpandedIndex ] = useState< number | null >( null );
 
 	useEffect( () => {
 		if ( field.endpoint ) {
@@ -45,68 +47,49 @@ function LogsField( { field }: { field: ToolField } ) {
 	}, [ field.endpoint ] );
 
 	if ( isLoading ) {
-		return (
-			<div className="experimental-tools__logs-field">
-				<strong>{ field.label }</strong>
-				<Spinner />
-			</div>
-		);
+		return <Spinner />;
 	}
 
 	if ( logs.length === 0 ) {
 		return (
-			<div className="experimental-tools__logs-field">
-				<strong>{ field.label }</strong>
-				<p className="experimental-tools__logs-empty">{ __( 'No requests logged yet.', 'newspack-plugin' ) }</p>
-			</div>
+			<Text variant="body-md" render={ <p /> }>
+				{ __( 'No requests logged yet.', 'newspack-plugin' ) }
+			</Text>
 		);
 	}
 
 	return (
-		<div className="experimental-tools__logs-field">
-			<strong>{ field.label }</strong>
-			{ field.help && <p className="experimental-tools__logs-help">{ field.help }</p> }
-			<div className="experimental-tools__logs-list">
-				{ logs.map( ( log, index ) => {
-					const isExpanded = expandedIndex === index;
-					const date = new Date( log.datetime.replace( ' ', 'T' ) + 'Z' );
-					const formattedDate = date.toLocaleString();
-					return (
-						<div key={ index } className="experimental-tools__log-entry">
-							<button
-								type="button"
-								className="experimental-tools__log-header"
-								onClick={ () => setExpandedIndex( isExpanded ? null : index ) }
-								aria-expanded={ isExpanded }
-							>
-								<span className="experimental-tools__log-date">{ formattedDate }</span>
-								<span className="experimental-tools__log-meta">
-									{ sprintf(
-										/* translators: 1: model name, 2: response time in seconds. */
-										__( '%1$s · %2$ss', 'newspack-plugin' ),
-										log.settings?.model ?? 'unknown',
-										String( log.response_time )
-									) }
-								</span>
-								<Icon icon={ isExpanded ? chevronUp : chevronDown } />
-							</button>
-							{ isExpanded && (
-								<div className="experimental-tools__log-details">
-									<div className="experimental-tools__log-section">
-										<strong>{ __( 'Prompt', 'newspack-plugin' ) }</strong>
-										<pre>{ log.prompt }</pre>
-									</div>
-									<div className="experimental-tools__log-section">
-										<strong>{ __( 'Response', 'newspack-plugin' ) }</strong>
-										<pre>{ log.response }</pre>
-									</div>
-								</div>
-							) }
-						</div>
-					);
-				} ) }
-			</div>
-		</div>
+		<CollapsibleGroup titleLevel={ 3 }>
+			{ logs.map( ( log, index ) => (
+				<CollapsibleGroup.Item
+					key={ index }
+					title={ sprintf(
+						/* translators: 1: request date and time, 2: model name, 3: response time in seconds. */
+						__( '%1$s · %2$s · %3$ss', 'newspack-plugin' ),
+						new Date( log.datetime.replace( ' ', 'T' ) + 'Z' ).toLocaleString(),
+						log.settings?.model ?? 'unknown',
+						String( log.response_time )
+					) }
+				>
+					<Stack direction="column" gap="lg">
+						<TextareaControl
+							__nextHasNoMarginBottom
+							label={ __( 'Prompt', 'newspack-plugin' ) }
+							value={ log.prompt }
+							readOnly
+							onChange={ () => {} }
+						/>
+						<TextareaControl
+							__nextHasNoMarginBottom
+							label={ __( 'Response', 'newspack-plugin' ) }
+							value={ log.response }
+							readOnly
+							onChange={ () => {} }
+						/>
+					</Stack>
+				</CollapsibleGroup.Item>
+			) ) }
+		</CollapsibleGroup>
 	);
 }
 
@@ -121,46 +104,11 @@ function FieldRenderer( {
 	onChange: ( val: string | boolean ) => void;
 	error?: string;
 } ) {
-	const stringValue = String( value ?? '' );
-	const hasDefault = field.default !== undefined && field.default !== '';
-	const isModified = hasDefault && stringValue !== field.default;
-
-	const handleRestore = () => {
-		if (
-			// eslint-disable-next-line no-alert
-			window.confirm(
-				__( 'Are you sure you want to restore this field to its default value? Your current customizations will be lost.', 'newspack-plugin' )
-			)
-		) {
-			onChange( field.default ?? '' );
-		}
-	};
-
-	const restoreButton = hasDefault ? (
-		<Button variant="link" className="experimental-tools__restore-default" onClick={ handleRestore } disabled={ ! isModified }>
-			{ __( 'Restore to default', 'newspack-plugin' ) }
-		</Button>
-	) : null;
-
-	const getHelp = () => {
-		if ( error ) {
-			return <span style={ { color: '#cc1818' } }>{ error }</span>;
-		}
-		if ( restoreButton && field.help ) {
-			return (
-				<span className="experimental-tools__help-with-restore">
-					{ field.help } { restoreButton }
-				</span>
-			);
-		}
-		return field.help;
-	};
-
 	const help = error ? <span style={ { color: '#cc1818' } }>{ error }</span> : field.help;
 
 	switch ( field.type ) {
 		case 'textarea':
-			return <TextareaControl label={ field.label } help={ getHelp() } value={ stringValue } onChange={ onChange } />;
+			return <TextareaControl label={ field.label } help={ help } value={ String( value ?? '' ) } onChange={ onChange } />;
 		case 'text':
 			return <TextControl label={ field.label } help={ help } value={ String( value ?? '' ) } onChange={ onChange } />;
 		case 'select':
@@ -187,17 +135,32 @@ function FieldRenderer( {
 	}
 }
 
+type Section = {
+	key: string;
+	title: string;
+	backNav?: string;
+	description?: React.ReactNode;
+	content: React.ReactNode;
+	isFullWidth?: boolean;
+};
+
 export default function ConfigureView( {
 	tool,
 	isFetching,
+	tabLabel,
+	tabUrl,
 	onSave,
-	onBack,
+	onDisable,
 }: {
 	tool: Tool;
 	isFetching?: boolean;
-	onSave: ( fields: Record< string, string | boolean > ) => void;
-	onBack: () => void;
+	tabLabel: string;
+	tabUrl: string;
+	onSave: ( fields: Record< string, string | boolean >, notice?: SaveNotice ) => Promise< unknown >;
+	onDisable: () => Promise< unknown >;
 } ) {
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+
 	const editableFields = tool.fields.filter( ( f: ToolField ) => f.type !== 'display' && f.type !== 'logs' );
 	const displayFields = tool.fields.filter( ( f: ToolField ) => f.type === 'display' );
 	const logsFields = tool.fields.filter( ( f: ToolField ) => f.type === 'logs' );
@@ -207,6 +170,31 @@ export default function ConfigureView( {
 		initialValues[ field.key ] = ( field.value as string | boolean ) ?? field.default ?? '';
 	} );
 	const [ values, setValues ] = useState< Record< string, string | boolean > >( initialValues );
+	// Saving hands back the stored values, which become the new baseline.
+	useEffect( () => {
+		setValues( initialValues );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ tool ] );
+	const isDirty = JSON.stringify( values ) !== JSON.stringify( initialValues );
+
+	const fieldsWithDefault = editableFields.filter( ( field: ToolField ) => field.default !== undefined );
+	const isDefault = fieldsWithDefault.every( ( field: ToolField ) => String( values[ field.key ] ?? '' ) === field.default );
+	const restoreDefaults = () => {
+		const previous = initialValues;
+		const defaults = Object.fromEntries( fieldsWithDefault.map( ( field: ToolField ) => [ field.key, field.default ?? '' ] ) );
+		onSave(
+			{ ...previous, ...defaults },
+			{
+				message: __( 'Restored to default.', 'newspack-plugin' ),
+				actions: [
+					{
+						label: __( 'Undo', 'newspack-plugin' ),
+						onClick: () => onSave( previous, { message: __( 'Restore undone.', 'newspack-plugin' ) } ).catch( () => undefined ),
+					},
+				],
+			}
+		).catch( () => undefined );
+	};
 
 	const [ errors, setErrors ] = useState< Record< string, string > >( {} );
 
@@ -243,71 +231,171 @@ export default function ConfigureView( {
 		return Object.keys( newErrors ).length === 0;
 	};
 
+	// Failures surface through the wizard's error handling, so the rejection has no second consumer here.
 	const handleSave = () => {
 		if ( validate() ) {
-			onSave( values );
+			onSave( values ).catch( () => undefined );
 		}
 	};
 
+	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( { when: isDirty && ! isFetching } );
+
+	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
+		/* translators: %s: tool name. */
+		title: sprintf( __( 'Disable %s?', 'newspack-plugin' ), tool.label ),
+		confirmButtonText: __( 'Disable', 'newspack-plugin' ),
+		message: isDirty
+			? __( 'Your saved settings are kept, but unsaved changes will be lost. You can enable the tool again at any time.', 'newspack-plugin' )
+			: __( 'Your settings are kept. You can enable the tool again at any time.', 'newspack-plugin' ),
+	} );
+
+	const { confirmDialog: restoreDialog, requestConfirm: requestRestore } = useConfirmDialog( {
+		title: __( 'Restore to Default?', 'newspack-plugin' ),
+		confirmButtonText: __( 'Restore', 'newspack-plugin' ),
+		message: isDirty
+			? __( 'Your customizations are replaced with the defaults and saved. Other unsaved changes will be lost.', 'newspack-plugin' )
+			: __( 'Your customizations are replaced with the defaults and saved.', 'newspack-plugin' ),
+	} );
+
+	// The header keeps whichever callbacks it was handed, so publishing these
+	// directly would pin the state of the render that published them.
+	const actionHandlers = useRef( { handleSave, onDisable, restoreDefaults } );
+	actionHandlers.current = { handleSave, onDisable, restoreDefaults };
+
+	useEffect( () => {
+		setHeaderData( {
+			sectionName: [ { label: tabLabel, url: tabUrl }, { label: tool.label } ],
+			actions: [
+				{
+					type: 'primary',
+					label: __( 'Save', 'newspack-plugin' ),
+					action: () => actionHandlers.current.handleSave(),
+					disabled: isFetching || ! isDirty,
+				},
+				...( fieldsWithDefault.length
+					? [
+							{
+								type: 'more',
+								label: __( 'Restore to Default', 'newspack-plugin' ),
+								action: () => requestRestore( () => actionHandlers.current.restoreDefaults() ),
+								disabled: isFetching || isDefault,
+							},
+					  ]
+					: [] ),
+				...( tool.constant_active
+					? []
+					: [
+							{
+								type: 'more',
+								label: __( 'Disable', 'newspack-plugin' ),
+								/* translators: %s: tool name. Must contain the menu item's visible label, "Disable" (WCAG 2.5.3, Label in Name). */
+								ariaLabel: sprintf( __( 'Disable %s', 'newspack-plugin' ), tool.label ),
+								action: () => requestDisable( () => actionHandlers.current.onDisable().catch( () => undefined ) ),
+								disabled: isFetching,
+							},
+					  ] ),
+			],
+		} );
+	}, [
+		tabLabel,
+		tabUrl,
+		tool.label,
+		tool.constant_active,
+		isDirty,
+		isFetching,
+		isDefault,
+		fieldsWithDefault.length,
+		requestDisable,
+		requestRestore,
+		setHeaderData,
+	] );
+
+	const usageNote = tool.llm
+		? sprintf(
+				/* translators: 1: tool name, 2: usage count, 3: LLM model name. */
+				__( '%1$s was used %2$s times in the last 30 days. Powered by %3$s.', 'newspack-plugin' ),
+				tool.label,
+				String( tool.usage_count ),
+				tool.llm
+		  )
+		: sprintf(
+				/* translators: 1: tool name, 2: usage count. */
+				__( '%1$s was used %2$s times in the last 30 days.', 'newspack-plugin' ),
+				tool.label,
+				String( tool.usage_count )
+		  );
+
+	const sections: Section[] = [
+		{
+			key: 'settings',
+			title: tool.label,
+			backNav: tabUrl,
+			description: tool.location_hint ? (
+				<>
+					{ tool.description } { tool.location_hint }
+				</>
+			) : (
+				tool.description
+			),
+			content: (
+				<>
+					{ editableFields.map( ( field: ToolField ) => (
+						<FieldRenderer
+							key={ field.key }
+							field={ field }
+							value={ values[ field.key ] }
+							onChange={ ( val: string | boolean ) => handleChange( field.key, val ) }
+							error={ errors[ field.key ] }
+						/>
+					) ) }
+					{ displayFields.map( ( field: ToolField ) => (
+						<FieldRenderer key={ field.key } field={ field } value={ field.value } onChange={ () => {} } />
+					) ) }
+				</>
+			),
+		},
+		...logsFields.map( ( field: ToolField ) => ( {
+			key: field.key,
+			title: field.label,
+			description: field.help,
+			content: <LogsField field={ field } />,
+			isFullWidth: true,
+		} ) ),
+	];
+
 	return (
-		<form
-			className={ `newspack-wizard__sections experimental-tools__configure${ isFetching ? ' is-fetching' : '' }` }
-			onSubmit={ ( e: React.FormEvent ) => {
-				e.preventDefault();
-				handleSave();
-			} }
-		>
-			<div className="experimental-tools__configure-header">
-				<Button icon={ chevronLeft } label={ __( 'Back', 'newspack-plugin' ) } onClick={ onBack } isLink />
-				<h2 className="newspack-wizard__heading">{ tool.label }</h2>
-			</div>
-			<p className="newspack-wizard__sections__description">{ tool.description }</p>
-
-			{ tool.location_hint && (
-				<Notice status="info" isDismissible={ false } className="experimental-tools__location-hint">
-					{ tool.location_hint }
-				</Notice>
-			) }
-
-			<div className="experimental-tools__configure-fields">
-				{ editableFields.map( ( field: ToolField ) => (
-					<FieldRenderer
-						key={ field.key }
-						field={ field }
-						value={ values[ field.key ] }
-						onChange={ ( val: string | boolean ) => handleChange( field.key, val ) }
-						error={ errors[ field.key ] }
-					/>
-				) ) }
-				{ displayFields.map( ( field: ToolField ) => (
-					<FieldRenderer key={ field.key } field={ field } value={ field.value } onChange={ () => {} } />
-				) ) }
-			</div>
-
-			<Button variant="primary" type="submit" disabled={ isFetching }>
-				{ __( 'Save', 'newspack-plugin' ) }
-			</Button>
-
-			{ logsFields.map( ( field: ToolField ) => (
-				<LogsField key={ field.key } field={ field } />
+		<WizardsTab isFetching={ isFetching }>
+			{ navBlockDialog }
+			{ disableDialog }
+			{ restoreDialog }
+			<Notice status="info" isDismissible={ false } spokenMessage="" className="experimental-tools__usage">
+				{ usageNote }
+			</Notice>
+			{ sections.map( ( section, index ) => (
+				<Fragment key={ section.key }>
+					{ index > 0 && <Divider alignment="full-width" variant="tertiary" /> }
+					{ section.isFullWidth ? (
+						<Stack direction="column" gap="xl">
+							<SectionHeader noMargin heading={ 2 } title={ section.title } description={ section.description } />
+							{ section.content }
+						</Stack>
+					) : (
+						<Grid columns={ 2 } gutter={ 32 } noMargin>
+							<SectionHeader
+								noMargin
+								fullWidthText
+								heading={ 2 }
+								backNav={ section.backNav }
+								title={ section.title }
+								description={ section.description }
+							/>
+							<Stack direction="column" gap="xl">
+								{ section.content }
+							</Stack>
+						</Grid>
+					) }
+				</Fragment>
 			) ) }
-
-			<p className="experimental-tools__usage-note">
-				{ tool.llm
-					? sprintf(
-							/* translators: 1: tool name, 2: usage count, 3: LLM model name. */
-							__( '%1$s was used %2$s times in the last 30 days. Powered by %3$s.', 'newspack-plugin' ),
-							tool.label,
-							String( tool.usage_count ),
-							tool.llm
-					  )
-					: sprintf(
-							/* translators: 1: tool name, 2: usage count. */
-							__( '%1$s was used %2$s times in the last 30 days.', 'newspack-plugin' ),
-							tool.label,
-							String( tool.usage_count )
-					  ) }
-			</p>
-		</form>
+		</WizardsTab>
 	);
 }

@@ -91,6 +91,9 @@ if ( 'experimental-tools' in settingsTabs ) {
 	sectionComponents[ 'experimental-tools' ] = lazy( () => import( /* webpackChunkName: "newspack-wizards" */ './experimental-tools' ) );
 }
 
+// These views publish their own trail below Settings, so the tab crumb can link back from their sub-screens.
+const sectionsWithOwnLeaf: SectionKeys[] = [ 'experimental-tools' ];
+
 const settingsSectionKeys = Object.keys( settingsTabs ) as SectionKeys[];
 
 export default settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
@@ -105,7 +108,7 @@ export default settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
 		exact: '/' === ( tab.path ?? '' ),
 		path: tab.path ?? `/${ sectionPath }`,
 		activeTabPaths: tab.activeTabPaths ?? undefined,
-		breadcrumbs: [ { label: __( 'Settings', 'newspack' ) }, { label: tab.label } ],
+		breadcrumbs: [ { label: __( 'Settings', 'newspack' ) }, ...( sectionsWithOwnLeaf.includes( sectionPath ) ? [] : [ { label: tab.label } ] ) ],
 		render: sectionComponents[ sectionPath ] ?? sectionComponents.default,
 	} );
 	return acc;

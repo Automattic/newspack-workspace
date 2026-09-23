@@ -32,6 +32,7 @@ import classnames from 'classnames';
  * @property {boolean}            [centered=false]   - Indicates if the header is centered.
  * @property {?string}            [className=null]   - Additional CSS class name, applied to the outer container.
  * @property {string|Function|*}  [description]      - Description of the section.
+ * @property {boolean}            [fullWidthText]    - Lets the title and description span the full header width. With a back nav they are otherwise capped at half, which suits a page-wide header but not one already sitting in a column.
  * @property {number}             [heading=2]        - HTML heading level, e.g., 1 for h1, 2 for h2, etc.
  * @property {string|Function|*}  [icon]             - Icon to display in the header.
  * @property {boolean}            [isWhite=false]    - Indicates if the header should use a white theme.
@@ -57,6 +58,7 @@ const SectionHeader = ( {
 	centered = false,
 	className = null,
 	description = '',
+	fullWidthText = false,
 	heading = 2,
 	icon = null,
 	isWhite = false,
@@ -154,6 +156,7 @@ const SectionHeader = ( {
 			className={ classnames(
 				'newspack-section-header__container',
 				backNav && 'newspack-section-header--has-back-nav',
+				fullWidthText && 'newspack-section-header--full-width-text',
 				primaryAction && 'newspack-section-header--has-primary-action',
 				className
 			) }
