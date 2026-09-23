@@ -22,7 +22,7 @@ class Settings {
 	/**
 	 * Posts per page options.
 	 */
-	public const POSTS_PER_PAGE_OPTIONS = [ 12, 18, 24 ];
+	public const POSTS_PER_PAGE_OPTIONS = [ 12, 18, 24, 30 ];
 
 	/**
 	 * Post indicator style options.

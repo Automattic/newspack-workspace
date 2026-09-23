@@ -65,7 +65,7 @@ The following nested options are available as properties of the `newspack_collec
 | `custom_slug` | String | Custom URL slug for collections. | Text (e.g., "issue") |
 | `subscribe_link` | String | Global subscription URL displayed on collection pages | Valid URL |
 | `order_link` | String | Global order URL for purchasing physical copies | Valid URL |
-| `posts_per_page` | Integer | Global posts per page | 12, 18, 24 |
+| `posts_per_page` | Integer | Global posts per page | 12, 18, 24, 30 |
 | `category_filter_label` | String | Custom label for the category filter dropdown | Text (e.g., "Publication:") |
 | `highlight_latest` | Boolean | Highlight the latest collection | Boolean |
 | `articles_block_attrs` | Array | Override articles block attributes | Object with properties like `showCategory`. See possible [attributes](https://github.com/Automattic/newspack-blocks/blob/trunk/src/blocks/homepage-articles/block.json) |
