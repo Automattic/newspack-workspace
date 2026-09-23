@@ -25,6 +25,7 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import IframePlaceholder from './iframe-placeholder';
+import { isEmbeddableSrc } from './utils';
 
 const IframeEdit = ( { attributes, setAttributes } ) => {
 	const blockProps = useBlockProps();
@@ -197,7 +198,7 @@ const IframeEdit = ( { attributes, setAttributes } ) => {
 						{ __( 'This block will take over the page content.', 'newspack-blocks' ) }
 					</Notice>
 				) }
-				{ src && showPreview ? (
+				{ isEmbeddableSrc( src ) && showPreview ? (
 					<div className="iframe-container">
 						<FocusableIframe
 							title={ __( 'Newspack embedded iframe', 'newspack-blocks' ) }
