@@ -189,12 +189,12 @@ final class Autosave_Cleanup {
 	public static function delete_autosaves( array $ids ): array {
 		$deleted = [];
 		foreach ( $ids as $id ) {
-			if ( ! wp_is_post_autosave( $id ) ) {
+			$autosave = get_post( $id );
+			if ( ! $autosave || ! wp_is_post_autosave( $autosave ) ) {
 				continue;
 			}
 			// WordPress rewrites an autosave in place, so it may have been refreshed since it was selected.
-			$autosave = get_post( $id );
-			$parent   = get_post( $autosave->post_parent );
+			$parent = get_post( $autosave->post_parent );
 			if ( ! $parent || $autosave->post_modified_gmt >= $parent->post_modified_gmt ) {
 				continue;
 			}
