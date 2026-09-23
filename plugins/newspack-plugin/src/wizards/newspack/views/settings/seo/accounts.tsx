@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { ACCOUNTS } from './constants';
-import { Grid, TextControl } from '../../../../../../packages/components/src';
+import { TextControl } from '../../../../../../packages/components/src';
 
 /**
  * Internal dependencies.
@@ -14,7 +14,7 @@ import { Grid, TextControl } from '../../../../../../packages/components/src';
 
 function Accounts( { setData, data }: { setData: ( v: SeoData[ 'urls' ] ) => void; data: SeoData[ 'urls' ] & { [ k: string ]: string } } ) {
 	return (
-		<Grid columns={ 3 } rowGap={ 16 }>
+		<>
 			{ ACCOUNTS.map( ( [ key, label, placeholder ] ) => (
 				<TextControl
 					key={ key }
@@ -22,9 +22,10 @@ function Accounts( { setData, data }: { setData: ( v: SeoData[ 'urls' ] ) => voi
 					onChange={ ( value: string ) => setData( { ...data, [ key ]: value } ) }
 					value={ data[ key ] }
 					placeholder={ placeholder }
+					withMargin={ false }
 				/>
 			) ) }
-		</Grid>
+		</>
 	);
 }
 

@@ -1,0 +1,30 @@
+name: Constants catalog
+
+# This repository's own call into the shared scanning routine, scanning
+# newspack-workspace and posting its NEWSPACK_* constants to the hub.
+#
+# Deliberately no `pull_request` trigger: this repository is public, so a
+# fork's pull request runs with a read-only, secret-less token by default --
+# but a `pull_request_target`-style hole is exactly the shape that would let a
+# fork's workflow run with access to CONSTANTS_CATALOG_SIGNING_SECRET. Cron
+# and manual dispatch only.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan-and-push:
+    uses: ./.github/workflows/reusable-constants-catalog.yml
+    with:
+      source: newspack-workspace
+      hub-url: ${{ vars.CONSTANTS_CATALOG_HUB_URL }}
+      # This repository's own runs scan with the scanner from the same commit,
+      # while private callers keep the main default
+      scanner-ref: ${{ github.sha }}
+    secrets:
+      signing-secret: ${{ secrets.CONSTANTS_CATALOG_SIGNING_SECRET }}

@@ -15,6 +15,13 @@ class Metering {
 	const METERING_META_KEY = 'np_content_metering';
 
 	/**
+	 * ID of the element the allowance is printed into. A DOM contract: the frontend
+	 * reads the payload from it (`src/content-gate/utils/metering-settings.js`), and
+	 * a site's optimizer allowlist may name it, so renaming it breaks both.
+	 */
+	const SETTINGS_ELEMENT_ID = 'newspack-content-gate-metering-settings';
+
+	/**
 	 * Article view activity to be handled by frontend metering.
 	 *
 	 * @var array|null
@@ -32,7 +39,7 @@ class Metering {
 	 * Initialize hooks.
 	 */
 	public static function init() {
-		add_filter( 'newspack_content_gate_restrict_post', [ __CLASS__, 'restrict_post' ] );
+		add_filter( 'newspack_content_gate_restrict_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ], 11 ); // Render after gate layout editor.
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'wp_footer', [ __CLASS__, 'enqueue_scripts' ] );
@@ -43,12 +50,30 @@ class Metering {
 	/**
 	 * Whether to restrict the post.
 	 *
-	 * @param bool $restrict Whether to restrict the post.
+	 * A metered view spends the reader's allowance on the article they opened, so
+	 * it unlocks that article and nothing else. Every other restricted post that
+	 * shares the page — a Query Loop, a listing block — is asked about by ID and
+	 * stays restricted. Without the queried-object test the whole page would open
+	 * on one metered read, since the predicates below answer for whichever post
+	 * the loop has set up rather than for the one being asked about.
+	 *
+	 * @param bool     $restrict Whether to restrict the post.
+	 * @param int|null $post_id  Post being asked about. Null when the caller has
+	 *                           no post in hand, which keeps the current post's
+	 *                           allowance as the answer.
 	 *
 	 * @return bool
 	 */
-	public static function restrict_post( $restrict ) {
-		if ( $restrict && self::is_metering() ) {
+	public static function restrict_post( $restrict, $post_id = null ) {
+		// is_singular() first: on an archive get_queried_object_id() answers with a
+		// term ID, and on an author archive a user ID. Those sequences are
+		// independent of post IDs, so a bare comparison treats a listed post whose ID
+		// happens to match the queried term as the article being read — and unlocks
+		// its paid body in the listing.
+		if ( null !== $post_id && ( ! is_singular() || (int) $post_id !== (int) get_queried_object_id() ) ) {
+			return $restrict;
+		}
+		if ( $restrict && self::is_metering( $post_id ) ) {
 			return false;
 		}
 		return $restrict;
@@ -452,7 +477,7 @@ class Metering {
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate-metering.js',
 			[],
-			filemtime( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-metering.js' ),
+			Newspack::asset_version( 'content-gate-metering' ),
 			[
 				'in_footer' => true,
 				'strategy'  => 'defer',
@@ -460,9 +485,19 @@ class Metering {
 		);
 
 		$settings = self::get_effective_settings( $gate_post_id, false );
-		\wp_localize_script(
-			$handle,
-			'newspack_metering_settings',
+
+		/*
+		 * The tag must stay non-executable. Metering makes the server send the whole
+		 * article, so the meter is the only thing withholding it, and a meter that cannot
+		 * read its allowance hands every metered article to anonymous readers. An
+		 * executable tag is one an optimizer may reorder or hold back; `application/json`
+		 * is data the parser puts in the DOM.
+		 *
+		 * JSON_HEX_TAG because `excerpt` carries post HTML: a literal `<script` after an
+		 * HTML comment opener would otherwise put the tokenizer into script-data-escaped
+		 * state on cores whose `wp_get_inline_script_tag()` predates the HTML API.
+		 */
+		$payload = \wp_json_encode(
 			[
 				'visible_paragraphs' => \get_post_meta( $gate_layout_id, 'visible_paragraphs', true ),
 				'use_more_tag'       => \get_post_meta( $gate_layout_id, 'use_more_tag', true ),
@@ -472,8 +507,24 @@ class Metering {
 				'meter_key'          => self::get_meter_key( $gate_post_id, false ),
 				'post_id'            => get_the_ID(),
 				'article_view'       => self::$article_view,
-				'excerpt'            => apply_filters( 'newspack_gate_content', Content_Gate::get_restricted_post_excerpt( get_post() ) ),
+				'excerpt'            => Content_Gate::get_restricted_post_excerpt( get_post() ),
 				'other_settings'     => Content_Gate_Advanced_Settings::get_settings(),
+			],
+			JSON_HEX_TAG
+		);
+
+		// An unencodable payload (invalid UTF-8 in the post, most often) would print an
+		// empty element, which reads to the frontend exactly like an unmetered page.
+		if ( false === $payload ) {
+			Logger::error( 'Could not encode metering settings for post ' . get_the_ID() . '; the meter will not run.', 'CONTENT-GATE-METERING' );
+			return;
+		}
+
+		\wp_print_inline_script_tag(
+			$payload,
+			[
+				'type' => 'application/json',
+				'id'   => self::SETTINGS_ELEMENT_ID,
 			]
 		);
 	}
@@ -704,9 +755,13 @@ class Metering {
 	 * Whether the content should be allowed to render. If it's frontend metered,
 	 * it will be handled by the frontend metering strategy.
 	 *
+	 * @param int|null $post_id Post the allowance is being spent on. Defaults to
+	 *                          the current post, which is only the same thing
+	 *                          while the loop sits on the article being read.
+	 *
 	 * @return bool
 	 */
-	public static function is_metering() {
+	public static function is_metering( $post_id = null ) {
 		/**
 		 * Short-circuit the metering check. Anything other than null
 		 * will prevent the metering logic from running.
@@ -725,7 +780,7 @@ class Metering {
 			return false;
 		}
 
-		return self::is_frontend_metering() || self::is_logged_in_metering_allowed();
+		return self::is_frontend_metering() || self::is_logged_in_metering_allowed( $post_id );
 	}
 
 	/**

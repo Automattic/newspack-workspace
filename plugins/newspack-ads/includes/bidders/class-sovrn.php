@@ -29,7 +29,7 @@ final class Sovrn {
 	public static function init() {
 
 		// Require environment variable due to its experimental nature.
-		if ( ! defined( 'NEWSPACK_ADS_EXPERIMENTAL_BIDDERS' ) ) {
+		if ( ! defined( 'NEWSPACK_ADS_EXPERIMENTAL_BIDDERS' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			return;
 		}
 

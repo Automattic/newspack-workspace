@@ -2318,7 +2318,7 @@ final class Reader_Activation {
 			return null;
 		}
 
-		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			return true;
 		}
 
@@ -2638,13 +2638,19 @@ final class Reader_Activation {
 				}
 
 				/**
-				 * Create WooCommerce Customer if possible.
-				 * Email notification for WooCommerce is handled by the plugin.
+				 * Create a WooCommerce customer if possible. WooCommerce's "New account"
+				 * email never fires for readers (see disable_woocommerce_new_user_email()),
+				 * so registration sends nothing here. Newspack's verification, magic link,
+				 * or OTP emails reach the reader instead.
 				 */
 				$user_id = \wc_create_new_customer( $email, $user_data['user_login'], $user_data['user_pass'], $user_data );
 			} else {
+				/**
+				 * Deliberately no wp_new_user_notification(): readers are passwordless, and
+				 * the WooCommerce path above sends no account email, so this path must not
+				 * either (NPPD-2261).
+				 */
 				$user_id = \wp_insert_user( $user_data );
-				\wp_new_user_notification( $user_id, null, 'user' );
 			}
 			add_filter( 'woocommerce_new_customer_data', [ __CLASS__, 'canonize_user_data' ], 10, 1 );
 

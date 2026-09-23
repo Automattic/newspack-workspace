@@ -2,14 +2,14 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Network 2.22.5\n"
+"Project-Id-Version: Newspack Network 2.22.6\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-network\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-02T00:11:50+00:00\n"
+"POT-Creation-Date: 2026-09-08T20:27:49+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-network\n"
@@ -203,34 +203,34 @@ msgstr ""
 msgid "Note: Editors will still be able to modify the status upon distribution of a post."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:158
+#: includes/content-distribution/class-api.php:167
 msgid "A post received from the network cannot be distributed."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:162
+#: includes/content-distribution/class-api.php:171
 msgid "Data Events class not found."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:172
+#: includes/content-distribution/class-api.php:181
 #: includes/content-distribution/class-distributor-migrator.php:141
 #: includes/content-distribution/class-distributor-migrator.php:385
 msgid "Post not found."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:175
+#: includes/content-distribution/class-api.php:184
 msgid "Post is currently an auto-draft. Save before distributing it."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:343
+#: includes/content-distribution/class-api.php:352
 msgid "The payload post data must be an object."
 msgstr ""
 
-#: includes/content-distribution/class-api.php:372
+#: includes/content-distribution/class-api.php:381
 msgid "The payload must carry a post type unless it is a partial update."
 msgstr ""
 
 #. translators: unsupported post type for content distribution
-#: includes/content-distribution/class-api.php:390
+#: includes/content-distribution/class-api.php:399
 #, php-format
 msgid "Post type %s is not supported as a distributed incoming post."
 msgstr ""

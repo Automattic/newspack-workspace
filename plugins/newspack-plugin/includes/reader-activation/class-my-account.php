@@ -83,7 +83,7 @@ class My_Account {
 	 * @return bool
 	 */
 	protected static function reader_must_verify(): bool {
-		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
 			return false;
 		}
 		if ( ! \class_exists( 'Newspack\WooCommerce_My_Account' ) ) {
@@ -951,7 +951,7 @@ class My_Account {
 
 		$token           = isset( $_GET['token'] ) ? \sanitize_text_field( \wp_unslash( $_GET['token'] ) ) : '';
 		$transient_token = \get_transient( 'np_reader_account_delete_' . \get_current_user_id() );
-		if ( ! $token || ! $transient_token || $token !== $transient_token ) {
+		if ( ! $token || ! $transient_token || ! hash_equals( (string) $transient_token, (string) $token ) ) {
 			echo '<p>' . \esc_html__( 'Invalid request.', 'newspack-plugin' ) . '</p>';
 			return;
 		}

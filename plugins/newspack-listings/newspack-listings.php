@@ -7,7 +7,7 @@
  * Author URI:      https://newspack.com
  * Text Domain:     newspack-listings
  * Domain Path:     /languages
- * Version:         3.7.5
+ * Version:         3.7.6
  *
  * @package         Newspack_Listings
  */
@@ -15,11 +15,11 @@
 defined( 'ABSPATH' ) || exit;
 
 // Define plugin constants.
-if ( ! defined( 'NEWSPACK_LISTINGS_PLUGIN_FILE' ) ) {
+if ( ! defined( 'NEWSPACK_LISTINGS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_LISTINGS_FILE', __FILE__ );
 	define( 'NEWSPACK_LISTINGS_PLUGIN_FILE', plugin_dir_path( NEWSPACK_LISTINGS_FILE ) );
 	define( 'NEWSPACK_LISTINGS_URL', plugin_dir_url( NEWSPACK_LISTINGS_FILE ) );
-	define( 'NEWSPACK_LISTINGS_VERSION', '3.7.5' );
+	define( 'NEWSPACK_LISTINGS_VERSION', '3.7.6' );
 }
 
 // Include plugin resources.

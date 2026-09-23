@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Republication Tracker Tool plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Republication Tracker Tool 2.8.4\n"
+"Project-Id-Version: Republication Tracker Tool 2.9.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/republication-tracker-tool\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-11T17:40:51+00:00\n"
+"POT-Creation-Date: 2026-09-14T18:19:30+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: republication-tracker-tool\n"
@@ -335,25 +335,25 @@ msgid "Copy to Clipboard"
 msgstr ""
 
 #. translators: %1$s is the site title, %2$s is the license description.
-#: republication-tracker-tool.php:353
+#: republication-tracker-tool.php:354
 #, php-format
 msgid "This article first appeared on %1$s and is republished here under a %2$s."
 msgstr ""
 
 #. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title. %4$s is the license URL, %5$s is the license description.
-#: republication-tracker-tool.php:361
+#: republication-tracker-tool.php:362
 #, php-format
 msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a> and is republished here under a <a target=\"_blank\" href=\"%4$s\">%5$s</a>."
 msgstr ""
 
 #. translators: %s is the site title.
-#: republication-tracker-tool.php:374
+#: republication-tracker-tool.php:375
 #, php-format
 msgid "This article first appeared on %s."
 msgstr ""
 
 #. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title.
-#: republication-tracker-tool.php:382
+#: republication-tracker-tool.php:383
 #, php-format
 msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a>."
 msgstr ""

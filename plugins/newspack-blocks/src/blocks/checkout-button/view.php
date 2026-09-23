@@ -178,8 +178,10 @@ function render_callback( $attributes ) {
 		$hidden_fields .= $after_success_behavior ? '<input type="hidden" name="after_success_behavior" value="' . esc_attr( $after_success_behavior ) . '" />' : '';
 		$hidden_fields .= $after_success_button_label ? '<input type="hidden" name="after_success_button_label" value="' . esc_attr( $after_success_button_label ) . '" />' : '';
 		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_url" value="' . esc_attr( $after_success_url ) . '" />' : '';
-		// Vouched for here because this is the last point the destination is known to come
-		// from the block's own settings rather than from the request.
+		// Vouched for here because this is the last point the destination is known to
+		// come from the block's own settings — or, for a URL-triggered render, from a
+		// value already restricted to allowed hosts (see
+		// Modal_Checkout::build_url_triggered_button_attrs()).
 		$after_success_token = $after_success_url ? Modal_Checkout::get_after_success_token( $after_success_url ) : '';
 		$hidden_fields      .= $after_success_token ? '<input type="hidden" name="after_success_token" value="' . esc_attr( $after_success_token ) . '" />' : '';
 	}

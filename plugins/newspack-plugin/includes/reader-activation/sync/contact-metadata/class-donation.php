@@ -40,7 +40,7 @@ class Donation extends Subscription {
 	 * @return string
 	 */
 	public static function get_section_name() {
-		return __( 'Donation', 'newspack' );
+		return __( 'Donation', 'newspack-plugin' );
 	}
 
 	/**
@@ -54,7 +54,7 @@ class Donation extends Subscription {
 			'Active_Donation_Count'         => 'Active Donation Count',
 			'Current_Donation_Start_Date'   => 'Current Donation Start Date',
 			'Current_Donation_End_Date'     => 'Current Donation End Date',
-			'Current_Donation_Cycle'        => 'Current Donation Cycle',
+			'Current_Donation_Frequency'    => 'Current Donation Frequency',
 			'Current_Recurring_Donation'    => 'Current Recurring Donation',
 			'Next_Donation_Date'            => 'Next Donation Date',
 			'Current_Donation_Product_Name' => 'Current Donation Product Name',
@@ -62,6 +62,76 @@ class Donation extends Subscription {
 			'Previous_Donation_Amount'      => 'Previous Donation Amount',
 			'Last_Donation_Amount'          => 'Last Donation Amount',
 			'Last_Donation_Date'            => 'Last Donation Date',
+		];
+	}
+
+	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'Donor_Status'                  => [
+				'name'        => 'Donor Status',
+				'description' => __( 'Summarized donor label. One of: Monthly Donor, Yearly Donor, Ex-Monthly Donor, Ex-Yearly Donor, Donor (one-time/no active recurring)', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Active_Donation_Count'         => [
+				'name'        => 'Active Donation Count',
+				'description' => __( 'Number of currently active recurring donations the reader holds', 'newspack-plugin' ),
+				'status'      => 'new',
+			],
+			'Current_Donation_Start_Date'   => [
+				'name'        => 'Current Donation Start Date',
+				'description' => __( 'Start date of the most recent active recurring donation (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Current_Donation_End_Date'     => [
+				'name'        => 'Current Donation End Date',
+				'description' => __( 'End date of the most recent recurring donation, if there is one (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Current_Donation_Frequency'    => [
+				'name'        => 'Current Donation Frequency',
+				'description' => __( 'Donation frequency. One of: month, year', 'newspack-plugin' ),
+				'status'      => 'updated',
+			],
+			'Current_Recurring_Donation'    => [
+				'name'        => 'Current Recurring Donation',
+				'description' => __( 'Amount of the active recurring donation', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Next_Donation_Date'            => [
+				'name'        => 'Next Donation Date',
+				'description' => __( 'Date of next scheduled recurring donation (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Current_Donation_Product_Name' => [
+				'name'        => 'Current Donation Product Name',
+				'description' => __( 'Name of the donation product', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Previous_Donation_Product'     => [
+				'name'        => 'Previous Donation Product',
+				'description' => __( 'Donation product the reader contributed to before switching', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Previous_Donation_Amount'      => [
+				'name'        => 'Previous Donation Amount',
+				'description' => __( 'Donation amount before the reader switched to a new level', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Last_Donation_Amount'          => [
+				'name'        => 'Last Donation Amount',
+				'description' => __( 'Amount of the most recent donation', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
+			'Last_Donation_Date'            => [
+				'name'        => 'Last Donation Date',
+				'description' => __( 'Date of most recent donation (YYYY-MM-DD HH:MM:SS)', 'newspack-plugin' ),
+				'status'      => 'existing',
+			],
 		];
 	}
 
@@ -80,7 +150,7 @@ class Donation extends Subscription {
 			'Active_Donation_Count'         => $this->get_active_subscription_count(),
 			'Current_Donation_Start_Date'   => $this->get_current_subscription_start_date(),
 			'Current_Donation_End_Date'     => $this->get_current_subscription_end_date(),
-			'Current_Donation_Cycle'        => $this->get_current_subscription_billing_cycle(),
+			'Current_Donation_Frequency'    => $this->get_current_subscription_billing_frequency(),
 			'Current_Recurring_Donation'    => $this->get_current_subscription_recurring_payment(),
 			'Next_Donation_Date'            => $this->get_current_subscription_next_payment_date(),
 			'Current_Donation_Product_Name' => $this->get_current_donation_product_name(),
