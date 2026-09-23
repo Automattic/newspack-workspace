@@ -43,12 +43,13 @@ export default function Footer( { themeMods, onUpdate }: { themeMods: ThemeMods;
 				<ToggleGroupControlOption value="default" label={ __( 'Default', 'newspack-plugin' ) } />
 				<ToggleGroupControlOption value="custom" label={ __( 'Custom', 'newspack-plugin' ) } />
 			</ToggleGroupControl>
-			<ColorPicker
-				label={ __( 'Background color', 'newspack-plugin' ) }
-				color={ footerColor( themeMods ) }
-				disabled={ themeMods.footer_color !== 'custom' }
-				onChange={ ( footer_color_hex: string ) => updateThemeMods( { footer_color_hex } ) }
-			/>
+			{ themeMods.footer_color === 'custom' && (
+				<ColorPicker
+					label={ __( 'Background color', 'newspack-plugin' ) }
+					color={ footerColor( themeMods ) }
+					onChange={ ( footer_color_hex: string ) => updateThemeMods( { footer_color_hex } ) }
+				/>
+			) }
 		</Stack>
 	);
 }

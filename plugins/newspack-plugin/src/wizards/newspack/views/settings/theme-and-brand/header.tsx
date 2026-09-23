@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _x } from '@wordpress/i18n';
 import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl,
@@ -51,8 +51,16 @@ export default function Header( { themeMods, updateHeader }: { themeMods: ThemeM
 					} )
 				}
 			>
-				<ToggleGroupControlOption value="small" label="S" aria-label={ __( 'Small', 'newspack-plugin' ) } />
-				<ToggleGroupControlOption value="large" label="L" aria-label={ __( 'Large', 'newspack-plugin' ) } />
+				<ToggleGroupControlOption
+					value="small"
+					label={ _x( 'S', 'abbreviation of Small', 'newspack-plugin' ) }
+					aria-label={ __( 'Small', 'newspack-plugin' ) }
+				/>
+				<ToggleGroupControlOption
+					value="large"
+					label={ _x( 'L', 'abbreviation of Large', 'newspack-plugin' ) }
+					aria-label={ __( 'Large', 'newspack-plugin' ) }
+				/>
 			</ToggleGroupControl>
 			<ToggleGroupControl
 				__nextHasNoMarginBottom
@@ -70,17 +78,18 @@ export default function Header( { themeMods, updateHeader }: { themeMods: ThemeM
 				<ToggleGroupControlOption value="default" label={ __( 'Default', 'newspack-plugin' ) } />
 				<ToggleGroupControlOption value="custom" label={ __( 'Custom', 'newspack-plugin' ) } />
 			</ToggleGroupControl>
-			<ColorPicker
-				label={ __( 'Background color', 'newspack-plugin' ) }
-				color={ themeMods.header_color_hex }
-				disabled={ ! themeMods.header_solid_background }
-				onChange={ ( header_color_hex: string ) =>
-					updateHeader( {
-						...themeMods,
-						header_color_hex,
-					} )
-				}
-			/>
+			{ themeMods.header_solid_background && (
+				<ColorPicker
+					label={ __( 'Background color', 'newspack-plugin' ) }
+					color={ themeMods.header_color_hex }
+					onChange={ ( header_color_hex: string ) =>
+						updateHeader( {
+							...themeMods,
+							header_color_hex,
+						} )
+					}
+				/>
+			) }
 		</Stack>
 	);
 }
