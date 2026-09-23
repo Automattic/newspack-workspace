@@ -28,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  * e2e-setup.sh writes both constants to wp-config.php before it installs and
  * activates this plugin, so a correctly provisioned site always has them.
  */
-if ( ! defined( 'NEWSPACK_IS_E2E' ) || ! NEWSPACK_IS_E2E ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
+if ( ! defined( 'NEWSPACK_IS_E2E' ) || ! NEWSPACK_IS_E2E ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/class-starter-content.php.
 	return;
 }
 

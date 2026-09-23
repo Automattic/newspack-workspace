@@ -146,7 +146,7 @@ class Newspack_Dashboard extends Wizard {
 		];
 
 		// Newspack Listings Plugin.
-		if ( defined( 'NEWSPACK_LISTINGS_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
+		if ( defined( 'NEWSPACK_LISTINGS_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/wizards/class-listings-wizard.php.
 			$dashboard['listings'] = [
 				'title'        => __( 'Listings', 'newspack-plugin' ),
 				'desc'         => __( 'Build databases of reusable or user-generated content to use on your site.', 'newspack-plugin' ),
