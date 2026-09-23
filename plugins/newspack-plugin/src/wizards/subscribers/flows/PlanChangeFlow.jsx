@@ -22,11 +22,9 @@ import { SelectControl, Spinner, __experimentalHStack as HStack, __experimentalV
 import { Button, Modal, Notice } from '../../../../packages/components/src';
 import { fmtCurrency, fmtDate } from '../format';
 
-// "Digital Access — $10.00/month", the picker's option label.
-const optionLabel = option =>
-	`${ option.name } — ${ fmtCurrency( option.amount, option.currency ) }/${
-		1 === option.interval ? option.period : `${ option.interval } ${ option.period }s`
-	}`;
+// "Digital Access — $10.00 / month". The price and cadence arrive already
+// formatted, because WCS owns the translated period names and their plurals.
+const optionLabel = option => ( option.priceString ? `${ option.name } — ${ option.priceString }` : option.name );
 
 /**
  * @param {Object}   props              Component props.
@@ -48,7 +46,6 @@ export default function PlanChangeFlow( { subscription, actions, onClose, onDone
 			.then( response => {
 				if ( ! cancelled ) {
 					setOptions( response.options || [] );
-					setSelectedId( response.options?.[ 0 ]?.id || 0 );
 				}
 			} )
 			.catch( e => {
@@ -106,12 +103,19 @@ export default function PlanChangeFlow( { subscription, actions, onClose, onDone
 								}
 							</strong>
 						</p>
+						{ /* No plan is preselected: every option here is a real change to
+						     what the reader pays, so Confirm stays disabled until the
+						     admin picks one deliberately. */ }
 						<SelectControl
 							label={ __( 'New subscription', 'newspack-plugin' ) }
 							value={ String( selectedId ) }
-							options={ options.map( option => ( { label: optionLabel( option ), value: String( option.id ) } ) ) }
+							options={ [
+								{ label: __( 'Select a subscription…', 'newspack-plugin' ), value: '0' },
+								...options.map( option => ( { label: optionLabel( option ), value: String( option.id ) } ) ),
+							] }
 							onChange={ value => setSelectedId( Number( value ) ) }
 							__nextHasNoMarginBottom
+							__next40pxDefaultSize
 						/>
 						{ selected && (
 							<p className="newspack-subscribers__modal-text">

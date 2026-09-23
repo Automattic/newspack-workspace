@@ -16,6 +16,7 @@
 /**
  * WordPress dependencies.
  */
+import { useEffect, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import {
 	Dropdown,
@@ -25,11 +26,12 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, Card } from '../../../../packages/components/src';
+import { Button, Card } from '../../../../packages/components/src';
 import '../screens/style.scss';
 import { visa as visaIcon, mastercard as mastercardIcon, amex as amexIcon, discover as discoverIcon, jcb as jcbIcon } from '../assets/cards';
 
@@ -77,8 +79,20 @@ export const cardLabel = pm => {
  * @param {Object}   props                Component props.
  * @param {Array}    props.paymentMethods The subscriber's saved payment methods.
  * @param {Function} props.onMakeDefault  Called with the payment method to promote.
+ * @param {number}   props.focusCardId    Card whose heading should take focus once rendered.
  */
-export default function PaymentMethodsList( { paymentMethods, onMakeDefault } ) {
+export default function PaymentMethodsList( { paymentMethods, onMakeDefault, focusCardId = 0 } ) {
+	const focusRef = useRef( null );
+
+	// Promoting a card removes its kebab, so the element focus would return to is
+	// gone by the time the refetch lands and focus falls to the document. Put it
+	// on the promoted card instead, where the admin was working.
+	useEffect( () => {
+		if ( focusCardId && focusRef.current ) {
+			focusRef.current.focus();
+		}
+	}, [ focusCardId, paymentMethods ] );
+
 	if ( ! paymentMethods.length ) {
 		return (
 			<Card __experimentalCoreCard className="newspack-subscribers__card">
@@ -98,15 +112,28 @@ export default function PaymentMethodsList( { paymentMethods, onMakeDefault } ) 
 								{ icon && <img src={ icon } alt="" className="newspack-subscribers__card-icon" /> }
 								<VStack spacing={ 1 }>
 									<HStack spacing={ 2 } justify="flex-start" expanded={ false }>
-										<strong>{ cardLabel( pm ) }</strong>
-										{ pm.isDefault && <Badge level="default" text={ __( 'Default', 'newspack-plugin' ) } /> }
-										{ pm.isExpired && <Badge level="error" text={ __( 'Expired', 'newspack-plugin' ) } /> }
+										{ /* h3, matching the subscription cards in the same section:
+										     both sit under the section's h2, so a reader moving by
+										     heading reaches the cards here too. It doubles as the
+										     landing place for focus when promoting a card unmounts
+										     the kebab that focus would otherwise return to. */ }
+										<h3
+											className="newspack-subscribers__card-title"
+											ref={ pm.id === focusCardId ? focusRef : undefined }
+											tabIndex={ pm.id === focusCardId ? -1 : undefined }
+										>
+											{ cardLabel( pm ) }
+										</h3>
+										{ pm.isDefault && <Badge intent="informational">{ __( 'Default', 'newspack-plugin' ) }</Badge> }
+										{ pm.isExpired && <Badge intent="high">{ __( 'Expired', 'newspack-plugin' ) }</Badge> }
 										{ promotable && (
 											// An active, non-default card has no badge to show, so an
 											// invisible one reserves the badge height and keeps the
-											// rows aligned when a badge appears or goes away.
+											// rows aligned when a badge appears or goes away. The
+											// content is a hard space rather than a word so the
+											// spacer never reaches the translation catalogue.
 											<span className="newspack-subscribers__badge-placeholder" aria-hidden="true">
-												<Badge level="success" text={ __( 'Active', 'newspack-plugin' ) } />
+												<Badge intent="informational">{ ' ' }</Badge>
 											</span>
 										) }
 									</HStack>

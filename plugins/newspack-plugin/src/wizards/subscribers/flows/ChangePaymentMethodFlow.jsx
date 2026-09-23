@@ -91,6 +91,7 @@ export default function ChangePaymentMethodFlow( { subscription, paymentMethods,
 					} ) ) }
 					onChange={ value => setSelectedId( Number( value ) ) }
 					__nextHasNoMarginBottom
+					__next40pxDefaultSize
 				/>
 				<p className="newspack-subscribers__modal-text">
 					{ unchanged

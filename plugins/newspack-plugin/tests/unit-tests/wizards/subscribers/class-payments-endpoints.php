@@ -262,8 +262,8 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 	public function test_change_payment_method_same_token_unresolved_and_no_action_refusals() {
 		$this->login_as_admin();
 		$reader_id = $this->create_user();
-		$visa      = $this->save_card( $reader_id, 'tok_current', [ 'default' => true ] );
-		$this->save_card( $reader_id, 'tok_next', [ 'brand' => 'mastercard' ] );
+		$visa       = $this->save_card( $reader_id, 'tok_current', [ 'default' => true ] );
+		$mastercard = $this->save_card( $reader_id, 'tok_next', [ 'brand' => 'mastercard' ] );
 		$subscription = $this->create_tokenized_subscription( $reader_id );
 
 		$same = $this->post( '/subscriptions/' . $subscription->get_id() . '/payment-method', [ 'token_id' => $visa->get_id() ] );
@@ -272,8 +272,7 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		// A subscription whose meta value matches no saved token has no slot to
 		// swap through; the endpoint must refuse, not guess.
 		$orphaned = $this->create_tokenized_subscription( $reader_id, [ 'meta' => [ '_mock_token' => 'tok_from_before_migration' ] ] );
-		$mc       = \WC_Payment_Tokens::get( 2 );
-		$response = $this->post( '/subscriptions/' . $orphaned->get_id() . '/payment-method', [ 'token_id' => $mc->get_id() ] );
+		$response = $this->post( '/subscriptions/' . $orphaned->get_id() . '/payment-method', [ 'token_id' => $mastercard->get_id() ] );
 		$this->assertSame( 'newspack_payments_current_unresolved', $response->get_data()['code'] );
 		$this->assertSame( 'tok_from_before_migration', $orphaned->get_meta( '_mock_token' ) );
 
@@ -316,6 +315,12 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		$this->assertSame( 409, $response->get_status() );
 		$this->assertSame( 'newspack_payments_amount_changed', $response->get_data()['code'] );
 		$this->assertEmpty( $wc_mock_refunds, 'No refund is created on a drifted amount.' );
+
+		// The guard fails closed: omitting the amount is refused rather than
+		// skipping the comparison, so no caller can opt out of it.
+		$unpromised = $this->post( '/subscriptions/' . $subscription->get_id() . '/refund', [ 'refund' => true ] );
+		$this->assertSame( 'newspack_payments_expected_amount_required', $unpromised->get_data()['code'] );
+		$this->assertEmpty( $wc_mock_refunds, 'No refund is created without a promised amount.' );
 
 		$matching = $this->post(
 			'/subscriptions/' . $subscription->get_id() . '/refund',
@@ -382,6 +387,31 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		$this->assertSame( $visa->get_id(), $data['subscriptions'][0]['paymentTokenId'] );
 		$this->assertSame( 'mock_gateway', $data['subscriptions'][0]['paymentGatewayId'] );
 		$this->assertNull( $data['subscriptions'][0]['refundableAmount'], 'No paid order means nothing to promise a refund of.' );
+	}
+
+	/**
+	 * A card expires at the END of its printed month, so one printed with the
+	 * current month is still chargeable. Every other expiry fixture here is
+	 * years stale and would read as expired under an off-by-one comparison too;
+	 * this is the case that separates them.
+	 */
+	public function test_a_card_expiring_this_month_is_still_chargeable() {
+		$this->login_as_admin();
+		$reader_id = $this->create_user();
+		$this->save_card(
+			$reader_id,
+			'tok_expiring_now',
+			[
+				'brand' => 'mastercard',
+				'month' => gmdate( 'm' ),
+				'year'  => gmdate( 'Y' ),
+			]
+		);
+
+		$request = new WP_REST_Request( 'GET', self::BASE . '/subscribers/' . $reader_id );
+		$card    = array_column( rest_get_server()->dispatch( $request )->get_data()['paymentMethods'], null, 'brand' )['mastercard'];
+
+		$this->assertFalse( $card['isExpired'], 'A card is chargeable through the last day of its printed month.' );
 	}
 
 	/**
@@ -528,9 +558,10 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		$response = $this->post(
 			'/subscriptions/' . $subscription->get_id() . '/refund',
 			[
-				'refund' => true,
-				'cancel' => true,
-			] 
+				'refund'          => true,
+				'cancel'          => true,
+				'expected_amount' => 100,
+			]
 		);
 		$data     = $response->get_data();
 
@@ -572,9 +603,10 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		$response = $this->post(
 			'/subscriptions/' . $subscription->get_id() . '/refund',
 			[
-				'refund' => true,
-				'cancel' => true,
-			] 
+				'refund'          => true,
+				'cancel'          => true,
+				'expected_amount' => 100,
+			]
 		);
 
 		$this->assertSame( 400, $response->get_status() );
@@ -618,7 +650,13 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 			[ 'related_orders' => [ 'any' => [ $order ] ] ]
 		);
 
-		$response = $this->post( '/subscriptions/' . $subscription->get_id() . '/refund', [ 'refund' => true ] );
+		$response = $this->post(
+			'/subscriptions/' . $subscription->get_id() . '/refund',
+			[
+				'refund'          => true,
+				'expected_amount' => 40,
+			]
+		);
 		$data     = $response->get_data();
 
 		$this->assertSame( 200, $response->get_status() );
@@ -707,6 +745,63 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		$notes = implode( ' ', $subscription->data['order_notes'] );
 		$this->assertStringContainsString( 'Digital Monthly', $notes );
 		$this->assertStringContainsString( 'Print + Digital Yearly', $notes );
+	}
+
+	/**
+	 * The picker already refuses a donation as the swap's target. This is the
+	 * same door from the other side: a recurring donation carries the reader's
+	 * own chosen amount, and a swap would replace it with a fixed plan price
+	 * that the picker cannot offer back.
+	 */
+	public function test_plan_change_refuses_a_recurring_donation_as_the_source() {
+		$this->login_as_admin();
+		$reader_id           = $this->create_user();
+		$donation_product_id = 205;
+		wc_create_mock_product(
+			[
+				'id'   => $donation_product_id,
+				'name' => 'Monthly donation',
+				'type' => 'subscription',
+				'meta' => [ '_subscription_price' => 25 ],
+			]
+		);
+		update_post_meta( $donation_product_id, \Newspack\WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		wc_create_mock_product(
+			[
+				'id'   => 206,
+				'name' => 'Digital Monthly',
+				'type' => 'subscription',
+				'meta' => [ '_subscription_price' => 10 ],
+			]
+		);
+		$donation_subscription = $this->create_tokenized_subscription(
+			$reader_id,
+			[
+				'items' => [
+					505 => new WC_Order_Item_Product(
+						[
+							'id'         => 505,
+							'product_id' => $donation_product_id,
+							'quantity'   => 1,
+						]
+					),
+				],
+			]
+		);
+
+		$refusal = $this->post( '/subscriptions/' . $donation_subscription->get_id() . '/plan', [ 'product_id' => 206 ] );
+
+		$this->assertSame( 'newspack_payments_donation_subscription', $refusal->get_data()['code'] );
+		$this->assertSame(
+			$donation_product_id,
+			(int) \Newspack\WooCommerce_Subscriptions::get_subscription_product_id( $donation_subscription ),
+			'A refused swap leaves the donation on its own product.'
+		);
+
+		// The profile must not offer what the endpoint refuses.
+		$request      = new WP_REST_Request( 'GET', self::BASE . '/subscribers/' . $reader_id );
+		$subscription = rest_get_server()->dispatch( $request )->get_data()['subscriptions'][0];
+		$this->assertFalse( $subscription['canChangePlan'], 'The menu hides an action the server refuses.' );
 	}
 
 	/**
@@ -962,7 +1057,12 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		$this->assertCount( 1, $options, 'Only the other individual subscription product is offered.' );
 		$this->assertSame( 202, $options[0]['id'] );
 		$this->assertSame( 150.0, (float) $options[0]['amount'] );
-		$this->assertSame( 'year', $options[0]['period'] );
+		// The cadence is rendered server-side so the picker never has to build a
+		// plural in English, and the amount travels with it — a label reading
+		// "150 / year" with no currency is what a bare cadence string produces.
+		$this->assertStringContainsString( 'year', $options[0]['priceString'] );
+		$this->assertStringContainsString( '150', $options[0]['priceString'] );
+		$this->assertStringNotContainsString( '<', $options[0]['priceString'], 'The label is plain text, not price markup.' );
 	}
 
 	/**

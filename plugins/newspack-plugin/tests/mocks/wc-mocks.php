@@ -1666,7 +1666,15 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 		 * @return string
 		 */
 		public static function get_price_string( $product, $include = [] ) {
-			$price    = isset( $include['price'] ) ? (string) $include['price'] : '';
+			// Real WCS renders the price itself when the caller does not supply
+			// one, so a caller that asks only for the cadence still gets the
+			// amount in front of it.
+			if ( isset( $include['price'] ) ) {
+				$price = (string) $include['price'];
+			} else {
+				$raw   = self::get_price( $product );
+				$price = function_exists( 'wc_price' ) ? wc_price( $raw ) : (string) $raw;
+			}
 			$include_period = ! array_key_exists( 'subscription_period', $include ) || $include['subscription_period'];
 			$suffix = '';
 			if ( $include_period ) {

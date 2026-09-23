@@ -28,6 +28,14 @@ class Subscribers_Payments {
 	const REST_BASE = '/wizard/newspack-subscribers';
 
 	/**
+	 * How many of a subscription's most recent orders latest_refundable_order()
+	 * will hydrate before giving up. The refundable order is the newest one in
+	 * every ordinary case; the bound is what stops a long run of failed renewals
+	 * from loading the whole order history on a profile read.
+	 */
+	const REFUNDABLE_ORDER_SCAN = 10;
+
+	/**
 	 * Register the payment-action routes.
 	 *
 	 * Called from Subscribers_Wizard::register_api_endpoints(), so these routes
@@ -108,6 +116,9 @@ class Subscribers_Payments {
 					],
 					// The amount the client promised the admin; the refund is
 					// refused if the real balance has drifted since (see api_refund).
+					// Optional here because a cancel-only request has no amount to
+					// promise; api_refund requires it whenever `refund` is true, so
+					// the guard cannot be skipped by omitting the parameter.
 					'expected_amount' => [
 						'type'              => 'number',
 						'required'          => false,
@@ -270,10 +281,31 @@ class Subscribers_Payments {
 		if ( ! $subscription->has_status( [ 'active' ] ) || ! empty( $subscription->get_items( [ 'coupon', 'fee', 'shipping' ] ) ) ) {
 			return false;
 		}
+		if ( self::is_donation_subscription( $subscription ) ) {
+			return false;
+		}
+		return self::is_single_standard_line( $subscription );
+	}
+
+	/**
+	 * Whether a subscription carries exactly one quantity-1 line item.
+	 *
+	 * The swap replaces the items wholesale with one such line, so any other
+	 * shape would silently drop an extra recurring product or a quantity from
+	 * every future renewal. Shared so the menu and the endpoint cannot drift
+	 * into offering an action the server then refuses.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return bool
+	 */
+	private static function is_single_standard_line( $subscription ) {
 		$line_items = $subscription->get_items();
+		if ( 1 !== count( $line_items ) ) {
+			return false;
+		}
 		$first_item = reset( $line_items );
-		return 1 === count( $line_items )
-			&& ( ! $first_item || ! method_exists( $first_item, 'get_quantity' ) || 1 === (int) $first_item->get_quantity() );
+		return ! $first_item || ! method_exists( $first_item, 'get_quantity' ) || 1 === (int) $first_item->get_quantity();
 	}
 
 	/**
@@ -394,6 +426,17 @@ class Subscribers_Payments {
 			return new \WP_Error(
 				'newspack_payments_not_changeable',
 				__( 'Only a live subscription can change its payment method.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		// A manual-renewal subscription keeps the gateway string and token meta of
+		// whatever it was converted from, so every guard below would pass and the
+		// swap would write a card onto a subscription that never auto-charges.
+		// The menu already hides the action; the server enforces the same rule.
+		if ( method_exists( $subscription, 'is_manual' ) && $subscription->is_manual() ) {
+			return new \WP_Error(
+				'newspack_payments_manual_renewal',
+				__( 'This subscription renews manually, so it does not charge a saved card.', 'newspack-plugin' ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -540,7 +583,14 @@ class Subscribers_Payments {
 			// between, refuse rather than silently move a different amount than the
 			// one the admin confirmed.
 			$expected = $request->get_param( 'expected_amount' );
-			if ( null !== $expected && round( (float) $expected, self::price_decimals() ) !== round( $amount, self::price_decimals() ) ) {
+			if ( null === $expected ) {
+				return new \WP_Error(
+					'newspack_payments_expected_amount_required',
+					__( 'A refund must state the amount it expects to move. Reload the profile and try again.', 'newspack-plugin' ),
+					[ 'status' => 400 ]
+				);
+			}
+			if ( round( (float) $expected, self::price_decimals() ) !== round( $amount, self::price_decimals() ) ) {
 				return new \WP_Error(
 					'newspack_payments_amount_changed',
 					__( 'The refundable amount has changed since this page was loaded. Reload the profile and try again.', 'newspack-plugin' ),
@@ -574,6 +624,17 @@ class Subscribers_Payments {
 			);
 			$result['refunded']      = $amount;
 			$result['gatewayRefund'] = (bool) $gateway_refund;
+			// WCS cancels a pending-cancel subscription whose latest order is fully
+			// refunded, and it does so through an instance of its own that it built
+			// from the order (WC_Subscriptions_Order::maybe_cancel_subscription_on_full_refund).
+			// WooCommerce keeps no identity map, so that write is invisible on the
+			// object loaded here: re-read before anything asks for the status, or
+			// the cancel below transitions a subscription that is already cancelled
+			// and WCS throws.
+			$reloaded = self::get_subscription( $subscription->get_id() );
+			if ( ! is_wp_error( $reloaded ) ) {
+				$subscription = $reloaded;
+			}
 			// A full refund can cancel the subscription through WCS's own hooks;
 			// report what actually happened, not what was requested.
 			$result['cancelled'] = $subscription->has_status( [ 'cancelled' ] );
@@ -616,9 +677,12 @@ class Subscribers_Payments {
 	 */
 	private static function format_note_amount( $amount, $order ) {
 		if ( function_exists( 'wc_price' ) ) {
-			return wp_strip_all_tags( wc_price( $amount, [ 'currency' => $order->get_currency() ] ) );
+			// WooCommerce stores currency symbols as HTML entities, and stripping
+			// the markup leaves the entity behind — so a note read as plain text
+			// (an export, a support paste) would show "&#36;100.00". Decode it.
+			return html_entity_decode( wp_strip_all_tags( wc_price( $amount, [ 'currency' => $order->get_currency() ] ) ), ENT_QUOTES, get_bloginfo( 'charset' ) );
 		}
-		return trim( number_format( $amount, 2 ) . ' ' . $order->get_currency() );
+		return trim( number_format( $amount, self::price_decimals() ) . ' ' . $order->get_currency() );
 	}
 
 	/**
@@ -664,6 +728,17 @@ class Subscribers_Payments {
 				);
 			}
 		}
+		// The picker refuses a donation as the target; refusing it as the source
+		// closes the same harm from the other side. A swap would drop the
+		// reader's chosen amount for a fixed plan price, and the picker cannot
+		// offer the donation back, so the move is one-way through this screen.
+		if ( self::is_donation_subscription( $subscription ) ) {
+			return new \WP_Error(
+				'newspack_payments_donation_subscription',
+				__( 'Recurring donations cannot be moved onto a plan here. Use the subscription edit screen instead.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
 		// A coupon, fee or shipping line would not survive the swap intact —
 		// calculate_totals() does not re-apply coupons, so a recurring discount
 		// would silently die while its line stayed on the subscription. Refuse
@@ -676,12 +751,7 @@ class Subscribers_Payments {
 				[ 'status' => 400 ]
 			);
 		}
-		// The swap replaces the items wholesale with one quantity-1 line, so
-		// only that exact shape can be migrated without silently dropping an
-		// extra recurring product or a quantity from future renewals.
-		$line_items = $subscription->get_items();
-		$first_item = reset( $line_items );
-		if ( 1 !== count( $line_items ) || ( $first_item && method_exists( $first_item, 'get_quantity' ) && 1 !== (int) $first_item->get_quantity() ) ) {
+		if ( ! self::is_single_standard_line( $subscription ) ) {
 			return new \WP_Error(
 				'newspack_payments_items_not_swappable',
 				__( 'This subscription is not a single standard plan, so its plan cannot be changed here. Use the subscription edit screen instead.', 'newspack-plugin' ),
@@ -772,7 +842,11 @@ class Subscribers_Payments {
 				[
 					'type'   => [ 'subscription' ],
 					'status' => 'publish',
-					'limit'  => 200,
+					// Unbounded, matching subscription_product_names() and the rest
+					// of the plugin: a cap would drop plans from the picker with
+					// nothing on screen to say a plan is missing, and the
+					// eligibility filter below already narrows what is offered.
+					'limit'  => -1,
 				]
 			)
 			: [];
@@ -781,12 +855,14 @@ class Subscribers_Payments {
 				continue;
 			}
 			$options[] = [
-				'id'       => (int) $product->get_id(),
-				'name'     => (string) $product->get_name(),
-				'amount'   => (float) \WC_Subscriptions_Product::get_price( $product ),
-				'currency' => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '',
-				'period'   => (string) \WC_Subscriptions_Product::get_period( $product ),
-				'interval' => (int) \WC_Subscriptions_Product::get_interval( $product ),
+				'id'          => (int) $product->get_id(),
+				'name'        => (string) $product->get_name(),
+				'amount'      => (float) \WC_Subscriptions_Product::get_price( $product ),
+				'currency'    => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '',
+				// The cadence is built here rather than in the picker: WCS owns the
+				// translated period names and the plural forms, and a client-side
+				// "every {n} {period}s" is English-only however the site is set up.
+				'priceString' => self::plan_price_string( $product ),
 			];
 		}
 		return rest_ensure_response( [ 'options' => $options ] );
@@ -888,6 +964,10 @@ class Subscribers_Payments {
 		}
 		$order_ids = array_map( 'intval', array_values( $order_ids ) );
 		rsort( $order_ids );
+		// Bounded so a subscription whose recent renewals all failed cannot turn
+		// this into one order load per renewal ever made. A refundable order
+		// further back than this is money the admin refunds from the order screen.
+		$order_ids = array_slice( $order_ids, 0, self::REFUNDABLE_ORDER_SCAN );
 		foreach ( $order_ids as $order_id ) {
 			$order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : false;
 			if ( $order && $order->is_paid() && self::order_remaining( $order ) > 0 ) {
@@ -929,6 +1009,57 @@ class Subscribers_Payments {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * A plan's price and cadence as one translated string, e.g. "$10.00 / month".
+	 *
+	 * The sign-up fee and trial are left out: neither applies to a plan change,
+	 * which charges nothing now and bills the new price at the scheduled renewal,
+	 * so naming them in the picker would promise the admin something that will
+	 * not happen.
+	 *
+	 * @param \WC_Product $product The subscription product.
+	 *
+	 * @return string
+	 */
+	private static function plan_price_string( $product ) {
+		if ( ! method_exists( '\WC_Subscriptions_Product', 'get_price_string' ) ) {
+			return '';
+		}
+		// The formatted price is passed in rather than left to WCS: its renderer
+		// otherwise emits the bare number, so the picker would read "100 / year"
+		// with no currency anywhere in the label.
+		$price_string = \WC_Subscriptions_Product::get_price_string(
+			$product,
+			[
+				'price'        => function_exists( 'wc_price' )
+					? wc_price( \WC_Subscriptions_Product::get_price( $product ) )
+					: (string) \WC_Subscriptions_Product::get_price( $product ),
+				'sign_up_fee'  => false,
+				'trial_length' => false,
+			]
+		);
+		return html_entity_decode( wp_strip_all_tags( (string) $price_string ), ENT_QUOTES, get_bloginfo( 'charset' ) );
+	}
+
+	/**
+	 * Whether a subscription is one of Newspack's recurring donations.
+	 *
+	 * A donation carries the reader's chosen amount on its own line item, and the
+	 * plan picker only ever offers ordinary plans — so a swap would replace that
+	 * amount with a fixed price and leave no way back through this screen.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return bool
+	 */
+	private static function is_donation_subscription( $subscription ) {
+		if ( ! class_exists( '\Newspack\Donations' ) || ! method_exists( '\Newspack\Donations', 'is_donation_product' ) ) {
+			return false;
+		}
+		$product_id = WooCommerce_Subscriptions::get_subscription_product_id( $subscription );
+		return $product_id && Donations::is_donation_product( $product_id );
 	}
 
 	/**

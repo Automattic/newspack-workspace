@@ -142,23 +142,14 @@ export default function PersonProfile() {
 	// The money flows: which modal is open (null for none), the snackbar shown
 	// after one completes, and the write calls the modals run. The snackbar's
 	// `id` makes a repeated identical message a new render (so it re-announces
-	// and its timer restarts), and `isError` styles a refusal apart from a
-	// confirmation.
+	// and its dismiss timer restarts), and `isError` styles a refusal apart from
+	// a confirmation and raises how insistently it is announced.
 	const [ modal, setModal ] = useState( null );
 	const [ snackbar, setSnackbar ] = useState( null );
+	const [ promotedCardId, setPromotedCardId ] = useState( 0 );
 	const paymentActions = usePaymentActions( id );
 
 	const showSnackbar = ( message, isError = false ) => setSnackbar( { message, isError, id: Date.now() } );
-
-	// A lone Snackbar (outside a SnackbarList) never dismisses itself, so a
-	// success toast would sit there until clicked.
-	useEffect( () => {
-		if ( ! snackbar ) {
-			return;
-		}
-		const timer = setTimeout( () => setSnackbar( null ), 10000 );
-		return () => clearTimeout( timer );
-	}, [ snackbar ] );
 
 	// Every flow ends the same way: close the modal, tell the admin what
 	// happened, and refetch the profile so the screen renders the server's
@@ -175,6 +166,9 @@ export default function PersonProfile() {
 	const makeDefault = async pm => {
 		try {
 			await paymentActions.setDefaultPaymentMethod( pm.id );
+			// The card's kebab disappears once it is the default, so name the card
+			// the list should hand focus to (see PaymentMethodsList).
+			setPromotedCardId( pm.id );
 			// translators: %s is a card label (e.g. "Visa ending in 4242").
 			completeFlow( sprintf( __( '%s is now the default payment method.', 'newspack-plugin' ), cardLabel( pm ) ) );
 		} catch ( e ) {
@@ -478,7 +472,7 @@ export default function PersonProfile() {
 				description={ __( 'The cards on file for this subscriber. Renewals fall back to the default.', 'newspack-plugin' ) }
 				showDivider={ false }
 			>
-				<PaymentMethodsList paymentMethods={ subscriber.paymentMethods || [] } onMakeDefault={ makeDefault } />
+				<PaymentMethodsList paymentMethods={ subscriber.paymentMethods || [] } onMakeDefault={ makeDefault } focusCardId={ promotedCardId } />
 			</Row>
 
 			{ 'payment' === modal?.kind && (
@@ -510,7 +504,9 @@ export default function PersonProfile() {
 
 			{ snackbar && (
 				<div className={ `newspack-subscribers__snackbar${ snackbar.isError ? ' newspack-subscribers__snackbar--error' : '' }` }>
-					<Snackbar key={ snackbar.id } onRemove={ () => setSnackbar( null ) }>
+					{ /* A refusal is announced assertively: it interrupts, because the
+					     admin's action did not happen and the message self-dismisses. */ }
+					<Snackbar key={ snackbar.id } politeness={ snackbar.isError ? 'assertive' : 'polite' } onRemove={ () => setSnackbar( null ) }>
 						{ snackbar.message }
 					</Snackbar>
 				</div>
