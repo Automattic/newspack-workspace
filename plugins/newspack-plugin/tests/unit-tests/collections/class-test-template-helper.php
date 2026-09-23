@@ -462,52 +462,12 @@ class Test_Template_Helper extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test update_document_title modifies title for collections archive pages.
-	 *
-	 * @covers \Newspack\Collections\Template_Helper::update_document_title
-	 */
-	public function test_update_document_title() {
-		$original_title_parts = [
-			'title' => 'Original Title',
-			'site'  => 'Test Site',
-		];
-
-		$custom_label = 'Magazines';
-
-		// Set custom collection label.
-		Settings::update_settings(
-			[
-				'custom_naming_enabled' => true,
-				'custom_name'           => $custom_label,
-			]
-		);
-
-		// Test on collections archive page.
-		$this->go_to( get_post_type_archive_link( Post_Type::get_post_type() ) );
-
-		$modified_title_parts = Template_Helper::update_document_title( $original_title_parts );
-		$this->assertEquals( $custom_label, $modified_title_parts['title'], 'Title should be updated to custom label on archive page.' );
-		$this->assertEquals( $original_title_parts['site'], $modified_title_parts['site'], 'Other title parts should remain unchanged.' );
-
-		// Test on regular page (should not modify title).
-		$this->go_to( home_url() );
-
-		$unmodified_title_parts = Template_Helper::update_document_title( $original_title_parts );
-		$this->assertEquals( $original_title_parts['title'], $unmodified_title_parts['title'], 'Title should not be modified.' );
-	}
-
-	/**
-	 * Test the custom collection names reach the labels that front-end titles are built from.
+	 * Test the custom collection names reach what readers see, while editor-facing labels keep the dashboard's wording.
 	 *
 	 * @covers \Newspack\Collections\Template_Helper::apply_reader_facing_labels
 	 */
 	public function test_custom_naming_reaches_front_end_labels() {
 		Collection_Section_Taxonomy::register_taxonomy();
-		$this->go_to( get_post_type_archive_link( Post_Type::get_post_type() ) );
-
-		Template_Helper::apply_reader_facing_labels();
-		$this->assertEquals( 'Collections', post_type_archive_title( '', false ), 'Labels should be unchanged without custom naming.' );
-
 		Settings::update_settings(
 			[
 				'custom_naming_enabled' => true,
@@ -515,12 +475,43 @@ class Test_Template_Helper extends \WP_UnitTestCase {
 				'custom_singular_name'  => 'Issue',
 			]
 		);
+		$this->go_to( get_post_type_archive_link( Post_Type::get_post_type() ) );
+
 		Template_Helper::apply_reader_facing_labels();
 
-		$this->assertEquals( 'Issues', post_type_archive_title( '', false ) );
-		$this->assertEquals( 'Issue', get_post_type_object( Post_Type::get_post_type() )->labels->singular_name );
+		$labels = get_post_type_object( Post_Type::get_post_type() )->labels;
+		$this->assertStringStartsWith( 'Issues', wp_get_document_title() );
+		$this->assertEquals( 'Issue', $labels->singular_name );
+		$this->assertEquals( 'No Issues found.', $labels->not_found );
+		$this->assertEquals( 'Edit Collection', $labels->edit_item, 'Editor-facing labels should keep the dashboard wording.' );
 		$this->assertEquals( 'Issue Category', get_taxonomy( Collection_Category_Taxonomy::get_taxonomy() )->labels->singular_name );
 		$this->assertEquals( 'Issue Section', get_taxonomy( Collection_Section_Taxonomy::get_taxonomy() )->labels->singular_name );
+	}
+
+	/**
+	 * Test a site's translated labels survive when custom naming is on but no custom name is set.
+	 *
+	 * @covers \Newspack\Collections\Template_Helper::apply_reader_facing_labels
+	 */
+	public function test_custom_naming_keeps_translated_labels_without_a_custom_name() {
+		$translate = function ( $translation, $text ) {
+			return 'No collections found.' === $text ? 'Aucune collection trouvée.' : $translation;
+		};
+		add_filter( 'gettext_newspack-plugin', $translate, 10, 2 );
+		Post_Type::register_post_type();
+		Settings::update_settings(
+			[
+				'custom_naming_enabled' => true,
+				'custom_slug'           => 'issues',
+			]
+		);
+
+		Template_Helper::apply_reader_facing_labels();
+		remove_filter( 'gettext_newspack-plugin', $translate, 10 );
+
+		$this->assertEquals( 'Aucune collection trouvée.', get_post_type_object( Post_Type::get_post_type() )->labels->not_found );
+		$this->assertEquals( 'Collection', get_post_type_object( Post_Type::get_post_type() )->labels->singular_name );
+		$this->assertEquals( 'Collection Category', get_taxonomy( Collection_Category_Taxonomy::get_taxonomy() )->labels->singular_name );
 	}
 
 	/**

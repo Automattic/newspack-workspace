@@ -30,49 +30,48 @@ class Template_Helper {
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 5 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'archive_filters' ] );
 		add_filter( 'jetpack_relatedposts_filter_enabled_for_request', [ __CLASS__, 'disable_jetpack_related_posts' ] );
-		add_filter( 'document_title_parts', [ __CLASS__, 'update_document_title' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'apply_reader_facing_labels' ] );
 	}
 
 	/**
-	 * Swap the custom collection names into the post type and taxonomy labels for front-end requests.
+	 * Swap the custom collection names into the labels readers see: archive and page titles, breadcrumbs,
+	 * feeds and nav menu items all read them.
 	 *
-	 * Titles, breadcrumbs, feeds and SEO plugins read these labels, so this is what makes custom naming
-	 * reach readers everywhere. The dashboard and REST API keep the registered "Collections" labels.
+	 * Runs on `template_redirect` because that fires for every front-end render, including feeds and embeds,
+	 * and never for the dashboard or the REST API, which keep the registered "Collections" labels. Only labels
+	 * built from a name the publisher actually set are replaced, so fully translated defaults stay intact.
 	 */
 	public static function apply_reader_facing_labels() {
 		if ( ! Settings::get_setting( 'custom_naming_enabled', false ) ) {
 			return;
 		}
 
-		$plural   = Settings::get_collection_label();
-		$singular = Settings::get_collection_singular_label();
+		$plural   = Settings::get_custom_name( 'custom_name' );
+		$singular = Settings::get_custom_name( 'custom_singular_name' );
 
 		$post_type = get_post_type_object( Post_Type::get_post_type() );
+		if ( $post_type && $plural ) {
+			$post_type->label             = $plural;
+			$post_type->labels->name      = $plural;
+			$post_type->labels->all_items = sprintf(
+				/* translators: %s: plural collection name, e.g. "Issues". */
+				_x( 'All %s', 'collection post type label', 'newspack-plugin' ),
+				$plural
+			);
+			$post_type->labels->archives  = $post_type->labels->all_items;
+			$post_type->labels->not_found = sprintf(
+				/* translators: %s: plural collection name, e.g. "Issues". */
+				_x( 'No %s found.', 'collection post type label', 'newspack-plugin' ),
+				$plural
+			);
+		}
+
+		if ( ! $singular ) {
+			return;
+		}
+
 		if ( $post_type ) {
-			$post_type->label = $plural;
-			$labels           = [
-				/* translators: %s: plural collection name, e.g. "Issues". */
-				'all_items'      => sprintf( _x( 'All %s', 'collection post type label', 'newspack-plugin' ), $plural ),
-				/* translators: %s: singular collection name, e.g. "Issue". */
-				'edit_item'      => sprintf( _x( 'Edit %s', 'collection post type label', 'newspack-plugin' ), $singular ),
-				/* translators: %s: plural collection name, e.g. "Issues". */
-				'not_found'      => sprintf( _x( 'No %s found.', 'collection post type label', 'newspack-plugin' ), $plural ),
-				/* translators: %s: plural collection name, e.g. "Issues". */
-				'search_items'   => sprintf( _x( 'Search %s', 'collection post type label', 'newspack-plugin' ), $plural ),
-				/* translators: %s: singular collection name, e.g. "Issue". */
-				'view_item'      => sprintf( _x( 'View %s', 'collection post type label', 'newspack-plugin' ), $singular ),
-				/* translators: %s: plural collection name, e.g. "Issues". */
-				'view_items'     => sprintf( _x( 'View %s', 'collection post type label', 'newspack-plugin' ), $plural ),
-				'menu_name'      => $plural,
-				'name'           => $plural,
-				'name_admin_bar' => $singular,
-				'singular_name'  => $singular,
-			];
-			$labels['archives'] = $labels['all_items'];
-			foreach ( $labels as $key => $label ) {
-				$post_type->labels->$key = $label;
-			}
+			$post_type->labels->singular_name = $singular;
 		}
 
 		$taxonomy_labels = [
@@ -480,7 +479,7 @@ class Template_Helper {
 		$aria_label = sprintf(
 			/* translators: %s is the collection name (e.g., "Collections", "Issues") */
 			_x( 'See all %s', 'see all collections link aria-label', 'newspack-plugin' ),
-			strtolower( Settings::get_collection_label() )
+			Settings::get_collection_label()
 		);
 
 		$html = sprintf(
@@ -506,20 +505,6 @@ class Template_Helper {
 	 */
 	public static function render_separator( $class_name = '' ) {
 		return '<hr class="has-light-gray-background-color has-background is-style-wide ' . esc_attr( $class_name ) . '"/>';
-	}
-
-	/**
-	 * Filter document title for collections pages to use custom label.
-	 *
-	 * @param array $title_parts The document title parts.
-	 * @return array Modified title parts.
-	 */
-	public static function update_document_title( $title_parts ) {
-		if ( is_post_type_archive( Post_Type::get_post_type() ) ) {
-			$title_parts['title'] = Settings::get_collection_label();
-		}
-
-		return $title_parts;
 	}
 
 	/**
