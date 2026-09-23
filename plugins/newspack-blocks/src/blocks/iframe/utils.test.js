@@ -9,6 +9,7 @@ describe( 'isEmbeddableSrc', () => {
 		[ 'data scheme', 'data:text/html,<p>x</p>' ],
 		[ 'vbscript scheme', 'vbscript:msgbox(1)' ],
 		[ 'empty', '' ],
+		[ 'whitespace only', '   ' ],
 	] )( 'does not load a source outside http(s): %s', ( _label, src ) => {
 		expect( isEmbeddableSrc( src ) ).toBe( false );
 	} );

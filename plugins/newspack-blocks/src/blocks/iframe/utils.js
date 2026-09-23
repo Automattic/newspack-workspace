@@ -9,7 +9,8 @@
  * @return {boolean} Whether the source is http(s), or relative to the site.
  */
 export const isEmbeddableSrc = src => {
-	if ( ! src ) {
+	// A blank source resolves to the current page, but the server renders nothing for it.
+	if ( ! src || ! src.trim() ) {
 		return false;
 	}
 	try {
