@@ -15,10 +15,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // mock-prefixed so Jest's hoisted jest.mock factories may close over them.
-const mockGates = [
+const mockPlainGates = [
 	{ id: 1, title: 'Gate A', status: 'active', priority: 0 },
 	{ id: 2, title: 'Gate B', status: 'active', priority: 1 },
 ];
+let mockGates = mockPlainGates;
 const mockAddNotice = jest.fn();
 const mockResetNotices = jest.fn();
 const mockResetError = jest.fn();
@@ -54,14 +55,20 @@ jest.mock( '@wordpress/components', () => {
 } );
 
 // Button/Modal passthroughs; CardSortableList exposes its drag callback as a
-// clickable button so the test can reorder (0 -> 1) and enable Save.
+// clickable button so the test can reorder (0 -> 1) and enable Save, and
+// renders each item's description so the priority warnings are visible.
 jest.mock( '../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
 		Button: ( { children, onClick, disabled } ) => React.createElement( 'button', { onClick, disabled }, children ),
 		Modal: ( { children } ) => React.createElement( 'div', { role: 'dialog' }, children ),
-		CardSortableList: ( { onDragCallback } ) =>
-			React.createElement( 'button', { 'data-testid': 'drag', onClick: () => onDragCallback( 0, 1 ) }, 'drag' ),
+		CardSortableList: ( { items, onDragCallback } ) =>
+			React.createElement(
+				'div',
+				null,
+				React.createElement( 'button', { 'data-testid': 'drag', onClick: () => onDragCallback( 0, 1 ) }, 'drag' ),
+				items.map( item => item.description && React.createElement( 'p', { key: item.id }, item.description ) )
+			),
 	};
 } );
 
@@ -74,13 +81,16 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 } ) );
 
 // Avoid pulling in the real gate-status helpers; the modal only needs strings.
+// The priority warnings are the real ones, since the case below tests them.
 jest.mock( './utils', () => ( {
 	getGateStatus: () => 'Active',
 	getGateStatusBadgeIntent: () => 'stable',
+	getPriorityWarnings: jest.requireActual( './utils' ).getPriorityWarnings,
 } ) );
 
 describe( 'Content Gates Priority modal', () => {
 	beforeEach( () => {
+		mockGates = mockPlainGates;
 		mockAddNotice.mockReset();
 		mockResetNotices.mockReset();
 		mockResetError.mockReset();
@@ -108,5 +118,38 @@ describe( 'Content Gates Priority modal', () => {
 
 		// Rollback: the optimistic reorder is reverted to the original gate order.
 		expect( updateGatesData ).toHaveBeenCalledWith( mockGates );
+	} );
+
+	it( 'warns about a gate ranked above a paid gate, and follows the unsaved order (NPPD-2289)', () => {
+		const allPosts = [ { slug: 'post_types', value: [ 'post' ] } ];
+		mockGates = [
+			{
+				id: 1,
+				title: 'Registration wall',
+				status: 'publish',
+				priority: 0,
+				content_rules: allPosts,
+				registration: { active: true },
+				custom_access: { active: false, access_rules: [] },
+			},
+			{
+				id: 2,
+				title: 'Paid wall',
+				status: 'publish',
+				priority: 1,
+				content_rules: allPosts,
+				registration: { active: true },
+				custom_access: { active: true, access_rules: [ [ { slug: 'subscription', value: [ '10' ] } ] ] },
+			},
+		];
+		const ContentGatesPriority = require( './content-gates-priority' ).default;
+		render( <ContentGatesPriority showModal={ true } closeModal={ () => {} } updateGatesData={ () => {} } /> );
+
+		expect( screen.getByText( /Ranked above “Paid wall”/ ) ).toBeTruthy();
+
+		// Drag the registration wall below the paid wall; the warning goes with the old order.
+		fireEvent.click( screen.getByTestId( 'drag' ) );
+
+		expect( screen.queryByText( /Ranked above/ ) ).toBeNull();
 	} );
 } );

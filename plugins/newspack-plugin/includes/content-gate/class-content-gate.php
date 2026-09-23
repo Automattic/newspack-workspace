@@ -2606,10 +2606,15 @@ class Content_Gate {
 		);
 		$gates = array_map( [ __CLASS__, 'get_gate' ], wp_list_pluck( $posts, 'ID' ) );
 		if ( $post_type === self::GATE_CPT ) {
+			// The first gate matching a post decides access to it, so the order has
+			// to be total. Equal priorities (a partial priority save, a direct meta
+			// write) fall back to the older gate, matching where new gates go: after
+			// every existing one. Left to the query's own order, a tie would go to
+			// the newest gate.
 			usort(
 				$gates,
 				function( $a, $b ) {
-					return $a['priority'] <=> $b['priority'];
+					return [ $a['priority'], $a['id'] ] <=> [ $b['priority'], $b['id'] ];
 				}
 			);
 		}

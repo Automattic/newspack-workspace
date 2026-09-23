@@ -15,6 +15,8 @@ import { gateMatchesPost } from './gate-matching';
 
 const { gates = [], taxonomyMap = {}, canEditGates = false } = window.newspackContentGates || {};
 
+const renderGateLink = gate => ( canEditGates && gate.edit_url ? <a href={ gate.edit_url }>{ gate.title }</a> : gate.title );
+
 function PostSettings() {
 	const { meta, postId, postType, termsByTax } = useSelect( select => {
 		const { getEditedPostAttribute, getCurrentPostId } = select( 'core/editor' );
@@ -43,15 +45,24 @@ function PostSettings() {
 			title={ __( 'Access Control Settings', 'newspack-plugin' ) }
 		>
 			{ matchingGates.length > 0 ? (
-				<p>
-					{ __( 'Gates that apply to this post: ', 'newspack-plugin' ) }
-					{ matchingGates.map( ( gate, index ) => (
-						<span key={ gate.id }>
-							{ index > 0 && ', ' }
-							{ canEditGates && gate.edit_url ? <a href={ gate.edit_url }>{ gate.title }</a> : gate.title }
-						</span>
-					) ) }
-				</p>
+				<>
+					{ /* Gates arrive in priority order, and the first matching gate decides access alone (NPPD-2289). */ }
+					<p>
+						{ __( 'Gate that decides access to this post: ', 'newspack-plugin' ) }
+						{ renderGateLink( matchingGates[ 0 ] ) }
+					</p>
+					{ matchingGates.length > 1 && (
+						<p>
+							{ __( 'Also matching, but ranked lower: ', 'newspack-plugin' ) }
+							{ matchingGates.slice( 1 ).map( ( gate, index ) => (
+								<span key={ gate.id }>
+									{ index > 0 && ', ' }
+									{ renderGateLink( gate ) }
+								</span>
+							) ) }
+						</p>
+					) }
+				</>
 			) : (
 				<p>{ __( 'No gates apply to this post.', 'newspack-plugin' ) }</p>
 			) }

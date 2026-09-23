@@ -1725,7 +1725,7 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	/**
 	 * When regrouping merges plans a previous run migrated separately — the likely
 	 * shape after a --plan run — the gates those plans were written to are named so
-	 * the operator can retire them before a stale, stricter gate wins the evaluation.
+	 * the operator can retire them before a stale gate, ranked above the new one, decides.
 	 */
 	public function test_find_superseded_gates_names_gates_the_merged_plans_already_have() {
 		$group          = [ $this->make_named_plan( 'Plan A' ), $this->make_named_plan( 'Plan B' ) ];
@@ -1862,8 +1862,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	/**
 	 * Two plans overlapping on one list without matching on the rest become two
 	 * gates over that list. WooCommerce Memberships grants it to a holder of either
-	 * plan while gates resolve restrictive-wins, so the stricter gate would decide
-	 * and the other plan's readers would lose the list. Computable from the grouping,
+	 * plan while only the higher-priority gate decides, so the other plan's readers
+	 * would lose the list. Computable from the grouping,
 	 * so it is caught before any write.
 	 */
 	public function test_find_lists_shared_across_groups_fires_for_overlapping_groups() {

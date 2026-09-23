@@ -18,7 +18,7 @@ import { Button, CardSortableList, Modal } from '../../../../../packages/compone
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
-import { getGateStatus, getGateStatusBadgeIntent } from './utils';
+import { getGateStatus, getGateStatusBadgeIntent, getPriorityWarnings } from './utils';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
 const ContentGatesPriority = ( {
@@ -34,15 +34,16 @@ const ContentGatesPriority = ( {
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ sortedGates, setSortedGates ] = useState< Gate[] >( gates );
-	const gateItems = useMemo(
-		() =>
-			sortedGates.map( gate => ( {
-				id: gate.id,
-				title: gate.title,
-				badge: { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) },
-			} ) ),
-		[ sortedGates ]
-	);
+	const gateItems = useMemo( () => {
+		// Recomputed from the unsaved order, so a warning follows each drag.
+		const priorityWarnings = getPriorityWarnings( sortedGates );
+		return sortedGates.map( gate => ( {
+			id: gate.id,
+			title: gate.title,
+			description: priorityWarnings[ gate.id ],
+			badge: { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) },
+		} ) );
+	}, [ sortedGates ] );
 
 	const updatePriorities = useRef< ( updates: Gate[] ) => void >();
 	const handleUpdateGatePriorities = ( updates: Gate[] ) => {
@@ -112,7 +113,7 @@ const ContentGatesPriority = ( {
 				<VStack spacing={ 6 }>
 					<span>
 						{ __(
-							'Gates are checked in this order. If content matches more than one gate, only the first matching gate will apply.',
+							'Gates are checked in this order. When content matches more than one gate, only the first matching gate decides who can read it.',
 							'newspack-plugin'
 						) }
 					</span>

@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 
 /**
@@ -132,6 +132,136 @@ export const getGateStatus = ( status: GateStatus ) => {
 // An inactive gate is an unpublished draft post, not a settled "off" state.
 export const getGateStatusBadgeIntent = ( status: GateStatus ): 'stable' | 'draft' => {
 	return status === 'publish' ? 'stable' : 'draft';
+};
+
+/**
+ * Whether a gate asks for paid access: custom access on, with at least one rule.
+ * Custom access with no rules restricts nobody.
+ *
+ * @param gate The gate.
+ */
+const requiresPaidAccess = ( gate: Gate ) =>
+	Boolean( gate.custom_access?.active ) && ( gate.custom_access?.access_rules ?? [] ).some( group => group.length > 0 );
+
+/**
+ * A content rule's values as strings, so term IDs stored as numbers and as strings compare equal.
+ * A single value counts as a one-item list, as it does on the server.
+ *
+ * @param rule The content rule.
+ */
+const getRuleValues = ( rule: GateContentRule ): string[] => {
+	const value: unknown = rule.value;
+	if ( value === undefined || value === null ) {
+		return [];
+	}
+	return ( Array.isArray( value ) ? value : [ value ] ).map( String );
+};
+
+type ContentScope = {
+	matchesNothing: boolean;
+	hasSpecificPosts: boolean;
+	required: GateContentRule[];
+	exclusions: GateContentRule[];
+};
+
+/**
+ * Summarize which content a gate can match, following Content_Restriction_Control::get_post_gates().
+ *
+ * @param gate The gate.
+ */
+const getContentScope = ( gate: Gate ): ContentScope => {
+	const rules = ( gate.content_rules ?? [] ).filter( rule => getRuleValues( rule ).length > 0 );
+	const specificPosts = rules.filter( rule => rule.slug === 'specific_posts' );
+	const otherRules = rules.filter( rule => rule.slug !== 'specific_posts' );
+	const inclusions = otherRules.filter( rule => ! rule.exclusion );
+	return {
+		// A gate with no rules beyond specific posts matches only those posts, and one with no rules at all matches nothing.
+		matchesNothing: otherRules.length === 0 && specificPosts.length === 0,
+		hasSpecificPosts: specificPosts.length > 0,
+		// Under "any", one inclusion rule is enough, so none is required unless it is the only one.
+		required: gate.content_rules_match === 'any' && inclusions.length > 1 ? [] : inclusions,
+		exclusions: otherRules.filter( rule => rule.exclusion ),
+	};
+};
+
+/**
+ * Whether one gate's exclusions carve out everything a required rule of the other gate matches.
+ * Exclusions and inclusions both extend to child terms, so a subset of IDs is a subset of posts.
+ *
+ * @param required   Inclusion rules every matching post satisfies.
+ * @param exclusions Exclusion rules of the other gate.
+ */
+const isCarvedOut = ( required: GateContentRule[], exclusions: GateContentRule[] ) =>
+	required.some( inclusion =>
+		exclusions.some(
+			exclusion =>
+				exclusion.slug === inclusion.slug && getRuleValues( inclusion ).every( value => getRuleValues( exclusion ).includes( value ) )
+		)
+	);
+
+/**
+ * Whether two gates could match the same post. Answers false only when that is certain: a post
+ * can carry several categories and tags at once, so different terms prove nothing.
+ *
+ * @param a One gate's content scope.
+ * @param b The other gate's content scope.
+ */
+const mayShareContent = ( a: ContentScope, b: ContentScope ) => {
+	if ( a.matchesNothing || b.matchesNothing ) {
+		return false;
+	}
+	if ( a.hasSpecificPosts || b.hasSpecificPosts ) {
+		return true;
+	}
+	const aPostTypes = a.required.find( rule => rule.slug === 'post_types' );
+	const bPostTypes = b.required.find( rule => rule.slug === 'post_types' );
+	if ( aPostTypes && bPostTypes && ! getRuleValues( aPostTypes ).some( type => getRuleValues( bPostTypes ).includes( type ) ) ) {
+		return false;
+	}
+	return ! isCarvedOut( a.required, b.exclusions ) && ! isCarvedOut( b.required, a.exclusions );
+};
+
+/**
+ * Warnings for gates ranked where they let readers skip a paid gate below them.
+ *
+ * The first gate matching a post decides access alone (NPPD-2289). A gate that asks for no paid
+ * access, ranked above a paid gate on content the two share, lets readers through there without
+ * paying. That is how a free section inside a paid one is built, and also how a paywall gets opened
+ * by mistake, so the shape is named rather than blocked.
+ *
+ * @param gates The gates, in any order. Ranked like the server ranks them: priority, then age.
+ *              Only published gates take part, since the server skips the rest.
+ * @return Warning text keyed by the ID of the higher-ranked gate.
+ */
+export const getPriorityWarnings = ( gates: Gate[] ): Record< number, string > => {
+	const ranked = gates.filter( gate => gate.status === 'publish' ).sort( ( a, b ) => a.priority - b.priority || a.id - b.id );
+	const scopes = ranked.map( getContentScope );
+	const warnings: Record< number, string > = {};
+	ranked.forEach( ( gate, index ) => {
+		const takesPart = gate.registration?.active || gate.custom_access?.active;
+		if ( ! takesPart || requiresPaidAccess( gate ) ) {
+			return;
+		}
+		const skipped = ranked.filter(
+			( lower, lowerIndex ) => lowerIndex > index && requiresPaidAccess( lower ) && mayShareContent( scopes[ index ], scopes[ lowerIndex ] )
+		);
+		if ( ! skipped.length ) {
+			return;
+		}
+		// translators: %s: a gate title.
+		const titles = skipped.map( lower => sprintf( __( '“%s”', 'newspack-plugin' ), lower.title ) ).join( ', ' );
+		warnings[ gate.id ] = sprintf(
+			// translators: %s: one or more gate titles.
+			_n(
+				'Ranked above %s, which requires paid access. Where both gates cover the same content, this gate decides, so readers there won’t need paid access.',
+				'Ranked above %s, which require paid access. Where these gates cover the same content, this gate decides, so readers there won’t need paid access.',
+				skipped.length,
+				'newspack-plugin'
+			),
+			titles
+		);
+	} );
+	return warnings;
 };
 
 /**

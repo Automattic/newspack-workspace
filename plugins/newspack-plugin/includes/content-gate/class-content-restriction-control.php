@@ -375,6 +375,14 @@ class Content_Restriction_Control {
 	/**
 	 * Whether the post is restricted for the current user.
 	 *
+	 * Gates compose first-match: of the gates whose content rules match the post,
+	 * the one with the highest priority (lowest number, see Content_Gate::get_gates())
+	 * decides alone. A reader it admits is admitted, and a reader it refuses is
+	 * refused and shown its layout; no lower gate is consulted either way, unless
+	 * the gate has no layout to show that reader and is passed over. That lets
+	 * a publisher open a free section inside a paid one by ranking a registration
+	 * wall on the free section above the paywall on its parent (NPPD-2289).
+	 *
 	 * @param bool     $is_post_restricted Whether the post is restricted for the current or given user.
 	 * @param int      $post_id            Post ID.
 	 * @param int|null $user_id            Optional user ID to check access for.
@@ -433,6 +441,11 @@ class Content_Restriction_Control {
 			return true;
 		}
 
+		// First-match: get_post_gates() keeps the priority order from get_gates(),
+		// so its first gate decides. The one exception is a gate that refuses the
+		// reader with no layout to show them. A gate without a layout has always been
+		// passed over, so the next matching gate decides rather than this one letting
+		// the reader through.
 		foreach ( $post_gates as $gate ) {
 			$gate_layout_id = null;
 			$is_restricted  = false;
@@ -473,7 +486,10 @@ class Content_Restriction_Control {
 				}
 			}
 
-			if ( $is_restricted && $gate_layout_id ) {
+			if ( ! $is_restricted ) {
+				return false;
+			}
+			if ( $gate_layout_id ) {
 				self::$post_gate_id_map[ $post_id . '_' . $user_id ] = $gate['id'];
 				self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ] = $gate_layout_id;
 				return true;

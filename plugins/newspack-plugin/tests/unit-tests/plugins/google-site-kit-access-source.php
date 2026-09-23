@@ -152,14 +152,15 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 
 	/**
 	 * A gate whose custom access is on but whose rule set is empty restricts
-	 * nobody — but it must not speak for the whole post. Content_Restriction_Control
-	 * stops at the first gate that restricts, so a reader blocked by a second
-	 * gate is genuinely blocked, and reporting "no gate applies" would describe
-	 * the opposite of what the reader sees.
+	 * nobody — but ranked below a restricting gate, it must not speak for the
+	 * post. The restricting gate decides, so the reader is genuinely blocked,
+	 * and reporting "no gate applies" would describe the opposite of what the
+	 * reader sees.
 	 */
-	public function test_unrestricting_gate_does_not_mask_a_restricting_one() {
+	public function test_unrestricting_gate_ranked_below_does_not_mask_a_restricting_one() {
 		$post_id = $this->create_gated_post(
 			[
+				'gate_priority' => 1,
 				'custom_access' => [
 					'active'       => true,
 					'access_rules' => [],
@@ -169,6 +170,7 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 		$this->attach_gate(
 			$post_id,
 			[
+				'gate_priority' => 0,
 				'custom_access' => [
 					'active'       => true,
 					'access_rules' => [
@@ -490,75 +492,46 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A gate the reader passes cannot speak for a post another gate still
-	 * blocks. Restriction is AND across every gate on the post — the reader
-	 * sees the gate overlay — so attributing their access to the gate they
-	 * happened to pass reports the opposite of what they experienced.
+	 * A gate the reader passes cannot speak for a post when a gate ranked above
+	 * it blocks them. The blocking gate decides — the reader sees the gate
+	 * overlay — so attributing their access to the lower gate would report the
+	 * opposite of what they experienced.
 	 */
-	public function test_passing_gate_does_not_mask_a_blocking_gate() {
-		$post_id = $this->create_gated_post(
-			[
-				'custom_access' => [
-					'active'       => true,
-					'access_rules' => [
-						[
-							[
-								'slug'  => 'email_domain',
-								'value' => 'example.org',
-							],
-						],
-					],
-				],
-			]
-		);
-		$this->attach_gate(
-			$post_id,
-			[
-				'custom_access' => [
-					'active'       => true,
-					'access_rules' => [
-						[
-							[
-								'slug'  => 'email_domain',
-								'value' => 'nobody.example',
-							],
-						],
-					],
-				],
-			]
-		);
-		$user_id = $this->factory->user->create( [ 'user_email' => 'reader@example.org' ] );
-		Newspack\Reader_Activation::set_reader_verified( $user_id );
-		wp_set_current_user( $user_id );
+	public function test_blocking_gate_ranked_first_reports_gated() {
+		$post_id = $this->create_gated_post( $this->email_domain_gate( 'example.org', 1 ) );
+		$this->attach_gate( $post_id, $this->email_domain_gate( 'nobody.example', 0 ) );
+		$this->sign_in_verified_reader( 'reader@example.org' );
 		$this->go_to( get_permalink( $post_id ) );
 
 		$this->assertSame( 'gated', GoogleSiteKit::get_request_access_source() );
 	}
 
 	/**
-	 * The metering half of the case above: a blocked reader on a post whose
-	 * gates meter is metering_eligible, not the label of the gate they passed.
-	 * Blocked is blocked; only the flavour of the block changes.
+	 * The mirror case: when the gate the reader passes ranks first, it decides
+	 * alone, so the reader is through and their access is attributed to it. A
+	 * gate ranked below it is never consulted, whatever it would have said.
+	 */
+	public function test_passing_gate_ranked_first_reports_its_source() {
+		$post_id = $this->create_gated_post( $this->email_domain_gate( 'example.org', 0 ) );
+		$this->attach_gate( $post_id, $this->email_domain_gate( 'nobody.example', 1 ) );
+		$this->sign_in_verified_reader( 'reader@example.org' );
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertSame( 'domain', GoogleSiteKit::get_request_access_source() );
+	}
+
+	/**
+	 * The metering half of the blocking case above: a blocked reader on a post
+	 * whose deciding gate meters is metering_eligible, not the label of a lower
+	 * gate they would have passed. Blocked is blocked; only the flavour of the
+	 * block changes.
 	 */
 	public function test_blocked_reader_on_a_metering_post_is_metering_eligible_not_attributed() {
-		$post_id = $this->create_gated_post(
-			[
-				'custom_access' => [
-					'active'       => true,
-					'access_rules' => [
-						[
-							[
-								'slug'  => 'email_domain',
-								'value' => 'example.org',
-							],
-						],
-					],
-				],
-			]
-		);
+		$post_id          = $this->create_gated_post( $this->email_domain_gate( 'example.org', 1 ) );
 		$metering_gate_id = $this->attach_gate(
 			$post_id,
 			[
+				'gate_priority' => 0,
 				'custom_access' => [
 					'active'       => true,
 					'access_rules' => [
@@ -591,13 +564,14 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 
 	/**
 	 * Metering is a property of the gate that blocked, not of the post. A
-	 * reader who sails through a metering gate and is then stopped by a hard
-	 * one gets no free views at all — reporting them as metering_eligible would
+	 * reader stopped by a hard gate gets no free views at all, even when a
+	 * gate ranked below it meters — reporting them as metering_eligible would
 	 * count a soft block that never happened.
 	 */
-	public function test_metering_on_a_gate_the_reader_passed_does_not_soften_a_hard_block() {
+	public function test_metering_on_a_lower_ranked_gate_does_not_soften_a_hard_block() {
 		$post_id = $this->create_gated_post(
 			[
+				'gate_priority' => 1,
 				'custom_access' => [
 					'active'       => true,
 					'access_rules' => [
@@ -616,10 +590,11 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 				],
 			]
 		);
-		$passed_gate_id = $this->gate_id;
+		$lower_metering_gate_id = $this->gate_id;
 		$this->attach_gate(
 			$post_id,
 			[
+				'gate_priority' => 0,
 				'custom_access' => [
 					'active'       => true,
 					'access_rules' => [
@@ -638,8 +613,8 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 		Newspack\Reader_Activation::set_reader_verified( $user_id );
 		wp_set_current_user( $user_id );
 		$this->assertTrue(
-			Newspack\Metering::offers_metering( $passed_gate_id, true ),
-			'The passed gate must meter, or this asserts nothing about which gate is consulted.'
+			Newspack\Metering::offers_metering( $lower_metering_gate_id, true ),
+			'The lower gate must meter, or this asserts nothing about which gate is consulted.'
 		);
 		$this->assertFalse(
 			Newspack\Metering::offers_metering( $blocking_gate_id, true ),
@@ -795,5 +770,42 @@ class Newspack_Test_GoogleSiteKit_Access_Source extends WP_UnitTestCase {
 		);
 		$this->gate_id = $gate_id;
 		return $gate_id;
+	}
+
+	/**
+	 * Gate meta for a custom-access gate that admits one email domain.
+	 *
+	 * @param string $domain   Email domain the gate admits.
+	 * @param int    $priority Gate priority; the lowest number decides.
+	 * @return array Gate meta for attach_gate().
+	 */
+	private function email_domain_gate( $domain, $priority ) {
+		return [
+			'gate_priority' => $priority,
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => $domain,
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * Create a verified reader and make them the current user.
+	 *
+	 * @param string $email Reader email.
+	 * @return int User ID.
+	 */
+	private function sign_in_verified_reader( $email ) {
+		$user_id = $this->factory->user->create( [ 'user_email' => $email ] );
+		Newspack\Reader_Activation::set_reader_verified( $user_id );
+		wp_set_current_user( $user_id );
+		return $user_id;
 	}
 }
