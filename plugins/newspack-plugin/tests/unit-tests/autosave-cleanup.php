@@ -18,11 +18,11 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 	/**
 	 * Test the default wait.
 	 */
-	public function test_get_days_defaults_to_7() {
+	public function test_get_days_defaults_to_1() {
 		if ( defined( 'NEWSPACK_AUTOSAVE_CLEANUP_DAYS' ) ) {
 			$this->markTestSkipped( 'NEWSPACK_AUTOSAVE_CLEANUP_DAYS is defined.' );
 		}
-		$this->assertSame( 7, Autosave_Cleanup::get_days() );
+		$this->assertSame( 1, Autosave_Cleanup::get_days() );
 	}
 
 	/**
@@ -168,9 +168,9 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 	 */
 	public function test_run_cron_deletes_only_eligible() {
 		[ , $eligible ] = $this->create_eligible_autosave();
-		$post_id        = $this->create_post( 5 );
+		$post_id        = $this->create_post( 0 );
 		$recent         = $this->create_revision( $post_id, 10, true );
-		$this->create_revision( $post_id, 5 );
+		$this->create_revision( $post_id, 0 );
 
 		$this->assertSame( 1, Autosave_Cleanup::run_cron() );
 		$this->assertNull( get_post( $eligible ) );

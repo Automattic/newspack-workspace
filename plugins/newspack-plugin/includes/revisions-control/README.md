@@ -52,7 +52,7 @@ WordPress keeps one autosave per user per post and only cleans up an autosave wh
 A daily cron (`newspack_autosave_cleanup`) deletes an autosave when:
 
 - the post was saved after it (so the editor will never offer it back), and
-- that happened at least 7 days ago, and
+- that happened at least a day ago, and
 - it isn't marked as a major revision.
 
 Fresh autosaves are never deleted. The cron deletes up to 500 autosaves per run. It runs whether or not the revision limit above is enabled; when the limit is enabled, autosaves younger than its minimum age are also kept.

@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Autosave_Cleanup {
 
-	const DEFAULT_DAYS  = 7;
+	const DEFAULT_DAYS  = 1;
 	const BATCH_SIZE    = 100;
 	const MAX_PER_RUN   = 500;
 	const CRON_HOOK     = 'newspack_autosave_cleanup';
@@ -90,7 +90,7 @@ final class Autosave_Cleanup {
 		 *
 		 * @constant NEWSPACK_AUTOSAVE_CLEANUP_DAYS
 		 * @type     int
-		 * @default  7
+		 * @default  1
 		 * @status   draft
 		 *
 		 * @example define( 'NEWSPACK_AUTOSAVE_CLEANUP_DAYS', 30 );

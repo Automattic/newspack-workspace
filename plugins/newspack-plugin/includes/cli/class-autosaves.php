@@ -31,7 +31,7 @@ final class Autosaves {
 	 * : Only consider autosaves of this post.
 	 *
 	 * [--older-than=<days>]
-	 * : Days an autosave must have been stale. Defaults to the cron setting (7). Use 0 for every stale autosave.
+	 * : Days an autosave must have been stale. Defaults to the cron setting (1). Use 0 for every stale autosave.
 	 *
 	 * @param array $args       Positional args.
 	 * @param array $assoc_args Associative args.
