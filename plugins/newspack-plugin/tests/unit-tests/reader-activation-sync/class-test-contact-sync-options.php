@@ -603,6 +603,41 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertSame( 0, $failed, 'A refused push is not a provider failure to alert on.' );
 	}
 
+	/**
+	 * Only `true` lets the push through. An override that returns a
+	 * find-by-email helper's value as is (`null` for a miss, an id for a hit)
+	 * must not get the upsert that would create the contact.
+	 *
+	 * @dataProvider non_boolean_lookup_answer_provider
+	 *
+	 * @param mixed $answer What the integration's contact_exists() returns.
+	 */
+	public function test_existing_only_withholds_the_push_on_a_non_boolean_lookup_answer( $answer ) {
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$contact_exists = $answer;
+		Integrations::register( new Failing_Sample_Integration( 'existing_only_peer', 'Existing Only Peer' ) );
+		Integrations::enable( 'existing_only_peer' );
+
+		$result = $this->push_existing_only();
+
+		Integrations::disable( 'existing_only_peer' );
+		$this->assertSame( 0, Failing_Sample_Integration::$push_count, 'A non-boolean answer must not let the push through.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertStringContainsString( 'existing_only_peer', $result->get_error_message() );
+	}
+
+	/**
+	 * Non-boolean contact_exists() answers.
+	 *
+	 * @return array
+	 */
+	public function non_boolean_lookup_answer_provider() {
+		return [
+			'null for a miss' => [ null ],
+			'an id for a hit' => [ '42' ],
+		];
+	}
+
 	public function test_dry_run_existing_only_fails_closed_for_an_integration_without_a_lookup() {
 		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
 		Lookupless_Sample_Integration::reset();

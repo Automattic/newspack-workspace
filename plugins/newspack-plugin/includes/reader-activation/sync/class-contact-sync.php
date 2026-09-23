@@ -388,7 +388,7 @@ class Contact_Sync extends Sync {
 				static::log( sprintf( 'Withheld integration "%s" sync of %s: it cannot check for an existing contact (--existing-only).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );
 				continue;
 			}
-			$result = empty( $options['existing_only'] ) ? true : $integration->contact_exists( $integration_contact['email'] ?? '' );
+			$result = empty( $options['existing_only'] ) ? true : self::check_existing_contact( $integration, $integration_contact['email'] ?? '' );
 			if ( false === $result ) {
 				$skipped[] = $integration_id;
 				static::log( sprintf( 'Skipped integration "%s" sync of %s: no existing contact (--existing-only).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );
@@ -450,6 +450,30 @@ class Contact_Sync extends Sync {
 		}
 
 		return self::resolve_push_result( $contact['email'] ?? 'unknown', $errors, $skipped, $pushed );
+	}
+
+	/**
+	 * Ask an integration whether it holds the contact, for `existing_only`.
+	 *
+	 * `contact_exists()` declares no return type, so an override that answers a
+	 * miss with `null` or `0` would read as "exists" and get the upsert the flag
+	 * exists to prevent. Only `true` or `false` is an answer; anything else comes
+	 * back as a failed check. Shared by the wet push and the dry-run preview.
+	 *
+	 * @param Integration $integration The integration to ask.
+	 * @param string      $email       The contact's email address.
+	 *
+	 * @return bool|\WP_Error
+	 */
+	private static function check_existing_contact( $integration, $email ): bool|\WP_Error {
+		$exists = $integration->contact_exists( $email );
+		if ( \is_bool( $exists ) || \is_wp_error( $exists ) ) {
+			return $exists;
+		}
+		return new \WP_Error(
+			'newspack_integration_contact_lookup_invalid',
+			__( 'contact_exists() returned neither true, false nor an error, so --existing-only withheld the push.', 'newspack-plugin' )
+		);
 	}
 
 	/**
@@ -1637,7 +1661,7 @@ class Contact_Sync extends Sync {
 					static::log( sprintf( '[dry-run] WITHHELD integration "%s" for %s: it cannot check for an existing contact (--existing-only).', $integration_id, $email ) );
 					continue;
 				}
-				$exists = $integration->contact_exists( $prepared['email'] ?? '' );
+				$exists = self::check_existing_contact( $integration, $prepared['email'] ?? '' );
 				if ( false === $exists ) {
 					$skipped[] = $integration_id;
 					static::log( sprintf( '[dry-run] SKIPPED integration "%s" for %s: no existing contact (--existing-only).', $integration_id, $email ) );
