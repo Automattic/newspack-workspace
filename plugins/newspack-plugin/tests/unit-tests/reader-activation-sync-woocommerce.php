@@ -160,20 +160,18 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 				'customer_id' => self::$user_id,
 				'status'      => 'failed',
 				'total'       => 60,
+				// WooCommerce records a paid date only once payment completes, so a
+				// failed order has none. The mock stamps one on every order unless
+				// told otherwise.
+				'date_paid'   => '',
 			]
 		);
-
-		$previous_order      = self::$current_order;
 		self::$current_order = $order;
 
 		$contact_data = Sync\WooCommerce::get_contact_from_order( $order );
 
-		$this->assertEquals(
-			// Disregard the seconds in comparison to avoid flaky tests.
-			substr( $contact_data['metadata']['last_payment_date'], 0, -3 ),
-			substr( $previous_order->get_date_paid()->date( Metadata::DATE_FORMAT ), 0, -3 )
-		);
-		$this->assertEquals( $contact_data['metadata']['last_payment_amount'], self::$current_order->get_total() );
+		$this->assertEmpty( $contact_data['metadata']['last_payment_date'] );
+		$this->assertEmpty( $contact_data['metadata']['last_payment_amount'] );
 	}
 
 	/**
