@@ -24,6 +24,16 @@ if ( ! class_exists( 'WC_Subscriptions_Payment_Gateways' ) ) {
 		}
 
 		/**
+		 * Subscription IDs this leg was called directly with. Recorded because
+		 * the mock's own body fires the umbrella action, so without a counter a
+		 * test cannot tell the direct call apart from the fallback — and which
+		 * of the two runs is the invariant the charge path exists to protect.
+		 *
+		 * @var int[]
+		 */
+		public static $direct_dispatches = [];
+
+		/**
 		 * The gateway leg of WCS's renewal chain, as the charge path calls it.
 		 *
 		 * Real WCS resolves the subscription, picks its latest renewal order and
@@ -35,6 +45,7 @@ if ( ! class_exists( 'WC_Subscriptions_Payment_Gateways' ) ) {
 		 * @param int $subscription_id The subscription being renewed.
 		 */
 		public static function gateway_scheduled_subscription_payment( $subscription_id ) {
+			self::$direct_dispatches[] = (int) $subscription_id;
 			do_action( 'woocommerce_scheduled_subscription_payment', $subscription_id );
 		}
 	}

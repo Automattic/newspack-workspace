@@ -99,16 +99,13 @@ export default function ReactivateFlow( { subscription, email, actions, onClose,
 		}
 	};
 
-	// The step swap and an arriving error both change the dialog's content in
-	// place; announce them so non-visual users hear the change.
+	// The step swap replaces the dialog's content in place while focus stays on
+	// the footer button, so nothing else would tell a non-visual user the step
+	// changed. The error needs no equivalent: it renders into the role="alert"
+	// region below, and speaking it as well would read the refusal twice.
 	useEffect( () => {
 		speak( step.isMethod ? __( 'Choose how to reactivate.', 'newspack-plugin' ) : __( 'Confirm the reactivation details.', 'newspack-plugin' ) );
 	}, [ step.isMethod ] );
-	useEffect( () => {
-		if ( error ) {
-			speak( error, 'assertive' );
-		}
-	}, [ error ] );
 
 	// The mode-specific confirmation note for step two.
 	let detail;

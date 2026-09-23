@@ -1099,13 +1099,18 @@ class Subscribers_Wizard extends Wizard {
 	 * impersonating the billing schedule.
 	 *
 	 * Outcome: a gateway charge is not always synchronous — Stripe can leave the
-	 * money in flight (a charge awaiting asynchronous capture or manual review,
-	 * an SCA charge awaiting the customer's authentication, a mandated debit
-	 * scheduled for later). So the outcome is read from state, three ways:
-	 * the subscription reactivated (success); the renewal order no longer needs
-	 * payment but the subscription is not active yet (payment in flight —
-	 * reported as pending, NOT as a failure, so nobody retries a live charge);
-	 * otherwise a failure that names both possible causes.
+	 * money in flight, either awaiting asynchronous capture or manual review, or
+	 * awaiting the customer's SCA authentication. So the outcome is read from
+	 * state, three ways: the subscription reactivated (success); the renewal
+	 * order settled, or still carries a transaction id, while the subscription
+	 * is not active yet (payment in flight — reported as pending, NOT as a
+	 * failure, so nobody retries a live charge); otherwise a failure.
+	 *
+	 * One in-flight state is deliberately not detected: a mandated debit the
+	 * gateway has scheduled for later leaves the order pending with nothing
+	 * recorded on it, so it is indistinguishable from an ordinary decline and
+	 * reports as one. The refusal copy names that possibility rather than
+	 * pretending to rule it out.
 	 *
 	 * Concurrency: a short-lived per-subscription transient lock guards the
 	 * dispatch. It is best-effort — the check-then-set is not atomic and the
@@ -1128,7 +1133,7 @@ class Subscribers_Wizard extends Wizard {
 			);
 		}
 
-		$lock_key = 'newspack_subscribers_charge_' . $subscription->get_id();
+		$lock_key = $this->charge_lock_key( $subscription->get_id() );
 		if ( false !== get_transient( $lock_key ) ) {
 			return new \WP_Error(
 				'newspack_subscribers_charge_in_progress',
@@ -1148,10 +1153,23 @@ class Subscribers_Wizard extends Wizard {
 			$subscription->add_order_note( sprintf( __( 'Renewal payment initiated by %s from the Subscribers admin.', 'newspack-plugin' ), $admin_login ) );
 
 			// The gateway leg of the renewal chain (see the method docblock for
-			// why it is called directly), with the umbrella action as the
-			// fallback for an environment where WCS's handler is absent.
+			// why it is called directly). WCS throws when it cannot resolve the
+			// subscription, and a gateway is free to throw out of its own hook;
+			// letting either escape would return a fatal on a click that may
+			// already have moved money, so the outcome read below runs either
+			// way and reports what the state actually says.
 			if ( class_exists( 'WC_Subscriptions_Payment_Gateways' ) ) {
-				\WC_Subscriptions_Payment_Gateways::gateway_scheduled_subscription_payment( $subscription->get_id() );
+				try {
+					\WC_Subscriptions_Payment_Gateways::gateway_scheduled_subscription_payment( $subscription->get_id() );
+				} catch ( \Throwable $e ) {
+					$renewal_order->add_order_note(
+						sprintf(
+							/* translators: %s: the error the gateway or WooCommerce Subscriptions raised. */
+							__( 'The renewal charge raised an error: %s', 'newspack-plugin' ),
+							$e->getMessage()
+						)
+					);
+				}
 			} else {
 				do_action( 'woocommerce_scheduled_subscription_payment', $subscription->get_id() );
 			}
@@ -1163,11 +1181,15 @@ class Subscribers_Wizard extends Wizard {
 				return rest_ensure_response( $this->reactivation_payload( $subscription ) );
 			}
 
-			// The order stopped needing payment but the subscription did not
-			// reactivate: the money is in flight (asynchronous capture, manual
-			// review, a webhook-confirmed gateway). Not a failure — saying
-			// "declined" here is what gets a live charge retried.
-			if ( $subscription && $renewal_order && ! $renewal_order->needs_payment() ) {
+			// The subscription did not reactivate, but the charge is not dead
+			// either. Two states say so, and saying "declined" for either is
+			// what gets a live charge retried: the order stopped needing
+			// payment (asynchronous capture, manual review, a webhook-confirmed
+			// gateway), or it still needs payment while carrying a transaction
+			// id — the gateway took the attempt and is waiting on the customer,
+			// which is where Stripe leaves an SCA charge pending authentication.
+			if ( $subscription && $renewal_order
+				&& ( ! $renewal_order->needs_payment() || '' !== (string) $renewal_order->get_transaction_id() ) ) {
 				return rest_ensure_response(
 					array_merge(
 						$this->reactivation_payload( $subscription ),
@@ -1210,41 +1232,65 @@ class Subscribers_Wizard extends Wizard {
 		// While a charge is mid-flight the renewal order still needs payment,
 		// so without this check the customer would be emailed a pay link for
 		// the very order the gateway is charging — and paying it is a second
-		// real payment. Same lock the charge path holds.
-		if ( false !== get_transient( 'newspack_subscribers_charge_' . $subscription->get_id() ) ) {
+		// real payment. This route takes the same lock rather than only reading
+		// it: latest_or_new_renewal_order() can CREATE an order, so two
+		// overlapping link requests would otherwise leave the subscriber two
+		// payable invoices for one period.
+		$lock_key = $this->charge_lock_key( $subscription->get_id() );
+		if ( false !== get_transient( $lock_key ) ) {
 			return new \WP_Error(
 				'newspack_subscribers_charge_in_progress',
 				__( 'A charge for this subscription is being processed. Wait for it to finish before sending a payment link.', 'newspack-plugin' ),
 				[ 'status' => 409 ]
 			);
 		}
+		set_transient( $lock_key, 1, MINUTE_IN_SECONDS );
 
-		$renewal_order = $this->latest_or_new_renewal_order( $subscription );
-		if ( \is_wp_error( $renewal_order ) ) {
-			return $renewal_order;
+		try {
+			$renewal_order = $this->latest_or_new_renewal_order( $subscription );
+			if ( \is_wp_error( $renewal_order ) ) {
+				return $renewal_order;
+			}
+
+			// `emailSent` is honest to what can be known here: the invoice email
+			// no-ops without a recipient, so an order with no billing email means no
+			// email went out — and the client falls back to showing the URL itself.
+			$email_sent = false;
+			if ( function_exists( 'WC' ) && \WC()->mailer() && '' !== (string) $renewal_order->get_billing_email() ) {
+				// The same envelope WC core's own "Email invoice" order action uses,
+				// so email-logging integrations see this send too.
+				do_action( 'woocommerce_before_resend_order_emails', $renewal_order, 'customer_invoice' );
+				\WC()->mailer()->customer_invoice( $renewal_order );
+				do_action( 'woocommerce_after_resend_order_emails', $renewal_order, 'customer_invoice' );
+				$email_sent = true;
+				/* translators: %s: the acting admin's login. */
+				$subscription->add_order_note( sprintf( __( 'Payment link emailed to the customer by %s from the Subscribers admin.', 'newspack-plugin' ), wp_get_current_user()->user_login ) );
+			}
+
+			return rest_ensure_response(
+				[
+					'paymentUrl' => $renewal_order->get_checkout_payment_url(),
+					'emailSent'  => $email_sent,
+				]
+			);
+		} finally {
+			delete_transient( $lock_key );
 		}
+	}
 
-		// `emailSent` is honest to what can be known here: the invoice email
-		// no-ops without a recipient, so an order with no billing email means no
-		// email went out — and the client falls back to showing the URL itself.
-		$email_sent = false;
-		if ( function_exists( 'WC' ) && \WC()->mailer() && '' !== (string) $renewal_order->get_billing_email() ) {
-			// The same envelope WC core's own "Email invoice" order action uses,
-			// so email-logging integrations see this send too.
-			do_action( 'woocommerce_before_resend_order_emails', $renewal_order, 'customer_invoice' );
-			\WC()->mailer()->customer_invoice( $renewal_order );
-			do_action( 'woocommerce_after_resend_order_emails', $renewal_order, 'customer_invoice' );
-			$email_sent = true;
-			/* translators: %s: the acting admin's login. */
-			$subscription->add_order_note( sprintf( __( 'Payment link emailed to the customer by %s from the Subscribers admin.', 'newspack-plugin' ), wp_get_current_user()->user_login ) );
-		}
-
-		return rest_ensure_response(
-			[
-				'paymentUrl' => $renewal_order->get_checkout_payment_url(),
-				'emailSent'  => $email_sent,
-			]
-		);
+	/**
+	 * The per-subscription lock both recovery routes hold.
+	 *
+	 * Shared so the charge route and the payment-link route cannot drift onto
+	 * different keys: the link route's whole protection is that it observes the
+	 * charge route's lock.
+	 *
+	 * @param int $subscription_id The subscription ID.
+	 *
+	 * @return string
+	 */
+	private function charge_lock_key( $subscription_id ) {
+		return 'newspack_subscribers_charge_' . (int) $subscription_id;
 	}
 
 	/**
@@ -1325,27 +1371,35 @@ class Subscribers_Wizard extends Wizard {
 	 */
 	private function latest_or_new_renewal_order( $subscription ) {
 		$latest_renewal = $subscription->get_last_order( 'all', [ 'renewal' ] );
-		if ( is_object( $latest_renewal ) && $latest_renewal->needs_payment() ) {
-			return $latest_renewal;
-		}
 
-		// A latest renewal order held on-hold WITH a transaction recorded means
-		// a gateway payment is in flight — a charge awaiting asynchronous
-		// capture or manual review parks the order there, with the money
-		// possibly already moved. Creating (and charging or invoicing) a
-		// second order underneath it is how a subscriber gets billed twice.
-		// The transaction id is the discriminator: offline gateways (BACS,
-		// cheque) also park orders on-hold but record no transaction, and for
-		// those the payment link IS the remedy, so they must not dead-end
-		// here. Settled orders — completed or processing (an admin-suspended
-		// subscription after a successful renewal), cancelled, refunded —
-		// don't block a fresh attempt either.
-		if ( is_object( $latest_renewal ) && $latest_renewal->has_status( [ 'on-hold' ] ) && '' !== (string) $latest_renewal->get_transaction_id() ) {
+		// A transaction recorded on a renewal that has not settled means the
+		// gateway accepted an attempt that is still in flight, and charging or
+		// invoicing underneath it is how a subscriber gets billed twice. Two
+		// shapes carry it, and they must be judged before the reuse branch
+		// below, because one of them still needs payment: an order parked
+		// on-hold (asynchronous capture, manual review), and an order left
+		// needing payment while the gateway waits on the customer — Stripe
+		// records the charge id and sets the order to `failed` while SCA
+		// authentication is outstanding.
+		//
+		// The transaction id is the discriminator, in both shapes. Offline
+		// gateways (BACS, cheque) also park orders on-hold and record no
+		// transaction, and an ordinary decline leaves a `failed` order with
+		// none either — for both the remedy is another attempt, so neither may
+		// dead-end here. Settled orders (completed, processing, cancelled,
+		// refunded) never block: an admin-suspended subscription whose last
+		// renewal succeeded still deserves a fresh charge.
+		if ( is_object( $latest_renewal ) && '' !== (string) $latest_renewal->get_transaction_id()
+			&& ( $latest_renewal->has_status( [ 'on-hold' ] ) || $latest_renewal->needs_payment() ) ) {
 			return new \WP_Error(
 				'newspack_subscribers_payment_unresolved',
 				__( 'A payment for this subscription is still awaiting confirmation. Wait for it to resolve before charging again or sending a payment link.', 'newspack-plugin' ),
 				[ 'status' => 409 ]
 			);
+		}
+
+		if ( is_object( $latest_renewal ) && $latest_renewal->needs_payment() ) {
+			return $latest_renewal;
 		}
 
 		$renewal_order = function_exists( 'wcs_create_renewal_order' ) ? \wcs_create_renewal_order( $subscription ) : false;

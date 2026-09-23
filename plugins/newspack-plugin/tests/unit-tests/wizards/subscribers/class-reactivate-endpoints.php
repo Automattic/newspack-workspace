@@ -39,6 +39,11 @@ class Test_Subscribers_Wizard_Reactivate_Endpoints extends WP_UnitTestCase {
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 3 ) . '/mocks/wc-mocks.php';
+		// Required here rather than left to whichever other suite happens to load
+		// it: which dispatch branch the charge path takes depends on this class
+		// existing, so a run of this file alone must exercise the same branch a
+		// full-suite run does.
+		require_once dirname( __DIR__, 3 ) . '/mocks/wcs-payment-gateways-mocks.php';
 		// The wizard rides the Access Control feature flag; enable it so its routes register.
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
@@ -55,6 +60,7 @@ class Test_Subscribers_Wizard_Reactivate_Endpoints extends WP_UnitTestCase {
 		$products_database      = [];
 		$orders_database        = [];
 		$this->user_ids         = [];
+		\WC_Subscriptions_Payment_Gateways::$direct_dispatches = [];
 		Group_Subscription_Settings::clear_group_subscription_ids_cache();
 		do_action( 'rest_api_init' );
 	}
@@ -384,6 +390,16 @@ class Test_Subscribers_Wizard_Reactivate_Endpoints extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'active', $response->get_data()['status'] );
 		$this->assertSame( [ $subscription->get_id() ], $charged );
+		// The charge reaches the gateway through WCS's gateway leg directly, not
+		// through `woocommerce_scheduled_subscription_payment`. Firing the
+		// umbrella action is what WCS's retry manager reads as a scheduled
+		// attempt, and the final retry rule on Newspack sites expires the
+		// subscription — so an admin's click must never look like one.
+		$this->assertSame(
+			[ $subscription->get_id() ],
+			\WC_Subscriptions_Payment_Gateways::$direct_dispatches,
+			'The charge dispatches the gateway leg directly, keeping the attempt out of the retry ladder.'
+		);
 		// With no unpaid renewal order staged, the endpoint created one for the
 		// gateway to charge.
 		$this->assertCount( 1, $orders_database );
@@ -418,6 +434,41 @@ class Test_Subscribers_Wizard_Reactivate_Endpoints extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertTrue( $response->get_data()['pendingConfirmation'] );
 		$this->assertSame( 'on-hold', $subscription->get_status() );
+	}
+
+	/**
+	 * An SCA charge is in flight even though its order still needs payment:
+	 * Stripe records the charge id and leaves the renewal order `failed` while
+	 * the customer authenticates. Reporting that as a decline is what gets the
+	 * admin to click again — and the second click would charge the very order
+	 * the customer is still authenticating.
+	 */
+	public function test_charge_awaiting_authentication_reports_pending_and_blocks_a_second_attempt() {
+		$this->login_admin();
+		$reader_id    = $this->create_reader();
+		$subscription = $this->create_chargeable_subscription( $reader_id );
+
+		$listener = function ( $subscription_id ) {
+			$order                        = wcs_get_subscription( $subscription_id )->get_last_order( 'all', [ 'renewal' ] );
+			$order->data['status']        = 'failed';
+			$order->data['transaction_id'] = 'ch_awaiting_sca';
+		};
+		add_action( 'woocommerce_scheduled_subscription_payment', $listener );
+
+		try {
+			$response = $this->dispatch( $subscription->get_id(), 'reactivate', [ 'mode' => 'charge' ] );
+		} finally {
+			remove_action( 'woocommerce_scheduled_subscription_payment', $listener );
+		}
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['pendingConfirmation'], 'An accepted but unconfirmed charge is pending, not declined.' );
+
+		// The admin clicks Charge again anyway: the unresolved attempt must
+		// refuse rather than re-charge the order the gateway already holds.
+		$second = $this->dispatch( $subscription->get_id(), 'reactivate', [ 'mode' => 'charge' ] );
+		$this->assertSame( 409, $second->get_status() );
+		$this->assertSame( 'newspack_subscribers_payment_unresolved', $second->as_error()->get_error_code() );
 	}
 
 	/**
@@ -551,6 +602,13 @@ class Test_Subscribers_Wizard_Reactivate_Endpoints extends WP_UnitTestCase {
 		$this->assertSame( 402, $response->get_status() );
 		$this->assertSame( 'newspack_subscribers_charge_failed', $response->as_error()->get_error_code() );
 		$this->assertSame( 'on-hold', $subscription->get_status() );
+		// The lock is released on the way out, so a declined card can be retried
+		// immediately. Holding it would read to the admin as "this subscription
+		// cannot be charged" for a minute after an ordinary decline.
+		$this->assertFalse(
+			get_transient( 'newspack_subscribers_charge_' . $subscription->get_id() ),
+			'A finished attempt releases the lock, whatever its outcome.'
+		);
 	}
 
 	/**
