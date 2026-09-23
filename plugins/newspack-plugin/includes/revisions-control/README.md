@@ -55,7 +55,7 @@ A daily cron (`newspack_autosave_cleanup`) deletes an autosave when:
 - that happened at least 7 days ago, and
 - it isn't marked as a major revision.
 
-Fresh autosaves are never deleted. The cron deletes up to 500 autosaves per run. It runs whether or not the revision limit above is enabled.
+Fresh autosaves are never deleted. The cron deletes up to 500 autosaves per run. It runs whether or not the revision limit above is enabled; when the limit is enabled, autosaves younger than its minimum age are also kept.
 
 Change the wait in `wp-config.php`:
 

@@ -19,6 +19,9 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 	 * Test the default wait.
 	 */
 	public function test_get_days_defaults_to_7() {
+		if ( defined( 'NEWSPACK_AUTOSAVE_CLEANUP_DAYS' ) ) {
+			$this->markTestSkipped( 'NEWSPACK_AUTOSAVE_CLEANUP_DAYS is defined.' );
+		}
 		$this->assertSame( 7, Autosave_Cleanup::get_days() );
 	}
 
@@ -28,6 +31,24 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 	public function test_autosave_stale_longer_than_wait_is_eligible() {
 		[ , $autosave_id ] = $this->create_eligible_autosave();
 		$this->assertContains( $autosave_id, Autosave_Cleanup::get_eligible_ids( 7, 100 ) );
+	}
+
+	/**
+	 * A stale autosave by someone other than the post's author is deleted.
+	 */
+	public function test_other_users_stale_autosave_is_deleted() {
+		$author = self::factory()->user->create( [ 'role' => 'editor' ] );
+		$editor = self::factory()->user->create( [ 'role' => 'editor' ] );
+
+		$post_id = $this->create_post( 20 );
+		$this->set_dates( $post_id, [ 'post_author' => $author ] );
+		$autosave_id = $this->create_revision( $post_id, 30, true );
+		$this->set_dates( $autosave_id, [ 'post_author' => $editor ] );
+		$this->create_revision( $post_id, 20 );
+
+		$this->assertSame( $autosave_id, wp_get_post_autosave( $post_id, $editor )->ID );
+		$this->assertSame( 1, Autosave_Cleanup::run_cron() );
+		$this->assertNull( get_post( $autosave_id ) );
 	}
 
 	/**
@@ -183,6 +204,56 @@ class Newspack_Test_Autosave_Cleanup extends WP_UnitTestCase {
 
 		$this->assertSame( [], $deleted );
 		$this->assertNotNull( get_post( $autosave_id ) );
+	}
+
+	/**
+	 * An autosave refreshed after it was selected is not deleted.
+	 */
+	public function test_delete_autosaves_skips_autosave_refreshed_after_selection() {
+		[ , $autosave_id ] = $this->create_eligible_autosave();
+		$this->assertContains( $autosave_id, Autosave_Cleanup::get_eligible_ids( 7, 100 ) );
+
+		$now = gmdate( 'Y-m-d H:i:s' );
+		$this->set_dates(
+			$autosave_id,
+			[
+				'post_modified_gmt' => $now,
+				'post_modified'     => $now,
+			]
+		);
+
+		$this->assertSame( [], Autosave_Cleanup::delete_autosaves( [ $autosave_id ] ) );
+		$this->assertNotNull( get_post( $autosave_id ) );
+	}
+
+	/**
+	 * With the revision limit active, autosaves younger than its minimum age are not selected.
+	 */
+	public function test_revisions_control_min_age_is_respected() {
+		[ , $autosave_id ] = $this->create_eligible_autosave();
+
+		update_option(
+			'newspack_revisions_control',
+			[
+				'active'  => true,
+				'number'  => 10,
+				'min_age' => '-60 days',
+			]
+		);
+		$this->assertNotContains( $autosave_id, Autosave_Cleanup::get_eligible_ids( 7, 100 ) );
+
+		update_option(
+			'newspack_revisions_control',
+			[
+				'active'  => true,
+				'number'  => 10,
+				'min_age' => '-1 week',
+			]
+		);
+		$this->assertContains( $autosave_id, Autosave_Cleanup::get_eligible_ids( 7, 100 ) );
+		$this->assertSame( 1, Autosave_Cleanup::run_cron() );
+
+		delete_option( 'newspack_revisions_control' );
 	}
 
 	/**

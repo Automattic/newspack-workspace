@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Autosaves CLI commands.
  */
-class Autosaves {
+final class Autosaves {
 
 	/**
 	 * Delete autosaves that have been stale (overtaken by a later save) for a number of days.
@@ -36,7 +36,7 @@ class Autosaves {
 	 * @param array $args       Positional args.
 	 * @param array $assoc_args Associative args.
 	 */
-	public static function cmd_prune( $args, $assoc_args ) {
+	public static function cmd_prune( array $args, array $assoc_args ): void {
 		$dry_run = ! empty( $assoc_args['dry-run'] );
 
 		$post_id = 0;
@@ -64,6 +64,10 @@ class Autosaves {
 			}
 			foreach ( $ids as $id ) {
 				$autosave = get_post( $id );
+				// Already deleted, e.g. by the cron running at the same time.
+				if ( ! $autosave ) {
+					continue;
+				}
 				WP_CLI::log(
 					sprintf(
 						'%s autosave %d (post %d, user %d, saved %s GMT)',

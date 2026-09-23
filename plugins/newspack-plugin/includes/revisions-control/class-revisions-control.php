@@ -109,7 +109,7 @@ class Revisions_Control {
 	 *
 	 * @return ?string
 	 */
-	private static function get_min_age() {
+	public static function get_min_age() {
 		if ( self::get_status()['active'] ) {
 			$min_age = self::get_status()['min_age'];
 			$date    = ( new DateTime() )->modify( $min_age );
