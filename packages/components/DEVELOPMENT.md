@@ -74,7 +74,6 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 
 ### Layout Components
 
-- **`BoxContrast`** – High-contrast content box for emphasis.
 - **`Card`** – Container for a logical block of content; use for grouping related settings. Default vertical margin is 32px so cards stack with consistent rhythm. Use `noBorder` when cards sit inside another card (e.g. ActionCard children).
 - **`Divider`** – Use between logical sections (e.g. between ActionCards) to separate content without another card. Margins are 32px (64px at larger breakpoints) so spacing stays consistent with the rest of the layout.
 - **`EmptyState`** – Use when a list has nothing in it yet, or an onboarding view stands in for a feature that is not set up. Compound: `EmptyState.Root` wraps `EmptyState.Header` and `EmptyState.Actions`. Render it only when the *unfiltered* collection is empty, so a search matching nothing keeps the DataViews "no results" treatment. See [src/empty-state/README.md](src/empty-state/README.md).
@@ -387,7 +386,6 @@ function Dashboard() {
 				sections={ sections }
 				renderAboveSections={ () => (
 					<>
-						<BrandHeader />
 						<SiteStatuses />
 					</>
 				) }

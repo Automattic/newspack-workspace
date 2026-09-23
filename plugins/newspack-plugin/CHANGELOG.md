@@ -1,3 +1,74 @@
+## newspack [6.52.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.4...newspack@6.52.5) (2026-09-22)
+
+
+### Bug Fixes
+
+* **content-gate:** honor written excerpt in feeds and REST ([96a6ba4](https://github.com/Automattic/newspack-workspace/commit/96a6ba49fa09bb1d6ad50b1daae197b1f23798c4))
+* **content-gate:** keep feed summaries XML-safe and password-aware ([11193f9](https://github.com/Automattic/newspack-workspace/commit/11193f94e3e8dfc67f5b4c7acbee3b56290388b6))
+
+## newspack [6.52.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.3...newspack@6.52.4) (2026-09-22)
+
+
+### Bug Fixes
+
+* **feeds:** keep build date in step with scheduled posts (NPPD-2284, [#1124](https://github.com/Automattic/newspack-workspace/issues/1124)) ([c2694d6](https://github.com/Automattic/newspack-workspace/commit/c2694d6e9ae4fffdf1ba8794783bc712bdd8faf3))
+
+## newspack [6.52.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.2...newspack@6.52.3) (2026-09-22)
+
+
+### Bug Fixes
+
+* **content-gate:** gate the frontend metering excerpt (NPPD-2254, [#1044](https://github.com/Automattic/newspack-workspace/issues/1044)) ([fda4d75](https://github.com/Automattic/newspack-workspace/commit/fda4d758fbd311a5d2d399dd06738d6217600b29))
+
+## newspack [6.52.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.1...newspack@6.52.2) (2026-09-21)
+
+
+### Bug Fixes
+
+* **content-gate:** let an integration outrank a per-feed restriction mode ([#1112](https://github.com/Automattic/newspack-workspace/issues/1112)) ([2d4b60d](https://github.com/Automattic/newspack-workspace/commit/2d4b60d469ef2423b140dfbad013ab0d265538af))
+
+## newspack [6.52.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.0...newspack@6.52.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **content-gate:** per-feed RSS restriction override (NPPD-2279) ([#1109](https://github.com/Automattic/newspack-workspace/issues/1109)) ([4ee0229](https://github.com/Automattic/newspack-workspace/commit/4ee02292dec8679020469c3117354aae9d30fe88))
+
+# newspack [6.52.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.4...newspack@6.52.0) (2026-09-18)
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([49a00c4](https://github.com/Automattic/newspack-workspace/commit/49a00c4e1bfa141c9c67cc1786f9d80b1eee5863))
+
+## newspack [6.51.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.3...newspack@6.51.4) (2026-09-16)
+
+
+### Bug Fixes
+
+* **campaigns:** render the donor landing page as a page autocomplete ([#1093](https://github.com/Automattic/newspack-workspace/issues/1093)) ([eaec5b2](https://github.com/Automattic/newspack-workspace/commit/eaec5b258873b8c27ecd518cb8a0e1c5be9b3a06)), closes [#686](https://github.com/Automattic/newspack-workspace/issues/686)
+
+## newspack [6.51.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.2...newspack@6.51.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* **plugin:** open the switch modal on the period of a private current plan ([#1085](https://github.com/Automattic/newspack-workspace/issues/1085)) ([0c45222](https://github.com/Automattic/newspack-workspace/commit/0c45222d5f5db16314904bb3cb6e5e63de3e0186))
+
+## newspack [6.51.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.1...newspack@6.51.2) (2026-09-15)
+
+
+### Bug Fixes
+
+* **perfmatters:** match Jetpack social logos by identifier (NPPM-3167) ([#995](https://github.com/Automattic/newspack-workspace/issues/995)) ([0eac4ba](https://github.com/Automattic/newspack-workspace/commit/0eac4bad082a26b940b7661fbf2e610053c1c927))
+
+## newspack [6.51.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.0...newspack@6.51.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **my-account:** refresh saved-card expiry after re-adding the same card ([#1075](https://github.com/Automattic/newspack-workspace/issues/1075)) ([e376217](https://github.com/Automattic/newspack-workspace/commit/e376217a96ec766ce5c6f473b634c8e89fbcf723))
+
 # newspack [6.51.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.50.3...newspack@6.51.0) (2026-09-14)
 
 

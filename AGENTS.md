@@ -142,6 +142,8 @@ The main container is `newspack_dev`; an isolated env is `newspack_env_<name>`, 
 
 **Services** — `wordpress` (`newspack_dev`, Apache + PHP), `db` (MariaDB 11.8.6), `mailhog` (http://localhost:8025), `adminer` (http://localhost:8088). Memcached object cache and Batcache page cache are enabled. Xdebug is on port 9003 with IDE key `DOCKERDEBUG`, mapping `/newspack-plugins/<project>` to `plugins/<project>`.
 
+**`custom-redirects.php`**: when present in a site's root it runs before WordPress on every request, as in production. The env wires this via PHP's `auto_prepend_file` (`config/php.ini` → `bin/auto-prepend.php`) for `html/`, additional sites and each env's `html/`, for web requests and for `wp` run from the site root. Baked into the image, so it takes effect after `./build-image.sh`.
+
 To customise the **main** stack without touching the tracked `docker-compose.yml`, create a gitignored `docker-compose.override.yml` at the root; `n start` merges it over the base stack. It does not apply to isolated envs, which layer their own generated files.
 
 ### Isolated environments
@@ -171,8 +173,10 @@ One repository, so a cross-plugin change is one branch and one PR. Before changi
 
 - **Squash merge** (`gh pr merge --squash`). The exception is branch promotions between `main`, `alpha` and `release`, which use merge commits to preserve history.
 - **`hotfix/*` and `epic/*` branches don't release.** They remain valid branch names, but pushes to them no longer publish prerelease tags or builds; releases come only from `release` (stable) and `alpha`. To test a branch on a site, use the installable zip CI's `build-zips` job attaches to every commit.
-- **Never push or merge unless asked.**
-- **One Copilot pass per PR**, requested when the PR opens. After addressing its feedback do not re-request it; the next review should be a human's.
+- **Never push, merge, mark a PR ready, or tag a reviewer unless asked.**
+- **Self-review before handoff.** A PR stays in draft until a self-review clears its blocking issues. Run as many rounds as that takes, using `/newspack:self-review` where the Newspack devkit is installed. Then post one short PR comment summarizing what the rounds changed and any feedback you declined.
+- **Copilot review is optional.** A self-review can replace it, or the two can run together. If you request one, request it once.
+- **Ask for a human review on purpose.** Most PRs merge after a clean self-review, plus QA by the reporter when the PR fixes a bug or feature request from Support or Design. Request one for a large, high-impact, or risky change, or when a teammate's opinion would help. Ask in a PR comment that tags the reviewer or `@Automattic/newspack-product`. Say what you want checked that a self-review couldn't cover: the approach, a flow to test, or specific code.
 - **PR bodies follow [the repository template](.github/PULL_REQUEST_TEMPLATE.md).** `gh pr create --body`/`--body-file` bypasses GitHub's automatic template application, so compose the body into the template's sections yourself, and follow the template's instruction comments without including them.
 
 ## External tools

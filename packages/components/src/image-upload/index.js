@@ -73,19 +73,23 @@ class ImageUpload extends Component {
 	 * Render.
 	 */
 	render = () => {
-		const { buttonLabel, className, disabled, help, image, isCovering, label, onChange, style = {} } = this.props;
+		const { buttonLabel, className, disabled, help, image, imageStyle, isCovering, label, onChange, style = {}, withMargin = true } = this.props;
 		const classes = classnames(
 			'newspack-image-upload__image',
 			{ 'newspack-image-upload__image--has-image': image },
 			{ 'newspack-image-upload__image--covering': isCovering }
 		);
 		return (
-			<BaseControl __nextHasNoMarginBottom className={ classnames( 'newspack-image-upload', className ) } help={ help }>
+			<BaseControl
+				__nextHasNoMarginBottom
+				className={ classnames( 'newspack-image-upload', { 'newspack-image-upload--no-margin': ! withMargin }, className ) }
+				help={ help }
+			>
 				{ label && <BaseControl.VisualLabel>{ label }</BaseControl.VisualLabel> }
 				<div className={ classes } style={ style }>
 					{ image?.url ? (
 						<>
-							<img data-testid="image-upload" src={ image.url } alt={ __( 'Image preview', 'newspack-plugin' ) } />
+							<img data-testid="image-upload" src={ image.url } alt={ __( 'Image preview', 'newspack-plugin' ) } style={ imageStyle } />
 							<div className="newspack-image-upload__controls">
 								<Button disabled={ disabled } onClick={ this.openModal } variant="tertiary">
 									{ __( 'Replace', 'newspack-plugin' ) }

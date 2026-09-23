@@ -40,6 +40,7 @@ export { default as overlayTop } from './src/overlay-top';
 export { default as phone } from './src/phone';
 export { default as playlist } from './src/playlist';
 export { default as postAvatar } from './src/post-avatar';
+export { default as print } from './src/print';
 export { default as priority } from './src/priority';
 export { default as readerRegistration } from './src/reader-registration';
 export { default as searchEmpty } from './src/search-empty';

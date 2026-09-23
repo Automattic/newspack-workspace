@@ -7,7 +7,7 @@
  * Author URI:      https://newspack.com
  * Text Domain:     newspack-popups
  * Domain Path:     /languages
- * Version:         3.18.0
+ * Version:         3.19.0
  *
  * @package         Newspack_Popups
  */
@@ -15,7 +15,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Define the plugin file path.
-if ( ! defined( 'NEWSPACK_POPUPS_PLUGIN_FILE' ) ) {
+if ( ! defined( 'NEWSPACK_POPUPS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_POPUPS_PLUGIN_FILE', __FILE__ );
 }
 

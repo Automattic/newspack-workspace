@@ -197,7 +197,7 @@ h1 {
 	&.newspack-dashboard {
 		.newspack-dashboard__section {
 			&:first-of-type {
-				margin-top: 3.5rem;
+				margin-top: wp-vars.$grid-unit-60;
 			}
 		}
 	}
@@ -280,26 +280,8 @@ h1 {
 .newspack-dashboard__section {
 	@include wizard-column;
 
-	> h3 {
-		font-size: 1.25rem;
-		font-weight: normal;
-		line-height: 1.75;
-		margin-bottom: calc(var(--newspack-wizard-section-child-space) / 2);
-	}
-
-	> p {
-		color: wp-colors.$gray-700;
-		margin: 0;
-	}
-
 	a {
 		text-decoration: none;
-	}
-
-	.newspack-grid:not(.newspack-grid--no-margin) {
-		--np-dash-card-icon-size: 80px;
-
-		margin: 1.5rem 0 2rem;
 	}
 }
 

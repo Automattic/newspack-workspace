@@ -27,6 +27,7 @@ class Initializer {
 			Hub\Event_Listeners::init();
 			Hub\Database\Subscriptions::init();
 			Hub\Database\Orders::init();
+			Hub\Database\Event_Log::init();
 			Hub\Newspack_Ads_GAM::init();
 			Hub\Connect_Node::init();
 		}
