@@ -1,3 +1,24 @@
+## newspack [6.52.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.1...newspack@6.52.2) (2026-09-21)
+
+
+### Bug Fixes
+
+* **content-gate:** let an integration outrank a per-feed restriction mode ([#1112](https://github.com/Automattic/newspack-workspace/issues/1112)) ([2d4b60d](https://github.com/Automattic/newspack-workspace/commit/2d4b60d469ef2423b140dfbad013ab0d265538af))
+
+## newspack [6.52.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.0...newspack@6.52.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **content-gate:** per-feed RSS restriction override (NPPD-2279) ([#1109](https://github.com/Automattic/newspack-workspace/issues/1109)) ([4ee0229](https://github.com/Automattic/newspack-workspace/commit/4ee02292dec8679020469c3117354aae9d30fe88))
+
+# newspack [6.52.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.4...newspack@6.52.0) (2026-09-18)
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([49a00c4](https://github.com/Automattic/newspack-workspace/commit/49a00c4e1bfa141c9c67cc1786f9d80b1eee5863))
+
 ## newspack [6.51.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.3...newspack@6.51.4) (2026-09-16)
 
 

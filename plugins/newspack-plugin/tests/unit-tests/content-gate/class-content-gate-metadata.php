@@ -10,7 +10,6 @@ use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Institution;
 use Newspack\Reader_Activation;
-use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Gate_Metadata;
 
 /**
@@ -43,13 +42,6 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	private $institution_ids = [];
 
 	/**
-	 * Schema version restored in tear_down().
-	 *
-	 * @var string
-	 */
-	private $original_version;
-
-	/**
 	 * Set up the WC mocks once for the class.
 	 */
 	public static function set_up_before_class() {
@@ -60,10 +52,10 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	/**
 	 * Set up before each test.
 	 *
-	 * Forces the v1 schema so get_metadata() returns the raw key shape these
-	 * tests assert against — legacy mode now normalizes to prefixed keys
-	 * (matching the other Legacy_* classes), which is exercised in
-	 * Test_Content_Gate_Legacy.
+	 * Content_Gate::get_metadata() always returns the raw key shape these
+	 * tests assert against; prefixing is applied later by the integration's
+	 * prepare_contact() (exercised separately in Test_Content_Gate_Legacy),
+	 * so no schema-version or origin simulation is needed here.
 	 */
 	public function set_up() {
 		parent::set_up();
@@ -76,9 +68,7 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 		$subscriptions_database = [];
 		$products_database      = [];
 
-		$this->original_version = Metadata::$version;
-		Metadata::$version      = '1.0';
-		self::$user_id          = $this->factory->user->create(
+		self::$user_id = $this->factory->user->create(
 			[
 				'role'       => 'subscriber',
 				'user_email' => 'reader@example.com',
@@ -108,7 +98,6 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 
 		Group_Subscription::reset_cache();
 		Institution::reset_matching_cache();
-		Metadata::$version = $this->original_version;
 		Content_Gate_Metadata::reset_cache();
 		parent::tear_down();
 	}

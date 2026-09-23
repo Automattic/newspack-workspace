@@ -64,7 +64,7 @@ class Newspack_Settings extends Wizard {
 					],
 					'jetpack_sso'  => [
 						'dependencies' => [
-							'jetpack_sso' => class_exists( 'Jetpack' ) && defined( 'NEWSPACK_MANAGER_FILE' ),
+							'jetpack_sso' => class_exists( 'Jetpack' ) && defined( 'NEWSPACK_MANAGER_FILE' ), // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 						],
 					],
 					'recaptcha'    => [],
@@ -113,7 +113,7 @@ class Newspack_Settings extends Wizard {
 			];
 
 		}
-		if ( defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE' ) ) {
+		if ( defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 			$newspack_settings['additional-brands'] = [
 				'label'          => __( 'Additional Brands', 'newspack-plugin' ),
 				'activeTabPaths' => [

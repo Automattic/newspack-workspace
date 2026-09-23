@@ -1,3 +1,17 @@
+## @automattic/newspack-blocks [4.33.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.0...newspack-blocks@4.33.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **iframe:** stop lazy-loaded embeds loading the page inside them ([#1115](https://github.com/Automattic/newspack-workspace/issues/1115)) ([bb97d4c](https://github.com/Automattic/newspack-workspace/commit/bb97d4c46864b3260f24b22690bb570eaf91e404))
+
+# @automattic/newspack-blocks [4.33.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.32.1...newspack-blocks@4.33.0) (2026-09-18)
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([49a00c4](https://github.com/Automattic/newspack-workspace/commit/49a00c4e1bfa141c9c67cc1786f9d80b1eee5863))
+
 ## @automattic/newspack-blocks [4.32.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.32.0...newspack-blocks@4.32.1) (2026-09-16)
 
 
