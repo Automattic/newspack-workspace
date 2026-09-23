@@ -64,7 +64,18 @@ function Print() {
 	// API layer re-throws has no second consumer here.
 	const setModuleEnabled = ( value: boolean ) => {
 		resetError();
-		return apiFetchToggle( { module_enabled_print: value }, true ).catch( () => undefined );
+		return apiFetchToggle( { module_enabled_print: value }, true )
+			.then( () => {
+				if ( ! value ) {
+					removeNotice( 'print-disabled' );
+					addNotice( {
+						id: 'print-disabled',
+						type: 'success',
+						message: __( 'InDesign export disabled.', 'newspack-plugin' ),
+					} );
+				}
+			} )
+			.catch( () => undefined );
 	};
 
 	const saveSettings = () => {

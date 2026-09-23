@@ -65,6 +65,8 @@ export interface SectionHeaderProps {
 	className?: string | null;
 	/** Description of the section. */
 	description?: React.ReactNode | ( () => React.ReactNode );
+	/** Lets the title and description span the full header width. With a back nav they are otherwise capped at half, which suits a page-wide header but not one already sitting in a column. */
+	fullWidthText?: boolean;
 	/** HTML heading level, e.g., 1 for h1, 2 for h2, etc. */
 	heading?: 1 | 2 | 3 | 4 | 5 | 6;
 	/** Icon to display in the header. */
@@ -100,6 +102,7 @@ export interface SectionHeaderProps {
  * @param props.centered
  * @param props.className
  * @param props.description
+ * @param props.fullWidthText
  * @param props.heading
  * @param props.icon
  * @param props.isWhite
@@ -119,6 +122,7 @@ const SectionHeader = ( {
 	centered = false,
 	className = null,
 	description = '',
+	fullWidthText = false,
 	heading = 2,
 	icon = null,
 	isWhite = false,
@@ -218,6 +222,7 @@ const SectionHeader = ( {
 			className={ classnames(
 				'newspack-section-header__container',
 				backNav && 'newspack-section-header--has-back-nav',
+				fullWidthText && 'newspack-section-header--full-width-text',
 				primaryAction && 'newspack-section-header--has-primary-action',
 				className
 			) }

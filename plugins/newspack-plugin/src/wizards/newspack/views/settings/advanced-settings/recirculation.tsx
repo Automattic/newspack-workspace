@@ -74,7 +74,7 @@ export default function Recirculation( { data, update, isFetching, requestLeave,
 				/>
 			) : (
 				! isFetching && (
-					<Notice status="info" isDismissible={ false } spokenMessage="">
+					<Notice status="warning" isDismissible={ false } spokenMessage="">
 						{ __( 'Related posts are turned off. Turn them on in Jetpack to show related content under each post.', 'newspack-plugin' ) }
 					</Notice>
 				)
