@@ -1073,6 +1073,30 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
+	 * Whether a product is a subscription — a subscription, a variable subscription,
+	 * or one of its variations.
+	 *
+	 * WooCommerce Subscriptions is asked directly when it is loaded, because it is the
+	 * authority on its own product types and handles variations. The type check is the
+	 * fallback for a site whose products outlived the plugin: those read as simple, so
+	 * every caller gets `false`. Which way that errs depends on the caller — a check
+	 * for what grants a rule covers a product it would have skipped, a cart check
+	 * withholds a discount — so a new caller has to decide for itself whether that is
+	 * the safe direction. Little rides on it in practice: without the plugin no
+	 * subscription is active, so the features that consult this reach nobody either way.
+	 *
+	 * @param \WC_Product $product The product.
+	 *
+	 * @return bool
+	 */
+	public static function is_subscription_product( \WC_Product $product ): bool {
+		if ( class_exists( 'WC_Subscriptions_Product' ) ) {
+			return (bool) \WC_Subscriptions_Product::is_subscription( $product );
+		}
+		return $product->is_type( [ 'subscription', 'variable-subscription', 'subscription_variation' ] );
+	}
+
+	/**
 	 * Check if WooCommerce Subscriptions is active.
 	 *
 	 * @return bool
@@ -1271,7 +1295,7 @@ class WooCommerce_Subscriptions {
 		) {
 			$user_id = \Newspack_Blocks\Modal_Checkout::get_user_id_from_email();
 		}
-		if ( $trial_length && $user_id && $product && $product->is_type( [ 'subscription', 'subscription_variation', 'variable-subscription' ] ) ) {
+		if ( $trial_length && $user_id && $product instanceof \WC_Product && self::is_subscription_product( $product ) ) {
 			$user_subscriptions = array_values( \wcs_get_users_subscriptions( $user_id ) );
 			foreach ( $user_subscriptions as $subscription ) {
 				if ( $subscription->has_product( $product->get_id() ) && 'trash' !== $subscription->get_status() ) {

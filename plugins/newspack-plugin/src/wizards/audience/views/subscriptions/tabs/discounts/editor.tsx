@@ -26,7 +26,7 @@ import {
  * Internal dependencies.
  */
 import { Drawer } from '../../../../../../../packages/components/src';
-import SearchTokenField from '../../components/search-token-field';
+import SubscriberFields from '../../components/subscriber-fields';
 import TargetingFields from '../../components/targeting-fields';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
 import { DISCOUNTS_ENDPOINT, PREVIEW_LIMIT } from './constants';
@@ -35,6 +35,7 @@ import type { DiscountCurrency, DiscountRule, DiscountsPayload } from './types';
 import type { ProductSearchItem } from '../../types';
 
 const EMPTY_RULE: Omit< DiscountRule, 'id' | 'created_at' > = {
+	subscription_targeting: 'subscriptions',
 	subscription_product_ids: [],
 	targeting: 'products',
 	product_ids: [],
@@ -132,12 +133,15 @@ export default function DiscountEditor( { isOpen, rule, currency, onSaved, onClo
 							{ error }
 						</Notice>
 					) }
-					<SearchTokenField
-						endpoint={ SEARCH_ENDPOINTS.subscriptions }
-						label={ __( 'Subscription', 'newspack-plugin' ) }
-						help={ __( 'Subscribers of these subscriptions get the discount.', 'newspack-plugin' ) }
-						value={ draft.subscription_product_ids ?? [] }
-						onChange={ ids => update( { subscription_product_ids: ids } ) }
+					<SubscriberFields
+						value={ {
+							subscription_targeting: draft.subscription_targeting ?? 'subscriptions',
+							subscription_product_ids: draft.subscription_product_ids ?? [],
+						} }
+						onChange={ partial => update( partial ) }
+						label={ __( 'Subscribers', 'newspack-plugin' ) }
+						specificHelp={ __( 'Only subscribers of the subscriptions below get the discount.', 'newspack-plugin' ) }
+						allHelp={ __( 'Anyone with an active subscription gets the discount.', 'newspack-plugin' ) }
 						disabled={ inFlight }
 					/>
 					<TargetingFields
@@ -188,14 +192,29 @@ export default function DiscountEditor( { isOpen, rule, currency, onSaved, onClo
 							<tbody>
 								{ previewRows.map( product => {
 									const basePrice = Number( product.price );
-									const discounted = subscriberPrice(
-										basePrice,
-										{
-											discount_type: draft.discount_type ?? 'fixed',
-											amount: Number( draft.amount ) || 0,
-										},
-										currency.decimals
-									);
+									// A rule never discounts what grants it, so those products keep
+									// their price on the storefront and the preview has to show that
+									// rather than a saving nobody will get. Which products those are
+									// depends on the mode: under "all subscriptions" every
+									// subscription grants the rule, otherwise only the ones it names —
+									// matched through the parent too, since naming a variable
+									// subscription covers its variations.
+									const isGrantor =
+										'all' === draft.subscription_targeting
+											? product.is_subscription
+											: ( draft.subscription_product_ids ?? [] ).some(
+													id => id === product.id || ( !! product.parent_id && id === product.parent_id )
+											  );
+									const discounted = isGrantor
+										? null
+										: subscriberPrice(
+												basePrice,
+												{
+													discount_type: draft.discount_type ?? 'fixed',
+													amount: Number( draft.amount ) || 0,
+												},
+												currency.decimals
+										  );
 									return (
 										<tr key={ product.id }>
 											<td>{ decodeEntities( product.name ) }</td>
