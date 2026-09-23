@@ -234,6 +234,31 @@ class Test_Settings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test update_from_request leaves settings the request didn't send untouched, even with the route's defaults applied.
+	 *
+	 * @covers \Newspack\Collections\Settings::update_from_request
+	 */
+	public function test_update_from_request_ignores_route_defaults() {
+		Settings::update_settings(
+			[
+				'custom_naming_enabled' => true,
+				'custom_name'           => 'Issues',
+				'posts_per_page'        => 30,
+			]
+		);
+
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/wizard/newspack-settings/collections' );
+		$request->set_default_params( Settings::get_rest_args( 'defaults' ) );
+		$request->set_body_params( [ 'module_enabled_collections' => false ] );
+
+		$result = Settings::update_from_request( $request );
+
+		$this->assertTrue( $result['custom_naming_enabled'] );
+		$this->assertEquals( 'Issues', $result['custom_name'] );
+		$this->assertEquals( 30, $result['posts_per_page'] );
+	}
+
+	/**
 	 * Test sanitize_articles_block_attrs preserves unmanaged keys.
 	 *
 	 * @covers \Newspack\Collections\Settings::sanitize_articles_block_attrs

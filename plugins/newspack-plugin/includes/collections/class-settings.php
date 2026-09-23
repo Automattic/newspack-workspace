@@ -250,8 +250,15 @@ class Settings {
 		$settings         = self::get_settings();
 		$updated_settings = [];
 
+		// `has_param()` also counts the route's declared defaults, which would reset every omitted setting.
+		$sent_params = array_merge(
+			(array) $request->get_query_params(),
+			(array) $request->get_body_params(),
+			(array) $request->get_json_params()
+		);
+
 		foreach ( self::get_rest_args( 'keys' ) as $key ) {
-			if ( ! $request->has_param( $key ) ) {
+			if ( ! array_key_exists( $key, $sent_params ) ) {
 				continue;
 			}
 
