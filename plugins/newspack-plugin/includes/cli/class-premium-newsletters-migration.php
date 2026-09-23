@@ -1237,12 +1237,13 @@ class Premium_Newsletters_Migration {
 	 *
 	 * A gate this run did not write is a gate no current plan accounts for: the plans
 	 * behind it were renamed, regrouped, unpublished or deleted since the gate was
-	 * created. It keeps restricting its lists regardless, and is_post_restricted()
+	 * created. It keeps applying to its lists regardless, and is_post_restricted()
 	 * lets the highest-priority matching gate decide — so a stale gate ranked above
-	 * the gate this run wrote beats it. On a newsletter gate that is not a paywall:
-	 * Premium_Newsletters::check_access() unsubscribes the reader from the list at the
-	 * ESP, so a reader silently loses a newsletter they pay for. Only the operator can
-	 * tell which of these are wanted, so they are named rather than touched.
+	 * the gate this run wrote beats it, and Premium_Newsletters::check_access() acts
+	 * on its answer at the ESP. A stricter stale gate unsubscribes readers from a
+	 * newsletter they pay for; a looser one subscribes readers who have not paid,
+	 * when auto-signup is on. Only the operator can tell which of these are wanted,
+	 * so they are named rather than touched.
 	 *
 	 * The gate list is re-read rather than taken from the pre-loop snapshot. Either
 	 * source gives the same answer — every gate this run created carries a title in

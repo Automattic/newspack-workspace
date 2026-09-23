@@ -524,7 +524,7 @@ class GoogleSiteKit {
 			// unreadable-gate case above.
 			return '';
 		}
-		// Every gate's rule set was empty, so no gate ever applied to anybody.
+		// The deciding gate's rule set was empty, so it restricts nobody.
 		return $unreadable ? '' : self::memo_access_source( $memo_key, 'no_custom_access_gate' );
 	}
 

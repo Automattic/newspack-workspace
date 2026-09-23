@@ -1909,8 +1909,8 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 
 	/**
 	 * A published premium newsletter gate no group wrote is a gate no current plan
-	 * accounts for. It keeps restricting its lists, and the first restricting gate
-	 * wins — so it has to be named. Gates in the content bucket are somebody else's
+	 * accounts for. It keeps applying to its lists, and the highest-priority gate on
+	 * a list decides — so it has to be named. Gates in the content bucket are somebody else's
 	 * business and must not be dragged in.
 	 */
 	public function test_report_stale_gates_names_an_untouched_newsletter_gate() {

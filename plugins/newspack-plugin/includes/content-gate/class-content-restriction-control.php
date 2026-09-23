@@ -187,8 +187,8 @@ class Content_Restriction_Control {
 	 * Get post gates.
 	 *
 	 * Returns the matching gates in Content_Gate::get_gates() priority order. Callers
-	 * treat the first as the gate that decides access (is_post_restricted(), Site Kit
-	 * attribution), so a change here that reorders the list changes who gets in.
+	 * rely on this order to find the gate that decides access (is_post_restricted(),
+	 * Site Kit attribution), so a change here that reorders the list changes who gets in.
 	 *
 	 * @param int $post_id Optional post ID.
 	 *
