@@ -8,6 +8,7 @@
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useRef, Fragment } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
+import { Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -36,7 +37,7 @@ const DEFAULT_DATA: ThemeData = {
 };
 
 const ThemeBrand = ( { isPartOfSetup = false } ) => {
-	const { wizardApiFetch, isFetching } = useWizardApiFetch( 'newspack-settings/theme-mods' );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/theme-mods' );
 	const { setHeaderData, addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setDataState ] = useState< ThemeData >( DEFAULT_DATA );
 	const [ savedData, setSavedData ] = useState< ThemeData >( DEFAULT_DATA );
@@ -70,8 +71,9 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 	};
 
 	async function save() {
+		resetError();
 		const requestData = data;
-		return new Promise( resolve =>
+		return new Promise( ( resolve, reject ) =>
 			wizardApiFetch(
 				{
 					data: requestData,
@@ -96,7 +98,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 						resolve( res );
 					},
 				}
-			)
+			).catch( reject )
 		);
 	}
 
@@ -116,7 +118,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 	const submit = useRef( save );
 	submit.current = save;
 
-	const isDirty = JSON.stringify( data ) !== JSON.stringify( savedData );
+	const isDirty = data.theme !== savedData.theme || JSON.stringify( data.theme_mods ) !== JSON.stringify( savedData.theme_mods );
 
 	useEffect( () => {
 		if ( isPartOfSetup ) {
@@ -127,13 +129,13 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 				{
 					type: 'primary',
 					label: __( 'Save', 'newspack-plugin' ),
-					action: () => submit.current(),
+					action: () => submit.current().catch( () => {} ),
 					disabled: isFetching || ! isDirty,
 				},
 				{
 					type: 'more',
 					label: __( 'Open Customizer', 'newspack-plugin' ),
-					href: 'customize.php',
+					href: `customize.php?return=${ encodeURIComponent( window.location.href ) }`,
 				},
 			],
 		} );
@@ -161,7 +163,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 		{
 			key: 'typography',
 			title: __( 'Typography', 'newspack-plugin' ),
-			description: __( 'Define the font pairing to use throughout your site', 'newspack-plugin' ),
+			description: __( 'Define the font pairing to use throughout your site.', 'newspack-plugin' ),
 			content: <Typography data={ data.theme_mods } update={ updateThemeMods } />,
 		},
 		{
@@ -181,8 +183,13 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 	return (
 		<WizardsTab isFetching={ isFetching }>
 			{ navBlockDialog }
+			{ errorMessage && (
+				<Notice status="error" isDismissible={ false } politeness="polite">
+					{ errorMessage }
+				</Notice>
+			) }
 			{ ! isPartOfSetup && (
-				<WizardSection title={ __( 'Theme', 'newspack-plugin' ) } description={ __( 'Update your sites theme.', 'newspack-plugin' ) }>
+				<WizardSection title={ __( 'Theme', 'newspack-plugin' ) } description={ __( 'Update your site’s theme.', 'newspack-plugin' ) }>
 					<ThemeSelection
 						theme={ isFetching ? '' : data.theme || 'newspack-theme' }
 						updateTheme={ theme => setData( { ...data, theme } ) }
@@ -218,7 +225,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 			) ) }
 			{ isPartOfSetup && (
 				<div className="newspack-buttons-card">
-					<Button variant="primary" onClick={ () => save().then( finishSetup ) }>
+					<Button variant="primary" onClick={ () => save().then( finishSetup, () => {} ) }>
 						{ __( 'Finish', 'newspack-plugin' ) }
 					</Button>
 				</div>

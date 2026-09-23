@@ -27,7 +27,7 @@ export default function Footer( { themeMods, onUpdate }: { themeMods: ThemeMods;
 		<Stack direction="column" gap="xl">
 			<TextControl
 				withMargin={ false }
-				label={ __( 'Copyright information', 'newspack' ) }
+				label={ __( 'Copyright information', 'newspack-plugin' ) }
 				value={ themeMods.footer_copyright || '' }
 				onChange={ ( footer_copyright: string ) => updateThemeMods( { footer_copyright } ) }
 			/>
@@ -35,15 +35,15 @@ export default function Footer( { themeMods, onUpdate }: { themeMods: ThemeMods;
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
 				isBlock
-				label={ __( 'Background', 'newspack' ) }
+				label={ __( 'Background', 'newspack-plugin' ) }
 				value={ themeMods.footer_color === 'custom' ? 'custom' : 'default' }
 				onChange={ value => updateThemeMods( { footer_color: value === 'custom' ? 'custom' : 'default' } ) }
 			>
-				<ToggleGroupControlOption value="default" label={ __( 'Default', 'newspack' ) } />
-				<ToggleGroupControlOption value="custom" label={ __( 'Custom', 'newspack' ) } />
+				<ToggleGroupControlOption value="default" label={ __( 'Default', 'newspack-plugin' ) } />
+				<ToggleGroupControlOption value="custom" label={ __( 'Custom', 'newspack-plugin' ) } />
 			</ToggleGroupControl>
 			<ColorPicker
-				label={ __( 'Background color' ) }
+				label={ __( 'Background color', 'newspack-plugin' ) }
 				color={ themeMods.footer_color_hex }
 				disabled={ themeMods.footer_color !== 'custom' }
 				onChange={ ( footer_color_hex: string ) => updateThemeMods( { footer_color_hex } ) }

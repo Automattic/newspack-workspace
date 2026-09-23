@@ -26,7 +26,7 @@ export default function Header( { themeMods, updateHeader }: { themeMods: ThemeM
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
 				isBlock
-				label={ __( 'Style', 'newspack' ) }
+				label={ __( 'Style', 'newspack-plugin' ) }
 				value={ themeMods.header_center_logo ? 'center' : 'left' }
 				onChange={ align =>
 					updateHeader( {
@@ -35,14 +35,14 @@ export default function Header( { themeMods, updateHeader }: { themeMods: ThemeM
 					} )
 				}
 			>
-				<ToggleGroupControlOption value="left" label={ __( 'Left', 'newspack' ) } />
-				<ToggleGroupControlOption value="center" label={ __( 'Center', 'newspack' ) } />
+				<ToggleGroupControlOption value="left" label={ __( 'Left', 'newspack-plugin' ) } />
+				<ToggleGroupControlOption value="center" label={ __( 'Center', 'newspack-plugin' ) } />
 			</ToggleGroupControl>
 			<ToggleGroupControl
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
 				isBlock
-				label={ __( 'Size', 'newspack' ) }
+				label={ __( 'Size', 'newspack-plugin' ) }
 				value={ themeMods.header_simplified ? 'small' : 'large' }
 				onChange={ size =>
 					updateHeader( {
@@ -51,14 +51,14 @@ export default function Header( { themeMods, updateHeader }: { themeMods: ThemeM
 					} )
 				}
 			>
-				<ToggleGroupControlOption value="small" label="S" aria-label={ __( 'Small', 'newspack' ) } />
-				<ToggleGroupControlOption value="large" label="L" aria-label={ __( 'Large', 'newspack' ) } />
+				<ToggleGroupControlOption value="small" label="S" aria-label={ __( 'Small', 'newspack-plugin' ) } />
+				<ToggleGroupControlOption value="large" label="L" aria-label={ __( 'Large', 'newspack-plugin' ) } />
 			</ToggleGroupControl>
 			<ToggleGroupControl
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
 				isBlock
-				label={ __( 'Background', 'newspack' ) }
+				label={ __( 'Background', 'newspack-plugin' ) }
 				value={ themeMods.header_solid_background ? 'custom' : 'default' }
 				onChange={ value =>
 					updateHeader( {
@@ -67,11 +67,11 @@ export default function Header( { themeMods, updateHeader }: { themeMods: ThemeM
 					} )
 				}
 			>
-				<ToggleGroupControlOption value="default" label={ __( 'Default', 'newspack' ) } />
-				<ToggleGroupControlOption value="custom" label={ __( 'Custom', 'newspack' ) } />
+				<ToggleGroupControlOption value="default" label={ __( 'Default', 'newspack-plugin' ) } />
+				<ToggleGroupControlOption value="custom" label={ __( 'Custom', 'newspack-plugin' ) } />
 			</ToggleGroupControl>
 			<ColorPicker
-				label={ __( 'Background color' ) }
+				label={ __( 'Background color', 'newspack-plugin' ) }
 				color={ themeMods.header_color_hex }
 				disabled={ ! themeMods.header_solid_background }
 				onChange={ ( header_color_hex: string ) =>
