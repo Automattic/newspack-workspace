@@ -154,3 +154,19 @@ export const LOGO_SIZE_OPTIONS = [
  */
 export const parseLogoSize = ( size: number, options = LOGO_SIZE_OPTIONS ) =>
 	options.reduce( ( foundSize, { value } ) => ( size >= value ? value : foundSize ), options[ 0 ].value );
+
+type LogoSize = { width: number; height: number };
+
+/**
+ * The size newspack-theme renders the header logo at for a given size percentage,
+ * following `newspack_customize_logo_resize()`.
+ */
+export function headerLogoSize( { width, height }: LogoSize, percent: number ): LogoSize {
+	const maxWidth = Math.min( width, 600 );
+	const isLandscape = width >= height;
+	const ratio = isLandscape ? width / height : height / width;
+	const maxShort = isLandscape ? Math.floor( maxWidth / ratio ) : maxWidth;
+	const short = Math.round( 48 + ( percent * ( maxShort - 48 ) ) / 100 );
+	const long = Math.round( short * ratio );
+	return isLandscape ? { width: long, height: short } : { width: short, height: long };
+}

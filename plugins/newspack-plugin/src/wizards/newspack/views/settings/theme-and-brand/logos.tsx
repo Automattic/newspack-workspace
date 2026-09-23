@@ -19,7 +19,7 @@ import { Stack } from '@wordpress/ui';
  * Internal dependencies
  */
 import { ImageUpload } from '../../../../../../packages/components/src';
-import { LOGO_SIZE_OPTIONS, parseLogoSize } from './utils';
+import { LOGO_SIZE_OPTIONS, headerLogoSize, parseLogoSize } from './utils';
 
 const settingsTabs = window.newspackSettings;
 const isMultibrandedEnabled = settingsTabs && 'additional-brands' in settingsTabs;
@@ -36,13 +36,16 @@ const PREVIEW_PADDING = 'var(--wpds-dimension-padding-2xl, 24px)';
 
 type Size = { width: number; height: number };
 
-const imageUrl = ( image: unknown ) => ( image as { url?: string } | null )?.url;
+type LogoImage = { url?: string; width?: number; height?: number } | null;
 
-function useNaturalSize( url?: string ) {
+// The theme sizes the logo from the original upload, which the preview URL (a `large` rendition) may not be.
+function useNaturalSize( image: unknown ) {
+	const { url, width, height } = ( image as LogoImage ) ?? {};
+	const hasKnownSize = Boolean( width && height );
 	const [ size, setSize ] = useState< Size | null >( null );
 	useEffect( () => {
 		setSize( null );
-		if ( ! url ) {
+		if ( ! url || hasKnownSize ) {
 			return;
 		}
 		const img = new window.Image();
@@ -51,23 +54,8 @@ function useNaturalSize( url?: string ) {
 		return () => {
 			img.onload = null;
 		};
-	}, [ url ] );
-	return size;
-}
-
-/**
- * The size newspack-theme renders the header logo at for a given size percentage,
- * following `newspack_customize_logo_resize()`.
- */
-function headerLogoSize( { width, height }: Size, percent: number ): Size {
-	const maxWidth = Math.min( width, 600 );
-	const isLandscape = width >= height;
-	const ratio = isLandscape ? width / height : height / width;
-	const maxShort = isLandscape ? Math.floor( maxWidth / ratio ) : maxWidth;
-	const short = Math.round( 48 + ( percent * ( maxShort - 48 ) ) / 100 );
-	const long = Math.round( short * ratio );
-	const renderedWidth = Math.min( isLandscape ? long : short, maxWidth );
-	return { width: renderedWidth, height: Math.round( ( renderedWidth * height ) / width ) };
+	}, [ url, hasKnownSize ] );
+	return hasKnownSize ? { width: Number( width ), height: Number( height ) } : size;
 }
 
 const previewHeight = ( logoHeight: number ) => `calc(${ logoHeight }px + 2 * ${ PREVIEW_PADDING })`;
@@ -77,7 +65,7 @@ export default function Logos( { themeMods, onUpdate }: { themeMods: ThemeMods; 
 		onUpdate( { ...themeMods, ...themeModChanges } );
 	}
 
-	const headerNaturalSize = useNaturalSize( imageUrl( themeMods.custom_logo ) );
+	const headerNaturalSize = useNaturalSize( themeMods.custom_logo );
 	const logoSizePercent = themeMods.logo_size as unknown;
 	const hasLogoSize = logoSizePercent !== '' && logoSizePercent !== null && Number.isFinite( Number( logoSizePercent ) );
 	const largestPercent = Math.max( LOGO_SIZE_OPTIONS[ LOGO_SIZE_OPTIONS.length - 1 ].value, hasLogoSize ? Number( logoSizePercent ) : 0 );
@@ -86,8 +74,10 @@ export default function Logos( { themeMods, onUpdate }: { themeMods: ThemeMods; 
 			? { width: headerLogoSize( headerNaturalSize, Number( logoSizePercent ) ).width, height: 'auto' }
 			: undefined;
 	const headerPreviewHeight = headerNaturalSize ? previewHeight( headerLogoSize( headerNaturalSize, largestPercent ).height ) : undefined;
+	const footerBox = FOOTER_LOGO_BOXES[ themeMods.footer_logo_size ] ?? FOOTER_LOGO_BOXES.medium;
 	const footerImageStyle = {
-		...( FOOTER_LOGO_BOXES[ themeMods.footer_logo_size ] ?? FOOTER_LOGO_BOXES.medium ),
+		maxWidth: `min(${ footerBox.maxWidth }px, 100%)`,
+		maxHeight: footerBox.maxHeight,
 		width: 'auto',
 		height: 'auto',
 	};
@@ -102,7 +92,7 @@ export default function Logos( { themeMods, onUpdate }: { themeMods: ThemeMods; 
 					...( themeMods.custom_logo && { padding: PREVIEW_PADDING, height: headerPreviewHeight } ),
 				} }
 				imageStyle={ headerImageStyle }
-				label={ __( 'Header Logo', 'newspack' ) }
+				label={ __( 'Header Logo', 'newspack-plugin' ) }
 				image={ themeMods.custom_logo }
 				onChange={ ( custom_logo: string ) =>
 					updateThemeMods( {
@@ -117,7 +107,7 @@ export default function Logos( { themeMods, onUpdate }: { themeMods: ThemeMods; 
 					__nextHasNoMarginBottom
 					__next40pxDefaultSize
 					isBlock
-					label={ __( 'Header Logo Size', 'newspack' ) }
+					label={ __( 'Header Logo Size', 'newspack-plugin' ) }
 					value={ parseLogoSize( themeMods.logo_size ) }
 					onChange={ logo_size => updateThemeMods( { logo_size: Number( logo_size ) } ) }
 				>
@@ -131,8 +121,8 @@ export default function Logos( { themeMods, onUpdate }: { themeMods: ThemeMods; 
 					<ImageUpload
 						withMargin={ false }
 						className="newspack-design__footer__logo"
-						label={ __( 'Footer Logo', 'newspack' ) }
-						help={ __( 'Optional. Without one, the footer shows the header logo.', 'newspack' ) }
+						label={ __( 'Footer Logo', 'newspack-plugin' ) }
+						help={ __( 'Optional. Without one, the footer shows the header logo.', 'newspack-plugin' ) }
 						style={ {
 							backgroundColor:
 								themeMods.footer_color === 'custom' && themeMods.footer_color_hex ? themeMods.footer_color_hex : 'transparent',
@@ -147,14 +137,14 @@ export default function Logos( { themeMods, onUpdate }: { themeMods: ThemeMods; 
 							__nextHasNoMarginBottom
 							__next40pxDefaultSize
 							isBlock
-							label={ __( 'Footer Logo Size', 'newspack' ) }
+							label={ __( 'Footer Logo Size', 'newspack-plugin' ) }
 							value={ themeMods.footer_logo_size }
 							onChange={ footer_logo_size => updateThemeMods( { footer_logo_size: String( footer_logo_size ) } ) }
 						>
-							<ToggleGroupControlOption value="small" label="S" aria-label={ __( 'Small', 'newspack' ) } />
-							<ToggleGroupControlOption value="medium" label="M" aria-label={ __( 'Medium', 'newspack' ) } />
-							<ToggleGroupControlOption value="large" label="L" aria-label={ __( 'Large', 'newspack' ) } />
-							<ToggleGroupControlOption value="xlarge" label="XL" aria-label={ __( 'Extra large', 'newspack' ) } />
+							<ToggleGroupControlOption value="small" label="S" aria-label={ __( 'Small', 'newspack-plugin' ) } />
+							<ToggleGroupControlOption value="medium" label="M" aria-label={ __( 'Medium', 'newspack-plugin' ) } />
+							<ToggleGroupControlOption value="large" label="L" aria-label={ __( 'Large', 'newspack-plugin' ) } />
+							<ToggleGroupControlOption value="xlarge" label="XL" aria-label={ __( 'Extra large', 'newspack-plugin' ) } />
 						</ToggleGroupControl>
 					) }
 				</>
