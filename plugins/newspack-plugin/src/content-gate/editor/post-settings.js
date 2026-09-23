@@ -48,7 +48,9 @@ function PostSettings() {
 				<>
 					{ /* Gates arrive in priority order, and the first matching gate decides access alone (NPPD-2289). */ }
 					<p>
-						{ __( 'Gate that decides access to this post: ', 'newspack-plugin' ) }
+						{ meta.newspack_content_restriction_is_exempt
+							? __( 'Gate that would decide access if this post weren’t exempt: ', 'newspack-plugin' )
+							: __( 'Gate that decides access to this post: ', 'newspack-plugin' ) }
 						{ renderGateLink( matchingGates[ 0 ] ) }
 					</p>
 					{ matchingGates.length > 1 && (
