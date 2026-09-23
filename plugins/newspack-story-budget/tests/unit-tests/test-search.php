@@ -8,7 +8,7 @@
 use Newspack_Story_Budget\Fields;
 
 /**
- * Story search matches custom-field values the way it matches titles.
+ * Special characters in a story search term match custom-field values literally.
  */
 class Test_Story_Search extends WP_UnitTestCase {
 	/**
@@ -25,7 +25,7 @@ class Test_Story_Search extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Run a story search the way the REST handlers do.
+	 * Run a query carrying the flag the story search REST handlers set.
 	 *
 	 * @param string $term Search term, as the reader typed it.
 	 * @return int[] Matching post IDs.
@@ -36,7 +36,7 @@ class Test_Story_Search extends WP_UnitTestCase {
 				'story_budget_search' => true,
 				'fields'              => 'ids',
 				'posts_per_page'      => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Test fixture; a handful of posts.
-				// WP_Query strips slashes from the term, so slash it as a request would arrive.
+				// WP_Query strips one level of slashes from the term; slash it so it reaches the filter as given.
 				's'                   => wp_slash( $term ),
 			]
 		);
@@ -44,7 +44,8 @@ class Test_Story_Search extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A term found only in a custom field is matched.
+	 * A term found only in a custom field is matched. Also shows the custom-field clause
+	 * is active here, so a no-match below is not a harness artifact.
 	 */
 	public function test_matches_term_in_custom_field() {
 		$match = $this->create_story( 'Weekly roundup of council votes' );
