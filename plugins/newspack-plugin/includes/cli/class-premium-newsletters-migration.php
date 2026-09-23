@@ -1275,7 +1275,7 @@ class Premium_Newsletters_Migration {
 		}
 		WP_CLI::warning(
 			sprintf(
-				'%d published premium newsletter gate(s) %s by this run, and still restrict their lists: %s. The highest-priority gate on a list decides, so one of these can override a gate this run wrote — and a restricted premium newsletter unsubscribes the reader at the ESP. Check each one and retire the ones no plan accounts for.',
+				'%d published premium newsletter gate(s) %s by this run, and still restrict their lists: %s. The highest-priority gate on a list decides, so one of these can override a gate this run wrote: a stricter one unsubscribes readers at the ESP, and a looser one subscribes readers who have not paid when auto-signup is on. Check each one and retire the ones no plan accounts for.',
 				count( $stale ),
 				$dry_run ? 'would not be written' : 'were not written',
 				implode(
@@ -1480,11 +1480,11 @@ class Premium_Newsletters_Migration {
 	 * when the mode is inactive or its layout is sound.
 	 *
 	 * A layout ID of 0 is the load-bearing case. Content_Restriction_Control::
-	 * is_post_restricted() ends each gate's turn on `if ( $is_restricted &&
-	 * $gate_layout_id )`, and both Content_Gate settings getters always return a
+	 * is_post_restricted() passes over a gate that refuses a reader with no layout to
+	 * show them, and both Content_Gate settings getters always return a
 	 * gate_layout_id key defaulting to (int) 0 — so the `?? $gate['id']` fallbacks
-	 * beside that assignment never fire, and a mode with no layout makes the gate
-	 * restrict nothing at all while looking migrated. create_gate() can leave it 0
+	 * there never fire, and a mode with no layout makes the gate restrict nothing at
+	 * all while looking migrated. create_gate() can leave it 0
 	 * without telling the caller: create_gate_layout() returns a WP_Error when the
 	 * insert fails, the settings are then written without the key, and create_gate()
 	 * returns the gate ID rather than the error.

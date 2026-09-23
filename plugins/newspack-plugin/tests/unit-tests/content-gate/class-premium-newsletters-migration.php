@@ -2269,9 +2269,9 @@ class Test_Premium_Newsletters_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The evaluator ends each gate's turn on `if ( $is_restricted && $gate_layout_id )`,
-	 * and the settings getters always return a gate_layout_id defaulting to 0 — so the
-	 * `??` fallbacks beside it never fire and a gate with no layout restricts nothing.
+	 * The evaluator passes over a gate that refuses a reader with no layout to show
+	 * them, and the settings getters always return a gate_layout_id defaulting to 0 — so
+	 * the `??` fallbacks there never fire and a gate with no layout restricts nothing.
 	 * create_gate() can produce exactly that: it discards a WP_Error from
 	 * create_gate_layout() and still returns the gate ID.
 	 */

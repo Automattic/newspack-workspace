@@ -145,7 +145,7 @@ const requiresPaidAccess = ( gate: Gate ) =>
 
 /**
  * A content rule's values as strings, so term IDs stored as numbers and as strings compare equal.
- * A single value counts as a one-item list, as it does on the server.
+ * A single value counts as a one-item list, as the server treats taxonomy rules.
  *
  * @param rule The content rule.
  */

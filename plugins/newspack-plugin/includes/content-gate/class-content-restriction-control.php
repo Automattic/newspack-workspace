@@ -186,6 +186,10 @@ class Content_Restriction_Control {
 	/**
 	 * Get post gates.
 	 *
+	 * Returns the matching gates in Content_Gate::get_gates() priority order. Callers
+	 * treat the first as the gate that decides access (is_post_restricted(), Site Kit
+	 * attribution), so a change here that reorders the list changes who gets in.
+	 *
 	 * @param int $post_id Optional post ID.
 	 *
 	 * @return array Array of post gates.
@@ -441,11 +445,8 @@ class Content_Restriction_Control {
 			return true;
 		}
 
-		// First-match: get_post_gates() keeps the priority order from get_gates(),
-		// so its first gate decides. The one exception is a gate that refuses the
-		// reader with no layout to show them. A gate without a layout has always been
-		// passed over, so the next matching gate decides rather than this one letting
-		// the reader through.
+		// get_post_gates() keeps the priority order from get_gates(). A gate that refuses
+		// the reader with no layout to show them is passed over, so the next gate decides.
 		foreach ( $post_gates as $gate ) {
 			$gate_layout_id = null;
 			$is_restricted  = false;

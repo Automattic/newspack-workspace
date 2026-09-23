@@ -38,7 +38,8 @@ export default function ContentGateSettings( {
 	const wizardData = useWizardData( slug ) as ContentGatesWizardData;
 	const gates = ( wizardData?.gates || [] ) as Gate[];
 	const siteMeter = wizardData?.config?.site_meter;
-	// Premium newsletter gates have no registration wall, so no rank of theirs can open a paid one.
+	// Premium newsletter gates are left out: their screen has no priority modal to act on a
+	// warning, and they match lists by ID, which the overlap check doesn't model.
 	const priorityWarning = useMemo( () => ( isNewsletter ? undefined : getPriorityWarnings( gates )[ gate.id ] ), [ gates, gate.id, isNewsletter ] );
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( slug );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );

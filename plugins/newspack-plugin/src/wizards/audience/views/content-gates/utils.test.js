@@ -378,10 +378,22 @@ describe( 'getPriorityWarnings', () => {
 		expect( getPriorityWarnings( rank( [ draft, paidGate( 2 ) ] ) ) ).toEqual( {} );
 	} );
 
-	it( 'reads a rule value stored as a single string, as the server does', () => {
-		const warnings = getPriorityWarnings( rank( [ registrationGate( 1, [ { slug: 'post_types', value: 'post' } ] ), paidGate( 2 ) ] ) );
+	it( 'reads a taxonomy rule value stored as a single string, as the server does', () => {
+		const warnings = getPriorityWarnings(
+			rank( [
+				registrationGate( 1, [
+					{ slug: 'post_types', value: [ 'post' ] },
+					{ slug: 'category', value: '7' },
+				] ),
+				paidGate( 2, [
+					{ slug: 'post_types', value: [ 'post' ] },
+					{ slug: 'category', value: [ '7' ], exclusion: true },
+				] ),
+			] )
+		);
 
-		expect( warnings ).toHaveProperty( '1' );
+		// The higher gate only covers category 7, which the paid gate carves out.
+		expect( warnings ).toEqual( {} );
 	} );
 
 	it( 'ranks gates by priority, not by their order in the list', () => {

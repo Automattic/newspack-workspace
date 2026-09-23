@@ -14,7 +14,7 @@ use Newspack\Reader_Activation;
 /**
  * Gate composition is first-match by priority (NPPD-2289).
  *
- * Each case puts two gates on the same post: a registration wall, which any
+ * Most cases put two gates on the same post: a registration wall, which any
  * signed-in reader passes, and a paid wall, which only readers on the paying
  * email domain pass. The reader who tells the two semantics apart is a
  * registered reader without paid access: under first-match the top gate's
@@ -219,10 +219,11 @@ class Test_Gate_Priority extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A gate that refuses a reader but has no layout to show them cannot
-	 * render, which has always meant the evaluator passes it over. It must not
-	 * decide by admitting the reader: the next matching gate decides instead,
-	 * so a broken registration wall on top does not open the paid wall below.
+	 * A gate that refuses a reader but has no layout to show them cannot render,
+	 * so the evaluator passes it over and the next matching gate decides. For an
+	 * anonymous visitor, whom the registration wall refuses, a broken wall on top
+	 * therefore does not open the paid wall below. (A signed-in reader passes the
+	 * wall, and it admits them whatever its layout.)
 	 */
 	public function test_gate_without_a_layout_is_passed_over() {
 		$registration_gate_id = $this->create_registration_gate( 0 );
