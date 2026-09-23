@@ -97,6 +97,10 @@ class Newspack_Settings extends Wizard {
 				'label' => __( 'Advanced Settings', 'newspack-plugin' ),
 			],
 		];
+		// These are Newspack Theme mods; other themes, the block theme included, ignore them.
+		if ( 'newspack-theme' !== get_template() ) {
+			unset( $newspack_settings['theme-and-brand'] );
+		}
 		if ( Complianz::is_complianz_active() ) {
 			$newspack_settings['privacy'] = [
 				'label' => __( 'Privacy', 'newspack-plugin' ),
