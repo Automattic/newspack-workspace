@@ -8,7 +8,7 @@
 import { __ } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
-import { useMemo, useRef, useState } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
@@ -34,6 +34,13 @@ const ContentGatesPriority = ( {
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ sortedGates, setSortedGates ] = useState< Gate[] >( gates );
+	// The modal stays mounted while closed, and card actions change gates in place, so
+	// each opening starts from the latest gates rather than the ones first rendered.
+	useEffect( () => {
+		if ( showModal ) {
+			setSortedGates( gates );
+		}
+	}, [ showModal ] ); // eslint-disable-line react-hooks/exhaustive-deps -- `gates` falls back to a fresh `[]` each render, which would re-seed in a loop.
 	const gateItems = useMemo( () => {
 		// Recomputed from the unsaved order, so a warning follows each drag.
 		const priorityWarnings = getPriorityWarnings( sortedGates );

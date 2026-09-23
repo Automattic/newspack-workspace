@@ -152,4 +152,35 @@ describe( 'Content Gates Priority modal', () => {
 
 		expect( screen.queryByText( /Ranked above/ ) ).toBeNull();
 	} );
+
+	it( 'warns from the latest gates each time it opens, not the ones it first saw', () => {
+		const allPosts = [ { slug: 'post_types', value: [ 'post' ] } ];
+		const paidWall = {
+			id: 2,
+			title: 'Paid wall',
+			status: 'publish',
+			priority: 1,
+			content_rules: allPosts,
+			registration: { active: true },
+			custom_access: { active: true, access_rules: [ [ { slug: 'subscription', value: [ '10' ] } ] ] },
+		};
+		const registrationWall = {
+			id: 1,
+			title: 'Registration wall',
+			status: 'draft',
+			priority: 0,
+			content_rules: allPosts,
+			registration: { active: true },
+			custom_access: { active: false, access_rules: [] },
+		};
+		mockGates = [ registrationWall, paidWall ];
+		const ContentGatesPriority = require( './content-gates-priority' ).default;
+		const { rerender } = render( <ContentGatesPriority showModal={ false } closeModal={ () => {} } updateGatesData={ () => {} } /> );
+
+		// Activated from its card while the modal was closed.
+		mockGates = [ { ...registrationWall, status: 'publish' }, paidWall ];
+		rerender( <ContentGatesPriority showModal={ true } closeModal={ () => {} } updateGatesData={ () => {} } /> );
+
+		expect( screen.getByText( /Ranked above “Paid wall”/ ) ).toBeTruthy();
+	} );
 } );
