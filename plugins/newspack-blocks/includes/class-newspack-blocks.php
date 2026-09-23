@@ -73,8 +73,16 @@ class Newspack_Blocks {
 					&& array_key_exists( 'isFullScreen', $block['attrs'] )
 					&& $block['attrs']['isFullScreen']
 					) {
+					$rendered = render_block( $block );
+
+					// A block with no usable source renders nothing; taking over the page would
+					// leave it blank, since the fullscreen body class hides the rest of it.
+					if ( '' === $rendered ) {
+						continue;
+					}
+
 					// we don't need the post content since the iframe will be fullscreen.
-					$content = render_block( $block );
+					$content = $rendered;
 
 					add_filter(
 						'body_class',

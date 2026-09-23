@@ -114,4 +114,39 @@ class IframeBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->assertStringContainsString( "src = 'https://docs.google.com/gview?embedded=true", $html );
 		$this->assertStringContainsString( 'url=https%3A%2F%2Fexample.test%2Ffiles%2Freport.pdf', $html );
 	}
+
+	/**
+	 * Run the full-screen content filter on a post holding one full-screen Iframe block.
+	 *
+	 * @param string $src Block source.
+	 * @return string Filtered content.
+	 */
+	private function filter_fullscreen_post( $src ) {
+		$attrs   = wp_json_encode(
+			[
+				'src'          => $src,
+				'isFullScreen' => true,
+			]
+		);
+		$post_id = self::factory()->post->create( [ 'post_content' => '<!-- wp:newspack-blocks/iframe ' . $attrs . ' /-->' ] );
+
+		$GLOBALS['post'] = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		return Newspack_Blocks::hide_post_content_when_iframe_block_is_fullscreen( 'original post content' );
+	}
+
+	/**
+	 * A full-screen block with no usable source leaves the post content and page layout alone.
+	 */
+	public function test_fullscreen_block_without_usable_source_keeps_post_content() {
+		$this->assertSame( 'original post content', $this->filter_fullscreen_post( 'javascript:void(0)' ) );
+		$this->assertNotContains( 'newspack-post-with-fullscreen-iframe', apply_filters( 'body_class', [] ) );
+	}
+
+	/**
+	 * A full-screen block with a usable source still replaces the post content.
+	 */
+	public function test_fullscreen_block_with_usable_source_replaces_post_content() {
+		$this->assertStringContainsString( "src = 'https://example.test/embed'", $this->filter_fullscreen_post( 'https://example.test/embed' ) );
+		$this->assertContains( 'newspack-post-with-fullscreen-iframe', apply_filters( 'body_class', [] ) );
+	}
 }
