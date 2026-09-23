@@ -31,9 +31,10 @@ const { InteractiveDiv } = utils;
  * @param {string}             [props.color]     - Default color.
  * @param {Function}           props.onChange    - Function to call when the color changes.
  * @param {string}             [props.className] - Additional class name.
+ * @param {boolean}            [props.disabled]  - Whether the color is shown but cannot be changed.
  * @return {JSX.Element} ColorPicker component.
  */
-const ColorPicker = ( { label, help, color = '#ffffff', onChange, className } ) => {
+const ColorPicker = ( { label, help, color = '#ffffff', onChange, className, disabled = false } ) => {
 	const [ isExpanded, setIsExpanded ] = useState( false );
 	const ref = useRef();
 	const id = useInstanceId( ColorPicker, 'newspack-color-picker' );
@@ -41,16 +42,24 @@ const ColorPicker = ( { label, help, color = '#ffffff', onChange, className } ) 
 	const colordColor = colord( color );
 	hooks.useOnClickOutside( ref, () => setIsExpanded( false ) );
 	return (
-		<BaseControl id={ id } className={ classnames( 'newspack-color-picker', className ) } help={ help } __nextHasNoMarginBottom>
+		<BaseControl
+			id={ id }
+			className={ classnames( 'newspack-color-picker', { 'is-disabled': disabled }, className ) }
+			help={ help }
+			__nextHasNoMarginBottom
+		>
 			<BaseControl.VisualLabel id={ labelId }>{ label }</BaseControl.VisualLabel>
 			<InteractiveDiv
 				id={ id }
 				aria-labelledby={ labelId }
 				aria-describedby={ help ? `${ id }__help` : undefined }
 				aria-expanded={ isExpanded }
+				aria-disabled={ disabled || undefined }
+				tabIndex={ disabled ? -1 : 0 }
 				className={ 'newspack-color-picker__expander' }
-				onClick={ () => setIsExpanded( ! isExpanded ) }
+				onClick={ () => ! disabled && setIsExpanded( ! isExpanded ) }
 				style={ {
+					...( disabled && { cursor: 'default' } ),
 					backgroundColor: color,
 					color: colordColor.contrast() > colordColor.contrast( '#000000' ) ? '#ffffff' : '#000000',
 				} }
@@ -59,7 +68,7 @@ const ColorPicker = ( { label, help, color = '#ffffff', onChange, className } ) 
 			</InteractiveDiv>
 
 			<div className="newspack-color-picker__main" ref={ ref }>
-				{ isExpanded && <ColorPickerComponent color={ color } onChange={ onChange } enableAlpha={ false } /> }
+				{ isExpanded && ! disabled && <ColorPickerComponent color={ color } onChange={ onChange } enableAlpha={ false } /> }
 			</div>
 		</BaseControl>
 	);

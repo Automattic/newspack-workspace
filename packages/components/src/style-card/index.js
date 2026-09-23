@@ -36,11 +36,9 @@ class StyleCard extends Component {
 						<img src={ image } alt={ cardTitle + ' ' + __( 'Thumbnail', 'newspack-plugin' ) } />
 					) }
 					<div className="newspack-style-card__actions">
-						{ isActive ? (
-							<span className="newspack-style-card__actions__badge">{ __( 'Selected', 'newspack-plugin' ) }</span>
-						) : (
+						{ ! isActive && (
 							<Button
-								variant="link"
+								variant="tertiary"
 								onClick={ onClick }
 								aria-label={ ariaLabel ? ariaLabel : __( 'Select', 'newspack-plugin' ) + ' ' + cardTitle }
 								tabIndex="0"
@@ -48,7 +46,7 @@ class StyleCard extends Component {
 								{ __( 'Select', 'newspack-plugin' ) }
 							</Button>
 						) }
-						{ url && <WebPreview url={ url } label={ __( 'View Demo', 'newspack-plugin' ) } variant="link" /> }
+						{ url && <WebPreview url={ url } label={ __( 'View Demo', 'newspack-plugin' ) } variant="tertiary" /> }
 					</div>
 				</div>
 				{ cardTitle && <div className="newspack-style-card__title">{ cardTitle }</div> }
