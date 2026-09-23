@@ -159,7 +159,7 @@ const IframeEdit = ( { attributes, setAttributes } ) => {
 	return (
 		<Fragment>
 			<BlockControls>
-				<Toolbar controls={ src && iframeControls } />
+				<Toolbar controls={ isEmbeddableSrc( src ) && iframeControls } />
 			</BlockControls>
 
 			<InspectorControls>

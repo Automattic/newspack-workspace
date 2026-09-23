@@ -79,11 +79,12 @@ function newspack_blocks_get_iframe_html( $mode, $src, $height, $width, $is_full
 	$classes[]   = 'wp-block-newspack-blocks-iframe';
 
 	// Embed only http(s) and relative sources. Any other scheme is treated as no source,
-	// matching the editor preview, which checks the same list.
-	$src = esc_url_raw( $src, [ 'http', 'https' ] );
+	// as in the editor preview, which allows the same schemes. Listing https first makes
+	// esc_url_raw() complete a scheme-less source with https:// rather than http://.
+	$src = esc_url_raw( $src, [ 'https', 'http' ] );
 
 	if ( empty( $src ) ) {
-		return;
+		return '';
 	}
 
 	if ( ! empty( $align ) ) {

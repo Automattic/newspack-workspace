@@ -51,7 +51,7 @@ class IframeBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * @param string $src Source URL.
 	 */
 	public function test_unsupported_source_scheme_renders_nothing( $src ) {
-		$this->assertSame( '', (string) $this->render_iframe( [ 'src' => $src ] ) );
+		$this->assertSame( '', $this->render_iframe( [ 'src' => $src ] ) );
 	}
 
 	/**
@@ -75,6 +75,30 @@ class IframeBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 */
 	public function test_supported_source_renders( $src ) {
 		$this->assertStringContainsString( "src = '" . $src . "'", $this->render_iframe( [ 'src' => $src ] ) );
+	}
+
+	/**
+	 * Sources the render completes or re-encodes on the way out.
+	 *
+	 * @return array
+	 */
+	public function normalized_sources() {
+		return [
+			'scheme-less'       => [ 'example.test/embed', 'https://example.test/embed' ],
+			'protocol-relative' => [ '//example.test/embed', '//example.test/embed' ],
+			'query ampersand'   => [ 'https://example.test/embed?a=1&b=2', 'https://example.test/embed?a=1&#038;b=2' ],
+		];
+	}
+
+	/**
+	 * A source is printed in the form the browser will load.
+	 *
+	 * @dataProvider normalized_sources
+	 * @param string $src      Source URL as saved.
+	 * @param string $expected Source as printed.
+	 */
+	public function test_source_is_printed_normalized( $src, $expected ) {
+		$this->assertStringContainsString( "src = '" . $expected . "'", $this->render_iframe( [ 'src' => $src ] ) );
 	}
 
 	/**
