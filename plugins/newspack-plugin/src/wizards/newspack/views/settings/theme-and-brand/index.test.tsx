@@ -175,6 +175,16 @@ describe( 'Theme and Brand', () => {
 		expect( server.theme_mods.footer_color_hex ).toBe( SERVER.theme_mods.secondary_color_hex );
 	} );
 
+	it( 'leaves nothing unsaved after switching the footer to Custom and back', async () => {
+		await renderThemeBrand();
+
+		const footerBackground = screen.getAllByRole( 'radiogroup', { name: 'Background' } )[ 1 ];
+		fireEvent.click( within( footerBackground ).getByRole( 'radio', { name: 'Custom' } ) );
+		fireEvent.click( within( footerBackground ).getByRole( 'radio', { name: 'Default' } ) );
+
+		expect( headerAction( 'Save' ).disabled ).toBe( true );
+	} );
+
 	it( 'surfaces an API error', async () => {
 		mockState.errorMessage = 'Request failed.';
 		await renderThemeBrand();

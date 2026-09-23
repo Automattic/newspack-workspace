@@ -27,6 +27,7 @@ import Colors from './colors';
 import Logos from './logos';
 import Typography from './typography';
 import { DEFAULT_THEME_MODS } from '../constants';
+import { footerColor } from './utils';
 
 const { useHistory } = Router;
 
@@ -80,17 +81,22 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 	async function save() {
 		resetError();
 		const requestData = data;
+		const { theme_mods: themeMods } = requestData;
+		const payload =
+			themeMods.footer_color === 'custom' && ! themeMods.footer_color_hex
+				? { ...requestData, theme_mods: { ...themeMods, footer_color_hex: footerColor( themeMods ) } }
+				: requestData;
 		return new Promise( ( resolve, reject ) =>
 			wizardApiFetch(
 				{
-					data: requestData,
+					data: payload,
 					path: '/newspack/v1/wizard/newspack-setup-wizard/theme',
 					method: 'POST',
 					updateCacheMethods: [ 'GET' ],
 				},
 				{
 					onSuccess: res => {
-						const saved = { ...requestData, ...res };
+						const saved = { ...payload, ...res };
 						setSavedData( saved );
 						// Controls stay editable mid-request; keep any edit made meanwhile, unsaved.
 						setDataState( current => ( current === requestData ? saved : current ) );

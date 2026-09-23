@@ -19,7 +19,7 @@ import { Stack } from '@wordpress/ui';
  * Internal dependencies
  */
 import { ImageUpload } from '../../../../../../packages/components/src';
-import { LOGO_SIZE_OPTIONS, headerLogoSize, parseLogoSize } from './utils';
+import { LOGO_SIZE_OPTIONS, footerColor, headerLogoSize, parseLogoSize } from './utils';
 
 const settingsTabs = window.newspackSettings;
 const isMultibrandedEnabled = settingsTabs && 'additional-brands' in settingsTabs;
@@ -124,8 +124,7 @@ export default function Logos( { themeMods, onUpdate }: { themeMods: ThemeMods; 
 						label={ __( 'Footer Logo', 'newspack-plugin' ) }
 						help={ __( 'Optional. Without one, the footer shows the header logo.', 'newspack-plugin' ) }
 						style={ {
-							backgroundColor:
-								themeMods.footer_color === 'custom' && themeMods.footer_color_hex ? themeMods.footer_color_hex : 'transparent',
+							backgroundColor: themeMods.footer_color === 'custom' ? footerColor( themeMods ) : 'transparent',
 							...( themeMods.newspack_footer_logo && { padding: PREVIEW_PADDING, height: footerPreviewHeight } ),
 						} }
 						imageStyle={ footerImageStyle }

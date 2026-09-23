@@ -170,3 +170,9 @@ export function headerLogoSize( { width, height }: LogoSize, percent: number ): 
 	const long = Math.round( short * ratio );
 	return isLandscape ? { width: long, height: short } : { width: short, height: long };
 }
+
+/**
+ * The footer color a Custom background applies. Nothing is stored until a color is
+ * chosen, so an unset one falls back to the secondary color.
+ */
+export const footerColor = ( themeMods: ThemeMods ) => themeMods.footer_color_hex || themeMods.secondary_color_hex;
