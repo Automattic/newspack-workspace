@@ -87,45 +87,43 @@ class Newspack_Test_GoogleSiteKit_Data_Layer extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The hashed email is sent to Site Kit's own gtag config but deliberately kept
-	 * out of the dataLayer, so it is not exposed to every third-party tag in the
-	 * publisher's GTM container.
+	 * A logged-in reader's WordPress user ID is sent to Site Kit's gtag config as the GA4
+	 * User-ID, as a string.
 	 */
-	public function test_email_hash_is_excluded_from_data_layer() {
-		$user_id = $this->factory->user->create(
-			[
-				'role'       => 'subscriber',
-				'user_email' => 'reader@example.com',
-			]
-		);
+	public function test_user_id_is_set_on_gtag_config_for_logged_in_readers() {
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		wp_set_current_user( $user_id );
 
-		// The gtag set (get_custom_event_parameters) does include the hashed email...
-		$gtag_params = GoogleSiteKit::get_custom_event_parameters();
-		$this->assertArrayHasKey( 'email_hash', $gtag_params );
+		$gtag_opt = GoogleSiteKit::add_ga_custom_parameters( [] );
 
-		// ...but the dataLayer set must not.
-		$data_layer_params = GoogleSiteKit::get_data_layer_params();
-		$this->assertArrayNotHasKey( 'email_hash', $data_layer_params );
-		$this->assertArrayHasKey( 'logged_in', $data_layer_params );
+		$this->assertArrayHasKey( 'user_id', $gtag_opt );
+		$this->assertSame( (string) $user_id, $gtag_opt['user_id'] );
 	}
 
 	/**
-	 * The exclusion is enforced after the filter runs, so a filter cannot re-introduce
-	 * `email_hash` into the dataLayer.
+	 * An anonymous reader has no User-ID, so the field is omitted rather than sent empty
+	 * (which GA4 rejects).
 	 */
-	public function test_filter_cannot_reintroduce_email_hash() {
-		add_filter(
-			'newspack_ga4_data_layer_params',
-			function ( $params ) {
-				$params['email_hash'] = 'should-not-survive';
-				return $params;
-			}
-		);
+	public function test_user_id_is_omitted_for_anonymous_readers() {
+		wp_set_current_user( 0 );
+
+		$gtag_opt = GoogleSiteKit::add_ga_custom_parameters( [] );
+
+		$this->assertArrayNotHasKey( 'user_id', $gtag_opt );
+	}
+
+	/**
+	 * The User-ID goes only to Site Kit's own gtag config, never into the dataLayer, so it
+	 * is not exposed to the third-party tags in a publisher's GTM container.
+	 */
+	public function test_user_id_is_not_mirrored_to_data_layer() {
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
 
 		$data_layer_params = GoogleSiteKit::get_data_layer_params();
 
-		$this->assertArrayNotHasKey( 'email_hash', $data_layer_params );
+		$this->assertArrayNotHasKey( 'user_id', $data_layer_params );
+		$this->assertArrayHasKey( 'logged_in', $data_layer_params );
 	}
 
 	/**
