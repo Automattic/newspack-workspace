@@ -112,6 +112,10 @@ class Rest_Authenticaton {
 
 		$verified = Crypto::decrypt_message( $signature, $secret_key, $nonce );
 
+		if ( false === $verified ) {
+			return new \WP_Error( 'newspack-network-authentication-error', 'Invalid Signature', [ 'status' => 401 ] );
+		}
+
 		if ( is_wp_error( $verified ) ) {
 			return $verified;
 		}

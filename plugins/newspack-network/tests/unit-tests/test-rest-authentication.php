@@ -174,6 +174,22 @@ class TestRestAuthentication extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Headers that do not decrypt are refused before any read access is granted.
+	 */
+	public function test_undecryptable_signature_is_refused_on_woo_read_route() {
+		$headers = [
+			'X-NP-Network-Signature' => str_repeat( 'ab', 40 ),
+			'X-NP-Network-Nonce'     => Crypto::generate_nonce(),
+		];
+
+		$result = Rest_Authenticaton::rest_pre_dispatch( null, [], $this->signed_request( $headers, '/wc/v3/orders/1' ) );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 401, $result->get_error_data()['status'] );
+		$this->assertFalse( has_filter( 'woocommerce_rest_check_permissions', [ Rest_Authenticaton::class, 'allow_woo_read_endpoints' ] ) );
+	}
+
+	/**
 	 * Signature headers in the format earlier Hub versions send.
 	 *
 	 * @param string $endpoint_id Endpoint ID.
