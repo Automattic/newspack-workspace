@@ -152,7 +152,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 		when: ! isPartOfSetup && isDirty && ! isFetching,
 	} );
 
-	const updateThemeMods = ( theme_mods: ThemeMods ) => setData( { ...data, theme_mods } );
+	const updateThemeMods = ( theme_mods: Partial< ThemeMods > ) => setData( { ...data, theme_mods: { ...data.theme_mods, ...theme_mods } } );
 
 	const sections = [
 		{
@@ -236,7 +236,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 				<div className="newspack-buttons-card">
 					<Button
 						variant="primary"
-						onClick={ event => {
+						onClick={ ( event?: { currentTarget: Element | null } ) => {
 							registerSubmit( event );
 							save().then( finishSetup, () => {} );
 						} }
