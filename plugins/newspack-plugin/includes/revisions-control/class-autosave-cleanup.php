@@ -36,6 +36,17 @@ final class Autosave_Cleanup {
 	public static function cron_init(): void {
 		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'cron_deactivate' ] );
 
+		/**
+		 * Array of cron hook names to disable. Use this to selectively
+		 * disable Newspack cron jobs on specific environments.
+		 *
+		 * @constant NEWSPACK_CRON_DISABLE
+		 * @type     array
+		 * @default  All cron jobs enabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_CRON_DISABLE', [ 'newspack_autosave_cleanup' ] );
+		 */
 		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CRON_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
 			self::cron_deactivate();
 		} elseif ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
