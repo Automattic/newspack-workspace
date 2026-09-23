@@ -27,7 +27,7 @@ describe( 'selectSpecificPosts', () => {
 
 		selectSpecificPosts( select, 'post', [ 12, 34 ] );
 
-		expect( queries ).toEqual( [ { include: [ 12, 34 ], status: [ 'publish', 'future', 'draft', 'pending' ] } ] );
+		expect( queries ).toEqual( [ { include: [ 12, 34 ], per_page: 2, status: [ 'publish', 'future', 'draft', 'pending' ] } ] );
 	} );
 
 	it( 'asks for nothing when nothing is picked, rather than the whole collection', () => {
@@ -75,5 +75,11 @@ describe( 'getSpecificPostsQuery', () => {
 
 	it( 'requests full records, so the inspector can reuse the same cached request', () => {
 		expect( getSpecificPostsQuery( [ 12 ] ) ).not.toHaveProperty( '_fields' );
+	} );
+
+	it( "lifts core's default cap so every hand-picked post is fetched", () => {
+		const ids = Array.from( { length: 15 }, ( _, i ) => i + 1 );
+
+		expect( getSpecificPostsQuery( ids ).per_page ).toBe( 15 );
 	} );
 } );

@@ -3,11 +3,13 @@
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
+import apiFetch from '@wordpress/api-fetch';
+import { decodeEntities } from '@wordpress/html-entities';
 
 /**
  * Internal dependencies
  */
-import { SEARCHABLE_STATUSES } from './consts';
+import { SELECTABLE_STATUSES } from './consts';
 
 /**
  * REST path for the "Add posts" search.
@@ -28,8 +30,35 @@ export const getPostSearchPath = ( restBase, search, includeStatuses = true ) =>
 		per_page: 20,
 		orderby: 'relevance',
 		_fields: 'id,title,status',
-		...( includeStatuses ? { status: SEARCHABLE_STATUSES } : {} ),
+		...( includeStatuses ? { status: SELECTABLE_STATUSES } : {} ),
 	} );
+
+/**
+ * Suggestions for the "Add posts" search, unpublished statuses included.
+ *
+ * @param {string} restBase REST base of the post type being searched.
+ * @param {string} search   Search term.
+ * @return {Promise<Object[]>} Posts with `id`, `title` and `status`.
+ */
+export const fetchPostSuggestions = ( restBase, search ) =>
+	apiFetch( { path: getPostSearchPath( restBase, search ) } )
+		.catch( error => {
+			// Core rejects the whole request when the user can't edit this post type. Fall back
+			// to published posts rather than leaving the search empty. Any other failure — no
+			// network, a broken endpoint — is not worth a second attempt.
+			if ( 'rest_forbidden_status' !== error?.code ) {
+				throw error;
+			}
+			return apiFetch( { path: getPostSearchPath( restBase, search, false ) } );
+		} )
+		.then( posts =>
+			posts.map( post => ( {
+				id: post.id,
+				title: decodeEntities( post.title?.rendered ) || __( '(no title)', 'newspack-newsletters' ),
+				status: post.status,
+			} ) )
+		)
+		.catch( () => [] );
 
 /**
  * Human-readable name for an unpublished status. Published posts get none.

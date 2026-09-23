@@ -1,15 +1,22 @@
 /**
  * Internal dependencies
  */
-import { SEARCHABLE_STATUSES } from './consts';
+import { SELECTABLE_STATUSES } from './consts';
 
 /**
  * `getEntityRecords` query for the posts hand-picked on a block.
  *
+ * `per_page` overrides core's default of 10, which would otherwise silently drop the
+ * overflow once more than ten posts are hand-picked.
+ *
  * @param {number[]} ids Post IDs.
  * @return {Object} Query args.
  */
-export const getSpecificPostsQuery = ids => ( { include: ids, status: SEARCHABLE_STATUSES } );
+export const getSpecificPostsQuery = ids => ( {
+	include: ids,
+	per_page: ids.length,
+	status: SELECTABLE_STATUSES,
+} );
 
 /**
  * Posts hand-picked on a block, unpublished ones included.

@@ -1,4 +1,8 @@
-import { formatPostLabel, getPostSearchPath } from './post-search';
+import apiFetch from '@wordpress/api-fetch';
+
+import { fetchPostSuggestions, formatPostLabel, getPostSearchPath } from './post-search';
+
+jest.mock( '@wordpress/api-fetch' );
 
 describe( 'getPostSearchPath', () => {
 	it( 'searches the given post type collection endpoint', () => {
@@ -49,5 +53,34 @@ describe( 'formatPostLabel', () => {
 
 	it( 'leaves the title alone when the status is not yet known', () => {
 		expect( formatPostLabel( 'City budget passes', undefined ) ).toBe( 'City budget passes' );
+	} );
+} );
+
+describe( 'fetchPostSuggestions', () => {
+	afterEach( () => {
+		jest.resetAllMocks();
+	} );
+
+	it( 'retries once for published posts only when core forbids the status query', async () => {
+		apiFetch
+			.mockRejectedValueOnce( { code: 'rest_forbidden_status' } )
+			.mockResolvedValueOnce( [ { id: 7, title: { rendered: 'City budget' }, status: 'publish' } ] );
+
+		const posts = await fetchPostSuggestions( 'posts', 'budget' );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		// The first request asks for unpublished statuses; the retry drops them.
+		expect( decodeURIComponent( apiFetch.mock.calls[ 0 ][ 0 ].path ) ).toContain( 'status[0]=publish' );
+		expect( decodeURIComponent( apiFetch.mock.calls[ 1 ][ 0 ].path ) ).not.toContain( 'status[' );
+		expect( posts ).toEqual( [ { id: 7, title: 'City budget', status: 'publish' } ] );
+	} );
+
+	it( 'resolves to an empty list without retrying on any other error', async () => {
+		apiFetch.mockRejectedValueOnce( { code: 'rest_no_route' } );
+
+		const posts = await fetchPostSuggestions( 'posts', 'budget' );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( posts ).toEqual( [] );
 	} );
 } );

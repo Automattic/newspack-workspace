@@ -20,28 +20,8 @@ import { decodeEntities } from '@wordpress/html-entities';
 /**
  * Internal dependencies
  */
-import { formatPostLabel, getPostSearchPath } from './post-search';
+import { fetchPostSuggestions, formatPostLabel } from './post-search';
 import { selectSpecificPosts } from './specific-posts';
-
-const fetchPostSuggestions = ( restBase, search ) =>
-	apiFetch( { path: getPostSearchPath( restBase, search ) } )
-		.catch( error => {
-			// Core rejects the whole request when the user can't edit this post type. Fall back
-			// to published posts rather than leaving the search empty. Any other failure — no
-			// network, a broken endpoint — is not worth a second attempt.
-			if ( 'rest_forbidden_status' !== error?.code ) {
-				throw error;
-			}
-			return apiFetch( { path: getPostSearchPath( restBase, search, false ) } );
-		} )
-		.then( posts =>
-			posts.map( post => ( {
-				id: post.id,
-				title: decodeEntities( post.title?.rendered ) || __( '(no title)', 'newspack-newsletters' ),
-				status: post.status,
-			} ) )
-		)
-		.catch( () => [] );
 
 const SEPARATOR = '--';
 const encodePosts = posts => posts.map( post => [ post.id, post.title ].join( SEPARATOR ) );
