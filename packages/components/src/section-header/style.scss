@@ -34,7 +34,7 @@
 				flex-direction: row;
 			}
 		}
-		&.newspack-section-header--has-back-nav {
+		&.newspack-section-header--has-back-nav:not(.newspack-section-header--full-width-text) {
 			@include wp-mixins.break-wide {
 				.newspack-section-header__title-container,
 				p {
