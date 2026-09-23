@@ -193,9 +193,29 @@ export default function ConfigureView( {
 		initialValues[ field.key ] = ( field.value as string | boolean ) ?? field.default ?? '';
 	} );
 	const [ values, setValues ] = useState< Record< string, string | boolean > >( initialValues );
-	// Saving hands back the stored values, which become the new baseline.
+	const pendingSave = useRef< { submitted: Record< string, string | boolean >; baseline: Record< string, string | boolean > } | null >( null );
+	// Undo runs from a snackbar long after the render that created it, so the baseline is read at call time.
+	const baseline = useRef( initialValues );
+	baseline.current = initialValues;
+	const save = ( fields: Record< string, string | boolean >, notice?: SaveNotice ) => {
+		pendingSave.current = { submitted: fields, baseline: baseline.current };
+		return onSave( fields, notice );
+	};
+	// Saving hands back the stored values, which become the new baseline. A field edited after the save started, such as
+	// between Restore to Default and its Undo, is neither the submitted nor the prior value, and keeps the edit.
 	useEffect( () => {
-		setValues( initialValues );
+		const pending = pendingSave.current;
+		pendingSave.current = null;
+		setValues( current =>
+			pending
+				? Object.fromEntries(
+						Object.entries( initialValues ).map( ( [ key, stored ] ) => {
+							const untouched = current[ key ] === pending.submitted[ key ] || current[ key ] === pending.baseline[ key ];
+							return [ key, untouched ? stored : current[ key ] ];
+						} )
+				  )
+				: initialValues
+		);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ tool ] );
 	const isDirty = JSON.stringify( values ) !== JSON.stringify( initialValues );
@@ -211,18 +231,17 @@ export default function ConfigureView( {
 	const restoreDefaults = () => {
 		const previous = initialValues;
 		const defaults = Object.fromEntries( fieldsWithDefault.map( ( field: ToolField ) => [ field.key, field.default ?? '' ] ) );
-		onSave(
-			{ ...previous, ...defaults },
-			{
-				message: __( 'Restored to default.', 'newspack-plugin' ),
-				actions: [
-					{
-						label: __( 'Undo', 'newspack-plugin' ),
-						onClick: () => onSave( previous, { message: __( 'Restore undone.', 'newspack-plugin' ) } ).catch( () => undefined ),
-					},
-				],
-			}
-		).catch( () => undefined );
+		const restored = { ...previous, ...defaults };
+		setValues( restored );
+		save( restored, {
+			message: __( 'Restored to default.', 'newspack-plugin' ),
+			actions: [
+				{
+					label: __( 'Undo', 'newspack-plugin' ),
+					onClick: () => save( previous, { message: __( 'Restore undone.', 'newspack-plugin' ) } ).catch( () => undefined ),
+				},
+			],
+		} ).catch( () => undefined );
 	};
 
 	const [ errors, setErrors ] = useState< Record< string, string > >( {} );
@@ -277,7 +296,7 @@ export default function ConfigureView( {
 	// Failures surface through `errorNotice`, so the rejection has no second consumer here.
 	const handleSave = () => {
 		if ( validate() ) {
-			onSave( values ).catch( () => undefined );
+			save( values ).catch( () => undefined );
 		} else {
 			setFailedSaveCount( count => count + 1 );
 		}
