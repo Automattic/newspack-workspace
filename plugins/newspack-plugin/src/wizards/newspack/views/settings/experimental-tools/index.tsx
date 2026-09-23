@@ -70,7 +70,7 @@ export default function ExperimentalTools() {
 
 	const ToolList = () => (
 		<WizardsTab
-			title={ __( 'Experimental tools', 'newspack-plugin' ) }
+			title={ __( 'Experimental Tools', 'newspack-plugin' ) }
 			description={ __(
 				"These tools are early-stage features we're developing based on publisher feedback. They're functional and supported, but still evolving. Your experience using them directly shapes what they become. Enable any tool below to try it in your newsroom. You can turn tools off at any time, and nothing changes in your published content.",
 				'newspack-plugin'
