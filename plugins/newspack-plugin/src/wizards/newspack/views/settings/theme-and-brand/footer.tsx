@@ -31,8 +31,6 @@ export default function Footer( { themeMods, onUpdate }: { themeMods: ThemeMods;
 				value={ themeMods.footer_copyright || '' }
 				onChange={ ( footer_copyright: string ) => updateThemeMods( { footer_copyright } ) }
 			/>
-			{ /* <Card noBorder className="newspack-design__footer__copyright">
-				</Card> */ }
 			<ToggleGroupControl
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
