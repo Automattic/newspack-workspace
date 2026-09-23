@@ -700,10 +700,12 @@ abstract class Integration {
 	 *
 	 * The default implementation is a no-op.
 	 *
-	 * Runs only for requests that passed every registration-endpoint gate —
-	 * integration key (including this integration's own
-	 * validate_registration_request()), per-IP rate limit, and reCAPTCHA. A
-	 * request rejected by any gate never reaches this handler.
+	 * Runs only for requests that passed the gates ahead of the logged-in
+	 * branch in \Newspack\Reader_Registration::api_frontend_register_reader(),
+	 * this integration's own validate_registration_request() included when
+	 * supports_frontend_registration() returns true. None of those gates ties
+	 * `$request` to `$user`: `npe` and `metadata` are whatever the caller sent,
+	 * so check that anything stored on `$user` belongs to that account.
 	 *
 	 * @param \WP_User         $user    The currently logged-in user attempting to register again.
 	 * @param \WP_REST_Request $request The original registration request.

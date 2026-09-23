@@ -493,18 +493,18 @@ final class Reader_Registration {
 			);
 		}
 
-		// Step 4: Per-IP rate limit. Ahead of both the integration key check and
-		// reCAPTCHA so neither external call can be driven by a rate-limited IP.
+		// Step 4: Per-IP rate limit. Ahead of the integration key check and
+		// reCAPTCHA so a rate-limited IP can drive neither an integration's
+		// validator nor the siteverify call.
 		// Integration-backed registrations count in a per-integration bucket
 		// (sized via the newspack_frontend_registration_rate_limit filter);
 		// filter-only registrations keep the shared 'registration' bucket.
-		// Because this now runs ahead of the key check, a request naming an
-		// integration counts against that integration's bucket before the key
-		// is validated. Buckets are per-IP where the host reports real client
-		// IPs (see the REMOTE_ADDR note in check_registration_rate_limit());
-		// behind a shared proxy or egress address the budget is shared across
-		// its users — logged-in callers included, now that they no longer
-		// return before this check.
+		// A request naming an integration counts against that integration's
+		// bucket before its key is validated. Buckets are per-IP where the host
+		// reports real client IPs (see the REMOTE_ADDR note in
+		// check_registration_rate_limit()); behind a shared proxy or egress
+		// address the budget is shared across its users, logged-in callers
+		// included.
 		$bucket     = $integration_instance && $integration_instance->supports_frontend_registration()
 			? self::get_rate_limit_bucket_for( $integration_id )
 			: 'registration';
