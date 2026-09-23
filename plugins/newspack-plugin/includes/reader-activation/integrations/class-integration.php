@@ -440,10 +440,10 @@ abstract class Integration {
 	 * permanent for the pageview — so without this the submission is lost
 	 * rather than retried. This matters in production today: the ESP
 	 * integration emits the legacy key on released sites and validates through
-	 * this method. (newspack-manager's Fundraise Up handler emits it too, but
-	 * replaces validate_registration_request() wholesale — it authenticates on
-	 * verified supporter identifiers rather than the key — so it never reaches
-	 * this branch and the allowance does nothing for it.)
+	 * this method. (newspack-manager's Fundraise Up handler emits it too.
+	 * Handler versions that call this method before their own supporter check
+	 * get the allowance; older ones replace the method and never reach this
+	 * branch.)
 	 *
 	 * @todo Remove this method and its branch in validate_registration_request()
 	 *       once the seeded key has been in production for a release cycle
