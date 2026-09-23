@@ -271,7 +271,12 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'account', $contact['metadata'], 'Non-requested legacy classes must be skipped.' );
 	}
 
-	public function test_prepare_contact_for_integration_keeps_only_requested_fields() {
+	/**
+	 * Field scoping keeps the sync-control keys. Without `status_if_new`,
+	 * Mailchimp's upsert sends `status: subscribed`, so a field-scoped run
+	 * subscribed every existing transactional member it updated.
+	 */
+	public function test_prepare_contact_for_integration_keeps_requested_fields_and_sync_control_keys() {
 		$esp     = Integrations::get_integration( 'esp' );
 		$options = [
 			'skip_lists' => false,
@@ -286,7 +291,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 				'NP_Content Access'        => 'Yes',
 				'NP_Content Access Source' => 'domain',
 				'NP_Account'               => '42',
-				'status_if_new'            => 'subscribed',
+				'status_if_new'            => 'transactional',
 			],
 		];
 
@@ -295,10 +300,11 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertSame( 'reader@example.com', $prepared['email'], 'Email must be preserved.' );
 		$this->assertArrayNotHasKey( 'name', $prepared, 'Name must be stripped when field-scoping.' );
 		$this->assertSame(
-			[ 'NP_Content Access', 'NP_Content Access Source' ],
+			[ 'NP_Content Access', 'NP_Content Access Source', 'status_if_new' ],
 			array_keys( $prepared['metadata'] ),
-			'Only requested, prefixed metadata keys survive; NP_Account and status_if_new are dropped.'
+			'Requested fields and the sync-control keys survive; NP_Account is dropped.'
 		);
+		$this->assertSame( 'transactional', $prepared['metadata']['status_if_new'] );
 	}
 
 	public function test_prepare_contact_for_integration_matches_utm_prefix_labels() {

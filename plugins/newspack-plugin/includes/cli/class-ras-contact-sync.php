@@ -1005,6 +1005,9 @@ class RAS_Contact_Sync {
 	 *     # Refresh one field on the contacts the ESP already has, creating none.
 	 *     wp newspack integrations backfill --integration=esp --fields="Newsletter Selection" --existing-only
 	 *
+	 *     # The same on ActiveCampaign, where a push with the master list would resubscribe contacts who unsubscribed from it.
+	 *     wp newspack integrations backfill --integration=esp --fields="Newsletter Selection" --existing-only --skip-lists
+	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
 	 */

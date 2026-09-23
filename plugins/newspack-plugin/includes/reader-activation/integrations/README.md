@@ -296,7 +296,7 @@ An integration that has **never saved** an Outbound selection inherits the ESP i
 `Contact_Sync` may pass a fourth `$options` array to `push_contact_data()` carrying operator-driven sync scoping (currently used by the `wp newspack integrations backfill` CLI and its legacy alias `wp newspack esp sync`):
 
 - `skip_lists` (bool) — upsert the contact without adding it to any list, so an unsubscribed contact isn't resubscribed.
-- `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called).
+- `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called). The sync-control keys are not fields and stay in the metadata.
 - `existing_only` (bool) — update-only: the framework asks `contact_exists()` before calling `push_contact_data()` and skips integrations that answer `false`, so an implementation never sees a contact it reported missing. An integration whose `supports_contact_lookup()` is false gets no push under the flag (withheld and reported as an error), and the CLI refuses such a run before any batch. Integrations do not need to read this key.
 - `integration_id` (string|null) — restricts the push fan-out to a single active integration. The framework acts on this key in `Contact_Sync::push_to_integrations()` before any integration is called; like the rest of `$options`, it is still visible to `push_contact_data()` overrides that declare the fourth parameter, but integrations don't need to (and shouldn't) act on it.
 

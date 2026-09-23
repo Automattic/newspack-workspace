@@ -256,8 +256,11 @@ class Contact_Sync extends Sync {
 	 * labels. Filtering runs after `prepare_contact()`, so keys already arrive
 	 * prefixed; a key is kept when its de-prefixed remainder equals a requested
 	 * label, or begins with a requested label ending in `': '` (the UTM label
-	 * shape, e.g. `Signup UTM: source`). Everything else — including `status` /
-	 * `status_if_new` — is dropped.
+	 * shape, e.g. `Signup UTM: source`). The sync-control keys
+	 * (`Metadata::SYNC_CONTROL_KEYS`) are kept, since they are not fields: without
+	 * `status_if_new`, Mailchimp's upsert sends `status: subscribed` and turns every
+	 * existing transactional member it updates into a subscribed one. Everything
+	 * else is dropped.
 	 *
 	 * @param \Newspack\Reader_Activation\Integration $integration The target integration.
 	 * @param array                                   $contact     The contact data.
@@ -282,6 +285,10 @@ class Contact_Sync extends Sync {
 		$labels   = $options['fields'];
 		$filtered = [];
 		foreach ( $integration_contact['metadata'] ?? [] as $key => $value ) {
+			if ( in_array( $key, Metadata::SYNC_CONTROL_KEYS, true ) ) {
+				$filtered[ $key ] = $value;
+				continue;
+			}
 			$remainder = 0 === strpos( $key, $prefix ) ? substr( $key, strlen( $prefix ) ) : $key;
 			foreach ( $labels as $label ) {
 				if ( $remainder === $label ) {
@@ -1644,7 +1651,8 @@ class Contact_Sync extends Sync {
 			}
 
 			$pushed++;
-			$metadata = $prepared['metadata'] ?? [];
+			// Sync-control keys ride along with the push but are not fields.
+			$metadata = array_diff_key( $prepared['metadata'] ?? [], array_flip( Metadata::SYNC_CONTROL_KEYS ) );
 			static::log(
 				sprintf(
 					'[dry-run] %s → integration "%s": lists %s, %d field(s): %s',
