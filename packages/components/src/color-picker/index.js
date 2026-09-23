@@ -3,7 +3,7 @@
  */
 import { BaseControl, ColorPicker as ColorPickerComponent } from '@wordpress/components';
 import { useInstanceId } from '@wordpress/compose';
-import { useState, useRef } from '@wordpress/element';
+import { useState, useRef, useEffect } from '@wordpress/element';
 
 /**
  * External dependencies.
@@ -41,6 +41,11 @@ const ColorPicker = ( { label, help, color = '#ffffff', onChange, className, dis
 	const labelId = `${ id }-label`;
 	const colordColor = colord( color );
 	hooks.useOnClickOutside( ref, () => setIsExpanded( false ) );
+	useEffect( () => {
+		if ( disabled ) {
+			setIsExpanded( false );
+		}
+	}, [ disabled ] );
 	return (
 		<BaseControl
 			id={ id }
