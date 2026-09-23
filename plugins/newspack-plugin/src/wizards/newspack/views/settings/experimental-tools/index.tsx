@@ -52,6 +52,8 @@ export default function ExperimentalTools() {
 	const handleToggle = useCallback(
 		( slug: string, enabled: boolean ) => {
 			resetError();
+			// An Undo left on screen would save settings for a tool this request may disable, racing it on the same option.
+			removeNotice( 'experimental-tools-saved' );
 			requestPathname.current = history.location.pathname;
 			return wizardApiFetch< Tool[] >(
 				{
