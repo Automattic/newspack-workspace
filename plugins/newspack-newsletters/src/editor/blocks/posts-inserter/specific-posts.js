@@ -45,6 +45,8 @@ export const selectSpecificPosts = ( select, postType, ids ) => {
 	const query = getSpecificPostsQuery( ids );
 
 	if ( hasResolutionFailed( 'getEntityRecords', [ 'postType', postType, query ] ) ) {
+		// Omitting `status` is the intended closed fallback: core's REST default is `publish`,
+		// so this yields published posts only. Do not add an explicit status here.
 		return getEntityRecords( 'postType', postType, { include: ids } );
 	}
 
