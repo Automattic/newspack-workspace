@@ -127,6 +127,39 @@ class Newspack_Test_GoogleSiteKit_Data_Layer extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Staff (administrators/editors) are not readers, so they are not assigned a GA4 User-ID,
+	 * matching the is_reader dimension.
+	 */
+	public function test_user_id_is_omitted_for_staff_users() {
+		$admin_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+
+		$gtag_opt = GoogleSiteKit::add_ga_custom_parameters( [] );
+
+		$this->assertArrayNotHasKey( 'user_id', $gtag_opt );
+	}
+
+	/**
+	 * Reserved identifiers are stripped after the filter runs, so a filter cannot re-introduce
+	 * `user_id` or `email_hash` into the dataLayer.
+	 */
+	public function test_filter_cannot_reintroduce_reserved_identifiers() {
+		add_filter(
+			'newspack_ga4_data_layer_params',
+			function ( $params ) {
+				$params['user_id']    = 'should-not-survive';
+				$params['email_hash'] = 'should-not-survive';
+				return $params;
+			}
+		);
+
+		$data_layer_params = GoogleSiteKit::get_data_layer_params();
+
+		$this->assertArrayNotHasKey( 'user_id', $data_layer_params );
+		$this->assertArrayNotHasKey( 'email_hash', $data_layer_params );
+	}
+
+	/**
 	 * The whole point of the fix: `logged_in` always carries an explicit value, so an
 	 * anonymous reader is sent `no` (not omitted, which GA4 reports as `(not set)`).
 	 */

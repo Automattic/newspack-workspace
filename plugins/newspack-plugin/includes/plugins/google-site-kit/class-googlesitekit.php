@@ -579,10 +579,11 @@ class GoogleSiteKit {
 
 		// Send the WordPress user ID as the GA4 User-ID for logged-in readers. `user_id` is a
 		// reserved gtag config field, kept off the custom-parameter set so it never reaches the
-		// dataLayer where third-party GTM tags could read it.
-		$user_id = get_current_user_id();
-		if ( $user_id ) {
-			$gtag_opt['user_id'] = (string) $user_id;
+		// dataLayer where third-party GTM tags could read it. Gated on is_user_reader() to match
+		// the is_reader dimension: staff (administrators/editors) are not assigned a reader ID.
+		$current_user = wp_get_current_user();
+		if ( $current_user->ID && Reader_Activation::is_user_reader( $current_user ) ) {
+			$gtag_opt['user_id'] = (string) $current_user->ID;
 		}
 
 		$custom_params = self::get_custom_event_parameters();
@@ -643,10 +644,18 @@ class GoogleSiteKit {
 		 * Filters the Newspack parameters pushed to the dataLayer for Google Tag Manager.
 		 *
 		 * Mirrors the `newspack_ga4_custom_parameters` set sent to Site Kit's gtag config.
+		 * Reserved identifiers (`user_id`, `email_hash`) are stripped after this filter and
+		 * cannot be re-added through it.
 		 *
 		 * @param array $params Parameters pushed to window.dataLayer.
 		 */
-		return apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
+		$params = apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
+
+		// Reserved identifiers must never reach the dataLayer, even via a filter: they go only to
+		// Site Kit's own gtag config, out of reach of the third-party tags in a GTM container.
+		unset( $params['user_id'], $params['email_hash'] );
+
+		return $params;
 	}
 
 	/**
