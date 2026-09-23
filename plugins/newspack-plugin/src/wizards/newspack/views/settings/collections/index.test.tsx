@@ -180,6 +180,24 @@ describe( 'when Collections is on', () => {
 		expect( headerAction( 'Save' ).disabled ).toBe( true );
 	} );
 
+	it( 'saves the stored values of fields the current choices hide, not the edits made to them', async () => {
+		server = { ...server, custom_naming_enabled: true, custom_name: 'Issues', post_indicator_style: 'card', card_message: 'Keep reading.' };
+		await renderCollections();
+
+		fireEvent.change( screen.getByLabelText( 'Plural name' ), { target: { value: 'Magazines' } } );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Default' } ) );
+		fireEvent.change( screen.getByLabelText( 'Card message' ), { target: { value: 'More to read.' } } );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Link' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( lastPost() ).toMatchObject( {
+			custom_naming_enabled: false,
+			custom_name: 'Issues',
+			post_indicator_style: 'default',
+			card_message: 'Keep reading.',
+		} );
+	} );
+
 	it( 'saves only its own settings, naming included, and confirms without reloading', async () => {
 		await renderCollections();
 

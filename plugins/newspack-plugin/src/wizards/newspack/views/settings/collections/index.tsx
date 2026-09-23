@@ -65,12 +65,20 @@ const toSettings = ( data: Partial< CollectionsSettingsData > ): CollectionsSett
 		( Object.keys( DEFAULT_SETTINGS ) as ( keyof CollectionsSettingsData )[] ).map( key => [ key, data[ key ] ?? DEFAULT_SETTINGS[ key ] ] )
 	) as CollectionsSettingsData;
 
-// Edits to fields the current choices hide are not changes the publisher can see, so they don't count.
+const hiddenFields = ( settings: CollectionsSettingsData ): ( keyof CollectionsSettingsData )[] => [
+	...( settings.custom_naming_enabled ? [] : ( [ 'custom_name', 'custom_singular_name', 'custom_slug' ] as const ) ),
+	...( settings.post_indicator_style === 'card' ? [] : ( [ 'card_message' ] as const ) ),
+];
+
+// Edits to fields the current choices hide are not changes the publisher can see, so they are neither counted nor saved.
+const withSavedHiddenFields = ( draft: CollectionsSettingsData, saved: CollectionsSettingsData ): CollectionsSettingsData => ( {
+	...draft,
+	...Object.fromEntries( hiddenFields( draft ).map( key => [ key, saved[ key ] ] ) ),
+} );
+
 const comparable = ( settings: CollectionsSettingsData ) =>
 	JSON.stringify( {
 		...settings,
-		...( settings.custom_naming_enabled ? {} : { custom_name: '', custom_singular_name: '', custom_slug: '' } ),
-		...( settings.post_indicator_style === 'card' ? {} : { card_message: '' } ),
 		posts_per_page: Number( settings.posts_per_page ),
 		articles_block_attrs: { showCategory: Boolean( settings.articles_block_attrs?.showCategory ) },
 	} );
@@ -106,7 +114,8 @@ function Collections() {
 	const [ isReloading, setIsReloading ] = useState( false );
 	const isBusy = isFetching || isReloading;
 
-	const isDirty = comparable( settings ) !== comparable( savedSettings );
+	const settingsToSave = withSavedHiddenFields( settings, savedSettings );
+	const isDirty = comparable( settingsToSave ) !== comparable( savedSettings );
 
 	const update = ( changes: Partial< CollectionsSettingsData > ) => setSettings( current => ( { ...current, ...changes } ) );
 
@@ -129,7 +138,7 @@ function Collections() {
 
 	const saveSettings = () => {
 		resetError();
-		return apiFetchToggle( { module_enabled_collections: true, ...settings }, true )
+		return apiFetchToggle( { module_enabled_collections: true, ...settingsToSave }, true )
 			.then( () => {
 				removeNotice( 'collections-saved' );
 				addNotice( {
