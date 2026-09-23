@@ -197,7 +197,7 @@ h1 {
 	&.newspack-dashboard {
 		.newspack-dashboard__section {
 			&:first-of-type {
-				margin-top: 3.5rem;
+				margin-top: wp-vars.$grid-unit-60;
 			}
 		}
 	}

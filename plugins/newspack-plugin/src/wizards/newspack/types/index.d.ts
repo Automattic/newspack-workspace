@@ -48,10 +48,6 @@ declare global {
 					}[];
 				};
 			};
-			settings: {
-				siteName: string;
-				headerBgColor: string;
-			};
 		};
 		newspackSettings: {
 			social: WizardTab & {
