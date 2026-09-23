@@ -133,7 +133,7 @@ final class Autosave_Cleanup {
 
 		$cutoff = gmdate( 'Y-m-d H:i:s', time() - ( (int) $days * DAY_IN_SECONDS ) );
 		// Skip what Revisions_Control::pre_delete_revision() would refuse, so it isn't re-selected every run.
-		$min_age = (string) Revisions_Control::get_min_age();
+		$min_age = Revisions_Control::get_min_age() ?? '9999-12-31 23:59:59';
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$ids = $wpdb->get_col(
@@ -163,7 +163,7 @@ final class Autosave_Cleanup {
 							AND m.meta_key = '_major_revision'
 							AND m.meta_value = CAST( a.ID AS CHAR )
 					)
-					AND ( '' = %s OR a.post_date <= %s )
+					AND a.post_date <= %s
 					AND ( 0 = %d OR p.ID = %d )
 					AND ( 0 = %d OR a.ID < %d )
 				ORDER BY a.ID DESC
@@ -172,7 +172,6 @@ final class Autosave_Cleanup {
 				$cutoff,
 				'%' . $wpdb->esc_like( '-autosave-v' ) . '%',
 				$cutoff,
-				$min_age,
 				$min_age,
 				$post_id,
 				$post_id,
