@@ -92,6 +92,8 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 						'type'     => 'array',
 						'required' => true,
 						'maxItems' => Newspack_Blocks_API::POSTS_BATCH_MAX_QUERIES,
+						// Core fills defaults for top-level args only, so the handler supplies its
+						// own for these two rather than relying on the schema.
 						'items'    => [
 							'type'       => 'object',
 							'properties' => [
@@ -100,22 +102,23 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 									'required' => true,
 								],
 								'postsQuery'  => [
-									'type'    => 'object',
-									'default' => [],
+									'type' => 'object',
 								],
 								'deduplicate' => [
-									'type'    => 'boolean',
-									'default' => false,
+									'type' => 'boolean',
 								],
 							],
 						],
 					],
 					'exclude' => [ // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude
-						'type'    => 'array',
-						'items'   => [
+						'type'     => 'array',
+						'items'    => [
 							'type' => 'integer',
 						],
-						'default' => [],
+						// Every deduplicating query carries this list plus everything the batch has
+						// matched so far, so an unbounded list here is work every query pays for.
+						'maxItems' => Newspack_Blocks_API::POSTS_BATCH_MAX_EXCLUDE,
+						'default'  => [],
 					],
 				],
 				'permission_callback' => function() {

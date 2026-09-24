@@ -73,7 +73,8 @@ describe( 'fetchPostsForBlocks', () => {
 	};
 
 	beforeEach( () => {
-		window.newspack_blocks_data = { posts_rest_url: SINGLE_URL, posts_batch_rest_url: BATCH_URL, posts_batch_max_queries: 50 };
+		// wp_localize_script casts every scalar to a string, so the limit arrives as one.
+		window.newspack_blocks_data = { posts_rest_url: SINGLE_URL, posts_batch_rest_url: BATCH_URL, posts_batch_max_queries: '50' };
 		jest.isolateModules( () => {
 			apiFetch = require( '@wordpress/api-fetch' ).default;
 			( { fetchPostsForBlocks } = require( './store' ) );
@@ -164,7 +165,7 @@ describe( 'fetchPostsForBlocks', () => {
 
 	// Later blocks' exclusion lists depend on the failed batch, so they can't be loaded either.
 	it( 'reports an error on every remaining block when a batch request fails', async () => {
-		window.newspack_blocks_data.posts_batch_max_queries = 2;
+		window.newspack_blocks_data.posts_batch_max_queries = '2';
 		apiFetch.mockImplementationOnce( fakeEndpoints ).mockRejectedValueOnce( new Error( 'Service unavailable' ) );
 
 		const { postsByBlock, errorsByBlock } = await run( [ block( 'a', 1 ), block( 'b', 1 ), block( 'c', 1 ), block( 'd', 1 ), block( 'e', 1 ) ] );
@@ -175,7 +176,7 @@ describe( 'fetchPostsForBlocks', () => {
 	} );
 
 	it( 'splits a page larger than the batch limit and carries deduplication across batches', async () => {
-		window.newspack_blocks_data.posts_batch_max_queries = 2;
+		window.newspack_blocks_data.posts_batch_max_queries = '2';
 
 		const { postsByBlock } = await run( [ block( 'a', 1 ), block( 'b', 1 ), block( 'c', 1 ), block( 'd', 1 ), block( 'e', 1 ) ] );
 

@@ -110,7 +110,9 @@ const effectiveQuery = ( block, exclude ) => ( block.deduplicate ? { ...block.po
  * @param {Array} exclude      IDs of posts to exclude from the first deduplicating block
  */
 export function* fetchPostsForBlocks( blockQueries, exclude ) {
-	const { posts_rest_url: singleUrl, posts_batch_rest_url: url, posts_batch_max_queries: maxQueries = 50 } = window.newspack_blocks_data;
+	const { posts_rest_url: singleUrl, posts_batch_rest_url: url } = window.newspack_blocks_data;
+	// Localized as a string, and the server enforces its own limit either way.
+	const maxQueries = Number( window.newspack_blocks_data.posts_batch_max_queries );
 	const pending = [ ...blockQueries ];
 
 	const showPosts = function* ( block, posts ) {

@@ -16,6 +16,13 @@ class Newspack_Blocks_API {
 	const POSTS_BATCH_MAX_QUERIES = 50;
 
 	/**
+	 * Most posts one batch request may be asked to exclude up front. The editor's list is the
+	 * specific posts its blocks pin plus the post being edited, so this is far above what a page
+	 * produces; it bounds what a caller can make every query in the batch carry.
+	 */
+	const POSTS_BATCH_MAX_EXCLUDE = 1000;
+
+	/**
 	 * Get thumbnail featured image source for the rest field.
 	 *
 	 * @param array $object_info The object info.
@@ -251,8 +258,11 @@ class Newspack_Blocks_API {
 	public static function posts_batch_endpoint( $request ) {
 		$exclude = array_map( 'intval', (array) $request->get_param( 'exclude' ) );
 		$results = [];
-		// posts_endpoint() leaves the global post on the last post it formatted. Restoring it
-		// after each query gives every query the state a standalone request would start from.
+		// Each query must start from the state a standalone request would, because two pieces of
+		// per-request state outlive one: the global post, which posts_endpoint() leaves on the last
+		// post it formatted, and the deduplication list, which a Homepage Posts or Carousel block
+		// embedded in a formatted post writes its rendered IDs into while `the_content` runs. Left
+		// in place, that list lands in the next query's post__not_in and silently drops posts.
 		$original_post = $GLOBALS['post'] ?? null;
 
 		foreach ( $request->get_param( 'queries' ) as $query ) {
@@ -269,15 +279,19 @@ class Newspack_Blocks_API {
 			try {
 				$response = rest_do_request( $single );
 			} catch ( \Throwable $e ) {
-				$GLOBALS['post'] = $original_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-				// One bad query must not cost the rest of the page its posts.
+				self::reset_batch_query_state( $original_post );
+				// A throw skips the excerpt filter posts_endpoint() would have removed itself.
+				Newspack_Blocks::remove_excerpt_filter();
+				// One bad query must not cost the rest of the page its posts. The message itself
+				// can carry a query or a path, so the block gets a generic one.
+				error_log( 'Newspack Blocks batch query failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 				$results[] = [
 					'clientId' => $client_id,
-					'error'    => $e->getMessage(),
+					'error'    => __( 'The posts for this block could not be loaded.', 'newspack-blocks' ),
 				];
 				continue;
 			}
-			$GLOBALS['post'] = $original_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			self::reset_batch_query_state( $original_post );
 
 			if ( $response->is_error() ) {
 				$results[] = [
@@ -298,6 +312,16 @@ class Newspack_Blocks_API {
 		}
 
 		return new \WP_REST_Response( $results );
+	}
+
+	/**
+	 * Return the state a batched query leaves behind to what a standalone request starts from.
+	 *
+	 * @param WP_Post|null $original_post The global post as the batch request found it.
+	 */
+	private static function reset_batch_query_state( $original_post ) {
+		$GLOBALS['post'] = $original_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		Newspack_Blocks::reset_deduplication();
 	}
 
 	/**

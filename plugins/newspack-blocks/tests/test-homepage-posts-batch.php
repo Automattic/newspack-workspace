@@ -111,19 +111,71 @@ class HomepagePostsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertSame( [ 'a', 'b' ], array_column( $results, 'clientId' ) );
 	}
 
-	public function test_each_result_matches_the_single_block_endpoint() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+	/**
+	 * Run a query through the single-block route.
+	 *
+	 * @param array $params Query parameters.
+	 * @return array Posts.
+	 */
+	private function single( $params ) {
 		$single = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
-		$single->set_query_params(
+		$single->set_query_params( $params );
+		return rest_do_request( $single )->get_data();
+	}
+
+	/**
+	 * A batch of one is the only size that cannot carry state from one query to the next, so the
+	 * query under test here is the last of three.
+	 */
+	public function test_a_later_result_matches_the_single_block_endpoint() {
+		$expected = $this->single(
 			[
-				'postsToShow' => 3,
+				'postsToShow' => 2,
 				'categories'  => [ $this->category_id ],
+				'exclude'     => array_slice( $this->post_ids, 0, 3 ), // What the two queries above show.
 			]
 		);
-		$expected = rest_do_request( $single )->get_data();
 
-		$results = $this->batch( [ $this->category_query( 'a', 3, false ) ] )->get_data();
+		$results = $this->batch( [ $this->category_query( 'a', 2 ), $this->category_query( 'b', 1 ), $this->category_query( 'c', 2 ) ] )->get_data();
 
-		self::assertSame( $expected, $results[0]['posts'], 'The batch returns the same post data as the single-block route.' );
+		self::assertSame( $expected, $results[2]['posts'], 'A batched query returns what the single-block route returns for the same query.' );
+	}
+
+	/**
+	 * A post can embed a Homepage Posts block of its own. Formatting such a post renders that
+	 * block, which records its posts in the deduplication list the query builder reads. Left in
+	 * place, that list excludes those posts from the queries below it in the batch.
+	 */
+	public function test_a_post_that_embeds_a_block_does_not_hide_posts_from_later_queries() {
+		$embedding_post = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_date'    => gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ),
+				'post_content' => '<!-- wp:newspack-blocks/homepage-articles {"postsToShow":2,"deduplicate":true} /-->',
+			]
+		);
+
+		$expected = $this->single( [ 'postsToShow' => 4 ] );
+
+		$results = $this->batch(
+			[
+				[
+					'clientId'    => 'embed',
+					'deduplicate' => false,
+					'postsQuery'  => [
+						'include'     => [ $embedding_post ],
+						'postsToShow' => 1,
+					],
+				],
+				[
+					'clientId'    => 'after',
+					'deduplicate' => true,
+					'postsQuery'  => [ 'postsToShow' => 4 ],
+				],
+			]
+		)->get_data();
+
+		self::assertSame( array_column( $expected, 'id' ), self::ids( $results[1] ), 'The query after the embedding post returns what it would on its own.' );
 	}
 
 	public function test_deduplicating_blocks_skip_posts_shown_above_them() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
@@ -171,6 +223,12 @@ class HomepagePostsBatchTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
 
 		self::assertSame( 403, $this->batch( [ $this->category_query( 'a', 1 ) ] )->get_status() );
+	}
+
+	public function test_rejects_a_longer_exclusion_list_than_the_limit() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+		$exclude = range( 1, Newspack_Blocks_API::POSTS_BATCH_MAX_EXCLUDE + 1 );
+
+		self::assertSame( 400, $this->batch( [ $this->category_query( 'a', 1 ) ], $exclude )->get_status() );
 	}
 
 	public function test_rejects_more_queries_than_the_limit() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
