@@ -26,7 +26,7 @@ import { category, chevronLeft, moreVertical } from '@wordpress/icons';
  * Internal dependencies
  */
 import { Footer, DebugBadge, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
-import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
+import { activeBreadcrumbs, activeSection, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
 import type { WizardHeaderAction, WizardHeaderData, WizardNotice, WizardsStoreSelectors } from './store';
@@ -125,6 +125,8 @@ export interface WizardSection {
 	activeTabPaths?: string[];
 	/** The section's explicit breadcrumb trail. */
 	breadcrumbs?: BreadcrumbItem[];
+	/** Sub-header text replacing the wizard's while the section is active. */
+	subHeaderText?: string;
 	/** The section header's title. */
 	title?: SectionHeaderProps[ 'title' ];
 	/** The section header's description. */
@@ -216,8 +218,10 @@ const WizardHeaderRegion = ( {
 	// headerData.sectionName (deduped against the current trailing label).
 	breadcrumbItems = appendSectionName( breadcrumbItems, sectionName );
 
+	const sectionSubTitle = activeSection( sections, pathname )?.subHeaderText;
+
 	return (
-		<Page breadcrumbItems={ breadcrumbItems } subTitle={ subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
+		<Page breadcrumbItems={ breadcrumbItems } subTitle={ sectionSubTitle ?? subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
 			{ children }
 		</Page>
 	);

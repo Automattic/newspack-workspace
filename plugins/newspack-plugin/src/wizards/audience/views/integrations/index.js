@@ -272,6 +272,10 @@ const AudienceIntegrations = ( props, ref ) => {
 					render: SettingsSection,
 					props: sharedProps,
 					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
+					subHeaderText: __(
+						'Manage how Newspack syncs reader data with your tools. Connect an integration to start syncing reader activity across your stack.',
+						'newspack-plugin'
+					),
 				},
 				{
 					path: '/settings/:integrationId/logs',

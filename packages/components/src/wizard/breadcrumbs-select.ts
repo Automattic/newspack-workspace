@@ -20,12 +20,21 @@ export interface BreadcrumbSection extends RouteMatchItem {
  * @param pathname Current router pathname.
  * @return Breadcrumb items `{ label, url? }`.
  */
-export const activeBreadcrumbs = ( sections: BreadcrumbSection[] = [], pathname: string ): BreadcrumbItem[] => {
+export const activeBreadcrumbs = ( sections: BreadcrumbSection[] = [], pathname: string ): BreadcrumbItem[] =>
+	activeSection( sections, pathname )?.breadcrumbs || [];
+
+/**
+ * Select the section matching the current route, falling back to the first.
+ *
+ * @param sections Wizard sections.
+ * @param pathname Current router pathname.
+ * @return The active section, if any.
+ */
+export const activeSection = < T extends RouteMatchItem >( sections: T[] = [], pathname: string ): T | undefined => {
 	if ( ! sections?.length ) {
-		return [];
+		return undefined;
 	}
-	const match = sections.find( section => matchesRoute( section, pathname ) ) || sections[ 0 ];
-	return match.breadcrumbs || [];
+	return sections.find( section => matchesRoute( section, pathname ) ) || sections[ 0 ];
 };
 
 /**
