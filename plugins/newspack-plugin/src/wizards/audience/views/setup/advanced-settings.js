@@ -5,6 +5,7 @@ import { __ } from '@wordpress/i18n';
 import { createPortal, useEffect, useState } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { Notice, Snackbar } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -72,17 +73,19 @@ export default function AdvancedSettings( props ) {
 		<AdvancedSettingsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
 			<WizardsTab isFetching={ inFlight }>
-				{ saveError && (
-					<Notice status="error" isDismissible={ false }>
-						{ saveError.message }
-					</Notice>
-				) }
-				<GroupLabels
-					labels={ labels }
-					defaults={ settings }
-					onChange={ ( key, value ) => setLabels( current => ( { ...current, [ key ]: value } ) ) }
-					disabled={ isLoading || inFlight }
-				/>
+				<Stack direction="column" gap="2xl">
+					{ saveError && (
+						<Notice status="error" isDismissible={ false }>
+							{ saveError.message }
+						</Notice>
+					) }
+					<GroupLabels
+						labels={ labels }
+						defaults={ settings }
+						onChange={ ( key, value ) => setLabels( current => ( { ...current, [ key ]: value } ) ) }
+						disabled={ isLoading || inFlight }
+					/>
+				</Stack>
 			</WizardsTab>
 			{ snackbar &&
 				createPortal(
