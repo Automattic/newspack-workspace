@@ -41,6 +41,24 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	const CLEANUP_REQUEST_TIMEOUT = 15;
 
 	/**
+	 * Maximum number of recipients for a test email. ActiveCampaign sends a
+	 * test to a single address per request, so each recipient is one API
+	 * call; the cap keeps the loop inside the request timeout. Matches the
+	 * limit ActiveCampaign's own UI applies to test sends.
+	 *
+	 * @var int
+	 */
+	const MAX_TEST_RECIPIENTS = 5;
+
+	/**
+	 * Pause, in microseconds, between consecutive test email requests, to stay
+	 * under ActiveCampaign's rate limit of 5 requests per second per account.
+	 *
+	 * @var int
+	 */
+	const TEST_SEND_INTERVAL = 250000;
+
+	/**
 	 * Dispatch states for a stored campaign, returned by
 	 * get_campaign_dispatch_state(): a confirmed fresh draft that is safe to
 	 * (re)send, a campaign that has already been dispatched and must never be
@@ -1288,8 +1306,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$send_list_id    = get_post_meta( $post_id, 'send_list_id', true );
 			$send_sublist_id = get_post_meta( $post_id, 'send_sublist_id', true );
 			$newsletter_data = [
-				'campaign'    => true, // Satisfy the JS API.
-				'campaign_id' => $campaign_id,
+				'campaign'                          => true, // Satisfy the JS API.
+				'campaign_id'                       => $campaign_id,
+				'supports_multiple_test_recipients' => true,
+				'max_test_recipients'               => self::MAX_TEST_RECIPIENTS,
 			];
 
 			// Handle legacy send-to meta.
@@ -1401,6 +1421,17 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				__( 'ActiveCampaign API credentials are missing.', 'newspack-newsletters' )
 			);
 		}
+		$emails = array_values( array_filter( $emails ) );
+		if ( count( $emails ) > self::MAX_TEST_RECIPIENTS ) {
+			return new WP_Error(
+				'newspack_newsletters_active_campaign_too_many_test_recipients',
+				sprintf(
+					// translators: %d is the maximum number of test email recipients.
+					__( 'ActiveCampaign test emails can be sent to up to %d addresses.', 'newspack-newsletters' ),
+					self::MAX_TEST_RECIPIENTS
+				)
+			);
+		}
 		/** Clear existing test campaigns for this post. */
 		$test_campaigns = get_post_meta( $post_id, 'ac_test_campaign', false );
 		if ( ! empty( $test_campaigns ) ) {
@@ -1441,32 +1472,76 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		$campaign_messages = explode( ',', $campaign_data[0]['messageslist'] );
 		$message_id        = ! empty( $campaign_messages ) ? reset( $campaign_messages ) : 0;
 
-		$test_result = $this->api_v1_request(
-			'campaign_send',
-			'GET',
-			[
-				'query' => [
-					'type'       => 'html',
-					'action'     => 'test',
-					'campaignid' => $campaign['id'],
-					'messageid'  => $message_id,
-					'email'      => implode( ',', $emails ),
-				],
-			]
-		);
-		if ( is_wp_error( $test_result ) ) {
+		return $this->send_test_emails( $campaign['id'], $message_id, $emails );
+	}
+
+	/**
+	 * Send a campaign message as a test to each recipient.
+	 *
+	 * ActiveCampaign's test send takes a single address, so each recipient is
+	 * its own request, paced to stay under the API rate limit. A failure for
+	 * one recipient doesn't stop the others.
+	 *
+	 * @param int      $campaign_id Campaign ID.
+	 * @param int      $message_id  Campaign message ID.
+	 * @param string[] $emails      Recipient email addresses.
+	 * @return array|WP_Error Result with a message, or error if no test was sent.
+	 */
+	public function send_test_emails( $campaign_id, $message_id, $emails ) {
+		$sent    = [];
+		$failed  = [];
+		$results = [];
+		foreach ( $emails as $index => $email ) {
+			if ( $index > 0 ) {
+				usleep( self::TEST_SEND_INTERVAL );
+			}
+			$test_result = $this->api_v1_request(
+				'campaign_send',
+				'GET',
+				[
+					'query' => [
+						'type'       => 'html',
+						'action'     => 'test',
+						'campaignid' => $campaign_id,
+						'messageid'  => $message_id,
+						'email'      => $email,
+					],
+				]
+			);
+			if ( is_wp_error( $test_result ) ) {
+				$failed[] = sprintf( '%s (%s)', $email, $test_result->get_error_message() );
+				continue;
+			}
+			$sent[]    = $email;
+			$results[] = $test_result;
+		}
+
+		if ( empty( $sent ) ) {
 			return new WP_Error(
 				'newspack_newsletters_active_campaign_test',
-				sprintf( 'Sending test campaign failed: %s', $test_result->get_error_message() )
+				sprintf(
+					// translators: %s are the failed emails, each with the reason.
+					__( 'Sending test campaign failed: %s', 'newspack-newsletters' ),
+					implode( ', ', $failed )
+				)
+			);
+		}
+
+		$message = sprintf(
+			// translators: %s are comma-separated emails.
+			__( 'ActiveCampaign test message sent successfully to %s.', 'newspack-newsletters' ),
+			implode( ', ', $sent )
+		);
+		if ( ! empty( $failed ) ) {
+			$message .= ' ' . sprintf(
+				// translators: %s are the failed emails, each with the reason.
+				__( 'Sending failed for: %s', 'newspack-newsletters' ),
+				implode( ', ', $failed )
 			);
 		}
 		return [
-			'message' => sprintf(
-				// translators: %s are comma-separated emails.
-				__( 'ActiveCampaign test message sent successfully to %s.', 'newspack-newsletters' ),
-				implode( ', ', $emails )
-			),
-			'result'  => $test_result,
+			'message' => $message,
+			'result'  => $results,
 		];
 	}
 
