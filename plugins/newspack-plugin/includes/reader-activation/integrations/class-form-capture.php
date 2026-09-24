@@ -56,6 +56,12 @@ class Form_Capture extends Integration {
 	const SCRIPT_HANDLE = 'newspack-form-capture';
 
 	/**
+	 * Handle for the block editor extension that adds the toggle to the
+	 * Gravity Forms block.
+	 */
+	const EDITOR_SCRIPT_HANDLE = 'newspack-form-capture-editor';
+
+	/**
 	 * Gravity Forms block attribute that opts a placement into capture. Declared
 	 * in the editor extension and registered with GF's block schema here.
 	 */
@@ -96,6 +102,7 @@ class Form_Capture extends Integration {
 		\add_filter( 'gform_form_block_attributes', [ $this, 'register_block_attribute' ] );
 		// After GF's own render filter at 10, which relocates custom-CSS classes.
 		\add_filter( 'render_block_gravityforms/form', [ $this, 'mark_captured_block_form' ], 20, 2 );
+		\add_action( 'enqueue_block_editor_assets', [ $this, 'enqueue_editor_assets' ] );
 	}
 
 	/**
@@ -402,6 +409,38 @@ class Form_Capture extends Integration {
 		);
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'defer', true );
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'amp-plus', true );
+	}
+
+	/**
+	 * Load the block editor extension wherever the Gravity Forms block can be
+	 * placed. Not gated on the integration being enabled: the block toggle is
+	 * how publishers find the feature, and the panel's notice points them to
+	 * Integrations while it is off. Gated on Reader Activation, without which
+	 * nothing can register readers, and on Gravity Forms, without which there
+	 * is no block to extend.
+	 */
+	public function enqueue_editor_assets() {
+		if ( ! Reader_Activation::is_enabled() || ! class_exists( 'GFForms' ) ) {
+			return;
+		}
+		$asset_file   = NEWSPACK_ABSPATH . 'dist/form-capture-editor.asset.php';
+		$asset        = file_exists( $asset_file ) ? include $asset_file : [];
+		$dependencies = $asset['dependencies'] ?? [ 'wp-block-editor', 'wp-components', 'wp-element', 'wp-hooks', 'wp-i18n' ];
+		\wp_enqueue_script(
+			self::EDITOR_SCRIPT_HANDLE,
+			Newspack::plugin_url() . '/dist/form-capture-editor.js',
+			$dependencies,
+			Newspack::asset_version( 'form-capture-editor' ),
+			true
+		);
+		\wp_localize_script(
+			self::EDITOR_SCRIPT_HANDLE,
+			'newspack_form_capture_editor',
+			[
+				'active'           => $this->supports_frontend_registration(),
+				'integrations_url' => \admin_url( 'admin.php?page=newspack-audience-integrations' ),
+			]
+		);
 	}
 
 	/**
