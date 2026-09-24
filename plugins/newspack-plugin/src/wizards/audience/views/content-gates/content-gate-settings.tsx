@@ -5,17 +5,17 @@ import { __, sprintf } from '@wordpress/i18n';
 import { CardBody } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
-import { createInterpolateElement, useRef } from '@wordpress/element';
+import { createInterpolateElement, useMemo, useRef } from '@wordpress/element';
 import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Card, Grid, Router, useConfirmDialog } from '../../../../../packages/components/src';
+import { Card, Grid, Notice, Router, useConfirmDialog } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent } from './utils';
+import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent, getPriorityWarnings } from './utils';
 import { getGateSummarySections } from './gate-summary';
 import { useAccessRuleOptions } from './use-access-rule-options';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
@@ -38,6 +38,9 @@ export default function ContentGateSettings( {
 	const wizardData = useWizardData( slug ) as ContentGatesWizardData;
 	const gates = ( wizardData?.gates || [] ) as Gate[];
 	const siteMeter = wizardData?.config?.site_meter;
+	// Premium newsletter gates are left out: their screen has no priority modal to act on a
+	// warning, and they match lists by ID, which the overlap check doesn't model.
+	const priorityWarning = useMemo( () => ( isNewsletter ? undefined : getPriorityWarnings( gates )[ gate.id ] ), [ gates, gate.id, isNewsletter ] );
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( slug );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { confirmDialog: deleteDialog, requestConfirm: requestDelete } = useConfirmDialog( {
@@ -229,6 +232,7 @@ export default function ContentGateSettings( {
 				} }
 			>
 				<CardBody>
+					{ priorityWarning && <Notice isWarning noticeText={ priorityWarning } /> }
 					<Grid className="newspack-content-gates__gate__settings" columns={ isNewsletter ? 2 : 3 } gutter={ 16 } borders noMargin>
 						{ getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions ).map( section => (
 							<div key={ section.key }>

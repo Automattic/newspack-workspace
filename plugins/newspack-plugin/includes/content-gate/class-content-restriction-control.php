@@ -186,6 +186,10 @@ class Content_Restriction_Control {
 	/**
 	 * Get post gates.
 	 *
+	 * Returns the matching gates in Content_Gate::get_gates() priority order. Callers
+	 * rely on this order to find the gate that decides access (is_post_restricted(),
+	 * Site Kit attribution), so a change here that reorders the list changes who gets in.
+	 *
 	 * @param int $post_id Optional post ID.
 	 *
 	 * @return array Array of post gates.
@@ -400,6 +404,14 @@ class Content_Restriction_Control {
 	/**
 	 * Whether the post is restricted for the current user.
 	 *
+	 * Gates compose first-match: of the gates whose content rules match the post,
+	 * the one with the highest priority (lowest number, see Content_Gate::get_gates())
+	 * decides alone. A reader it admits is admitted, and a reader it refuses is
+	 * refused and shown its layout; no lower gate is consulted either way, unless
+	 * the gate has no layout to show that reader and is passed over. That lets
+	 * a publisher open a free section inside a paid one by ranking a registration
+	 * wall on the free section above the paywall on its parent (NPPD-2289).
+	 *
 	 * @param bool     $is_post_restricted Whether the post is restricted for the current or given user.
 	 * @param int      $post_id            Post ID.
 	 * @param int|null $user_id            Optional user ID to check access for.
@@ -459,6 +471,8 @@ class Content_Restriction_Control {
 			return true;
 		}
 
+		// get_post_gates() keeps the priority order from get_gates(). A gate that refuses
+		// the reader with no layout to show them is passed over, so the next gate decides.
 		foreach ( $post_gates as $gate ) {
 			$gate_layout_id = null;
 			$is_restricted  = false;
@@ -507,7 +521,10 @@ class Content_Restriction_Control {
 				}
 			}
 
-			if ( $is_restricted && $gate_layout_id ) {
+			if ( ! $is_restricted ) {
+				return false;
+			}
+			if ( $gate_layout_id ) {
 				self::$post_gate_id_map[ $memo_key ]        = $gate['id'];
 				self::$post_gate_layout_id_map[ $memo_key ] = $gate_layout_id;
 				return true;
