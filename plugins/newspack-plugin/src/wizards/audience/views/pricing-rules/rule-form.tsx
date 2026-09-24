@@ -817,7 +817,7 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 							<ToggleControl
 								label={ __( 'Lock pricing at purchase', 'newspack-plugin' ) }
 								help={ __(
-									'On: subscribers keep the price they bought at — the rule only applies to new sign-ups. Off: the rule applies to every matching subscriber at each renewal.',
+									"On: subscribers keep the rule's terms from the day they bought — later edits to the rule reach new sign-ups only. Percentage and amount-off discounts follow the product's current price. Off: the rule applies to every matching subscriber at each renewal.",
 									'newspack-plugin'
 								) }
 								checked={ 'locked' === application }
