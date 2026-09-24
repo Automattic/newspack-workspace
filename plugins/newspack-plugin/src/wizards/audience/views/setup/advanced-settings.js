@@ -4,12 +4,12 @@
 import { __ } from '@wordpress/i18n';
 import { createPortal, useEffect, useState } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { Snackbar } from '@wordpress/components';
+import { Notice, Snackbar } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Button, Notice, withWizardScreen, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Button, withWizardScreen, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
@@ -72,7 +72,11 @@ export default function AdvancedSettings( props ) {
 		<AdvancedSettingsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
 			<WizardsTab isFetching={ inFlight }>
-				{ saveError && <Notice isError noticeText={ saveError.message } /> }
+				{ saveError && (
+					<Notice status="error" isDismissible={ false }>
+						{ saveError.message }
+					</Notice>
+				) }
 				<GroupLabels
 					labels={ labels }
 					defaults={ settings }
