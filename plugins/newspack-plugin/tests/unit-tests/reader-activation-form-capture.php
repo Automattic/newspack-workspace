@@ -281,7 +281,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		Integrations::enable( Form_Capture::ID );
 		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
 		$integration->enqueue_editor_assets();
-		$this->assertTrue( wp_script_is( Form_Capture::EDITOR_SCRIPT_HANDLE, 'enqueued' ), 'Loads while Reader Activation is off, or a save drops the attribute.' );
+		$this->assertTrue( wp_script_is( Form_Capture::EDITOR_SCRIPT_HANDLE, 'enqueued' ), 'Must load while Reader Activation is off; otherwise a save drops the attribute.' );
 		$this->assertStringContainsString( '"active":""', wp_scripts()->get_data( Form_Capture::EDITOR_SCRIPT_HANDLE, 'data' ), 'Nothing registers readers with Reader Activation off.' );
 		Integrations::disable( Form_Capture::ID );
 	}

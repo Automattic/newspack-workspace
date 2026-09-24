@@ -26,15 +26,18 @@ window.newspackRAS.push( readerActivation => {
 
 	const captured = new Set();
 	const attached = new WeakSet();
-	// Gravity Forms ids of matched forms. GF's AJAX postback re-renders the
-	// form from GFFormDisplay::get_form(), outside the block render filter
-	// that adds the marker class, so after a validation error or a page
-	// change the form on the page carries no marker. Its data-formid survives
-	// every render, and GF does not support the same form twice on a page, so
-	// an id remembered at first attach stands in for the class in two places:
-	// the pre_submission callback matches on it, and the observer's rescan
-	// re-attaches the re-rendered form by it, so the form warms a fresh
-	// reCAPTCHA v3 token on focus and is still captured past the token TTL.
+	// Gravity Forms ids of matched GF forms. Only forms whose element id is
+	// gform_<formid> are remembered: WPForms stamps data-formid too, and a
+	// publisher's selectors may match one of its forms. GF's AJAX postback
+	// re-renders the form from GFFormDisplay::get_form(), outside the block
+	// render filter that adds the marker class, so after a validation error
+	// or a page change the form on the page carries no marker. Its data-formid
+	// survives every render, and GF does not support the same form twice on a
+	// page, so an id remembered at first attach stands in for the class in
+	// two places: the pre_submission callback matches on it, and the
+	// observer's rescan re-attaches the re-rendered form by it, so the form
+	// warms a fresh reCAPTCHA v3 token on focus and is still captured past
+	// the token TTL.
 	const matchedFormIds = new Set();
 	let warmToken = null;
 	let warming = false;
@@ -150,7 +153,7 @@ window.newspackRAS.push( readerActivation => {
 
 	const attach = () => {
 		const forms = new Set( getMatchedForms( selectors ) );
-		document.querySelectorAll( 'form[data-formid]' ).forEach( form => {
+		document.querySelectorAll( 'form[id^="gform_"][data-formid]' ).forEach( form => {
 			if ( matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) {
 				forms.add( form );
 			}
@@ -161,7 +164,7 @@ window.newspackRAS.push( readerActivation => {
 			}
 			attached.add( form );
 			const formId = form.getAttribute( 'data-formid' );
-			if ( formId ) {
+			if ( formId && form.id === `gform_${ formId }` ) {
 				matchedFormIds.add( formId );
 			}
 			form.addEventListener( 'focusin', warmCaptcha );

@@ -409,14 +409,23 @@ describe( 'form-capture client', () => {
 
 		it( 'still ignores a GF form whose id was never matched, before and after a re-render', async () => {
 			const { submitViaGform } = installFakeGform();
+			// The marked form carries a GF id, so the remembered set is populated
+			// while the unmatched form is submitted: an empty set would prove
+			// nothing about over-matching.
+			const MARKED_FORM = `<form id="gform_3" class="newspack-form-capture" data-formid="3" novalidate><input type="email" name="input_2" value="gf-reader@example.com"></form>`;
 			const OTHER_FORM = `<form id="gform_9" data-formid="9" novalidate><input type="email" value="other@example.com"></form>`;
-			const ras = loadCaptureClient( `${ GF_FORM }<div id="gform_wrapper_9">${ OTHER_FORM }</div>` );
+			const ras = loadCaptureClient( `${ MARKED_FORM }<div id="gform_wrapper_9">${ OTHER_FORM }</div>` );
 			await submitViaGform( document.querySelector( '#gform_9' ) );
 			document.getElementById( 'gform_wrapper_9' ).innerHTML = OTHER_FORM;
+			// The rescan must not re-attach it either: with no listener, a native
+			// submit registers nobody.
+			await new Promise( resolve => setTimeout( resolve, 250 ) );
+			submit( document.querySelector( '#gform_9' ) );
 			await submitViaGform( document.querySelector( '#gform_9' ) );
 			expect( ras.register ).not.toHaveBeenCalled();
-			// Positive control: the matched form's id is the one remembered.
-			await submitViaGform( document.querySelector( '#gform_1' ) );
+			// Positive control: the adapter is live and the marked form's id is
+			// what the set holds, so a populated set ignored the unrelated GF form.
+			await submitViaGform( document.querySelector( '#gform_3' ) );
 			expect( ras.register ).toHaveBeenCalledTimes( 1 );
 		} );
 
@@ -424,6 +433,8 @@ describe( 'form-capture client', () => {
 			// Matching the re-rendered form at submission time is not enough on a
 			// v3 site: without the focusin listener it never warms a token, and a
 			// reader who outlasts the TTL on a later page submits without one.
+			// Distinct id: earlier clients in this file keep observing document.body
+			// and would re-attach a remembered id.
 			window.grecaptcha = {
 				ready: callback => callback(),
 				execute: jest.fn( () => Promise.resolve( 'rerender-token' ) ),
