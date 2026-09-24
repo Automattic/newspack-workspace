@@ -33,7 +33,7 @@ export default function AdvancedSettings( props ) {
 	const [ labels, setLabels ] = useState( toLabels( settings ) );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ saveError, setSaveError ] = useState( null );
-	// The legacy audience wizard has no store snackbar outlet, so success feedback is a local Snackbar.
+	// The legacy audience wizard has no store snackbar outlet.
 	const [ savedCount, setSavedCount ] = useState( 0 );
 
 	useEffect( () => {
@@ -41,8 +41,7 @@ export default function AdvancedSettings( props ) {
 	}, [ settings.label_singular, settings.label_plural ] );
 
 	const saved = toLabels( settings );
-	// The server trims labels, so whitespace-only edits are not changes. Only changed labels are sent,
-	// because an empty value deletes the stored override.
+	// The server trims labels and deletes an override saved as empty, so untouched fields must not be sent.
 	const changes = Object.fromEntries( Object.entries( labels ).filter( ( [ key, value ] ) => value.trim() !== saved[ key ] ) );
 	const isDirty = Object.keys( changes ).length > 0;
 
