@@ -643,7 +643,8 @@ Components use consistent breakpoints so layouts behave predictably across viewp
 |------------|-------------|
 | **600px** | Narrow viewport overrides (e.g. wizard layout) |
 | **744px** | Card padding, ActionCard region layout (title + toggle side-by-side), Grid columns (2–3), modal, withWizardScreen layout |
-| **783px** | Wizard content width, Divider full margin |
+| **782px** | Divider full margin (`wp-mixins.break-medium`) |
+| **783px** | Wizard content width |
 | **960px** | Modal width, wizard layout |
 | **961px** | Wizard layout |
 | **1128px** | Grid 3–4 columns |

@@ -8,8 +8,8 @@ Horizontal rule component with alignment, variant, and margin options.
 |------|------|---------|-------------|
 | `alignment` | `'full-width'` \| `'none'` | `'none'` | `full-width` breaks out of the container to span the viewport; `none` stays within the container. |
 | `className` | `string` | — | Additional CSS class. |
-| `marginBottom` | `number` \| `string` | `48` | Bottom margin (e.g. `48` or `"2rem"`). Capped at 32px on viewports &lt; 783px. |
-| `marginTop` | `number` \| `string` | `48` | Top margin (e.g. `48` or `"2rem"`). Capped at 32px on viewports &lt; 783px. |
+| `marginBottom` | `number` \| `string` | `48` | Bottom margin (e.g. `48` or `"2rem"`). Capped at 32px on viewports &lt; 782px. |
+| `marginTop` | `number` \| `string` | `48` | Top margin (e.g. `48` or `"2rem"`). Capped at 32px on viewports &lt; 782px. |
 | `variant` | `'default'` \| `'primary'` \| `'secondary'` \| `'tertiary'` | `'default'` | Line color: `default` uses `$gray-300`; `primary` uses the admin theme color (`--wp-admin-theme-color`); `secondary` uses `$gray-200`; `tertiary` uses `$gray-100`. |
 
 ## Usage
