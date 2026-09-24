@@ -622,8 +622,8 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 | **16px** | Gaps between related controls, buttons card gap, margins inside ActionCard region-children for Card/Grid/TextControl | Related items, form rows |
 | **24px** | Default ActionCard region padding, toggle/region gaps, expandable content padding and sibling spacing | Default internal padding and gaps within a card |
 | **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Newspack Notice margin, Divider margin | Section rhythm, between blocks |
-| **48px** | SectionHeader container margin-top, Divider margins (large breakpoint), Card horizontal padding (small screens) | Section separation |
-| **64px** | SectionHeader top margin, buttons card margin, Card horizontal padding (large screens) | Major section separation |
+| **48px** | SectionHeader container margin-top, Divider margins (large breakpoint), Card horizontal padding (small screens) | Major section separation |
+| **64px** | SectionHeader top margin, buttons card margin, Card horizontal padding (large screens) | Section header and large-screen spacing |
 
 **In code:** Card uses `margin: 32px 0` and `padding: 16px 48px` (32px 64px at 744px+). ActionCard uses 24px for region padding and 24px between regions; region-children use `padding: 0 24px 24px` (0 32px 32px for is-medium). Grid uses `grid-gap: 32px` and `margin: 32px 0` by default, with optional gutter classes (`__gutter-8`, `__gutter-16`, etc.). When adding new components or overrides, prefer these values (or 8px multiples) instead of ad-hoc spacing.
 
