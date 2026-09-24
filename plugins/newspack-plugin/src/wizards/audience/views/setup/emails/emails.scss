@@ -1,73 +1,9 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
-// Full-width override for the emails tab.
-// The parent `.newspack-wizard__sections` constrains width via max-width.
-// Break out of that for the DataViews table, but set the inherited
-// horizontal padding explicitly here so cascade quirks can't leave the
-// grid edge-to-edge.
-.newspack-emails-tab.newspack-wizard__sections {
-	max-width: 100%;
-	padding-left: var(--newspack-wizard-section-space, 24px);
-	padding-right: var(--newspack-wizard-section-space, 24px);
-}
-
-// Chip filter bar above the DataViews grid. Two-way toggle between
-// 'Reader revenue' and 'Authentication & account' — every email belongs
-// to exactly one chip group, so there's no "All" view. Settings now lives
-// in the DataViews toolbar (the `header` slot), not this bar.
-//
-// Horizontal padding matches the 24px inner padding `@wordpress/dataviews`
-// applies to `.dataviews__view-actions`, so the chip bar's left edge
-// lines up with the search field and grid below. Without this the bar
-// reads as unmoored.
-//
-// Vertical: the Newspack DataViews wrapper applies `margin-top: -16px`
-// in full-width contexts (see packages/components/src/dataviews/style.scss).
-// Exactly cancelling it (margin-bottom: 16px) makes the chip bar's
-// bottom edge share a y-coordinate with the wrapper's top edge — at
-// which point the wrapper's background paints over the bottom border
-// of the selected chip pill, clipping its outline visually. Use 24px
-// so 8px of positive gap remains between chip-bar bottom and wrapper
-// top after the pull-up resolves (24 + -16 = 8). Visible gap to the
-// search row inside DataViews is 24px (8 + view-actions padding-top
-// of 16px).
-.newspack-emails__chip-bar {
-	margin-bottom: 24px;
-	padding: 0 24px;
-}
-
-// Layout (display: flex, gap) is provided by the HStack wrapper —
-// `spacing={2}` is WP's 8px grid unit, matching the previous custom
-// `gap: 8px`. Only the chip-pill visual styling stays in SCSS.
-.newspack-emails__chips {
-	// Nested for specificity over WP Button defaults — without the
-	// `.components-button` chain, the pill shape and padding lose to
-	// WP's default button styling.
-	.newspack-emails__chip.components-button {
-		border-radius: 20px;
-		padding: 4px 16px;
-		font-size: 13px;
-		line-height: 1.4;
-	}
-}
-
-// DataViews search/filter/icon alignment.
-// The Audience Emails route in src/wizards/audience/views/setup/index.js
-// passes `className="newspack-wizard__content--full-width"` to its
-// withWizardScreen-wrapped tab, which adds that class to the parent and
-// disables the with-wizard-screen negative-margin breakout that would
-// otherwise pull DataViews past the page edges.
-.newspack-emails-tab {
+.newspack-emails {
 	.dataviews__view-actions {
-		display: flex;
-		align-items: center;
 		margin-bottom: 16px;
-	}
-
-	.dataviews__search {
-		display: flex;
-		align-items: flex-start;
-		gap: 8px;
 	}
 
 	// DataViews v14 hides the per-card actions menu (kebab) by default and
@@ -89,7 +25,7 @@
 // is the only keyboard-navigable element in this tile, and assistive
 // tech reads its aria-label ("Edit {email label}"). Without a focus
 // ring, keyboard users can't tell when the tile is focused.
-.newspack-emails-tab .newspack-emails__preview-link {
+.newspack-emails .newspack-emails__preview-link {
 	display: block;
 	border-radius: 4px;
 	text-decoration: none;
@@ -104,11 +40,7 @@
 	}
 }
 
-// Clickable name link in grid/table view.
-// Scope under `.newspack-emails-tab` (2-class specificity) so the rule
-// wins against WP's default `a` link color, which would otherwise paint
-// these titles WP-admin blue.
-.newspack-emails-tab .newspack-emails__name-link {
+.newspack-emails .newspack-emails__name-link {
 	color: wp-colors.$gray-900;
 	text-decoration: none;
 
@@ -139,4 +71,21 @@
 	-webkit-line-clamp: 3;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
+}
+
+.newspack-emails__settings-modal.newspack-emails__settings-modal > * {
+	margin: 0;
+}
+
+.newspack-emails__notices {
+	margin-bottom: wp-vars.$grid-unit-40;
+	padding: 0 wp-vars.$grid-unit-60;
+
+	> * {
+		margin: 0;
+	}
+
+	@media (max-width: 430px) {
+		padding: 0 wp-vars.$grid-unit-30;
+	}
 }
