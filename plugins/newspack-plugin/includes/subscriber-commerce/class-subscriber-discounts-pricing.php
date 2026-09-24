@@ -379,8 +379,10 @@ class Subscriber_Discounts_Pricing {
 		if ( self::is_suspended() || ! $product instanceof \WC_Product ) {
 			return null;
 		}
-		// The dynamic pricing engine reads a product's regular price as its
-		// discount base; a subscriber price there would be discounted twice.
+		// The dynamic pricing engine reads a product's catalog price as its
+		// discount base (for subscriptions, WooCommerce Subscriptions' recurring
+		// price, which runs these filters); a subscriber price there would be
+		// discounted twice.
 		if ( self::is_engine_reading_base() ) {
 			return null;
 		}
