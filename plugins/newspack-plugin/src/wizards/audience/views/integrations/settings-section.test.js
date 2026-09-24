@@ -13,12 +13,17 @@ import { inbox } from '@wordpress/icons';
  * Internal dependencies
  */
 import { SettingsSection, sortIntegrationIds } from './settings-section';
-import colors from '../../../../../packages/colors/colors.module.scss';
 
 const mockCardFeatureProps = [];
 const mockEnableModalProps = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( {
+	'neutral-000': '#fff',
+	'neutral-100': '#f0f0f0',
+	'neutral-600': '#6c6c6c',
+	'primary-600': '#003da5',
+} ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Card: ( { children } ) => children,
 	Grid: ( { children } ) => children,
@@ -235,7 +240,7 @@ describe( 'Audience Integrations settings section card action', () => {
 	it( 'renders the reported provider brand icon for other integrations', () => {
 		render(
 			<SettingsSection
-				integrations={ { fundraise_up: { ...baseIntegration, id: 'fundraise_up', provider: 'active_campaign' } } }
+				integrations={ { other_esp: { ...baseIntegration, id: 'other_esp', provider: 'active_campaign' } } }
 				loading={ false }
 				onToggleEnabled={ jest.fn() }
 				onActivatePlugin={ jest.fn() }
@@ -287,7 +292,7 @@ describe( 'Audience Integrations settings section card action', () => {
 			/>
 		);
 		expect( mockCardFeatureProps[ 0 ].icon.node.props.icon ).toBe( inbox );
-		expect( mockCardFeatureProps[ 0 ].icon.backgroundColor ).toBe( colors[ 'primary-600' ] );
+		expect( mockCardFeatureProps[ 0 ].icon.backgroundColor ).toBe( '#003da5' );
 	} );
 } );
 

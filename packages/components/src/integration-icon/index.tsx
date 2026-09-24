@@ -11,7 +11,7 @@ import './style.scss';
 
 /**
  * The single source for how a provider is shown: brand mark plus badge
- * background. A new provider needs an icon file, an `providerIcons` entry,
+ * background. A new provider needs an icon file, a `providerIcons` entry,
  * and a background rule in this component's stylesheet.
  */
 const IntegrationIcon = ( { provider, className }: { provider: string; className?: string } ) => {
