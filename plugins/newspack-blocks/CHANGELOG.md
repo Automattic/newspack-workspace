@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.33.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.0...newspack-blocks@4.33.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **iframe:** stop lazy-loaded embeds loading the page inside them ([#1115](https://github.com/Automattic/newspack-workspace/issues/1115)) ([bb97d4c](https://github.com/Automattic/newspack-workspace/commit/bb97d4c46864b3260f24b22690bb570eaf91e404))
+
 # @automattic/newspack-blocks [4.33.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.32.1...newspack-blocks@4.33.0) (2026-09-18)
 
 

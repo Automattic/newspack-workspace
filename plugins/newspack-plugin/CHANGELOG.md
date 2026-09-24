@@ -1,3 +1,46 @@
+## newspack [6.52.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.5...newspack@6.52.6) (2026-09-24)
+
+
+### Bug Fixes
+
+* **content-gate:** show and keep integer-stored specific post IDs in the gate editor (Part of NPPD-2154, [#1152](https://github.com/Automattic/newspack-workspace/issues/1152)) ([f283eea](https://github.com/Automattic/newspack-workspace/commit/f283eeaf2e7431ad913f51b99b1d0804a7f09c53))
+
+## newspack [6.52.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.4...newspack@6.52.5) (2026-09-22)
+
+
+### Bug Fixes
+
+* **content-gate:** honor written excerpt in feeds and REST ([96a6ba4](https://github.com/Automattic/newspack-workspace/commit/96a6ba49fa09bb1d6ad50b1daae197b1f23798c4))
+* **content-gate:** keep feed summaries XML-safe and password-aware ([11193f9](https://github.com/Automattic/newspack-workspace/commit/11193f94e3e8dfc67f5b4c7acbee3b56290388b6))
+
+## newspack [6.52.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.3...newspack@6.52.4) (2026-09-22)
+
+
+### Bug Fixes
+
+* **feeds:** keep build date in step with scheduled posts (NPPD-2284, [#1124](https://github.com/Automattic/newspack-workspace/issues/1124)) ([c2694d6](https://github.com/Automattic/newspack-workspace/commit/c2694d6e9ae4fffdf1ba8794783bc712bdd8faf3))
+
+## newspack [6.52.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.2...newspack@6.52.3) (2026-09-22)
+
+
+### Bug Fixes
+
+* **content-gate:** gate the frontend metering excerpt (NPPD-2254, [#1044](https://github.com/Automattic/newspack-workspace/issues/1044)) ([fda4d75](https://github.com/Automattic/newspack-workspace/commit/fda4d758fbd311a5d2d399dd06738d6217600b29))
+
+## newspack [6.52.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.1...newspack@6.52.2) (2026-09-21)
+
+
+### Bug Fixes
+
+* **content-gate:** let an integration outrank a per-feed restriction mode ([#1112](https://github.com/Automattic/newspack-workspace/issues/1112)) ([2d4b60d](https://github.com/Automattic/newspack-workspace/commit/2d4b60d469ef2423b140dfbad013ab0d265538af))
+
+## newspack [6.52.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.0...newspack@6.52.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **content-gate:** per-feed RSS restriction override (NPPD-2279) ([#1109](https://github.com/Automattic/newspack-workspace/issues/1109)) ([4ee0229](https://github.com/Automattic/newspack-workspace/commit/4ee02292dec8679020469c3117354aae9d30fe88))
+
 # newspack [6.52.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.51.4...newspack@6.52.0) (2026-09-18)
 
 
