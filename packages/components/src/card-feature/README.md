@@ -101,7 +101,7 @@ import colors from 'newspack-colors';
 
 // A vendor mark on its own brand background, keeping the mark's colours
 <CardFeature
-	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	title="Mailchimp"
 	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
 	icon={ { node: <MailchimpMark />, backgroundColor: '#ffe01b' } }
 	enabled={ isEnabled }
@@ -112,7 +112,7 @@ import colors from 'newspack-colors';
 
 // A ready element, rendered as-is
 <CardFeature
-	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	title="Mailchimp"
 	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
 	icon={ <IntegrationIcon provider="mailchimp" /> }
 	enabled={ isEnabled }

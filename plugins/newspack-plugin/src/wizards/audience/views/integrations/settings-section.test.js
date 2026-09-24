@@ -7,11 +7,13 @@ import { act, render, waitFor } from '@testing-library/react';
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
+import { inbox } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import { SettingsSection, sortIntegrationIds } from './settings-section';
+import colors from '../../../../../packages/colors/colors.module.scss';
 
 const mockCardFeatureProps = [];
 const mockEnableModalProps = [];
@@ -259,7 +261,7 @@ describe( 'Audience Integrations settings section card action', () => {
 		expect( mockCardFeatureProps[ 0 ].icon.props ).toBeUndefined();
 	} );
 
-	it.each( [ 'salesforce', 'beehiiv' ] )( 'renders the %s brand icon for its integration ID', id => {
+	it.each( [ 'salesforce', 'beehiiv', 'fundraiseup' ] )( 'renders the %s brand icon for its integration ID', id => {
 		render(
 			<SettingsSection
 				integrations={ { [ id ]: { ...baseIntegration, id, provider: null } } }
@@ -271,6 +273,21 @@ describe( 'Audience Integrations settings section card action', () => {
 			/>
 		);
 		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( id );
+	} );
+
+	it( 'renders the inbox icon on the Newspack blue for Inbound Form Capture', () => {
+		render(
+			<SettingsSection
+				integrations={ { 'form-capture': { ...baseIntegration, id: 'form-capture', provider: null } } }
+				loading={ false }
+				onToggleEnabled={ jest.fn() }
+				onActivatePlugin={ jest.fn() }
+				onSetupAndEnable={ jest.fn() }
+				history={ { push: jest.fn() } }
+			/>
+		);
+		expect( mockCardFeatureProps[ 0 ].icon.node.props.icon ).toBe( inbox );
+		expect( mockCardFeatureProps[ 0 ].icon.backgroundColor ).toBe( colors[ 'primary-600' ] );
 	} );
 } );
 

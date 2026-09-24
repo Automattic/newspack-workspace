@@ -9,6 +9,7 @@ import { atSymbol } from '@wordpress/icons';
 import activeCampaign from './active-campaign';
 import beehiiv from './beehiiv';
 import constantContact from './constant-contact';
+import fundraiseUp from './fundraise-up';
 import mailchimp from './mailchimp';
 import salesforce from './salesforce';
 
@@ -23,13 +24,14 @@ export { default as wisepops } from './wisepops';
 // Brand marks keyed by the ESP slug the backend reports
 // (`Newspack_Newsletters::service_provider()`) or by integration ID. Rendered
 // via IntegrationIcon.
-export const espProviderIcons = {
+export const providerIcons = {
 	active_campaign: activeCampaign,
 	mailchimp,
 	constant_contact: constantContact,
 	manual: atSymbol,
 	salesforce,
 	beehiiv,
+	fundraiseup: fundraiseUp,
 };
 
 export const espProviderOrder = [ 'active_campaign', 'mailchimp', 'constant_contact', 'manual' ];

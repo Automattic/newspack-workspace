@@ -25,6 +25,7 @@ describe( 'IntegrationIcon', () => {
 	it.each( [
 		[ 'salesforce', 'white' ],
 		[ 'beehiiv', '#FF5EC4' ],
+		[ 'fundraiseup', 'white' ],
 	] )( 'renders the %s mark in its brand colour inside its provider badge', ( provider, fill ) => {
 		const { container } = render( <IntegrationIcon provider={ provider } /> );
 		const badge = container.querySelector( `.newspack-integration-icon--${ provider }` );

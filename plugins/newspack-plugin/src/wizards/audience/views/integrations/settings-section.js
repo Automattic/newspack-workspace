@@ -16,14 +16,15 @@ import WizardSection from '../../../wizards-section';
 import { EnableModal, getMissingRequiredFields } from './enable-modal';
 
 /**
- * Fallback icon for integrations that report no brand. Per-integration icons
- * move to the PHP API response when new integrations are added (DSGNEWS-157).
+ * Fallback for integrations with no brand mark or icon of their own.
  */
 const DEFAULT_ICON = {
 	node: <Icon icon={ envelope } />,
 	fill: colors[ 'neutral-600' ],
 	backgroundColor: colors[ 'neutral-100' ],
 };
+
+const BRANDED_INTEGRATION_IDS = [ 'beehiiv', 'fundraiseup', 'salesforce' ];
 
 const FORM_CAPTURE_ICON = {
 	node: <Icon icon={ inbox } />,
@@ -88,7 +89,7 @@ export const SettingsSection = ( {
 								let cardIcon = DEFAULT_ICON;
 								if ( id === 'esp' ) {
 									cardIcon = <IntegrationIcon provider="mailchimp" />;
-								} else if ( id === 'salesforce' || id === 'beehiiv' ) {
+								} else if ( BRANDED_INTEGRATION_IDS.includes( id ) ) {
 									cardIcon = <IntegrationIcon provider={ id } />;
 								} else if ( id === 'form-capture' ) {
 									cardIcon = FORM_CAPTURE_ICON;
