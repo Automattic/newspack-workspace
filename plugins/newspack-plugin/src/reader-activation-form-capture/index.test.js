@@ -385,6 +385,42 @@ describe( 'form-capture client', () => {
 		} );
 
 		/**
+		 * GF's AJAX postback replaces the form with markup rendered outside the
+		 * block render filter that adds the marker class: after a validation
+		 * error or a page change, the form on the page carries no marker. The
+		 * id GF stamps on every render stands in for it, so a reader who fails
+		 * validation once, or whose email field sits on a later page, is still
+		 * registered.
+		 */
+		it( 'keeps capturing a matched GF form after an AJAX re-render drops the marker class', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient(
+				`<div id="gform_wrapper_7"><form id="gform_7" class="newspack-form-capture" data-formid="7" novalidate><input type="email" name="input_2" value=""></form></div>`
+			);
+			// GF re-renders from GFFormDisplay::get_form(): same id, no marker.
+			const RERENDERED_FORM = `<form id="gform_7" data-formid="7" novalidate><input type="email" name="input_2" value="gf-reader@example.com"></form>`;
+			document.getElementById( 'gform_wrapper_7' ).innerHTML = RERENDERED_FORM;
+			const form = document.querySelector( 'form' );
+			expect( form.classList.contains( 'newspack-form-capture' ) ).toBe( false );
+			await submitViaGform( form );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+			expect( ras.register ).toHaveBeenCalledWith( 'gf-reader@example.com', 'form-capture', expect.any( Object ), expect.any( Object ) );
+		} );
+
+		it( 'still ignores a GF form whose id was never matched, before and after a re-render', async () => {
+			const { submitViaGform } = installFakeGform();
+			const OTHER_FORM = `<form id="gform_9" data-formid="9" novalidate><input type="email" value="other@example.com"></form>`;
+			const ras = loadCaptureClient( `${ GF_FORM }<div id="gform_wrapper_9">${ OTHER_FORM }</div>` );
+			await submitViaGform( document.querySelector( '#gform_9' ) );
+			document.getElementById( 'gform_wrapper_9' ).innerHTML = OTHER_FORM;
+			await submitViaGform( document.querySelector( '#gform_9' ) );
+			expect( ras.register ).not.toHaveBeenCalled();
+			// Positive control: the matched form's id is the one remembered.
+			await submitViaGform( document.querySelector( '#gform_1' ) );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		/**
 		 * GF awaits the pre_submission filter chain, so the adapter can hold
 		 * the submission until the registration response sets the reader's
 		 * auth cookies — the page GF navigates to then renders already

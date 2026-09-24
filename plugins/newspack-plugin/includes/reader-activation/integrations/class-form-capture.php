@@ -413,19 +413,21 @@ class Form_Capture extends Integration {
 
 	/**
 	 * Load the block editor extension wherever the Gravity Forms block can be
-	 * placed. Not gated on the integration being enabled: the block toggle is
-	 * how publishers find the feature, and the panel's notice points them to
-	 * Integrations while it is off. Gated on Reader Activation, without which
-	 * nothing can register readers, and on Gravity Forms, without which there
-	 * is no block to extend.
+	 * placed. Gated on Gravity Forms alone, without which there is no block to
+	 * extend. The attribute has to be declared whenever the block can be
+	 * edited: without the extension, GF's own client-side attributes replace
+	 * the server-registered ones, the parser drops the toggle, and the next
+	 * save writes the block without it. So neither the integration nor Reader
+	 * Activation gates the script. They only decide whether a toggled form
+	 * registers anyone, which the panel's notice reports through `active`.
 	 */
 	public function enqueue_editor_assets() {
-		if ( ! Reader_Activation::is_enabled() || ! class_exists( 'GFForms' ) ) {
+		if ( ! class_exists( 'GFForms' ) ) {
 			return;
 		}
 		$asset_file   = NEWSPACK_ABSPATH . 'dist/form-capture-editor.asset.php';
 		$asset        = file_exists( $asset_file ) ? include $asset_file : [];
-		$dependencies = $asset['dependencies'] ?? [ 'wp-block-editor', 'wp-components', 'wp-element', 'wp-hooks', 'wp-i18n' ];
+		$dependencies = $asset['dependencies'] ?? [ 'react-jsx-runtime', 'wp-block-editor', 'wp-components', 'wp-hooks', 'wp-i18n' ];
 		\wp_enqueue_script(
 			self::EDITOR_SCRIPT_HANDLE,
 			Newspack::plugin_url() . '/dist/form-capture-editor.js',
@@ -437,7 +439,7 @@ class Form_Capture extends Integration {
 			self::EDITOR_SCRIPT_HANDLE,
 			'newspack_form_capture_editor',
 			[
-				'active'           => $this->supports_frontend_registration(),
+				'active'           => Reader_Activation::is_enabled() && $this->supports_frontend_registration(),
 				'integrations_url' => \admin_url( 'admin.php?page=newspack-audience-integrations' ),
 			]
 		);

@@ -26,6 +26,14 @@ window.newspackRAS.push( readerActivation => {
 
 	const captured = new Set();
 	const attached = new WeakSet();
+	// Gravity Forms ids of matched forms. GF's AJAX postback re-renders the
+	// form from GFFormDisplay::get_form(), outside the block render filter
+	// that adds the marker class, so after a validation error or a page
+	// change the form on the page carries no marker. Its data-formid survives
+	// every render, and GF does not support the same form twice on a page, so
+	// an id remembered at first attach stands in for the class — no rescan
+	// needed to keep capturing the re-rendered form.
+	const matchedFormIds = new Set();
 	let warmToken = null;
 	let warming = false;
 
@@ -144,6 +152,10 @@ window.newspackRAS.push( readerActivation => {
 				return;
 			}
 			attached.add( form );
+			const formId = form.getAttribute( 'data-formid' );
+			if ( formId ) {
+				matchedFormIds.add( formId );
+			}
 			form.addEventListener( 'focusin', warmCaptcha );
 			// No capture flag: submit always fires at the form itself, where
 			// capture and bubble listeners run together in registration order,
@@ -193,8 +205,9 @@ window.newspackRAS.push( readerActivation => {
 		gformHooked = true;
 		window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
 			try {
-				if ( data?.form && getMatchedForms( selectors ).includes( data.form ) ) {
-					const pending = captureForm( data.form );
+				const form = data?.form;
+				if ( form && ( getMatchedForms( selectors ).includes( form ) || matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) ) {
+					const pending = captureForm( form );
 					if ( pending ) {
 						// GF awaits this filter, so hold the submission until
 						// the registration response lands its auth cookies —
