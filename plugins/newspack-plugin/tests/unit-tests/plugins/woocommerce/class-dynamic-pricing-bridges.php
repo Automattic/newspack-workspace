@@ -102,6 +102,33 @@ class Newspack_Test_Dynamic_Pricing_Bridges extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Once the subscription exists, its own group setting decides, even over a
+	 * group-enabled product: a subscription switched off as a group is priced
+	 * at renewal like any other.
+	 */
+	public function test_subscription_group_setting_overrides_its_product() {
+		global $products_database;
+		$product      = wc_create_mock_product(
+			[
+				'id'   => $this->factory->post->create( [ 'post_type' => 'product' ] ),
+				'type' => 'subscription',
+				'meta' => [ '_newspack_group_subscription_enabled' => 'yes' ],
+			]
+		);
+		$subscription = new \WC_Subscription(
+			[
+				'id'    => 125,
+				'items' => [ new \WC_Order_Item_Product( [ 'product_id' => $product->get_id() ] ) ],
+				'meta'  => [ '_newspack_group_subscription_enabled' => 'no' ],
+			]
+		);
+
+		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', false, $product, $subscription );
+		unset( $products_database[ $product->get_id() ] );
+		$this->assertFalse( $excluded, "The subscription's own group setting must win over its product's." );
+	}
+
+	/**
 	 * Group products are excluded before the subscription exists: at checkout,
 	 * where the target is the cart item, and in previews, which pass none.
 	 * Priced at checkout, the subscription would be created at the rule's price
