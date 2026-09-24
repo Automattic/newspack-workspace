@@ -1,11 +1,14 @@
 <?php
 /**
- * Inbound Form Capture integration.
+ * Gravity Forms integration (inbound form capture).
  *
- * Captures email submissions from publisher-designated frontend forms (built
- * with any form tool) and registers them as readers via the frontend
- * registration endpoint. Capture-only: neither a sync destination nor a
- * pull source (see supports_push()/supports_pull()).
+ * Registers readers from Gravity Forms submissions. The way in is a
+ * "Register readers" toggle on the Gravity Forms block: the block attribute
+ * is carried to the page as the newspack-form-capture class on the form
+ * tag, which the capture script matches. Any other form can opt in the same
+ * way, through the class directly or through the CSS selectors listed under
+ * the integration's Advanced options. Capture-only: neither a sync
+ * destination nor a pull source (see supports_push()/supports_pull()).
  *
  * Capture semantics publishers must understand before opting a form in:
  * - Capture fires on the browser's submit event (native validity checked)
@@ -24,6 +27,7 @@
 namespace Newspack\Reader_Activation\Integrations;
 
 use Newspack\Newspack;
+use Newspack\Plugin_Manager;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Registration;
 use Newspack\Reader_Activation\Integration;
@@ -65,8 +69,8 @@ class Form_Capture extends Integration {
 	public function __construct() {
 		parent::__construct(
 			self::ID,
-			__( 'Inbound Form Capture', 'newspack-plugin' ),
-			__( 'Register readers from email signup forms built with any form tool.', 'newspack-plugin' )
+			__( 'Gravity Forms', 'newspack-plugin' ),
+			__( 'Register readers from Gravity Forms submissions, and from other forms you opt in.', 'newspack-plugin' )
 		);
 	}
 
@@ -98,6 +102,10 @@ class Form_Capture extends Integration {
 	/**
 	 * Register settings fields.
 	 *
+	 * The selectors field is the advanced route: the block toggle is the way
+	 * in, and the configure view files anything flagged `advanced` under its
+	 * own section after the how-to guide.
+	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function register_settings_fields() {
@@ -106,8 +114,52 @@ class Form_Capture extends Integration {
 				'key'         => 'selectors',
 				'type'        => 'textarea',
 				'label'       => __( 'Form selectors', 'newspack-plugin' ),
-				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class. Bare tag selectors (e.g. "form") are ignored — they would opt in every form on the site. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission, so submissions its spam checks would discard still create readers and count toward your ESP contacts. Captures are rate-limited per visitor IP (100/hour by default).', 'newspack-plugin' ),
+				'description' => __( 'Capture forms placed without the block. Any form with the newspack-form-capture CSS class is captured: for a Gravity Forms shortcode or widget, add the class in the form\'s CSS Class Name setting. To capture forms built with other tools, list CSS selectors here, one per line. Selectors that name only element types (like "form") are ignored, since they would opt in every form on the site. The same rule applies as for the block switch: only opt in forms whose submissions should always create a reader account. Captures are rate-limited per visitor IP (100 per hour by default).', 'newspack-plugin' ),
 				'default'     => '',
+				'advanced'    => true,
+			],
+		];
+	}
+
+	/**
+	 * The how-to steps shown at the top of the settings page. The toggle
+	 * lives in the block editor, so this page has to say where to look and
+	 * what opting a form in commits the publisher to.
+	 *
+	 * @return array List of associative arrays with keys `title` and `description`.
+	 */
+	public function get_guide() {
+		return [
+			[
+				'title'       => __( 'Add the form with the Gravity Forms block', 'newspack-plugin' ),
+				'description' => __( 'Place the form on a page, post, or prompt with the Gravity Forms block.', 'newspack-plugin' ),
+			],
+			[
+				'title'       => __( 'Turn on Register readers in the block settings', 'newspack-plugin' ),
+				'description' => __( 'Select the block, open its settings sidebar, and switch on Register readers under Newspack. The switch belongs to the block, so the same form can register readers in one place and not in another.', 'newspack-plugin' ),
+			],
+			[
+				'title'       => __( 'Submissions register readers', 'newspack-plugin' ),
+				'description' => __( 'Each submission registers a reader account with the submitted email address and name, or updates the existing reader without emailing a login link. Only turn this on for forms whose submissions should always create a reader account: registration happens as the form is submitted, so a submission Gravity Forms later rejects has still registered the reader. Never turn it on for a form that collects someone else\'s email address.', 'newspack-plugin' ),
+			],
+		];
+	}
+
+	/**
+	 * Gravity Forms is the way in: the toggle lives in its block, so without
+	 * it the card would offer an Enable that captures nothing. Reported in the
+	 * shape the Integrations card reads (see Integration::get_required_plugins()).
+	 *
+	 * @return array List of associative arrays with keys `slug`, `name`, `is_active`, `is_installed`.
+	 */
+	public function get_required_plugins() {
+		$status = Plugin_Manager::get_managed_plugin_status( 'gravityforms' );
+		return [
+			[
+				'slug'         => 'gravityforms',
+				'name'         => __( 'Gravity Forms', 'newspack-plugin' ),
+				'is_active'    => 'active' === $status,
+				'is_installed' => 'uninstalled' !== $status,
 			],
 		];
 	}
