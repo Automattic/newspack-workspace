@@ -277,6 +277,26 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A migrated group auto-joins by its owner's domain only where the Teams auto-join
+	 * plugin ran, and never by a domain that plugin's exclusion list skipped.
+	 */
+	public function test_get_auto_join_domain() {
+		$corporate_owner = $this->create_reader( 'boss@Example.test' );
+		$consumer_owner  = $this->create_reader( 'boss@mail.freemail.test' );
+		update_option( Teams_Migration::AUTO_JOIN_OPTION, [ 'excluded_email_domains' => 'webmail.test, *freemail.*' ] );
+
+		$this->assertSame( '', Teams_Migration::get_auto_join_domain( $corporate_owner ), 'No auto-join plugin, no domain.' );
+
+		// The auto-join plugin is detected by its main class. The alias outlives this test,
+		// so later tests in the process see the plugin as active.
+		if ( ! class_exists( 'Newspack_Teams_For_WC_Memberships_Auto_Join_By_Email\Plugin' ) ) {
+			class_alias( stdClass::class, 'Newspack_Teams_For_WC_Memberships_Auto_Join_By_Email\Plugin' );
+		}
+		$this->assertSame( 'example.test', Teams_Migration::get_auto_join_domain( $corporate_owner ) );
+		$this->assertSame( '', Teams_Migration::get_auto_join_domain( $consumer_owner ), 'An excluded domain is not carried over.' );
+	}
+
+	/**
 	 * The product command must set the same owner-inclusive limit migrate-teams does:
 	 * a product's "Maximum member count" gains a seat for the owner unless the global
 	 * "Owners must be members" setting already reserves one. 0 (unlimited) is untouched.

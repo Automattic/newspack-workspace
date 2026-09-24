@@ -25,6 +25,7 @@ namespace Newspack\CLI;
 
 use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Settings;
 use Newspack\WooCommerce_Connection;
 use WP_CLI;
 
@@ -76,6 +77,13 @@ class Teams_Migration {
 	 * @var string
 	 */
 	const MIGRATED_TEAM_ID_META_KEY = Group_Subscription::MIGRATED_TEAM_ID_META_KEY;
+
+	/**
+	 * Option of the Teams auto-join-by-email plugin holding its excluded email domains.
+	 *
+	 * @var string
+	 */
+	const AUTO_JOIN_OPTION = 'wc_team_memberships_auto_join_by_email';
 
 	/**
 	 * Value-requiring flags of migrate-manual-members, for the raw-argv bare-flag
@@ -560,6 +568,12 @@ class Teams_Migration {
 				// find_reusable_group_subscription() for the reuse rules and the dry-run
 				// caveat).
 				$subscription->update_meta_data( self::MIGRATED_TEAM_ID_META_KEY, $team_id );
+				// Carry over auto-join by email. A re-run never touches a list an admin has since
+				// edited or cleared.
+				$auto_join_domain = self::get_auto_join_domain( $owner_id );
+				if ( $auto_join_domain && ! $subscription->meta_exists( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY ) ) {
+					$subscription->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, $auto_join_domain );
+				}
 				$subscription->save();
 			}
 
@@ -3083,5 +3097,30 @@ class Teams_Migration {
 	 */
 	private static function summary_row( $team_id, $subscription_id, $members_added, $managers_promoted, $seat_limit, $created_new, $errors ) {
 		return compact( 'team_id', 'subscription_id', 'members_added', 'managers_promoted', 'seat_limit', 'created_new', 'errors' );
+	}
+
+	/**
+	 * The email domain a migrated group auto-joins by: the team owner's, as the Teams
+	 * auto-join-by-email plugin matched it. Empty when that plugin is not active, or
+	 * when the domain is on its exclusion list, which accepts "*" wildcards.
+	 *
+	 * @param int $owner_id The team owner user ID.
+	 *
+	 * @return string The domain, or an empty string.
+	 */
+	public static function get_auto_join_domain( $owner_id ) {
+		$owner = \get_userdata( $owner_id );
+		if ( ! $owner || ! class_exists( '\Newspack_Teams_For_WC_Memberships_Auto_Join_By_Email\Plugin' ) ) {
+			return '';
+		}
+		$domain   = strtolower( substr( strrchr( $owner->user_email, '@' ), 1 ) );
+		$options  = (array) \get_option( self::AUTO_JOIN_OPTION, [] );
+		$excluded = explode( ',', $options['excluded_email_domains'] ?? '' );
+		foreach ( array_filter( array_map( 'trim', $excluded ) ) as $pattern ) {
+			if ( preg_match( '|^' . str_replace( '\*', '.*', preg_quote( $pattern, '|' ) ) . '$|i', $domain ) ) {
+				return '';
+			}
+		}
+		return $domain;
 	}
 }
