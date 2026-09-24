@@ -569,8 +569,15 @@ class Fields {
 
 	/**
 	 * Get the image count of the post's content, not including the featured image.
-	 * Searches for all instances of <img> tags in the post content, which should
-	 * capture Image blocks as well as images embedded via other means such as galleries.
+	 *
+	 * Counts the <img> tags saved in the content (Image, Gallery, Cover and
+	 * Media & Text blocks, classic HTML) plus the images a classic [gallery]
+	 * shortcode lists. It deliberately does not run `the_content`: this runs
+	 * inside the save request, where that pipeline would execute every block,
+	 * shortcode and third-party filter with no global post set. A [gallery]
+	 * without ids rendered in that state falls back to post_parent 0 and loads
+	 * every unattached image on the site, which exhausts PHP memory on large
+	 * media libraries and makes the editor fail to save the post.
 	 *
 	 * @param int $post_id The post ID.
 	 *
@@ -584,8 +591,20 @@ class Fields {
 		if ( ! $story->is_valid() ) {
 			return 0;
 		}
-		$rendered_post_content = \apply_filters( 'the_content', \get_post_field( 'post_content', $post_id ) );
-		return substr_count( $rendered_post_content, '<img ' );
+		$content = \get_post_field( 'post_content', $post_id );
+		$count   = substr_count( $content, '<img ' );
+
+		if ( \has_shortcode( $content, 'gallery' ) && preg_match_all( '/' . \get_shortcode_regex( [ 'gallery' ] ) . '/s', $content, $matches, PREG_SET_ORDER ) ) {
+			foreach ( $matches as $shortcode ) {
+				// Pin the gallery to this post, as core's get_post_galleries() does, so it never queries parent 0.
+				$attrs = \shortcode_parse_atts( $shortcode[3] );
+				if ( ! is_array( $attrs ) || ! isset( $attrs['id'] ) ) {
+					$shortcode[3] .= ' id="' . (int) $post_id . '"';
+				}
+				$count += substr_count( \do_shortcode_tag( $shortcode ), '<img ' );
+			}
+		}
+		return $count;
 	}
 
 	/**
