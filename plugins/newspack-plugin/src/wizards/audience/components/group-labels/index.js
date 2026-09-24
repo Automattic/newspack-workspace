@@ -2,16 +2,16 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
 import { Grid, SectionHeader, TextControl } from '../../../../../packages/components/src';
 
-export default function GroupLabels( { labels, defaults, onChange, disabled } ) {
-	const singularDefault = defaults.label_singular_default || __( 'Group', 'newspack-plugin' );
-	const pluralDefault = defaults.label_plural_default || __( 'Groups', 'newspack-plugin' );
+export default function GroupLabels( { labels, singularDefault: singular, pluralDefault: plural, onChange, disabled } ) {
+	const singularDefault = singular || __( 'Group', 'newspack-plugin' );
+	const pluralDefault = plural || __( 'Groups', 'newspack-plugin' );
 
 	return (
 		<Grid columns={ 2 } gutter={ 32 } noMargin>
@@ -24,7 +24,7 @@ export default function GroupLabels( { labels, defaults, onChange, disabled } ) 
 				) }
 				noMargin
 			/>
-			<VStack spacing={ 4 }>
+			<Stack direction="column" gap="lg">
 				<TextControl
 					label={ __( 'Singular label', 'newspack-plugin' ) }
 					placeholder={ singularDefault }
@@ -51,7 +51,7 @@ export default function GroupLabels( { labels, defaults, onChange, disabled } ) 
 					disabled={ disabled }
 					withMargin={ false }
 				/>
-			</VStack>
+			</Stack>
 		</Grid>
 	);
 }

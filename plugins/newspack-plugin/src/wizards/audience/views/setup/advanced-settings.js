@@ -34,14 +34,17 @@ export default function AdvancedSettings( props ) {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ saveError, setSaveError ] = useState( null );
 	// The legacy audience wizard has no store snackbar outlet, so success feedback is a local Snackbar.
-	const [ snackbar, setSnackbar ] = useState( null );
+	const [ savedCount, setSavedCount ] = useState( 0 );
 
 	useEffect( () => {
 		setLabels( toLabels( settings ) );
 	}, [ settings.label_singular, settings.label_plural ] );
 
 	const saved = toLabels( settings );
-	const isDirty = labels.label_singular !== saved.label_singular || labels.label_plural !== saved.label_plural;
+	// The server trims labels, so whitespace-only edits are not changes. Only changed labels are sent,
+	// because an empty value deletes the stored override.
+	const changes = Object.fromEntries( Object.entries( labels ).filter( ( [ key, value ] ) => value.trim() !== saved[ key ] ) );
+	const isDirty = Object.keys( changes ).length > 0;
 
 	const save = () => {
 		setSaveError( null );
@@ -49,13 +52,14 @@ export default function AdvancedSettings( props ) {
 		wizardApiFetch( {
 			path: `/newspack/v1/wizard/${ DATA_STORE_KEY }`,
 			method: 'POST',
-			data: labels,
+			data: changes,
 			isLocalError: true,
 			isQuietFetch: true,
 		} )
 			.then( data => {
 				setAPIDataForWizard( { slug: DATA_STORE_KEY, data } );
-				setSnackbar( __( 'Settings saved.', 'newspack-plugin' ) );
+				setLabels( toLabels( data ) );
+				setSavedCount( count => count + 1 );
 			} )
 			.catch( setSaveError )
 			.finally( () => setInFlight( false ) );
@@ -81,16 +85,19 @@ export default function AdvancedSettings( props ) {
 					) }
 					<GroupLabels
 						labels={ labels }
-						defaults={ settings }
+						singularDefault={ settings.label_singular_default }
+						pluralDefault={ settings.label_plural_default }
 						onChange={ ( key, value ) => setLabels( current => ( { ...current, [ key ]: value } ) ) }
 						disabled={ isLoading || inFlight }
 					/>
 				</Stack>
 			</WizardsTab>
-			{ snackbar &&
+			{ savedCount > 0 &&
 				createPortal(
 					<div className="newspack-wizard__snackbar-list">
-						<Snackbar onRemove={ () => setSnackbar( null ) }>{ snackbar }</Snackbar>
+						<Snackbar key={ savedCount } onRemove={ () => setSavedCount( 0 ) }>
+							{ __( 'Settings saved.', 'newspack-plugin' ) }
+						</Snackbar>
 					</div>,
 					document.body
 				) }
