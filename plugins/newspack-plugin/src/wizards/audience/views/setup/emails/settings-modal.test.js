@@ -12,7 +12,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 jest.mock( './emails.scss', () => ( {} ) );
 
@@ -144,12 +144,7 @@ jest.mock( './email-preview', () => ( {
 jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
-		DataViews: ( { data, header } ) => (
-			<div data-testid="dataviews">
-				{ header }
-				{ data.length }
-			</div>
-		),
+		DataViews: ( { data } ) => <div data-testid="dataviews">{ data.length }</div>,
 		Notice: ( { noticeText } ) => <div data-testid="notice">{ noticeText }</div>,
 		// Discard `loading` and `variant` rather than spreading them to
 		// the DOM button — React warns on unrecognized non-boolean
@@ -191,7 +186,7 @@ jest.mock( '../../../../../../packages/components/src', () => {
 			function MockWizardScreen( props ) {
 				return (
 					<>
-						{ props.headerActions }
+						<div data-testid="header-actions">{ props.headerActions }</div>
 						<WrappedComponent { ...props } />
 					</>
 				);
@@ -287,8 +282,7 @@ describe( 'SettingsModal', () => {
 		// Modal not yet rendered.
 		expect( screen.queryByRole( 'dialog', { name: 'Settings' } ) ).not.toBeInTheDocument();
 
-		// Click the Settings button in the page header.
-		fireEvent.click( screen.getByRole( 'button', { name: 'Settings' } ) );
+		fireEvent.click( within( screen.getByTestId( 'header-actions' ) ).getByRole( 'button', { name: 'Settings' } ) );
 
 		await waitFor( () => {
 			expect( screen.getByRole( 'dialog', { name: 'Settings' } ) ).toBeInTheDocument();

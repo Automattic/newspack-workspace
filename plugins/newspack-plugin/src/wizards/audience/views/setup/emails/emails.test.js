@@ -87,7 +87,7 @@ jest.mock( '../../../../../../packages/components/src', () => {
 		return null;
 	}
 	return {
-		DataViews: ( { data, fields, actions, view, onChangeView, header } ) => {
+		DataViews: ( { data, fields, actions, view, onChangeView } ) => {
 			mockCapturedActions = actions || [];
 			mockCapturedView = view;
 			mockCapturedOnChangeView = onChangeView;
@@ -95,7 +95,6 @@ jest.mock( '../../../../../../packages/components/src', () => {
 			mockCapturedFields = fields;
 			return (
 				<>
-					{ header }
 					<table data-testid="dataviews">
 						<tbody>
 							{ data.map( ( item, i ) => (
@@ -138,8 +137,8 @@ jest.mock( './email-preview', () => ( {
 	},
 } ) );
 
-// Fixtures span both types and both sources so the filter and
-// type-routing tests have meaningful data on either side of the toggle.
+// Fixtures span both types and both sources so the Type filter and
+// type-routing tests have meaningful data on both sides of the filter.
 const mockEmails = [
 	{
 		label: 'Payment receipt',
@@ -257,8 +256,8 @@ describe( 'Emails', () => {
 					newspackNewsletters: true,
 				},
 				postType: 'newspack_rr_email',
-				// Default to the Newspack platform so the Type filter applies. The non-Newspack case has
-				// its own test below.
+				// Default to the Newspack platform so the Type filter applies.
+				// The non-Newspack case has its own test below.
 				isNewspackPlatform: true,
 			},
 		};
@@ -600,24 +599,15 @@ describe( 'Emails', () => {
 		} );
 	};
 
-	it( 'shows and filters by Type, Recipient and Status, with no filter applied', async () => {
+	it( 'applies no filter and shows Type by default', async () => {
 		render( <Emails /> );
 
 		await waitFor( () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		const filterable = mockCapturedFields.filter( field => field.filterBy );
-		expect( filterable.map( field => field.id ).sort() ).toEqual( [ 'recipient', 'status', 'type' ] );
-		filterable.forEach( field => {
-			expect( field.filterBy ).toEqual( { isPrimary: true, operators: [ 'isAny' ] } );
-		} );
-		expect( mockCapturedFields.find( field => field.id === 'type' ).elements.map( element => element.value ) ).toEqual( [
-			'reader-revenue',
-			'auth-account',
-		] );
 		expect( mockCapturedView.filters ).toEqual( [] );
-		expect( mockCapturedView.fields ).toEqual( [ 'type', 'recipient', 'status' ] );
+		expect( mockCapturedView.fields ).toEqual( [ 'chip', 'recipient', 'status' ] );
 	} );
 
 	it( 'Type filter shows only emails of the selected type', async () => {
@@ -627,7 +617,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		setFilter( 'type', [ 'auth-account' ] );
+		setFilter( 'chip', [ 'auth-account' ] );
 
 		await waitFor( () => {
 			expect( screen.getByText( 'Reader verification' ) ).toBeInTheDocument();
@@ -667,9 +657,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		// Receipt, cancellation, welcome,
-		// new order. Each row's preview field renders an anchor with an
-		// aria-label of the form "Edit {label}".
+		// Each row's preview field renders an anchor labelled "Edit {label}".
 		expect( screen.getByRole( 'link', { name: 'Edit Payment receipt' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'link', { name: 'Edit Cancellation confirmation' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'link', { name: 'Edit Welcome email' } ) ).toBeInTheDocument();
@@ -686,22 +674,10 @@ describe( 'Emails', () => {
 		const previews = screen.getAllByTestId( 'email-preview-stub' );
 		const ids = previews.map( el => el.getAttribute( 'data-post-id' ) );
 
-		// Reader-revenue ids:
-		// - Newspack rows fall back to integer post_id: receipt=1,
-		//   cancellation=2, welcome=5
-		// - WC block-template row uses preview_id (integer): new_order=999
-		expect( ids ).toEqual( expect.arrayContaining( [ '1', '2', '5', '999' ] ) );
-
-		// Auth-account ids, isolated by the Type filter.
-		setFilter( 'type', [ 'auth-account' ] );
-
-		await waitFor( () => {
-			const aaPreviews = screen.getAllByTestId( 'email-preview-stub' );
-			const aaIds = aaPreviews.map( el => el.getAttribute( 'data-post-id' ) );
-			// Newspack RA fallback: verification=3, delete-account=4.
-			// WC classic row uses preview_id (string): customer_new_account.
-			expect( aaIds ).toEqual( expect.arrayContaining( [ '3', '4', 'wc:customer_new_account' ] ) );
-		} );
+		// Newspack rows fall back to their integer post_id; WC rows use
+		// preview_id, an integer for block templates (999) or a `wc:` string
+		// for classic ones.
+		expect( ids ).toEqual( expect.arrayContaining( [ '1', '2', '3', '4', '5', '999', 'wc:customer_new_account' ] ) );
 	} );
 
 	it( 'renders the Emails heading as visually hidden (screen-reader only)', async () => {
@@ -729,7 +705,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		expect( mockCapturedFields.find( field => field.id === 'type' ) ).toBeUndefined();
+		expect( mockCapturedFields.find( field => field.id === 'chip' ) ).toBeUndefined();
 		expect( mockCapturedView.fields ).toEqual( [ 'recipient', 'status' ] );
 		expect( mockCapturedView.filters ).toEqual( [] );
 		expect( mockCapturedData.length ).toBe( mockEmails.length );

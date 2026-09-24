@@ -62,7 +62,7 @@ const DEFAULT_VIEW: View = {
 	page: 1,
 	perPage: 50,
 	search: '',
-	fields: [ 'type', 'recipient', 'status' ],
+	fields: [ 'chip', 'recipient', 'status' ],
 	filters: [],
 	layout: {},
 	titleField: 'name',
@@ -105,7 +105,7 @@ const Emails = () => {
 	// auth/account emails alone, so a Type filter would have one option.
 	const isNewspackPlatform = Boolean( emailSettings.isNewspackPlatform );
 	const [ view, setView ] = useState< View >( () =>
-		isNewspackPlatform ? DEFAULT_VIEW : { ...DEFAULT_VIEW, fields: DEFAULT_VIEW.fields?.filter( field => field !== 'type' ) }
+		isNewspackPlatform ? DEFAULT_VIEW : { ...DEFAULT_VIEW, fields: DEFAULT_VIEW.fields?.filter( field => field !== 'chip' ) }
 	);
 
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/emails' );
@@ -284,7 +284,7 @@ const Emails = () => {
 			...( isNewspackPlatform
 				? [
 						{
-							id: 'type',
+							id: 'chip',
 							label: __( 'Type', 'newspack-plugin' ),
 							getValue: ( { item }: { item: EmailItem } ) => item.chip,
 							render: ( { item }: { item: EmailItem } ) => <span>{ TYPES.find( type => type.value === item.chip )?.label }</span>,
@@ -435,23 +435,25 @@ const Emails = () => {
 		return (
 			<Fragment>
 				<PageHeading />
-				<Notice
-					isError
-					noticeText={ __(
-						'Newspack uses Newspack Newsletters to handle editing email-type content. Please activate this plugin to proceed. Until this feature is configured, default receipts will be used.',
-						'newspack-plugin'
-					) }
-				/>
-				<WizardsPluginCard
-					slug="newspack-newsletters"
-					title={ __( 'Newspack Newsletters', 'newspack-plugin' ) }
-					description={ __( 'Newspack Newsletters is the plugin that powers Newspack email receipts.', 'newspack-plugin' ) }
-					onStatusChange={ ( statuses: Record< string, boolean > ) => {
-						if ( ! statuses.isLoading ) {
-							setPluginsReady( statuses.isSetup );
-						}
-					} }
-				/>
+				<div className="newspack-emails__notices">
+					<Notice
+						isError
+						noticeText={ __(
+							'Newspack uses Newspack Newsletters to handle editing email-type content. Please activate this plugin to proceed. Until this feature is configured, default receipts will be used.',
+							'newspack-plugin'
+						) }
+					/>
+					<WizardsPluginCard
+						slug="newspack-newsletters"
+						title={ __( 'Newspack Newsletters', 'newspack-plugin' ) }
+						description={ __( 'Newspack Newsletters is the plugin that powers Newspack email receipts.', 'newspack-plugin' ) }
+						onStatusChange={ ( statuses: Record< string, boolean > ) => {
+							if ( ! statuses.isLoading ) {
+								setPluginsReady( statuses.isSetup );
+							}
+						} }
+					/>
+				</div>
 			</Fragment>
 		);
 	}
@@ -459,7 +461,11 @@ const Emails = () => {
 	return (
 		<Fragment>
 			<PageHeading />
-			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+			{ errorMessage && (
+				<div className="newspack-emails__notices">
+					<Notice isError noticeText={ errorMessage } />
+				</div>
+			) }
 			<DataViews
 				className="newspack-emails"
 				data={ processedData }
@@ -472,7 +478,7 @@ const Emails = () => {
 				isLoading={ isFetching }
 				getItemId={ ( item: EmailItem ) => String( item.post_id ) }
 			>
-				<Stack direction="row" justify="space-between" align="center" gap="sm" className="dataviews__view-actions">
+				<Stack direction="row" justify="space-between" align="flex-start" gap="sm" className="dataviews__view-actions">
 					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
 						<WPDataViews.Search />
 						<WPDataViews.Filters />
