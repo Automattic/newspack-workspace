@@ -643,6 +643,27 @@ describe( 'Emails', () => {
 		} );
 	} );
 
+	it( 'Disabled filter includes every non-published email', async () => {
+		mockWizardApiFetch.mockImplementation( ( opts, callbacks ) => {
+			callbacks?.onSuccess?.( {
+				newspack_emails: [ { ...mockEmails[ 0 ], status: 'pending' } ],
+				post_type: 'newspack_rr_email',
+			} );
+			return Promise.resolve();
+		} );
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		setFilter( 'status', [ 'draft' ] );
+
+		await waitFor( () => {
+			expect( mockCapturedData ).toHaveLength( 1 );
+		} );
+	} );
+
 	// Slice 2b.5 — DataViews preview field. The render uses a smart
 	// fallback: `item.preview_id ?? item.post_id` (with a typeof guard
 	// rejecting wc:strings as a fallback target). Newspack rows have no

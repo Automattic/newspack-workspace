@@ -1,4 +1,3 @@
-@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
@@ -41,10 +40,6 @@
 	}
 }
 
-// Clickable name link in grid/table view.
-// Scope under `.newspack-emails` (2-class specificity) so the rule
-// wins against WP's default `a` link color, which would otherwise paint
-// these titles WP-admin blue.
 .newspack-emails .newspack-emails__name-link {
 	color: wp-colors.$gray-900;
 	text-decoration: none;
@@ -78,14 +73,14 @@
 	overflow: hidden;
 }
 
-.newspack-emails__settings-modal > * {
+.newspack-emails__settings-modal.newspack-emails__settings-modal > * {
 	margin: 0;
 }
 
 .newspack-emails__notices {
-	padding: 0 wp-vars.$grid-unit-30;
+	padding: 0 wp-vars.$grid-unit-60;
 
-	@media (min-width: wp-breakpoints.$break-small) {
-		padding: 0 wp-vars.$grid-unit-60;
+	@media (max-width: 430px) {
+		padding: 0 wp-vars.$grid-unit-30;
 	}
 }

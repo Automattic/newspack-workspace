@@ -310,7 +310,7 @@ const Emails = () => {
 			{
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
-				getValue: ( { item }: { item: EmailItem } ) => item.status,
+				getValue: ( { item }: { item: EmailItem } ) => ( item.status === 'publish' ? 'publish' : 'draft' ),
 				render: ( { item }: { item: EmailItem } ) => {
 					const isEnabled = item.status === 'publish';
 					return (
