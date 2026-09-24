@@ -407,12 +407,6 @@ class Subscriber_Discounts_Pricing {
 			return null;
 		}
 
-		// A donation is an amount the reader chose; no discount lowers it. Asked
-		// only once a rule would apply: answering it loads the product again.
-		if ( class_exists( '\Newspack\Donations' ) && Donations::is_donation_product( $product->get_id() ) ) {
-			return null;
-		}
-
 		$settings = Subscriber_Discounts::get_settings();
 		if ( empty( $settings['apply_on_sale'] ) && self::is_on_sale_before_discount( $product ) ) {
 			return null;
@@ -594,7 +588,8 @@ class Subscriber_Discounts_Pricing {
 	}
 
 	/**
-	 * The active rules covering a product that this reader qualifies for.
+	 * The active rules covering a product that this reader qualifies for, or
+	 * none when the product is a donation.
 	 *
 	 * @param \WC_Product $product Product being priced.
 	 * @param int         $user_id Reader.
@@ -636,6 +631,14 @@ class Subscriber_Discounts_Pricing {
 				}
 			)
 		);
+
+		// A donation is an amount the reader chose; no discount lowers it.
+		// Answering that loads the product again, so it is asked only once a
+		// rule would apply, and kept with the verdict rather than asked on
+		// every price read.
+		if ( ! empty( $qualifying_rules ) && class_exists( '\Newspack\Donations' ) && Donations::is_donation_product( $product->get_id() ) ) {
+			$qualifying_rules = [];
+		}
 
 		self::$rules_for_product[ $cache_key ] = $qualifying_rules;
 
