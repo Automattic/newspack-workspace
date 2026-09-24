@@ -188,8 +188,6 @@ export const ScheduledActions = ( { integrationId } ) => {
 				defaultLayouts={ { table: {} } }
 				isLoading={ isLoading }
 				getItemId={ item => item.id }
-				onClickItem={ openDetails }
-				isItemClickable={ () => true }
 				search
 			>
 				<Stack direction="row" align="flex-start" gap="sm" className="dataviews__view-actions">

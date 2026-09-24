@@ -162,7 +162,7 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 	}
 
 	if ( error ) {
-		// Raised by the mount GET, so it can render as the dialog opens:
+		// Raised by the mount GET, so it can render as the drawer opens:
 		// assertive would cut off the title being announced.
 		return (
 			<Notice status="error" isDismissible={ false } politeness="polite">
@@ -188,7 +188,7 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 	const fieldsHeadingId = `newspack-integration-log-details__fields-heading-${ entryId }`;
 
 	return (
-		<Stack direction="column" gap="2xl">
+		<Stack direction="column" gap="xl">
 			<div className="newspack-integration-log-details__header">
 				<h3>{ entry.email }</h3>
 				<Badge intent={ status.intent }>{ status.label }</Badge>

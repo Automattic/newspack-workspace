@@ -260,8 +260,6 @@ export const SyncActivity = ( { integrationId } ) => {
 				defaultLayouts={ { table: {} } }
 				isLoading={ isLoading }
 				getItemId={ item => item.id }
-				onClickItem={ openDetails }
-				isItemClickable={ () => true }
 				empty={ <p>{ hasFailed ? __( 'The sync activity did not load.', 'newspack-plugin' ) : getEmptyMessage( view, retentionDays ) }</p> }
 				search
 			>

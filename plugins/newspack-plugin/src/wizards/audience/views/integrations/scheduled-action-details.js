@@ -72,8 +72,10 @@ export const ScheduledActionDetails = ( { integrationId, actionId } ) => {
 	}
 
 	if ( error ) {
+		// Raised by the mount GET, so it can render as the drawer opens:
+		// assertive would cut off the title being announced.
 		return (
-			<Notice status="error" isDismissible={ false }>
+			<Notice status="error" isDismissible={ false } politeness="polite">
 				{ error }
 			</Notice>
 		);
@@ -88,7 +90,7 @@ export const ScheduledActionDetails = ( { integrationId, actionId } ) => {
 	const formattedArgs = formatArgs( action.args );
 
 	return (
-		<Stack direction="column" gap="2xl">
+		<Stack direction="column" gap="xl">
 			<div className="newspack-integration-log-details__header">
 				<h3>{ action.event }</h3>
 				<Badge intent={ status.intent }>{ status.label }</Badge>
