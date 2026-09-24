@@ -54,14 +54,11 @@ export const blocks = [
 	overlayMenuTrigger,
 	overlayMenuPanel,
 	overlaySearch,
-<<<<<<< HEAD
 	commentsPanel,
 	commentsPanelTrigger,
 	commentsPanelContent,
-=======
 	responsiveContainer,
 	responsiveContainerBreakpoint,
->>>>>>> main
 ];
 
 const readerActivationBlocks = [ 'newspack/reader-registration', 'newspack/my-account-button' ];
@@ -80,14 +77,11 @@ const blockThemeBlocks = [
 	'newspack/overlay-menu-panel',
 	'newspack/my-account-button',
 	'newspack/overlay-search',
-<<<<<<< HEAD
 	'newspack/comments-panel',
 	'newspack/comments-panel-trigger',
 	'newspack/comments-panel-content',
-=======
 	'newspack/responsive-container',
 	'newspack/responsive-container-breakpoint',
->>>>>>> main
 ];
 const siteEditorOnlyBlocks = [ 'newspack/responsive-container', 'newspack/responsive-container-breakpoint' ];
 

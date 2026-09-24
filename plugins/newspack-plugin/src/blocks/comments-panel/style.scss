@@ -13,12 +13,12 @@
 .comments-panel__close-wrapper {
 	align-items: center;
 	display: flex;
-	height: var( --wp--custom--spacing--85, 4rem );
+	height: var(--wp--custom--spacing--85, 4rem);
 	justify-content: flex-end;
-	margin-right: calc( -1 * var( --wp--preset--spacing--30 ) );
+	margin-right: calc(-1 * var(--wp--preset--spacing--30));
 
-	@media ( min-width: breakpoints.$tablet_width ) {
-		margin-right: calc( -1 * var( --wp--preset--spacing--40 ) );
+	@media (min-width: breakpoints.$tablet_width) {
+		margin-right: calc(-1 * var(--wp--preset--spacing--40));
 	}
 }
 
@@ -26,14 +26,14 @@
 	align-items: center;
 	background: none;
 	border: none;
-	border-radius: var( --wp--custom--border--radius-small, 0.25rem );
+	border-radius: var(--wp--custom--border--radius-small, 0.25rem);
 	color: inherit;
 	cursor: pointer;
 	display: inline-flex;
 	font-family: inherit;
 	font-size: inherit;
-	gap: var( --wp--custom--spacing--10, 0.25rem );
-	padding: var( --wp--preset--spacing--20 );
+	gap: var(--wp--custom--spacing--10, 0.25rem);
+	padding: var(--wp--preset--spacing--20);
 
 	&:focus-visible {
 		outline: 2px solid;
@@ -42,14 +42,14 @@
 
 	svg {
 		display: block;
-		width: var( --wp--preset--spacing--40, 1.5rem );
-		height: var( --wp--preset--spacing--40, 1.5rem );
+		width: var(--wp--preset--spacing--40, 1.5rem);
+		height: var(--wp--preset--spacing--40, 1.5rem);
 		fill: currentcolor;
 	}
 }
 
 .comments-panel__content {
-	padding-top: var( --wp--preset--spacing--30 );
+	padding-top: var(--wp--preset--spacing--30);
 
 	.wp-block-comments {
 		margin-top: 0;
@@ -62,25 +62,27 @@
 .comments-panel__panel {
 	--comments-panel-slide-duration: 325ms;
 
-	background: var( --wp--preset--color--base, #fff );
+	background: var(--wp--preset--color--base, #fff);
 	bottom: 0;
-	color: var( --wp--preset--color--contrast, #1e1e1e );
+	color: var(--wp--preset--color--contrast, #1e1e1e);
 	opacity: 0;
 	overflow-y: auto;
-	padding: var( --wp--preset--spacing--30, 1rem );
+	padding: var(--wp--preset--spacing--30, 1rem);
 	position: fixed;
-	top: var( --wp-admin--admin-bar--height, 0 );
+	top: var(--wp-admin--admin-bar--height, 0);
 	transition:
 		opacity 125ms ease-in-out,
-		left var( --comments-panel-slide-duration ) ease-in-out,
-		right var( --comments-panel-slide-duration ) ease-in-out;
-	max-width: calc( var( --wp--preset--spacing--30, 1rem ) + var( --wp--style--global--content-size, 680px ) + var( --wp--preset--spacing--30, 1rem ) );
+		left var(--comments-panel-slide-duration) ease-in-out,
+		right var(--comments-panel-slide-duration) ease-in-out;
+	max-width: calc(var(--wp--preset--spacing--30, 1rem) + var(--wp--style--global--content-size, 680px) + var(--wp--preset--spacing--30, 1rem));
 	width: 100%;
 	z-index: 99998;
 
-	@media ( min-width: breakpoints.$tablet_width ) {
-		max-width: calc( var( --wp--preset--spacing--40, 1.5rem ) + var( --wp--style--global--content-size, 680px ) + var( --wp--preset--spacing--40, 1.5rem ) );
-		padding: var( --wp--preset--spacing--40, 1.5rem );
+	@media (min-width: breakpoints.$tablet_width) {
+		max-width: calc(
+			var(--wp--preset--spacing--40, 1.5rem) + var(--wp--style--global--content-size, 680px) + var(--wp--preset--spacing--40, 1.5rem)
+		);
+		padding: var(--wp--preset--spacing--40, 1.5rem);
 	}
 
 	&--left {
@@ -109,7 +111,7 @@
 // ─── Scrim ──────────────────────────────────────────────────────────────────────
 
 .comments-panel__scrim {
-	background: var( --wp--custom--color--neutral-70, var( --newspack-ui-color-neutral-70, #{colors.$neutral-700} ) );
+	background: var(--wp--custom--color--overlay-70);
 	cursor: pointer;
 	inset: 0;
 	margin: 0 !important;
