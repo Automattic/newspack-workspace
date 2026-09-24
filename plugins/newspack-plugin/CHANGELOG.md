@@ -1,3 +1,10 @@
+## newspack [6.52.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.5...newspack@6.52.6) (2026-09-24)
+
+
+### Bug Fixes
+
+* **content-gate:** show and keep integer-stored specific post IDs in the gate editor (Part of NPPD-2154, [#1152](https://github.com/Automattic/newspack-workspace/issues/1152)) ([f283eea](https://github.com/Automattic/newspack-workspace/commit/f283eeaf2e7431ad913f51b99b1d0804a7f09c53))
+
 ## newspack [6.52.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.4...newspack@6.52.5) (2026-09-22)
 
 
