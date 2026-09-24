@@ -667,11 +667,11 @@ const readerActivation = {
 	refreshAuthentication,
 	getReader,
 	openNewslettersSignupModal,
-	// openVerificationModal and maybeConfirmRegistration are attached at runtime by
-	// the reader-activation-auth bundle (see reader-activation-auth/index.js). They
-	// aren't included in this literal because they depend on auth-modal markup that
-	// only ships when the auth modal is rendered. Cross-plugin consumers gate access
-	// with `typeof ras?.openVerificationModal === 'function'`.
+	// openVerificationModal is attached at runtime by the reader-activation-auth
+	// bundle (see reader-activation-auth/index.js). It isn't included in this
+	// literal because it depends on auth-modal markup that only ships when the auth
+	// modal is rendered. Cross-plugin consumers gate access with
+	// `typeof ras?.openVerificationModal === 'function'`.
 	hasAuthLink,
 	getOTPHash,
 	setOTPTimer,
