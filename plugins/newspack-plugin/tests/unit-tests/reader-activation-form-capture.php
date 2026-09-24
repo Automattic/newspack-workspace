@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests the Inbound Form Capture integration and its Reader Activation hooks.
+ * Tests the Gravity Forms (form capture) integration and its Reader Activation hooks.
  *
  * @package Newspack\Tests
  */
@@ -193,6 +193,52 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$selectors = array_values( array_filter( $payload['settings'], fn( $field ) => 'selectors' === $field['key'] ) );
 		$this->assertCount( 1, $selectors );
 		$this->assertTrue( $selectors[0]['advanced'] );
+	}
+
+	/**
+	 * The block toggle reaches the page as the marker class: the render filter
+	 * adds it to the form tag only when the attribute is set and leaves every
+	 * other placement untouched, whether or not the integration is enabled.
+	 * The attribute is also registered with Gravity Forms, whose block preview
+	 * validates attributes against the server schema and would otherwise
+	 * refuse every toggled block.
+	 */
+	public function test_block_attribute_marks_the_form() {
+		$integration = new Form_Capture();
+		$integration->register_handlers();
+		$this->assertSame( 10, has_filter( 'gform_form_block_attributes', [ $integration, 'register_block_attribute' ] ) );
+		$this->assertSame( 20, has_filter( 'render_block_gravityforms/form', [ $integration, 'mark_captured_block_form' ] ), 'Runs after GF\'s own render filter at 10.' );
+
+		$attributes = $integration->register_block_attribute( [ 'formId' => [ 'type' => 'string' ] ] );
+		$this->assertSame( [ 'type' => 'string' ], $attributes['formId'], 'GF\'s own attributes pass through.' );
+		$this->assertSame( 'boolean', $attributes[ Form_Capture::BLOCK_ATTRIBUTE ]['type'] );
+		$this->assertFalse( $attributes[ Form_Capture::BLOCK_ATTRIBUTE ]['default'] );
+
+		$html = "<div class='gform_wrapper gravity-theme'><form method='post' id='gform_1' class='signup' action='/' data-formid='1' novalidate><input type='email' name='input_1'></form></div>";
+		$on   = [
+			'blockName' => 'gravityforms/form',
+			'attrs'     => [
+				'formId'                      => '1',
+				Form_Capture::BLOCK_ATTRIBUTE => true,
+			],
+		];
+		$off  = [
+			'blockName' => 'gravityforms/form',
+			'attrs'     => [ 'formId' => '1' ],
+		];
+
+		$this->assertFalse( Integrations::is_enabled( Form_Capture::ID ), 'Marking must not depend on the enabled state.' );
+		$marked = $integration->mark_captured_block_form( $html, $on );
+		$this->assertMatchesRegularExpression( '/<form[^>]*class=["\'][^"\']*\bnewspack-form-capture\b/', $marked, 'The form tag carries the marker.' );
+		$this->assertStringContainsString( 'signup', $marked, 'Existing classes are kept.' );
+		$this->assertSame( 1, substr_count( $marked, Form_Capture::MARKER_CLASS ), 'Only the form tag is marked, not the wrapper.' );
+
+		$this->assertSame( $html, $integration->mark_captured_block_form( $html, $off ), 'An untoggled placement is untouched.' );
+		$this->assertSame( $html, $integration->mark_captured_block_form( $html, [ 'attrs' => [ Form_Capture::BLOCK_ATTRIBUTE => false ] ] ) );
+		$this->assertSame( '<p>No form here.</p>', $integration->mark_captured_block_form( '<p>No form here.</p>', $on ), 'Content without a form tag is returned as is.' );
+
+		$bare = "<form method='post' id='gform_2' data-formid='2'></form>";
+		$this->assertMatchesRegularExpression( '/<form[^>]*class=["\']newspack-form-capture["\']/', $integration->mark_captured_block_form( $bare, $on ), 'A form with no class attribute gets one.' );
 	}
 
 	/**

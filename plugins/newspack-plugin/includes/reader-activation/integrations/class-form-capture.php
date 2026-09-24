@@ -37,7 +37,7 @@ use Newspack\Recaptcha;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Inbound Form Capture integration class.
+ * Gravity Forms integration class.
  */
 class Form_Capture extends Integration {
 	/**
@@ -54,6 +54,12 @@ class Form_Capture extends Integration {
 	 * Handle for the frontend capture script.
 	 */
 	const SCRIPT_HANDLE = 'newspack-form-capture';
+
+	/**
+	 * Gravity Forms block attribute that opts a placement into capture. Declared
+	 * in the editor extension and registered with GF's block schema here.
+	 */
+	const BLOCK_ATTRIBUTE = 'newspackFormCapture';
 
 	/**
 	 * Default per-IP hourly limit for this integration's rate-limit bucket.
@@ -85,6 +91,11 @@ class Form_Capture extends Integration {
 		\add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ], 20 );
 		// Priority 5 so a publisher's own filter at default priority wins.
 		\add_filter( 'newspack_frontend_registration_rate_limit', [ $this, 'filter_rate_limit' ], 5, 3 );
+		// GF applies this filter while constructing its block on `init` at
+		// priority 10; integrations register at priority 5, so it is in place.
+		\add_filter( 'gform_form_block_attributes', [ $this, 'register_block_attribute' ] );
+		// After GF's own render filter at 10, which relocates custom-CSS classes.
+		\add_filter( 'render_block_gravityforms/form', [ $this, 'mark_captured_block_form' ], 20, 2 );
 	}
 
 	/**
@@ -391,6 +402,50 @@ class Form_Capture extends Integration {
 		);
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'defer', true );
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'amp-plus', true );
+	}
+
+	/**
+	 * Register the capture toggle with Gravity Forms' block schema.
+	 *
+	 * The editor extension declares the attribute client-side, but GF renders
+	 * the block preview through the REST block renderer, which validates
+	 * attributes against the server-registered schema: without this, every
+	 * preview of a toggled block fails. GF keeps only the type of each
+	 * declared attribute.
+	 *
+	 * @param array $attributes Block attributes declared by Gravity Forms.
+	 *
+	 * @return array Attributes with the capture toggle declared.
+	 */
+	public function register_block_attribute( $attributes ) {
+		$attributes[ self::BLOCK_ATTRIBUTE ] = [
+			'type'    => 'boolean',
+			'default' => false,
+		];
+		return $attributes;
+	}
+
+	/**
+	 * Carry the block toggle to the page as the marker class on the form tag,
+	 * which is what the capture script matches. Runs whether or not the
+	 * integration is enabled: the class is inert on its own and the script is
+	 * the switch, so a placement's markup does not change with the setting.
+	 *
+	 * @param string $content The rendered block HTML.
+	 * @param array  $block   The parsed block, including its attributes.
+	 *
+	 * @return string The block HTML, with the form tag marked when opted in.
+	 */
+	public function mark_captured_block_form( $content, $block ) {
+		if ( empty( $block['attrs'][ self::BLOCK_ATTRIBUTE ] ) ) {
+			return $content;
+		}
+		$tags = new \WP_HTML_Tag_Processor( $content );
+		if ( ! $tags->next_tag( 'form' ) ) {
+			return $content;
+		}
+		$tags->add_class( self::MARKER_CLASS );
+		return $tags->get_updated_html();
 	}
 
 	/**
