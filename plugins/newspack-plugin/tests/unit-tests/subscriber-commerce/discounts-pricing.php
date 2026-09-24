@@ -80,7 +80,7 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	public function tear_down() {
 		// Global like the engine's own flag, so a test that fails mid-read would
 		// otherwise leave every test after it running inside a base read.
-		Amount_Calculator::$reading_base = false;
+		Amount_Calculator::set_reading_base( false );
 		$this->set_cart_contents( [] );
 		$this->clear_rest_route();
 		remove_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10 );
@@ -684,9 +684,9 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	public function test_no_subscriber_price_while_the_pricing_engine_reads_its_base() {
 		$this->add_book_discount();
 
-		Amount_Calculator::$reading_base = true;
-		$price_during_base_read          = Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id );
-		Amount_Calculator::$reading_base = false;
+		Amount_Calculator::set_reading_base( true );
+		$price_during_base_read = Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id );
+		Amount_Calculator::set_reading_base( false );
 
 		$this->assertNull( $price_during_base_read, 'The engine reads the undiscounted price as its base.' );
 		$this->assertSame(
@@ -706,9 +706,9 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		$this->add_book_discount();
 		wp_set_current_user( $this->subscriber_id );
 
-		Amount_Calculator::$reading_base = true;
-		$hash_during_base_read           = Subscriber_Discounts_Pricing::filter_variation_prices_hash( [ 'base' => 1 ], $this->book );
-		Amount_Calculator::$reading_base = false;
+		Amount_Calculator::set_reading_base( true );
+		$hash_during_base_read = Subscriber_Discounts_Pricing::filter_variation_prices_hash( [ 'base' => 1 ], $this->book );
+		Amount_Calculator::set_reading_base( false );
 
 		$this->assertSame( [ 'base' => 1 ], $hash_during_base_read, 'Undiscounted prices are cached under the key every undiscounted read shares.' );
 		$this->assertArrayHasKey(
@@ -726,8 +726,9 @@ namespace Automattic\WooCommerce\DynamicPricing;
 if ( ! class_exists( __NAMESPACE__ . '\Amount_Calculator' ) ) {
 	/**
 	 * Stand-in for the dynamic pricing engine's Amount_Calculator, which this
-	 * suite does not load. Only the base-read flag is modelled: a test raises it
-	 * to put the engine in the middle of reading a product's discount base.
+	 * suite does not load. Only the base-read flag is modelled, private as in
+	 * the engine: a test raises it through set_reading_base() to put the engine
+	 * in the middle of reading a product's discount base.
 	 */
 	final class Amount_Calculator {
 		/**
@@ -735,7 +736,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Amount_Calculator' ) ) {
 		 *
 		 * @var bool
 		 */
-		public static $reading_base = false;
+		private static $reading_base = false;
 
 		/**
 		 * Whether the engine is reading a product's discount base.
@@ -744,6 +745,16 @@ if ( ! class_exists( __NAMESPACE__ . '\Amount_Calculator' ) ) {
 		 */
 		public static function is_reading_base(): bool {
 			return self::$reading_base;
+		}
+
+		/**
+		 * Start or end a base read. Only the double has this: the engine raises
+		 * the flag itself, for the length of a read it makes.
+		 *
+		 * @param bool $reading_base Whether a base read is under way.
+		 */
+		public static function set_reading_base( bool $reading_base ): void {
+			self::$reading_base = $reading_base;
 		}
 	}
 }
