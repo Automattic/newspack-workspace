@@ -78,7 +78,7 @@ class Email_Verification_Prompt {
 	/**
 	 * Resolve the prompt context for the gate denying the current reader.
 	 *
-	 * Cheap before expensive. The first stage reads the gate that decides access for a
+	 * Cheap before expensive. The first stage checks the deciding gate's rules for a
 	 * domain the reader's address matches, which rules out every visitor but the handful
 	 * the prompt is for. Only those reach the second, which asks what the reader would
 	 * see if they verified — the question the prompt is about to make a promise about,
@@ -155,8 +155,8 @@ class Email_Verification_Prompt {
 		// One exception: a first gate with no layout that still refuses the reader after they
 		// verify is passed over, and the gate below it decides. The first gate's groups have
 		// failed then, so no prompt shows even where the lower gate would let the reader in.
-		// That miss is accepted: a gate only lacks a layout when creating it failed or the
-		// layout was deleted.
+		// That miss is accepted: a gate is only saved without a layout when creating the
+		// layout failed.
 		$post_gates    = Content_Restriction_Control::get_post_gates( $post_id );
 		$custom_access = $post_gates[0]['custom_access'] ?? [];
 		if ( empty( $custom_access['active'] ) || empty( $custom_access['access_rules'] ) ) {
