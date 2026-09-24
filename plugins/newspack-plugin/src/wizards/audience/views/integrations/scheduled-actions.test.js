@@ -3,7 +3,7 @@
 /**
  * External dependencies
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 
 const mockApiFetch = jest.fn();
 const mockDataViewsProps = { current: null };
@@ -28,7 +28,7 @@ jest.mock( '@wordpress/ui', () => {
 
 jest.mock( '@wordpress/dataviews', () => {
 	const Part = () => null;
-	return { DataViews: { Search: Part, FiltersToggle: Part, FiltersToggled: Part, Layout: Part, Footer: Part } };
+	return { DataViews: { Search: Part, Filters: Part, Layout: Part, Footer: Part } };
 } );
 
 // Captured rather than rendered: the real DataViews cannot load in this jsdom env.
@@ -37,9 +37,24 @@ jest.mock( '../../../../../packages/components/src', () => {
 	return {
 		DataViews: props => {
 			mockDataViewsProps.current = props;
-			return React.createElement( 'div', null, 'DataViews' );
+			// One row per item, carrying the first field's cell, so its details link can be tested.
+			const rows = ( props.data || [] ).map( item =>
+				React.createElement(
+					'tr',
+					{ key: item.id, className: 'dataviews-view-table__row' },
+					React.createElement( 'td', null, props.fields[ 0 ].render( { item } ) )
+				)
+			);
+			return React.createElement( 'table', null, React.createElement( 'tbody', null, rows ) );
 		},
 		StatusIndicator: ( { children } ) => React.createElement( 'span', null, children ),
+		Drawer: {
+			Root: ( { isOpen, children } ) => ( isOpen ? React.createElement( 'div', { role: 'dialog' }, children ) : null ),
+			Header: ( { children } ) => React.createElement( 'div', null, children ),
+			Title: ( { children } ) => React.createElement( 'h2', null, children ),
+			CloseIcon: () => null,
+			Content: ( { children } ) => React.createElement( 'div', null, children ),
+		},
 	};
 } );
 
@@ -47,7 +62,7 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 
-jest.mock( './log-details-modal', () => ( { LogDetailsModal: () => null } ) );
+jest.mock( './scheduled-action-details', () => ( { ScheduledActionDetails: ( { actionId } ) => `Details of ${ actionId }` } ) );
 
 import { ScheduledActions } from './scheduled-actions';
 
@@ -90,5 +105,20 @@ describe( 'ScheduledActions', () => {
 		const runNow = mockDataViewsProps.current.actions.find( action => action.id === 'run-now' );
 		expect( runNow.isEligible( { id: 1, status: 'pending' } ) ).toBe( true );
 		expect( runNow.isEligible( { id: 1, status: 'complete' } ) ).toBe( false );
+	} );
+
+	it( 'opens the details in a drawer from the row link and from its action', async () => {
+		mockApiFetch.mockResolvedValue( { items: [ { id: 12, timestamp: '2026-09-10 10:00:00', status: 'complete' } ], total: 1 } );
+		render( <ScheduledActions integrationId="sample" /> );
+		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
+		expect( screen.queryByRole( 'dialog' ) ).toBeNull();
+
+		fireEvent.click( document.querySelector( '.newspack-integration-logs__details-link' ) );
+		expect( screen.getByRole( 'heading', { name: 'Action Details' } ) ).toBeTruthy();
+		expect( screen.getByRole( 'dialog' ).textContent ).toContain( 'Details of 12' );
+
+		const viewDetails = mockDataViewsProps.current.actions.find( action => action.id === 'view-details' );
+		act( () => viewDetails.callback( [ { id: 34 } ] ) );
+		expect( screen.getByRole( 'dialog' ).textContent ).toContain( 'Details of 34' );
 	} );
 } );

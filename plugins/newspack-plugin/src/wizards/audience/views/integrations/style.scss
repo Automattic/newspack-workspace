@@ -3,36 +3,7 @@
 
 .newspack-integration-logs {
 	.dataviews__view-actions {
-		display: flex;
-		align-items: center;
-		margin-bottom: 16px;
-	}
-
-	.dataviews__search {
-		display: flex;
-		align-items: flex-start;
-		gap: 8px;
-	}
-
-	.dataviews-filters__visibility-toggle.components-button {
-		background: wp-colors.$gray-900;
-		color: wp-colors.$white;
-		border-radius: 4px;
-
-		&:hover,
-		&:focus {
-			background: wp-colors.$black;
-			color: wp-colors.$white;
-		}
-
-		&[aria-expanded='true'] {
-			background: wp-colors.$black;
-			color: wp-colors.$white;
-		}
-
-		svg {
-			fill: currentcolor;
-		}
+		margin-bottom: wp-vars.$grid-unit-20;
 	}
 
 	.dataviews-item-actions .components-button:not(:disabled) {
@@ -58,40 +29,37 @@
 	}
 }
 
-.newspack-integration-logs-tabs {
-	// The tab list sits outside the DataViews wrapper, so it needs its own
-	// container to keep step with the gutter DataViews gives itself.
-	container-type: inline-size;
-}
+.newspack-integration-logs__details-link {
+	background: none;
+	border: 0;
+	color: wp-colors.$gray-900;
+	cursor: pointer;
+	font: inherit;
+	padding: 0;
+	text-align: left;
 
-.newspack-integration-logs-tabs__list {
-	padding-inline: wp-vars.$grid-unit-60;
-}
-
-// DataViews drops its own gutter at this width; the tab list follows, or the
-// two stop lining up.
-@container (max-width: 430px) {
-	.newspack-integration-logs-tabs__list {
-		padding-inline: wp-vars.$grid-unit-30;
+	&:hover {
+		color: var( --wp-admin-theme-color );
+		text-decoration: underline;
 	}
-}
 
-.newspack-integration-logs-tabs__panel {
-	padding-top: 24px;
+	&:focus-visible {
+		outline: var( --wp-admin-border-width-focus, 1.5px ) solid var( --wp-admin-theme-color );
+		outline-offset: 2px;
+	}
 }
 
 .newspack-integration-log-details {
 	&--loading {
 		display: flex;
 		justify-content: center;
-		padding: 24px 0;
+		padding: wp-vars.$grid-unit-30 0;
 	}
 
 	&__header {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		margin-bottom: 16px;
+		gap: wp-vars.$grid-unit-15;
 
 		h3 {
 			margin: 0;
@@ -100,13 +68,13 @@
 
 	&__meta {
 		display: grid;
-		grid-template-columns: max-content 1fr;
-		column-gap: 16px;
-		row-gap: 4px;
-		margin: 0 0 16px;
+		grid-template-columns: 16 * wp-vars.$grid-unit 1fr;
+		column-gap: wp-vars.$grid-unit-20;
+		row-gap: wp-vars.$grid-unit-10;
+		margin: 0;
 
 		dt {
-			font-weight: 600;
+			font-weight: wp-vars.$font-weight-medium;
 		}
 
 		dd {
@@ -115,23 +83,21 @@
 	}
 
 	&__section {
-		margin-top: 16px;
-
 		h4 {
-			margin: 0 0 8px;
+			margin: 0 0 wp-vars.$grid-unit-10;
 		}
 	}
 
 	&__args {
-		background: #f0f0f1;
-		padding: 12px;
-		border-radius: 4px;
-		max-height: 240px;
+		background: wp-colors.$gray-100;
+		padding: wp-vars.$grid-unit-15;
+		border-radius: wp-vars.$radius-medium;
+		max-height: 30 * wp-vars.$grid-unit;
 		overflow: auto;
 		white-space: pre-wrap;
 		word-break: break-word;
-		font-family: Consolas, monaco, monospace;
-		font-size: 12px;
+		font-family: wp-vars.$font-family-mono;
+		font-size: wp-vars.$font-size-small;
 	}
 
 	&__logs {
@@ -142,8 +108,8 @@
 		li {
 			display: grid;
 			grid-template-columns: max-content 1fr;
-			column-gap: 12px;
-			padding: 4px 0;
+			column-gap: wp-vars.$grid-unit-15;
+			padding: wp-vars.$grid-unit-05 0;
 			border-bottom: 1px solid wp-colors.$gray-200;
 
 			&:last-child {
@@ -158,26 +124,33 @@
 	}
 
 	&__fields {
-		width: 100%;
 		border-collapse: collapse;
-		margin-bottom: 8px;
+		margin-bottom: wp-vars.$grid-unit-15;
+		width: 100%;
 
 		th,
 		td {
-			padding: 8px 12px 8px 0;
-			border-bottom: 1px solid wp-colors.$gray-200;
+			border-bottom: 1px solid wp-colors.$gray-100;
+			padding: wp-vars.$grid-unit-15 wp-vars.$grid-unit-15 wp-vars.$grid-unit-15 0;
 			text-align: left;
 			vertical-align: top;
 			word-break: break-word;
 		}
 
 		thead th {
-			color: wp-colors.$gray-700;
-			font-weight: 400;
+			color: wp-colors.$gray-900;
+			font-size: wp-vars.$font-size-x-small;
+			font-weight: wp-vars.$font-weight-medium;
+			text-transform: uppercase;
 		}
 
 		tbody th {
-			font-weight: 600;
+			color: wp-colors.$gray-900;
+			font-weight: wp-vars.$font-weight-regular;
+		}
+
+		td {
+			color: wp-colors.$gray-700;
 		}
 	}
 
@@ -186,7 +159,7 @@
 		th,
 		td {
 			color: wp-colors.$gray-700;
-			font-weight: 400;
+			font-weight: wp-vars.$font-weight-regular;
 		}
 	}
 }

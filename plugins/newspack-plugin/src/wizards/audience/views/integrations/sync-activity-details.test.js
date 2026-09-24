@@ -20,7 +20,10 @@ jest.mock( '@wordpress/components', () => {
 
 jest.mock( '@wordpress/ui', () => {
 	const React = require( 'react' );
-	return { Badge: ( { children } ) => React.createElement( 'span', null, children ) };
+	return {
+		Badge: ( { children } ) => React.createElement( 'span', null, children ),
+		Stack: ( { children, className } ) => React.createElement( 'div', { className }, children ),
+	};
 } );
 
 import { SyncActivityDetails } from './sync-activity-details';

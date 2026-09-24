@@ -3,7 +3,7 @@
 /**
  * External dependencies
  */
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 
 const mockApiFetch = jest.fn();
 const mockAddNotice = jest.fn();
@@ -29,7 +29,7 @@ jest.mock( '@wordpress/ui', () => {
 
 jest.mock( '@wordpress/dataviews', () => {
 	const Part = () => null;
-	return { DataViews: { Search: Part, FiltersToggle: Part, FiltersToggled: Part, Layout: Part, Footer: Part } };
+	return { DataViews: { Search: Part, Filters: Part, Layout: Part, Footer: Part } };
 } );
 
 // Captured rather than rendered: the real DataViews cannot load in this jsdom env.
@@ -38,9 +38,24 @@ jest.mock( '../../../../../packages/components/src', () => {
 	return {
 		DataViews: props => {
 			mockDataViewsProps.current = props;
-			return React.createElement( 'div', null, 'DataViews' );
+			// One row per item, carrying the first field's cell, so its details link can be tested.
+			const rows = ( props.data || [] ).map( item =>
+				React.createElement(
+					'tr',
+					{ key: item.id, className: 'dataviews-view-table__row' },
+					React.createElement( 'td', null, props.fields[ 0 ].render( { item } ) )
+				)
+			);
+			return React.createElement( 'table', null, React.createElement( 'tbody', null, rows ) );
 		},
 		StatusIndicator: ( { children } ) => React.createElement( 'span', null, children ),
+		Drawer: {
+			Root: ( { isOpen, children } ) => ( isOpen ? React.createElement( 'div', { role: 'dialog' }, children ) : null ),
+			Header: ( { children } ) => React.createElement( 'div', null, children ),
+			Title: ( { children } ) => React.createElement( 'h2', null, children ),
+			CloseIcon: () => null,
+			Content: ( { children } ) => React.createElement( 'div', null, children ),
+		},
 	};
 } );
 
@@ -48,7 +63,7 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 
-jest.mock( './sync-activity-details', () => ( { SyncActivityDetails: () => null } ) );
+jest.mock( './sync-activity-details', () => ( { SyncActivityDetails: ( { entryId } ) => `Details of ${ entryId }` } ) );
 
 import { SyncActivity } from './sync-activity';
 
@@ -266,5 +281,18 @@ describe( 'SyncActivity', () => {
 		render( mockDataViewsProps.current.empty );
 		expect( screen.getByText( 'The sync activity did not load.' ) ).toBeTruthy();
 		expect( screen.queryByText( 'No pushes recorded yet.' ) ).toBeNull();
+	} );
+
+	it( 'opens the details in a drawer from the row link and from its action', async () => {
+		await renderLoaded();
+		expect( screen.queryByRole( 'dialog' ) ).toBeNull();
+
+		fireEvent.click( document.querySelector( '.newspack-integration-logs__details-link' ) );
+		expect( screen.getByRole( 'heading', { name: 'Sync Details' } ) ).toBeTruthy();
+		expect( screen.getByRole( 'dialog' ).textContent ).toContain( `Details of ${ retryingItem.id }` );
+
+		const viewDetails = mockDataViewsProps.current.actions.find( action => action.id === 'view-details' );
+		act( () => viewDetails.callback( [ { id: 99 } ] ) );
+		expect( screen.getByRole( 'dialog' ).textContent ).toContain( 'Details of 99' );
 	} );
 } );

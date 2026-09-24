@@ -2,50 +2,62 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect } from '@wordpress/element';
+import { useEffect } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
-import { Tabs } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { SyncActivity } from './sync-activity';
 import { ScheduledActions } from './scheduled-actions';
 import './style.scss';
 
-const TABS = [
-	{ value: 'sync-activity', label: __( 'Sync activity', 'newspack-plugin' ), Content: SyncActivity },
-	{ value: 'scheduled-actions', label: __( 'Scheduled actions', 'newspack-plugin' ), Content: ScheduledActions },
+const { Redirect } = Router;
+
+const SCHEDULED_ACTIONS_TAB = 'scheduled-actions';
+
+/**
+ * The Logs tabs of an integration, for the wizard's tabbed navigation. Sync
+ * Activity comes first, on the bare Logs route, because it answers what a
+ * publisher comes here for: what was sent for a reader, and whether it arrived.
+ * The scheduled actions are the machinery behind it.
+ *
+ * @param {Object} params               Route params.
+ * @param {string} params.integrationId The integration ID.
+ * @return {Array} Tabbed navigation items.
+ */
+export const getLogsTabs = ( { integrationId } ) => [
+	{
+		label: __( 'Sync Activity', 'newspack-plugin' ),
+		path: `/settings/${ integrationId }/logs`,
+		exact: true,
+	},
+	{
+		label: __( 'Scheduled Actions', 'newspack-plugin' ),
+		path: `/settings/${ integrationId }/logs/${ SCHEDULED_ACTIONS_TAB }`,
+		exact: true,
+	},
 ];
 
 /**
- * The Logs page of an integration. Sync activity comes first because it
- * answers what a publisher comes here for: what was sent for a reader, and
- * whether it arrived. The scheduled actions are the machinery behind it.
+ * The Logs page of an integration: the content of whichever tab the route names.
  *
  * @param {Object} props              Props.
  * @param {Object} props.integrations Integrations keyed by ID.
- * @param {Object} props.match        The router match, carrying `integrationId`.
+ * @param {Object} props.match        The router match, carrying `integrationId` and `tab`.
  */
 export const LogsView = ( { integrations, match } ) => {
 	const integrationId = match?.params?.integrationId;
+	const tab = match?.params?.tab;
 	const integration = integrationId ? integrations[ integrationId ] : null;
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const [ activeTab, setActiveTab ] = useState( TABS[ 0 ].value );
 
 	useEffect( () => {
 		if ( integration ) {
 			setHeaderData( {
 				sectionName: [ { label: integration.name, url: `#/settings/${ integrationId }` }, { label: __( 'Logs', 'newspack-plugin' ) } ],
-				actions: [
-					{
-						type: 'secondary',
-						label: __( 'Back to Integrations', 'newspack-plugin' ),
-						icon: 'chevronLeft',
-						href: '#/settings',
-					},
-				],
 			} );
 		}
 	}, [ integration, integrationId, setHeaderData ] );
@@ -54,21 +66,9 @@ export const LogsView = ( { integrations, match } ) => {
 		return null;
 	}
 
-	return (
-		<Tabs.Root value={ activeTab } onValueChange={ setActiveTab } className="newspack-integration-logs-tabs">
-			<Tabs.List className="newspack-integration-logs-tabs__list" aria-label={ __( 'Logs', 'newspack-plugin' ) }>
-				{ TABS.map( ( { value, label } ) => (
-					<Tabs.Tab key={ value } value={ value }>
-						{ label }
-					</Tabs.Tab>
-				) ) }
-			</Tabs.List>
-			{ TABS.map( ( { value, Content } ) => (
-				<Tabs.Panel key={ value } value={ value } className="newspack-integration-logs-tabs__panel">
-					{ /* Only the open tab fetches: each list loads on mount. */ }
-					{ value === activeTab ? <Content integrationId={ integrationId } /> : null }
-				</Tabs.Panel>
-			) ) }
-		</Tabs.Root>
-	);
+	if ( tab && SCHEDULED_ACTIONS_TAB !== tab ) {
+		return <Redirect to={ `/settings/${ integrationId }/logs` } />;
+	}
+
+	return SCHEDULED_ACTIONS_TAB === tab ? <ScheduledActions integrationId={ integrationId } /> : <SyncActivity integrationId={ integrationId } />;
 };

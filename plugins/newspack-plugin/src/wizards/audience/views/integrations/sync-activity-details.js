@@ -5,7 +5,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { Spinner, Notice, Button } from '@wordpress/components';
-import { Badge } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -155,7 +155,7 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 
 	if ( isLoading ) {
 		return (
-			<div className="newspack-integration-log-details newspack-integration-log-details--loading">
+			<div className="newspack-integration-log-details--loading">
 				<Spinner />
 			</div>
 		);
@@ -188,7 +188,7 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 	const fieldsHeadingId = `newspack-integration-log-details__fields-heading-${ entryId }`;
 
 	return (
-		<div className="newspack-integration-log-details">
+		<Stack direction="column" gap="2xl">
 			<div className="newspack-integration-log-details__header">
 				<h3>{ entry.email }</h3>
 				<Badge intent={ status.intent }>{ status.label }</Badge>
@@ -298,6 +298,6 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 					</>
 				) }
 			</section>
-		</div>
+		</Stack>
 	);
 };

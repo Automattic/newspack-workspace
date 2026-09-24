@@ -13,12 +13,13 @@ import { DataViews as WPDataViews } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { DataViews, StatusIndicator } from '../../../../../packages/components/src';
+import { DataViews, Drawer, StatusIndicator } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, PUSH_LOG_STATUS_MAP, PUSH_LOG_OPERATION_LABELS, formatTimestamp } from './constants';
 import { NEEDS_ATTENTION_VALUE, buildPushLogQuery, getAttemptLabel, getRetryNote, getStatusDisplay, getEmptyMessage } from './push-log-utils';
 import { SyncActivityDetails } from './sync-activity-details';
 import { useRunAction } from './use-run-action';
+import { DetailsLink } from './details-link';
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -117,12 +118,20 @@ export const SyncActivity = ( { integrationId } ) => {
 
 	const { runAction, runningActionIds } = useRunAction( integrationId, { onSettled: fetchEntries, completeNotice: RETRY_RAN_NOTICE } );
 
+	const [ detailsId, setDetailsId ] = useState( null );
+	const [ isDetailsOpen, setIsDetailsOpen ] = useState( false );
+	// The id outlives a close, so the drawer keeps its content while it slides out.
+	const openDetails = useCallback( item => {
+		setDetailsId( item.id );
+		setIsDetailsOpen( true );
+	}, [] );
+
 	const fields = useMemo(
 		() => [
 			{
 				id: 'updated_at',
 				label: __( 'Last activity', 'newspack-plugin' ),
-				render: ( { item } ) => formatTimestamp( item.updated_at ),
+				render: ( { item } ) => <DetailsLink onClick={ () => openDetails( item ) }>{ formatTimestamp( item.updated_at ) }</DetailsLink>,
 				enableSorting: true,
 				enableHiding: false,
 			},
@@ -130,6 +139,7 @@ export const SyncActivity = ( { integrationId } ) => {
 				id: 'email',
 				label: __( 'Reader', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.email,
+				render: ( { item } ) => <DetailsLink onClick={ () => openDetails( item ) }>{ item.email }</DetailsLink>,
 				enableSorting: false,
 			},
 			{
@@ -138,7 +148,7 @@ export const SyncActivity = ( { integrationId } ) => {
 				render: ( { item } ) => PUSH_LOG_OPERATION_LABELS[ item.operation ] || item.operation,
 				enableSorting: false,
 				elements: toElements( PUSH_LOG_OPERATION_LABELS ),
-				filterBy: { operators: [ 'is' ] },
+				filterBy: { isPrimary: true, operators: [ 'is' ] },
 			},
 			{
 				id: 'status',
@@ -162,7 +172,7 @@ export const SyncActivity = ( { integrationId } ) => {
 				},
 				enableSorting: false,
 				elements: Object.entries( PUSH_LOG_STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),
-				filterBy: { operators: [ 'is' ] },
+				filterBy: { isPrimary: true, operators: [ 'is' ] },
 			},
 			{
 				id: 'context',
@@ -198,10 +208,10 @@ export const SyncActivity = ( { integrationId } ) => {
 				enableSorting: false,
 				enableHiding: false,
 				elements: [ { value: NEEDS_ATTENTION_VALUE, label: __( 'Retrying or failed, with no later success', 'newspack-plugin' ) } ],
-				filterBy: { operators: [ 'is' ] },
+				filterBy: { isPrimary: true, operators: [ 'is' ] },
 			},
 		],
-		[]
+		[ openDetails ]
 	);
 
 	const actions = useMemo(
@@ -209,8 +219,7 @@ export const SyncActivity = ( { integrationId } ) => {
 			{
 				id: 'view-details',
 				label: __( 'View details', 'newspack-plugin' ),
-				modalHeader: __( 'Sync details', 'newspack-plugin' ),
-				RenderModal: ( { items } ) => <SyncActivityDetails integrationId={ integrationId } entryId={ items[ 0 ].id } />,
+				callback: items => openDetails( items[ 0 ] ),
 			},
 			{
 				id: 'run-retry',
@@ -219,7 +228,7 @@ export const SyncActivity = ( { integrationId } ) => {
 				callback: items => runAction( items[ 0 ].retry.action_id ),
 			},
 		],
-		[ integrationId, runAction, runningActionIds ]
+		[ openDetails, runAction, runningActionIds ]
 	);
 
 	const paginationInfo = useMemo(
@@ -239,29 +248,41 @@ export const SyncActivity = ( { integrationId } ) => {
 	}
 
 	return (
-		<DataViews
-			className="newspack-integration-logs"
-			data={ data }
-			fields={ fields }
-			actions={ actions }
-			view={ view }
-			onChangeView={ setView }
-			paginationInfo={ paginationInfo }
-			defaultLayouts={ { table: {} } }
-			isLoading={ isLoading }
-			getItemId={ item => item.id }
-			empty={ <p>{ hasFailed ? __( 'The sync activity did not load.', 'newspack-plugin' ) : getEmptyMessage( view, retentionDays ) }</p> }
-			search
-		>
-			<div className="dataviews__view-actions">
-				<div className="dataviews__search">
-					<WPDataViews.Search label={ __( 'Search by reader email', 'newspack-plugin' ) } />
-					<WPDataViews.FiltersToggle />
-				</div>
-			</div>
-			<WPDataViews.FiltersToggled className="dataviews-filters__container" />
-			<WPDataViews.Layout />
-			<WPDataViews.Footer />
-		</DataViews>
+		<>
+			<DataViews
+				className="newspack-integration-logs"
+				data={ data }
+				fields={ fields }
+				actions={ actions }
+				view={ view }
+				onChangeView={ setView }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ { table: {} } }
+				isLoading={ isLoading }
+				getItemId={ item => item.id }
+				onClickItem={ openDetails }
+				isItemClickable={ () => true }
+				empty={ <p>{ hasFailed ? __( 'The sync activity did not load.', 'newspack-plugin' ) : getEmptyMessage( view, retentionDays ) }</p> }
+				search
+			>
+				<Stack direction="row" align="flex-start" gap="sm" className="dataviews__view-actions">
+					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
+						<WPDataViews.Search label={ __( 'Search by reader email', 'newspack-plugin' ) } />
+						<WPDataViews.Filters />
+					</Stack>
+				</Stack>
+				<WPDataViews.Layout />
+				<WPDataViews.Footer />
+			</DataViews>
+			<Drawer.Root isOpen={ isDetailsOpen } size="x-large" onRequestClose={ () => setIsDetailsOpen( false ) }>
+				<Drawer.Header>
+					<Drawer.Title>{ __( 'Sync Details', 'newspack-plugin' ) }</Drawer.Title>
+					<Drawer.CloseIcon />
+				</Drawer.Header>
+				<Drawer.Content>
+					{ null !== detailsId ? <SyncActivityDetails integrationId={ integrationId } entryId={ detailsId } /> : null }
+				</Drawer.Content>
+			</Drawer.Root>
+		</>
 	);
 };

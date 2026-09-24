@@ -3,7 +3,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 
 const mockSetHeaderData = jest.fn();
 
@@ -16,53 +16,41 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 
-// A small controlled tabs widget: the real one is Base UI, which this jsdom
-// env does not need to exercise to check which tab's content is shown.
-jest.mock( '@wordpress/ui', () => {
-	const React = require( 'react' );
-	const TabsContext = React.createContext( {} );
-	const Root = ( { value, onValueChange, children } ) => React.createElement( TabsContext.Provider, { value: { value, onValueChange } }, children );
-	const List = ( { children } ) => React.createElement( 'div', { role: 'tablist' }, children );
-	const Tab = ( { value, children } ) => {
-		const tabs = React.useContext( TabsContext );
-		return React.createElement(
-			'button',
-			{ role: 'tab', 'aria-selected': tabs.value === value, onClick: () => tabs.onValueChange( value ) },
-			children
-		);
-	};
-	const Panel = ( { children } ) => React.createElement( 'div', { role: 'tabpanel' }, children );
-	return { Tabs: { Root, List, Tab, Panel } };
-} );
+jest.mock( '../../../../../packages/components/src/proxied-imports/router', () => ( {
+	Redirect: ( { to } ) => `Redirect to ${ to }`,
+} ) );
 
 jest.mock( './sync-activity', () => ( { SyncActivity: ( { integrationId } ) => `Sync activity of ${ integrationId }` } ) );
 jest.mock( './scheduled-actions', () => ( { ScheduledActions: ( { integrationId } ) => `Scheduled actions of ${ integrationId }` } ) );
 
-import { LogsView } from './logs-view';
+import { LogsView, getLogsTabs } from './logs-view';
 
 const integrations = { sample: { name: 'Sample' } };
-const match = { params: { integrationId: 'sample' } };
+const matchFor = tab => ( { params: { integrationId: 'sample', tab } } );
 
 describe( 'LogsView', () => {
-	it( 'opens on the sync activity and leaves the scheduled actions unmounted', () => {
-		render( <LogsView integrations={ integrations } match={ match } /> );
+	it( 'opens on the sync activity', () => {
+		render( <LogsView integrations={ integrations } match={ matchFor() } /> );
 
-		expect( screen.getByRole( 'tab', { name: 'Sync activity' } ).getAttribute( 'aria-selected' ) ).toBe( 'true' );
 		expect( screen.getByText( 'Sync activity of sample' ) ).toBeTruthy();
 		expect( screen.queryByText( 'Scheduled actions of sample' ) ).toBeNull();
 	} );
 
-	it( 'switches to the scheduled actions', () => {
-		render( <LogsView integrations={ integrations } match={ match } /> );
-
-		fireEvent.click( screen.getByRole( 'tab', { name: 'Scheduled actions' } ) );
+	it( 'shows the scheduled actions on their route', () => {
+		render( <LogsView integrations={ integrations } match={ matchFor( 'scheduled-actions' ) } /> );
 
 		expect( screen.getByText( 'Scheduled actions of sample' ) ).toBeTruthy();
 		expect( screen.queryByText( 'Sync activity of sample' ) ).toBeNull();
 	} );
 
+	it( 'sends an unknown tab back to the Logs route', () => {
+		render( <LogsView integrations={ integrations } match={ matchFor( 'nope' ) } /> );
+
+		expect( screen.getByText( 'Redirect to /settings/sample/logs' ) ).toBeTruthy();
+	} );
+
 	it( 'keeps the Logs breadcrumb under the integration', () => {
-		render( <LogsView integrations={ integrations } match={ match } /> );
+		render( <LogsView integrations={ integrations } match={ matchFor() } /> );
 
 		expect( mockSetHeaderData ).toHaveBeenCalledWith(
 			expect.objectContaining( { sectionName: [ { label: 'Sample', url: '#/settings/sample' }, { label: 'Logs' } ] } )
@@ -70,8 +58,17 @@ describe( 'LogsView', () => {
 	} );
 
 	it( 'renders nothing for an integration it does not know', () => {
-		const { container } = render( <LogsView integrations={ {} } match={ match } /> );
+		const { container } = render( <LogsView integrations={ {} } match={ matchFor() } /> );
 
 		expect( container.innerHTML ).toBe( '' );
+	} );
+} );
+
+describe( 'getLogsTabs', () => {
+	it( 'routes each tab under the integration, sync activity first', () => {
+		expect( getLogsTabs( { integrationId: 'sample' } ) ).toEqual( [
+			{ label: 'Sync Activity', path: '/settings/sample/logs', exact: true },
+			{ label: 'Scheduled Actions', path: '/settings/sample/logs/scheduled-actions', exact: true },
+		] );
 	} );
 } );

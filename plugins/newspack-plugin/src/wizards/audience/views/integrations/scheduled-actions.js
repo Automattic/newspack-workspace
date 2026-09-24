@@ -13,11 +13,12 @@ import { DataViews as WPDataViews } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { DataViews, StatusIndicator } from '../../../../../packages/components/src';
+import { DataViews, Drawer, StatusIndicator } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
-import { LogDetailsModal } from './log-details-modal';
+import { ScheduledActionDetails } from './scheduled-action-details';
 import { useRunAction } from './use-run-action';
+import { DetailsLink } from './details-link';
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -97,18 +98,26 @@ export const ScheduledActions = ( { integrationId } ) => {
 
 	const { runAction, runningActionIds } = useRunAction( integrationId, { onSettled: fetchLogs } );
 
+	const [ detailsId, setDetailsId ] = useState( null );
+	const [ isDetailsOpen, setIsDetailsOpen ] = useState( false );
+	// The id outlives a close, so the drawer keeps its content while it slides out.
+	const openDetails = useCallback( item => {
+		setDetailsId( item.id );
+		setIsDetailsOpen( true );
+	}, [] );
+
 	const fields = useMemo(
 		() => [
 			{
 				id: 'timestamp',
 				label: __( 'Timestamp', 'newspack-plugin' ),
-				render: ( { item } ) => formatTimestamp( item.timestamp ),
+				render: ( { item } ) => <DetailsLink onClick={ () => openDetails( item ) }>{ formatTimestamp( item.timestamp ) }</DetailsLink>,
 				enableSorting: true,
 			},
 			{
 				id: 'email',
 				label: __( 'Email', 'newspack-plugin' ),
-				render: ( { item } ) => item.email || '—',
+				render: ( { item } ) => ( item.email ? <DetailsLink onClick={ () => openDetails( item ) }>{ item.email }</DetailsLink> : '—' ),
 				enableSorting: false,
 			},
 			{
@@ -127,12 +136,10 @@ export const ScheduledActions = ( { integrationId } ) => {
 				},
 				enableSorting: true,
 				elements: Object.entries( STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),
-				filterBy: {
-					operators: [ 'is' ],
-				},
+				filterBy: { isPrimary: true, operators: [ 'is' ] },
 			},
 		],
-		[]
+		[ openDetails ]
 	);
 
 	const actions = useMemo(
@@ -140,8 +147,7 @@ export const ScheduledActions = ( { integrationId } ) => {
 			{
 				id: 'view-details',
 				label: __( 'View details', 'newspack-plugin' ),
-				modalHeader: __( 'Action details', 'newspack-plugin' ),
-				RenderModal: ( { items } ) => <LogDetailsModal integrationId={ integrationId } actionId={ items[ 0 ].id } />,
+				callback: items => openDetails( items[ 0 ] ),
 			},
 			{
 				id: 'run-now',
@@ -150,7 +156,7 @@ export const ScheduledActions = ( { integrationId } ) => {
 				callback: items => runAction( items[ 0 ].id ),
 			},
 		],
-		[ integrationId, runAction, runningActionIds ]
+		[ openDetails, runAction, runningActionIds ]
 	);
 
 	const paginationInfo = useMemo(
@@ -170,28 +176,40 @@ export const ScheduledActions = ( { integrationId } ) => {
 	}
 
 	return (
-		<DataViews
-			className="newspack-integration-logs"
-			data={ data }
-			fields={ fields }
-			actions={ actions }
-			view={ view }
-			onChangeView={ setView }
-			paginationInfo={ paginationInfo }
-			defaultLayouts={ { table: {} } }
-			isLoading={ isLoading }
-			getItemId={ item => item.id }
-			search
-		>
-			<div className="dataviews__view-actions">
-				<div className="dataviews__search">
-					<WPDataViews.Search />
-					<WPDataViews.FiltersToggle />
-				</div>
-			</div>
-			<WPDataViews.FiltersToggled className="dataviews-filters__container" />
-			<WPDataViews.Layout />
-			<WPDataViews.Footer />
-		</DataViews>
+		<>
+			<DataViews
+				className="newspack-integration-logs"
+				data={ data }
+				fields={ fields }
+				actions={ actions }
+				view={ view }
+				onChangeView={ setView }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ { table: {} } }
+				isLoading={ isLoading }
+				getItemId={ item => item.id }
+				onClickItem={ openDetails }
+				isItemClickable={ () => true }
+				search
+			>
+				<Stack direction="row" align="flex-start" gap="sm" className="dataviews__view-actions">
+					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
+						<WPDataViews.Search />
+						<WPDataViews.Filters />
+					</Stack>
+				</Stack>
+				<WPDataViews.Layout />
+				<WPDataViews.Footer />
+			</DataViews>
+			<Drawer.Root isOpen={ isDetailsOpen } size="x-large" onRequestClose={ () => setIsDetailsOpen( false ) }>
+				<Drawer.Header>
+					<Drawer.Title>{ __( 'Action Details', 'newspack-plugin' ) }</Drawer.Title>
+					<Drawer.CloseIcon />
+				</Drawer.Header>
+				<Drawer.Content>
+					{ null !== detailsId ? <ScheduledActionDetails integrationId={ integrationId } actionId={ detailsId } /> : null }
+				</Drawer.Content>
+			</Drawer.Root>
+		</>
 	);
 };
