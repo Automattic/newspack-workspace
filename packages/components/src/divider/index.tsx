@@ -23,8 +23,8 @@ type DividerProps = {
 const Divider = ( {
 	alignment = 'none',
 	className = undefined,
-	marginBottom = 64,
-	marginTop = 64,
+	marginBottom = 48,
+	marginTop = 48,
 	variant = 'default',
 	...otherProps
 }: DividerProps ) => {

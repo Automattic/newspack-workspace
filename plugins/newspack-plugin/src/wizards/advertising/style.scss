@@ -1,4 +1,5 @@
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-wizard-ads-placements__snackbar {
 	@include wp-mixins.snackbar-container();
@@ -52,7 +53,7 @@
 		}
 
 		+ .newspack-card__header-actions {
-			margin-top: 64px;
+			margin-top: wp-vars.$grid-unit-60;
 		}
 	}
 
@@ -72,7 +73,7 @@
 
 	.newspack-plugin-settings {
 		:nth-last-child(1 of .newspack-card) {
-			margin-bottom: 64px;
+			margin-bottom: wp-vars.$grid-unit-60;
 		}
 	}
 }

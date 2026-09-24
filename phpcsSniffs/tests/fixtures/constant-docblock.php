@@ -6,8 +6,10 @@
  * phpcsSniffs/tests/constant-docblock-test.sh asserts that the three ERROR
  * lines are reported and that nothing else is.
  *
- * Excluded from the monorepo ruleset by phpcs.xml's */tests/fixtures/*
- * pattern, since the point of the file is to hold code the sniff rejects.
+ * Excluded from the monorepo ruleset by the tests/fixtures exclude-pattern in
+ * phpcs.xml, since the point of the file is to hold code the sniff rejects.
+ * That pattern is described rather than written out: a literal closing-comment
+ * delimiter inside this docblock would end it early and break the file.
  *
  * @package phpcsSniffs
  */
