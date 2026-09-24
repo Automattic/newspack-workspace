@@ -21,12 +21,12 @@
 		background: #004cff;
 	}
 
-	&--mailchimp {
-		background: #ffe01b;
+	&--beehiiv {
+		background: #060419;
 	}
 
-	&--salesforce {
-		background: #0d9dda;
+	&--constant-contact {
+		background: wp-colors.$gray-100;
 	}
 
 	&--fundraiseup {
@@ -37,12 +37,8 @@
 		background: #ff4f00;
 	}
 
-	&--beehiiv {
-		background: #060419;
-	}
-
-	&--constant-contact {
-		background: wp-colors.$gray-100;
+	&--mailchimp {
+		background: #ffe01b;
 	}
 
 	&--manual {
@@ -54,5 +50,9 @@
 		svg path {
 			fill: currentcolor;
 		}
+	}
+
+	&--salesforce {
+		background: #0d9dda;
 	}
 }
