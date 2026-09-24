@@ -78,13 +78,14 @@ class Email_Verification_Prompt {
 	/**
 	 * Resolve the prompt context for the gate denying the current reader.
 	 *
-	 * Cheap before expensive. The first stage walks the post's gates for a domain the
-	 * reader's address matches, which rules out every visitor but the handful the
-	 * prompt is for. Only those reach the second, which asks what the reader would see
-	 * if they verified — the question the prompt is about to make a promise about, and
-	 * one a single rule cannot answer: rules are ANDed within a group, and a post can
-	 * be covered by several gates in priority order, so verification can satisfy the
-	 * email-domain rule and leave the reader on a paywall either way.
+	 * Cheap before expensive. The first stage reads the gate that decides access for a
+	 * domain the reader's address matches, which rules out every visitor but the handful
+	 * the prompt is for. Only those reach the second, which asks what the reader would
+	 * see if they verified — the question the prompt is about to make a promise about,
+	 * and one a single rule cannot answer: rules are ANDed within a group, and other
+	 * callbacks on `newspack_is_post_restricted` can keep the post restricted, so
+	 * verification can satisfy the email-domain rule and leave the reader on a paywall
+	 * either way.
 	 *
 	 * @return array|false {
 	 *     The prompt context, or false when no prompt should render.
@@ -138,10 +139,11 @@ class Email_Verification_Prompt {
 	 * Build the prompt context for a reader and post, uncached.
 	 *
 	 * Only the gate that decides access is read (NPPD-2289). A domain rule on a gate
-	 * ranked below it is never consulted, so it can neither prompt the reader nor be
-	 * named: with a registration gate walling verification at priority 1 and the
-	 * reader's domain only on an institution gate at priority 2, no prompt shows, since
-	 * the reader's route in is the registration wall rather than their domain.
+	 * ranked below it is not consulted while that gate decides, so it can neither prompt
+	 * the reader nor be named: with a registration gate walling verification at priority
+	 * 1 and the reader's domain only on an institution gate at priority 2, no prompt
+	 * shows. The reader's route in is the registration wall, whose default layout already
+	 * offers them a way to verify.
 	 *
 	 * @param \WP_User $user    The reader.
 	 * @param int      $post_id The post they were denied.
@@ -150,8 +152,11 @@ class Email_Verification_Prompt {
 	 */
 	private static function build_prompt_context( \WP_User $user, int $post_id ) {
 		// get_post_gates() keeps priority order, so the first gate is the one that decides.
-		// Should it have no layout and still refuse the reader once they verify, the gate
-		// below it decides instead. Its groups have failed too, so the prompt stays off.
+		// One exception: a first gate with no layout that still refuses the reader after they
+		// verify is passed over, and the gate below it decides. The first gate's groups have
+		// failed then, so no prompt shows even where the lower gate would let the reader in.
+		// That miss is accepted: a gate only lacks a layout when creating it failed or the
+		// layout was deleted.
 		$post_gates    = Content_Restriction_Control::get_post_gates( $post_id );
 		$custom_access = $post_gates[0]['custom_access'] ?? [];
 		if ( empty( $custom_access['active'] ) || empty( $custom_access['access_rules'] ) ) {
@@ -262,7 +267,7 @@ class Email_Verification_Prompt {
 	 * Must run inside {@see Access_Rules::with_assumed_verification()}. A group is a
 	 * route in only if it passes as a whole, so a group that ANDs the matched rule with
 	 * one the reader still fails contributes no names — and if no group passes, or the
-	 * gate denies regardless, verifying opens nothing and there is no prompt.
+	 * post stays restricted regardless, verifying opens nothing and there is no prompt.
 	 *
 	 * @param \WP_User $user            The reader.
 	 * @param int      $post_id         The post they were denied.

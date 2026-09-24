@@ -397,6 +397,38 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A passing group opens the gate that decides, but the prompt promises that the
+	 * article opens, and another callback on `newspack_is_post_restricted` can still keep
+	 * it restricted. Replaying the whole decision under the assumption is what catches it.
+	 */
+	public function test_no_prompt_when_the_post_stays_restricted_after_verifying() {
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
+		$this->create_gate(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ $institution_id ],
+					],
+				],
+			]
+		);
+		$reader_id = $this->create_reader( 'reader@example.test' );
+
+		$this->visit_gated_post_as( $reader_id );
+		$this->assertNotFalse( Email_Verification_Prompt::get_prompt_context(), 'Sanity: the reader is offered the prompt.' );
+
+		// Runs after the gates' own check at priority 10 and keeps the post restricted.
+		add_filter( 'newspack_is_post_restricted', '__return_true', 20 );
+		Email_Verification_Prompt::reset_cache();
+		$this->assertFalse(
+			Email_Verification_Prompt::get_prompt_context(),
+			'Verifying opens the gate, but the post stays restricted, so no prompt is offered.'
+		);
+		remove_filter( 'newspack_is_post_restricted', '__return_true', 20 );
+	}
+
+	/**
 	 * The rule keeps its verification requirement. Simulating verification decides
 	 * whether to prompt and nothing else — an unverified reader is still denied.
 	 */
