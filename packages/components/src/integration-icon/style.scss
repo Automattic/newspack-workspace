@@ -25,6 +25,15 @@
 		background: #ffe01b;
 	}
 
+	&--salesforce {
+		--integration-icon-color: #{wp-colors.$white};
+		background: #0d9dda;
+	}
+
+	&--beehiiv {
+		background: #060419;
+	}
+
 	&--constant-contact {
 		background: wp-colors.$gray-100;
 	}

@@ -1191,7 +1191,7 @@ class ComponentsDemo extends Component {
 									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-									icon={ { node: <Icon icon={ settings } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
+									icon={ { node: <Icon icon={ settings } />, fill: '#003da5', backgroundColor: '#dfe7f4' } }
 									enabled={ true }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }

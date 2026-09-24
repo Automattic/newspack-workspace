@@ -11,7 +11,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { SettingsSection } from './settings-section';
+import { SettingsSection, sortIntegrationIds } from './settings-section';
 
 const mockCardFeatureProps = [];
 const mockEnableModalProps = [];
@@ -69,7 +69,7 @@ const requiredAudienceField = {
 const baseIntegration = {
 	id: 'esp',
 	name: 'Mailchimp',
-	description: 'Syncs reader data with your Mailchimp audience.',
+	description: 'Sync reader data with your Mailchimp audience.',
 	enabled: false,
 	is_set_up: false,
 	is_connected: false,
@@ -257,5 +257,22 @@ describe( 'Audience Integrations settings section card action', () => {
 		);
 		expect( mockCardFeatureProps[ 0 ].icon.node ).toBeDefined();
 		expect( mockCardFeatureProps[ 0 ].icon.props ).toBeUndefined();
+	} );
+} );
+
+describe( 'sortIntegrationIds', () => {
+	it( 'orders integrations by name, ignoring case and registration order', () => {
+		const integrations = {
+			esp: { name: 'Mailchimp' },
+			'form-capture': { name: 'Inbound Form Capture' },
+			salesforce: { name: 'Salesforce' },
+			activecampaign: { name: 'ActiveCampaign' },
+			beehiiv: { name: 'beehiiv' },
+		};
+		expect( sortIntegrationIds( integrations ) ).toEqual( [ 'activecampaign', 'beehiiv', 'form-capture', 'esp', 'salesforce' ] );
+	} );
+
+	it( 'falls back to the ID when an integration has no name', () => {
+		expect( sortIntegrationIds( { zeta: { name: 'Zeta' }, alpha: {} } ) ).toEqual( [ 'alpha', 'zeta' ] );
 	} );
 } );

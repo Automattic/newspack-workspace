@@ -11,12 +11,20 @@ import { matchesRoute } from '../route-match';
  * @param {string} pathname Current router pathname.
  * @return {Array} Breadcrumb items `{ label, url? }`.
  */
-export const activeBreadcrumbs = ( sections = [], pathname ) => {
+export const activeBreadcrumbs = ( sections = [], pathname ) => activeSection( sections, pathname )?.breadcrumbs || [];
+
+/**
+ * Select the section matching the current route, falling back to the first.
+ *
+ * @param {Array}  sections Wizard sections.
+ * @param {string} pathname Current router pathname.
+ * @return {Object|undefined} The active section, if any.
+ */
+export const activeSection = ( sections = [], pathname ) => {
 	if ( ! sections?.length ) {
-		return [];
+		return undefined;
 	}
-	const match = sections.find( section => matchesRoute( section, pathname ) ) || sections[ 0 ];
-	return match.breadcrumbs || [];
+	return sections.find( section => matchesRoute( section, pathname ) ) || sections[ 0 ];
 };
 
 /**

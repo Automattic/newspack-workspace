@@ -44,7 +44,7 @@ class ESP extends Integration {
 		parent::__construct(
 			'esp',
 			__( 'Mailchimp', 'newspack-plugin' ),
-			__( 'Syncs reader data with your Mailchimp audience.', 'newspack-plugin' )
+			__( 'Sync reader data with your Mailchimp audience.', 'newspack-plugin' )
 		);
 	}
 
