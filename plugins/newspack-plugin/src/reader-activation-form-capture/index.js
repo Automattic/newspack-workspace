@@ -31,8 +31,10 @@ window.newspackRAS.push( readerActivation => {
 	// that adds the marker class, so after a validation error or a page
 	// change the form on the page carries no marker. Its data-formid survives
 	// every render, and GF does not support the same form twice on a page, so
-	// an id remembered at first attach stands in for the class — no rescan
-	// needed to keep capturing the re-rendered form.
+	// an id remembered at first attach stands in for the class in two places:
+	// the pre_submission callback matches on it, and the observer's rescan
+	// re-attaches the re-rendered form by it, so the form warms a fresh
+	// reCAPTCHA v3 token on focus and is still captured past the token TTL.
 	const matchedFormIds = new Set();
 	let warmToken = null;
 	let warming = false;
@@ -147,7 +149,13 @@ window.newspackRAS.push( readerActivation => {
 	const handleSubmit = event => captureForm( event.target );
 
 	const attach = () => {
-		getMatchedForms( selectors ).forEach( form => {
+		const forms = new Set( getMatchedForms( selectors ) );
+		document.querySelectorAll( 'form[data-formid]' ).forEach( form => {
+			if ( matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) {
+				forms.add( form );
+			}
+		} );
+		forms.forEach( form => {
 			if ( attached.has( form ) ) {
 				return;
 			}

@@ -420,6 +420,32 @@ describe( 'form-capture client', () => {
 			expect( ras.register ).toHaveBeenCalledTimes( 1 );
 		} );
 
+		it( 're-attaches a re-rendered GF form on rescan so it warms a fresh captcha token', async () => {
+			// Matching the re-rendered form at submission time is not enough on a
+			// v3 site: without the focusin listener it never warms a token, and a
+			// reader who outlasts the TTL on a later page submits without one.
+			window.grecaptcha = {
+				ready: callback => callback(),
+				execute: jest.fn( () => Promise.resolve( 'rerender-token' ) ),
+			};
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient(
+				`<div id="gform_wrapper_8"><form id="gform_8" class="newspack-form-capture" data-formid="8" novalidate><input type="email" name="input_2" value=""></form></div>`,
+				V3_CONFIG
+			);
+			const RERENDERED_FORM = `<form id="gform_8" data-formid="8" novalidate><input type="email" name="input_2" value="gf-reader@example.com"></form>`;
+			document.getElementById( 'gform_wrapper_8' ).innerHTML = RERENDERED_FORM;
+			// MutationObserver delivery is a microtask; the rescan is debounced 200ms.
+			await new Promise( resolve => setTimeout( resolve, 250 ) );
+			const form = document.querySelector( 'form' );
+			focusin( form );
+			await flush();
+			expect( window.grecaptcha.execute ).toHaveBeenCalledTimes( 1 );
+			await submitViaGform( form );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+			expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'rerender-token' );
+		} );
+
 		/**
 		 * GF awaits the pre_submission filter chain, so the adapter can hold
 		 * the submission until the registration response sets the reader's
