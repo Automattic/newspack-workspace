@@ -55,6 +55,8 @@ class Newspack_Test_Dynamic_Pricing_Bridges extends WP_UnitTestCase {
 
 		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
 		$product->method( 'get_id' )->willReturn( $post_id );
+		// The group bridge reads the product's meta too; WooCommerce answers '' for an unset key.
+		$product->method( 'get_meta' )->willReturn( '' );
 
 		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', false, $product, null );
 		$this->assertFalse( $excluded );
@@ -97,6 +99,75 @@ class Newspack_Test_Dynamic_Pricing_Bridges extends WP_UnitTestCase {
 
 		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', false, $product, $subscription );
 		$this->assertFalse( $excluded );
+	}
+
+	/**
+	 * Group products are excluded before the subscription exists: at checkout,
+	 * where the target is the cart item, and in previews, which pass none.
+	 * Priced at checkout, the subscription would be created at the rule's price
+	 * and the renewal exclusion would then freeze it there.
+	 */
+	public function test_excludes_group_products_before_the_subscription_exists() {
+		$product   = new \WC_Product(
+			[
+				'id'   => $this->factory->post->create( [ 'post_type' => 'product' ] ),
+				'type' => 'subscription',
+				'meta' => [ '_newspack_group_subscription_enabled' => 'yes' ],
+			]
+		);
+		$cart_item = [
+			'product_id' => $product->get_id(),
+			'data'       => $product,
+		];
+
+		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', false, $product, $cart_item );
+		$this->assertTrue( $excluded, 'Group products must be excluded at checkout.' );
+		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', false, $product, null );
+		$this->assertTrue( $excluded, 'Group products must be excluded from previews.' );
+	}
+
+	/**
+	 * Products without the group setting are priced at checkout as usual.
+	 */
+	public function test_does_not_exclude_non_group_products_at_checkout() {
+		$product   = new \WC_Product(
+			[
+				'id'   => $this->factory->post->create( [ 'post_type' => 'product' ] ),
+				'type' => 'subscription',
+			]
+		);
+		$cart_item = [
+			'product_id' => $product->get_id(),
+			'data'       => $product,
+		];
+
+		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', false, $product, $cart_item );
+		$this->assertFalse( $excluded );
+	}
+
+	/**
+	 * A variation carries its own group setting rather than inheriting its
+	 * parent's (this parent has none), so the variation decides — the same
+	 * product the renewal exclusion reads.
+	 */
+	public function test_excludes_a_group_variation_by_its_own_setting() {
+		$parent_id = $this->factory->post->create( [ 'post_type' => 'product' ] );
+		$variation = new \WC_Product(
+			[
+				'id'        => $this->factory->post->create( [ 'post_type' => 'product' ] ),
+				'type'      => 'subscription_variation',
+				'parent_id' => $parent_id,
+				'meta'      => [ '_newspack_group_subscription_enabled' => 'yes' ],
+			]
+		);
+		$cart_item = [
+			'product_id'   => $parent_id,
+			'variation_id' => $variation->get_id(),
+			'data'         => $variation,
+		];
+
+		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', false, $variation, $cart_item );
+		$this->assertTrue( $excluded, 'Group variations must be excluded at checkout.' );
 	}
 
 	/**
