@@ -68,7 +68,7 @@ Follow this step-by-step process when selecting a component:
 
 ## Design & layout at a glance
 
-When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64) and prefer **VStack** for vertical stacks and **HStack** for related items in a row; use **Grid** for real multi-column layouts. Structure content as **SectionHeader → Card → ActionCard → controls**, with **Divider** between sections and primary actions in **`.newspack-buttons-card`**. Use the same **breakpoints** (e.g. 744px, 1128px) as existing components. Full detail: [Spacing scale](#spacing-scale-design-system), [Layout (HStack / VStack / Grid)](#layout-when-to-use-hstack-vstack-grid), [Responsive breakpoints](#responsive-breakpoints), [Visual hierarchy patterns](#visual-hierarchy-patterns), [Component states](#component-states). For code examples by context and wizard patterns, see [Usage](#usage).
+When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64) and prefer **VStack** for vertical stacks and **HStack** for related items in a row; use **Grid** for real multi-column layouts. Structure content as **SectionHeader → Card → ActionCard → controls**, with **Divider** between sections and primary actions in **`.newspack-buttons-card`**. Use the same **breakpoints** (e.g. 744px, 1054px) as existing components. Full detail: [Spacing scale](#spacing-scale-design-system), [Layout (HStack / VStack / Grid)](#layout-when-to-use-hstack-vstack-grid), [Responsive breakpoints](#responsive-breakpoints), [Visual hierarchy patterns](#visual-hierarchy-patterns), [Component states](#component-states). For code examples by context and wizard patterns, see [Usage](#usage).
 
 ## Available Components
 
@@ -622,7 +622,7 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 | **16px** | Gaps between related controls, buttons card gap, margins inside ActionCard region-children for Card/Grid/TextControl | Related items, form rows |
 | **24px** | Default ActionCard region padding, toggle/region gaps, expandable content padding and sibling spacing | Default internal padding and gaps within a card |
 | **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Newspack Notice margin, Divider margin | Section rhythm, between blocks |
-| **48px** | SectionHeader top margin, buttons card margin, Divider margins (large breakpoint), Card horizontal padding (small screens) | Major section separation |
+| **48px** | SectionHeader top margin, buttons card top margin, Divider margins (large breakpoint), Card horizontal padding (small screens) | Major section separation |
 | **64px** | Card horizontal padding (large screens) | Large-screen card padding |
 
 **In code:** Card uses `margin: 32px 0` and `padding: 16px 48px` (32px 64px at 744px+). ActionCard uses 24px for region padding and 24px between regions; region-children use `padding: 0 24px 24px` (0 32px 32px for is-medium). Grid uses `grid-gap: 32px` and `margin: 32px 0` by default, with optional gutter classes (`__gutter-8`, `__gutter-16`, etc.). When adding new components or overrides, prefer these values (or 8px multiples) instead of ad-hoc spacing.
@@ -647,7 +647,7 @@ Components use consistent breakpoints so layouts behave predictably across viewp
 | **783px** | Wizard content width |
 | **960px** | Modal width, wizard layout |
 | **961px** | Wizard layout |
-| **1128px** | Grid 3–4 columns |
+| **1054px** | Grid 3–4 columns |
 | **1224px** | Large wizard layout |
 
 Prefer these values over new breakpoints so behaviour stays consistent with Card, Grid, and wizard shells.
@@ -667,7 +667,7 @@ Wizard
         TextControl / SelectControl / etc.
     Divider              ← 32px / 48px margin
     ActionCard
-  .newspack-buttons-card  ← 48px margin, 16px gap
+  .newspack-buttons-card  ← 48px top / 32px bottom margin, 16px gap
     Button (primary)
 ```
 
