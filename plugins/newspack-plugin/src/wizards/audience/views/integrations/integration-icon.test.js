@@ -22,6 +22,17 @@ describe( 'IntegrationIcon', () => {
 		expect( container.querySelector( '.newspack-integration-icon--active-campaign' ) ).not.toBeNull();
 	} );
 
+	it.each( [
+		[ 'salesforce', 'white' ],
+		[ 'beehiiv', '#FF5EC4' ],
+		[ 'fundraiseup', 'white' ],
+	] )( 'renders the %s mark in its brand colour inside its provider badge', ( provider, fill ) => {
+		const { container } = render( <IntegrationIcon provider={ provider } /> );
+		const badge = container.querySelector( `.newspack-integration-icon--${ provider }` );
+		expect( badge ).not.toBeNull();
+		expect( badge.querySelector( 'svg path' ) ).toHaveAttribute( 'fill', fill );
+	} );
+
 	it( 'renders nothing for an unknown provider', () => {
 		const { container } = render( <IntegrationIcon provider="unknown_esp" /> );
 		expect( container.querySelector( '.newspack-integration-icon' ) ).toBeNull();
