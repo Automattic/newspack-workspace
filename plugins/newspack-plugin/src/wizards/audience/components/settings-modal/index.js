@@ -27,7 +27,7 @@ const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup } ) => {
 			<Button onClick={ () => onClose() } className="screen-reader-text">
 				{ __( 'Close Modal', 'newspack-plugin' ) }
 			</Button>
-			<Grid gutter={ 64 } columns={ 1 }>
+			<Grid gutter={ 48 } columns={ 1 }>
 				<SettingsCard
 					title={ __( 'Campaigns', 'newspack-plugin' ) }
 					description={ __( 'Assign a prompt to one or more campaigns for easier management', 'newspack-plugin' ) }
