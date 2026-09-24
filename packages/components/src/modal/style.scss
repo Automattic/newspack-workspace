@@ -94,6 +94,13 @@
 			}
 		}
 	}
+
+	.components-modal__children-container {
+		> :first-child,
+		> .screen-reader-text:first-child + * {
+			margin-top: 0;
+		}
+	}
 }
 /** Hide dropdown menus when a modal is open */
 .modal-open .components-popover__content {

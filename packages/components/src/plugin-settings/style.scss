@@ -1,6 +1,6 @@
 .newspack-card:not(.newspack-settings__no-border) {
 	.newspack-action-card__region-children {
-		> .newspack-grid {
+		> .newspack-grid:not(.newspack-grid--no-margin) {
 			margin: 32px 0 0 !important;
 		}
 	}
