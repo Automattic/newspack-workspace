@@ -7,7 +7,6 @@ import { act, render, waitFor } from '@testing-library/react';
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { inbox } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -19,10 +18,8 @@ const mockEnableModalProps = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( {
-	'neutral-000': '#fff',
 	'neutral-100': '#f0f0f0',
 	'neutral-600': '#6c6c6c',
-	'primary-600': '#003da5',
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Card: ( { children } ) => children,
@@ -280,7 +277,7 @@ describe( 'Audience Integrations settings section card action', () => {
 		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( id );
 	} );
 
-	it( 'renders the inbox icon on the Newspack blue for Inbound Form Capture', () => {
+	it( 'renders the Gravity Forms mark for Inbound Form Capture', () => {
 		render(
 			<SettingsSection
 				integrations={ { 'form-capture': { ...baseIntegration, id: 'form-capture', provider: null } } }
@@ -291,8 +288,7 @@ describe( 'Audience Integrations settings section card action', () => {
 				history={ { push: jest.fn() } }
 			/>
 		);
-		expect( mockCardFeatureProps[ 0 ].icon.node.props.icon ).toBe( inbox );
-		expect( mockCardFeatureProps[ 0 ].icon.backgroundColor ).toBe( '#003da5' );
+		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( 'gravity_forms' );
 	} );
 } );
 

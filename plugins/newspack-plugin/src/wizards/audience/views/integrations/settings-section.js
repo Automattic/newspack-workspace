@@ -4,7 +4,7 @@
 import apiFetch from '@wordpress/api-fetch';
 import { useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Icon, envelope, inbox } from '@wordpress/icons';
+import { Icon, envelope } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -25,12 +25,6 @@ const DEFAULT_ICON = {
 };
 
 const BRANDED_INTEGRATION_IDS = [ 'beehiiv', 'fundraiseup', 'salesforce' ];
-
-const FORM_CAPTURE_ICON = {
-	node: <Icon icon={ inbox } />,
-	fill: colors[ 'neutral-000' ],
-	backgroundColor: colors[ 'primary-600' ],
-};
 
 /**
  * Integration IDs ordered by display name, so the grid reads alphabetically
@@ -70,7 +64,7 @@ export const SettingsSection = ( {
 				) }
 				{ ! loading && integrationIds.length > 0 && (
 					<>
-						<Grid columns={ 2 }>
+						<Grid columns={ 2 } noMargin>
 							{ integrationIds.map( id => {
 								const integration = integrations[ id ];
 								const {
@@ -92,7 +86,7 @@ export const SettingsSection = ( {
 								} else if ( BRANDED_INTEGRATION_IDS.includes( id ) ) {
 									cardIcon = <IntegrationIcon provider={ id } />;
 								} else if ( id === 'form-capture' ) {
-									cardIcon = FORM_CAPTURE_ICON;
+									cardIcon = <IntegrationIcon provider="gravity_forms" />;
 								} else if ( provider && espProviderOrder.includes( provider ) ) {
 									cardIcon = <IntegrationIcon provider={ provider } />;
 								}
