@@ -215,10 +215,7 @@ The card is built on `Card.Root`, `Card.Header` and `Card.Content` from `@wordpr
 type CardFeatureIcon = {
 	node: React.ReactNode;       // The icon element to render
 	fill?: string;               // SVG fill colour (applied via currentColor)
-	backgroundColor?: string;    // Background colour of the 40×40 container
-	radius?: 'small' | 'full';   // 'small' = 2px ($radius-small), 'full' = 50% ($radius-round)
-	                             // Defaults to 'small' whenever backgroundColor is set,
-	                             // and has nothing to round without one.
+	backgroundColor?: string;    // Background colour of the 40×40 container, always a circle
 };
 ```
 

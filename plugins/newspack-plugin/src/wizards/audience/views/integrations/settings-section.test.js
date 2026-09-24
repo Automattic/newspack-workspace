@@ -258,6 +258,20 @@ describe( 'Audience Integrations settings section card action', () => {
 		expect( mockCardFeatureProps[ 0 ].icon.node ).toBeDefined();
 		expect( mockCardFeatureProps[ 0 ].icon.props ).toBeUndefined();
 	} );
+
+	it.each( [ 'salesforce', 'beehiiv' ] )( 'renders the %s brand icon for its integration ID', id => {
+		render(
+			<SettingsSection
+				integrations={ { [ id ]: { ...baseIntegration, id, provider: null } } }
+				loading={ false }
+				onToggleEnabled={ jest.fn() }
+				onActivatePlugin={ jest.fn() }
+				onSetupAndEnable={ jest.fn() }
+				history={ { push: jest.fn() } }
+			/>
+		);
+		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( id );
+	} );
 } );
 
 describe( 'sortIntegrationIds', () => {
