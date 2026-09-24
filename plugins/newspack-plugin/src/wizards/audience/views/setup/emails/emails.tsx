@@ -9,12 +9,13 @@ import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
 import { DataViews as WPDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
+import { Notice } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { DataViews, Notice, StatusIndicator, utils } from '../../../../../../packages/components/src';
+import { DataViews, StatusIndicator, utils } from '../../../../../../packages/components/src';
 import { postStatus } from '../../../post-status';
 import WizardsPluginCard from '../../../../wizards-plugin-card';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
@@ -435,14 +436,13 @@ const Emails = () => {
 		return (
 			<Fragment>
 				<PageHeading />
-				<div className="newspack-emails__notices">
-					<Notice
-						isError
-						noticeText={ __(
+				<Stack direction="column" gap="xl" className="newspack-emails__notices">
+					<Notice status="error" isDismissible={ false } spokenMessage="">
+						{ __(
 							'Newspack uses Newspack Newsletters to handle editing email-type content. Please activate this plugin to proceed. Until this feature is configured, default receipts will be used.',
 							'newspack-plugin'
 						) }
-					/>
+					</Notice>
 					<WizardsPluginCard
 						slug="newspack-newsletters"
 						title={ __( 'Newspack Newsletters', 'newspack-plugin' ) }
@@ -453,7 +453,7 @@ const Emails = () => {
 							}
 						} }
 					/>
-				</div>
+				</Stack>
 			</Fragment>
 		);
 	}
@@ -462,9 +462,11 @@ const Emails = () => {
 		<Fragment>
 			<PageHeading />
 			{ errorMessage && (
-				<div className="newspack-emails__notices">
-					<Notice isError noticeText={ errorMessage } />
-				</div>
+				<Stack direction="column" gap="xl" className="newspack-emails__notices">
+					<Notice status="error" isDismissible={ false } politeness="polite">
+						{ errorMessage }
+					</Notice>
+				</Stack>
 			) }
 			<DataViews
 				className="newspack-emails"

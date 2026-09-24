@@ -42,6 +42,14 @@ jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
 	useWizardApiFetch: () => mockUseWizardApiFetchReturn,
 } ) );
 
+jest.mock( '@wordpress/components', () => ( {
+	Notice: ( { children, politeness, spokenMessage } ) => (
+		<div data-testid="notice" data-politeness={ politeness } data-spoken-message={ spokenMessage }>
+			{ children }
+		</div>
+	),
+} ) );
+
 jest.mock( '@wordpress/icons', () => ( {
 	Icon: ( { icon } ) => <span data-testid="icon">{ icon }</span>,
 	envelope: 'envelope',
@@ -110,7 +118,6 @@ jest.mock( '../../../../../../packages/components/src', () => {
 			);
 		},
 		Card: ( { children } ) => <div data-testid="card">{ children }</div>,
-		Notice: ( { noticeText } ) => <div data-testid="notice">{ noticeText }</div>,
 		StatusIndicator: ( { children } ) => <span data-testid="status-indicator">{ children }</span>,
 		utils: {
 			confirmAction: jest.fn( () => true ),
@@ -347,6 +354,19 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'notice' ) ).toBeInTheDocument();
 			expect( screen.getByTestId( 'notice' ) ).toHaveTextContent( 'Something went wrong' );
 		} );
+		// The message can come from the mount fetch, where an assertive
+		// announcement would cut off the page title.
+		expect( screen.getByTestId( 'notice' ) ).toHaveAttribute( 'data-politeness', 'polite' );
+	} );
+
+	it( 'keeps the Newsletters-inactive notice silent', async () => {
+		window.newspackAudience.emails.dependencies.newspackNewsletters = false;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'plugin-card' ) ).toBeInTheDocument();
+		} );
+		expect( screen.getByTestId( 'notice' ) ).toHaveAttribute( 'data-spoken-message', '' );
 	} );
 
 	it( 'activate action calls wizardApiFetch with publish status', async () => {

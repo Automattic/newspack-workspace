@@ -14,7 +14,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { TextControl } from '@wordpress/components';
+import { Notice, TextControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { Stack } from '@wordpress/ui';
@@ -22,7 +22,7 @@ import { Stack } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, Modal, Notice, useConfirmDialog } from '../../../../../../packages/components/src';
+import { Button, Modal, useConfirmDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
@@ -243,7 +243,11 @@ const SettingsModal = ( { showModal, closeModal }: { showModal: boolean; closeMo
 							'newspack-plugin'
 						) }
 					</p>
-					{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
+					{ errorMessage && (
+						<Notice status="error" isDismissible={ false } politeness="polite">
+							{ errorMessage }
+						</Notice>
+					) }
 					<TextControl
 						__nextHasNoMarginBottom
 						label={ __( 'Sender Name', 'newspack-plugin' ) }

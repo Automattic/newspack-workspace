@@ -100,7 +100,9 @@ jest.mock( '@wordpress/components', () => {
 	// for tests we only need the click behavior.
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	const Button = ( { children, onClick, disabled, loading, ...rest } ) => React.createElement( 'button', { onClick, disabled, ...rest }, children );
+	const Notice = ( { children, politeness } ) => React.createElement( 'div', { 'data-testid': 'notice', 'data-politeness': politeness }, children );
 	return {
+		Notice,
 		TextControl,
 		Button,
 	};
@@ -137,7 +139,7 @@ jest.mock( './email-preview', () => ( {
 } ) );
 
 // Single mock for the packages/components/src barrel covers both the
-// grid (DataViews, Notice, utils) and the modal (Button, Modal,
+// grid (DataViews, utils) and the modal (Button, Modal,
 // useConfirmDialog). useConfirmDialog is captured via the top-level
 // spy so tests can assert when it was called and whether the callback
 // fired.
@@ -145,7 +147,6 @@ jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
 		DataViews: ( { data } ) => <div data-testid="dataviews">{ data.length }</div>,
-		Notice: ( { noticeText } ) => <div data-testid="notice">{ noticeText }</div>,
 		// Discard `loading` and `variant` rather than spreading them to
 		// the DOM button — React warns on unrecognized non-boolean
 		// attributes. Same treatment as the @wordpress/components Button
@@ -377,6 +378,7 @@ describe( 'SettingsModal', () => {
 		await waitFor( () => {
 			expect( screen.getByTestId( 'notice' ) ).toHaveTextContent( 'Could not save transactional email settings.' );
 		} );
+		expect( screen.getByTestId( 'notice' ) ).toHaveAttribute( 'data-politeness', 'polite' );
 	} );
 
 	it( 'save failure: fires onError, keeps the modal open, dispatches no success notice', async () => {

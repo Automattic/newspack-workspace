@@ -78,7 +78,12 @@
 }
 
 .newspack-emails__notices {
+	margin-bottom: wp-vars.$grid-unit-30;
 	padding: 0 wp-vars.$grid-unit-60;
+
+	> * {
+		margin: 0;
+	}
 
 	@media (max-width: 430px) {
 		padding: 0 wp-vars.$grid-unit-30;
