@@ -4,7 +4,7 @@
 import apiFetch from '@wordpress/api-fetch';
 import { useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Icon, envelope } from '@wordpress/icons';
+import { Icon, envelope, inbox } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -16,14 +16,33 @@ import WizardSection from '../../../wizards-section';
 import { EnableModal, getMissingRequiredFields } from './enable-modal';
 
 /**
- * Fallback icon for integrations that report no brand. Per-integration icons
- * move to the PHP API response when new integrations are added (DSGNEWS-157).
+ * Fallback for integrations with no brand mark or icon of their own.
  */
 const DEFAULT_ICON = {
 	node: <Icon icon={ envelope } />,
 	fill: colors[ 'neutral-600' ],
 	backgroundColor: colors[ 'neutral-100' ],
 };
+
+const BRANDED_INTEGRATION_IDS = [ 'beehiiv', 'fundraiseup', 'salesforce' ];
+
+const FORM_CAPTURE_ICON = {
+	node: <Icon icon={ inbox } />,
+	fill: colors[ 'neutral-000' ],
+	backgroundColor: colors[ 'primary-600' ],
+};
+
+/**
+ * Integration IDs ordered by display name, so the grid reads alphabetically
+ * whatever order the integrations were registered in.
+ *
+ * @param {Record<string, {name?: string}>} integrations Integrations keyed by ID.
+ * @return {string[]} Sorted integration IDs.
+ */
+export const sortIntegrationIds = integrations =>
+	Object.keys( integrations ).sort( ( a, b ) =>
+		( integrations[ a ].name || a ).localeCompare( integrations[ b ].name || b, undefined, { sensitivity: 'base' } )
+	);
 
 const getMissingPlugins = integration => ( integration.required_plugins || [] ).filter( plugin => ! plugin.is_active );
 
@@ -37,18 +56,11 @@ export const SettingsSection = ( {
 	onSetupAndEnable,
 	history,
 } ) => {
-	const integrationIds = Object.keys( integrations );
+	const integrationIds = sortIntegrationIds( integrations );
 	const [ enablingId, setEnablingId ] = useState( null );
 
 	return (
-		<WizardsTab
-			className="newspack-audience-integrations"
-			title={ __( 'Integrations', 'newspack-plugin' ) }
-			description={ __(
-				'Manage how Newspack syncs reader data with your tools. Connect an integration to start syncing reader activity across your stack.',
-				'newspack-plugin'
-			) }
-		>
+		<WizardsTab className="newspack-audience-integrations">
 			<WizardSection>
 				{ loading && <p>{ __( 'Loading…', 'newspack-plugin' ) }</p> }
 				{ ! loading && integrationIds.length === 0 && (
@@ -77,6 +89,10 @@ export const SettingsSection = ( {
 								let cardIcon = DEFAULT_ICON;
 								if ( id === 'esp' ) {
 									cardIcon = <IntegrationIcon provider="mailchimp" />;
+								} else if ( BRANDED_INTEGRATION_IDS.includes( id ) ) {
+									cardIcon = <IntegrationIcon provider={ id } />;
+								} else if ( id === 'form-capture' ) {
+									cardIcon = FORM_CAPTURE_ICON;
 								} else if ( provider && espProviderOrder.includes( provider ) ) {
 									cardIcon = <IntegrationIcon provider={ provider } />;
 								}
@@ -152,7 +168,7 @@ export const SettingsSection = ( {
 								}
 								return (
 									<CardFeature
-										headingLevel={ 3 }
+										headingLevel={ 2 }
 										key={ id }
 										title={ name }
 										description={ description }

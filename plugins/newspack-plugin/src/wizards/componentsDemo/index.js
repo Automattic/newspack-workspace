@@ -61,6 +61,7 @@ import {
 	WebPreview,
 } from '../../../packages/components/src';
 import * as newspackIcons from '../../../packages/icons';
+import colors from '../../../packages/colors/colors.module.scss';
 
 class ComponentsDemo extends Component {
 	/**
@@ -1204,7 +1205,11 @@ class ComponentsDemo extends Component {
 									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-									icon={ { node: <Icon icon={ settings } />, fill: '#757575', backgroundColor: '#f0f0f0' } }
+									icon={ {
+										node: <Icon icon={ settings } />,
+										fill: colors[ 'neutral-600' ],
+										backgroundColor: colors[ 'neutral-100' ],
+									} }
 									enabled={ false }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }
@@ -1213,7 +1218,11 @@ class ComponentsDemo extends Component {
 									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-									icon={ { node: <Icon icon={ settings } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
+									icon={ {
+										node: <Icon icon={ settings } />,
+										fill: colors[ 'primary-600' ],
+										backgroundColor: colors[ 'primary-000' ],
+									} }
 									enabled={ true }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }

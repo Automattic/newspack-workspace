@@ -234,16 +234,16 @@ describe( 'CardFeature', () => {
 			expect( container.querySelector( '.newspack-card-feature__icon' ) ).toBeNull();
 		} );
 
-		it( 'applies the descriptor colours inline and rounds fully on request', () => {
+		it( 'applies the descriptor colours inline and rounds a backed icon', () => {
 			const { container } = render(
 				<CardFeature
 					title="Content gifting"
-					icon={ { node: <span data-testid="descriptor-icon" />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
+					icon={ { node: <span data-testid="descriptor-icon" />, fill: '#003da5', backgroundColor: '#dfe7f4' } }
 				/>
 			);
 			const iconContainer = container.querySelector( '.newspack-card-feature__icon' );
 			expect( screen.getByTestId( 'descriptor-icon' ) ).toBeInTheDocument();
-			expect( iconContainer ).toHaveClass( 'newspack-card-feature__icon--radius-full' );
+			expect( iconContainer ).toHaveClass( 'newspack-card-feature__icon--has-background' );
 			expect( iconContainer ).toHaveStyle( { backgroundColor: '#dfe7f4', color: '#003da5' } );
 		} );
 
@@ -252,17 +252,10 @@ describe( 'CardFeature', () => {
 			expect( container.querySelector( '.newspack-card-feature__icon' ) ).toHaveAttribute( 'aria-hidden', 'true' );
 		} );
 
-		it( 'falls back to small corners when a background is set without a radius', () => {
-			const { container } = render( <CardFeature title="Content gifting" icon={ { node: <span />, backgroundColor: '#dfe7f4' } } /> );
-			const iconContainer = container.querySelector( '.newspack-card-feature__icon' );
-			expect( iconContainer ).toHaveClass( 'newspack-card-feature__icon--radius-small' );
-			expect( iconContainer ).not.toHaveClass( 'newspack-card-feature__icon--radius-full' );
-		} );
-
-		it( 'leaves an unbacked descriptor icon without a radius class', () => {
+		it( 'leaves an unbacked descriptor icon without the background class', () => {
 			const { container } = render( <CardFeature title="Content gifting" icon={ { node: <span />, fill: '#003da5' } } /> );
 			const iconContainer = container.querySelector( '.newspack-card-feature__icon' );
-			expect( iconContainer ).not.toHaveClass( 'newspack-card-feature__icon--radius-small' );
+			expect( iconContainer ).not.toHaveClass( 'newspack-card-feature__icon--has-background' );
 		} );
 	} );
 

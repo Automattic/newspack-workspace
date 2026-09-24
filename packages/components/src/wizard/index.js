@@ -25,7 +25,7 @@ import { category, chevronLeft, moreVertical } from '@wordpress/icons';
  * Internal dependencies
  */
 import { Footer, DebugBadge, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
-import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
+import { activeBreadcrumbs, activeSection, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
 import WizardSnackbar from './components/WizardSnackbar';
@@ -125,8 +125,10 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 	// headerData.sectionName (deduped against the current trailing label).
 	breadcrumbItems = appendSectionName( breadcrumbItems, sectionName );
 
+	const sectionSubTitle = activeSection( sections, pathname )?.subHeaderText;
+
 	return (
-		<Page breadcrumbItems={ breadcrumbItems } subTitle={ subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
+		<Page breadcrumbItems={ breadcrumbItems } subTitle={ sectionSubTitle ?? subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
 			{ children }
 		</Page>
 	);
@@ -138,7 +140,7 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
  * @property {string}     [subHeaderText]           The sub-header text, optional.
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.
- * @property {any[]}      sections                  Array of sections.
+ * @property {any[]}      sections                  Array of sections. A section's own `subHeaderText` replaces the wizard's while it is active.
  * @property {boolean}    [hasSimpleFooter]         Indicates if a simple footer is used, optional.
  * @property {() => void} [renderAboveSections]     Function to render content above sections, optional.
  * @property {string[]}   [requiredPlugins]         Array of required plugin strings, optional.

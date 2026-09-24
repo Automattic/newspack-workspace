@@ -75,9 +75,9 @@ import { __ } from '@wordpress/i18n';
 
 ## With a custom icon
 
-`icon` takes either a descriptor object or a ready React element. A descriptor gets the standard treatment: pass `node` for the icon element, `fill` for the SVG colour, `backgroundColor` for a container background, and `radius` for the corner treatment. A ready element renders exactly as given, with no container, background or radius, which is the escape hatch for an icon that already carries its own chrome.
+`icon` takes either a descriptor object or a ready React element. A descriptor gets the standard treatment: pass `node` for the icon element, `fill` for the SVG colour, and `backgroundColor` for a container background. A ready element renders exactly as given, with no container or background, which is the escape hatch for an icon that already carries its own chrome.
 
-A descriptor's container is always **40 × 40 px** with the SVG at **24 × 24 px**. Setting `backgroundColor` without a `radius` gives 2px corners; pass `radius: 'full'` for a circle.
+A descriptor's container is always **40 × 40 px** with the SVG at **24 × 24 px**. Setting `backgroundColor` makes the container a circle.
 
 `fill` sets the container's `color`, which the SVG picks up through `fill: currentcolor`. That only recolours single-colour icons that inherit their fill, such as those from `@wordpress/icons`. A vendor's own mark carries `fill` on its paths and keeps its colours, so pair it with `backgroundColor` rather than trying to tint it.
 
@@ -101,9 +101,9 @@ import colors from 'newspack-colors';
 
 // A vendor mark on its own brand background, keeping the mark's colours
 <CardFeature
-	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	title="Mailchimp"
 	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
-	icon={ { node: <MailchimpMark />, backgroundColor: '#ffe01b', radius: 'full' } }
+	icon={ { node: <MailchimpMark />, backgroundColor: '#ffe01b' } }
 	enabled={ isEnabled }
 	onEnable={ handleEnable }
 	onConfigure={ handleConfigure }
@@ -112,7 +112,7 @@ import colors from 'newspack-colors';
 
 // A ready element, rendered as-is
 <CardFeature
-	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	title="Mailchimp"
 	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
 	icon={ <IntegrationIcon provider="mailchimp" /> }
 	enabled={ isEnabled }
@@ -215,10 +215,7 @@ The card is built on `Card.Root`, `Card.Header` and `Card.Content` from `@wordpr
 type CardFeatureIcon = {
 	node: React.ReactNode;       // The icon element to render
 	fill?: string;               // SVG fill colour (applied via currentColor)
-	backgroundColor?: string;    // Background colour of the 40×40 container
-	radius?: 'small' | 'full';   // 'small' = 2px ($radius-small), 'full' = 50% ($radius-round)
-	                             // Defaults to 'small' whenever backgroundColor is set,
-	                             // and has nothing to round without one.
+	backgroundColor?: string;    // Background colour of the 40×40 container, always a circle
 };
 ```
 

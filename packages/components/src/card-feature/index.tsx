@@ -25,14 +25,8 @@ type CardFeatureIcon = {
 	node: React.ReactNode;
 	/** SVG fill colour, applied via currentColor. */
 	fill?: string;
-	/** Background colour for the icon container. */
+	/** Background colour for the icon container, which is always a circle. */
 	backgroundColor?: string;
-	/**
-	 * Border-radius of the icon container.
-	 * 'small' uses $radius-small (2px), 'full' uses $radius-round (50%).
-	 * Only relevant when backgroundColor is set, where it defaults to 'small'.
-	 */
-	radius?: 'small' | 'full';
 };
 
 type MoreControl = {
@@ -146,8 +140,7 @@ const CardFeature = ( {
 	const iconDescriptor = icon && ! isValidElement( icon ) ? ( icon as CardFeatureIcon ) : null;
 	const iconClasses = iconDescriptor
 		? classnames( 'newspack-card-feature__icon', {
-				'newspack-card-feature__icon--radius-small': !! iconDescriptor.backgroundColor && iconDescriptor.radius !== 'full',
-				'newspack-card-feature__icon--radius-full': iconDescriptor.radius === 'full',
+				'newspack-card-feature__icon--has-background': !! iconDescriptor.backgroundColor,
 		  } )
 		: undefined;
 
