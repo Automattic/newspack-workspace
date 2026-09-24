@@ -4,8 +4,8 @@
  * NPPD-1566 — settings-modal coverage. Tests render the modal with
  * controllable mocks for useWizardApiFetch (fetch behavior),
  * useDispatch (addNotice spy), and useConfirmDialog (dirty-discard
- * flow). Test #1 also renders the parent emails.tsx to verify the
- * Settings button on the chip bar opens the modal — that's why this
+ * flow). Test #1 also renders the parent index.tsx to verify the
+ * Settings button in the page header opens the modal — that's why this
  * file mirrors several of emails.test.js's parent-level mocks.
  */
 
@@ -61,8 +61,7 @@ jest.mock( '@wordpress/icons', () => ( {
 } ) );
 
 // Stub @wordpress/components — settings-modal.tsx imports TextControl
-// and the experimental HStack/VStack. emails.tsx imports Button + HStack
-// from here too. Real-module load fails in this jsdom env (the barrel
+// from it. Real-module load fails in this jsdom env (the barrel
 // pulls in components that need broader setup), so provide minimal
 // passthrough stubs. TextControl mirrors the real component's contract:
 // label + help + value + onChange( value ) signature, with the input
@@ -76,7 +75,8 @@ jest.mock( '@wordpress/components', () => {
 	// `...rest` forwards passthrough props (e.g. `aria-invalid`) onto the
 	// input, mirroring the real TextControl's behavior, so tests can
 	// assert the accessible invalid state.
-	const TextControl = ( { label, help, value, onChange, type, required, ...rest } ) =>
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const TextControl = ( { label, help, value, onChange, type, required, __nextHasNoMarginBottom, ...rest } ) =>
 		React.createElement(
 			'div',
 			null,
@@ -94,7 +94,6 @@ jest.mock( '@wordpress/components', () => {
 			),
 			help ? React.createElement( 'span', null, help ) : null
 		);
-	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
 	// Discard `loading` rather than spreading it to the DOM <button> —
 	// React warns on unrecognized non-boolean attributes. The real
 	// Newspack Button accepts the prop and translates it to a spinner;
@@ -104,12 +103,18 @@ jest.mock( '@wordpress/components', () => {
 	return {
 		TextControl,
 		Button,
-		__experimentalHStack: Passthrough,
-		__experimentalVStack: Passthrough,
 	};
 } );
 
 jest.mock( '@wordpress/dataviews', () => ( {
+	DataViews: {
+		Search: () => null,
+		Filters: () => null,
+		LayoutSwitcher: () => null,
+		ViewConfig: () => null,
+		Layout: () => null,
+		Footer: () => null,
+	},
 	filterSortAndPaginate: data => ( {
 		data,
 		paginationInfo: { totalItems: data.length, totalPages: 1 },
@@ -182,6 +187,15 @@ jest.mock( '../../../../../../packages/components/src', () => {
 			};
 		},
 		utils: { confirmAction: jest.fn( () => true ) },
+		withWizardScreen: WrappedComponent =>
+			function MockWizardScreen( props ) {
+				return (
+					<>
+						{ props.headerActions }
+						<WrappedComponent { ...props } />
+					</>
+				);
+			},
 	};
 } );
 
@@ -265,15 +279,15 @@ describe( 'SettingsModal', () => {
 		};
 	} );
 
-	it( 'opens the modal when the Settings button in the DataViews toolbar is clicked', async () => {
+	it( 'opens the modal when the Settings button in the page header is clicked', async () => {
 		setUpFetchMock();
-		const Emails = require( './emails' ).default;
+		const Emails = require( './index' ).default;
 		render( <Emails /> );
 
 		// Modal not yet rendered.
 		expect( screen.queryByRole( 'dialog', { name: 'Settings' } ) ).not.toBeInTheDocument();
 
-		// Click the Settings button in the DataViews toolbar.
+		// Click the Settings button in the page header.
 		fireEvent.click( screen.getByRole( 'button', { name: 'Settings' } ) );
 
 		await waitFor( () => {

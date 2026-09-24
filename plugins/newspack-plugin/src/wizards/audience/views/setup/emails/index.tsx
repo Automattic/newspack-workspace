@@ -3,25 +3,33 @@
  */
 
 /**
+ * WordPress dependencies.
+ */
+import { __ } from '@wordpress/i18n';
+import { useState } from '@wordpress/element';
+
+/**
  * Internal dependencies.
  */
-import { withWizardScreen } from '../../../../../../packages/components/src';
-import WizardsTab from '../../../../wizards-tab';
+import { Button, withWizardScreen } from '../../../../../../packages/components/src';
 import { default as EmailsSection } from './emails';
-import WizardSection from '../../../../wizards-section';
+import SettingsModal from './settings-modal';
 
-function Emails() {
+const EmailsScreen = withWizardScreen( ( { children }: { children: React.ReactNode } ) => <>{ children }</> );
+
+export default function Emails( props: Record< string, unknown > ) {
+	const [ showSettingsModal, setShowSettingsModal ] = useState( false );
+
+	const headerActions = (
+		<Button variant="secondary" onClick={ () => setShowSettingsModal( true ) }>
+			{ __( 'Settings', 'newspack-plugin' ) }
+		</Button>
+	);
+
 	return (
-		<WizardsTab className="newspack-emails-tab">
-			<WizardSection>
-				<EmailsSection />
-			</WizardSection>
-		</WizardsTab>
+		<EmailsScreen { ...props } headerActions={ headerActions }>
+			<EmailsSection />
+			<SettingsModal showModal={ showSettingsModal } closeModal={ () => setShowSettingsModal( false ) } />
+		</EmailsScreen>
 	);
 }
-
-// withWizardScreen applied at the export to match the sibling tabs
-// (Setup, ContentGating, Payment, Campaign, Complete) — each applies
-// the HOC at its own module's default export so the parent setup view
-// just routes to the component, not to an inline wrapper.
-export default withWizardScreen( Emails );

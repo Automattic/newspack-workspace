@@ -7,9 +7,9 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
-import { filterSortAndPaginate } from '@wordpress/dataviews';
+import { DataViews as WPDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Button, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
@@ -19,7 +19,6 @@ import { postStatus } from '../../../post-status';
 import WizardsPluginCard from '../../../../wizards-plugin-card';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import EmailPreview from './email-preview';
-import SettingsModal from './settings-modal';
 import './emails.scss';
 
 interface EmailItem {
@@ -63,7 +62,7 @@ const DEFAULT_VIEW: View = {
 	page: 1,
 	perPage: 50,
 	search: '',
-	fields: [ 'recipient', 'status' ],
+	fields: [ 'type', 'recipient', 'status' ],
 	filters: [],
 	layout: {},
 	titleField: 'name',
@@ -75,17 +74,14 @@ const DEFAULT_VIEW: View = {
 
 const PageHeading = () => <h2 className="screen-reader-text">{ __( 'Emails', 'newspack-plugin' ) }</h2>;
 
-// The chip bar is a strict two-way toggle — every email belongs to exactly
-// one of these two groups. Defaults to 'reader-revenue' on first load.
-type ChipValue = 'reader-revenue' | 'auth-account';
-const CHIPS: { value: ChipValue; label: string }[] = [
+const TYPES: { value: EmailItem[ 'chip' ]; label: string }[] = [
 	{
 		value: 'reader-revenue',
-		label: __( 'Reader revenue', 'newspack-plugin' ),
+		label: __( 'Reader Revenue', 'newspack-plugin' ),
 	},
 	{
 		value: 'auth-account',
-		label: __( 'Authentication & account', 'newspack-plugin' ),
+		label: __( 'Authentication & Account', 'newspack-plugin' ),
 	},
 ];
 
@@ -105,21 +101,12 @@ const Emails = () => {
 	const initial = emailSettings.initial;
 	const [ data, setData ] = useState< EmailItem[] >( ( initial?.newspack_emails as EmailItem[] | undefined ) ?? [] );
 	const postType = initial?.post_type ?? emailSettings.postType;
-	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
-	// The chip bar only earns its place on the Newspack platform, which has
-	// both groups. On RevEngine/Other the server returns only auth/account
-	// emails, so there's a single group and the chip bar is hidden entirely
-	// (a lone, always-pressed chip is a non-functional, confusing control).
+	// Only the Newspack platform has both types; elsewhere the server returns
+	// auth/account emails alone, so a Type filter would have one option.
 	const isNewspackPlatform = Boolean( emailSettings.isNewspackPlatform );
-	const [ activeChip, setActiveChip ] = useState< ChipValue >( 'reader-revenue' );
-	const [ showSettingsModal, setShowSettingsModal ] = useState( false );
-
-	const selectChip = ( chip: ChipValue ) => {
-		setActiveChip( chip );
-		// Reset search + pagination on chip switch so the user sees the new
-		// group from the top with no leftover query.
-		setView( prev => ( { ...prev, search: '', page: 1 } ) );
-	};
+	const [ view, setView ] = useState< View >( () =>
+		isNewspackPlatform ? DEFAULT_VIEW : { ...DEFAULT_VIEW, fields: DEFAULT_VIEW.fields?.filter( field => field !== 'type' ) }
+	);
 
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/emails' );
 
@@ -294,15 +281,31 @@ const Emails = () => {
 				enableHiding: false,
 				enableSorting: false,
 			},
+			...( isNewspackPlatform
+				? [
+						{
+							id: 'type',
+							label: __( 'Type', 'newspack-plugin' ),
+							getValue: ( { item }: { item: EmailItem } ) => item.chip,
+							render: ( { item }: { item: EmailItem } ) => <span>{ TYPES.find( type => type.value === item.chip )?.label }</span>,
+							elements: TYPES,
+							filterBy: { isPrimary: true, operators: [ 'isAny' as const ] },
+							enableSorting: false,
+						},
+				  ]
+				: [] ),
 			{
 				id: 'recipient',
 				label: __( 'Recipient', 'newspack-plugin' ),
-				enableGlobalSearch: true,
-				getValue: ( { item }: { item: EmailItem } ) =>
-					item.recipient === 'admin' ? __( 'Admin', 'newspack-plugin' ) : __( 'Reader', 'newspack-plugin' ),
+				getValue: ( { item }: { item: EmailItem } ) => item.recipient,
 				render: ( { item }: { item: EmailItem } ) => (
 					<span>{ item.recipient === 'admin' ? __( 'Admin', 'newspack-plugin' ) : __( 'Reader', 'newspack-plugin' ) }</span>
 				),
+				elements: [
+					{ value: 'reader', label: __( 'Reader', 'newspack-plugin' ) },
+					{ value: 'admin', label: __( 'Admin', 'newspack-plugin' ) },
+				],
+				filterBy: { isPrimary: true, operators: [ 'isAny' ] },
 			},
 			{
 				id: 'status',
@@ -326,10 +329,10 @@ const Emails = () => {
 						label: __( 'Disabled', 'newspack-plugin' ),
 					},
 				],
-				filterBy: { isPrimary: false, operators: [ 'is' ] },
+				filterBy: { isPrimary: true, operators: [ 'isAny' ] },
 			},
 		],
-		[]
+		[ isNewspackPlatform ]
 	);
 
 	const actions: EmailAction[] = [
@@ -393,23 +396,7 @@ const Emails = () => {
 		},
 	];
 
-	// Search overrides chip scope: when the user is searching, results
-	// come from the full dataset (both chips) so a query can find any
-	// email. When search is empty, the active chip filter applies as a
-	// view scope. `activeChip` stays in state through a search and
-	// re-engages when search clears.
-	const isSearching = Boolean( view.search );
-	// Chip filtering only applies on the Newspack platform (where the chip
-	// bar is shown). Elsewhere the list is already auth/account-only from the
-	// server, so show it unfiltered.
-	const visibleData = useMemo(
-		() => ( isSearching || ! isNewspackPlatform ? data : data.filter( item => item.chip === activeChip ) ),
-		[ data, activeChip, isSearching, isNewspackPlatform ]
-	);
-	const { data: processedData, paginationInfo } = useMemo(
-		() => filterSortAndPaginate( visibleData, view, fields ),
-		[ visibleData, view, fields ]
-	);
+	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( data, view, fields ), [ data, view, fields ] );
 
 	// The `preview` media field belongs to the grid view (each card
 	// renders the iframe as its top tile). DataViews v14 also renders
@@ -473,38 +460,6 @@ const Emails = () => {
 		<Fragment>
 			<PageHeading />
 			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
-			{ /* Chip bar only on the Newspack platform (the only one with both
-			     groups). Settings lives in the DataViews toolbar (see `header`
-			     below), so there's nothing to render here off-platform. */ }
-			{ isNewspackPlatform && (
-				<HStack
-					className="newspack-emails__chip-bar newspack-emails__chips"
-					role="group"
-					aria-label={ __( 'Filter emails by group', 'newspack-plugin' ) }
-					spacing={ 2 }
-					justify="flex-start"
-				>
-					{ CHIPS.map( chip => {
-						// During an active search, neither chip is filtering —
-						// render both as unpressed so the visual matches reality.
-						// Clicking either chip clears the search via selectChip
-						// and engages that chip's view.
-						const isActive = ! isSearching && activeChip === chip.value;
-						return (
-							<Button
-								key={ chip.value }
-								variant={ isActive ? 'primary' : 'secondary' }
-								aria-pressed={ isActive }
-								onClick={ () => selectChip( chip.value ) }
-								className="newspack-emails__chip"
-							>
-								{ chip.label }
-							</Button>
-						);
-					} ) }
-				</HStack>
-			) }
-			<SettingsModal showModal={ showSettingsModal } closeModal={ () => setShowSettingsModal( false ) } />
 			<DataViews
 				className="newspack-emails"
 				data={ processedData }
@@ -516,13 +471,20 @@ const Emails = () => {
 				defaultLayouts={ { table: {}, grid: {} } }
 				isLoading={ isFetching }
 				getItemId={ ( item: EmailItem ) => String( item.post_id ) }
-				search
-				header={
-					<Button variant="secondary" size="compact" onClick={ () => setShowSettingsModal( true ) }>
-						{ __( 'Settings', 'newspack-plugin' ) }
-					</Button>
-				}
-			/>
+			>
+				<Stack direction="row" justify="space-between" align="center" gap="sm" className="dataviews__view-actions">
+					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
+						<WPDataViews.Search />
+						<WPDataViews.Filters />
+					</Stack>
+					<Stack direction="row" align="center" gap="xs">
+						<WPDataViews.LayoutSwitcher />
+						<WPDataViews.ViewConfig />
+					</Stack>
+				</Stack>
+				<WPDataViews.Layout />
+				<WPDataViews.Footer />
+			</DataViews>
 		</Fragment>
 	);
 };
