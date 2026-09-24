@@ -345,10 +345,10 @@ class Subscriber_Discounts_Pricing {
 	 * @return array
 	 */
 	public static function filter_variation_prices_hash( $hash, $product ) {
-		// Left untouched wherever prices are not adjusted, so a request that
-		// reports list prices cannot store them under a subscriber's key and
+		// Left untouched wherever prices are not adjusted, so a request or a read
+		// that reports list prices cannot store them under a subscriber's key and
 		// hand that reader undiscounted prices on the storefront afterwards.
-		if ( self::is_suspended() || ! self::should_adjust_prices_in_context() ) {
+		if ( self::is_suspended() || self::is_engine_reading_base() || ! self::should_adjust_prices_in_context() ) {
 			return $hash;
 		}
 		// Keyed on the reader's entitlement across the whole active rule set,
@@ -379,6 +379,11 @@ class Subscriber_Discounts_Pricing {
 		if ( self::is_suspended() || ! $product instanceof \WC_Product ) {
 			return null;
 		}
+		// The dynamic pricing engine reads a product's regular price as its
+		// discount base; a subscriber price there would be discounted twice.
+		if ( self::is_engine_reading_base() ) {
+			return null;
+		}
 		// Checked here as well as at registration so every surface agrees:
 		// the reader-facing messaging asks this question directly rather than
 		// through the price filters, and a context where prices are not adjusted
@@ -397,6 +402,12 @@ class Subscriber_Discounts_Pricing {
 
 		$rules = self::get_rules_for( $product, $user_id );
 		if ( empty( $rules ) ) {
+			return null;
+		}
+
+		// A donation is an amount the reader chose; no discount lowers it. Asked
+		// only once a rule would apply: answering it loads the product again.
+		if ( class_exists( '\Newspack\Donations' ) && Donations::is_donation_product( $product->get_id() ) ) {
 			return null;
 		}
 
@@ -672,6 +683,18 @@ class Subscriber_Discounts_Pricing {
 	 */
 	private static function is_suspended() {
 		return self::$suspend_depth > 0;
+	}
+
+	/**
+	 * Whether the dynamic pricing engine is reading a product's discount base.
+	 *
+	 * @return bool
+	 */
+	private static function is_engine_reading_base() {
+		// Not autoloaded: a read can only be under way once the engine has
+		// loaded the class, and this is asked on every price read.
+		return class_exists( '\Automattic\WooCommerce\DynamicPricing\Amount_Calculator', false )
+			&& \Automattic\WooCommerce\DynamicPricing\Amount_Calculator::is_reading_base();
 	}
 }
 

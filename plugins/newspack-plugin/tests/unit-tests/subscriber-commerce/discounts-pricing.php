@@ -7,10 +7,12 @@
 
 namespace Newspack\Tests\Subscriber_Commerce;
 
+use Automattic\WooCommerce\DynamicPricing\Amount_Calculator;
 use Newspack\Subscriber_Commerce;
 use Newspack\Subscriber_Discounts;
 use Newspack\Subscriber_Discounts_Pricing;
 use Newspack\Tests\Subscriber_Commerce\Traits\Trait_Subscriber_Discounts_Fixtures;
+use Newspack\WooCommerce_Products;
 
 /**
  * Pricing decisions: who gets a discount, on what, and how it is presented.
@@ -76,6 +78,9 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	 * Detach the simulated subscription and clear memoized state.
 	 */
 	public function tear_down() {
+		// Global like the engine's own flag, so a test that fails mid-read would
+		// otherwise leave every test after it running inside a base read.
+		Amount_Calculator::$reading_base = false;
 		$this->set_cart_contents( [] );
 		$this->clear_rest_route();
 		remove_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10 );
@@ -642,5 +647,103 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $subscription, $this->subscriber_id ),
 			'A subscription product keeps its price.'
 		);
+	}
+
+	/**
+	 * A donation is an amount the reader chose. A rule covering every product
+	 * reaches donation products too, and would otherwise charge a subscriber less
+	 * than they decided to give.
+	 */
+	public function test_a_donation_is_not_discounted_by_an_all_products_rule() {
+		$this->add_book_discount(
+			[
+				'targeting'   => 'all',
+				'product_ids' => [],
+			]
+		);
+		$donation = $this->create_product( 25.0 );
+		update_post_meta( $donation->get_id(), WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 25.0, $donation, $this->subscriber_id ),
+			'A subscriber donating $25 is charged $25.'
+		);
+		$this->assertSame(
+			90.0,
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id ),
+			'The same rule still discounts everything else it covers.'
+		);
+	}
+
+	/**
+	 * The dynamic pricing engine computes its rule prices from a product's price
+	 * as read through WooCommerce's filters. A subscriber price reported during
+	 * that read becomes the engine's base, and the subscriber discount is then
+	 * applied a second time on top of the rule price.
+	 */
+	public function test_no_subscriber_price_while_the_pricing_engine_reads_its_base() {
+		$this->add_book_discount();
+
+		Amount_Calculator::$reading_base = true;
+		$price_during_base_read          = Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id );
+		Amount_Calculator::$reading_base = false;
+
+		$this->assertNull( $price_during_base_read, 'The engine reads the undiscounted price as its base.' );
+		$this->assertSame(
+			90.0,
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id ),
+			'Once the read is over, the subscriber is discounted again.'
+		);
+	}
+
+	/**
+	 * A variable product whose prices are computed during the engine's base read
+	 * is priced without the discount. Caching that range under a subscriber's key
+	 * would show every reader with that entitlement undiscounted prices until the
+	 * cache is next rebuilt.
+	 */
+	public function test_variation_price_cache_key_is_left_alone_while_the_pricing_engine_reads_its_base() {
+		$this->add_book_discount();
+		wp_set_current_user( $this->subscriber_id );
+
+		Amount_Calculator::$reading_base = true;
+		$hash_during_base_read           = Subscriber_Discounts_Pricing::filter_variation_prices_hash( [ 'base' => 1 ], $this->book );
+		Amount_Calculator::$reading_base = false;
+
+		$this->assertSame( [ 'base' => 1 ], $hash_during_base_read, 'Undiscounted prices are cached under the key every undiscounted read shares.' );
+		$this->assertArrayHasKey(
+			'newspack_subscriber_discounts',
+			Subscriber_Discounts_Pricing::filter_variation_prices_hash( [ 'base' => 1 ], $this->book ),
+			'Once the read is over, the subscriber\'s prices are cached under their own key again.'
+		);
+	}
+}
+
+// phpcs:disable Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Generic.Files.OneObjectStructurePerFile.MultipleFound -- A double of a class another plugin ships, kept beside the only tests that raise its flag.
+
+namespace Automattic\WooCommerce\DynamicPricing;
+
+if ( ! class_exists( __NAMESPACE__ . '\Amount_Calculator' ) ) {
+	/**
+	 * Stand-in for the dynamic pricing engine's Amount_Calculator, which this
+	 * suite does not load. Only the base-read flag is modelled: a test raises it
+	 * to put the engine in the middle of reading a product's discount base.
+	 */
+	final class Amount_Calculator {
+		/**
+		 * Whether the engine is reading a product's discount base.
+		 *
+		 * @var bool
+		 */
+		public static $reading_base = false;
+
+		/**
+		 * Whether the engine is reading a product's discount base.
+		 *
+		 * @return bool
+		 */
+		public static function is_reading_base(): bool {
+			return self::$reading_base;
+		}
 	}
 }
