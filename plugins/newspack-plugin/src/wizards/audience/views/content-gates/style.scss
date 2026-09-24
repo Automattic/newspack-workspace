@@ -24,7 +24,28 @@
 					margin-top: wp-vars.$grid-unit-40 !important;
 				}
 			}
+			// The warning about ranking above a paid gate.
+			.newspack-notice {
+				margin: wp-vars.$grid-unit-20;
+			}
 			&__settings {
+				// Keep the columns side by side at every width, rather than stacking them on narrow screens.
+				grid-auto-columns: minmax(0, 1fr);
+				grid-auto-flow: column;
+				grid-template-columns: none;
+				// Separates the columns from a notice above them. With nothing between them and the card
+				// header, the header's own bottom border draws the line.
+				border-top: 1px solid rgba(wp-colors.$black, 0.1);
+				&:first-child {
+					border-top: 0;
+				}
+				> * {
+					border-bottom: 0;
+					border-right: 1px solid wp-colors.$gray-300;
+					&:last-child {
+						border-right: 0;
+					}
+				}
 				h4 {
 					font-size: wp-vars.$font-size-small;
 					font-weight: wp-vars.$font-weight-medium;
