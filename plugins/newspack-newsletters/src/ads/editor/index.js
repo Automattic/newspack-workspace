@@ -2,23 +2,58 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import apiFetch from '@wordpress/api-fetch';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { Fragment, useState } from '@wordpress/element';
 import { PluginDocumentSettingPanel, PluginPrePublishPanel, store as editPostStore } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
-import { ToggleControl, TextControl, DatePicker, Notice, RangeControl, Button, Modal } from '@wordpress/components';
-import { format, isInTheFuture } from '@wordpress/date';
+import { ToggleControl, TextControl, DatePicker, Notice, RadioControl, RangeControl, Button, Modal } from '@wordpress/components';
+import { date as wpDate, format, isInTheFuture } from '@wordpress/date';
 import { SelectControl } from 'newspack-components';
 import AdPlacements from '../../components/ad-placements';
 
+// Strip the read-only counters from ad saves: the editor round-trips the full
+// meta object, and a stale counter value would trip their `auth_callback`.
+const AD_REST_PATH = /\/wp\/v2\/newspack_nl_ads_cpt(\/|\?|$)/;
+apiFetch.use( ( options, next ) => {
+	const method = ( options.method || 'GET' ).toUpperCase();
+	const target = options.path || options.url || '';
+	if ( ( method === 'POST' || method === 'PUT' ) && options.data?.meta && AD_REST_PATH.test( target ) ) {
+		const meta = { ...options.data.meta };
+		delete meta.tracking_impressions;
+		delete meta.tracking_clicks;
+		options.data = { ...options.data, meta };
+	}
+	return next( options );
+} );
+
+// A bare `Y-m-d` reaches `DatePicker` as a UTC instant, which renders — and
+// saves back — as the previous day wherever the UTC offset is negative. Both
+// supported WordPress versions get there, by different routes: 6.9 hands the
+// string to `new Date()`, where a date-only ISO string is UTC by spec while a
+// date-time one is local; 7.0 first tests it against `/Z|[+-]\d{2}(:?\d{2})?$/`
+// to decide whether it already carries an offset, and the `-DD` day component
+// matches. Appending a time component is what avoids both, so keep it even if
+// that regex is fixed upstream — 6.9 would still be wrong without it.
+//
+// Noon, not midnight: only Y/m/d is ever read back off this value, and midday
+// survives the zones where local midnight does not exist on DST-transition
+// days. `includes/admin/class-ads-list-rest.php` anchors these same dates the
+// same way.
+const toTimezonelessDateTime = value => ( value ? `${ String( value ).slice( 0, 10 ) }T12:00:00` : value );
+
 function AdEdit() {
-	const { price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
-		const { getEditedPostAttribute } = select( 'core/editor' );
+	const { status, isSaving, price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
+		const { getEditedPostAttribute, isSavingPost } = select( 'core/editor' );
 		const meta = getEditedPostAttribute( 'meta' );
 		return {
+			status: getEditedPostAttribute( 'status' ),
+			isSaving: isSavingPost(),
 			price: meta.price,
-			startDate: meta.start_date,
-			expiryDate: meta.expiry_date,
+			// Normalize to Y-m-d on read so all client-side date comparisons are
+			// plain string compares regardless of any legacy ISO-datetime value.
+			startDate: meta.start_date ? String( meta.start_date ).slice( 0, 10 ) : meta.start_date,
+			expiryDate: meta.expiry_date ? String( meta.expiry_date ).slice( 0, 10 ) : meta.expiry_date,
 			insertionStrategy: meta.insertion_strategy,
 			positionInContent: meta.position_in_content,
 			positionBlockCount: meta.position_block_count,
@@ -39,11 +74,12 @@ function AdEdit() {
 	const [ isSavingPlacement, setIsSavingPlacement ] = useState( false );
 	const [ isManagingPlacements, setIsManagingPlacements ] = useState( false );
 
-	const { editPost } = useDispatch( 'core/editor' );
+	const { editPost, savePost } = useDispatch( 'core/editor' );
 	const { saveEntityRecord } = useDispatch( 'core' );
 	const { removeEditorPanel } = useDispatch( editPostStore );
 	const messages = [];
-	if ( expiryDate && ! isInTheFuture( expiryDate ) ) {
+	// Site-timezone "today" so this advisory agrees with the server.
+	if ( expiryDate && expiryDate < wpDate( 'Y-m-d' ) ) {
 		messages.push( __( 'The expiration date is set in the past. This ad will not be displayed.', 'newspack-newsletters' ) );
 	}
 	if ( startDate && startDate > expiryDate ) {
@@ -85,12 +121,46 @@ function AdEdit() {
 		};
 	}
 
-	// Remove the "post-status" (Summary) panel.
+	// Ads only need an on/off state: whether they run (`publish`) or not
+	// (`draft`). Scheduling is driven by the start/expiry date meta, and
+	// private/pending/password statuses never serve. Remove the native
+	// "Summary" panel (which offers all of those) and expose a single
+	// Active/Inactive control instead, matching the ads list Quick Edit.
 	removeEditorPanel( 'post-status' );
+
+	// `future`/`private`/etc. are edge statuses a publisher can't set from
+	// this control; map any publish-equivalent to Active and everything else
+	// to Inactive, and only write `publish`/`draft` back on an actual change.
+	const statusControl = [ 'publish', 'future' ].includes( status ) ? 'active' : 'inactive';
+
+	// Toggle acts as an on/off switch: apply and persist the new status in one
+	// step. Saving directly avoids sending the publisher through the native
+	// Publish button, whose pre-publish panel exposes WP's "Visibility /
+	// Publish" vocabulary that this control is meant to hide.
+	const setStatus = value => {
+		editPost( { status: value === 'active' ? 'publish' : 'draft' } );
+		savePost();
+	};
 
 	return (
 		<Fragment>
 			<PluginDocumentSettingPanel name="newsletters-ads-settings-panel" title={ __( 'Ad settings', 'newspack-newsletters' ) }>
+				{ noticeProps ? <Notice isDismissible={ false } { ...noticeProps } /> : null }
+				<RadioControl
+					label={ __( 'Status', 'newspack-newsletters' ) }
+					selected={ statusControl }
+					options={ [
+						{ label: __( 'Active', 'newspack-newsletters' ), value: 'active' },
+						{ label: __( 'Inactive', 'newspack-newsletters' ), value: 'inactive' },
+					] }
+					onChange={ setStatus }
+					disabled={ isSaving }
+					help={ __(
+						'Active ads run according to their start and expiration dates. Inactive ads are never shown.',
+						'newspack-newsletters'
+					) }
+				/>
+				<hr />
 				<TextControl
 					type="number"
 					label={ __( 'Price', 'newspack-newsletters' ) }
@@ -247,14 +317,14 @@ function AdEdit() {
 						if ( startDate ) {
 							editPost( { meta: { start_date: null } } );
 						} else {
-							editPost( { meta: { start_date: new Date() } } );
+							editPost( { meta: { start_date: format( 'Y-m-d', new Date() ) } } );
 						}
 					} }
 				/>
 				{ startDate ? (
 					<DatePicker
-						currentDate={ startDate }
-						onChange={ start_date => editPost( { meta: { start_date } } ) }
+						currentDate={ toTimezonelessDateTime( startDate ) }
+						onChange={ next => editPost( { meta: { start_date: format( 'Y-m-d', next ) } } ) }
 						isInvalidDate={ date => ! isInTheFuture( date ) }
 					/>
 				) : null }
@@ -268,7 +338,7 @@ function AdEdit() {
 						} else {
 							editPost( {
 								meta: {
-									expiry_date: startDate ? new Date( startDate ) : new Date(),
+									expiry_date: format( 'Y-m-d', startDate ? startDate : new Date() ),
 								},
 							} );
 						}
@@ -276,10 +346,10 @@ function AdEdit() {
 				/>
 				{ expiryDate ? (
 					<DatePicker
-						currentDate={ expiryDate }
-						onChange={ expiry_date => editPost( { meta: { expiry_date } } ) }
+						currentDate={ toTimezonelessDateTime( expiryDate ) }
+						onChange={ next => editPost( { meta: { expiry_date: format( 'Y-m-d', next ) } } ) }
 						isInvalidDate={ date => {
-							return startDate ? date < new Date( startDate ) : ! isInTheFuture( date );
+							return startDate ? format( 'Y-m-d', date ) < startDate : ! isInTheFuture( date );
 						} }
 					/>
 				) : null }

@@ -133,6 +133,16 @@ const SASS_STYLESHEETS = [
 		withRTL: true,
 	},
 	{
+		inFile: 'newspack-theme/sass/plugins/newspack-tag-labels.scss',
+		outFile: 'newspack-theme/styles/newspack-tag-labels.css',
+		withRTL: true,
+	},
+	{
+		inFile: 'newspack-theme/sass/plugins/newspack-tag-labels-editor.scss',
+		outFile: 'newspack-theme/styles/newspack-tag-labels-editor.css',
+		withRTL: true,
+	},
+	{
 		inFile: 'newspack-theme/tribe-events/tribe-events.scss',
 		outFile: 'newspack-theme/tribe-events/tribe-events.css',
 	},

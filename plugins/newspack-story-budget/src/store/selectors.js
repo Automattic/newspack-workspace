@@ -123,6 +123,8 @@ export const canManage = () => ! utils.sites.isRemoteSite();
 
 export const canEditStory = ( state, id ) => canManage() && ( state.meta.stories.can_edit || state.stories[ id ]?.metadata?.can_edit );
 
+export const canManageBudgets = state => canManage() && !! state.meta.stories?.can_manage_budgets;
+
 export const getStoriesMeta = state => state.meta.stories;
 
 export const getStoryMeta = ( state, id, key ) => ( key ? state.stories[ id ]?.metadata?.[ key ] : state.stories[ id ]?.metadata );

@@ -1,0 +1,32 @@
+.revisions-tickmarks > div.newspack-major::after {
+	content: "";
+	width: 6px;
+	height: 6px;
+	top: 0;
+	left: 0;
+	display: block;
+	border-radius: 100%;
+	margin-left: -3px;
+	margin-top: -10px;
+}
+
+.major-label {
+	display: none;
+	font-weight: 700;
+}
+
+.diff-meta-to.newspack-major .major-label {
+	display: inline;
+}
+
+/* Sit alongside core's "Restore This Revision" button, which floats right. */
+.diff-meta input.mark-major,
+.diff-meta .mark-major-message {
+	float: right;
+	margin-left: 6px;
+	margin-right: 6px;
+}
+
+.diff-meta .mark-major-message {
+	line-height: 30px;
+}

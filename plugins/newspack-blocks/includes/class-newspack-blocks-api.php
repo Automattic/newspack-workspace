@@ -158,6 +158,17 @@ class Newspack_Blocks_API {
 	}
 
 	/**
+	 * Get tag labels for the REST API.
+	 *
+	 * @param  array $object_info The object info.
+	 * @return array|bool Tag labels, or false if none.
+	 */
+	public static function newspack_blocks_get_tag_labels( $object_info ) {
+		$tag_labels = Newspack_Blocks::get_tag_labels( $object_info['id'] );
+		return ! empty( $tag_labels ) ? array_values( $tag_labels ) : false;
+	}
+
+	/**
 	 * Pass whether there is a custom excerpt to the editor.
 	 *
 	 * @param array $object_info The object info.
@@ -166,6 +177,29 @@ class Newspack_Blocks_API {
 	public static function newspack_blocks_has_custom_excerpt( $object_info ) {
 		$post_has_custom_excerpt = has_excerpt( $object_info['id'] );
 		return $post_has_custom_excerpt;
+	}
+
+	/**
+	 * Point every anchor in a rendered payload fragment at '#'.
+	 *
+	 * The editor canvas renders the byline and avatar fields verbatim, so a
+	 * live URL navigates the canvas iframe away from the post being edited.
+	 * Runs on the finished markup — after the newspack_blocks_post_byline
+	 * filter — so links injected by filters (e.g. custom bylines) are covered
+	 * too, matching the category-link convention used elsewhere in this
+	 * payload. Only real anchor href attributes are rewritten: "href=" text
+	 * inside another attribute's value (avatar proxy URLs), xlink:href sprite
+	 * references, and plain text all pass through untouched.
+	 *
+	 * @param string $html Rendered markup destined for the editor payload.
+	 * @return string Markup with every anchor href pointing at '#'.
+	 */
+	private static function neutralize_editor_links( $html ) {
+		$processor = new \WP_HTML_Tag_Processor( (string) $html );
+		while ( $processor->next_tag( 'A' ) ) {
+			$processor->set_attribute( 'href', '#' );
+		}
+		return $processor->get_updated_html();
 	}
 
 	/**
@@ -258,6 +292,14 @@ class Newspack_Blocks_API {
 				],
 			];
 
+			// The meta bag is returned verbatim, and the Homepage Posts editor component
+			// assigns the subtitle with RawHTML. A value stored before the theme gained a
+			// sanitize_callback is still raw, so it is filtered here rather than at that
+			// sink -- this endpoint is the only thing between the two.
+			if ( isset( $data['meta']['newspack_post_subtitle'] ) ) {
+				$data['meta']['newspack_post_subtitle'] = Newspack_Blocks::sanitize_post_subtitle( $data['meta']['newspack_post_subtitle'] );
+			}
+
 			$sponsors = Newspack_Blocks::get_all_sponsors( $post->ID );
 			$author_info = Newspack_Blocks::prepare_authors();
 			$add_ons  = [
@@ -269,8 +311,9 @@ class Newspack_Blocks_API {
 				'newspack_post_sponsors'            => self::newspack_blocks_sponsor_info( $data ),
 				'newspack_sponsors_show_author'     => Newspack_Blocks::newspack_display_sponsors_and_authors( $sponsors ),
 				'newspack_sponsors_show_categories' => Newspack_Blocks::newspack_display_sponsors_and_categories( $sponsors ),
-				'newspack_post_avatars'             => \newspack_blocks_format_avatars( $author_info ),
-				'newspack_post_byline'              => \newspack_blocks_format_byline( $author_info ),
+				'newspack_tag_labels'               => self::newspack_blocks_get_tag_labels( $data ),
+				'newspack_post_avatars'             => self::neutralize_editor_links( \newspack_blocks_format_avatars( $author_info ) ),
+				'newspack_post_byline'              => self::neutralize_editor_links( \newspack_blocks_format_byline( $author_info ) ),
 				'post_status'                       => $post->post_status,
 				'post_type'                         => $post->post_type,
 				'post_link'                         => Newspack_Blocks::get_post_link( $post->ID ),

@@ -79,7 +79,7 @@ class Bylines {
 			'newspack-bylines',
 			Newspack::plugin_url() . '/dist/bylines.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'bylines' ),
 			true
 		);
 		\wp_localize_script(
@@ -95,7 +95,7 @@ class Bylines {
 			'newspack-bylines',
 			Newspack::plugin_url() . '/dist/bylines.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'bylines' )
 		);
 	}
 

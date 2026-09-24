@@ -18,3 +18,26 @@
 		margin-top: 0;
 	}
 }
+
+/**
+ * Header ad spacing
+ *
+ * `.global_below_header` is present whenever the below-header placement has a
+ * configured ad unit and an active provider — it tracks whether an ad is
+ * *configured*, not whether the creative actually filled. On a provider no-fill
+ * the wrapper still renders, so the header's bottom margin collapses even though
+ * no ad is visible; keying this on an actual fill signal would need a client-side
+ * hook we don't have here. The `!important` overrides the block's inline spacing,
+ * which selector specificity alone can't beat.
+ */
+header.wp-block-template-part {
+	.wp-block-newspack-responsive-container:has( ~ .global_below_header ) {
+		// When there's a below header ad, remove the bottom most margin from the header:
+		.header-desktop,
+		.header-mobile {
+			> *:last-child {
+				margin-bottom: 0 !important;
+			}
+		}
+	}
+}

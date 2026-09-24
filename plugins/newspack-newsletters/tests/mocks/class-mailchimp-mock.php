@@ -118,6 +118,14 @@ class Newspack_Newsletters_Mailchimp_Api {
 		return apply_filters( 'mailchimp_mock_post', [], $endpoint, $args );
 	}
 
+	public static function patch( $endpoint, $args = [] ) { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+		if ( ! self::is_api_configured() ) {
+			return [];
+		}
+
+		return apply_filters( 'mailchimp_mock_patch', [], $endpoint, $args );
+	}
+
 	/**
 	 * Get the subscriber hash.
 	 *

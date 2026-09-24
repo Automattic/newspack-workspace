@@ -210,8 +210,11 @@ class WooCommerce_Cover_Fees {
 			$handler,
 			\Newspack\Newspack::plugin_url() . '/dist/other-scripts/wc-cover-fees.js',
 			[ 'jquery' ],
-			NEWSPACK_PLUGIN_VERSION,
-			[ 'in_footer' => true ]
+			\Newspack\Newspack::asset_version( 'other-scripts/wc-cover-fees' ),
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
 		);
 	}
 

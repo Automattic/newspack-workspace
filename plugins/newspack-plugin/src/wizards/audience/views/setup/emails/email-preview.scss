@@ -1,0 +1,40 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+// Email preview thumbnail container.
+.newspack-email-preview {
+	width: 100%;
+	aspect-ratio: 1;
+	overflow: hidden;
+	position: relative;
+	background: transparent;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	&__iframe {
+		width: 848px;
+		height: auto;
+		border: 0;
+		position: absolute;
+		top: 0;
+		left: 0;
+		transform-origin: top left;
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 200ms ease-out;
+	}
+
+	&.is-ready &__iframe {
+		opacity: 1;
+	}
+
+	// Loading / error placeholder overlay.
+	&__placeholder {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		color: wp-colors.$gray-400;
+	}
+}

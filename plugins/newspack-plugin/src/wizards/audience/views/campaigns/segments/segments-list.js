@@ -8,16 +8,10 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies.
  */
-import { Button, Card, CardSortableList, Notice, Router } from '../../../../../../packages/components/src';
+import { Card, CardSortableList, Notice, Router } from '../../../../../../packages/components/src';
 import { segmentDescription } from '../utils';
 
-const { NavLink, useHistory } = Router;
-
-const AddNewSegmentLink = () => (
-	<NavLink to="segments/new">
-		<Button variant="primary">{ __( 'Add New Segment', 'newspack-plugin' ) }</Button>
-	</NavLink>
-);
+const { useHistory } = Router;
 
 const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) => {
 	const [ inFlight, setInFlight ] = useState( false );
@@ -105,8 +99,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 				id: segment.id,
 				title: segment.name,
 				description: segmentDescription( segment ),
-				badgeLevel: segment.is_criteria_duplicated ? 'warning' : 'default',
-				badgeText: segment.is_criteria_duplicated ? __( 'Duplicate', 'newspack-plugin' ) : undefined,
+				badge: segment.is_criteria_duplicated ? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' } : undefined,
 				toggleChecked: ! segment.configuration.is_disabled,
 				onToggleChange: () => toggleSegmentStatus( segment ),
 				actions: [
@@ -133,7 +126,6 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 			{ error && <Notice noticeText={ error } isError /> }
 			<Card headerActions noBorder>
 				<h2>{ __( 'Audience segments', 'newspack-plugin' ) }</h2>
-				<AddNewSegmentLink />
 			</Card>
 			<CardSortableList disabled={ inFlight || isLoading > 0 } items={ items } onDragCallback={ sortSegments } />
 		</Fragment>
@@ -141,7 +133,6 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 		<Fragment>
 			<Card headerActions noBorder>
 				<h2>{ __( 'You have no saved audience segments.', 'newspack-plugin' ) }</h2>
-				<AddNewSegmentLink />
 			</Card>
 			<p>{ __( 'Create audience segments to target visitors by engagement, activity, and more.', 'newspack-plugin' ) }</p>
 		</Fragment>

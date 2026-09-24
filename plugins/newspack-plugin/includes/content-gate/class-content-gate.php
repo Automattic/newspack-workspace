@@ -27,42 +27,210 @@ class Content_Gate {
 	 *
 	 * @var boolean
 	 */
-	private static $gate_rendered = false;
+	private static bool $gate_rendered = false;
 
 	/**
 	 * Whether the gate is being rendered.
 	 *
 	 * @var boolean
 	 */
-	private static $is_gated = false;
+	private static bool $is_gated = false;
 
 	/**
-	 * Whether the post is being shown via metering.
+	 * Whether the queried post's content is locked for the current reader, i.e.
+	 * fully gated with no access (the content has been replaced by a gate).
+	 *
+	 * Distinct from $is_gated, which only signals that gate markup is being
+	 * rendered: that flag is also raised while building the metering excerpt
+	 * and while rendering an overlay gate for a *metered* (still-readable) post.
+	 * Comment gating must key off the access decision instead so it stays
+	 * correct regardless of when gate markup happens to render. Set once, on the
+	 * `the_post` action, before any content or comments are rendered.
 	 *
 	 * @var boolean
 	 */
-	private static $is_metered = false;
+	private static bool $is_content_locked = false;
+
+	/**
+	 * Request-scoped cache of get_gates() results, keyed by its arguments.
+	 *
+	 * Each miss costs a get_posts() with a meta_query plus a get_gate() per gate,
+	 * and callers hit it once per evaluated post (e.g. every item of an RSS feed),
+	 * so the uncached cost scales with the number of posts on the page. Flushed
+	 * whenever a post or post meta is written (see flush_gates_cache), which
+	 * covers both wp_update_post and the bare update_post_meta() calls that gate
+	 * settings are stored with.
+	 *
+	 * @var array<string,array>
+	 */
+	private static $gates_cache = [];
+
+	/**
+	 * Whether $gates_cache may be read from and written to.
+	 *
+	 * Null means "not resolved yet"; see is_gates_cache_enabled() for the default
+	 * and set_gates_cache_enabled() for why it is overridable.
+	 *
+	 * @var bool|null
+	 */
+	private static $gates_cache_enabled = null;
 
 	/**
 	 * Valid gate post statuses.
 	 *
 	 * @var array
 	 */
-	public static $valid_gate_post_statuses = [ 'publish', 'draft', 'pending', 'future', 'private', 'trash' ];
+	public static array $valid_gate_post_statuses = [ 'publish', 'draft', 'pending', 'future', 'private', 'trash' ];
 
 	/**
-	 * Restricted content per post ID.
+	 * Rendered pieces of each restricted post, keyed by post ID: the teaser and the
+	 * gate HTML. Held separately so the teaser can be handed to the remaining
+	 * 'the_content' filters without exposing the gate HTML to them.
 	 *
-	 * @var string[]
+	 * `source` records which render wrote the entry, and the two paths do not
+	 * produce interchangeable strings: the article render answers to the reader
+	 * making the request, a listing answers to the anonymous one and carries no
+	 * gate. So an entry is only ever handed back to the render that matches it.
+	 * {@see self::get_teaser_outside_article()} takes a listing's own entry alone,
+	 * which keeps the article's reader-specific teaser out of a direct caller's
+	 * hands and out of the shared teaser cache. The substitution filters resolve
+	 * the render they are answering through
+	 * {@see self::get_staged_restriction_for_render()}, which keeps it out of a
+	 * card the block cache serves to whoever comes next. And a listing never
+	 * overwrites an article entry, which carries the gate that page still has to
+	 * render.
+	 *
+	 * @var array<int, array{teaser: string, gate: string, source: string}>
 	 */
-	private static $restricted_content = [];
+	private static array $restricted_content = [];
+
+	/**
+	 * Teasers built for posts appearing outside their own article page, keyed by
+	 * post ID. Reader-independent by construction
+	 * ({@see self::is_withheld_outside_article()}), so it needs no reader key.
+	 *
+	 * @var array<int, string>
+	 */
+	private static array $withheld_teasers = [];
+
+	/**
+	 * Listing teasers staged for individual WP_Post instances, keyed by the
+	 * instance's object id and naming the post each one belongs to.
+	 *
+	 * A loop is handed its own WP_Post instance, so which instance is set up is
+	 * what separates a card for a post from the article render of that same post.
+	 * {@see self::get_staged_restriction_for_render()} is what reads that apart. The
+	 * exception is a query that inherits the main one, which shares its objects
+	 * rather than copying them; {@see self::withhold_post_in_loop()} keeps the
+	 * article's own instance out of this map for that reason.
+	 *
+	 * @var array<int, array{post_id: int, teaser: string}>
+	 */
+	private static array $withheld_instances = [];
+
+	/**
+	 * Whether a listing teaser is being built right now.
+	 *
+	 * The teaser is cached with no reader dimension and served to everyone for an
+	 * hour, so every question asked while it is being built has to answer to the
+	 * anonymous reader. Four places read this flag to do that:
+	 *
+	 * - {@see Block_Visibility::filter_render_block()} evaluates a block's
+	 *   visibility as user 0 and skips the admin bypass.
+	 * - {@see Block_Visibility::evaluation_cache_suffix()} keeps those evaluations
+	 *   out of the entries the article page cached under the same user 0.
+	 * - {@see Access_Rules::evaluate_anonymous_rules()} declines the anonymous
+	 *   bypass, which the `institution` rule grants on an IP match.
+	 * - {@see Content_Restriction_Control::get_gate_memo_key()} keeps the resolved
+	 *   gate and layout out of the article page's memo slot, for the same reason.
+	 *
+	 * A caller that clears the flag mid-build gets all four back at once: the
+	 * memo lands under the article page's key, and the institution bypass comes
+	 * back on inside a string every visitor is then served — an on-campus
+	 * visitor's view of the post published to the public.
+	 *
+	 * @var bool
+	 */
+	private static bool $is_listing_context = false;
+
+	/**
+	 * The post whose teaser has been substituted into an in-flight 'the_content'
+	 * pass, and the gate that pass still owes, keyed by that pass's nesting depth.
+	 *
+	 * The gate is carried here rather than read back from
+	 * self::$restricted_content, so that the pass appends the gate belonging to the
+	 * render it substituted for: a card for the article being read is substituted
+	 * from that article's entry and owes no gate.
+	 *
+	 * Keyed per pass rather than held as a single flag because 'the_content' nests:
+	 * a callback registered after self::RESTRICTION_PRIORITY may run
+	 * apply_filters( 'the_content', … ) itself, and core runs the whole callback
+	 * list again for that inner pass. Sharing one slot, the inner pass would consume
+	 * the outer pass's state, and the outer pass would then fall back to unfiltered
+	 * markup, silently discarding the third-party filtering this substitution exists
+	 * to preserve.
+	 *
+	 * Depth is also what keeps the bookkeeping self-cleaning. Neither filter is
+	 * exception-safe — a callback throwing in between leaves the entry behind — but
+	 * an entry can only ever be read by another pass at that exact depth, and
+	 * {@see self::replace_restricted_content()} claims the slot on the way in, so a
+	 * leftover is overwritten rather than mistaken for the pass now running.
+	 *
+	 * What depth cannot establish on its own is that the pass holding the entry is
+	 * the one that substituted, so {@see self::handle_restricted_content()} pairs it
+	 * with the substitution filter still being registered. That stands in for the
+	 * substitution having run in every ordinary execution, since priorities run
+	 * ascending and core does not revisit one it has passed. Defeating it takes four
+	 * coincident manipulations of this class's own filters: the substitution filter
+	 * removed before self::RESTRICTION_PRIORITY, then re-added by a callback above
+	 * it, over a leftover entry at this same depth, on a restricted post. Short of
+	 * all four the mismatch falls through to the stored teaser and gate, so the
+	 * failure mode this guards against — publishing a restricted body — needs a
+	 * plugin manipulating these filters deliberately rather than an integration
+	 * merely filtering content.
+	 *
+	 * @var array<int, array{post_id: int, gate: string}>
+	 */
+	private static array $pending_gates = [];
+
+	/**
+	 * Priority at which a restricted post's content is swapped for its teaser.
+	 *
+	 * Woo Memberships restricted content at 999. Matching it keeps integrations
+	 * built against Memberships working once a site moves to Access Control, which
+	 * is the reason for substituting here rather than at the end of the chain.
+	 *
+	 * Note the boundary this draws: callbacks at or below this priority still
+	 * receive the full restricted post and their output is still replaced. That is
+	 * the behavior Memberships had, but it means an integration gating its own
+	 * embeds at the default priority of 10 is not covered by this.
+	 */
+	const RESTRICTION_PRIORITY = 999;
+
+	/**
+	 * Object cache group holding the teasers built by
+	 * {@see self::get_teaser_outside_article()}.
+	 */
+	const WITHHELD_TEASER_CACHE_GROUP = 'newspack_withheld_teasers';
+
+	/**
+	 * Origin of a {@see self::$restricted_content} entry written by the article
+	 * render: a teaser and gate built for the reader making the request.
+	 */
+	private const STAGED_BY_ARTICLE = 'article';
+
+	/**
+	 * Origin of a {@see self::$restricted_content} entry written by a listing: a
+	 * teaser built for the anonymous reader, and no gate.
+	 */
+	private const STAGED_BY_LISTING = 'listing';
 
 	/**
 	 * Whether the overlay gate markup has been output in this execution.
 	 *
 	 * @var boolean
 	 */
-	private static $overlay_gate_output = false;
+	private static bool $overlay_gate_output = false;
 
 	/**
 	 * Initialize hooks and filters.
@@ -76,13 +244,23 @@ class Content_Gate {
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 		add_action( 'after_setup_theme', [ __CLASS__, 'register_overlay_gate_hooks' ] );
 		add_action( 'before_delete_post', [ __CLASS__, 'delete_gate_layouts' ], 10, 2 );
+
+		// Keep the get_gates() cache honest across writes (see $gates_cache).
+		add_action( 'save_post', [ __CLASS__, 'flush_gates_cache' ] );
+		add_action( 'deleted_post', [ __CLASS__, 'flush_gates_cache' ] );
+		add_action( 'added_post_meta', [ __CLASS__, 'flush_gates_cache' ] );
+		add_action( 'updated_post_meta', [ __CLASS__, 'flush_gates_cache' ] );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'flush_gates_cache' ] );
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
 		add_filter( 'newspack_reader_activity_article_view', [ __CLASS__, 'suppress_article_view_activity' ], 100 );
 
 		add_action( 'the_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
+		add_action( 'rest_api_init', [ __CLASS__, 'register_rest_filters' ] );
+		add_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ], self::RESTRICTION_PRIORITY );
 		add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
 		add_filter( 'comments_open', [ __CLASS__, 'filter_comments_open' ], 10, 2 );
 		add_filter( 'comments_array', [ __CLASS__, 'filter_comments_array' ], 10, 2 );
+		add_filter( 'rest_pre_insert_comment', [ __CLASS__, 'filter_rest_pre_insert_comment' ], 10, 2 );
 		add_filter( 'get_comments_number', [ __CLASS__, 'filter_comments_number' ], 10, 2 );
 
 		/** Add gate content filters to mimic 'the_content'. See 'wp-includes/default-filters.php' for reference. */
@@ -99,23 +277,42 @@ class Content_Gate {
 
 		include __DIR__ . '/class-content-gate-api.php';
 		include __DIR__ . '/class-content-gate-advanced-settings.php';
+		include __DIR__ . '/class-content-gate-excerpt.php';
 		include __DIR__ . '/class-access-rules.php';
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
 		include __DIR__ . '/class-block-patterns.php';
+		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
 		include __DIR__ . '/class-metering-countdown.php';
 		include __DIR__ . '/content-gifting/class-content-gifting.php';
 		include __DIR__ . '/class-ip-access-rule.php';
+		include __DIR__ . '/class-institution-rest-controller.php';
 		include __DIR__ . '/class-institution.php';
 		include __DIR__ . '/class-newsletters-access.php';
 		include __DIR__ . '/class-user-gate-access.php';
 		include __DIR__ . '/class-premium-newsletters.php';
 		include __DIR__ . '/class-block-visibility.php';
+		include __DIR__ . '/class-gate-preview.php';
+		include __DIR__ . '/class-email-verification-prompt.php';
+
+		Site_Meter::init();
+		Content_Gate\Gate_Preview::init();
 	}
 
 	/**
 	 * Whether the first-party Newspack feature is enabled.
+	 *
+	 * Memoized per request — the underlying constant is immutable for the
+	 * lifetime of a request, and call sites (admin menu, REST registration,
+	 * wizard data, gated callbacks across Group_Subscription_*) consult this
+	 * many times per page. The cache keeps that footprint flat if the check
+	 * grows beyond a constant lookup in the future (license, remote call,
+	 * etc.).
+	 *
+	 * Tests under PHPUnit boot the plugin once and `define()` the constant
+	 * later in per-suite `setUp()` calls. To keep those defines effective,
+	 * skip the cache when `IS_TEST_ENV` is on.
 	 *
 	 * @return bool
 	 */
@@ -131,46 +328,515 @@ class Content_Gate {
 		 *
 		 * @example define( 'NEWSPACK_CONTENT_GATES', true );
 		 */
-		return defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
+			return defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		}
+		static $enabled = null;
+		if ( null === $enabled ) {
+			$enabled = defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		}
+		return $enabled;
 	}
 
 	/**
-	 * Restrict the post.
+	 * Whether gating actually enforces anything for readers right now.
+	 *
+	 * The predicate reader-facing enforcement asks, so that "gating is off" means
+	 * the same thing across the surfaces that share both conditions. Surfaces that
+	 * answer the question for themselves drift, which is what this exists to stop.
+	 *
+	 * ONE DELIBERATE EXCEPTION: {@see Block_Visibility::filter_render_block()} uses
+	 * `Reader_Activation::is_enabled()` alone, not this. Block visibility predates
+	 * the feature constant and is independent of it — the class registers
+	 * unconditionally, its editor panel loads without the constant, and in `custom`
+	 * mode a block needs no gate at all. ANDing the constant in there would unhide
+	 * blocks on sites that never enabled content gates. Don't "fix" it to call this
+	 * method; the asymmetry is the point.
+	 *
+	 * Two conditions, either of which stands gating down:
+	 *
+	 * - The feature constant. Access Control is only on where someone put it.
+	 * - Audience Management (NPPD-1846). Everything a gate hands the reader off
+	 *   to — registration, magic-link sign-in, account emails, session
+	 *   hydration, My Account — is gated on it, so a gate enforced without it
+	 *   locks readers out with no way in. Gates stay configured and go inert
+	 *   instead, which is what lets Audience Management be switched off without
+	 *   stranding a live restriction nobody can reach the screens to lift.
+	 *
+	 * Deliberately NOT the predicate for admin surfaces. The Access Control
+	 * screens stay registered on {@see self::is_newspack_feature_enabled()}
+	 * alone, so the dependency is explained rather than hidden: a publisher
+	 * whose gates are inert can still open the screen and read why. When the
+	 * feature constant retires, the two converge on the reader side and the
+	 * admin side keeps its own predicate.
+	 *
+	 * @return bool
+	 */
+	public static function is_gating_active(): bool {
+		return self::is_newspack_feature_enabled() && Reader_Activation::is_enabled();
+	}
+
+	/**
+	 * The unfiltered half of {@see self::has_first_party_restriction_source()}.
+	 *
+	 * Separate so a caller that combines this with another restriction source
+	 * can apply `newspack_content_gate_has_restriction_source` to the combined
+	 * answer instead of to this half alone. Filtering the half and then OR-ing
+	 * the other source in afterwards silently drops the filter's force-disable
+	 * direction: a callback returning false is overridden by the source that
+	 * was added after it. {@see Content_Gate_Advanced_Settings::has_restriction_source()}
+	 * is the caller that needs this.
+	 *
+	 * Gates only count while gating is active — otherwise a site with inert
+	 * gates pays this check's cost (a get_gates() query, on cache miss) to
+	 * evaluate a restriction that is guaranteed to be a no-op everywhere this
+	 * predicate gates work.
+	 *
+	 * @return bool
+	 */
+	public static function detect_first_party_restriction_source(): bool {
+		return self::is_gating_active()
+			&& ! empty( self::get_gates( self::GATE_CPT, 'publish', false ) );
+	}
+
+	/**
+	 * Whether Newspack's own Content Restriction Control gates could restrict
+	 * a post on this site — independent of WooCommerce Memberships, which is
+	 * a separate restriction source callers combine in for themselves (see
+	 * {@see Content_Gate_Advanced_Settings::has_restriction_source()} for the
+	 * feed path, and {@see self::filter_rest_response()} for REST).
+	 *
+	 * The filtered form, and what a caller wants when this predicate is the
+	 * whole answer — the REST path. A caller that ORs another restriction
+	 * source in afterwards wants {@see self::detect_first_party_restriction_source()}
+	 * instead, and applies the filter to the combined value itself.
+	 *
+	 * Not memoized: the gate lookup itself is cached by self::get_gates(), so
+	 * a second memo here would only add a value that can go stale against the
+	 * cache it was derived from.
+	 *
+	 * @return bool
+	 */
+	public static function has_first_party_restriction_source(): bool {
+		$has_first_party_restriction_source = self::detect_first_party_restriction_source();
+
+		/**
+		 * Filters whether Newspack's own gate mechanism could restrict a post
+		 * on this site.
+		 *
+		 * Every caller of this predicate short-circuits entirely when it's
+		 * false, so code that answers `newspack_is_post_restricted` on its
+		 * own — a publisher plugin restricting posts without publishing a
+		 * gate — must return true here, or its restricted posts ship
+		 * unrestricted through whichever path consulted this.
+		 *
+		 * @param bool $has_first_party_restriction_source Whether a first-party restriction source was detected.
+		 */
+		return (bool) apply_filters( 'newspack_content_gate_has_restriction_source', $has_first_party_restriction_source );
+	}
+
+	/**
+	 * Whether the gate never applies to a post, by post ID alone.
+	 *
+	 * ID comparisons rather than the is_cart()/is_checkout() helpers, so the
+	 * same list can be consulted outside a front-end query. restrict_post()
+	 * keeps those helpers too: they are true in more situations than the page
+	 * ID alone, and the only drift that produces is the front end being
+	 * stricter than a REST read, which is the safe direction.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool Whether the post is excluded from gating.
+	 */
+	private static function is_excluded_from_gating( $post_id ) {
+		$excluded = [
+			(int) get_option( 'wp_page_for_privacy_policy' ),
+			(int) Accessibility_Statement_Page::get_page_id(),
+		];
+		if ( function_exists( 'wc_terms_and_conditions_page_id' ) ) {
+			$excluded[] = (int) wc_terms_and_conditions_page_id();
+		}
+		if ( function_exists( 'wc_get_page_id' ) ) {
+			// wc_get_page_id() returns -1 when the page is not configured.
+			$excluded[] = (int) wc_get_page_id( 'myaccount' );
+			$excluded[] = (int) wc_get_page_id( 'cart' );
+			$excluded[] = (int) wc_get_page_id( 'checkout' );
+		}
+
+		return in_array(
+			(int) $post_id,
+			array_filter(
+				$excluded,
+				static function ( $id ) {
+					return $id > 0;
+				}
+			),
+			true
+		);
+	}
+
+	/**
+	 * Whether $post is restricted for the current reader, independent of
+	 * query context. Decision only — no rendering, and critically no
+	 * mark_gate_as_rendered() side effect. See get_restriction_for_post()'s
+	 * docblock for why that side effect must not live here.
+	 *
+	 * Holds the entitlement half of the restriction decision: the feature flag,
+	 * the Memberships deferral, the page exclusions, and the restriction
+	 * filters. The query-context guards stay in restrict_post(), which is what
+	 * keeps the gate off archives and secondary loops on the front end.
+	 *
+	 * @param \WP_Post $post Post to evaluate.
+	 * @return bool
+	 */
+	private static function should_restrict_post( $post ) {
+		if ( ! $post instanceof \WP_Post ) {
+			return false;
+		}
+		if ( ! self::is_newspack_feature_enabled() ) {
+			return false;
+		}
+		// Don't apply our restriction strategy if Woo Memberships is active.
+		if ( Memberships::is_active() ) {
+			return false;
+		}
+		if ( self::is_excluded_from_gating( $post->ID ) ) {
+			return false;
+		}
+		if ( ! self::is_post_restricted( $post->ID ) ) {
+			return false;
+		}
+		/**
+		 * Filters whether to restrict the post.
+		 *
+		 * @param bool $restrict Whether to restrict the post.
+		 * @param int $post_id Post ID.
+		 */
+		if ( ! apply_filters( 'newspack_content_gate_restrict_post', true, $post->ID ) ) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Render the gate and teaser for a post already decided to be restricted
+	 * — i.e. only ever call this after should_restrict_post( $post ) is true.
+	 *
+	 * Renders only. Does not call mark_gate_as_rendered(): that decision
+	 * belongs to the caller (see get_restriction_for_post()'s docblock), not
+	 * to the render step itself.
+	 *
+	 * @param \WP_Post $post Post to build the restriction for.
+	 * @return array{teaser: string, gate: string}
+	 */
+	private static function build_restriction( $post ) {
+		// Pass the ID explicitly for the same reason self::get_restricted_post_excerpt()
+		// does below: get_gate_layout_id()'s is_singular() fallback resolves to nothing
+		// outside a singular main-query view, and outside that view get_post( false )
+		// falls back to the global $post rather than "no post" — which, from a REST
+		// callback, is the very restricted post being served, defeating the gate.
+		$gate   = self::get_inline_gate_html( $post->ID );
+		$teaser = self::get_restricted_post_excerpt( $post );
+
+		return [
+			'teaser' => $teaser,
+			'gate'   => $gate,
+		];
+	}
+
+	/**
+	 * Resolve the gated substitute for a post, independent of query context.
+	 *
+	 * A thin should_restrict_post()-then-build_restriction() wrapper, kept as
+	 * the one existing entry point so filter_rest_response() (and NPPM-3119's
+	 * planned call site) are unaffected by the split below. Deliberately does
+	 * NOT call mark_gate_as_rendered(): that flag is restrict_post()'s own
+	 * front-end re-entrancy lock (see its docblock and has_rendered()'s), not
+	 * a general "a gate was built" signal, and REST has no analogous
+	 * re-entrancy hazard to guard against — the query-context guards that
+	 * would need it (is_singular(), the main-query check) live in
+	 * restrict_post(), never reached from a REST callback.
+	 *
+	 * Claiming the lock here instead would be unsound: `rest_prepare_{$post_type}`
+	 * fires for an in-process REST dispatch as it does for an external request,
+	 * and dispatchers exist that run during an ordinary front-end page render
+	 * (co-authors-plus's block renderer, newspack-network's hub Woo store,
+	 * newspack-community's moderation list table). A REST read part-way through
+	 * such a render would claim the lock, and the render's own restrict_post()
+	 * call would then see has_rendered() true and bail — serving that page's
+	 * post ungated. test_in_process_rest_dispatch_during_page_render_does_not_disarm_front_end_gating()
+	 * is what holds this.
+	 *
+	 * @param \WP_Post $post Post to evaluate.
+	 * @return array|null Array with 'teaser' and 'gate' keys, or null when the
+	 *                    post is not restricted for the current user.
+	 */
+	public static function get_restriction_for_post( $post ) {
+		if ( ! self::should_restrict_post( $post ) ) {
+			return null;
+		}
+		return self::build_restriction( $post );
+	}
+
+	/**
+	 * Whether a REST request handler is running right now.
+	 *
+	 * Read from core's own dispatch bookkeeping rather than from REST_REQUEST:
+	 * the constant is defined only for an HTTP request that reached
+	 * rest_api_loaded(), so an in-process rest_do_request() — which plugins make
+	 * during a page render — would not be recognised. It is still consulted as a
+	 * fallback, for the window before the server object exists.
+	 *
+	 * Core is asked rather than counted alongside, so there is no second copy of
+	 * the state to get stuck: a route callback that throws skips every `after`
+	 * hook a plugin could hang a decrement on, and a counter left standing would
+	 * make the excerpt filter stand down for the rest of the render. The server
+	 * is read out of the global rather than through rest_get_server(), which
+	 * would instantiate it and fire `rest_api_init` on a request that never
+	 * asked for the API.
+	 *
+	 * @return bool
+	 */
+	public static function is_dispatching_rest(): bool {
+		$server = $GLOBALS['wp_rest_server'] ?? null;
+		if ( $server instanceof \WP_REST_Server && method_exists( $server, 'is_dispatching' ) ) {
+			return $server->is_dispatching();
+		}
+		return defined( 'REST_REQUEST' ) && REST_REQUEST;
+	}
+
+	/**
+	 * Register the REST response filter for every post type exposed in REST.
+	 *
+	 * The `rest_prepare_{$post_type}` hook fires from WP_REST_Posts_Controller.
+	 * A post type declaring its own rest_controller_class never fires it, so the
+	 * filter registered here is inert for such a type.
+	 *
+	 * `np_institution` is the one instance (Institution::register_post_type(),
+	 * `rest_controller_class => Institution_REST_Controller`). Nothing is lost:
+	 * it is `public => false` and its route is gated to an editing capability, so
+	 * there is no reader entitlement for this filter to evaluate. Registering an
+	 * inert filter for it costs nothing, which is why the loop stays a plain
+	 * `show_in_rest` sweep rather than growing an exclusion list.
+	 *
+	 * A post type that both declares its own controller *and* serves reader-facing
+	 * content would be a real gap. None does today; the check is to compare
+	 * `rest_controller_class` registrations against this filter's coverage.
+	 */
+	public static function register_rest_filters() {
+		foreach ( get_post_types( [ 'show_in_rest' => true ], 'names' ) as $post_type ) {
+			add_filter( "rest_prepare_{$post_type}", [ __CLASS__, 'filter_rest_response' ], 10, 3 );
+		}
+	}
+
+	/**
+	 * Substitute a restricted post's body in a REST response.
+	 *
+	 * {@see self::restrict_post()} cannot serve this path: it is hooked on
+	 * 'the_post' and returns early outside a singular main-query view, so
+	 * nothing populates the substitution the content filters read.
+	 *
+	 * Each item decides independently. No state is shared between items and
+	 * has_rendered()/mark_gate_as_rendered() are deliberately not consulted
+	 * here: they mean "one gate per page render", and honoring them in a
+	 * collection would gate the first item and serve the rest intact.
+	 *
+	 * @param \WP_REST_Response $response Response object.
+	 * @param \WP_Post          $post     Post being prepared.
+	 * @param \WP_REST_Request  $request  Request object.
+	 * @return \WP_REST_Response The response, with a restricted body substituted.
+	 */
+	public static function filter_rest_response( $response, $post, $request ) {
+		if ( ! self::is_newspack_feature_enabled() ) {
+			return $response;
+		}
+		if ( ! $response instanceof \WP_REST_Response || ! $post instanceof \WP_Post ) {
+			return $response;
+		}
+		// The block editor. Already gated behind an edit capability, and an
+		// editor whose reader account lacks entitlement must still be able to
+		// edit the post.
+		if ( 'edit' === $request['context'] ) {
+			return $response;
+		}
+		// Nothing this filter can restrict exists on this site unless a
+		// first-party Content Gate is published and active.
+		// has_first_party_restriction_source() is shared with the feed path's
+		// equivalent guard (Content_Gate_Advanced_Settings::has_restriction_source()),
+		// including the `newspack_content_gate_has_restriction_source` filter
+		// seam, but Memberships is combined in differently here: that method
+		// ORs in Memberships::is_active(), which is correct for the feed path
+		// (it asks `newspack_is_post_restricted` directly, and Memberships
+		// answers that filter on its own) but wrong for this REST path —
+		// get_restriction_for_post() below defers to Memberships
+		// unconditionally ("Don't apply our restriction strategy if Woo
+		// Memberships is active") and always returns null while it is
+		// active, so a Memberships-only site can never be restricted by this
+		// filter regardless of gates. Reusing has_restriction_source()
+		// (Memberships included) here would keep forcing the no-cache
+		// opt-in below on every REST-exposed post type on such a site for
+		// nothing — the exact waste this guard exists to avoid.
+		//
+		// Premium-newsletter gates are not counted as a restriction source here.
+		// They gate `newspack_nl_list`, which registers `show_in_rest => false`
+		// and so never reaches this hook; revisit if that changes.
+		if ( Memberships::is_active() || ! self::has_first_party_restriction_source() ) {
+			return $response;
+		}
+		// A password-protected body core withheld is the more restrictive
+		// authority here: substituting would hand back the gate's teaser for a
+		// post the same caller cannot read at all on the front end.
+		//
+		// post_password_required() cannot answer that on its own.
+		// WP_REST_Posts_Controller::prepare_item_for_response() adds a
+		// `post_password_required` override (check_password_required()) while it
+		// builds content.rendered, then removes it before firing this hook, so by
+		// the time we run the function reports true again even on a response
+		// carrying the full body. $post->post_password is never touched.
+		//
+		// So ask the controller that built the response, using the predicate it
+		// used. Reading content.rendered instead misjudges every response that
+		// omits the field — context=embed, or a _fields list without it — where
+		// core withheld nothing and the excerpt still carries the real body.
+		//
+		// Holding the password is not the gate's entitlement, so a caller who has
+		// it still falls through to the restriction check below.
+		//
+		// Known gap, not fixed here: when core did withhold the body, this returns
+		// early and none of the substitutions below run — including comment_status,
+		// which stays whatever core reported rather than being forced to 'closed'.
+		// No content is disclosed (there was none to disclose), just a
+		// comment-status mismatch against the front end.
+		if ( \post_password_required( $post ) && ! self::rest_caller_has_post_password( $post, $request ) ) {
+			return $response;
+		}
+
+		// The restriction filter is not a pure predicate: metering records
+		// consumption as a side effect of granting access. A collection read
+		// would spend one view per item for articles the reader never opened,
+		// so metering is short-circuited for the whole REST path.
+		$short_circuit = static function () {
+			return true;
+		};
+		add_filter( 'newspack_content_gate_metering_short_circuit', $short_circuit );
+		try {
+			$restriction = self::get_restriction_for_post( $post );
+		} finally {
+			// Required: without it a throw leaves metering disabled for the
+			// remainder of the request.
+			remove_filter( 'newspack_content_gate_metering_short_circuit', $short_circuit );
+		}
+
+		// Entitlement was evaluated, so this response depends on the reader
+		// whatever the outcome — including when nothing was substituted, which
+		// is the full-content response a shared cache must not hand to the next
+		// anonymous caller. Core resolves this filter once per response in
+		// WP_REST_Server::serve_request(), after dispatch, so adding it while
+		// items are prepared is in time and covers collections, where per-item
+		// response headers are discarded.
+		//
+		// Deliberately not removed, unlike the metering short-circuit above. It has
+		// to outlive this callback to be read at serve_request() time, so there is
+		// no scope to restore it to. The cost is that an in-process dispatch during
+		// a front-end render (the co-authors-plus / newspack-network / community
+		// cases named on get_restriction_for_post()) leaves the flag set for the
+		// rest of that request. That only ever suppresses caching of a response
+		// this filter has already judged reader-dependent, so erring on the side of
+		// leaving it set is the safe direction.
+		add_filter( 'rest_send_nocache_headers', '__return_true' );
+
+		if ( null === $restriction ) {
+			return $response;
+		}
+
+		// Replace only keys the response already carries. context=embed omits
+		// content entirely, and writing it would fabricate a key core never
+		// emits — changing the response shape for consumers that branch on key
+		// presence. 'embed' is neither 'view' nor 'edit', so the context check
+		// above does not cover it.
+		$data = $response->get_data();
+		if ( isset( $data['content']['rendered'] ) ) {
+			$data['content']['rendered'] = $restriction['teaser'] . $restriction['gate'];
+		}
+		if ( isset( $data['excerpt']['rendered'] ) ) {
+			// excerpt.rendered is a summary surface, like the feed <description>:
+			// prefer the author's excerpt over the teaser. content.rendered above
+			// stays the teaser — it is the body-substitute the front end renders.
+			$data['excerpt']['rendered'] = self::get_withheld_summary( $post, $restriction['teaser'] );
+		}
+		if ( isset( $data['comment_status'] ) ) {
+			$data['comment_status'] = 'closed';
+		}
+		$response->set_data( $data );
+
+		return $response;
+	}
+
+	/**
+	 * Whether the request carries what core needs to serve a password-protected body.
+	 *
+	 * Defers to the controller that prepared the response instead of re-deriving
+	 * the comparison, so the edit-context exemption and the password check stay
+	 * core's to define. A post type served by something other than a posts
+	 * controller has no such predicate to consult and is reported as withheld,
+	 * which leaves core's own output untouched.
+	 *
+	 * @param \WP_Post         $post    Post being prepared.
+	 * @param \WP_REST_Request $request Request object.
+	 * @return bool
+	 */
+	private static function rest_caller_has_post_password( $post, $request ) {
+		if ( ! $request instanceof \WP_REST_Request ) {
+			return false;
+		}
+		$post_type = get_post_type_object( $post->post_type );
+		if ( ! $post_type instanceof \WP_Post_Type || ! method_exists( $post_type, 'get_rest_controller' ) ) {
+			return false;
+		}
+		$controller = $post_type->get_rest_controller();
+		if ( ! $controller instanceof \WP_REST_Posts_Controller ) {
+			return false;
+		}
+		return (bool) $controller->can_access_password_content( $post, $request );
+	}
+
+	/**
+	 * Stage a post's gated substitute for the rest of the request.
+	 *
+	 * Two paths. The article being read takes the full one: teaser, gate markup,
+	 * and the once-per-request render lock. Every other post passing through a
+	 * loop — a Query Loop, a listing block, a related-posts widget — takes the
+	 * light one in {@see self::withhold_post_in_loop()}, which withholds the body
+	 * and never renders a gate.
 	 *
 	 * @param \WP_Post  $post Post object.
 	 * @param \WP_Query $query Query object.
 	 */
 	public static function restrict_post( $post, $query ) {
-		if ( self::has_rendered() ) {
-			return;
-		}
-		if ( ! $query->is_main_query() ) {
-			return;
-		}
-		if ( ! is_singular() ) {
-			return;
-		}
-		if ( get_queried_object_id() !== $post->ID ) {
-			return;
-		}
 		// Don't apply our restriction strategy if Woo Memberships is active.
 		if ( Memberships::is_active() ) {
 			return;
 		}
-		// Never restrict posts in the admin.
-		if ( is_admin() ) {
+		// Never restrict posts for the person authoring them. Gated on that person
+		// being able to author this post: is_admin() is true under admin-ajax, which
+		// newspack-theme's Jetpack infinite scroll uses to fetch archive pages 2 and
+		// up — a real loop, rendering the_content() for a reader with no entitlement.
+		// Mirrors Block_Visibility::filter_render_block().
+		if ( is_admin() && current_user_can( 'edit_post', $post->ID ) ) {
 			return;
 		}
-		// Never in Privacy Policy page.
-		if ( is_privacy_policy() ) {
+		// Feeds carry a restriction layer of their own
+		// ({@see Content_Gate_Advanced_Settings}), which answers for the whole
+		// feed on a filter of its own rather than per loop iteration.
+		if ( is_feed() ) {
 			return;
 		}
+		// Page-level guards: true for every post in the request rather than for
+		// one post, which is why they sit ahead of the split below. Every
+		// exclusion that can be decided from the post ID alone — Privacy Policy,
+		// Terms and Conditions, Accessibility Statement, and the WooCommerce page
+		// IDs — lives in is_excluded_from_gating(), which both paths run.
 		// Never in My Account pages.
 		if ( function_exists( 'is_account_page' ) && is_account_page() ) {
-			return;
-		}
-		// Never in Terms and Conditions page.
-		if ( function_exists( 'wc_terms_and_conditions_page_id' ) && $post->ID === wc_terms_and_conditions_page_id() ) {
 			return;
 		}
 		// Never in WooCommerce cart page.
@@ -181,56 +847,691 @@ class Content_Gate {
 		if ( function_exists( 'is_checkout' ) && is_checkout() ) {
 			return;
 		}
-		// Never on Accessibility Statement page.
-		if ( $post->ID === get_theme_mod( 'accessibility_statement_page_id' ) ) {
+
+		if ( ! $query->is_main_query() || ! is_singular() || get_queried_object_id() !== $post->ID ) {
+			// `the_post` is not loop-only. WP_Query::setup_postdata() fires it too,
+			// and WP_REST_Posts_Controller::prepare_item_for_response() calls that
+			// for every item it serves — so without this test the light path would
+			// answer REST reads, where entitlement is evaluated per requester by
+			// self::filter_rest_response() instead. in_the_loop is what separates
+			// the two: WP_Query::the_post() sets it before firing the action, and
+			// a bare setup_postdata() leaves it as it found it.
+			if ( ! empty( $query->in_the_loop ) ) {
+				self::withhold_post_in_loop( $post );
+			}
 			return;
 		}
 
-		// If no other restrictions apply.
-		if ( ! self::is_post_restricted( $post->ID ) ) {
-			return;
-		}
-		if (
-			/**
-			 * Filters whether to restrict the post.
-			 *
-			 * @param bool $restrict Whether to restrict the post.
-			 * @param int $post_id Post ID.
-			 */
-			! apply_filters( 'newspack_content_gate_restrict_post', true, $post->ID )
-		) {
-			// Content is accessible via metering — show comments but prevent commenting.
-			self::$is_metered        = true;
-			$post->comment_status    = 'closed';
+		// Guards the gate render below, not the withholding above. Held inside
+		// this branch so that a listing rendered before the article cannot claim
+		// the lock and leave the article itself ungated.
+		if ( self::has_rendered() ) {
 			return;
 		}
 
-		self::$is_gated = true;
+		// Not get_restriction_for_post(): the lock has to be claimed between the
+		// decision and the renders below, and that wrapper never claims it.
+		if ( ! self::should_restrict_post( $post ) ) {
+			// A listing rendered above the main loop stages the anonymous teaser
+			// for every restricted post it shows, this article included. This
+			// reader is entitled to it, so the slot is the article's to clear:
+			// replace_restricted_content() substitutes from it, and a teaser left
+			// standing would hand a subscriber a stub of the post they paid for.
+			// The restricted branch below overwrites the entry for the same reason.
+			unset( self::$restricted_content[ $post->ID ] );
+			return;
+		}
 
-		$content = self::get_restricted_post_excerpt( $post );
+		self::$is_gated          = true;
+		self::$is_content_locked = true;
 
-		$post->post_content   = $content . self::get_inline_gate_html();
+		// Mark before rendering: the renders below run the post content and
+		// the gate layout through the block pipeline, and any block that runs
+		// a secondary loop ends it with wp_reset_postdata(), which re-fires
+		// `the_post` for the main post. The has_rendered() guard above must
+		// already be set by then, or this method re-enters itself unboundedly
+		// (#821). Marked here, before build_restriction() runs either render,
+		// rather than inside build_restriction() itself: REST
+		// (filter_rest_response(), via the thin get_restriction_for_post()
+		// wrapper) calls build_restriction() too, indirectly, and must NOT
+		// claim this lock — see get_restriction_for_post()'s docblock for the
+		// in-process-REST-dispatch-during-a-page-render scenario that rules
+		// out claiming it anywhere build_restriction() itself could reach.
+		self::mark_gate_as_rendered();
+
+		$restriction = self::build_restriction( $post );
+		$content     = $restriction['teaser'];
+		$gate_html   = $restriction['gate'];
+
+		// Note that this does not feed the 'the_content' chain: core generates the
+		// post's page data before firing 'the_post', so the chain is handed the
+		// original body regardless. The assignment is for the other readers of the
+		// global post object, and is why the filters below have to substitute the
+		// teaser themselves.
+		$post->post_content   = $content . $gate_html;
 		$post->post_excerpt   = $content;
 		$post->comment_status = 'closed';
 		$post->comment_count  = 0;
 
-		self::$restricted_content[ $post->ID ] = $post->post_content;
-
-		self::mark_gate_as_rendered();
+		self::$restricted_content[ $post->ID ] = [
+			'teaser' => $content,
+			'gate'   => $gate_html,
+			'source' => self::STAGED_BY_ARTICLE,
+		];
 	}
 
 	/**
-	 * Handle restricted post content filtering.
+	 * Withhold a restricted post's body everywhere but its own article page.
+	 *
+	 * The gate belongs to the article render alone, so this stages the teaser and
+	 * no gate: a listing repeats the free opening, it does not repeat the call to
+	 * action. {@see self::replace_restricted_content()} reads what is staged here.
+	 *
+	 * @param \WP_Post $post Post object.
+	 */
+	private static function withhold_post_in_loop( $post ) {
+		if ( ! $post instanceof \WP_Post ) {
+			return;
+		}
+
+		// The queried post's own WP_Post instance belongs to the article path, and a
+		// loop handing that object back is not showing a card. A Query Loop set to
+		// inherit the main query is the case: render_block_core_post_template()
+		// shallow-clones $wp_query while in the loop, so the clone's posts are the
+		// very objects the main query holds and its the_post() sets up the article's
+		// own instance. Recording it below would mark the article as a card, and
+		// every later 'the_content' pass over it — the body pass, or a loop inside
+		// the body, which do_blocks renders at priority 9 ahead of the substitution
+		// at self::RESTRICTION_PRIORITY — would be answered as one: the anonymous
+		// teaser and no gate, leaving a restricted reader the free opening and
+		// nothing to act on. The mutation at the foot of this method would also
+		// overwrite the teaser and gate restrict_post() wrote onto that object.
+		//
+		// Such a loop is answered from the article's entry instead, gate and all.
+		// Two calls to action on one page is the cost of a loop that shares the
+		// object, and it is the direction that keeps the call to action on the page.
+		//
+		// For a reader the gate lets through there is no entry to answer from:
+		// restrict_post() clears the slot, and this return skips the teaser build
+		// and the post_content write, so an inheriting card renders that reader the
+		// whole body. It is the one listing surface where the "one string for every
+		// reader" invariant {@see self::$restricted_content} states does not hold,
+		// and it gives away nothing: the same reader has the body in the article one
+		// block down, and nothing reader-blind caches a core Query Loop.
+		//
+		// The identity test alone is not enough, hence the request shape. An
+		// archive's main loop hands back $wp_the_query->post too, and there that
+		// object is a card: drop this half and the first card on every archive and
+		// on the home page publishes the paid body. Asked of $wp_the_query rather
+		// than the current query so both halves read one object; a legacy
+		// query_posts() is what separates the two.
+		$main_query = $GLOBALS['wp_the_query'] ?? null;
+		if ( $main_query instanceof \WP_Query && $main_query->is_singular() && $post === $main_query->post ) {
+			return;
+		}
+
+		// The queried post itself is not exempted, only that one instance. A listing
+		// above the main loop reaches this method for the queried post too, is
+		// handed its own instance for it, and the entry it leaves carries no gate,
+		// so restrict_post() owns that slot on the article path: it overwrites the
+		// entry with the gate for a restricted reader and clears it for an entitled
+		// one. Deciding the withholding from the post and the request rather than
+		// from whether staging has already happened is what covers a classic theme's
+		// pre-loop widget areas, where the listing renders first.
+
+		// Always the listing teaser, never whatever is staged. A listing below the
+		// article lists the article too, and the entry standing there is then the
+		// article render's, built for the reader making the request — handing it
+		// back would repeat that reader's view of the post in a card the block
+		// cache serves to whoever comes next.
+		$teaser = self::get_teaser_outside_article( $post );
+		if ( null === $teaser ) {
+			return;
+		}
+
+		// Record the instance this teaser belongs to. A card for the article being
+		// read and that article's own body pass share a post id, and the instance
+		// set up is the one thing that separates them, so this is what the
+		// substitution filters resolve the two apart by. See
+		// self::get_staged_restriction_for_render().
+		self::$withheld_instances[ spl_object_id( $post ) ] = [
+			'post_id' => $post->ID,
+			'teaser'  => $teaser,
+		];
+
+		// Substitute on every pass. One post can pass through several loops in a
+		// request — a Query Loop and a sidebar listing over the same posts — and
+		// every loop is handed its own WP_Post instance, bar the inheriting query
+		// the guard above returns for, so leaving the later
+		// instances to a staged entry would leave them carrying the full body. A
+		// block that builds its own excerpt from post_content, as newspack-blocks'
+		// Homepage Posts does, then publishes it.
+		//
+		// Staged here rather than in get_teaser_outside_article(): this map is what
+		// replace_restricted_content() substitutes from, so writing it is a claim
+		// that this post is being rendered. Asking for a post's teaser — which an
+		// excerpt does — must not make that claim on its behalf. An article entry
+		// already in the slot stands: it carries the gate that page still has to
+		// render, on this pass and on any later one. A listing entry is rewritten
+		// instead. A nested loop over this post can stage the empty slot
+		// build_withheld_teaser() claims while that build is still running, and
+		// rewriting is what replaces the empty string with the finished teaser.
+		if ( self::STAGED_BY_ARTICLE !== ( self::$restricted_content[ $post->ID ]['source'] ?? '' ) ) {
+			self::$restricted_content[ $post->ID ] = [
+				'teaser' => $teaser,
+				'gate'   => '',
+				'source' => self::STAGED_BY_LISTING,
+			];
+		}
+
+		// post_excerpt is deliberately left alone. Empty, it makes core build the
+		// excerpt from post_content — now the teaser — so the trimming and the
+		// "read more" suffix stay core's to decide; non-empty, it is the author's
+		// own words about a post they chose to gate, and survives.
+		$post->post_content = $teaser;
+	}
+
+	/**
+	 * The teaser that stands in for a post's body outside its own article page,
+	 * or null when the post is not withheld there.
+	 *
+	 * Public because a surface that builds its own excerpt never reaches the
+	 * staged substitution: newspack-listings' REST controller assembles listing
+	 * items from `post_content` outside any loop, so `the_post` never fires for
+	 * them and nothing withholds the body.
+	 *
+	 * The result is shared: it is memoised for the request and written to a
+	 * persistent object-cache group with an hour's expiry, under a key carrying no
+	 * reader dimension. Two properties make that safe, and a caller changing either
+	 * one breaks it for every reader on the site. The verdict is reader-independent
+	 * ({@see self::is_withheld_outside_article()}), and so is the render: the body
+	 * runs through the block pipeline with the anonymous reader in scope, so a
+	 * members-only block in the free opening cannot reach the teaser whoever warms
+	 * it. The key carries every input that shapes the string — the post's revision,
+	 * the layout, and the layout settings the excerpt is sliced by — so an edit
+	 * produces a new key rather than needing an invalidation hook.
+	 *
+	 * @param \WP_Post $post Post object.
+	 * @return string|null
+	 */
+	public static function get_teaser_outside_article( $post ) {
+		if ( ! $post instanceof \WP_Post ) {
+			return null;
+		}
+
+		// A password-protected post is core's to withhold: the_content() is handed
+		// the password form, and substituting a teaser for it would publish the
+		// free opening of a post core meant to show nothing of, and drop the form
+		// with it. self::can_access_password_content() yields to core on the REST
+		// path for the same reason. Guarded here rather than at each caller so that
+		// a direct one — newspack-listings builds its listing excerpts from this —
+		// cannot put the opening words of a protected post into the shared teaser
+		// cache.
+		if ( post_password_required( $post ) ) {
+			return null;
+		}
+
+		// Only a listing's own entry. The article render writes this map too, and
+		// its teaser answers to the reader that page was built for: a block that
+		// varies by entitlement inside the free opening reaches it, and the cache
+		// below has no reader dimension to keep it in.
+		if ( self::STAGED_BY_LISTING === ( self::$restricted_content[ $post->ID ]['source'] ?? '' ) ) {
+			return self::$restricted_content[ $post->ID ]['teaser'];
+		}
+		if ( isset( self::$withheld_teasers[ $post->ID ] ) ) {
+			return self::$withheld_teasers[ $post->ID ];
+		}
+		if ( Memberships::is_active() ) {
+			return null;
+		}
+
+		// The verdict, the layout it resolves and the render all run with the
+		// listing reader in scope, so the three cannot answer to different readers
+		// between them.
+		return self::in_listing_context(
+			function () use ( $post ) {
+				return self::build_withheld_teaser( $post );
+			}
+		);
+	}
+
+	/**
+	 * Build and cache a post's withheld teaser, or null when it is not withheld.
+	 *
+	 * Runs inside {@see self::in_listing_context()}; every reader-facing question
+	 * it asks is answered for the anonymous reader on that basis.
+	 *
+	 * @param \WP_Post $post Post object.
+	 * @return string|null
+	 */
+	private static function build_withheld_teaser( $post ) {
+		if ( ! self::is_withheld_outside_article( $post ) ) {
+			return null;
+		}
+
+		// The layout is resolved for the same anonymous reader the decision was
+		// made for, so a gate's configured paragraph count still shapes the teaser
+		// without making it vary per reader. A map read, not an evaluation:
+		// is_withheld_outside_article() above is what populated it.
+		$gate_layout_id = Content_Restriction_Control::get_gate_layout_id( $post->ID, 0 );
+
+		// Every input the slicing reads is in the key. The post's revision covers
+		// the body; the layout id covers a switch to another gate; the settings
+		// cover an edit to the layout itself, which changes how much of the body is
+		// free without touching the article's modified time. Building a teaser
+		// costs a full body render — get_restricted_post_excerpt_for_gate() runs
+		// the post through `newspack_gate_content` and slices the result — and a
+		// listing pays it once per card, so the entry is worth keeping across
+		// requests.
+		$cache_key = md5(
+			wp_json_encode(
+				[
+					$post->ID,
+					$post->post_modified_gmt,
+					$gate_layout_id,
+					self::get_teaser_layout_settings( $gate_layout_id ),
+				]
+			)
+		);
+		$cached    = wp_cache_get( $cache_key, self::WITHHELD_TEASER_CACHE_GROUP );
+		if ( is_string( $cached ) ) {
+			self::$withheld_teasers[ $post->ID ] = $cached;
+			return $cached;
+		}
+
+		// Claim the slot before building the teaser. The build runs the body
+		// through the block pipeline, and a block that runs a secondary loop ends
+		// it with wp_reset_postdata(), which re-fires `the_post` for this post and
+		// re-enters this method — the same re-entrancy the article path holds off
+		// with its render lock (#821).
+		self::$withheld_teasers[ $post->ID ] = '';
+
+		$teaser = self::get_restricted_post_excerpt_for_gate( $post, $gate_layout_id );
+
+		self::$withheld_teasers[ $post->ID ] = $teaser;
+		wp_cache_set( $cache_key, $teaser, self::WITHHELD_TEASER_CACHE_GROUP, HOUR_IN_SECONDS );
+
+		return $teaser;
+	}
+
+	/**
+	 * Whether a loop in this request has already staged a withheld body for a post.
+	 *
+	 * Writing this map is how {@see self::restrict_post()} records that a post is
+	 * being rendered rather than read, so it is the one signal that separates the
+	 * two inside a REST dispatch. `in_the_loop()` cannot: it reports on the main
+	 * query, and a route running its own WP_Query never sets that flag.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	public static function has_staged_restriction( $post_id ): bool {
+		return isset( self::$restricted_content[ $post_id ] );
+	}
+
+	/**
+	 * Whether the render in progress is a listing teaser.
+	 *
+	 * Block visibility, its evaluation cache, the anonymous access rules and the
+	 * gate memo key all answer to the anonymous reader while this is true. See
+	 * {@see self::$is_listing_context} for the four callers and for what a caller
+	 * clearing it mid-build gives away.
+	 *
+	 * @return bool
+	 */
+	public static function is_listing_context(): bool {
+		return self::$is_listing_context;
+	}
+
+	/**
+	 * Run a build with the listing reader in scope.
+	 *
+	 * Restores the previous value rather than clearing it: the block pipeline
+	 * nests, and a block inside a teaser that lists another withheld post builds
+	 * that post's teaser from inside this one.
+	 *
+	 * @param callable $build Callback producing the teaser.
+	 * @return mixed The callback's return value.
+	 */
+	private static function in_listing_context( $build ) {
+		$was_listing_context      = self::$is_listing_context;
+		self::$is_listing_context = true;
+		try {
+			return $build();
+		} finally {
+			self::$is_listing_context = $was_listing_context;
+		}
+	}
+
+	/**
+	 * Whether a post's body must be withheld outside its own article page.
+	 *
+	 * Answers for an anonymous reader, not for the one making the request, and
+	 * that is the point rather than an approximation. Newspack's block cache keys
+	 * rendered listing markup by block attributes and position with no reader
+	 * dimension, so a listing that varied by entitlement would be handed to the
+	 * next reader along. Everyone sees the teaser in a listing; a reader who is
+	 * entitled to the post reads it in full on the article page.
+	 *
+	 * Deliberately not should_restrict_post(), which answers for the current
+	 * reader and consults `newspack_content_gate_restrict_post` — whose callbacks
+	 * hand out per-reader bypasses (a gift link, a metered view). This asks the
+	 * first-party gates directly instead.
+	 * {@see Block_Visibility::strip_blocks_hidden_from_public()} evaluates against
+	 * the same reader, for the same reason.
+	 *
+	 * Going straight to Content_Restriction_Control also skips the
+	 * `newspack_is_post_restricted` filter, so a restriction source that answers
+	 * only through that filter — a publisher plugin gating posts without
+	 * publishing a gate — is not withheld here, and its posts appear in full in
+	 * listings. That is the price of the invariant: the filter takes no user
+	 * argument, so consulting it would reintroduce exactly the per-request
+	 * variance this method exists to avoid. The per-post exemption meta is the
+	 * reader-independent opt-out, and it works on both paths.
+	 *
+	 * @param \WP_Post $post Post object.
+	 * @return bool
+	 */
+	private static function is_withheld_outside_article( $post ): bool {
+		if ( ! self::is_newspack_feature_enabled() ) {
+			return false;
+		}
+		if ( self::is_excluded_from_gating( $post->ID ) ) {
+			return false;
+		}
+		// Asked from inside the listing context, which is what switches off the
+		// anonymous bypass and keeps the answer off the article page's memo slot.
+		return (bool) Content_Restriction_Control::is_post_restricted( false, $post->ID, 0 );
+	}
+
+	/**
+	 * The staged pieces a 'the_content' pass over a restricted post is answered
+	 * from — the teaser to substitute, and the gate that pass owes — or null when
+	 * nothing is staged for the post.
+	 *
+	 * One post can be both the article being read and a card in a listing on that
+	 * same page, and the two are not answered alike. The article's entry holds a
+	 * teaser built for the reader making the request and the gate that page still
+	 * has to render; a card gets the anonymous teaser and no gate. Handing a card
+	 * the article's entry would repeat that reader's view of the post in markup the
+	 * block cache serves to whoever comes next, and repeat the call to action with
+	 * it — the registration form, and its element ids, once per card.
+	 *
+	 * The WP_Post instance set up is what tells the two apart: every loop is handed
+	 * its own, and {@see self::withhold_post_in_loop()} records the ones it
+	 * withheld. The exception is a query inheriting the main one, which shares the
+	 * article's instance rather than copying it and which that method deliberately
+	 * leaves out of the map; its cards fall through to the staged entry below and
+	 * are answered like the article, gate and all. The post id cannot tell the two
+	 * apart, since both renders are of the same post, and neither can
+	 * `in_the_loop()`, which reports on the main query and is true throughout a
+	 * listing rendered from inside the main loop's template.
+	 *
+	 * @param int $post_id Post being rendered.
+	 * @return array{teaser: string, gate: string}|null
+	 */
+	private static function get_staged_restriction_for_render( $post_id ) {
+		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
+			return null;
+		}
+
+		$staged = self::$restricted_content[ $post_id ];
+
+		// Only an article entry has to be resolved against the instance. A listing
+		// entry already holds the anonymous teaser and an empty gate, which is what
+		// a card is answered with either way.
+		if ( self::STAGED_BY_ARTICLE === $staged['source'] ) {
+			$card_teaser = self::get_withheld_instance_teaser( $post_id );
+			if ( null !== $card_teaser ) {
+				return [
+					'teaser' => $card_teaser,
+					'gate'   => '',
+				];
+			}
+		}
+
+		return [
+			'teaser' => $staged['teaser'],
+			'gate'   => $staged['gate'],
+		];
+	}
+
+	/**
+	 * The listing teaser staged for the post object set up right now, or null when
+	 * that object is not one a loop withheld.
+	 *
+	 * The entry names its post as well as its instance, because an object id is
+	 * reused once the instance holding it is freed. The instance the article render
+	 * answers to is allocated before any listing on the page runs and outlives them
+	 * all, so a freed listing instance's id cannot come back as the article's.
+	 *
+	 * Reading the render's identity off the global is what a stale global costs. A
+	 * loop inside the body that lists the article and skips wp_reset_postdata()
+	 * leaves the global on that card's instance, so the article's own pass is
+	 * answered as a card and the page loses its gate. Pinning the article's
+	 * instance does not help: the stale global is a genuine card instance, and no
+	 * state separates that pass from the card's. First-party code resets — core's
+	 * post template and newspack-blocks' articles-loop.php both do, and
+	 * newspack-listings never touches the global — so this needs a third-party or
+	 * legacy loop.
+	 *
+	 * @param int $post_id Post being rendered.
+	 * @return string|null
+	 */
+	private static function get_withheld_instance_teaser( $post_id ) {
+		$post = $GLOBALS['post'] ?? null;
+		if ( ! $post instanceof \WP_Post ) {
+			return null;
+		}
+
+		$withheld = self::$withheld_instances[ spl_object_id( $post ) ] ?? null;
+		if ( null === $withheld || $withheld['post_id'] !== (int) $post_id ) {
+			return null;
+		}
+
+		return $withheld['teaser'];
+	}
+
+	/**
+	 * Substitute a restricted post's content for its teaser, early enough that the
+	 * remaining 'the_content' filters still run over it.
+	 *
+	 * Third-party integrations gate their own embeds on 'the_content' – the Everlit
+	 * audio player, which registers at priority 999999, is the known case. Handing
+	 * them the teaser lets their gating compose with the paywall the way it did
+	 * under Woo Memberships, whose restriction filter ran at 999. Returning the
+	 * full post here and discarding the filtered result instead would leave those
+	 * embeds ungated on restricted posts.
+	 *
+	 * The gate HTML is deliberately excluded; {@see self::handle_restricted_content()}
+	 * appends it once every other filter has run, so neither a callback at a lower
+	 * priority nor one registered at PHP_INT_MAX before this class hooks in can
+	 * rewrite the gate markup itself. A PHP_INT_MAX callback registered afterwards
+	 * does run last within that priority and does see the gate; nothing but
+	 * registration order separates the two, so this is a boundary against ordinary
+	 * integrations rather than against a plugin that means to reach the markup.
 	 *
 	 * @param string $content Content.
 	 *
 	 * @return string
 	 */
-	public static function handle_restricted_content( $content ) {
-		if ( ! isset( self::$restricted_content[ get_the_ID() ] ) ) {
+	public static function replace_restricted_content( $content ) {
+		$post_id = get_the_ID();
+		$depth   = self::get_content_filter_depth();
+
+		// Claim this pass's slot before anything else, so an entry a previous pass
+		// at this depth left behind – a callback between the two filters throwing,
+		// with the exception caught upstream – cannot be read as if it belonged to
+		// this pass.
+		unset( self::$pending_gates[ $depth ] );
+
+		$staged = self::get_staged_restriction_for_render( $post_id );
+		if ( null === $staged ) {
 			return $content;
 		}
-		return self::$restricted_content[ get_the_ID() ];
+
+		self::$pending_gates[ $depth ] = [
+			'post_id' => $post_id,
+			'gate'    => $staged['gate'],
+		];
+		return $staged['teaser'];
+	}
+
+	/**
+	 * Append the gate to a restricted post after all other content filters have run.
+	 *
+	 * @param string $content Content, expected to be the teaser as returned by
+	 *                        {@see self::replace_restricted_content()} and processed
+	 *                        by any later 'the_content' filters.
+	 *
+	 * @return string
+	 */
+	public static function handle_restricted_content( $content ) {
+		$post_id = get_the_ID();
+		$depth   = self::get_content_filter_depth();
+
+		$pending = self::$pending_gates[ $depth ] ?? null;
+		unset( self::$pending_gates[ $depth ] );
+
+		// Close only a substitution this same pass opened, which the nesting depth
+		// is what establishes. A later filter may run 'the_content' again – related
+		// posts, summaries – and that inner pass gets a depth of its own, so it can
+		// neither consume this pass's pending gate nor be handed it.
+		//
+		// The post is taken from the entry rather than from get_the_ID(), which a
+		// callback may have moved off the post whose teaser is in hand; and the
+		// entry is trusted only while the substitution is still registered, since
+		// short of that filter being removed and re-added mid-chain no pass can
+		// have substituted, and the body in hand is the unrestricted post. See
+		// self::$pending_gates for what that proxy does and does not establish.
+		if (
+			null !== $pending
+			&& isset( self::$restricted_content[ $pending['post_id'] ] )
+			&& has_filter( 'the_content', [ __CLASS__, 'replace_restricted_content' ] )
+		) {
+			return $content . $pending['gate'];
+		}
+
+		$staged = self::get_staged_restriction_for_render( $post_id );
+		if ( null === $staged ) {
+			return $content;
+		}
+
+		// The teaser substitution did not run for this pass, most likely because
+		// another plugin removed or short-circuited the filter. Core hands this
+		// chain the unrestricted post body, so return the staged markup rather than
+		// appending the gate to what is in hand, which would publish the restricted
+		// post.
+		//
+		// A listing entry is answered from as well, and deliberately: it is the
+		// only thing withholding the body once the substitution filter is gone,
+		// because core builds the page data from the row before `the_post` fires
+		// and hands this chain the full post whatever a loop did to its WP_Post.
+		// The cost is a reader entitled to the queried post, on a page whose
+		// listing block skipped wp_reset_postdata() so that nothing cleared the
+		// entry: their own body pass is answered with the anonymous teaser. Serving
+		// the body in hand instead would publish the gated post to everyone on the
+		// far more common path.
+		return $staged['teaser'] . $staged['gate'];
+	}
+
+	/**
+	 * Nesting depth of the 'the_content' pass currently running: 1 for an ordinary
+	 * render, deeper when a callback runs the filter again from inside it.
+	 *
+	 * Core pushes the hook name onto $wp_current_filter for the duration of each
+	 * pass, so counting the entries is the one reading of the depth that cannot
+	 * disagree with the chain actually being run.
+	 *
+	 * @return int
+	 */
+	private static function get_content_filter_depth() {
+		if ( empty( $GLOBALS['wp_current_filter'] ) || ! is_array( $GLOBALS['wp_current_filter'] ) ) {
+			return 0;
+		}
+		return count( array_keys( $GLOBALS['wp_current_filter'], 'the_content', true ) );
+	}
+
+	/**
+	 * Run a gated teaser through the 'the_content' callbacks registered above
+	 * self::RESTRICTION_PRIORITY.
+	 *
+	 * The server-side path gets these for free: the teaser is substituted into a
+	 * live 'the_content' pass at that priority, so every callback above it
+	 * processes the teaser rather than the restricted body, which is what keeps an
+	 * integration gating its own embeds composing with the gate. A teaser built
+	 * outside such a pass — {@see Metering::get_metered_excerpt()}, the string the
+	 * frontend metering strategy hands the browser — has to be given the same
+	 * callbacks explicitly, or the markup that ends up in the DOM is the one piece
+	 * of gated output no third-party gate ever sees.
+	 *
+	 * Applies the callbacks directly rather than running a nested
+	 * apply_filters( 'the_content' ), which would also run everything at or below
+	 * the priority — ad inserters, prompt injectors, related-post blocks — over a
+	 * teaser that never sees them today. Everything else about the dispatch mirrors
+	 * core: 'the_content' is pushed onto $wp_current_filter so current_filter() and
+	 * doing_filter() answer as they would in a real pass — a callback that guards on
+	 * either would otherwise decline to run, which for a gate means declining to
+	 * gate — and each callback is passed the argument count it registered for.
+	 *
+	 * The result is cast on the way out rather than relied on to be a string. Core's
+	 * 'the_content' is untyped and carries a callback's non-string return onward
+	 * without fataling; a declared string return here would turn one misbehaving
+	 * third-party callback into a TypeError at wp_footer, on exactly the callbacks
+	 * this method exists to run.
+	 *
+	 * Two consequences of running a second time over content the request has already
+	 * filtered once. A callback that guards against running twice will no-op here,
+	 * and so will not gate the teaser; one with side effects — an enqueue, a counter,
+	 * an analytics ping — fires again. Both are inherent to there being no server-side
+	 * teaser on this path to filter in the first place.
+	 *
+	 * Boundary: a callback registered at exactly self::RESTRICTION_PRIORITY is
+	 * excluded. Server-side such a callback sees the teaser or the full post
+	 * depending on which registered first, so it has no settled behavior to
+	 * reproduce; excluding it is the half that cannot leak restricted content.
+	 *
+	 * The callbacks are a snapshot: a callback that adds or removes a 'the_content'
+	 * filter mid-loop does not change what this pass runs, where core would resort
+	 * the live iteration.
+	 *
+	 * This class's own closing callback is skipped: it appends the gate to a teaser
+	 * it has already substituted, and there is no substitution here to close. Matched
+	 * by the unique id WP keys it under rather than by the shape of the callable, so
+	 * the skip holds however it was registered.
+	 *
+	 * @param string $teaser Gated teaser markup.
+	 *
+	 * @return string
+	 */
+	public static function apply_late_content_filters( string $teaser ): string {
+		$hook = $GLOBALS['wp_filter']['the_content'] ?? null;
+		if ( ! $hook instanceof \WP_Hook ) {
+			return $teaser;
+		}
+
+		$own_callback_id       = _wp_filter_build_unique_id( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
+		$callbacks_by_priority = $hook->callbacks;
+		ksort( $callbacks_by_priority, SORT_NUMERIC );
+
+		$GLOBALS['wp_current_filter'][] = 'the_content'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Pushed and popped around the dispatch, as core's apply_filters() does.
+		try {
+			foreach ( $callbacks_by_priority as $priority => $callbacks ) {
+				if ( $priority <= self::RESTRICTION_PRIORITY ) {
+					continue;
+				}
+				foreach ( $callbacks as $callback_id => $callback ) {
+					if ( $own_callback_id === $callback_id || ! is_callable( $callback['function'] ) ) {
+						continue;
+					}
+					$teaser = call_user_func_array( $callback['function'], array_slice( [ $teaser ], 0, (int) $callback['accepted_args'] ) );
+				}
+			}
+		} finally {
+			array_pop( $GLOBALS['wp_current_filter'] );
+		}
+
+		return (string) $teaser;
 	}
 
 	/**
@@ -245,7 +1546,9 @@ class Content_Gate {
 	/**
 	 * Filter whether comments are open.
 	 *
-	 * Close comments on gated and metered posts.
+	 * Close comments only on fully locked posts, where the reader cannot access
+	 * the content. Metered (currently-accessible) posts are left untouched so
+	 * the site's Discussion Settings continue to govern commenting.
 	 *
 	 * @param bool $open    Whether comments are open.
 	 * @param int  $post_id Post ID.
@@ -253,16 +1556,53 @@ class Content_Gate {
 	 * @return bool
 	 */
 	public static function filter_comments_open( $open, $post_id ) {
-		if ( ( self::$is_gated || self::$is_metered ) && (int) $post_id === (int) get_queried_object_id() ) {
+		if ( self::$is_content_locked && (int) $post_id === (int) get_queried_object_id() ) {
 			return false;
 		}
 		return $open;
 	}
 
 	/**
+	 * Refuse a REST-created comment on a post the author cannot read.
+	 *
+	 * The comments_open() pair is front-end only: the render lock is set by
+	 * restrict_post(), and get_queried_object_id() is 0 under a REST dispatch.
+	 * WP_REST_Comments_Controller gates creation on comments_open(), so without
+	 * this a reader with no entitlement can comment on a post whose own REST
+	 * payload this plugin has just reported as comment_status: closed.
+	 *
+	 * Hooked here rather than on comments_open so the decision stays inside the
+	 * comments endpoint. Widening comments_open() itself would reach the admin
+	 * comment screens and every front-end call for a post that is not the one
+	 * being rendered, which is a much larger surface than the mismatch.
+	 *
+	 * @param array|\WP_Error  $prepared_comment Prepared comment data.
+	 * @param \WP_REST_Request $request          Request object.
+	 * @return array|\WP_Error
+	 */
+	public static function filter_rest_pre_insert_comment( $prepared_comment, $request ) {
+		if ( is_wp_error( $prepared_comment ) || ! self::is_newspack_feature_enabled() ) {
+			return $prepared_comment;
+		}
+		$post_id = isset( $prepared_comment['comment_post_ID'] ) ? (int) $prepared_comment['comment_post_ID'] : 0;
+		$post    = $post_id ? get_post( $post_id ) : null;
+		if ( ! $post instanceof \WP_Post ) {
+			return $prepared_comment;
+		}
+		if ( null === self::get_restriction_for_post( $post ) ) {
+			return $prepared_comment;
+		}
+		return new \WP_Error(
+			'rest_comment_closed',
+			__( 'Sorry, comments are closed for this post.', 'newspack-plugin' ),
+			[ 'status' => 403 ]
+		);
+	}
+
+	/**
 	 * Filter comments array.
 	 *
-	 * Hide all comments on fully gated posts.
+	 * Hide all comments on fully locked posts.
 	 *
 	 * @param array $comments Array of comments.
 	 * @param int   $post_id  Post ID.
@@ -270,7 +1610,7 @@ class Content_Gate {
 	 * @return array
 	 */
 	public static function filter_comments_array( $comments, $post_id ) {
-		if ( self::$is_gated && (int) $post_id === (int) get_queried_object_id() ) {
+		if ( self::$is_content_locked && (int) $post_id === (int) get_queried_object_id() ) {
 			return [];
 		}
 		return $comments;
@@ -279,7 +1619,7 @@ class Content_Gate {
 	/**
 	 * Filter the comment count.
 	 *
-	 * Return 0 on fully gated posts.
+	 * Return 0 on fully locked posts.
 	 *
 	 * @param int $count   Comment count.
 	 * @param int $post_id Post ID.
@@ -287,7 +1627,7 @@ class Content_Gate {
 	 * @return int
 	 */
 	public static function filter_comments_number( $count, $post_id ) {
-		if ( self::$is_gated && (int) $post_id === (int) get_queried_object_id() ) {
+		if ( self::$is_content_locked && (int) $post_id === (int) get_queried_object_id() ) {
 			return 0;
 		}
 		return $count;
@@ -414,12 +1754,22 @@ class Content_Gate {
 		if ( Content_Gifting::should_enqueue_assets() || Metering_Countdown::is_enabled() ) {
 			$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-banner.asset.php';
 
-			// Ensure the content gate metering script is enqueued first.
+			// Order the banner after the meter so the meter has already locked or unlocked
+			// the article by the time the banner reads the view count.
 			if ( is_singular() && self::has_gate() && self::is_post_restricted() && Metering::is_frontend_metering() ) {
 				$asset['dependencies'][] = 'newspack-content-gate-metering';
 			}
-			wp_enqueue_script( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.js', $asset['dependencies'], NEWSPACK_PLUGIN_VERSION, true );
-			wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], NEWSPACK_PLUGIN_VERSION );
+			wp_enqueue_script(
+				'newspack-content-banner',
+				Newspack::plugin_url() . '/dist/content-banner.js',
+				$asset['dependencies'],
+				Newspack::asset_version( 'content-banner' ),
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
+			);
+			wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
 		}
 	}
 
@@ -427,6 +1777,18 @@ class Content_Gate {
 	 * Enqueue block editor assets.
 	 */
 	public static function enqueue_block_editor_assets() {
+		// Share the same feature gate as Content_Restriction_Control::register_meta():
+		// with the flag off the exempt key is absent from the REST schema, so the panel
+		// must not render a toggle that could not persist. In practice get_gates() is
+		// already empty when the flag is off, but gating both on the flag keeps them aligned.
+		// Gating rather than the flag alone: with Audience Management off no gate
+		// applies to any reader, so this panel would name gates that are doing nothing
+		// and offer an exemption toggle that suppresses nothing. Mirrors the block
+		// visibility panel. The exempt post meta stays registered either way, so a
+		// post's exemption survives the toggle exactly as block attributes do.
+		if ( ! self::is_gating_active() ) {
+			return;
+		}
 		if ( ! in_array( get_post_type(), array_column( Content_Restriction_Control::get_available_post_types(), 'value' ), true ) ) {
 			return;
 		}
@@ -450,10 +1812,11 @@ class Content_Gate {
 				continue;
 			}
 			$gates_data[] = [
-				'id'            => $gate['id'],
-				'title'         => $gate['title'],
-				'edit_url'      => get_edit_post_link( $gate['id'], 'raw' ),
-				'content_rules' => $gate['content_rules'],
+				'id'                  => $gate['id'],
+				'title'               => $gate['title'],
+				'edit_url'            => get_edit_post_link( $gate['id'], 'raw' ),
+				'content_rules'       => $gate['content_rules'],
+				'content_rules_match' => $gate['content_rules_match'],
 			];
 		}
 
@@ -479,17 +1842,45 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether the gate's front-end script should load on this request, and why.
+	 *
+	 * The decision lives here, not just its payload, so it can be asserted without
+	 * building assets: the script also has to load on a gate preview where no gate
+	 * renders — archives, home, search — so the previewed params survive a click
+	 * through one of those pages. Gate them out and the preview ends silently at
+	 * the first non-singular view, which is not what the pre-7.1 editor-side
+	 * handler did: it re-ran on every navigation inside the preview frame.
+	 * Returning both inputs alongside the verdict saves the caller recomputing them.
+	 *
+	 * @return array{enqueue: bool, renders_gate: bool, is_preview: bool}
+	 */
+	public static function get_frontend_script_conditions() {
+		// is_singular() first, matching enqueue_content_banner_assets(): during a
+		// preview on an archive, has_gate() would otherwise scan the gate list and have
+		// the result thrown away by the very next operand.
+		$renders_gate = is_singular() && self::has_gate() && self::is_post_restricted();
+		$is_preview   = Content_Gate\Gate_Preview::is_preview_request();
+		return [
+			'enqueue'      => $renders_gate || $is_preview,
+			'renders_gate' => $renders_gate,
+			'is_preview'   => $is_preview,
+		];
+	}
+
+	/**
 	 * Enqueue frontend scripts and styles for gated content.
 	 */
 	public static function enqueue_scripts() {
 		self::enqueue_content_banner_assets();
 
-		if ( ! self::has_gate() ) {
+		$context      = self::get_frontend_script_conditions();
+		$renders_gate = $context['renders_gate'];
+		$is_preview   = $context['is_preview'];
+
+		if ( ! $context['enqueue'] ) {
 			return;
 		}
-		if ( ! is_singular() || ! self::is_post_restricted() ) {
-			return;
-		}
+
 		$handle = 'newspack-content-gate';
 		\wp_enqueue_script(
 			$handle,
@@ -499,19 +1890,55 @@ class Content_Gate {
 			true
 		);
 		\wp_script_add_data( $handle, 'async', true );
-		\wp_localize_script(
-			$handle,
-			'newspack_content_gate',
-			[
-				'metadata' => self::get_gate_metadata(),
-			]
-		);
+		\wp_localize_script( $handle, 'newspack_content_gate', self::get_frontend_script_data( $renders_gate, $is_preview ) );
+
+		// Only a rendering gate needs the styles.
+		if ( ! $renders_gate ) {
+			return;
+		}
 		\wp_enqueue_style(
 			$handle,
 			Newspack::plugin_url() . '/dist/content-gate.css',
 			[],
 			filemtime( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate.css' )
 		);
+	}
+
+	/**
+	 * Data localized to the front-end gate script.
+	 *
+	 * Split out from enqueue_scripts() so the payload is assertable without
+	 * touching the filesystem for asset versions. Whether the script loads at all
+	 * is decided in get_frontend_script_conditions().
+	 *
+	 * The two keys are independently optional: gate.js reads `metadata`, and
+	 * preview-links.js reads `preview_param_names`. A preview on a view where no
+	 * gate renders carries only the second.
+	 *
+	 * @param bool $renders_gate Whether a gate renders on this request.
+	 * @param bool $is_preview   Whether this is a gate preview request.
+	 * @return array{metadata?: array, preview_param_names?: string[]}
+	 */
+	public static function get_frontend_script_data( $renders_gate, $is_preview ) {
+		$script_data = [];
+
+		if ( $renders_gate ) {
+			$script_data['metadata'] = self::get_gate_metadata();
+		}
+
+		// On a gate preview the previewed document carries its own preview params
+		// onto same-origin links, so the preview survives navigation. It needs the
+		// param list to know which of its query params those are. Gate_Preview's
+		// own check already requires the preview capability, so this does not ship
+		// to ordinary readers.
+		if ( $is_preview ) {
+			$script_data['preview_param_names'] = array_merge(
+				[ Content_Gate\Gate_Preview::PREVIEW_QUERY_PARAM ],
+				array_values( Content_Gate\Gate_Preview::PREVIEW_QUERY_KEYS )
+			);
+		}
+
+		return $script_data;
 	}
 
 	/**
@@ -581,7 +2008,11 @@ class Content_Gate {
 	}
 
 	/**
-	 * Whether any gates of the given type has metering enabled.
+	 * Whether any gate of the given type meters, i.e. grants at least one free view.
+	 *
+	 * Read the gate settings through Metering rather than the gate array: metering lives
+	 * under the `registration`/`custom_access` sections on the gate CPT and in flat post
+	 * meta on the legacy memberships gate, and Metering is what resolves the two.
 	 *
 	 * @param string $post_type Post type.
 	 *
@@ -590,7 +2021,7 @@ class Content_Gate {
 	public static function is_metering_enabled( $post_type = self::GATE_CPT ) {
 		$gates = self::get_gates( $post_type );
 		foreach ( $gates as $gate ) {
-			if ( isset( $gate['metering'] ) && ! empty( $gate['metering']['enabled'] ) ) {
+			if ( Metering::is_gate_metered( $gate['id'] ) ) {
 				return true;
 			}
 		}
@@ -598,14 +2029,21 @@ class Content_Gate {
 	}
 
 	/**
-	 * Public method for marking the gate as rendered.
+	 * Public method for marking the gate render as claimed.
+	 *
+	 * Every render path sets this BEFORE producing output, so the flag acts as
+	 * a once-per-request re-entrancy lock, not a signal that gate markup
+	 * already exists.
 	 */
 	public static function mark_gate_as_rendered() {
 		self::$gate_rendered = true;
 	}
 
 	/**
-	 * Whether the gate has rendered.
+	 * Whether a gate render has been claimed for this request.
+	 *
+	 * True from the moment a render path commits to rendering (see
+	 * mark_gate_as_rendered()), which may be before any markup is output.
 	 */
 	public static function has_rendered() {
 		return self::$gate_rendered;
@@ -621,8 +2059,6 @@ class Content_Gate {
 	public static function post_has_restrictions( $post_id = null ) {
 		$post_id = $post_id ? $post_id : get_the_ID();
 
-		// TODO: Content Gate content rules check.
-
 		/**
 		 * Filters whether the post has restrictions.
 		 *
@@ -634,6 +2070,12 @@ class Content_Gate {
 
 	/**
 	 * Whether the post is restricted for the current user.
+	 *
+	 * Callbacks on `newspack_is_post_restricted` may run inside a hypothetical replay
+	 * asking what a reader would see if they verified their email address. A callback
+	 * that branches on verification state, or that memoises anything derived from it,
+	 * must check `Access_Rules::is_verification_assumed_for()` — the reader is not
+	 * verified, and a value cached from that answer would be read back later as fact.
 	 *
 	 * @param int $post_id Post ID.
 	 *
@@ -652,6 +2094,55 @@ class Content_Gate {
 	}
 
 	/**
+	 * Get the priority to give a new gate, placing it after the last gate of its own bucket.
+	 *
+	 * Content gates and premium newsletter gates are prioritized separately, so a gate is
+	 * numbered against the others in its bucket. Derived from the highest priority in use
+	 * rather than the gate count: priorities are positions, not a counter, so a count would
+	 * collide with an existing gate as soon as one has been deleted from the middle of the
+	 * list — and priority is what orders overlapping gates, so a tie leaves an arbitrary gate
+	 * deciding what a reader sees.
+	 *
+	 * This reads the current max and returns max + 1, a check-then-act pair that isn't atomic:
+	 * two concurrent creations could read the same max and both claim it. Gate creation is a
+	 * one-at-a-time admin action, so that race can't realistically happen and no lock is warranted.
+	 *
+	 * Only the single highest-priority gate in the bucket is queried (its ID and priority meta),
+	 * rather than hydrating every gate, since that top priority is all this needs.
+	 *
+	 * @param string $post_type     Post type whose bucket the new gate belongs to. Defaults to self::GATE_CPT.
+	 * @param bool   $is_newsletter Whether the new gate is a premium newsletter gate.
+	 *
+	 * @return int
+	 */
+	public static function get_next_gate_priority( $post_type = self::GATE_CPT, $is_newsletter = false ) {
+		$top_gate_ids = get_posts(
+			[
+				'post_type'      => $post_type,
+				'post_status'    => self::get_post_statuses(),
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'orderby'        => [ 'priority' => 'DESC' ],
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					'relation' => 'AND',
+					'priority' => [
+						'key'  => 'gate_priority',
+						'type' => 'NUMERIC',
+					],
+					[
+						'key'     => 'is_newsletter',
+						'compare' => $is_newsletter ? 'EXISTS' : 'NOT EXISTS',
+					],
+				],
+			]
+		);
+		if ( empty( $top_gate_ids ) ) {
+			return 0;
+		}
+		return (int) get_post_meta( $top_gate_ids[0], 'gate_priority', true ) + 1;
+	}
+
+	/**
 	 * Create a new gate post.
 	 *
 	 * @param array  $gate Gate settings.
@@ -661,14 +2152,13 @@ class Content_Gate {
 	 * @return int|\WP_Error The gate post ID or error if not created.
 	 */
 	public static function create_gate( $gate, $post_type = self::GATE_CPT, $is_newsletter = false ) {
-		$all_gates = self::get_gates();
-		$args      = [
-			'post_title'   => $gate['title'],
+		$args = [
+			'post_title'   => $gate['title'] ?? __( 'Untitled Content Gate', 'newspack-plugin' ),
 			'post_type'    => $post_type,
-			'post_status'  => 'publish',
+			'post_status'  => isset( $gate['status'] ) && in_array( $gate['status'], self::get_post_statuses(), true ) ? $gate['status'] : 'publish',
 			'post_content' => '',
 			'meta_input'   => [
-				'gate_priority' => count( $all_gates ),
+				'gate_priority' => self::get_next_gate_priority( $post_type, $is_newsletter ),
 			],
 		];
 		if ( $is_newsletter ) {
@@ -688,7 +2178,14 @@ class Content_Gate {
 			Content_Rules::update_gate_content_rules( $gate_id, $gate['content_rules'] );
 		}
 
+		// Update rule-combination mode.
+		if ( isset( $gate['content_rules_match'] ) ) {
+			Content_Rules::update_gate_content_rules_match( $gate_id, $gate['content_rules_match'] );
+		}
+
 		// Create default layouts for registration and custom_access modes.
+		$layout_titles = self::get_gate_mode_layout_titles();
+
 		$registration_settings  = $gate['registration'] ?? [];
 		$registration_layout_id = $registration_settings['gate_layout_id'] ?? 0;
 		$custom_access_settings  = $gate['custom_access'] ?? [];
@@ -697,7 +2194,7 @@ class Content_Gate {
 		if ( ! $registration_layout_id ) {
 			$registration_content   = self::get_layout_default_content( $gate_id, 'registration', $registration_settings, $custom_access_settings );
 			$registration_layout_id = self::create_gate_layout(
-				__( 'Registration Access Layout', 'newspack-plugin' ),
+				$layout_titles['registration'],
 				$registration_content
 			);
 		}
@@ -709,7 +2206,7 @@ class Content_Gate {
 		if ( ! $custom_access_layout_id ) {
 			$custom_access_content   = self::get_layout_default_content( $gate_id, 'custom_access', $registration_settings, $custom_access_settings );
 			$custom_access_layout_id = self::create_gate_layout(
-				__( 'Paid Access Layout', 'newspack-plugin' ),
+				$layout_titles['custom_access'],
 				$custom_access_content
 			);
 			if ( ! is_wp_error( $custom_access_layout_id ) ) {
@@ -719,6 +2216,203 @@ class Content_Gate {
 		self::update_custom_access_settings( $gate_id, $custom_access_settings );
 
 		return $gate_id;
+	}
+
+	/**
+	 * The gate meta keys holding a mode's settings, mapped to the default title of that
+	 * mode's layout post.
+	 *
+	 * @return array
+	 */
+	private static function get_gate_mode_layout_titles() {
+		return [
+			'registration'  => __( 'Registration Access Layout', 'newspack-plugin' ),
+			'custom_access' => __( 'Paid Access Layout', 'newspack-plugin' ),
+		];
+	}
+
+	/**
+	 * Get a unique title for a copy of a gate.
+	 *
+	 * Appends a translatable " copy" suffix, numbering it (" copy 2", " copy 3", …)
+	 * until it no longer collides with an existing gate in the same bucket.
+	 *
+	 * @param int        $gate_id       Gate ID being duplicated.
+	 * @param array|null $bucket_gates  Optional gates of the source's bucket, to save re-fetching them.
+	 *
+	 * @return string
+	 */
+	public static function get_duplicate_gate_title( $gate_id, $bucket_gates = null ) {
+		// Deliberately not get_the_title(): the 'the_title' filters texturize the title and
+		// prefix drafts/private posts, so the copy's stored title would not be the source's
+		// title plus a suffix, and would not compare against the raw titles below.
+		$source       = get_post( $gate_id );
+		$source_title = $source ? $source->post_title : '';
+
+		if ( null === $bucket_gates ) {
+			$is_newsletter = (bool) get_post_meta( $gate_id, 'is_newsletter', true );
+			$bucket_gates  = self::get_gates( self::GATE_CPT, null, $is_newsletter );
+		}
+		$taken_titles = wp_list_pluck( $bucket_gates, 'title' );
+
+		/* translators: %s: title of the gate being duplicated. */
+		$title = sprintf( __( '%s copy', 'newspack-plugin' ), $source_title );
+
+		$copy_number = 1;
+		while ( in_array( $title, $taken_titles, true ) ) {
+			++$copy_number;
+			/* translators: 1: title of the gate being duplicated. 2: number of this copy. */
+			$title = sprintf( __( '%1$s copy %2$d', 'newspack-plugin' ), $source_title, $copy_number );
+		}
+
+		return $title;
+	}
+
+	/**
+	 * Copy a gate layout post, with the presentation settings stored as its meta.
+	 *
+	 * Those settings ('style', 'visible_paragraphs', …) decide how much of a restricted
+	 * article a reader sees, so a copy that dropped them would not just look different —
+	 * it would reveal a different amount of the gated content.
+	 *
+	 * @param \WP_Post $source_layout The layout post to copy.
+	 *
+	 * @return int|\WP_Error The new layout post ID or error if not created.
+	 */
+	private static function duplicate_gate_layout( $source_layout ) {
+		// Deliberately not create_gate_layout(): it substitutes the default gate content for an
+		// empty layout, which would give the copy a member message a deliberately blank source
+		// layout doesn't show.
+		$new_layout_id = \wp_insert_post(
+			[
+				'post_title'   => $source_layout->post_title,
+				'post_type'    => self::GATE_LAYOUT_CPT,
+				'post_content' => $source_layout->post_content,
+				'post_status'  => $source_layout->post_status,
+			],
+			true // Return WP_Error on failure.
+		);
+		if ( is_wp_error( $new_layout_id ) ) {
+			return $new_layout_id;
+		}
+
+		foreach ( \get_post_meta( $source_layout->ID ) as $key => $values ) {
+			if ( str_starts_with( $key, '_' ) ) {
+				continue;
+			}
+			foreach ( $values as $value ) {
+				\add_post_meta( $new_layout_id, $key, \maybe_unserialize( $value ) );
+			}
+		}
+
+		return $new_layout_id;
+	}
+
+	/**
+	 * Duplicate a gate.
+	 *
+	 * The copy is always created inactive, regardless of the site's default status for
+	 * new gates: a copy of a live gate silently going live would change the site's
+	 * access behavior.
+	 *
+	 * @param int $gate_id Gate ID to duplicate.
+	 *
+	 * @return int|\WP_Error The new gate ID, or error if the source is not a gate or the copy could not be created.
+	 */
+	public static function duplicate_gate( $gate_id ) {
+		$source = get_post( $gate_id );
+		if ( ! $source || self::GATE_CPT !== $source->post_type ) {
+			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		if ( ! in_array( $source->post_status, self::get_post_statuses(), true ) ) {
+			return new \WP_Error( 'newspack_content_gate_invalid_status', __( 'This gate cannot be duplicated.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$is_newsletter = (bool) get_post_meta( $gate_id, 'is_newsletter', true );
+
+		// Content gates and premium newsletter gates are prioritized in separate buckets, so
+		// the copy goes after the last gate of its own. Derived from the highest priority in
+		// use rather than the gate count, which would collide with an existing gate whenever
+		// one has been deleted from the middle of the list.
+		$bucket_gates = self::get_gates( self::GATE_CPT, null, $is_newsletter );
+		$priority     = $bucket_gates ? max( wp_list_pluck( $bucket_gates, 'priority' ) ) + 1 : 0;
+
+		$new_gate_id = \wp_insert_post(
+			[
+				'post_title'   => self::get_duplicate_gate_title( $gate_id, $bucket_gates ),
+				'post_type'    => self::GATE_CPT,
+				'post_status'  => 'draft',
+				'post_content' => '',
+			],
+			true // Return WP_Error on failure.
+		);
+		if ( is_wp_error( $new_gate_id ) ) {
+			// A failed insert is a genuine server error, so give it an explicit 500 status
+			// (matching the controlled codes on the validation branches above) rather than
+			// leaving the REST layer to fall back on its generic 500. The underlying error
+			// is preserved so a maintainer can see why the insert failed.
+			$new_gate_id->add_data( [ 'status' => 500 ] );
+			return $new_gate_id;
+		}
+
+		$layout_titles = self::get_gate_mode_layout_titles();
+
+		// Copy the settings generically, so gate settings added later are carried over without
+		// a list to maintain here.
+		foreach ( \get_post_meta( $gate_id ) as $key => $values ) {
+			if ( 'gate_priority' === $key || str_starts_with( $key, '_' ) ) {
+				continue;
+			}
+			foreach ( $values as $value ) {
+				$value = \maybe_unserialize( $value );
+				// The source's layout IDs must never be persisted on the copy, not even
+				// briefly: while they are, deleting the copy would delete the layouts the
+				// source is still serving to readers. The copy's own layouts are wired in
+				// below.
+				if ( isset( $layout_titles[ $key ] ) && is_array( $value ) ) {
+					unset( $value['gate_layout_id'] );
+				}
+				\add_post_meta( $new_gate_id, $key, $value );
+			}
+		}
+		\update_post_meta( $new_gate_id, 'gate_priority', $priority );
+
+		// Deep-copy the layouts. Sharing layout posts between two gates would let
+		// delete_gate_layouts() destroy the surviving gate's reader-facing content.
+		foreach ( $layout_titles as $gate_mode => $default_layout_title ) {
+			$source_settings  = \get_post_meta( $gate_id, $gate_mode, true );
+			$source_layout_id = is_array( $source_settings ) && ! empty( $source_settings['gate_layout_id'] ) ? $source_settings['gate_layout_id'] : 0;
+			$source_layout    = $source_layout_id ? get_post( $source_layout_id ) : null;
+
+			if ( $source_layout && self::GATE_LAYOUT_CPT === $source_layout->post_type ) {
+				$new_layout_id = self::duplicate_gate_layout( $source_layout );
+			} else {
+				// Stale or missing layout ID: create a fresh default layout, as create_gate() does.
+				$new_layout_id = self::create_gate_layout(
+					$default_layout_title,
+					self::get_layout_default_content(
+						$new_gate_id,
+						$gate_mode,
+						self::get_registration_settings( $new_gate_id ),
+						self::get_custom_access_settings( $new_gate_id )
+					)
+				);
+			}
+
+			if ( is_wp_error( $new_layout_id ) ) {
+				// Discard the half-built copy rather than leave it in the publisher's list.
+				// Its own layouts, if any, go with it via delete_gate_layouts().
+				\wp_delete_post( $new_gate_id, true );
+				return $new_layout_id;
+			}
+
+			$settings                   = \get_post_meta( $new_gate_id, $gate_mode, true );
+			$settings                   = is_array( $settings ) ? $settings : [];
+			$settings['gate_layout_id'] = $new_layout_id;
+			\update_post_meta( $new_gate_id, $gate_mode, $settings );
+		}
+
+		return $new_gate_id;
 	}
 
 	/**
@@ -821,7 +2515,13 @@ class Content_Gate {
 		$pattern_slug = '';
 		if ( 'registration' === $gate_mode ) {
 			$pattern_slug = 'registration-wall';
-			if ( ! empty( $custom_access_settings['active'] ) ) {
+			// Upgrade to the metering layout only when the paid tier actually grants free
+			// views. A tier that is active but meters 0 views gates every reader on their
+			// first view, so its layout must not advertise "free articles" it never
+			// delivers (NPPD-2056).
+			$custom_access_metering = Metering::resolve_path_settings( $custom_access_settings, true );
+			$custom_access_meters   = $custom_access_metering['enabled'] && $custom_access_metering['count'] > 0;
+			if ( $custom_access_meters ) {
 				$pattern_slug = 'pay-wall-one-tier-metering';
 			}
 		} elseif ( 'custom_access' === $gate_mode ) {
@@ -926,11 +2626,63 @@ class Content_Gate {
 	 *
 	 * @param \WP_Post $post Post object.
 	 *
-	 * @return string
+	 * @return string Rendered excerpt HTML. Already through the `newspack_gate_content`
+	 *                pipeline: callers must not apply that filter again, or blocks get
+	 *                re-rendered and shortcodes re-expanded over the rendered output.
 	 */
 	public static function get_restricted_post_excerpt( $post ) {
 		self::$is_gated = true;
-		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id() );
+		// Pass the ID explicitly rather than relying on get_gate_layout_id()'s
+		// own is_singular() fallback to the queried object. Callers:
+		// restrict_post() and wc_memberships_excerpt() both guard on
+		// $post->ID === get_queried_object_id(), so for them this resolves to
+		// the same ID either way. Metering::enqueue_scripts() carries no such
+		// guard and keys its restriction check on $post->ID too, so passing
+		// it here keeps the layout lookup consistent with that decision
+		// instead of risking a mismatched fallback and an empty gate.
+		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id( $post->ID ) );
+	}
+
+	/**
+	 * Resolve the summary shown for a restricted post on syndication surfaces —
+	 * RSS feeds and the REST `excerpt` field: the author's own excerpt when the
+	 * post has one, otherwise the constructed gate teaser.
+	 *
+	 * Deliberately distinct from get_restricted_post_excerpt_for_gate(), which
+	 * builds the on-page reveal from the gate layout's visible-paragraph count. A
+	 * summary surface answers "what is this post about", and an authored excerpt
+	 * is the best answer — this is the WooCommerce Memberships "show excerpts"
+	 * behaviour a migrated site expects. The on-page gate answers a different
+	 * question ("how much of the body may an anonymous reader see") and keeps its
+	 * configured paragraph reveal, so the two are not merged.
+	 *
+	 * @param \WP_Post    $post     Restricted post.
+	 * @param string|null $fallback Teaser the caller already built, if any. Passing
+	 *                              it avoids rendering the post body a second time.
+	 * @return string Authored excerpt, or the gate teaser as a fallback.
+	 */
+	public static function get_withheld_summary( $post, $fallback = null ) {
+		/**
+		 * Filters whether a restricted post's authored excerpt is preferred over
+		 * the constructed teaser on syndication surfaces (feeds, REST excerpt).
+		 *
+		 * The seam a future "show written excerpt in feeds" setting hooks into:
+		 * returning false falls back to the paragraph teaser everywhere this
+		 * resolves, restoring the pre-parity behaviour without touching call sites.
+		 *
+		 * @param bool     $prefer_written_excerpt Whether to prefer the authored excerpt.
+		 * @param \WP_Post $post                   The restricted post.
+		 */
+		$prefer_written_excerpt = apply_filters( 'newspack_content_gate_prefer_written_excerpt', true, $post );
+
+		if ( $prefer_written_excerpt && '' !== trim( (string) $post->post_excerpt ) ) {
+			return $post->post_excerpt;
+		}
+
+		if ( null !== $fallback ) {
+			return $fallback;
+		}
+		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id( $post->ID ) );
 	}
 
 	/**
@@ -1052,6 +2804,23 @@ class Content_Gate {
 	}
 
 	/**
+	 * Get the metering settings an audience path starts from.
+	 *
+	 * Both audience paths and the layout-copy resolver fill missing values from this,
+	 * so drift between copies would let a gate advertise an allowance it does not serve.
+	 *
+	 * @return array{enabled: bool, count: int, period: string, scope: string} Default metering settings.
+	 */
+	public static function get_default_metering_settings(): array {
+		return [
+			'enabled' => false,
+			'count'   => 1,
+			'period'  => 'month',
+			'scope'   => Site_Meter::SCOPE_SITE,
+		];
+	}
+
+	/**
 	 * Get registration settings for a gate.
 	 *
 	 * @param int $gate_id Gate ID.
@@ -1064,15 +2833,11 @@ class Content_Gate {
 			$registration = [];
 		}
 
-		$default_metering = [
-			'enabled' => false,
-			'count'   => 1,
-			'period'  => 'month',
-		];
+		$default_metering = self::get_default_metering_settings();
 
 		return [
 			'active'               => isset( $registration['active'] ) ? (bool) $registration['active'] : false,
-			'metering'             => isset( $registration['metering'] ) ? $registration['metering'] : $default_metering,
+			'metering'             => isset( $registration['metering'] ) && is_array( $registration['metering'] ) ? wp_parse_args( $registration['metering'], $default_metering ) : $default_metering,
 			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
 			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
 		];
@@ -1107,6 +2872,9 @@ class Content_Gate {
 	public static function update_registration_settings( $gate_id, $settings ) {
 		$registration = get_post_meta( $gate_id, 'registration', true );
 		if ( $registration ) {
+			if ( isset( $settings['metering'], $registration['metering'] ) && is_array( $settings['metering'] ) && is_array( $registration['metering'] ) ) {
+				$settings['metering'] = wp_parse_args( $settings['metering'], $registration['metering'] );
+			}
 			$settings = wp_parse_args( $settings, $registration );
 		}
 		\update_post_meta( $gate_id, 'registration', $settings );
@@ -1130,17 +2898,16 @@ class Content_Gate {
 		// Normalize legacy flat rules to grouped format.
 		$access_rules = Access_Rules::normalize_rules( $access_rules );
 
-		$default_metering = [
-			'enabled' => false,
-			'count'   => 1,
-			'period'  => 'month',
-		];
+		$default_metering = self::get_default_metering_settings();
 
 		return [
-			'active'         => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
-			'metering'       => isset( $custom_access['metering'] ) ? $custom_access['metering'] : $default_metering,
-			'access_rules'   => $access_rules,
-			'gate_layout_id' => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
+			'active'                 => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
+			'metering'               => isset( $custom_access['metering'] ) && is_array( $custom_access['metering'] ) ? wp_parse_args( $custom_access['metering'], $default_metering ) : $default_metering,
+			'access_rules'           => $access_rules,
+			'gate_layout_id'         => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
+			// Defaults to ON so gates saved before the setting existed keep granting
+			// access to readers whose subscription is in payment recovery.
+			'payment_recovery_grace' => isset( $custom_access['payment_recovery_grace'] ) ? (bool) $custom_access['payment_recovery_grace'] : true,
 		];
 	}
 
@@ -1155,6 +2922,9 @@ class Content_Gate {
 	public static function update_custom_access_settings( $gate_id, $settings ) {
 		$custom_access = get_post_meta( $gate_id, 'custom_access', true );
 		if ( $custom_access ) {
+			if ( isset( $settings['metering'], $custom_access['metering'] ) && is_array( $settings['metering'] ) && is_array( $custom_access['metering'] ) ) {
+				$settings['metering'] = wp_parse_args( $settings['metering'], $custom_access['metering'] );
+			}
 			$settings = wp_parse_args( $settings, $custom_access );
 		}
 		\update_post_meta( $gate_id, 'custom_access', $settings );
@@ -1174,13 +2944,14 @@ class Content_Gate {
 		}
 
 		return [
-			'id'            => $post->ID,
-			'status'        => $post->post_status,
-			'title'         => $post->post_title,
-			'priority'      => (int) get_post_meta( $post->ID, 'gate_priority', true ),
-			'content_rules' => Content_Rules::get_gate_content_rules( $post->ID ),
-			'registration'  => self::get_registration_settings( $post->ID ),
-			'custom_access' => self::get_custom_access_settings( $post->ID ),
+			'id'                  => $post->ID,
+			'status'              => $post->post_status,
+			'title'               => $post->post_title,
+			'priority'            => (int) get_post_meta( $post->ID, 'gate_priority', true ),
+			'content_rules'       => Content_Rules::get_gate_content_rules( $post->ID ),
+			'content_rules_match' => Content_Rules::get_gate_content_rules_match( $post->ID ),
+			'registration'        => self::get_registration_settings( $post->ID ),
+			'custom_access'       => self::get_custom_access_settings( $post->ID ),
 		];
 	}
 
@@ -1211,6 +2982,9 @@ class Content_Gate {
 			];
 		} elseif ( 'content_rules' === $key ) {
 			Content_Rules::update_gate_content_rules( $id, $value );
+			return self::get_gate( $id );
+		} elseif ( 'content_rules_match' === $key ) {
+			Content_Rules::update_gate_content_rules_match( $id, $value );
 			return self::get_gate( $id );
 		} elseif ( 'registration' === $key ) {
 			self::update_registration_settings( $id, $value );
@@ -1250,20 +3024,28 @@ class Content_Gate {
 		}
 
 		// Update title, priority, and status.
-		wp_update_post(
-			[
-				'ID'          => $id,
-				'post_title'  => $gate['title'],
-				'post_status' => isset( $gate['status'] ) ? $gate['status'] : $post->post_status,
-				'meta_input'  => [
-					'gate_priority' => $gate['priority'],
-				],
-			]
-		);
+		$update_args = [
+			'ID'          => $id,
+			'post_status' => isset( $gate['status'] ) ? $gate['status'] : $post->post_status,
+		];
+		if ( isset( $gate['title'] ) ) {
+			$update_args['post_title'] = $gate['title'];
+		}
+		if ( isset( $gate['priority'] ) ) {
+			$update_args['meta_input'] = [
+				'gate_priority' => $gate['priority'],
+			];
+		}
+		wp_update_post( $update_args );
 
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
 			Content_Rules::update_gate_content_rules( $id, $gate['content_rules'] );
+		}
+
+		// Update rule-combination mode.
+		if ( isset( $gate['content_rules_match'] ) ) {
+			Content_Rules::update_gate_content_rules_match( $id, $gate['content_rules_match'] );
 		}
 
 		// Update registration settings.
@@ -1294,6 +3076,84 @@ class Content_Gate {
 	}
 
 	/**
+	 * Option name storing the default status applied to newly created gates.
+	 */
+	const DEFAULT_STATUS_OPTION = 'newspack_content_gate_default_status';
+
+	/**
+	 * Get the default status ('publish' or 'draft') for newly created gates.
+	 *
+	 * Defaults to 'draft' (inactive) so new gates are set up before going live.
+	 * Only affects gates created going forward; existing gates keep their own
+	 * status. Publishers can change this default in the Access control preferences.
+	 *
+	 * @return string
+	 */
+	public static function get_default_new_gate_status() {
+		$value = get_option( self::DEFAULT_STATUS_OPTION, 'draft' );
+		return in_array( $value, [ 'publish', 'draft' ], true ) ? $value : 'draft';
+	}
+
+	/**
+	 * Set the default status for newly created gates.
+	 *
+	 * @param string $status Either 'publish' or 'draft'.
+	 *
+	 * @return string The stored status.
+	 */
+	public static function set_default_new_gate_status( $status ) {
+		$status = in_array( $status, [ 'publish', 'draft' ], true ) ? $status : 'draft';
+		update_option( self::DEFAULT_STATUS_OPTION, $status, false );
+		return $status;
+	}
+
+	/**
+	 * Fill in the site-wide default status on a new-gate payload when none was provided.
+	 *
+	 * For REST create endpoints only. Direct PHP callers of create_gate() (e.g. the
+	 * WooCommerce Memberships auto-gate creators) rely on its 'publish' fallback,
+	 * which must not be routed through this option.
+	 *
+	 * @param array $gate Gate payload.
+	 *
+	 * @return array The gate payload with a status.
+	 */
+	public static function with_default_new_gate_status( $gate ) {
+		if ( is_array( $gate ) && ! isset( $gate['status'] ) ) {
+			$gate['status'] = self::get_default_new_gate_status();
+		}
+		return $gate;
+	}
+
+	/**
+	 * User meta key for the pre-save checklist preference.
+	 */
+	const PRESAVE_CHECKS_META_KEY = 'np_gate_presave_checks';
+
+	/**
+	 * Whether the current user should see the gate pre-save checklist panel.
+	 *
+	 * Defaults to enabled (true) when the user has never set the preference.
+	 *
+	 * @return bool
+	 */
+	public static function get_presave_checks_enabled() {
+		$value = get_user_meta( get_current_user_id(), self::PRESAVE_CHECKS_META_KEY, true );
+		return '' === $value ? true : '1' === $value;
+	}
+
+	/**
+	 * Set the pre-save checklist preference for the current user.
+	 *
+	 * @param bool $enabled Whether the pre-save checklist is enabled.
+	 *
+	 * @return void
+	 */
+	public static function set_presave_checks_enabled( $enabled ) {
+		update_user_meta( get_current_user_id(), self::PRESAVE_CHECKS_META_KEY, $enabled ? '1' : '0' );
+	}
+
+	/**
 	 * Get all gates.
 	 *
 	 * @param string          $post_type Post type.
@@ -1303,11 +3163,19 @@ class Content_Gate {
 	 * @return array Array of content gates.
 	 */
 	public static function get_gates( $post_type = self::GATE_CPT, $post_status = null, $is_newsletter = false ) {
+		$is_cacheable = self::is_gates_cache_enabled();
+		// Keyed by blog as well as by arguments: the cache is a plain static, so it
+		// would otherwise outlive a switch_to_blog() and hand one site another
+		// site's gates.
+		$cache_key = wp_json_encode( [ get_current_blog_id(), $post_type, $post_status, $is_newsletter ] );
+		if ( $is_cacheable && isset( self::$gates_cache[ $cache_key ] ) ) {
+			return self::$gates_cache[ $cache_key ];
+		}
 		$posts = get_posts(
 			[
 				'post_type'      => $post_type,
 				'post_status'    => $post_status ? $post_status : self::get_post_statuses(),
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Content-gate CPT; config-scale.
 				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
 						'key'     => 'is_newsletter',
@@ -1325,7 +3193,55 @@ class Content_Gate {
 				}
 			);
 		}
+		if ( $is_cacheable ) {
+			self::$gates_cache[ $cache_key ] = $gates;
+		}
 		return $gates;
+	}
+
+	/**
+	 * Whether get_gates() may serve from (and populate) its cache.
+	 *
+	 * Off by default under PHPUnit: tests are rolled back at the database level,
+	 * which fires none of the write hooks the cache is invalidated by, so a gate
+	 * created in one test would still be "visible" in the next.
+	 *
+	 * @return bool
+	 */
+	private static function is_gates_cache_enabled(): bool {
+		if ( null === self::$gates_cache_enabled ) {
+			self::$gates_cache_enabled = ! defined( 'IS_TEST_ENV' ) || ! IS_TEST_ENV;
+		}
+		return self::$gates_cache_enabled;
+	}
+
+	/**
+	 * Turn the get_gates() cache on or off for the rest of the request.
+	 *
+	 * Exists so the cache is not merely untested under PHPUnit but untestable:
+	 * with the test-env default (off) hard-coded into get_gates(), neither the
+	 * cache read, the cache write nor any of the five invalidation hooks could be
+	 * exercised at all. A test that covers them turns the cache on for its own
+	 * duration and calls this with no argument to restore the default.
+	 *
+	 * @param bool|null $enabled True/false to force, null to restore the default.
+	 */
+	public static function set_gates_cache_enabled( ?bool $enabled = null ) {
+		self::$gates_cache_enabled = $enabled;
+		self::flush_gates_cache();
+	}
+
+	/**
+	 * Flush the get_gates() cache.
+	 *
+	 * Hooked to every post and post-meta write rather than only to gate-CPT
+	 * writes: gate settings are persisted with bare update_post_meta() calls, and
+	 * the hooks that carry a post ID would each need a get_post_type() lookup to
+	 * tell a gate write from any other. Flushing unconditionally is cheaper than
+	 * that check and can only cost a re-query on requests that write posts.
+	 */
+	public static function flush_gates_cache() {
+		self::$gates_cache = [];
 	}
 
 	/**

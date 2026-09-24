@@ -58,6 +58,31 @@ class Newspack_Test_My_Account_Button_Block extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create an account page and point the relevant URL source at it.
+	 *
+	 * When WooCommerce owns the account shell, the mocked
+	 * `wc_get_account_endpoint_url()` supplies the URL. Otherwise the native
+	 * account page (resolved via My_Account::PAGE_ID_OPTION) is used.
+	 *
+	 * @return string The expected account URL.
+	 */
+	private static function set_up_account_url() {
+		if ( \Newspack\My_Account::woocommerce_owns_shell() ) {
+			return 'https://example.com/my-account';
+		}
+		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( \Newspack\My_Account::PAGE_ID_OPTION, $page_id );
+		return get_permalink( $page_id );
+	}
+
+	/**
+	 * Clean up the native account page option set by set_up_account_url().
+	 */
+	private static function tear_down_account_url() {
+		delete_option( \Newspack\My_Account::PAGE_ID_OPTION );
+	}
+
+	/**
 	 * Test signed-out rendering includes labels and href.
 	 */
 	public function test_render_block_signed_out() {
@@ -74,10 +99,12 @@ class Newspack_Test_My_Account_Button_Block extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that My Account button links to /my-account and doesn't trigger the modal when the reader is signed in..
+	 * Test that My Account button links to the account page and doesn't trigger the modal when the reader is signed in.
 	 */
 	public function test_render_block_signed_in() {
 		self::$reader_activation_enabled = true;
+
+		$account_url = self::set_up_account_url();
 
 		$user_id = self::factory()->user->create(
 			[
@@ -91,8 +118,10 @@ class Newspack_Test_My_Account_Button_Block extends WP_UnitTestCase {
 		);
 
 		$this->assertNotEmpty( $output );
-		$this->assertStringContainsString( 'href="https://example.com/my-account"', $output );
+		$this->assertStringContainsString( 'href="' . esc_url( $account_url ) . '"', $output );
 		$this->assertStringNotContainsString( 'data-newspack-reader-account-link', $output );
+
+		self::tear_down_account_url();
 	}
 
 	/**
@@ -172,6 +201,8 @@ class Newspack_Test_My_Account_Button_Block extends WP_UnitTestCase {
 	public function test_render_block_empty_signed_in_label() {
 		self::$reader_activation_enabled = true;
 
+		self::set_up_account_url();
+
 		$user_id = self::factory()->user->create(
 			[
 				'role' => 'subscriber',
@@ -185,6 +216,8 @@ class Newspack_Test_My_Account_Button_Block extends WP_UnitTestCase {
 
 		$this->assertNotEmpty( $signed_in_output );
 		$this->assertStringContainsString( '&quot;signedin&quot;:&quot;My Account&quot;', $signed_in_output );
+
+		self::tear_down_account_url();
 	}
 
 	/**
@@ -213,5 +246,23 @@ class Newspack_Test_My_Account_Button_Block extends WP_UnitTestCase {
 		$this->assertSame( '', trim( $output ) );
 
 		remove_all_filters( 'newspack_test_wc_account_url' );
+	}
+
+	/**
+	 * The account URL resolves via My_Account::get_endpoint_url when Woo is
+	 * absent (native page set).
+	 */
+	public function test_account_url_native() {
+		if ( \Newspack\My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( \Newspack\My_Account::PAGE_ID_OPTION, $page_id );
+
+		$method = new ReflectionMethod( 'Newspack\Blocks\My_Account_Button\My_Account_Button_Block', 'get_account_url' );
+		$method->setAccessible( true );
+		$this->assertSame( get_permalink( $page_id ), $method->invoke( null ) );
+
+		delete_option( \Newspack\My_Account::PAGE_ID_OPTION );
 	}
 }

@@ -14,12 +14,12 @@ Sponsors are a custom post type (CPT). Each published sponsor post automatically
 ## Linting
 
 ```bash
-npm run lint          # SCSS + JS
-npm run lint:php      # PHPCS
-npm run fix:php       # PHPCBF auto-fix
+npm run lint          # SCSS + JS (skips PHP)
 ```
 
-PHPCS standards: `WordPress-Extra`, `WordPress-Docs`, `WordPress-VIP-Go`. Short array syntax and non-Yoda conditions are allowed (explicitly excluded in `phpcs.xml`). PHP compatibility is checked against `7.2+`.
+PHP is linted from the workspace root, not from this directory. See the root guide.
+
+PHPCS standards: `WordPress-Extra`, `WordPress-Docs`, `WordPress-VIP-Go`. Short array syntax and non-Yoda conditions are allowed (explicitly excluded in `phpcs.xml`). The root ruleset checks PHP compatibility against `8.0-`.
 
 ## Technical details
 
@@ -28,7 +28,7 @@ PHPCS standards: `WordPress-Extra`, `WordPress-Docs`, `WordPress-VIP-Go`. Short 
 All sponsor-level meta is registered on the `newspack_spnsrs_cpt` post type unless noted. To discover the full list:
 
 ```bash
-grep -n 'register_meta' repos/newspack-sponsors/includes/class-core.php
+grep -n 'register_meta' includes/class-core.php
 ```
 
 Display-control meta fields (`newspack_sponsor_sponsorship_scope`, `newspack_sponsor_native_byline_display`, `newspack_sponsor_native_category_display`, `newspack_sponsor_underwriter_style`, `newspack_sponsor_underwriter_placement`) have **no `object_subtype`**. They are registered for all post types so that non-CPT posts can hold per-post display overrides.
@@ -131,7 +131,7 @@ This single filter covers CPT registration, taxonomy registration, editor asset 
 
 ```bash
 # Find all filters/actions this plugin exposes:
-grep -n 'apply_filters\|do_action' repos/newspack-sponsors/includes/
+grep -rn 'apply_filters\|do_action' includes/
 ```
 
 Key filter: **`newspack_sponsors_post_types`** - controls which post types can be sponsored, appear in the editor sidebar, and are queried by theme helpers. Default: `['post', 'page']`.

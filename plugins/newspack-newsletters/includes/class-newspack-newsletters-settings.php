@@ -102,6 +102,24 @@ class Newspack_Newsletters_Settings {
 				'sanitize_callback' => 'boolval',
 				'onboarding'        => true,
 			),
+			// Stored raw when saved via the wizard's REST path (update_settings() writes
+			// the option directly); sanitized with wp_kses_post at output.
+			array(
+				'description'       => esc_html__( 'Resubscribe error message', 'newspack-newsletters' ),
+				'key'               => 'newspack_newsletters_mailchimp_resubscribe_message',
+				'type'              => 'textarea',
+				'default'           => '',
+				'provider'          => 'mailchimp',
+				// Previews the real fallback copy, so it reads from the same getter the
+				// fallback itself uses. Plain (unescaped) — the value is delivered over REST
+				// and set as a React attribute (placeholder={ props.placeholder }); React
+				// escapes attributes at render, so PHP-side esc_attr/esc_html here would only
+				// encode the apostrophe (We&#039;ll).
+				'placeholder'       => Newspack_Newsletters_Mailchimp::get_default_resubscribe_message(),
+				'sanitize_callback' => 'wp_kses_post',
+				'help'              => esc_html__( 'Shown to readers who unsubscribed from Mailchimp and try to resubscribe on the site. HTML links are allowed. Leave empty for the default message.', 'newspack-newsletters' ),
+				'onboarding'        => false,
+			),
 			array(
 				'description' => esc_html__( 'Constant Contact API Key', 'newspack-newsletters' ),
 				'key'         => 'newspack_newsletters_constant_contact_api_key',
@@ -561,6 +579,13 @@ class Newspack_Newsletters_Settings {
 					<?php endif; ?>
 				/>
 			<?php
+		} elseif ( 'textarea' === $type ) {
+			printf(
+				'<textarea id="%s" name="%s" rows="4" class="widefat">%s</textarea>',
+				esc_attr( $key ),
+				esc_attr( $key ),
+				esc_textarea( $value )
+			);
 		} else {
 			printf(
 				'<input type="text" id="%s" name="%s" value="%s" class="widefat" />',

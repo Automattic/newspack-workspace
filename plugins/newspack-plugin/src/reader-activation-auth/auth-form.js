@@ -7,6 +7,8 @@ import { domReady, formatTime } from '../utils';
 import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
 import { openVerificationModal } from './verification-modal';
+import { maybeConfirmRegistration } from './confirmation-modal';
+import { getBackTarget, shouldReuseActiveCode } from './auth-form-helpers';
 
 import './google-oauth';
 import './otp-input';
@@ -96,10 +98,21 @@ window.newspackRAS.push( function ( readerActivation ) {
 			 * Handle auth form action selection.
 			 */
 			let formAction;
+			// Whether a one-time code has been sent in this modal session. A per-session flag,
+			// not the np_otp_hash cookie, which persists ~29 minutes across sessions and would
+			// make a genuine first "email me a code" click skip the send (NPPM-3054).
+			let codeSent = false;
 			container.setFormAction = ( action, shouldFocus = false ) => {
 				if ( ! FORM_ALLOWED_ACTIONS.includes( action ) ) {
 					action = 'signin';
 				}
+				// Moving to any form step ends the previous step's in-flight request, so clear the
+				// submit button's loading spinner here. This is the single owner for the transition
+				// case (signin -> pwd/otp, -> success, back button): startLoginFlow() adds the class,
+				// every step change removes it. Same-state errors clear it in endLoginFlow() instead.
+				submitButtons.forEach( button => {
+					button.classList.remove( 'newspack-ui__button--loading' );
+				} );
 				// Signin and success steps should clear any modal errors or messages.
 				if ( 'signin' === action || 'success' === action ) {
 					form.setMessageContent();
@@ -185,7 +198,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						}
 					}
 					form.setMessageContent();
-					container.setFormAction( 'signin', true );
+					container.setFormAction( getBackTarget( formAction, container.readerHasPassword ), true );
 				} );
 			} );
 
@@ -222,6 +235,16 @@ window.newspackRAS.push( function ( readerActivation ) {
 					button.addEventListener( 'click', function ( ev ) {
 						ev.preventDefault();
 						form.setMessageContent();
+						// A reader who already requested a code and returned to the password step can
+						// choose the code again. Show the existing code-entry step instead of asking the
+						// server for a new code, which would restart the resend cooldown and strand the
+						// code already in their inbox. Only the "email me a code" button reuses; resend
+						// always requests a fresh code.
+						if ( shouldReuseActiveCode( ev.currentTarget === sendCodeButton, codeSent ) ) {
+							container.setFormAction( 'otp' );
+							handleOTPTimer();
+							return;
+						}
 						form.startLoginFlow();
 						const body = new FormData();
 						body.set( 'reader-activation-auth-form', 1 );
@@ -252,6 +275,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 									formAction === 'pwd' ? newspack_reader_activation_labels.code_sent : newspack_reader_activation_labels.code_resent
 								);
 								container.setFormAction( 'otp' );
+								codeSent = true;
 								if ( ! readerActivation.getOTPTimeRemaining() ) {
 									readerActivation.setOTPTimer();
 								}
@@ -261,6 +285,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 								form.style.opacity = 1;
 								submitButtons.forEach( submitButton => {
 									submitButton.disabled = false;
+									// startLoginFlow() added the spinner for this send/resend request; this
+									// branch doesn't route through setFormAction() on error, so clear it here
+									// in lockstep with the disabled attribute.
+									submitButton.classList.remove( 'newspack-ui__button--loading' );
 								} );
 							} );
 					} );
@@ -273,6 +301,12 @@ window.newspackRAS.push( function ( readerActivation ) {
 				container.removeAttribute( 'data-form-status' );
 				submitButtons.forEach( button => {
 					button.disabled = true;
+					// Add the loading spinner here so both the modal and the inline auth form (e.g.
+					// /my-account) show it — newspack-ui/js/modals.js also adds it, but only for forms
+					// inside a modal. Removal is centralized in setFormAction() (on every step change)
+					// and endLoginFlow() (on errors), with the few AJAX branches that bypass those
+					// clearing it directly.
+					button.classList.add( 'newspack-ui__button--loading' );
 				} );
 				form.setMessageContent();
 				form.style.opacity = 0.5;
@@ -285,18 +319,22 @@ window.newspackRAS.push( function ( readerActivation ) {
 				if ( container.config?.closeOnSuccess ) {
 					form.style.opacity = 1;
 				}
-				if ( message ) {
-					const messageNode = document.createElement( 'p' );
-					messageNode.innerHTML = message;
-
-					if ( status !== 200 ) {
-						form.isVerifying = false;
+				if ( status !== 200 ) {
+					// Any non-success outcome must restore the form so the reader can retry: undim it,
+					// clear the loading spinner, and re-enable the button. This is the only reset for the
+					// null-message network/parse failures from the fetch .catch() paths — they have no
+					// other opacity/spinner restore and would otherwise leave the form dimmed with a stuck
+					// spinner. Show an inline error only when we actually have a message.
+					form.isVerifying = false;
+					form.style.opacity = 1;
+					if ( message ) {
 						form.setMessageContent( message, true );
 						messageContentElement.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
-						submitButtons.forEach( button => {
-							button.disabled = false;
-						} );
 					}
+					submitButtons.forEach( button => {
+						button.disabled = false;
+						button.classList.remove( 'newspack-ui__button--loading' );
+					} );
 				}
 				if ( status === 200 ) {
 					if ( data?.email ) {
@@ -330,7 +368,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					// modal before completing the auth flow. The newsletters signup modal is shown after the
 					// verification step (or its dismissal) and before the original onSuccess/onClose callbacks.
 					const needsVerification =
-						data?.registered && newspack_ras_config?.require_account_verification && data?.verified !== true && data?.verification_nonce;
+						data?.registered && newspack_ras_config?.verify_new_reader_accounts && data?.verified !== true && data?.verification_nonce;
 
 					let callback;
 					if ( ! container.config?.skipNewslettersSignup && data?.registered && container.authCallback ) {
@@ -375,6 +413,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 						// back to it in OTP state on Send code.
 						submitButtons.forEach( button => {
 							button.disabled = false;
+							// startLoginFlow() added the spinner; this branch opens the verification modal
+							// instead of routing through setFormAction(), so clear it here in lockstep
+							// with the disabled attribute.
+							button.classList.remove( 'newspack-ui__button--loading' );
 						} );
 						form.style.opacity = 1;
 
@@ -518,54 +560,87 @@ window.newspackRAS.push( function ( readerActivation ) {
 							form.endLoginFlow( data.message, 400 );
 						} );
 				} else {
-					fetch( form.getAttribute( 'action' ) || window.location.pathname, {
-						method: 'POST',
-						headers: {
-							Accept: 'application/json',
-						},
-						body,
-					} )
-						.then( res => {
-							container.setAttribute( 'data-form-status', res.status );
-							res.json()
-								.then( ( { message, data } ) => {
-									const status = res.status;
-									if ( status === 200 ) {
-										readerActivation.setReaderEmail( body.get( 'npe' ) );
-									}
-									if ( data.action ) {
-										container.setFormAction( data.action, true );
-										if ( data.action === 'otp' ) {
-											readerActivation.setOTPTimer();
-											handleOTPTimer();
+					const submitForm = () =>
+						fetch( form.getAttribute( 'action' ) || window.location.pathname, {
+							method: 'POST',
+							headers: {
+								Accept: 'application/json',
+							},
+							body,
+						} )
+							.then( res => {
+								container.setAttribute( 'data-form-status', res.status );
+								res.json()
+									.then( ( { message, data } ) => {
+										const status = res.status;
+										if ( status === 200 ) {
+											readerActivation.setReaderEmail( body.get( 'npe' ) );
 										}
-										if ( data.action === 'otp' || data.action === 'pwd' ) {
+										if ( data.action ) {
+											// A `signin` response of 'pwd' means the reader has a password; 'otp' means
+											// they don't. Remember it so "Go Back" from the code step can return them to
+											// the password step (NPPM-3054). Other transitions (resend, verify) don't set
+											// data.action here, so the flag survives them.
+											if ( 'pwd' === data.action || 'otp' === data.action ) {
+												container.readerHasPassword = 'pwd' === data.action;
+											}
+											container.setFormAction( data.action, true );
+											if ( data.action === 'otp' ) {
+												readerActivation.setOTPTimer();
+												handleOTPTimer();
+											}
+											if ( data.action === 'otp' || data.action === 'pwd' ) {
+												form.style.opacity = 1;
+											}
+											// The spinner is already cleared by setFormAction() above; just
+											// re-enable the button for the new step.
+											submitButtons.forEach( button => {
+												button.disabled = false;
+											} );
+										} else {
+											form.endLoginFlow( message, status, data );
+										}
+									} )
+									.catch( () => {
+										form.endLoginFlow();
+									} )
+									.finally( () => {
+										const status = res.status;
+										// Check if modal should close on success. If no, reset opacity to 1.
+										// If yes, only reset opacity to 1 if the status is not successful.
+										if ( container.config?.closeOnSuccess ) {
+											form.style.opacity = 1;
+										} else if ( status !== 200 && ! container.config?.closeOnSuccess ) {
 											form.style.opacity = 1;
 										}
-										submitButtons.forEach( button => {
-											button.disabled = false;
-										} );
-									} else {
-										form.endLoginFlow( message, status, data );
-									}
-								} )
-								.catch( () => {
-									form.endLoginFlow();
-								} )
-								.finally( () => {
-									const status = res.status;
-									// Check if modal should close on success. If no, reset opacity to 1.
-									// If yes, only reset opacity to 1 if the status is not successful.
-									if ( container.config?.closeOnSuccess ) {
-										form.style.opacity = 1;
-									} else if ( status !== 200 && ! container.config?.closeOnSuccess ) {
-										form.style.opacity = 1;
-									}
+									} );
+							} )
+							.catch( () => {
+								form.endLoginFlow();
+							} );
+
+					// Only the unified `signin` action can become a new registration server-side;
+					// `pwd` and `link` always require an existing user, so they skip the confirmation
+					// step. When verification is OFF and the email is new, the confirmation modal
+					// appears before the actual register POST.
+					if ( 'signin' === action ) {
+						maybeConfirmRegistration( {
+							email: body.get( 'npe' ),
+							onProceed: submitForm,
+							onCancel: () => {
+								submitButtons.forEach( button => {
+									button.disabled = false;
+									// startLoginFlow() added the spinner; cancelling keeps us on the signin step
+									// without routing through setFormAction(), so clear it here in lockstep
+									// with the disabled attribute.
+									button.classList.remove( 'newspack-ui__button--loading' );
 								} );
-						} )
-						.catch( () => {
-							form.endLoginFlow();
+								form.style.opacity = 1;
+							},
 						} );
+					} else {
+						submitForm();
+					}
 				}
 			} );
 		} );

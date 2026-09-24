@@ -31,6 +31,8 @@ class Teams_For_Memberships {
 		add_filter( 'newspack_my_account_disabled_pages', [ __CLASS__, 'enable_members_area_for_team_members' ] );
 		add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'update_team_subscription_on_resubscribe' ], 21, 2 );
 		add_filter( 'wc_memberships_for_teams_determine_order_item_action', [ __CLASS__, 'restore_team_meta_on_renewal' ], 10, 2 );
+		// Priority 20 so this runs after Teams' own subscription integration (priority 10), which is a no-op for non-subscription teams.
+		add_action( 'wc_memberships_for_teams_add_team_member', [ __CLASS__, 'sync_member_end_date_to_team' ], 20, 3 );
 	}
 
 	/**
@@ -385,6 +387,68 @@ class Teams_For_Memberships {
 		}
 
 		return $action;
+	}
+
+	/**
+	 * Fill in a member's user-membership end date from the team when it has none.
+	 *
+	 * Teams propagates the team end date to a member's user membership when the member already had
+	 * an existing membership (see Team::add_member()), or when the team is tied to a WooCommerce
+	 * subscription (see the Teams Subscriptions integration, which bails for non-subscription
+	 * teams). For manually-managed teams that have a fixed end date but no subscription, a newly
+	 * created member membership is left with the plan-relative end date, which resolves to empty
+	 * for unlimited/subscription-typed plans. The member then never expires even after the team
+	 * membership lapses.
+	 *
+	 * This fills that specific gap: when the member's user membership has no end date at all, it
+	 * inherits the team's. We deliberately only fill a *missing* end date and never override one
+	 * that is already set -- whether by the plan's access length, a separately purchased individual
+	 * membership, or upstream Team::add_member() (which reconciles existing memberships and their
+	 * status on its own). That keeps us from fighting fixed-length plans' midnight-snapped dates,
+	 * shortening a longer independently-held membership, or duplicating upstream's membership note.
+	 *
+	 * Calling set_end_date() also (re)schedules the per-membership expiry event so the member
+	 * expires on time on their own; is_active() lazily expires the membership if the team end is
+	 * already in the past, so no status change is needed here (and we avoid the synchronous ESP
+	 * list mutations a status change would fire during a possibly-bulk member add).
+	 *
+	 * @see https://linear.app/a8c/issue/NPPM-2932
+	 *
+	 * @param \SkyVerge\WooCommerce\Memberships\Teams\Team_Member $member          The team member instance.
+	 * @param \SkyVerge\WooCommerce\Memberships\Teams\Team        $team            The team instance.
+	 * @param \WC_Memberships_User_Membership                     $user_membership The related user membership instance.
+	 */
+	public static function sync_member_end_date_to_team( $member, $team, $user_membership ): void {
+		if (
+			! is_a( $team, '\SkyVerge\WooCommerce\Memberships\Teams\Team' ) ||
+			! is_a( $user_membership, '\WC_Memberships_User_Membership' ) ||
+			! method_exists( $team, 'get_membership_end_date' )
+		) {
+			return;
+		}
+
+		// Only fill a *missing* end date. Anything already set is owned by the plan, an independent
+		// membership, or upstream Team::add_member(); overriding it would fight fixed-length plans'
+		// midnight snapping and could shorten a longer independently-held membership.
+		if ( ! empty( $user_membership->get_end_date( 'timestamp' ) ) ) {
+			return;
+		}
+
+		$team_end = $team->get_membership_end_date( 'timestamp' );
+
+		// Unlimited team (no end date): there is nothing to enforce. The is_numeric() check is
+		// belt-and-suspenders for this access-control path: get_membership_end_date( 'timestamp' )
+		// returns int|null today, but if a future upstream change returned a date string, casting it
+		// to int below would collapse it to a ~1970 timestamp and wrongly expire the member -- so we
+		// bail instead.
+		if ( empty( $team_end ) || ! is_numeric( $team_end ) ) {
+			return;
+		}
+
+		// Pass a MySQL/UTC date string for consistency with this file's sibling set_end_date() call.
+		$user_membership->set_end_date( gmdate( 'Y-m-d H:i:s', (int) $team_end ) );
+
+		$user_membership->add_note( __( 'Membership end date synced to the team membership expiration date.', 'newspack-plugin' ) );
 	}
 }
 

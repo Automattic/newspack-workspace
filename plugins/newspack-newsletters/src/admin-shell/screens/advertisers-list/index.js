@@ -7,37 +7,52 @@
  * `useAllAdvertisers`).
  */
 
-import { __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Button } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
 
-import EmptyState from '../../components/empty-state';
+import { EmptyState } from 'newspack-components';
+import LoadingState from '../../components/loading-state';
+import HeaderCount from '../../components/header-count';
+import ItemsPerPage from '../../components/items-per-page';
+import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
 import { useHeaderActions } from '../../header-actions-context';
+import usePersistedView from '../../hooks/use-persisted-view';
+import isStrictlyEmpty from '../../utils/is-strictly-empty';
 import AdvertiserModal from './modal';
 import useAdvertisersData from './use-advertisers-data';
 import useAllAdvertisers from './use-all-advertisers';
 import { getInitialView } from './initial-filters';
-import { getFields } from './fields';
+import { FIELD_IDS, getFields } from './fields';
 import { getActions } from './actions';
 
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
-	perPage: 25,
+	perPage: 20,
 	sort: { field: 'name', direction: 'asc' },
 	search: '',
 	filters: [],
 	titleField: 'name',
 	fields: [ 'description', 'slug', 'count' ],
-	...getInitialView(),
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
 
+const PERSIST_OPTIONS = {
+	fieldIds: FIELD_IDS,
+	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
+	urlPatch: getInitialView(),
+};
+
+// Suppress the built-in ViewConfig per-page control — the custom
+// `ItemsPerPage` renders in its place inside the View options popover.
+const DATAVIEWS_CONFIG = { perPageSizes: [] };
+
 export default function AdvertisersListScreen() {
-	const [ view, setView ] = useState( DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'advertisers-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ modalState, setModalState ] = useState( null ); // null | { mode: 'add' | 'edit', advertiser?: Object }
 	// Single mutation trigger shared by every write path (Modal save,
 	// per-row Delete, bulk Delete). Bumping it refetches both the
@@ -63,8 +78,9 @@ export default function AdvertisersListScreen() {
 	const fields = useMemo( () => getFields( { onEdit: openEdit } ), [ openEdit ] );
 	const actions = useMemo( () => getActions( { onEdit: openEdit, onMutated } ), [ openEdit, onMutated ] );
 
-	const isStrictEmpty =
-		hasLoadedOnce && ! isLoading && paginationInfo.totalItems === 0 && ! view.search && ( ! view.filters || view.filters.length === 0 );
+	// `trashCount` is omitted, not forgotten: advertisers are terms and have no trash.
+	// Passing the `null` `useAdvertisersData` hands back would block this empty state.
+	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, view } );
 
 	useHeaderActions(
 		useMemo(
@@ -74,7 +90,7 @@ export default function AdvertisersListScreen() {
 					: [
 							{
 								type: 'primary',
-								label: __( 'Add new advertiser', 'newspack-newsletters' ),
+								label: __( 'Add Advertiser', 'newspack-newsletters' ),
 								onClick: openAdd,
 							},
 					  ],
@@ -83,26 +99,29 @@ export default function AdvertisersListScreen() {
 	);
 
 	if ( ! hasResolved ) {
-		return (
-			<HStack className="newspack-newsletters-admin__loading" justify="center">
-				<Spinner />
-			</HStack>
-		);
+		return <LoadingState label={ __( 'Fetching advertisers…', 'newspack-newsletters' ) } />;
 	}
 
 	return (
 		<>
+			<HeaderCount count={ paginationInfo.totalItems } />
 			{ isStrictEmpty ? (
-				<EmptyState
-					icon={ store }
-					title={ __( 'Get started with advertisers', 'newspack-newsletters' ) }
-					description={ __(
-						'Group ads by the advertiser they belong to so you can track and report on each one separately.',
-						'newspack-newsletters'
-					) }
-					ctaTitle={ __( 'Add new advertiser', 'newspack-newsletters' ) }
-					ctaOnClick={ openAdd }
-				/>
+				<EmptyState.Root className={ EMPTY_STATE_CLASS }>
+					<EmptyState.Header
+						icon={ store }
+						heading={ getEmptyStateHeading() }
+						title={ __( 'Get started with advertisers', 'newspack-newsletters' ) }
+						description={ __(
+							'Group ads by the advertiser they belong to so you can track and report on each one separately.',
+							'newspack-newsletters'
+						) }
+					/>
+					<EmptyState.Actions>
+						<Button variant="primary" onClick={ openAdd }>
+							{ __( 'Add Advertiser', 'newspack-newsletters' ) }
+						</Button>
+					</EmptyState.Actions>
+				</EmptyState.Root>
 			) : (
 				<DataViews
 					className="newspack-newsletters-list newspack-newsletters-advertisers-list"
@@ -116,6 +135,10 @@ export default function AdvertisersListScreen() {
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
 					search
+					config={ DATAVIEWS_CONFIG }
+					header={
+						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
+					}
 				/>
 			) }
 

@@ -5,11 +5,11 @@ import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { Spinner, Notice } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge } from '../../../../../packages/components/src';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
 
 function formatArgs( args ) {
@@ -84,14 +84,14 @@ export const LogDetailsModal = ( { integrationId, actionId } ) => {
 	}
 
 	const { action, logs } = data;
-	const status = STATUS_MAP[ action.status ] || { label: action.status, level: 'default' };
+	const status = STATUS_MAP[ action.status ] || { label: action.status, intent: 'none' };
 	const formattedArgs = formatArgs( action.args );
 
 	return (
 		<div className="newspack-integration-log-details">
 			<div className="newspack-integration-log-details__header">
 				<h3>{ action.event }</h3>
-				<Badge text={ status.label } level={ status.level } />
+				<Badge intent={ status.intent }>{ status.label }</Badge>
 			</div>
 
 			<dl className="newspack-integration-log-details__meta">

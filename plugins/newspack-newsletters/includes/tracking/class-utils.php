@@ -19,18 +19,47 @@ final class Utils {
 		if ( empty( $provider ) ) {
 			return '';
 		}
-		$provider_name = $provider->service;
-		switch ( $provider_name ) {
-			case 'mailchimp':
-				return '*|EMAIL|*';
-			case 'campaign_monitor':
-				return '[email]';
-			case 'constant_contact':
-				return '[[emailAddress]]';
-			case 'active_campaign':
-				return '%EMAIL%';
-			default:
-				return '';
+		return match ( $provider->service ) {
+			'mailchimp'        => '*|EMAIL|*',
+			'campaign_monitor' => '[email]',
+			'constant_contact' => '[[emailAddress]]',
+			'active_campaign'  => '%EMAIL%',
+			default            => '',
+		};
+	}
+
+	/**
+	 * Get the ESP merge tag for an arbitrary merge field.
+	 *
+	 * The counterpart to get_email_address_tag() for any field: callers embed
+	 * the returned tag in newsletter content and the ESP substitutes the
+	 * recipient's value at send time. Used to carry a per-recipient field value
+	 * (e.g. a donor-status flag) into a link without Newspack needing to know
+	 * the recipient at render time.
+	 *
+	 * The field name is used verbatim, so callers must pass the exact ESP merge
+	 * tag (e.g. the Mailchimp merge field's tag, not its display label).
+	 *
+	 * @param string $field The ESP merge field tag.
+	 *
+	 * @return string The merge tag (e.g. '*|DONORSTATUS|*'), or '' when there is
+	 *                no provider, the field is empty, or the provider is unsupported.
+	 */
+	public static function get_merge_tag( $field ) {
+		$field = trim( (string) $field );
+		if ( '' === $field ) {
+			return '';
 		}
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider ) ) {
+			return '';
+		}
+		return match ( $provider->service ) {
+			'mailchimp'        => '*|' . $field . '|*',
+			'campaign_monitor' => '[' . $field . ']',
+			'constant_contact' => '[[' . $field . ']]',
+			'active_campaign'  => '%' . $field . '%',
+			default            => '',
+		};
 	}
 }

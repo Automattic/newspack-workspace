@@ -15,6 +15,10 @@
 	},
 	"supports": {
 		"html": false,
-		"visibility": false
+		"visibility": false,
+		"spacing": {
+			"padding": true,
+			"margin": true
+		}
 	}
 }

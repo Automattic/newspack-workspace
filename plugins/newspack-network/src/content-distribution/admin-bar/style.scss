@@ -1,0 +1,57 @@
+#wpadminbar {
+
+	#wp-admin-bar-newspack-network-distribute > .ab-item {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.newspack-network-distribute-icon {
+		display: grid;
+		place-items: center;
+	}
+}
+
+@media screen and (max-width: 782px) {
+
+	#wpadminbar li#wp-admin-bar-newspack-network-distribute {
+		display: block;
+	}
+}
+
+// Layout and spacing come from Newspack UI's stack and button classes; what is
+// left here is the fieldset reset and the two things the design system has no
+// class for.
+.newspack-network-distribute-form {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+// The panels are stacks, so they set display: flex, which would win over [hidden].
+.newspack-network-distribute-form[hidden],
+.newspack-network-distribute-confirm[hidden] {
+	display: none;
+}
+
+.newspack-network-distribute-all {
+	font-weight: 600;
+}
+
+.newspack-network-distribute-site {
+
+	// Reads as locked, matching the disabled checkbox and its description.
+	&:has(input:disabled) {
+		opacity: 0.5;
+	}
+}
+
+.newspack-network-distribute-site-name {
+	flex: 1;
+}
+
+// Focused programmatically so the question is announced; it is not in the tab
+// ring, so the ring would be misleading here.
+.newspack-network-distribute-confirm-message:focus {
+	outline: none;
+}

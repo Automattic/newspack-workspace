@@ -65,3 +65,23 @@ figcaption a {
 		margin-bottom: var(--wp--preset--spacing--50);
 	}
 }
+
+/*
+ * Editor styles - Ad spacing
+ *
+ * When an ad slot is immediately after the header, remove the bottom margin from
+ * the header to prevent extra spacing. This mirrors the front-end rule in
+ * `_header.scss`, but keys off the ad-slot block wrapper rather than the rendered
+ * ad. The wrapper is always present in the canvas, so this is an editor-only
+ * approximation: it collapses the margin whenever the block is placed, even if
+ * the placement is unbound and no ad would render on the front end. The
+ * `!important` overrides the block's inline spacing, which selector specificity
+ * alone can't beat.
+ */
+.editor-styles-wrapper {
+	.wp-block-newspack-responsive-container:has( + .wp-block-newspack-ads-ad-slot ) {
+		.newspack-responsive-container-breakpoint .block-editor-block-list__layout > *:last-child {
+			margin-bottom: 0 !important;
+		}
+	}
+}

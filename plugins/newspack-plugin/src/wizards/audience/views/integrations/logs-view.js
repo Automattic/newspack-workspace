@@ -12,7 +12,7 @@ import { DataViews as WPDataViews } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { Badge, DataViews } from '../../../../../packages/components/src';
+import { DataViews, StatusIndicator } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
 import { LogDetailsModal } from './log-details-modal';
@@ -51,7 +51,7 @@ export const LogsView = ( { integrations, match } ) => {
 	useEffect( () => {
 		if ( integration ) {
 			setHeaderData( {
-				sectionName: `${ integration.name } / ${ __( 'Logs', 'newspack-plugin' ) }`,
+				sectionName: [ { label: integration.name, url: `#/settings/${ integrationId }` }, { label: __( 'Logs', 'newspack-plugin' ) } ],
 				actions: [
 					{
 						type: 'secondary',
@@ -62,7 +62,7 @@ export const LogsView = ( { integrations, match } ) => {
 				],
 			} );
 		}
-	}, [ integration, setHeaderData ] );
+	}, [ integration, integrationId, setHeaderData ] );
 
 	const statusFilter = view.filters?.find( f => f.field === 'status' )?.value;
 
@@ -132,8 +132,9 @@ export const LogsView = ( { integrations, match } ) => {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				render: ( { item } ) => {
-					const mapped = STATUS_MAP[ item.status ] || { label: item.status, level: 'default' };
-					return <Badge text={ mapped.label } level={ mapped.level } />;
+					// A status Action Scheduler grows later is one to look at, not a deliberate stop.
+					const mapped = STATUS_MAP[ item.status ] || { label: item.status, status: 'attention' };
+					return <StatusIndicator status={ mapped.status }>{ mapped.label }</StatusIndicator>;
 				},
 				enableSorting: true,
 				elements: [

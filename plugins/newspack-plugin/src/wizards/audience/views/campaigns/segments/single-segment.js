@@ -5,7 +5,7 @@
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { ToggleControl, CheckboxControl } from '@wordpress/components';
 import { useEffect, useState, Fragment } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import find from 'lodash/find';
 import { applyFilters, addFilter } from '@wordpress/hooks';
 
@@ -16,7 +16,15 @@ import { Button, CategoryAutocomplete, Router, SelectControl, Settings, TextCont
 import ListsControl from '../../../components/lists-control';
 
 const { useHistory } = Router;
-const { SettingsCard, SettingsSection, MinMaxSetting } = Settings;
+const { SettingsCard, SettingsSection, MinMaxSetting, DateRangeSetting } = Settings;
+
+/**
+ * Whether a criterion should render as a multi-select checkbox group: ESP
+ * fields marked "Multiple values" use the list__in / list__not_in matching
+ * functions and have a fixed set of options.
+ */
+export const isMultiSelectCriteria = criteria =>
+	[ 'list__in', 'list__not_in' ].includes( criteria?.matching_function ) && !! criteria?.options?.length;
 
 const DEFAULT_CONFIG = {
 	is_disabled: false,
@@ -105,7 +113,12 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 			if ( ! value || ( Array.isArray( value ) && 0 === value.length ) ) {
 				config.splice( config.indexOf( item ), 1 );
 			} else if ( ! Array.isArray( value ) && typeof value === 'object' ) {
-				item.value = { ...item.value, ...value };
+				// A criterion that changed operators may still hold a scalar value
+				// (e.g. a date field switched from Text to Date range). Spreading a
+				// string would scatter it into character-indexed keys, so only merge
+				// onto a previous value that is itself a plain object.
+				const previous = item.value && typeof item.value === 'object' && ! Array.isArray( item.value ) ? item.value : {};
+				item.value = { ...previous, ...value };
 			} else {
 				item.value = value;
 			}
@@ -130,6 +143,37 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 					/>
 				);
 			}
+			if ( 'date_range' === criteria.matching_function ) {
+				return (
+					<DateRangeSetting
+						data-testid={ `newspack-criteria-${ criteria.id }` }
+						label={ criteria.name }
+						start={ value?.start }
+						end={ value?.end }
+						onChange={ update }
+					/>
+				);
+			}
+			if ( isMultiSelectCriteria( criteria ) ) {
+				const selected = Array.isArray( value ) ? value : [];
+				// `register_segment_criteria` prepends an "Any" option (value '') for the
+				// single-select case; it is meaningless for a multi-select, so drop it.
+				const options = criteria.options.filter( option => '' !== option.value );
+				return (
+					<div data-testid={ `newspack-criteria-${ criteria.id }` }>
+						{ options.map( option => (
+							<CheckboxControl
+								key={ option.value }
+								label={ option.label }
+								checked={ selected.includes( option.value ) }
+								onChange={ isChecked =>
+									update( isChecked ? [ ...selected, option.value ] : selected.filter( v => v !== option.value ) )
+								}
+							/>
+						) ) }
+					</div>
+				);
+			}
 			if ( criteria.options?.length ) {
 				return (
 					<SelectControl
@@ -147,13 +191,22 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 					isWide
 					placeholder={ criteria.placeholder }
 					help={ criteria.help }
-					value={ value }
+					// A criterion that changed operators may still hold an object value
+					// (a saved { start, end } range after the field moved off Date range).
+					// Rendered raw it becomes "[object Object]", and one keystroke would
+					// save that literal over the range — show an empty input instead and
+					// leave the stored value alone until it is deliberately replaced.
+					value={ value && 'object' === typeof value && ! Array.isArray( value ) ? '' : value }
 					onChange={ update }
 				/>
 			);
 		};
 		return applyFilters( 'newspack.criteria.input', getInput(), criteria, value, update );
 	};
+
+	// translators: %s is the segment's numeric ID.
+	const analyticsIdText = __( 'Analytics ID: %s — this segment’s identifier in Google Analytics reports.', 'newspack-plugin' );
+	const analyticsIdHelp = isNew ? undefined : sprintf( analyticsIdText, segmentId );
 
 	return (
 		<Fragment>
@@ -163,6 +216,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 				onChange={ setName }
 				label={ __( 'Title', 'newspack-plugin' ) }
 				className={ 'newspack-campaigns-wizard-segments__title' }
+				help={ analyticsIdHelp }
 			/>
 
 			<SettingsCard

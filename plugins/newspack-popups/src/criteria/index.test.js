@@ -80,6 +80,30 @@ describe( 'criteria matching', () => {
 		expect( criteria.matches( { value: { min: 10 } } ) ).toEqual( false );
 		expect( criteria.matches( { value: {} } ) ).toEqual( true );
 	} );
+	it( 'enforces a "range" min of 0 instead of treating it as unbounded', () => {
+		// A fresh criteria per value — `criteria.value` is snapshotted on first match.
+		registerCriteria( 'range_min_zero', { matchingFunction: 'range', matchingAttribute: () => -5 } );
+		expect( getCriteria( 'range_min_zero' ).matches( { value: { min: 0 } } ) ).toEqual( false );
+		registerCriteria( 'range_exact_zero', { matchingFunction: 'range', matchingAttribute: () => 0 } );
+		expect( getCriteria( 'range_exact_zero' ).matches( { value: { min: 0 } } ) ).toEqual( true );
+	} );
+	it( 'discards a "range" max of 0 or less as invalid, so it does not bound the value', () => {
+		// The segment editor stores max: 0 when the Max bound is unticked, and the
+		// pre-criteria migration stored it for every "at least N" segment.
+		registerCriteria( 'range_max_zero', { matchingFunction: 'range', matchingAttribute: () => 5 } );
+		expect( getCriteria( 'range_max_zero' ).matches( { value: { min: 1, max: 0 } } ) ).toEqual( true );
+		registerCriteria( 'range_max_string_zero', { matchingFunction: 'range', matchingAttribute: () => 5 } );
+		expect( getCriteria( 'range_max_string_zero' ).matches( { value: { max: '0' } } ) ).toEqual( true );
+		registerCriteria( 'range_max_negative', { matchingFunction: 'range', matchingAttribute: () => 5 } );
+		expect( getCriteria( 'range_max_negative' ).matches( { value: { max: -1 } } ) ).toEqual( true );
+		// A positive max is still a bound, fractional ones included.
+		registerCriteria( 'range_max_one', { matchingFunction: 'range', matchingAttribute: () => 5 } );
+		expect( getCriteria( 'range_max_one' ).matches( { value: { min: 1, max: 1 } } ) ).toEqual( false );
+		registerCriteria( 'range_above_fraction', { matchingFunction: 'range', matchingAttribute: () => 0.9 } );
+		expect( getCriteria( 'range_above_fraction' ).matches( { value: { min: 0.2, max: 0.8 } } ) ).toEqual( false );
+		registerCriteria( 'range_within_fraction', { matchingFunction: 'range', matchingAttribute: () => 0.5 } );
+		expect( getCriteria( 'range_within_fraction' ).matches( { value: { min: 0.2, max: 0.8 } } ) ).toEqual( true );
+	} );
 	it( 'should match "list__in" matching function', () => {
 		setMatchingAttribute( criteriaId, () => 'bar' );
 		setMatchingFunction( criteriaId, 'list__in' );
@@ -115,6 +139,13 @@ describe( 'criteria matching', () => {
 		expect( criteria.matches( { value: [ 1 ] } ) ).toEqual( false );
 		expect( criteria.matches( { value: '1' } ) ).toEqual( false );
 		expect( criteria.matches( { value: 1 } ) ).toEqual( false );
+	} );
+	it( 'parses ActiveCampaign pipe-delimited reader values for list__in', () => {
+		setMatchingAttribute( criteriaId, () => '||foo||bar||' );
+		setMatchingFunction( criteriaId, 'list__in' );
+		const criteria = getCriteria( criteriaId );
+		expect( criteria.matches( { value: [ 'bar' ] } ) ).toEqual( true );
+		expect( criteria.matches( { value: [ 'baz' ] } ) ).toEqual( false );
 	} );
 	it( 'should match "list__not_in" matching function', () => {
 		setMatchingAttribute( criteriaId, () => 'bar' );
@@ -168,6 +199,14 @@ describe( 'criteria matching', () => {
 		expect( matchingFunction ).toHaveBeenCalledTimes( 1 );
 		expect( criteria.matches( { value: 'bar' } ) ).toEqual( true );
 		expect( matchingFunction ).toHaveBeenCalledTimes( 2 );
+	} );
+	it( 'never matches when the matching function cannot be resolved', () => {
+		// A criterion registered with a matching function name that doesn't exist
+		// (e.g. an old newspack-popups build that predates a newspack-plugin
+		// criterion) must fail closed instead of throwing when matched.
+		setMatchingFunction( criteriaId, 'does_not_exist' );
+		const criteria = getCriteria( criteriaId );
+		expect( criteria.matches( { value: 'anything' } ) ).toEqual( false );
 	} );
 	it( 'should pass option params to matching function', () => {
 		registerCriteria( criteriaId, {

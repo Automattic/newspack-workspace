@@ -7,6 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
+import { decodeEntities } from '@wordpress/html-entities';
 import { useMemo, useRef, useState } from '@wordpress/element';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
@@ -17,7 +18,7 @@ import { Button, CardSortableList, Modal } from '../../../../../packages/compone
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
-import { getGateStatus, getGateStatusBadgeLevel } from './utils';
+import { getGateStatus, getGateStatusBadgeIntent } from './utils';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
 const ContentGatesPriority = ( {
@@ -29,8 +30,8 @@ const ContentGatesPriority = ( {
 	showModal: boolean;
 	updateGatesData: ( gates: Gate[] ) => void;
 } ) => {
-	const { gates = [] as Gate[] } = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
-	const { wizardApiFetch, isFetching, resetError, setError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
+	const { gates = [] } = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as { gates?: Gate[] };
+	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ sortedGates, setSortedGates ] = useState< Gate[] >( gates );
 	const gateItems = useMemo(
@@ -38,8 +39,7 @@ const ContentGatesPriority = ( {
 			sortedGates.map( gate => ( {
 				id: gate.id,
 				title: gate.title,
-				badgeLevel: getGateStatusBadgeLevel( gate.status ) as 'default' | 'success' | 'info' | 'warning' | 'error',
-				badgeText: getGateStatus( gate.status ) as string,
+				badge: { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) },
 			} ) ),
 		[ sortedGates ]
 	);
@@ -71,7 +71,11 @@ const ContentGatesPriority = ( {
 					} );
 				},
 				onError: ( fetchError: WpFetchError ) => {
-					setError( fetchError );
+					addNotice( {
+						message: decodeEntities( fetchError.message ),
+						type: 'error',
+						id: 'content-gates-priority-error',
+					} );
 					updateGatesData( oldGates );
 				},
 				onFinally: () => {
@@ -104,7 +108,7 @@ const ContentGatesPriority = ( {
 
 	return (
 		showModal && (
-			<Modal title={ __( 'Gate priority', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+			<Modal title={ __( 'Gate Priority', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<VStack spacing={ 6 }>
 					<span>
 						{ __(

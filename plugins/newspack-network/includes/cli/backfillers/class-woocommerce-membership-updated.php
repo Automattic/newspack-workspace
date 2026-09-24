@@ -38,7 +38,7 @@ class Woocommerce_Membership_Updated extends Abstract_Backfiller {
 			[
 				'post_type'   => 'wc_user_membership',
 				'post_status' => 'any',
-				'numberposts' => -1,
+				'numberposts' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 				'fields'      => 'ids',
 				'date_query'  => [
 					'column'    => 'post_modified_gmt',

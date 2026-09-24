@@ -95,7 +95,14 @@ class Enqueuer {
 		}
 
 		// Enqueue frontend assets.
-		self::enqueue_script( self::SCRIPT_NAME_FRONTEND, [ 'wp-dom-ready' ] );
+		self::enqueue_script(
+			self::SCRIPT_NAME_FRONTEND,
+			[ 'wp-dom-ready' ],
+			[
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			]
+		);
 		self::enqueue_style( self::SCRIPT_NAME_FRONTEND );
 		self::localize_data( self::SCRIPT_NAME_FRONTEND );
 	}
@@ -103,16 +110,17 @@ class Enqueuer {
 	/**
 	 * Enqueue a script.
 	 *
-	 * @param string $handle       Script handle.
-	 * @param array  $dependencies Script dependencies. Default is empty array.
+	 * @param string     $handle       Script handle.
+	 * @param array      $dependencies Script dependencies. Default is empty array.
+	 * @param array|bool $args         Script args (or in_footer bool) passed to wp_enqueue_script(). Default is true.
 	 */
-	private static function enqueue_script( $handle, $dependencies = [] ) {
+	private static function enqueue_script( $handle, $dependencies = [], $args = true ) {
 		wp_enqueue_script(
 			$handle,
 			\Newspack\Newspack::plugin_url() . '/dist/' . $handle . '.js',
 			$dependencies,
-			NEWSPACK_PLUGIN_VERSION,
-			true
+			\Newspack\Newspack::asset_version( $handle ),
+			$args
 		);
 	}
 
@@ -127,7 +135,7 @@ class Enqueuer {
 			$handle,
 			\Newspack\Newspack::plugin_url() . '/dist/' . $handle . '.css',
 			$dependencies,
-			NEWSPACK_PLUGIN_VERSION
+			\Newspack\Newspack::asset_version( $handle )
 		);
 
 		wp_style_add_data( $handle, 'rtl', 'replace' );

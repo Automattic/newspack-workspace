@@ -1,0 +1,92 @@
+name: Prune merged branches
+
+# Stack-aware replacement for the "Automatically delete head branches" repo
+# setting (which is to be turned OFF once this workflow is live – see the PR
+# that introduced it for the rollout order).
+#
+# Why not just use the setting: deleting a head branch at the instant of merge
+# races GitHub's own PR-retargeting. When a branch is deleted, two independent
+# server-side jobs fire against PRs that use it as their base: a legacy job
+# that closes them, and the 2020 retargeting job that repoints them at the
+# merged PR's base. They are not mutually exclusive – a stacked ("daisychained")
+# PR can be retargeted AND closed in the same second (see e.g. #626, closed
+# collaterally by the merge of #608 with a live 16-file diff:
+# base_ref_deleted + automatic_base_change_succeeded + closed, all at
+# 2026-07-18T21:38:28Z). Refs:
+# https://github.blog/changelog/2020-05-19-pull-request-retargeting/
+# https://github.com/orgs/community/discussions/176698
+#
+# This workflow enforces the invariant that makes the race structurally
+# impossible: a branch is only ever deleted when NO open PR has it as a base.
+# Branches that fail the check are kept and logged, and retried on the next
+# run – by then the retarget-stacked-prs workflow (or a human) will normally
+# have repointed the dependents. The grace period is cosmetic by comparison;
+# the dependents check is what carries the safety.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: prune-merged-branches
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Delete merged branches with no open dependents
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      GRACE_DAYS: 3
+    steps:
+      - name: Prune
+        run: |
+          cutoff=$(date -u -d "$GRACE_DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)
+          default_branch=$(gh api "repos/$REPO" --jq .default_branch)
+          # Long-lived integration branches are never candidates, protected or not.
+          keep_regex='^(main|alpha|release|trunk|master)$'
+
+          branches=$(gh api "repos/$REPO/branches" --paginate --jq '.[] | select(.protected | not) | .name')
+
+          for branch in $branches; do
+            [ "$branch" = "$default_branch" ] && continue
+            [[ "$branch" =~ $keep_regex ]] && continue
+
+            # An open PR from this branch means active work.
+            open_head=$(gh pr list --repo "$REPO" --head "$branch" --state open --json number --jq length)
+            if [ "$open_head" -gt 0 ]; then
+              continue
+            fi
+
+            # The load-bearing check: never delete a branch that any open PR
+            # still targets. Deleting it would hand those PRs to GitHub's
+            # deletion-time handlers, and with them the close race this
+            # workflow exists to avoid.
+            dependents=$(gh pr list --repo "$REPO" --base "$branch" --state open --json number --jq '[.[].number | tostring] | join(", #")')
+            if [ -n "$dependents" ]; then
+              echo "::notice::Keeping $branch – it is the base of open PR(s) #$dependents. Retarget them first (retarget-stacked-prs normally does this on merge)."
+              continue
+            fi
+
+            # Only branches whose PR actually merged are pruned; a branch with
+            # no merged PR is in-progress or abandoned work, not ours to judge.
+            merged_at=$(gh pr list --repo "$REPO" --head "$branch" --state merged --json mergedAt --jq 'map(.mergedAt) | max // empty')
+            if [ -z "$merged_at" ]; then
+              continue
+            fi
+            if [[ "$merged_at" > "$cutoff" ]]; then
+              echo "Keeping $branch – merged $merged_at, inside the $GRACE_DAYS-day grace period."
+              continue
+            fi
+
+            echo "Deleting $branch (merged $merged_at, no open PRs from or onto it)."
+            if ! gh api -X DELETE "repos/$REPO/git/refs/heads/$branch"; then
+              echo "::warning::Could not delete $branch."
+            fi
+          done

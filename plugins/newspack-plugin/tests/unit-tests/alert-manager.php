@@ -43,7 +43,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			'newspack_sync_retry_exhausted',
 			[
 				'integration_id' => 'esp',
-				'contact'        => [ 'email' => 'test@test.com' ],
+				'contact'        => [ 'email' => 'test@example.com' ],
 				'context'        => 'Reader registered',
 				'retry_count'    => 5,
 				'reason'         => 'Invalid API key',
@@ -56,6 +56,148 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'message', $alert_data );
 		$this->assertArrayHasKey( 'context', $alert_data );
 		$this->assertArrayHasKey( 'timestamp', $alert_data );
+	}
+
+	/**
+	 * Test that a permanent config-level failure fires an error-severity alert
+	 * (routed to Slack).
+	 */
+	public function test_permanent_failure_alert() {
+		$alerts = [];
+		add_action(
+			'newspack_alert',
+			function ( $data ) use ( &$alerts ) {
+				$alerts[] = $data;
+			}
+		);
+
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'user_id'        => 1,
+				'context'        => 'Reader registered',
+				'reason'         => 'Payment Required',
+			]
+		);
+
+		$this->assertCount( 1, $alerts, 'The permanent failure should fire newspack_alert.' );
+		$this->assertEquals( 'sync_permanent_failure', $alerts[0]['type'] );
+		$this->assertEquals( 'error', $alerts[0]['severity'], 'Permanent config failure should be error severity (Slack).' );
+	}
+
+	/**
+	 * Test that repeat permanent config failures for the same integration are
+	 * deduped within the alert window — a config failure is site-level, so an
+	 * account-wide ESP outage must not page once per contact.
+	 */
+	public function test_permanent_config_failure_alert_deduped_per_integration() {
+		$alerts = [];
+		add_action(
+			'newspack_alert',
+			function ( $data ) use ( &$alerts ) {
+				$alerts[] = $data;
+			}
+		);
+
+		$payload = [
+			'integration_id' => 'esp',
+			'user_id'        => 1,
+			'context'        => 'Reader registered',
+			'reason'         => 'Payment Required',
+			'error_class'    => 'permanent_config',
+		];
+		do_action( 'newspack_sync_permanent_failure', $payload );
+		do_action( 'newspack_sync_permanent_failure', $payload );
+
+		$this->assertCount( 1, $alerts, 'Repeat config failures for the same integration should emit one alert.' );
+
+		do_action(
+			'newspack_sync_permanent_failure',
+			array_merge( $payload, [ 'integration_id' => 'other_esp' ] )
+		);
+
+		$this->assertCount( 2, $alerts, 'A different integration should alert independently.' );
+	}
+
+	/**
+	 * Test that severity derives from the failure class: config failures page
+	 * (error → Slack) while deletion-path contact-data failures surface as
+	 * warnings (Watch), observable without paging — and are not deduped, since
+	 * each concerns a distinct contact.
+	 */
+	public function test_permanent_failure_severity_derives_from_class() {
+		$alerts = [];
+		add_action(
+			'newspack_alert',
+			function ( $data ) use ( &$alerts ) {
+				$alerts[] = $data;
+			}
+		);
+
+		$contact_payload = [
+			'integration_id' => 'esp',
+			'email'          => 'gone@example.com',
+			'mode'           => 'flag',
+			'context'        => 'Account deletion',
+			'reason'         => 'Your merge fields were invalid.',
+			'error_class'    => 'permanent_contact',
+		];
+		do_action( 'newspack_sync_permanent_failure', $contact_payload );
+		do_action( 'newspack_sync_permanent_failure', $contact_payload );
+
+		$this->assertCount( 2, $alerts, 'Contact-class permanent failures should not be deduped.' );
+		$this->assertEquals( 'warning', $alerts[0]['severity'], 'Contact-class permanent failures should not page.' );
+
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'user_id'        => 1,
+				'context'        => 'Reader registered',
+				'reason'         => 'Payment Required',
+				'error_class'    => 'permanent_config',
+			]
+		);
+
+		$this->assertCount( 3, $alerts );
+		$this->assertEquals( 'error', $alerts[2]['severity'], 'Config-class permanent failures should page.' );
+	}
+
+	/**
+	 * Test that non-transient failure classes stay out of the failure log so
+	 * never-fixable failures cannot trip the hourly pattern rules.
+	 */
+	public function test_record_failure_skips_non_transient_classes() {
+		foreach ( [ 'benign', 'permanent_contact', 'permanent_config' ] as $error_class ) {
+			Alert_Manager::record_failure(
+				[
+					'integration_id' => 'esp',
+					'contact'        => [ 'email' => 'test@example.com' ],
+					'reason'         => 'Some error',
+					'error_class'    => $error_class,
+				]
+			);
+		}
+
+		$this->assertEmpty( get_option( Alert_Manager::FAILURE_LOG_OPTION, [] ), 'Non-transient classes must not be recorded.' );
+
+		Alert_Manager::record_failure(
+			[
+				'integration_id' => 'esp',
+				'contact'        => [ 'email' => 'test@example.com' ],
+				'reason'         => 'Some error',
+				'error_class'    => 'transient',
+			]
+		);
+		Alert_Manager::record_failure(
+			[
+				'action_name' => 'reader_registered',
+				'reason'      => 'Handler failed',
+			]
+		);
+
+		$this->assertCount( 2, get_option( Alert_Manager::FAILURE_LOG_OPTION, [] ), 'Transient and unclassified failures must be recorded.' );
 	}
 
 	/**
@@ -143,7 +285,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			'newspack_sync_contact_failed',
 			[
 				'integration_id' => 'mailchimp',
-				'contact'        => [ 'email' => 'user@test.com' ],
+				'contact'        => [ 'email' => 'user@example.com' ],
 				'context'        => 'Reader registered',
 				'reason'         => 'Invalid API key',
 			]
@@ -152,7 +294,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$log = get_option( Alert_Manager::FAILURE_LOG_OPTION, [] );
 		$this->assertCount( 1, $log );
 		$this->assertEquals( 'mailchimp', $log[0]['integration_id'] );
-		$this->assertEquals( 'user@test.com', $log[0]['contact_email'] );
+		$this->assertEquals( 'user@example.com', $log[0]['contact_email'] );
 		$this->assertEquals( 'Invalid API key', $log[0]['reason'] );
 		$this->assertNull( $log[0]['action_name'] );
 	}
@@ -224,7 +366,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			$log[] = [
 				'timestamp'      => time() - 60,
 				'integration_id' => 'mailchimp',
-				'contact_email'  => "user{$i}@test.com",
+				'contact_email'  => "user{$i}@example.com",
 				'action_name'    => null,
 				'reason'         => "API timeout {$i}",
 			];
@@ -264,7 +406,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			$log[] = [
 				'timestamp'      => time() - 60,
 				'integration_id' => 'mailchimp',
-				'contact_email'  => "user{$i}@test.com",
+				'contact_email'  => "user{$i}@example.com",
 				'action_name'    => null,
 				'reason'         => "API timeout {$i}",
 			];
@@ -297,7 +439,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			$log[] = [
 				'timestamp'      => time() - 7200,
 				'integration_id' => 'mailchimp',
-				'contact_email'  => "user{$i}@test.com",
+				'contact_email'  => "user{$i}@example.com",
 				'action_name'    => null,
 				'reason'         => "API timeout {$i}",
 			];
@@ -329,7 +471,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			$log[] = [
 				'timestamp'      => time() - 60,
 				'integration_id' => 'mailchimp',
-				'contact_email'  => "user{$i}@test.com",
+				'contact_email'  => "user{$i}@example.com",
 				'action_name'    => null,
 				'reason'         => "API timeout {$i}",
 			];
@@ -565,6 +707,63 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$this->assertNotNull( $captured );
 		$this->assertSame( 'reader@example.com', $captured['params']['user_email'] );
 		$this->assertStringNotContainsString( 'reader@example.com', $captured['message'], 'Email must not leak into the message.' );
+	}
+
+	/**
+	 * Test that permanent-failure alerts forward the contact email via the
+	 * structured `user_email` param for both the contact-sync payload (top-level
+	 * `email`) and the deletion payload (keyed on `email`).
+	 *
+	 * @dataProvider permanent_failure_email_provider
+	 *
+	 * @param array $payload The newspack_sync_permanent_failure payload.
+	 */
+	public function test_permanent_failure_email_forwarded_via_user_email_param( $payload ) {
+		add_action( 'newspack_alert', [ Alert_Manager::class, 'forward_alert_to_log' ] );
+
+		$captured = null;
+		add_action(
+			'newspack_log',
+			function ( $code, $message, $params ) use ( &$captured ) {
+				$captured = compact( 'code', 'message', 'params' );
+			},
+			10,
+			3
+		);
+
+		do_action( 'newspack_sync_permanent_failure', $payload );
+
+		$this->assertNotNull( $captured );
+		$this->assertSame( 'reader@example.com', $captured['params']['user_email'] );
+		$this->assertStringNotContainsString( 'reader@example.com', $captured['message'], 'Email must not leak into the message.' );
+	}
+
+	/**
+	 * Provides the two permanent-failure payload shapes that carry an email.
+	 *
+	 * @return array
+	 */
+	public function permanent_failure_email_provider() {
+		return [
+			'contact-sync path' => [
+				[
+					'integration_id' => 'esp',
+					'user_id'        => 1,
+					'email'          => 'reader@example.com',
+					'context'        => 'Reader registered',
+					'reason'         => 'Payment Required',
+				],
+			],
+			'deletion path'     => [
+				[
+					'integration_id' => 'esp',
+					'email'          => 'reader@example.com',
+					'mode'           => 'delete',
+					'context'        => 'Reader deleted',
+					'reason'         => 'Payment Required',
+				],
+			],
+		];
 	}
 
 	/**

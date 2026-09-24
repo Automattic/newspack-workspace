@@ -110,7 +110,7 @@ class My_Account_UI_V1_Passwords {
 			\add_query_arg(
 				self::RESET_PASSWORD_URL_PARAM,
 				\wp_create_nonce( 'newspack_my_account_reset_password' ),
-				\wc_get_account_endpoint_url( 'edit-account' )
+				My_Account::get_endpoint_url( My_Account::ENDPOINT_EDIT_ACCOUNT )
 			)
 		);
 		exit;
@@ -163,7 +163,7 @@ class My_Account_UI_V1_Passwords {
 	 */
 	public static function maybe_password_reset_success() {
 		if ( \is_user_logged_in() && filter_input( INPUT_GET, 'password-reset', FILTER_VALIDATE_BOOLEAN ) ) {
-			\wc_add_notice( __( 'Password updated.', 'newspack-plugin' ), 'success' );
+			My_Account::add_notice( __( 'Password updated.', 'newspack-plugin' ), 'success' );
 		}
 	}
 

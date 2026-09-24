@@ -32,6 +32,31 @@ function removeQueryArgs( str: string ) {
 let promiseCache: Record< string, any > = {};
 
 /**
+ * The message a REST endpoint wrote for a rejected parameter.
+ *
+ * When a `sanitize_callback` or `validate_callback` returns an error, WP keeps only its
+ * message, filed under `data.params[ <param name> ]`, and sends the generic
+ * `Invalid parameter(s): <param name>` as the top-level message. That generic string is
+ * what the wizard would otherwise show, naming neither what was wrong nor how to fix it.
+ *
+ * Only `rest_invalid_param` fills `data.params` that way. `rest_missing_callback_param`
+ * fills it with a numerically-indexed list of parameter *names*, so reading that as
+ * messages would turn "Missing parameter(s): gate" into a bare "gate".
+ *
+ * @param error The error response from the API.
+ * @return      The per-parameter messages, or an empty string when there are none.
+ */
+const getInvalidParamMessage = ( error: WpFetchError ): string => {
+	const params = error.data?.params;
+	if ( 'rest_invalid_param' !== error.code || ! params || typeof params !== 'object' ) {
+		return '';
+	}
+	return Object.values( params )
+		.filter( message => typeof message === 'string' && message )
+		.join( ' ' );
+};
+
+/**
  * Parses the API error response into a WizardApiError object.
  *
  * @param error The error response from the API.
@@ -50,7 +75,7 @@ const parseApiError = ( error: WpFetchError | string ): WizardApiError | null =>
 	} else if ( typeof error === 'string' ) {
 		newError.message = error;
 	} else if ( error instanceof Error || 'message' in error ) {
-		newError.message = error.message ?? newError.message;
+		newError.message = getInvalidParamMessage( error ) || error.message || newError.message;
 		newError.statusCode = error.data?.status ?? newError.statusCode;
 		newError.errorCode = error.code ?? newError.errorCode;
 		newError.details = '';
@@ -88,23 +113,20 @@ export function useWizardApiFetch( slug: string ) {
 		( select: ( namespace: string ) => WizardSelector ) => select( WIZARD_STORE_NAMESPACE ).getWizardData( slug ),
 		[ slug ]
 	);
-	const [ error, setError ] = useState< WizardApiError | null >( wizardData.error ?? null );
+	const [ error, setError ] = useState< WizardApiError | null >( null );
 
 	const requests = useRef< string[] >( [] );
 
+	// Errors live in local component state only, never in the wizard store. Two
+	// effects used to sync `error` to and from the store; because the store
+	// deep-clones on every write (breaking reference equality), that store->local
+	// / local->store pair raced into a flickering render loop on any fetch failure
+	// (NPPM-2733). The effect below only clears the local error when the slug
+	// changes, so an error from a previous slug can't leak into a new one. It is
+	// loop-free: it touches local state, never the store.
 	useEffect( () => {
-		if ( wizardData?.error !== error ) {
-			setError( wizardData?.error ?? null );
-		}
-	}, [ wizardData?.error, error ] );
-
-	useEffect( () => {
-		updateWizardSettings( {
-			slug,
-			path: [ 'error' ],
-			value: error,
-		} );
-	}, [ error, updateWizardSettings, slug ] );
+		setError( null );
+	}, [ slug ] );
 
 	function resetError() {
 		setError( null );
@@ -153,7 +175,7 @@ export function useWizardApiFetch( slug: string ) {
 			const cacheKeyPath = removeQueryArgs( path ?? '' );
 			const { isCached = method === 'GET', updateCacheKey = null, updateCacheMethods = [], ...options } = opts;
 
-			const { error: cachedError, [ cacheKeyPath ]: { [ method ]: cachedMethod = null } = {} }: WizardData = wizardData;
+			const { [ cacheKeyPath ]: { [ method ]: cachedMethod = null } = {} }: WizardData = wizardData;
 
 			function thenCallback( response: T ) {
 				if ( isCached ) {
@@ -210,8 +232,7 @@ export function useWizardApiFetch( slug: string ) {
 			}
 
 			// Cache exists and is not empty, return it.
-			if ( isCached && ( cachedError || cachedMethod ) ) {
-				setError( cachedError );
+			if ( isCached && cachedMethod ) {
 				on( 'onSuccess', cachedMethod );
 				return cachedMethod;
 			}
@@ -229,7 +250,13 @@ export function useWizardApiFetch( slug: string ) {
 				.catch( catchCallback )
 				.finally( finallyCallback );
 
-			return promiseCache[ slug ];
+			// Return the promise we just stored, keyed by `cacheKeyPath` —
+			// the same key it was written under. Returning `promiseCache[ slug ]`
+			// (the hook's slug, a different key) handed callers `undefined`,
+			// so a `.catch()` at the call site attached to the resolved async
+			// wrapper instead of the real request and never saw the rejection
+			// `catchCallback` re-throws.
+			return promiseCache[ cacheKeyPath ];
 		},
 		[ wizardApiFetch, wizardData, updateWizardSettings, isFetching, slug ]
 	);

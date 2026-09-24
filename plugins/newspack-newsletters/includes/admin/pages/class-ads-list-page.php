@@ -81,12 +81,15 @@ class Ads_List_Page extends Hidden_React_List_Page {
 	}
 
 	/**
-	 * Canonical Ads tab URL — the wizard header's strict URL equality
-	 * check would otherwise miss our `&page=…` subpage.
+	 * Explicit admin-header breadcrumb trail.
 	 *
-	 * @return string
+	 * @return array<array{label: string}>
 	 */
-	public function get_wizard_tab_url(): ?string {
-		return admin_url( 'edit.php?post_type=' . Ads::CPT );
+	public function get_wizard_breadcrumbs(): ?array {
+		return [
+			[ 'label' => __( 'Newsletters', 'newspack-newsletters' ) ],
+			[ 'label' => __( 'Advertising', 'newspack-newsletters' ) ],
+			[ 'label' => __( 'Ads', 'newspack-newsletters' ) ],
+		];
 	}
 }

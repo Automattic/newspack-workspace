@@ -56,13 +56,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<?php echo esc_attr( wcs_get_subscription_status_name( $subscription->get_status() ) ); ?>
 			</td>
 			<td class="subscription-next-payment order-date woocommerce-orders-table__cell woocommerce-orders-table__cell-subscription-next-payment woocommerce-orders-table__cell-order-date" data-title="<?php echo esc_attr_x( 'Next Payment', 'table heading', 'newspack-plugin' ); ?>">
-				<?php echo esc_attr( $subscription->get_date_to_display( 'next_payment' ) ); ?>
-				<?php if ( ! $subscription->is_manual() && $subscription->has_status( 'active' ) && $subscription->get_time( 'next_payment' ) > 0 && ! $is_group_member_subscription ) : ?>
-				<br/><small><?php echo esc_html( $subscription->get_payment_method_to_display( 'customer' ) ); ?></small>
+				<?php if ( $is_group_member_subscription ) : ?>
+					<?php // A group member has the owner's subscription injected into their list; the owner's next-payment date and total are private to the owner. ?>
+					—
+				<?php else : ?>
+					<?php echo esc_attr( $subscription->get_date_to_display( 'next_payment' ) ); ?>
+					<?php if ( ! $subscription->is_manual() && $subscription->has_status( 'active' ) && $subscription->get_time( 'next_payment' ) > 0 ) : ?>
+						<br/><small><?php echo esc_html( $subscription->get_payment_method_to_display( 'customer' ) ); ?></small>
+					<?php endif; ?>
 				<?php endif; ?>
 			</td>
 			<td class="subscription-total order-total woocommerce-orders-table__cell woocommerce-orders-table__cell-subscription-total woocommerce-orders-table__cell-order-total" data-title="<?php echo esc_attr_x( 'Total', 'Used in data attribute. Escaped', 'newspack-plugin' ); ?>">
-				<?php echo wp_kses_post( $subscription->get_formatted_order_total() ); ?>
+				<?php echo $is_group_member_subscription ? esc_html( '—' ) : wp_kses_post( $subscription->get_formatted_order_total() ); ?>
 			</td>
 			<td class="subscription-actions order-actions woocommerce-orders-table__cell woocommerce-orders-table__cell-subscription-actions woocommerce-orders-table__cell-order-actions">
 				<a href="<?php echo esc_url( $subscription->get_view_order_url() ); ?>" class="woocommerce-button button view<?php echo esc_attr( wc_wp_theme_get_element_class_name( 'button' ) ? ' ' . wc_wp_theme_get_element_class_name( 'button' ) : '' ); ?>"><?php echo esc_html_x( 'View', 'view a subscription', 'newspack-plugin' ); ?></a>

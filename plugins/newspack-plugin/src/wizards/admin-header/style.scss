@@ -1,3 +1,17 @@
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+
 .newspack-wizards-admin-header {
 	margin-left: -20px;
+
+	@include wp-mixins.break-medium {
+		position: sticky;
+		top: var(--wp-admin--admin-bar--height);
+		z-index: 3;
+	}
+
+	// The sticky unit here is this mount (the React tree holds only the header
+	// block; the page content is PHP-rendered below it).
+	.newspack-page__header-region {
+		position: static;
+	}
 }

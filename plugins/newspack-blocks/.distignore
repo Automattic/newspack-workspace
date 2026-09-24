@@ -44,3 +44,6 @@ node_modules
 /bin
 .cache
 coverage
+AGENTS.md
+CLAUDE.md
+.claude

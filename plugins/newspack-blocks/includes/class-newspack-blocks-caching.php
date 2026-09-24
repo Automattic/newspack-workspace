@@ -192,7 +192,7 @@ class Newspack_Blocks_Caching {
 	 * @param string $message Message to log.
 	 */
 	protected static function debug_log( $message ) {
-		if ( defined( 'NEWSPACK_LOG_LEVEL' ) && (int) NEWSPACK_LOG_LEVEL >= 4 && class_exists( 'Newspack\Logger' ) ) {
+		if ( defined( 'NEWSPACK_LOG_LEVEL' ) && (int) NEWSPACK_LOG_LEVEL >= 4 && class_exists( 'Newspack\Logger' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/class-logger.php.
 			Newspack\Logger::log( $message );
 		}
 	}
@@ -253,9 +253,9 @@ class Newspack_Blocks_Caching {
 		}
 
 		if ( 'newspack-blocks/homepage-articles' === $block_data['blockName'] ) {
-			Newspack_Blocks::enqueue_view_assets( 'homepage-articles' );
+			Newspack_Blocks::enqueue_view_assets( 'homepage-articles', 'defer' );
 		} elseif ( 'newspack-blocks/carousel' === $block_data['blockName'] ) {
-			Newspack_Blocks::enqueue_view_assets( 'carousel' );
+			Newspack_Blocks::enqueue_view_assets( 'carousel', 'defer' );
 		}
 
 		return $cached_data['cached_content'];

@@ -22,6 +22,7 @@ final class Subtitle_Block {
 	public static function init() {
 		\add_action( 'init', [ __CLASS__, 'register_block_and_post_meta' ] );
 		\add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
+		\add_action( 'admin_init', [ __CLASS__, 'prevent_classic_metabox_meta_clobber' ] );
 	}
 
 	/**
@@ -44,6 +45,50 @@ final class Subtitle_Block {
 				'type'         => 'string',
 			]
 		);
+	}
+
+	/**
+	 * Stop the classic "Custom Fields" box from clobbering the subtitle meta.
+	 *
+	 * The subtitle is edited through the editor subtitle UI and saved via the
+	 * REST API. When the "Custom Fields" panel is enabled, the editor also fires
+	 * a separate classic meta-box save (the `meta-box-loader` request) that
+	 * resubmits the box's page-load value and writes it through edit_post(),
+	 * landing just after the REST save and silently overwriting it.
+	 *
+	 * Rather than protecting the key (which would remove it from the Custom
+	 * Fields box and block publishers who manage it there), we drop it from the
+	 * meta-box-loader payload only. Intentional edits made with the box's own
+	 * Add/Update buttons save through a separate admin-ajax request and are
+	 * unaffected.
+	 *
+	 * @return void
+	 */
+	public static function prevent_classic_metabox_meta_clobber() {
+		// Only the block editor's auxiliary meta-box save carries this flag; a
+		// genuine classic-editor save does not, and must keep writing normally.
+		if ( ! isset( $_REQUEST['meta-box-loader'], $_POST['post_ID'], $_POST['_wpnonce'], $_POST['meta'] ) ) {
+			return;
+		}
+
+		// edit_post() processes $_POST['meta'] only after core verifies this nonce
+		// for the 'editpost' action (wp-admin/post.php). This runs earlier (on
+		// admin_init), so verify the same nonce before touching the payload.
+		$post_id = (int) $_POST['post_ID'];
+		$nonce   = sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) );
+		if ( ! $post_id || ! wp_verify_nonce( $nonce, 'update-post_' . $post_id ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only the meta-row key is read and sanitized below; the row value is never used, and the nonce is verified above.
+		foreach ( array_keys( (array) $_POST['meta'] ) as $mid ) {
+			$key = isset( $_POST['meta'][ $mid ]['key'] )
+				? sanitize_text_field( wp_unslash( $_POST['meta'][ $mid ]['key'] ) )
+				: '';
+			if ( self::POST_META_NAME === $key ) {
+				unset( $_POST['meta'][ $mid ] );
+			}
+		}
 	}
 
 	/**

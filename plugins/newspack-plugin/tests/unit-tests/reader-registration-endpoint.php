@@ -7,6 +7,7 @@
 
 use Newspack\Reader_Activation;
 use Newspack\Reader_Registration;
+use Newspack\Recaptcha;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integration;
 
@@ -205,9 +206,11 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		if ( $user ) {
 			wp_delete_user( $user->ID );
 		}
-		// Reset rate limit state.
+		// Reset rate limit state for both buckets.
 		delete_transient( 'newspack_reg_ip_' . md5( '127.0.0.1' ) );
 		wp_cache_delete( 'newspack_reg_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
+		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
 		// Clean up any $_POST pollution.
 		unset( $_POST['g-recaptcha-response'] );
 		parent::tear_down();
@@ -349,15 +352,54 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test honeypot field triggers fake success.
+	 * An invalid-key rejection must emit a `newspack_log` entry.
+	 *
+	 * The clients on this path treat a key rejection as final, so the remote
+	 * entry is the only operator-visible signal when keys fail site-wide
+	 * (a rotated key, a cached page emitting a stale one).
 	 */
-	public function test_honeypot_returns_fake_success() {
+	public function test_invalid_key_rejection_remote_logs() {
+		$captured = [];
+		$spy      = function ( $code, $message, $data ) use ( &$captured ) {
+			if ( 'newspack_frontend_registration_invalid_key' === $code ) {
+				$captured[] = $data;
+			}
+		};
+		add_action( 'newspack_log', $spy, 10, 3 );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'wrong-key',
+			]
+		);
+
+		remove_action( 'newspack_log', $spy );
+
+		$this->assertEquals( 403, $response->get_status() );
+		$this->assertCount( 1, $captured, 'An invalid-key rejection must fire one newspack_log entry.' );
+		$this->assertSame( 'debug', $captured[0]['type'] );
+		$this->assertSame( self::$integration_id, $captured[0]['data']['integration_id'] );
+	}
+
+	/**
+	 * A filled honeypot gets the fake success response and creates no user,
+	 * whatever integration key comes with it.
+	 *
+	 * The invalid-key row is the order guard: if the key check ran ahead of
+	 * the honeypot, that request would get a 403 instead.
+	 *
+	 * @dataProvider honeypot_integration_keys
+	 * @param bool $valid_key Whether the request carries the valid integration key.
+	 */
+	public function test_honeypot_returns_fake_success( $valid_key ) {
 		$response = $this->do_register_request(
 			[
 				'npe'             => self::$reader_email,
 				'email'           => 'bot-filled@spam.com',
 				'integration_id'  => self::$integration_id,
-				'integration_key' => self::generate_key( self::$integration_id ),
+				'integration_key' => $valid_key ? self::generate_key( self::$integration_id ) : 'not-the-key',
 			]
 		);
 		$this->assertEquals( 200, $response->get_status() );
@@ -368,7 +410,24 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Integration keys to send alongside a filled honeypot.
+	 *
+	 * @return array
+	 */
+	public function honeypot_integration_keys() {
+		return [
+			'valid key'   => [ true ],
+			'invalid key' => [ false ],
+		];
+	}
+
+	/**
 	 * Test logged-in user returns current reader data.
+	 *
+	 * Also the positive control for the gate tests below: their zero-fire
+	 * assertions on `newspack_frontend_registration_existing_user` only
+	 * guard the ordering if this spy proves the action observably fires on
+	 * the passing path, with the payload consumers receive.
 	 */
 	public function test_register_while_logged_in() {
 		$admin_id = self::factory()->user->create(
@@ -379,6 +438,12 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		);
 		wp_set_current_user( $admin_id );
 
+		$fired = [];
+		$spy   = function ( $user, $request, $integration_instance ) use ( &$fired ) {
+			$fired[] = [ $user, $request, $integration_instance ];
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy, 10, 3 );
+
 		$response = $this->do_register_request(
 			[
 				'npe'             => self::$reader_email,
@@ -386,12 +451,217 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 				'integration_key' => self::generate_key( self::$integration_id ),
 			]
 		);
+
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+
 		$this->assertEquals( 200, $response->get_status() );
 		$data = $response->get_data();
 		$this->assertTrue( $data['success'] );
 		$this->assertEquals( 'existing', $data['status'] );
 		$this->assertEquals( 'admin@test.com', $data['email'] );
 
+		$this->assertCount( 1, $fired, 'The existing-user action must fire exactly once on the valid logged-in path.' );
+		$this->assertSame( $admin_id, $fired[0][0]->ID );
+		$this->assertInstanceOf( WP_REST_Request::class, $fired[0][1] );
+		$this->assertNull( $fired[0][2], 'Filter-only integrations pass null as the integration instance.' );
+
+		wp_delete_user( $admin_id );
+	}
+
+	/**
+	 * A logged-in caller must still present a valid integration key.
+	 *
+	 * Regression test for #816: before it, the logged-in branch ran ahead of the
+	 * key check, so any visitor with a session reached integration hooks without
+	 * a valid key.
+	 *
+	 * A 403 only implies the logged-in branch was never reached; it isn't the
+	 * security property itself, and a status code could change for unrelated
+	 * reasons without this test noticing. The actual property is that
+	 * `newspack_frontend_registration_existing_user` — the hook integrations use
+	 * to act on a logged-in registration attempt — never fires behind a failed
+	 * key check, so this also spies on that action directly.
+	 */
+	public function test_register_while_logged_in_requires_valid_key() {
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-key@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		$fire_count = 0;
+		$spy        = function () use ( &$fire_count ) {
+			$fire_count++;
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'not-the-key',
+			]
+		);
+
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$this->assertEquals( 403, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'invalid_integration_key', $data['code'] );
+		$this->assertSame( 0, $fire_count, 'newspack_frontend_registration_existing_user must not fire behind a failed integration key check.' );
+
+		wp_delete_user( $admin_id );
+	}
+
+	/**
+	 * A logged-in caller is subject to the per-IP rate limit.
+	 */
+	public function test_register_while_logged_in_respects_rate_limit() {
+		$set_limit = function () {
+			return 1;
+		};
+		add_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-rate@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		$fire_count = 0;
+		$spy        = function () use ( &$fire_count ) {
+			$fire_count++;
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$body = [
+			'npe'             => self::$reader_email,
+			'integration_id'  => self::$integration_id,
+			'integration_key' => self::generate_key( self::$integration_id ),
+		];
+
+		$first = $this->do_register_request( $body );
+		$this->assertEquals( 200, $first->get_status() );
+
+		$second = $this->do_register_request( $body );
+		$this->assertEquals( 429, $second->get_status() );
+		$data = $second->get_data();
+		$this->assertEquals( 'rate_limit_exceeded', $data['code'] );
+
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+		$this->assertSame( 1, $fire_count, 'newspack_frontend_registration_existing_user must fire for the first request only, not behind the rate limit.' );
+
+		remove_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+		wp_delete_user( $admin_id );
+	}
+
+	/**
+	 * A logged-in caller is subject to the Reader Activation gate.
+	 *
+	 * Before #816 a session got a 200 here even with Reader Activation switched
+	 * off. Reader_Registration::init() only registers the route when Reader
+	 * Activation is enabled, so this covers the narrower case where the
+	 * `newspack_reader_activation_enabled` filter returns false after the route
+	 * was already registered.
+	 */
+	public function test_register_while_logged_in_when_ras_disabled() {
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-ras@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$fire_count = 0;
+		$spy        = function () use ( &$fire_count ) {
+			$fire_count++;
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+			]
+		);
+
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$this->assertEquals( 403, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'reader_activation_disabled', $data['code'] );
+		$this->assertSame( 0, $fire_count, 'newspack_frontend_registration_existing_user must not fire with Reader Activation off.' );
+
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		wp_delete_user( $admin_id );
+	}
+
+	/**
+	 * Order guard: reCAPTCHA must run before the logged-in branch.
+	 *
+	 * The other logged-in guards pin the branch behind the key check, the
+	 * rate limit, and the Reader Activation gate; this pins it behind
+	 * reCAPTCHA. Forcing verification via the
+	 * `newspack_recaptcha_verify_captcha` filter is not enough here —
+	 * Recaptcha::verify_captcha() returns true when can_use_captcha() is
+	 * false (see test_recaptcha_filter_forces_verification()) — so this
+	 * populates real credentials and sends no token, which is rejected as an
+	 * invalid token before any siteverify HTTP call.
+	 */
+	public function test_register_while_logged_in_requires_recaptcha() {
+		Recaptcha::update_settings(
+			[
+				'use_captcha' => true,
+				'version'     => 'v3',
+				'credentials' => [
+					'v3' => [
+						'site_key'    => 'test-site-key',
+						'site_secret' => 'test-site-secret',
+					],
+				],
+			]
+		);
+
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin-recaptcha@test.com',
+			]
+		);
+		wp_set_current_user( $admin_id );
+
+		$fire_count = 0;
+		$spy        = function () use ( &$fire_count ) {
+			$fire_count++;
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+			]
+		);
+
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$this->assertEquals( 403, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'recaptcha_failed', $data['code'] );
+		$this->assertSame( 0, $fire_count, 'newspack_frontend_registration_existing_user must not fire behind a failed reCAPTCHA check.' );
+
+		foreach ( [ 'use_captcha', 'version', 'credentials' ] as $key ) {
+			delete_option( 'newspack_recaptcha_' . $key );
+		}
 		wp_delete_user( $admin_id );
 	}
 
@@ -437,15 +707,8 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 
 	/**
 	 * Test RAS disabled returns 403.
-	 *
-	 * Skipped in the test environment because Reader_Activation::is_enabled()
-	 * short-circuits to true when IS_TEST_ENV is defined, bypassing the filter.
 	 */
 	public function test_register_when_ras_disabled() {
-		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
-			$this->markTestSkipped( 'is_enabled() always returns true when IS_TEST_ENV is defined.' );
-		}
-
 		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
 
 		$response = $this->do_register_request(
@@ -498,6 +761,111 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 			if ( $user ) {
 				wp_delete_user( $user->ID );
 			}
+		}
+	}
+
+	/**
+	 * Order guard: the rate limit must be checked before the integration key.
+	 *
+	 * Existing rate-limit coverage (test_rate_limit_exceeded() above) sends a
+	 * valid key on every request, so it can't tell the two orderings apart. A
+	 * request that is both over the limit AND carries an invalid key must
+	 * still be rejected as rate-limited — if the key check ran first, it
+	 * would return 403 instead of 429.
+	 */
+	public function test_rate_limit_precedes_integration_key_check() {
+		// Lower limit to 1 for testing.
+		$set_limit = function () {
+			return 1;
+		};
+		add_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		$base_body = [
+			'integration_id'  => self::$integration_id,
+			'integration_key' => self::generate_key( self::$integration_id ),
+		];
+
+		// First request exhausts the limit.
+		// Reset current user between requests since successful registration authenticates the reader.
+		$priming = $this->do_register_request( array_merge( $base_body, [ 'npe' => 'order-guard-rate1@test.com' ] ) );
+		$this->assertEquals( 201, $priming->get_status(), 'The priming request must succeed — the guard is about a successful request exhausting the limit.' );
+		wp_set_current_user( 0 );
+
+		// Second request is over the limit AND carries an invalid key — must
+		// be rejected as rate-limited, not as an invalid key.
+		$response = $this->do_register_request(
+			[
+				'npe'             => 'order-guard-rate2@test.com',
+				'integration_id'  => self::$integration_id,
+				'integration_key' => 'not-the-key',
+			]
+		);
+		$this->assertEquals( 429, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertEquals( 'rate_limit_exceeded', $data['code'] );
+
+		remove_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		// Clean up created user.
+		$user = get_user_by( 'email', 'order-guard-rate1@test.com' );
+		if ( $user ) {
+			wp_delete_user( $user->ID );
+		}
+	}
+
+	/**
+	 * Once the counter has recorded the limit crossing, over-limit requests
+	 * must not keep writing to the rate-limit store.
+	 *
+	 * Without the guard, every rejected request rewrites the transient — a
+	 * wp_options write per hit on hosts with no external object cache, and a
+	 * window that rolls forward with each hit instead of expiring. The
+	 * object-cache branch keeps its atomic incr, so this pins the transient
+	 * path explicitly.
+	 */
+	public function test_rate_limit_store_stops_writing_once_over_limit() {
+		// Force the transient branch regardless of the test environment.
+		$using_ext_cache = wp_using_ext_object_cache( false );
+
+		$set_limit = function () {
+			return 1;
+		};
+		add_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+
+		$base_body = [
+			'integration_id'  => self::$integration_id,
+			'integration_key' => self::generate_key( self::$integration_id ),
+		];
+		$cache_key = 'newspack_reg_ip_' . md5( '127.0.0.1' );
+
+		// Exhaust the limit, then cross it: the crossing is recorded.
+		$this->do_register_request( array_merge( $base_body, [ 'npe' => 'store-write1@test.com' ] ) );
+		wp_set_current_user( 0 );
+		$crossing = $this->do_register_request( array_merge( $base_body, [ 'npe' => 'store-write2@test.com' ] ) );
+		$this->assertEquals( 429, $crossing->get_status() );
+		$this->assertSame( 2, (int) get_transient( $cache_key ) );
+
+		// Further over-limit requests are rejected without touching the store.
+		$counter_writes = 0;
+		$count_writes   = function ( $value ) use ( &$counter_writes ) {
+			$counter_writes++;
+			return $value;
+		};
+		add_filter( 'pre_set_transient_' . $cache_key, $count_writes );
+		$this->do_register_request( array_merge( $base_body, [ 'npe' => 'store-write3@test.com' ] ) );
+		$rejected = $this->do_register_request( array_merge( $base_body, [ 'npe' => 'store-write4@test.com' ] ) );
+		remove_filter( 'pre_set_transient_' . $cache_key, $count_writes );
+		$this->assertEquals( 429, $rejected->get_status() );
+		$this->assertSame( 0, $counter_writes, 'Over-limit requests must not call set_transient() on the counter.' );
+		$this->assertSame( 2, (int) get_transient( $cache_key ) );
+
+		remove_filter( 'newspack_frontend_registration_rate_limit', $set_limit );
+		wp_using_ext_object_cache( $using_ext_cache );
+		delete_transient( $cache_key );
+
+		$user = get_user_by( 'email', 'store-write1@test.com' );
+		if ( $user ) {
+			wp_delete_user( $user->ID );
 		}
 	}
 
@@ -748,6 +1116,64 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A logged-in request to an Integration with its own validator must pass
+	 * that validator before the existing-user action fires.
+	 *
+	 * The other logged-in tests use a filter-only integration, which takes the
+	 * HMAC fallback and passes no instance to the action. This pins the path an
+	 * integration with an overridden validate_registration_request() takes.
+	 */
+	public function test_register_while_logged_in_runs_integration_validator() {
+		// Integrations::register() refuses an ID that is already registered, and
+		// test_custom_key_validation() registers 'custom-key-test'.
+		$integration = new Test_Custom_Key_Integration( 'custom-key-logged-in', 'Custom Key Logged In' );
+		Integrations::register( $integration );
+
+		$reader_id = self::factory()->user->create(
+			[
+				'role'       => 'subscriber',
+				'user_email' => 'reader-custom-key@example.test',
+			]
+		);
+		wp_set_current_user( $reader_id );
+
+		$fired_instances = [];
+		$spy             = function ( $user, $request, $integration_instance ) use ( &$fired_instances ) {
+			$fired_instances[] = $integration_instance;
+		};
+		add_action( 'newspack_frontend_registration_existing_user', $spy, 10, 3 );
+
+		// The page-emitted key is not one this integration's validator accepts.
+		$rejected = $this->do_register_request(
+			[
+				'npe'             => 'reader-custom-key@example.test',
+				'integration_id'  => 'custom-key-logged-in',
+				'integration_key' => 'custom-public-key',
+			]
+		);
+		$this->assertEquals( 403, $rejected->get_status() );
+		$this->assertEquals( 'invalid_integration_key', $rejected->get_data()['code'] );
+		$this->assertCount( 0, $fired_instances, 'The existing-user action must not fire behind the integration validator.' );
+
+		$accepted = $this->do_register_request(
+			[
+				'npe'             => 'reader-custom-key@example.test',
+				'integration_id'  => 'custom-key-logged-in',
+				'integration_key' => 'custom-secret-key',
+			]
+		);
+
+		remove_action( 'newspack_frontend_registration_existing_user', $spy );
+
+		$this->assertEquals( 200, $accepted->get_status() );
+		$this->assertEquals( 'existing', $accepted->get_data()['status'] );
+		$this->assertCount( 1, $fired_instances );
+		$this->assertSame( $integration, $fired_instances[0], 'The action must receive the instance whose validator passed.' );
+
+		wp_delete_user( $reader_id );
+	}
+
+	/**
 	 * Test that Integration subclass is included in get_frontend_registration_integrations().
 	 */
 	public function test_integration_subclass_in_registry() {
@@ -757,5 +1183,308 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		$integrations = Reader_Registration::get_frontend_registration_integrations();
 		$this->assertArrayHasKey( 'registry-test', $integrations );
 		$this->assertEquals( 'Registry Test', $integrations['registry-test'] );
+	}
+
+	/**
+	 * Helper to make a /check-email preflight request.
+	 *
+	 * @param array $body Request body.
+	 * @return WP_REST_Response
+	 */
+	private function do_check_email_request( $body = [] ) {
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/reader-activation/check-email' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( $body ) );
+		return $this->server->dispatch( $request );
+	}
+
+	/**
+	 * /check-email returns `exists: true` only for accounts that are readers — a
+	 * staff / admin / editor that shares the email must surface as `exists: false`
+	 * so the endpoint can't be used to enumerate non-reader logins.
+	 */
+	public function test_check_email_reader_vs_non_reader() {
+		$reader_email     = 'check-reader@test.com';
+		$non_reader_email = 'check-editor@test.com';
+		$reader_id        = Reader_Activation::register_reader( $reader_email, 'Reader' );
+		wp_set_current_user( 0 );
+		$non_reader_id = self::factory()->user->create(
+			[
+				'user_email' => $non_reader_email,
+				'role'       => 'editor',
+			]
+		);
+
+		// Reader account → exists: true.
+		$response = $this->do_check_email_request( [ 'email' => $reader_email ] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['exists'], 'A reader account must surface as exists:true.' );
+
+		// Non-reader (editor) sharing an email → exists: false (privacy filter).
+		$response = $this->do_check_email_request( [ 'email' => $non_reader_email ] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['exists'], 'Non-reader accounts must surface as exists:false to prevent enumeration.' );
+
+		// Unknown email → exists: false.
+		$response = $this->do_check_email_request( [ 'email' => 'nobody@test.com' ] );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['exists'] );
+
+		// Clean up.
+		wp_delete_user( $reader_id );
+		wp_delete_user( $non_reader_id );
+	}
+
+	/**
+	 * /check-email must reject missing or invalid email addresses with a 400 — the
+	 * frontend confirmation-modal helper relies on this to fall open via its
+	 * res.ok gate instead of treating malformed input as exists:false.
+	 */
+	public function test_check_email_invalid_email_rejected() {
+		// Missing email entirely.
+		$response = $this->do_check_email_request( [] );
+		$this->assertEquals( 400, $response->get_status(), 'Missing email must return 400.' );
+
+		// Malformed email.
+		$response = $this->do_check_email_request( [ 'email' => 'not-an-email' ] );
+		$this->assertEquals( 400, $response->get_status(), 'Malformed email must return 400.' );
+	}
+
+	/**
+	 * /check-email has its own per-IP rate-limit bucket separate from /register so
+	 * an enumeration sweep can't be unbounded while still allowing legitimate
+	 * users 10 full registrations per hour (1 preflight + 1 register per
+	 * submission, each bucket counted independently).
+	 */
+	public function test_check_email_rate_limit() {
+		add_filter(
+			'newspack_frontend_registration_rate_limit',
+			static function ( $limit, $ip, $bucket = 'registration' ) {
+				return 'check_email' === $bucket ? 2 : $limit;
+			},
+			10,
+			3
+		);
+
+		$ok1 = $this->do_check_email_request( [ 'email' => 'rl-a@test.com' ] );
+		$this->assertEquals( 200, $ok1->get_status(), '1st check-email under the limit must succeed.' );
+
+		$ok2 = $this->do_check_email_request( [ 'email' => 'rl-b@test.com' ] );
+		$this->assertEquals( 200, $ok2->get_status(), '2nd check-email under the limit must succeed.' );
+
+		$blocked = $this->do_check_email_request( [ 'email' => 'rl-c@test.com' ] );
+		$this->assertEquals( 429, $blocked->get_status(), 'Over-limit check-email must return 429.' );
+
+		remove_all_filters( 'newspack_frontend_registration_rate_limit' );
+		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
+		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+	}
+
+	/**
+	 * The /check-email rate-limit bucket must NOT consume the /register budget.
+	 * A legitimate user submission (1 preflight + 1 register) should still buy 10
+	 * full registrations per hour regardless of how many preflights happened.
+	 */
+	public function test_check_email_does_not_drain_registration_bucket() {
+		// Saturate the check-email bucket.
+		add_filter(
+			'newspack_frontend_registration_rate_limit',
+			static function ( $limit, $ip, $bucket = 'registration' ) {
+				return 'check_email' === $bucket ? 1 : $limit;
+			},
+			10,
+			3
+		);
+		$ok      = $this->do_check_email_request( [ 'email' => 'bucket-a@test.com' ] );
+		$blocked = $this->do_check_email_request( [ 'email' => 'bucket-b@test.com' ] );
+		$this->assertEquals( 200, $ok->get_status() );
+		$this->assertEquals( 429, $blocked->get_status(), 'check-email bucket must saturate independently.' );
+
+		// /register cache key must still be untouched.
+		$register_attempts = (int) get_transient( 'newspack_reg_ip_' . md5( '127.0.0.1' ) );
+		$this->assertSame( 0, $register_attempts, '/register bucket must remain at 0 after exhausting /check-email.' );
+
+		// Object cache fallback path.
+		$wp_cache_attempts = (int) wp_cache_get( 'newspack_reg_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+		$this->assertSame( 0, $wp_cache_attempts, '/register object-cache bucket must remain at 0.' );
+
+		remove_all_filters( 'newspack_frontend_registration_rate_limit' );
+		delete_transient( 'newspack_check_email_ip_' . md5( '127.0.0.1' ) );
+		wp_cache_delete( 'newspack_check_email_ip_' . md5( '127.0.0.1' ), 'newspack_rate_limit' );
+	}
+
+	/**
+	 * Metadata sent to the endpoint must not be able to set state the site trusts.
+	 * The endpoint is unauthenticated, so reader state (email verification), reader
+	 * data (which content gates read) and WordPress account state are all off limits.
+	 */
+	public function test_register_metadata_cannot_write_reserved_keys() {
+		global $wpdb;
+
+		$caps_key = $wpdb->get_blog_prefix() . 'capabilities';
+
+		$response = $this->do_register_request(
+			[
+				'npe'             => self::$reader_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+				'metadata'        => [
+					'np_reader_email_verified'           => '1',
+					'_np_reader_email_verified'          => '1',
+					'newspack_reader_data_item_is_donor' => 'injected-reader-data',
+					'newspack_reader_data_keys'          => 'injected-key-list',
+					'_newspack_group_subscription'       => 'injected-subscription',
+					$caps_key                            => 'administrator',
+					'wpcom_user_id'                      => '12345',
+					'_stripe_customer_id'                => 'cus_attacker',
+					'_wcpay_customer_id'                 => 'cus_attacker',
+					'_wcpay_customer_id_live'            => 'cus_attacker',
+					'_wcpay_customer_id_test'            => 'cus_attacker',
+					'session_tokens'                     => 'injected-session',
+					'_application_passwords'             => 'injected-password',
+					'partner_member_id'                  => 'abc-123',
+				],
+			]
+		);
+
+		$this->assertEquals( 201, $response->get_status() );
+		$user = get_user_by( 'email', self::$reader_email );
+		$this->assertInstanceOf( 'WP_User', $user );
+
+		$this->assertFalse(
+			Reader_Activation::is_reader_verified( $user ),
+			'Request metadata must not be able to mark the reader email-verified.'
+		);
+		$this->assertSame(
+			'',
+			get_user_meta( $user->ID, 'newspack_reader_data_item_is_donor', true ),
+			'Request metadata must not be able to write reader data that access rules read.'
+		);
+		$this->assertSame(
+			'',
+			get_user_meta( $user->ID, '_newspack_group_subscription', true ),
+			'Request metadata must not be able to write underscore-prefixed Newspack keys.'
+		);
+		// Identifiers other systems resolve their own records against. get_user_option()
+		// falls back to the unprefixed key, so an unprefixed write is what gets read.
+		foreach ( [ 'wpcom_user_id', '_stripe_customer_id', '_wcpay_customer_id', '_wcpay_customer_id_live', '_wcpay_customer_id_test' ] as $identity_key ) {
+			$this->assertSame(
+				'',
+				get_user_meta( $user->ID, $identity_key, true ),
+				sprintf( 'Request metadata must not be able to claim another account via "%s".', $identity_key )
+			);
+			$this->assertFalse(
+				get_user_option( $identity_key, $user->ID ),
+				sprintf( 'get_user_option() must not resolve a caller-supplied "%s".', $identity_key )
+			);
+		}
+
+		// Registration authenticates the new reader, so these two may legitimately hold
+		// a real value. What must never happen is a caller-supplied scalar landing in
+		// them, which is what their consumers would choke on.
+		foreach ( [ 'newspack_reader_data_keys', 'session_tokens', '_application_passwords' ] as $array_key ) {
+			$stored = get_user_meta( $user->ID, $array_key, true );
+			$this->assertTrue(
+				'' === $stored || is_array( $stored ),
+				sprintf( 'Request metadata must not be able to write a scalar into "%s".', $array_key )
+			);
+		}
+
+		// The harm at the capabilities key is not escalation — sanitize_text_field()
+		// makes the value a scalar, which core ignores — it is that writing a scalar
+		// replaces the role array, stripping the account of every role.
+		$caps = get_user_meta( $user->ID, $caps_key, true );
+		$this->assertIsArray(
+			$caps,
+			'Request metadata must not be able to overwrite the capabilities meta.'
+		);
+		$this->assertArrayNotHasKey( 'administrator', $caps );
+		$this->assertNotEmpty( $caps, 'The account keeps the role register_reader() gave it.' );
+
+		// The drop is reported back, so an integration author can tell "saved" from
+		// "silently discarded".
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'skipped_metadata_keys', $data );
+		$this->assertContains( 'np_reader_email_verified', $data['skipped_metadata_keys'] );
+		$this->assertNotContains( 'partner_member_id', $data['skipped_metadata_keys'] );
+
+		// The prefixed account keys are blocked but not echoed. Echoing only the one
+		// matching this install would tell an unauthenticated caller the table prefix.
+		$this->assertNotContains(
+			$caps_key,
+			$data['skipped_metadata_keys'],
+			'The response must not disclose which table prefix matched.'
+		);
+
+		// Keys outside the reserved set still write: the metadata contract that
+		// integrations rely on is unchanged.
+		$this->assertSame(
+			'abc-123',
+			get_user_meta( $user->ID, 'partner_member_id', true ),
+			'Non-reserved metadata keys must still be saved.'
+		);
+	}
+
+	/**
+	 * Reserved-key classification, including the case and whitespace variants a
+	 * caller could use to try to slip past the guard.
+	 */
+	public function test_is_reserved_meta_key() {
+		global $wpdb;
+
+		$reserved = [
+			'np_reader',
+			'np_reader_email_verified',
+			'_np_reader',
+			'newspack_reader_data_keys',
+			'newspack_reader_data_item_is_donor',
+			'_newspack_anything',
+			'wp_capabilities',
+			'wp_user_level',
+			'wp_2_capabilities',
+			'wp_2_user_level',
+			$wpdb->base_prefix . 'capabilities',
+			$wpdb->base_prefix . '3_capabilities',
+			$wpdb->base_prefix . 'user_level',
+			'wpcom_user_id',
+			'_stripe_customer_id',
+			'_wcpay_customer_id',
+			'_wcpay_customer_id_live',
+			'_wcpay_customer_id_test',
+			'session_tokens',
+			'_application_passwords',
+			'wp_user-settings',
+			'wp_user-settings-time',
+			$wpdb->base_prefix . 'user-settings',
+			$wpdb->base_prefix . 'user-settings-time',
+			'default_password_nag',
+			'NP_Reader_Email_Verified',
+			'  np_reader  ',
+			'np\\_reader',
+			'',
+		];
+		foreach ( $reserved as $key ) {
+			$this->assertTrue(
+				Reader_Registration::is_reserved_meta_key( $key ),
+				sprintf( 'Key "%s" must be treated as reserved.', $key )
+			);
+		}
+
+		$allowed = [
+			'partner_member_id',
+			'billing_city',
+			'nps_score',
+			'newspaper_subscriber_id',
+			'crm_contact_id',
+			'capabilities',
+			'user_level',
+			'reader_source',
+		];
+		foreach ( $allowed as $key ) {
+			$this->assertFalse(
+				Reader_Registration::is_reserved_meta_key( $key ),
+				sprintf( 'Key "%s" must remain writable.', $key )
+			);
+		}
 	}
 }

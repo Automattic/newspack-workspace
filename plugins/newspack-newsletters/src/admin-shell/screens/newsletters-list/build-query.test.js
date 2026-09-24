@@ -1,20 +1,52 @@
 import { buildQueryParams, toQueryString } from './build-query';
+import { FETCH_ALL_CHUNK_SIZE, PER_PAGE_ALL } from '../../utils/per-page';
 
 describe( 'buildQueryParams', () => {
-	it( 'sets page and per_page from the view, defaulting to 1 and 25', () => {
-		expect( buildQueryParams( {} ) ).toMatchObject( { page: 1, per_page: 25 } );
+	it( 'sets page and per_page from the view, defaulting to 1 and 20', () => {
+		expect( buildQueryParams( {} ) ).toMatchObject( { page: 1, per_page: 20 } );
 		expect( buildQueryParams( { page: 3, perPage: 50 } ) ).toMatchObject( {
 			page: 3,
 			per_page: 50,
 		} );
 	} );
 
+	it( 'maps the All sentinel to max-size chunks starting at page 1', () => {
+		expect( buildQueryParams( { perPage: PER_PAGE_ALL, page: 7 } ) ).toMatchObject( { page: 1, per_page: FETCH_ALL_CHUNK_SIZE } );
+	} );
+
+	it( 'restricts fields so content/excerpt are never rendered server-side', () => {
+		const { _fields } = buildQueryParams( {} );
+		expect( _fields.split( ',' ) ).toEqual(
+			expect.arrayContaining( [ 'id', 'status', 'title', 'date', 'link', 'meta', 'newspack_newsletters_status' ] )
+		);
+		expect( _fields ).not.toContain( 'content' );
+		expect( _fields ).not.toContain( 'excerpt' );
+		expect( _fields.split( ',' ) ).toEqual( expect.arrayContaining( [ 'categories', 'tags' ] ) );
+	} );
+
 	it( 'requests context=edit so meta and private fields are returned', () => {
 		expect( buildQueryParams( {} ).context ).toBe( 'edit' );
 	} );
 
-	it( 'includes author and wp:term embeds for the columns that need them', () => {
-		expect( buildQueryParams( {} )._embed ).toBe( 'author,wp:term' );
+	it( 'never asks for _links or embeds', () => {
+		for ( const view of [ {}, { fields: [ 'categories', 'tags' ] }, { fields: [ 'status' ] } ] ) {
+			const params = buildQueryParams( view );
+			expect( params ).not.toHaveProperty( '_embed' );
+			expect( params._fields.split( ',' ) ).not.toContain( '_links' );
+		}
+	} );
+
+	it( 'reads author display data from a dedicated field rather than an embed', () => {
+		expect( buildQueryParams( {} )._fields.split( ',' ) ).toContain( 'newspack_newsletters_author' );
+	} );
+
+	it( 'requests term names only while a taxonomy column is visible', () => {
+		const hasTerms = view => buildQueryParams( view )._fields.split( ',' ).includes( 'newspack_newsletters_terms' );
+		// Unknown visibility — assume the columns are on.
+		expect( hasTerms( {} ) ).toBe( true );
+		expect( hasTerms( { fields: [ 'status', 'categories' ] } ) ).toBe( true );
+		expect( hasTerms( { fields: [ 'tags' ] } ) ).toBe( true );
+		expect( hasTerms( { fields: [ 'status', 'date', 'author' ] } ) ).toBe( false );
 	} );
 
 	it( 'defaults status to all common writable statuses (no trash) when no filter is set', () => {
@@ -23,9 +55,12 @@ describe( 'buildQueryParams', () => {
 		expect( status.split( ',' ) ).not.toContain( 'trash' );
 	} );
 
-	it( 'includes auto-draft so a post-new + back row stays visible', () => {
-		const { status } = buildQueryParams( {} );
-		expect( status.split( ',' ) ).toContain( 'auto-draft' );
+	it( 'excludes auto-draft so an abandoned "Add new" never reaches the list', () => {
+		expect( buildQueryParams( {} ).status.split( ',' ) ).not.toContain( 'auto-draft' );
+		const filtered = buildQueryParams( {
+			filters: [ { field: 'status', operator: 'isAny', value: [ 'draft,pending' ] } ],
+		} );
+		expect( filtered.status.split( ',' ) ).not.toContain( 'auto-draft' );
 	} );
 
 	it( 'replaces the default status set when the user filters by status', () => {

@@ -581,6 +581,12 @@ class Content_Gifting {
 	 * Print the gift modal.
 	 */
 	public static function print_gift_modal() {
+		// Modal checkout renders in an iframe with its own modal. Emitting another
+		// modal's markup inside it puts unrelated content in the reader's checkout
+		// (NPPD-2170), so nothing is printed there.
+		if ( class_exists( '\Newspack_Blocks\Modal_Checkout' ) && \Newspack_Blocks\Modal_Checkout::is_modal_checkout() ) {
+			return;
+		}
 		?>
 		<div class="newspack-ui">
 			<div id="newspack-content-gifting-modal" class="newspack-ui__modal-container" data-state="closed">
@@ -629,8 +635,7 @@ class Content_Gifting {
 		}
 
 		$restriction_instance = \wc_memberships()->get_restrictions_instance()->get_posts_restrictions_instance();
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes', 9 );
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes' ); // For compatibility with Woo Memberships < 1.27.2.
+		Memberships::remove_posts_restriction_handler( $restriction_instance );
 		\add_filter( 'wc_memberships_restrictable_comment_types', '__return_empty_array' );
 		\add_filter( 'newspack_can_render_overlay_gate', '__return_false' );
 	}

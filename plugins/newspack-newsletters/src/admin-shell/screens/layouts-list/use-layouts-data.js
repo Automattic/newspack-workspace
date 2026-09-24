@@ -3,21 +3,28 @@ import { __ } from '@wordpress/i18n';
 import { LAYOUT_CPT_SLUG } from '../../../utils/consts';
 import useCollectionData from '../../hooks/use-collection-data';
 import { buildQueryParams, toQueryString } from '../../utils/build-query';
+import { isFetchAllPerPage, LAYOUTS_FETCH_ALL_CHUNK_SIZE } from '../../utils/per-page';
 
 const COLLECTION_PATH = `/wp/v2/${ LAYOUT_CPT_SLUG }`;
-// `future` is excluded — layouts don't surface scheduling. `auto-draft` keeps "Add new" + back visible.
-const DEFAULT_STATUSES = 'publish,private,draft,pending,auto-draft';
+// `future` is excluded: layouts don't surface scheduling.
+const DEFAULT_STATUSES = 'publish,private,draft,pending';
 
-function buildPath( view ) {
+export function buildPath( view ) {
 	if ( ! view ) {
 		return '';
 	}
 	const params = buildQueryParams( view, {
 		defaultPerPage: 12,
+		fetchAllChunkSize: LAYOUTS_FETCH_ALL_CHUNK_SIZE,
 		defaultStatuses: DEFAULT_STATUSES,
 		// `offset` overrides `page` so page 1 can reserve slots for prebuilts.
 		supportsOffset: true,
-		extraParams: { _embed: 'author,wp:term' },
+		// `content.raw` (not `.rendered`) — previews parse blocks client-side,
+		// so skip the whole `the_content` chain. No `_links` either: see
+		// the newsletters-list note for what it costs.
+		extraParams: {
+			_fields: 'id,status,title,date,modified,author,content.raw,meta,newspack_newsletters_author',
+		},
 		arrayParams: [ { viewKey: 'author', param: 'author' } ],
 	} );
 	return `${ COLLECTION_PATH }${ toQueryString( params ) }`;
@@ -32,6 +39,7 @@ export default function useLayoutsData( view, mutationKey = 0 ) {
 	return useCollectionData( {
 		path: buildPath( view ),
 		mutationKey,
+		fetchAll: isFetchAllPerPage( view?.perPage ),
 		errorMessage: __( 'Failed to load layouts. Please refresh the page.', 'newspack-newsletters' ),
 		errorNoticeId: 'newspack-newsletters-layouts-list-fetch-error',
 	} );

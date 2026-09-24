@@ -6,33 +6,13 @@ import './style.scss';
 import { domReady } from '../../utils';
 import { openAuthModal } from '../../reader-activation-auth/auth-modal';
 import { openVerificationModal } from '../../reader-activation-auth/verification-modal';
+import { maybeConfirmRegistration } from '../../reader-activation-auth/confirmation-modal';
 import { openNewslettersSignupModal } from '../../reader-activation-newsletters/newsletters-modal';
+import { wireInlineVerificationBox } from '../../reader-activation-auth/inline-verification';
 
 window.newspackRAS = window.newspackRAS || [];
 
 window.newspackRAS.push( function ( readerActivation ) {
-	/**
-	 * Send verification OTP via the dedicated AJAX endpoint.
-	 *
-	 * @return {Promise} Resolves on success, rejects on failure.
-	 */
-	const sendVerificationOTP = () => {
-		const body = new FormData();
-		body.set( 'action', 'newspack_reader_registration_verification' );
-		body.set( 'nonce', reader_registration_block_config.verification_nonce );
-		return fetch( reader_registration_block_config.verification_url, {
-			method: 'POST',
-			headers: { Accept: 'application/json' },
-			body,
-		} ).then( res => {
-			if ( ! res.ok ) {
-				throw new Error( res.statusText );
-			}
-			readerActivation.setOTPTimer();
-			return res.json();
-		} );
-	};
-
 	const openAuth = ( initialState = 'otp', overrides = {} ) => {
 		openAuthModal( {
 			skipAuthenticatedCheck: true,
@@ -79,24 +59,14 @@ window.newspackRAS.push( function ( readerActivation ) {
 			box => ! box.querySelector( '.newspack-ui__modal-container' )
 		);
 		inlineVerificationBoxes.forEach( box => {
-			const sendOtpButton = box.querySelector( '[data-send-otp]' );
-			if ( ! sendOtpButton ) {
-				return;
-			}
-			sendOtpButton.addEventListener( 'click', () => {
-				sendOtpButton.disabled = true;
-				sendVerificationOTP()
-					.then( () => {
-						openAuth( 'otp' );
-					} )
-					.catch( () => {
-						sendOtpButton.disabled = false;
-						sendOtpButton.textContent = sendOtpButton.textContent.trim();
-						const errorP = box.querySelector( 'p:not(:has(button))' );
-						if ( errorP ) {
-							errorP.textContent = 'Something went wrong. Please try again.';
-						}
-					} );
+			wireInlineVerificationBox( box, {
+				url: reader_registration_block_config.verification_url,
+				nonce: reader_registration_block_config.verification_nonce,
+				errorText: reader_registration_block_config.verification_error,
+				onSent: () => {
+					readerActivation.setOTPTimer();
+					openAuth( 'otp' );
+				},
 			} );
 		} );
 
@@ -181,7 +151,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 				// Check if this is a new registration that needs email verification
 				// Note: verified can be false, null, or undefined - we need verification if it's not true
-				const needsVerification = ! data?.existing_user && newspack_ras_config.require_account_verification && data?.verified !== true;
+				const needsVerification = ! data?.existing_user && newspack_ras_config.verify_new_reader_accounts && data?.verified !== true;
 
 				// Hide success element first to ensure clean state
 				const successElement = container.querySelector( '.newspack-registration__registration-success' );
@@ -279,19 +249,38 @@ window.newspackRAS.push( function ( readerActivation ) {
 				if ( ! body.has( 'npe' ) || ! body.get( 'npe' ) ) {
 					return form.endLoginFlow( 'Please enter a valid email address.', 400 );
 				}
-				fetch( form.getAttribute( 'action' ) || window.location.pathname, {
-					method: 'POST',
-					headers: { Accept: 'application/json' },
-					body,
-				} )
-					.then( res => {
-						res.json()
-							.then( ( { message, data } ) => form.endLoginFlow( message, res.status, data ) )
-							.catch( () => form.endLoginFlow( 'An error occurred.', res.status || 400 ) );
+
+				const submitForm = () => {
+					fetch( form.getAttribute( 'action' ) || window.location.pathname, {
+						method: 'POST',
+						headers: { Accept: 'application/json' },
+						body,
 					} )
-					.catch( e => {
-						form.endLoginFlow( e?.message || 'An error occurred.', 400 );
-					} );
+						.then( res => {
+							res.json()
+								.then( ( { message, data } ) => form.endLoginFlow( message, res.status, data ) )
+								.catch( () => form.endLoginFlow( 'An error occurred.', res.status || 400 ) );
+						} )
+						.catch( e => {
+							form.endLoginFlow( e?.message || 'An error occurred.', 400 );
+						} );
+				};
+
+				// When post-registration verification is OFF, intercept new-email submissions with a
+				// "You're about to create an account for X" confirmation step. Cancel reverts the
+				// in-progress UI state so the reader can edit the email and try again.
+				maybeConfirmRegistration( {
+					email: body.get( 'npe' ),
+					onProceed: submitForm,
+					onCancel: () => {
+						flowCompleted = false;
+						if ( submitElement.contains( spinner ) ) {
+							submitElement.removeChild( spinner );
+						}
+						submitElement.disabled = false;
+						container.classList.remove( 'newspack-registration--in-progress' );
+					},
+				} );
 			} );
 
 			readerActivation.on( 'reader', ( { detail } ) => {

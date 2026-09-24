@@ -13,18 +13,19 @@ import Metering from './metering';
 
 interface RegistrationProps {
 	registration: Registration;
-	onChange: ( registration: Partial< Registration > ) => void;
+	onChange: ( registration: Registration ) => void;
 	cardProps?: Partial< React.ComponentPropsWithoutRef< typeof ActionCard > >;
 	isNewsletter?: boolean;
+	siteMeter?: SiteMeterConfig;
 }
 
-export default function Registration( { registration, onChange, isNewsletter = false }: RegistrationProps ) {
+export default function Registration( { registration, onChange, isNewsletter = false, siteMeter }: RegistrationProps ) {
 	const handleChange = useCallback(
 		( value: Partial< Registration > ) => {
+			// Spread the full object so fields this screen doesn't manage
+			// (e.g. gate_layout_id) survive the update and the next save.
 			onChange( {
-				active: registration.active,
-				metering: registration.metering,
-				require_verification: registration.require_verification,
+				...registration,
 				...value,
 			} );
 		},
@@ -39,6 +40,8 @@ export default function Registration( { registration, onChange, isNewsletter = f
 							description={ __( 'Allow limited free views before requiring login.', 'newspack-plugin' ) }
 							metering={ registration.metering }
 							onChange={ ( metering: Metering ) => handleChange( { metering } ) }
+							siteCount={ siteMeter?.anonymous_count }
+							sitePeriod={ siteMeter?.period }
 						/>
 					</CardBody>
 					<CardDivider />

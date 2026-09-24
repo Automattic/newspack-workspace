@@ -1,13 +1,12 @@
 import {
 	Notice,
-	Spinner,
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 import { notifyError, notifySuccess } from '../../notices';
+import LoadingState from '../../components/loading-state';
 import ListsSection from './lists-section';
 import OptionsSection from './options-section';
 import ProviderSection from './provider-section';
@@ -140,11 +139,7 @@ export default function SettingsScreen() {
 	);
 
 	if ( isLoading && ! data ) {
-		return (
-			<HStack className="newspack-newsletters-admin__loading" justify="center">
-				<Spinner />
-			</HStack>
-		);
+		return <LoadingState label={ __( 'Fetching settings…', 'newspack-newsletters' ) } />;
 	}
 
 	if ( error && ! data ) {

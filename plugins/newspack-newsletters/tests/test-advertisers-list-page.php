@@ -109,18 +109,20 @@ class Advertisers_List_Page_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The wizard-tab override returns the Advertisers tab URL —
-	 * `edit-tags.php?taxonomy=newspack_nl_advertiser&post_type=newspack_nl_cpt`,
-	 * matching the href `Newsletters_Wizard::get_tabs()` renders.
-	 * Without this override the wizard's strict URL equality check would
-	 * fail (live URL has the extra `&page=…` query) and the tab would
-	 * render without `.selected`.
+	 * The page declares its explicit three-level admin-header breadcrumb
+	 * trail (Newsletters / Advertising / Advertisers), supplied to the
+	 * newspack-plugin wizard header via the
+	 * `newspack_wizards_admin_header_breadcrumbs` filter.
 	 */
-	public function test_wizard_tab_url_targets_advertisers_tab() {
+	public function test_wizard_breadcrumbs_are_three_level_advertisers_trail() {
 		$page = new Advertisers_List_Page();
 		$this->assertSame(
-			admin_url( 'edit-tags.php?taxonomy=' . Ads::ADVERTISER_TAX . '&post_type=' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT ),
-			$page->get_wizard_tab_url()
+			[
+				[ 'label' => 'Newsletters' ],
+				[ 'label' => 'Advertising' ],
+				[ 'label' => 'Advertisers' ],
+			],
+			$page->get_wizard_breadcrumbs()
 		);
 	}
 }

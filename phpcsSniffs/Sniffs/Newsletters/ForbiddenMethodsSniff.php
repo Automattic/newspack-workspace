@@ -11,6 +11,17 @@ namespace phpcsSniffs\Sniffs\Newsletters;
 use PHP_CodeSniffer\Files\File;
 use PHP_CodeSniffer\Sniffs\Sniff;
 
+/**
+ * Flags calls to newsletter-provider methods that callers should reach through
+ * Newspack_Newsletters_Contacts instead.
+ *
+ * The two call shapes are treated differently on purpose. A static call is an
+ * error only when the receiver is one of $static_classes, because the receiver
+ * is known exactly. An instance call cannot be resolved to a class from tokens
+ * alone, so any `->` call matching $methods is reported as a warning whatever
+ * the receiver — deliberately over-reaching, which is why its message is
+ * hedged rather than asserted.
+ */
 class ForbiddenMethodsSniff implements Sniff {
 
 	const ERROR_CODE      = 'ForbiddenContactsMethods';
@@ -46,10 +57,22 @@ class ForbiddenMethodsSniff implements Sniff {
 		'Newspack_Newsletters_Subscription',
 	];
 
+	/**
+	 * Tokens this sniff listens for.
+	 *
+	 * @return array<int|string>
+	 */
 	public function register() {
 		return [ T_STRING ];
 	}
 
+	/**
+	 * Processes a token, reporting forbidden method calls.
+	 *
+	 * @param File $phpcs_file The file being scanned.
+	 * @param int  $stack_ptr  Position of the current token in the stack.
+	 * @return void
+	 */
 	public function process( File $phpcs_file, $stack_ptr ) {
 		$tokens = $phpcs_file->getTokens();
 		$token  = $tokens[ $stack_ptr ];

@@ -1,0 +1,17 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/responsive-container",
+	"title": "Responsive Container",
+	"category": "newspack",
+	"description": "A container that shows one set of blocks on desktop and another on mobile, swapping automatically at a breakpoint. Ideal for responsive headers and footers.",
+	"keywords": [ "responsive", "adaptive", "header", "footer", "mobile", "desktop" ],
+	"textdomain": "newspack-plugin",
+	"supports": {
+		"html": false,
+		"anchor": true,
+		"position": { "sticky": true }
+	},
+	"editorStyle": "file:../../../dist/blocks.css",
+	"style": "file:../../../dist/blocks.css"
+}

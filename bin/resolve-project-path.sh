@@ -14,9 +14,14 @@
 #   path=$(resolve_project_path "newspack-plugin")
 #
 
-PLUGINS_PATH="/newspack-plugins"
-THEMES_PATH="/newspack-themes"
-REPOS_PATH="/newspack-repos"
+# Container mount points. Overridable so bin/tests/ can point the resolver at a
+# fixture tree; nothing in the container sets them, so the defaults stand there.
+# These are read at source time, so a caller that sets one of these names BEFORE
+# sourcing this file now wins where it used to be overwritten. No caller does
+# today -- link-repos.sh sets REPOS_PATH after its source, not before.
+PLUGINS_PATH="${PLUGINS_PATH:-/newspack-plugins}"
+THEMES_PATH="${THEMES_PATH:-/newspack-themes}"
+REPOS_PATH="${REPOS_PATH:-/newspack-repos}"
 
 resolve_project_path() {
     local name="$1"

@@ -167,7 +167,10 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/clipboard-utils.js',
 			array(),
 			REPUBLICATION_TRACKER_TOOL_VERSION,
-			true
+			array(
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			)
 		);
 
 		// Enqueue the republish page scripts.
@@ -176,7 +179,10 @@ class Republication_Tracker_Tool_Rewrite_Endpoint {
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/republish-template.js',
 			array( 'republication-tracker-tool-clipboard-utils' ),
 			REPUBLICATION_TRACKER_TOOL_VERSION,
-			true
+			array(
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			)
 		);
 	}
 }

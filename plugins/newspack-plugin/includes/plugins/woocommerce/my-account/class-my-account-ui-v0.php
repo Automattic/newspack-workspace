@@ -37,7 +37,7 @@ class My_Account_UI_V0 {
 				'newspack-my-account-v0',
 				\Newspack\Newspack::plugin_url() . '/dist/my-account-v0.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				\Newspack\Newspack::asset_version( 'my-account-v0' )
 			);
 		}
 	}

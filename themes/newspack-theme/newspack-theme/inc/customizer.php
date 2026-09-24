@@ -164,7 +164,7 @@ function newspack_customize_register( $wp_customize ) {
 		'slideout_label',
 		array(
 			'default'           => esc_html__( 'Menu', 'newspack-theme' ),
-			'sanitize_callback' => 'sanitize_text_field',
+			'sanitize_callback' => 'newspack_sanitize_radio',
 		)
 	);
 	$wp_customize->add_control(
@@ -1251,6 +1251,27 @@ function newspack_customize_register( $wp_customize ) {
 			'type'    => 'textarea',
 			'label'   => esc_html__( 'Comment policy text', 'newspack-theme' ),
 			'section' => 'comments_options',
+		)
+	);
+
+	// Add option to control comment meta position.
+	$wp_customize->add_setting(
+		'comment_meta_position',
+		array(
+			'default'           => 'above',
+			'sanitize_callback' => 'newspack_sanitize_radio',
+		)
+	);
+	$wp_customize->add_control(
+		'comment_meta_position',
+		array(
+			'type'    => 'radio',
+			'label'   => esc_html__( 'Comment meta position', 'newspack-theme' ),
+			'section' => 'comments_options',
+			'choices' => array(
+				'above' => esc_html__( 'Above comment content', 'newspack-theme' ),
+				'below' => esc_html__( 'Below comment content', 'newspack-theme' ),
+			),
 		)
 	);
 

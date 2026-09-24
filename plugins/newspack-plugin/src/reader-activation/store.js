@@ -5,6 +5,22 @@ import { EVENTS, emit, on } from './events';
 import { getApiNonce } from './session';
 
 /**
+ * A switched session (an admin browsing as a reader through User Switching)
+ * keeps its store in sessionStorage and never syncs, like a temporary one, but
+ * unlike a temporary one it still hydrates the reader's server items: prompts
+ * read the reader's stored snapshot, so the browser must hold it.
+ */
+const isSwitchedSession = () => !! newspack_reader_data?.is_switched_session;
+
+/**
+ * Whether this session keeps its writes to itself. Such a session must not
+ * mark keys as pending sync: a switched session hydrates on every page load
+ * and rehydrate() skips pending keys, so a mark that can never clear would
+ * hide the reader's stored value for the rest of the tab's visit.
+ */
+const neverSyncs = () => !! newspack_reader_data?.is_temporary || isSwitchedSession();
+
+/**
  * Store configuration.
  *
  * @type {Object}
@@ -16,7 +32,7 @@ import { getApiNonce } from './session';
  */
 const config = {
 	storePrefix: newspack_reader_data?.store_prefix || 'np_reader_',
-	storage: newspack_reader_data?.is_temporary ? window.sessionStorage : window.localStorage,
+	storage: neverSyncs() ? window.sessionStorage : window.localStorage,
 	collections: {
 		maxItems: 1000,
 		maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days.
@@ -76,8 +92,8 @@ function rehydrateItem( key, serverValue ) {
  */
 function initializeSyncInterval( queue ) {
 	setInterval( () => {
-		// Bail if there are no items to sync or if it's a temporary session.
-		if ( ! queue.length || newspack_reader_data?.is_temporary ) {
+		// Bail if there are no items to sync or if the session never syncs.
+		if ( ! queue.length || neverSyncs() ) {
 			return;
 		}
 		const key = queue.shift();
@@ -344,7 +360,18 @@ export default function Store() {
 			if ( unsyncedKeys.includes( key ) && ! mergeStrategies.has( key ) ) {
 				continue;
 			}
-			rehydrateItem( key, decode( items[ key ] ) );
+			// Decode inside the loop's own guard: a single unparseable stored
+			// value (e.g. a legacy comma list, see NPPM-3205) must skip only
+			// its key, not abort hydration of every key after it.
+			let value;
+			try {
+				value = decode( items[ key ] );
+			} catch ( err ) {
+				// eslint-disable-next-line no-console
+				console.warn( `Unable to decode ${ key } for rehydration`, err );
+				continue;
+			}
+			rehydrateItem( key, value );
 		}
 	}
 
@@ -399,6 +426,13 @@ export default function Store() {
 		// Reset the in-memory server-known-items cache that syncItem reads to
 		// short-circuit no-op writes. window.newspack_reader_data is initialized
 		// at module load (top of this file), so no presence guard is needed.
+		//
+		// Load-bearing: this REASSIGNS the property to a fresh object rather than
+		// mutating it in place. init()'s account-switch restore (NPPM-2899) captures a
+		// reference to the prior items object *before* calling clear() and replays it
+		// after the wipe to rehydrate the switched-in reader's own server data. That
+		// relies on the captured reference staying intact — switching to in-place key
+		// deletion (e.g. `delete items[k]`) would silently empty it and break the restore.
 		window.newspack_reader_data.items = {};
 		// Reseed via _set (not public set) so the reseed itself doesn't enqueue a
 		// server write — and so init()'s trailing equality check skips its own
@@ -456,7 +490,7 @@ export default function Store() {
 		set: ( key, value, sync = true ) => {
 			assertNotReadOnly( key );
 			_set( key, value, false );
-			if ( sync ) {
+			if ( sync && ! neverSyncs() ) {
 				setPendingSync( key );
 				syncQueue.push( key );
 			}
@@ -473,8 +507,10 @@ export default function Store() {
 			assertNotReadOnly( key );
 			config.storage.removeItem( getStoreItemKey( key ) );
 			emit( EVENTS.data, { key, value: undefined } );
-			setPendingSync( key );
-			syncQueue.push( key );
+			if ( ! neverSyncs() ) {
+				setPendingSync( key );
+				syncQueue.push( key );
+			}
 		},
 		/**
 		 * Add a value to a collection.

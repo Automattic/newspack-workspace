@@ -5,10 +5,11 @@
 
 // TODO: Some misc styles that need a home!
 :root {
-	// Modal widths
-	--newspack-ui-modal-width-l: 964px;
-	--newspack-ui-modal-width-m: 632px;
-	--newspack-ui-modal-width-s: 410px;
+	// Container widths
+	--newspack-ui-width-l: 964px;
+	--newspack-ui-width-m: 632px;
+	--newspack-ui-width-s: 410px;
+	--newspack-ui-width-xs: 300px;
 
 	// Border radius - not ems because the font size of the element itself caused a cascade.
 	--newspack-ui-border-radius-2xl: 12px;

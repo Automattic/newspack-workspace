@@ -67,7 +67,7 @@ class Nextdoor {
 			$handle,
 			\Newspack\Newspack::plugin_url() . '/dist/other-scripts/nextdoor.js',
 			[ 'wp-edit-post', 'wp-data', 'wp-components', 'wp-element' ],
-			NEWSPACK_PLUGIN_VERSION,
+			\Newspack\Newspack::asset_version( 'other-scripts/nextdoor' ),
 			true
 		);
 
@@ -75,7 +75,7 @@ class Nextdoor {
 			$handle,
 			\Newspack\Newspack::plugin_url() . '/dist/other-scripts/nextdoor.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			\Newspack\Newspack::asset_version( 'other-scripts/nextdoor' )
 		);
 	}
 

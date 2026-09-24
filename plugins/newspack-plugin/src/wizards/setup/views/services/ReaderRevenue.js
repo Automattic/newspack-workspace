@@ -20,7 +20,7 @@ import { AUDIENCE_DONATIONS_WIZARD_SLUG } from '../../../audience/constants';
 const ReaderRevenue = ( { className } ) => {
 	const wizardData = useWizardData( AUDIENCE_DONATIONS_WIZARD_SLUG );
 	return (
-		<div className={ classnames( className, { 'o-50': isEmpty( wizardData ) } ) }>
+		<div className={ classnames( className, { 'newspack-is-dimmed': isEmpty( wizardData ) } ) }>
 			<Platform />
 			{ 'nrh' === wizardData.platform_data?.platform && (
 				<p>

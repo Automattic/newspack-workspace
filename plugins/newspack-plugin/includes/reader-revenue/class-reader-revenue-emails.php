@@ -96,10 +96,12 @@ class Reader_Revenue_Emails {
 			'name'                   => self::EMAIL_TYPES['RECEIPT'],
 			'category'               => 'reader-revenue',
 			'label'                  => __( 'Receipt', 'newspack-plugin' ),
-			'description'            => __( "Email sent to the donor after they've donated.", 'newspack-plugin' ),
+			'description'            => __( 'Email sent to the reader after a completed purchase.', 'newspack-plugin' ),
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-revenue-emails/receipt.php',
-			'editor_notice'          => __( 'This email will be sent to a reader after they contribute to your site.', 'newspack-plugin' ),
+			'editor_notice'          => __( 'This email will be sent to a reader after any completed purchase — a donation, subscription or membership.', 'newspack-plugin' ),
 			'from_email'             => self::get_from_email(),
+			'trigger_description'    => __( 'Sent after a successful payment.', 'newspack-plugin' ),
+			'recommended'            => true,
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[
@@ -116,7 +118,7 @@ class Reader_Revenue_Emails {
 						'template' => '*DATE*',
 					],
 					[
-						'label'    => __( 'payment method (last four digits of the card used)', 'newspack-plugin' ),
+						'label'    => __( 'payment method (card brand and last four digits, when available)', 'newspack-plugin' ),
 						'template' => '*PAYMENT_METHOD*',
 					],
 				]
@@ -130,6 +132,8 @@ class Reader_Revenue_Emails {
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-revenue-emails/welcome.php',
 			'editor_notice'          => __( 'This email will be sent to readers when they register an account during a transaction.', 'newspack-plugin' ),
 			'from_email'             => self::get_from_email(),
+			'trigger_description'    => __( 'Sent to new supporters after their first payment.', 'newspack-plugin' ),
+			'recommended'            => true,
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[
@@ -146,7 +150,7 @@ class Reader_Revenue_Emails {
 						'template' => '*DATE*',
 					],
 					[
-						'label'    => __( 'payment method (last four digits of the card used)', 'newspack-plugin' ),
+						'label'    => __( 'payment method (card brand and last four digits, when available)', 'newspack-plugin' ),
 						'template' => '*PAYMENT_METHOD*',
 					],
 					[
@@ -160,10 +164,12 @@ class Reader_Revenue_Emails {
 			'name'                   => self::EMAIL_TYPES['CANCELLATION'],
 			'category'               => 'reader-revenue',
 			'label'                  => __( 'Cancellation', 'newspack-plugin' ),
-			'description'            => __( "Email sent to the donor after they've cancelled a recurring donation.", 'newspack-plugin' ),
+			'description'            => __( 'Email sent to the reader after they cancel a recurring payment.', 'newspack-plugin' ),
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-revenue-emails/cancellation.php',
-			'editor_notice'          => __( 'This email will be sent to a reader after they cancel a recurring donation.', 'newspack-plugin' ),
+			'editor_notice'          => __( 'This email will be sent to a reader after they cancel a recurring payment — a donation, subscription or membership.', 'newspack-plugin' ),
 			'from_email'             => self::get_from_email(),
+			'trigger_description'    => __( 'Sent when a reader cancels their subscription.', 'newspack-plugin' ),
+			'recommended'            => true,
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[

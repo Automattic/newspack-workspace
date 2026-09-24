@@ -1,3 +1,24 @@
+## newspack-sponsors [2.2.3](https://github.com/Automattic/newspack-workspace/compare/newspack-sponsors@2.2.2...newspack-sponsors@2.2.3) (2026-08-31)
+
+
+### Bug Fixes
+
+* **blocks:** allow opted-in post types on the public /articles endpoint ([#522](https://github.com/Automattic/newspack-workspace/issues/522)) ([4ad30b4](https://github.com/Automattic/newspack-workspace/commit/4ad30b494bbdf5ecbb57576ddb922d9a300acb33))
+
+## newspack-sponsors [2.2.2](https://github.com/Automattic/newspack-workspace/compare/newspack-sponsors@2.2.1...newspack-sponsors@2.2.2) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-sponsors [2.2.1](https://github.com/Automattic/newspack-workspace/compare/newspack-sponsors@2.2.0...newspack-sponsors@2.2.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
 # [2.2.0](https://github.com/Automattic/newspack-sponsors/compare/v2.1.0...v2.2.0) (2025-11-24)
 
 

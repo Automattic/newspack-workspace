@@ -1502,6 +1502,29 @@ ul.wp-block-list {
 	font-family: var(--newspack-theme-font-heading);
 }
 
+/** === Contextual Prompt Block === */
+// Core's classic.css gives every `.wp-block` a 28px vertical margin in the
+// canvas; the card's padding owns the vertical rhythm at its edges.
+.wp-block-newspack-popups-contextual-prompt {
+	// The card's own font-size support has to reach its copy, which the editor's
+	// base paragraph rule would otherwise stop. Scoped here rather than dropping
+	// that rule, which every classic-theme editor session relies on. Paragraphs
+	// carrying their own size preset keep it.
+	p:not([class*="-font-size"]) {
+		font-size: inherit;
+	}
+
+	> * {
+		&:first-child {
+			margin-top: 0 !important; // !important to override inline styles.
+		}
+
+		&:last-child {
+			margin-bottom: 0 !important; // !important to override inline styles.
+		}
+	}
+}
+
 /** === Ad Unit Block === */
 .wp-block-newspack-ads-blocks-ad-unit {
 	> div {
@@ -1638,4 +1661,11 @@ $colors: (
 }
 .has-grad-6-gradient-background {
 	background-image: linear-gradient(135deg, rgb(221, 221, 221) 0%, rgb(255, 255, 255) 100%);
+}
+
+// Gutenberg's inline text-color format wraps text in mark.has-inline-color.
+// Keep the editor canvas consistent with the frontend fix: color-carrier
+// marks get no highlight background (browser default is yellow).
+mark.has-inline-color {
+	background-color: transparent;
 }

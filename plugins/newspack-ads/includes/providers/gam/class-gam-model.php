@@ -418,7 +418,7 @@ final class GAM_Model {
 		$query           = new \WP_Query(
 			[
 				'post_type'      => self::$custom_post_type,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Legacy ad-unit CPT; config-scale.
 				'post_status'    => [ 'publish' ],
 			]
 		);
@@ -824,7 +824,7 @@ final class GAM_Model {
 			"<!-- /%s/%s --><div id='div-gpt-ad-%s-0'></div>",
 			$network_code,
 			$code,
-			$unique_id
+			esc_attr( $unique_id )
 		);
 		return $code;
 	}

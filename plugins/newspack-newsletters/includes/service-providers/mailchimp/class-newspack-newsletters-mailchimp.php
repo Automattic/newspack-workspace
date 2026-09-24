@@ -598,7 +598,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 
 			// Prefetch send list info if we have a selected list and/or sublist.
-			$send_lists = $this->get_send_lists(
+			$send_lists = $this->get_send_lists_with_fallback(
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -611,7 +611,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$newsletter_data['lists'] = $send_lists;
 
 			$send_sublists = $send_list_id || $send_sublist_id ? // Prefetch send lists only if we have something selected already.
-				$this->get_send_lists(
+				$this->get_send_lists_with_fallback(
 					[
 						'ids'       => [ $send_sublist_id ], // If we have a selected sublist, make sure to fetch it. Otherwise, we'll populate sublists later.
 						'parent_id' => $send_list_id,
@@ -1214,9 +1214,117 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$payload = apply_filters( 'newspack_newsletters_mc_payload_sync', $payload, $post, $mc_campaign_id );
 
 			if ( $mc_campaign_id ) {
-				$campaign_result = $this->validate(
-					$mc->patch( "campaigns/$mc_campaign_id", $payload )
-				);
+				// Mailchimp snapshots ad-hoc "advanced segments"
+				// (segment_opts.conditions, as opposed to a saved segment
+				// referenced by ID) at PATCH time and does not refresh the
+				// campaign's `recipient_count` when a populated segment_opts is
+				// swapped for another populated segment_opts in a subsequent
+				// PATCH — the campaign keeps the prior snapshot's recipient
+				// count even though its stored conditions are correctly updated.
+				// Empirically the only PATCH shape that triggers a fresh
+				// snapshot is the transition from "no segment" to "populated
+				// segment". So before PATCHing a populated segment_opts onto an
+				// existing campaign, first PATCH segment_opts to an empty
+				// object to force Mailchimp through that transition.
+				//
+				// The reset PATCH lands a transient "send to the entire
+				// audience" state on Mailchimp's side. To make sure a failed
+				// main PATCH below can't leave the campaign stuck in that
+				// state (which any subsequent scheduled-send retry,
+				// hub-driven sync, or parallel actions/send would otherwise
+				// blast to the full list), capture the campaign's existing
+				// recipients first and roll back to them if the main PATCH
+				// throws.
+				//
+				// References:
+				// - https://mailchimp.com/help/troubleshooting-advanced-segments.
+				// - https://mailchimp.com/help/schedule-or-pause-a-regular-email-campaign.
+				$rollback_recipients = null;
+				if (
+					isset( $payload['recipients']['segment_opts'], $payload['recipients']['list_id'] ) &&
+					! empty( (array) $payload['recipients']['segment_opts'] )
+				) {
+					// Capture the existing recipients so we can roll back
+					// if the main PATCH below fails. Missing/empty
+					// segment_opts on the existing campaign is fine — we'll
+					// rollback to (object) [] (whole audience) which is the
+					// state the reset left us in anyway.
+					try {
+						$existing = $this->validate( $mc->get( "campaigns/$mc_campaign_id", [ 'fields' => 'recipients' ] ) );
+						if ( is_array( $existing ) && ! empty( $existing['recipients']['list_id'] ) ) {
+							$prior_segment_opts  = $existing['recipients']['segment_opts'] ?? [];
+							$rollback_recipients = [
+								'list_id'      => $existing['recipients']['list_id'],
+								'segment_opts' => empty( $prior_segment_opts ) ? (object) [] : $prior_segment_opts,
+							];
+						}
+					} catch ( Exception $capture_error ) {
+						// Without a prior snapshot we can't safely roll
+						// back. Log so operators can correlate if the main
+						// PATCH then also fails; sync continues.
+						Newspack_Newsletters_Logger::log(
+							'Mailchimp prior recipients capture failed for campaign ' . $mc_campaign_id . ': ' . $capture_error->getMessage() . ' — proceeding without rollback safety.'
+						);
+					}
+
+					// Reset PATCH is best-effort: if Mailchimp rejects it
+					// (e.g. the campaign is already sent or otherwise
+					// locked), let the main PATCH below produce the
+					// canonical error.
+					try {
+						if ( null !== $rollback_recipients ) {
+							$this->validate(
+								$mc->patch(
+									"campaigns/$mc_campaign_id",
+									[
+										'recipients' => [
+											'list_id'      => $payload['recipients']['list_id'],
+											'segment_opts' => (object) [],
+										],
+									]
+								)
+							);
+						}
+					} catch ( Exception $reset_error ) {
+						Newspack_Newsletters_Logger::log(
+							'Mailchimp segment_opts reset failed for campaign ' . $mc_campaign_id . ': ' . $reset_error->getMessage() . ' — proceeding with main PATCH.'
+						);
+						// The reset didn't apply, so the campaign is
+						// still in its prior recipients state and there's
+						// nothing to roll back if the main PATCH also
+						// fails.
+						$rollback_recipients = null;
+					}
+				}
+
+				try {
+					$campaign_result = $this->validate(
+						$mc->patch( "campaigns/$mc_campaign_id", $payload )
+					);
+				} catch ( Exception $main_error ) {
+					// The reset PATCH already neutered segment_opts;
+					// without restoring the prior state the Mailchimp
+					// campaign is now configured to send to the entire
+					// audience. Attempt a rollback PATCH. Rollback
+					// failures are logged but cannot be propagated
+					// further — we re-throw the original main-PATCH
+					// error so callers see the canonical sync error.
+					if ( null !== $rollback_recipients ) {
+						try {
+							$this->validate(
+								$mc->patch( "campaigns/$mc_campaign_id", [ 'recipients' => $rollback_recipients ] )
+							);
+							Newspack_Newsletters_Logger::log(
+								'Mailchimp main PATCH failed after segment_opts reset — rolled back recipients for campaign ' . $mc_campaign_id . '.'
+							);
+						} catch ( Exception $rollback_error ) {
+							Newspack_Newsletters_Logger::log(
+								'Mailchimp rollback PATCH failed for campaign ' . $mc_campaign_id . ': ' . $rollback_error->getMessage() . ' — campaign may be left in an inconsistent recipients state.'
+							);
+						}
+					}
+					throw $main_error;
+				}
 			} else {
 				$campaign_result = $this->validate(
 					$mc->post( 'campaigns', $payload )
@@ -1524,6 +1632,20 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	}
 
 	/**
+	 * The fallback message shown to readers whose Mailchimp contact is in a
+	 * compliance state, used when no custom message has been configured.
+	 *
+	 * Shared with the settings list, which uses it as the field placeholder so the
+	 * wizard previews the real fallback copy. A method rather than a class constant
+	 * because gettext extraction requires a string literal inside __().
+	 *
+	 * @return string The default resubscribe error message.
+	 */
+	public static function get_default_resubscribe_message() {
+		return __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' );
+	}
+
+	/**
 	 * Filters the error message shown to readers when an error occurs.
 	 *
 	 * @param string $reader_error The default error message.
@@ -1535,7 +1657,13 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	public function reader_error_message( $reader_error, $params, $raw_error ) {
 		// Handle special case where a user is in compliance state.
 		if ( is_wp_error( $raw_error ) && false !== strpos( $raw_error->get_error_message(), 'Member In Compliance State' ) ) {
-			$reader_error = __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' );
+			// Mailchimp forbids resubscribing such contacts via its API, so the reader must be
+			// pointed elsewhere — publishers can customize the message (HTML links allowed).
+			$custom_message = trim( (string) get_option( 'newspack_newsletters_mailchimp_resubscribe_message', '' ) );
+			if ( ! empty( $custom_message ) ) {
+				return $custom_message;
+			}
+			$reader_error = self::get_default_resubscribe_message();
 		}
 		return $reader_error;
 	}
@@ -2182,6 +2310,9 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				'interests'    => [],
 				'merge_fields' => [],
 			];
+			// Collected alongside the loop but only exposed under $return_details,
+			// so a plain lookup keeps its historical keys.
+			$merge_fields_by_list = [];
 			foreach ( $found as $contact ) {
 				foreach ( $keys as $key ) {
 					if ( ! isset( $data[ $key ] ) || empty( $data[ $key ] ) ) {
@@ -2200,9 +2331,39 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					'status'     => $contact['status'],
 				];
 				if ( isset( $contact['merge_fields'] ) ) {
+					// Flat and last-wins, preserved as-is: existing callers read this
+					// shape. Merge fields are defined per audience, so for a contact in
+					// several audiences it holds whichever came back last — which is why
+					// the per-audience map below exists.
 					$data['merge_fields'] = $contact['merge_fields'];
+
+					// Mailchimp reports every merge field defined on the audience, using
+					// an empty string for ones the contact hasn't filled in — filter
+					// those out so `metadata` keeps the shared meaning of "fields the
+					// contact has a value for".
+					$merge_fields_by_list[ $contact['list_id'] ] = self::filter_set_field_values( $contact['merge_fields'] );
 				}
 			}
+
+			// Expose the merge fields under the provider-neutral `metadata` key that
+			// callers requesting full details read, as ActiveCampaign already does.
+			// Merge fields are keyed by merge tag, which is the same identifier
+			// get_contact_fields_for_integrations() reports as a field's `key`, so
+			// the two line up without remapping. Without this an ESP contact pull
+			// finds no `metadata` and stores nothing while reporting success.
+			//
+			// `metadata_by_list` carries the same values keyed by audience. Merge
+			// fields are per-audience in Mailchimp, and a caller's field schema comes
+			// from one specific audience (get_contact_fields_for_integrations() takes
+			// a list ID), so a caller that knows which audience it configured should
+			// read its entry rather than the flat `metadata` — which, like
+			// `merge_fields`, can only report one audience for a multi-audience
+			// contact.
+			if ( $return_details ) {
+				$data['metadata']         = self::filter_set_field_values( $data['merge_fields'] );
+				$data['metadata_by_list'] = $merge_fields_by_list;
+			}
+
 			return $data;
 		} catch ( \Exception $e ) {
 			return new WP_Error(
@@ -2608,6 +2769,8 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 *
 	 * Mailchimp types eligible for access-rule / segmentation defaults: text, number, date, radio, dropdown.
 	 * Other types (phone, url, imageurl, birthday, zip, address) are exposed but not promoted by default.
+	 * `birthday` is deliberately excluded from the `date` value_type as well: it is MM/DD with no
+	 * year, so it cannot be placed on an absolute timeline and stays exact-match text.
 	 *
 	 * @param array $field Raw merge field from the Mailchimp API.
 	 * @return array|null Mapped field, or null if no usable identifier is available.
@@ -2632,15 +2795,57 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 		}
 
+		// Derive value_type (and the numeric range default) from Mailchimp's
+		// merge-field type so the framework constrains the operator dropdown to the
+		// field shape — a date field can't be typed "Number", a numeric field gets
+		// range matching. Mirrors the ActiveCampaign mapper for cross-ESP consistency.
+		$value_type        = 'string';
+		$matching_function = 'default';
+		$date_format       = '';
+		if ( in_array( $type, [ 'dropdown', 'radio' ], true ) ) {
+			$value_type = 'select';
+		} elseif ( 'date' === $type ) {
+			$value_type = 'date';
+			// Probed rather than assumed: on an older newspack-plugin the operator
+			// would travel to newspack-popups unvalidated, where a stale build
+			// crashes on it (see integrations_supports_date_range()).
+			$matching_function = self::integrations_supports_date_range() ? 'date_range' : 'default';
+			$date_format       = self::map_mailchimp_date_format(
+				isset( $field['options']['date_format'] ) ? (string) $field['options']['date_format'] : ''
+			);
+		} elseif ( 'number' === $type ) {
+			$value_type        = 'number';
+			$matching_function = 'range';
+		}
+
 		return [
 			'key'                 => $tag,
 			'name'                => ! empty( $field['name'] ) ? $field['name'] : $tag,
-			'value_type'          => 'string',
-			'matching_function'   => 'default',
+			'value_type'          => $value_type,
+			'matching_function'   => $matching_function,
+			'date_format'         => $date_format,
 			'options'             => $options,
 			'description'         => isset( $field['help_text'] ) ? $field['help_text'] : '',
 			'is_access_rule'      => $is_promoted_by_default,
 			'is_segment_criteria' => $is_promoted_by_default,
 		];
+	}
+
+	/**
+	 * Translate a Mailchimp date_format option into a PHP date format string.
+	 *
+	 * Mailchimp renders a date merge field per this setting, so '03/04/2026' means
+	 * different days under the two options. An unrecognized format returns '',
+	 * which the consumer reads as ISO 8601 / Y-m-d.
+	 *
+	 * @param string $format The Mailchimp date_format option.
+	 * @return string A PHP date format string, or ''.
+	 */
+	private static function map_mailchimp_date_format( $format ) {
+		$formats = [
+			'MM/DD/YYYY' => 'm/d/Y',
+			'DD/MM/YYYY' => 'd/m/Y',
+		];
+		return isset( $formats[ $format ] ) ? $formats[ $format ] : '';
 	}
 }

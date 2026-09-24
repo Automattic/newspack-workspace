@@ -227,7 +227,7 @@ class Republication_Tracker_Tool_Settings {
 					checked
 				<?php endif; ?>
 			/>
-			<p><em><?php echo esc_html__( 'If checked, an attribution statement will be appended to the copied content.', 'republication-tracker-tool' ); ?></em></p>
+			<p><em><?php echo esc_html__( 'If checked, an attribution statement will be appended to the copied content (classic theme only).', 'republication-tracker-tool' ); ?></em></p>
 		<?php
 	}
 

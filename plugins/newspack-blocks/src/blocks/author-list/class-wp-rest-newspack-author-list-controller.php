@@ -13,6 +13,13 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound
 
 	/**
+	 * Fields returned when a caller doesn't ask for a specific set.
+	 *
+	 * @var string[]
+	 */
+	const DEFAULT_FIELDS = [ 'id', 'name', 'bio', 'email', 'social', 'avatar', 'url' ];
+
+	/**
 	 * Constructs the controller.
 	 *
 	 * @access public
@@ -136,6 +143,10 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 			$options['fields'] = explode( ',', $request->get_param( 'fields' ) );
 		}
 
+		// Restricted here rather than in get_all_authors(), which also renders the block on
+		// the front end for visitors and must keep returning whatever a publisher publishes.
+		$options['fields'] = self::restrict_fields( $options['fields'] ?? self::DEFAULT_FIELDS );
+
 		$combined_authors = $this->get_all_authors( $options );
 		$response         = new \WP_REST_Response( $combined_authors );
 		$response->header( 'x-wp-total', count( $combined_authors ) );
@@ -157,11 +168,16 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 			'avatar_hide_default' => false,
 			'exclude'             => [], // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude
 			'exclude_empty'       => false,
-			'fields'              => [ 'id', 'name', 'bio', 'email', 'social', 'avatar', 'url' ],
+			'fields'              => self::DEFAULT_FIELDS,
 			'per_page'            => 10,
 		];
 		$options         = wp_parse_args( $options, $default_options );
 		$fields          = $options['fields'];
+
+		// Only the component's own author roles can be listed. A caller-chosen role outside them
+		// is dropped, and when nothing usable remains the user query is skipped below rather than
+		// run without a role filter, which would match every user on the site.
+		$options['author_roles'] = array_values( array_intersect( (array) $options['author_roles'], Newspack_Blocks\get_authors_roles_slugs() ) );
 		$current_page    = 1;
 
 		// Array to store all authors.
@@ -208,7 +224,7 @@ class WP_REST_Newspack_Author_List_Controller extends WP_REST_Newspack_Authors_C
 			}
 		}
 
-		if ( in_array( $options['author_type'], [ 'all', 'users' ], true ) ) {
+		if ( ! empty( $options['author_roles'] ) && in_array( $options['author_type'], [ 'all', 'users' ], true ) ) {
 			// Reset current page for new query.
 			$current_page         = 1;
 			$exclude_empty        = $options['exclude_empty'] ? true : false;

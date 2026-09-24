@@ -23,13 +23,13 @@ $magic_link_args                                     = [];
 $magic_link_args[ $newspack_send_magic_link_arg ]    = wp_create_nonce( $newspack_send_magic_link_arg );
 $magic_link_url                                      = \add_query_arg(
 	$magic_link_args,
-	\wc_get_account_endpoint_url( 'edit-account' )
+	My_Account::get_endpoint_url( My_Account::ENDPOINT_EDIT_ACCOUNT )
 );
 $reset_password_args                                 = [];
 $reset_password_args[ $newspack_reset_password_arg ] = wp_create_nonce( $newspack_reset_password_arg );
 $reset_password_url                                  = \add_query_arg(
 	$reset_password_args,
-	\wc_get_account_endpoint_url( 'edit-account' )
+	My_Account::get_endpoint_url( My_Account::ENDPOINT_EDIT_ACCOUNT )
 );
 ?>
 
@@ -38,10 +38,10 @@ $reset_password_url                                  = \add_query_arg(
 		<?php esc_html_e( 'You must verify your account before you can manage account settings. Verify with a link or by setting a password.', 'newspack-plugin' ); ?>
 	</p>
 	<p>
-		<a class="woocommerce-Button button" href="<?php echo esc_url( $magic_link_url ); ?>">
+		<a class="newspack-ui__button newspack-ui__button--primary" href="<?php echo esc_url( $magic_link_url ); ?>">
 			<?php esc_html_e( 'Send me a link', 'newspack-plugin' ); ?>
 		</a>
-		<a class="woocommerce-Button button" href="<?php echo esc_url( $reset_password_url ); ?>">
+		<a class="newspack-ui__button newspack-ui__button--primary" href="<?php echo esc_url( $reset_password_url ); ?>">
 			<?php esc_html_e( 'Set a new password', 'newspack-plugin' ); ?>
 		</a>
 	</p>

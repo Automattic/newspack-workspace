@@ -110,9 +110,10 @@ interface AdvancedSettings {
 	show_author_email: boolean;
 	author_bio_length: number;
 
-	// Default Featured Image and Post Template.
+	// Default Featured Image and Post/Page Template.
 	featured_image_default: string;
 	post_template_default: string;
+	page_template_default: string;
 
 	// Featured Image and Post Template for All Posts.
 	featured_image_all_posts: string;
@@ -124,13 +125,6 @@ interface AdvancedSettings {
 	newspack_image_credits_prefix_label: string;
 	newspack_image_credits_placeholder: number | null;
 	newspack_image_credits_auto_populate: boolean;
-
-	// Accessibility Statement.
-	accessibility_statement_page?: {
-		editUrl: string;
-		status: string;
-		pageUrl: string;
-	};
 
 	// Post Date.
 	post_time_ago: boolean;
@@ -144,18 +138,21 @@ interface AdvancedSettings {
 	// Post content fallback image.
 	post_content_fallback_image?: string | null;
 
-	// Private Tags settings (present only when NEWSPACK_PRIVATE_TAGS_ENABLED is active).
+	// Private Tags settings (present unless the feature is opted out via the NEWSPACK_PRIVATE_TAGS_DISABLED constant or the newspack_private_tags_enabled filter).
+	// Individual keys are optional because updates are deep-merged, so a single-key payload is a valid update.
 	newspack_private_tags_settings?: {
-		all: boolean;
-		archives: boolean;
-		feeds: boolean;
-		tag_links: boolean;
-		tag_clouds: boolean;
-		css_classes: boolean;
-		gam_targeting: boolean;
-		yoast_metadata: boolean;
-		yoast_sitemap: boolean;
-		[ key: string ]: boolean;
+		all?: boolean;
+		archives?: boolean;
+		feeds?: boolean;
+		feed_terms?: boolean;
+		tag_links?: boolean;
+		tag_clouds?: boolean;
+		css_classes?: boolean;
+		gam_targeting?: boolean;
+		yoast_metadata?: boolean;
+		yoast_sitemap?: boolean;
+		reader_data?: boolean;
+		[ key: string ]: boolean | undefined;
 	};
 }
 

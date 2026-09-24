@@ -136,14 +136,22 @@ final class Newspack_Segments_Model {
 									'properties'           => [
 										'min' => [
 											'name'     => 'min',
-											'type'     => 'integer',
+											'type'     => 'number',
 											'required' => false,
 										],
 										'max' => [
 											'name'     => 'max',
-											'type'     => 'integer',
+											'type'     => 'number',
 											'required' => false,
 										],
+									],
+								],
+								[
+									'type'                 => 'object',
+									'additionalProperties' => false,
+									'properties'           => [
+										'start' => self::get_date_bound_schema(),
+										'end'   => self::get_date_bound_schema(),
 									],
 								],
 
@@ -266,6 +274,55 @@ final class Newspack_Segments_Model {
 	}
 
 	/**
+	 * Schema for one end of a date-range criterion value.
+	 *
+	 * A bound is either a fixed calendar date or an offset in days from today —
+	 * negative for the past, positive for the future. Absent means unbounded, so
+	 * neither key is required on the parent object.
+	 *
+	 * @return array The schema.
+	 */
+	private static function get_date_bound_schema() {
+		return [
+			'type'  => 'object',
+			'oneOf' => [
+				[
+					'type'                 => 'object',
+					'additionalProperties' => false,
+					'required'             => [ 'type', 'date' ],
+					'properties'           => [
+						'type' => [
+							'type' => 'string',
+							'enum' => [ 'absolute' ],
+						],
+						// Month and day are bounded, not just digit-shaped, so this matches
+						// the client matcher's ISO_DATE exactly. A criterion the matcher
+						// would reject (`2026-13-45`) can't be saved in the first place.
+						'date' => [
+							'type'    => 'string',
+							'pattern' => '^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$',
+						],
+					],
+				],
+				[
+					'type'                 => 'object',
+					'additionalProperties' => false,
+					'required'             => [ 'type', 'days' ],
+					'properties'           => [
+						'type' => [
+							'type' => 'string',
+							'enum' => [ 'relative' ],
+						],
+						'days' => [
+							'type' => 'integer',
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
 	 * Registers each meta field.
 	 *
 	 * @return void
@@ -313,6 +370,11 @@ final class Newspack_Segments_Model {
 				$segment['name'] = $original_name . ' ' . $i;
 				$i++;
 			}
+		}
+
+		// Store criteria the same way update_segment() does.
+		if ( isset( $segment['criteria'] ) ) {
+			$segment['criteria'] = self::filter_criteria( $segment['criteria'] );
 		}
 
 		$term = wp_insert_term(
@@ -439,7 +501,7 @@ final class Newspack_Segments_Model {
 			[
 				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 				'fields'         => 'ids',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Prompt IDs for a single segment; config-scale.
 				'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 					[
 						'taxonomy' => self::TAX_SLUG,
@@ -518,7 +580,144 @@ final class Newspack_Segments_Model {
 		}
 
 		// Ensure we got the segment in its latest version.
-		return Newspack_Segments_Migration::migrate_criteria_configuration( $segment );
+		$segment = Newspack_Segments_Migration::migrate_criteria_configuration( $segment );
+
+		// Drop disabled criteria (e.g. number-based criteria the editor saved with {min:0, max:0}).
+		if ( isset( $segment['criteria'] ) ) {
+			$segment['criteria'] = self::filter_criteria( $segment['criteria'] );
+		}
+
+		return $segment;
+	}
+
+	/**
+	 * Filter out disabled criteria from a segment's criteria array.
+	 *
+	 * A criterion is considered disabled when its value carries no constraint
+	 * (`null`, empty string, string/numeric `0`, boolean `false`, empty array,
+	 * or a nested array whose entries are all themselves empty by these
+	 * rules). This prevents disabled number-based criteria like
+	 * `{ min: 0, max: 0 }` from leaking through to the front-end criteria
+	 * array and being evaluated as active constraints.
+	 *
+	 * Extensibility:
+	 * - `newspack_popups_is_criteria_value_empty` — short-circuit the
+	 *   per-value emptiness check (return a non-null boolean to override).
+	 * - `newspack_popups_filter_segment_criteria` — final filter over the
+	 *   returned criteria array, e.g. for custom criteria that need to
+	 *   survive the default filter.
+	 *
+	 * @param mixed $criteria Criteria array from segment meta. Non-arrays return [].
+	 * @return array Filtered criteria, re-indexed.
+	 */
+	public static function filter_criteria( $criteria ) {
+		if ( ! is_array( $criteria ) ) {
+			return [];
+		}
+		$filtered = array_values(
+			array_filter(
+				array_map( [ __CLASS__, 'drop_invalid_range_max' ], $criteria ),
+				function( $item ) {
+					return is_array( $item )
+						&& isset( $item['criteria_id'] )
+						&& ! self::is_criteria_value_empty( $item['value'] ?? null );
+				}
+			)
+		);
+
+		/**
+		 * Filters the criteria array after disabled entries have been stripped.
+		 *
+		 * Lets custom criteria registered via `newspack_popups_default_criteria`
+		 * opt out of, or override, the default filtering — e.g. a criterion
+		 * whose semantically-meaningful value is `0` / `''` / `false`.
+		 *
+		 * @param array $filtered Criteria after the default empty-value filter.
+		 * @param array $criteria Raw criteria as received.
+		 */
+		return apply_filters( 'newspack_popups_filter_segment_criteria', $filtered, $criteria );
+	}
+
+	/**
+	 * Drop a range `max` of 0 or less from a criterion, since it is invalid.
+	 *
+	 * The segment editor stores `max => 0` when the Max bound is unticked, and the
+	 * pre-criteria migration stored it for every "at least N" segment. Treating it
+	 * as a real bound leaves the segment matching nobody, so it is removed on both
+	 * save and read; a criterion left with no bounds is then dropped by
+	 * `is_criteria_value_empty()`. A fractional max stays valid, since numeric
+	 * reader fields can hold values between 0 and 1.
+	 *
+	 * @param mixed $item Criterion entry.
+	 * @return mixed The entry, without an invalid max.
+	 */
+	private static function drop_invalid_range_max( $item ) {
+		if (
+			is_array( $item )
+			&& isset( $item['value'] )
+			&& is_array( $item['value'] )
+			&& array_key_exists( 'max', $item['value'] )
+			&& is_numeric( $item['value']['max'] )
+			&& (float) $item['value']['max'] <= 0
+		) {
+			unset( $item['value']['max'] );
+		}
+		return $item;
+	}
+
+	/**
+	 * Determine whether a criterion value represents "no constraint".
+	 *
+	 * Walks nested arrays so fully-disabled values (e.g. `{ min: 0, max: 0 }`)
+	 * are recognised as empty. Booleans are treated as empty when `false` —
+	 * mirroring the convention used by the existing `is_disabled` toggles —
+	 * so custom boolean criteria don't need bespoke handling.
+	 *
+	 * @param mixed $value Criterion value.
+	 * @return bool True if the value carries no constraint.
+	 */
+	private static function is_criteria_value_empty( $value ) {
+		/**
+		 * Short-circuit the per-value emptiness check for `filter_criteria()`.
+		 *
+		 * Return a boolean to override; return `null` (default) to fall through
+		 * to the built-in rules. Useful when a custom criterion treats a
+		 * normally-empty value (e.g. `0`, `''`, `false`) as meaningful.
+		 *
+		 * @param mixed $value The criterion value being evaluated.
+		 */
+		$override = apply_filters( 'newspack_popups_is_criteria_value_empty', null, $value );
+		if ( is_bool( $override ) ) {
+			return $override;
+		}
+
+		if ( null === $value ) {
+			return true;
+		}
+		if ( is_bool( $value ) ) {
+			return false === $value;
+		}
+		if ( is_string( $value ) ) {
+			return '' === $value || '0' === $value;
+		}
+		if ( is_int( $value ) ) {
+			return 0 === $value;
+		}
+		if ( is_float( $value ) ) {
+			return 0.0 === $value;
+		}
+		if ( is_array( $value ) ) {
+			if ( [] === $value ) {
+				return true;
+			}
+			foreach ( $value as $sub ) {
+				if ( ! self::is_criteria_value_empty( $sub ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -579,7 +778,7 @@ final class Newspack_Segments_Model {
 		}
 
 		update_term_meta( $segment['id'], 'updated_at', gmdate( 'Y-m-d' ) );
-		update_term_meta( $segment['id'], 'criteria', $segment['criteria'] ?? [] );
+		update_term_meta( $segment['id'], 'criteria', self::filter_criteria( $segment['criteria'] ?? [] ) );
 		update_term_meta( $segment['id'], 'configuration', $segment['configuration'] );
 
 		return self::get_segments();

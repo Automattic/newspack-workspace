@@ -33,7 +33,7 @@ const getCreateButton =
 	if ( newspack_plugin_info.screen === 'plugin-install.php' && newspack_plugin_info.plugin_review_link ) {
 		const modalEl = document.createElement( 'div' );
 		const modalContentEl = document.createElement( 'div' );
-		const modalHeadingEl = document.createElement( 'h1' );
+		const modalHeadingEl = document.createElement( 'h2' );
 		const modalPEl = document.createElement( 'p' );
 		const modalButtonsWrapperEl = document.createElement( 'div' );
 		const modalCloseEl = document.createElement( 'button' );

@@ -22,7 +22,7 @@ class Settings {
 	/**
 	 * Posts per page options.
 	 */
-	public const POSTS_PER_PAGE_OPTIONS = [ 12, 18, 24 ];
+	public const POSTS_PER_PAGE_OPTIONS = [ 12, 18, 24, 30 ];
 
 	/**
 	 * Post indicator style options.
@@ -218,7 +218,7 @@ class Settings {
 	 * @return string The plural collection label.
 	 */
 	public static function get_collection_label() {
-		return self::get_custom_name( 'custom_name', _x( 'Collections', 'collections general label', 'newspack' ) );
+		return self::get_custom_name( 'custom_name', _x( 'Collections', 'collections general label', 'newspack-plugin' ) );
 	}
 
 	/**
@@ -227,7 +227,7 @@ class Settings {
 	 * @return string The singular collection label.
 	 */
 	public static function get_collection_singular_label() {
-		return self::get_custom_name( 'custom_singular_name', _x( 'Collection', 'collections singular label', 'newspack' ) );
+		return self::get_custom_name( 'custom_singular_name', _x( 'Collection', 'collections singular label', 'newspack-plugin' ) );
 	}
 
 	/**
@@ -250,8 +250,15 @@ class Settings {
 		$settings         = self::get_settings();
 		$updated_settings = [];
 
+		// `has_param()` also counts the route's declared defaults, which would reset every omitted setting.
+		$sent_params = array_merge(
+			(array) $request->get_query_params(),
+			(array) $request->get_body_params(),
+			(array) $request->get_json_params()
+		);
+
 		foreach ( self::get_rest_args( 'keys' ) as $key ) {
-			if ( ! $request->has_param( $key ) ) {
+			if ( ! array_key_exists( $key, $sent_params ) ) {
 				continue;
 			}
 

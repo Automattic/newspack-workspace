@@ -388,6 +388,18 @@ p.has-background {
 	}
 }
 
+//! Newspack Contextual Prompt Block
+.wp-block-newspack-popups-contextual-prompt {
+	// The card's padding owns the vertical rhythm at its edges.
+	> *:first-child {
+		margin-top: 0 !important; // !important to override inline styles from child block attributes.
+	}
+
+	> *:last-child {
+		margin-bottom: 0 !important; // !important to override inline styles from child block attributes.
+	}
+}
+
 //! Columns
 .wp-block-columns {
 	.wp-block-cover,
@@ -998,6 +1010,23 @@ body:not(.wp-child-theme-newspack-joseph):not(.wp-child-theme-newspack-nelson) .
 		text-align: left;
 	}
 
+	&.aligncenter figcaption,
+	.aligncenter figcaption {
+		text-align: center;
+	}
+
+	&.alignright figcaption,
+	.alignright figcaption {
+		/* rtl:ignore */
+		text-align: right;
+	}
+
+	&.alignleft figcaption,
+	.alignleft figcaption {
+		/* rtl:ignore */
+		text-align: left;
+	}
+
 	img:not([style*="object-fit"]) {
 		height: auto !important; // !important to override inline styles.
 	}
@@ -1095,6 +1124,17 @@ hr {
 			color: inherit;
 		}
 	}
+}
+
+// Default-width separators need a short max-width. Historically WordPress core
+// pinned this with `.wp-block-separator { width: 100px }` (the separator block's
+// theme.css). WordPress 7.0 stopped enqueuing that rule in separate-block-assets
+// mode, exposing that inside post content `.entry .entry-content > *` (0,2,0)
+// out-specifies the base `.wp-block-separator` (0,1,0) max-width above, so a
+// Default separator stretched to full width. Re-assert the short width for the
+// default style with a higher-specificity selector (0,3,0). See NPPM-2930.
+.wp-block-separator:not(.is-style-wide):not(.is-style-dots) {
+	max-width: #{5 * structure.$size__spacing-unit};
 }
 
 .entry .entry-content,
@@ -1691,6 +1731,11 @@ $colors: (
 .page-template-single-feature,
 .page-template-no-header-footer {
 	.entry .entry-content > *,
+	// Some plugins (e.g. Everlit) wrap the_content in a span/div at render
+	// time, which interposes a parent between .entry-content and the aligned
+	// block and breaks the direct-child match above. Allow one level of such
+	// wrapping so wide/full alignment continues to work.
+	.entry .entry-content > .everlit-audio > *,
 	.newspack-content-gate__inline-gate > *,
 	[id="pico"] > * {
 		&.alignwide {

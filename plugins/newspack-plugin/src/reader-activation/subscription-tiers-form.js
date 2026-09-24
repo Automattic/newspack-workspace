@@ -62,6 +62,56 @@ export default function init() {
 
 			let isFormValid = false;
 
+			// Seat bounds belong to the tier being bought, and each tier's radio
+			// publishes its own. The single seats field follows whichever one is
+			// checked: shown and bounded for a per-seat tier, hidden and disabled
+			// otherwise — and a disabled input submits nothing, so a flat tier sends no
+			// seat count at all. Without that, its price would be billed per seat.
+			const seatsField = form.querySelector( '.newspack__subscription-tiers__seats' );
+			// By name, not by id: one page can hold several switch modals, each with
+			// its own seats field, and the id is unique per form for that reason.
+			const seatsInput = seatsField?.querySelector( 'input[name="quantity"]' );
+			let seatsTierId = null;
+			const syncSeatsToTier = () => {
+				if ( ! seatsField || ! seatsInput ) {
+					return;
+				}
+				const tier = form.querySelector( 'input[name="product_id"]:checked' );
+				const tierChanged = ( tier?.value || '' ) !== seatsTierId;
+				seatsTierId = tier?.value || '';
+				if ( ! tier?.dataset.perSeat ) {
+					seatsField.hidden = true;
+					seatsInput.disabled = true;
+					return;
+				}
+				seatsField.hidden = false;
+				seatsInput.disabled = false;
+				// The plan's own minimum, raised to the seats already in use: a group can
+				// never shrink below the people in it, and the server refuses it either
+				// way. The floor belongs to the group, so it survives a tier change.
+				const floor = parseInt( seatsField.dataset.seatsFloor, 10 ) || 0;
+				const min = Math.max( parseInt( tier.dataset.seatsMin, 10 ) || 1, floor );
+				const max = parseInt( tier.dataset.seatsMax, 10 ) || 0;
+				seatsInput.min = min;
+				if ( max > 0 ) {
+					seatsInput.max = max;
+				} else {
+					seatsInput.removeAttribute( 'max' );
+				}
+				// Only a tier change may rewrite the value: clamping on every keystroke
+				// would fight the reader as they type. A count the newly chosen tier
+				// can't sell would otherwise only be rejected server-side.
+				const value = parseInt( seatsInput.value, 10 );
+				if ( ! tierChanged || Number.isNaN( value ) ) {
+					return;
+				}
+				if ( value < min ) {
+					seatsInput.value = min;
+				} else if ( max > 0 && value > max ) {
+					seatsInput.value = max;
+				}
+			};
+
 			const attachInputListeners = () => {
 				const inputs = form.querySelectorAll( 'input[type="radio"], input[type="number"], select' );
 				inputs.forEach( input => {
@@ -90,7 +140,16 @@ export default function init() {
 				// Validate inputs.
 				if ( isNYP ) {
 					const amountInput = form.querySelector( '#nyp_amount.current' );
-					if ( amountInput && ( ! amountInput.value || amountInput.value === amountInput.dataset.originalValue ) ) {
+					// Compare numerically in minor units, matching the server-side guard:
+					// a string comparison would treat "10.00" over an original "10" as a
+					// change and let the submission through only to be rejected later.
+					// The factor is sized by the store's price decimals (passed from
+					// wc_get_price_decimals(), like the server side) so zero- and
+					// three-decimal currencies keep a correct smallest step.
+					const decimals = parseInt( amountInput?.dataset.priceDecimals, 10 );
+					const factor = Math.pow( 10, Number.isNaN( decimals ) ? 2 : decimals );
+					const toCents = value => Math.round( parseFloat( value ) * factor );
+					if ( amountInput && ( ! amountInput.value || toCents( amountInput.value ) === toCents( amountInput.dataset.originalValue ) ) ) {
 						form.querySelector( 'button[type="submit"]' ).disabled = true;
 						isFormValid = false;
 					} else {
@@ -98,14 +157,19 @@ export default function init() {
 						isFormValid = true;
 					}
 				} else {
+					syncSeatsToTier();
+					// Buying more or fewer seats on the tier the reader already has is a
+					// real change, so it can't count as re-selecting the same plan. A
+					// disabled or empty field is not a change: like the amount above, it
+					// would only be rejected server-side.
+					const seats = seatsInput && ! seatsInput.disabled ? seatsInput : null;
+					const seatsValue = seats ? parseInt( seats.value, 10 ) : NaN;
+					const seatsChanged =
+						! Number.isNaN( seatsValue ) && !! seats.dataset.originalValue && seatsValue !== parseInt( seats.dataset.originalValue, 10 );
 					const selected = form.querySelector( '.current input[type="radio"]:checked' );
-					if ( selected ) {
-						form.querySelector( 'button[type="submit"]' ).disabled = true;
-						isFormValid = false;
-					} else {
-						form.querySelector( 'button[type="submit"]' ).disabled = false;
-						isFormValid = true;
-					}
+					const isNoOp = !! selected && ! seatsChanged;
+					form.querySelector( 'button[type="submit"]' ).disabled = isNoOp;
+					isFormValid = ! isNoOp;
 				}
 			};
 

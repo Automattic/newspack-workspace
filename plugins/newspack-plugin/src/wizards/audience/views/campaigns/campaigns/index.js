@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Notice, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useContext, useEffect, useState, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { ENTER } from '@wordpress/keycodes';
@@ -17,7 +17,7 @@ import { moreVertical } from '@wordpress/icons';
 import { Button, Card, CustomSelectControl, Modal, Router, TextControl, withWizardScreen } from '../../../../../../packages/components/src';
 import CampaignManagementPopover from '../../../components/campaign-management-popover';
 import SegmentGroup from '../../../components/segment-group';
-import { dataForCampaignId } from '../utils';
+import { dataForCampaignId, isAboveHeader } from '../utils';
 import { CampaignsContext } from '../../../contexts';
 import './style.scss';
 
@@ -40,7 +40,7 @@ const modalTitle = modalType => {
 	} else if ( MODAL_TYPE_DUPLICATE === modalType ) {
 		return __( 'Duplicate Campaign', 'newspack-plugin' );
 	}
-	return __( 'Add New Campaign', 'newspack-plugin' );
+	return __( 'Add Campaign', 'newspack-plugin' );
 };
 
 const modalButton = modalType => {
@@ -119,6 +119,7 @@ const Campaigns = props => {
 	const allPrompts = useContext( CampaignsContext );
 	const prompts = filterByCampaign( allPrompts, campaignId );
 	const hasUnassigned = filterByCampaign( allPrompts, 'unassigned' ).length;
+	const hasPublishedAboveHeader = allPrompts.some( prompt => 'publish' === prompt.status && isAboveHeader( prompt ) );
 
 	useEffect( () => {
 		if ( modalVisible ) {
@@ -196,6 +197,14 @@ const Campaigns = props => {
 
 	return (
 		<Fragment>
+			{ hasPublishedAboveHeader && (
+				<Notice className="newspack-campaigns__above-header-notice" status="warning" isDismissible={ false }>
+					{ __(
+						'This site has published above-header prompts. These appear at the very top of the page and push the rest of the content down as they load, which can lower your Cumulative Layout Shift (CLS) score. To reduce the impact, keep above-header prompts short, or use an overlay placement instead.',
+						'newspack-plugin'
+					) }
+				</Notice>
+			) }
 			<Card headerActions noBorder>
 				<div className="newspack-campaigns__campaign-group__filter-group-actions">
 					<CustomSelectControl
@@ -247,54 +256,42 @@ const Campaigns = props => {
 						</div>
 					) }
 				</div>
-				<div className="newspack-campaigns__campaign-group__add-new-button">
-					<Button
-						isPrimary
-						onClick={ () => {
-							setModalVisible( ! modalVisible );
-							setCampaignName( '' );
-							setModalType( MODAL_TYPE_NEW );
+				{ modalVisible && (
+					<Modal
+						title={ modalTitle( modalType ) }
+						onRequestClose={ () => {
+							setModalVisible( false );
 						} }
 					>
-						{ __( 'Add New Campaign', 'newspack-plugin' ) }
-					</Button>
-					{ modalVisible && (
-						<Modal
-							title={ modalTitle( modalType ) }
-							onRequestClose={ () => {
-								setModalVisible( false );
+						<TextControl
+							id="newspack-add-campaigns-modal-input"
+							placeholder={ __( 'Campaign Name', 'newspack-plugin' ) }
+							onChange={ setCampaignName }
+							label={ __( 'Campaign Name', 'newspack-plugin' ) }
+							hideLabelFromVision={ true }
+							value={ campaignName }
+							onKeyDown={ event => {
+								if ( ENTER === event.keyCode && '' !== campaignName ) {
+									event.preventDefault();
+									submitModal( campaignName );
+								}
 							} }
-						>
-							<TextControl
-								id="newspack-add-campaigns-modal-input"
-								placeholder={ __( 'Campaign Name', 'newspack-plugin' ) }
-								onChange={ setCampaignName }
-								label={ __( 'Campaign Name', 'newspack-plugin' ) }
-								hideLabelFromVision={ true }
-								value={ campaignName }
-								onKeyDown={ event => {
-									if ( ENTER === event.keyCode && '' !== campaignName ) {
-										event.preventDefault();
-										submitModal( campaignName );
-									}
+						/>
+						<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
+							<Button
+								variant="secondary"
+								onClick={ () => {
+									setModalVisible( false );
 								} }
-							/>
-							<Card buttonsCard noBorder className="justify-end">
-								<Button
-									variant="secondary"
-									onClick={ () => {
-										setModalVisible( false );
-									} }
-								>
-									{ __( 'Cancel', 'newspack-plugin' ) }
-								</Button>
-								<Button variant="primary" disabled={ ! campaignName } onClick={ () => submitModal( campaignName ) }>
-									{ modalButton( modalType ) }
-								</Button>
-							</Card>
-						</Modal>
-					) }
-				</div>
+							>
+								{ __( 'Cancel', 'newspack-plugin' ) }
+							</Button>
+							<Button variant="primary" disabled={ ! campaignName } onClick={ () => submitModal( campaignName ) }>
+								{ modalButton( modalType ) }
+							</Button>
+						</HStack>
+					</Modal>
+				) }
 			</Card>
 			<VStack spacing={ 4 }>
 				{ groupBySegment( segments, prompts ).map( ( segment, index ) =>

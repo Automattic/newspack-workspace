@@ -43,6 +43,10 @@
 .newspack-grouped-select-control {
 	position: relative;
 
+	&__field {
+		position: relative;
+	}
+
 	.components-select-control {
 		&__input {
 			appearance: none;

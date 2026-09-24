@@ -12,6 +12,63 @@ defined( 'ABSPATH' ) || exit;
 const FORM_ACTION = 'newspack_newsletters_subscribe';
 
 /**
+ * Keys permitted in the block's JSON response.
+ *
+ * Governs the success branch only. That response is assembled from the ESP's
+ * contact record, so anything not named here would ship the provider's stored
+ * fields to the caller. The failure branch builds `compact( 'message' )` by hand
+ * below and never consults this list, which is why `message` is absent here: on
+ * the branch this list governs, the only thing that could supply it is the
+ * provider record it exists to bound, and view.js renders the block's own
+ * success message rather than the response's.
+ *
+ * Every entry is produced on that branch by this file, except `verified` and
+ * `verification_nonce`, which come from newspack-plugin's
+ * `\Newspack\Reader_Activation::get_verification_payload()` and are merged in
+ * wholesale — so a key added on that side needs an entry here before it can
+ * reach the caller.
+ *
+ * `src/blocks/subscribe/view.js` is the consumer, and removing an entry it reads
+ * breaks the front end silently. A key it does *not* read is not thereby safe to
+ * add: what this list manages is what leaves the server, not what the front end
+ * happens to use.
+ */
+const RESPONSE_KEYS = [
+	'newspack_newsletters_subscribed',
+	FORM_ACTION,
+	'metadata',
+	'registered',
+	'verified',
+	'verification_nonce',
+	'email',
+];
+
+/**
+ * Keys permitted inside the response's `metadata` member.
+ *
+ * Bounded for the same reason as RESPONSE_KEYS: allowlisting `metadata` as a
+ * whole would leave the response closed at the top level and open one level
+ * down.
+ *
+ * This list is what the block itself may emit, not what view.js reads — the two
+ * differ, and applying the narrower rule would wrongly delete entries.
+ * `current_page_url` and `status` are built here (see the $metadata literal
+ * below) and read by no front-end code. `gate_post_id` arrives as a hidden
+ * input that newspack-plugin's content gate (`src/content-gate/gate.js`) adds
+ * to every form inside a gate; the handler copies it into $metadata so
+ * view.js can put it on the reader_registered / newsletter_signup events.
+ */
+const METADATA_KEYS = [
+	'current_page_url',
+	'newspack_popup_id',
+	'newsletters_subscription_method',
+	'status',
+	'registration_method',
+	'registered',
+	'gate_post_id',
+];
+
+/**
  * Register block from metadata.
  */
 function register_block() {
@@ -170,12 +227,25 @@ function render_block( $attrs ) {
 	$display_input_label = ! empty( $attrs['displayInputLabels'] );
 	$email_label         = $display_input_label ? $attrs['emailLabel'] : '';
 	$input_id            = sprintf( 'newspack-newsletters-subscribe-block-input-%s', $block_id );
+
+	// After-subscribe redirect config. Mirrors the Checkout Button block's
+	// afterSuccess* attributes; the Continue button + redirect are wired up on
+	// the front end in view.js (see the success branch of form.endFlow).
+	$after_success_behavior = $attrs['afterSuccessBehavior'] ?? '';
+	$after_success_url      = $attrs['afterSuccessURL'] ?? '';
+	$after_success_label    = $attrs['afterSuccessButtonLabel'] ?? '';
 	// phpcs:enable
 	ob_start();
 	?>
 	<div
 		class="wp-block-newspack-newsletters-subscribe newspack-newsletters-subscribe <?php echo esc_attr( get_block_classes( $attrs ) ); ?>"
 		data-success-message="<?php echo \esc_attr( $attrs['successMessage'] ); ?>"
+		<?php if ( $after_success_behavior ) : ?>
+			data-after-success-behavior="<?php echo \esc_attr( $after_success_behavior ); ?>"
+			<?php // The redirect URL is escaped with esc_url() rather than the Checkout Button's esc_attr(): it strips javascript:/data: schemes and only ever feeds window.location.href. This intentionally diverges from strict parity — esc_url() rewrites a schemeless relative path without a leading slash (e.g. "foo/bar" → "http://foo/bar"), so publishers should use a leading slash ("/foo/bar") or an absolute URL for a same-site destination. ?>
+			data-after-success-url="<?php echo \esc_url( $after_success_url ); ?>"
+			data-after-success-label="<?php echo \esc_attr( $after_success_label ); ?>"
+		<?php endif; ?>
 		<?php echo $subscribed ? 'data-status="200"' : ''; ?>
 	>
 		<?php if ( ! $subscribed ) : ?>
@@ -401,11 +471,28 @@ function send_form_response( $data ) {
 	$is_error = \is_wp_error( $data );
 	if ( \wp_is_json_request() ) {
 		if ( $is_error ) {
+			// Only the reader-facing message. The WP_Error's own data can carry the
+			// provider's raw response, and view.js reads nothing but `message` and
+			// the HTTP status on this branch. That also drops get_error_code() from
+			// what a caller can see; view.js doesn't read that either, so this is
+			// deliberate, not an oversight.
 			$message = $data->get_error_message();
-			\wp_send_json( compact( 'message', 'data' ), 400 );
+			\wp_send_json( compact( 'message' ), 400 );
 			exit;
 		} else {
 			$data['newspack_newsletters_subscribed'] = 1;
+			$data                                    = array_intersect_key( $data, array_flip( RESPONSE_KEYS ) );
+			// array_key_exists() rather than isset(): isset() is false for null, so a
+			// `metadata` of null would skip this branch and ship as `"metadata": null`
+			// -- the exact shape the normalization below exists to prevent.
+			if ( array_key_exists( 'metadata', $data ) ) {
+				// `metadata` is itself an allowlisted key, so a non-array value under it
+				// would otherwise skip this nested filter and reach the caller as-is.
+				// Normalizing to an empty array keeps the shape stable for view.js, which
+				// reads `metadata` on every response, rather than passing through
+				// whatever shape happened to arrive.
+				$data['metadata'] = is_array( $data['metadata'] ) ? array_intersect_key( $data['metadata'], array_flip( METADATA_KEYS ) ) : [];
+			}
 			\wp_send_json( $data, 200 );
 			exit;
 		}
@@ -478,6 +565,7 @@ function process_form() {
 	$email     = \sanitize_email( $_REQUEST['npe'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	$lists     = array_map( 'sanitize_text_field', $_REQUEST['lists'] ); // phpcs:ignore
 	$popup_id  = isset( $_REQUEST['newspack_popup_id'] ) ? (int) $_REQUEST['newspack_popup_id'] : false; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$gate_post_id = isset( $_REQUEST['gate_post_id'] ) ? (int) $_REQUEST['gate_post_id'] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- See METADATA_KEYS.
 	$current_page_url = \wp_get_raw_referer();
 	if ( strpos( $current_page_url, 'http' ) !== 0 ) {
 		$current_page_url = \home_url( $current_page_url );
@@ -487,6 +575,9 @@ function process_form() {
 		'newspack_popup_id'               => $popup_id,
 		'newsletters_subscription_method' => 'newsletters-subscription-block',
 	];
+	if ( $gate_post_id > 0 ) {
+		$metadata['gate_post_id'] = $gate_post_id;
+	}
 
 	// Handle Mailchimp double opt-in option.
 	$provider = \Newspack_Newsletters::get_service_provider();
@@ -496,20 +587,36 @@ function process_form() {
 
 	$registered_user      = false;
 	$verification_payload = [];
-	if ( ! \is_user_logged_in() && \class_exists( '\Newspack\Reader_Activation' ) && \Newspack\Reader_Activation::is_enabled() ) {
+	// Default to "did not authenticate" so the response-side registration gate below is safe
+	// even when Reader Activation is disabled/unavailable (the branch that assigns it is skipped).
+	$authenticate = false;
+	if ( \class_exists( '\Newspack\Reader_Activation' ) && \Newspack\Reader_Activation::is_enabled() ) {
 		$metadata = array_merge( $metadata, [ 'registration_method' => 'newsletters-subscription' ] );
 		if ( $popup_id ) {
 			$metadata['registration_method'] = 'newsletters-subscription-popup';
 		}
-		$registered_user = \Newspack\Reader_Activation::register_reader( $email, $name, true, $metadata );
+		// Authenticate the new reader only when the browser has no existing session. A
+		// logged-in browser (a returning reader, or a shared device still carrying a prior
+		// reader's cookie) must still get an account created for the submitted email — but
+		// without re-authenticating as that email. Skipping registration entirely when logged
+		// in is what silently orphaned these signups: the email landed in the ESP list with
+		// no WordPress account. See NPPM-2936.
+		$authenticate    = ! \is_user_logged_in();
+		$registered_user = \Newspack\Reader_Activation::register_reader( $email, $name, $authenticate, $metadata );
 		// register_reader() can return false (existing user) or a WP_Error; only proceed when
 		// we got a positive integer user ID for a freshly-created reader.
-		if ( is_int( $registered_user ) && $registered_user > 0 ) {
+		// Only signal a registration to the current browser when this signup authenticated
+		// the new reader (a clean, logged-out visitor). When a reader is already logged in we
+		// create the account for the submitted email without authenticating it, so the current
+		// session must not be told "you just registered" — otherwise the other reader's
+		// registration (its `registered` flag, verification prompt, and `reader_registered`
+		// activity) would be recorded against this browser's reader. See NPPM-2936.
+		if ( $authenticate && is_int( $registered_user ) && $registered_user > 0 ) {
 			$metadata['registered'] = '1';
 
 			// Surface verification state so the frontend can trigger the post-registration
-			// verification flow. Guarded with method_exists so we degrade gracefully when running
-			// against an older newspack-plugin that doesn't expose the helper yet.
+			// verification flow. Guarded with method_exists so we degrade gracefully when
+			// running against an older newspack-plugin that doesn't expose the helper yet.
 			if ( method_exists( '\Newspack\Reader_Activation', 'get_verification_payload' ) ) {
 				$verification_payload = \Newspack\Reader_Activation::get_verification_payload( (int) $registered_user );
 			}
@@ -564,11 +671,13 @@ function process_form() {
 	$result['metadata'] = $metadata;
 
 	// Surface registration + verification state so the frontend can trigger the
-	// post-registration verification flow when a brand-new reader account was created.
-	// `get_verification_payload()` always returns both `verified` and `verification_nonce`
-	// keys (with empty/null sentinels when not applicable); the frontend gates on the
-	// `verification_nonce` being a non-empty string.
-	if ( is_int( $registered_user ) && $registered_user > 0 ) {
+	// post-registration verification flow when a brand-new reader account was created and
+	// authenticated in this browser. `get_verification_payload()` always returns both
+	// `verified` and `verification_nonce` keys (with empty/null sentinels when not
+	// applicable); the frontend gates on the `verification_nonce` being a non-empty string.
+	// Skipped when a reader is already logged in: the new account belongs to a different
+	// email, not this session, so registration must not be surfaced to the current reader.
+	if ( $authenticate && is_int( $registered_user ) && $registered_user > 0 ) {
 		$result['email']      = $email;
 		$result['registered'] = 1;
 		$result               = array_merge( $result, $verification_payload );

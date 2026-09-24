@@ -3,7 +3,7 @@
 	--newspack-theme-color-primary: #003da5; // TODO: rename --newspack-primary-color, --newspack-listings--primary elsewhere
 	--newspack-theme-color-primary-variation: #2055b0;
 	--newspack-theme-color-secondary: #555; // TODO: replace --newspack-secondary-color elsewhere
-	--newspack-theme-color-secondary-variation: #3e3e3e;
+	--newspack-theme-color-secondary-variation: #393939;
 	--newspack-theme-color-highlight: #fed850;
 	--newspack-theme-color-primary-darken-5: #00296e; // TODO: find a better approach than being this literal.
 	--newspack-theme-color-primary-darken-10: #001f53; // TODO: find a better approach than being this literal.
@@ -45,4 +45,8 @@
 	--newspack-theme-color-alert-yellow: #dba617;
 	--newspack-theme-color-alert-red: #d63638;
 	--newspack-theme-color-alert-green: #008a20;
+
+	// Ads
+	--newspack-ads-sticky-bg: var( --newspack-theme-color-bg-body );
+	--newspack-ads-sticky-text: var( --newspack-theme-color-text-main );
 }

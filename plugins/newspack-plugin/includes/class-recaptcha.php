@@ -129,7 +129,7 @@ final class Recaptcha {
 				self::SCRIPT_HANDLE,
 				Newspack::plugin_url() . '/dist/other-scripts/recaptcha.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				Newspack::asset_version( 'other-scripts/recaptcha' )
 			);
 
 			// Enqueue the reCAPTCHA API from Google's servers.
@@ -146,7 +146,7 @@ final class Recaptcha {
 				self::SCRIPT_HANDLE,
 				Newspack::plugin_url() . '/dist/other-scripts/recaptcha.js',
 				[ self::SCRIPT_HANDLE_API, 'wp-i18n' ],
-				NEWSPACK_PLUGIN_VERSION,
+				Newspack::asset_version( 'other-scripts/recaptcha' ),
 				[
 					'strategy'  => 'async',
 					'in_footer' => true,

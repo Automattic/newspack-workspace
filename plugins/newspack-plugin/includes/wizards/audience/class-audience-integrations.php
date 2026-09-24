@@ -48,6 +48,18 @@ class Audience_Integrations extends Wizard {
 	 * @return bool
 	 */
 	public static function is_enabled() {
+		/**
+		 * Enables the Audience / Integrations settings screen and its REST
+		 * endpoints. The wizard does not register itself at all while this is
+		 * unset, so the screen is absent rather than empty.
+		 *
+		 * @constant NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED
+		 * @type     bool
+		 * @default  Screen and endpoints not registered
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED', true );
+		 */
 		return defined( 'NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED' ) && NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED;
 	}
 
@@ -132,6 +144,12 @@ class Audience_Integrations extends Wizard {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_integration_enabled' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'enabled' => [
+						'type'     => 'boolean',
+						'required' => true,
+					],
+				],
 			]
 		);
 
@@ -280,6 +298,21 @@ class Audience_Integrations extends Wizard {
 		}
 
 		if ( $enabled ) {
+			if ( ! $integration->is_connected() ) {
+				return new WP_Error(
+					'newspack_integration_not_connected',
+					esc_html__( 'This integration must be connected before it can be enabled.', 'newspack-plugin' ),
+					[ 'status' => 400 ]
+				);
+			}
+			$unsupported_reason = $integration->get_unsupported_reason();
+			if ( $unsupported_reason ) {
+				return new WP_Error(
+					'newspack_integration_unsupported',
+					esc_html( $unsupported_reason ),
+					[ 'status' => 400 ]
+				);
+			}
 			Integrations::enable( $integration_id );
 		} else {
 			Integrations::disable( $integration_id );

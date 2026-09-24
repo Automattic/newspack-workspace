@@ -1,0 +1,160 @@
+name: Sync design-review labels and reviewers
+
+on:
+  pull_request:
+    types: [labeled, review_requested]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync design-review labels and reviewers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync labels and reviewers
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const NEEDS_DESIGN    = '[Status] Needs Design Review';
+            const DESIGN_APPROVED = '[Status] Design Approved';
+            const NEEDS_CHANGES   = '[Status] Needs Changes or Feedback';
+            const TEAM_SLUG       = 'newspack-design';
+
+            // This workflow stands in for the @Automattic/newspack-design team using
+            // a single hardcoded reviewer. The automatic GITHUB_TOKEN is repo-scoped:
+            // it cannot resolve/request an org TEAM (requesting one returns 422
+            // "Could not resolve to a node") nor read org team membership, and those
+            // org permissions cannot be granted to GITHUB_TOKEN. Requesting an
+            // INDIVIDUAL reviewer and comparing a review author's login DO work with
+            // it, so we target the team's sole current member instead.
+            // 'thomasguillot' is that member. IMPORTANT: update this value if that
+            // username changes or the design team gains/loses members — or migrate to
+            // an org-scoped token / GitHub App that can address the team directly.
+            const DESIGN_REVIEWER = 'thomasguillot';
+
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request.number;
+
+            // Label writes are best-effort. On a fork-head PR the GITHUB_TOKEN is
+            // read-only and every write returns 403; that is not worth failing a run
+            // over (this is label hygiene, not a gate), so warn and continue. Any
+            // other error is a real problem and still throws.
+            const addLabel = async ( name ) => {
+              try {
+                await github.rest.issues.addLabels(
+                  { owner, repo, issue_number: number, labels: [ name ] }
+                );
+              } catch ( error ) {
+                if ( error.status !== 403 ) throw error;
+                core.warning( `No permission to add label "${ name }" (read-only token?).` );
+              }
+            };
+
+            const removeLabelSafe = async ( name ) => {
+              try {
+                await github.rest.issues.removeLabel(
+                  { owner, repo, issue_number: number, name }
+                );
+              } catch ( error ) {
+                // 404 = label not on the PR; 403 = read-only token (fork-head PR).
+                if ( error.status === 404 ) return;
+                if ( error.status !== 403 ) throw error;
+                core.warning( `No permission to remove label "${ name }" (read-only token?).` );
+              }
+            };
+
+            // Latest non-comment review per reviewer; true if any is CHANGES_REQUESTED.
+            // listReviews returns reviews in ascending submission order, so the last
+            // write per reviewer id wins.
+            const hasOutstandingChangesRequested = async () => {
+              const reviews = await github.paginate(
+                github.rest.pulls.listReviews,
+                { owner, repo, pull_number: number }
+              );
+              const latestByUser = new Map();
+              for ( const review of reviews ) {
+                if ( ! review.user ) continue;
+                if ( ! [ 'APPROVED', 'CHANGES_REQUESTED', 'DISMISSED' ].includes( review.state ) ) {
+                  continue;
+                }
+                latestByUser.set( review.user.id, review.state );
+              }
+              return [ ...latestByUser.values() ].includes( 'CHANGES_REQUESTED' );
+            };
+
+            // Design sign-off reached: drop the "needs design review" label, and drop
+            // the "needs changes" label unless another reviewer still requests changes.
+            // Shared by Behavior 3 (label added) and Behavior 4 (reviewer approved).
+            const cleanupAfterDesignApproval = async () => {
+              await removeLabelSafe( NEEDS_DESIGN );
+              if ( ! ( await hasOutstandingChangesRequested() ) ) {
+                await removeLabelSafe( NEEDS_CHANGES );
+              }
+            };
+
+            // Behavior 4: the design reviewer approved the PR.
+            if ( context.eventName === 'pull_request_review' ) {
+              const review = context.payload.review;
+              if (
+                review.state === 'approved' &&
+                review.user &&
+                review.user.login === DESIGN_REVIEWER
+              ) {
+                await addLabel( DESIGN_APPROVED );
+                await cleanupAfterDesignApproval();
+              }
+              return;
+            }
+
+            const action = context.payload.action;
+
+            if ( action === 'labeled' ) {
+              const label = context.payload.label && context.payload.label.name;
+
+              // Behavior 1: someone flagged the PR for design review.
+              if ( label === NEEDS_DESIGN ) {
+                await removeLabelSafe( DESIGN_APPROVED );
+                // GitHub rejects requesting the PR author as their own reviewer, so
+                // skip that case. A failed reviewer request should not fail the run
+                // (this is label hygiene, not a gate) — warn instead. Requesting via
+                // GITHUB_TOKEN also means this does not re-trigger the workflow, so
+                // Behavior 2 below does not double-fire from this request.
+                if ( context.payload.pull_request.user.login !== DESIGN_REVIEWER ) {
+                  try {
+                    await github.rest.pulls.requestReviewers(
+                      { owner, repo, pull_number: number, reviewers: [ DESIGN_REVIEWER ] }
+                    );
+                  } catch ( error ) {
+                    core.warning(
+                      `Could not request review from ${ DESIGN_REVIEWER }: ${ error.message }`
+                    );
+                  }
+                }
+                return;
+              }
+
+              // Behavior 3: design sign-off was applied via the label.
+              if ( label === DESIGN_APPROVED ) {
+                await cleanupAfterDesignApproval();
+                return;
+              }
+
+              return;
+            }
+
+            // Behavior 2: a design review was requested — either the newspack-design
+            // team or the hardcoded design reviewer as an individual.
+            if ( action === 'review_requested' ) {
+              const team = context.payload.requested_team;
+              const reviewer = context.payload.requested_reviewer;
+              const isDesignTeam = team && team.slug === TEAM_SLUG;
+              const isDesignReviewer = reviewer && reviewer.login === DESIGN_REVIEWER;
+              if ( ! isDesignTeam && ! isDesignReviewer ) return;
+              await addLabel( NEEDS_DESIGN );
+              await removeLabelSafe( DESIGN_APPROVED );
+              return;
+            }

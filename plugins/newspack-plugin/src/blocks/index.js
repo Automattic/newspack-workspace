@@ -28,6 +28,8 @@ import * as overlaySearch from './overlay-search';
 import * as commentsPanel from './comments-panel';
 import * as commentsPanelTrigger from './comments-panel/trigger';
 import * as commentsPanelContent from './comments-panel/content';
+import * as responsiveContainer from './responsive-container';
+import * as responsiveContainerBreakpoint from './responsive-container/breakpoint';
 
 /**
  * Block Scripts
@@ -52,9 +54,14 @@ export const blocks = [
 	overlayMenuTrigger,
 	overlayMenuPanel,
 	overlaySearch,
+<<<<<<< HEAD
 	commentsPanel,
 	commentsPanelTrigger,
 	commentsPanelContent,
+=======
+	responsiveContainer,
+	responsiveContainerBreakpoint,
+>>>>>>> main
 ];
 
 const readerActivationBlocks = [ 'newspack/reader-registration', 'newspack/my-account-button' ];
@@ -73,10 +80,16 @@ const blockThemeBlocks = [
 	'newspack/overlay-menu-panel',
 	'newspack/my-account-button',
 	'newspack/overlay-search',
+<<<<<<< HEAD
 	'newspack/comments-panel',
 	'newspack/comments-panel-trigger',
 	'newspack/comments-panel-content',
+=======
+	'newspack/responsive-container',
+	'newspack/responsive-container-breakpoint',
+>>>>>>> main
 ];
+const siteEditorOnlyBlocks = [ 'newspack/responsive-container', 'newspack/responsive-container-breakpoint' ];
 
 /**
  * Function to register an individual block.
@@ -109,6 +122,10 @@ const registerBlock = block => {
 	}
 	/** Do not register block theme blocks if not using a block theme. */
 	if ( blockThemeBlocks.includes( name ) && ! newspack_blocks.is_block_theme ) {
+		return;
+	}
+	/** Do not register Site Editor-only blocks outside the Site Editor. */
+	if ( siteEditorOnlyBlocks.includes( name ) && window.pagenow !== 'site-editor' ) {
 		return;
 	}
 

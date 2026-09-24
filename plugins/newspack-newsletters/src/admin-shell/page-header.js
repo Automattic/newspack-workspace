@@ -11,8 +11,9 @@ import { createPortal, useEffect, useState } from '@wordpress/element';
 
 import { useHeaderActionsValue } from './header-actions-context';
 
-// Mount as a sibling of `__inner` (matching the wizard's own primary-action mount in `packages/components/src/wizard/index.js`) so its flex rules align our buttons next to the breadcrumb.
-const NEWSPACK_HEADER_SELECTOR = '#newspack-wizards-admin-header .newspack-wizard__header';
+// Portal target: the stable actions container the newspack-plugin admin-header
+// `<Page>` renders inside its header. Falls back to an inline row in standalone mode.
+const NEWSPACK_HEADER_SELECTOR = '#newspack-wizards-admin-header-actions';
 
 const variantFor = type => ( 'primary' === type ? 'primary' : 'secondary' );
 
@@ -30,7 +31,7 @@ function useNewspackHeader() {
 		}
 
 		// Re-query synchronously — MutationObserver only fires on future mutations.
-		const synchronous = wrapper.querySelector( '.newspack-wizard__header' );
+		const synchronous = wrapper.querySelector( '#newspack-wizards-admin-header-actions' );
 		if ( synchronous ) {
 			setTarget( synchronous );
 			return undefined;
@@ -38,7 +39,7 @@ function useNewspackHeader() {
 
 		// Newspack admin-header's React app rewrites this subtree on mount.
 		const observer = new MutationObserver( () => {
-			const found = wrapper.querySelector( '.newspack-wizard__header' );
+			const found = wrapper.querySelector( '#newspack-wizards-admin-header-actions' );
 			if ( found ) {
 				setTarget( found );
 				observer.disconnect();
@@ -79,9 +80,8 @@ export default function PageHeader() {
 	}
 
 	if ( newspackHeader ) {
-		// Reuse the wizard's `__header__actions` class so its flex/spacing aligns us next to the breadcrumb.
 		return createPortal(
-			<div className="newspack-wizard__header__actions newspack-newsletters-admin__header-actions--in-newspack-header">
+			<div className="newspack-newsletters-admin__header-actions--in-newspack-header">
 				<ActionButtons actions={ actions } />
 			</div>,
 			newspackHeader

@@ -3,13 +3,14 @@
  */
 
 import { parse } from '@wordpress/blocks';
-import { Icon, TextControl } from '@wordpress/components';
+import { TextControl } from '@wordpress/components';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { commentAuthorAvatar, plugins } from '@wordpress/icons';
 import { ENTER, ESCAPE } from '@wordpress/keycodes';
 
 import NewsletterPreview from '../../../components/newsletter-preview';
+import UserRow, { avatarPropsFromAuthor } from '../../../components/user-row';
 import { setPreventDeduplicationForPostsInserter } from '../../../editor/blocks/posts-inserter/utils';
 import { getAdminUrl } from '../../admin-globals';
 import { formatPostDate } from '../../utils/format-date';
@@ -117,8 +118,7 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 			return <RenamingTitle item={ item } onCommit={ next => onRenameCommit?.( item, next ) } onCancel={ () => onRenameCancel?.() } />;
 		}
 		const raw = getRawTitle( item );
-		// Auto-drafts carry WordPress's "Auto Draft" placeholder; show a friendly title instead.
-		const label = ! raw || 'auto-draft' === item?.status ? __( '(no title)', 'newspack-newsletters' ) : raw;
+		const label = raw || __( '(no title)', 'newspack-newsletters' );
 		// Prebuilts aren't editable; only user-owned layouts link to the editor.
 		if ( item?.is_prebuilt ) {
 			return <strong>{ label }</strong>;
@@ -131,24 +131,17 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 	};
 
 	const renderAuthor = ( { item } ) => {
-		const author = item?._embedded?.author?.[ 0 ];
+		const author = item?.newspack_newsletters_author;
 		if ( ! author ) {
 			return null;
 		}
 		const isPrebuilt = !! item?.is_prebuilt;
-		// Prefer the 48px source so the 16px display stays crisp on hi-DPI screens.
-		const avatarUrl = ! isPrebuilt && ( author.avatar_urls?.[ 48 ] || author.avatar_urls?.[ 24 ] );
 		return (
-			<span className="newspack-newsletters-list__author">
-				{ avatarUrl ? (
-					<span className="newspack-newsletters-list__author-avatar">
-						<img src={ avatarUrl } width={ 16 } height={ 16 } alt="" />
-					</span>
-				) : (
-					<Icon className="newspack-newsletters-list__author-icon" icon={ isPrebuilt ? plugins : commentAuthorAvatar } size={ 24 } />
-				) }
-				<span>{ author.name || '' }</span>
-			</span>
+			<UserRow
+				{ ...( isPrebuilt ? {} : avatarPropsFromAuthor( author ) ) }
+				icon={ isPrebuilt ? plugins : commentAuthorAvatar }
+				label={ author.name || '' }
+			/>
 		);
 	};
 
@@ -156,7 +149,8 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 		id: 'author',
 		label: __( 'Author', 'newspack-newsletters' ),
 		enableSorting: false,
-		getValue: ( { item } ) => ( item?.is_prebuilt ? PREBUILT_AUTHOR_VALUE : String( item?._embedded?.author?.[ 0 ]?.id ?? item?.author ?? '' ) ),
+		getValue: ( { item } ) =>
+			item?.is_prebuilt ? PREBUILT_AUTHOR_VALUE : String( item?.newspack_newsletters_author?.id ?? item?.author ?? '' ),
 		render: renderAuthor,
 	};
 
@@ -245,3 +239,5 @@ function PreviewCard( { item } ) {
 		</LazyPreview>
 	);
 }
+
+export const FIELD_IDS = getFields().map( field => field.id );

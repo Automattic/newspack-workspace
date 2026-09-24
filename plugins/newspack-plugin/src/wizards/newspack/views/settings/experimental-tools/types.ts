@@ -18,6 +18,7 @@ export interface Tool {
 	label: string;
 	description: string;
 	disclosure?: string;
+	location_hint?: string;
 	llm?: string;
 	constant: string | null;
 	constant_active: boolean;
@@ -26,4 +27,9 @@ export interface Tool {
 	enabled_by: number | null;
 	fields: ToolField[];
 	usage_count: number;
+}
+
+export interface SaveNotice {
+	message: string;
+	actions?: Array< { label: string; onClick: () => void } >;
 }

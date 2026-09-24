@@ -19,6 +19,7 @@ use Newspack\Collections\Post_Meta;
 use Newspack\Collections\Cache;
 use Newspack\Collections\Template_Helper;
 use Newspack\Collections\Content_Inserter;
+use Newspack\Collections\List_Screen_Header;
 
 /**
  * Collections module for managing print editions and other collections.
@@ -49,6 +50,7 @@ class Collections {
 		Cache::init();
 		Template_Helper::init();
 		Content_Inserter::init();
+		List_Screen_Header::init();
 	}
 
 	/**

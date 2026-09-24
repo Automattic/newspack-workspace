@@ -154,7 +154,7 @@
 // editor preview (rendered as a React fragment sibling in edit.js).
 
 .overlay-menu__scrim {
-	background: var(--wp--custom--color--neutral-70, var(--newspack-ui-color-neutral-70, #{colors.$neutral-700}));
+	background: var(--wp--custom--color--overlay-70, var(--newspack-ui-color-overlay-70, #{colors.$overlay-700}));
 	cursor: pointer;
 	inset: 0;
 	margin: 0 !important;

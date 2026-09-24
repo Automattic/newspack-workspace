@@ -7,18 +7,15 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { createRoot, lazy, Suspense } from '@wordpress/element';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { __experimentalVStack as VStack } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
 import * as Components from '../../packages/components/src';
-
-/**
- * Internal dependencies
- */
 import '../shared/js/public-path';
 
 const pageParam = new URLSearchParams( window.location.search ).get( 'page' ) ?? '';
@@ -36,10 +33,6 @@ const components: Record< string, any > = {
 		label: __( 'Settings', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "newspack-wizards" */ './newspack/views/settings' ) ),
 	},
-	'newspack-insights': {
-		label: __( 'Insights', 'newspack-plugin' ),
-		component: lazy( () => import( /* webpackChunkName: "insights-wizard" */ './insights' ) ),
-	},
 	'newspack-audience': {
 		label: __( 'Audience', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/setup' ) ),
@@ -49,7 +42,7 @@ const components: Record< string, any > = {
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/campaigns' ) ),
 	},
 	'newspack-audience-access-control': {
-		label: __( 'Access control', 'newspack-plugin' ),
+		label: __( 'Access Control', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/content-gates' ) ),
 	},
 	'newspack-audience-donations': {
@@ -59,6 +52,14 @@ const components: Record< string, any > = {
 	'newspack-audience-subscriptions': {
 		label: __( 'Audience Subscriptions', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/subscriptions' ) ),
+	},
+	'newspack-audience-subscription-products': {
+		label: __( 'Plans', 'newspack-plugin' ),
+		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/subscription-products' ) ),
+	},
+	'newspack-audience-pricing-rules': {
+		label: __( 'Pricing Rules', 'newspack-plugin' ),
+		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/pricing-rules' ) ),
 	},
 	'newspack-premium-newsletters': {
 		label: __( 'Premium newsletters', 'newspack-plugin' ),
@@ -74,17 +75,12 @@ if ( window.newspackAudienceIntegrations?.integrations_settings_enabled ) {
 	};
 }
 
-const AdminPageLoader = ( { label }: { label: string } ) => {
+const AdminPageLoader = () => {
 	return (
 		<div className="newspack-wizard__loader">
 			<VStack alignment="center" spacing={ 2 }>
 				<Components.Waiting noMargin />
-				<strong>
-					{
-						/* translators: %s is the label of the page */
-						sprintf( __( '%s loading…', 'newspack-plugin' ), label )
-					}
-				</strong>
+				<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
 			</VStack>
 		</div>
 	);
@@ -93,7 +89,7 @@ const AdminPageLoader = ( { label }: { label: string } ) => {
 const AdminPages = () => {
 	const PageComponent = components[ pageParam ].component;
 	return (
-		<Suspense fallback={ <AdminPageLoader label={ components[ pageParam ].label } /> }>
+		<Suspense fallback={ <AdminPageLoader /> }>
 			<PageComponent />
 		</Suspense>
 	);

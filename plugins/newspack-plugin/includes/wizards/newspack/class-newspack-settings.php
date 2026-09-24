@@ -7,14 +7,10 @@
 
 namespace Newspack\Wizards\Newspack;
 
-use Newspack\Emails;
 use Newspack\OAuth;
 use Newspack\Wizard;
-use Newspack\Reader_Activation;
-use Newspack\Reader_Revenue_Emails;
 use Newspack\Everlit_Configuration_Manager;
 use Newspack\Nextdoor;
-use Newspack\WooCommerce_Emails;
 use Newspack\Complianz;
 use function Newspack\google_site_kit_available;
 
@@ -47,7 +43,7 @@ class Newspack_Settings extends Wizard {
 	public function get_local_data() {
 		$google_site_kit_url = google_site_kit_available() ? admin_url( 'admin.php?page=googlesitekit-settings#/connected-services/analytics-4' ) : admin_url( 'admin.php?page=googlesitekit-splash' );
 		$newspack_settings = [
-			'connections'       => [
+			'connections'     => [
 				'label'    => __( 'Connections', 'newspack-plugin' ),
 				'path'     => '/',
 				'sections' => [
@@ -68,7 +64,7 @@ class Newspack_Settings extends Wizard {
 					],
 					'jetpack_sso'  => [
 						'dependencies' => [
-							'jetpack_sso' => class_exists( 'Jetpack' ) && defined( 'NEWSPACK_MANAGER_FILE' ),
+							'jetpack_sso' => class_exists( 'Jetpack' ) && defined( 'NEWSPACK_MANAGER_FILE' ), // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 						],
 					],
 					'recaptcha'    => [],
@@ -80,20 +76,7 @@ class Newspack_Settings extends Wizard {
 					'customEvents' => $this->sections['custom-events']->get_data(),
 				],
 			],
-			'emails'            => [
-				'label'    => __( 'Emails', 'newspack-plugin' ),
-				'sections' => [
-					'emails' => [
-						'dependencies'              => [
-							'newspackNewsletters' => is_plugin_active( 'newspack-newsletters/newspack-newsletters.php' ),
-						],
-						'all'                       => Emails::get_emails( Reader_Activation::is_enabled() ? [] : array_values( Reader_Revenue_Emails::EMAIL_TYPES ), false ),
-						'postType'                  => Emails::POST_TYPE,
-						'isEmailEnhancementsActive' => WooCommerce_Emails::is_active(),
-					],
-				],
-			],
-			'social'            => [
+			'social'          => [
 				'label'    => __( 'Social', 'newspack-plugin' ),
 				'nextdoor' => [
 					'available_roles' => Nextdoor::get_available_roles(),
@@ -101,19 +84,20 @@ class Newspack_Settings extends Wizard {
 					'redirect_uri'    => Nextdoor::get_redirect_uri(),
 				],
 			],
-			'syndication'       => [
+			'syndication'     => [
 				'label' => __( 'Syndication', 'newspack-plugin' ),
 			],
-			'seo'               => [
+			'seo'             => [
 				'label' => __( 'SEO', 'newspack-plugin' ),
 			],
-			'theme-and-brand'   => [
+			'theme-and-brand' => [
 				'label' => __( 'Theme and Brand', 'newspack-plugin' ),
 			],
-			'advanced-settings' => [
-				'label' => __( 'Advanced Settings', 'newspack-plugin' ),
-			],
 		];
+		// These are Newspack Theme mods; other themes, the block theme included, ignore them.
+		if ( 'newspack-theme' !== get_template() ) {
+			unset( $newspack_settings['theme-and-brand'] );
+		}
 		if ( Complianz::is_complianz_active() ) {
 			$newspack_settings['privacy'] = [
 				'label' => __( 'Privacy', 'newspack-plugin' ),
@@ -130,7 +114,7 @@ class Newspack_Settings extends Wizard {
 			];
 
 		}
-		if ( defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE' ) ) {
+		if ( defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 			$newspack_settings['additional-brands'] = [
 				'label'          => __( 'Additional Brands', 'newspack-plugin' ),
 				'activeTabPaths' => [
@@ -156,13 +140,16 @@ class Newspack_Settings extends Wizard {
 		$experimental_tools = \Newspack\Experimental_Tools::get_tools();
 		if ( ! empty( $experimental_tools ) ) {
 			$newspack_settings['experimental-tools'] = [
-				'label'          => __( 'Experimental tools', 'newspack-plugin' ),
+				'label'          => __( 'Experimental Tools', 'newspack-plugin' ),
 				'activeTabPaths' => [ '/experimental-tools/*' ],
 				'sections'       => [
 					'tools' => $experimental_tools,
 				],
 			];
 		}
+		$newspack_settings['advanced-settings'] = [
+			'label' => __( 'Advanced Settings', 'newspack-plugin' ),
+		];
 
 		return $newspack_settings;
 	}

@@ -10,6 +10,7 @@ import {
 	CheckboxControl,
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 
 /**
@@ -44,7 +45,7 @@ export default function ContentRuleControl( { slug, value, exclusion, onChange, 
 		);
 	}
 	return (
-		<div className="newspack-content-gates__content-rule-control">
+		<VStack className="newspack-content-gates__content-rule-control" spacing={ 4 }>
 			{ ! rule.include_only && (
 				<ToggleGroupControl
 					label={ __( 'Mode', 'newspack-plugin' ) }
@@ -75,6 +76,6 @@ export default function ContentRuleControl( { slug, value, exclusion, onChange, 
 			) : (
 				<ContentRuleControlTokenField slug={ slug } value={ value } onChange={ onChange } exclusion={ exclusion } />
 			) }
-		</div>
+		</VStack>
 	);
 }

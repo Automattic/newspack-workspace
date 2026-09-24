@@ -299,7 +299,7 @@ class Query_Helper {
 			[
 				'post_type'      => 'post',
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Posts in a single collection; bounded editorial set.
 				'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 					[
 						'taxonomy' => Collection_Taxonomy::get_taxonomy(),

@@ -73,10 +73,10 @@ function WizardsPluginCardButton( {
 	actionText?: PluginCardActionText;
 } ) {
 	if ( plugin.status === 'page-reload' ) {
-		return <span className="gray">{ __( 'Page reloading…', 'newspack-plugin' ) }</span>;
+		return <span className="newspack-text-muted">{ __( 'Page reloading…', 'newspack-plugin' ) }</span>;
 	}
 	if ( plugin.status === 'page-redirect' ) {
-		return <span className="gray">{ __( 'Page redirecting…', 'newspack-plugin' ) }</span>;
+		return <span className="newspack-text-muted">{ __( 'Page redirecting…', 'newspack-plugin' ) }</span>;
 	}
 	if ( isLoading ) {
 		return <Waiting />;

@@ -60,8 +60,31 @@ addFilter( 'blocks.registerBlockType', 'newspack-newsletters/core-blocks', ( set
 	if ( 'core/paragraph' === name || 'core/columns' === name || 'core/separator' === name ) {
 		settings.supports = { ...settings.supports, align: [] };
 	}
-	if ( 'core/group' === name ) {
+	/* Group and cover are the only blocks whose alignfull bleeds full-width in the
+	 * email render (see Full_Bleed_Sections), so they keep the full-width option. */
+	if ( 'core/group' === name || 'core/cover' === name ) {
 		settings.supports = { ...settings.supports, align: [ 'full' ] };
+	}
+	/* The remaining WC-native blocks have no full-bleed support, so drop the
+	 * wider-than-content alignments (wide/full) rather than offer options that
+	 * render at content width anyway. */
+	if ( [ 'core/table', 'core/gallery', 'core/media-text', 'core/audio', 'core/video' ].includes( name ) ) {
+		const align = settings.supports?.align;
+		let current;
+		if ( true === align ) {
+			current = [ 'left', 'center', 'right', 'wide', 'full' ];
+		} else if ( Array.isArray( align ) ) {
+			current = align;
+		}
+		// Only rewrite blocks that already opt into alignment support; writing
+		// `align: []` to a block with no align support would opt it in with zero
+		// options rather than leave it untouched.
+		if ( current ) {
+			settings.supports = {
+				...settings.supports,
+				align: current.filter( alignment => 'wide' !== alignment && 'full' !== alignment ),
+			};
+		}
 	}
 
 	/* This bundle is only enqueued in the email editor (see

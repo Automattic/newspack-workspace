@@ -48,4 +48,16 @@ class Settings_Page extends Admin_Page {
 	public function get_parent_slug(): string {
 		return 'edit.php?post_type=' . \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT;
 	}
+
+	/**
+	 * Explicit admin-header breadcrumb trail.
+	 *
+	 * @return array<array{label: string}>
+	 */
+	public function get_wizard_breadcrumbs(): ?array {
+		return [
+			[ 'label' => __( 'Newsletters', 'newspack-newsletters' ) ],
+			[ 'label' => __( 'Settings', 'newspack-newsletters' ) ],
+		];
+	}
 }

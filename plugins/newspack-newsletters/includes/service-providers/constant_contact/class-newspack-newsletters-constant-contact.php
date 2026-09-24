@@ -636,7 +636,7 @@ final class Newspack_Newsletters_Constant_Contact extends \Newspack_Newsletters_
 			}
 
 			// Prefetch send list info if we have a selected list and/or sublist.
-			$send_lists = $this->get_send_lists(
+			$send_lists = $this->get_send_lists_with_fallback(
 				[
 					'ids'  => $send_list_id ? [ $send_list_id ] : null, // If we have a selected list, make sure to fetch it.
 					'type' => 'list',
@@ -1293,17 +1293,27 @@ final class Newspack_Newsletters_Constant_Contact extends \Newspack_Newsletters_
 	/**
 	 * Get contact data by email.
 	 *
+	 * The SDK tells "no such contact" apart from "the request failed" and from "the
+	 * address matched several records" (see Constant_Contact_SDK::get_contact()),
+	 * and each keeps its own error here: a failed or ambiguous lookup passes the
+	 * SDK's error through unchanged, while a genuine miss gets a dedicated
+	 * not-found code, matching Mailchimp's and Active Campaign's.
+	 *
 	 * @param string $email Email address.
 	 * @param bool   $return_details Fetch full contact data.
 	 *
-	 * @return array|WP_Error Response or error if contact was not found.
+	 * @return array|WP_Error Response, or a WP_Error if the contact was not found
+	 *                        or the request failed.
 	 */
 	public function get_contact_data( $email, $return_details = false ) {
 		$cc      = $this->get_sdk();
 		$contact = $cc->get_contact( $email );
-		if ( ! $contact || is_wp_error( $contact ) ) {
+		if ( is_wp_error( $contact ) ) {
+			return $contact;
+		}
+		if ( ! $contact ) {
 			return new WP_Error(
-				'newspack_newsletters_error',
+				'newspack_newsletters_constant_contact_contact_not_found',
 				__( 'Contact not found.', 'newspack-newsletters' )
 			);
 		}
