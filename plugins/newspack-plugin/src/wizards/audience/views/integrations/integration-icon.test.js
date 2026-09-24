@@ -24,13 +24,20 @@ describe( 'IntegrationIcon', () => {
 
 	it.each( [
 		[ 'salesforce', 'white' ],
-		[ 'beehiiv', '#FF5EC4' ],
+		[ 'beehiiv', 'white' ],
 		[ 'fundraiseup', 'white' ],
 	] )( 'renders the %s mark in its brand colour inside its provider badge', ( provider, fill ) => {
 		const { container } = render( <IntegrationIcon provider={ provider } /> );
 		const badge = container.querySelector( `.newspack-integration-icon--${ provider }` );
 		expect( badge ).not.toBeNull();
 		expect( badge.querySelector( 'svg path' ) ).toHaveAttribute( 'fill', fill );
+	} );
+
+	it( 'renders the Gravity Forms mark in white inside its orange badge', () => {
+		const { container } = render( <IntegrationIcon provider="gravity_forms" /> );
+		const badge = container.querySelector( '.newspack-integration-icon--gravity-forms' );
+		expect( badge ).not.toBeNull();
+		expect( badge.querySelector( 'svg path' ) ).toHaveAttribute( 'fill', 'white' );
 	} );
 
 	it( 'renders nothing for an unknown provider', () => {

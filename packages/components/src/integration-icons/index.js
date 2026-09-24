@@ -10,6 +10,7 @@ import activeCampaign from './active-campaign';
 import beehiiv from './beehiiv';
 import constantContact from './constant-contact';
 import fundraiseUp from './fundraise-up';
+import gravityForms from './gravity-forms';
 import mailchimp from './mailchimp';
 import salesforce from './salesforce';
 
@@ -17,6 +18,7 @@ export { default as activeCampaign } from './active-campaign';
 export { default as beehiiv } from './beehiiv';
 export { default as constantContact } from './constant-contact';
 export { default as fundraiseUp } from './fundraise-up';
+export { default as gravityForms } from './gravity-forms';
 export { default as mailchimp } from './mailchimp';
 export { default as salesforce } from './salesforce';
 export { default as wisepops } from './wisepops';
@@ -32,6 +34,7 @@ export const providerIcons = {
 	salesforce,
 	beehiiv,
 	fundraiseup: fundraiseUp,
+	gravity_forms: gravityForms,
 };
 
 export const espProviderOrder = [ 'active_campaign', 'mailchimp', 'constant_contact', 'manual' ];
