@@ -14,7 +14,7 @@ export default function GroupLabels( { labels, defaults, onChange, disabled } ) 
 	const pluralDefault = defaults.label_plural_default || __( 'Groups', 'newspack-plugin' );
 
 	return (
-		<Grid columns={ 2 } gutter={ 32 }>
+		<Grid columns={ 2 } gutter={ 32 } noMargin>
 			<SectionHeader
 				heading={ 2 }
 				title={ __( 'Reader-Facing Labels', 'newspack-plugin' ) }
