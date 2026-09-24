@@ -18,10 +18,8 @@ const mockEnableModalProps = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( {
-	'neutral-000': '#fff',
 	'neutral-100': '#f0f0f0',
 	'neutral-600': '#6c6c6c',
-	'primary-600': '#003da5',
 } ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Card: ( { children } ) => children,

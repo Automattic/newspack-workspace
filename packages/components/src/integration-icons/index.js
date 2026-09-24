@@ -24,8 +24,8 @@ export { default as salesforce } from './salesforce';
 export { default as wisepops } from './wisepops';
 
 // Brand marks keyed by the ESP slug the backend reports
-// (`Newspack_Newsletters::service_provider()`) or by integration ID. Rendered
-// via IntegrationIcon.
+// (`Newspack_Newsletters::service_provider()`), by integration ID, or by the
+// brand slug an integration maps to. Rendered via IntegrationIcon.
 export const providerIcons = {
 	active_campaign: activeCampaign,
 	mailchimp,
