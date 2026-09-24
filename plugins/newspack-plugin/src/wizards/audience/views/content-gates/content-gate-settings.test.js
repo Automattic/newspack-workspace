@@ -87,6 +87,7 @@ jest.mock( './utils', () => ( {
 	getEditGateLayoutUrl: () => '#',
 	getGateStatus: () => 'Active',
 	getGateStatusBadgeIntent: () => 'stable',
+	getPriorityWarnings: () => ( {} ),
 } ) );
 
 describe( 'ContentGateSettings per-gate actions', () => {

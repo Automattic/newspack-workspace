@@ -250,7 +250,7 @@ class Premium_Newsletters_Migration {
 			}
 			WP_CLI::error(
 				sprintf(
-					'These list(s) would end up behind more than one gate: %s. WooCommerce Memberships grants such a list to a holder of either plan; gates resolve the other way, so the stricter gate would decide and readers holding only the other plan would lose the list. Make the overlapping plans restrict the same set of lists, or move the shared list onto one of them, and re-run. Nothing has been written.',
+					'These list(s) would end up behind more than one gate: %s. WooCommerce Memberships grants such a list to a holder of either plan; gates do not, since only the higher-priority gate would decide and readers holding only the other plan would lose the list. Make the overlapping plans restrict the same set of lists, or move the shared list onto one of them, and re-run. Nothing has been written.',
 					implode( '; ', $overlaps )
 				)
 			);
@@ -281,9 +281,10 @@ class Premium_Newsletters_Migration {
 		// after a --plan run, which writes a gate titled for that one plan. Gate
 		// identity is the title, so the merged title matches no existing gate and this
 		// run would create a new one while the originals stay published.
-		// is_post_restricted() stops at the first gate that restricts, so a stale
-		// stricter gate wins over the merged, more permissive one. Name them, and let
-		// the operator stop before anything is created.
+		// is_post_restricted() lets the highest-priority matching gate decide, and a
+		// new gate is ranked after every existing one, so a stale gate keeps deciding
+		// over the merged one. Name them, and let the operator stop before anything
+		// is created.
 		$superseding = self::find_superseding_groups( $plan_groups, $existing_gates );
 		foreach ( $superseding as $gate_title => $superseded ) {
 			WP_CLI::warning(
@@ -719,8 +720,8 @@ class Premium_Newsletters_Migration {
 	 * Groups are keyed on the exact set of lists a plan restricts, so two plans that
 	 * overlap without matching become two gates over a shared list. The two access
 	 * models then disagree about that list: WooCommerce Memberships grants it to a
-	 * holder of either plan, while gates resolve restrictive-wins, so the stricter
-	 * gate decides and readers holding only the other plan lose it — and, once the
+	 * holder of either plan, while only the higher-priority gate decides, so readers
+	 * holding only the other plan lose it — and, once the
 	 * access check is live, are unsubscribed at the provider. Grouping is the last
 	 * point at which the two can still be compared with nothing written.
 	 *
@@ -1236,12 +1237,13 @@ class Premium_Newsletters_Migration {
 	 *
 	 * A gate this run did not write is a gate no current plan accounts for: the plans
 	 * behind it were renamed, regrouped, unpublished or deleted since the gate was
-	 * created. It keeps restricting its lists regardless, and is_post_restricted()
-	 * stops at the first gate that restricts — so a stale, stricter gate beats the
-	 * gate this run wrote. On a newsletter gate that is not a paywall:
-	 * Premium_Newsletters::check_access() unsubscribes the reader from the list at the
-	 * ESP, so a reader silently loses a newsletter they pay for. Only the operator can
-	 * tell which of these are wanted, so they are named rather than touched.
+	 * created. It keeps applying to its lists regardless, and is_post_restricted()
+	 * lets the highest-priority matching gate decide — so a stale gate ranked above
+	 * the gate this run wrote beats it, and Premium_Newsletters::check_access() acts
+	 * on its answer at the ESP. A stricter stale gate unsubscribes readers from a
+	 * newsletter they pay for; a looser one subscribes readers who have not paid,
+	 * when auto-signup is on. Only the operator can tell which of these are wanted,
+	 * so they are named rather than touched.
 	 *
 	 * The gate list is re-read rather than taken from the pre-loop snapshot. Either
 	 * source gives the same answer — every gate this run created carries a title in
@@ -1274,7 +1276,7 @@ class Premium_Newsletters_Migration {
 		}
 		WP_CLI::warning(
 			sprintf(
-				'%d published premium newsletter gate(s) %s by this run, and still restrict their lists: %s. The first gate that restricts wins, so one of these can override a gate this run wrote — and a restricted premium newsletter unsubscribes the reader at the ESP. Check each one and retire the ones no plan accounts for.',
+				'%d published premium newsletter gate(s) %s by this run, and still restrict their lists: %s. The highest-priority gate on a list decides, so one of these can override a gate this run wrote: a stricter one unsubscribes readers at the ESP, and a looser one subscribes readers who have not paid when auto-signup is on. Check each one and retire the ones no plan accounts for.',
 				count( $stale ),
 				$dry_run ? 'would not be written' : 'were not written',
 				implode(
@@ -1479,11 +1481,11 @@ class Premium_Newsletters_Migration {
 	 * when the mode is inactive or its layout is sound.
 	 *
 	 * A layout ID of 0 is the load-bearing case. Content_Restriction_Control::
-	 * is_post_restricted() ends each gate's turn on `if ( $is_restricted &&
-	 * $gate_layout_id )`, and both Content_Gate settings getters always return a
+	 * is_post_restricted() passes over a gate that refuses a reader with no layout to
+	 * show them, and both Content_Gate settings getters always return a
 	 * gate_layout_id key defaulting to (int) 0 — so the `?? $gate['id']` fallbacks
-	 * beside that assignment never fire, and a mode with no layout makes the gate
-	 * restrict nothing at all while looking migrated. create_gate() can leave it 0
+	 * there never fire, and a mode with no layout makes the gate restrict nothing at
+	 * all while looking migrated. create_gate() can leave it 0
 	 * without telling the caller: create_gate_layout() returns a WP_Error when the
 	 * insert fails, the settings are then written without the key, and create_gate()
 	 * returns the gate ID rather than the error.
