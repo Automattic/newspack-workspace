@@ -4,7 +4,6 @@
  */
 import { SIGN_IN_MODAL_HASHES, getModalContainer, openAuthModal } from './auth-modal.js';
 import { openVerificationModal as openVerificationModalImpl } from './verification-modal.js';
-import { maybeConfirmRegistration as maybeConfirmRegistrationImpl } from './confirmation-modal.js';
 
 import { domReady } from '../utils';
 
@@ -26,13 +25,6 @@ window.newspackRAS.push( readerActivation => {
 				setOTPTimer: readerActivation.setOTPTimer,
 				...config,
 			} );
-		/**
-		 * Expose the maybeConfirmRegistration helper on the RAS scope. Nothing in
-		 * this workspace reads it here — both in-plugin callers import the module
-		 * directly — but older newspack-newsletters builds look it up on the global,
-		 * so removing it would break that version skew.
-		 */
-		readerActivation.maybeConfirmRegistration = maybeConfirmRegistrationImpl;
 
 		/**
 		 * Handle hash change.
