@@ -11,6 +11,7 @@ import * as a11y from './accessibility.js';
  */
 import { manageDismissed, manageOpened } from './analytics';
 import {
+	afterDeferredScripts,
 	domReady,
 	iframeReady,
 	onCheckoutReady,
@@ -24,7 +25,14 @@ import {
 	getCheckoutData,
 	getFormattedAmount,
 } from './utils';
-import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields } from './checkout-button-trigger';
+import {
+	resolveCheckoutButtonForm,
+	readCheckoutData,
+	applyContextFields,
+	appendUtmFields,
+	readUtmParams,
+	getDroppedLinkContext,
+} from './checkout-button-trigger';
 import { resolveDonationTrigger } from './donate-trigger';
 import { TIERS_BASED_READY_EVENT } from '../shared/js/tiers-based-ready';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
@@ -285,6 +293,12 @@ domReady( () => {
 		newspackBlocksModal?.is_registration_required &&
 		window?.newspackReaderActivation?.openAuthModal;
 
+	// Snapshot the landing page's utm params: the form's own GET submission
+	// replaces the query string entirely, so the request the checkout sees
+	// carries only what rides the form. Captured once, applied to every form
+	// (direct, donate, picker) at submit time.
+	const landingUtmParams = readUtmParams( window.location.search );
+
 	/**
 	 * Handle checkout form submit.
 	 *
@@ -304,6 +318,11 @@ domReady( () => {
 		// (a form rendered inside the surface itself always wins) or when the form is
 		// inside a gate. Must run BEFORE getCheckoutData(), which snapshots the form.
 		applyCtaAttribution( form );
+
+		// Carry the landing page's utm params into the checkout request itself, so
+		// Modal_Checkout::merge_request_utm_params() reads them from $_GET instead
+		// of depending on the referer.
+		appendUtmFields( form, landingUtmParams );
 
 		const checkoutData = getCheckoutData( form );
 
@@ -887,6 +906,18 @@ domReady( () => {
 			iframeName: IFRAME_NAME,
 		} );
 		if ( form ) {
+			// A page-authored form wins with its own context; say so when that
+			// drops something the link carried, instead of applying list price
+			// or the default thank-you behavior with no trace.
+			const dropped = getDroppedLinkContext( form, window.location.search );
+			if ( dropped.length ) {
+				// eslint-disable-next-line no-console
+				console.warn(
+					`Newspack modal checkout: the resolved checkout form does not carry ${ dropped.join(
+						', '
+					) } from the URL. The page block's own settings apply instead.`
+				);
+			}
 			triggerFormSubmit( form );
 			return true;
 		}
@@ -950,7 +981,16 @@ domReady( () => {
 			stripCheckoutUrlParams();
 		}
 	};
-	handleModalCheckoutUrlParams();
+	// A click reaches a form long after every script has loaded; the URL trigger
+	// fires as soon as this bundle runs. This bundle is async and the reader
+	// activation scripts are deferred, so firing here can beat them — and then
+	// the checkout opens without the sign-in step and without registering as an
+	// overlay, which lets prompts open on top of it. Deferred scripts are done
+	// by DOMContentLoaded, so the trigger waits for that rather than queueing on
+	// newspackRAS: that queue only flushes once newspack-plugin's reader
+	// activation script runs, and the modal needs only WooCommerce, so on a site
+	// without newspack-plugin a queued trigger would never fire.
+	afterDeferredScripts( handleModalCheckoutUrlParams );
 
 	/**
 	 * Open the modal checkout.

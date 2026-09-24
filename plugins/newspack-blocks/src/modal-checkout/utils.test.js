@@ -2,10 +2,76 @@
  * Tests for modal-checkout utils.
  */
 
-import { getCheckoutData } from './utils';
+import { afterDeferredScripts, getCheckoutData } from './utils';
 
 afterEach( () => {
 	document.body.innerHTML = '';
+} );
+
+describe( 'afterDeferredScripts()', () => {
+	let readyState;
+	let navigationEntries;
+
+	beforeEach( () => {
+		readyState = 'complete';
+		navigationEntries = [];
+		Object.defineProperty( document, 'readyState', { configurable: true, get: () => readyState } );
+		Object.defineProperty( window.performance, 'getEntriesByType', {
+			configurable: true,
+			value: type => ( type === 'navigation' ? navigationEntries : [] ),
+		} );
+	} );
+
+	afterEach( () => {
+		delete document.readyState;
+		delete window.performance.getEntriesByType;
+	} );
+
+	// Images still loading keep readyState at `interactive` after DOMContentLoaded,
+	// so a bundle arriving then must not wait for an event that will not repeat.
+	// Missing navigation timing leaves nothing to consult, and the trigger
+	// degrades to running immediately rather than to never running.
+	it.each( [
+		[ 'the document is complete', 'complete', [] ],
+		[ 'DOMContentLoaded already fired and images keep the document interactive', 'interactive', [ { domContentLoadedEventStart: 850 } ] ],
+		[ 'navigation timing is unavailable', 'interactive', [] ],
+	] )( 'runs at once when %s', ( _, state, entries ) => {
+		readyState = state;
+		navigationEntries = entries;
+		const callback = jest.fn();
+
+		afterDeferredScripts( callback );
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'waits for DOMContentLoaded, once, when parsing has ended but the event has not fired', () => {
+		// The window an async bundle lands in when it beats the deferred scripts:
+		// readyState is already `interactive`, DOMContentLoaded is still pending.
+		readyState = 'interactive';
+		navigationEntries = [ { domContentLoadedEventStart: 0 } ];
+		const callback = jest.fn();
+
+		afterDeferredScripts( callback );
+		expect( callback ).not.toHaveBeenCalled();
+
+		document.dispatchEvent( new Event( 'DOMContentLoaded' ) );
+		document.dispatchEvent( new Event( 'DOMContentLoaded' ) );
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'waits for DOMContentLoaded while the document is still loading, without consulting timing', () => {
+		// `loading` alone says the event is ahead; the empty navigation timing
+		// must not be read as permission to run.
+		readyState = 'loading';
+		navigationEntries = [];
+		const callback = jest.fn();
+
+		afterDeferredScripts( callback );
+		expect( callback ).not.toHaveBeenCalled();
+
+		document.dispatchEvent( new Event( 'DOMContentLoaded' ) );
+		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
 } );
 
 /**
