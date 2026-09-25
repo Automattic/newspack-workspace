@@ -1,9 +1,5 @@
 /**
- * NPPD-1492 — the institutions list keeps the gates screen header in sync by
- * writing `config.has_institutions` into the wizard store after each fetch.
- * This is the half the "no reload" behaviour rests on: the gates config is
- * resolved once per page load, so without this write a publisher who creates
- * their first institution and navigates back sees a stale header.
+ * Deleting an institution drops the fetched option list the gate pickers name institutions from.
  */
 
 /**
@@ -17,7 +13,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import Institutions from './index';
 
 // mock-prefixed so Jest's hoisted jest.mock factories may close over them.
-const mockUpdateWizardSettings = jest.fn();
 const mockApiFetch = jest.fn();
 const mockInvalidate = jest.fn();
 const mockDataViewsProps = { current: null };
@@ -30,7 +25,6 @@ jest.mock( '@wordpress/data', () => {
 	const dispatch = {
 		setHeaderData: jest.fn(),
 		addNotice: jest.fn(),
-		updateWizardSettings: ( ...args ) => mockUpdateWizardSettings( ...args ),
 	};
 	return { useDispatch: () => dispatch };
 } );
@@ -78,33 +72,6 @@ jest.mock( '../consts', () => ( {
 } ) );
 
 jest.mock( './onboarding', () => () => null );
-
-describe( 'Institutions list — gates header sync (NPPD-1492)', () => {
-	beforeEach( () => {
-		mockUpdateWizardSettings.mockReset();
-		mockApiFetch.mockReset();
-	} );
-
-	it.each( [
-		{ name: 'has institutions', institutions: [ { id: 1, title: { raw: 'Uni' }, meta: {} } ], expected: true },
-		{ name: 'has none', institutions: [], expected: false },
-	] )( 'writes has_institutions=$expected when the site $name', async ( { institutions, expected } ) => {
-		mockApiFetch.mockResolvedValue( institutions );
-
-		render( <Institutions /> );
-
-		await waitFor( () => expect( mockUpdateWizardSettings ).toHaveBeenCalled() );
-		expect( mockUpdateWizardSettings ).toHaveBeenCalledWith( {
-			slug: 'newspack-audience-access-control',
-			path: [ 'config', 'has_institutions' ],
-			value: expected,
-		} );
-		// The initial fetch changes the value from unknown to its result, so
-		// exactly one write happens; the per-instance ref guards later fetches
-		// that leave the derived boolean unchanged.
-		expect( mockUpdateWizardSettings ).toHaveBeenCalledTimes( 1 );
-	} );
-} );
 
 describe( 'Institutions list — fetched option list invalidation', () => {
 	// The gate pickers and summaries name institutions from a list fetched once per app

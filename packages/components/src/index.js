@@ -50,6 +50,7 @@ export { default as StyleCard } from './style-card';
 export { default as TabbedNavigation } from './tabbed-navigation';
 export { default as TableCard } from './table-card';
 export { default as TextControl } from './text-control';
+export { default as TooltipBadge } from './tooltip-badge';
 export { default as Waiting } from './waiting';
 export { default as WebPreview } from './web-preview';
 export { default as Wizard } from './wizard';

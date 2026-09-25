@@ -13,6 +13,7 @@ import { Badge } from '@wordpress/ui';
  * Internal dependencies
  */
 import { Card } from '../';
+import TooltipBadge from '../tooltip-badge';
 import type { CardBadge } from '../types';
 import './style.scss';
 
@@ -37,6 +38,8 @@ type DraggableItem = {
 	title: string;
 	description?: React.ReactNode;
 	badge?: CardBadge;
+	/** A second badge, e.g. a warning, whose tooltip explains it. */
+	secondaryBadge?: CardBadge & { tooltip?: string };
 	toggleChecked?: boolean;
 	onToggleChange?: () => void;
 	actions?: DraggableItemAction[];
@@ -406,6 +409,18 @@ const CardSortableList = ( {
 														{ item.badge?.label && (
 															<Badge intent={ item.badge.intent ?? 'none' }>{ item.badge.label }</Badge>
 														) }
+														{ item.secondaryBadge?.label &&
+															( item.secondaryBadge.tooltip ? (
+																<TooltipBadge
+																	label={ item.secondaryBadge.label }
+																	tooltip={ item.secondaryBadge.tooltip }
+																	intent={ item.secondaryBadge.intent }
+																/>
+															) : (
+																<Badge intent={ item.secondaryBadge.intent ?? 'none' }>
+																	{ item.secondaryBadge.label }
+																</Badge>
+															) ) }
 													</h3>
 													{ item.description && <p>{ item.description }</p> }
 												</>

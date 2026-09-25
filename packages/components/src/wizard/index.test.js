@@ -280,3 +280,41 @@ describe( 'Wizard section subtitle', () => {
 		expect( subtitle() ).toBe( 'Wizard intro' );
 	} );
 } );
+
+describe( 'Wizard tab bar on hidden routes', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( {} );
+	} );
+
+	it( 'hides the tab bar on a hideTabbedNavigation route and restores it on a tab route', async () => {
+		window.location.hash = '#/list';
+		render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ [
+					{ label: 'List', path: '/list', exact: true, render: () => <div>List view</div> },
+					{ label: 'Other', path: '/other', exact: true, render: () => <div>Other view</div> },
+					{ path: '/list/:id', isHidden: true, hideTabbedNavigation: true, render: () => <div>Item view</div> },
+				] }
+			/>
+		);
+
+		expect( await screen.findByText( 'List view' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'tab', { name: 'Other' } ) ).toBeInTheDocument();
+
+		act( () => {
+			window.location.hash = '#/list/esp';
+			window.dispatchEvent( new HashChangeEvent( 'hashchange' ) );
+		} );
+		expect( await screen.findByText( 'Item view' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'tab' ) ).not.toBeInTheDocument();
+
+		act( () => {
+			window.location.hash = '#/list';
+			window.dispatchEvent( new HashChangeEvent( 'hashchange' ) );
+		} );
+		expect( await screen.findByText( 'List view' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'tab', { name: 'Other' } ) ).toBeInTheDocument();
+	} );
+} );

@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import {
 	BaseControl,
 	RangeControl,
@@ -23,30 +23,30 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
  * Internal dependencies
  */
 import {
+	Button,
 	Divider,
 	Grid,
 	Notice,
-	Router,
 	SectionHeader,
 	SelectControl,
 	TextControl,
 	useConfirmDialog,
 } from '../../../../../../packages/components/src';
+import EmptyState from '../../../../../../packages/components/src/empty-state';
+import { gift } from '../../../../../../packages/icons';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 
-const { useHistory } = Router;
-
 const ContentGiftingSettings = () => {
-	const history = useHistory();
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
 	const { addNotice, resetNotices, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const [ config, setConfig ] = useState< GateSettings >( wizardData?.config || {} );
 	const availableProducts = window.newspackAudience?.available_products || [];
 	const hasMetering = window.newspackAudience?.content_gifting?.has_metering;
+	const isEnabled = !! wizardData?.config?.content_gifting?.enabled;
 	const giftingErrors = Object.values( window.newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat();
 	const isDirty = useMemo( () => {
 		return (
@@ -87,7 +87,6 @@ const ContentGiftingSettings = () => {
 						type: 'success',
 						id: 'content-gifting-config-updated',
 					} );
-					history.push( '/content-gates' );
 				},
 				onFinally: () => {
 					isSaving.current = false;
@@ -96,7 +95,23 @@ const ContentGiftingSettings = () => {
 		);
 	};
 
+	const setEnabled = ( enabled: boolean ) =>
+		handleUpdateConfig(
+			{ ...wizardData?.config, content_gifting: { ...wizardData?.config?.content_gifting, enabled } },
+			enabled ? __( 'Content gifting enabled.', 'newspack-plugin' ) : __( 'Content gifting disabled.', 'newspack-plugin' )
+		);
+
 	useEffect( () => {
+		if ( ! isEnabled ) {
+			setHeaderData( {
+				actions: [],
+				subTitle: __(
+					'Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe.',
+					'newspack-plugin'
+				),
+			} );
+			return;
+		}
 		setHeaderData( {
 			actions: [
 				{
@@ -106,27 +121,19 @@ const ContentGiftingSettings = () => {
 					type: 'primary',
 				},
 				{
-					label: config?.content_gifting?.enabled ? __( 'Disable', 'newspack-plugin' ) : __( 'Enable', 'newspack-plugin' ),
-					action: () => {
-						const newConfig = {
-							...wizardData?.config,
-							content_gifting: {
-								...wizardData?.config?.content_gifting,
-								enabled: ! wizardData?.config?.content_gifting?.enabled,
-							},
-						};
-						const message = sprintf(
-							// translators: %s is the status of content gifting.
-							__( 'Content gifting %s.', 'newspack-plugin' ),
-							config?.content_gifting?.enabled ? __( 'disabled', 'newspack-plugin' ) : __( 'enabled', 'newspack-plugin' )
-						);
-						requestConfirm( () => handleUpdateConfig( newConfig, message ) );
-					},
+					label: __( 'Disable', 'newspack-plugin' ),
+					/* translators: must contain the menu item's visible label, "Disable" (WCAG 2.5.3, Label in Name). */
+					ariaLabel: __( 'Disable content gifting', 'newspack-plugin' ),
+					action: () => requestConfirm( () => setEnabled( false ) ),
 					type: 'more',
 				},
 			],
+			subTitle: __(
+				'Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe.',
+				'newspack-plugin'
+			),
 		} );
-	}, [ config, isDirty, setHeaderData ] );
+	}, [ config, isDirty, isEnabled, setHeaderData ] );
 
 	useEffect( () => {
 		setConfig( wizardData?.config || {} );
@@ -141,6 +148,33 @@ const ContentGiftingSettings = () => {
 			} );
 		}
 	}, [ errorMessage ] );
+
+	if ( ! isEnabled ) {
+		return (
+			<>
+				{ confirmDialog }
+				{ giftingErrors.length > 0 && <Notice noticeText={ giftingErrors.join( ', ' ) } isError /> }
+				<EmptyState.Root>
+					<EmptyState.Header
+						icon={ gift }
+						title={ __( 'Get started with content gifting', 'newspack-plugin' ) }
+						description={ __( 'Enable it to let members share gated articles with non-subscribers.', 'newspack-plugin' ) }
+					/>
+					<EmptyState.Actions>
+						<Button
+							variant="primary"
+							accessibleWhenDisabled
+							loading={ isFetching }
+							disabled={ isFetching }
+							onClick={ () => setEnabled( true ) }
+						>
+							{ __( 'Enable', 'newspack-plugin' ) }
+						</Button>
+					</EmptyState.Actions>
+				</EmptyState.Root>
+			</>
+		);
+	}
 
 	return (
 		<div className="newspack-content-gate__edit">

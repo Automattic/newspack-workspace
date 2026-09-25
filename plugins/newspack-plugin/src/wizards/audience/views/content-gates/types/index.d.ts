@@ -192,7 +192,6 @@ type GateSettings = {
 	content_gifting?: ContentGiftingConfig;
 	countdown_banner?: MeteringCountdownConfig;
 	advanced_settings?: AdvancedSettingsConfig;
-	has_institutions?: boolean;
 	// Capability flags the gates endpoint returns alongside the stored settings.
 	has_newsletters?: boolean;
 };

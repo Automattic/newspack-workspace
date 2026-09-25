@@ -9,7 +9,7 @@ import { __ } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -18,7 +18,7 @@ import { Button, CardSortableList, Modal } from '../../../../../packages/compone
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
-import { getGateStatus, getGateStatusBadgeIntent, getPriorityWarnings } from './utils';
+import { getGateStatus, getGateStatusBadgeIntent, getPriorityWarningLabel, getPriorityWarnings } from './utils';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
 const ContentGatesPriority = ( {
@@ -47,7 +47,9 @@ const ContentGatesPriority = ( {
 		return sortedGates.map( gate => ( {
 			id: gate.id,
 			title: gate.title,
-			description: priorityWarnings[ gate.id ],
+			secondaryBadge: priorityWarnings[ gate.id ]
+				? { label: getPriorityWarningLabel(), intent: 'low' as const, tooltip: priorityWarnings[ gate.id ] }
+				: undefined,
 			badge: { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) },
 		} ) );
 	}, [ sortedGates ] );
@@ -116,8 +118,8 @@ const ContentGatesPriority = ( {
 
 	return (
 		showModal && (
-			<Modal title={ __( 'Gate Priority', 'newspack-plugin' ) } onRequestClose={ closeModal }>
-				<VStack spacing={ 6 }>
+			<Modal title={ __( 'Gate Priority', 'newspack-plugin' ) } size="large" onRequestClose={ closeModal }>
+				<Stack direction="column" gap="xl">
 					<span>
 						{ __(
 							'Gates are checked in this order. When content matches more than one gate, only the first matching gate decides who can read it.',
@@ -125,7 +127,7 @@ const ContentGatesPriority = ( {
 						) }
 					</span>
 					<CardSortableList disabled={ isFetching } items={ gateItems } onDragCallback={ sortGates } />
-					<HStack justify="end">
+					<Stack direction="row" gap="sm" justify="end">
 						<Button variant="tertiary" disabled={ isFetching } onClick={ closeModal }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
@@ -137,8 +139,8 @@ const ContentGatesPriority = ( {
 						>
 							{ __( 'Save', 'newspack-plugin' ) }
 						</Button>
-					</HStack>
-				</VStack>
+					</Stack>
+				</Stack>
 			</Modal>
 		)
 	);

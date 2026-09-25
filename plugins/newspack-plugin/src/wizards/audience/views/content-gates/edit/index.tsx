@@ -72,6 +72,25 @@ const getContentTypeFromRules = ( rules: GateContentRule[] ): 'all' | 'custom' |
 	return 'all';
 };
 
+/**
+ * Title Case heading for the gate editor's breadcrumb and section title.
+ *
+ * @param kind         Which heading.
+ * @param isNewsletter Whether the gate is a premium newsletter.
+ */
+const getGateHeading = ( kind: 'add' | 'edit' | 'untitled', isNewsletter: boolean ) =>
+	( isNewsletter
+		? {
+				add: __( 'Add Premium Newsletter', 'newspack-plugin' ),
+				edit: __( 'Edit Premium Newsletter', 'newspack-plugin' ),
+				untitled: __( 'Untitled Premium Newsletter', 'newspack-plugin' ),
+		  }
+		: {
+				add: __( 'Add Content Gate', 'newspack-plugin' ),
+				edit: __( 'Edit Content Gate', 'newspack-plugin' ),
+				untitled: __( 'Untitled Content Gate', 'newspack-plugin' ),
+		  } )[ kind ];
+
 const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SLUG, isNewsletter = false }: ContentGateEditProps ) => {
 	const [ defaultGateStatus, setDefaultGateStatus ] = useState< GateStatus >( window.newspackAudienceContentGates?.default_gate_status || 'draft' );
 	const DEFAULT_GATE: Gate = {
@@ -380,7 +399,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		}
 		setHeaderData( {
 			backNav: '#/content-gates',
-			sectionName: isNew ? __( 'Add new', 'newspack-plugin' ) : __( 'Edit', 'newspack-plugin' ),
+			sectionName: getGateHeading( isNew ? 'add' : 'edit', isNewsletter ),
 		} );
 		if ( isNew ) {
 			return;
@@ -473,18 +492,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		setHeaderData( {
 			actions,
 			badges: isNew ? [] : [ { label: getGateStatus( gate.status ), intent: getGateStatusBadgeIntent( gate.status ) } ],
-			sectionTitle: isNew
-				? sprintf(
-						// translators: %s is the type of content to restrict.
-						__( 'Add new %s', 'newspack-plugin' ),
-						isNewsletter ? __( 'premium newsletter', 'newspack-plugin' ) : __( 'gate', 'newspack-plugin' )
-				  )
-				: title ||
-				  sprintf(
-						// translators: %s is the type of content to restrict.
-						__( 'Untitled %s', 'newspack-plugin' ),
-						isNewsletter ? __( 'premium newsletter', 'newspack-plugin' ) : __( 'gate', 'newspack-plugin' )
-				  ),
+			sectionTitle: isNew ? getGateHeading( 'add', isNewsletter ) : title || getGateHeading( 'untitled', isNewsletter ),
 		} );
 	}, [
 		contentRules.length,

@@ -2,7 +2,7 @@
  * WordPress dependencies.
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
-import { CardBody, Notice } from '@wordpress/components';
+import { CardBody } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { createInterpolateElement, useMemo, useRef } from '@wordpress/element';
@@ -11,11 +11,11 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Card, Grid, Router, useConfirmDialog } from '../../../../../packages/components/src';
+import { Card, Grid, Router, TooltipBadge, useConfirmDialog } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent, getPriorityWarnings } from './utils';
+import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent, getPriorityWarningLabel, getPriorityWarnings } from './utils';
 import { getGateSummarySections } from './gate-summary';
 import { useAccessRuleOptions } from './use-access-rule-options';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
@@ -250,6 +250,7 @@ export default function ContentGateSettings( {
 							<h3>
 								<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
 								<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
+								{ priorityWarning && <TooltipBadge label={ getPriorityWarningLabel() } tooltip={ priorityWarning } intent="low" /> }
 							</h3>
 						</>
 					),
@@ -258,11 +259,6 @@ export default function ContentGateSettings( {
 				} }
 			>
 				<CardBody>
-					{ priorityWarning && (
-						<Notice status="warning" isDismissible={ false } spokenMessage="">
-							{ priorityWarning }
-						</Notice>
-					) }
 					<Grid className="newspack-content-gates__gate__settings" gutter={ 16 } noMargin>
 						{ getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions ).map( section => (
 							<div key={ section.key }>
