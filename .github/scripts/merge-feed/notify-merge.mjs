@@ -212,7 +212,14 @@ async function pullRequestsToPost() {
 	const event = JSON.parse( readFileSync( process.env.GITHUB_EVENT_PATH, 'utf8' ) );
 	const prs = [];
 	for ( const commit of event.commits || [] ) {
-		const pr = await prMergedAs( commit.id );
+		let pr;
+		try {
+			pr = await prMergedAs( commit.id );
+		} catch ( error ) {
+			// One failed lookup must not drop the other merges in the same push.
+			warn( `${ commit.id.slice( 0, 9 ) }: could not find its PR: ${ error.message }` );
+			continue;
+		}
 		if ( ! pr ) {
 			console.log( `[merge-feed] ${ commit.id.slice( 0, 9 ) } is not a PR merge into main. Skipping.` );
 			continue;
