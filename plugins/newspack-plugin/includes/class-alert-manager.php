@@ -68,7 +68,8 @@ class Alert_Manager {
 	 * changes nothing. Matched against the joined, lowercased WP_Error
 	 * messages, as Contact_Sync::ERROR_SIGNATURES does for push errors. A
 	 * bare 401, 402 or 403 status marks it publisher-side too, whether the
-	 * provider put it in the message or in the error code.
+	 * provider printed it in the message ("401: …" or "status 401") or kept
+	 * it as the error code.
 	 *
 	 * Anything unmatched is 'other': a provider outage, a timeout, or an
 	 * error not seen before, which stays an engineering signal.
@@ -943,11 +944,14 @@ class Alert_Manager {
 				return 'publisher';
 			}
 		}
-		// A bare auth or payment status with no recognisable text, e.g.
-		// "ActiveCampaign REST returned status 401 for /api/3/users/me". The
-		// lookahead keeps "timed out after 401.5 seconds" from matching.
-		if ( preg_match( '/\b40[123]\b(?!\.\d)/', $haystack ) ) {
-			return 'publisher';
+		// A bare auth or payment status with no recognisable text, in the two
+		// forms providers print one: "401: …" opening a message, or
+		// "status 401". A number anywhere else is not a status, such as the
+		// connect duration in cURL's "Failed to connect … after 402 ms".
+		foreach ( $error->get_error_messages() as $error_message ) {
+			if ( preg_match( '/^40[123]:|\bstatus 40[123]\b/i', trim( (string) $error_message ) ) ) {
+				return 'publisher';
+			}
 		}
 		// The Newsletters ActiveCampaign provider keeps the status as the error
 		// code when the response has no error body, leaving only the reason

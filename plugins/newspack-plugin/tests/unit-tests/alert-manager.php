@@ -1519,7 +1519,9 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	 * the Newsletters ActiveCampaign provider's dead-key response. The rows
 	 * with a numeric code have that provider's shape for a response without
 	 * an error body: the HTTP status as the code and its reason phrase as the
-	 * message.
+	 * message. The last two rows pin the status forms: one printed the way a
+	 * provider prints it, and a connection failure whose duration only looks
+	 * like one.
 	 */
 	public function data_health_error_classification() {
 		return [
@@ -1535,6 +1537,8 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			'service unavailable'           => [ 'Service Unavailable', 'other', 503 ],
 			'activecampaign 503'            => [ 'ActiveCampaign REST returned status 503 for /api/3/users/me.', 'other' ],
 			'too many requests'             => [ 'Too Many Requests', 'other', 429 ],
+			'status opening the message'    => [ '403: Forbidden', 'publisher' ],
+			'curl connect after 402 ms'     => [ "cURL error 7: Failed to connect to example.test port 443 after 402 ms: Couldn't connect to server", 'other' ],
 		];
 	}
 
