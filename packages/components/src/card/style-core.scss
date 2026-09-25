@@ -8,10 +8,15 @@
 .newspack-card--core,
 .newspack-wizard .newspack-card--core {
 	background: wp-colors.$white;
+	box-shadow: 0 0 0 var(--wpds-border-width-xs, #{wp-vars.$border-width}) var(--wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100});
 	position: relative;
 	transition: background-color 125ms ease-in-out, box-shadow 125ms ease-in-out, color 125ms ease-in-out;
 	svg {
 		transition: fill 125ms ease-in-out;
+	}
+	.components-card__header,
+	.components-card__footer {
+		border-color: var(--wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100});
 	}
 	// Slot for a pre-rendered icon element that owns its own badge.
 	&__icon-slot {
@@ -107,7 +112,7 @@
 		}
 		> .components-dropdown-menu {
 			aspect-ratio: 1;
-			border-left: 1px solid wp-colors.$gray-200;
+			border-left: var(--wpds-border-width-xs, #{wp-vars.$border-width}) solid var(--wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100});
 			display: grid;
 			height: 100%;
 			max-width: 70px;
@@ -212,7 +217,7 @@
 				color: inherit;
 				text-decoration: none;
 				&:hover {
-					text-decoration: underline;
+					color: var(--wp-admin-theme-color);
 				}
 			}
 		}

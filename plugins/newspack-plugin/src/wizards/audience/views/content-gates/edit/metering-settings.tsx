@@ -20,15 +20,15 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Divider, Grid, Router, SectionHeader, useConfirmDialog } from '../../../../../../packages/components/src';
+import { Button, Divider, Grid, SectionHeader, useConfirmDialog } from '../../../../../../packages/components/src';
+import EmptyState from '../../../../../../packages/components/src/empty-state';
+import { countdown as countdownIcon } from '../../../../../../packages/icons';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
-import { hasOwnMeter, hasSharedMeteredPath, isGateMetered, sharesTheSiteMeter } from '../utils';
+import { getMeteringDescription, hasOwnMeter, hasSharedMeteredPath, isGateMetered, sharesTheSiteMeter } from '../utils';
 import CountdownBanner from './countdown-banner';
-
-const { useHistory } = Router;
 
 const DEFAULT_SITE_METER: SiteMeterConfig = {
 	anonymous_count: 1,
@@ -37,7 +37,6 @@ const DEFAULT_SITE_METER: SiteMeterConfig = {
 };
 
 const MeteringSettings = () => {
-	const history = useHistory();
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
 	const { addNotice, resetNotices, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
@@ -68,7 +67,7 @@ const MeteringSettings = () => {
 
 	const gates = wizardData?.gates || [];
 	const gatesWithOwnMeter = gates.filter( hasOwnMeter );
-	const hasMetering = gates.some( gate => isGateMetered( gate, siteMeter ) );
+	const hasMetering = gates.some( gate => gate.status === 'publish' && isGateMetered( gate, siteMeter ) );
 	// Layout wording is written once at creation and never rewritten from here. Judged
 	// per path: a gate with one path pinned and one sharing still quotes the shared number.
 	const gatesQuotingTheAllowance = gates.filter( gate => hasSharedMeteredPath( gate, savedSiteMeter ) );
@@ -126,13 +125,17 @@ const MeteringSettings = () => {
 			type: 'success',
 			id: 'metering-config-updated',
 		} );
-		history.push( '/content-gates' );
-		// After the redirect: clearing it first lets the unsaved-changes guard catch a save
-		// that succeeded.
 		isSaving.current = false;
 	};
 
 	useEffect( () => {
+		if ( ! hasMetering ) {
+			setHeaderData( {
+				actions: [],
+				subTitle: __( 'Give readers a set number of free views before a gate applies.', 'newspack-plugin' ),
+			} );
+			return;
+		}
 		setHeaderData( {
 			actions: [
 				{
@@ -142,8 +145,9 @@ const MeteringSettings = () => {
 					type: 'primary',
 				},
 			],
+			subTitle: getMeteringDescription( savedSiteMeter ),
 		} );
-	}, [ siteMeter, countdown, isDirty, setHeaderData ] );
+	}, [ siteMeter, countdown, isDirty, setHeaderData, hasMetering, savedSiteMeter ] );
 
 	// Compared by value: saving deep-clones the whole config, so the half that did not
 	// change still arrives as a fresh object, and reacting to that identity would
@@ -204,6 +208,26 @@ const MeteringSettings = () => {
 		noFreeViewsWarning = __(
 			'Signed-in readers get 0 free views, so every gate sharing this allowance gates them on their first view, the same as turning metering off.',
 			'newspack-plugin'
+		);
+	}
+
+	if ( ! hasMetering ) {
+		return (
+			<EmptyState.Root>
+				<EmptyState.Header
+					icon={ countdownIcon }
+					title={ __( 'No gate uses metering yet', 'newspack-plugin' ) }
+					description={ __( "Metering starts when an active gate turns it on. Set it in a gate's access settings.", 'newspack-plugin' ) }
+				/>
+				<EmptyState.Actions>
+					<Button variant="primary" href="#/edit/new/all">
+						{ __( 'Add Content Gate', 'newspack-plugin' ) }
+					</Button>
+					<Button variant="secondary" href="#/content-gates">
+						{ __( 'View Content Gates', 'newspack-plugin' ) }
+					</Button>
+				</EmptyState.Actions>
+			</EmptyState.Root>
 		);
 	}
 
@@ -289,7 +313,6 @@ const MeteringSettings = () => {
 			<CountdownBanner
 				countdown={ countdown }
 				onChange={ setCountdown }
-				hasMetering={ hasMetering }
 				meterCount={ siteMeter.registered_count || siteMeter.anonymous_count }
 				meterPeriod={ siteMeter.period }
 				meterAudience={ siteMeter.registered_count ? 'registered' : 'anonymous' }

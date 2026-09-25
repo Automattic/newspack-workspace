@@ -26,7 +26,8 @@ import InstitutionEdit from './institutions/edit';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG, BASE_HEADER_TEXT } from './consts';
 
 const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
-const ACCESS_CONTROL = [ ...ROOT, { label: __( 'Access Control', 'newspack-plugin' ), url: '#/content-gates' } ];
+const ACCESS_CONTROL = [ ...ROOT, { label: __( 'Access Control', 'newspack-plugin' ) } ];
+const ACCESS_CONTROL_GATES = [ ...ACCESS_CONTROL, { label: __( 'Content Gates', 'newspack-plugin' ), url: '#/content-gates' } ];
 const ACCESS_CONTROL_INSTITUTIONS = [ ...ACCESS_CONTROL, { label: __( 'Institutions', 'newspack-plugin' ), url: '#/institutions' } ];
 
 // Wrapped at module scope so each section keeps a stable component type across
@@ -65,49 +66,45 @@ const AudienceContentGates = ( props, ref ) => {
 			sections={ [
 				{
 					path: '/content-gates',
+					label: __( 'Content Gates', 'newspack-plugin' ),
 					render: GuardedContentGates,
-					breadcrumbs: ACCESS_CONTROL,
+					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Content Gates', 'newspack-plugin' ) } ],
+				},
+				{
+					path: '/settings/metering',
+					label: __( 'Metering', 'newspack-plugin' ),
+					render: GuardedMeteringSettings,
+					exact: true,
+					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Metering', 'newspack-plugin' ) } ],
+				},
+				{
+					path: '/institutions',
+					label: __( 'Institutions', 'newspack-plugin' ),
+					render: GuardedInstitutions,
+					exact: true,
+					fullWidth: true,
+					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Institutions', 'newspack-plugin' ) } ],
+				},
+				{
+					path: '/settings/content-gifting',
+					label: __( 'Content Gifting', 'newspack-plugin' ),
+					render: GuardedContentGifting,
+					exact: true,
+					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Content Gifting', 'newspack-plugin' ) } ],
 				},
 				{
 					path: '/edit/:id/:type?',
 					render: GuardedEdit,
 					isHidden: true,
+					hideTabbedNavigation: true,
 					exact: true,
-					breadcrumbs: ACCESS_CONTROL,
-				},
-				{
-					path: '/settings/metering',
-					render: GuardedMeteringSettings,
-					isHidden: true,
-					exact: true,
-					backNav: '#/content-gates',
-					title: __( 'Metering', 'newspack-plugin' ),
-					size: 'hidden',
-					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Metering', 'newspack-plugin' ) } ],
-				},
-				{
-					path: '/settings/content-gifting',
-					render: GuardedContentGifting,
-					isHidden: true,
-					exact: true,
-					backNav: '#/content-gates',
-					title: __( 'Content Gifting', 'newspack-plugin' ),
-					size: 'hidden',
-					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Content Gifting', 'newspack-plugin' ) } ],
-				},
-				{
-					path: '/institutions',
-					render: GuardedInstitutions,
-					exact: true,
-					isHidden: true,
-					fullWidth: true,
-					label: __( 'Institutions', 'newspack-plugin' ),
-					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Institutions', 'newspack-plugin' ) } ],
+					breadcrumbs: ACCESS_CONTROL_GATES,
 				},
 				{
 					path: '/institutions/new',
 					render: GuardedInstitutionEdit,
 					isHidden: true,
+					hideTabbedNavigation: true,
 					exact: true,
 					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
@@ -115,6 +112,7 @@ const AudienceContentGates = ( props, ref ) => {
 					path: '/institutions/:id',
 					render: GuardedInstitutionEdit,
 					isHidden: true,
+					hideTabbedNavigation: true,
 					exact: true,
 					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},

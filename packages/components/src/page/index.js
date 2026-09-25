@@ -57,7 +57,11 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 							<HStack className="newspack-page__breadcrumbs" justify="flex-start">
 								<Breadcrumbs items={ breadcrumbItems } />
 							</HStack>
-							{ badges }
+							{ badges && (
+								<Stack direction="row" gap="xs" align="center" className="newspack-page__header-badges">
+									{ badges }
+								</Stack>
+							) }
 						</Stack>
 						{ actions && (
 							<Stack direction="row" gap="sm" align="center" className="newspack-page__header-actions">

@@ -45,18 +45,14 @@ jest.mock( '@wordpress/data', () => ( {
 	useSelect: () => ( {} ),
 } ) );
 
-jest.mock( '@wordpress/components', () => {
+jest.mock( '@wordpress/ui', () => {
 	const React = require( 'react' );
-	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
-	return {
-		__experimentalHStack: Passthrough,
-		__experimentalVStack: Passthrough,
-	};
+	return { Stack: ( { children } ) => React.createElement( 'div', null, children ) };
 } );
 
 // Button/Modal passthroughs; CardSortableList exposes its drag callback as a
 // clickable button so the test can reorder (0 -> 1) and enable Save, and
-// renders each item's description so the priority warnings are visible.
+// renders each item's warning badge tooltip so the priority warnings are visible.
 jest.mock( '../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
@@ -67,7 +63,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 				'div',
 				null,
 				React.createElement( 'button', { 'data-testid': 'drag', onClick: () => onDragCallback( 0, 1 ) }, 'drag' ),
-				items.map( item => item.description && React.createElement( 'p', { key: item.id }, item.description ) )
+				items.map( item => item.secondaryBadge && React.createElement( 'p', { key: item.id }, item.secondaryBadge.tooltip ) )
 			),
 	};
 } );
@@ -86,6 +82,7 @@ jest.mock( './utils', () => ( {
 	getGateStatus: () => 'Active',
 	getGateStatusBadgeIntent: () => 'stable',
 	getPriorityWarnings: jest.requireActual( './utils' ).getPriorityWarnings,
+	getPriorityWarningLabel: jest.requireActual( './utils' ).getPriorityWarningLabel,
 } ) );
 
 describe( 'Content Gates Priority modal', () => {

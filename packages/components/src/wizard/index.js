@@ -105,8 +105,19 @@ const ResetHeaderData = () => {
  * Wizard header + content region. Rendered inside the wizard's HashRouter so it
  * can read the current route and derive the active-tab breadcrumb.
  */
-const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, subTitle, actions, tabbedNavigation, children } ) => {
+const WizardHeaderRegion = ( {
+	hideHeader,
+	headerText,
+	sections,
+	sectionName,
+	subTitle,
+	headerSubTitle,
+	actions,
+	tabbedNavigation: sectionsTabbedNavigation,
+	children,
+} ) => {
 	const { pathname } = useLocation();
+	const tabbedNavigation = activeSection( sections, pathname )?.hideTabbedNavigation ? null : sectionsTabbedNavigation;
 
 	if ( hideHeader ) {
 		// Without the Page shell the tabs still own the content: it renders
@@ -128,7 +139,12 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 	const sectionSubTitle = activeSection( sections, pathname )?.subHeaderText;
 
 	return (
-		<Page breadcrumbItems={ breadcrumbItems } subTitle={ sectionSubTitle ?? subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
+		<Page
+			breadcrumbItems={ breadcrumbItems }
+			subTitle={ headerSubTitle || ( sectionSubTitle ?? subTitle ) }
+			actions={ actions }
+			tabbedNavigation={ tabbedNavigation }
+		>
 			{ children }
 		</Page>
 	);
@@ -140,7 +156,7 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
  * @property {string}     [subHeaderText]           The sub-header text, optional.
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.
- * @property {any[]}      sections                  Array of sections. A section's own `subHeaderText` replaces the wizard's while it is active.
+ * @property {any[]}      sections                  Array of sections. A section's own `subHeaderText` replaces the wizard's while it is active, and `hideTabbedNavigation` hides the tab bar on its route.
  * @property {boolean}    [hasSimpleFooter]         Indicates if a simple footer is used, optional.
  * @property {() => void} [renderAboveSections]     Function to render content above sections, optional.
  * @property {string[]}   [requiredPlugins]         Array of required plugin strings, optional.
@@ -188,6 +204,7 @@ const Wizard = (
 		sectionTitle,
 		sectionPrimaryAction,
 		sectionSecondaryAction,
+		subTitle: headerSubTitle,
 	} = headerData;
 
 	const mainActions = actions?.filter( action => action.type === 'primary' || action.type === 'secondary' );
@@ -416,6 +433,7 @@ const Wizard = (
 							sections={ routedSections }
 							sectionName={ sectionName }
 							subTitle={ subHeaderText }
+							headerSubTitle={ headerSubTitle }
 							actions={ headerActions }
 							tabbedNavigation={ tabbedNavigation }
 						>

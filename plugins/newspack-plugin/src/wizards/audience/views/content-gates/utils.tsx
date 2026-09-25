@@ -254,6 +254,11 @@ const sharesContent = ( a: ContentScope, b: ContentScope ) => {
 };
 
 /**
+ * Short label for the badge that carries a priority warning.
+ */
+export const getPriorityWarningLabel = () => __( 'Overrides paid access', 'newspack-plugin' );
+
+/**
  * Warnings for gates ranked where they let readers skip a paid gate below them.
  *
  * The first gate matching a post decides access alone (NPPD-2289). A gate that asks for no paid
@@ -285,7 +290,7 @@ export const getPriorityWarnings = ( gates: Gate[] ): Record< number, string > =
 };
 
 /**
- * Describe the shared allowance, for the Metering card and the Metering page header.
+ * Describe the shared allowance, for the Metering page subtitle.
  *
  * @param siteMeter The site meter, once the wizard has loaded it.
  */

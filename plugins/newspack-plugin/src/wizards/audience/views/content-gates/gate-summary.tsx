@@ -7,6 +7,8 @@
  * WordPress dependencies.
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
+import { Button } from '@wordpress/components';
+import { useState } from '@wordpress/element';
 
 /**
  * Internal dependencies.
@@ -32,13 +34,60 @@ const noOp = () => {};
  * across product and institution tiers, and a value the option list cannot describe is
  * named rather than printed bare.
  */
+const listAccessRuleOptionValues = ( values: Array< string | number >, options: AccessRuleOption[] = [], slug: string ) =>
+	values.map( value => {
+		const option = findAccessRuleOption( options, value );
+		return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
+	} );
+
 const formatAccessRuleOptionValues = ( values: Array< string | number >, options: AccessRuleOption[] = [], slug: string ) =>
-	values
-		.map( value => {
-			const option = findAccessRuleOption( options, value );
-			return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
-		} )
-		.join( ', ' );
+	listAccessRuleOptionValues( values, options, slug ).join( ', ' );
+
+const COLLAPSED_VALUE_COUNT = 3;
+
+/**
+ * A rule's values, cut to the first few until the publisher asks for the rest, so a
+ * rule naming many institutions or products does not stretch the whole gate card.
+ */
+const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: string } ) => {
+	const [ isExpanded, setIsExpanded ] = useState( false );
+	const hiddenCount = values.length - COLLAPSED_VALUE_COUNT;
+	if ( hiddenCount < 1 ) {
+		return <>{ values.join( ', ' ) }</>;
+	}
+	return (
+		<>
+			{ ( isExpanded ? values : values.slice( 0, COLLAPSED_VALUE_COUNT ) ).join( ', ' ) }{ ' ' }
+			<Button
+				variant="link"
+				aria-expanded={ isExpanded }
+				aria-label={
+					isExpanded
+						? sprintf(
+								// translators: %s: access rule name, e.g. "Institutional access".
+								__( 'Show less for %s', 'newspack-plugin' ),
+								ruleName
+						  )
+						: sprintf(
+								// translators: 1: number of hidden values, 2: access rule name, e.g. "Institutional access".
+								_n( 'Show %1$d more for %2$s', 'Show %1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
+								hiddenCount,
+								ruleName
+						  )
+				}
+				onClick={ () => setIsExpanded( ! isExpanded ) }
+			>
+				{ isExpanded
+					? __( 'Show less', 'newspack-plugin' )
+					: sprintf(
+							// translators: %d: number of hidden values.
+							_n( '+ %d more', '+ %d more', hiddenCount, 'newspack-plugin' ),
+							hiddenCount
+					  ) }
+			</Button>
+		</>
+	);
+};
 
 /**
  * Human-readable summary for an access rule value.
@@ -48,7 +97,7 @@ const formatAccessRuleOptionValues = ( values: Array< string | number >, options
  *                      `useAccessRuleOptions()`. Falls back to the list localised with
  *                      the page for a rule the caller did not supply.
  */
-const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string => {
+const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string | string[] => {
 	const config = availableAccessRules[ rule.slug ];
 	const options = optionsBySlug[ rule.slug ] ?? config?.options;
 	if ( 'one_time_purchase' === rule.slug ) {
@@ -103,7 +152,7 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 			: __( 'Not set (matches no reader)', 'newspack-plugin' );
 	}
 	if ( Array.isArray( rule.value ) && options ) {
-		return formatAccessRuleOptionValues( rule.value, options, rule.slug );
+		return listAccessRuleOptionValues( rule.value, options, rule.slug );
 	}
 	// Boolean rules carry no displayable value (mirrors the pre-formatter
 	// rendering, where React printed nothing for a boolean child).
@@ -111,6 +160,15 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 		return '';
 	}
 	return String( rule.value );
+};
+
+const AccessRuleValue = ( { rule, optionsBySlug }: { rule: GateAccessRule; optionsBySlug: Record< string, AccessRuleOption[] > } ) => {
+	const value = formatAccessRuleValue( rule, optionsBySlug );
+	return Array.isArray( value ) ? (
+		<CollapsibleValues values={ value } ruleName={ availableAccessRules[ rule.slug ]?.name ?? rule.slug } />
+	) : (
+		<>{ value }</>
+	);
 };
 
 export type GateSummarySection = {
@@ -274,7 +332,8 @@ export const getGateSummarySections = (
 						ruleGroup.map( rule =>
 							availableAccessRules[ rule.slug ]?.name ? (
 								<p key={ `${ groupIndex }-${ rule.slug }` }>
-									<strong>{ availableAccessRules[ rule.slug ].name }:</strong> { formatAccessRuleValue( rule, optionsBySlug ) }
+									<strong>{ availableAccessRules[ rule.slug ].name }:</strong>{ ' ' }
+									<AccessRuleValue rule={ rule } optionsBySlug={ optionsBySlug } />
 								</p>
 							) : null
 						)
