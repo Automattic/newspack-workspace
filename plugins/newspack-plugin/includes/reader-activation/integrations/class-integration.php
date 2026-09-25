@@ -268,6 +268,20 @@ abstract class Integration {
 	}
 
 	/**
+	 * How-to steps the Integrations UI shows at the top of the settings page.
+	 *
+	 * Child classes override this when the way in is a workflow elsewhere in
+	 * the admin, such as a setting on a block, so the settings page has to say
+	 * where to look. Each step carries a `title` and a `description`. The
+	 * default is no guide.
+	 *
+	 * @return array List of associative arrays with keys `title` and `description`.
+	 */
+	public function get_guide() {
+		return [];
+	}
+
+	/**
 	 * Whether this integration supports frontend reader registration.
 	 *
 	 * Integrations that return true will have their key output to the page

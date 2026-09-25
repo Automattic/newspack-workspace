@@ -1040,3 +1040,52 @@ describe( 'ConfigureView outbound field details', () => {
 		expect( checkbox.parentElement.querySelector( '[data-testid="badge"]' ) ).toBeNull();
 	} );
 } );
+
+describe( 'ConfigureView guide and advanced options', () => {
+	const GUIDED = {
+		id: 'form-capture',
+		name: 'Gravity Forms',
+		description: 'Register readers from Gravity Forms submissions.',
+		guide: [
+			{ title: 'Add the form with the Gravity Forms block', description: 'Place the form on a page.' },
+			{ title: 'Turn on Register readers', description: 'Switch it on in the block sidebar.' },
+		],
+		settings: [ { key: 'selectors', type: 'textarea', label: 'Form selectors', value: '', advanced: true } ],
+	};
+	const renderGuided = ( overrides = {}, props = {} ) =>
+		renderConfigureView( { integrations: { 'form-capture': { ...GUIDED, ...overrides } }, integrationId: 'form-capture', ...props } );
+
+	it( 'renders the guide steps in order, ahead of the fields', () => {
+		renderGuided();
+		const headings = screen.getAllByRole( 'heading' ).map( heading => heading.textContent );
+		expect( headings[ 0 ] ).toBe( 'How it works' );
+		expect( screen.getAllByRole( 'listitem' ).map( step => step.textContent ) ).toEqual( [
+			'Add the form with the Gravity Forms blockPlace the form on a page.',
+			'Turn on Register readersSwitch it on in the block sidebar.',
+		] );
+	} );
+
+	it( 'files advanced fields under Advanced options, with no Settings section left over', () => {
+		renderGuided();
+		expect( screen.getByRole( 'heading', { name: 'Advanced options' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'heading', { name: 'Settings' } ) ).toBeNull();
+		expect( screen.getByRole( 'textbox', { name: 'Form selectors' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'keeps ordinary fields under Settings and saves advanced edits through the same draft', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		renderGuided( { settings: [ { key: 'plain', type: 'text', label: 'Plain', value: '' }, ...GUIDED.settings ] }, { onSave } );
+		const headings = screen.getAllByRole( 'heading' ).map( heading => heading.textContent );
+		expect( headings ).toEqual( [ 'How it works', 'Settings', 'Advanced options' ] );
+		fireEvent.change( screen.getByRole( 'textbox', { name: 'Form selectors' } ), { target: { value: '#signup' } } );
+		await act( async () => getLatestSaveAction()() );
+		expect( onSave ).toHaveBeenCalledWith( 'form-capture', { selectors: '#signup' } );
+	} );
+
+	it( 'renders neither section for an integration without a guide or advanced fields', () => {
+		renderConfigureView();
+		expect( screen.queryByRole( 'heading', { name: 'How it works' } ) ).toBeNull();
+		expect( screen.queryByRole( 'heading', { name: 'Advanced options' } ) ).toBeNull();
+		expect( screen.getByRole( 'heading', { name: 'Settings' } ) ).toBeInTheDocument();
+	} );
+} );

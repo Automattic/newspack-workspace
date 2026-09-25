@@ -498,6 +498,7 @@ class Integrations {
 				'setup_url'                => $integration->get_setup_url(),
 				'settings'                 => $integration->get_settings_config(),
 				'required_plugins'         => $integration->get_required_plugins(),
+				'guide'                    => $integration->get_guide(),
 			];
 		}
 
