@@ -88,6 +88,7 @@ class Integrations {
 		require_once __DIR__ . '/integrations/class-contact-pull.php';
 		require_once __DIR__ . '/integrations/class-contact-cron.php';
 		require_once __DIR__ . '/integrations/class-form-capture.php';
+		require_once __DIR__ . '/integrations/class-gravity-forms.php';
 		require_once __DIR__ . '/integrations/class-push-log.php';
 
 		add_action( 'init', [ __CLASS__, 'register_integrations' ], 5 );
@@ -282,7 +283,23 @@ class Integrations {
 	public static function register_integrations() {
 		// Native integrations.
 		self::register( new Integrations\ESP() );
-		self::register( new Integrations\Form_Capture() );
+		self::register( new Integrations\Gravity_Forms() );
+		/**
+		 * Registers Inbound Form Capture, which registers readers from forms
+		 * built with tools other than Gravity Forms. Without the flag the
+		 * integration is absent: no card, and no capture on a site that
+		 * enabled it before, until the flag is set.
+		 *
+		 * @constant NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED
+		 * @type     bool
+		 * @default  Integration not registered
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED', true );
+		 */
+		if ( defined( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED' ) && NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED ) {
+			self::register( new Integrations\Form_Capture() );
+		}
 
 		// Hook for other plugins/code to register their integrations.
 		do_action( 'newspack_reader_activation_register_integrations' );

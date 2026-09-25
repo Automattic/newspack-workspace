@@ -1,17 +1,14 @@
 <?php
 /**
- * Gravity Forms integration (inbound form capture).
+ * Inbound Form Capture integration.
  *
- * Registers readers from Gravity Forms submissions. The way in is a
- * "Register readers" toggle on the Gravity Forms block: the block attribute
- * is carried to the page as the newspack-form-capture class on the form
- * tag, which the capture script matches. While Gravity Forms is active, any
- * other form can opt in the same way by carrying the class itself, a route
- * the help docs cover. A form's CSS Class Name setting applies to every
- * placement of that form, whatever each block's toggle says. There are no
- * settings: CSS selectors saved by the former Form selectors setting are not
- * read. Capture-only: neither a sync destination nor a pull source (see
- * supports_push()/supports_pull()).
+ * Captures email submissions from publisher-designated frontend forms built
+ * with any tool but Gravity Forms (an ActiveCampaign embed, a WPForms form)
+ * and registers them as readers via the frontend registration endpoint.
+ * Gravity Forms forms belong to the Gravity Forms integration, which extends
+ * this one. Registered only behind a flag (see
+ * Integrations::register_integrations()). Capture-only: neither a sync
+ * destination nor a pull source (see supports_push()/supports_pull()).
  *
  * Capture semantics publishers must understand before opting a form in:
  * - Capture fires on the browser's submit event (native validity checked)
@@ -19,8 +16,7 @@
  *   submission the vendor's JS or server later rejects may still have
  *   registered the reader.
  * - Programmatic HTMLFormElement.submit() dispatches no submit event and
- *   is not captured. Gravity Forms — which submits every form this way —
- *   is captured through its own submission filter bus instead.
+ *   is not captured.
  * - Forms that collect somebody else's email address (e.g. "email a
  *   friend") must never be opted in.
  *
@@ -30,7 +26,6 @@
 namespace Newspack\Reader_Activation\Integrations;
 
 use Newspack\Newspack;
-use Newspack\Plugin_Manager;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Registration;
 use Newspack\Reader_Activation\Integration;
@@ -40,7 +35,7 @@ use Newspack\Recaptcha;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Gravity Forms integration class.
+ * Inbound Form Capture integration class.
  */
 class Form_Capture extends Integration {
 	/**
@@ -59,16 +54,15 @@ class Form_Capture extends Integration {
 	const SCRIPT_HANDLE = 'newspack-form-capture';
 
 	/**
-	 * Handle for the block editor extension that adds the toggle to the
-	 * Gravity Forms block.
+	 * Key of this integration's entry in the capture script's config: the
+	 * forms it covers.
 	 */
-	const EDITOR_SCRIPT_HANDLE = 'newspack-form-capture-editor';
+	const SCRIPT_CONFIG_KEY = 'other_forms';
 
 	/**
-	 * Gravity Forms block attribute that opts a placement into capture. Declared
-	 * in the editor extension and registered with GF's block schema here.
+	 * Context of the contact sync a capture of an existing reader schedules.
 	 */
-	const BLOCK_ATTRIBUTE = 'newspackFormCapture';
+	const SYNC_CONTEXT = 'Form Capture registration (existing reader)';
 
 	/**
 	 * Default per-IP hourly limit for this integration's rate-limit bucket.
@@ -84,8 +78,8 @@ class Form_Capture extends Integration {
 	public function __construct() {
 		parent::__construct(
 			self::ID,
-			__( 'Gravity Forms', 'newspack-plugin' ),
-			__( 'Register readers from Gravity Forms submissions, and from other forms you opt in.', 'newspack-plugin' )
+			__( 'Inbound Form Capture', 'newspack-plugin' ),
+			__( 'Register readers from email signup forms built with any form tool other than Gravity Forms.', 'newspack-plugin' )
 		);
 	}
 
@@ -100,12 +94,6 @@ class Form_Capture extends Integration {
 		\add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ], 20 );
 		// Priority 5 so a publisher's own filter at default priority wins.
 		\add_filter( 'newspack_frontend_registration_rate_limit', [ $this, 'filter_rate_limit' ], 5, 3 );
-		// GF applies this filter while constructing its block on `init` at
-		// priority 10; integrations register at priority 5, so it is in place.
-		\add_filter( 'gform_form_block_attributes', [ $this, 'register_block_attribute' ] );
-		// After GF's own render filter at 10, which relocates custom-CSS classes.
-		\add_filter( 'render_block_gravityforms/form', [ $this, 'mark_captured_block_form' ], 20, 2 );
-		\add_action( 'enqueue_block_editor_assets', [ $this, 'enqueue_editor_assets' ] );
 	}
 
 	/**
@@ -117,78 +105,24 @@ class Form_Capture extends Integration {
 	 * @return string
 	 */
 	public static function get_registration_method() {
-		return Reader_Registration::get_registration_method_for( self::ID );
+		return Reader_Registration::get_registration_method_for( static::ID );
 	}
 
 	/**
 	 * Register settings fields.
 	 *
-	 * None: forms opt in through the block toggle or the marker class, so the
-	 * Integrations card offers no settings page.
-	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function register_settings_fields() {
-		return [];
-	}
-
-	/**
-	 * The how-to the Integrations card opens from its How it works menu item.
-	 * The toggle lives in the block editor, so the guide has to say where to
-	 * look and what opting a form in commits the publisher to. The last step
-	 * links the help page, which covers forms placed without the block.
-	 *
-	 * @return array List of associative arrays with keys `title`, `description`, and an optional `link` (`label`, `url`).
-	 */
-	public function get_guide() {
 		return [
 			[
-				'title'       => __( 'Add the form with the Gravity Forms block', 'newspack-plugin' ),
-				'description' => __( 'Place the form on a page, post, or prompt with the Gravity Forms block.', 'newspack-plugin' ),
-			],
-			[
-				'title'       => __( 'Turn on Register readers in the block settings', 'newspack-plugin' ),
-				'description' => __( 'Select the block, open its settings sidebar, and switch on Register readers under Newspack. The switch belongs to the block, so the same form can register readers in one place and not in another.', 'newspack-plugin' ),
-			],
-			[
-				'title'       => __( 'Submissions register readers', 'newspack-plugin' ),
-				'description' => __( 'Each submission registers a reader account with the submitted email address and name, or updates the existing reader without emailing a login link. Only turn this on for forms whose submissions should always create a reader account: registration happens as the form is submitted, so a submission Gravity Forms later rejects has still registered the reader. Never turn it on for a form that collects someone else\'s email address.', 'newspack-plugin' ),
-				'link'        => [
-					'label' => __( 'Learn how to opt in forms placed without the block', 'newspack-plugin' ),
-					'url'   => 'https://help.newspack.com/integrations/gravity-forms/',
-				],
+				'key'         => 'selectors',
+				'type'        => 'textarea',
+				'label'       => __( 'Form selectors', 'newspack-plugin' ),
+				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class. Gravity Forms forms are captured by the Gravity Forms integration instead. Bare tag selectors (e.g. "form") are ignored — they would opt in every form on the site. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission, so submissions its spam checks would discard still create readers and count toward your ESP contacts. Captures are rate-limited per visitor IP (100/hour by default).', 'newspack-plugin' ),
+				'default'     => '',
 			],
 		];
-	}
-
-	/**
-	 * Gravity Forms is the way in: the toggle lives in its block, so without
-	 * it the card would offer an Enable that captures nothing. Reported in the
-	 * shape the Integrations card reads (see Integration::get_required_plugins()).
-	 *
-	 * @return array List of associative arrays with keys `slug`, `name`, `is_active`, `is_installed`.
-	 */
-	public function get_required_plugins() {
-		$status = Plugin_Manager::get_managed_plugin_status( 'gravityforms' );
-		return [
-			[
-				'slug'         => 'gravityforms',
-				'name'         => __( 'Gravity Forms', 'newspack-plugin' ),
-				'is_active'    => 'active' === $status,
-				'is_installed' => 'uninstalled' !== $status,
-			],
-		];
-	}
-
-	/**
-	 * Whether Gravity Forms is active. The capture switch reads this on every
-	 * front-end request, which is why it checks for Gravity Forms' main class
-	 * instead of Plugin_Manager's status lookup, a scan of the installed plugins.
-	 *
-	 * @return bool
-	 */
-	protected function is_gravity_forms_active() {
-		return class_exists( 'GFForms' );
 	}
 
 	/**
@@ -236,7 +170,7 @@ class Form_Capture extends Integration {
 	 * @return int The limit.
 	 */
 	public function filter_rate_limit( $limit, $ip, $bucket ) {
-		if ( Reader_Registration::get_rate_limit_bucket_for( self::ID ) === $bucket ) {
+		if ( Reader_Registration::get_rate_limit_bucket_for( $this->get_id() ) === $bucket ) {
 			return self::RATE_LIMIT_DEFAULT;
 		}
 		return $limit;
@@ -301,38 +235,104 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Frontend registration is available while the integration is enabled,
-	 * Gravity Forms is active, and the site's configuration supports capture.
-	 * This gates the registration endpoint, the page-emitted key, and the
-	 * capture script together.
+	 * Frontend registration is available while the integration is enabled
+	 * and the site's configuration supports capture. This gates the
+	 * registration endpoint, the page-emitted key, and the capture script
+	 * together.
 	 *
-	 * Both checks run here, not only at enable time. A site that switches to
-	 * reCAPTCHA v2 after enabling would otherwise keep emitting a key that
-	 * capture can never use, and go on capturing nothing silently. A site
-	 * without Gravity Forms, because it enabled capture for another tool's
-	 * forms or removed Gravity Forms later, would otherwise keep registering
-	 * readers behind a card that requires Gravity Forms and, with it
-	 * uninstalled, offers no Disable.
+	 * The unsupported check runs here, not only at enable time: a site that
+	 * switches to reCAPTCHA v2 after enabling would otherwise keep emitting a
+	 * key that capture can never use, and go on capturing nothing silently.
 	 *
 	 * @return bool
 	 */
 	public function supports_frontend_registration(): bool {
-		return Integrations::is_enabled( self::ID ) && $this->is_gravity_forms_active() && ! $this->get_unsupported_reason();
+		return Integrations::is_enabled( $this->get_id() ) && ! $this->get_unsupported_reason();
 	}
 
 	/**
-	 * The selectors the capture script matches: the marker class alone, which
-	 * the block toggle adds and any other form can carry. Selectors saved by
-	 * the former Form selectors setting are not read.
+	 * Get the configured form selectors, always including the marker class.
+	 *
+	 * Selectors that name only element types (`form`, `body form`, `div > form`)
+	 * or the universal selector opt in every form on the page — comment forms,
+	 * search, checkout — which is never what a per-form opt-in means. A line
+	 * carrying one is dropped whole, including inside a comma-separated list,
+	 * since `form, #signup` matches everything `form` does. Applied at read
+	 * time so previously stored values are covered too.
 	 *
 	 * @return string[] CSS selectors.
 	 */
 	public function get_selectors() {
-		return [ '.' . self::MARKER_CLASS ];
+		$value     = (string) $this->get_settings_field_value( 'selectors' );
+		$lines     = array_map( 'trim', preg_split( '/[\r\n]+/', $value ) );
+		$selectors = array_filter( array_map( [ __CLASS__, 'normalize_selector' ], $lines ) );
+		return array_values( array_unique( array_merge( [ '.' . self::MARKER_CLASS ], $selectors ) ) );
 	}
 
 	/**
-	 * Enqueue the frontend capture script when the integration is active.
+	 * Reduce one configured line to the selector the client should run, or ''
+	 * to drop it.
+	 *
+	 * Rebuilds the line from its non-empty parts rather than passing it through:
+	 * a trailing comma is a plausible copy-paste from a CSS rule, and an empty
+	 * slot makes the whole list invalid CSS — `querySelectorAll( '#signup,' )`
+	 * throws, so the client discards it and one stray comma takes every
+	 * selector on the line with it.
+	 *
+	 * @param string $line A configured line, possibly a comma-separated list.
+	 *
+	 * @return string The normalized selector, or '' when the line is rejected.
+	 */
+	private static function normalize_selector( string $line ): string {
+		$parts = [];
+		foreach ( explode( ',', $line ) as $part ) {
+			$part = trim( $part );
+			if ( '' === $part ) {
+				continue;
+			}
+			if ( self::is_over_broad_selector( $part ) ) {
+				return '';
+			}
+			$parts[] = $part;
+		}
+		return implode( ', ', $parts );
+	}
+
+	/**
+	 * Whether a single selector names nothing more specific than element types.
+	 *
+	 * Splits on combinators and checks every compound: a selector built only
+	 * from tag names and `*` matches every form on the page whatever its depth,
+	 * so `body form` and `div > form` are as broad as `form`. One class, id or
+	 * attribute anywhere in the selector makes it specific enough to keep.
+	 *
+	 * Attribute selectors are kept: `[method]` is as broad as `form`, but
+	 * `[data-newsletter-form]` is a precise opt-in and structurally identical,
+	 * so the distinction is semantic rather than something the guard can read.
+	 *
+	 * @param string $selector A single CSS selector (no commas).
+	 *
+	 * @return bool Whether the selector is too broad to opt a form in.
+	 */
+	private static function is_over_broad_selector( string $selector ): bool {
+		$compounds = preg_split( '/[\s>+~]+/', trim( $selector ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( empty( $compounds ) ) {
+			return true;
+		}
+		foreach ( $compounds as $compound ) {
+			if ( '*' !== $compound && ! preg_match( '/^[a-z][a-z0-9-]*$/i', $compound ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Enqueue the frontend capture script while the integration captures, and
+	 * hand it this integration's forms. The Gravity Forms integration shares
+	 * the script, so each integration adds its own entry: the script registers
+	 * each form under the integration whose entry covers it, and a disabled
+	 * integration's forms have no entry to match.
 	 */
 	public function enqueue_scripts() {
 		if ( ! Reader_Activation::is_enabled() || ! $this->supports_frontend_registration() ) {
@@ -348,92 +348,22 @@ class Form_Capture extends Integration {
 				'in_footer' => true,
 			]
 		);
-		\wp_localize_script(
+		\wp_add_inline_script(
 			self::SCRIPT_HANDLE,
-			'newspack_form_capture',
-			[
-				'selectors' => $this->get_selectors(),
-			]
+			sprintf(
+				'window.newspack_form_capture = window.newspack_form_capture || {}; window.newspack_form_capture[%s] = %s;',
+				\wp_json_encode( static::SCRIPT_CONFIG_KEY ),
+				\wp_json_encode(
+					[
+						'integration' => $this->get_id(),
+						'selectors'   => $this->get_selectors(),
+					]
+				)
+			),
+			'before'
 		);
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'defer', true );
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'amp-plus', true );
-	}
-
-	/**
-	 * Load the block editor extension wherever the Gravity Forms block can be
-	 * placed. Gated on Gravity Forms alone, without which there is no block to
-	 * extend. Neither the integration nor Reader Activation gates it: the
-	 * panel is where a placement opts in, so the toggle stays visible and
-	 * saves while either is off, and the notice reports through `active` that
-	 * a toggled form registers nobody yet.
-	 */
-	public function enqueue_editor_assets() {
-		if ( ! $this->is_gravity_forms_active() ) {
-			return;
-		}
-		$asset_file   = NEWSPACK_ABSPATH . 'dist/form-capture-editor.asset.php';
-		$asset        = file_exists( $asset_file ) ? include $asset_file : [];
-		$dependencies = $asset['dependencies'] ?? [ 'react-jsx-runtime', 'wp-block-editor', 'wp-components', 'wp-hooks', 'wp-i18n' ];
-		\wp_enqueue_script(
-			self::EDITOR_SCRIPT_HANDLE,
-			Newspack::plugin_url() . '/dist/form-capture-editor.js',
-			$dependencies,
-			Newspack::asset_version( 'form-capture-editor' ),
-			true
-		);
-		\wp_localize_script(
-			self::EDITOR_SCRIPT_HANDLE,
-			'newspack_form_capture_editor',
-			[
-				'active'           => Reader_Activation::is_enabled() && $this->supports_frontend_registration(),
-				'integrations_url' => \admin_url( 'admin.php?page=newspack-audience-integrations' ),
-			]
-		);
-	}
-
-	/**
-	 * Register the capture toggle with Gravity Forms' block schema.
-	 *
-	 * As of Gravity Forms 3.1 this filter feeds both halves of its block. The
-	 * server-side registration, which keeps only each attribute's type, is
-	 * what the REST block renderer validates the editor preview against, so
-	 * without it every preview of a toggled block fails. The editor config,
-	 * which keeps the default too, is where GF's block script takes its
-	 * attributes from, so it is also what keeps the toggle through a save.
-	 *
-	 * @param array $attributes Block attributes declared by Gravity Forms.
-	 *
-	 * @return array Attributes with the capture toggle declared.
-	 */
-	public function register_block_attribute( $attributes ) {
-		$attributes[ self::BLOCK_ATTRIBUTE ] = [
-			'type'    => 'boolean',
-			'default' => false,
-		];
-		return $attributes;
-	}
-
-	/**
-	 * Carry the block toggle to the page as the marker class on the form tag,
-	 * which is what the capture script matches. Runs whether or not the
-	 * integration is enabled: the class is inert on its own and the script is
-	 * the switch, so a placement's markup does not change with the setting.
-	 *
-	 * @param string $content The rendered block HTML.
-	 * @param array  $block   The parsed block, including its attributes.
-	 *
-	 * @return string The block HTML, with the form tag marked when opted in.
-	 */
-	public function mark_captured_block_form( $content, $block ) {
-		if ( empty( $block['attrs'][ self::BLOCK_ATTRIBUTE ] ) ) {
-			return $content;
-		}
-		$tags = new \WP_HTML_Tag_Processor( $content );
-		if ( ! $tags->next_tag( 'form' ) ) {
-			return $content;
-		}
-		$tags->add_class( self::MARKER_CLASS );
-		return $tags->get_updated_html();
 	}
 
 	/**
@@ -448,7 +378,7 @@ class Form_Capture extends Integration {
 	 * @return bool Whether the registration is a form capture.
 	 */
 	private function is_capture_registration( $metadata ) {
-		return Integrations::is_enabled( self::ID ) && ( $metadata['registration_method'] ?? '' ) === self::get_registration_method();
+		return Integrations::is_enabled( $this->get_id() ) && ( $metadata['registration_method'] ?? '' ) === static::get_registration_method();
 	}
 
 	/**
@@ -512,7 +442,7 @@ class Form_Capture extends Integration {
 			return;
 		}
 		$hook = 'newspack_scheduled_esp_sync';
-		$args = [ $existing_user->ID, 'Form Capture registration (existing reader)' ];
+		$args = [ $existing_user->ID, static::SYNC_CONTEXT ];
 		if ( false === \as_next_scheduled_action( $hook, $args, $this->get_action_group() ) ) {
 			\as_schedule_single_action( time() + MINUTE_IN_SECONDS, $hook, $args, $this->get_action_group() );
 		}

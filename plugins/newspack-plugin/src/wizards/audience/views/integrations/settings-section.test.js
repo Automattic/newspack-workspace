@@ -313,7 +313,7 @@ describe( 'Audience Integrations settings section card action', () => {
 	it( 'renders the Gravity Forms mark for the Gravity Forms integration', () => {
 		render(
 			<SettingsSection
-				integrations={ { 'form-capture': { ...baseIntegration, id: 'form-capture', provider: null } } }
+				integrations={ { 'gravity-forms': { ...baseIntegration, id: 'gravity-forms', provider: null } } }
 				loading={ false }
 				onToggleEnabled={ jest.fn() }
 				onActivatePlugin={ jest.fn() }
@@ -329,12 +329,12 @@ describe( 'sortIntegrationIds', () => {
 	it( 'orders integrations by name, ignoring case and registration order', () => {
 		const integrations = {
 			esp: { name: 'Mailchimp' },
-			'form-capture': { name: 'Gravity Forms' },
+			'gravity-forms': { name: 'Gravity Forms' },
 			salesforce: { name: 'Salesforce' },
 			activecampaign: { name: 'ActiveCampaign' },
 			beehiiv: { name: 'beehiiv' },
 		};
-		expect( sortIntegrationIds( integrations ) ).toEqual( [ 'activecampaign', 'beehiiv', 'form-capture', 'esp', 'salesforce' ] );
+		expect( sortIntegrationIds( integrations ) ).toEqual( [ 'activecampaign', 'beehiiv', 'gravity-forms', 'esp', 'salesforce' ] );
 	} );
 
 	it( 'falls back to the ID when an integration has no name', () => {

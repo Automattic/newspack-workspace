@@ -88,7 +88,7 @@ export const SettingsSection = ( {
 									cardIcon = <IntegrationIcon provider="mailchimp" />;
 								} else if ( BRANDED_INTEGRATION_IDS.includes( id ) ) {
 									cardIcon = <IntegrationIcon provider={ id } />;
-								} else if ( id === 'form-capture' ) {
+								} else if ( id === 'gravity-forms' ) {
 									cardIcon = <IntegrationIcon provider="gravity_forms" />;
 								} else if ( provider && espProviderOrder.includes( provider ) ) {
 									cardIcon = <IntegrationIcon provider={ provider } />;
