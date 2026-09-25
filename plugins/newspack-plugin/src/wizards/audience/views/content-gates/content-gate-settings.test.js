@@ -50,7 +50,10 @@ jest.mock( '@wordpress/data', () => ( {
 
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
-	return { CardBody: ( { children } ) => React.createElement( 'div', null, children ) };
+	return {
+		CardBody: ( { children } ) => React.createElement( 'div', null, children ),
+		Notice: ( { children } ) => React.createElement( 'div', null, children ),
+	};
 } );
 
 // Card renders its action items (nested arrays) as clickable buttons so the
