@@ -229,7 +229,7 @@ export default function ContentGateSettings( {
 	const actionsLabel = gate.title
 		? sprintf(
 				// translators: %s is the gate title.
-				__( '%s actions', 'newspack-plugin' ),
+				__( 'Gate actions: %s', 'newspack-plugin' ),
 				decodeEntities( gate.title )
 		  )
 		: undefined;
@@ -259,11 +259,11 @@ export default function ContentGateSettings( {
 			>
 				<CardBody>
 					{ priorityWarning && (
-						<Notice status="warning" isDismissible={ false }>
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
 							{ priorityWarning }
 						</Notice>
 					) }
-					<Grid className="newspack-content-gates__gate__settings" columns={ isNewsletter ? 2 : 3 } gutter={ 16 } noMargin>
+					<Grid className="newspack-content-gates__gate__settings" gutter={ 16 } noMargin>
 						{ getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions ).map( section => (
 							<div key={ section.key }>
 								<h4>{ section.label }</h4>
