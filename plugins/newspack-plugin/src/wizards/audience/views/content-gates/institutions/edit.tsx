@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack, TextareaControl, CardBody, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { TextareaControl, CardBody, Spinner } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useState, useEffect, useCallback } from '@wordpress/element';
 import { Stack } from '@wordpress/ui';
@@ -458,7 +458,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 						'newspack-plugin'
 					) }
 				/>
-				<VStack spacing={ 4 }>
+				<Stack direction="column" gap="lg">
 					<CardSettingsGroup
 						title={ __( 'Email Domain', 'newspack-plugin' ) }
 						description={ __( 'Match readers by verified email domain', 'newspack-plugin' ) }
@@ -532,7 +532,7 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 							/>
 						</CardBody>
 					</CardSettingsGroup>
-				</VStack>
+				</Stack>
 			</Grid>
 		</div>
 	);
