@@ -592,12 +592,12 @@ class Alert_Manager {
 	 * Handle an integration health check failure.
 	 *
 	 * Keeps a per-integration record and pages only on the transition to
-	 * broken, the HEALTH_BROKEN_THRESHOLD-th consecutive failure. Every
-	 * failure is still forwarded at warning severity so the log keeps the
-	 * hourly history, and failures after the transition add nothing to
-	 * Slack: the condition is already reported, and the record carries it
-	 * until a passing check, or a run that no longer checks the integration,
-	 * clears it.
+	 * broken, the HEALTH_BROKEN_THRESHOLD-th consecutive failure. Every other
+	 * failure is forwarded at warning severity so the log keeps the hourly
+	 * history; those after the transition add nothing to Slack, since the
+	 * condition is already reported and the record carries it until a
+	 * passing check, or a run that no longer checks the integration, clears
+	 * it.
 	 *
 	 * The record is written before dispatch so a `newspack_alert` handler
 	 * that throws cannot leave the transition unrecorded and page again on
@@ -660,28 +660,7 @@ class Alert_Manager {
 			return;
 		}
 
-		/**
-		 * Fires when an integration's health changes state: it has failed
-		 * HEALTH_BROKEN_THRESHOLD consecutive checks ('broken'), a check
-		 * passed after that ('recovered'), or a run stopped checking it while
-		 * broken because it was disabled or is no longer set up
-		 * ('disconnected'). One event per outage in each direction, so a
-		 * consumer can open and close a ticket without deduplicating hourly
-		 * repeats itself.
-		 *
-		 * @param array $payload {
-		 *     @type string $integration_id   The integration ID.
-		 *     @type string $integration_name The integration display name.
-		 *     @type string $state            'broken', 'recovered' or 'disconnected'.
-		 *     @type string $error_class      'publisher' when the ESP account itself is the
-		 *                                    problem, 'other' for provider outages and unknowns.
-		 *     @type string $error            The last health-check error message.
-		 *     @type int    $first_failed_at  Unix timestamp of the first failure in this outage.
-		 *     @type int    $failures         Consecutive failed checks so far.
-		 * }
-		 */
-		do_action(
-			'newspack_integration_health_changed',
+		self::fire_health_changed(
 			[
 				'integration_id'   => $integration_id,
 				'integration_name' => $integration_name,
@@ -720,11 +699,14 @@ class Alert_Manager {
 	/**
 	 * Handle an integration health check pass.
 	 *
-	 * A pass after 'broken' is the other half of the transition: it fires
-	 * `newspack_integration_health_changed` with 'recovered' and a warning-
-	 * severity alert for the log, then drops the record. A pass while merely
-	 * 'failing' drops the record silently, since nothing was reported. A pass
-	 * with no record is the hourly steady state and costs no option write.
+	 * A pass after 'broken' is the other half of the transition: it drops the
+	 * record, then fires `newspack_integration_health_changed` with
+	 * 'recovered' and a warning-severity alert for the log. The record goes
+	 * before dispatch, as in handle_health_check_failed(), so a handler that
+	 * throws cannot leave a recovered integration recorded as broken. A pass
+	 * while merely 'failing' drops the record silently, since nothing was
+	 * reported. A pass with no record is the hourly steady state and costs
+	 * no option write.
 	 *
 	 * @param array $payload Health check pass data (integration_id, integration_name).
 	 */
@@ -750,9 +732,7 @@ class Alert_Manager {
 		$integration_name = (string) ( $payload['integration_name'] ?? 'unknown' );
 		$failures         = (int) ( $record['failures'] ?? 0 );
 
-		/** This action is documented in includes/class-alert-manager.php */
-		do_action(
-			'newspack_integration_health_changed',
+		self::fire_health_changed(
 			[
 				'integration_id'   => $integration_id,
 				'integration_name' => $integration_name,
@@ -812,9 +792,7 @@ class Alert_Manager {
 			$integration_name = (string) ( $record['integration_name'] ?? $integration_id );
 			$failures         = (int) ( $record['failures'] ?? 0 );
 
-			/** This action is documented in includes/class-alert-manager.php */
-			do_action(
-				'newspack_integration_health_changed',
+			self::fire_health_changed(
 				[
 					'integration_id'   => (string) $integration_id,
 					'integration_name' => $integration_name,
@@ -837,6 +815,54 @@ class Alert_Manager {
 						'integration_id' => (string) $integration_id,
 						'health'         => $record,
 					],
+					'timestamp' => time(),
+				]
+			);
+		}
+	}
+
+	/**
+	 * Fire `newspack_integration_health_changed` so that a listener that
+	 * throws cannot cancel the alert that follows it.
+	 *
+	 * The record already holds the new state when this runs, so an exception
+	 * reaching the caller would drop the one page or log entry that state
+	 * gets, and no later check would send it again.
+	 *
+	 * @param array $payload The state change, as documented on the action below.
+	 */
+	private static function fire_health_changed( $payload ) {
+		try {
+			/**
+			 * Fires when an integration's health changes state: it has failed
+			 * HEALTH_BROKEN_THRESHOLD consecutive checks ('broken'), a check
+			 * passed after that ('recovered'), or a run stopped checking it while
+			 * broken because it was disabled or is no longer set up
+			 * ('disconnected'). One event per outage in each direction, so a
+			 * consumer can open and close a ticket without deduplicating hourly
+			 * repeats itself.
+			 *
+			 * @param array $payload {
+			 *     @type string $integration_id   The integration ID.
+			 *     @type string $integration_name The integration display name.
+			 *     @type string $state            'broken', 'recovered' or 'disconnected'.
+			 *     @type string $error_class      'publisher' when the ESP account itself is the
+			 *                                    problem, 'other' for provider outages and unknowns.
+			 *     @type string $error            The last health-check error message.
+			 *     @type int    $first_failed_at  Unix timestamp of the first failure in this outage.
+			 *     @type int    $failures         Consecutive failed checks so far.
+			 * }
+			 */
+			do_action( 'newspack_integration_health_changed', $payload );
+		} catch ( \Throwable $e ) {
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_alert',
+				[
+					'type'      => 'integration_health_changed_listener_failed',
+					'severity'  => 'warning',
+					'message'   => sprintf( 'A newspack_integration_health_changed listener failed for integration "%s": %s', $payload['integration_id'] ?? 'unknown', $e->getMessage() ),
+					'context'   => $payload,
 					'timestamp' => time(),
 				]
 			);
