@@ -2006,6 +2006,29 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The settings routes live under the Settings wizard and are limited to administrators.
+	 */
+	public function test_settings_routes_require_manage_options() {
+		global $wp_rest_server;
+		$wp_rest_server = new \WP_REST_Server();
+		$section        = new \Newspack\Wizards\Newspack\Integrations_Section( [ 'wizard_slug' => 'newspack-settings' ] );
+		add_action( 'rest_api_init', [ $section, 'register_rest_routes' ] );
+		do_action( 'rest_api_init' );
+
+		$route = '/newspack/v1/wizard/newspack-settings/integrations';
+		$this->assertArrayHasKey( $route, $wp_rest_server->get_routes() );
+
+		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		$this->assertSame( 403, $wp_rest_server->dispatch( new \WP_REST_Request( 'GET', $route ) )->get_status() );
+
+		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$this->assertSame( 200, $wp_rest_server->dispatch( new \WP_REST_Request( 'GET', $route ) )->get_status() );
+
+		remove_action( 'rest_api_init', [ $section, 'register_rest_routes' ] );
+		$wp_rest_server = null;
+	}
+
+	/**
 	 * The enable endpoint still allows disabling an integration that is not connected.
 	 */
 	public function test_enable_endpoint_allows_disabling_unconnected_integration() {

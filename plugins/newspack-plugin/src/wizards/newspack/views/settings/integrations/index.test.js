@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /**
@@ -36,8 +36,8 @@ jest.mock( './settings-section', () => ( {
 		return null;
 	},
 } ) );
-jest.mock( './configure-view', () => ( { ConfigureView: () => null } ) );
-jest.mock( './logs-view', () => ( { LogsView: () => null } ) );
+jest.mock( './configure-view', () => ( { ConfigureView: ( { match } ) => <p>configure { match.params.integrationId }</p> } ) );
+jest.mock( './logs-view', () => ( { LogsView: ( { match } ) => <p>logs { match.params.integrationId }</p> } ) );
 
 const SETTINGS_MAP = {
 	esp: { id: 'esp', name: 'Newsletter ESP', enabled: false, settings: [] },
@@ -356,5 +356,30 @@ describe( 'Integrations retry buffer', () => {
 			await flushPromises();
 		} );
 		expect( captured.props.saving.esp ).toBe( false );
+	} );
+} );
+
+describe( 'Integrations routes', () => {
+	const renderAt = path =>
+		render(
+			<MemoryRouter initialEntries={ [ path ] }>
+				<Integrations match={ { path: '/integrations' } } />
+			</MemoryRouter>
+		);
+
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( SETTINGS_MAP );
+	} );
+
+	it( 'renders the logs view for an integration logs path', async () => {
+		renderAt( '/integrations/esp/logs' );
+		expect( await screen.findByText( 'logs esp' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'configure esp' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'renders the configure view for an integration path', async () => {
+		renderAt( '/integrations/esp' );
+		expect( await screen.findByText( 'configure esp' ) ).toBeInTheDocument();
 	} );
 } );

@@ -50,6 +50,16 @@ if ( hash === '#/emails' || hash.startsWith( '#/emails/' ) || hash.startsWith( '
 	window.location.replace( `${ window.location.pathname }?${ params.toString() }#/emails${ suffix }` );
 }
 
+// Requests redirected from the old Audience > Integrations page keep their
+// fragment, which still uses that screen's routes (`#/settings/salesforce` from
+// newspack-manager's OAuth return). Rewrite it before the HashRouter reads it.
+const searchParams = new URLSearchParams( window.location.search );
+if ( searchParams.has( 'legacy-integrations' ) ) {
+	searchParams.delete( 'legacy-integrations' );
+	const legacySubPath = window.location.hash.match( /^#\/settings(\/[^?]*)?/ )?.[ 1 ] ?? '';
+	window.history.replaceState( null, '', `${ window.location.pathname }?${ searchParams.toString() }#/integrations${ legacySubPath }` );
+}
+
 const settingsTabs = window.newspackSettings;
 
 import Seo from './seo';
@@ -61,13 +71,11 @@ import ThemeAndBrand from './theme-and-brand';
 import Collections from './collections';
 import Print from './print';
 import Privacy from './privacy';
-import Integrations from './integrations';
 
 type SectionKeys = keyof typeof settingsTabs;
 
 const sectionComponents: Partial< Record< SectionKeys | 'default', ( props: { isPartOfSetup?: boolean } ) => React.ReactNode > > = {
 	connections: Connections,
-	integrations: Integrations,
 	social: Social,
 	syndication: Syndication,
 	seo: Seo,
@@ -78,6 +86,10 @@ const sectionComponents: Partial< Record< SectionKeys | 'default', ( props: { is
 	privacy: Privacy,
 	default: () => <h2>🚫 { __( 'Not found' ) }</h2>,
 };
+
+if ( 'integrations' in settingsTabs ) {
+	sectionComponents.integrations = lazy( () => import( /* webpackChunkName: "settings-integrations" */ './integrations' ) );
+}
 
 /**
  * Load additional brands section if `newspack-multibranded-site` plugin is active.

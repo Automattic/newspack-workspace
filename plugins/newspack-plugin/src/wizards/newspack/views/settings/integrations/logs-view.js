@@ -50,9 +50,6 @@ export const LogsView = ( { integrations, match } ) => {
 
 	useEffect( () => {
 		setHeaderData( { fullWidth: true } );
-	}, [ setHeaderData ] );
-
-	useEffect( () => {
 		if ( integration ) {
 			setHeaderData( {
 				sectionName: [ { label: integration.name, url: `#/integrations/${ integrationId }` }, { label: __( 'Logs', 'newspack-plugin' ) } ],

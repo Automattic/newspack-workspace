@@ -32,7 +32,14 @@ class Integrations_Section extends Wizard_Section {
 	 *
 	 * @var string
 	 */
-	const LEGACY_PAGE_SLUG = 'newspack-audience-integrations';
+	private const LEGACY_PAGE_SLUG = 'newspack-audience-integrations';
+
+	/**
+	 * Query arg that marks a request redirected from the legacy page.
+	 *
+	 * @var string
+	 */
+	private const LEGACY_QUERY_ARG = 'legacy-integrations';
 
 	/**
 	 * Initialize.
@@ -44,7 +51,7 @@ class Integrations_Section extends Wizard_Section {
 			return;
 		}
 		parent::__construct( $args );
-		add_action( 'admin_menu', [ __CLASS__, 'redirect_legacy_page' ] );
+		add_action( 'admin_menu', [ __CLASS__, 'redirect_legacy_page' ], 1 );
 	}
 
 	/**
@@ -52,11 +59,13 @@ class Integrations_Section extends Wizard_Section {
 	 *
 	 * @return bool
 	 */
-	public static function is_enabled() {
+	public static function is_enabled(): bool {
 		/**
 		 * Enables the Settings / Integrations screen and its REST endpoints.
 		 * The section does not register itself at all while this is unset, so
-		 * the tab is absent rather than empty.
+		 * the tab is absent rather than empty. It also limits the generic ESP
+		 * reader sync to Mailchimp, so sites on other providers rely on their
+		 * dedicated integrations once it is set.
 		 *
 		 * @constant NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED
 		 * @type     bool
@@ -73,18 +82,24 @@ class Integrations_Section extends Wizard_Section {
 	 *
 	 * @return string
 	 */
-	public static function get_url() {
+	public static function get_url(): string {
 		return admin_url( 'admin.php?page=newspack-settings#/integrations' );
 	}
 
 	/**
-	 * Send bookmarks of the old Audience > Integrations page to the Settings tab.
+	 * Send links to the old Audience > Integrations page to the Settings tab.
+	 *
+	 * The Salesforce OAuth flow in newspack-manager still returns to the old page with
+	 * a `#/settings/salesforce` fragment. The server never sees the fragment, and
+	 * a Location header that carries its own would replace it, so the redirect
+	 * leaves the fragment off and the Settings screen maps the old route onto
+	 * the new one.
 	 */
-	public static function redirect_legacy_page() {
+	public static function redirect_legacy_page(): void {
 		if ( self::LEGACY_PAGE_SLUG !== filter_input( INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS ) ) {
 			return;
 		}
-		wp_safe_redirect( self::get_url() );
+		wp_safe_redirect( admin_url( 'admin.php?page=newspack-settings&' . self::LEGACY_QUERY_ARG . '=1' ) );
 		exit;
 	}
 
