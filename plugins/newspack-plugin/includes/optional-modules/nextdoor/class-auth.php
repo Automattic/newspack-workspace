@@ -123,11 +123,16 @@ class Auth {
 		$token_data = json_decode( $body, true );
 
 		// Update stored settings with new token.
-		$settings                     = Nextdoor::get_settings();
-		$settings['access_token']     = $token_data['access_token'];
-		$settings['token_expires_at'] = time() + $token_data['expires_in'];
+		// Read the raw option (not Nextdoor::get_settings()) so centralized credentials
+		// injected from env/constants are not written back to the database.
+		$saved = get_option( Nextdoor::SETTINGS_SLUG, [] );
+		if ( ! is_array( $saved ) ) {
+			$saved = [];
+		}
+		$saved['access_token']     = $token_data['access_token'];
+		$saved['token_expires_at'] = time() + $token_data['expires_in'];
 
-		Nextdoor::update_settings( $settings );
+		Nextdoor::update_settings( $saved );
 
 		return $token_data;
 	}
@@ -208,10 +213,16 @@ class Auth {
 			exit;
 		}
 
-		$settings['access_token']     = $token_response['access_token'];
-		$settings['token_expires_at'] = time() + $token_response['expires_in'];
+		// Read the raw option (not Nextdoor::get_settings()) so centralized credentials
+		// injected from env/constants are not written back to the database.
+		$saved = get_option( Nextdoor::SETTINGS_SLUG, [] );
+		if ( ! is_array( $saved ) ) {
+			$saved = [];
+		}
+		$saved['access_token']     = $token_response['access_token'];
+		$saved['token_expires_at'] = time() + $token_response['expires_in'];
 
-		Nextdoor::update_settings( $settings );
+		Nextdoor::update_settings( $saved );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=newspack-settings&oauth_success=1#social' ) );
 		exit;
