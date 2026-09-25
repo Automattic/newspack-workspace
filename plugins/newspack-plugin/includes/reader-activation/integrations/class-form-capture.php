@@ -6,11 +6,12 @@
  * "Register readers" toggle on the Gravity Forms block: the block attribute
  * is carried to the page as the newspack-form-capture class on the form
  * tag, which the capture script matches. While Gravity Forms is active, any
- * other form can opt in the same way, through the class directly or through
- * the CSS selectors listed under the integration's Advanced options. A form's
+ * other form can opt in the same way by carrying the class itself. A form's
  * CSS Class Name setting applies to every placement of that form, whatever
- * each block's toggle says. Capture-only: neither a sync destination nor a
- * pull source (see supports_push()/supports_pull()).
+ * each block's toggle says. CSS selectors, the route the class replaced, still
+ * opt forms in on sites that saved some (see register_settings_fields()).
+ * Capture-only: neither a sync destination nor a pull source (see
+ * supports_push()/supports_pull()).
  *
  * Capture semantics publishers must understand before opting a form in:
  * - Capture fires on the browser's submit event (native validity checked)
@@ -122,9 +123,11 @@ class Form_Capture extends Integration {
 	/**
 	 * Register settings fields.
 	 *
-	 * The selectors field is the advanced route: the block toggle is the way
-	 * in, and the configure view files anything flagged `advanced` under its
-	 * own section after the how-to guide.
+	 * Form selectors are deprecated in favor of the marker class, which the
+	 * guide's note explains. Saved selectors still opt forms in (see
+	 * get_selectors()), and the field is flagged `deprecated` so the settings
+	 * page shows it only while a value is saved: a site that relies on it can
+	 * see and clear it, and no site can start using it.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
@@ -134,19 +137,20 @@ class Form_Capture extends Integration {
 				'key'         => 'selectors',
 				'type'        => 'textarea',
 				'label'       => __( 'Form selectors', 'newspack-plugin' ),
-				'description' => __( 'Capture forms placed without the block. Any form with the newspack-form-capture CSS class is captured: for a Gravity Forms shortcode or widget, add the class in the form\'s CSS Class Name setting. That setting belongs to the form, not the placement, so every placement of the form then registers readers, including blocks with Register readers switched off. To capture forms built with other tools, list CSS selectors here, one per line. Selectors that name only element types (like "form") are ignored, since they would opt in every form on the site. The same rule applies as for the block switch: only opt in forms whose submissions should always create a reader account. Captures are rate-limited per visitor IP (100 per hour by default).', 'newspack-plugin' ),
+				'description' => __( 'Deprecated. Forms that match these CSS selectors still register readers. Add the newspack-form-capture class to those forms instead, as described under How it works, then clear this list. Once it is saved empty, this setting goes away.', 'newspack-plugin' ),
 				'default'     => '',
-				'advanced'    => true,
+				'deprecated'  => true,
 			],
 		];
 	}
 
 	/**
-	 * The how-to steps shown at the top of the settings page. The toggle
-	 * lives in the block editor, so this page has to say where to look and
-	 * what opting a form in commits the publisher to.
+	 * The how-to shown at the top of the settings page. The toggle lives in
+	 * the block editor, so this page has to say where to look and what opting
+	 * a form in commits the publisher to. The note covers forms placed any
+	 * other way, which opt in through the marker class.
 	 *
-	 * @return array List of associative arrays with keys `title` and `description`.
+	 * @return array List of associative arrays with keys `title`, `description`, and an optional `note`.
 	 */
 	public function get_guide() {
 		return [
@@ -161,6 +165,11 @@ class Form_Capture extends Integration {
 			[
 				'title'       => __( 'Submissions register readers', 'newspack-plugin' ),
 				'description' => __( 'Each submission registers a reader account with the submitted email address and name, or updates the existing reader without emailing a login link. Only turn this on for forms whose submissions should always create a reader account: registration happens as the form is submitted, so a submission Gravity Forms later rejects has still registered the reader. Never turn it on for a form that collects someone else\'s email address.', 'newspack-plugin' ),
+			],
+			[
+				'title'       => __( 'Forms placed without the block', 'newspack-plugin' ),
+				'description' => __( 'Any form with the newspack-form-capture CSS class also registers readers. For a Gravity Forms shortcode or widget, add the class in the form\'s CSS Class Name setting. That setting belongs to the form, not the placement, so every placement of the form then registers readers, including blocks with Register readers switched off. For a form built with another tool, add the class to the form itself, or to a block that contains it through the block\'s Additional CSS class(es) setting. As with the block switch, only add it to forms whose submissions should always create a reader account.', 'newspack-plugin' ),
+				'note'        => true,
 			],
 		];
 	}

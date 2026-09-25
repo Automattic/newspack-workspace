@@ -178,26 +178,29 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The settings page leads with a how-to guide: the steps travel in the
-	 * integrations payload under the Gravity Forms name, and the selectors
-	 * field is flagged advanced so the UI files it under Advanced options
-	 * instead of presenting it as the way in.
+	 * The settings page leads with a how-to guide: numbered steps for the
+	 * block, then a note on the marker class for forms placed any other way.
+	 * Form selectors, the route the class replaced, travel flagged deprecated,
+	 * so the UI shows them only to a site that still has some saved.
 	 */
-	public function test_guide_and_advanced_selectors_in_payload() {
+	public function test_guide_and_deprecated_selectors_in_payload() {
 		$integration = Integrations::get_integration( Form_Capture::ID );
 		$guide       = $integration->get_guide();
-		$this->assertCount( 3, $guide );
-		foreach ( $guide as $step ) {
-			$this->assertNotEmpty( $step['title'] );
-			$this->assertNotEmpty( $step['description'] );
+		foreach ( $guide as $item ) {
+			$this->assertNotEmpty( $item['title'] );
+			$this->assertNotEmpty( $item['description'] );
 		}
+		$notes = array_values( array_filter( $guide, fn( $item ) => ! empty( $item['note'] ) ) );
+		$this->assertCount( 1, $notes, 'The class route is a note, not a numbered step.' );
+		$this->assertStringContainsString( Form_Capture::MARKER_CLASS, $notes[0]['description'] );
+		$this->assertCount( 3, array_filter( $guide, fn( $item ) => empty( $item['note'] ) ), 'The block route keeps its three steps.' );
 
 		$payload = Integrations::get_all_integration_settings()[ Form_Capture::ID ];
 		$this->assertSame( 'Gravity Forms', $payload['name'] );
 		$this->assertSame( $guide, $payload['guide'] );
 		$selectors = array_values( array_filter( $payload['settings'], fn( $field ) => 'selectors' === $field['key'] ) );
 		$this->assertCount( 1, $selectors );
-		$this->assertTrue( $selectors[0]['advanced'] );
+		$this->assertTrue( $selectors[0]['deprecated'] );
 	}
 
 	/**

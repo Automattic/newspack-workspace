@@ -234,55 +234,48 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	// out of the generic Settings group so they render inside their section, and
 	// the push-pipeline settings (metadata prefix, account-deletion sync) render
 	// inside the Outbound section they act on.
-	const { settingsFields, outboundSettingsFields, advancedFields, inboundField, outboundField, inboundToggleField, outboundToggleField } =
-		useMemo( () => {
-			const empty = {
-				settingsFields: [],
-				outboundSettingsFields: [],
-				advancedFields: [],
-				inboundField: null,
-				outboundField: null,
-				inboundToggleField: null,
-				outboundToggleField: null,
-			};
-			if ( ! integration?.settings ) {
-				return empty;
+	const { settingsFields, outboundSettingsFields, inboundField, outboundField, inboundToggleField, outboundToggleField } = useMemo( () => {
+		const empty = {
+			settingsFields: [],
+			outboundSettingsFields: [],
+			inboundField: null,
+			outboundField: null,
+			inboundToggleField: null,
+			outboundToggleField: null,
+		};
+		if ( ! integration?.settings ) {
+			return empty;
+		}
+		const groups = { ...empty, settingsFields: [], outboundSettingsFields: [] };
+		for ( const field of integration.settings ) {
+			if ( field.key === 'incoming_metadata_fields' ) {
+				groups.inboundField = field;
+			} else if ( field.key === 'outgoing_metadata_fields' ) {
+				groups.outboundField = field;
+			} else if ( field.key === 'incoming_sync_enabled' ) {
+				groups.inboundToggleField = field;
+			} else if ( field.key === 'outgoing_sync_enabled' ) {
+				groups.outboundToggleField = field;
+			} else if ( OUTBOUND_SETTINGS_KEYS.includes( field.key ) ) {
+				groups.outboundSettingsFields.push( field );
+			} else {
+				groups.settingsFields.push( field );
 			}
-			const groups = { ...empty, settingsFields: [], outboundSettingsFields: [], advancedFields: [] };
-			for ( const field of integration.settings ) {
-				if ( field.key === 'incoming_metadata_fields' ) {
-					groups.inboundField = field;
-				} else if ( field.key === 'outgoing_metadata_fields' ) {
-					groups.outboundField = field;
-				} else if ( field.key === 'incoming_sync_enabled' ) {
-					groups.inboundToggleField = field;
-				} else if ( field.key === 'outgoing_sync_enabled' ) {
-					groups.outboundToggleField = field;
-				} else if ( OUTBOUND_SETTINGS_KEYS.includes( field.key ) ) {
-					groups.outboundSettingsFields.push( field );
-				} else if ( field.advanced ) {
-					// The advanced route to a feature whose way in is elsewhere (a
-					// block toggle, say): shown last, under its own heading, so it
-					// never reads as the setting to fill in first.
-					groups.advancedFields.push( field );
-				} else {
-					groups.settingsFields.push( field );
-				}
-			}
-			// A toggle renders only inside its direction section; when the section
-			// has no other content there is no section at all, so fall the toggle
-			// through to the generic Settings group instead of shipping a field the
-			// view can neither display nor edit.
-			if ( groups.inboundToggleField && ! groups.inboundField ) {
-				groups.settingsFields.push( groups.inboundToggleField );
-				groups.inboundToggleField = null;
-			}
-			if ( groups.outboundToggleField && ! groups.outboundField && ! groups.outboundSettingsFields.length ) {
-				groups.settingsFields.push( groups.outboundToggleField );
-				groups.outboundToggleField = null;
-			}
-			return groups;
-		}, [ integration?.settings ] );
+		}
+		// A toggle renders only inside its direction section; when the section
+		// has no other content there is no section at all, so fall the toggle
+		// through to the generic Settings group instead of shipping a field the
+		// view can neither display nor edit.
+		if ( groups.inboundToggleField && ! groups.inboundField ) {
+			groups.settingsFields.push( groups.inboundToggleField );
+			groups.inboundToggleField = null;
+		}
+		if ( groups.outboundToggleField && ! groups.outboundField && ! groups.outboundSettingsFields.length ) {
+			groups.settingsFields.push( groups.outboundToggleField );
+			groups.outboundToggleField = null;
+		}
+		return groups;
+	}, [ integration?.settings ] );
 
 	// Save submits the draft plus, when it needs repair, a reconciled inbound
 	// operator map (see reconcileOperators). Read through a ref for the same reason
@@ -450,10 +443,13 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 
 	const visibleSettingsFields = settingsFields.filter( fieldIsRendered );
 	const visibleOutboundSettingsFields = outboundSettingsFields.filter( fieldIsRendered );
-	const visibleAdvancedFields = advancedFields.filter( fieldIsRendered );
 	// Guide steps come from the integration (see Integration::get_guide()); an
 	// integration whose way in is a workflow elsewhere describes it here first.
+	// Notes describe another way in rather than a step, so they follow the
+	// numbered steps without a number.
 	const guide = Array.isArray( integration.guide ) ? integration.guide : [];
+	const guideSteps = guide.filter( item => ! item.note );
+	const guideNotes = guide.filter( item => item.note );
 	const inboundOptions = inboundField?.options || [];
 	const outboundGroups = outboundField?.grouped_options || [];
 
@@ -482,14 +478,24 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				{ guide.length > 0 && (
 					<Grid columns={ 2 } gutter={ 32 }>
 						<SectionHeader heading={ 2 } title={ __( 'How it works', 'newspack-plugin' ) } />
-						<ol className="newspack-configure-view__guide">
-							{ guide.map( ( step, index ) => (
-								<li key={ index }>
-									<strong>{ step.title }</strong>
-									<p>{ step.description }</p>
-								</li>
+						<div className="newspack-configure-view__guide">
+							{ /* `list-style: none` drops list semantics in Safari, so the role is restated. */ }
+							{ /* eslint-disable-next-line jsx-a11y/no-redundant-roles */ }
+							<ol className="newspack-configure-view__guide-steps" role="list">
+								{ guideSteps.map( ( step, index ) => (
+									<li key={ index }>
+										<h3>{ step.title }</h3>
+										<p>{ step.description }</p>
+									</li>
+								) ) }
+							</ol>
+							{ guideNotes.map( ( note, index ) => (
+								<div className="newspack-configure-view__guide-note" key={ index }>
+									<h3>{ note.title }</h3>
+									<p>{ note.description }</p>
+								</div>
 							) ) }
-						</ol>
+						</div>
 					</Grid>
 				) }
 
@@ -653,26 +659,6 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 										} ) }
 									</CollapsibleGroup>
 								) }
-							</Stack>
-						</Grid>
-					</>
-				) }
-
-				{ /* Section 4: Advanced options */ }
-				{ visibleAdvancedFields.length > 0 && (
-					<>
-						<Divider alignment="full-width" variant="tertiary" />
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader heading={ 2 } title={ __( 'Advanced options', 'newspack-plugin' ) } noMargin />
-							<Stack direction="column" gap="xl">
-								{ visibleAdvancedFields.map( field => (
-									<SettingsField
-										key={ field.key }
-										field={ field }
-										value={ getFieldValue( field ) }
-										onChange={ val => handleFieldChange( field.key, val ) }
-									/>
-								) ) }
 							</Stack>
 						</Grid>
 					</>

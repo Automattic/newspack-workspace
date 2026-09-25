@@ -82,6 +82,13 @@ describe( 'settingsFieldRenders', () => {
 		expect( settingsFieldRenders( { type: 'select', value: 'stored', options: [] } ) ).toBe( true );
 	} );
 
+	// A site can still see and clear a deprecated setting it relies on, but a
+	// site without a value never meets it.
+	it( 'reports output for a deprecated field only while it holds a saved value', () => {
+		expect( settingsFieldRenders( { type: 'textarea', deprecated: true, value: '' } ) ).toBe( false );
+		expect( settingsFieldRenders( { type: 'textarea', deprecated: true, value: '.signup-form' } ) ).toBe( true );
+	} );
+
 	it( 'reports output for every other field type', () => {
 		[ 'text', 'password', 'number', 'textarea', 'checkbox', 'oauth' ].forEach( type => {
 			expect( settingsFieldRenders( { type } ) ).toBe( true );

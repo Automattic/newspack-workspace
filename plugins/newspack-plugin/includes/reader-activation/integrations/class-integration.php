@@ -272,10 +272,11 @@ abstract class Integration {
 	 *
 	 * Child classes override this when the way in is a workflow elsewhere in
 	 * the admin, such as a setting on a block, so the settings page has to say
-	 * where to look. Each step carries a `title` and a `description`. The
-	 * default is no guide.
+	 * where to look. Each item carries a `title` and a `description`. An item
+	 * flagged `note` is not a step, such as another way in, and renders after
+	 * the numbered steps without a number. The default is no guide.
 	 *
-	 * @return array List of associative arrays with keys `title` and `description`.
+	 * @return array List of associative arrays with keys `title`, `description`, and an optional `note`.
 	 */
 	public function get_guide() {
 		return [];
