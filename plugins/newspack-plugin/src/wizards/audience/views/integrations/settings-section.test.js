@@ -277,7 +277,7 @@ describe( 'Audience Integrations settings section card action', () => {
 		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( id );
 	} );
 
-	it( 'renders the Gravity Forms mark for Inbound Form Capture', () => {
+	it( 'renders the Gravity Forms mark for the Gravity Forms integration', () => {
 		render(
 			<SettingsSection
 				integrations={ { 'form-capture': { ...baseIntegration, id: 'form-capture', provider: null } } }
@@ -296,7 +296,7 @@ describe( 'sortIntegrationIds', () => {
 	it( 'orders integrations by name, ignoring case and registration order', () => {
 		const integrations = {
 			esp: { name: 'Mailchimp' },
-			'form-capture': { name: 'Inbound Form Capture' },
+			'form-capture': { name: 'Gravity Forms' },
 			salesforce: { name: 'Salesforce' },
 			activecampaign: { name: 'ActiveCampaign' },
 			beehiiv: { name: 'beehiiv' },

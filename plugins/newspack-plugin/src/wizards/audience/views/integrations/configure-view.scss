@@ -26,6 +26,21 @@
 		margin: 0;
 		width: 200px;
 	}
+
+	// Numbered how-to steps: the title carries the step, the description
+	// sits under it in the same item.
+	&__guide {
+		margin: 0;
+		padding-left: 1.25em;
+
+		li + li {
+			margin-top: 16px;
+		}
+
+		p {
+			margin: 4px 0 0;
+		}
+	}
 }
 
 .newspack-outbound-field-row {
