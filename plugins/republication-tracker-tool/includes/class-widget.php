@@ -94,8 +94,11 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 		}
 
 		if ( ! empty( $instance['layout'] ) && 'page' === $instance['layout'] ) {
+			// Carry the destination in a data attribute rather than an inline handler:
+			// esc_url() escapes for an HTML attribute, not for the JavaScript string
+			// literal an onclick would place it in. widget.js reads this and navigates.
 			printf(
-				'<p><button name="%1$s" id="cc-btn" class="republication-tracker-tool-button page" onclick="window.location.href=\'%2$s\'" role="link">%1$s</button></p>',
+				'<p><button name="%1$s" id="cc-btn" class="republication-tracker-tool-button page" data-republish-url="%2$s" role="link">%1$s</button></p>',
 				esc_html__( 'Republish This Story', 'republication-tracker-tool' ),
 				esc_url( '/republish' . ( isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '' ) )
 			);

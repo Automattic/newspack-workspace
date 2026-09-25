@@ -164,4 +164,84 @@ class WidgetTest extends WP_UnitTestCase {
 		$this->assertEquals( 1, substr_count( $output, 'id="republication-tracker-tool-modal"' ), 'Single modal found in output.' );
 		$this->assertEquals( 3, substr_count( $output, 'republication-tracker-tool-button' ), 'Multiple buttons found in output.' );
 	}
+
+	/**
+	 * The page layout carries its destination in a data attribute that widget.js reads,
+	 * not in an inline handler. esc_url() escapes for an HTML attribute, not for the
+	 * JavaScript string literal an onclick would place the request path into, so the
+	 * attribute form is the one that stays correct for any request path.
+	 */
+	public function test_page_layout_button_uses_data_attribute_not_inline_handler() {
+		global $post, $wp_query;
+		$post                        = $this->test_post;
+		$wp_query->is_single         = true;
+		$wp_query->queried_object    = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+
+		$args = array(
+			'before_widget' => '<div class="widget">',
+			'after_widget'  => '</div>',
+			'before_title'  => '<h2>',
+			'after_title'   => '</h2>',
+		);
+
+		ob_start();
+		$this->widget->widget(
+			$args,
+			array(
+				'layout' => 'page',
+				'title'  => 'Republish This Story',
+				'text'   => 'Test widget text',
+			) 
+		);
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'republication-tracker-tool-button page', $output );
+		$this->assertStringContainsString( 'data-republish-url=', $output );
+		$this->assertStringNotContainsString( 'onclick', $output );
+	}
+
+	/**
+	 * A metacharacter in the request path comes out encoded in the data attribute, so it
+	 * stays inert data. The input is an apostrophe, an ordinary character in real request
+	 * paths, which esc_url() renders as the entity &#039; rather than a bare quote.
+	 */
+	public function test_page_layout_button_encodes_request_path_metacharacters() {
+		global $post, $wp_query;
+		$post                        = $this->test_post;
+		$wp_query->is_single         = true;
+		$wp_query->queried_object    = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+
+		$args = array(
+			'before_widget' => '<div class="widget">',
+			'after_widget'  => '</div>',
+			'before_title'  => '<h2>',
+			'after_title'   => '</h2>',
+		);
+
+		$original_request_uri   = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : null;
+		$_SERVER['REQUEST_URI'] = '/2026/09/sample-story/?ref=o\'brien';
+
+		ob_start();
+		$this->widget->widget(
+			$args,
+			array(
+				'layout' => 'page',
+				'title'  => 'Republish This Story',
+				'text'   => 'Test widget text',
+			) 
+		);
+		$output = ob_get_clean();
+
+		if ( null === $original_request_uri ) {
+			unset( $_SERVER['REQUEST_URI'] );
+		} else {
+			$_SERVER['REQUEST_URI'] = $original_request_uri;
+		}
+
+		$this->assertStringContainsString( 'o&#039;brien', $output );
+		$this->assertStringNotContainsString( 'o\'brien', $output );
+		$this->assertStringNotContainsString( 'onclick', $output );
+	}
 }
