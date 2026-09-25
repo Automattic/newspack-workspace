@@ -26,6 +26,7 @@ The framework is built on top of [Data Events](../../data-events/README.md) and 
 | `class-date-value.php` | Date value helpers shared by the pull pipeline and the access-rule evaluator: source-format normalization to ISO and calendar-date validation. |
 | `class-contact-pull.php` | Pull pipeline. Per-integration synchronous loopback requests plus ActionScheduler-backed retries with exponential backoff. |
 | `class-contact-cron.php` | Recurring cron orchestration. Stages users for pull/push and processes both queues every 5 minutes. |
+| `class-push-log.php` | Push log. The record of what was sent to each integration: one row per reader, integration and triggering push, written by `Contact_Sync`. |
 
 The registry class is `Newspack\Reader_Activation\Integrations` (parent namespace). Classes under this folder live in `Newspack\Reader_Activation\Integrations\*`.
 
@@ -307,7 +308,7 @@ The abstract signature intentionally stays three-parameter (`push_contact_data( 
 
 ### Retries
 
-Failed pushes are scheduled for retry by the upstream `Contact_Sync` class with exponential backoff via ActionScheduler. Each integration's retries are grouped under `newspack-integration-{id}` so they can be inspected and managed independently in the Activity Logs UI. Retries go through `push_contact()` too, so every attempt leaves its own `newspack_sync_push_contact` entry.
+Failed pushes are scheduled for retry by the upstream `Contact_Sync` class with exponential backoff via ActionScheduler. Each integration's retries are grouped under `newspack-integration-{id}` so they can be inspected and managed independently in the Activity Logs UI. A retry chain is a single row in the [Push Log](#push-log). Retries go through `push_contact()` too, so every attempt leaves its own `newspack_sync_push_contact` entry.
 
 ---
 
@@ -470,6 +471,37 @@ Integrations::count_scheduled_actions( [ 'integration_id' => 'esp' ] );
 ```
 
 An empty `integration_id` queries every group registered by the framework.
+
+---
+
+## Push Log
+
+`Push_Log` records every outbound operation `Contact_Sync` performs against an integration — contact upserts, deletion flags and hard deletes — in the `{prefix}newspack_integrations_push_log` table. It answers "what did we send this reader's CRM record, when, and did it arrive?", which ActionScheduler cannot: most pushes are not actions of their own, retry args carry a user ID rather than an email, and an intermediate retry completes normally while the sync is still failing.
+
+Integrations do not write to it. `Contact_Sync` does, because only it knows which attempt of a chain a push was, whether another follows, and when a chain gives up. Pulls, dry runs and pushes that never ran (sync disabled, outbound paused) are not recorded.
+
+### What a row is
+
+One reader, one integration, one triggering push. A fan-out to three integrations writes three rows.
+
+- **Retries update the row.** The row ID rides in the retry's ActionScheduler args as `log_id`. `attempts` counts pushes made so far; `max_attempts` is the ceiling when the row was written (`MAX_RETRIES + 1`, or 1 when nothing will retry: a CLI push scoped with `--skip-lists`/`--fields`, or a contact with no account to rebuild from). It is a ceiling, not a promise: a permanent or benign result ends a row on its first attempt. Read `status` to know whether another attempt is coming.
+- **`status` describes the sync, not an action**: `success`, `retrying` or `failed`. An error row is written as `failed` and becomes `retrying` only when a retry is actually scheduled: if Action Scheduler stores nothing, the row stays `failed`. A retry that gives up before pushing ends the row as `failed` with `error_code = retry_aborted`. A benign result is a `success` that keeps `error_class = benign`.
+- **`payload`** is the prepared contact as handed to the integration: as close to the wire as the framework sees. An integration may still reshape it internally. Hard deletes have none. On an email change it also carries `previous_email`, the address the contact was matched on: that is log context, not data sent. Because it is part of the payload, the first routine push after an email change adds a row of its own rather than collapsing, which leaves the email-change row intact as the record of the change.
+- **Identical pushes collapse.** A clean successful first-attempt upsert whose payload matches the reader's latest row for that integration bumps `repeat_count` and `updated_at` on that row instead of adding one, so the recurring sync does not grow the table. The comparison ignores key order and volatile fields (`Last Active` by default; filter `newspack_integrations_push_log_volatile_fields`, whose names are field names as sent to the integration, without its prefix). Deletion rows never collapse.
+- **Flag-mode deletion is two steps.** When the flag push lands but `flag_deletion_cleanup()` fails, the row ends as `failed` with `error_code = flag_cleanup_failed`: the deleted reader is still on the lists. The same holds when the push came back benign (the contact was already deleted at the integration): no retry follows a benign result, so the failed cleanup is the only record that a list still holds the reader.
+- **Error fields are never cleared**, so a row that succeeds on a later attempt still says what the earlier ones hit.
+
+### Retention and privacy
+
+The hourly `newspack_integrations_push_log_cleanup` cron deletes `success` rows 30 days after their last update and `failed` or `retrying` rows after 90, in batches of 1,000. Each run stops after 5 batches that deleted rows (looking at an integration with nothing to prune does not count). A run that stops there with expired rows still left logs `newspack_integrations_push_log_cleanup_capped`, so a backlog that outgrows the cron is visible; the rest goes on the next run. Tune the windows with `newspack_integrations_push_log_retention_days`; add the hook name to `NEWSPACK_CRON_DISABLE` to turn the cron off. A collapsed row keeps refreshing `updated_at`, so an active reader whose data has not changed holds one live row per integration.
+
+Rows hold reader emails and pushed field values. A personal-data eraser (`newspack-integrations-push-log`) deletes a reader's rows by email and by account, so rows under a previous address go too. The account comes from the WP user the address resolves to and from the rows stored under that address, so a request that arrives after the account was deleted still reaches them. Guest and deletion rows name no account (`user_id` 0) and are matched by email alone.
+
+Writing the log never breaks a sync: a database failure returns 0 to the caller and is reported once per request as `newspack_integrations_push_log_write_failed`. Statements that carry reader data run with `$wpdb` error output suppressed, because a failed statement would otherwise reach the PHP error log whole, email and payload included; that report is the signal instead.
+
+### Changing the schema
+
+Edit the `CREATE TABLE` in `Push_Log::maybe_create_table()` and bump `TABLE_VERSION`. The stored version no longer matches, so `dbDelta` runs on the next request and applies the change; the version is recorded only once the table is really there, so a failed run is retried rather than leaving every write to fail. The retry is hourly, not per request, for a host that keeps refusing the table. A table that disappears after its version was recorded (a restore, a manual drop) is created again: the first failed write finds it gone and forgets the version.
 
 ---
 
