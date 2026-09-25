@@ -27,7 +27,7 @@ import { useWizardData } from '../../../../../../packages/components/src/wizard/
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
-import { getMeteringDescription, hasOwnMeter, hasSharedMeteredPath, isGateMetered, sharesTheSiteMeter } from '../utils';
+import { getMeteringDescription, hasOwnMeter, hasSharedMeteredPath, sharesTheSiteMeter } from '../utils';
 import CountdownBanner from './countdown-banner';
 
 const DEFAULT_SITE_METER: SiteMeterConfig = {
@@ -67,7 +67,11 @@ const MeteringSettings = () => {
 
 	const gates = wizardData?.gates || [];
 	const gatesWithOwnMeter = gates.filter( hasOwnMeter );
-	const hasMetering = gates.some( gate => gate.status === 'publish' && isGateMetered( gate, siteMeter ) );
+	// Whether any gate, active or draft, switches metering on, not whether it counts: a 0/0 allowance
+	// must keep the form reachable so it can be raised again, and a draft gate needs the allowance it will use.
+	const hasMetering = gates.some( gate =>
+		[ gate.registration, gate.custom_access ].some( section => section?.active && section.metering?.enabled )
+	);
 	// Layout wording is written once at creation and never rewritten from here. Judged
 	// per path: a gate with one path pinned and one sharing still quotes the shared number.
 	const gatesQuotingTheAllowance = gates.filter( gate => hasSharedMeteredPath( gate, savedSiteMeter ) );

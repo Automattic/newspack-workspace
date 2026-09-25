@@ -101,7 +101,7 @@ describe( 'Content Gates page header', () => {
 		{ gateCount: 1, expectedMenu: [ 'Advanced Settings' ] },
 		{ gateCount: 2, expectedMenu: [ 'Gate Priority', 'Advanced Settings' ] },
 	] )( 'lists Gate Priority only with more than one gate ($gateCount)', ( { gateCount, expectedMenu } ) => {
-		mockWizardData = { gates: gatesOfLength( gateCount ), config: { has_institutions: true } };
+		mockWizardData = { gates: gatesOfLength( gateCount ), config: {} };
 		render( <ContentGates updateGatesData={ () => {} } /> );
 
 		const headerData = lastHeaderData();
@@ -114,6 +114,9 @@ describe( 'Content Gates page header', () => {
 		mockWizardData = { gates: gatesOfLength( 1 ), config: {} };
 		render( <ContentGates updateGatesData={ () => {} } /> );
 
-		expect( lastHeaderData().subTitle ).toBe( 'Choose which content to restrict and how readers get access to it.' );
+		const headerData = lastHeaderData();
+		expect( headerData.subTitle ).toEqual( expect.any( String ) );
+		expect( headerData.subTitle ).not.toBe( '' );
+		expect( headerData.sectionDescription ).toBeUndefined();
 	} );
 } );

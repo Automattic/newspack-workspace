@@ -16,7 +16,7 @@ import { forwardRef } from '@wordpress/element';
  */
 import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { redirectWithoutAudienceManagement, requireAudienceManagement } from '../../components/audience-management-required';
+import { hasAudienceManagement, redirectWithoutAudienceManagement, requireAudienceManagement } from '../../components/audience-management-required';
 import ContentGates from './content-gates';
 import Edit from './edit';
 import MeteringSettings from './edit/metering-settings';
@@ -47,6 +47,8 @@ const GuardedInstitutions = redirectWithoutAudienceManagement( Institutions, GAT
 const GuardedInstitutionEdit = redirectWithoutAudienceManagement( InstitutionEdit, GATES_ROUTE, getConfig );
 
 const AudienceContentGates = ( props, ref ) => {
+	// Without Audience Management these tabs only redirect back to Content Gates, so they are not offered.
+	const withoutAudienceManagement = ! hasAudienceManagement( getConfig() );
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const updateGatesData = gates => {
 		updateWizardSettings( {
@@ -72,6 +74,7 @@ const AudienceContentGates = ( props, ref ) => {
 				},
 				{
 					path: '/settings/metering',
+					isHidden: withoutAudienceManagement,
 					label: __( 'Metering', 'newspack-plugin' ),
 					render: GuardedMeteringSettings,
 					exact: true,
@@ -79,6 +82,7 @@ const AudienceContentGates = ( props, ref ) => {
 				},
 				{
 					path: '/institutions',
+					isHidden: withoutAudienceManagement,
 					label: __( 'Institutions', 'newspack-plugin' ),
 					render: GuardedInstitutions,
 					exact: true,
@@ -87,6 +91,7 @@ const AudienceContentGates = ( props, ref ) => {
 				},
 				{
 					path: '/settings/content-gifting',
+					isHidden: withoutAudienceManagement,
 					label: __( 'Content Gifting', 'newspack-plugin' ),
 					render: GuardedContentGifting,
 					exact: true,

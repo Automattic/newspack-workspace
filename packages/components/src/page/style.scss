@@ -61,11 +61,6 @@
 	flex-shrink: 0;
 }
 
-.newspack-page__header-badges {
-	flex-shrink: 0;
-	white-space: nowrap;
-}
-
 .newspack-page__header-subtitle {
 	/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
 	color: var(--wpds-color-foreground-content-neutral-weak);

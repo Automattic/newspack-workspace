@@ -1,5 +1,5 @@
 /**
- * The institutions list.
+ * Deleting an institution drops the fetched option list the gate pickers name institutions from.
  */
 
 /**

@@ -1,7 +1,8 @@
 /**
  * WordPress dependencies
  */
-import { Badge, Tooltip, VisuallyHidden } from '@wordpress/ui';
+import { useInstanceId } from '@wordpress/compose';
+import { Badge, Tooltip } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -16,17 +17,24 @@ type TooltipBadgeProps = {
 
 /**
  * A badge whose tooltip explains it. The tooltip serves mouse and keyboard users;
- * its text is also inside the badge, visually hidden, so screen readers get it
- * without opening the tooltip.
+ * screen readers get the same text as the trigger's description, which keeps it
+ * out of the accessible name of a heading the badge sits in.
  */
-const TooltipBadge = ( { label, tooltip, intent = 'none' }: TooltipBadgeProps ) => (
-	<Tooltip.Root>
-		<Tooltip.Trigger render={ <Badge intent={ intent } tabIndex={ 0 } /> }>
-			{ label }
-			<VisuallyHidden>{ `: ${ tooltip }` }</VisuallyHidden>
-		</Tooltip.Trigger>
-		<Tooltip.Popup>{ tooltip }</Tooltip.Popup>
-	</Tooltip.Root>
-);
+const TooltipBadge = ( { label, tooltip, intent = 'none' }: TooltipBadgeProps ) => {
+	const descriptionId = useInstanceId( TooltipBadge, 'newspack-tooltip-badge' );
+	return (
+		<>
+			<Tooltip.Root>
+				<Tooltip.Trigger render={ <span tabIndex={ 0 } aria-describedby={ descriptionId } /> }>
+					<Badge intent={ intent }>{ label }</Badge>
+				</Tooltip.Trigger>
+				<Tooltip.Popup>{ tooltip }</Tooltip.Popup>
+			</Tooltip.Root>
+			<span id={ descriptionId } hidden>
+				{ tooltip }
+			</span>
+		</>
+	);
+};
 
 export default TooltipBadge;

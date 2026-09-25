@@ -117,7 +117,17 @@ const WizardHeaderRegion = ( {
 	children,
 } ) => {
 	const { pathname } = useLocation();
-	const tabbedNavigation = activeSection( sections, pathname )?.hideTabbedNavigation ? null : sectionsTabbedNavigation;
+	const hidesTabs = activeSection( sections, pathname )?.hideTabbedNavigation;
+	const tabbedNavigation = hidesTabs ? null : sectionsTabbedNavigation;
+	// WizardError normally mounts inside the tab bar, so a route without one renders it itself.
+	if ( hidesTabs && sectionsTabbedNavigation ) {
+		children = (
+			<>
+				<WizardError />
+				{ children }
+			</>
+		);
+	}
 
 	if ( hideHeader ) {
 		// Without the Page shell the tabs still own the content: it renders

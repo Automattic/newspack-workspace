@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, _x } from '@wordpress/i18n';
 import {
 	ToggleControl,
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -25,8 +25,8 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
-// Modes and their labels come from PHP, where the same list backs the REST
-// schema's enum and the storage sanitizer.
+// Modes come from PHP, where the same list backs the REST schema's enum and the
+// storage sanitizer. Its labels are a fallback for a mode this screen has no short label for.
 const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
 // Truthy check because wp_localize_script() delivers this as '1'/'' rather than a boolean.
 const feedsGovernedByMemberships = !! window.newspackAudienceContentGates?.feeds_governed_by_memberships;
@@ -34,19 +34,23 @@ const feedsGovernedByMemberships = !! window.newspackAudienceContentGates?.feeds
 // Not a stored mode: it stands for `restrict_feeds` being off, so one control covers both settings.
 const FEED_MODE_OFF = 'off';
 
-const getFeedModeLabel = ( mode: string ) =>
-	( {
+const getFeedModeLabel = ( mode: string ): string | undefined => {
+	const labels: Record< string, string > = {
 		[ FEED_MODE_OFF ]: __( 'Full article', 'newspack-plugin' ),
 		truncate: __( 'Teaser only', 'newspack-plugin' ),
-		exclude: __( 'Remove', 'newspack-plugin' ),
-	} )[ mode ];
+		exclude: _x( 'Remove', 'what feeds do with restricted articles', 'newspack-plugin' ),
+	};
+	return labels[ mode ] ?? feedRestrictionModes.find( ( option: { value: string; label: string } ) => option.value === mode )?.label;
+};
 
-const getFeedModeHelp = ( mode: string ) =>
-	( {
-		[ FEED_MODE_OFF ]: __( 'Feeds show restricted articles in full, ignoring your gates.', 'newspack-plugin' ),
+const getFeedModeHelp = ( mode: string ): string | undefined => {
+	const help: Record< string, string > = {
+		[ FEED_MODE_OFF ]: __( 'Feeds show restricted articles in full, ignoring gate restrictions.', 'newspack-plugin' ),
 		truncate: __( 'Feeds keep restricted articles but show only the teaser, the same free preview readers see on the site.', 'newspack-plugin' ),
 		exclude: __( 'Feeds leave restricted articles out.', 'newspack-plugin' ),
-	} )[ mode ];
+	};
+	return help[ mode ];
+};
 
 const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; showModal: boolean } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
@@ -113,7 +117,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	};
 
 	updateConfig.current = handleUpdateConfig;
-	const feedMode = config?.restrict_feeds ? config?.feed_restriction_mode || feedRestrictionModes[ 0 ]?.value : FEED_MODE_OFF;
+	const feedMode: string = ( config?.restrict_feeds && ( config?.feed_restriction_mode || feedRestrictionModes[ 0 ]?.value ) ) || FEED_MODE_OFF;
 	return (
 		showModal && (
 			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
