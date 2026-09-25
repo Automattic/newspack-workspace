@@ -956,6 +956,18 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Helper: fail an integration's health check until its record is broken.
+	 *
+	 * @param string $integration_id Integration ID.
+	 */
+	private function break_integration( $integration_id ) {
+		$payload = $this->make_health_check_payload( $integration_id, [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+	}
+
+	/**
 	 * Failures below the threshold reach the log at warning severity and
 	 * never page.
 	 */
@@ -1316,6 +1328,36 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 
 		$this->assertSame( [ 'esp' ], array_keys( get_option( Alert_Manager::HEALTH_STATE_OPTION ) ) );
 		$this->assertCount( 0, $changed );
+	}
+
+	/**
+	 * A state-change listener that throws must not cancel the page for the
+	 * outage or the log entry for its recovery: the record already holds the
+	 * new state, so no later check would send either.
+	 */
+	public function test_health_changed_listener_that_throws_does_not_cancel_alerts() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$this->capture_alerts( 'integration_health_check_recovered' );
+		$this->capture_alerts( 'integration_health_changed_listener_failed' );
+		add_action(
+			'newspack_integration_health_changed',
+			function () {
+				throw new \RuntimeException( 'Simulated listener failure.' );
+			}
+		);
+
+		$this->break_integration( 'esp' );
+		do_action(
+			'newspack_integration_health_check_passed',
+			[
+				'integration_id'   => 'esp',
+				'integration_name' => 'Mock esp',
+			]
+		);
+
+		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'], 'The outage still pages.' );
+		$this->assertCount( 1, $this->captured['integration_health_check_recovered']['warning'], 'The recovery still reaches the log.' );
+		$this->assertCount( 2, $this->captured['integration_health_changed_listener_failed']['warning'], 'Each failed dispatch reaches the log.' );
 	}
 
 	/**
