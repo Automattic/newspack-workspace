@@ -523,7 +523,11 @@ do_action(
 );
 ```
 
-One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself. To disable the schedule on a specific site, add `'newspack_integration_health_check'` to the `NEWSPACK_CRON_DISABLE` constant array.
+One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself.
+
+While an integration is broken, its contact-sync failures don't page either: retry exhaustion reaches the log at warning severity, and its failures stay out of the failure log the pattern alerts read.
+
+To disable the schedule on a specific site, add `'newspack_integration_health_check'` to the `NEWSPACK_CRON_DISABLE` constant array.
 
 ---
 
