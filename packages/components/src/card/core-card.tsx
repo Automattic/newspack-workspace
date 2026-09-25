@@ -31,6 +31,8 @@ export type CoreCardMenuAction = {
 	icon?: WpIcon;
 	action?: () => void;
 	href?: string;
+	/** Accessible name for the menu item, when the visible label alone is ambiguous. */
+	ariaLabel?: string;
 	disabled?: boolean;
 	destructive?: boolean;
 };
@@ -52,6 +54,8 @@ export type CoreCardHeaderAction = {
 export type CoreCardProps = {
 	/** Dropdown menu actions; a nested array renders as a MenuGroup of sub-actions. */
 	actions?: ( CoreCardMenuAction | CoreCardMenuAction[] )[];
+	/** Accessible name for the actions dropdown menu. */
+	actionsLabel?: string;
 	/** chevron | toggle | button | link | none */
 	actionType?: string | null;
 	as?: keyof JSX.IntrinsicElements;
@@ -103,6 +107,7 @@ export type CoreCardProps = {
 
 const CoreCard = ( {
 	actions,
+	actionsLabel,
 	actionType,
 	as,
 	buttonsCard,
@@ -260,7 +265,7 @@ const CoreCard = ( {
 						/>
 					) }
 					{ hasActions && actions && (
-						<DropdownMenu icon={ moreVertical } label={ __( 'More', 'newspack-plugin' ) }>
+						<DropdownMenu icon={ moreVertical } label={ actionsLabel || __( 'More actions', 'newspack-plugin' ) }>
 							{ () =>
 								actions.map( ( action, index ) => {
 									// Actions can be an array of sub-actions, which are rendered within a MenuGroup.
@@ -275,6 +280,7 @@ const CoreCard = ( {
 															onClick={ subAction.action }
 															// href is only typed on the anchor variant of MenuItem's underlying Button; forwarded via spread.
 															{ ...{ href: subAction.href } }
+															aria-label={ subAction.ariaLabel }
 															disabled={ subAction.disabled || false }
 															isDestructive={ subAction.destructive || false }
 														>
@@ -292,6 +298,7 @@ const CoreCard = ( {
 											onClick={ action.action }
 											// href is only typed on the anchor variant of MenuItem's underlying Button; forwarded via spread.
 											{ ...{ href: action.href } }
+											aria-label={ action.ariaLabel }
 											disabled={ action.disabled || false }
 											isDestructive={ action.destructive || false }
 										>

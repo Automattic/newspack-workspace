@@ -1,7 +1,7 @@
 /**
  * External dependencies.
  */
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies.
@@ -34,6 +34,22 @@ describe( 'CoreCard', () => {
 			<CoreCard header="Settings" actions={ [ { label: 'Delete', action: () => {} } ] } onHeaderClick={ () => {} } />
 		);
 		expect( getHeader( container ).tagName ).not.toBe( 'BUTTON' );
+	} );
+
+	it( 'names the actions menu "More actions" by default', () => {
+		render( <CoreCard header="Settings" actions={ [ { label: 'Delete', action: () => {} } ] } /> );
+		expect( screen.getByRole( 'button', { name: 'More actions' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'names the actions menu with actionsLabel when supplied', () => {
+		render( <CoreCard header="Settings" actions={ [ { label: 'Delete', action: () => {} } ] } actionsLabel="Settings actions" /> );
+		expect( screen.getByRole( 'button', { name: 'Settings actions' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'gives a menu item its ariaLabel as the accessible name', async () => {
+		render( <CoreCard header="Settings" actions={ [ { label: 'Delete', ariaLabel: 'Delete: Settings', action: () => {} } ] } /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'More actions' } ) );
+		expect( await screen.findByRole( 'menuitem', { name: 'Delete: Settings' } ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the header as a non-button when it is also draggable', () => {

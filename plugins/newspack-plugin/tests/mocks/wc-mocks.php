@@ -20,13 +20,24 @@ class WC_Payment_Token {
 	}
 }
 
+/**
+ * Credit-card token mirroring the WC_Payment_Token_CC surface production reads.
+ * Both construction styles the real class allows are supported: the positional
+ * form for fixtures that stage a card inline, and the setter form for tests that
+ * build one up and save() it into the store.
+ */
 class WC_Payment_Token_CC extends WC_Payment_Token {
-	private $card_type;
-	private $last4;
-	private $token;
-	private $user_id;
-	private $expiry_month = '';
-	private $expiry_year  = '';
+	private $data = [
+		'id'           => 0,
+		'token'        => '',
+		'gateway_id'   => '',
+		'card_type'    => '',
+		'last4'        => '',
+		'expiry_month' => '',
+		'expiry_year'  => '',
+		'user_id'      => 0,
+		'default'      => false,
+	];
 	/**
 	 * Number of save() calls, so tests can assert that unchanged tokens are not written.
 	 *
@@ -41,10 +52,26 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	public $throw_on_save = false;
 	public function __construct( $card_type = '', $last4 = '', $token = '', $user_id = 0, $gateway_id = '' ) {
 		parent::__construct( $gateway_id );
-		$this->card_type = $card_type;
-		$this->last4     = $last4;
-		$this->token     = $token;
-		$this->user_id   = $user_id;
+		$this->data['card_type']  = $card_type;
+		$this->data['last4']      = $last4;
+		$this->data['token']      = $token;
+		$this->data['user_id']    = (int) $user_id;
+		$this->data['gateway_id'] = $gateway_id;
+	}
+	public function get_id() {
+		return $this->data['id'];
+	}
+	public function get_token() {
+		return $this->data['token'];
+	}
+	public function set_token( $token ) {
+		$this->data['token'] = $token;
+	}
+	public function get_gateway_id() {
+		return $this->data['gateway_id'];
+	}
+	public function set_gateway_id( $gateway_id ) {
+		$this->data['gateway_id'] = $gateway_id;
 	}
 	/**
 	 * Card brand.
@@ -52,45 +79,82 @@ class WC_Payment_Token_CC extends WC_Payment_Token {
 	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
 	 */
 	public function get_card_type( $context = 'view' ) {
-		return $this->card_type;
+		return $this->data['card_type'];
 	}
 	public function set_card_type( $card_type ) {
-		$this->card_type = $card_type;
-	}
-	public function get_last4( $context = 'view' ) {
-		return $this->last4;
-	}
-	public function set_last4( $last4 ) {
-		$this->last4 = $last4;
-	}
-	public function get_token() {
-		return $this->token;
-	}
-	public function get_user_id() {
-		return $this->user_id;
+		$this->data['card_type'] = $card_type;
 	}
 	/**
-	 * WooCommerce stores the month zero-padded ('02'), so mirror that here.
+	 * Last four digits of the card.
+	 *
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
+	 */
+	public function get_last4( $context = 'view' ) {
+		return $this->data['last4'];
+	}
+	public function set_last4( $last4 ) {
+		$this->data['last4'] = $last4;
+	}
+	/**
+	 * Expiry month.
 	 *
 	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
 	 */
 	public function get_expiry_month( $context = 'view' ) {
-		return $this->expiry_month;
+		return $this->data['expiry_month'];
 	}
+	/**
+	 * WooCommerce stores the month zero-padded ('02'), so mirror that here.
+	 *
+	 * @param string|int $month Expiry month.
+	 */
 	public function set_expiry_month( $month ) {
-		$this->expiry_month = str_pad( (string) $month, 2, '0', STR_PAD_LEFT );
+		$this->data['expiry_month'] = str_pad( (string) $month, 2, '0', STR_PAD_LEFT );
 	}
+	/**
+	 * Expiry year.
+	 *
+	 * @param string $context Unused; accepted so the 'edit'-context reads match WC_Data getters.
+	 */
 	public function get_expiry_year( $context = 'view' ) {
-		return $this->expiry_year;
+		return $this->data['expiry_year'];
 	}
 	public function set_expiry_year( $year ) {
-		$this->expiry_year = (string) $year;
+		$this->data['expiry_year'] = (string) $year;
 	}
+	public function get_user_id() {
+		return $this->data['user_id'];
+	}
+	public function set_user_id( $user_id ) {
+		$this->data['user_id'] = (int) $user_id;
+	}
+	public function is_default() {
+		return (bool) $this->data['default'];
+	}
+	public function set_default( $default ) {
+		$this->data['default'] = (bool) $default;
+	}
+	public function get_display_name() {
+		return trim( $this->data['card_type'] . ' ending in ' . $this->data['last4'] );
+	}
+	/**
+	 * Writes the token into the store, assigning an ID the way the real data
+	 * store does. A token a fixture staged into the store directly keeps the key
+	 * it was staged under, so a save never duplicates it.
+	 *
+	 * @throws Exception When $throw_on_save is set.
+	 */
 	public function save() {
 		if ( $this->throw_on_save ) {
 			throw new Exception( 'Invalid or missing payment token fields.' );
 		}
 		$this->save_calls++;
+		if ( ! $this->data['id'] ) {
+			$staged_key       = array_search( $this, WC_Payment_Tokens::$tokens, true );
+			$this->data['id'] = false !== $staged_key ? $staged_key : count( WC_Payment_Tokens::$tokens ) + 1;
+		}
+		WC_Payment_Tokens::$tokens[ $this->data['id'] ] = $this;
+		return $this->data['id'];
 	}
 }
 
@@ -148,6 +212,20 @@ class WC_Payment_Tokens {
 				return '' === $gateway_id || $token->get_gateway_id() === $gateway_id;
 			}
 		);
+	}
+	/**
+	 * Faithful to WC_Payment_Tokens::set_users_default(): exactly one of the
+	 * customer's tokens ends up flagged default, the rest are cleared.
+	 *
+	 * @param int $user_id  Customer ID.
+	 * @param int $token_id Token ID to make default.
+	 */
+	public static function set_users_default( $user_id, $token_id ) {
+		foreach ( self::$tokens as $token ) {
+			if ( (int) $token->get_user_id() === (int) $user_id ) {
+				$token->set_default( $token->get_id() === (int) $token_id );
+			}
+		}
 	}
 }
 
@@ -1006,6 +1084,17 @@ class WC_Order {
 	public function get_currency() {
 		return $this->data['currency'] ?? '';
 	}
+	public function get_total_refunded() {
+		return (float) ( $this->data['total_refunded'] ?? 0 );
+	}
+	public function is_paid() {
+		// Real wc_order_is_paid_statuses(): processing and completed.
+		return $this->has_status( [ 'processing', 'completed' ] );
+	}
+	public function add_order_note( $note ) {
+		$this->data['order_notes'][] = $note;
+		return count( $this->data['order_notes'] );
+	}
 	/**
 	 * Faithful to WC_Order::needs_payment(): an order awaits payment while it is
 	 * pending or failed and there is an amount to pay.
@@ -1015,9 +1104,6 @@ class WC_Order {
 	}
 	public function get_checkout_payment_url() {
 		return 'https://example.test/checkout/order-pay/' . $this->get_id() . '/?pay_for_order=true&key=wc_order_' . $this->get_id();
-	}
-	public function add_order_note( $note ) {
-		$this->data['order_notes'][] = $note;
 	}
 	/**
 	 * Accepts a gateway object or id string, like the real setter.
@@ -1090,6 +1176,9 @@ class WC_Subscription {
 	}
 	public function get_payment_method() {
 		return $this->data['payment_method'] ?? '';
+	}
+	public function get_payment_method_title() {
+		return $this->data['payment_method_title'] ?? '';
 	}
 	/**
 	 * Stageable stand-in for WC_Subscription::payment_method_supports(): pass a
@@ -1289,7 +1378,22 @@ class WC_Subscription {
 		return reset( $this->orders );
 	}
 	public function get_related_orders( $output = 'all', $type = '' ) {
-		return $this->data['related_orders'][ $type ] ?? [];
+		// Real WCS expands 'any' to parent/renewal/resubscribe/switch; mirror it
+		// so staging per-type fixtures still reaches production code asking 'any'.
+		if ( 'any' === $type ) {
+			$orders = array_merge( ...array_values( array_map( 'array_values', $this->data['related_orders'] ?? [ [] ] ) ) );
+		} else {
+			$orders = $this->data['related_orders'][ $type ] ?? [];
+		}
+		if ( 'ids' === $output ) {
+			return array_map(
+				function ( $order ) {
+					return $order->get_id();
+				},
+				$orders
+			);
+		}
+		return $orders;
 	}
 	public function get_coupon_codes() {
 		return $this->data['coupon_codes'] ?? [];
@@ -1324,8 +1428,20 @@ class WC_Subscription {
 		$last  = $this->data['billing_last_name'] ?? '';
 		return trim( "$first $last" );
 	}
-	public function get_items() {
-		return $this->data['items'] ?? [];
+	/**
+	 * Faithful to WC_Abstract_Order::get_items(): defaults to line items only;
+	 * other types (coupon/fee/shipping) come from `<type>_items` data keys.
+	 *
+	 * @param string|array $types Item type(s) to return.
+	 */
+	public function get_items( $types = 'line_item' ) {
+		$types = (array) $types;
+		$out   = [];
+		foreach ( $types as $type ) {
+			$typed = 'line_item' === $type ? ( $this->data['items'] ?? [] ) : ( $this->data[ $type . '_items' ] ?? [] );
+			$out   = array_replace( $out, $typed );
+		}
+		return $out;
 	}
 	/**
 	 * Keyed by item ID like WC_Abstract_Order::remove_item().
@@ -1334,17 +1450,6 @@ class WC_Subscription {
 	 */
 	public function remove_item( $item_id ) {
 		unset( $this->data['items'][ $item_id ] );
-	}
-	/**
-	 * Sum the line items into the order total, like WC_Abstract_Order does.
-	 */
-	public function calculate_totals() {
-		$total = 0;
-		foreach ( $this->get_items() as $item ) {
-			$total += (float) $item->get_total();
-		}
-		$this->data['total'] = $total;
-		return $total;
 	}
 	/**
 	 * Address setter. The mock stores address fields flat, matching how the
@@ -1360,9 +1465,6 @@ class WC_Subscription {
 	}
 	public function set_billing_period( $period ) {
 		$this->data['billing_period'] = $period;
-	}
-	public function set_billing_interval( $interval ) {
-		$this->data['billing_interval'] = $interval;
 	}
 	public function get_item( $item_id, $load_from_db = true ) {
 		// Faithful to WC_Abstract_Order::get_item(): the default delegates to
@@ -1397,9 +1499,6 @@ class WC_Subscription {
 	public function get_parent_id() {
 		return $this->data['parent_id'] ?? 0;
 	}
-	public function get_payment_method_title() {
-		return $this->data['payment_method_title'] ?? '';
-	}
 	public function is_manual() {
 		// Real WC_Subscription keys this 'requires_manual_renewal'; fixtures also stage the shorter 'is_manual'.
 		return ! empty( $this->data['requires_manual_renewal'] ) || ! empty( $this->data['is_manual'] );
@@ -1415,6 +1514,56 @@ class WC_Subscription {
 	}
 	public function get_view_order_url() {
 		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
+	}
+	/**
+	 * Append a product line item, recording the call like real add_product().
+	 *
+	 * @param WC_Product $product  The product.
+	 * @param int        $quantity Quantity.
+	 */
+	public function add_product( $product, $quantity = 1 ) {
+		$item_id = 9000 + count( $this->data['added_products'] ?? [] );
+		$this->data['added_products'][] = [
+			'product_id' => $product->get_id(),
+			'quantity'   => $quantity,
+		];
+		$this->data['items'][ $item_id ] = new WC_Order_Item_Product(
+			[
+				'id'         => $item_id,
+				'product_id' => $product->get_id(),
+				'name'       => $product->get_name(),
+				'quantity'   => $quantity,
+			]
+		);
+		return $item_id;
+	}
+	public function set_billing_interval( $interval ) {
+		$this->data['billing_interval'] = (int) $interval;
+	}
+	/**
+	 * Recompute the order total. Products staged via add_product() price from
+	 * the subscription price; otherwise the line items are summed, like
+	 * WC_Abstract_Order does. Records that the recalculation ran.
+	 */
+	public function calculate_totals() {
+		$this->data['calculated_totals'] = true;
+		$total                           = 0;
+		if ( ! empty( $this->data['added_products'] ) ) {
+			foreach ( $this->data['added_products'] as $added ) {
+				$product = wc_get_product( $added['product_id'] );
+				if ( $product ) {
+					$price  = (float) $product->get_price();
+					$price  = $price ? $price : (float) $product->get_meta( '_subscription_price' );
+					$total += $price * $added['quantity'];
+				}
+			}
+		} else {
+			foreach ( $this->get_items() as $item ) {
+				$total += (float) $item->get_total();
+			}
+		}
+		$this->data['total'] = $total;
+		return $total;
 	}
 	public function save() {
 		return true;
@@ -1537,6 +1686,22 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 			return $interval > 0 ? $interval : 1;
 		}
 		/**
+		 * Mirror of WCS's expiration-date resolver: `_subscription_length`
+		 * periods from the given start, or 0 for a never-expiring product.
+		 *
+		 * @param int|WC_Product $product_id The product (ID).
+		 * @param string         $from_date  GMT datetime to count from.
+		 */
+		public static function get_expiration_date( $product_id, $from_date = '' ) {
+			$product = is_object( $product_id ) ? $product_id : wc_get_product( $product_id );
+			$length  = $product ? (int) $product->get_meta( '_subscription_length' ) : 0;
+			if ( $length <= 0 ) {
+				return 0;
+			}
+			$base = $from_date ? strtotime( $from_date ) : time();
+			return gmdate( 'Y-m-d H:i:s', strtotime( sprintf( '+%d %s', $length, self::get_period( $product ) ), $base ) );
+		}
+		/**
 		 * Minimal mirror of WCS's price-string builder — enough to derive a
 		 * locale-stable suffix in tests. Real WCS returns localized text via
 		 * `wcs_price_string`; we just need a placeholder-substitutable format.
@@ -1546,7 +1711,15 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 		 * @return string
 		 */
 		public static function get_price_string( $product, $include = [] ) {
-			$price    = isset( $include['price'] ) ? (string) $include['price'] : '';
+			// Real WCS renders the price itself when the caller does not supply
+			// one, so a caller that asks only for the cadence still gets the
+			// amount in front of it.
+			if ( isset( $include['price'] ) ) {
+				$price = (string) $include['price'];
+			} else {
+				$raw   = self::get_price( $product );
+				$price = function_exists( 'wc_price' ) ? wc_price( $raw ) : (string) $raw;
+			}
 			$include_period = ! array_key_exists( 'subscription_period', $include ) || $include['subscription_period'];
 			$suffix = '';
 			if ( $include_period ) {
@@ -1760,21 +1933,50 @@ function wcs_get_subscriptions_for_order( $order, $args = [] ) {
 
 /**
  * Faithful to wc_get_payment_gateway_by_order() in shape: a gateway object for
- * an order/subscription whose payment method id is set, false otherwise. The
- * object carries only `id`, which is all callers here read.
+ * an order/subscription whose payment method id is set, false otherwise.
+ *
+ * A test can stage a specific gateway for an order in
+ * $wc_mock_gateways_by_order[ order_id ] (e.g. one exposing supports( 'refunds' ));
+ * that wins. Otherwise the object carries the method `id` and supports nothing.
  *
  * @param WC_Order|WC_Subscription $order The order or subscription.
  *
  * @return object|false
  */
 function wc_get_payment_gateway_by_order( $order ) {
-	$method = method_exists( $order, 'get_payment_method' ) ? (string) $order->get_payment_method() : '';
+	global $wc_mock_gateways_by_order;
+	$order_id = is_object( $order ) ? $order->get_id() : (int) $order;
+	if ( isset( $wc_mock_gateways_by_order[ $order_id ] ) ) {
+		return $wc_mock_gateways_by_order[ $order_id ];
+	}
+	$method = is_object( $order ) && method_exists( $order, 'get_payment_method' ) ? (string) $order->get_payment_method() : '';
 	if ( '' === $method ) {
 		return false;
 	}
-	$gateway     = new stdClass();
-	$gateway->id = $method;
-	return $gateway;
+	return new class( $method ) {
+		/**
+		 * Gateway id.
+		 *
+		 * @var string
+		 */
+		public $id;
+		/**
+		 * Constructor.
+		 *
+		 * @param string $id Gateway id.
+		 */
+		public function __construct( $id ) {
+			$this->id = $id;
+		}
+		/**
+		 * No optional gateway features.
+		 *
+		 * @param string $feature Feature name.
+		 */
+		public function supports( $feature ) {
+			return false;
+		}
+	};
 }
 
 /**

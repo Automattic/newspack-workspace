@@ -338,9 +338,9 @@ class Subscribers_Wizard extends Wizard {
 			]
 		);
 
-		// The wizard's first person-profile write endpoints: on-hold recovery
-		// (NPPD-1753). Both act on one individual subscription; group money
-		// actions deliberately live with the group surface instead.
+		// On-hold recovery (NPPD-1753). Both act on one individual
+		// subscription; group money actions deliberately live with the group
+		// surface instead.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/subscriptions/(?P<id>\d+)/reactivate',
@@ -384,6 +384,11 @@ class Subscribers_Wizard extends Wizard {
 				],
 			]
 		);
+
+		// The payment-action routes (change payment method, refund/cancel, plan
+		// change, default card) live in their own class; they share this wizard's
+		// permission check so the whole surface has one capability gate.
+		Subscribers_Payments::register_routes( [ $this, 'api_permissions_check' ] );
 	}
 
 	/**
@@ -1378,13 +1383,21 @@ class Subscribers_Wizard extends Wizard {
 		// shapes carry it, and they must be judged before the reuse branch
 		// below, because one of them still needs payment: an order parked
 		// on-hold (asynchronous capture, manual review), and an order left
-		// needing payment while the gateway waits on the customer — Stripe
-		// records the charge id and sets the order to `failed` while SCA
-		// authentication is outstanding.
+		// needing payment while the gateway settles a charge it has already
+		// named.
 		//
-		// The transaction id is the discriminator, in both shapes. Offline
-		// gateways (BACS, cheque) also park orders on-hold and record no
-		// transaction, and an ordinary decline leaves a `failed` order with
+		// The transaction id is the discriminator, so this only catches an
+		// attempt the gateway got far enough to name. An attempt can be
+		// genuinely unresolved and carry none: WC Stripe takes the id from the
+		// charge object, and an off-session renewal refused with
+		// `authentication_required` produces no charge at all, leaving the
+		// order with only `_stripe_intent_id`. Nothing is billed twice there,
+		// because WC Stripe reuses one PaymentIntent per order — but that
+		// protection belongs to the gateway, not to this guard, and a gateway
+		// that mints a fresh intent per attempt would not have it.
+		//
+		// Offline gateways (BACS, cheque) also park orders on-hold and record
+		// no transaction, and an ordinary decline leaves a `failed` order with
 		// none either — for both the remedy is another attempt, so neither may
 		// dead-end here. Settled orders (completed, processing, cancelled,
 		// refunded) never block: an admin-suspended subscription whose last
@@ -1494,21 +1507,24 @@ class Subscribers_Wizard extends Wizard {
 		$registered = $user->user_registered ? strtotime( $user->user_registered . ' UTC' ) : false;
 
 		return [
-			'id'            => $user_id,
-			'name'          => $user->display_name,
-			'email'         => $user->user_email,
+			'id'             => $user_id,
+			'name'           => $user->display_name,
+			'email'          => $user->user_email,
 			// The native user-edit screen (self edits resolve to profile.php). The
 			// in-wizard profile does not yet cover editing the WordPress user, so the
 			// profile keeps this as a header action rather than stranding the admin.
-			'editUrl'       => get_edit_user_link( $user_id ),
-			'status'        => $this->reduced_status( $subscriptions, $groups ),
-			'memberSince'   => $this->local_date( $registered ),
-			'lastPayment'   => $this->last_payment_date( $user_id ),
-			'lastSeen'      => $this->last_seen_date( $user_id ),
-			'subscriptions' => $subscriptions,
-			'groups'        => $groups,
-			'tags'          => $this->reader_tags( $user_id ),
-			'newsletters'   => $this->reader_newsletters( $user_id ),
+			'editUrl'        => get_edit_user_link( $user_id ),
+			'status'         => $this->reduced_status( $subscriptions, $groups ),
+			'memberSince'    => $this->local_date( $registered ),
+			'lastPayment'    => $this->last_payment_date( $user_id ),
+			'lastSeen'       => $this->last_seen_date( $user_id ),
+			'subscriptions'  => $subscriptions,
+			'groups'         => $groups,
+			'tags'           => $this->reader_tags( $user_id ),
+			'newsletters'    => $this->reader_newsletters( $user_id ),
+			// The saved-card list is profile-only: a list row never renders it, and
+			// resolving tokens per row would cost a query on every row of every page.
+			'paymentMethods' => $detailed ? Subscribers_Payments::payment_methods_for_user( $user_id ) : [],
 		];
 	}
 
@@ -1546,6 +1562,7 @@ class Subscribers_Wizard extends Wizard {
 				? array_merge(
 					$entry,
 					$this->subscription_billing( $subscription ),
+					Subscribers_Payments::subscription_payment_fields( $subscription ),
 					[
 						// Whether a renewal charge could even be attempted, so
 						// the reactivate flow can hide "Charge now" when there

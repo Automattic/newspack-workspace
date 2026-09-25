@@ -2,7 +2,9 @@
  * Content gates group
  */
 
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 .audience_page_newspack-audience-access-control,
@@ -24,16 +26,27 @@
 					margin-top: wp-vars.$grid-unit-40 !important;
 				}
 			}
+			.components-notice {
+				margin: wp-vars.$grid-unit-20 wp-vars.$grid-unit-20 0;
+			}
 			&__settings {
+				grid-template-columns: minmax(0, 1fr);
+				padding: wp-vars.$grid-unit-20;
+				@media screen and ( min-width: wp-breakpoints.$break-medium ) {
+					grid-auto-columns: minmax(0, 1fr);
+					grid-auto-flow: column;
+					grid-template-columns: none;
+				}
 				h4 {
-					font-size: wp-vars.$font-size-small;
-					font-weight: wp-vars.$font-weight-medium;
-					line-height: wp-vars.$font-line-height-small;
+					@include wp-mixins.heading-small();
 					margin-bottom: wp-vars.$grid-unit-10;
 					text-transform: uppercase;
 				}
 				p {
 					margin: 0;
+				}
+				strong {
+					font-weight: wp-vars.$font-weight-medium;
 				}
 				.components-button {
 					justify-content: center;
