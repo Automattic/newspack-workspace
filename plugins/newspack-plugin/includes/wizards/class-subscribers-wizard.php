@@ -1383,13 +1383,21 @@ class Subscribers_Wizard extends Wizard {
 		// shapes carry it, and they must be judged before the reuse branch
 		// below, because one of them still needs payment: an order parked
 		// on-hold (asynchronous capture, manual review), and an order left
-		// needing payment while the gateway waits on the customer — Stripe
-		// records the charge id and sets the order to `failed` while SCA
-		// authentication is outstanding.
+		// needing payment while the gateway settles a charge it has already
+		// named.
 		//
-		// The transaction id is the discriminator, in both shapes. Offline
-		// gateways (BACS, cheque) also park orders on-hold and record no
-		// transaction, and an ordinary decline leaves a `failed` order with
+		// The transaction id is the discriminator, so this only catches an
+		// attempt the gateway got far enough to name. An attempt can be
+		// genuinely unresolved and carry none: WC Stripe takes the id from the
+		// charge object, and an off-session renewal refused with
+		// `authentication_required` produces no charge at all, leaving the
+		// order with only `_stripe_intent_id`. Nothing is billed twice there,
+		// because WC Stripe reuses one PaymentIntent per order — but that
+		// protection belongs to the gateway, not to this guard, and a gateway
+		// that mints a fresh intent per attempt would not have it.
+		//
+		// Offline gateways (BACS, cheque) also park orders on-hold and record
+		// no transaction, and an ordinary decline leaves a `failed` order with
 		// none either — for both the remedy is another attempt, so neither may
 		// dead-end here. Settled orders (completed, processing, cancelled,
 		// refunded) never block: an admin-suspended subscription whose last
