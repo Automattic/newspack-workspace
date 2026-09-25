@@ -6,7 +6,7 @@ import { render } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import IntegrationIcon from '../../../../../packages/components/src/integration-icon';
+import IntegrationIcon from '../../../../../../packages/components/src/integration-icon';
 
 describe( 'IntegrationIcon', () => {
 	it( 'renders the provider brand mark inside a provider-classed badge', () => {

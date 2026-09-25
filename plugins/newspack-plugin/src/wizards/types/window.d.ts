@@ -88,9 +88,6 @@ declare global {
 			audience_management_enabled?: string;
 			audience_management_url?: string;
 		};
-		newspackAudienceIntegrations: {
-			integrations_settings_enabled: boolean;
-		};
 		newspackAudienceContentGates: {
 			api: string;
 			available_access_rules: AccessRules;

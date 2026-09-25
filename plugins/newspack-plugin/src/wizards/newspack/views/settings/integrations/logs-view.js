@@ -12,8 +12,8 @@ import { DataViews as WPDataViews } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { DataViews, StatusIndicator } from '../../../../../packages/components/src';
-import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { DataViews, StatusIndicator } from '../../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
 import { LogDetailsModal } from './log-details-modal';
 import './style.scss';
@@ -49,15 +49,19 @@ export const LogsView = ( { integrations, match } ) => {
 	const [ runningActionIds, setRunningActionIds ] = useState( () => new Set() );
 
 	useEffect( () => {
+		setHeaderData( { fullWidth: true } );
+	}, [ setHeaderData ] );
+
+	useEffect( () => {
 		if ( integration ) {
 			setHeaderData( {
-				sectionName: [ { label: integration.name, url: `#/settings/${ integrationId }` }, { label: __( 'Logs', 'newspack-plugin' ) } ],
+				sectionName: [ { label: integration.name, url: `#/integrations/${ integrationId }` }, { label: __( 'Logs', 'newspack-plugin' ) } ],
 				actions: [
 					{
 						type: 'secondary',
 						label: __( 'Back to Integrations', 'newspack-plugin' ),
 						icon: 'chevronLeft',
-						href: '#/settings',
+						href: '#/integrations',
 					},
 				],
 			} );

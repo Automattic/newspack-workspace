@@ -7,7 +7,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
  * Internal dependencies
  */
 import { ConfigureView, fallbackOperator, operatorOptionsForField, reconcileOperators, toggleField } from './configure-view';
-import { useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 
 const mockSetHeaderData = jest.fn();
 
@@ -62,7 +62,7 @@ jest.mock( '@wordpress/components', () => ( {
 	SelectControl: ( { label, value, onChange, options, children } ) =>
 		options?.length || children ? <input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } /> : null,
 } ) );
-jest.mock( '../../../../../packages/components/src', () => ( {
+jest.mock( '../../../../../../packages/components/src', () => ( {
 	Button: ( { children } ) => children,
 	// Item flattens, so a collapsed group's contents stay reachable here while the real
 	// component puts them behind hidden="until-found" and out of the tab order. Every
@@ -94,12 +94,12 @@ jest.mock( '../../../../../packages/components/src', () => ( {
 	useUnsavedChangesDialog: jest.fn( () => ( { confirmDialog: null, requestConfirm: jest.fn() } ) ),
 } ) );
 jest.mock(
-	'../../../wizards-tab',
+	'../../../../wizards-tab',
 	() =>
 		( { children } ) =>
 			children
 );
-jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
+jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 
@@ -416,7 +416,7 @@ describe( 'ConfigureView per-id remount', () => {
 		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
 	} );
 
-	// Both #/settings/esp and #/settings/other match one Route, so React reuses
+	// Both #/integrations/esp and #/integrations/other match one Route, so React reuses
 	// the instance across an id change. Keying the inner view by id remounts it,
 	// resetting the draft — esp's edit must not bleed into other.
 	it( 'resets the draft when the integration id changes', () => {

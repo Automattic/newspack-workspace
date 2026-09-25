@@ -17,11 +17,11 @@ const mockCardFeatureProps = [];
 const mockEnableModalProps = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
-jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( {
+jest.mock( '../../../../../../packages/colors/colors.module.scss', () => ( {
 	'neutral-100': '#f0f0f0',
 	'neutral-600': '#6c6c6c',
 } ) );
-jest.mock( '../../../../../packages/components/src', () => ( {
+jest.mock( '../../../../../../packages/components/src', () => ( {
 	Card: ( { children } ) => children,
 	Grid: ( { children } ) => children,
 	CardFeature: props => {
@@ -42,20 +42,20 @@ jest.mock( './enable-modal', () => {
 	};
 } );
 jest.mock(
-	'../../../wizards-tab',
+	'../../../../wizards-tab',
 	() =>
 		( { children } ) =>
 			children
 );
 jest.mock(
-	'../../../wizards-section',
+	'../../../../wizards-section',
 	() =>
 		( { children } ) =>
 			children
 );
 
 const SETUP_URL = 'https://example.com/wp-admin/admin.php?page=newspack-newsletters';
-const RETURN_URL = 'https://example.com/wp-admin/admin.php?page=newspack-audience-integrations#/settings';
+const RETURN_URL = 'https://example.com/wp-admin/admin.php?page=newspack-settings#/integrations';
 const HANDOFF_LINK = SETUP_URL + '&newspack_handoff=1';
 
 const requiredAudienceField = {
@@ -100,7 +100,7 @@ const renderSection = ( integrationOverrides = {}, extraProps = {} ) => {
 	return { history, onToggleEnabled, onSetupAndEnable, cardProps: mockCardFeatureProps[ 0 ] };
 };
 
-describe( 'Audience Integrations settings section card action', () => {
+describe( 'Integrations settings section card action', () => {
 	beforeEach( () => {
 		mockCardFeatureProps.length = 0;
 		mockEnableModalProps.length = 0;
@@ -159,7 +159,7 @@ describe( 'Audience Integrations settings section card action', () => {
 	it( 'routes the configure action to the configure view when connected', () => {
 		const { history, cardProps } = renderSection( { is_connected: true, is_set_up: true, enabled: true } );
 		cardProps.onConfigure();
-		expect( history.push ).toHaveBeenCalledWith( '/settings/esp' );
+		expect( history.push ).toHaveBeenCalledWith( '/integrations/esp' );
 	} );
 
 	it( 'routes the configure action through the handoff while the provider is not connected', async () => {

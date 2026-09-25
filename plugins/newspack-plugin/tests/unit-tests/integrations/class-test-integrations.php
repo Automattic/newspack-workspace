@@ -1994,7 +1994,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		};
 		Integrations::register( $integration );
 
-		$wizard  = new \Newspack\Audience_Integrations();
+		$wizard  = new \Newspack\Wizards\Newspack\Integrations_Section();
 		$request = new \WP_REST_Request( 'POST' );
 		$request->set_param( 'integration_id', 'unconnected_test' );
 		$request->set_param( 'enabled', true );
@@ -2022,7 +2022,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		Integrations::register( $integration );
 		Integrations::enable( 'unconnected_disable_test' );
 
-		$wizard  = new \Newspack\Audience_Integrations();
+		$wizard  = new \Newspack\Wizards\Newspack\Integrations_Section();
 		$request = new \WP_REST_Request( 'POST' );
 		$request->set_param( 'integration_id', 'unconnected_disable_test' );
 		$request->set_param( 'enabled', false );
@@ -2039,7 +2039,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$integration = new Sample_Integration( 'connected_test', 'Connected Test' );
 		Integrations::register( $integration );
 
-		$wizard  = new \Newspack\Audience_Integrations();
+		$wizard  = new \Newspack\Wizards\Newspack\Integrations_Section();
 		$request = new \WP_REST_Request( 'POST' );
 		$request->set_param( 'integration_id', 'connected_test' );
 		$request->set_param( 'enabled', true );
@@ -2076,7 +2076,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		};
 		Integrations::register( $integration );
 
-		$wizard  = new \Newspack\Audience_Integrations();
+		$wizard  = new \Newspack\Wizards\Newspack\Integrations_Section();
 		$request = new \WP_REST_Request( 'POST' );
 		$request->set_param( 'integration_id', 'unsupported_test' );
 		$request->set_param( 'enabled', true );

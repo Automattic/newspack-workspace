@@ -9,10 +9,10 @@ import { Icon, envelope } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { Card, CardFeature, Grid, IntegrationIcon, espProviderOrder } from '../../../../../packages/components/src';
-import colors from '../../../../../packages/colors/colors.module.scss';
-import WizardsTab from '../../../wizards-tab';
-import WizardSection from '../../../wizards-section';
+import { Card, CardFeature, Grid, IntegrationIcon, espProviderOrder } from '../../../../../../packages/components/src';
+import colors from '../../../../../../packages/colors/colors.module.scss';
+import WizardsTab from '../../../../wizards-tab';
+import WizardSection from '../../../../wizards-section';
 import { EnableModal, getMissingRequiredFields } from './enable-modal';
 
 /**
@@ -54,7 +54,14 @@ export const SettingsSection = ( {
 	const [ enablingId, setEnablingId ] = useState( null );
 
 	return (
-		<WizardsTab className="newspack-audience-integrations">
+		<WizardsTab
+			title={ __( 'Integrations', 'newspack-plugin' ) }
+			description={ __(
+				'Manage how Newspack syncs reader data with your tools. Connect an integration to start syncing reader activity across your stack.',
+				'newspack-plugin'
+			) }
+			className="newspack-settings-integrations"
+		>
 			<WizardSection>
 				{ loading && <p>{ __( 'Loading…', 'newspack-plugin' ) }</p> }
 				{ ! loading && integrationIds.length === 0 && (
@@ -138,7 +145,7 @@ export const SettingsSection = ( {
 											window.location.href = setup_url;
 										} );
 								};
-								const goToConfigure = () => history?.push( `/settings/${ id }` );
+								const goToConfigure = () => history?.push( `/integrations/${ id }` );
 								let enableLabel = __( 'Enable', 'newspack-plugin' );
 								let onEnable = () => {
 									if ( getMissingRequiredFields( integration ).length ) {
@@ -179,7 +186,7 @@ export const SettingsSection = ( {
 												? [
 														{
 															title: __( 'Logs', 'newspack-plugin' ),
-															onClick: () => history?.push( `/settings/${ id }/logs` ),
+															onClick: () => history?.push( `/integrations/${ id }/logs` ),
 														},
 														{
 															title: __( 'Disable', 'newspack-plugin' ),
@@ -199,7 +206,7 @@ export const SettingsSection = ( {
 								onEnable={ settings => onSetupAndEnable( enablingId, settings ).then( () => setEnablingId( null ) ) }
 								onGoToSettings={ () => {
 									setEnablingId( null );
-									history?.push( `/settings/${ enablingId }` );
+									history?.push( `/integrations/${ enablingId }` );
 								} }
 							/>
 						) }

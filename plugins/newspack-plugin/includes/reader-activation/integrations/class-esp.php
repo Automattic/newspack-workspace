@@ -13,7 +13,7 @@ use Newspack\Reader_Activation\Integrations;
 use Newspack_Newsletters_Contacts;
 use Newspack_Newsletters_Subscription;
 use Newspack\Configuration_Managers;
-use Newspack\Audience_Integrations;
+use Newspack\Wizards\Newspack\Integrations_Section;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -104,7 +104,7 @@ class ESP extends Integration {
 	 * @return bool
 	 */
 	protected function is_mailchimp_only() {
-		return Audience_Integrations::is_enabled();
+		return Integrations_Section::is_enabled();
 	}
 
 	/**

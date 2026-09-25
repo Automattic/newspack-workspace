@@ -2,6 +2,7 @@
  * External dependencies
  */
 import { act, render, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 /**
  * WordPress dependencies
@@ -11,7 +12,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import AudienceIntegrations from './index';
+import Integrations from './index';
 
 const mockAddNotice = jest.fn();
 const mockRemoveNotice = jest.fn();
@@ -22,14 +23,10 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { addNotice: mockAddNotice, removeNotice: mockRemoveNotice } ),
 } ) );
-jest.mock( '../../../../../packages/components/src', () => ( {
-	Wizard: ( { sections } ) => {
-		const Section = sections[ 0 ].render;
-		return <Section { ...sections[ 0 ].props } />;
-	},
-	withWizard: Component => Component,
+jest.mock( '../../../../../../packages/components/src', () => ( {
+	Router: jest.requireActual( 'react-router-dom' ),
 } ) );
-jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
+jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 jest.mock( './settings-section', () => ( {
@@ -52,13 +49,17 @@ const SETTINGS_MAP = {
 // state updates stay inside act's tracked scope instead of firing after it.
 const flushPromises = () => new Promise( resolve => setTimeout( resolve, 0 ) );
 
-describe( 'AudienceIntegrations notices', () => {
+describe( 'Integrations notices', () => {
 	beforeEach( async () => {
 		mockAddNotice.mockClear();
 		mockRemoveNotice.mockClear();
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
-		render( <AudienceIntegrations /> );
+		render(
+			<MemoryRouter initialEntries={ [ '/integrations' ] }>
+				<Integrations match={ { path: '/integrations' } } />
+			</MemoryRouter>
+		);
 		await waitFor( () => expect( captured.props.loading ).toBe( false ) );
 	} );
 
@@ -258,11 +259,15 @@ describe( 'AudienceIntegrations notices', () => {
 	} );
 } );
 
-describe( 'AudienceIntegrations retry buffer', () => {
+describe( 'Integrations retry buffer', () => {
 	beforeEach( async () => {
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
-		render( <AudienceIntegrations /> );
+		render(
+			<MemoryRouter initialEntries={ [ '/integrations' ] }>
+				<Integrations match={ { path: '/integrations' } } />
+			</MemoryRouter>
+		);
 		await waitFor( () => expect( captured.props.loading ).toBe( false ) );
 	} );
 

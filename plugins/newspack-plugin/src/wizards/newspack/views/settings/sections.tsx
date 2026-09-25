@@ -61,11 +61,13 @@ import ThemeAndBrand from './theme-and-brand';
 import Collections from './collections';
 import Print from './print';
 import Privacy from './privacy';
+import Integrations from './integrations';
 
 type SectionKeys = keyof typeof settingsTabs;
 
 const sectionComponents: Partial< Record< SectionKeys | 'default', ( props: { isPartOfSetup?: boolean } ) => React.ReactNode > > = {
 	connections: Connections,
+	integrations: Integrations,
 	social: Social,
 	syndication: Syndication,
 	seo: Seo,
@@ -92,7 +94,7 @@ if ( 'experimental-tools' in settingsTabs ) {
 }
 
 // The tab crumb links back to these views from their sub-screens. On the view itself it is the last crumb, which never renders as a link.
-const sectionsWithSubScreens: SectionKeys[] = [ 'experimental-tools' ];
+const sectionsWithSubScreens: SectionKeys[] = [ 'integrations', 'experimental-tools' ];
 
 const settingsSectionKeys = Object.keys( settingsTabs ) as SectionKeys[];
 

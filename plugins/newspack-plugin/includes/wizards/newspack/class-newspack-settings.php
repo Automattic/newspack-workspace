@@ -43,7 +43,7 @@ class Newspack_Settings extends Wizard {
 	public function get_local_data() {
 		$google_site_kit_url = google_site_kit_available() ? admin_url( 'admin.php?page=googlesitekit-settings#/connected-services/analytics-4' ) : admin_url( 'admin.php?page=googlesitekit-splash' );
 		$newspack_settings = [
-			'connections'     => [
+			'connections' => [
 				'label'    => __( 'Connections', 'newspack-plugin' ),
 				'path'     => '/',
 				'sections' => [
@@ -76,6 +76,14 @@ class Newspack_Settings extends Wizard {
 					'customEvents' => $this->sections['custom-events']->get_data(),
 				],
 			],
+		];
+		if ( Integrations_Section::is_enabled() ) {
+			$newspack_settings['integrations'] = [
+				'label'          => __( 'Integrations', 'newspack-plugin' ),
+				'activeTabPaths' => [ '/integrations/*' ],
+			];
+		}
+		$newspack_settings += [
 			'social'          => [
 				'label'    => __( 'Social', 'newspack-plugin' ),
 				'nextdoor' => [
