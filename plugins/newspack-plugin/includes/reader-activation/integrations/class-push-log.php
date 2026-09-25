@@ -40,6 +40,14 @@ final class Push_Log {
 	const OPERATION_DELETE = 'delete';
 
 	/**
+	 * What a list returns for each row. The payload, its hash and the error
+	 * message stay out, so a page of rows stays light: a provider's message
+	 * can run to thousands of characters and a list does not show it. get()
+	 * returns all three for one row.
+	 */
+	const LIST_COLUMNS = [ 'id', 'integration_id', 'email', 'user_id', 'operation', 'context', 'status', 'attempts', 'max_attempts', 'repeat_count', 'error_class', 'error_code', 'retry_action_id', 'created_at', 'updated_at' ];
+
+	/**
 	 * Whether a write failure was already reported during this request.
 	 *
 	 * @var bool
@@ -398,6 +406,437 @@ final class Push_Log {
 	}
 
 	/**
+	 * List one integration's rows.
+	 *
+	 * @param array $args {
+	 *     The query.
+	 *
+	 *     @type string $integration_id  The integration. Required.
+	 *     @type string $search          A full email, which also matches the rows of the account it
+	 *                                   belongs to and of the accounts its own rows name, or the
+	 *                                   start of an address.
+	 *     @type string $status          One of the STATUS_* constants.
+	 *     @type string $operation       One of the OPERATION_* constants.
+	 *     @type bool   $needs_attention Only rows that are retrying or failed, with no later
+	 *                                   successful push for the same reader.
+	 *     @type int    $per_page        1 to 100. Default 25.
+	 *     @type int    $page            Default 1.
+	 *     @type string $order           'ASC' or 'DESC' on the last update. Default 'DESC'.
+	 * }
+	 *
+	 * @return array{items:array[],total:int}|\WP_Error The rows, or an error when the table could not be read.
+	 */
+	public static function query( array $args ): array|\WP_Error {
+		global $wpdb;
+
+		$args = wp_parse_args(
+			$args,
+			[
+				'integration_id'  => '',
+				'search'          => '',
+				'status'          => '',
+				'operation'       => '',
+				'needs_attention' => false,
+				'per_page'        => 25,
+				'page'            => 1,
+				'order'           => 'DESC',
+			]
+		);
+
+		$table_name = self::get_table_name();
+		$where      = [ 'l.integration_id = %s' ];
+		$values     = [ $table_name, (string) $args['integration_id'] ];
+
+		if ( in_array( $args['status'], [ self::STATUS_SUCCESS, self::STATUS_RETRYING, self::STATUS_FAILED ], true ) ) {
+			$where[]  = 'l.status = %s';
+			$values[] = $args['status'];
+		}
+		if ( in_array( $args['operation'], [ self::OPERATION_UPSERT, self::OPERATION_FLAG, self::OPERATION_DELETE ], true ) ) {
+			$where[]  = 'l.operation = %s';
+			$values[] = $args['operation'];
+		}
+
+		$search = trim( (string) $args['search'] );
+		if ( '' !== $search && is_email( $search ) ) {
+			$stored_email = self::normalize_email( $search );
+			// The users table is asked about the same address, so its statement
+			// stays out of the error log like the ones against this table.
+			$reader = self::quietly( fn() => get_user_by( 'email', $search ) );
+			// The accounts the address's own rows name, so the address a reader
+			// left still finds the email-change push, which is logged under the
+			// new one. Guests name account 0, which links no one.
+			$account_ids = (array) self::quietly(
+				fn() => $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT user_id FROM %i WHERE email = %s AND integration_id = %s AND user_id > 0', $table_name, $stored_email, (string) $args['integration_id'] ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			);
+			if ( $reader ) {
+				$account_ids[] = $reader->ID;
+			}
+			$account_ids = array_values( array_unique( array_map( 'intval', $account_ids ) ) );
+
+			if ( $account_ids ) {
+				$account_placeholders = implode( ', ', array_fill( 0, count( $account_ids ), '%d' ) );
+				$where[]              = "( l.email = %s OR l.user_id IN ( {$account_placeholders} ) )";
+				$values               = array_merge( $values, [ $stored_email ], $account_ids );
+			} else {
+				$where[]  = 'l.email = %s';
+				$values[] = $stored_email;
+			}
+		} elseif ( '' !== $search ) {
+			// Start of the address only: a match in the middle cannot use the
+			// email index, and this table is the largest one the screen reads.
+			$where[]  = 'l.email LIKE %s';
+			$values[] = $wpdb->esc_like( self::normalize_email( $search ) ) . '%';
+		}
+
+		if ( $args['needs_attention'] ) {
+			// Only a push that did not end in success can need attention. As a
+			// range on the leading columns of integration_status, it also keeps
+			// the plan off a scan of every row of the integration.
+			$where[]  = 'l.status IN ( %s, %s )';
+			$values[] = self::STATUS_RETRYING;
+			$values[] = self::STATUS_FAILED;
+
+			// An upsert normally sends the full contact, so any later success for the same
+			// reader supersedes a failed or retrying one. A retry that still runs
+			// writes its row again, so a new failure puts it back on the list,
+			// while a row whose retry is gone is never rewritten. A deletion sends
+			// no contact data, so a later signup is not evidence it reached the
+			// provider: only a flag or deletion that itself succeeded closes one out.
+			$resolving_success        = 's.status = %s'
+				. ' AND ( s.updated_at > l.updated_at OR ( s.updated_at = l.updated_at AND s.id > l.id ) )'
+				. ' AND ( l.operation = %s OR s.operation <> %s )';
+			$resolving_success_values = [ self::STATUS_SUCCESS, self::OPERATION_UPSERT, self::OPERATION_UPSERT ];
+
+			// "Same reader" follows the account as well as the address, asked as
+			// two subqueries rather than one OR over both: each one's leading
+			// condition is an equality on the leading column of an index the
+			// table has, which an OR inside a dependent subquery cannot use.
+			// Guests share account 0, which links no one, so an account of 0
+			// answers for the address alone.
+			$where[] = '( NOT EXISTS ( SELECT 1 FROM %i s WHERE s.email = l.email AND s.integration_id = l.integration_id AND ' . $resolving_success . ' )'
+				. ' AND ( l.user_id = 0 OR NOT EXISTS ( SELECT 1 FROM %i s WHERE s.user_id = l.user_id AND s.integration_id = l.integration_id AND ' . $resolving_success . ' ) ) )';
+			$values  = array_merge(
+				$values,
+				[ $table_name ],
+				$resolving_success_values,
+				[ $table_name ],
+				$resolving_success_values
+			);
+		}
+
+		$where_sql = implode( ' AND ', $where );
+		$columns   = 'l.' . implode( ', l.', self::LIST_COLUMNS );
+		$order     = 'ASC' === strtoupper( (string) $args['order'] ) ? 'ASC' : 'DESC';
+		$per_page  = min( 100, max( 1, (int) $args['per_page'] ) );
+		$offset    = ( max( 1, (int) $args['page'] ) - 1 ) * $per_page;
+
+		// $columns is a class constant, $order an allowlisted literal, and
+		// $where_sql holds only placeholders; every value is bound below.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$list_sql = "SELECT {$columns} FROM %i l WHERE {$where_sql} ORDER BY l.updated_at {$order}, l.id {$order} LIMIT %d OFFSET %d";
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$count_sql = "SELECT COUNT(*) FROM %i l WHERE {$where_sql}";
+
+		return self::quietly(
+			function () use ( $wpdb, $list_sql, $count_sql, $values, $per_page, $offset ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+				$rows = $wpdb->get_results( $wpdb->prepare( $list_sql, array_merge( $values, [ $per_page, $offset ] ) ), ARRAY_A );
+				// $wpdb clears the error at the start of each statement, so each
+				// read is asked about itself rather than about the pair.
+				$read_failed = '' !== $wpdb->last_error;
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+				$total       = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $values ) );
+				$read_failed = $read_failed || '' !== $wpdb->last_error;
+
+				if ( $read_failed ) {
+					return self::read_failure();
+				}
+
+				return [
+					'items' => array_map( [ __CLASS__, 'format_row' ], is_array( $rows ) ? $rows : [] ),
+					'total' => $total,
+				];
+			}
+		);
+	}
+
+	/**
+	 * What a read returns when the table did not answer.
+	 *
+	 * Reads run with the database layer's error output off, so without this a
+	 * broken or missing table would read as an empty log, or as a row that is
+	 * not there. The message carries neither the statement nor the database's
+	 * own text: either can quote the reader's address.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function read_failure(): \WP_Error {
+		return new \WP_Error( 'newspack_push_log_read_failed', __( 'Could not read the push log.', 'newspack-plugin' ) );
+	}
+
+	/**
+	 * Give a row's numbers their types; the database returns strings.
+	 *
+	 * @param array $row A table row.
+	 *
+	 * @return array
+	 */
+	private static function format_row( array $row ): array {
+		foreach ( [ 'id', 'user_id', 'attempts', 'max_attempts', 'repeat_count' ] as $column ) {
+			$row[ $column ] = (int) $row[ $column ];
+		}
+		$row['retry_action_id'] = null === $row['retry_action_id'] ? null : (int) $row['retry_action_id'];
+
+		return $row;
+	}
+
+	/**
+	 * One row, with the payload it sent.
+	 *
+	 * @param int    $id             The row ID.
+	 * @param string $integration_id The integration the caller is reading. A row of
+	 *                               another integration reads as missing.
+	 *
+	 * @return array|\WP_Error|null The row, null when there is none, or an error when the table could not be read.
+	 */
+	public static function get( int $id, string $integration_id ): array|\WP_Error|null {
+		global $wpdb;
+
+		return self::quietly(
+			function () use ( $wpdb, $id, $integration_id ) {
+				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d AND integration_id = %s', self::get_table_name(), $id, $integration_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				if ( '' !== $wpdb->last_error ) {
+					return self::read_failure();
+				}
+
+				return is_array( $row ) ? self::decode_row( $row ) : null;
+			}
+		);
+	}
+
+	/**
+	 * The push a row is compared with: the reader's previous one that reached
+	 * the provider. A failed push never arrived, so it says nothing about what
+	 * the provider holds.
+	 *
+	 * @param array $row A row, as get() returns it.
+	 *
+	 * @return array|\WP_Error|null The row, null when there is none, or an error when the table could not be read.
+	 */
+	public static function get_predecessor( array $row ): array|\WP_Error|null {
+		$predecessor = self::quietly( fn() => self::read_predecessor( $row ) );
+
+		return is_array( $predecessor ) ? self::decode_row( $predecessor ) : $predecessor;
+	}
+
+	/**
+	 * Read the predecessor for get_predecessor().
+	 *
+	 * The address and the account are asked separately and the later of the
+	 * two answers kept: one lookup per identifier leads with an equality on
+	 * the leading column of an index the table has, where an OR over both
+	 * walks the rows back from the newest instead.
+	 *
+	 * @param array $row A row, as get() returns it.
+	 *
+	 * @return array|\WP_Error|null
+	 */
+	private static function read_predecessor( array $row ): array|\WP_Error|null {
+		global $wpdb;
+		$table_name = self::get_table_name();
+		$user_id    = (int) ( $row['user_id'] ?? 0 );
+
+		$by_address = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				'SELECT * FROM %i WHERE email = %s AND integration_id = %s AND status = %s AND id < %d ORDER BY id DESC LIMIT 1',
+				$table_name,
+				$row['email'],
+				$row['integration_id'],
+				self::STATUS_SUCCESS,
+				(int) $row['id']
+			),
+			ARRAY_A
+		);
+		if ( '' !== $wpdb->last_error ) {
+			return self::read_failure();
+		}
+
+		// Guests share account 0, which would link every guest to every other.
+		if ( $user_id <= 0 ) {
+			return is_array( $by_address ) ? $by_address : null;
+		}
+
+		$by_account = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				'SELECT * FROM %i WHERE user_id = %d AND integration_id = %s AND status = %s AND id < %d ORDER BY id DESC LIMIT 1',
+				$table_name,
+				$user_id,
+				$row['integration_id'],
+				self::STATUS_SUCCESS,
+				(int) $row['id']
+			),
+			ARRAY_A
+		);
+		if ( '' !== $wpdb->last_error ) {
+			return self::read_failure();
+		}
+
+		if ( ! is_array( $by_address ) ) {
+			return is_array( $by_account ) ? $by_account : null;
+		}
+		if ( ! is_array( $by_account ) ) {
+			return $by_address;
+		}
+
+		return (int) $by_account['id'] > (int) $by_address['id'] ? $by_account : $by_address;
+	}
+
+	/**
+	 * Type a full row and decode its payload.
+	 *
+	 * @param array $row A table row.
+	 *
+	 * @return array
+	 */
+	private static function decode_row( array $row ): array {
+		$row     = self::format_row( $row );
+		$payload = null === $row['payload'] ? null : json_decode( $row['payload'], true );
+
+		$row['payload'] = is_array( $payload ) ? $payload : null;
+		unset( $row['payload_hash'] );
+
+		return $row;
+	}
+
+	/**
+	 * Compare what a row sent with what its predecessor sent, field by field.
+	 *
+	 * Computed here rather than on the screen because both inputs live here:
+	 * the volatile fields are a PHP filter, and the prefix is the integration's.
+	 *
+	 * @param array      $row         A row, as get() returns it.
+	 * @param array|null $predecessor The row to compare with, or null when there is none.
+	 * @param string     $prefix      The integration's metadata prefix.
+	 *
+	 * @return array[] One entry per field in either payload, or, for an operation
+	 *                 other than an upsert, one per field the row itself sent:
+	 *                 key, label, before, after, changed, volatile. Real changes
+	 *                 first, then volatile ones, then the rest. Empty for a hard
+	 *                 delete.
+	 */
+	public static function compare_payloads( array $row, ?array $predecessor, string $prefix ): array {
+		if ( ! isset( $row['payload'] ) || ! is_array( $row['payload'] ) ) {
+			return [];
+		}
+
+		$after  = self::flatten_payload( $row['payload'] );
+		$before = null !== $predecessor && isset( $predecessor['payload'] ) && is_array( $predecessor['payload'] ) ? self::flatten_payload( $predecessor['payload'] ) : [];
+
+		// An upsert normally sends the whole contact, so a field it stopped sending is
+		// one the provider no longer hears about and belongs on the list. A
+		// deletion flag carries the address and a few deletion fields by
+		// design: the rest were never cleared, and listing them as emptied
+		// would describe an erasure the provider never made.
+		$operation    = (string) ( $row['operation'] ?? '' );
+		$sends_it_all = '' === $operation || self::OPERATION_UPSERT === $operation;
+		$keys         = $sends_it_all
+			? array_unique( array_merge( array_keys( $after ), array_keys( $before ) ) )
+			: array_keys( $after );
+
+		$volatile_fields = self::get_volatile_fields();
+		$labels          = [
+			'email'          => __( 'Email', 'newspack-plugin' ),
+			'name'           => __( 'Name', 'newspack-plugin' ),
+			'previous_email' => __( 'Previous email', 'newspack-plugin' ),
+		];
+
+		$real_changes     = [];
+		$volatile_changes = [];
+		$unchanged        = [];
+		foreach ( $keys as $key ) {
+			$key = (string) $key;
+			// The previous address is log context, not data sent.
+			$is_compared = null !== $predecessor && 'previous_email' !== $key;
+			$bare_key    = self::strip_prefix( $key, $prefix );
+			$field       = [
+				'key'      => $key,
+				'label'    => $labels[ $key ] ?? $bare_key,
+				'before'   => $is_compared ? ( $before[ $key ] ?? null ) : null,
+				'after'    => $after[ $key ] ?? null,
+				'changed'  => $is_compared && ( $before[ $key ] ?? null ) !== ( $after[ $key ] ?? null ),
+				'volatile' => in_array( $bare_key, $volatile_fields, true ),
+			];
+
+			if ( ! $field['changed'] ) {
+				$unchanged[] = $field;
+			} elseif ( $field['volatile'] ) {
+				$volatile_changes[] = $field;
+			} else {
+				$real_changes[] = $field;
+			}
+		}
+
+		return array_merge( $real_changes, $volatile_changes, $unchanged );
+	}
+
+	/**
+	 * A payload as one list of text values: its top-level fields, then its
+	 * metadata. Text, because that is how the two sides are compared.
+	 *
+	 * @param array $payload The contact as handed to the integration.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function flatten_payload( array $payload ): array {
+		$metadata = isset( $payload['metadata'] ) && is_array( $payload['metadata'] ) ? $payload['metadata'] : [];
+		unset( $payload['metadata'] );
+
+		$fields = [];
+		foreach ( array_merge( $payload, $metadata ) as $key => $value ) {
+			if ( is_array( $value ) || is_object( $value ) ) {
+				$value = wp_json_encode( $value );
+			} elseif ( is_bool( $value ) ) {
+				$value = $value ? 'true' : 'false';
+			}
+			$fields[ (string) $key ] = (string) $value;
+		}
+
+		return $fields;
+	}
+
+	/**
+	 * A field's name without the integration's prefix.
+	 *
+	 * @param string $key    The field name as sent.
+	 * @param string $prefix The integration's metadata prefix.
+	 *
+	 * @return string
+	 */
+	private static function strip_prefix( string $key, string $prefix ): string {
+		return ( '' !== $prefix && 0 === strpos( $key, $prefix ) ) ? substr( $key, strlen( $prefix ) ) : $key;
+	}
+
+	/**
+	 * The metadata fields that change on every visit.
+	 *
+	 * @return string[] Field names as sent, without the integration's prefix.
+	 */
+	private static function get_volatile_fields(): array {
+		/**
+		 * Filters the metadata fields the push log ignores when deciding
+		 * whether a push sent the same data as the previous one, and mutes
+		 * when it shows what changed.
+		 *
+		 * Names are the field names as sent to the integration, without the
+		 * integration's prefix — so "Last Active", not the raw "Last_Active"
+		 * metadata key the contact arrives with.
+		 *
+		 * @param string[] $fields Field names as sent, without the integration's prefix.
+		 */
+		return (array) apply_filters( 'newspack_integrations_push_log_volatile_fields', [ 'Last Active' ] );
+	}
+
+	/**
 	 * Fingerprint a payload, to tell whether two pushes sent the same data.
 	 *
 	 * Key order is not data, and neither are fields that change on every
@@ -410,22 +849,11 @@ final class Push_Log {
 	 * @return string
 	 */
 	private static function hash_payload( array $payload, string $prefix ): string {
-		/**
-		 * Filters the metadata fields the push log ignores when deciding
-		 * whether a push sent the same data as the previous one.
-		 *
-		 * Names are the field names as sent to the integration, without the
-		 * integration's prefix — so "Last Active", not the raw "Last_Active"
-		 * metadata key the contact arrives with.
-		 *
-		 * @param string[] $fields Field names as sent, without the integration's prefix.
-		 */
-		$volatile_fields = (array) apply_filters( 'newspack_integrations_push_log_volatile_fields', [ 'Last Active' ] );
+		$volatile_fields = self::get_volatile_fields();
 
 		$metadata = isset( $payload['metadata'] ) && is_array( $payload['metadata'] ) ? $payload['metadata'] : [];
 		foreach ( array_keys( $metadata ) as $key ) {
-			$bare_key = ( '' !== $prefix && 0 === strpos( $key, $prefix ) ) ? substr( $key, strlen( $prefix ) ) : $key;
-			if ( in_array( $bare_key, $volatile_fields, true ) ) {
+			if ( in_array( self::strip_prefix( (string) $key, $prefix ), $volatile_fields, true ) ) {
 				unset( $metadata[ $key ] );
 			}
 		}
@@ -537,7 +965,7 @@ final class Push_Log {
 	public static function schedule_cleanup() {
 		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'unschedule_cleanup' ] );
 
-		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CLEANUP_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
+		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CLEANUP_HOOK, NEWSPACK_CRON_DISABLE, true ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/oauth/class-oauth-transients.php.
 			self::unschedule_cleanup();
 		} elseif ( ! wp_next_scheduled( self::CLEANUP_HOOK ) ) {
 			wp_schedule_event( time(), 'hourly', self::CLEANUP_HOOK );
