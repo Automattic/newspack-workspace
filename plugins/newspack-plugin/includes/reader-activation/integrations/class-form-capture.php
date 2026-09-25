@@ -7,9 +7,10 @@
  * is carried to the page as the newspack-form-capture class on the form
  * tag, which the capture script matches. While Gravity Forms is active, any
  * other form can opt in the same way, through the class directly or through
- * the CSS selectors listed under the integration's Advanced options.
- * Capture-only: neither a sync destination nor a pull source (see
- * supports_push()/supports_pull()).
+ * the CSS selectors listed under the integration's Advanced options. A form's
+ * CSS Class Name setting applies to every placement of that form, whatever
+ * each block's toggle says. Capture-only: neither a sync destination nor a
+ * pull source (see supports_push()/supports_pull()).
  *
  * Capture semantics publishers must understand before opting a form in:
  * - Capture fires on the browser's submit event (native validity checked)
@@ -133,7 +134,7 @@ class Form_Capture extends Integration {
 				'key'         => 'selectors',
 				'type'        => 'textarea',
 				'label'       => __( 'Form selectors', 'newspack-plugin' ),
-				'description' => __( 'Capture forms placed without the block. Any form with the newspack-form-capture CSS class is captured: for a Gravity Forms shortcode or widget, add the class in the form\'s CSS Class Name setting. To capture forms built with other tools, list CSS selectors here, one per line. Selectors that name only element types (like "form") are ignored, since they would opt in every form on the site. The same rule applies as for the block switch: only opt in forms whose submissions should always create a reader account. Captures are rate-limited per visitor IP (100 per hour by default).', 'newspack-plugin' ),
+				'description' => __( 'Capture forms placed without the block. Any form with the newspack-form-capture CSS class is captured: for a Gravity Forms shortcode or widget, add the class in the form\'s CSS Class Name setting. That setting belongs to the form, not the placement, so every placement of the form then registers readers, including blocks with Register readers switched off. To capture forms built with other tools, list CSS selectors here, one per line. Selectors that name only element types (like "form") are ignored, since they would opt in every form on the site. The same rule applies as for the block switch: only opt in forms whose submissions should always create a reader account. Captures are rate-limited per visitor IP (100 per hour by default).', 'newspack-plugin' ),
 				'default'     => '',
 				'advanced'    => true,
 			],
