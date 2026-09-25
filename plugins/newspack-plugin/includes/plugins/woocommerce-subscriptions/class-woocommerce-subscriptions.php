@@ -1206,6 +1206,9 @@ class WooCommerce_Subscriptions {
 	 * Maybe limit the subscription product for user. If the product is limited to one active
 	 * subscription per user, treat on-hold, pending, and pending-cancel statuses as active.
 	 *
+	 * Subscriptions the reader is paying for right now don't count, or a reader could never
+	 * pay for a pending subscription an admin created for them.
+	 *
 	 * @param bool           $is_limited_for_user Whether the subscription product is limited for user.
 	 * @param int|WC_Product $product A WC_Product object or the ID of a product.
 	 * @param int            $user_id The user ID.
@@ -1213,7 +1216,12 @@ class WooCommerce_Subscriptions {
 	public static function maybe_limit_subscription_product_for_user( $is_limited_for_user, $product, $user_id ) {
 		$product_limitation = \wcs_get_product_limitation( $product );
 		if ( ! $is_limited_for_user && 'active' === $product_limitation ) {
-			$is_limited_for_user = \wcs_user_has_subscription( $user_id, $product->get_id(), [ 'active', 'on-hold', 'pending', 'pending-cancel' ] );
+			$is_limited_for_user = \wcs_user_has_subscription(
+				$user_id,
+				$product->get_id(),
+				[ 'active', 'on-hold', 'pending', 'pending-cancel' ],
+				self::get_subscription_ids_awaiting_payment( $product->get_id() )
+			);
 		}
 
 		// Use custom error messaging if available.
@@ -1222,6 +1230,47 @@ class WooCommerce_Subscriptions {
 			add_filter( 'woocommerce_cart_item_removed_message', [ 'Newspack_Blocks\Modal_Checkout', $callback ] );
 		}
 		return $is_limited_for_user;
+	}
+
+	/**
+	 * Get the IDs of the subscriptions to a product that the current request is paying for.
+	 *
+	 * Mirrors WCS_Limiter::get_subscriptions_awaiting_payment_for_product(), which is protected.
+	 * WooCommerce Subscriptions 9 excludes these subscriptions inside wcs_is_product_limited_for_user()
+	 * but doesn't pass them to the `woocommerce_subscriptions_product_limited_for_user` filter, so
+	 * a filter that runs its own subscription lookup has to exclude them itself. Older versions
+	 * ignore the exclusion argument and exempt the order later, in WCS_Limiter::is_product_limited().
+	 *
+	 * @param int $product_id The product ID.
+	 *
+	 * @return int[] Subscription IDs.
+	 */
+	private static function get_subscription_ids_awaiting_payment( $product_id ) {
+		global $wp;
+
+		$order_id = function_exists( 'WC' ) && \WC()->session ? \WC()->session->get( 'order_awaiting_payment' ) : 0;
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( empty( $order_id ) && isset( $_GET['pay_for_order'], $wp->query_vars['order-pay'] ) ) {
+			$order_id = $wp->query_vars['order-pay'];
+		}
+		$order = $order_id ? \wc_get_order( absint( $order_id ) ) : false;
+		if ( ! $order || ! $order->has_status( [ 'pending', 'failed' ] ) ) {
+			return [];
+		}
+
+		$subscription_ids = [];
+		$subscriptions    = \wcs_get_subscriptions(
+			[
+				'order_id'            => $order->get_id(),
+				'subscription_status' => [ 'active', 'pending', 'on-hold' ],
+			]
+		);
+		foreach ( $subscriptions as $subscription ) {
+			if ( $subscription->has_product( $product_id ) && $subscription->needs_payment() ) {
+				$subscription_ids[] = $subscription->get_id();
+			}
+		}
+		return $subscription_ids;
 	}
 
 	/**
