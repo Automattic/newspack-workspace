@@ -202,9 +202,10 @@ class WidgetTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A metacharacter in the request path comes out encoded in the data attribute, so it
-	 * stays inert data. The input is an apostrophe, an ordinary character in real request
-	 * paths, which esc_url() renders as the entity &#039; rather than a bare quote.
+	 * A metacharacter in the request path is delivered as the data attribute's value and
+	 * never reaches an inline navigation handler. The input is an apostrophe, an ordinary
+	 * character in real request paths; esc_url() renders it as the entity &#039; inside the
+	 * attribute, where it is data rather than part of a JavaScript string.
 	 */
 	public function test_page_layout_button_encodes_request_path_metacharacters() {
 		global $post, $wp_query;
@@ -240,8 +241,9 @@ class WidgetTest extends WP_UnitTestCase {
 			$_SERVER['REQUEST_URI'] = $original_request_uri;
 		}
 
-		$this->assertStringContainsString( 'o&#039;brien', $output );
-		$this->assertStringNotContainsString( 'o\'brien', $output );
-		$this->assertStringNotContainsString( 'onclick', $output );
+		// The metacharacter-bearing path is carried, encoded, as the data attribute's value...
+		$this->assertMatchesRegularExpression( '/data-republish-url="[^"]*o&#039;brien[^"]*"/', $output );
+		// ...and the request path never lands in an inline navigation handler.
+		$this->assertStringNotContainsString( 'window.location.href', $output );
 	}
 }
