@@ -27,7 +27,7 @@ import { useWizardData } from '../../../../../../packages/components/src/wizard/
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
-import { getMeteringDescription, hasOwnMeter, hasSharedMeteredPath, sharesTheSiteMeter } from '../utils';
+import { getMeteringDescription, hasOwnMeter, isGateMetered, hasSharedMeteredPath, sharesTheSiteMeter } from '../utils';
 import CountdownBanner from './countdown-banner';
 
 const DEFAULT_SITE_METER: SiteMeterConfig = {
@@ -317,6 +317,7 @@ const MeteringSettings = () => {
 			<CountdownBanner
 				countdown={ countdown }
 				onChange={ setCountdown }
+				hasActiveMetering={ gates.some( gate => gate.status === 'publish' && isGateMetered( gate, siteMeter ) ) }
 				meterCount={ siteMeter.registered_count || siteMeter.anonymous_count }
 				meterPeriod={ siteMeter.period }
 				meterAudience={ siteMeter.registered_count ? 'registered' : 'anonymous' }

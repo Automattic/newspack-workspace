@@ -16,6 +16,7 @@ import classnames from 'classnames';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	BaseControl,
+	Notice,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -32,6 +33,8 @@ import { Grid, SectionHeader, SelectControl, TextControl } from '../../../../../
 interface CountdownBannerProps {
 	countdown: MeteringCountdownConfig;
 	onChange: ( countdown: MeteringCountdownConfig ) => void;
+	/** Whether an active gate meters, so the banner has something to count down. */
+	hasActiveMetering: boolean;
 	/** The allowance the banner counts down, as currently edited. */
 	meterCount: number;
 	/** The reset period the allowance runs on, as currently edited. */
@@ -92,6 +95,7 @@ const getPreviewHelp = ( audience: 'anonymous' | 'registered', otherAudienceMete
 export default function CountdownBanner( {
 	countdown,
 	onChange,
+	hasActiveMetering,
 	meterCount,
 	meterPeriod,
 	meterAudience,
@@ -111,6 +115,14 @@ export default function CountdownBanner( {
 						title={ __( 'Countdown Banner', 'newspack-plugin' ) }
 						description={ __( 'Tell readers how many free views they have left before a gate applies.', 'newspack-plugin' ) }
 					/>
+					{ isEnabled && ! hasActiveMetering && (
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
+							{ __(
+								'No active gate meters yet, so there is nothing to count down and the banner will not appear. Activate a gate with metering to show it.',
+								'newspack-plugin'
+							) }
+						</Notice>
+					) }
 				</VStack>
 				<VStack spacing={ 6 } justify="flex-start">
 					<ToggleGroupControl
