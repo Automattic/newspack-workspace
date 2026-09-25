@@ -146,7 +146,10 @@ function page_button_actions(){
 	var $ = jQuery;
 	$( '.republication-tracker-tool-button.page' ).on( 'click', function() {
 		var url = $( this ).attr( 'data-republish-url' );
-		if ( url ) {
+		// Navigate only to a root-relative path (leading '/', but not '//', which is
+		// protocol-relative), so the listener stays safe on its own rather than trusting
+		// whatever the attribute holds.
+		if ( url && '/' === url.charAt( 0 ) && '/' !== url.charAt( 1 ) ) {
 			window.location.href = url;
 		}
 	} );
