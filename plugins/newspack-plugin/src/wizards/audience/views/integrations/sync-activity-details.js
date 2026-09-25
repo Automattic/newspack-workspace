@@ -248,7 +248,7 @@ export const SyncActivityDetails = ( { integrationId, entryId } ) => {
 					<dl className="newspack-integration-log-details__meta">
 						{ entry.error_class && (
 							<>
-								<dt>{ __( 'Kind', 'newspack-plugin' ) }</dt>
+								<dt>{ __( 'Type', 'newspack-plugin' ) }</dt>
 								<dd>{ getErrorKindLabel( entry ) }</dd>
 							</>
 						) }

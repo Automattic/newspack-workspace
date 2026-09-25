@@ -43,10 +43,10 @@ describe( 'STATUS_MAP', () => {
 		expect( STATUS_MAP[ 'in-progress' ].intent ).toBe( 'informational' );
 	} );
 
-	it( 'says a finished action ran, not that the sync worked', () => {
+	it( 'says a finished action is complete, not that the sync worked', () => {
 		// The action finishing says nothing about the push inside it, so the
-		// label and the neutral badge stop short of "success".
-		expect( STATUS_MAP.complete.label ).toBe( 'Ran' );
+		// neutral badge stops short of "success".
+		expect( STATUS_MAP.complete.label ).toBe( 'Complete' );
 		expect( STATUS_MAP.complete.intent ).toBe( 'draft' );
 		expect( STATUS_MAP.complete.status ).toBe( 'done' );
 	} );
@@ -66,7 +66,7 @@ describe( 'PUSH_LOG_STATUS_MAP', () => {
 	} );
 
 	it( 'keeps the success badge for a sync that worked', () => {
-		// The scheduled actions list gave this badge up ("Ran"); here it means it.
+		// The scheduled actions list gave this badge up; here it means it.
 		expect( PUSH_LOG_STATUS_MAP.success.intent ).toBe( 'stable' );
 		expect( PUSH_LOG_STATUS_MAP.failed.intent ).toBe( 'high' );
 	} );

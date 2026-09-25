@@ -110,6 +110,7 @@ describe( 'SyncActivityDetails', () => {
 
 		expect( screen.getByRole( 'heading', { name: 'Not delivered' } ) ).toBeTruthy();
 		expect( screen.getByRole( 'heading', { name: 'Error' } ) ).toBeTruthy();
+		expect( screen.getByText( 'Type' ) ).toBeTruthy();
 		expect( screen.getByText( 'Temporary error' ) ).toBeTruthy();
 		expect( screen.getByText( 'ESP 503' ) ).toBeTruthy();
 		expect( screen.getByText( 'Retry 5 of 5' ) ).toBeTruthy();

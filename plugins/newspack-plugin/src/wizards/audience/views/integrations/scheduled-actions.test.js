@@ -85,16 +85,16 @@ describe( 'ScheduledActions', () => {
 		expect( mockDataViewsProps.current.data ).toEqual( items );
 	} );
 
-	it( 'says a finished action ran, in the column and in the filter', async () => {
+	it( 'says a finished action is complete, in the column and in the filter', async () => {
 		mockApiFetch.mockResolvedValue( { items: [], total: 0 } );
 		render( <ScheduledActions integrationId="sample" /> );
 		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
 
 		const statusField = mockDataViewsProps.current.fields.find( field => field.id === 'status' );
-		expect( statusField.elements ).toContainEqual( { value: 'complete', label: 'Ran' } );
+		expect( statusField.elements ).toContainEqual( { value: 'complete', label: 'Complete' } );
 
 		render( statusField.render( { item: { status: 'complete' } } ) );
-		expect( screen.getByText( 'Ran' ) ).toBeTruthy();
+		expect( screen.getByText( 'Complete' ) ).toBeTruthy();
 	} );
 
 	it( 'offers to run only an action that is still pending', async () => {
