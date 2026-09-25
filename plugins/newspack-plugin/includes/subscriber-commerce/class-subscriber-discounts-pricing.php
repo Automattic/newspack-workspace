@@ -345,10 +345,10 @@ class Subscriber_Discounts_Pricing {
 	 * @return array
 	 */
 	public static function filter_variation_prices_hash( $hash, $product ) {
-		// Left untouched wherever prices are not adjusted, so a request that
-		// reports list prices cannot store them under a subscriber's key and
+		// Left untouched wherever prices are not adjusted, so a request or a read
+		// that reports list prices cannot store them under a subscriber's key and
 		// hand that reader undiscounted prices on the storefront afterwards.
-		if ( self::is_suspended() || ! self::should_adjust_prices_in_context() ) {
+		if ( self::is_suspended() || self::is_engine_reading_base() || ! self::should_adjust_prices_in_context() ) {
 			return $hash;
 		}
 		// Keyed on the reader's entitlement across the whole active rule set,
@@ -377,6 +377,13 @@ class Subscriber_Discounts_Pricing {
 	 */
 	public static function get_subscriber_price( $base_price, $product, $user_id = null ) {
 		if ( self::is_suspended() || ! $product instanceof \WC_Product ) {
+			return null;
+		}
+		// The dynamic pricing engine reads a product's catalog price as its
+		// discount base (for subscriptions, WooCommerce Subscriptions' recurring
+		// price, which runs these filters); a subscriber price there would be
+		// discounted twice.
+		if ( self::is_engine_reading_base() ) {
 			return null;
 		}
 		// Checked here as well as at registration so every surface agrees:
@@ -581,7 +588,8 @@ class Subscriber_Discounts_Pricing {
 	}
 
 	/**
-	 * The active rules covering a product that this reader qualifies for.
+	 * The active rules covering a product that this reader qualifies for, or
+	 * none when the product is a donation.
 	 *
 	 * @param \WC_Product $product Product being priced.
 	 * @param int         $user_id Reader.
@@ -623,6 +631,14 @@ class Subscriber_Discounts_Pricing {
 				}
 			)
 		);
+
+		// A donation is an amount the reader chose; no discount lowers it.
+		// Answering that loads the product again, so it is asked only once a
+		// rule would apply, and kept with the verdict rather than asked on
+		// every price read.
+		if ( ! empty( $qualifying_rules ) && class_exists( '\Newspack\Donations' ) && Donations::is_donation_product( $product->get_id() ) ) {
+			$qualifying_rules = [];
+		}
 
 		self::$rules_for_product[ $cache_key ] = $qualifying_rules;
 
@@ -672,6 +688,18 @@ class Subscriber_Discounts_Pricing {
 	 */
 	private static function is_suspended() {
 		return self::$suspend_depth > 0;
+	}
+
+	/**
+	 * Whether the dynamic pricing engine is reading a product's discount base.
+	 *
+	 * @return bool
+	 */
+	private static function is_engine_reading_base() {
+		// Not autoloaded: a read can only be under way once the engine has
+		// loaded the class, and this is asked on every price read.
+		return class_exists( '\Automattic\WooCommerce\DynamicPricing\Amount_Calculator', false )
+			&& \Automattic\WooCommerce\DynamicPricing\Amount_Calculator::is_reading_base();
 	}
 }
 
