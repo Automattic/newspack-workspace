@@ -178,29 +178,27 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The settings page leads with a how-to guide: numbered steps for the
-	 * block, then a note on the marker class for forms placed any other way.
-	 * Form selectors, the route the class replaced, travel flagged deprecated,
-	 * so the UI shows them only to a site that still has some saved.
+	 * The how-to travels in the integrations payload for the card's How it
+	 * works guide, its last step linking the help page that covers forms
+	 * placed without the block. The integration declares no settings, so the
+	 * card offers no settings page.
 	 */
-	public function test_guide_and_deprecated_selectors_in_payload() {
+	public function test_guide_in_payload_and_no_settings() {
 		$integration = Integrations::get_integration( Form_Capture::ID );
 		$guide       = $integration->get_guide();
-		foreach ( $guide as $item ) {
-			$this->assertNotEmpty( $item['title'] );
-			$this->assertNotEmpty( $item['description'] );
+		$this->assertCount( 3, $guide );
+		foreach ( $guide as $step ) {
+			$this->assertNotEmpty( $step['title'] );
+			$this->assertNotEmpty( $step['description'] );
 		}
-		$notes = array_values( array_filter( $guide, fn( $item ) => ! empty( $item['note'] ) ) );
-		$this->assertCount( 1, $notes, 'The class route is a note, not a numbered step.' );
-		$this->assertStringContainsString( Form_Capture::MARKER_CLASS, $notes[0]['description'] );
-		$this->assertCount( 3, array_filter( $guide, fn( $item ) => empty( $item['note'] ) ), 'The block route keeps its three steps.' );
+		$last_step = end( $guide );
+		$this->assertNotEmpty( $last_step['link']['label'] );
+		$this->assertStringStartsWith( 'https://help.newspack.com/', $last_step['link']['url'] );
 
 		$payload = Integrations::get_all_integration_settings()[ Form_Capture::ID ];
 		$this->assertSame( 'Gravity Forms', $payload['name'] );
 		$this->assertSame( $guide, $payload['guide'] );
-		$selectors = array_values( array_filter( $payload['settings'], fn( $field ) => 'selectors' === $field['key'] ) );
-		$this->assertCount( 1, $selectors );
-		$this->assertTrue( $selectors[0]['deprecated'] );
+		$this->assertSame( [], $payload['settings'] );
 	}
 
 	/**
@@ -289,43 +287,13 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Selector and list settings parse into clean arrays, and bare
-	 * element/universal selectors — which would opt in every form on the
-	 * site — are rejected.
+	 * Only the marker class opts a form in. CSS selectors a site saved under
+	 * the former Form selectors setting stay in its options table, and the
+	 * capture script must not receive them.
 	 */
-	public function test_settings_parsing() {
-		$integration = Integrations::get_integration( Form_Capture::ID );
-
-		$this->assertSame( [ '.newspack-form-capture' ], $integration->get_selectors(), 'Marker class is always present.' );
-		$integration->update_settings_field_value( 'selectors', "#signup-form\n .sidebar form \n#signup-form" );
-		$this->assertSame( [ '.newspack-form-capture', '#signup-form', '.sidebar form' ], $integration->get_selectors() );
-
-		$integration->update_settings_field_value( 'selectors', "form\n*\nbody\nDIV\n#signup-form\nform.signup" );
-		$this->assertSame(
-			[ '.newspack-form-capture', '#signup-form', 'form.signup' ],
-			$integration->get_selectors(),
-			'Bare element/universal selectors must be rejected; qualified ones kept.'
-		);
-
-		// An over-broad selector is over-broad wherever it sits: inside a
-		// comma-separated list, or behind ancestors that name only elements.
-		$integration->update_settings_field_value( 'selectors', "form, #signup\nbody , .thing\nbody form\ndiv > form\n#a, .b\nfooter form.signup" );
-		$this->assertSame(
-			[ '.newspack-form-capture', '#a, .b', 'footer form.signup' ],
-			$integration->get_selectors(),
-			'A line is dropped whole when any of its selectors matches every form.'
-		);
-
-		// A trailing comma is a plausible copy-paste from a CSS rule. The empty
-		// slot has to be removed, not merely tolerated: it makes the whole line
-		// invalid CSS, and querySelectorAll() would throw on it client-side.
-		$integration->update_settings_field_value( 'selectors', "#signup,\n#a, #b,\n ,#c" );
-		$this->assertSame(
-			[ '.newspack-form-capture', '#signup', '#a, #b', '#c' ],
-			$integration->get_selectors(),
-			'Lines are rebuilt from their non-empty parts, so what ships is valid CSS.'
-		);
-		$integration->update_settings_field_value( 'selectors', '' );
+	public function test_saved_selectors_are_ignored() {
+		update_option( 'newspack_integration_settings_form-capture_selectors', "#signup-form\n.sidebar form" );
+		$this->assertSame( [ '.newspack-form-capture' ], Integrations::get_integration( Form_Capture::ID )->get_selectors() );
 	}
 
 	/**

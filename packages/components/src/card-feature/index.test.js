@@ -61,7 +61,7 @@ describe( 'CardFeature', () => {
 		} );
 
 		it( 'names the feature in the configure state too', () => {
-			render( <CardFeature title="Content Gifting" enabled /> );
+			render( <CardFeature title="Content Gifting" enabled onConfigure={ () => {} } /> );
 			expect( screen.getByRole( 'button', { name: 'Configure Content Gifting' } ) ).toBeInTheDocument();
 		} );
 
@@ -106,6 +106,15 @@ describe( 'CardFeature', () => {
 			fireEvent.click( primaryButton() );
 			expect( onConfigure ).toHaveBeenCalledTimes( 1 );
 			expect( onEnable ).not.toHaveBeenCalled();
+		} );
+
+		// A button reading Configure with nothing behind it would click to nowhere.
+		it( 'drops the primary button once enabled when there is nothing to configure', () => {
+			render(
+				<CardFeature title="Content gifting" enabled onEnable={ jest.fn() } moreControls={ [ { title: 'Disable', onClick: jest.fn() } ] } />
+			);
+			expect( screen.queryByRole( 'button', { name: /Configure/ } ) ).toBeNull();
+			expect( moreMenu() ).toBeInTheDocument();
 		} );
 
 		it( 'still routes to onEnable when enabled with an unmet requirement, since the button reads Enable', () => {
@@ -162,7 +171,7 @@ describe( 'CardFeature', () => {
 		} );
 
 		it( 'leaves the enabled badge unlinked, since it explains nothing about the button', () => {
-			render( <CardFeature title="Content gifting" enabled /> );
+			render( <CardFeature title="Content gifting" enabled onConfigure={ () => {} } /> );
 			expect( primaryButton() ).not.toHaveAttribute( 'aria-describedby' );
 		} );
 
@@ -180,7 +189,7 @@ describe( 'CardFeature', () => {
 		it( 'accepts custom labels for both states', () => {
 			const { rerender } = render( <CardFeature title="Apple News" enableLabel="Connect" configureLabel="Manage connection" /> );
 			expect( screen.getByRole( 'button', { name: 'Connect Apple News' } ) ).toBeInTheDocument();
-			rerender( <CardFeature title="Apple News" enabled enableLabel="Connect" configureLabel="Manage connection" /> );
+			rerender( <CardFeature title="Apple News" enabled enableLabel="Connect" configureLabel="Manage connection" onConfigure={ () => {} } /> );
 			expect( screen.getByRole( 'button', { name: 'Manage connection Apple News' } ) ).toBeInTheDocument();
 		} );
 	} );

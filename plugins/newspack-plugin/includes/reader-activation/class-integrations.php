@@ -474,15 +474,17 @@ class Integrations {
 	}
 
 	/**
-	 * Get settings config for all integrations that have settings fields.
+	 * Get settings config for the integrations the Integrations screen lists:
+	 * those with settings fields, and those with a how-to guide, whose card
+	 * offers it from its menu even with nothing to configure.
 	 *
 	 * @return array Keyed array of integration settings.
 	 */
 	public static function get_all_integration_settings() {
 		$result = [];
 		foreach ( self::$integrations as $id => $integration ) {
-			$fields = $integration->get_settings_fields();
-			if ( empty( $fields ) ) {
+			$guide = $integration->get_guide();
+			if ( empty( $integration->get_settings_fields() ) && empty( $guide ) ) {
 				continue;
 			}
 			$result[ $id ] = [
@@ -498,7 +500,7 @@ class Integrations {
 				'setup_url'                => $integration->get_setup_url(),
 				'settings'                 => $integration->get_settings_config(),
 				'required_plugins'         => $integration->get_required_plugins(),
-				'guide'                    => $integration->get_guide(),
+				'guide'                    => $guide,
 			];
 		}
 

@@ -71,7 +71,7 @@ type CardFeatureProps = {
 	 * where the requirement rather than the feature is what the button acts on.
 	 */
 	onEnable?: () => void;
-	/** Called when the primary button is clicked while it reads "Configure": enabled, with no unmet requirements. */
+	/** Called when the primary button is clicked while it reads "Configure": enabled, with no unmet requirements. Omit it for a feature with nothing to configure, and that state shows no primary button. */
 	onConfigure?: () => void;
 	/** Controls rendered inside the "More" dropdown, shown when enabled — including the unmet-requirements state when `requirementsActionable`. */
 	moreControls?: MoreControl[];
@@ -128,6 +128,8 @@ const CardFeature = ( {
 		title
 	);
 	const showMoreControls = enabled && !! moreControls?.length && ( ! requirements || requirementsActionable );
+	// A Configure button with nothing behind it would click to nowhere.
+	const showPrimaryButton = ! isConfigureState || !! onConfigure;
 
 	const handleButtonClick = () => {
 		if ( isConfigureState ) {
@@ -177,18 +179,20 @@ const CardFeature = ( {
 			<Card.Content className="newspack-card-feature__actions">
 				<Stack direction="row" align="center" justify="space-between" gap="sm" wrap="wrap">
 					<Stack direction="row" align="center" gap="sm">
-						<Button
-							variant={ isConfigureState ? 'tertiary' : 'secondary' }
-							accessibleWhenDisabled
-							aria-describedby={ describedById }
-							aria-label={ buttonAccessibleLabel }
-							disabled={ ( isMuted && ! requirementsActionable ) || busy }
-							isBusy={ busy }
-							onClick={ handleButtonClick }
-							size="compact"
-						>
-							{ buttonLabel }
-						</Button>
+						{ showPrimaryButton && (
+							<Button
+								variant={ isConfigureState ? 'tertiary' : 'secondary' }
+								accessibleWhenDisabled
+								aria-describedby={ describedById }
+								aria-label={ buttonAccessibleLabel }
+								disabled={ ( isMuted && ! requirementsActionable ) || busy }
+								isBusy={ busy }
+								onClick={ handleButtonClick }
+								size="compact"
+							>
+								{ buttonLabel }
+							</Button>
+						) }
 						{ showMoreControls && (
 							<DropdownMenu
 								icon={ moreVertical }

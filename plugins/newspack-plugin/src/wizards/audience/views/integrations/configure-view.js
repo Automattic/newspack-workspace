@@ -443,13 +443,6 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 
 	const visibleSettingsFields = settingsFields.filter( fieldIsRendered );
 	const visibleOutboundSettingsFields = outboundSettingsFields.filter( fieldIsRendered );
-	// Guide steps come from the integration (see Integration::get_guide()); an
-	// integration whose way in is a workflow elsewhere describes it here first.
-	// Notes describe another way in rather than a step, so they follow the
-	// numbered steps without a number.
-	const guide = Array.isArray( integration.guide ) ? integration.guide : [];
-	const guideSteps = guide.filter( item => ! item.note );
-	const guideNotes = guide.filter( item => item.note );
 	const inboundOptions = inboundField?.options || [];
 	const outboundGroups = outboundField?.grouped_options || [];
 
@@ -474,49 +467,21 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		<>
 			{ navBlockDialog }
 			<div className="newspack-configure-view">
-				{ /* Section 0: How it works */ }
-				{ guide.length > 0 && (
-					<Grid columns={ 2 } gutter={ 32 }>
-						<SectionHeader heading={ 2 } title={ __( 'How it works', 'newspack-plugin' ) } />
-						<div className="newspack-configure-view__guide">
-							{ /* `list-style: none` drops list semantics in Safari, so the role is restated. */ }
-							{ /* eslint-disable-next-line jsx-a11y/no-redundant-roles */ }
-							<ol className="newspack-configure-view__guide-steps" role="list">
-								{ guideSteps.map( ( step, index ) => (
-									<li key={ index }>
-										<h3>{ step.title }</h3>
-										<p>{ step.description }</p>
-									</li>
-								) ) }
-							</ol>
-							{ guideNotes.map( ( note, index ) => (
-								<div className="newspack-configure-view__guide-note" key={ index }>
-									<h3>{ note.title }</h3>
-									<p>{ note.description }</p>
-								</div>
-							) ) }
-						</div>
-					</Grid>
-				) }
-
 				{ /* Section 1: Settings */ }
 				{ visibleSettingsFields.length > 0 && (
-					<>
-						{ guide.length > 0 && <Divider alignment="full-width" variant="tertiary" /> }
-						<Grid columns={ 2 } gutter={ 32 } noMargin={ guide.length > 0 }>
-							<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } noMargin={ guide.length > 0 } />
-							<Stack direction="column" gap="xl">
-								{ visibleSettingsFields.map( field => (
-									<SettingsField
-										key={ field.key }
-										field={ field }
-										value={ getFieldValue( field ) }
-										onChange={ val => handleFieldChange( field.key, val ) }
-									/>
-								) ) }
-							</Stack>
-						</Grid>
-					</>
+					<Grid columns={ 2 } gutter={ 32 }>
+						<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
+						<Stack direction="column" gap="xl">
+							{ visibleSettingsFields.map( field => (
+								<SettingsField
+									key={ field.key }
+									field={ field }
+									value={ getFieldValue( field ) }
+									onChange={ val => handleFieldChange( field.key, val ) }
+								/>
+							) ) }
+						</Stack>
+					</Grid>
 				) }
 
 				{ /* Section 2: Inbound */ }

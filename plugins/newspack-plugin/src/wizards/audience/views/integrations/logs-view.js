@@ -16,6 +16,7 @@ import { DataViews, StatusIndicator } from '../../../../../packages/components/s
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
 import { LogDetailsModal } from './log-details-modal';
+import { hasSettingsToShow } from './settings-field';
 import './style.scss';
 
 const DEFAULT_VIEW = {
@@ -50,8 +51,12 @@ export const LogsView = ( { integrations, match } ) => {
 
 	useEffect( () => {
 		if ( integration ) {
+			// The name links to the integration's settings page, unless it has none.
+			const integrationCrumb = hasSettingsToShow( integration.settings )
+				? { label: integration.name, url: `#/settings/${ integrationId }` }
+				: { label: integration.name };
 			setHeaderData( {
-				sectionName: [ { label: integration.name, url: `#/settings/${ integrationId }` }, { label: __( 'Logs', 'newspack-plugin' ) } ],
+				sectionName: [ integrationCrumb, { label: __( 'Logs', 'newspack-plugin' ) } ],
 				actions: [
 					{
 						type: 'secondary',

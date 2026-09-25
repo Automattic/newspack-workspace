@@ -1,7 +1,3 @@
-@use "~@wordpress/base-styles/colors" as wp-colors;
-@use "~@wordpress/base-styles/mixins" as wp-mixins;
-@use "~@wordpress/base-styles/variables" as wp-vars;
-
 .newspack-configure-view {
 	// Align section headers to the top of the grid row.
 	.newspack-grid .newspack-section-header {
@@ -29,70 +25,6 @@
 		flex: 0 0 auto;
 		margin: 0;
 		width: 200px;
-	}
-
-	// Numbered how-to steps, then any notes. Each step number sits in a circle in
-	// the gutter, so the text lines up with the fields in the sections below; a
-	// single column has no gutter, so the circle moves inside and the text,
-	// notes included, indents past it.
-	&__guide {
-		h3 {
-			@include wp-mixins.heading-large();
-			margin: 0;
-		}
-
-		p {
-			margin: wp-vars.$grid-unit-10 0 0;
-		}
-	}
-
-	&__guide-steps li,
-	&__guide-note {
-		padding-left: wp-vars.$grid-unit-60;
-
-		// The Grid's two-column breakpoint.
-		@media screen and (min-width: 744px) {
-			padding-left: 0;
-		}
-	}
-
-	&__guide-steps li + li,
-	&__guide-note {
-		border-top: 1px solid var(--wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100});
-		margin-top: wp-vars.$grid-unit-40;
-		padding-top: wp-vars.$grid-unit-40;
-	}
-
-	&__guide-steps {
-		counter-reset: newspack-configure-view-guide;
-		list-style: none;
-		margin: 0;
-		padding: 0;
-
-		li {
-			counter-increment: newspack-configure-view-guide;
-		}
-
-		h3 {
-			position: relative;
-
-			&::before {
-				@include wp-mixins.body-medium();
-				align-items: center;
-				border: 1px solid currentcolor;
-				border-radius: 50%;
-				box-sizing: border-box;
-				color: var(--wp-admin-theme-color);
-				content: counter(newspack-configure-view-guide);
-				display: flex;
-				height: wp-vars.$grid-unit-40;
-				justify-content: center;
-				left: -1 * wp-vars.$grid-unit-60;
-				position: absolute;
-				top: calc((#{wp-vars.$font-line-height-small} - #{wp-vars.$grid-unit-40}) / 2);
-				width: wp-vars.$grid-unit-40;
-			}
-		}
 	}
 }
 

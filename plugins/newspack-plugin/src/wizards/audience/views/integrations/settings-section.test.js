@@ -15,6 +15,7 @@ import { SettingsSection, sortIntegrationIds } from './settings-section';
 
 const mockCardFeatureProps = [];
 const mockEnableModalProps = [];
+const mockIntegrationGuideProps = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( {
@@ -41,6 +42,12 @@ jest.mock( './enable-modal', () => {
 		},
 	};
 } );
+jest.mock( './guide', () => ( {
+	IntegrationGuide: props => {
+		mockIntegrationGuideProps.push( props );
+		return null;
+	},
+} ) );
 jest.mock(
 	'../../../wizards-tab',
 	() =>
@@ -104,6 +111,7 @@ describe( 'Audience Integrations settings section card action', () => {
 	beforeEach( () => {
 		mockCardFeatureProps.length = 0;
 		mockEnableModalProps.length = 0;
+		mockIntegrationGuideProps.length = 0;
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( { HandoffLink: HANDOFF_LINK } );
 		delete window.location;
@@ -157,9 +165,34 @@ describe( 'Audience Integrations settings section card action', () => {
 	} );
 
 	it( 'routes the configure action to the configure view when connected', () => {
-		const { history, cardProps } = renderSection( { is_connected: true, is_set_up: true, enabled: true } );
+		const { history, cardProps } = renderSection( {
+			is_connected: true,
+			is_set_up: true,
+			enabled: true,
+			settings: [ { ...requiredAudienceField, value: 'abc123' } ],
+		} );
 		cardProps.onConfigure();
 		expect( history.push ).toHaveBeenCalledWith( '/settings/esp' );
+	} );
+
+	// Configure leads to the settings page, which would be empty.
+	it( 'offers no configure action for an integration with no setting to show', () => {
+		const { cardProps } = renderSection( { is_connected: true, is_set_up: true, enabled: true, settings: [ { key: 'token', type: 'hidden' } ] } );
+		expect( cardProps.onConfigure ).toBeUndefined();
+	} );
+
+	it( 'opens the how-to from the menu of an enabled integration that has one', () => {
+		const guide = [ { title: 'Add the form with the Gravity Forms block', description: 'Place the form on a page.' } ];
+		const { cardProps } = renderSection( { is_connected: true, is_set_up: true, enabled: true, guide } );
+		const howItWorks = cardProps.moreControls.find( control => 'How it works' === control.title );
+		expect( howItWorks ).toBeDefined();
+		act( () => howItWorks.onClick() );
+		expect( mockIntegrationGuideProps[ mockIntegrationGuideProps.length - 1 ].integration.guide ).toBe( guide );
+	} );
+
+	it( 'leaves How it works out of the menu for an integration without a how-to', () => {
+		const { cardProps } = renderSection( { is_connected: true, is_set_up: true, enabled: true } );
+		expect( cardProps.moreControls.map( control => control.title ) ).toEqual( [ 'Logs', 'Disable' ] );
 	} );
 
 	it( 'routes the configure action through the handoff while the provider is not connected', async () => {

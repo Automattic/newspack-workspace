@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -1038,60 +1038,5 @@ describe( 'ConfigureView outbound field details', () => {
 		const checkbox = screen.getByLabelText( 'Undetailed Field' );
 		expect( checkbox ).toBeInTheDocument();
 		expect( checkbox.parentElement.querySelector( '[data-testid="badge"]' ) ).toBeNull();
-	} );
-} );
-
-describe( 'ConfigureView guide and deprecated fields', () => {
-	const GUIDED = {
-		id: 'form-capture',
-		name: 'Gravity Forms',
-		description: 'Register readers from Gravity Forms submissions.',
-		guide: [
-			{ title: 'Add the form with the Gravity Forms block', description: 'Place the form on a page.' },
-			{ title: 'Turn on Register readers', description: 'Switch it on in the block sidebar.' },
-		],
-		settings: [ { key: 'selectors', type: 'textarea', label: 'Form selectors', value: '', deprecated: true } ],
-	};
-	const renderGuided = ( overrides = {} ) =>
-		renderConfigureView( { integrations: { 'form-capture': { ...GUIDED, ...overrides } }, integrationId: 'form-capture' } );
-
-	it( 'renders the guide as ordered steps titled by headings, ahead of the fields', () => {
-		renderGuided();
-		expect( screen.getAllByRole( 'heading', { level: 2 } )[ 0 ] ).toHaveTextContent( 'How it works' );
-		const steps = within( screen.getByRole( 'list' ) ).getAllByRole( 'listitem' );
-		expect( steps.map( step => within( step ).getByRole( 'heading', { level: 3 } ).textContent ) ).toEqual( [
-			'Add the form with the Gravity Forms block',
-			'Turn on Register readers',
-		] );
-		expect( steps.map( step => step.textContent ) ).toEqual( [
-			'Add the form with the Gravity Forms blockPlace the form on a page.',
-			'Turn on Register readersSwitch it on in the block sidebar.',
-		] );
-	} );
-
-	// A note is another way in, not a step, so it carries no number.
-	it( 'renders guide notes after the numbered steps, outside the list', () => {
-		renderGuided( {
-			guide: [ ...GUIDED.guide, { title: 'Forms placed without the block', description: 'Add the newspack-form-capture class.', note: true } ],
-		} );
-		const steps = screen.getByRole( 'list' );
-		expect( within( steps ).queryByText( 'Forms placed without the block' ) ).toBeNull();
-		const noteHeading = screen.getByRole( 'heading', { level: 3, name: 'Forms placed without the block' } );
-		expect( steps.compareDocumentPosition( noteHeading ) ).toBe( Node.DOCUMENT_POSITION_FOLLOWING );
-		expect( screen.getByText( 'Add the newspack-form-capture class.' ) ).toBeInTheDocument();
-	} );
-
-	// Visibility follows the saved value, not the draft: clearing the field must
-	// not pull it off the screen before the empty value is saved.
-	it( 'keeps a deprecated field on screen while its saved value is being cleared', () => {
-		renderGuided( { settings: [ { ...GUIDED.settings[ 0 ], value: '.signup-form' } ] } );
-		fireEvent.change( screen.getByRole( 'textbox', { name: 'Form selectors' } ), { target: { value: '' } } );
-		expect( screen.getByRole( 'textbox', { name: 'Form selectors' } ) ).toBeInTheDocument();
-	} );
-
-	it( 'renders no How it works section for an integration without a guide', () => {
-		renderConfigureView();
-		expect( screen.queryByRole( 'heading', { name: 'How it works' } ) ).toBeNull();
-		expect( screen.getByRole( 'heading', { name: 'Settings' } ) ).toBeInTheDocument();
 	} );
 } );

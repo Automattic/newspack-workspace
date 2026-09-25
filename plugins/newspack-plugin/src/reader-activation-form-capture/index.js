@@ -28,7 +28,7 @@ window.newspackRAS.push( readerActivation => {
 	const attached = new WeakSet();
 	// Gravity Forms ids of matched GF forms. Only forms whose element id is
 	// gform_<formid> are remembered: WPForms stamps data-formid too, and a
-	// publisher's selectors may match one of its forms. GF's AJAX postback
+	// WPForms form can carry the marker class. GF's AJAX postback
 	// re-renders the form from GFFormDisplay::get_form(), outside the block
 	// render filter that adds the marker class, so after a validation error
 	// or a page change the form on the page carries no marker. Its data-formid

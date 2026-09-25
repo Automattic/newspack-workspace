@@ -61,13 +61,6 @@ export const hasSelectableOption = field => ( field.options || [] ).some( option
  * @return {boolean} True when `SettingsField` renders something for the field.
  */
 export const settingsFieldRenders = field => {
-	// A deprecated field stays while it holds a saved value, so a site relying on
-	// it can clear it, but never appears for a site that would start using it.
-	// Judged on the saved value, not the draft, so clearing it keeps it on screen
-	// until the empty value is saved.
-	if ( field.deprecated && isEmptyValue( field.value ) ) {
-		return false;
-	}
 	switch ( field.type ) {
 		case 'hidden':
 			return false;
@@ -82,6 +75,15 @@ export const settingsFieldRenders = field => {
 			return true;
 	}
 };
+
+/**
+ * Whether an integration's settings page would show anything. Without a field
+ * to render, the page would be empty, so nothing should lead to it.
+ *
+ * @param {Object[]} [settings] The integration's field declarations.
+ * @return {boolean} True when at least one field renders.
+ */
+export const hasSettingsToShow = settings => ( settings || [] ).some( settingsFieldRenders );
 
 /**
  * Render a single settings field.

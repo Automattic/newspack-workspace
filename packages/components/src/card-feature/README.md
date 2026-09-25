@@ -203,7 +203,7 @@ The card is built on `Card.Root`, `Card.Header` and `Card.Content` from `@wordpr
 | `enableLabel` | `string` | `"Enable"` | Label for the primary button in its "Enable" states: not enabled, or enabled with an unmet requirement |
 | `configureLabel` | `string` | `"Configure"` | Label for the primary button in its "Configure" state: enabled, with no unmet requirement |
 | `onEnable` | `() => void` | — | Called when the primary button is clicked while it reads "Enable". That covers the not-enabled case and the enabled-with-unmet-requirements case, where the feature is on but the requirement is what the button acts on |
-| `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements |
+| `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements. Omit it for a feature with nothing to configure, and that state shows no primary button |
 | `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown. Shown when `enabled` and either there are no `requirements` or `requirementsActionable` is set |
 | `badge` | `{ label?: string; intent?: BadgeIntent }` | `{ label: "Enabled", intent: "stable" }` | Badge shown when enabled. Ignored while `requirements` is set, which takes the badge |
 | `busy` | `boolean` | `false` | Shows the primary button as busy and blocks it while an action is in flight |

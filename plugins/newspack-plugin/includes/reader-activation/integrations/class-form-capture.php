@@ -6,11 +6,11 @@
  * "Register readers" toggle on the Gravity Forms block: the block attribute
  * is carried to the page as the newspack-form-capture class on the form
  * tag, which the capture script matches. While Gravity Forms is active, any
- * other form can opt in the same way by carrying the class itself. A form's
- * CSS Class Name setting applies to every placement of that form, whatever
- * each block's toggle says. CSS selectors, the route the class replaced, still
- * opt forms in on sites that saved some (see register_settings_fields()).
- * Capture-only: neither a sync destination nor a pull source (see
+ * other form can opt in the same way by carrying the class itself, a route
+ * the help docs cover. A form's CSS Class Name setting applies to every
+ * placement of that form, whatever each block's toggle says. There are no
+ * settings: CSS selectors saved by the former Form selectors setting are not
+ * read. Capture-only: neither a sync destination nor a pull source (see
  * supports_push()/supports_pull()).
  *
  * Capture semantics publishers must understand before opting a form in:
@@ -123,34 +123,22 @@ class Form_Capture extends Integration {
 	/**
 	 * Register settings fields.
 	 *
-	 * Form selectors are deprecated in favor of the marker class, which the
-	 * guide's note explains. Saved selectors still opt forms in (see
-	 * get_selectors()), and the field is flagged `deprecated` so the settings
-	 * page shows it only while a value is saved: a site that relies on it can
-	 * see and clear it, and no site can start using it.
+	 * None: forms opt in through the block toggle or the marker class, so the
+	 * Integrations card offers no settings page.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
 	public function register_settings_fields() {
-		return [
-			[
-				'key'         => 'selectors',
-				'type'        => 'textarea',
-				'label'       => __( 'Form selectors', 'newspack-plugin' ),
-				'description' => __( 'Deprecated. Forms that match these CSS selectors still register readers. Add the newspack-form-capture class to those forms instead, as described under How it works, then clear this list. Once it is saved empty, this setting goes away.', 'newspack-plugin' ),
-				'default'     => '',
-				'deprecated'  => true,
-			],
-		];
+		return [];
 	}
 
 	/**
-	 * The how-to shown at the top of the settings page. The toggle lives in
-	 * the block editor, so this page has to say where to look and what opting
-	 * a form in commits the publisher to. The note covers forms placed any
-	 * other way, which opt in through the marker class.
+	 * The how-to the Integrations card opens from its How it works menu item.
+	 * The toggle lives in the block editor, so the guide has to say where to
+	 * look and what opting a form in commits the publisher to. The last step
+	 * links the help page, which covers forms placed without the block.
 	 *
-	 * @return array List of associative arrays with keys `title`, `description`, and an optional `note`.
+	 * @return array List of associative arrays with keys `title`, `description`, and an optional `link` (`label`, `url`).
 	 */
 	public function get_guide() {
 		return [
@@ -165,11 +153,10 @@ class Form_Capture extends Integration {
 			[
 				'title'       => __( 'Submissions register readers', 'newspack-plugin' ),
 				'description' => __( 'Each submission registers a reader account with the submitted email address and name, or updates the existing reader without emailing a login link. Only turn this on for forms whose submissions should always create a reader account: registration happens as the form is submitted, so a submission Gravity Forms later rejects has still registered the reader. Never turn it on for a form that collects someone else\'s email address.', 'newspack-plugin' ),
-			],
-			[
-				'title'       => __( 'Forms placed without the block', 'newspack-plugin' ),
-				'description' => __( 'Any form with the newspack-form-capture CSS class also registers readers. For a Gravity Forms shortcode or widget, add the class in the form\'s CSS Class Name setting. That setting belongs to the form, not the placement, so every placement of the form then registers readers, including blocks with Register readers switched off. For a form built with another tool, add the class to the form itself, or to a block that contains it through the block\'s Additional CSS class(es) setting. As with the block switch, only add it to forms whose submissions should always create a reader account.', 'newspack-plugin' ),
-				'note'        => true,
+				'link'        => [
+					'label' => __( 'Learn how to opt in forms placed without the block', 'newspack-plugin' ),
+					'url'   => 'https://help.newspack.com/integrations/gravity-forms/',
+				],
 			],
 		];
 	}
@@ -334,80 +321,14 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Get the configured form selectors, always including the marker class.
-	 *
-	 * Selectors that name only element types (`form`, `body form`, `div > form`)
-	 * or the universal selector opt in every form on the page — comment forms,
-	 * search, checkout — which is never what a per-form opt-in means. A line
-	 * carrying one is dropped whole, including inside a comma-separated list,
-	 * since `form, #signup` matches everything `form` does. Applied at read
-	 * time so previously stored values are covered too.
+	 * The selectors the capture script matches: the marker class alone, which
+	 * the block toggle adds and any other form can carry. Selectors saved by
+	 * the former Form selectors setting are not read.
 	 *
 	 * @return string[] CSS selectors.
 	 */
 	public function get_selectors() {
-		$value     = (string) $this->get_settings_field_value( 'selectors' );
-		$lines     = array_map( 'trim', preg_split( '/[\r\n]+/', $value ) );
-		$selectors = array_filter( array_map( [ __CLASS__, 'normalize_selector' ], $lines ) );
-		return array_values( array_unique( array_merge( [ '.' . self::MARKER_CLASS ], $selectors ) ) );
-	}
-
-	/**
-	 * Reduce one configured line to the selector the client should run, or ''
-	 * to drop it.
-	 *
-	 * Rebuilds the line from its non-empty parts rather than passing it through:
-	 * a trailing comma is a plausible copy-paste from a CSS rule, and an empty
-	 * slot makes the whole list invalid CSS — `querySelectorAll( '#signup,' )`
-	 * throws, so the client discards it and one stray comma takes every
-	 * selector on the line with it.
-	 *
-	 * @param string $line A configured line, possibly a comma-separated list.
-	 *
-	 * @return string The normalized selector, or '' when the line is rejected.
-	 */
-	private static function normalize_selector( string $line ): string {
-		$parts = [];
-		foreach ( explode( ',', $line ) as $part ) {
-			$part = trim( $part );
-			if ( '' === $part ) {
-				continue;
-			}
-			if ( self::is_over_broad_selector( $part ) ) {
-				return '';
-			}
-			$parts[] = $part;
-		}
-		return implode( ', ', $parts );
-	}
-
-	/**
-	 * Whether a single selector names nothing more specific than element types.
-	 *
-	 * Splits on combinators and checks every compound: a selector built only
-	 * from tag names and `*` matches every form on the page whatever its depth,
-	 * so `body form` and `div > form` are as broad as `form`. One class, id or
-	 * attribute anywhere in the selector makes it specific enough to keep.
-	 *
-	 * Attribute selectors are kept: `[method]` is as broad as `form`, but
-	 * `[data-newsletter-form]` is a precise opt-in and structurally identical,
-	 * so the distinction is semantic rather than something the guard can read.
-	 *
-	 * @param string $selector A single CSS selector (no commas).
-	 *
-	 * @return bool Whether the selector is too broad to opt a form in.
-	 */
-	private static function is_over_broad_selector( string $selector ): bool {
-		$compounds = preg_split( '/[\s>+~]+/', trim( $selector ), -1, PREG_SPLIT_NO_EMPTY );
-		if ( empty( $compounds ) ) {
-			return true;
-		}
-		foreach ( $compounds as $compound ) {
-			if ( '*' !== $compound && ! preg_match( '/^[a-z][a-z0-9-]*$/i', $compound ) ) {
-				return false;
-			}
-		}
-		return true;
+		return [ '.' . self::MARKER_CLASS ];
 	}
 
 	/**
