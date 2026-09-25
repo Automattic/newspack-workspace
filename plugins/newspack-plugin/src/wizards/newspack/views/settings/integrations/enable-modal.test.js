@@ -16,13 +16,13 @@ import { EnableModal, getMissingRequiredFields } from './enable-modal';
 // so modal semantics, label association and disabled state stay fully
 // exercised. If the components under test start using another barrel
 // export, add it here (the failure is a loud "X is not a component").
-jest.mock( '../../../../../packages/components/src', () => ( {
-	Button: jest.requireActual( '../../../../../packages/components/src/button' ).default,
-	Modal: jest.requireActual( '../../../../../packages/components/src/modal' ).default,
-	Notice: jest.requireActual( '../../../../../packages/components/src/notice' ).default,
-	Grid: jest.requireActual( '../../../../../packages/components/src/grid' ).default,
-	SelectControl: jest.requireActual( '../../../../../packages/components/src/select-control' ).default,
-	TextControl: jest.requireActual( '../../../../../packages/components/src/text-control' ).default,
+jest.mock( '../../../../../../packages/components/src', () => ( {
+	Button: jest.requireActual( '../../../../../../packages/components/src/button' ).default,
+	Modal: jest.requireActual( '../../../../../../packages/components/src/modal' ).default,
+	Notice: jest.requireActual( '../../../../../../packages/components/src/notice' ).default,
+	Grid: jest.requireActual( '../../../../../../packages/components/src/grid' ).default,
+	SelectControl: jest.requireActual( '../../../../../../packages/components/src/select-control' ).default,
+	TextControl: jest.requireActual( '../../../../../../packages/components/src/text-control' ).default,
 } ) );
 
 const audienceField = {

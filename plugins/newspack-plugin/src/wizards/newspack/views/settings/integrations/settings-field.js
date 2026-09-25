@@ -14,7 +14,7 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button, Grid, TextControl } from '../../../../../packages/components/src';
+import { Button, Grid, TextControl } from '../../../../../../packages/components/src';
 
 import './settings-field.scss';
 

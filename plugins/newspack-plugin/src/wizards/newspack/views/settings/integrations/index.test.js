@@ -1,7 +1,8 @@
 /**
  * External dependencies
  */
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 /**
  * WordPress dependencies
@@ -11,7 +12,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import AudienceIntegrations from './index';
+import Integrations from './index';
 
 const mockAddNotice = jest.fn();
 const mockRemoveNotice = jest.fn();
@@ -22,14 +23,10 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { addNotice: mockAddNotice, removeNotice: mockRemoveNotice } ),
 } ) );
-jest.mock( '../../../../../packages/components/src', () => ( {
-	Wizard: ( { sections } ) => {
-		const Section = sections[ 0 ].render;
-		return <Section { ...sections[ 0 ].props } />;
-	},
-	withWizard: Component => Component,
+jest.mock( '../../../../../../packages/components/src', () => ( {
+	Router: jest.requireActual( 'react-router-dom' ),
 } ) );
-jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
+jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 jest.mock( './settings-section', () => ( {
@@ -39,8 +36,8 @@ jest.mock( './settings-section', () => ( {
 		return null;
 	},
 } ) );
-jest.mock( './configure-view', () => ( { ConfigureView: () => null } ) );
-jest.mock( './logs-view', () => ( { LogsView: () => null } ) );
+jest.mock( './configure-view', () => ( { ConfigureView: ( { match } ) => <p>configure { match.params.integrationId }</p> } ) );
+jest.mock( './logs-view', () => ( { LogsView: ( { match } ) => <p>logs { match.params.integrationId }</p> } ) );
 
 const SETTINGS_MAP = {
 	esp: { id: 'esp', name: 'Newsletter ESP', enabled: false, settings: [] },
@@ -52,13 +49,17 @@ const SETTINGS_MAP = {
 // state updates stay inside act's tracked scope instead of firing after it.
 const flushPromises = () => new Promise( resolve => setTimeout( resolve, 0 ) );
 
-describe( 'AudienceIntegrations notices', () => {
+describe( 'Integrations notices', () => {
 	beforeEach( async () => {
 		mockAddNotice.mockClear();
 		mockRemoveNotice.mockClear();
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
-		render( <AudienceIntegrations /> );
+		render(
+			<MemoryRouter initialEntries={ [ '/integrations' ] }>
+				<Integrations match={ { path: '/integrations' } } />
+			</MemoryRouter>
+		);
 		await waitFor( () => expect( captured.props.loading ).toBe( false ) );
 	} );
 
@@ -258,11 +259,15 @@ describe( 'AudienceIntegrations notices', () => {
 	} );
 } );
 
-describe( 'AudienceIntegrations retry buffer', () => {
+describe( 'Integrations retry buffer', () => {
 	beforeEach( async () => {
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
-		render( <AudienceIntegrations /> );
+		render(
+			<MemoryRouter initialEntries={ [ '/integrations' ] }>
+				<Integrations match={ { path: '/integrations' } } />
+			</MemoryRouter>
+		);
 		await waitFor( () => expect( captured.props.loading ).toBe( false ) );
 	} );
 
@@ -351,5 +356,30 @@ describe( 'AudienceIntegrations retry buffer', () => {
 			await flushPromises();
 		} );
 		expect( captured.props.saving.esp ).toBe( false );
+	} );
+} );
+
+describe( 'Integrations routes', () => {
+	const renderAt = path =>
+		render(
+			<MemoryRouter initialEntries={ [ path ] }>
+				<Integrations match={ { path: '/integrations' } } />
+			</MemoryRouter>
+		);
+
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( SETTINGS_MAP );
+	} );
+
+	it( 'renders the logs view for an integration logs path', async () => {
+		renderAt( '/integrations/esp/logs' );
+		expect( await screen.findByText( 'logs esp' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'configure esp' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'renders the configure view for an integration path', async () => {
+		renderAt( '/integrations/esp' );
+		expect( await screen.findByText( 'configure esp' ) ).toBeInTheDocument();
 	} );
 } );

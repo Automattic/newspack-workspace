@@ -1994,7 +1994,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		};
 		Integrations::register( $integration );
 
-		$wizard  = new \Newspack\Audience_Integrations();
+		$wizard  = new \Newspack\Wizards\Newspack\Integrations_Section();
 		$request = new \WP_REST_Request( 'POST' );
 		$request->set_param( 'integration_id', 'unconnected_test' );
 		$request->set_param( 'enabled', true );
@@ -2003,6 +2003,29 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->assertWPError( $response );
 		$this->assertSame( 'newspack_integration_not_connected', $response->get_error_code() );
 		$this->assertFalse( Integrations::is_enabled( 'unconnected_test' ) );
+	}
+
+	/**
+	 * The settings routes are registered under the Settings wizard and require manage_options.
+	 */
+	public function test_integration_routes_live_under_the_settings_wizard() {
+		global $wp_rest_server;
+		$wp_rest_server = new \WP_REST_Server();
+		try {
+			add_action( 'rest_api_init', [ new \Newspack\Wizards\Newspack\Integrations_Section(), 'register_rest_routes' ] );
+			do_action( 'rest_api_init' );
+
+			$route = '/newspack/v1/wizard/newspack-settings/integrations';
+			$this->assertArrayHasKey( $route, $wp_rest_server->get_routes() );
+
+			wp_set_current_user( $this->factory()->user->create( [ 'role' => 'subscriber' ] ) );
+			$this->assertSame( 403, $wp_rest_server->dispatch( new \WP_REST_Request( 'GET', $route ) )->get_status() );
+
+			wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
+			$this->assertSame( 200, $wp_rest_server->dispatch( new \WP_REST_Request( 'GET', $route ) )->get_status() );
+		} finally {
+			$wp_rest_server = null;
+		}
 	}
 
 	/**
@@ -2022,7 +2045,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		Integrations::register( $integration );
 		Integrations::enable( 'unconnected_disable_test' );
 
-		$wizard  = new \Newspack\Audience_Integrations();
+		$wizard  = new \Newspack\Wizards\Newspack\Integrations_Section();
 		$request = new \WP_REST_Request( 'POST' );
 		$request->set_param( 'integration_id', 'unconnected_disable_test' );
 		$request->set_param( 'enabled', false );
@@ -2039,7 +2062,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$integration = new Sample_Integration( 'connected_test', 'Connected Test' );
 		Integrations::register( $integration );
 
-		$wizard  = new \Newspack\Audience_Integrations();
+		$wizard  = new \Newspack\Wizards\Newspack\Integrations_Section();
 		$request = new \WP_REST_Request( 'POST' );
 		$request->set_param( 'integration_id', 'connected_test' );
 		$request->set_param( 'enabled', true );
@@ -2076,7 +2099,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		};
 		Integrations::register( $integration );
 
-		$wizard  = new \Newspack\Audience_Integrations();
+		$wizard  = new \Newspack\Wizards\Newspack\Integrations_Section();
 		$request = new \WP_REST_Request( 'POST' );
 		$request->set_param( 'integration_id', 'unsupported_test' );
 		$request->set_param( 'enabled', true );

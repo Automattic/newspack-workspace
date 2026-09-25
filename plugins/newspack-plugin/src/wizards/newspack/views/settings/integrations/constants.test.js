@@ -2,7 +2,7 @@
  * Internal dependencies
  */
 import { STATUS_MAP } from './constants';
-import { statusGlyph } from '../../../../../packages/components/src/status-indicator';
+import { statusGlyph } from '../../../../../../packages/components/src/status-indicator';
 
 /**
  * The activity log's Status column offers these as separate filters, so two statuses

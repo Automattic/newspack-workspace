@@ -4,7 +4,8 @@
  * Component for outputting sections with grid and cards
  */
 import { __ } from '@wordpress/i18n';
-import { lazy } from '@wordpress/element';
+import { lazy, Suspense } from '@wordpress/element';
+import { Spinner } from '@wordpress/components';
 
 // NPPD-1538: forward stale bookmarks of `?page=newspack-settings#/emails`
 // to the new Audience > Configuration > Emails home. This is an
@@ -50,6 +51,12 @@ if ( hash === '#/emails' || hash.startsWith( '#/emails/' ) || hash.startsWith( '
 	window.location.replace( `${ window.location.pathname }?${ params.toString() }#/emails${ suffix }` );
 }
 
+// Runs before the HashRouter reads the fragment, like the emails redirect above.
+const legacyIntegrationsUrl = rewriteLegacyIntegrationsUrl( window.location.pathname, window.location.search, window.location.hash );
+if ( legacyIntegrationsUrl ) {
+	window.history.replaceState( null, '', legacyIntegrationsUrl );
+}
+
 const settingsTabs = window.newspackSettings;
 
 import Seo from './seo';
@@ -61,6 +68,7 @@ import ThemeAndBrand from './theme-and-brand';
 import Collections from './collections';
 import Print from './print';
 import Privacy from './privacy';
+import { rewriteLegacyIntegrationsUrl } from './integrations/legacy-url';
 
 type SectionKeys = keyof typeof settingsTabs;
 
@@ -77,6 +85,16 @@ const sectionComponents: Partial< Record< SectionKeys | 'default', ( props: { is
 	default: () => <h2>🚫 { __( 'Not found' ) }</h2>,
 };
 
+if ( 'integrations' in settingsTabs ) {
+	const Integrations = lazy( () => import( /* webpackChunkName: "settings-integrations" */ './integrations' ) );
+	// A local boundary keeps the Settings header and tabs on screen while the chunk loads.
+	sectionComponents.integrations = props => (
+		<Suspense fallback={ <Spinner /> }>
+			<Integrations { ...( props as React.ComponentProps< typeof Integrations > ) } />
+		</Suspense>
+	);
+}
+
 /**
  * Load additional brands section if `newspack-multibranded-site` plugin is active.
  */
@@ -92,7 +110,7 @@ if ( 'experimental-tools' in settingsTabs ) {
 }
 
 // The tab crumb links back to these views from their sub-screens. On the view itself it is the last crumb, which never renders as a link.
-const sectionsWithSubScreens: SectionKeys[] = [ 'experimental-tools' ];
+const sectionsWithSubScreens: SectionKeys[] = [ 'integrations', 'experimental-tools' ];
 
 const settingsSectionKeys = Object.keys( settingsTabs ) as SectionKeys[];
 

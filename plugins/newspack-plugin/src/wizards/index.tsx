@@ -67,14 +67,6 @@ const components: Record< string, any > = {
 	},
 } as const;
 
-// Conditionally add the Audience Integrations page if the feature is enabled.
-if ( window.newspackAudienceIntegrations?.integrations_settings_enabled ) {
-	components[ 'newspack-audience-integrations' ] = {
-		label: __( 'Audience Integrations', 'newspack-plugin' ),
-		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/integrations' ) ),
-	};
-}
-
 const AdminPageLoader = () => {
 	return (
 		<div className="newspack-wizard__loader">

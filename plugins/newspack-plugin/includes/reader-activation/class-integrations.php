@@ -503,7 +503,7 @@ class Integrations {
 		}
 
 		/**
-		 * Filters the integration settings list shown in the Audience → Integrations UI.
+		 * Filters the integration settings list shown in the Settings → Integrations UI.
 		 *
 		 * Lets a registered integration hide another's card when a takeover is in
 		 * effect (e.g. a vendor-specific ESP integration superseding the built-in

@@ -89,7 +89,7 @@ class Audience_Wizard extends Wizard {
 			'can_use_salesforce'            => ! empty( $salesforce_settings['client_id'] ),
 			'salesforce_redirect_url'       => Salesforce::get_redirect_url(),
 			'available_products'            => Content_Gate::get_purchasable_product_options(),
-			'integrations_settings_enabled' => Audience_Integrations::is_enabled(),
+			'integrations_settings_enabled' => Wizards\Newspack\Integrations_Section::is_enabled(),
 		];
 
 		if ( method_exists( 'Newspack\Newsletters\Subscription_Lists', 'get_add_new_url' ) ) {
