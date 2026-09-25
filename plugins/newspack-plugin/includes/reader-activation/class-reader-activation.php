@@ -378,7 +378,7 @@ final class Reader_Activation {
 			return self::$reader_activation_labels;
 		}
 
-		return self::$reader_activation_labels[ $key ] ?? array();
+		return self::$reader_activation_labels[ $key ] ?? '';
 	}
 
 	/**
