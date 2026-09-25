@@ -291,6 +291,11 @@ class Alert_Manager {
 		if ( 'transient' !== ( $payload['error_class'] ?? 'transient' ) ) {
 			return;
 		}
+		// A broken integration's failures share its outage's cause, which has
+		// already paged once; logged here, they would page it again every hour.
+		if ( self::is_integration_broken( $payload['integration_id'] ?? '' ) ) {
+			return;
+		}
 
 		$log = get_option( self::FAILURE_LOG_OPTION, [] );
 
@@ -318,6 +323,10 @@ class Alert_Manager {
 
 	/**
 	 * Handle sync retry exhaustion.
+	 *
+	 * While the integration's health record is broken, the alert reaches the
+	 * log only: the outage has already paged once, and every contact whose
+	 * retries run out during it would page again for the same cause.
 	 *
 	 * @param array $payload Alert data from Contact_Sync.
 	 */
@@ -349,7 +358,7 @@ class Alert_Manager {
 			'newspack_alert',
 			[
 				'type'      => 'sync_retry_exhausted',
-				'severity'  => 'error',
+				'severity'  => self::is_integration_broken( $payload['integration_id'] ?? '' ) ? 'warning' : 'error',
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),
@@ -867,6 +876,18 @@ class Alert_Manager {
 				]
 			);
 		}
+	}
+
+	/**
+	 * Whether an integration's health record is broken, meaning its outage
+	 * has already paged once.
+	 *
+	 * @param string $integration_id The integration ID.
+	 * @return bool
+	 */
+	private static function is_integration_broken( $integration_id ) {
+		$state = get_option( self::HEALTH_STATE_OPTION, [] );
+		return is_array( $state ) && 'broken' === ( $state[ (string) $integration_id ]['status'] ?? '' );
 	}
 
 	/**

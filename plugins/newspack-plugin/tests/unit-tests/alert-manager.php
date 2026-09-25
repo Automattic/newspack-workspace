@@ -1331,6 +1331,55 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * While an integration is broken, a contact whose retries run out reaches
+	 * the log only: the outage has already paged once. An integration that
+	 * isn't broken still pages.
+	 */
+	public function test_sync_retry_exhausted_for_a_broken_integration_does_not_page() {
+		$this->break_integration( 'esp' );
+		$this->capture_alerts( 'sync_retry_exhausted' );
+
+		foreach ( [ 'esp', 'crm' ] as $integration_id ) {
+			do_action(
+				'newspack_sync_retry_exhausted',
+				[
+					'integration_id' => $integration_id,
+					'retry_count'    => 5,
+					'reason'         => 'API Key Invalid: Your API key may be invalid.',
+				]
+			);
+		}
+
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['warning'] );
+		$this->assertSame( 'esp', $this->captured['sync_retry_exhausted']['warning'][0]['context']['integration_id'] );
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['error'] );
+		$this->assertSame( 'crm', $this->captured['sync_retry_exhausted']['error'][0]['context']['integration_id'] );
+	}
+
+	/**
+	 * A broken integration's contact failures stay out of the failure log, so
+	 * its outage doesn't trip the hourly pattern rules. Another
+	 * integration's failures are still recorded.
+	 */
+	public function test_broken_integration_failures_stay_out_of_the_failure_log() {
+		$this->break_integration( 'esp' );
+
+		foreach ( [ 'esp', 'crm' ] as $integration_id ) {
+			do_action(
+				'newspack_sync_contact_failed',
+				[
+					'integration_id' => $integration_id,
+					'contact'        => [ 'email' => 'reader@example.test' ],
+					'context'        => 'Reader registered',
+					'reason'         => 'API Key Invalid: Your API key may be invalid.',
+				]
+			);
+		}
+
+		$this->assertSame( [ 'crm' ], array_column( get_option( Alert_Manager::FAILURE_LOG_OPTION, [] ), 'integration_id' ) );
+	}
+
+	/**
 	 * A state-change listener that throws must not cancel the page for the
 	 * outage or the log entry for its recovery: the record already holds the
 	 * new state, so no later check would send either.
