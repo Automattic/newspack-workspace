@@ -250,10 +250,9 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	/**
 	 * The editor extension loads wherever the Gravity Forms block can be
 	 * placed, whatever the state of the integration or of Reader Activation:
-	 * the block toggle is how publishers find the feature, and the attribute
-	 * it declares has to be present whenever the block can be edited, or a
-	 * save drops the toggle from the post. `active` tells the panel whether a
-	 * toggled form registers anyone yet, and is off while Reader Activation
+	 * the block toggle is how publishers find the feature, and it stays
+	 * visible and saves while either is off. `active` tells the panel whether
+	 * a toggled form registers anyone yet, and is off while Reader Activation
 	 * is off.
 	 */
 	public function test_editor_script_loads_for_gravity_forms_editors() {
@@ -281,7 +280,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		Integrations::enable( Form_Capture::ID );
 		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
 		$integration->enqueue_editor_assets();
-		$this->assertTrue( wp_script_is( Form_Capture::EDITOR_SCRIPT_HANDLE, 'enqueued' ), 'Must load while Reader Activation is off; otherwise a save drops the attribute.' );
+		$this->assertTrue( wp_script_is( Form_Capture::EDITOR_SCRIPT_HANDLE, 'enqueued' ), 'Must load while Reader Activation is off, so the toggle can still be set.' );
 		$this->assertStringContainsString( '"active":""', wp_scripts()->get_data( Form_Capture::EDITOR_SCRIPT_HANDLE, 'data' ), 'Nothing registers readers with Reader Activation off.' );
 		Integrations::disable( Form_Capture::ID );
 	}

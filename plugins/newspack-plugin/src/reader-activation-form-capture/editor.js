@@ -13,12 +13,15 @@ import { __ } from '@wordpress/i18n';
 
 export const GF_BLOCK = 'gravityforms/form';
 
-// Must match Form_Capture::BLOCK_ATTRIBUTE, which registers the same
-// attribute with Gravity Forms' block schema so the block preview validates.
+// Must match Form_Capture::BLOCK_ATTRIBUTE, which declares the same attribute
+// through Gravity Forms' block attributes filter.
 export const ATTRIBUTE = 'newspackFormCapture';
 
 /**
- * Declare the capture toggle on the Gravity Forms block.
+ * Declare the capture toggle on the Gravity Forms block. Gravity Forms 3.1
+ * already declares it in the editor from that server-side filter; declaring it
+ * here as well keeps the toggle from depending on Gravity Forms passing the
+ * filtered attributes to its block script.
  *
  * @param {Object} settings Block settings.
  * @param {string} name     Block name.

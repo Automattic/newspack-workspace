@@ -432,12 +432,10 @@ class Form_Capture extends Integration {
 	/**
 	 * Load the block editor extension wherever the Gravity Forms block can be
 	 * placed. Gated on Gravity Forms alone, without which there is no block to
-	 * extend. The attribute has to be declared whenever the block can be
-	 * edited: without the extension, GF's own client-side attributes replace
-	 * the server-registered ones, the parser drops the toggle, and the next
-	 * save writes the block without it. So neither the integration nor Reader
-	 * Activation gates the script. They only decide whether a toggled form
-	 * registers anyone, which the panel's notice reports through `active`.
+	 * extend. Neither the integration nor Reader Activation gates it: the
+	 * panel is where a placement opts in, so the toggle stays visible and
+	 * saves while either is off, and the notice reports through `active` that
+	 * a toggled form registers nobody yet.
 	 */
 	public function enqueue_editor_assets() {
 		if ( ! $this->is_gravity_forms_active() ) {
@@ -466,11 +464,12 @@ class Form_Capture extends Integration {
 	/**
 	 * Register the capture toggle with Gravity Forms' block schema.
 	 *
-	 * The editor extension declares the attribute client-side, but GF renders
-	 * the block preview through the REST block renderer, which validates
-	 * attributes against the server-registered schema: without this, every
-	 * preview of a toggled block fails. GF keeps only the type of each
-	 * declared attribute.
+	 * As of Gravity Forms 3.1 this filter feeds both halves of its block. The
+	 * server-side registration, which keeps only each attribute's type, is
+	 * what the REST block renderer validates the editor preview against, so
+	 * without it every preview of a toggled block fails. The editor config,
+	 * which keeps the default too, is where GF's block script takes its
+	 * attributes from, so it is also what keeps the toggle through a save.
 	 *
 	 * @param array $attributes Block attributes declared by Gravity Forms.
 	 *
