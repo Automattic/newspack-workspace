@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import { CardBody, Notice } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
@@ -169,7 +169,7 @@ export default function ContentGateSettings( {
 		gate.title
 			? sprintf(
 					// translators: 1: a menu action, such as "Edit". 2: the gate title.
-					__( '%1$s: %2$s', 'newspack-plugin' ),
+					_x( '%1$s: %2$s', 'menu action and the gate it applies to', 'newspack-plugin' ),
 					label,
 					decodeEntities( gate.title )
 			  )
