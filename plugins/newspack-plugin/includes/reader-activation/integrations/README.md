@@ -248,7 +248,7 @@ A settings field can declare an optional `condition` so the frontend hides it wh
 ],
 ```
 
-The configure-view in `src/wizards/audience/views/integrations/` honors this predicate. Conditions are single-level only (no nesting, no array of conditions).
+The configure-view in `src/wizards/newspack/views/settings/integrations/` honors this predicate. Conditions are single-level only (no nesting, no array of conditions).
 
 ---
 

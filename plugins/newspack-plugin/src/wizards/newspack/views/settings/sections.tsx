@@ -4,7 +4,8 @@
  * Component for outputting sections with grid and cards
  */
 import { __ } from '@wordpress/i18n';
-import { lazy } from '@wordpress/element';
+import { lazy, Suspense } from '@wordpress/element';
+import { Spinner } from '@wordpress/components';
 
 // NPPD-1538: forward stale bookmarks of `?page=newspack-settings#/emails`
 // to the new Audience > Configuration > Emails home. This is an
@@ -50,14 +51,10 @@ if ( hash === '#/emails' || hash.startsWith( '#/emails/' ) || hash.startsWith( '
 	window.location.replace( `${ window.location.pathname }?${ params.toString() }#/emails${ suffix }` );
 }
 
-// Requests redirected from the old Audience > Integrations page keep their
-// fragment, which still uses that screen's routes (`#/settings/salesforce` from
-// newspack-manager's OAuth return). Rewrite it before the HashRouter reads it.
-const searchParams = new URLSearchParams( window.location.search );
-if ( searchParams.has( 'legacy-integrations' ) ) {
-	searchParams.delete( 'legacy-integrations' );
-	const legacySubPath = window.location.hash.match( /^#\/settings(\/[^?]*)?/ )?.[ 1 ] ?? '';
-	window.history.replaceState( null, '', `${ window.location.pathname }?${ searchParams.toString() }#/integrations${ legacySubPath }` );
+// Runs before the HashRouter reads the fragment, like the emails redirect above.
+const legacyIntegrationsUrl = rewriteLegacyIntegrationsUrl( window.location.pathname, window.location.search, window.location.hash );
+if ( legacyIntegrationsUrl ) {
+	window.history.replaceState( null, '', legacyIntegrationsUrl );
 }
 
 const settingsTabs = window.newspackSettings;
@@ -71,6 +68,7 @@ import ThemeAndBrand from './theme-and-brand';
 import Collections from './collections';
 import Print from './print';
 import Privacy from './privacy';
+import { rewriteLegacyIntegrationsUrl } from './integrations/legacy-url';
 
 type SectionKeys = keyof typeof settingsTabs;
 
@@ -88,7 +86,13 @@ const sectionComponents: Partial< Record< SectionKeys | 'default', ( props: { is
 };
 
 if ( 'integrations' in settingsTabs ) {
-	sectionComponents.integrations = lazy( () => import( /* webpackChunkName: "settings-integrations" */ './integrations' ) );
+	const Integrations = lazy( () => import( /* webpackChunkName: "settings-integrations" */ './integrations' ) );
+	// A local boundary keeps the Settings header and tabs on screen while the chunk loads.
+	sectionComponents.integrations = props => (
+		<Suspense fallback={ <Spinner /> }>
+			<Integrations { ...( props as React.ComponentProps< typeof Integrations > ) } />
+		</Suspense>
+	);
 }
 
 /**

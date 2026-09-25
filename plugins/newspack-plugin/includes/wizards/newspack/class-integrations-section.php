@@ -106,7 +106,7 @@ class Integrations_Section extends Wizard_Section {
 	/**
 	 * Register the endpoints needed for the wizard screens.
 	 */
-	public function register_rest_routes() {
+	public function register_rest_routes(): void {
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->wizard_slug . '/integrations',
@@ -234,7 +234,7 @@ class Integrations_Section extends Wizard_Section {
 	 *
 	 * @return WP_REST_Response
 	 */
-	public function api_get_integration_settings() {
+	public function api_get_integration_settings(): WP_REST_Response {
 		return rest_ensure_response( Integrations::get_all_integration_settings() );
 	}
 
@@ -244,7 +244,7 @@ class Integrations_Section extends Wizard_Section {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function api_update_integration_settings( WP_REST_Request $request ) {
+	public function api_update_integration_settings( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$integration_id = $request->get_param( 'integration_id' );
 		$settings       = $request->get_param( 'settings' );
 
@@ -274,7 +274,7 @@ class Integrations_Section extends Wizard_Section {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function api_update_integration_enabled( WP_REST_Request $request ) {
+	public function api_update_integration_enabled( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$integration_id = $request->get_param( 'integration_id' );
 		$enabled        = $request->get_param( 'enabled' );
 
@@ -317,7 +317,7 @@ class Integrations_Section extends Wizard_Section {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function api_get_integration_logs( WP_REST_Request $request ) {
+	public function api_get_integration_logs( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$integration_id = $request->get_param( 'integration_id' );
 		$integration    = Integrations::get_integration( $integration_id );
 
