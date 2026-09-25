@@ -263,4 +263,23 @@ class Newspack_Test_Revisions_Control extends WP_UnitTestCase {
 	public function test_pre_delete_revision_inactive( $post ) {
 		$this->assertSame( null, Revisions_Control::pre_delete_revision( null, $post ) );
 	}
+
+	/**
+	 * Tests that the minimum age doesn't stop an autosave from being deleted
+	 *
+	 * @return void
+	 */
+	public function test_pre_delete_revision_active_ignores_min_age_for_autosaves() {
+		$this->set_option();
+		$post_id     = self::factory()->post->create();
+		$autosave_id = self::factory()->post->create(
+			[
+				'post_type'   => 'revision',
+				'post_status' => 'inherit',
+				'post_parent' => $post_id,
+				'post_name'   => "{$post_id}-autosave-v1",
+			]
+		);
+		$this->assertNull( Revisions_Control::pre_delete_revision( null, get_post( $autosave_id ) ) );
+	}
 }
