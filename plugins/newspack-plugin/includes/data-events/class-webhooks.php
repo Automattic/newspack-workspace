@@ -120,7 +120,7 @@ final class Webhooks {
 	/**
 	 * Get cron configuration.
 	 *
-	 * "clear_finished": Twice a day will permanently delete finished webhook
+	 * "clear_finished": Hourly will permanently delete finished webhook
 	 * requests older than 7 days.
 	 *
 	 * "send_late_requests": Hourly will send webhook requests that are late.
@@ -129,7 +129,7 @@ final class Webhooks {
 	 */
 	private static function get_cron_config() {
 		return [
-			'clear_finished'     => 'twicedaily',
+			'clear_finished'     => 'hourly',
 			'send_late_requests' => 'hourly',
 		];
 	}
@@ -142,6 +142,11 @@ final class Webhooks {
 		foreach ( $config as $event => $schedule ) {
 			$hook = "newspack_webhooks_cron_{$event}";
 			\add_action( $hook, [ __CLASS__, $event ] );
+			// Reschedule events registered under a previous schedule.
+			$scheduled = \wp_get_scheduled_event( $hook );
+			if ( $scheduled && $scheduled->schedule !== $schedule ) {
+				\wp_clear_scheduled_hook( $hook );
+			}
 			if ( ! \wp_next_scheduled( $hook ) ) {
 				\wp_schedule_event( time(), $schedule, $hook );
 			}
@@ -170,18 +175,24 @@ final class Webhooks {
 				'post_type'      => self::REQUEST_POST_TYPE,
 				'post_status'    => 'publish',
 				'posts_per_page' => 100,
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
 				'date_query'     => [
 					[
 						'column' => 'post_date_gmt',
 						'before' => self::DELETE_REQUESTS_BEFORE,
 					],
 				],
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'   => 'status',
+						'value' => 'finished',
+					],
+				],
 			]
 		);
 		foreach ( $requests as $request_id ) {
-			if ( 'finished' === \get_post_meta( $request_id, 'status', true ) ) {
-				\wp_delete_post( $request_id, true );
-			}
+			\wp_delete_post( $request_id, true );
 		}
 	}
 
@@ -495,12 +506,14 @@ final class Webhooks {
 	 *
 	 * This executes a potentially slow query, use with caution.
 	 *
-	 * @param int $endpoint_id Endpoint ID.
-	 * @param int $amount      Number of requests to return. Default -1 (all).
+	 * @param int         $endpoint_id Endpoint ID.
+	 * @param int         $amount      Number of requests to return. Default -1 (all).
+	 * @param string|null $status      Request status to filter by ('pending', 'finished' or 'killed').
+	 *                                 When set, requests are returned oldest first. Default null (any).
 	 *
 	 * @return array Array of requests.
 	 */
-	public static function get_endpoint_requests( $endpoint_id, $amount = -1 ) {
+	public static function get_endpoint_requests( $endpoint_id, $amount = -1, $status = null ) {
 		$endpoint = self::get_endpoint( $endpoint_id );
 		if ( is_wp_error( $endpoint ) ) {
 			return [];
@@ -509,13 +522,20 @@ final class Webhooks {
 			'post_type'      => self::REQUEST_POST_TYPE,
 			'post_status'    => [ 'publish', 'draft', 'future', 'trash' ],
 			'posts_per_page' => $amount,
+			'meta_query'     => [], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 		];
+		if ( null !== $status ) {
+			$query['meta_query'][] = [
+				'key'   => 'status',
+				'value' => $status,
+			];
+			$query['orderby']      = 'ID';
+			$query['order']        = 'ASC';
+		}
 		if ( true === $endpoint['system'] ) {
-			$query['meta_query'] = [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-				[
-					'key'   => '_endpoint_id',
-					'value' => $endpoint_id,
-				],
+			$query['meta_query'][] = [
+				'key'   => '_endpoint_id',
+				'value' => $endpoint_id,
 			];
 		} else {
 			$query['tax_query'] = [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
