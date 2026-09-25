@@ -1716,7 +1716,7 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
-	// Minimal mock: implements the `customer_id` and `subscription_status` filters
+	// Minimal mock: implements the `customer_id`, `order_id` and `subscription_status` filters
 	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
 	// passes. `subscription_status` accepts a single status or an array; 'any' (or
 	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
@@ -1732,6 +1732,7 @@ function wcs_get_subscriptions( $args = [] ) {
 	global $wcs_mock_query_log;
 	$wcs_mock_query_log[] = $args;
 	$customer_id = $args['customer_id'] ?? null;
+	$order_id    = isset( $args['order_id'] ) ? (int) $args['order_id'] : null;
 	$statuses    = $args['subscription_status'] ?? 'any';
 	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
 	// Stageable: set $wcs_mock_ignore_offset to reproduce a query that never advances —
@@ -1747,6 +1748,10 @@ function wcs_get_subscriptions( $args = [] ) {
 	$matches = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
 		if ( null !== $customer_id && $subscription->get_customer_id() !== $customer_id ) {
+			continue;
+		}
+		// Real WCS matches `order_id` against the subscription's parent order.
+		if ( null !== $order_id && (int) $subscription->get_parent_id() !== $order_id ) {
 			continue;
 		}
 		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
@@ -1790,11 +1795,15 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
  * @param int             $user_id    User ID.
  * @param int|string      $product_id Optional product the subscription must hold.
  * @param string|string[] $status     Optional status or statuses; 'any' matches all.
+ * @param int[]           $excluded_subscription_ids Optional subscriptions to ignore, as WCS 9+ accepts.
  *
  * @return bool
  */
-function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
+function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any', $excluded_subscription_ids = [] ) {
 	foreach ( wcs_get_users_subscriptions( (int) $user_id ) as $subscription ) {
+		if ( in_array( $subscription->get_id(), $excluded_subscription_ids, true ) ) {
+			continue;
+		}
 		if ( $product_id && ! $subscription->has_product( (int) $product_id ) ) {
 			continue;
 		}

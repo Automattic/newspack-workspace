@@ -54,6 +54,8 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$wcs_mock_cart_switches                   = null;
 		$wcs_mock_product_switchable              = null;
 		remove_all_filters( 'newspack_wc_subs_switch_include_signup_fee' );
+		remove_all_filters( 'woocommerce_cart_item_removed_message' );
+		unset( $_GET['pay_for_order'], $GLOBALS['wp']->query_vars['order-pay'] );
 		wp_set_current_user( 0 );
 		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
 		parent::tear_down();
@@ -1436,5 +1438,97 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$this->assertSame( 40, has_action( 'woocommerce_store_api_checkout_order_processed', [ WooCommerce_Subscriptions::class, 'maybe_reactivate_pending_cancel_switch' ] ) );
 		$this->assertSame( 10, has_action( 'woocommerce_order_status_failed', [ WooCommerce_Subscriptions::class, 'maybe_revert_reactivation_on_failed_switch' ] ) );
 		$this->assertSame( 10, has_action( 'woocommerce_order_status_cancelled', [ WooCommerce_Subscriptions::class, 'maybe_revert_reactivation_on_failed_switch' ] ) );
+	}
+
+	/**
+	 * Set up a reader with a pending subscription to a product limited to one
+	 * active subscription, plus the unpaid parent order an admin creates for it.
+	 *
+	 * @return array{user_id: int, product: WC_Product, order: WC_Order, subscription: WC_Subscription}
+	 */
+	private function create_pending_limited_subscription() {
+		$user_id      = $this->factory->user->create();
+		$product      = wc_create_mock_product(
+			[
+				'id'   => 300,
+				'meta' => [ '_subscription_limit' => 'active' ],
+			]
+		);
+		$order        = wc_create_order(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'pending',
+			]
+		);
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'   => $user_id,
+				'status'        => 'pending',
+				'parent_id'     => $order->get_id(),
+				'products'      => [ $product->get_id() ],
+				'needs_payment' => true,
+			]
+		);
+		return compact( 'user_id', 'product', 'order', 'subscription' );
+	}
+
+	/**
+	 * Simulate the pay-for-order request for an order.
+	 *
+	 * @param WC_Order $order The order being paid.
+	 */
+	private function set_paying_for_order( $order ) {
+		global $wp;
+		$_GET['pay_for_order']          = 'true';
+		$wp->query_vars['order-pay'] = $order->get_id();
+	}
+
+	/**
+	 * A reader paying for their own pending subscription is not blocked by it.
+	 *
+	 * WooCommerce Subscriptions 9 sets the subscription being paid for aside
+	 * when it evaluates the limit, so our pending-status check has to as well.
+	 */
+	public function test_limit_ignores_pending_subscription_being_paid_for() {
+		$fixture = $this->create_pending_limited_subscription();
+		$this->set_paying_for_order( $fixture['order'] );
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'The subscription being paid for should not count toward the limit.'
+		);
+	}
+
+	/**
+	 * Paying for one order does not exempt a different pending subscription.
+	 */
+	public function test_limit_counts_other_pending_subscription_while_paying() {
+		$fixture = $this->create_pending_limited_subscription();
+		wcs_create_subscription(
+			[
+				'customer_id'   => $fixture['user_id'],
+				'status'        => 'pending',
+				'products'      => [ $fixture['product']->get_id() ],
+				'needs_payment' => true,
+			]
+		);
+		$this->set_paying_for_order( $fixture['order'] );
+
+		$this->assertTrue(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'Another pending subscription to the product should still count toward the limit.'
+		);
+	}
+
+	/**
+	 * Outside of paying for an order, a pending subscription still counts.
+	 */
+	public function test_limit_counts_pending_subscription_when_not_paying() {
+		$fixture = $this->create_pending_limited_subscription();
+
+		$this->assertTrue(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'A pending subscription should count toward the limit when no order is being paid.'
+		);
 	}
 }
