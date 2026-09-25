@@ -93,6 +93,14 @@ class Failing_Sample_Integration extends Integration {
 	public static $cannot_sync_reason = null;
 
 	/**
+	 * Value returned by contact_exists(). Tests covering --existing-only set
+	 * false (the integration has no such contact) or a WP_Error (failed read).
+	 *
+	 * @var bool|\WP_Error
+	 */
+	public static $contact_exists = true;
+
+	/**
 	 * Register settings fields (test implementation).
 	 */
 	public function register_settings_fields() {
@@ -115,6 +123,16 @@ class Failing_Sample_Integration extends Integration {
 			return new \WP_Error( 'mock_error', self::$fail_message );
 		}
 		return true;
+	}
+
+	/**
+	 * Whether the integration holds this contact (test implementation).
+	 *
+	 * @param string $email Contact email.
+	 * @return bool|\WP_Error
+	 */
+	public function contact_exists( $email ) {
+		return self::$contact_exists;
 	}
 
 	/**
@@ -187,5 +205,6 @@ class Failing_Sample_Integration extends Integration {
 		self::$enabled_incoming_fields_calls = 0;
 		self::$is_set_up_value               = true;
 		self::$cannot_sync_reason            = null;
+		self::$contact_exists                = true;
 	}
 }

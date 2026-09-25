@@ -12,6 +12,7 @@
 use Newspack\Content_Gate;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Gate_Metadata;
@@ -60,6 +61,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		parent::set_up();
 		Content_Gate_Metadata::reset_cache();
 		Newspack_Newsletters_Contacts::reset_calls();
+		Newspack_Newsletters_Subscription::reset_calls();
 
 		$this->user_id = $this->factory->user->create(
 			[
@@ -269,7 +271,12 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'account', $contact['metadata'], 'Non-requested legacy classes must be skipped.' );
 	}
 
-	public function test_prepare_contact_for_integration_keeps_only_requested_fields() {
+	/**
+	 * Field scoping keeps the sync-control keys. Without `status_if_new`,
+	 * Mailchimp's upsert sends `status: subscribed`, so a field-scoped run
+	 * subscribed every existing transactional member it updated.
+	 */
+	public function test_prepare_contact_for_integration_keeps_requested_fields_and_sync_control_keys() {
 		$esp     = Integrations::get_integration( 'esp' );
 		$options = [
 			'skip_lists' => false,
@@ -284,7 +291,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 				'NP_Content Access'        => 'Yes',
 				'NP_Content Access Source' => 'domain',
 				'NP_Account'               => '42',
-				'status_if_new'            => 'subscribed',
+				'status_if_new'            => 'transactional',
 			],
 		];
 
@@ -293,10 +300,11 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertSame( 'reader@example.com', $prepared['email'], 'Email must be preserved.' );
 		$this->assertArrayNotHasKey( 'name', $prepared, 'Name must be stripped when field-scoping.' );
 		$this->assertSame(
-			[ 'NP_Content Access', 'NP_Content Access Source' ],
+			[ 'NP_Content Access', 'NP_Content Access Source', 'status_if_new' ],
 			array_keys( $prepared['metadata'] ),
-			'Only requested, prefixed metadata keys survive; NP_Account and status_if_new are dropped.'
+			'Requested fields and the sync-control keys survive; NP_Account is dropped.'
 		);
+		$this->assertSame( 'transactional', $prepared['metadata']['status_if_new'] );
 	}
 
 	public function test_prepare_contact_for_integration_matches_utm_prefix_labels() {
@@ -464,5 +472,233 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 			array_keys( $call['contact']['metadata'] ),
 			'Only the three prefixed Content Access fields are pushed.'
 		);
+	}
+
+	/**
+	 * Push the seeded reader through push_to_integrations() under --existing-only.
+	 *
+	 * @param array $extra_options Options merged over `existing_only => true`.
+	 * @return true|\WP_Error
+	 */
+	private function push_existing_only( array $extra_options = [] ) {
+		$contact = [
+			'email'    => 'reader@example.com',
+			'metadata' => [ 'NP_Content Access' => 'Yes' ],
+		];
+		return $this->invoke_contact_sync(
+			'push_to_integrations',
+			[ $contact, 'ctx', null, array_merge( [ 'existing_only' => true ], $extra_options ) ]
+		);
+	}
+
+	/**
+	 * Count `newspack_sync_contact_failed` firings during a callback.
+	 *
+	 * @param callable $callback The work to observe.
+	 * @return array The callback's result, then the number of firings.
+	 */
+	private function count_failed_syncs( callable $callback ) {
+		$failed   = 0;
+		$listener = function () use ( &$failed ) {
+			$failed++;
+		};
+		add_action( 'newspack_sync_contact_failed', $listener );
+		$result = $callback();
+		remove_action( 'newspack_sync_contact_failed', $listener );
+		return [ $result, $failed ];
+	}
+
+	/**
+	 * The flag's whole point: a reader the ESP does not have is left alone,
+	 * and the outcome is a skip — not a failure the alerting would count.
+	 */
+	public function test_existing_only_skips_a_reader_the_esp_does_not_have() {
+		// No staged contact data: the subscription mock reports the contact as not found.
+		list( $result, $failed ) = $this->count_failed_syncs( fn() => $this->push_existing_only() );
+
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, '--existing-only must not upsert a contact the ESP does not have.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code(), 'A skipped reader reports the canonical not-found code so the CLI tallies it as skipped.' );
+		$this->assertSame( 0, $failed, 'A deliberate skip is not a sync failure.' );
+	}
+
+	public function test_existing_only_updates_a_reader_the_esp_has() {
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = [ 'id' => '42' ];
+
+		$result = $this->push_existing_only();
+
+		$this->assertTrue( $result );
+		$this->assertCount( 1, Newspack_Newsletters_Contacts::$upsert_calls, 'An existing contact is updated as usual.' );
+	}
+
+	/**
+	 * A read the ESP could not complete is not "no contact": the push is
+	 * withheld (the conservative side), but the reader is a failure the
+	 * operator can see and re-run — and never a retry, since the retry path
+	 * rebuilds the full contact and would create it.
+	 */
+	public function test_existing_only_read_failure_is_a_failed_push_without_retry() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Error reaching to search-members endpoint' );
+
+		list( $result, $failed ) = $this->count_failed_syncs( fn() => $this->push_existing_only() );
+
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'A contact whose existence could not be confirmed is not pushed.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_esp_sync_failed', $result->get_error_code(), 'A failed read is a failed push, not a skip.' );
+		$this->assertSame( 1, $failed, 'A failed read reaches the failure alerting like any failed push.' );
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'esp' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'The retry path rebuilds the full contact and would create it.' );
+	}
+
+	/**
+	 * An integration without an existence check keeps the base default and
+	 * pushes as before; the reader was updated somewhere, so the sync succeeds.
+	 */
+	public function test_existing_only_reports_success_when_another_integration_pushed() {
+		Failing_Sample_Integration::reset();
+		Integrations::register( new Failing_Sample_Integration( 'existing_only_peer', 'Existing Only Peer' ) );
+		Integrations::enable( 'existing_only_peer' );
+		// No staged ESP contact: the ESP skips; the peer pushes.
+
+		$result = $this->push_existing_only();
+
+		Integrations::disable( 'existing_only_peer' );
+		$this->assertTrue( $result );
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'The ESP still skipped its missing contact.' );
+		$this->assertSame( 1, Failing_Sample_Integration::$push_count, 'A peer that can check and reports the contact pushes as usual.' );
+	}
+
+	/**
+	 * The flag promises "update, never create". An integration that cannot say
+	 * whether it holds the contact must not push under it; failing closed here
+	 * is what keeps a programmatic caller from creating the contacts the CLI
+	 * pre-flight refuses to.
+	 */
+	public function test_existing_only_fails_closed_for_an_integration_without_a_lookup() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Lookupless_Sample_Integration::reset();
+		Integrations::register( new Lookupless_Sample_Integration( 'existing_only_lookupless', 'Existing Only Lookupless' ) );
+		Integrations::enable( 'existing_only_lookupless' );
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = [ 'id' => '42' ];
+
+		list( $result, $failed ) = $this->count_failed_syncs( fn() => $this->push_existing_only() );
+
+		Integrations::disable( 'existing_only_lookupless' );
+		$this->assertSame( 0, Lookupless_Sample_Integration::$push_count, 'An integration that cannot check must not push under --existing-only.' );
+		$this->assertCount( 1, Newspack_Newsletters_Contacts::$upsert_calls, 'The ESP, which can check, still updates its existing contact.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_esp_sync_failed', $result->get_error_code() );
+		$this->assertStringContainsString( 'existing_only_lookupless', $result->get_error_message() );
+		$this->assertSame( 0, $failed, 'A refused push is not a provider failure to alert on.' );
+	}
+
+	/**
+	 * Only `true` lets the push through. An override that returns a
+	 * find-by-email helper's value as is (`null` for a miss, an id for a hit)
+	 * must not get the upsert that would create the contact.
+	 *
+	 * @dataProvider non_boolean_lookup_answer_provider
+	 *
+	 * @param mixed $answer What the integration's contact_exists() returns.
+	 */
+	public function test_existing_only_withholds_the_push_on_a_non_boolean_lookup_answer( $answer ) {
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$contact_exists = $answer;
+		Integrations::register( new Failing_Sample_Integration( 'existing_only_peer', 'Existing Only Peer' ) );
+		Integrations::enable( 'existing_only_peer' );
+
+		$result = $this->push_existing_only();
+
+		Integrations::disable( 'existing_only_peer' );
+		$this->assertSame( 0, Failing_Sample_Integration::$push_count, 'A non-boolean answer must not let the push through.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertStringContainsString( 'existing_only_peer', $result->get_error_message() );
+	}
+
+	/**
+	 * Non-boolean contact_exists() answers.
+	 *
+	 * @return array
+	 */
+	public function non_boolean_lookup_answer_provider() {
+		return [
+			'null for a miss' => [ null ],
+			'an id for a hit' => [ '42' ],
+		];
+	}
+
+	public function test_dry_run_existing_only_fails_closed_for_an_integration_without_a_lookup() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Lookupless_Sample_Integration::reset();
+		Integrations::register( new Lookupless_Sample_Integration( 'existing_only_lookupless', 'Existing Only Lookupless' ) );
+		Integrations::enable( 'existing_only_lookupless' );
+		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
+
+		$result = Contact_Sync::sync_contact(
+			$this->user_id,
+			'ctx',
+			true, // dry run.
+			[
+				'existing_only' => true,
+				'fields'        => $this->content_access_labels,
+			]
+		);
+
+		Integrations::disable( 'existing_only_lookupless' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_esp_sync_failed', $result->get_error_code(), 'The preview reports the refusal the run would.' );
+		$this->assertSame( 0, Lookupless_Sample_Integration::$push_count );
+	}
+
+	/**
+	 * Previewing the skip means performing the same existence read the run
+	 * would, and reporting the same outcome so the dry-run summary tallies it.
+	 */
+	public function test_dry_run_existing_only_previews_the_skip_without_a_push() {
+		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
+		// No staged contact data: the ESP reports the reader as missing.
+
+		$result = Contact_Sync::sync_contact(
+			$this->user_id,
+			'ctx',
+			true, // dry run.
+			[
+				'existing_only' => true,
+				'fields'        => $this->content_access_labels,
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code() );
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'A dry run never pushes.' );
+	}
+
+	public function test_dry_run_existing_only_previews_an_update_as_a_sync() {
+		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = [ 'id' => '42' ];
+
+		$result = Contact_Sync::sync_contact(
+			$this->user_id,
+			'ctx',
+			true, // dry run.
+			[
+				'existing_only' => true,
+				'fields'        => $this->content_access_labels,
+			]
+		);
+
+		$this->assertTrue( $result );
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'A dry run never pushes.' );
 	}
 }
