@@ -7,7 +7,7 @@
  * `content.rendered` through `the_content` on the revisions/autosaves REST
  * endpoints, so on busy sites every editor autosave fires those queries for
  * output nobody ever sees. These tests lock in that both blocks skip rendering
- * in that context.
+ * in that context, and that the skip never leaks past the request that caused it.
  *
  * @package Newspack_Blocks
  */
@@ -18,23 +18,9 @@
 class RevisionRenderSkipTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
-		// Clear any captured REST route so the suite stays order-independent. Core
-		// listeners on rest_post_dispatch type-hint WP_REST_Response, so pass one.
-		apply_filters( 'rest_post_dispatch', new WP_REST_Response(), rest_get_server(), new WP_REST_Request() );
 		unset( $GLOBALS['newspack_blocks_post_id'], $GLOBALS['newspack_blocks_all_specific_posts_ids'], $GLOBALS['newspack_blocks_hpb_all_blocks'] );
 		wp_reset_postdata();
 		parent::tear_down();
-	}
-
-	/**
-	 * Make the current REST request look like the given route, the way the REST
-	 * server does when it dispatches one.
-	 *
-	 * @param string $route The REST route being served.
-	 */
-	private function serve_rest_route( $route ) {
-		$request = new WP_REST_Request( 'GET', $route );
-		apply_filters( 'rest_pre_dispatch', null, rest_get_server(), $request );
 	}
 
 	/**
@@ -49,6 +35,26 @@ class RevisionRenderSkipTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Render block markup while a REST request for the given route is in flight,
+	 * the way the REST server brackets an endpoint callback. The route is pushed
+	 * before the render and popped after, even if the render throws, so the suite
+	 * stays order-independent.
+	 *
+	 * @param string $markup Block markup to render.
+	 * @param string $route  The REST route being served during the render.
+	 * @return string The block output.
+	 */
+	private function render_during_rest_route( $markup, $route ) {
+		$request = new WP_REST_Request( 'GET', $route );
+		Newspack_Blocks::push_rest_route( null, [], $request );
+		try {
+			return do_blocks( $markup );
+		} finally {
+			Newspack_Blocks::pop_rest_route( null, [], $request );
+		}
+	}
+
+	/**
 	 * The Content Loop block, rendered as it would be on the page.
 	 *
 	 * @return string The block output.
@@ -58,70 +64,57 @@ class RevisionRenderSkipTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * The Carousel block, rendered as it would be on the page.
+	 * Route × block cases: for each block, the revisions and autosaves routes
+	 * (collection and single) skip the render, while an ordinary post route still
+	 * renders it. The marker is the block's front-end wrapper class.
 	 *
-	 * @return string The block output.
+	 * @return array<string, array{0: string, 1: string, 2: string, 3: bool}>
 	 */
-	private function render_carousel() {
-		return do_blocks( '<!-- wp:newspack-blocks/carousel {"slidesPerView":1,"postsToShow":3} /-->' );
+	public function rest_route_render_cases() {
+		$content_loop = '<!-- wp:newspack-blocks/homepage-articles {"postsToShow":3} /-->';
+		$carousel     = '<!-- wp:newspack-blocks/carousel {"slidesPerView":1,"postsToShow":3} /-->';
+
+		return [
+			// Case => [ markup, marker, route, expect_rendered ].
+			'content loop, single revision'  => [ $content_loop, 'wpnbha', '/wp/v2/posts/123/revisions/456', false ],
+			'content loop, autosaves list'   => [ $content_loop, 'wpnbha', '/wp/v2/posts/123/autosaves', false ],
+			'content loop, single autosave'  => [ $content_loop, 'wpnbha', '/wp/v2/posts/123/autosaves/456', false ],
+			'content loop, ordinary post'    => [ $content_loop, 'wpnbha', '/wp/v2/posts/123', true ],
+			'carousel, single revision'      => [ $carousel, 'wpnbpc', '/wp/v2/posts/123/revisions/456', false ],
+			'carousel, autosaves list'       => [ $carousel, 'wpnbpc', '/wp/v2/posts/123/autosaves', false ],
+			'carousel, single autosave'      => [ $carousel, 'wpnbpc', '/wp/v2/posts/123/autosaves/456', false ],
+			'carousel, ordinary post'        => [ $carousel, 'wpnbpc', '/wp/v2/posts/123', true ],
+		];
 	}
 
 	/**
-	 * The Content Loop must not run its query while a revision is being prepared
-	 * for the REST API.
+	 * A block renders during an ordinary REST request but skips its query on the
+	 * revisions and autosaves routes, whose output is never displayed.
+	 *
+	 * @dataProvider rest_route_render_cases
+	 *
+	 * @param string $markup          Block markup to render.
+	 * @param string $marker          The block's front-end wrapper class.
+	 * @param string $route           The REST route in flight during the render.
+	 * @param bool   $expect_rendered Whether the block should render on that route.
 	 */
-	public function test_content_loop_skips_render_during_revisions_rest_request() {
+	public function test_block_render_respects_rest_route( $markup, $marker, $route, $expect_rendered ) {
 		$this->create_published_posts();
-		$this->serve_rest_route( '/wp/v2/posts/123/revisions/456' );
+		$output = $this->render_during_rest_route( $markup, $route );
 
-		self::assertStringNotContainsString(
-			'wpnbha',
-			$this->render_content_loop(),
-			'The Content Loop must render nothing inside a revisions REST request.'
-		);
-	}
-
-	/**
-	 * The Content Loop must not run its query while an autosave is being prepared
-	 * for the REST API.
-	 */
-	public function test_content_loop_skips_render_during_autosaves_rest_request() {
-		$this->create_published_posts();
-		$this->serve_rest_route( '/wp/v2/posts/123/autosaves' );
-
-		self::assertStringNotContainsString(
-			'wpnbha',
-			$this->render_content_loop(),
-			'The Content Loop must render nothing inside an autosaves REST request.'
-		);
-	}
-
-	/**
-	 * The skip is scoped to revisions/autosaves: a normal REST request (an editor
-	 * fetch of the post itself, say) still renders the block.
-	 */
-	public function test_content_loop_renders_during_a_non_revision_rest_request() {
-		$this->create_published_posts();
-		$this->serve_rest_route( '/wp/v2/posts/123' );
-
-		self::assertStringContainsString(
-			'wpnbha',
-			$this->render_content_loop(),
-			'The Content Loop must still render on a non-revision REST request.'
-		);
-	}
-
-	/**
-	 * A front-end render, with no REST request in flight at all, is untouched.
-	 */
-	public function test_content_loop_renders_on_the_front_end() {
-		$this->create_published_posts();
-
-		self::assertStringContainsString(
-			'wpnbha',
-			$this->render_content_loop(),
-			'The Content Loop must render normally on the front end.'
-		);
+		if ( $expect_rendered ) {
+			self::assertStringContainsString(
+				$marker,
+				$output,
+				"The block must render on route $route."
+			);
+		} else {
+			self::assertStringNotContainsString(
+				$marker,
+				$output,
+				"The block must render nothing on route $route."
+			);
+		}
 	}
 
 	/**
@@ -157,46 +150,28 @@ class RevisionRenderSkipTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * The Carousel must not run its query while a revision is being prepared for
-	 * the REST API.
+	 * The captured route must not outlive the request that set it. An in-process
+	 * `rest_do_request()` on a revisions route dispatches without ever firing
+	 * `rest_post_dispatch`, so a route tracked on that hook would stay set and
+	 * blank every later render in the process (and cache the empty page). Bracketing
+	 * on the before/after-callback hooks clears it when the request returns.
 	 */
-	public function test_carousel_skips_render_during_revisions_rest_request() {
+	public function test_route_does_not_leak_after_in_process_revisions_request() {
 		$this->create_published_posts();
-		$this->serve_rest_route( '/wp/v2/posts/123/revisions/456' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 
-		self::assertStringNotContainsString(
-			'wpnbpc',
-			$this->render_carousel(),
-			'The Carousel must render nothing inside a revisions REST request.'
-		);
-	}
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		wp_save_post_revision( $post_id );
 
-	/**
-	 * The Carousel must not run its query while an autosave is being prepared for
-	 * the REST API.
-	 */
-	public function test_carousel_skips_render_during_autosaves_rest_request() {
-		$this->create_published_posts();
-		$this->serve_rest_route( '/wp/v2/posts/123/autosaves' );
-
-		self::assertStringNotContainsString(
-			'wpnbpc',
-			$this->render_carousel(),
-			'The Carousel must render nothing inside an autosaves REST request.'
-		);
-	}
-
-	/**
-	 * The Carousel still renders on a normal REST request.
-	 */
-	public function test_carousel_renders_during_a_non_revision_rest_request() {
-		$this->create_published_posts();
-		$this->serve_rest_route( '/wp/v2/posts/123' );
+		$request = new WP_REST_Request( 'GET', '/wp/v2/posts/' . $post_id . '/revisions' );
+		$request->set_param( 'context', 'edit' );
+		$response = rest_do_request( $request );
+		self::assertSame( 200, $response->get_status(), 'The in-process revisions request succeeded.' );
 
 		self::assertStringContainsString(
-			'wpnbpc',
-			$this->render_carousel(),
-			'The Carousel must still render on a non-revision REST request.'
+			'wpnbha',
+			$this->render_content_loop(),
+			'The Content Loop must still render after an in-process revisions REST request returns.'
 		);
 	}
 }
