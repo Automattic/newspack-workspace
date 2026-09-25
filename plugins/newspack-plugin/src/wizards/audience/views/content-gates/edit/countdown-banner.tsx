@@ -118,7 +118,7 @@ export default function CountdownBanner( {
 					{ isEnabled && ! hasActiveMetering && (
 						<Notice status="warning" isDismissible={ false } spokenMessage="">
 							{ __(
-								'No active gate meters yet, so there is nothing to count down and the banner will not appear. Activate a gate with metering to show it.',
+								'No active gate gives readers free views, so the banner has nothing to count down and will not appear.',
 								'newspack-plugin'
 							) }
 						</Notice>
