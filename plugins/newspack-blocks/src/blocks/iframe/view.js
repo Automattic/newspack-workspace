@@ -27,7 +27,7 @@ const isStillBlank = iframe => {
 };
 
 /**
- * Whether the frame has an address of its own to retry. A lazy loader can hold it
+ * Whether the frame has an address of its own. A lazy loader can hold it
  * back until the frame nears the viewport (perfmatters moves it to data-src). With
  * no src, iframe.src is '', which location.replace() resolves to this page, and an
  * empty src attribute reads back as this page's URL. Either way a retry would load
@@ -65,8 +65,11 @@ domReady( () => {
 
 		// Add a listener for dynamic resizing if the iframe supports it.
 		window.addEventListener( 'message', function ( event ) {
-			// Reject messages from untrusted origins.
-			if ( event.origin !== new URL( iframe.src ).origin || iframe.contentWindow !== event.source ) {
+			// Reject messages from untrusted origins. A frame still waiting on a lazy loader
+			// has no src of its own, so no origin to check, and new URL( '' ) throws. This
+			// runs per message rather than at registration, so the frame resizes once the
+			// loader fills src in.
+			if ( ! hasOwnSrc( iframe ) || event.origin !== new URL( iframe.src ).origin || iframe.contentWindow !== event.source ) {
 				return;
 			}
 
