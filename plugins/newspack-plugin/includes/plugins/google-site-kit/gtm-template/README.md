@@ -42,15 +42,13 @@ stop here until it ships.
 | `group` | when Content Gate is enabled | anon group IDs / `none` |
 | `access_source` | every page, when Content Gate is enabled | product name / `subscription` / `one_time_purchase` / `group` / `institution` / `domain` / `reader_data` / `metering_eligible` / `gated` / `no_custom_access_gate` |
 
-The GA4 User-ID (the WordPress user ID) is intentionally **not** in the dataLayer. Newspack
-sets it directly on Site Kit's gtag config, so it reaches Google without being exposed to
-third-party reach.
+No reader identifier is sent to GA4 at all – there is no email hash or user ID, neither on
+Site Kit's gtag config nor in the dataLayer.
 
 > **Privacy note:** everything pushed to `window.dataLayer` is readable by *every* tag in
 > the container – not just Google's GA4 tag, but any third-party tags too. The params above
-> are intentionally coarse and anonymized (yes/no flags, anonymized group IDs, no PII), and
-> the reader identifier is kept off the dataLayer for exactly this reason. Don't extend this
-> set with reader PII.
+> are intentionally coarse and anonymized (yes/no flags, anonymized group IDs, no PII).
+> Don't extend this set with reader PII.
 
 ## Step 1 – Import the variables
 

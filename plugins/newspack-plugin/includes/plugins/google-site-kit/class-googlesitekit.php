@@ -576,16 +576,6 @@ class GoogleSiteKit {
 		if ( defined( 'NEWSPACK_GA_DISABLE_CUSTOM_FE_PARAMS' ) && NEWSPACK_GA_DISABLE_CUSTOM_FE_PARAMS ) {
 			return $gtag_opt;
 		}
-
-		// Send the WordPress user ID as the GA4 User-ID for logged-in readers. `user_id` is a
-		// reserved gtag config field, kept off the custom-parameter set so it never reaches the
-		// dataLayer where third-party GTM tags could read it. Gated on is_user_reader() to match
-		// the is_reader dimension: staff (administrators/editors) are not assigned a reader ID.
-		$current_user = wp_get_current_user();
-		if ( $current_user->ID && Reader_Activation::is_user_reader( $current_user ) ) {
-			$gtag_opt['user_id'] = (string) $current_user->ID;
-		}
-
 		$custom_params = self::get_custom_event_parameters();
 		return array_merge( $custom_params, $gtag_opt );
 	}
@@ -632,10 +622,9 @@ class GoogleSiteKit {
 	/**
 	 * The reader/content parameters to mirror into the dataLayer for Google Tag Manager.
 	 *
-	 * Mirrors the custom-dimension set sent to Site Kit's gtag config. The GA4 User-ID is
-	 * not part of this set: it is set directly on the gtag config (see
-	 * add_ga_custom_parameters) so it reaches Google without being exposed to the
-	 * third-party tags that can read a publisher's dataLayer.
+	 * Mirrors the custom-dimension set sent to Site Kit's gtag config. That set is
+	 * intentionally coarse and anonymized (yes/no flags, anonymized group IDs), carrying no
+	 * reader identifier, so it is safe to expose to every tag in a publisher's GTM container.
 	 *
 	 * @return array Parameters to push to window.dataLayer.
 	 */
@@ -644,18 +633,11 @@ class GoogleSiteKit {
 		 * Filters the Newspack parameters pushed to the dataLayer for Google Tag Manager.
 		 *
 		 * Mirrors the `newspack_ga4_custom_parameters` set sent to Site Kit's gtag config.
-		 * Reserved identifiers (`user_id`, `email_hash`) are stripped after this filter and
-		 * cannot be re-added through it.
+		 * Everything here is readable by every tag in the container, so do not add reader PII.
 		 *
 		 * @param array $params Parameters pushed to window.dataLayer.
 		 */
-		$params = apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
-
-		// Reserved identifiers must never reach the dataLayer, even via a filter: they go only to
-		// Site Kit's own gtag config, out of reach of the third-party tags in a GTM container.
-		unset( $params['user_id'], $params['email_hash'] );
-
-		return $params;
+		return apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
 	}
 
 	/**
