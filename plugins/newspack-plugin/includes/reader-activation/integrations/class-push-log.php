@@ -965,7 +965,7 @@ final class Push_Log {
 	public static function schedule_cleanup() {
 		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'unschedule_cleanup' ] );
 
-		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CLEANUP_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
+		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CLEANUP_HOOK, NEWSPACK_CRON_DISABLE, true ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/oauth/class-oauth-transients.php.
 			self::unschedule_cleanup();
 		} elseif ( ! wp_next_scheduled( self::CLEANUP_HOOK ) ) {
 			wp_schedule_event( time(), 'hourly', self::CLEANUP_HOOK );
