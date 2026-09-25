@@ -506,14 +506,14 @@ do_action(
 do_action( 'newspack_integration_health_checks_completed', [ 'esp' ] );
 ```
 
-`Newspack\Alert_Manager` consumes all three and keeps one health record per integration in the `newspack_integration_health_state` option. Every failure reaches the log at warning severity, but Slack is paged once, on the `Alert_Manager::HEALTH_BROKEN_THRESHOLD`-th consecutive failure; a gap longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP` between failures restarts a count that has not paged yet. That transition, the pass that ends it, and a run that stops checking a broken integration (disabled, or no longer set up) fire:
+`Newspack\Alert_Manager` consumes all three and keeps one health record per integration in the `newspack_integration_health_state` option. Slack is paged once, on the `Alert_Manager::HEALTH_BROKEN_THRESHOLD`-th consecutive failure, and every other failure reaches the log at warning severity; a gap longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP` between failures restarts a count that has not paged yet. That transition, the pass that ends it, and a run that stops checking a broken integration (disabled, or no longer set up) fire:
 
 ```php
 do_action(
     'newspack_integration_health_changed',
     [
         'integration_id'   => 'esp',
-        'integration_name' => 'Newsletter ESP',
+        'integration_name' => 'Mailchimp',
         'state'            => 'broken', // or 'recovered', or 'disconnected' when a run no longer checks it
         'error_class'      => 'publisher', // the ESP account is the problem; 'other' for outages and unknowns
         'error'            => '403: API Access has been disabled for this account.',
@@ -523,7 +523,7 @@ do_action(
 );
 ```
 
-One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself.
+One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself. Staging hosts (`*.newspackstaging.com`) fire it too; only their alerts are capped at Watch, so a consumer that should skip staging has to check the host itself.
 
 While an integration is broken, its contact-sync failures don't page either: retry exhaustion reaches the log at warning severity, and its failures stay out of the failure log the pattern alerts read.
 
