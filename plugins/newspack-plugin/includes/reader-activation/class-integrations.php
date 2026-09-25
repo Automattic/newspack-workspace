@@ -500,6 +500,7 @@ class Integrations {
 				'setup_url'                => $integration->get_setup_url(),
 				'settings'                 => $integration->get_settings_config(),
 				'required_plugins'         => $integration->get_required_plugins(),
+				'guide'                    => $integration->get_guide(),
 			];
 		}
 
@@ -880,7 +881,7 @@ class Integrations {
 	public static function schedule_health_check() {
 		register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'deactivate_health_check' ] );
 
-		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::HEALTH_CHECK_CRON_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
+		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::HEALTH_CHECK_CRON_HOOK, NEWSPACK_CRON_DISABLE, true ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/oauth/class-oauth-transients.php.
 			self::deactivate_health_check();
 		} elseif ( ! \wp_next_scheduled( self::HEALTH_CHECK_CRON_HOOK ) ) {
 			\wp_schedule_event( time(), 'hourly', self::HEALTH_CHECK_CRON_HOOK );

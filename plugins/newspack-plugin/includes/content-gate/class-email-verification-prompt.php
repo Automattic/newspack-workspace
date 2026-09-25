@@ -78,20 +78,22 @@ class Email_Verification_Prompt {
 	/**
 	 * Resolve the prompt context for the gate denying the current reader.
 	 *
-	 * Cheap before expensive. The first stage walks the post's gates for a domain the
-	 * reader's address matches, which rules out every visitor but the handful the
-	 * prompt is for. Only those reach the second, which asks what the reader would see
-	 * if they verified — the question the prompt is about to make a promise about, and
-	 * one a single rule cannot answer: rules are ANDed within a group, and a post can
-	 * be covered by several gates in priority order, so verification can satisfy the
-	 * email-domain rule and leave the reader on a paywall either way.
+	 * Cheap before expensive. The first stage checks the deciding gate's rules for a
+	 * domain the reader's address matches, which rules out every visitor but the handful
+	 * the prompt is for. Only those reach the second, which asks what the reader would
+	 * see if they verified — the question the prompt is about to make a promise about,
+	 * and one a single rule cannot answer: rules are ANDed within a group, and other
+	 * callbacks on `newspack_is_post_restricted` can keep the post restricted, so
+	 * verification can satisfy the email-domain rule and leave the reader on a paywall
+	 * either way.
 	 *
 	 * @return array|false {
 	 *     The prompt context, or false when no prompt should render.
 	 *
 	 *     @type string[] $institutions Names of the institutions the reader's verified
-	 *                                  address would grant access through. Empty when
-	 *                                  the route in is a gate's own email-domain rule
+	 *                                  address would grant access through, on the gate
+	 *                                  that decides access to the post. Empty when the
+	 *                                  route in is that gate's own email-domain rule
 	 *                                  rather than an institution.
 	 *     @type string   $email        The reader's email address.
 	 * }
@@ -136,11 +138,12 @@ class Email_Verification_Prompt {
 	/**
 	 * Build the prompt context for a reader and post, uncached.
 	 *
-	 * Every gate covering the post is walked, not only the one that denied. The gate a
-	 * reader is stopped at need not be the one their address would let them past: a
-	 * registration gate walling verification can deny at priority 1 while an
-	 * institution gate at priority 2 is the route in, and the same act of verifying
-	 * clears both.
+	 * Only the gate that decides access is read (NPPD-2289). A domain rule on a gate
+	 * ranked below it is not consulted while that gate decides, so it can neither prompt
+	 * the reader nor be named: with a registration gate walling verification at priority
+	 * 1 and the reader's domain only on an institution gate at priority 2, no prompt
+	 * shows. The reader's route in is the registration wall, whose default layout already
+	 * offers them a way to verify.
 	 *
 	 * @param \WP_User $user    The reader.
 	 * @param int      $post_id The post they were denied.
@@ -148,21 +151,22 @@ class Email_Verification_Prompt {
 	 * @return array|false
 	 */
 	private static function build_prompt_context( \WP_User $user, int $post_id ) {
-		$matching_groups = [];
-		foreach ( Content_Restriction_Control::get_post_gates( $post_id ) as $gate ) {
-			$custom_access = $gate['custom_access'] ?? [];
-			if ( empty( $custom_access['active'] ) || empty( $custom_access['access_rules'] ) ) {
-				continue;
-			}
-			$matching_groups = array_merge(
-				$matching_groups,
-				self::get_domain_matching_groups(
-					$user->user_email,
-					$custom_access['access_rules'],
-					$custom_access['payment_recovery_grace'] ?? true
-				)
-			);
+		// get_post_gates() keeps priority order, so the first gate is the one that decides.
+		// One exception: a first gate with no layout that still refuses the reader after they
+		// verify is passed over, and the gate below it decides. The first gate's groups have
+		// failed then, so no prompt shows even where the lower gate would let the reader in.
+		// That miss is accepted: a gate is only saved without a layout when creating the
+		// layout failed.
+		$post_gates    = Content_Restriction_Control::get_post_gates( $post_id );
+		$custom_access = $post_gates[0]['custom_access'] ?? [];
+		if ( empty( $custom_access['active'] ) || empty( $custom_access['access_rules'] ) ) {
+			return false;
 		}
+		$matching_groups = self::get_domain_matching_groups(
+			$user->user_email,
+			$custom_access['access_rules'],
+			$custom_access['payment_recovery_grace'] ?? true
+		);
 		if ( empty( $matching_groups ) ) {
 			return false;
 		}
@@ -262,12 +266,13 @@ class Email_Verification_Prompt {
 	 *
 	 * Must run inside {@see Access_Rules::with_assumed_verification()}. A group is a
 	 * route in only if it passes as a whole, so a group that ANDs the matched rule with
-	 * one the reader still fails contributes no names — and if no group passes, or
-	 * another gate on the post denies regardless, there is no route in at all.
+	 * one the reader still fails contributes no names — and if no group passes, or the
+	 * post stays restricted regardless, verifying opens nothing and there is no prompt.
 	 *
 	 * @param \WP_User $user            The reader.
 	 * @param int      $post_id         The post they were denied.
-	 * @param array    $matching_groups Groups from {@see self::get_domain_matching_groups()}.
+	 * @param array    $matching_groups Groups from {@see self::get_domain_matching_groups()},
+	 *                                  read off the gate that decides access.
 	 *
 	 * @return string[]|null Institution names (possibly empty, for a bare email-domain
 	 *                       rule), or null when verifying would not unlock the article.
@@ -297,11 +302,11 @@ class Email_Verification_Prompt {
 	/**
 	 * Whether the post would still be restricted with the assumption in place.
 	 *
-	 * Re-runs the whole restriction decision, not just this gate's: a post can be
-	 * covered by several gates, and the check stops at the first that denies, so a
-	 * lower-priority gate the reader also fails stays invisible until the gate above it
-	 * starts granting. Isolated from the request's own gate resolution so the
-	 * hypothetical neither reads it nor replaces it.
+	 * Re-runs the whole restriction decision, filter chain included, rather than taking a
+	 * passing group as proof: the prompt promises that this article opens, and other
+	 * callbacks on `newspack_is_post_restricted` can still keep it restricted. Isolated
+	 * from the request's own gate resolution so the hypothetical neither reads it nor
+	 * replaces it.
 	 *
 	 * @param int $post_id The post to re-evaluate.
 	 *

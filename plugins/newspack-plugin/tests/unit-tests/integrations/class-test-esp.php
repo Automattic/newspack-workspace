@@ -821,7 +821,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	public function test_integration_is_branded_mailchimp() {
 		$esp = new ESP();
 		$this->assertSame( 'Mailchimp', $esp->get_name() );
-		$this->assertSame( 'Syncs reader data with your Mailchimp audience.', $esp->get_description() );
+		$this->assertSame( 'Sync reader data with your Mailchimp audience.', $esp->get_description() );
 	}
 
 	/**

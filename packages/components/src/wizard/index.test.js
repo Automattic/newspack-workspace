@@ -287,3 +287,36 @@ describe( 'Wizard section tabs', () => {
 		expect( screen.queryByRole( 'tab' ) ).toBeNull();
 	} );
 } );
+
+describe( 'Wizard section subtitle', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( {} );
+	} );
+
+	it( "shows the active section's subHeaderText in the header, falling back to the wizard's", async () => {
+		window.location.hash = '#/list';
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				subHeaderText="Wizard intro"
+				sections={ [
+					{ label: 'List', path: '/list', exact: true, subHeaderText: 'List intro', render: () => <div>List view</div> },
+					{ label: 'Item', path: '/list/:id', isHidden: true, render: () => <div>Item view</div> },
+				] }
+			/>
+		);
+		const subtitle = () => container.querySelector( '.newspack-page__header-subtitle' )?.textContent;
+
+		expect( await screen.findByText( 'List view' ) ).toBeInTheDocument();
+		expect( subtitle() ).toBe( 'List intro' );
+
+		act( () => {
+			window.location.hash = '#/list/esp';
+			window.dispatchEvent( new HashChangeEvent( 'hashchange' ) );
+		} );
+
+		expect( await screen.findByText( 'Item view' ) ).toBeInTheDocument();
+		expect( subtitle() ).toBe( 'Wizard intro' );
+	} );
+} );

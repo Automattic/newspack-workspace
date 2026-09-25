@@ -326,14 +326,18 @@ class Audience_Subscriptions extends Wizard {
 	 */
 	private static function get_product_data( $product ) {
 		return [
-			'id'            => (int) $product->get_id(),
-			'name'          => $product->get_name(),
-			'parent_id'     => (int) $product->get_parent_id(),
-			'type_label'    => $product->get_parent_id() ? __( 'Variation', 'newspack-plugin' ) : __( 'Product', 'newspack-plugin' ),
-			'price'         => (string) $product->get_price(),
-			'regular_price' => (string) $product->get_regular_price(),
-			'sale_price'    => (string) $product->get_sale_price(),
-			'is_on_sale'    => (bool) $product->is_on_sale(),
+			'id'              => (int) $product->get_id(),
+			'name'            => $product->get_name(),
+			'parent_id'       => (int) $product->get_parent_id(),
+			'type_label'      => $product->get_parent_id() ? __( 'Variation', 'newspack-plugin' ) : __( 'Product', 'newspack-plugin' ),
+			'price'           => (string) $product->get_price(),
+			'regular_price'   => (string) $product->get_regular_price(),
+			'sale_price'      => (string) $product->get_sale_price(),
+			'is_on_sale'      => (bool) $product->is_on_sale(),
+			// A rule open to every subscriber never discounts a subscription, so the
+			// editor's price preview has to know which of the products it lists are
+			// ones. `type_label` is display copy and cannot answer that.
+			'is_subscription' => WooCommerce_Subscriptions::is_subscription_product( $product ),
 		];
 	}
 

@@ -11,12 +11,16 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { SettingsSection } from './settings-section';
+import { SettingsSection, sortIntegrationIds } from './settings-section';
 
 const mockCardFeatureProps = [];
 const mockEnableModalProps = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( {
+	'neutral-100': '#f0f0f0',
+	'neutral-600': '#6c6c6c',
+} ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Card: ( { children } ) => children,
 	Grid: ( { children } ) => children,
@@ -69,7 +73,7 @@ const requiredAudienceField = {
 const baseIntegration = {
 	id: 'esp',
 	name: 'Mailchimp',
-	description: 'Syncs reader data with your Mailchimp audience.',
+	description: 'Sync reader data with your Mailchimp audience.',
 	enabled: false,
 	is_set_up: false,
 	is_connected: false,
@@ -233,7 +237,7 @@ describe( 'Audience Integrations settings section card action', () => {
 	it( 'renders the reported provider brand icon for other integrations', () => {
 		render(
 			<SettingsSection
-				integrations={ { fundraise_up: { ...baseIntegration, id: 'fundraise_up', provider: 'active_campaign' } } }
+				integrations={ { other_esp: { ...baseIntegration, id: 'other_esp', provider: 'active_campaign' } } }
 				loading={ false }
 				onToggleEnabled={ jest.fn() }
 				onActivatePlugin={ jest.fn() }
@@ -257,5 +261,50 @@ describe( 'Audience Integrations settings section card action', () => {
 		);
 		expect( mockCardFeatureProps[ 0 ].icon.node ).toBeDefined();
 		expect( mockCardFeatureProps[ 0 ].icon.props ).toBeUndefined();
+	} );
+
+	it.each( [ 'salesforce', 'beehiiv', 'fundraiseup' ] )( 'renders the %s brand icon for its integration ID', id => {
+		render(
+			<SettingsSection
+				integrations={ { [ id ]: { ...baseIntegration, id, provider: null } } }
+				loading={ false }
+				onToggleEnabled={ jest.fn() }
+				onActivatePlugin={ jest.fn() }
+				onSetupAndEnable={ jest.fn() }
+				history={ { push: jest.fn() } }
+			/>
+		);
+		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( id );
+	} );
+
+	it( 'renders the Gravity Forms mark for the Gravity Forms integration', () => {
+		render(
+			<SettingsSection
+				integrations={ { 'form-capture': { ...baseIntegration, id: 'form-capture', provider: null } } }
+				loading={ false }
+				onToggleEnabled={ jest.fn() }
+				onActivatePlugin={ jest.fn() }
+				onSetupAndEnable={ jest.fn() }
+				history={ { push: jest.fn() } }
+			/>
+		);
+		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( 'gravity_forms' );
+	} );
+} );
+
+describe( 'sortIntegrationIds', () => {
+	it( 'orders integrations by name, ignoring case and registration order', () => {
+		const integrations = {
+			esp: { name: 'Mailchimp' },
+			'form-capture': { name: 'Gravity Forms' },
+			salesforce: { name: 'Salesforce' },
+			activecampaign: { name: 'ActiveCampaign' },
+			beehiiv: { name: 'beehiiv' },
+		};
+		expect( sortIntegrationIds( integrations ) ).toEqual( [ 'activecampaign', 'beehiiv', 'form-capture', 'esp', 'salesforce' ] );
+	} );
+
+	it( 'falls back to the ID when an integration has no name', () => {
+		expect( sortIntegrationIds( { zeta: { name: 'Zeta' }, alpha: {} } ) ).toEqual( [ 'alpha', 'zeta' ] );
 	} );
 } );

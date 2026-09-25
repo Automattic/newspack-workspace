@@ -7,6 +7,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Subscriber_Commerce;
 use Newspack\Subscriber_Discounts;
 
 /**
@@ -363,5 +364,52 @@ class Newspack_Test_Subscriber_Discounts_Storage extends WP_UnitTestCase {
 		$rule_ids_in_order = wp_list_pluck( Subscriber_Discounts::get_rules(), 'id' );
 
 		$this->assertSame( [ $newer_rule['id'], $older_rule['id'] ], $rule_ids_in_order, 'Newest rules sort first.' );
+	}
+
+	/**
+	 * "All subscriptions" carries the audience in the mode, not in a list, so a
+	 * rule using it saves with no subscription selected. This is what lets a
+	 * publisher say "subscribers get this" without enumerating every tier.
+	 */
+	public function test_all_subscriptions_rule_needs_no_subscription_ids() {
+		$saved_rule = Subscriber_Discounts::save_rule(
+			[
+				'subscription_targeting' => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'targeting'              => 'products',
+				'product_ids'            => [ 200 ],
+				'discount_type'          => 'fixed',
+				'amount'                 => 5.0,
+			]
+		);
+
+		$this->assertNotWPError( $saved_rule, 'An all-subscriptions rule is valid with no subscription selected.' );
+		$this->assertSame( [], $saved_rule['subscription_product_ids'] );
+	}
+
+	/**
+	 * The fail-open direction. A rule stored before the audience mode existed is
+	 * read back as naming its subscriptions, so an empty list still means nobody
+	 * rather than flipping to every subscriber.
+	 */
+	public function test_a_stored_rule_without_a_mode_reads_as_named_subscriptions() {
+		update_option(
+			Subscriber_Discounts::OPTION_NAME,
+			[
+				[
+					'id'                       => 'legacy',
+					'subscription_product_ids' => [],
+					'targeting'                => 'all',
+					'discount_type'            => 'percent',
+					'amount'                   => 10,
+					'active'                   => true,
+					'created_at'               => '2026-01-01',
+				],
+			]
+		);
+
+		$this->assertSame(
+			Subscriber_Commerce::SUBSCRIPTION_TARGETING_SPECIFIC,
+			Subscriber_Discounts::get_rule( 'legacy' )['subscription_targeting']
+		);
 	}
 }

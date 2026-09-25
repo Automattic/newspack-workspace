@@ -7,6 +7,7 @@
 
 namespace Newspack\Tests\Subscriber_Commerce;
 
+use Newspack\Subscriber_Commerce;
 use Newspack\Subscriber_Eligibility;
 
 /**
@@ -157,5 +158,91 @@ class Test_Subscriber_Eligibility extends \WP_UnitTestCase {
 	public function test_cache_distinguishes_subscription_sets() {
 		$this->assertTrue( Subscriber_Eligibility::user_has( $this->reader_id, [ 101 ] ) );
 		$this->assertFalse( Subscriber_Eligibility::user_has( $this->reader_id, [ 102 ] ) );
+	}
+
+	/**
+	 * Stand in for the oracle as a site where only the first reader holds a
+	 * subscription — any subscription, whatever a rule asks about.
+	 *
+	 * @param bool  $has_subscription Whether the user has an active subscription.
+	 * @param int   $user_id          User ID.
+	 * @param array $product_ids      Required product IDs.
+	 *
+	 * @return bool
+	 */
+	public function mock_any_subscription_oracle( $has_subscription, $user_id, $product_ids ) {
+		$this->oracle_calls[] = [ $user_id, $product_ids ];
+		return $user_id === $this->reader_id;
+	}
+
+	/**
+	 * Swap the narrow oracle for the "holds something" one.
+	 */
+	private function use_any_subscription_oracle() {
+		remove_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'mock_oracle' ], 10 );
+		add_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'mock_any_subscription_oracle' ], 10, 3 );
+		$this->oracle_calls = [];
+	}
+
+	/**
+	 * "Any active subscription" is the oracle's own reading of an empty product
+	 * list, so this passes one through rather than short-circuiting the way
+	 * user_has() does for a rule that names nothing.
+	 */
+	public function test_user_has_any_asks_the_oracle_about_every_subscription() {
+		$this->use_any_subscription_oracle();
+
+		$this->assertTrue( Subscriber_Eligibility::user_has_any( $this->reader_id ) );
+		$this->assertSame( [ [ $this->reader_id, [] ] ], $this->oracle_calls );
+		$this->assertFalse(
+			Subscriber_Eligibility::user_has_any( $this->other_reader_id ),
+			'A reader holding nothing is still not a subscriber — "all subscriptions" is not "everyone".'
+		);
+	}
+
+	/**
+	 * An anonymous visitor holds no subscription, so the oracle is never asked.
+	 */
+	public function test_user_has_any_never_matches_an_anonymous_reader() {
+		$this->use_any_subscription_oracle();
+
+		$this->assertFalse( Subscriber_Eligibility::user_has_any( 0 ) );
+		$this->assertSame( [], $this->oracle_calls );
+	}
+
+	/**
+	 * The two questions are different questions. Sharing a cache entry would let
+	 * a rule naming one subscription answer for a rule naming all of them.
+	 */
+	public function test_cache_distinguishes_any_subscription_from_a_named_set() {
+		$this->use_any_subscription_oracle();
+
+		Subscriber_Eligibility::user_has( $this->reader_id, [ 101 ] );
+		Subscriber_Eligibility::user_has_any( $this->reader_id );
+
+		$this->assertCount( 2, $this->oracle_calls );
+	}
+
+	/**
+	 * The rule's own mode picks the question, so callers hand over the rule
+	 * rather than deciding for themselves which lookup applies.
+	 */
+	public function test_user_matches_rule_routes_on_the_rules_mode() {
+		$this->use_any_subscription_oracle();
+
+		$all_subscriptions = [
+			'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+			'subscription_product_ids' => [],
+		];
+		$named_subscription = [
+			'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_SPECIFIC,
+			'subscription_product_ids' => [],
+		];
+
+		$this->assertTrue( Subscriber_Eligibility::user_matches_rule( $this->reader_id, $all_subscriptions ) );
+		$this->assertFalse(
+			Subscriber_Eligibility::user_matches_rule( $this->reader_id, $named_subscription ),
+			'A rule naming no subscription under the default mode still names no way in.'
+		);
 	}
 }

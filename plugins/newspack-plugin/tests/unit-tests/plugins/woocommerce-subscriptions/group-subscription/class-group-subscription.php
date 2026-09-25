@@ -317,7 +317,7 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	 * exactly as an owned one would.
 	 */
 	public function test_member_capacity_is_the_limit_when_ownerless() {
-		// customer_id 0 -> get_managers() returns [0], an empty/phantom owner.
+		// customer_id 0 -> no owner, so get_managers() returns an empty list.
 		$sub = $this->create_group_subscription( 0, 10 );
 
 		$this->assertSame(
@@ -787,6 +787,79 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		$this->assertEmpty(
 			Group_Subscription::get_group_names_for_user( $admin_id ),
 			'A non-eligible user holding only member meta (not ownership) must not see the group.'
+		);
+	}
+
+	/**
+	 * Create a reader on the given email domain and track it for cleanup.
+	 *
+	 * @param string $domain Email domain.
+	 * @return int User ID.
+	 */
+	private function create_reader_on_domain( string $domain ): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'staff-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'staff-' . wp_generate_password( 6, false ) . '@' . $domain,
+				'role'       => 'subscriber',
+			]
+		);
+		$this->assertNotWPError( $user_id );
+		update_user_meta( $user_id, '_newspack_reader', true );
+		$this->user_ids[] = $user_id;
+		return $user_id;
+	}
+
+	/**
+	 * Verifying an address joins the reader to every active group listing its domain,
+	 * and to no other group. Before verification the domain match alone does nothing.
+	 */
+	public function test_verifying_an_email_joins_groups_listing_its_domain() {
+		$matching  = $this->create_group_subscription( $this->create_reader_user() );
+		$unrelated = $this->create_group_subscription( $this->create_reader_user() );
+		$cancelled = $this->create_group_subscription( $this->create_reader_user() );
+		$matching->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'other.test,example.test' );
+		$unrelated->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'unrelated.test' );
+		$cancelled->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'example.test' );
+		$cancelled->update_status( 'cancelled' );
+
+		$reader_id = $this->create_reader_on_domain( 'EXAMPLE.test' );
+		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $matching ), 'An unverified reader must not join.' );
+
+		global $wcs_mock_query_log;
+		$wcs_mock_query_log = [];
+		Newspack\Reader_Activation::set_reader_verified( $reader_id );
+
+		// The mock ignores meta_query, so pin that production only loads groups with a domain list.
+		$this->assertSame( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, end( $wcs_mock_query_log )['meta_query'][0]['key'] );
+		$this->assertTrue( Group_Subscription::user_is_member( $reader_id, $matching ), 'A verified reader joins the group listing their domain.' );
+		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $unrelated ), 'A group listing other domains is untouched.' );
+		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $cancelled ), 'An inactive group takes no auto-joins.' );
+	}
+
+	/**
+	 * A full group keeps its limit: the verified reader is left out rather than
+	 * pushing the group over.
+	 */
+	public function test_verifying_an_email_does_not_join_a_full_group() {
+		$group = $this->create_group_subscription( $this->create_reader_user(), 2 );
+		$group->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'example.test' );
+		$this->add_member( $this->create_reader_user(), $group );
+
+		$reader_id = $this->create_reader_on_domain( 'example.test' );
+		Newspack\Reader_Activation::set_reader_verified( $reader_id );
+
+		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $group ) );
+	}
+
+	/**
+	 * The admin field accepts loose input and stores one canonical list.
+	 */
+	public function test_sanitize_email_domains() {
+		$this->assertSame(
+			'example.test,example.org',
+			Group_Subscription_Settings::sanitize_email_domains( " @Example.test,  example.org\nexample.test, " )
 		);
 	}
 }

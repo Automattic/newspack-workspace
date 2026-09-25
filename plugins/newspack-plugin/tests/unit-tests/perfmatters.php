@@ -214,6 +214,25 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Perfmatters "Delay JavaScript" executes scripts on first user interaction,
+	 * and the IP-access landing page auto-redirects with no interaction — a
+	 * delayed gtag never runs there, so no pageview or event is ever sent. The
+	 * delay is vetoed on that request; everywhere else the configured value
+	 * passes through.
+	 */
+	public function test_delay_js_vetoed_on_ip_access_landing_page() {
+		$this->assertTrue( Perfmatters::should_delay_js( true ), 'The configured value passes through on a regular request.' );
+
+		// The landing page is identified by its query var alone — no path involved.
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '1' );
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', 'test-university' );
+		$this->assertFalse( Perfmatters::should_delay_js( true ), 'JS delay is vetoed on the landing page request.' );
+
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '' );
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', '' );
+	}
+
+	/**
 	 * A saved option that already carries the manually-applied workaround entry
 	 * doesn't end up with duplicates after the defaults merge.
 	 */

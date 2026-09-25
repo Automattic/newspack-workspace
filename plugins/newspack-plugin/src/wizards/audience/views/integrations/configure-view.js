@@ -234,48 +234,55 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 	// out of the generic Settings group so they render inside their section, and
 	// the push-pipeline settings (metadata prefix, account-deletion sync) render
 	// inside the Outbound section they act on.
-	const { settingsFields, outboundSettingsFields, inboundField, outboundField, inboundToggleField, outboundToggleField } = useMemo( () => {
-		const empty = {
-			settingsFields: [],
-			outboundSettingsFields: [],
-			inboundField: null,
-			outboundField: null,
-			inboundToggleField: null,
-			outboundToggleField: null,
-		};
-		if ( ! integration?.settings ) {
-			return empty;
-		}
-		const groups = { ...empty, settingsFields: [], outboundSettingsFields: [] };
-		for ( const field of integration.settings ) {
-			if ( field.key === 'incoming_metadata_fields' ) {
-				groups.inboundField = field;
-			} else if ( field.key === 'outgoing_metadata_fields' ) {
-				groups.outboundField = field;
-			} else if ( field.key === 'incoming_sync_enabled' ) {
-				groups.inboundToggleField = field;
-			} else if ( field.key === 'outgoing_sync_enabled' ) {
-				groups.outboundToggleField = field;
-			} else if ( OUTBOUND_SETTINGS_KEYS.includes( field.key ) ) {
-				groups.outboundSettingsFields.push( field );
-			} else {
-				groups.settingsFields.push( field );
+	const { settingsFields, outboundSettingsFields, advancedFields, inboundField, outboundField, inboundToggleField, outboundToggleField } =
+		useMemo( () => {
+			const empty = {
+				settingsFields: [],
+				outboundSettingsFields: [],
+				advancedFields: [],
+				inboundField: null,
+				outboundField: null,
+				inboundToggleField: null,
+				outboundToggleField: null,
+			};
+			if ( ! integration?.settings ) {
+				return empty;
 			}
-		}
-		// A toggle renders only inside its direction section; when the section
-		// has no other content there is no section at all, so fall the toggle
-		// through to the generic Settings group instead of shipping a field the
-		// view can neither display nor edit.
-		if ( groups.inboundToggleField && ! groups.inboundField ) {
-			groups.settingsFields.push( groups.inboundToggleField );
-			groups.inboundToggleField = null;
-		}
-		if ( groups.outboundToggleField && ! groups.outboundField && ! groups.outboundSettingsFields.length ) {
-			groups.settingsFields.push( groups.outboundToggleField );
-			groups.outboundToggleField = null;
-		}
-		return groups;
-	}, [ integration?.settings ] );
+			const groups = { ...empty, settingsFields: [], outboundSettingsFields: [], advancedFields: [] };
+			for ( const field of integration.settings ) {
+				if ( field.key === 'incoming_metadata_fields' ) {
+					groups.inboundField = field;
+				} else if ( field.key === 'outgoing_metadata_fields' ) {
+					groups.outboundField = field;
+				} else if ( field.key === 'incoming_sync_enabled' ) {
+					groups.inboundToggleField = field;
+				} else if ( field.key === 'outgoing_sync_enabled' ) {
+					groups.outboundToggleField = field;
+				} else if ( OUTBOUND_SETTINGS_KEYS.includes( field.key ) ) {
+					groups.outboundSettingsFields.push( field );
+				} else if ( field.advanced ) {
+					// The advanced route to a feature whose way in is elsewhere (a
+					// block toggle, say): shown last, under its own heading, so it
+					// never reads as the setting to fill in first.
+					groups.advancedFields.push( field );
+				} else {
+					groups.settingsFields.push( field );
+				}
+			}
+			// A toggle renders only inside its direction section; when the section
+			// has no other content there is no section at all, so fall the toggle
+			// through to the generic Settings group instead of shipping a field the
+			// view can neither display nor edit.
+			if ( groups.inboundToggleField && ! groups.inboundField ) {
+				groups.settingsFields.push( groups.inboundToggleField );
+				groups.inboundToggleField = null;
+			}
+			if ( groups.outboundToggleField && ! groups.outboundField && ! groups.outboundSettingsFields.length ) {
+				groups.settingsFields.push( groups.outboundToggleField );
+				groups.outboundToggleField = null;
+			}
+			return groups;
+		}, [ integration?.settings ] );
 
 	// Save submits the draft plus, when it needs repair, a reconciled inbound
 	// operator map (see reconcileOperators). Read through a ref for the same reason
@@ -443,6 +450,10 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 
 	const visibleSettingsFields = settingsFields.filter( fieldIsRendered );
 	const visibleOutboundSettingsFields = outboundSettingsFields.filter( fieldIsRendered );
+	const visibleAdvancedFields = advancedFields.filter( fieldIsRendered );
+	// Guide steps come from the integration (see Integration::get_guide()); an
+	// integration whose way in is a workflow elsewhere describes it here first.
+	const guide = Array.isArray( integration.guide ) ? integration.guide : [];
 	const inboundOptions = inboundField?.options || [];
 	const outboundGroups = outboundField?.grouped_options || [];
 
@@ -467,27 +478,45 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		<>
 			{ navBlockDialog }
 			<div className="newspack-configure-view">
+				{ /* Section 0: How it works */ }
+				{ guide.length > 0 && (
+					<Grid columns={ 2 } gutter={ 32 }>
+						<SectionHeader heading={ 2 } title={ __( 'How it works', 'newspack-plugin' ) } />
+						<ol className="newspack-configure-view__guide">
+							{ guide.map( ( step, index ) => (
+								<li key={ index }>
+									<strong>{ step.title }</strong>
+									<p>{ step.description }</p>
+								</li>
+							) ) }
+						</ol>
+					</Grid>
+				) }
+
 				{ /* Section 1: Settings */ }
 				{ visibleSettingsFields.length > 0 && (
-					<Grid columns={ 2 } gutter={ 32 }>
-						<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
-						<Stack direction="column" gap="xl">
-							{ visibleSettingsFields.map( field => (
-								<SettingsField
-									key={ field.key }
-									field={ field }
-									value={ getFieldValue( field ) }
-									onChange={ val => handleFieldChange( field.key, val ) }
-								/>
-							) ) }
-						</Stack>
-					</Grid>
+					<>
+						{ guide.length > 0 && <Divider alignment="full-width" variant="tertiary" /> }
+						<Grid columns={ 2 } gutter={ 32 } noMargin={ guide.length > 0 }>
+							<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } noMargin={ guide.length > 0 } />
+							<Stack direction="column" gap="xl">
+								{ visibleSettingsFields.map( field => (
+									<SettingsField
+										key={ field.key }
+										field={ field }
+										value={ getFieldValue( field ) }
+										onChange={ val => handleFieldChange( field.key, val ) }
+									/>
+								) ) }
+							</Stack>
+						</Grid>
+					</>
 				) }
 
 				{ /* Section 2: Inbound */ }
 				{ inboundField && ( inboundOptions.length > 0 || !! inboundToggleField ) && (
 					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
+						<Divider alignment="full-width" variant="tertiary" />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Stack direction="column" gap="xl">
@@ -558,7 +587,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				{ /* Section 3: Outbound */ }
 				{ ( outboundGroups.length > 0 || visibleOutboundSettingsFields.length > 0 || !! outboundToggleField ) && (
 					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
+						<Divider alignment="full-width" variant="tertiary" />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
 							<Stack direction="column" gap="xl">
@@ -624,6 +653,26 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 										} ) }
 									</CollapsibleGroup>
 								) }
+							</Stack>
+						</Grid>
+					</>
+				) }
+
+				{ /* Section 4: Advanced options */ }
+				{ visibleAdvancedFields.length > 0 && (
+					<>
+						<Divider alignment="full-width" variant="tertiary" />
+						<Grid columns={ 2 } gutter={ 32 } noMargin>
+							<SectionHeader heading={ 2 } title={ __( 'Advanced options', 'newspack-plugin' ) } noMargin />
+							<Stack direction="column" gap="xl">
+								{ visibleAdvancedFields.map( field => (
+									<SettingsField
+										key={ field.key }
+										field={ field }
+										value={ getFieldValue( field ) }
+										onChange={ val => handleFieldChange( field.key, val ) }
+									/>
+								) ) }
 							</Stack>
 						</Grid>
 					</>

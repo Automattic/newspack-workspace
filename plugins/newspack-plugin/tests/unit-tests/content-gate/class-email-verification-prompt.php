@@ -323,11 +323,48 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A gate can be one of several covering a post, and the restriction check stops at
-	 * the first that denies. Verifying past this gate only to be held by the next one
-	 * is the promise the prompt must not make.
+	 * A post can match several gates, and the highest-priority one decides access alone
+	 * (NPPD-2289). Verifying would satisfy the institution rule on the gate ranked below,
+	 * but that gate is never consulted while the one above it still holds the reader, so
+	 * the prompt must not promise the post opens.
 	 */
-	public function test_no_prompt_when_a_lower_priority_gate_still_denies() {
+	public function test_no_prompt_when_a_higher_priority_gate_still_denies() {
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
+		$this->create_gate(
+			[
+				[
+					[
+						'slug'  => 'reader_data',
+						'value' => 'plan=premium',
+					],
+				],
+			]
+		);
+		$this->create_gate(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ $institution_id ],
+					],
+				],
+			],
+			2
+		);
+		$reader_id = $this->create_reader( 'reader@example.test' );
+
+		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
+		$this->assertFalse(
+			Email_Verification_Prompt::get_prompt_context(),
+			'The institution gate is ranked below the gate that decides and still denies, so no prompt is offered.'
+		);
+	}
+
+	/**
+	 * An institution gate that decides, ranked above a gate the reader would fail. The
+	 * lower gate is never consulted, so verifying opens the post and the prompt is offered.
+	 */
+	public function test_prompts_when_only_a_lower_priority_gate_would_deny() {
 		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[
@@ -339,7 +376,6 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 				],
 			]
 		);
-		// Priority 2, so it is evaluated only once the institution gate starts granting.
 		$this->create_gate(
 			[
 				[
@@ -354,10 +390,42 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
+
+		$prompt_context = Email_Verification_Prompt::get_prompt_context();
+		$this->assertNotFalse( $prompt_context, 'Verifying clears the gate that decides, so the prompt is offered.' );
+		$this->assertSame( [ 'Example University' ], $prompt_context['institutions'] );
+	}
+
+	/**
+	 * A passing group opens the gate that decides, but the prompt promises that the
+	 * article opens, and another callback on `newspack_is_post_restricted` can still keep
+	 * it restricted. Replaying the whole decision under the assumption is what catches it.
+	 */
+	public function test_no_prompt_when_the_post_stays_restricted_after_verifying() {
+		$institution_id = $this->create_institution( 'Example University', 'example.test' );
+		$this->create_gate(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ $institution_id ],
+					],
+				],
+			]
+		);
+		$reader_id = $this->create_reader( 'reader@example.test' );
+
+		$this->visit_gated_post_as( $reader_id );
+		$this->assertNotFalse( Email_Verification_Prompt::get_prompt_context(), 'Sanity: the reader is offered the prompt.' );
+
+		// Runs after the gates' own check at priority 10 and keeps the post restricted.
+		add_filter( 'newspack_is_post_restricted', '__return_true', 20 );
+		Email_Verification_Prompt::reset_cache();
 		$this->assertFalse(
 			Email_Verification_Prompt::get_prompt_context(),
-			'Verifying would clear the first gate and leave the reader held by the second, so no prompt is offered.'
+			'Verifying opens the gate, but the post stays restricted, so no prompt is offered.'
 		);
+		remove_filter( 'newspack_is_post_restricted', '__return_true', 20 );
 	}
 
 	/**
@@ -507,12 +575,12 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The gate a reader is stopped at need not be the gate their address would let them
-	 * past. Here a registration gate denies first and an institution gate two priorities
-	 * down is the route in — one act of verifying clears both, so scoping the walk to the
-	 * denying gate alone would suppress the prompt on a configuration it is exactly for.
+	 * The prompt is about a domain rule that verifying would open. Here a registration
+	 * gate walling verification decides, and the reader's domain sits only on the
+	 * institution gate at priority 2, which is never consulted. The reader's route in is
+	 * the registration wall rather than their domain, so no prompt shows.
 	 */
-	public function test_prompts_when_another_gate_on_the_post_is_the_route_in() {
+	public function test_no_prompt_when_the_deciding_gate_holds_no_domain_rule() {
 		$institution_id = $this->create_institution( 'Example University', 'example.test' );
 		$this->create_gate(
 			[],
@@ -536,9 +604,46 @@ class Test_Email_Verification_Prompt extends WP_UnitTestCase {
 		$reader_id = $this->create_reader( 'reader@example.test' );
 
 		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
+		$this->assertFalse(
+			Email_Verification_Prompt::get_prompt_context(),
+			'The only domain rule is on a gate that is never consulted, so no prompt is offered.'
+		);
+	}
+
+	/**
+	 * Two gates can both hold an institution the reader's domain matches. Only the gate
+	 * that decides lets them in, so only its institution is named.
+	 */
+	public function test_names_only_institutions_on_the_gate_that_decides() {
+		$deciding_institution_id = $this->create_institution( 'Example University', 'example.test' );
+		$lower_institution_id    = $this->create_institution( 'Example Library', 'example.test' );
+		$this->create_gate(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ $deciding_institution_id ],
+					],
+				],
+			]
+		);
+		$this->create_gate(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ $lower_institution_id ],
+					],
+				],
+			],
+			2
+		);
+		$reader_id = $this->create_reader( 'reader@example.test' );
+
+		$this->assertTrue( $this->visit_gated_post_as( $reader_id ), 'Sanity: the unverified reader is denied.' );
 
 		$prompt_context = Email_Verification_Prompt::get_prompt_context();
-		$this->assertNotFalse( $prompt_context, 'The reader is offered the prompt, though the gate denying them holds no domain rule.' );
+		$this->assertNotFalse( $prompt_context );
 		$this->assertSame( [ 'Example University' ], $prompt_context['institutions'] );
 	}
 

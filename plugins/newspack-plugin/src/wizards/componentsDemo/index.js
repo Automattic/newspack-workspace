@@ -30,7 +30,6 @@ import {
 	ActionCard,
 	AutocompleteWithSuggestions,
 	AutocompleteWithLatestPosts,
-	BoxContrast,
 	Button,
 	Card,
 	CardFeature,
@@ -61,6 +60,7 @@ import {
 	WebPreview,
 } from '../../../packages/components/src';
 import * as newspackIcons from '../../../packages/icons';
+import colors from '../../../packages/colors/colors.module.scss';
 
 class ComponentsDemo extends Component {
 	/**
@@ -1127,27 +1127,6 @@ class ComponentsDemo extends Component {
 							</div>
 						</Card>
 						<Card>
-							<h2>{ __( 'Box Contrast', 'newspack-plugin' ) }</h2>
-							<p>
-								Component for adding color black/white depending on contrast ratio for <code>hexColor</code> prop value.
-							</p>
-							<h3>{ __( 'Demo 1:', 'newspack-plugin' ) }</h3>
-							<BoxContrast hexColor="#e5bd13">#e5bd13</BoxContrast>
-							<BoxContrast hexColor="#e5bd13" isInverted>
-								#e5bd13 / Inverted
-							</BoxContrast>
-							<h3>{ __( 'Demo 2:', 'newspack-plugin' ) }</h3>
-							<BoxContrast hexColor="#003da5">#003da5</BoxContrast>
-							<BoxContrast hexColor="#003da5" isInverted>
-								#003da5 / Inverted
-							</BoxContrast>
-							<h3>{ __( 'Demo 3:', 'newspack-plugin' ) }</h3>
-							<BoxContrast hexColor="#51f1ff">#e5bd13</BoxContrast>
-							<BoxContrast hexColor="#51f1ff" isInverted>
-								#51f1ff / Inverted
-							</BoxContrast>
-						</Card>
-						<Card>
 							<h2>{ __( 'CardFeature', 'newspack-plugin' ) }</h2>
 							<p>
 								{ __(
@@ -1204,7 +1183,11 @@ class ComponentsDemo extends Component {
 									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-									icon={ { node: <Icon icon={ settings } />, fill: '#757575', backgroundColor: '#f0f0f0' } }
+									icon={ {
+										node: <Icon icon={ settings } />,
+										fill: colors[ 'neutral-600' ],
+										backgroundColor: colors[ 'neutral-100' ],
+									} }
 									enabled={ false }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }
@@ -1213,7 +1196,11 @@ class ComponentsDemo extends Component {
 									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-									icon={ { node: <Icon icon={ settings } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
+									icon={ {
+										node: <Icon icon={ settings } />,
+										fill: colors[ 'primary-600' ],
+										backgroundColor: colors[ 'primary-000' ],
+									} }
 									enabled={ true }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }
