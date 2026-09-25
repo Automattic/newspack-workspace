@@ -35,13 +35,28 @@ import { Button, Card } from '../../../../packages/components/src';
 import '../screens/style.scss';
 import { visa as visaIcon, mastercard as mastercardIcon, amex as amexIcon, discover as discoverIcon, jcb as jcbIcon } from '../assets/cards';
 
-// Keyed by WooCommerce's normalized card types (WC_Payment_Token_CC stores
-// lowercase brand slugs; "american express" appears from some gateways).
+// One card network can reach us under three different names: WC Stripe saves
+// `display_brand ?? networks.preferred ?? brand`, and those vocabularies
+// disagree — the same Amex is "american_express", "american express" or "amex".
+// Collapsing them to one key per network is what keeps a card from rendering as
+// a raw slug with no icon.
+const BRAND_ALIASES = {
+	'american express': 'amex',
+	american_express: 'amex',
+	cartes_bancaires: 'cartesbancaires',
+	'cartes bancaires': 'cartesbancaires',
+	diners_club: 'diners',
+	'diners club': 'diners',
+	eftpos_au: 'eftpos',
+	eftpos_australia: 'eftpos',
+	union_pay: 'unionpay',
+	'union pay': 'unionpay',
+};
+
 const BRAND_ICONS = {
 	visa: visaIcon,
 	mastercard: mastercardIcon,
 	amex: amexIcon,
-	'american express': amexIcon,
 	discover: discoverIcon,
 	jcb: jcbIcon,
 };
@@ -51,13 +66,25 @@ const BRAND_ICONS = {
 const brandLabels = () => ( {
 	visa: __( 'Visa', 'newspack-plugin' ),
 	mastercard: __( 'Mastercard', 'newspack-plugin' ),
-	amex: __( 'Amex', 'newspack-plugin' ),
-	'american express': __( 'American Express', 'newspack-plugin' ),
+	amex: __( 'American Express', 'newspack-plugin' ),
 	discover: __( 'Discover', 'newspack-plugin' ),
 	jcb: __( 'JCB', 'newspack-plugin' ),
+	diners: __( 'Diners Club', 'newspack-plugin' ),
+	unionpay: __( 'UnionPay', 'newspack-plugin' ),
+	eftpos: __( 'Eftpos Australia', 'newspack-plugin' ),
+	cartesbancaires: __( 'Cartes Bancaires', 'newspack-plugin' ),
+	interac: __( 'Interac', 'newspack-plugin' ),
+	girocard: __( 'girocard', 'newspack-plugin' ),
 } );
 
-const brandKey = pm => ( pm.brand || '' ).toLowerCase();
+const brandKey = pm => {
+	const raw = ( pm.brand || '' ).toLowerCase().trim();
+	return BRAND_ALIASES[ raw ] || raw;
+};
+
+// Stripe keeps adding networks, so an unmapped one still has to read as a name.
+// Underscores are the giveaway that a slug reached the screen untranslated.
+const humanizeBrand = raw => raw.replace( /_/g, ' ' ).replace( /\b\w/g, character => character.toUpperCase() );
 
 /**
  * "Visa ending in 4242" — the label every flow and snackbar uses for a card,
@@ -67,7 +94,7 @@ const brandKey = pm => ( pm.brand || '' ).toLowerCase();
  * @return {string} The label.
  */
 export const cardLabel = pm => {
-	const brand = brandLabels()[ brandKey( pm ) ] || pm.brand;
+	const brand = brandLabels()[ brandKey( pm ) ] || humanizeBrand( ( pm.brand || '' ).toLowerCase() );
 	if ( brand && pm.last4 ) {
 		// translators: 1: card brand (e.g. "Visa"), 2: the card's last four digits.
 		return sprintf( __( '%1$s ending in %2$s', 'newspack-plugin' ), brand, pm.last4 );

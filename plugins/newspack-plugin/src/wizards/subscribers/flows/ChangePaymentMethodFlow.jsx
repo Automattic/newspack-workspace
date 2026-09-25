@@ -22,6 +22,21 @@ import { Button, Modal, Notice } from '../../../../packages/components/src';
 import { cardLabel } from '../components/PaymentMethodsList';
 import { usableCardsFor } from '../data/use-payments';
 
+// Which card the subscription charges today is the fact this picker turns on, so
+// it is the one that gets marked. The default is worth naming too, but only
+// where it is a different card: it governs new purchases, not this renewal.
+const optionLabel = ( card, currentId ) => {
+	if ( card.id === currentId ) {
+		// translators: %s is a card label (e.g. "Visa ending in 4242").
+		return sprintf( __( '%s (current)', 'newspack-plugin' ), cardLabel( card ) );
+	}
+	if ( card.isDefault ) {
+		// translators: %s is a card label (e.g. "Visa ending in 4242").
+		return sprintf( __( '%s (default)', 'newspack-plugin' ), cardLabel( card ) );
+	}
+	return cardLabel( card );
+};
+
 /**
  * @param {Object}   props                Component props.
  * @param {Object}   props.subscription   The profile subscription entry.
@@ -82,13 +97,7 @@ export default function ChangePaymentMethodFlow( { subscription, paymentMethods,
 				<SelectControl
 					label={ __( 'Card to charge', 'newspack-plugin' ) }
 					value={ String( selectedId ) }
-					options={ cards.map( card => ( {
-						label: card.isDefault
-							? // translators: %s is a card label (e.g. "Visa ending in 4242").
-							  sprintf( __( '%s (default)', 'newspack-plugin' ), cardLabel( card ) )
-							: cardLabel( card ),
-						value: String( card.id ),
-					} ) ) }
+					options={ cards.map( card => ( { label: optionLabel( card, currentId ), value: String( card.id ) } ) ) }
 					onChange={ value => setSelectedId( Number( value ) ) }
 					__nextHasNoMarginBottom
 					__next40pxDefaultSize

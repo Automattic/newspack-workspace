@@ -486,7 +486,10 @@ export default function PersonProfile() {
 
 			<Row
 				title={ __( 'Payment methods', 'newspack-plugin' ) }
-				description={ __( 'The cards on file for this subscriber. Renewals fall back to the default.', 'newspack-plugin' ) }
+				description={ __(
+					'The cards on file for this subscriber. Each subscription charges the card set on it; the default applies to new purchases.',
+					'newspack-plugin'
+				) }
 				showDivider={ false }
 			>
 				<PaymentMethodsList paymentMethods={ subscriber.paymentMethods || [] } onMakeDefault={ makeDefault } focusCardId={ promotedCardId } />
