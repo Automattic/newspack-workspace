@@ -6,6 +6,7 @@
  */
 
 use Newspack\Alert_Manager;
+use Newspack\Reader_Activation\Integrations;
 
 /**
  * Test the Alert_Manager class.
@@ -20,9 +21,29 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	private $captured = [];
 
 	/**
+	 * The `pre_get_scheduled_event` filter set by set_health_check_next_run().
+	 *
+	 * @var callable|null
+	 */
+	private $next_run_filter = null;
+
+	/**
+	 * Report the hourly health check as scheduled, as it is on a site where
+	 * it runs, so tests that don't set it get its normal escalation path.
+	 */
+	public function set_up() {
+		parent::set_up();
+		$this->set_health_check_next_run( time() + HOUR_IN_SECONDS );
+	}
+
+	/**
 	 * Clean up hooks between tests to prevent callback leaking.
 	 */
 	public function tear_down() {
+		if ( $this->next_run_filter ) {
+			remove_filter( 'pre_get_scheduled_event', $this->next_run_filter );
+			$this->next_run_filter = null;
+		}
 		parent::tear_down();
 		remove_all_actions( 'newspack_alert' );
 		remove_all_actions( 'newspack_log' );
@@ -165,6 +186,45 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$this->assertEquals( 'warning', $alerts[0]['severity'] );
 		$this->assertStringContainsString( 'deletion signal was not propagated', $alerts[0]['message'] );
 		$this->assertEquals( 'warning', $alerts[1]['severity'] );
+	}
+
+	/**
+	 * Where the hourly health check isn't running, nothing else observes a
+	 * disabled or unpaid account, so a permanent config failure pages from
+	 * the sync path, at most once an hour per integration.
+	 *
+	 * @dataProvider data_health_check_not_running
+	 *
+	 * @param int|null $next_run_offset Seconds from now to the check's next run, or null when it is not scheduled.
+	 */
+	public function test_permanent_config_failure_pages_while_the_health_check_is_not_running( $next_run_offset ) {
+		$this->set_health_check_next_run( null === $next_run_offset ? false : time() + $next_run_offset );
+		$this->capture_alerts( 'sync_permanent_failure' );
+
+		$payload = [
+			'integration_id' => 'esp',
+			'email'          => 'reader@example.test',
+			'context'        => 'Reader registered',
+			'reason'         => 'API Access has been disabled for this account.',
+			'error_class'    => 'permanent_config',
+		];
+		do_action( 'newspack_sync_permanent_failure', $payload );
+		do_action( 'newspack_sync_permanent_failure', $payload );
+
+		$this->assertCount( 1, $this->captured['sync_permanent_failure']['error'], 'The first failure pages.' );
+		$this->assertCount( 1, $this->captured['sync_permanent_failure']['warning'], 'A repeat within the hour reaches the log only.' );
+	}
+
+	/**
+	 * Health-check schedules that leave the check not running: switched off
+	 * (not scheduled), and a cron that stopped firing, which leaves the next
+	 * run overdue.
+	 */
+	public function data_health_check_not_running() {
+		return [
+			'not scheduled' => [ null ],
+			'cron stalled'  => [ -Alert_Manager::HEALTH_STREAK_MAX_GAP - 1 ],
+		];
 	}
 
 	/**
@@ -953,6 +1013,34 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$state[ $integration_id ]['first_failed_at'] -= $seconds;
 		$state[ $integration_id ]['last_failed_at']   = time() - $seconds;
 		update_option( Alert_Manager::HEALTH_STATE_OPTION, $state, false );
+	}
+
+	/**
+	 * Helper: make wp_next_scheduled() report the health check's next run,
+	 * without touching the stored cron schedule.
+	 *
+	 * @param int|false $next_run Unix timestamp of the next run, or false when the check is not scheduled.
+	 */
+	private function set_health_check_next_run( $next_run ) {
+		if ( $this->next_run_filter ) {
+			remove_filter( 'pre_get_scheduled_event', $this->next_run_filter );
+		}
+		$this->next_run_filter = function ( $pre, $hook ) use ( $next_run ) {
+			if ( Integrations::HEALTH_CHECK_CRON_HOOK !== $hook ) {
+				return $pre;
+			}
+			if ( false === $next_run ) {
+				return false;
+			}
+			return (object) [
+				'hook'      => $hook,
+				'timestamp' => $next_run,
+				'schedule'  => 'hourly',
+				'args'      => [],
+				'interval'  => HOUR_IN_SECONDS,
+			];
+		};
+		add_filter( 'pre_get_scheduled_event', $this->next_run_filter, 10, 2 );
 	}
 
 	/**

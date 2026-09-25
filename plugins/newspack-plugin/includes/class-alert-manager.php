@@ -370,12 +370,15 @@ class Alert_Manager {
 	 * Handle a permanent (non-retryable) contact-sync failure.
 	 *
 	 * Both classes forward at 'warning' severity, which reaches the log but
-	 * not Slack:
+	 * not Slack, apart from the fallback described for `permanent_config`:
 	 *
 	 * - `permanent_config` (disabled or unpaid ESP account) is site-level.
 	 *   The hourly health check observes the same account state within the
 	 *   hour and owns the escalation through handle_health_check_failed(),
-	 *   so a per-contact repeat here would only duplicate it.
+	 *   so a per-contact repeat here would only duplicate it. Where the check
+	 *   isn't running, because it is switched off or its cron has stalled,
+	 *   this path is the only one that sees the account state, so it pages
+	 *   instead, at most once an hour per integration.
 	 * - `permanent_contact` (fired by the deletion path only, where a skipped
 	 *   retry has no natural re-trigger and the dropped deletion signal is
 	 *   GDPR-relevant) concerns one contact each and stays observable.
@@ -407,7 +410,7 @@ class Alert_Manager {
 			'newspack_alert',
 			[
 				'type'      => 'sync_permanent_failure',
-				'severity'  => 'warning',
+				'severity'  => $is_config && self::claim_config_failure_page( $integration_id ) ? 'error' : 'warning',
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),
@@ -888,6 +891,40 @@ class Alert_Manager {
 	private static function is_integration_broken( $integration_id ) {
 		$state = get_option( self::HEALTH_STATE_OPTION, [] );
 		return is_array( $state ) && 'broken' === ( $state[ (string) $integration_id ]['status'] ?? '' );
+	}
+
+	/**
+	 * Whether a permanent config failure pages from the sync path, taking the
+	 * integration's hourly slot when it does.
+	 *
+	 * @param string $integration_id The integration ID.
+	 * @return bool
+	 */
+	private static function claim_config_failure_page( $integration_id ) {
+		if ( self::is_health_check_running() ) {
+			return false;
+		}
+		// Set before dispatch, so a `newspack_alert` handler that throws cannot
+		// leave the slot free for the next failed contact.
+		$dedup_key = 'newspack_alert_pf_' . md5( (string) $integration_id );
+		if ( get_transient( $dedup_key ) ) {
+			return false;
+		}
+		set_transient( $dedup_key, time(), HOUR_IN_SECONDS );
+		return true;
+	}
+
+	/**
+	 * Whether the hourly health check is running: scheduled, and not overdue
+	 * by more than HEALTH_STREAK_MAX_GAP. A cron that has stopped firing
+	 * leaves the event scheduled, with its next run falling further into the
+	 * past.
+	 *
+	 * @return bool
+	 */
+	private static function is_health_check_running() {
+		$next_run = wp_next_scheduled( Reader_Activation\Integrations::HEALTH_CHECK_CRON_HOOK );
+		return false !== $next_run && $next_run >= time() - self::HEALTH_STREAK_MAX_GAP;
 	}
 
 	/**

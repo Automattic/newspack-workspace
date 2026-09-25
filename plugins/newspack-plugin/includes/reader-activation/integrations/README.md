@@ -527,7 +527,7 @@ One event per outage in each direction, so a consumer can open and close a ticke
 
 While an integration is broken, its contact-sync failures don't page either: retry exhaustion reaches the log at warning severity, and its failures stay out of the failure log the pattern alerts read.
 
-To disable the schedule on a specific site, add `'newspack_integration_health_check'` to the `NEWSPACK_CRON_DISABLE` constant array.
+To disable the schedule on a specific site, add `'newspack_integration_health_check'` to the `NEWSPACK_CRON_DISABLE` constant array. Contact sync then pages for a disabled or unpaid ESP account itself, at most once an hour per integration, as it also does when the check's cron has stopped running for longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP`.
 
 ---
 
