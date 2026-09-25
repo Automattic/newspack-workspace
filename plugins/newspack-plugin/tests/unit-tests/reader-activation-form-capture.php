@@ -363,6 +363,39 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Gravity Forms is checked at runtime too. The card requires it, and with
+	 * it uninstalled the card offers no Disable, so a site that enabled
+	 * capture for another tool's forms, or removed Gravity Forms later, must
+	 * not keep registering readers behind that card.
+	 */
+	public function test_capture_stays_off_without_gravity_forms() {
+		$integration = new class() extends Form_Capture {
+			/**
+			 * Stand in for a site without Gravity Forms: the suite loads its stub class.
+			 *
+			 * @return bool
+			 */
+			protected function is_gravity_forms_active() {
+				return false;
+			}
+		};
+		foreach ( [ Form_Capture::SCRIPT_HANDLE, Form_Capture::EDITOR_SCRIPT_HANDLE ] as $handle ) {
+			wp_dequeue_script( $handle );
+			wp_deregister_script( $handle );
+		}
+		Integrations::enable( Form_Capture::ID );
+
+		$this->assertFalse( $integration->supports_frontend_registration(), 'No key, endpoint or capture script without Gravity Forms.' );
+		$integration->enqueue_scripts();
+		$this->assertFalse( wp_script_is( Form_Capture::SCRIPT_HANDLE, 'enqueued' ), 'The capture script must not load.' );
+		$integration->enqueue_editor_assets();
+		$this->assertFalse( wp_script_is( Form_Capture::EDITOR_SCRIPT_HANDLE, 'enqueued' ), 'There is no block to extend.' );
+		$this->assertTrue( Integrations::is_enabled( Form_Capture::ID ), 'The integration stays enabled, so capture resumes once Gravity Forms is back.' );
+
+		Integrations::disable( Form_Capture::ID );
+	}
+
+	/**
 	 * The reCAPTCHA v2 flow renders an interactive widget capture cannot warm,
 	 * so the integration must report itself unsupported (the REST layer then
 	 * refuses to enable it) instead of silently capturing nothing.

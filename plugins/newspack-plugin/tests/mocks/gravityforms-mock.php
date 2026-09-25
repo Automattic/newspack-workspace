@@ -5,8 +5,8 @@
  * Stand-in for Gravity Forms' main class: the editor extension loads only
  * where the GF block exists, which is what this class signals. Tests that
  * exercise code paths gated on `class_exists( 'GFForms' )` include this
- * file. The class is defined globally once, so the GF-absent branch is not
- * exercised by any test in the same process.
+ * file. The class is defined globally once, so tests reach the GF-absent
+ * branch by overriding `Form_Capture::is_gravity_forms_active()` instead.
  *
  * @package Newspack\Tests
  */

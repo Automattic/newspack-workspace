@@ -5,10 +5,11 @@
  * Registers readers from Gravity Forms submissions. The way in is a
  * "Register readers" toggle on the Gravity Forms block: the block attribute
  * is carried to the page as the newspack-form-capture class on the form
- * tag, which the capture script matches. Any other form can opt in the same
- * way, through the class directly or through the CSS selectors listed under
- * the integration's Advanced options. Capture-only: neither a sync
- * destination nor a pull source (see supports_push()/supports_pull()).
+ * tag, which the capture script matches. While Gravity Forms is active, any
+ * other form can opt in the same way, through the class directly or through
+ * the CSS selectors listed under the integration's Advanced options.
+ * Capture-only: neither a sync destination nor a pull source (see
+ * supports_push()/supports_pull()).
  *
  * Capture semantics publishers must understand before opting a form in:
  * - Capture fires on the browser's submit event (native validity checked)
@@ -183,6 +184,17 @@ class Form_Capture extends Integration {
 	}
 
 	/**
+	 * Whether Gravity Forms is active. The capture switch reads this on every
+	 * front-end request, which is why it checks for Gravity Forms' main class
+	 * instead of Plugin_Manager's status lookup, a scan of the installed plugins.
+	 *
+	 * @return bool
+	 */
+	protected function is_gravity_forms_active() {
+		return class_exists( 'GFForms' );
+	}
+
+	/**
 	 * Why capture cannot operate with the site's current reCAPTCHA configuration.
 	 *
 	 * The v2 flow renders an interactive widget and awaits a callback the page
@@ -292,18 +304,23 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Frontend registration is available while the integration is enabled and
-	 * the site's configuration supports capture. This gates the registration
-	 * endpoint, the page-emitted key, and the capture script together.
+	 * Frontend registration is available while the integration is enabled,
+	 * Gravity Forms is active, and the site's configuration supports capture.
+	 * This gates the registration endpoint, the page-emitted key, and the
+	 * capture script together.
 	 *
-	 * The unsupported check runs here, not only at enable time: a site that
-	 * switches to reCAPTCHA v2 after enabling would otherwise keep emitting a
-	 * key that capture can never use, and go on capturing nothing silently.
+	 * Both checks run here, not only at enable time. A site that switches to
+	 * reCAPTCHA v2 after enabling would otherwise keep emitting a key that
+	 * capture can never use, and go on capturing nothing silently. A site
+	 * without Gravity Forms, because it enabled capture for another tool's
+	 * forms or removed Gravity Forms later, would otherwise keep registering
+	 * readers behind a card that requires Gravity Forms and, with it
+	 * uninstalled, offers no Disable.
 	 *
 	 * @return bool
 	 */
 	public function supports_frontend_registration(): bool {
-		return Integrations::is_enabled( self::ID ) && ! $this->get_unsupported_reason();
+		return Integrations::is_enabled( self::ID ) && $this->is_gravity_forms_active() && ! $this->get_unsupported_reason();
 	}
 
 	/**
@@ -422,7 +439,7 @@ class Form_Capture extends Integration {
 	 * registers anyone, which the panel's notice reports through `active`.
 	 */
 	public function enqueue_editor_assets() {
-		if ( ! class_exists( 'GFForms' ) ) {
+		if ( ! $this->is_gravity_forms_active() ) {
 			return;
 		}
 		$asset_file   = NEWSPACK_ABSPATH . 'dist/form-capture-editor.asset.php';
