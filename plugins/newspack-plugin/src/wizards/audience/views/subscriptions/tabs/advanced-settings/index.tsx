@@ -91,7 +91,7 @@ function AdvancedSettings() {
 							__nextHasNoMarginBottom
 						/>
 						{ saved && (
-							<Notice isDismissible={ false }>
+							<Notice>
 								{ __( 'Share the following URL to trigger the subscription upgrade:', 'newspack-plugin' ) }{ ' ' }
 								<a href={ window.newspackAudienceSubscriptions.upgrade_subscription_url } target="_blank" rel="noreferrer noopener">
 									{ window.newspackAudienceSubscriptions.upgrade_subscription_url }
