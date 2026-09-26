@@ -12,6 +12,7 @@ use WP_Post;
 
 require_once 'class-major-revisions.php';
 require_once 'class-autosave-cleanup.php';
+require_once 'class-revision-cleanup.php';
 
 /**
  * Revisions Control class
@@ -98,7 +99,7 @@ class Revisions_Control {
 	 *
 	 * @return ?int
 	 */
-	private static function get_number() {
+	public static function get_number() {
 		if ( self::get_status()['active'] ) {
 			return self::get_status()['number'];
 		}
