@@ -5,6 +5,7 @@ import {
 	getGateStatusBadgeIntent,
 	getMeteringCount,
 	getMeteringDescription,
+	getPriorityWarnings,
 	hasOwnMeter,
 	hasSharedMeteredPath,
 	isGateMetered,
@@ -267,5 +268,189 @@ describe( 'getMeteringDescription', () => {
 		expect( description ).toContain( '2 for signed-out readers' );
 		expect( description ).toContain( '5 for signed-in' );
 		expect( description ).toContain( 'weekly' );
+	} );
+} );
+
+/**
+ * The first gate matching a post decides access alone (NPPD-2289), so a gate
+ * that asks for no paid access, ranked above a paid gate on the same content,
+ * opens that content to readers without paid access. The warning names that
+ * shape; it has to stay quiet when the two gates provably never meet, or it
+ * trains publishers to ignore it.
+ */
+describe( 'getPriorityWarnings', () => {
+	const allPosts = [ { slug: 'post_types', value: [ 'post' ] } ];
+	const registrationGate = ( id, contentRules = allPosts, match = 'all' ) => ( {
+		id,
+		title: `Registration ${ id }`,
+		status: 'publish',
+		content_rules: contentRules,
+		content_rules_match: match,
+		registration: { active: true },
+		custom_access: { active: false, access_rules: [] },
+	} );
+	const paidGate = ( id, contentRules = allPosts ) => ( {
+		id,
+		title: `Paid ${ id }`,
+		status: 'publish',
+		content_rules: contentRules,
+		content_rules_match: 'all',
+		registration: { active: true },
+		custom_access: { active: true, access_rules: [ [ { slug: 'subscription', value: [ '10' ] } ] ] },
+	} );
+	// Priority follows array position, the way the priority modal reindexes a drag.
+	const rank = gates => gates.map( ( gate, priority ) => ( { ...gate, priority } ) );
+
+	const warning = 'This grants registered readers access to content also restricted by paid access rules.';
+
+	it( 'warns on a gate without paid access ranked above a paid gate on the same content', () => {
+		const warnings = getPriorityWarnings( rank( [ registrationGate( 1 ), paidGate( 2 ) ] ) );
+
+		expect( warnings ).toEqual( { 1: warning } );
+	} );
+
+	it( 'stays quiet when the paid gate ranks first', () => {
+		expect( getPriorityWarnings( rank( [ paidGate( 2 ), registrationGate( 1 ) ] ) ) ).toEqual( {} );
+	} );
+
+	it( 'warns about a gate with paid access on but no rules, which admits every reader', () => {
+		const openGate = { ...paidGate( 1 ), custom_access: { active: true, access_rules: [] } };
+
+		expect( getPriorityWarnings( rank( [ openGate, paidGate( 2 ) ] ) ) ).toHaveProperty( '1' );
+	} );
+
+	it( 'stays quiet when the gates cover different categories', () => {
+		const warnings = getPriorityWarnings(
+			rank( [ registrationGate( 1, [ { slug: 'category', value: [ '7' ] } ] ), paidGate( 2, [ { slug: 'category', value: [ '8' ] } ] ) ] )
+		);
+
+		expect( warnings ).toEqual( {} );
+	} );
+
+	it( 'warns when the gates share a category', () => {
+		const warnings = getPriorityWarnings(
+			rank( [ registrationGate( 1, [ { slug: 'category', value: [ '7' ] } ] ), paidGate( 2, [ { slug: 'category', value: [ '7', '8' ] } ] ) ] )
+		);
+
+		expect( warnings ).toEqual( { 1: warning } );
+	} );
+
+	it( 'warns on a category gate above a paid gate on all posts, since that category sits inside it', () => {
+		const warnings = getPriorityWarnings( rank( [ registrationGate( 1, [ { slug: 'category', value: [ '7' ] } ] ), paidGate( 2 ) ] ) );
+
+		expect( warnings ).toEqual( { 1: warning } );
+	} );
+
+	it( 'stays quiet when every rule the gates share keeps them apart', () => {
+		const warnings = getPriorityWarnings(
+			rank( [
+				registrationGate( 1, [
+					{ slug: 'post_types', value: [ 'post' ] },
+					{ slug: 'post_tag', value: [ '3' ] },
+				] ),
+				paidGate( 2, [
+					{ slug: 'post_types', value: [ 'post' ] },
+					{ slug: 'post_tag', value: [ '4' ] },
+				] ),
+			] )
+		);
+
+		expect( warnings ).toEqual( {} );
+	} );
+
+	it( 'stays quiet when the gates cover different post types', () => {
+		const warnings = getPriorityWarnings( rank( [ registrationGate( 1, [ { slug: 'post_types', value: [ 'page' ] } ] ), paidGate( 2 ) ] ) );
+
+		expect( warnings ).toEqual( {} );
+	} );
+
+	it( 'stays quiet when the paid gate excludes everything the higher gate requires', () => {
+		const warnings = getPriorityWarnings(
+			rank( [
+				registrationGate( 1, [ { slug: 'category', value: [ '7' ] } ] ),
+				paidGate( 2, [ { slug: 'category', value: [ '7', '9' ], exclusion: true } ] ),
+			] )
+		);
+
+		expect( warnings ).toEqual( {} );
+	} );
+
+	it( 'does not treat a post type as required when the higher gate matches any rule', () => {
+		const warnings = getPriorityWarnings(
+			rank( [
+				registrationGate(
+					1,
+					[
+						{ slug: 'post_types', value: [ 'page' ] },
+						{ slug: 'category', value: [ '7' ] },
+					],
+					'any'
+				),
+				paidGate( 2 ),
+			] )
+		);
+
+		expect( warnings ).toHaveProperty( '1' );
+	} );
+
+	it( 'stays quiet about a gate with no content rules, which matches nothing', () => {
+		expect( getPriorityWarnings( rank( [ registrationGate( 1, [] ), paidGate( 2 ) ] ) ) ).toEqual( {} );
+	} );
+
+	it( 'warns once when several paid gates rank below on the same content', () => {
+		const warnings = getPriorityWarnings( rank( [ registrationGate( 1 ), paidGate( 2 ), paidGate( 3 ) ] ) );
+
+		expect( warnings ).toEqual( { 1: warning } );
+	} );
+
+	it( 'warns when either gate lists a post by ID, since its type and terms are unknown here', () => {
+		const specific = [ { slug: 'specific_posts', value: [ '42' ] } ];
+
+		expect( getPriorityWarnings( rank( [ registrationGate( 1, specific ), paidGate( 2 ) ] ) ) ).toEqual( { 1: warning } );
+		expect( getPriorityWarnings( rank( [ registrationGate( 1 ), paidGate( 2, specific ) ] ) ) ).toEqual( { 1: warning } );
+	} );
+
+	it( 'stays quiet when both gates list only different posts', () => {
+		const warnings = getPriorityWarnings(
+			rank( [
+				registrationGate( 1, [ { slug: 'specific_posts', value: [ '42' ] } ] ),
+				paidGate( 2, [ { slug: 'specific_posts', value: [ '43' ] } ] ),
+			] )
+		);
+
+		expect( warnings ).toEqual( {} );
+	} );
+
+	it( 'stays quiet about a draft, which decides nothing until it is published', () => {
+		const draft = { ...registrationGate( 1 ), status: 'draft' };
+
+		expect( getPriorityWarnings( rank( [ draft, paidGate( 2 ) ] ) ) ).toEqual( {} );
+	} );
+
+	it( 'reads a taxonomy rule value stored as a single string, as the server does', () => {
+		const warnings = getPriorityWarnings(
+			rank( [
+				registrationGate( 1, [
+					{ slug: 'post_types', value: [ 'post' ] },
+					{ slug: 'category', value: '7' },
+				] ),
+				paidGate( 2, [
+					{ slug: 'post_types', value: [ 'post' ] },
+					{ slug: 'category', value: [ '7' ], exclusion: true },
+				] ),
+			] )
+		);
+
+		// The higher gate only covers category 7, which the paid gate carves out.
+		expect( warnings ).toEqual( {} );
+	} );
+
+	it( 'ranks gates by priority, not by their order in the list', () => {
+		const warnings = getPriorityWarnings( [
+			{ ...paidGate( 2 ), priority: 1 },
+			{ ...registrationGate( 1 ), priority: 0 },
+		] );
+
+		expect( warnings ).toHaveProperty( '1' );
 	} );
 } );

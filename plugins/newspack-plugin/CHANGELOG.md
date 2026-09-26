@@ -1,3 +1,24 @@
+## newspack [6.52.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.7...newspack@6.52.8) (2026-09-24)
+
+
+### Bug Fixes
+
+* **content-gate:** let the highest-priority gate decide access alone ([#1146](https://github.com/Automattic/newspack-workspace/issues/1146)) ([1d563a4](https://github.com/Automattic/newspack-workspace/commit/1d563a457e06a9361fe6b4ed9dd5d5cf211e756f))
+
+## newspack [6.52.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.6...newspack@6.52.7) (2026-09-24)
+
+
+### Bug Fixes
+
+* **newsletters:** subscribing no longer prompts to create an account ([#1108](https://github.com/Automattic/newspack-workspace/issues/1108)) ([99c8e63](https://github.com/Automattic/newspack-workspace/commit/99c8e6300675ceff8fe7365348d1f912716fb4da))
+
+## newspack [6.52.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.5...newspack@6.52.6) (2026-09-24)
+
+
+### Bug Fixes
+
+* **content-gate:** show and keep integer-stored specific post IDs in the gate editor (Part of NPPD-2154, [#1152](https://github.com/Automattic/newspack-workspace/issues/1152)) ([f283eea](https://github.com/Automattic/newspack-workspace/commit/f283eeaf2e7431ad913f51b99b1d0804a7f09c53))
+
 ## newspack [6.52.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.4...newspack@6.52.5) (2026-09-22)
 
 

@@ -1,3 +1,10 @@
+## newspack-popups [3.19.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.19.0...newspack-popups@3.19.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* make block centring more specific ([#1158](https://github.com/Automattic/newspack-workspace/issues/1158)) ([a8c86f7](https://github.com/Automattic/newspack-workspace/commit/a8c86f7d5265f2c25092035ee711993df1fe8b10))
+
 # newspack-popups [3.19.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.18.1...newspack-popups@3.19.0) (2026-09-18)
 
 
