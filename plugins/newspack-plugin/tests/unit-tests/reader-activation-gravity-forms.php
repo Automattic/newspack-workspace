@@ -66,18 +66,40 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 
 	/**
 	 * Gravity Forms is there on every site, while Inbound Form Capture, for
-	 * forms built with other tools, registers only behind its flag.
+	 * forms built with other tools, registers behind its flag or where the site
+	 * already enabled it, so an upgrade leaves that site capturing.
 	 *
+	 * @dataProvider data_inbound_form_capture_registration
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
+	 *
+	 * @param bool $flag    Whether the site defines the flag.
+	 * @param bool $enabled Whether the site already enabled Inbound Form Capture.
 	 */
-	public function test_inbound_form_capture_registers_only_behind_its_flag() {
+	public function test_inbound_form_capture_registers_behind_its_flag_or_where_enabled( $flag, $enabled ) {
 		$this->assertInstanceOf( Gravity_Forms::class, Integrations::get_integration( Gravity_Forms::ID ) );
-		$this->assertNull( Integrations::get_integration( Form_Capture::ID ), 'Inbound Form Capture is absent without the flag.' );
+		$this->assertNull( Integrations::get_integration( Form_Capture::ID ), 'Absent on a site with neither.' );
 
-		define( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED', true );
+		if ( $flag ) {
+			define( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED', true );
+		}
+		if ( $enabled ) {
+			update_option( Integrations::OPTION_NAME, [ Form_Capture::ID ] );
+		}
 		Integrations::register_integrations();
-		$this->assertInstanceOf( Form_Capture::class, Integrations::get_integration( Form_Capture::ID ), 'The flag registers it.' );
+		$this->assertInstanceOf( Form_Capture::class, Integrations::get_integration( Form_Capture::ID ) );
+	}
+
+	/**
+	 * The two ways Inbound Form Capture registers.
+	 *
+	 * @return array[]
+	 */
+	public function data_inbound_form_capture_registration() {
+		return [
+			'behind the flag'                   => [ true, false ],
+			'where the site already enabled it' => [ false, true ],
+		];
 	}
 
 	/**

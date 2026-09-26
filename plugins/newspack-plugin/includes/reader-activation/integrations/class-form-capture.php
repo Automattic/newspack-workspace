@@ -6,7 +6,7 @@
  * with any tool but Gravity Forms (an ActiveCampaign embed, a WPForms form)
  * and registers them as readers via the frontend registration endpoint.
  * Gravity Forms forms belong to the Gravity Forms integration, which extends
- * this one. Registered only behind a flag (see
+ * this one. Registered behind a flag, or where a site already enabled it (see
  * Integrations::register_integrations()). Capture-only: neither a sync
  * destination nor a pull source (see supports_push()/supports_pull()).
  *

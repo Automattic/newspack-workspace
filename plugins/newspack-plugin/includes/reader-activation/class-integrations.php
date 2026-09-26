@@ -286,18 +286,18 @@ class Integrations {
 		self::register( new Integrations\Gravity_Forms() );
 		/**
 		 * Registers Inbound Form Capture, which registers readers from forms
-		 * built with tools other than Gravity Forms. Without the flag the
-		 * integration is absent: no card, and no capture on a site that
-		 * enabled it before, until the flag is set.
+		 * built with tools other than Gravity Forms, on sites with the flag and
+		 * on sites that already enabled it, so those keep capturing. Elsewhere
+		 * the integration is absent: no card, no capture.
 		 *
 		 * @constant NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED
 		 * @type     bool
-		 * @default  Integration not registered
+		 * @default  Integration registered only where already enabled
 		 * @status   draft
 		 *
 		 * @example define( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED', true );
 		 */
-		if ( defined( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED' ) && NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED ) {
+		if ( ( defined( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED' ) && NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED ) || self::is_enabled( Integrations\Form_Capture::ID ) ) {
 			self::register( new Integrations\Form_Capture() );
 		}
 

@@ -29,9 +29,10 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	/**
 	 * Set up.
 	 *
-	 * The integration registers only behind its flag, which the suite leaves
-	 * off, so register it here as a flagged site would. Its hooks go in on
-	 * every test: the hooks backup restored after each test drops them.
+	 * The integration registers behind its flag or where a site already
+	 * enabled it, and the suite starts with neither, so register it here as a
+	 * flagged site would. Its hooks go in on every test: the hooks backup
+	 * restored after each test drops them.
 	 */
 	public function set_up() {
 		parent::set_up();
