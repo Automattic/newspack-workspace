@@ -305,9 +305,6 @@ class GoogleSiteKit {
 		$current_user = wp_get_current_user();
 		$is_logged_in = 0 < $current_user->ID;
 		$params['is_reader'] = $is_logged_in && Reader_Activation::is_user_reader( $current_user ) ? 'yes' : 'no';
-		if ( ! empty( $current_user->user_email ) ) {
-			$params['email_hash'] = md5( $current_user->user_email );
-		}
 
 		$reader_data = method_exists( 'Newspack\Reader_Data', 'get_data' ) ? Reader_Data::get_data( $current_user->ID ) : [];
 
@@ -624,10 +621,9 @@ class GoogleSiteKit {
 	/**
 	 * The reader/content parameters to mirror into the dataLayer for Google Tag Manager.
 	 *
-	 * Starts from the same set sent to Site Kit's gtag config, but drops `email_hash`:
-	 * the hashed email is only needed by Site Kit's own gtag config (which still receives
-	 * it), and pushing it to the dataLayer would expose it to every tag in the publisher's
-	 * GTM container, including third-party ones.
+	 * Mirrors the custom-dimension set sent to Site Kit's gtag config. That set is
+	 * intentionally coarse and anonymized (yes/no flags, anonymized group IDs), carrying no
+	 * reader identifier, so it is safe to expose to every tag in a publisher's GTM container.
 	 *
 	 * @return array Parameters to push to window.dataLayer.
 	 */
@@ -636,19 +632,11 @@ class GoogleSiteKit {
 		 * Filters the Newspack parameters pushed to the dataLayer for Google Tag Manager.
 		 *
 		 * Mirrors the `newspack_ga4_custom_parameters` set sent to Site Kit's gtag config.
-		 * Note that `email_hash` is always stripped afterwards (see below) and cannot be
-		 * re-added through this filter.
+		 * Everything here is readable by every tag in the container, so do not add reader PII.
 		 *
 		 * @param array $params Parameters pushed to window.dataLayer.
 		 */
-		$params = apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
-
-		// Always keep the hashed email out of the dataLayer - enforced after the filter so it
-		// cannot be re-added. It is only needed by Site Kit's own gtag config (which still
-		// receives it) and must not reach the third-party tags in a publisher's GTM container.
-		unset( $params['email_hash'] );
-
-		return $params;
+		return apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
 	}
 
 	/**
