@@ -7,7 +7,7 @@ import classnames from 'classnames';
  * WordPress dependencies
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
-import { createElement, isValidElement } from '@wordpress/element';
+import { createElement, isValidElement, useCallback, useEffect, useRef } from '@wordpress/element';
 import { useInstanceId } from '@wordpress/compose';
 import { DropdownMenu } from '@wordpress/components';
 import { moreVertical } from '@wordpress/icons';
@@ -131,6 +131,27 @@ const CardFeature = ( {
 	// A Configure button with nothing behind it would click to nowhere.
 	const showPrimaryButton = ! isConfigureState || !! onConfigure;
 
+	// Enabling a feature with nothing to configure removes the button that was
+	// just used, so its focus goes to the More menu instead of the page. React
+	// detaches a ref before removing the node, which is the last point the
+	// button can still be read as focused.
+	const actionsRef = useRef< HTMLDivElement >( null );
+	const primaryButtonNode = useRef< HTMLElement | null >( null );
+	const primaryButtonLeftWithFocus = useRef( false );
+	const primaryButtonRef = useCallback( ( node: HTMLElement | null ) => {
+		if ( ! node && primaryButtonNode.current ) {
+			primaryButtonLeftWithFocus.current = primaryButtonNode.current === primaryButtonNode.current.ownerDocument.activeElement;
+		}
+		primaryButtonNode.current = node;
+	}, [] );
+	useEffect( () => {
+		if ( showPrimaryButton || ! primaryButtonLeftWithFocus.current ) {
+			return;
+		}
+		primaryButtonLeftWithFocus.current = false;
+		actionsRef.current?.querySelector< HTMLElement >( '.components-dropdown-menu__toggle' )?.focus();
+	}, [ showPrimaryButton ] );
+
 	const handleButtonClick = () => {
 		if ( isConfigureState ) {
 			onConfigure?.();
@@ -178,9 +199,10 @@ const CardFeature = ( {
 			</Card.Header>
 			<Card.Content className="newspack-card-feature__actions">
 				<Stack direction="row" align="center" justify="space-between" gap="sm" wrap="wrap">
-					<Stack direction="row" align="center" gap="sm">
+					<Stack ref={ actionsRef } direction="row" align="center" gap="sm">
 						{ showPrimaryButton && (
 							<Button
+								ref={ primaryButtonRef }
 								variant={ isConfigureState ? 'tertiary' : 'secondary' }
 								accessibleWhenDisabled
 								aria-describedby={ describedById }

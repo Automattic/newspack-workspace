@@ -11,6 +11,8 @@ A card component for presenting a named feature or setting with a predictable, s
 
 Cards sit side by side, so a bare "Enable" names no feature out of context. The card appends `title` to the primary button's accessible name ("Enable Metered Countdown") and to the "More" menu ("More options for Metered Countdown"). The visible label leads, so voice control still matches on the word the user can see. Nothing to pass — this is automatic.
 
+When enabling leaves nothing to configure, the primary button goes away while it still has focus; the card moves that focus to the "More" menu rather than letting it fall to the page.
+
 ## States
 
 | State | Condition | Button | Dropdown | Badge |

@@ -117,6 +117,34 @@ describe( 'CardFeature', () => {
 			expect( moreMenu() ).toBeInTheDocument();
 		} );
 
+		// Enabling removes the button that was just used; without a hand-off,
+		// keyboard focus falls to the page.
+		it( 'hands focus to the More menu when enabling removes the focused button', () => {
+			const props = { title: 'Content gifting', onEnable: jest.fn(), moreControls: [ { title: 'Disable', onClick: jest.fn() } ] };
+			const { rerender } = render( <CardFeature { ...props } /> );
+			primaryButton().focus();
+			rerender( <CardFeature { ...props } enabled /> );
+			expect( moreMenu() ).toHaveFocus();
+		} );
+
+		it( 'leaves focus alone when the removed button did not have it', () => {
+			const props = { title: 'Content gifting', onEnable: jest.fn(), moreControls: [ { title: 'Disable', onClick: jest.fn() } ] };
+			const { rerender } = render(
+				<>
+					<CardFeature { ...props } />
+					<button>Elsewhere</button>
+				</>
+			);
+			screen.getByRole( 'button', { name: 'Elsewhere' } ).focus();
+			rerender(
+				<>
+					<CardFeature { ...props } enabled />
+					<button>Elsewhere</button>
+				</>
+			);
+			expect( screen.getByRole( 'button', { name: 'Elsewhere' } ) ).toHaveFocus();
+		} );
+
 		it( 'still routes to onEnable when enabled with an unmet requirement, since the button reads Enable', () => {
 			const onEnable = jest.fn();
 			const onConfigure = jest.fn();
