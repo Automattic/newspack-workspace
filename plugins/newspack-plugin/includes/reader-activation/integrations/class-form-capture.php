@@ -73,13 +73,16 @@ class Form_Capture extends Integration {
 	const RATE_LIMIT_DEFAULT = 100;
 
 	/**
-	 * Constructor.
+	 * Constructor. A subclass passes its own name and description.
+	 *
+	 * @param string|null $name        Optional. The display name.
+	 * @param string|null $description Optional. A short description.
 	 */
-	public function __construct() {
+	public function __construct( $name = null, $description = null ) {
 		parent::__construct(
-			self::ID,
-			__( 'Inbound Form Capture', 'newspack-plugin' ),
-			__( 'Register readers from email signup forms built with any form tool other than Gravity Forms.', 'newspack-plugin' )
+			static::ID,
+			$name ?? __( 'Inbound Form Capture', 'newspack-plugin' ),
+			$description ?? __( 'Register readers from email signup forms built with any form tool other than Gravity Forms.', 'newspack-plugin' )
 		);
 	}
 

@@ -25,7 +25,6 @@ namespace Newspack\Reader_Activation\Integrations;
 use Newspack\Newspack;
 use Newspack\Plugin_Manager;
 use Newspack\Reader_Activation;
-use Newspack\Reader_Activation\Integration;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -62,12 +61,10 @@ class Gravity_Forms extends Form_Capture {
 	const BLOCK_ATTRIBUTE = 'newspackFormCapture';
 
 	/**
-	 * Constructor. Calls the base integration's directly: Form_Capture's
-	 * names Inbound Form Capture.
+	 * Constructor.
 	 */
 	public function __construct() {
-		Integration::__construct(
-			self::ID,
+		parent::__construct(
 			__( 'Gravity Forms', 'newspack-plugin' ),
 			__( 'Register readers from Gravity Forms submissions.', 'newspack-plugin' )
 		);
