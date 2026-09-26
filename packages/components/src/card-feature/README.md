@@ -11,13 +11,15 @@ A card component for presenting a named feature or setting with a predictable, s
 
 Cards sit side by side, so a bare "Enable" names no feature out of context. The card appends `title` to the primary button's accessible name ("Enable Metered Countdown") and to the "More" menu ("More options for Metered Countdown"). The visible label leads, so voice control still matches on the word the user can see. Nothing to pass — this is automatic.
 
+When enabling leaves nothing to configure, the primary button goes away while it still has focus; the card moves that focus to the "More" menu rather than letting it fall to the page.
+
 ## States
 
 | State | Condition | Button | Dropdown | Badge |
 |---|---|---|---|---|
 | **Unmet requirements** | `requirements` is set | "Enable" — blocked but still focusable, and described by the badge (clickable if `requirementsActionable`) | Shown if `enabled` and `requirementsActionable` (and `moreControls` provided); otherwise hidden | High-intent badge with `requirements` text |
 | **Disabled** | `!enabled`, no requirements | "Enable" | Hidden | None |
-| **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Stable-intent badge ("Enabled") |
+| **Enabled** | `enabled`, no requirements | "Configure", or none without `onConfigure` | Shown if `moreControls` provided | Stable-intent badge ("Enabled") |
 
 When `requirements` is set the title drops to the muted text colour. The description already uses that colour in every state, so the unmet-requirements state is signalled by the title colour plus the high-intent badge.
 
@@ -203,7 +205,7 @@ The card is built on `Card.Root`, `Card.Header` and `Card.Content` from `@wordpr
 | `enableLabel` | `string` | `"Enable"` | Label for the primary button in its "Enable" states: not enabled, or enabled with an unmet requirement |
 | `configureLabel` | `string` | `"Configure"` | Label for the primary button in its "Configure" state: enabled, with no unmet requirement |
 | `onEnable` | `() => void` | — | Called when the primary button is clicked while it reads "Enable". That covers the not-enabled case and the enabled-with-unmet-requirements case, where the feature is on but the requirement is what the button acts on |
-| `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements |
+| `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements. Omit it for a feature with nothing to configure, and that state shows no primary button |
 | `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown. Shown when `enabled` and either there are no `requirements` or `requirementsActionable` is set |
 | `badge` | `{ label?: string; intent?: BadgeIntent }` | `{ label: "Enabled", intent: "stable" }` | Badge shown when enabled. Ignored while `requirements` is set, which takes the badge |
 | `busy` | `boolean` | `false` | Shows the primary button as busy and blocks it while an action is in flight |

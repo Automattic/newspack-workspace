@@ -268,16 +268,18 @@ abstract class Integration {
 	}
 
 	/**
-	 * How-to steps the Integrations UI shows at the top of the settings page.
+	 * How-to steps the Integrations UI shows as a guide, one step per page,
+	 * from the How it works item in the integration card's menu.
 	 *
 	 * Child classes override this when the way in is a workflow elsewhere in
-	 * the admin, such as a setting on a block, so the settings page has to say
-	 * where to look. Each step carries a `title` and a `description`. The
-	 * default is no guide.
+	 * the admin, such as a setting on a block, so the admin has to say where
+	 * to look. Each step carries a `title` and a `description`, and can carry
+	 * a `link` to documentation, with a `label` and a `url`. The default is no
+	 * guide.
 	 *
-	 * @return array List of associative arrays with keys `title` and `description`.
+	 * @return array List of associative arrays with keys `title`, `description`, and an optional `link`.
 	 */
-	public function get_guide() {
+	public function get_guide(): array {
 		return [];
 	}
 
