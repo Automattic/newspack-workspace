@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.20\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
-"POT-Creation-Date: 2026-09-18T15:34:37+00:00\n"
+"POT-Creation-Date: 2026-09-26T16:11:48+00:00\n"
 "PO-Revision-Date: 2024-08-30 08:46-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -300,45 +300,45 @@ msgstr ""
 msgid "Newspack Subscribe"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1062
+#: includes/class-newspack-blocks.php:1132
 msgid "Common"
 msgstr ""
 
 #. translators: separates last two sponsor names; needs a space on either side.
-#: includes/class-newspack-blocks.php:1163
+#: includes/class-newspack-blocks.php:1233
 msgid " and "
 msgstr " og "
 
 #. translators: separates all but the last two sponsor names; needs a space at the end.
-#: includes/class-newspack-blocks.php:1166
+#: includes/class-newspack-blocks.php:1236
 msgid ", "
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1501
+#: includes/class-newspack-blocks.php:1571
 msgid "Jetpack donations is disabled in favour of Newspack donations."
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1534 dist/editor.js:30
+#: includes/class-newspack-blocks.php:1604 dist/editor.js:30
 #: src/shared/js/utils.js:54
 msgid "Draft"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1535 dist/editor.js:30
+#: includes/class-newspack-blocks.php:1605 dist/editor.js:30
 #: src/shared/js/utils.js:54
 msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1733 dist/editor.js:52
+#: includes/class-newspack-blocks.php:1803 dist/editor.js:52
 #, php-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1764
+#: includes/class-newspack-blocks.php:1834
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1767
+#: includes/class-newspack-blocks.php:1837
 msgid " per "
 msgstr ""
 
@@ -552,24 +552,24 @@ msgid "Centered"
 msgstr ""
 
 #. translators: %d: Slide number.
-#: src/blocks/carousel/view.php:237
+#: src/blocks/carousel/view.php:243
 #, php-format
 msgid "Go to slide %d"
 msgstr ""
 
-#: src/blocks/carousel/view.php:258
+#: src/blocks/carousel/view.php:264
 msgid "Previous Slide"
 msgstr ""
 
-#: src/blocks/carousel/view.php:259
+#: src/blocks/carousel/view.php:265
 msgid "Next Slide"
 msgstr ""
 
-#: src/blocks/carousel/view.php:303
+#: src/blocks/carousel/view.php:309
 msgid "Pause Slideshow"
 msgstr ""
 
-#: src/blocks/carousel/view.php:304
+#: src/blocks/carousel/view.php:310
 msgid "Play Slideshow"
 msgstr ""
 
@@ -625,20 +625,20 @@ msgstr "Mengde donasjon"
 msgid "Other"
 msgstr "Annet"
 
-#: src/blocks/homepage-articles/view.php:409 dist/editor.js:64
+#: src/blocks/homepage-articles/view.php:415 dist/editor.js:64
 msgid "Load more posts"
 msgstr "Last flere innlegg"
 
-#: src/blocks/homepage-articles/view.php:416
+#: src/blocks/homepage-articles/view.php:422
 msgid "Something went wrong. Please refresh the page and/or try again."
 msgstr "Noe gikk galt. Oppdater siden og/eller prøv igjen."
 
-#: src/blocks/homepage-articles/view.php:491
+#: src/blocks/homepage-articles/view.php:497
 msgctxt "post author"
 msgid "by"
 msgstr "av"
 
-#: src/blocks/homepage-articles/view.php:508
+#: src/blocks/homepage-articles/view.php:514
 msgctxt "post author"
 msgid " and "
 msgstr " og "
