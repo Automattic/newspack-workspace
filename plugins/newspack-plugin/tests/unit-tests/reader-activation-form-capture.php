@@ -375,9 +375,12 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	/**
 	 * A new reader's contact sync names the capture that registered them, as an
 	 * existing reader's does, so Sync Activity tells captures apart from other
-	 * sign-ups. Each integration names only its own registrations.
+	 * sign-ups. Each integration names only its own registrations, whether or
+	 * not it is enabled.
 	 */
 	public function test_new_reader_sync_names_the_capture() {
+		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Naming must not depend on the enabled state.' );
+		$this->assertFalse( Integrations::is_enabled( Form_Capture::ID ), 'Naming must not depend on the enabled state.' );
 		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
 		$contexts = [];
 		add_filter(
@@ -394,7 +397,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$context_by_method = [
 			Gravity_Forms::get_registration_method() => 'Gravity Forms registration',
 			Form_Capture::get_registration_method()  => 'Form Capture registration',
-			'registration-wall'                      => 'RAS Reader registration',
+			'registration-block'                     => 'RAS Reader registration',
 		];
 		foreach ( $context_by_method as $registration_method => $expected_context ) {
 			$contexts = [];
