@@ -3,7 +3,7 @@
  * Contextual Prompt synced pattern.
  *
  * Owns the `wp_block` post every Contextual Prompt instance references: seeding
- * it on demand with a locked Group holding the bound copy paragraph and the CTA
+ * it on demand with a marker Group holding the bound copy paragraph and the CTA
  * for the site's donation platform, and the one compare-and-swap write helper
  * every later change to its markup goes through.
  *
@@ -30,8 +30,10 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	const PATTERN_NAME = 'Contextual Prompt';
 
 	/**
-	 * Every block in the pattern is editable but fixed in place: instances are
-	 * meant to differ by copy alone.
+	 * Holds the group and its generated copy in place — content stays editable,
+	 * position does not. The call to action is left unlocked so a detached card
+	 * can swap it for the publisher's own blocks; the card guard lifts whatever
+	 * the detach copied onto the rest and re-asserts this on the copy alone.
 	 */
 	const BLOCK_LOCK = [
 		'move'   => true,
@@ -1094,8 +1096,9 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * The prompt card: a marker-classed Group that takes no further blocks,
-	 * holding the bound copy paragraph and the CTA.
+	 * The prompt card: a marker-classed Group holding the bound copy paragraph and
+	 * the CTA. The group is unlocked for inserts so a detached card can take blocks
+	 * beside its copy; the copy keeps its own lock.
 	 *
 	 * @return array Parsed core/group block.
 	 */
@@ -1108,12 +1111,11 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		return [
 			'blockName'    => 'core/group',
 			'attrs'        => [
-				'metadata'     => [ 'name' => self::PATTERN_NAME ],
-				'className'    => self::MARKER_CLASS,
-				'templateLock' => 'insert',
-				'lock'         => self::BLOCK_LOCK,
-				'textColor'    => $text_color,
-				'style'        => [
+				'metadata'  => [ 'name' => self::PATTERN_NAME ],
+				'className' => self::MARKER_CLASS,
+				'lock'      => self::BLOCK_LOCK,
+				'textColor' => $text_color,
+				'style'     => [
 					'color'   => [ 'background' => '#f7f7f7' ],
 					'border'  => [ 'radius' => '10px' ],
 					'spacing' => [
@@ -1126,8 +1128,8 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 						'blockGap' => 'var:preset|spacing|30',
 					],
 				],
-				'fontSize'     => $font_size,
-				'layout'       => [ 'type' => 'constrained' ],
+				'fontSize'  => $font_size,
+				'layout'    => [ 'type' => 'constrained' ],
 			],
 			'innerBlocks'  => [ self::build_copy_child(), self::build_cta_child() ],
 			'innerHTML'    => $wrapper . '</div>',
@@ -1188,7 +1190,6 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		if ( $accent ) {
 			$attrs['buttonColor'] = $accent;
 		}
-		$attrs['lock'] = self::BLOCK_LOCK;
 
 		if ( $record ) {
 			self::record_stamp( (string) $accent );
@@ -1240,7 +1241,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 
 		return [
 			'blockName'    => 'core/buttons',
-			'attrs'        => [ 'lock' => self::BLOCK_LOCK ],
+			'attrs'        => [],
 			'innerBlocks'  => [
 				[
 					'blockName'    => 'core/button',
