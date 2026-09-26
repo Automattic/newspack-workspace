@@ -76,3 +76,27 @@ wp newspack autosaves prune [--dry-run] [--post=<id>] [--older-than=<days>]
 ```
 
 `--older-than=0` removes every stale autosave on the targeted posts. Fresh autosaves are still kept.
+
+## Trimming revisions over the limit
+
+WordPress trims a post to the limit each time it's saved. When the limit is lowered, a single save can delete hundreds of revisions and take several seconds. Instead:
+
+- Each save deletes at most 10 revisions, the oldest first.
+- An hourly cron (`newspack_revision_cleanup`) deletes up to 500 more per run. It works through posts in ID order, picking up where the last run stopped, and starts over after the last one.
+- Once a full pass over the posts deletes nothing, the cron runs daily instead. It goes back to hourly when a run deletes something or the revision limit setting is saved.
+
+Both skip revisions under the minimum age, major revisions and autosaves. The cron deletes nothing while the limit is off, unlimited or 0 (WordPress treats a limit of 0 as revisions turned off).
+
+Saves count autosaves toward the limit, as WordPress does, while the cron counts only regular revisions. So a post with an autosave can keep one fewer regular revision after a save than after the cron. The two never undo each other's work.
+
+Disable the cron:
+
+```php
+define( 'NEWSPACK_CRON_DISABLE', [ 'newspack_revision_cleanup' ] );
+```
+
+Run it by hand with WP-CLI:
+
+```
+wp newspack revisions prune [--dry-run] [--post=<id>]
+```
