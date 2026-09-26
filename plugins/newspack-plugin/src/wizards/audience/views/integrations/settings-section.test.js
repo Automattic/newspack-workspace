@@ -11,12 +11,17 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { SettingsSection } from './settings-section';
+import { SettingsSection, sortIntegrationIds } from './settings-section';
 
 const mockCardFeatureProps = [];
 const mockEnableModalProps = [];
+const mockIntegrationGuideProps = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( '../../../../../packages/colors/colors.module.scss', () => ( {
+	'neutral-100': '#f0f0f0',
+	'neutral-600': '#6c6c6c',
+} ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Card: ( { children } ) => children,
 	Grid: ( { children } ) => children,
@@ -37,6 +42,12 @@ jest.mock( './enable-modal', () => {
 		},
 	};
 } );
+jest.mock( './guide', () => ( {
+	IntegrationGuide: props => {
+		mockIntegrationGuideProps.push( props );
+		return null;
+	},
+} ) );
 jest.mock(
 	'../../../wizards-tab',
 	() =>
@@ -69,7 +80,7 @@ const requiredAudienceField = {
 const baseIntegration = {
 	id: 'esp',
 	name: 'Mailchimp',
-	description: 'Syncs reader data with your Mailchimp audience.',
+	description: 'Sync reader data with your Mailchimp audience.',
 	enabled: false,
 	is_set_up: false,
 	is_connected: false,
@@ -100,6 +111,7 @@ describe( 'Audience Integrations settings section card action', () => {
 	beforeEach( () => {
 		mockCardFeatureProps.length = 0;
 		mockEnableModalProps.length = 0;
+		mockIntegrationGuideProps.length = 0;
 		apiFetch.mockReset();
 		apiFetch.mockResolvedValue( { HandoffLink: HANDOFF_LINK } );
 		delete window.location;
@@ -153,9 +165,34 @@ describe( 'Audience Integrations settings section card action', () => {
 	} );
 
 	it( 'routes the configure action to the configure view when connected', () => {
-		const { history, cardProps } = renderSection( { is_connected: true, is_set_up: true, enabled: true } );
+		const { history, cardProps } = renderSection( {
+			is_connected: true,
+			is_set_up: true,
+			enabled: true,
+			settings: [ { ...requiredAudienceField, value: 'abc123' } ],
+		} );
 		cardProps.onConfigure();
 		expect( history.push ).toHaveBeenCalledWith( '/settings/esp' );
+	} );
+
+	// Configure leads to the settings page, which would be empty.
+	it( 'offers no configure action for an integration with no setting to show', () => {
+		const { cardProps } = renderSection( { is_connected: true, is_set_up: true, enabled: true, settings: [ { key: 'token', type: 'hidden' } ] } );
+		expect( cardProps.onConfigure ).toBeUndefined();
+	} );
+
+	it( 'opens the how-to from the menu of an enabled integration that has one', () => {
+		const guide = [ { title: 'Add the form with the Gravity Forms block', description: 'Place the form on a page.' } ];
+		const { cardProps } = renderSection( { is_connected: true, is_set_up: true, enabled: true, guide } );
+		const howItWorks = cardProps.moreControls.find( control => 'How it works' === control.title );
+		expect( howItWorks ).toBeDefined();
+		act( () => howItWorks.onClick() );
+		expect( mockIntegrationGuideProps[ mockIntegrationGuideProps.length - 1 ].integration.guide ).toBe( guide );
+	} );
+
+	it( 'leaves How it works out of the menu for an integration without a how-to', () => {
+		const { cardProps } = renderSection( { is_connected: true, is_set_up: true, enabled: true } );
+		expect( cardProps.moreControls.map( control => control.title ) ).toEqual( [ 'Logs', 'Disable' ] );
 	} );
 
 	it( 'routes the configure action through the handoff while the provider is not connected', async () => {
@@ -233,7 +270,7 @@ describe( 'Audience Integrations settings section card action', () => {
 	it( 'renders the reported provider brand icon for other integrations', () => {
 		render(
 			<SettingsSection
-				integrations={ { fundraise_up: { ...baseIntegration, id: 'fundraise_up', provider: 'active_campaign' } } }
+				integrations={ { other_esp: { ...baseIntegration, id: 'other_esp', provider: 'active_campaign' } } }
 				loading={ false }
 				onToggleEnabled={ jest.fn() }
 				onActivatePlugin={ jest.fn() }
@@ -257,5 +294,50 @@ describe( 'Audience Integrations settings section card action', () => {
 		);
 		expect( mockCardFeatureProps[ 0 ].icon.node ).toBeDefined();
 		expect( mockCardFeatureProps[ 0 ].icon.props ).toBeUndefined();
+	} );
+
+	it.each( [ 'salesforce', 'beehiiv', 'fundraiseup' ] )( 'renders the %s brand icon for its integration ID', id => {
+		render(
+			<SettingsSection
+				integrations={ { [ id ]: { ...baseIntegration, id, provider: null } } }
+				loading={ false }
+				onToggleEnabled={ jest.fn() }
+				onActivatePlugin={ jest.fn() }
+				onSetupAndEnable={ jest.fn() }
+				history={ { push: jest.fn() } }
+			/>
+		);
+		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( id );
+	} );
+
+	it( 'renders the Gravity Forms mark for the Gravity Forms integration', () => {
+		render(
+			<SettingsSection
+				integrations={ { 'gravity-forms': { ...baseIntegration, id: 'gravity-forms', provider: null } } }
+				loading={ false }
+				onToggleEnabled={ jest.fn() }
+				onActivatePlugin={ jest.fn() }
+				onSetupAndEnable={ jest.fn() }
+				history={ { push: jest.fn() } }
+			/>
+		);
+		expect( mockCardFeatureProps[ 0 ].icon.props.provider ).toBe( 'gravity_forms' );
+	} );
+} );
+
+describe( 'sortIntegrationIds', () => {
+	it( 'orders integrations by name, ignoring case and registration order', () => {
+		const integrations = {
+			esp: { name: 'Mailchimp' },
+			'gravity-forms': { name: 'Gravity Forms' },
+			salesforce: { name: 'Salesforce' },
+			activecampaign: { name: 'ActiveCampaign' },
+			beehiiv: { name: 'beehiiv' },
+		};
+		expect( sortIntegrationIds( integrations ) ).toEqual( [ 'activecampaign', 'beehiiv', 'gravity-forms', 'esp', 'salesforce' ] );
+	} );
+
+	it( 'falls back to the ID when an integration has no name', () => {
+		expect( sortIntegrationIds( { zeta: { name: 'Zeta' }, alpha: {} } ) ).toEqual( [ 'alpha', 'zeta' ] );
 	} );
 } );

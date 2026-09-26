@@ -118,7 +118,7 @@ class Legacy_Basic extends Contact_Metadata {
 			],
 			'registration_method'  => [
 				'name'        => 'Registration Method',
-				'description' => __( 'How the reader registered (e.g. registration wall, newsletter, checkout, popup, manual, or an SSO provider).', 'newspack-plugin' ),
+				'description' => __( 'How the reader registered, recorded when the account was created. For example: registration-block, auth-form (sign-in form), newsletters-subscription, woocommerce (checkout), google, or integration-registration-gravity-forms (Gravity Forms).', 'newspack-plugin' ),
 				'status'      => 'legacy',
 			],
 		];

@@ -88,6 +88,8 @@ class Integrations {
 		require_once __DIR__ . '/integrations/class-contact-pull.php';
 		require_once __DIR__ . '/integrations/class-contact-cron.php';
 		require_once __DIR__ . '/integrations/class-form-capture.php';
+		require_once __DIR__ . '/integrations/class-gravity-forms.php';
+		require_once __DIR__ . '/integrations/class-push-log.php';
 
 		add_action( 'init', [ __CLASS__, 'register_integrations' ], 5 );
 		add_action( 'init', [ __CLASS__, 'register_my_account_endpoints' ], 6 );
@@ -107,6 +109,7 @@ class Integrations {
 		add_filter( 'newspack_action_scheduler_group_labels', [ __CLASS__, 'register_group_labels' ] );
 
 		Integrations\Contact_Cron::init();
+		Integrations\Push_Log::init();
 	}
 
 	/**
@@ -280,7 +283,23 @@ class Integrations {
 	public static function register_integrations() {
 		// Native integrations.
 		self::register( new Integrations\ESP() );
-		self::register( new Integrations\Form_Capture() );
+		self::register( new Integrations\Gravity_Forms() );
+		/**
+		 * Registers Form Capture, which registers readers from forms
+		 * built with tools other than Gravity Forms, on sites with the flag and
+		 * on sites that already enabled it, so those keep capturing. Elsewhere
+		 * the integration is absent: no card, no capture.
+		 *
+		 * @constant NEWSPACK_FORM_CAPTURE_ENABLED
+		 * @type     bool
+		 * @default  Integration registered only where already enabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_FORM_CAPTURE_ENABLED', true );
+		 */
+		if ( ( defined( 'NEWSPACK_FORM_CAPTURE_ENABLED' ) && NEWSPACK_FORM_CAPTURE_ENABLED ) || self::is_enabled( Integrations\Form_Capture::ID ) ) {
+			self::register( new Integrations\Form_Capture() );
+		}
 
 		// Hook for other plugins/code to register their integrations.
 		do_action( 'newspack_reader_activation_register_integrations' );
@@ -293,6 +312,12 @@ class Integrations {
 			if ( null === $legacy_sync_esp || rest_sanitize_boolean( $legacy_sync_esp ) ) {
 				self::enable( 'esp' );
 			}
+		}
+
+		// A site upgrading with Form Capture keeps capturing its Gravity Forms forms.
+		$gravity_forms = self::get_integration( Integrations\Gravity_Forms::ID );
+		if ( $gravity_forms instanceof Integrations\Gravity_Forms ) {
+			$gravity_forms->maybe_enable_on_upgrade();
 		}
 
 		// Let each integration register its data event handlers.
@@ -474,15 +499,17 @@ class Integrations {
 	}
 
 	/**
-	 * Get settings config for all integrations that have settings fields.
+	 * Get settings config for the integrations the Integrations screen lists:
+	 * those with settings fields, and those with a how-to guide, whose card
+	 * offers it from its menu even with nothing to configure.
 	 *
 	 * @return array Keyed array of integration settings.
 	 */
 	public static function get_all_integration_settings() {
 		$result = [];
 		foreach ( self::$integrations as $id => $integration ) {
-			$fields = $integration->get_settings_fields();
-			if ( empty( $fields ) ) {
+			$guide = $integration->get_guide();
+			if ( empty( $integration->get_settings_fields() ) && empty( $guide ) ) {
 				continue;
 			}
 			$result[ $id ] = [
@@ -498,6 +525,7 @@ class Integrations {
 				'setup_url'                => $integration->get_setup_url(),
 				'settings'                 => $integration->get_settings_config(),
 				'required_plugins'         => $integration->get_required_plugins(),
+				'guide'                    => $guide,
 			];
 		}
 

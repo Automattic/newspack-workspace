@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { STATUS_MAP } from './constants';
+import { STATUS_MAP, PUSH_LOG_STATUS_MAP, PUSH_LOG_OPERATION_LABELS, PUSH_LOG_ERROR_CLASS_LABELS } from './constants';
 import { statusGlyph } from '../../../../../packages/components/src/status-indicator';
 
 /**
@@ -41,5 +41,40 @@ describe( 'STATUS_MAP', () => {
 	it( 'reads a queued job as worth noticing and a running one as context', () => {
 		expect( STATUS_MAP.pending.intent ).toBe( 'low' );
 		expect( STATUS_MAP[ 'in-progress' ].intent ).toBe( 'informational' );
+	} );
+
+	it( 'says a finished action is complete, not that the sync worked', () => {
+		// The action finishing says nothing about the push inside it, so the
+		// neutral badge stops short of "success".
+		expect( STATUS_MAP.complete.label ).toBe( 'Complete' );
+		expect( STATUS_MAP.complete.intent ).toBe( 'draft' );
+		expect( STATUS_MAP.complete.status ).toBe( 'done' );
+	} );
+} );
+
+describe( 'PUSH_LOG_STATUS_MAP', () => {
+	it( 'labels every status a push log row can have', () => {
+		expect( Object.keys( PUSH_LOG_STATUS_MAP ).sort() ).toEqual( [ 'failed', 'retrying', 'success' ] );
+		Object.values( PUSH_LOG_STATUS_MAP ).forEach( ( { label } ) => expect( label ).toBeTruthy() );
+	} );
+
+	it( 'gives no two statuses the same mark or the same intent', () => {
+		const glyphs = Object.values( PUSH_LOG_STATUS_MAP ).map( ( { status } ) => statusGlyph( status ) );
+		const intents = Object.values( PUSH_LOG_STATUS_MAP ).map( ( { intent } ) => intent );
+		expect( new Set( glyphs ).size ).toBe( glyphs.length );
+		expect( new Set( intents ).size ).toBe( intents.length );
+	} );
+
+	it( 'keeps the success badge for a sync that worked', () => {
+		// The scheduled actions list gave this badge up; here it means it.
+		expect( PUSH_LOG_STATUS_MAP.success.intent ).toBe( 'stable' );
+		expect( PUSH_LOG_STATUS_MAP.failed.intent ).toBe( 'high' );
+	} );
+} );
+
+describe( 'push log labels', () => {
+	it( 'names every operation and every error class the log records', () => {
+		expect( Object.keys( PUSH_LOG_OPERATION_LABELS ).sort() ).toEqual( [ 'delete', 'flag', 'upsert' ] );
+		expect( Object.keys( PUSH_LOG_ERROR_CLASS_LABELS ).sort() ).toEqual( [ 'benign', 'permanent_config', 'permanent_contact', 'transient' ] );
 	} );
 } );

@@ -2,274 +2,78 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useEffect } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
-import apiFetch from '@wordpress/api-fetch';
-import { addQueryArgs } from '@wordpress/url';
-import { Spinner } from '@wordpress/components';
-import { DataViews as WPDataViews } from '@wordpress/dataviews';
 
 /**
  * Internal dependencies
  */
-import { DataViews, StatusIndicator } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
-import { LogDetailsModal } from './log-details-modal';
+import Router from '../../../../../packages/components/src/proxied-imports/router';
+import { SyncActivity } from './sync-activity';
+import { ScheduledActions } from './scheduled-actions';
+import { hasSettingsToShow } from './settings-field';
 import './style.scss';
 
-const DEFAULT_VIEW = {
-	type: 'table',
-	page: 1,
-	perPage: 25,
-	sort: { field: 'timestamp', direction: 'desc' },
-	search: '',
-	fields: [ 'timestamp', 'email', 'event', 'status' ],
-	filters: [],
-	layout: {
-		styles: {
-			timestamp: { width: '35%' },
-			email: { width: '30%' },
-			event: { width: '20%' },
-			status: { width: '15%' },
-		},
-	},
-};
+const { Redirect } = Router;
 
+const SCHEDULED_ACTIONS_TAB = 'scheduled-actions';
+
+/**
+ * The Logs tabs of an integration, for the wizard's tabbed navigation. Sync
+ * Activity comes first, on the bare Logs route, because it answers what a
+ * publisher comes here for: what was sent for a reader, and whether it arrived.
+ * The scheduled actions are the machinery behind it.
+ *
+ * @param {Object} params               Route params.
+ * @param {string} params.integrationId The integration ID.
+ * @return {Array} Tabbed navigation items.
+ */
+export const getLogsTabs = ( { integrationId } ) => [
+	{
+		label: __( 'Sync Activity', 'newspack-plugin' ),
+		path: `/settings/${ integrationId }/logs`,
+		exact: true,
+	},
+	{
+		label: __( 'Scheduled Actions', 'newspack-plugin' ),
+		path: `/settings/${ integrationId }/logs/${ SCHEDULED_ACTIONS_TAB }`,
+		exact: true,
+	},
+];
+
+/**
+ * The Logs page of an integration: the content of whichever tab the route names.
+ *
+ * @param {Object} props              Props.
+ * @param {Object} props.integrations Integrations keyed by ID.
+ * @param {Object} props.match        The router match, carrying `integrationId` and `tab`.
+ */
 export const LogsView = ( { integrations, match } ) => {
 	const integrationId = match?.params?.integrationId;
+	const tab = match?.params?.tab;
 	const integration = integrationId ? integrations[ integrationId ] : null;
-	const { addNotice, removeNotice, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
-
-	const [ data, setData ] = useState( [] );
-	const [ total, setTotal ] = useState( 0 );
-	const [ isLoading, setIsLoading ] = useState( true );
-	const [ hasLoadedOnce, setHasLoadedOnce ] = useState( false );
-	const [ view, setView ] = useState( DEFAULT_VIEW );
-	const [ runningActionIds, setRunningActionIds ] = useState( () => new Set() );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	useEffect( () => {
 		if ( integration ) {
+			// The name links to the integration's settings page, unless it has none.
+			const integrationCrumb = hasSettingsToShow( integration.settings )
+				? { label: integration.name, url: `#/settings/${ integrationId }` }
+				: { label: integration.name };
 			setHeaderData( {
-				sectionName: [ { label: integration.name, url: `#/settings/${ integrationId }` }, { label: __( 'Logs', 'newspack-plugin' ) } ],
-				actions: [
-					{
-						type: 'secondary',
-						label: __( 'Back to Integrations', 'newspack-plugin' ),
-						icon: 'chevronLeft',
-						href: '#/settings',
-					},
-				],
+				sectionName: [ integrationCrumb, { label: __( 'Logs', 'newspack-plugin' ) } ],
 			} );
 		}
 	}, [ integration, integrationId, setHeaderData ] );
-
-	const statusFilter = view.filters?.find( f => f.field === 'status' )?.value;
-
-	const fetchLogs = useCallback( () => {
-		if ( ! integrationId ) {
-			return;
-		}
-		setIsLoading( true );
-
-		const orderbyMap = {
-			timestamp: 'scheduled_date_gmt',
-			status: 'status',
-		};
-
-		const path = addQueryArgs( `${ API_BASE }/${ integrationId }/logs`, {
-			page: view.page,
-			per_page: view.perPage,
-			orderby: orderbyMap[ view.sort?.field || 'timestamp' ] || 'scheduled_date_gmt',
-			order: ( view.sort?.direction || 'desc' ).toUpperCase(),
-			search: view.search || undefined,
-			status: statusFilter || undefined,
-		} );
-
-		apiFetch( { path } )
-			.then( response => {
-				setData( response.items );
-				setTotal( response.total );
-			} )
-			.catch( () => {
-				addNotice( {
-					message: __( 'Failed to load activity logs. Please try again.', 'newspack-plugin' ),
-					type: 'error',
-					id: 'integration-logs-fetch-error',
-				} );
-			} )
-			.finally( () => {
-				setIsLoading( false );
-				setHasLoadedOnce( true );
-			} );
-	}, [ integrationId, view.page, view.perPage, view.sort?.field, view.sort?.direction, view.search, statusFilter, addNotice ] );
-
-	useEffect( () => {
-		fetchLogs();
-	}, [ fetchLogs ] );
-
-	const fields = useMemo(
-		() => [
-			{
-				id: 'timestamp',
-				label: __( 'Timestamp', 'newspack-plugin' ),
-				render: ( { item } ) => formatTimestamp( item.timestamp ),
-				enableSorting: true,
-			},
-			{
-				id: 'email',
-				label: __( 'Email', 'newspack-plugin' ),
-				render: ( { item } ) => item.email || '—',
-				enableSorting: false,
-			},
-			{
-				id: 'event',
-				label: __( 'Event', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.event,
-				enableSorting: false,
-			},
-			{
-				id: 'status',
-				label: __( 'Status', 'newspack-plugin' ),
-				render: ( { item } ) => {
-					// A status Action Scheduler grows later is one to look at, not a deliberate stop.
-					const mapped = STATUS_MAP[ item.status ] || { label: item.status, status: 'attention' };
-					return <StatusIndicator status={ mapped.status }>{ mapped.label }</StatusIndicator>;
-				},
-				enableSorting: true,
-				elements: [
-					{ value: 'complete', label: __( 'Complete', 'newspack-plugin' ) },
-					{ value: 'failed', label: __( 'Failed', 'newspack-plugin' ) },
-					{ value: 'pending', label: __( 'Pending', 'newspack-plugin' ) },
-					{ value: 'in-progress', label: __( 'In progress', 'newspack-plugin' ) },
-					{ value: 'canceled', label: __( 'Canceled', 'newspack-plugin' ) },
-				],
-				filterBy: {
-					operators: [ 'is' ],
-				},
-			},
-		],
-		[]
-	);
-
-	const runAction = useCallback(
-		actionId => {
-			setRunningActionIds( prev => {
-				const next = new Set( prev );
-				next.add( actionId );
-				return next;
-			} );
-			// Synchronous "running" notice. addNotice appends without deduping by
-			// id, so the final success/failure notice removes this one first
-			// (see removeNotice calls below) to replace it in place.
-			const noticeId = `integration-action-run-${ actionId }`;
-			addNotice( {
-				message: __( 'Running action…', 'newspack-plugin' ),
-				type: 'info',
-				id: noticeId,
-			} );
-			apiFetch( {
-				path: `${ API_BASE }/${ integrationId }/logs/${ actionId }/run`,
-				method: 'POST',
-			} )
-				.then( response => {
-					let message;
-					if ( response.status === 'complete' ) {
-						message = __( 'Action completed.', 'newspack-plugin' );
-					} else if ( response.status === 'failed' ) {
-						message = response.message || __( 'Action failed.', 'newspack-plugin' );
-					} else {
-						message = response.message || __( 'Action processed.', 'newspack-plugin' );
-					}
-					removeNotice( noticeId );
-					addNotice( {
-						message,
-						type: response.status === 'failed' ? 'error' : 'success',
-						id: noticeId,
-					} );
-				} )
-				.catch( err => {
-					const message = err && err.message ? err.message : __( 'Could not run action.', 'newspack-plugin' );
-					removeNotice( noticeId );
-					addNotice( {
-						message,
-						type: 'error',
-						id: noticeId,
-					} );
-				} )
-				.finally( () => {
-					setRunningActionIds( prev => {
-						const next = new Set( prev );
-						next.delete( actionId );
-						return next;
-					} );
-					fetchLogs();
-				} );
-		},
-		[ integrationId, addNotice, removeNotice, fetchLogs ]
-	);
-
-	const actions = useMemo(
-		() => [
-			{
-				id: 'view-details',
-				label: __( 'View details', 'newspack-plugin' ),
-				modalHeader: __( 'Action details', 'newspack-plugin' ),
-				RenderModal: ( { items } ) => <LogDetailsModal integrationId={ integrationId } actionId={ items[ 0 ].id } />,
-			},
-			{
-				id: 'run-now',
-				label: __( 'Run now', 'newspack-plugin' ),
-				isEligible: item => item.status === 'pending' && ! runningActionIds.has( item.id ),
-				callback: items => runAction( items[ 0 ].id ),
-			},
-		],
-		[ integrationId, runAction, runningActionIds ]
-	);
-
-	const paginationInfo = useMemo(
-		() => ( {
-			totalItems: total,
-			totalPages: Math.ceil( total / ( view.perPage || 25 ) ),
-		} ),
-		[ total, view.perPage ]
-	);
 
 	if ( ! integrationId || ! integration ) {
 		return null;
 	}
 
-	if ( ! hasLoadedOnce ) {
-		return (
-			<div style={ { display: 'flex', justifyContent: 'center', alignItems: 'center' } }>
-				<Spinner />
-			</div>
-		);
+	if ( tab && SCHEDULED_ACTIONS_TAB !== tab ) {
+		return <Redirect to={ `/settings/${ integrationId }/logs` } />;
 	}
 
-	return (
-		<DataViews
-			className="newspack-integration-logs"
-			data={ data }
-			fields={ fields }
-			actions={ actions }
-			view={ view }
-			onChangeView={ setView }
-			paginationInfo={ paginationInfo }
-			defaultLayouts={ { table: {} } }
-			isLoading={ isLoading }
-			getItemId={ item => item.id }
-			search
-		>
-			<div className="dataviews__view-actions">
-				<div className="dataviews__search">
-					<WPDataViews.Search />
-					<WPDataViews.FiltersToggle />
-				</div>
-			</div>
-			<WPDataViews.FiltersToggled className="dataviews-filters__container" />
-			<WPDataViews.Layout />
-			<WPDataViews.Footer />
-		</DataViews>
-	);
+	return SCHEDULED_ACTIONS_TAB === tab ? <ScheduledActions integrationId={ integrationId } /> : <SyncActivity integrationId={ integrationId } />;
 };
