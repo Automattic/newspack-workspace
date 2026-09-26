@@ -70,7 +70,7 @@ class Registration extends Contact_Metadata {
 			],
 			'Registration_Strategy'     => [
 				'name'        => 'Registration Strategy',
-				'description' => __( 'How the reader registered. One of: registration-wall, newsletter, checkout, popup, manual, or an SSO provider (e.g. google, apple)', 'newspack-plugin' ),
+				'description' => __( 'How the reader registered, recorded when the account was created. For example: registration-block, auth-form (sign-in form), newsletters-subscription, woocommerce (checkout), google, or integration-registration-gravity-forms (Gravity Forms).', 'newspack-plugin' ),
 				'status'      => 'new',
 			],
 			'Registration_UTM_Source'   => [
