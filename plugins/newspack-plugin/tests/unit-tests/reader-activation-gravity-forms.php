@@ -81,7 +81,7 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 		$this->assertNull( Integrations::get_integration( Form_Capture::ID ), 'Absent on a site with neither.' );
 
 		if ( $flag ) {
-			define( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED', true );
+			define( 'NEWSPACK_FORM_CAPTURE_ENABLED', true );
 		}
 		if ( $enabled ) {
 			update_option( Integrations::OPTION_NAME, [ Form_Capture::ID ] );

@@ -290,14 +290,14 @@ class Integrations {
 		 * on sites that already enabled it, so those keep capturing. Elsewhere
 		 * the integration is absent: no card, no capture.
 		 *
-		 * @constant NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED
+		 * @constant NEWSPACK_FORM_CAPTURE_ENABLED
 		 * @type     bool
 		 * @default  Integration registered only where already enabled
 		 * @status   draft
 		 *
-		 * @example define( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED', true );
+		 * @example define( 'NEWSPACK_FORM_CAPTURE_ENABLED', true );
 		 */
-		if ( ( defined( 'NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED' ) && NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED ) || self::is_enabled( Integrations\Form_Capture::ID ) ) {
+		if ( ( defined( 'NEWSPACK_FORM_CAPTURE_ENABLED' ) && NEWSPACK_FORM_CAPTURE_ENABLED ) || self::is_enabled( Integrations\Form_Capture::ID ) ) {
 			self::register( new Integrations\Form_Capture() );
 		}
 
