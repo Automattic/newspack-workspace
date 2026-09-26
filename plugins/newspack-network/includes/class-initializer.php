@@ -81,9 +81,10 @@ class Initializer {
 	 */
 	public static function activation_hook() {
 		add_role( NEWSPACK_NETWORK_READER_ROLE, __( 'Network Reader', 'newspack-network' ) ); // phpcs:ignore
-		// Create the Hub's used-nonce table up front on a site already configured as a
-		// Hub. Everywhere else it is created lazily on first use — which is also what
-		// installs it on a Hub updated in place, since an update does not fire this hook.
+		// Create the used-nonce table up front on a site already configured as a Hub.
+		// Everywhere else, Nodes included, it is created lazily on first use — which is
+		// also what installs it on a Hub updated in place, since an update does not fire
+		// this hook.
 		if ( Site_Role::is_hub() ) {
 			Used_Nonces::install();
 		}
