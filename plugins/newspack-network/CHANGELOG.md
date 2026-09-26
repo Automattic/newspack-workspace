@@ -1,3 +1,10 @@
+## newspack-network [2.22.9](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.8...newspack-network@2.22.9) (2026-09-22)
+
+
+### Bug Fixes
+
+* **event-log:** index timestamp so checkout skips a full-table scan ([#1132](https://github.com/Automattic/newspack-workspace/issues/1132)) ([c2ecf7c](https://github.com/Automattic/newspack-workspace/commit/c2ecf7cd8b9f0d7dd29b29e85171a7c79d8d3a94))
+
 ## newspack-network [2.22.8](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.7...newspack-network@2.22.8) (2026-09-15)
 
 
