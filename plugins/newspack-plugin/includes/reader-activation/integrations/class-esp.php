@@ -13,7 +13,6 @@ use Newspack\Reader_Activation\Integrations;
 use Newspack_Newsletters_Contacts;
 use Newspack_Newsletters_Subscription;
 use Newspack\Configuration_Managers;
-use Newspack\Audience_Integrations;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -22,10 +21,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * Reader-data sync through the Newspack Newsletters Mailchimp provider. This
  * was the generic ESP integration; the `esp` id — and every option keyed on
- * it — is retained so no stored settings move. The legacy provider paths
- * (ActiveCampaign, Constant Contact) keep syncing until the Integrations
- * screen is live for the site (see is_mailchimp_only()), after which
- * dedicated integrations own everything that is not Mailchimp.
+ * it — is retained so no stored settings move. It syncs Mailchimp only: any
+ * other provider needs a dedicated integration, such as the ActiveCampaign
+ * one in newspack-manager.
  */
 class ESP extends Integration {
 
@@ -94,20 +92,6 @@ class ESP extends Integration {
 	}
 
 	/**
-	 * Whether reader sync through this integration is restricted to Mailchimp.
-	 *
-	 * Tied to the Integrations screen flag: sites where the screen is not live
-	 * still sync ActiveCampaign or Constant Contact through this generic path,
-	 * and cutting them off before the dedicated integrations take over would
-	 * silently stop their reader sync.
-	 *
-	 * @return bool
-	 */
-	protected function is_mailchimp_only() {
-		return Audience_Integrations::is_enabled();
-	}
-
-	/**
 	 * Whether the ESP integration is ready to sync.
 	 *
 	 * Checks STORED configuration only — provider option set + master list
@@ -121,16 +105,15 @@ class ESP extends Integration {
 	 * state; "is the provider reachable right now?" is `health_check()`'s
 	 * job.
 	 *
-	 * Under the Mailchimp-only restriction a non-Mailchimp provider is never
-	 * set up, which keeps this integration out of
-	 * get_active_configured_integrations(): a flag-on site mid-migration gets
-	 * a clean stop instead of a sync attempt whose provider error would be
-	 * classified transient and retried forever.
+	 * A non-Mailchimp provider is never set up, which keeps this integration
+	 * out of get_active_configured_integrations(): a site on another provider
+	 * gets a clean stop instead of a sync attempt whose provider error would
+	 * be classified transient and retried forever.
 	 *
 	 * @return bool True if a provider is selected and a master list ID is stored.
 	 */
 	public function is_set_up() {
-		if ( $this->is_mailchimp_only() && 'mailchimp' !== $this->get_provider_slug() ) {
+		if ( 'mailchimp' !== $this->get_provider_slug() ) {
 			return false;
 		}
 		return $this->is_connected() && (bool) $this->get_master_list_id();
@@ -192,9 +175,10 @@ class ESP extends Integration {
 	 *
 	 * Returns ALL possible ESP fields unconditionally as static
 	 * declarations. No provider check, no API calls. Provider options
-	 * are added in get_settings_config(). The ActiveCampaign and Constant Contact declarations remain for the
-	 * legacy generic path (its sync reads and option migration) even though
-	 * the settings UI no longer offers them; they go when that path retires.
+	 * are added in get_settings_config(). The settings UI no longer offers the
+	 * ActiveCampaign and Constant Contact declarations; they stay so stored
+	 * values remain readable, e.g. the ActiveCampaign master list that
+	 * newspack-manager's ActiveCampaign integration copies when it takes over.
 	 *
 	 * @return array Array of settings field declarations.
 	 */
@@ -447,7 +431,7 @@ class ESP extends Integration {
 			);
 		}
 
-		if ( $this->is_mailchimp_only() && 'mailchimp' !== $this->get_provider_slug() ) {
+		if ( 'mailchimp' !== $this->get_provider_slug() ) {
 			$errors->add(
 				'ras_esp_provider_not_supported',
 				__( 'Sync requires Mailchimp as the newsletter provider.', 'newspack-plugin' )
