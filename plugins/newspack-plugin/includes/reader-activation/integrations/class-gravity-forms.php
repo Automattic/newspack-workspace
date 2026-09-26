@@ -129,7 +129,7 @@ class Gravity_Forms extends Form_Capture {
 	 *
 	 * @return array List of associative arrays with keys `title`, `description`, and an optional `link` (`label`, `url`).
 	 */
-	public function get_guide() {
+	public function get_guide(): array {
 		return [
 			[
 				'title'       => __( 'Add the form with the Gravity Forms block', 'newspack-plugin' ),

@@ -279,7 +279,7 @@ abstract class Integration {
 	 *
 	 * @return array List of associative arrays with keys `title`, `description`, and an optional `link`.
 	 */
-	public function get_guide() {
+	public function get_guide(): array {
 		return [];
 	}
 
