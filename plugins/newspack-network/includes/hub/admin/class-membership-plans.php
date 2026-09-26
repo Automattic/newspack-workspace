@@ -9,6 +9,7 @@ namespace Newspack_Network\Hub\Admin;
 
 use Newspack_Network\Admin as Network_Admin;
 use Newspack_Network\Debugger;
+use Newspack_Network\Utils\Network;
 
 /**
  * Class to handle Woo Membership_Plans
@@ -79,7 +80,7 @@ abstract class Membership_Plans {
 	 */
 	public static function fetch_collection_from_api( $node, $collection_endpoint, $collection_endpoint_id, $query_args = [] ) {
 		$endpoint = add_query_arg( $query_args, sprintf( '%s/wp-json/%s', $node->get_url(), $collection_endpoint ) );
-		$response = wp_remote_get( // phpcs:ignore
+		$response = Network::safe_peer_remote_get(
 			$endpoint,
 			[
 				'headers' => $node->get_authorization_headers( 'get-woo-' . $collection_endpoint_id ),

@@ -116,11 +116,51 @@ class Network {
 	}
 
 	/**
+	 * GET a URL on a peer site, refusing private and reserved addresses.
+	 *
+	 * For requests to a peer's stored URL, which is site configuration rather than a
+	 * known-good constant. Applies the same address rules as sideload_peer_image(), to the
+	 * initial URL and to every redirect hop, and sends the request with core's own
+	 * reject_unsafe_urls check on as well.
+	 *
+	 * @param mixed $url  URL to request.
+	 * @param array $args wp_safe_remote_get() arguments.
+	 *
+	 * @return array|\WP_Error The response, or WP_Error if the address or a redirect is refused.
+	 */
+	public static function safe_peer_remote_get( $url, array $args = [] ): array|\WP_Error {
+		if ( ! self::is_safe_sideload_url( $url ) ) {
+			// Callers turn this error into empty data, so without a record a Node that
+			// resolves privately just shows blank site info. Debugger::log() is silent
+			// unless NEWSPACK_NETWORK_DEBUG is defined; newspack_log reaches production.
+			if ( method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+				\Newspack\Logger::newspack_log(
+					'newspack_network_peer_request',
+					'Refused a request to a peer: the URL resolves to a private or reserved address, or its lookup failed.',
+					[
+						'host' => is_string( $url ) ? wp_parse_url( $url, PHP_URL_HOST ) : null,
+					],
+					'error'
+				);
+			}
+			return new \WP_Error( 'newspack_network_unsafe_peer_url', __( 'Refused a request to a private or reserved address.', 'newspack-network' ) );
+		}
+
+		add_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+		try {
+			return wp_safe_remote_get( $url, $args );
+		} finally {
+			remove_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+		}
+	}
+
+	/**
 	 * Refuse a redirect whose target resolves into a private or reserved range.
 	 *
-	 * Registered on the Requests before_redirect bridge during a peer sideload. Throwing
-	 * aborts the redirect the way core's own reject_unsafe_urls check does, but through
-	 * is_safe_sideload_url(), which blocks the ranges core misses on older WordPress.
+	 * Registered on the Requests before_redirect bridge during a peer sideload or peer
+	 * request (safe_peer_remote_get()). Throwing aborts the redirect the way core's own
+	 * reject_unsafe_urls check does, but through is_safe_sideload_url(), which blocks the
+	 * ranges core misses on older WordPress.
 	 *
 	 * @param string $location Redirect target URL.
 	 *
@@ -288,12 +328,15 @@ class Network {
 		}
 
 		/**
-		 * Filters whether a resolved address is refused for a peer image sideload.
+		 * Filters whether a resolved address is refused for a peer image sideload, or for
+		 * a request to a peer's stored URL (safe_peer_remote_get()).
 		 *
 		 * This check runs after wp_http_validate_url() and overrides it, so a network
 		 * that answers `http_request_host_is_external` to allow its own private
-		 * addressing still loses avatar and thumbnail sync here. This filter is how
-		 * such a network opts an address back in; the default is to refuse.
+		 * addressing still loses avatar and thumbnail sync, and the Hub's requests to
+		 * its Nodes, here. This filter is how such a network opts an address back in;
+		 * the default is to refuse. Such a network needs both answers, since the
+		 * request itself also goes through core's check.
 		 *
 		 * @param bool   $blocked Whether the address is refused.
 		 * @param string $ip      The resolved IPv4 or IPv6 address.

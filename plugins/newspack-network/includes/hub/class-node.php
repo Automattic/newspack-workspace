@@ -9,6 +9,7 @@ namespace Newspack_Network\Hub;
 
 use Newspack_Network\Crypto;
 use Newspack_Network\Rest_Authenticaton;
+use Newspack_Network\Utils\Network;
 use Newspack_Network\Utils\Sites;
 use WP_Post;
 
@@ -135,7 +136,7 @@ class Node {
 	 * Get site info.
 	 */
 	public function get_site_info() {
-		$response = wp_remote_get( // phpcs:ignore
+		$response = Network::safe_peer_remote_get(
 			$this->get_url() . '/wp-json/newspack-network/v1/info',
 			[
 				'headers' => $this->get_authorization_headers( 'info' ),
