@@ -31,6 +31,18 @@ export function getMatchedForms( selectors, root = document ) {
 }
 
 /**
+ * Whether a form is a Gravity Forms form: Gravity Forms renders every form
+ * with the id gform_<form id>. Read as an attribute, since a field named
+ * "id" shadows the form's id property.
+ *
+ * @param {HTMLFormElement} form Form element.
+ * @return {boolean} True for a Gravity Forms form.
+ */
+export function isGravityForm( form ) {
+	return /^gform_\d+$/.test( form.getAttribute( 'id' ) || '' );
+}
+
+/**
  * Get a valid email value from a form, preferring input[type=email] and
  * falling back to name/id/autocomplete heuristics on text inputs. Iterates
  * all candidates in order and returns the first one with a valid value, so

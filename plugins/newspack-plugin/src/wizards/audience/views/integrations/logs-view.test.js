@@ -20,15 +20,24 @@ jest.mock( '../../../../../packages/components/src/proxied-imports/router', () =
 	Redirect: ( { to } ) => `Redirect to ${ to }`,
 } ) );
 
+// The breadcrumb reads the real settings rule from the settings field module,
+// whose controls never render here.
+jest.mock( '@wordpress/components', () => ( {} ) );
+jest.mock( '../../../../../packages/components/src', () => ( {} ) );
+
 jest.mock( './sync-activity', () => ( { SyncActivity: ( { integrationId } ) => `Sync activity of ${ integrationId }` } ) );
 jest.mock( './scheduled-actions', () => ( { ScheduledActions: ( { integrationId } ) => `Scheduled actions of ${ integrationId }` } ) );
 
 import { LogsView, getLogsTabs } from './logs-view';
 
-const integrations = { sample: { name: 'Sample' } };
+const integrations = { sample: { name: 'Sample', settings: [ { key: 'api_key', type: 'text' } ] } };
 const matchFor = tab => ( { params: { integrationId: 'sample', tab } } );
 
 describe( 'LogsView', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+	} );
+
 	it( 'opens on the sync activity', () => {
 		render( <LogsView integrations={ integrations } match={ matchFor() } /> );
 
@@ -55,6 +64,14 @@ describe( 'LogsView', () => {
 		expect( mockSetHeaderData ).toHaveBeenCalledWith(
 			expect.objectContaining( { sectionName: [ { label: 'Sample', url: '#/settings/sample' }, { label: 'Logs' } ] } )
 		);
+	} );
+
+	// Its settings page would be empty, so the name leads nowhere.
+	it( 'leaves the integration unlinked when it has no setting to show', () => {
+		const withoutSettings = { sample: { name: 'Sample', settings: [ { key: 'token', type: 'hidden' } ] } };
+		render( <LogsView integrations={ withoutSettings } match={ matchFor() } /> );
+
+		expect( mockSetHeaderData ).toHaveBeenCalledWith( expect.objectContaining( { sectionName: [ { label: 'Sample' }, { label: 'Logs' } ] } ) );
 	} );
 
 	it( 'renders nothing for an integration it does not know', () => {

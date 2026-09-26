@@ -1,0 +1,39 @@
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+// The Guide's own 600px width loses to the Modal's later `width: auto`, which
+// would change the frame's width with each page's text as the reader pages
+// through. Core's guides set their width through their own class, too; on
+// narrow screens, core's max-width still keeps the frame inside the viewport.
+.components-modal__frame.newspack-integration-guide {
+	width: 600px;
+
+	// Core sizes and centers each page around an illustration, which leaves
+	// text-only steps floating in blank space. These start at the top, with
+	// the page dots level with the close button, and the frame fits each step.
+	.components-guide__page {
+		justify-content: flex-start;
+		min-height: 0;
+		padding-top: wp-vars.$grid-unit-20;
+	}
+}
+
+// The Guide leaves page content to its caller. As in core's own guides, the
+// text sets its own type and keeps clear of the frame, in line with the
+// footer buttons.
+.newspack-integration-guide__page {
+	padding: wp-vars.$grid-unit-30 wp-vars.$grid-unit-30 wp-vars.$grid-unit-40;
+
+	h1 {
+		@include wp-mixins.heading-x-large();
+		margin: 0 0 wp-vars.$grid-unit-10;
+	}
+
+	p {
+		margin: 0 0 wp-vars.$grid-unit-20;
+
+		&:last-child {
+			margin-bottom: 0;
+		}
+	}
+}
