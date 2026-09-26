@@ -8,6 +8,7 @@
 namespace Newspack\CLI;
 
 use Newspack\Revision_Cleanup;
+use Newspack\Revisions_Control;
 use WP_CLI;
 
 defined( 'ABSPATH' ) || exit;
@@ -42,6 +43,10 @@ final class Revisions {
 			if ( ! $post_id || ! get_post( $post_id ) ) {
 				WP_CLI::error( sprintf( 'Post %s not found.', $assoc_args['post'] ) );
 			}
+		}
+
+		if ( ! Revisions_Control::is_active() || Revisions_Control::get_number() < 1 ) {
+			WP_CLI::warning( 'The Newspack revision limit is off, unlimited or 0, so there is nothing to delete.' );
 		}
 
 		$count    = 0;

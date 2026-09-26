@@ -95,6 +95,19 @@ class Newspack_Test_Revision_Cleanup_CLI extends WP_UnitTestCase {
 	}
 
 	/**
+	 * With the limit off, the command warns and deletes nothing.
+	 */
+	public function test_warns_when_limit_off() {
+		[ , $ids ] = $this->create_post_over_limit();
+		delete_option( 'newspack_revisions_control' );
+
+		Revisions::cmd_prune( [], [] );
+
+		$this->assertNotEmpty( WP_CLI::$warnings );
+		$this->assertNotNull( get_post( $ids[0] ) );
+	}
+
+	/**
 	 * A missing post aborts.
 	 */
 	public function test_missing_post_errors() {

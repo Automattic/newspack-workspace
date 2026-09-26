@@ -103,6 +103,7 @@ class Revisions_Control {
 		if ( self::get_status()['active'] ) {
 			return self::get_status()['number'];
 		}
+		return null;
 	}
 
 	/**

@@ -140,6 +140,19 @@ class Newspack_Test_Revision_Cleanup extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An autosave among the oldest revisions is neither deleted nor counted as a deletion.
+	 */
+	public function test_save_keeps_autosave_among_oldest() {
+		[ $post_id ]  = $this->create_post_with_revisions( 20 );
+		$autosave_id = $this->create_revision( $post_id, 90, true );
+
+		$this->save( $post_id );
+
+		$this->assertNotNull( get_post( $autosave_id ) );
+		$this->assertCount( 11, $this->regular_revision_ids( $post_id ) );
+	}
+
+	/**
 	 * Without the Newspack limit, the list is left alone.
 	 */
 	public function test_cap_does_nothing_when_limit_inactive() {
@@ -158,6 +171,72 @@ class Newspack_Test_Revision_Cleanup extends WP_UnitTestCase {
 		Revision_Cleanup::cron_init();
 		$this->assertNotFalse( wp_next_scheduled( Revision_Cleanup::CRON_HOOK ) );
 		$this->assertSame( 'hourly', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
+	}
+
+	/**
+	 * Schedule the cron with a recurrence.
+	 *
+	 * @param string $recurrence 'hourly' or 'daily'.
+	 */
+	private function schedule( $recurrence ) {
+		wp_clear_scheduled_hook( Revision_Cleanup::CRON_HOOK );
+		wp_schedule_event( time(), $recurrence, Revision_Cleanup::CRON_HOOK );
+	}
+
+	/**
+	 * A full pass that deletes nothing switches the cron to daily.
+	 */
+	public function test_backs_off_to_daily_when_a_pass_deletes_nothing() {
+		$this->schedule( 'hourly' );
+		$this->create_post_with_revisions( 3 );
+
+		$this->assertSame( 0, Revision_Cleanup::run_cron() );
+		$this->assertSame( 'daily', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
+	}
+
+	/**
+	 * A pass that deletes anything, even in an earlier run, stays hourly.
+	 */
+	public function test_stays_hourly_until_a_whole_pass_deletes_nothing() {
+		$this->schedule( 'hourly' );
+		$this->create_post_with_revisions( 10 );
+
+		$this->assertSame( 5, Revision_Cleanup::run_cron( 5 ) );
+		$this->assertSame( 2, Revision_Cleanup::run_cron( 5 ) );
+		$this->assertSame( 'hourly', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
+
+		$this->assertSame( 0, Revision_Cleanup::run_cron( 5 ) );
+		$this->assertSame( 'daily', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
+	}
+
+	/**
+	 * A daily run that deletes something switches back to hourly.
+	 */
+	public function test_daily_run_that_deletes_goes_back_to_hourly() {
+		$this->schedule( 'daily' );
+		$this->create_post_with_revisions( 5 );
+
+		$this->assertSame( 2, Revision_Cleanup::run_cron() );
+		$this->assertSame( 'hourly', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
+	}
+
+	/**
+	 * Saving the revision limit switches back to hourly.
+	 */
+	public function test_saving_the_limit_goes_back_to_hourly() {
+		$this->schedule( 'daily' );
+		$this->set_limit( 10 );
+		$this->assertSame( 'hourly', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
+	}
+
+	/**
+	 * Unscheduling the cron clears its saved position.
+	 */
+	public function test_cron_deactivate_clears_cursor() {
+		update_option( Revision_Cleanup::CURSOR_OPTION, 123 );
+		Revision_Cleanup::cron_deactivate();
+		$this->assertFalse( get_option( Revision_Cleanup::CURSOR_OPTION ) );
+		$this->assertFalse( wp_next_scheduled( Revision_Cleanup::CRON_HOOK ) );
 	}
 
 	/**
@@ -197,6 +276,19 @@ class Newspack_Test_Revision_Cleanup extends WP_UnitTestCase {
 
 		$this->assertSame( 0, Revision_Cleanup::run_cron() );
 		$this->assertNotNull( get_post( $autosave_id ) );
+	}
+
+	/**
+	 * Checking a post's revisions doesn't load each revision separately.
+	 */
+	public function test_get_excess_ids_does_not_load_each_revision() {
+		global $wpdb;
+		[ $post_id ] = $this->create_post_with_revisions( 25 );
+		wp_cache_flush();
+
+		$before = $wpdb->num_queries;
+		$this->assertCount( 22, Revision_Cleanup::get_excess_ids( $post_id, 500 ) );
+		$this->assertLessThan( 10, $wpdb->num_queries - $before );
 	}
 
 	/**
@@ -250,6 +342,89 @@ class Newspack_Test_Revision_Cleanup extends WP_UnitTestCase {
 				] 
 			) 
 		);
+	}
+
+	/**
+	 * A post type with a higher limit of its own is trimmed only to that limit.
+	 */
+	public function test_run_cron_respects_higher_post_type_limit() {
+		[ $post_id ] = $this->create_post_with_revisions( 8 );
+
+		$keep_five = function () {
+			return 5;
+		};
+		add_filter( 'wp_post_revisions_to_keep', $keep_five );
+		$deleted = Revision_Cleanup::run_cron();
+		remove_filter( 'wp_post_revisions_to_keep', $keep_five );
+
+		$this->assertSame( 3, $deleted );
+		$this->assertCount( 5, $this->regular_revision_ids( $post_id ) );
+	}
+
+	/**
+	 * A post type with a lower limit of its own is trimmed to that limit once it's a candidate.
+	 */
+	public function test_run_cron_trims_to_lower_post_type_limit() {
+		[ $post_id ] = $this->create_post_with_revisions( 5 );
+
+		$keep_two = function () {
+			return 2;
+		};
+		add_filter( 'wp_post_revisions_to_keep', $keep_two );
+		$deleted = Revision_Cleanup::run_cron();
+		remove_filter( 'wp_post_revisions_to_keep', $keep_two );
+
+		$this->assertSame( 3, $deleted );
+		$this->assertCount( 2, $this->regular_revision_ids( $post_id ) );
+	}
+
+	/**
+	 * A limit of 0 means revisions are off, so nothing is trimmed, as in WordPress.
+	 */
+	public function test_run_cron_does_nothing_with_a_limit_of_zero() {
+		[ $post_id ] = $this->create_post_with_revisions( 8 );
+
+		$keep_none = function () {
+			return 0;
+		};
+		add_filter( 'wp_post_revisions_to_keep', $keep_none );
+		$deleted = Revision_Cleanup::run_cron();
+		remove_filter( 'wp_post_revisions_to_keep', $keep_none );
+
+		$this->assertSame( 0, $deleted );
+		$this->assertCount( 8, $this->regular_revision_ids( $post_id ) );
+	}
+
+	/**
+	 * A full batch of candidates saves its place, and the next run carries on from there.
+	 */
+	public function test_run_cron_continues_after_a_full_batch() {
+		$post_ids = [];
+		for ( $i = 0; $i <= Revision_Cleanup::MAX_CANDIDATES; $i++ ) {
+			[ $post_ids[] ] = $this->create_post_with_revisions( 4 );
+		}
+
+		$this->assertSame( Revision_Cleanup::MAX_CANDIDATES, Revision_Cleanup::run_cron() );
+		$this->assertSame( $post_ids[ Revision_Cleanup::MAX_CANDIDATES - 1 ], (int) get_option( Revision_Cleanup::CURSOR_OPTION ) );
+
+		$this->assertSame( 1, Revision_Cleanup::run_cron() );
+		$this->assertCount( 3, $this->regular_revision_ids( end( $post_ids ) ) );
+		$this->assertSame( 0, (int) get_option( Revision_Cleanup::CURSOR_OPTION ) );
+	}
+
+	/**
+	 * Revisions whose post no longer exists don't stop a run.
+	 */
+	public function test_run_cron_skips_orphaned_revisions() {
+		global $wpdb;
+		[ $orphan_parent, $orphans ] = $this->create_post_with_revisions( 5 );
+		$wpdb->delete( $wpdb->posts, [ 'ID' => $orphan_parent ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		clean_post_cache( $orphan_parent );
+		[ $post_id ] = $this->create_post_with_revisions( 5 );
+
+		$this->assertSame( 2, Revision_Cleanup::run_cron() );
+		$this->assertCount( 3, $this->regular_revision_ids( $post_id ) );
+		$this->assertNotNull( get_post( $orphans[0] ) );
 	}
 
 	/**
