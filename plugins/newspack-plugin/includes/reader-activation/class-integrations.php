@@ -285,7 +285,7 @@ class Integrations {
 		self::register( new Integrations\ESP() );
 		self::register( new Integrations\Gravity_Forms() );
 		/**
-		 * Registers Inbound Form Capture, which registers readers from forms
+		 * Registers Form Capture, which registers readers from forms
 		 * built with tools other than Gravity Forms, on sites with the flag and
 		 * on sites that already enabled it, so those keep capturing. Elsewhere
 		 * the integration is absent: no card, no capture.
@@ -314,7 +314,7 @@ class Integrations {
 			}
 		}
 
-		// A site upgrading with Inbound Form Capture keeps capturing its Gravity Forms forms.
+		// A site upgrading with Form Capture keeps capturing its Gravity Forms forms.
 		$gravity_forms = self::get_integration( Integrations\Gravity_Forms::ID );
 		if ( $gravity_forms instanceof Integrations\Gravity_Forms ) {
 			$gravity_forms->maybe_enable_on_upgrade();

@@ -40,7 +40,7 @@ Syncs contacts and metadata fields with the active Newspack Newsletters service 
 
 ### `form-capture`
 
-Inbound Form Capture. Registers readers from publisher-designated frontend forms built with any tool but Gravity Forms, such as an ActiveCampaign embed (opt-in via the `newspack-form-capture` CSS class or configured selectors). Registered while `NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED` is set or where a site already enabled it, and disabled by default. It is the first capture-only built-in — neither a sync destination nor a pull source — which makes it the working reference for two patterns:
+Form Capture. Registers readers from publisher-designated frontend forms built with any tool but Gravity Forms, such as an ActiveCampaign embed (opt-in via the `newspack-form-capture` CSS class or configured selectors). Registered while `NEWSPACK_INBOUND_FORM_CAPTURE_ENABLED` is set or where a site already enabled it, and disabled by default. It is the first capture-only built-in — neither a sync destination nor a pull source — which makes it the working reference for two patterns:
 
 - **Capability declarations over failing gates.** `supports_push()`/`supports_pull()` return `false` (no dead outbound/inbound controls, no bearing on `has_one_syncable_integration()`), while `can_sync()` succeeds — capture-only is a declared capability, not an error state.
 - **One switch for the frontend registration surface.** `supports_frontend_registration()` returns the integration's *enabled* state **and** its `get_unsupported_reason()` being null, so the page-emitted key, the endpoint acceptance, and the capture script share a single off switch — one that also closes when the site's configuration changes after enabling.

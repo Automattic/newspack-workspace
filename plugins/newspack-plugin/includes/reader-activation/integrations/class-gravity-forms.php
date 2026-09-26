@@ -10,7 +10,7 @@
  * the help docs cover; that setting applies to every placement of the form,
  * whatever each block's toggle says. There are no settings.
  *
- * Capture works as in Inbound Form Capture, which this extends, through the
+ * Capture works as in Form Capture, which this extends, through the
  * same script: Gravity Forms forms register under this integration and every
  * other form under that one, so each integration's switch covers its own
  * forms. Gravity Forms submits every form through programmatic
@@ -77,13 +77,13 @@ class Gravity_Forms extends Form_Capture {
 	}
 
 	/**
-	 * Enable this integration on a site upgrading with Inbound Form Capture
-	 * enabled and Gravity Forms active. Inbound Form Capture used to capture
+	 * Enable this integration on a site upgrading with Form Capture
+	 * enabled and Gravity Forms active. Form Capture used to capture
 	 * Gravity Forms forms, which belong to this integration now and would stop
 	 * registering readers without it. Without Gravity Forms active there were
 	 * no such forms, and a card whose required plugin is uninstalled offers no
 	 * Disable. Runs once per site, whatever it finds, so a later Disable
-	 * sticks and enabling Inbound Form Capture afterwards does not bring this
+	 * sticks and enabling Form Capture afterwards does not bring this
 	 * one along.
 	 */
 	public function maybe_enable_on_upgrade() {
@@ -195,7 +195,7 @@ class Gravity_Forms extends Form_Capture {
 	/**
 	 * The selectors the capture script matches: the marker class alone, which
 	 * the block toggle adds and a form's CSS Class Name setting can carry. The
-	 * selectors saved for Inbound Form Capture cover other tools' forms.
+	 * selectors saved for Form Capture cover other tools' forms.
 	 *
 	 * @return string[] CSS selectors.
 	 */

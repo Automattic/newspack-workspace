@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests the Inbound Form Capture integration and the capture behavior the
+ * Tests the Form Capture integration and the capture behavior the
  * Gravity Forms integration shares with it.
  *
  * @package Newspack\Tests
@@ -20,7 +20,7 @@ if ( ! class_exists( 'GFForms' ) ) {
 }
 
 /**
- * Test the Inbound Form Capture integration.
+ * Test the Form Capture integration.
  *
  * @group form-capture
  */
@@ -124,7 +124,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$this->assertSame( [], Integrations::get_integration( Form_Capture::ID )->get_required_plugins() );
 
 		$payload = Integrations::get_all_integration_settings()[ Form_Capture::ID ];
-		$this->assertSame( 'Inbound Form Capture', $payload['name'] );
+		$this->assertSame( 'Form Capture', $payload['name'] );
 		$this->assertSame( [ 'selectors' ], wp_list_pluck( $payload['settings'], 'key' ) );
 	}
 
@@ -545,13 +545,13 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	public function test_script_gets_an_entry_per_capturing_integration() {
 		wp_dequeue_script( Form_Capture::SCRIPT_HANDLE );
 		wp_deregister_script( Form_Capture::SCRIPT_HANDLE );
-		$inbound_capture = Integrations::get_integration( Form_Capture::ID );
-		$gravity_forms   = Integrations::get_integration( Gravity_Forms::ID );
-		$inbound_capture->update_settings_field_value( 'selectors', '#signup-form' );
+		$form_capture  = Integrations::get_integration( Form_Capture::ID );
+		$gravity_forms = Integrations::get_integration( Gravity_Forms::ID );
+		$form_capture->update_settings_field_value( 'selectors', '#signup-form' );
 		Integrations::enable( Form_Capture::ID );
 		Integrations::enable( Gravity_Forms::ID );
 
-		$inbound_capture->enqueue_scripts();
+		$form_capture->enqueue_scripts();
 		$gravity_forms->enqueue_scripts();
 
 		$this->assertSame(
@@ -571,7 +571,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		wp_dequeue_script( Form_Capture::SCRIPT_HANDLE );
 		wp_deregister_script( Form_Capture::SCRIPT_HANDLE );
 		Integrations::disable( Gravity_Forms::ID );
-		$inbound_capture->enqueue_scripts();
+		$form_capture->enqueue_scripts();
 		$gravity_forms->enqueue_scripts();
 		$this->assertSame( [ 'other_forms' ], array_keys( $this->get_capture_script_config() ), 'A disabled integration hands the script no forms.' );
 	}

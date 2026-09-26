@@ -20,7 +20,7 @@ window.newspackRAS = window.newspackRAS || [];
 window.newspackRAS.push( readerActivation => {
 	const config = window.newspack_form_capture || {};
 	// Each form belongs to one integration: a Gravity Forms form to the Gravity
-	// Forms integration, any other form to Inbound Form Capture. The config has
+	// Forms integration, any other form to Form Capture. The config has
 	// an entry only for an integration that captures, so a form whose
 	// integration is off stays unmatched even where the other's selectors
 	// reach it, and each integration's switch covers its own forms.

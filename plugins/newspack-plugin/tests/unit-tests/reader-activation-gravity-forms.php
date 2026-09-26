@@ -1,7 +1,7 @@
 <?php
 /**
  * Tests the Gravity Forms integration: the block toggle, its requirement, and
- * what it keeps apart from Inbound Form Capture.
+ * what it keeps apart from Form Capture.
  *
  * @package Newspack\Tests
  */
@@ -65,18 +65,18 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Gravity Forms is there on every site, while Inbound Form Capture, for
+	 * Gravity Forms is there on every site, while Form Capture, for
 	 * forms built with other tools, registers behind its flag or where the site
 	 * already enabled it, so an upgrade leaves that site capturing.
 	 *
-	 * @dataProvider data_inbound_form_capture_registration
+	 * @dataProvider data_form_capture_registration
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 *
 	 * @param bool $flag    Whether the site defines the flag.
-	 * @param bool $enabled Whether the site already enabled Inbound Form Capture.
+	 * @param bool $enabled Whether the site already enabled Form Capture.
 	 */
-	public function test_inbound_form_capture_registers_behind_its_flag_or_where_enabled( $flag, $enabled ) {
+	public function test_form_capture_registers_behind_its_flag_or_where_enabled( $flag, $enabled ) {
 		$this->assertInstanceOf( Gravity_Forms::class, Integrations::get_integration( Gravity_Forms::ID ) );
 		$this->assertNull( Integrations::get_integration( Form_Capture::ID ), 'Absent on a site with neither.' );
 
@@ -91,11 +91,11 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The two ways Inbound Form Capture registers.
+	 * The two ways Form Capture registers.
 	 *
 	 * @return array[]
 	 */
-	public function data_inbound_form_capture_registration() {
+	public function data_form_capture_registration() {
 		return [
 			'behind the flag'                   => [ true, false ],
 			'where the site already enabled it' => [ false, true ],
@@ -296,7 +296,7 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 
 	/**
 	 * Registrations from Gravity Forms are the integration's own: their method
-	 * and rate-limit bucket differ from Inbound Form Capture's, and the magic
+	 * and rate-limit bucket differ from Form Capture's, and the magic
 	 * link suppression they get follows this integration's switch alone, so
 	 * disabling one integration leaves the other's captures as they were.
 	 */
@@ -307,25 +307,25 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 		$this->assertSame( 'registration_gravity-forms', $bucket );
 		$this->assertSame( Gravity_Forms::RATE_LIMIT_DEFAULT, apply_filters( 'newspack_frontend_registration_rate_limit', 10, '203.0.113.9', $bucket ) );
 
-		$user                    = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
-		$gravity_forms_metadata  = [ 'registration_method' => Gravity_Forms::get_registration_method() ];
-		$inbound_capture_metadata = [ 'registration_method' => Form_Capture::get_registration_method() ];
+		$user                   = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
+		$gravity_forms_metadata = [ 'registration_method' => Gravity_Forms::get_registration_method() ];
+		$form_capture_metadata  = [ 'registration_method' => Form_Capture::get_registration_method() ];
 
 		Integrations::enable( Gravity_Forms::ID );
 		$this->assertFalse( apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', true, $user, $gravity_forms_metadata ) );
-		$this->assertTrue( apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', true, $user, $inbound_capture_metadata ), 'Not a Gravity Forms registration.' );
+		$this->assertTrue( apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', true, $user, $form_capture_metadata ), 'Not a Gravity Forms registration.' );
 
 		Integrations::disable( Gravity_Forms::ID );
 		$this->assertTrue( apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', true, $user, $gravity_forms_metadata ), 'Suppression stops with the integration.' );
 	}
 
 	/**
-	 * Inbound Form Capture captured Gravity Forms forms before the split, and
+	 * Form Capture captured Gravity Forms forms before the split, and
 	 * those forms belong to this integration now, so a site upgrading with it
 	 * enabled and Gravity Forms active gets this integration enabled. Once: a
 	 * later Disable sticks.
 	 */
-	public function test_upgrade_enables_it_where_inbound_form_capture_captured_its_forms() {
+	public function test_upgrade_enables_it_where_form_capture_captured_its_forms() {
 		delete_option( Gravity_Forms::UPGRADE_OPTION );
 		update_option( Integrations::OPTION_NAME, [ Form_Capture::ID ] );
 
@@ -340,7 +340,7 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 	/**
 	 * The upgrade leaves every other site alone: without Gravity Forms active
 	 * there were no Gravity Forms forms to capture, and a site that enables
-	 * Inbound Form Capture after the upgrade picks its integrations itself.
+	 * Form Capture after the upgrade picks its integrations itself.
 	 */
 	public function test_upgrade_leaves_other_sites_alone() {
 		$without_gravity_forms = new class() extends Gravity_Forms {
@@ -362,10 +362,10 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 		delete_option( Gravity_Forms::UPGRADE_OPTION );
 		update_option( Integrations::OPTION_NAME, [] );
 		$gravity_forms->maybe_enable_on_upgrade();
-		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Not without Inbound Form Capture.' );
+		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Not without Form Capture.' );
 
 		update_option( Integrations::OPTION_NAME, [ Form_Capture::ID ] );
 		$gravity_forms->maybe_enable_on_upgrade();
-		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Not for Inbound Form Capture enabled after the upgrade.' );
+		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Not for Form Capture enabled after the upgrade.' );
 	}
 }

@@ -1,6 +1,6 @@
 <?php
 /**
- * Inbound Form Capture integration.
+ * Form Capture integration.
  *
  * Captures email submissions from publisher-designated frontend forms built
  * with any tool but Gravity Forms (an ActiveCampaign embed, a WPForms form)
@@ -35,7 +35,7 @@ use Newspack\Recaptcha;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Inbound Form Capture integration class.
+ * Form Capture integration class.
  */
 class Form_Capture extends Integration {
 	/**
@@ -81,7 +81,7 @@ class Form_Capture extends Integration {
 	public function __construct( $name = null, $description = null ) {
 		parent::__construct(
 			static::ID,
-			$name ?? __( 'Inbound Form Capture', 'newspack-plugin' ),
+			$name ?? __( 'Form Capture', 'newspack-plugin' ),
 			$description ?? __( 'Register readers from email signup forms built with any form tool other than Gravity Forms.', 'newspack-plugin' )
 		);
 	}

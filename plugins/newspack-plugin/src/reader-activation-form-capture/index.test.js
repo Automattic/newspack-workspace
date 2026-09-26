@@ -318,7 +318,7 @@ describe( 'form-capture client', () => {
 		 * Each form belongs to one integration, so a reader is registered once
 		 * and each integration's switch covers its own forms: Gravity Forms
 		 * forms register under the Gravity Forms integration, every other form
-		 * under Inbound Form Capture.
+		 * under Form Capture.
 		 */
 		it( 'registers each form under the integration that owns it', async () => {
 			const { submitViaGform } = installFakeGform();
@@ -330,7 +330,7 @@ describe( 'form-capture client', () => {
 			expect( ras.register ).toHaveBeenNthCalledWith( 2, 'reader@example.com', 'form-capture', expect.any( Object ), expect.any( Object ) );
 		} );
 
-		it( 'leaves Gravity Forms forms alone while only Inbound Form Capture captures, even where its selectors reach them', async () => {
+		it( 'leaves Gravity Forms forms alone while only Form Capture captures, even where its selectors reach them', async () => {
 			const { submitViaGform } = installFakeGform();
 			const ras = loadCaptureClient(
 				`${ GF_FORM }${ FORM }`,
