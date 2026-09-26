@@ -65,6 +65,11 @@ class Form_Capture extends Integration {
 	const SYNC_CONTEXT = 'Form Capture registration (existing reader)';
 
 	/**
+	 * Context of the contact sync a capture of a new reader triggers.
+	 */
+	const NEW_READER_SYNC_CONTEXT = 'Form Capture registration';
+
+	/**
 	 * Default per-IP hourly limit for this integration's rate-limit bucket.
 	 * Sized for form traffic rather than explicit signup forms: capture fires
 	 * on every opted-in submission across the site, and on hosts where
@@ -94,6 +99,7 @@ class Form_Capture extends Integration {
 	public function register_handlers() {
 		\add_filter( 'newspack_reader_activation_send_magic_link_on_reregistration', [ $this, 'filter_send_magic_link' ], 10, 3 );
 		\add_action( 'newspack_registered_reader', [ $this, 'handle_registered_reader' ], 10, 5 );
+		\add_filter( 'newspack_reader_registered_sync_context', [ $this, 'filter_new_reader_sync_context' ], 10, 2 );
 		\add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ], 20 );
 		// Priority 5 so a publisher's own filter at default priority wins.
 		\add_filter( 'newspack_frontend_registration_rate_limit', [ $this, 'filter_rate_limit' ], 5, 3 );
@@ -453,5 +459,23 @@ class Form_Capture extends Integration {
 		if ( false === \as_next_scheduled_action( $hook, $args, $this->get_action_group() ) ) {
 			\as_schedule_single_action( time() + MINUTE_IN_SECONDS, $hook, $args, $this->get_action_group() );
 		}
+	}
+
+	/**
+	 * Name this integration in the contact sync a new reader's capture
+	 * triggers, so Sync Activity tells captures apart from other sign-ups. It
+	 * goes by the registration method alone: the capture happened even if the
+	 * integration is off by the time the sync runs.
+	 *
+	 * @param string $context The context of the sync.
+	 * @param array  $data    The reader_registered event data.
+	 *
+	 * @return string The context of the sync.
+	 */
+	public function filter_new_reader_sync_context( $context, $data ) {
+		if ( ( $data['metadata']['registration_method'] ?? '' ) === static::get_registration_method() ) {
+			return static::NEW_READER_SYNC_CONTEXT;
+		}
+		return $context;
 	}
 }
