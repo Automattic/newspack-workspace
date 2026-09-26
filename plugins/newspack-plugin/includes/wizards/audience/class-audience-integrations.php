@@ -36,20 +36,8 @@ class Audience_Integrations extends Wizard {
 	 * Constructor.
 	 */
 	public function __construct() {
-		if ( ! self::is_enabled() ) {
-			return;
-		}
 		parent::__construct();
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
-	}
-
-	/**
-	 * Check if the integrations settings feature is enabled.
-	 *
-	 * @return bool
-	 */
-	public static function is_enabled() {
-		return defined( 'NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED' ) && NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED;
 	}
 
 	/**
@@ -87,9 +75,7 @@ class Audience_Integrations extends Wizard {
 
 		wp_enqueue_script( 'newspack-wizards' );
 
-		$localized_data = [
-			'integrations_settings_enabled' => self::is_enabled(),
-		];
+		$localized_data = [];
 
 		if ( class_exists( 'Newspack_Newsletters' ) ) {
 			$localized_data['esp_provider'] = \Newspack_Newsletters::service_provider();
