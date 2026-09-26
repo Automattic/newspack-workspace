@@ -25,6 +25,7 @@ namespace Newspack\Reader_Activation\Integrations;
 use Newspack\Newspack;
 use Newspack\Plugin_Manager;
 use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Integrations;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -61,6 +62,11 @@ class Gravity_Forms extends Form_Capture {
 	const BLOCK_ATTRIBUTE = 'newspackFormCapture';
 
 	/**
+	 * Option set once maybe_enable_on_upgrade() has run on a site.
+	 */
+	const UPGRADE_OPTION = 'newspack_reader_activation_gravity_forms_upgraded';
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -68,6 +74,26 @@ class Gravity_Forms extends Form_Capture {
 			__( 'Gravity Forms', 'newspack-plugin' ),
 			__( 'Register readers from Gravity Forms submissions.', 'newspack-plugin' )
 		);
+	}
+
+	/**
+	 * Enable this integration on a site upgrading with Inbound Form Capture
+	 * enabled and Gravity Forms active. Inbound Form Capture used to capture
+	 * Gravity Forms forms, which belong to this integration now and would stop
+	 * registering readers without it. Without Gravity Forms active there were
+	 * no such forms, and a card whose required plugin is uninstalled offers no
+	 * Disable. Runs once per site, whatever it finds, so a later Disable
+	 * sticks and enabling Inbound Form Capture afterwards does not bring this
+	 * one along.
+	 */
+	public function maybe_enable_on_upgrade() {
+		if ( \get_option( self::UPGRADE_OPTION ) ) {
+			return;
+		}
+		\update_option( self::UPGRADE_OPTION, true );
+		if ( Integrations::is_enabled( Form_Capture::ID ) && $this->is_gravity_forms_active() ) {
+			Integrations::enable( self::ID );
+		}
 	}
 
 	/**

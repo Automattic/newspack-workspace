@@ -318,4 +318,54 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 		Integrations::disable( Gravity_Forms::ID );
 		$this->assertTrue( apply_filters( 'newspack_reader_activation_send_magic_link_on_reregistration', true, $user, $gravity_forms_metadata ), 'Suppression stops with the integration.' );
 	}
+
+	/**
+	 * Inbound Form Capture captured Gravity Forms forms before the split, and
+	 * those forms belong to this integration now, so a site upgrading with it
+	 * enabled and Gravity Forms active gets this integration enabled. Once: a
+	 * later Disable sticks.
+	 */
+	public function test_upgrade_enables_it_where_inbound_form_capture_captured_its_forms() {
+		delete_option( Gravity_Forms::UPGRADE_OPTION );
+		update_option( Integrations::OPTION_NAME, [ Form_Capture::ID ] );
+
+		Integrations::register_integrations();
+		$this->assertTrue( Integrations::is_enabled( Gravity_Forms::ID ) );
+
+		Integrations::disable( Gravity_Forms::ID );
+		Integrations::register_integrations();
+		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'A later Disable sticks.' );
+	}
+
+	/**
+	 * The upgrade leaves every other site alone: without Gravity Forms active
+	 * there were no Gravity Forms forms to capture, and a site that enables
+	 * Inbound Form Capture after the upgrade picks its integrations itself.
+	 */
+	public function test_upgrade_leaves_other_sites_alone() {
+		$without_gravity_forms = new class() extends Gravity_Forms {
+			/**
+			 * Stand in for a site without Gravity Forms: the suite loads its stub class.
+			 *
+			 * @return bool
+			 */
+			protected function is_gravity_forms_active() {
+				return false;
+			}
+		};
+		delete_option( Gravity_Forms::UPGRADE_OPTION );
+		update_option( Integrations::OPTION_NAME, [ Form_Capture::ID ] );
+		$without_gravity_forms->maybe_enable_on_upgrade();
+		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Not without Gravity Forms.' );
+
+		$gravity_forms = Integrations::get_integration( Gravity_Forms::ID );
+		delete_option( Gravity_Forms::UPGRADE_OPTION );
+		update_option( Integrations::OPTION_NAME, [] );
+		$gravity_forms->maybe_enable_on_upgrade();
+		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Not without Inbound Form Capture.' );
+
+		update_option( Integrations::OPTION_NAME, [ Form_Capture::ID ] );
+		$gravity_forms->maybe_enable_on_upgrade();
+		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Not for Inbound Form Capture enabled after the upgrade.' );
+	}
 }

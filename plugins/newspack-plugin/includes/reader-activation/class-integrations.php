@@ -314,6 +314,12 @@ class Integrations {
 			}
 		}
 
+		// A site upgrading with Inbound Form Capture keeps capturing its Gravity Forms forms.
+		$gravity_forms = self::get_integration( Integrations\Gravity_Forms::ID );
+		if ( $gravity_forms instanceof Integrations\Gravity_Forms ) {
+			$gravity_forms->maybe_enable_on_upgrade();
+		}
+
 		// Let each integration register its data event handlers.
 		foreach ( self::$integrations as $integration ) {
 			$integration->register_handlers();

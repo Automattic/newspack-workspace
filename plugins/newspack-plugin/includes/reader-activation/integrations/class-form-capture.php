@@ -122,7 +122,7 @@ class Form_Capture extends Integration {
 				'key'         => 'selectors',
 				'type'        => 'textarea',
 				'label'       => __( 'Form selectors', 'newspack-plugin' ),
-				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class. Gravity Forms forms are captured by the Gravity Forms integration instead. Bare tag selectors (e.g. "form") are ignored — they would opt in every form on the site. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission, so submissions its spam checks would discard still create readers and count toward your ESP contacts. Captures are rate-limited per visitor IP (100/hour by default).', 'newspack-plugin' ),
+				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class. Gravity Forms forms are captured only through the Gravity Forms integration. Bare tag selectors (e.g. "form") are ignored — they would opt in every form on the site. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission, so submissions its spam checks would discard still create readers and count toward your ESP contacts. Captures are rate-limited per visitor IP (100/hour by default).', 'newspack-plugin' ),
 				'default'     => '',
 			],
 		];
