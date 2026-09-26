@@ -431,7 +431,13 @@ case $1 in
     test-php)
         require_target_folder
         command="/var/scripts/test-php.sh $target_folder ${@:2}"
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
+        # Coding agents get a compact summary instead of full PHPUnit output (see
+        # bin/test-php.sh). NEWSPACK_TEST_OUTPUT=full or =compact overrides this.
+        test_output=${NEWSPACK_TEST_OUTPUT:-}
+        if [[ -z "$test_output" && ( -n "${CLAUDECODE:-}" || -n "${AI_AGENT:-}" || -n "${CODEX_SANDBOX:-}" ) ]]; then
+            test_output=compact
+        fi
+        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" $TARGET_CONTAINER sh -c "$command"
         ;;
     test-js)
         if [[ -n "$2" ]]; then
