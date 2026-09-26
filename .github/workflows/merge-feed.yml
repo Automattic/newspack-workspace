@@ -1,0 +1,39 @@
+name: Merge feed
+
+# Posts a one-sentence, plain-English summary of every PR merged to main to
+# Slack, so the wider team can follow what lands without reading commit
+# subjects or changelogs.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify:
+    name: Post merges to Slack
+    if: github.repository == 'Automattic/newspack-workspace'
+    runs-on: ubuntu-latest
+    # Holds the Anthropic key. The environment only admits main, so a workflow
+    # pushed on any other branch cannot read it.
+    environment: merge-feed
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts/merge-feed
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: .github/scripts/merge-feed
+      - name: Post to Slack
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Reused from the release and CI-failure notifiers (a8c workspace).
+          SLACK_AUTH_TOKEN: ${{ secrets.SLACK_AUTH_TOKEN }}
+          SLACK_MERGE_FEED_CHANNEL_ID: ${{ secrets.SLACK_MERGE_FEED_CHANNEL_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/merge-feed/notify-merge.mjs

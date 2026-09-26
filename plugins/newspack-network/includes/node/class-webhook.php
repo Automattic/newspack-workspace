@@ -160,9 +160,9 @@ class Webhook {
 	 * ## OPTIONS
 	 *
 	 * [--per-page=<number>]
-	 * : How many requests to process.
+	 * : How many requests to process, oldest first. Run the command again to process the next batch.
 	 * ---
-	 * default: -1
+	 * default: 1000
 	 * ---
 	 *
 	 * [--status=<string>]
@@ -187,15 +187,16 @@ class Webhook {
 	 * @when after_wp_load
 	 */
 	public function cli_process_webhooks( array $args, array $assoc_args ): void {
-		$per_page = (int) ( $assoc_args['per-page'] ?? -1 );
+		$per_page = (int) ( $assoc_args['per-page'] ?? 1000 );
 		$dry_run = isset( $assoc_args['dry-run'] );
 		$status = $assoc_args['status'] ?? 'pending';
 
 		/**
-		 * Get requests by 'status'
+		 * Get requests by 'status'. The query filters by status too; the
+		 * callback keeps the result correct on older versions of Newspack.
 		 */
 		$requests = array_filter(
-			Newspack_Webhooks::get_endpoint_requests( static::ENDPOINT_ID, $per_page ),
+			Newspack_Webhooks::get_endpoint_requests( static::ENDPOINT_ID, $per_page, $status ),
 			fn ( $r ) => $r['status'] === $status
 		);
 		usort(

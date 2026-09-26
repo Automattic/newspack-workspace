@@ -88,6 +88,7 @@ class Integrations {
 		require_once __DIR__ . '/integrations/class-contact-pull.php';
 		require_once __DIR__ . '/integrations/class-contact-cron.php';
 		require_once __DIR__ . '/integrations/class-form-capture.php';
+		require_once __DIR__ . '/integrations/class-push-log.php';
 
 		add_action( 'init', [ __CLASS__, 'register_integrations' ], 5 );
 		add_action( 'init', [ __CLASS__, 'register_my_account_endpoints' ], 6 );
@@ -107,6 +108,7 @@ class Integrations {
 		add_filter( 'newspack_action_scheduler_group_labels', [ __CLASS__, 'register_group_labels' ] );
 
 		Integrations\Contact_Cron::init();
+		Integrations\Push_Log::init();
 	}
 
 	/**
@@ -498,6 +500,7 @@ class Integrations {
 				'setup_url'                => $integration->get_setup_url(),
 				'settings'                 => $integration->get_settings_config(),
 				'required_plugins'         => $integration->get_required_plugins(),
+				'guide'                    => $integration->get_guide(),
 			];
 		}
 

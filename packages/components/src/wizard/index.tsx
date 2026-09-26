@@ -32,6 +32,7 @@ import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
 import type { WizardHeaderAction, WizardHeaderData, WizardNotice, WizardsStoreSelectors } from './store';
 import type { SectionHeaderProps } from '../section-header';
 import type { BreadcrumbItem } from '../breadcrumbs';
+import type { TabbedNavigationItem } from '../tabbed-navigation';
 import WizardSnackbar from './components/WizardSnackbar';
 import WizardError from './components/WizardError';
 
@@ -62,7 +63,7 @@ const resolveIcon = ( icon?: string | JSX.Element | null ) => {
 	return icon;
 };
 
-const { HashRouter, Redirect, Route, Switch, useLocation } = Router;
+const { HashRouter, Redirect, Route, Switch, matchPath, useLocation } = Router;
 
 /**
  * Interpolate a translated message's named tags, falling back to plain text.
@@ -127,6 +128,8 @@ export interface WizardSection {
 	breadcrumbs?: BreadcrumbItem[];
 	/** Sub-header text replacing the wizard's while the section is active. */
 	subHeaderText?: string;
+	/** Returns the tab items shown in place of the wizard's while the section's route matches. */
+	tabbedNavigation?: ( params: Record< string, string | undefined > ) => TabbedNavigationItem[];
 	/** The section header's title. */
 	title?: SectionHeaderProps[ 'title' ];
 	/** The section header's description. */
@@ -196,10 +199,27 @@ const WizardHeaderRegion = ( {
 	sectionName,
 	subTitle,
 	actions,
-	tabbedNavigation,
+	tabbedNavigation: wizardTabbedNavigation,
 	children,
 }: WizardHeaderRegionProps ) => {
 	const { pathname } = useLocation();
+
+	// A section can carry its own tabs, built from its route params, in place of
+	// the wizard's. The first match wins, as it does in the wizard's `<Switch>`.
+	let tabbedNavigation = wizardTabbedNavigation;
+	for ( const section of sections ) {
+		const match = matchPath( pathname, { path: section.path, exact: section.exact ?? false } );
+		if ( match ) {
+			if ( typeof section.tabbedNavigation === 'function' ) {
+				tabbedNavigation = (
+					<TabbedNavigation items={ section.tabbedNavigation( match.params ) }>
+						<WizardError />
+					</TabbedNavigation>
+				);
+			}
+			break;
+		}
+	}
 
 	if ( hideHeader ) {
 		// Without the Page shell the tabs still own the content: it renders
