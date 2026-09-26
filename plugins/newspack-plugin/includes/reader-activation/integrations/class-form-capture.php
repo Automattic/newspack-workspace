@@ -99,10 +99,10 @@ class Form_Capture extends Integration {
 	public function register_handlers() {
 		\add_filter( 'newspack_reader_activation_send_magic_link_on_reregistration', [ $this, 'filter_send_magic_link' ], 10, 3 );
 		\add_action( 'newspack_registered_reader', [ $this, 'handle_registered_reader' ], 10, 5 );
-		\add_filter( 'newspack_reader_registered_sync_context', [ $this, 'filter_new_reader_sync_context' ], 10, 2 );
 		\add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ], 20 );
-		// Priority 5 so a publisher's own filter at default priority wins.
+		// Priority 5 so a publisher's own filters at default priority win.
 		\add_filter( 'newspack_frontend_registration_rate_limit', [ $this, 'filter_rate_limit' ], 5, 3 );
+		\add_filter( 'newspack_reader_registered_sync_context', [ $this, 'filter_new_reader_sync_context' ], 5, 2 );
 	}
 
 	/**
@@ -464,8 +464,9 @@ class Form_Capture extends Integration {
 	/**
 	 * Name this integration in the contact sync a new reader's capture
 	 * triggers, so Sync Activity tells captures apart from other sign-ups. It
-	 * goes by the registration method alone: the capture happened even if the
-	 * integration is off by the time the sync runs.
+	 * goes by the registration method alone, not the enabled state: the name
+	 * records where the reader came from. Hooked at priority 5 so a publisher's
+	 * own filter at default priority can still rename it.
 	 *
 	 * @param string $context The context of the sync.
 	 * @param array  $data    The reader_registered event data.
