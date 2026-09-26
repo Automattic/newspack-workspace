@@ -1,3 +1,10 @@
+## newspack [6.52.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.8...newspack@6.52.9) (2026-09-26)
+
+
+### Bug Fixes
+
+* remove email_hash from ga params ([6163541](https://github.com/Automattic/newspack-workspace/commit/61635411a8da066e76232eed8f277cd636741e36))
+
 ## newspack [6.52.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.7...newspack@6.52.8) (2026-09-24)
 
 
