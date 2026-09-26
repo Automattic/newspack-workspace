@@ -529,9 +529,10 @@ The framework schedules an hourly cron hook `newspack_integration_health_check` 
 1. `can_sync( true )` — settings validation as a `WP_Error`.
 2. `test_connection()` — live API check.
 
-`Integration::health_check()` is `final` and returns either `true` or a `WP_Error` aggregating failures. When a failure is detected, the framework logs the error under `NEWSPACK-INTEGRATION` and fires:
+`Integration::health_check()` is `final` and returns either `true` or a `WP_Error` aggregating failures. Each run fires one of two actions per integration, then one for the run:
 
 ```php
+// On failure, after logging the error under `NEWSPACK-INTEGRATION`:
 do_action(
     'newspack_integration_health_check_failed',
     [
@@ -540,9 +541,42 @@ do_action(
         'error'            => $result, // WP_Error
     ]
 );
+
+// On success:
+do_action(
+    'newspack_integration_health_check_passed',
+    [
+        'integration_id'   => $integration->get_id(),
+        'integration_name' => $integration->get_name(),
+    ]
+);
+
+// After the run, with the IDs of the integrations it checked:
+do_action( 'newspack_integration_health_checks_completed', [ 'esp' ] );
 ```
 
-This hook is consumed by Newspack Manager to surface alerts. To disable the schedule on a specific site, add `'newspack_integration_health_check'` to the `NEWSPACK_CRON_DISABLE` constant array.
+`Newspack\Alert_Manager` consumes all three and keeps one health record per integration in the `newspack_integration_health_state` option. Slack is paged once, on the `Alert_Manager::HEALTH_BROKEN_THRESHOLD`-th consecutive failure, and every other failure reaches the log at warning severity; a gap longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP` between failures restarts a count that has not paged yet. That transition, the pass that ends it, and a run that stops checking a broken integration (disabled, or no longer set up) fire:
+
+```php
+do_action(
+    'newspack_integration_health_changed',
+    [
+        'integration_id'   => 'esp',
+        'integration_name' => 'Mailchimp',
+        'state'            => 'broken', // or 'recovered', or 'disconnected' when a run no longer checks it
+        'error_class'      => 'publisher', // the ESP account is the problem; 'other' for outages and unknowns
+        'error'            => '403: API Access has been disabled for this account.',
+        'first_failed_at'  => 1790000000,
+        'failures'         => 3,
+    ]
+);
+```
+
+One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself. Staging hosts (`*.newspackstaging.com`) fire it too; only their alerts are capped at Watch, so a consumer that should skip staging has to check the host itself.
+
+While an integration is broken, its contact-sync failures don't page either: retry exhaustion reaches the log at warning severity, and its failures stay out of the failure log the pattern alerts read.
+
+To disable the schedule on a specific site, add `'newspack_integration_health_check'` to the `NEWSPACK_CRON_DISABLE` constant array. Contact sync then pages for a disabled or unpaid ESP account itself, at most once an hour per integration, as it also does when the check's cron has stopped running for longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP`.
 
 ---
 

@@ -6,6 +6,9 @@
  * Listens for data event handler and integration sync retry exhaustion and
  * fires a unified alert action for each.
  *
+ * Keeps one health record per integration so a broken integration pages
+ * once, on the transition, and reports its recovery.
+ *
  * Also scans the failure log for recurring patterns and fires an alert when a
  * threshold is exceeded within the configured time window.
  *
@@ -32,27 +35,52 @@ class Alert_Manager {
 	const FAILURE_LOG_OPTION = 'newspack_alert_failure_log';
 
 	/**
-	 * Window during which a repeating health-check failure for the same
-	 * integration + error-code signature emits at most one Slack alert.
+	 * Option holding one health record per integration ID.
 	 *
-	 * Private because no external caller needs to read it; keeping the
-	 * surface minimal lets the value evolve without breaking consumers.
+	 * An option rather than a transient: the previous dedup lived in
+	 * transients, and a site's object cache evicting one re-paged the same
+	 * failure hours later. A record exists only while an integration is
+	 * failing or broken, so a healthy integration's hourly pass costs no
+	 * write.
 	 */
-	private const HEALTH_CHECK_DEDUP_INTERVAL = DAY_IN_SECONDS;
+	const HEALTH_STATE_OPTION = 'newspack_integration_health_state';
 
 	/**
-	 * Window during which repeat permanent config-level sync failures for the
-	 * same integration emit at most one Slack alert.
-	 *
-	 * A config failure (disabled/unpaid ESP account) is site-level rather than
-	 * per-contact, and — unlike the retry-exhausted path, which is naturally
-	 * rate-limited by the retry backoff — the permanent-failure path fires on
-	 * the first failure of every contact, so an account-wide outage on a busy
-	 * site would otherwise page once per contact for a single problem.
-	 *
-	 * Private for the same reason as HEALTH_CHECK_DEDUP_INTERVAL.
+	 * Consecutive failed hourly checks before an integration counts as
+	 * broken and pages once. Three outlasts the provider blips seen in the
+	 * alerts channel, which cleared within a single check.
 	 */
-	private const PERMANENT_FAILURE_DEDUP_INTERVAL = HOUR_IN_SECONDS;
+	const HEALTH_BROKEN_THRESHOLD = 3;
+
+	/**
+	 * Longest gap between two failed checks that still extends a failing
+	 * streak. The check runs hourly, so this allows for one skipped run. A
+	 * longer silence (a cron stall, or checks switched off for a while) says
+	 * nothing about the hours in between, and a streak carried across it
+	 * would page on the next single failure, dated from before the gap.
+	 */
+	const HEALTH_STREAK_MAX_GAP = 3 * HOUR_IN_SECONDS;
+
+	/**
+	 * Substring signatures (lowercase) that mark a health-check failure as
+	 * publisher-side: the ESP account is disabled, unpaid, or holding a dead
+	 * key, so the fix belongs to the publisher and retrying on our side
+	 * changes nothing. Matched against the joined, lowercased WP_Error
+	 * messages, as Contact_Sync::ERROR_SIGNATURES does for push errors. A
+	 * bare 401, 402 or 403 status marks it publisher-side too, whether the
+	 * provider printed it in the message ("401: …" or "status 401") or kept
+	 * it as the error code.
+	 *
+	 * Anything unmatched is 'other': a provider outage, a timeout, or an
+	 * error not seen before, which stays an engineering signal.
+	 */
+	private const PUBLISHER_ERROR_SIGNATURES = [
+		'api access has been disabled',
+		'payment required',
+		'api key',
+		'account has been deactivated',
+		'user disabled',
+	];
 
 	/**
 	 * Default pattern rules.
@@ -120,6 +148,8 @@ class Alert_Manager {
 		add_action( 'newspack_sync_permanent_failure', [ __CLASS__, 'handle_sync_permanent_failure' ] );
 		add_action( 'newspack_data_event_retry_exhausted', [ __CLASS__, 'handle_data_event_retry_exhausted' ] );
 		add_action( 'newspack_integration_health_check_failed', [ __CLASS__, 'handle_health_check_failed' ] );
+		add_action( 'newspack_integration_health_check_passed', [ __CLASS__, 'handle_health_check_passed' ] );
+		add_action( 'newspack_integration_health_checks_completed', [ __CLASS__, 'prune_health_state' ] );
 		add_action( 'newspack_alert', [ __CLASS__, 'forward_alert_to_log' ] );
 		add_action( self::PATTERN_SCAN_HOOK, [ __CLASS__, 'scan_failure_patterns' ] );
 		add_action( 'init', [ __CLASS__, 'schedule_pattern_scan' ] );
@@ -133,6 +163,7 @@ class Alert_Manager {
 	 *     (Alert — Slack)
 	 *   - anything else (incl. 'warning', unknown, or missing severity) →
 	 *     type 'debug', log_level 2 (Watch — logstash only)
+	 *   - a Newspack staging host (`*.newspackstaging.com`) → always Watch
 	 *
 	 * Only known error severities escalate to Slack so an unanticipated
 	 * alert shape (e.g. a third-party `newspack_alert` with no severity)
@@ -160,6 +191,13 @@ class Alert_Manager {
 
 		$severity = is_scalar( $alert['severity'] ?? null ) ? (string) $alert['severity'] : '';
 		$is_error = in_array( $severity, [ 'error', 'critical' ], true );
+
+		// Staging sites report to the same on-call channel as production,
+		// and a broken sandbox is never an incident. Watch keeps the entry
+		// in the log.
+		if ( $is_error && self::is_staging_site() ) {
+			$is_error = false;
+		}
 
 		$params = [
 			'type'      => $is_error ? 'error' : 'debug',
@@ -206,6 +244,16 @@ class Alert_Manager {
 	}
 
 	/**
+	 * Whether this site is a Newspack staging site, judged by its host.
+	 *
+	 * @return bool
+	 */
+	private static function is_staging_site() {
+		$host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+		return str_ends_with( $host, '.newspackstaging.com' );
+	}
+
+	/**
 	 * Schedule the recurring pattern scan via WP-Cron.
 	 */
 	public static function schedule_pattern_scan() {
@@ -244,6 +292,11 @@ class Alert_Manager {
 		if ( 'transient' !== ( $payload['error_class'] ?? 'transient' ) ) {
 			return;
 		}
+		// A broken integration's failures share its outage's cause, which has
+		// already paged once; logged here, they would page it again every hour.
+		if ( self::is_integration_broken( $payload['integration_id'] ?? '' ) ) {
+			return;
+		}
 
 		$log = get_option( self::FAILURE_LOG_OPTION, [] );
 
@@ -271,6 +324,10 @@ class Alert_Manager {
 
 	/**
 	 * Handle sync retry exhaustion.
+	 *
+	 * While the integration's health record is broken, the alert reaches the
+	 * log only: the outage has already paged once, and every contact whose
+	 * retries run out during it would page again for the same cause.
 	 *
 	 * @param array $payload Alert data from Contact_Sync.
 	 */
@@ -302,7 +359,7 @@ class Alert_Manager {
 			'newspack_alert',
 			[
 				'type'      => 'sync_retry_exhausted',
-				'severity'  => 'error',
+				'severity'  => self::is_integration_broken( $payload['integration_id'] ?? '' ) ? 'warning' : 'error',
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),
@@ -313,17 +370,19 @@ class Alert_Manager {
 	/**
 	 * Handle a permanent (non-retryable) contact-sync failure.
 	 *
-	 * Severity derives from the failure class carried in the payload:
+	 * Both classes forward at 'warning' severity, which reaches the log but
+	 * not Slack, apart from the fallback described for `permanent_config`:
 	 *
-	 * - `permanent_config` (disabled/unpaid ESP account — actionable and
-	 *   site-level): 'error' severity, routed to Slack by
-	 *   forward_alert_to_log(). Deduped per integration for
-	 *   PERMANENT_FAILURE_DEDUP_INTERVAL, since per-contact repeats of a
-	 *   site-level condition add no signal.
+	 * - `permanent_config` (disabled or unpaid ESP account) is site-level.
+	 *   The hourly health check observes the same account state within the
+	 *   hour and owns the escalation through handle_health_check_failed(),
+	 *   so a per-contact repeat here would only duplicate it. Where the check
+	 *   isn't running, because it is switched off or its cron has stalled,
+	 *   this path is the only one that sees the account state, so it pages
+	 *   instead, at most once an hour per integration.
 	 * - `permanent_contact` (fired by the deletion path only, where a skipped
 	 *   retry has no natural re-trigger and the dropped deletion signal is
-	 *   GDPR-relevant): 'warning' severity — surfaced in Watch without
-	 *   paging. Not deduped: each alert concerns a distinct contact.
+	 *   GDPR-relevant) concerns one contact each and stays observable.
 	 *
 	 * Contact_Sync skips permanent contact-data failures silently on the
 	 * regular sync path (the contact re-syncs on the reader's next event), so
@@ -335,35 +394,24 @@ class Alert_Manager {
 		$integration_id = $payload['integration_id'] ?? 'unknown';
 		$is_config      = 'permanent_contact' !== ( $payload['error_class'] ?? 'permanent_config' );
 
-		if ( $is_config ) {
-			$dedup_key = 'newspack_alert_pf_' . md5( (string) $integration_id );
-			if ( get_transient( $dedup_key ) ) {
-				return;
-			}
-			// Set the dedup transient BEFORE dispatch so a `newspack_alert`
-			// handler that throws cannot defeat dedup by leaving the key unset
-			// (see handle_health_check_failed for the same rationale).
-			set_transient( $dedup_key, time(), self::PERMANENT_FAILURE_DEDUP_INTERVAL );
-
-			$message = sprintf(
+		$message = $is_config
+			? sprintf(
 				'Permanent config sync failure for integration "%s" (no retry). Last error: %s',
 				$integration_id,
 				$payload['reason'] ?? 'unknown'
-			);
-		} else {
-			$message = sprintf(
+			)
+			: sprintf(
 				'Permanent contact-data failure for integration "%s" account-deletion sync; the deletion signal was not propagated (no retry). Last error: %s',
 				$integration_id,
 				$payload['reason'] ?? 'unknown'
 			);
-		}
 
 		/** This action is documented in includes/class-alert-manager.php */
 		do_action(
 			'newspack_alert',
 			[
 				'type'      => 'sync_permanent_failure',
-				'severity'  => $is_config ? 'error' : 'warning',
+				'severity'  => $is_config && self::claim_config_failure_page( $integration_id ) ? 'error' : 'warning',
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),
@@ -554,55 +602,99 @@ class Alert_Manager {
 	}
 
 	/**
-	 * Handle integration health check failure.
+	 * Handle an integration health check failure.
 	 *
-	 * Deduplicates by integration + error-code + error-message signature
-	 * for HEALTH_CHECK_DEDUP_INTERVAL so an hourly cron does not repeat
-	 * the same Slack alert all day. A new error code OR a changed message
-	 * on the same integration (e.g. "list missing" escalating to "auth
-	 * fully revoked") falls outside the key and alerts immediately.
+	 * Keeps a per-integration record and pages only on the transition to
+	 * broken, the HEALTH_BROKEN_THRESHOLD-th consecutive failure. Every other
+	 * failure is forwarded at warning severity so the log keeps the hourly
+	 * history; those after the transition add nothing to Slack, since the
+	 * condition is already reported and the record carries it until a
+	 * passing check, or a run that no longer checks the integration, clears
+	 * it.
 	 *
-	 * Known boundaries of the dedup contract:
-	 * - Message text is part of the key, so locale shifts between cron
-	 *   passes (e.g. `switch_to_locale()` in a multilingual context) can
-	 *   produce a different key for the same underlying error and
-	 *   re-alert. Newspack ESP error messages are static per code today,
-	 *   so this is theoretical; revisit if dynamic content lands in
-	 *   error strings.
-	 * - The dedup key is stored as a transient, so on hosts backed by a
-	 *   persistent object cache (memcached) the entry can be evicted
-	 *   under LRU pressure before HEALTH_CHECK_DEDUP_INTERVAL elapses.
-	 *   The failure mode is re-alerting on the next hourly cron — the
-	 *   alternative (writing to the options table on every cron tick)
-	 *   has its own cost; transient + accepted re-alert risk is the
-	 *   intentional trade-off here.
+	 * The record is written before dispatch so a `newspack_alert` handler
+	 * that throws cannot leave the transition unrecorded and page again on
+	 * the next hourly cron.
 	 *
 	 * @param array $payload Health check failure data.
 	 */
 	public static function handle_health_check_failed( $payload ) {
-		$error          = $payload['error'] ?? null;
-		$integration_id = $payload['integration_id'] ?? 'unknown';
-		$error_codes    = is_wp_error( $error ) ? $error->get_error_codes() : [];
-		if ( empty( $error_codes ) ) {
-			$error_codes = [ 'unknown' ];
-		}
-		$error_messages = is_wp_error( $error ) ? $error->get_error_messages() : [];
+		$integration_id   = (string) ( $payload['integration_id'] ?? 'unknown' );
+		$integration_name = (string) ( $payload['integration_name'] ?? 'unknown' );
+		$error            = $payload['error'] ?? null;
+		$message          = is_wp_error( $error ) ? implode( '; ', $error->get_error_messages() ) : 'unknown error';
 
-		$dedup_key = self::get_health_check_dedup_key( $integration_id, $error_codes, $error_messages );
-		if ( get_transient( $dedup_key ) ) {
+		$state = get_option( self::HEALTH_STATE_OPTION, [] );
+		if ( ! is_array( $state ) ) {
+			$state = [];
+		}
+		$now    = time();
+		$record = is_array( $state[ $integration_id ] ?? null ) ? $state[ $integration_id ] : null;
+		// A failing streak interrupted by a long gap starts over. A broken
+		// record is kept: its outage is already reported, and no passing check
+		// observed it end.
+		if ( null !== $record && 'broken' !== ( $record['status'] ?? '' ) && $now - (int) ( $record['last_failed_at'] ?? 0 ) > self::HEALTH_STREAK_MAX_GAP ) {
+			$record = null;
+		}
+		$record = $record ?? [
+			'status'          => 'failing',
+			'failures'        => 0,
+			'first_failed_at' => $now,
+		];
+
+		$record['failures']         = (int) ( $record['failures'] ?? 0 ) + 1;
+		$record['last_error']       = $message;
+		$record['last_failed_at']   = $now;
+		$record['integration_name'] = $integration_name;
+
+		$is_transition = 'broken' !== ( $record['status'] ?? 'failing' ) && $record['failures'] >= self::HEALTH_BROKEN_THRESHOLD;
+		if ( $is_transition ) {
+			$record['status']      = 'broken';
+			$record['error_class'] = self::classify_health_error( $error );
+		}
+
+		$state[ $integration_id ] = $record;
+		update_option( self::HEALTH_STATE_OPTION, $state, false );
+
+		$context = array_merge( $payload, [ 'health' => $record ] );
+
+		if ( ! $is_transition ) {
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_alert',
+				[
+					'type'      => 'integration_health_check_failed',
+					'severity'  => 'warning',
+					'message'   => sprintf( 'Integration "%s" health check failed: %s', $integration_name, $message ),
+					'context'   => $context,
+					'timestamp' => time(),
+				]
+			);
 			return;
 		}
 
-		// Set the dedup transient BEFORE dispatch so a `newspack_alert`
-		// handler that throws (e.g. transient Slack POST failure) cannot
-		// defeat dedup by leaving the key unset for the next hourly cron.
-		set_transient( $dedup_key, time(), self::HEALTH_CHECK_DEDUP_INTERVAL );
-
-		$message = sprintf(
-			'Integration "%s" health check failed: %s',
-			$payload['integration_name'] ?? 'unknown',
-			is_wp_error( $error ) ? implode( '; ', $error_messages ) : 'unknown error'
+		self::fire_health_changed(
+			[
+				'integration_id'   => $integration_id,
+				'integration_name' => $integration_name,
+				'state'            => 'broken',
+				'error_class'      => $record['error_class'],
+				'error'            => $message,
+				'first_failed_at'  => (int) $record['first_failed_at'],
+				'failures'         => $record['failures'],
+			]
 		);
+
+		$alert_message = sprintf(
+			'Integration "%s" has failed %d consecutive health checks since %s. Last error: %s',
+			$integration_name,
+			$record['failures'],
+			gmdate( 'Y-m-d H:i', (int) $record['first_failed_at'] ) . ' UTC',
+			$message
+		);
+		if ( 'publisher' === $record['error_class'] ) {
+			$alert_message .= ' The ESP account itself is the problem, so the fix is on the publisher side.';
+		}
 
 		/** This action is documented in includes/class-alert-manager.php */
 		do_action(
@@ -610,28 +702,266 @@ class Alert_Manager {
 			[
 				'type'      => 'integration_health_check_failed',
 				'severity'  => 'error',
-				'message'   => $message,
-				'context'   => $payload,
+				'message'   => $alert_message,
+				'context'   => $context,
 				'timestamp' => time(),
 			]
 		);
 	}
 
 	/**
-	 * Get the deduplication transient key for a health-check failure.
+	 * Handle an integration health check pass.
 	 *
-	 * @param string   $integration_id The integration identifier.
-	 * @param string[] $error_codes    The WP_Error codes from the failure.
-	 * @param string[] $error_messages The WP_Error messages from the failure.
+	 * A pass after 'broken' is the other half of the transition: it drops the
+	 * record, then fires `newspack_integration_health_changed` with
+	 * 'recovered' and a warning-severity alert for the log. The record goes
+	 * before dispatch, as in handle_health_check_failed(), so a handler that
+	 * throws cannot leave a recovered integration recorded as broken. A pass
+	 * while merely 'failing' drops the record silently, since nothing was
+	 * reported. A pass with no record is the hourly steady state and costs
+	 * no option write.
 	 *
-	 * @return string Transient key.
+	 * @param array $payload Health check pass data (integration_id, integration_name).
 	 */
-	private static function get_health_check_dedup_key( $integration_id, $error_codes, $error_messages = [] ) {
-		$codes = array_map( 'strval', $error_codes );
-		sort( $codes );
-		$messages = array_map( 'strval', $error_messages );
-		sort( $messages );
-		return 'newspack_alert_hc_' . md5( $integration_id . ':' . implode( ',', $codes ) . ':' . implode( '|', $messages ) );
+	public static function handle_health_check_passed( $payload ) {
+		$integration_id = (string) ( $payload['integration_id'] ?? 'unknown' );
+		$state          = get_option( self::HEALTH_STATE_OPTION, [] );
+		if ( ! is_array( $state ) || ! isset( $state[ $integration_id ] ) ) {
+			return;
+		}
+
+		$record = $state[ $integration_id ];
+		unset( $state[ $integration_id ] );
+		if ( empty( $state ) ) {
+			delete_option( self::HEALTH_STATE_OPTION );
+		} else {
+			update_option( self::HEALTH_STATE_OPTION, $state, false );
+		}
+
+		if ( 'broken' !== ( $record['status'] ?? '' ) ) {
+			return;
+		}
+
+		$integration_name = (string) ( $payload['integration_name'] ?? 'unknown' );
+		$failures         = (int) ( $record['failures'] ?? 0 );
+
+		self::fire_health_changed(
+			[
+				'integration_id'   => $integration_id,
+				'integration_name' => $integration_name,
+				'state'            => 'recovered',
+				'error_class'      => (string) ( $record['error_class'] ?? 'other' ),
+				'error'            => (string) ( $record['last_error'] ?? '' ),
+				'first_failed_at'  => (int) ( $record['first_failed_at'] ?? 0 ),
+				'failures'         => $failures,
+			]
+		);
+
+		/** This action is documented in includes/class-alert-manager.php */
+		do_action(
+			'newspack_alert',
+			[
+				'type'      => 'integration_health_check_recovered',
+				'severity'  => 'warning',
+				'message'   => sprintf( 'Integration "%s" health check is passing again after %d failed checks.', $integration_name, $failures ),
+				'context'   => array_merge( $payload, [ 'health' => $record ] ),
+				'timestamp' => time(),
+			]
+		);
+	}
+
+	/**
+	 * Drop the records of integrations a health-check run no longer checks.
+	 *
+	 * A record changes only while its integration is checked, so one that is
+	 * disabled or no longer set up would keep its record, and a stale
+	 * `broken` one would swallow the page for the integration's next outage.
+	 * A broken record closes as 'disconnected' rather than 'recovered', since
+	 * no passing check observed a fix.
+	 *
+	 * @param string[] $checked_ids IDs of the integrations the run checked.
+	 */
+	public static function prune_health_state( $checked_ids ) {
+		$state = get_option( self::HEALTH_STATE_OPTION, [] );
+		if ( ! is_array( $state ) || empty( $state ) ) {
+			return;
+		}
+		$stale = array_diff_key( $state, array_flip( array_map( 'strval', (array) $checked_ids ) ) );
+		if ( empty( $stale ) ) {
+			return;
+		}
+
+		$state = array_diff_key( $state, $stale );
+		if ( empty( $state ) ) {
+			delete_option( self::HEALTH_STATE_OPTION );
+		} else {
+			update_option( self::HEALTH_STATE_OPTION, $state, false );
+		}
+
+		foreach ( $stale as $integration_id => $record ) {
+			if ( 'broken' !== ( $record['status'] ?? '' ) ) {
+				continue;
+			}
+			$integration_name = (string) ( $record['integration_name'] ?? $integration_id );
+			$failures         = (int) ( $record['failures'] ?? 0 );
+
+			self::fire_health_changed(
+				[
+					'integration_id'   => (string) $integration_id,
+					'integration_name' => $integration_name,
+					'state'            => 'disconnected',
+					'error_class'      => (string) ( $record['error_class'] ?? 'other' ),
+					'error'            => (string) ( $record['last_error'] ?? '' ),
+					'first_failed_at'  => (int) ( $record['first_failed_at'] ?? 0 ),
+					'failures'         => $failures,
+				]
+			);
+
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_alert',
+				[
+					'type'      => 'integration_health_check_disconnected',
+					'severity'  => 'warning',
+					'message'   => sprintf( 'Integration "%s" is no longer checked, so its outage is closed after %d failed checks.', $integration_name, $failures ),
+					'context'   => [
+						'integration_id' => (string) $integration_id,
+						'health'         => $record,
+					],
+					'timestamp' => time(),
+				]
+			);
+		}
+	}
+
+	/**
+	 * Fire `newspack_integration_health_changed` so that a listener that
+	 * throws cannot cancel the alert that follows it.
+	 *
+	 * The record already holds the new state when this runs, so an exception
+	 * reaching the caller would drop the one page or log entry that state
+	 * gets, and no later check would send it again.
+	 *
+	 * @param array $payload The state change, as documented on the action below.
+	 */
+	private static function fire_health_changed( $payload ) {
+		try {
+			/**
+			 * Fires when an integration's health changes state: it has failed
+			 * HEALTH_BROKEN_THRESHOLD consecutive checks ('broken'), a check
+			 * passed after that ('recovered'), or a run stopped checking it while
+			 * broken because it was disabled or is no longer set up
+			 * ('disconnected'). One event per outage in each direction, so a
+			 * consumer can open and close a ticket without deduplicating hourly
+			 * repeats itself.
+			 *
+			 * @param array $payload {
+			 *     @type string $integration_id   The integration ID.
+			 *     @type string $integration_name The integration display name.
+			 *     @type string $state            'broken', 'recovered' or 'disconnected'.
+			 *     @type string $error_class      'publisher' when the ESP account itself is the
+			 *                                    problem, 'other' for provider outages and unknowns.
+			 *     @type string $error            The last health-check error message.
+			 *     @type int    $first_failed_at  Unix timestamp of the first failure in this outage.
+			 *     @type int    $failures         Consecutive failed checks so far.
+			 * }
+			 */
+			do_action( 'newspack_integration_health_changed', $payload );
+		} catch ( \Throwable $e ) {
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_alert',
+				[
+					'type'      => 'integration_health_changed_listener_failed',
+					'severity'  => 'warning',
+					'message'   => sprintf( 'A newspack_integration_health_changed listener failed for integration "%s": %s', $payload['integration_id'] ?? 'unknown', $e->getMessage() ),
+					'context'   => $payload,
+					'timestamp' => time(),
+				]
+			);
+		}
+	}
+
+	/**
+	 * Whether an integration's health record is broken, meaning its outage
+	 * has already paged once.
+	 *
+	 * @param string $integration_id The integration ID.
+	 * @return bool
+	 */
+	private static function is_integration_broken( $integration_id ) {
+		$state = get_option( self::HEALTH_STATE_OPTION, [] );
+		return is_array( $state ) && 'broken' === ( $state[ (string) $integration_id ]['status'] ?? '' );
+	}
+
+	/**
+	 * Whether a permanent config failure pages from the sync path, taking the
+	 * integration's hourly slot when it does.
+	 *
+	 * @param string $integration_id The integration ID.
+	 * @return bool
+	 */
+	private static function claim_config_failure_page( $integration_id ) {
+		if ( self::is_health_check_running() ) {
+			return false;
+		}
+		// Set before dispatch, so a `newspack_alert` handler that throws cannot
+		// leave the slot free for the next failed contact.
+		$dedup_key = 'newspack_alert_pf_' . md5( (string) $integration_id );
+		if ( get_transient( $dedup_key ) ) {
+			return false;
+		}
+		set_transient( $dedup_key, time(), HOUR_IN_SECONDS );
+		return true;
+	}
+
+	/**
+	 * Whether the hourly health check is running: scheduled, and not overdue
+	 * by more than HEALTH_STREAK_MAX_GAP. A cron that has stopped firing
+	 * leaves the event scheduled, with its next run falling further into the
+	 * past.
+	 *
+	 * @return bool
+	 */
+	private static function is_health_check_running() {
+		$next_run = wp_next_scheduled( Reader_Activation\Integrations::HEALTH_CHECK_CRON_HOOK );
+		return false !== $next_run && $next_run >= time() - self::HEALTH_STREAK_MAX_GAP;
+	}
+
+	/**
+	 * Classify a health-check failure as publisher-side or other.
+	 *
+	 * @param \WP_Error|mixed $error The health-check error.
+	 * @return string 'publisher' or 'other'.
+	 */
+	private static function classify_health_error( $error ) {
+		if ( ! is_wp_error( $error ) ) {
+			return 'other';
+		}
+		$haystack = strtolower( implode( ' ', $error->get_error_messages() ) );
+		foreach ( self::PUBLISHER_ERROR_SIGNATURES as $signature ) {
+			if ( str_contains( $haystack, $signature ) ) {
+				return 'publisher';
+			}
+		}
+		// A bare auth or payment status with no recognisable text, in the two
+		// forms providers print one: "401: …" opening a message, or
+		// "status 401". A number anywhere else is not a status, such as the
+		// connect duration in cURL's "Failed to connect … after 402 ms".
+		foreach ( $error->get_error_messages() as $error_message ) {
+			if ( preg_match( '/^40[123]:|\bstatus 40[123]\b/i', trim( (string) $error_message ) ) ) {
+				return 'publisher';
+			}
+		}
+		// The Newsletters ActiveCampaign provider keeps the status as the error
+		// code when the response has no error body, leaving only the reason
+		// phrase as the message: "Forbidden" with code 403.
+		foreach ( $error->get_error_codes() as $code ) {
+			if ( is_numeric( $code ) && in_array( (int) $code, [ 401, 402, 403 ], true ) ) {
+				return 'publisher';
+			}
+		}
+		return 'other';
 	}
 }
 Alert_Manager::init();

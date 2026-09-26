@@ -6,6 +6,7 @@
  */
 
 use Newspack\Alert_Manager;
+use Newspack\Reader_Activation\Integrations;
 
 /**
  * Test the Alert_Manager class.
@@ -13,16 +14,46 @@ use Newspack\Alert_Manager;
 class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 
 	/**
+	 * Alerts captured by capture_alerts(), keyed by type then severity.
+	 *
+	 * @var array
+	 */
+	private $captured = [];
+
+	/**
+	 * The `pre_get_scheduled_event` filter set by set_health_check_next_run().
+	 *
+	 * @var callable|null
+	 */
+	private $next_run_filter = null;
+
+	/**
+	 * Report the hourly health check as scheduled, as it is on a site where
+	 * it runs, so tests that don't set it get its normal escalation path.
+	 */
+	public function set_up() {
+		parent::set_up();
+		$this->set_health_check_next_run( time() + HOUR_IN_SECONDS );
+	}
+
+	/**
 	 * Clean up hooks between tests to prevent callback leaking.
 	 */
 	public function tear_down() {
+		if ( $this->next_run_filter ) {
+			remove_filter( 'pre_get_scheduled_event', $this->next_run_filter );
+			$this->next_run_filter = null;
+		}
 		parent::tear_down();
 		remove_all_actions( 'newspack_alert' );
 		remove_all_actions( 'newspack_log' );
+		remove_all_actions( 'newspack_integration_health_changed' );
 		remove_all_filters( 'newspack_alert_pattern_rules' );
 		remove_all_filters( 'newspack_alert_failure_record' );
 		delete_option( Alert_Manager::FAILURE_LOG_OPTION );
+		delete_option( Alert_Manager::HEALTH_STATE_OPTION );
 		wp_clear_scheduled_hook( Alert_Manager::PATTERN_SCAN_HOOK );
+		$this->captured = [];
 	}
 
 	/**
@@ -59,8 +90,9 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a permanent config-level failure fires an error-severity alert
-	 * (routed to Slack).
+	 * Test that a permanent config-level failure forwards at warning severity
+	 * (Watch). The hourly health check observes the same account state and
+	 * owns the Slack escalation, so this path no longer pages.
 	 */
 	public function test_permanent_failure_alert() {
 		$alerts = [];
@@ -83,15 +115,16 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $alerts, 'The permanent failure should fire newspack_alert.' );
 		$this->assertEquals( 'sync_permanent_failure', $alerts[0]['type'] );
-		$this->assertEquals( 'error', $alerts[0]['severity'], 'Permanent config failure should be error severity (Slack).' );
+		$this->assertEquals( 'warning', $alerts[0]['severity'], 'Permanent config failures reach the log, not Slack.' );
+		$this->assertStringContainsString( 'Permanent config sync failure for integration "esp"', $alerts[0]['message'] );
 	}
 
 	/**
-	 * Test that repeat permanent config failures for the same integration are
-	 * deduped within the alert window — a config failure is site-level, so an
-	 * account-wide ESP outage must not page once per contact.
+	 * Test that repeat permanent config failures are no longer deduped: at
+	 * warning severity each one is a log entry, and per-contact history in
+	 * the log is useful.
 	 */
-	public function test_permanent_config_failure_alert_deduped_per_integration() {
+	public function test_permanent_config_failure_is_not_deduped() {
 		$alerts = [];
 		add_action(
 			'newspack_alert',
@@ -110,23 +143,15 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		do_action( 'newspack_sync_permanent_failure', $payload );
 		do_action( 'newspack_sync_permanent_failure', $payload );
 
-		$this->assertCount( 1, $alerts, 'Repeat config failures for the same integration should emit one alert.' );
-
-		do_action(
-			'newspack_sync_permanent_failure',
-			array_merge( $payload, [ 'integration_id' => 'other_esp' ] )
-		);
-
-		$this->assertCount( 2, $alerts, 'A different integration should alert independently.' );
+		$this->assertCount( 2, $alerts );
+		$this->assertEquals( 'warning', $alerts[1]['severity'] );
 	}
 
 	/**
-	 * Test that severity derives from the failure class: config failures page
-	 * (error → Slack) while deletion-path contact-data failures surface as
-	 * warnings (Watch), observable without paging — and are not deduped, since
-	 * each concerns a distinct contact.
+	 * Test that both permanent-failure classes stay out of Slack, and that
+	 * the deletion-path message still names the dropped deletion signal.
 	 */
-	public function test_permanent_failure_severity_derives_from_class() {
+	public function test_permanent_failure_classes_both_stay_out_of_slack() {
 		$alerts = [];
 		add_action(
 			'newspack_alert',
@@ -135,20 +160,17 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			}
 		);
 
-		$contact_payload = [
-			'integration_id' => 'esp',
-			'email'          => 'gone@example.com',
-			'mode'           => 'flag',
-			'context'        => 'Account deletion',
-			'reason'         => 'Your merge fields were invalid.',
-			'error_class'    => 'permanent_contact',
-		];
-		do_action( 'newspack_sync_permanent_failure', $contact_payload );
-		do_action( 'newspack_sync_permanent_failure', $contact_payload );
-
-		$this->assertCount( 2, $alerts, 'Contact-class permanent failures should not be deduped.' );
-		$this->assertEquals( 'warning', $alerts[0]['severity'], 'Contact-class permanent failures should not page.' );
-
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'email'          => 'gone@example.com',
+				'mode'           => 'flag',
+				'context'        => 'Account deletion',
+				'reason'         => 'Your merge fields were invalid.',
+				'error_class'    => 'permanent_contact',
+			]
+		);
 		do_action(
 			'newspack_sync_permanent_failure',
 			[
@@ -160,8 +182,49 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			]
 		);
 
-		$this->assertCount( 3, $alerts );
-		$this->assertEquals( 'error', $alerts[2]['severity'], 'Config-class permanent failures should page.' );
+		$this->assertCount( 2, $alerts );
+		$this->assertEquals( 'warning', $alerts[0]['severity'] );
+		$this->assertStringContainsString( 'deletion signal was not propagated', $alerts[0]['message'] );
+		$this->assertEquals( 'warning', $alerts[1]['severity'] );
+	}
+
+	/**
+	 * Where the hourly health check isn't running, nothing else observes a
+	 * disabled or unpaid account, so a permanent config failure pages from
+	 * the sync path, at most once an hour per integration.
+	 *
+	 * @dataProvider data_health_check_not_running
+	 *
+	 * @param int|null $next_run_offset Seconds from now to the check's next run, or null when it is not scheduled.
+	 */
+	public function test_permanent_config_failure_pages_while_the_health_check_is_not_running( $next_run_offset ) {
+		$this->set_health_check_next_run( null === $next_run_offset ? false : time() + $next_run_offset );
+		$this->capture_alerts( 'sync_permanent_failure' );
+
+		$payload = [
+			'integration_id' => 'esp',
+			'email'          => 'reader@example.test',
+			'context'        => 'Reader registered',
+			'reason'         => 'API Access has been disabled for this account.',
+			'error_class'    => 'permanent_config',
+		];
+		do_action( 'newspack_sync_permanent_failure', $payload );
+		do_action( 'newspack_sync_permanent_failure', $payload );
+
+		$this->assertCount( 1, $this->captured['sync_permanent_failure']['error'], 'The first failure pages.' );
+		$this->assertCount( 1, $this->captured['sync_permanent_failure']['warning'], 'A repeat within the hour reaches the log only.' );
+	}
+
+	/**
+	 * Health-check schedules that leave the check not running: switched off
+	 * (not scheduled), and a cron that stopped firing, which leaves the next
+	 * run overdue.
+	 */
+	public function data_health_check_not_running() {
+		return [
+			'not scheduled' => [ null ],
+			'cron stalled'  => [ -Alert_Manager::HEALTH_STREAK_MAX_GAP - 1 ],
+		];
 	}
 
 	/**
@@ -647,6 +710,46 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Alerts from a staging host are capped at Watch (log_level 2), so a
+	 * broken sandbox never pages the on-call channel but still reaches the
+	 * log.
+	 */
+	public function test_staging_site_alerts_are_capped_at_watch() {
+		add_action( 'newspack_alert', [ Alert_Manager::class, 'forward_alert_to_log' ] );
+		$staging = function () {
+			return 'https://sandbox.newspackstaging.com';
+		};
+		add_filter( 'home_url', $staging );
+
+		$captured = null;
+		add_action(
+			'newspack_log',
+			function ( $code, $message, $params ) use ( &$captured ) {
+				$captured = compact( 'code', 'message', 'params' );
+			},
+			10,
+			3
+		);
+
+		try {
+			do_action(
+				'newspack_alert',
+				[
+					'type'     => 'integration_health_check_failed',
+					'severity' => 'error',
+					'message'  => 'Boom',
+				]
+			);
+		} finally {
+			remove_filter( 'home_url', $staging );
+		}
+
+		$this->assertNotNull( $captured, 'The entry must still reach the log.' );
+		$this->assertSame( 2, $captured['params']['log_level'] );
+		$this->assertSame( 'debug', $captured['params']['type'] );
+	}
+
+	/**
 	 * Test that a numeric-zero message is still forwarded (it casts to the
 	 * non-empty string '0'), unlike (bool) false which casts to ''.
 	 */
@@ -877,155 +980,575 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a repeated health-check failure with the same integration +
-	 * error codes only triggers one Slack-bound newspack_alert within the
-	 * dedup interval.
-	 */
-	public function test_health_check_failed_dedupes_repeated_fires() {
-		$fire_count = 0;
-		add_action(
-			'newspack_alert',
-			function ( $data ) use ( &$fire_count ) {
-				if ( 'integration_health_check_failed' === ( $data['type'] ?? '' ) ) {
-					$fire_count++;
-				}
-			}
-		);
-
-		$payload = $this->make_health_check_payload( 'dedup-a', [ 'master_list_missing' ] );
-
-		do_action( 'newspack_integration_health_check_failed', $payload );
-		do_action( 'newspack_integration_health_check_failed', $payload );
-		do_action( 'newspack_integration_health_check_failed', $payload );
-
-		$this->assertEquals( 1, $fire_count, 'Identical health-check failures should dedupe to a single alert.' );
-	}
-
-	/**
-	 * Test that a different error-code set on the same integration fires a
-	 * fresh alert — the dedup is per signature, not per integration.
-	 */
-	public function test_health_check_failed_alerts_on_new_error_codes() {
-		$fire_count = 0;
-		add_action(
-			'newspack_alert',
-			function ( $data ) use ( &$fire_count ) {
-				if ( 'integration_health_check_failed' === ( $data['type'] ?? '' ) ) {
-					$fire_count++;
-				}
-			}
-		);
-
-		do_action(
-			'newspack_integration_health_check_failed',
-			$this->make_health_check_payload( 'dedup-b', [ 'master_list_missing' ] )
-		);
-		do_action(
-			'newspack_integration_health_check_failed',
-			$this->make_health_check_payload( 'dedup-b', [ 'master_list_missing' ] )
-		);
-		do_action(
-			'newspack_integration_health_check_failed',
-			$this->make_health_check_payload( 'dedup-b', [ 'connection_failed' ] )
-		);
-
-		$this->assertEquals( 2, $fire_count, 'A new error-code set on the same integration should bypass the dedup.' );
-	}
-
-	/**
-	 * Test that two distinct integrations alert independently even if they
-	 * fail with the same error codes.
-	 */
-	public function test_health_check_failed_alerts_per_integration() {
-		$fire_count = 0;
-		add_action(
-			'newspack_alert',
-			function ( $data ) use ( &$fire_count ) {
-				if ( 'integration_health_check_failed' === ( $data['type'] ?? '' ) ) {
-					$fire_count++;
-				}
-			}
-		);
-
-		do_action(
-			'newspack_integration_health_check_failed',
-			$this->make_health_check_payload( 'dedup-c1', [ 'master_list_missing' ] )
-		);
-		do_action(
-			'newspack_integration_health_check_failed',
-			$this->make_health_check_payload( 'dedup-c2', [ 'master_list_missing' ] )
-		);
-
-		$this->assertEquals( 2, $fire_count, 'Distinct integration IDs should each alert independently.' );
-	}
-
-	/**
-	 * Test that a same-code but escalated-message failure fires a fresh alert.
+	 * Capture `newspack_alert` payloads of one type into $this->captured,
+	 * split by severity: 'error' pages Slack, 'warning' reaches the log.
+	 * Read $this->captured after firing the actions under test.
 	 *
-	 * The dedup key folds in `WP_Error::get_error_messages()` so an escalating
-	 * failure that retains the same code(s) but carries a worse message
-	 * (e.g. "list missing" → "auth fully revoked") still reaches Slack
-	 * instead of being suppressed for the full HEALTH_CHECK_DEDUP_INTERVAL.
+	 * @param string $type The alert type to capture.
 	 */
-	public function test_health_check_failed_alerts_on_new_error_messages() {
-		$fire_count = 0;
+	private function capture_alerts( $type ) {
+		$this->captured[ $type ] = [
+			'error'   => [],
+			'warning' => [],
+		];
 		add_action(
 			'newspack_alert',
-			function ( $data ) use ( &$fire_count ) {
-				if ( 'integration_health_check_failed' === ( $data['type'] ?? '' ) ) {
-					$fire_count++;
+			function ( $data ) use ( $type ) {
+				if ( $type === ( $data['type'] ?? '' ) && isset( $this->captured[ $type ][ $data['severity'] ?? '' ] ) ) {
+					$this->captured[ $type ][ $data['severity'] ][] = $data;
 				}
 			}
 		);
+	}
+
+	/**
+	 * Helper: move an integration's whole failure streak into the past, as if
+	 * the checks had stopped running after its last failure.
+	 *
+	 * @param string $integration_id Integration ID.
+	 * @param int    $seconds        How far back to move the streak.
+	 */
+	private function age_health_record( $integration_id, $seconds ) {
+		$state = get_option( Alert_Manager::HEALTH_STATE_OPTION );
+		$state[ $integration_id ]['first_failed_at'] -= $seconds;
+		$state[ $integration_id ]['last_failed_at']   = time() - $seconds;
+		update_option( Alert_Manager::HEALTH_STATE_OPTION, $state, false );
+	}
+
+	/**
+	 * Helper: make wp_next_scheduled() report the health check's next run,
+	 * without touching the stored cron schedule.
+	 *
+	 * @param int|false $next_run Unix timestamp of the next run, or false when the check is not scheduled.
+	 */
+	private function set_health_check_next_run( $next_run ) {
+		if ( $this->next_run_filter ) {
+			remove_filter( 'pre_get_scheduled_event', $this->next_run_filter );
+		}
+		$this->next_run_filter = function ( $pre, $hook ) use ( $next_run ) {
+			if ( Integrations::HEALTH_CHECK_CRON_HOOK !== $hook ) {
+				return $pre;
+			}
+			if ( false === $next_run ) {
+				return false;
+			}
+			return (object) [
+				'hook'      => $hook,
+				'timestamp' => $next_run,
+				'schedule'  => 'hourly',
+				'args'      => [],
+				'interval'  => HOUR_IN_SECONDS,
+			];
+		};
+		add_filter( 'pre_get_scheduled_event', $this->next_run_filter, 10, 2 );
+	}
+
+	/**
+	 * Helper: fail an integration's health check until its record is broken.
+	 *
+	 * @param string $integration_id Integration ID.
+	 */
+	private function break_integration( $integration_id ) {
+		$payload = $this->make_health_check_payload( $integration_id, [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+	}
+
+	/**
+	 * Failures below the threshold reach the log at warning severity and
+	 * never page.
+	 */
+	public function test_health_check_failed_below_threshold_is_watch_only() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+
+		$payload = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		do_action( 'newspack_integration_health_check_failed', $payload );
+		do_action( 'newspack_integration_health_check_failed', $payload );
+
+		$this->assertCount( 0, $this->captured['integration_health_check_failed']['error'], 'Two failures must not page.' );
+		$this->assertCount( 2, $this->captured['integration_health_check_failed']['warning'], 'Every failure reaches the log.' );
+
+		$record = get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp'];
+		$this->assertSame( 'failing', $record['status'] );
+		$this->assertSame( 2, $record['failures'] );
+		$this->assertSame( 'Mock: connection_failed', $record['last_error'] );
+	}
+
+	/**
+	 * The threshold-th consecutive failure pages once and fires the broken
+	 * transition; later failures add nothing to Slack.
+	 */
+	public function test_health_check_failed_pages_once_at_threshold() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		$payload = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD + 2; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+
+		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'], 'One outage pages exactly once.' );
+		$this->assertCount( Alert_Manager::HEALTH_BROKEN_THRESHOLD + 1, $this->captured['integration_health_check_failed']['warning'], 'Every other failure reaches the log.' );
+		$this->assertStringContainsString( 'failed 3 consecutive health checks', $this->captured['integration_health_check_failed']['error'][0]['message'] );
+
+		$this->assertCount( 1, $changed, 'The broken transition fires once.' );
+		$this->assertSame( 'broken', $changed[0]['state'] );
+		$this->assertSame( 'esp', $changed[0]['integration_id'] );
+		$this->assertSame( Alert_Manager::HEALTH_BROKEN_THRESHOLD, $changed[0]['failures'] );
+		$this->assertSame( 'other', $changed[0]['error_class'] );
+
+		$record = get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp'];
+		$this->assertSame( 'broken', $record['status'] );
+		$this->assertSame( Alert_Manager::HEALTH_BROKEN_THRESHOLD + 2, $record['failures'] );
+	}
+
+	/**
+	 * A publisher-side error is classified on the transition and named in
+	 * the page, since that is the part the on-call can act on.
+	 */
+	public function test_health_check_failed_names_publisher_side_causes() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$payload = [
+			'integration_id'   => 'esp',
+			'integration_name' => 'Newsletter ESP',
+			'error'            => new \WP_Error( 'newspack_newsletters_connection_error', '403: API Access has been disabled for this account.' ),
+		];
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+
+		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'] );
+		$this->assertStringContainsString( 'on the publisher side', $this->captured['integration_health_check_failed']['error'][0]['message'] );
+		$this->assertSame( 'publisher', $this->captured['integration_health_check_failed']['error'][0]['context']['health']['error_class'] );
+	}
+
+	/**
+	 * Each integration keeps its own record, so two integrations failing
+	 * with the same error page independently.
+	 */
+	public function test_health_check_failed_keeps_one_record_per_integration() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+
+		foreach ( [ 'esp', 'crm' ] as $integration_id ) {
+			$payload = $this->make_health_check_payload( $integration_id, [ 'connection_failed' ] );
+			for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+				do_action( 'newspack_integration_health_check_failed', $payload );
+			}
+		}
+
+		$this->assertCount( 2, $this->captured['integration_health_check_failed']['error'], 'Distinct integrations each page once.' );
+		$this->assertCount( 2, get_option( Alert_Manager::HEALTH_STATE_OPTION ) );
+	}
+
+	/**
+	 * A changed error message on an already-broken integration updates the
+	 * record and does not page again. The old dedup keyed on message text,
+	 * which re-paged every hour for a timeout message carrying a float.
+	 */
+	public function test_health_check_failed_changed_message_does_not_repage() {
+		$this->capture_alerts( 'integration_health_check_failed' );
 
 		$first  = [
-			'integration_id'   => 'dedup-msg',
-			'integration_name' => 'Mock dedup-msg',
-			'error'            => new \WP_Error( 'connection_failed', 'Provider returned 401: list missing.' ),
+			'integration_id'   => 'esp',
+			'integration_name' => 'Mock esp',
+			'error'            => new \WP_Error( 'connection_failed', 'Request timed out after 20.001555 seconds.' ),
 		];
 		$second = [
-			'integration_id'   => 'dedup-msg',
-			'integration_name' => 'Mock dedup-msg',
-			'error'            => new \WP_Error( 'connection_failed', 'Provider returned 401: auth fully revoked.' ),
+			'integration_id'   => 'esp',
+			'integration_name' => 'Mock esp',
+			'error'            => new \WP_Error( 'connection_failed', 'Request timed out after 20.002996 seconds.' ),
 		];
-
-		do_action( 'newspack_integration_health_check_failed', $first );
-		do_action( 'newspack_integration_health_check_failed', $first );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $first );
+		}
+		do_action( 'newspack_integration_health_check_failed', $second );
 		do_action( 'newspack_integration_health_check_failed', $second );
 
-		$this->assertEquals( 2, $fire_count, 'A same-code, changed-message failure should bypass the dedup.' );
+		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'], 'A new message on a broken integration must not page again.' );
+		$this->assertSame( 'Request timed out after 20.002996 seconds.', get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp']['last_error'] );
 	}
 
 	/**
-	 * Test that the dedup transient is set BEFORE dispatching `newspack_alert`
-	 * so a handler that throws cannot leave the key unset and defeat dedup
-	 * on the next hourly cron.
+	 * The record is written BEFORE dispatch so a `newspack_alert` handler
+	 * that throws cannot leave the transition unrecorded and page again on
+	 * the next hourly cron.
 	 */
-	public function test_health_check_failed_sets_dedup_before_dispatch() {
+	public function test_health_check_failed_records_state_before_dispatch() {
+		$payload = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD - 1; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+
 		$listener = function () {
 			throw new \RuntimeException( 'Simulated handler failure.' );
 		};
 		add_action( 'newspack_alert', $listener );
-
-		$payload = $this->make_health_check_payload( 'dedup-pre', [ 'master_list_missing' ] );
-
 		try {
-			try {
-				do_action( 'newspack_integration_health_check_failed', $payload );
-			} catch ( \RuntimeException $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
-				// Expected — handler is intentionally throwing.
-			}
-
-			// Reflect the dedup-key contract — the transient must exist even
-			// though dispatch threw.
-			$reflection = new \ReflectionMethod( Alert_Manager::class, 'get_health_check_dedup_key' );
-			$reflection->setAccessible( true );
-			$key = $reflection->invoke( null, 'dedup-pre', [ 'master_list_missing' ], [ 'Mock: master_list_missing' ] );
-
-			$this->assertNotFalse( get_transient( $key ), 'Dedup transient must be set even when alert handler throws.' );
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		} catch ( \RuntimeException $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Expected: the handler is intentionally throwing.
 		} finally {
 			remove_action( 'newspack_alert', $listener );
-			delete_transient( $key ?? '' );
 		}
+
+		$this->assertSame( 'broken', get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp']['status'], 'The transition must be recorded even when dispatch throws.' );
+
+		$this->capture_alerts( 'integration_health_check_failed' );
+		do_action( 'newspack_integration_health_check_failed', $payload );
+		$this->assertCount( 0, $this->captured['integration_health_check_failed']['error'], 'The next failure must not page again.' );
+	}
+
+	/**
+	 * A failing streak interrupted by a gap longer than
+	 * HEALTH_STREAK_MAX_GAP starts over, so the next failure neither
+	 * completes the old streak nor reports a start date from before the gap.
+	 */
+	public function test_health_check_failed_restarts_a_streak_after_a_gap() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+
+		$payload = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD - 1; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+		$this->age_health_record( 'esp', Alert_Manager::HEALTH_STREAK_MAX_GAP + 1 );
+
+		do_action( 'newspack_integration_health_check_failed', $payload );
+
+		$this->assertCount( 0, $this->captured['integration_health_check_failed']['error'], 'A failure after a gap must not complete the old streak.' );
+		$record = get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp'];
+		$this->assertSame( 1, $record['failures'] );
+		$this->assertGreaterThan( time() - HOUR_IN_SECONDS, $record['first_failed_at'] );
+	}
+
+	/**
+	 * A broken record survives a gap: the outage is already reported and no
+	 * passing check observed it end, so failures after the gap page nothing.
+	 */
+	public function test_health_check_failed_keeps_a_broken_outage_across_a_gap() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+
+		$payload = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+		$this->age_health_record( 'esp', Alert_Manager::HEALTH_STREAK_MAX_GAP + 1 );
+
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $payload );
+		}
+
+		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'], 'One outage pages once, gap or not.' );
+		$this->assertSame( 'broken', get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp']['status'] );
+	}
+
+	/**
+	 * A pass after broken fires the recovered transition, logs at warning
+	 * severity, and clears the record so a fresh outage can page again.
+	 */
+	public function test_health_check_passed_after_broken_reports_recovery() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$this->capture_alerts( 'integration_health_check_recovered' );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		$failure = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		$pass    = [
+			'integration_id'   => 'esp',
+			'integration_name' => 'Mock esp',
+		];
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $failure );
+		}
+		do_action( 'newspack_integration_health_check_passed', $pass );
+
+		$this->assertCount( 2, $changed );
+		$this->assertSame( 'recovered', $changed[1]['state'] );
+		$this->assertSame( 'esp', $changed[1]['integration_id'] );
+		$this->assertSame( Alert_Manager::HEALTH_BROKEN_THRESHOLD, $changed[1]['failures'] );
+		$this->assertSame( 'Mock: connection_failed', $changed[1]['error'] );
+
+		$this->assertCount( 1, $this->captured['integration_health_check_recovered']['warning'], 'Recovery reaches the log without paging.' );
+		$this->assertCount( 0, $this->captured['integration_health_check_recovered']['error'] );
+		$this->assertStringContainsString( 'passing again', $this->captured['integration_health_check_recovered']['warning'][0]['message'] );
+
+		$this->assertFalse( get_option( Alert_Manager::HEALTH_STATE_OPTION ), 'The last record clears the option.' );
+
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $failure );
+		}
+		$this->assertCount( 2, $this->captured['integration_health_check_failed']['error'], 'A new outage after recovery pages again.' );
+	}
+
+	/**
+	 * A pass while merely failing (below the threshold) resets the record
+	 * silently: nothing was reported, so there is nothing to recover from.
+	 */
+	public function test_health_check_passed_while_failing_resets_silently() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$this->capture_alerts( 'integration_health_check_recovered' );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		$failure = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		$pass    = [
+			'integration_id'   => 'esp',
+			'integration_name' => 'Mock esp',
+		];
+		do_action( 'newspack_integration_health_check_failed', $failure );
+		do_action( 'newspack_integration_health_check_failed', $failure );
+		do_action( 'newspack_integration_health_check_passed', $pass );
+
+		$this->assertCount( 0, $changed, 'No transition below the threshold.' );
+		$this->assertCount( 0, $this->captured['integration_health_check_recovered']['warning'] );
+		$this->assertFalse( get_option( Alert_Manager::HEALTH_STATE_OPTION ) );
+
+		// The count restarted: two more failures do not reach the threshold.
+		do_action( 'newspack_integration_health_check_failed', $failure );
+		do_action( 'newspack_integration_health_check_failed', $failure );
+		$this->assertCount( 0, $this->captured['integration_health_check_failed']['error'] );
+	}
+
+	/**
+	 * A pass with no record is the hourly steady state and must not write
+	 * the option.
+	 */
+	public function test_health_check_passed_when_healthy_writes_nothing() {
+		$writes  = 0;
+		$counter = function () use ( &$writes ) {
+			$writes++;
+		};
+		add_action( 'add_option_' . Alert_Manager::HEALTH_STATE_OPTION, $counter );
+		add_action( 'update_option_' . Alert_Manager::HEALTH_STATE_OPTION, $counter );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		try {
+			do_action(
+				'newspack_integration_health_check_passed',
+				[
+					'integration_id'   => 'esp',
+					'integration_name' => 'Mock esp',
+				]
+			);
+		} finally {
+			remove_action( 'add_option_' . Alert_Manager::HEALTH_STATE_OPTION, $counter );
+			remove_action( 'update_option_' . Alert_Manager::HEALTH_STATE_OPTION, $counter );
+		}
+
+		$this->assertSame( 0, $writes );
+		$this->assertCount( 0, $changed );
+	}
+
+	/**
+	 * A run that no longer checks a broken integration (disabled, or no
+	 * longer set up) drops its record and closes the outage as disconnected,
+	 * so the integration's next outage pages again.
+	 */
+	public function test_health_check_run_closes_a_broken_integration_it_no_longer_checks() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$this->capture_alerts( 'integration_health_check_disconnected' );
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		$failure = $this->make_health_check_payload( 'esp', [ 'connection_failed' ] );
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $failure );
+		}
+		do_action( 'newspack_integration_health_checks_completed', [] );
+
+		$this->assertFalse( get_option( Alert_Manager::HEALTH_STATE_OPTION ), 'The unchecked integration loses its record.' );
+		$this->assertCount( 2, $changed );
+		$this->assertSame( 'disconnected', $changed[1]['state'] );
+		$this->assertSame( 'esp', $changed[1]['integration_id'] );
+		$this->assertSame( 'Mock esp', $changed[1]['integration_name'] );
+		$this->assertCount( 1, $this->captured['integration_health_check_disconnected']['warning'], 'The closure reaches the log without paging.' );
+
+		for ( $i = 0; $i < Alert_Manager::HEALTH_BROKEN_THRESHOLD; $i++ ) {
+			do_action( 'newspack_integration_health_check_failed', $failure );
+		}
+		$this->assertCount( 2, $this->captured['integration_health_check_failed']['error'], 'Its next outage pages again.' );
+	}
+
+	/**
+	 * A run keeps the records of the integrations it checked, and drops the
+	 * failing record of one it no longer checks without reporting anything,
+	 * since that streak never paged.
+	 */
+	public function test_health_check_run_keeps_only_the_records_it_checked() {
+		$changed = [];
+		add_action(
+			'newspack_integration_health_changed',
+			function ( $data ) use ( &$changed ) {
+				$changed[] = $data;
+			}
+		);
+
+		do_action( 'newspack_integration_health_check_failed', $this->make_health_check_payload( 'esp', [ 'connection_failed' ] ) );
+		do_action( 'newspack_integration_health_check_failed', $this->make_health_check_payload( 'crm', [ 'connection_failed' ] ) );
+		do_action( 'newspack_integration_health_checks_completed', [ 'esp' ] );
+
+		$this->assertSame( [ 'esp' ], array_keys( get_option( Alert_Manager::HEALTH_STATE_OPTION ) ) );
+		$this->assertCount( 0, $changed );
+	}
+
+	/**
+	 * While an integration is broken, a contact whose retries run out reaches
+	 * the log only: the outage has already paged once. An integration that
+	 * isn't broken still pages.
+	 */
+	public function test_sync_retry_exhausted_for_a_broken_integration_does_not_page() {
+		$this->break_integration( 'esp' );
+		$this->capture_alerts( 'sync_retry_exhausted' );
+
+		foreach ( [ 'esp', 'crm' ] as $integration_id ) {
+			do_action(
+				'newspack_sync_retry_exhausted',
+				[
+					'integration_id' => $integration_id,
+					'retry_count'    => 5,
+					'reason'         => 'API Key Invalid: Your API key may be invalid.',
+				]
+			);
+		}
+
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['warning'] );
+		$this->assertSame( 'esp', $this->captured['sync_retry_exhausted']['warning'][0]['context']['integration_id'] );
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['error'] );
+		$this->assertSame( 'crm', $this->captured['sync_retry_exhausted']['error'][0]['context']['integration_id'] );
+	}
+
+	/**
+	 * A broken integration's contact failures stay out of the failure log, so
+	 * its outage doesn't trip the hourly pattern rules. Another
+	 * integration's failures are still recorded.
+	 */
+	public function test_broken_integration_failures_stay_out_of_the_failure_log() {
+		$this->break_integration( 'esp' );
+
+		foreach ( [ 'esp', 'crm' ] as $integration_id ) {
+			do_action(
+				'newspack_sync_contact_failed',
+				[
+					'integration_id' => $integration_id,
+					'contact'        => [ 'email' => 'reader@example.test' ],
+					'context'        => 'Reader registered',
+					'reason'         => 'API Key Invalid: Your API key may be invalid.',
+				]
+			);
+		}
+
+		$this->assertSame( [ 'crm' ], array_column( get_option( Alert_Manager::FAILURE_LOG_OPTION, [] ), 'integration_id' ) );
+	}
+
+	/**
+	 * A state-change listener that throws must not cancel the page for the
+	 * outage or the log entry for its recovery: the record already holds the
+	 * new state, so no later check would send either.
+	 */
+	public function test_health_changed_listener_that_throws_does_not_cancel_alerts() {
+		$this->capture_alerts( 'integration_health_check_failed' );
+		$this->capture_alerts( 'integration_health_check_recovered' );
+		$this->capture_alerts( 'integration_health_changed_listener_failed' );
+		add_action(
+			'newspack_integration_health_changed',
+			function () {
+				throw new \RuntimeException( 'Simulated listener failure.' );
+			}
+		);
+
+		$this->break_integration( 'esp' );
+		do_action(
+			'newspack_integration_health_check_passed',
+			[
+				'integration_id'   => 'esp',
+				'integration_name' => 'Mock esp',
+			]
+		);
+
+		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'], 'The outage still pages.' );
+		$this->assertCount( 1, $this->captured['integration_health_check_recovered']['warning'], 'The recovery still reaches the log.' );
+		$this->assertCount( 2, $this->captured['integration_health_changed_listener_failed']['warning'], 'Each failed dispatch reaches the log.' );
+	}
+
+	/**
+	 * Health-check errors classify as publisher-side when the ESP account
+	 * itself is the problem, and as other for anything else.
+	 *
+	 * @dataProvider data_health_error_classification
+	 *
+	 * @param string     $message  The WP_Error message.
+	 * @param string     $expected 'publisher' or 'other'.
+	 * @param string|int $code     The WP_Error code.
+	 */
+	public function test_classify_health_error( $message, $expected, $code = 'newspack_newsletters_connection_error' ) {
+		$method = new \ReflectionMethod( Alert_Manager::class, 'classify_health_error' );
+		$method->setAccessible( true );
+
+		$this->assertSame( $expected, $method->invoke( null, new \WP_Error( $code, $message ) ) );
+	}
+
+	/**
+	 * Messages seen in the alerts channel during the week of 2026-09-16, plus
+	 * the Newsletters ActiveCampaign provider's dead-key response. The rows
+	 * with a numeric code have that provider's shape for a response without
+	 * an error body: the HTTP status as the code and its reason phrase as the
+	 * message. The last two rows pin the status forms: one printed the way a
+	 * provider prints it, and a connection failure whose duration only looks
+	 * like one.
+	 */
+	public function data_health_error_classification() {
+		return [
+			'mailchimp invalid key'         => [ "401: Your API key may be invalid, or you've attempted to access the wrong datacenter.", 'publisher' ],
+			'mailchimp key disabled'        => [ '401: API key has been disabled', 'publisher' ],
+			'mailchimp access disabled'     => [ '403: API Access has been disabled for this account. Please contact customer support.', 'publisher' ],
+			'mailchimp unpaid'              => [ 'Payment Required', 'publisher' ],
+			'account deactivated'           => [ 'User Disabled: This account has been deactivated.', 'publisher' ],
+			'bare 401 from activecampaign'  => [ 'ActiveCampaign REST returned status 401 for /api/3/users/me.', 'publisher' ],
+			'status only in the code'       => [ 'Forbidden', 'publisher', 403 ],
+			'mailchimp timeout'             => [ 'Request timed out after 20.001555 seconds.', 'other' ],
+			'timeout with a 401-like float' => [ 'Request timed out after 401.5 seconds.', 'other' ],
+			'service unavailable'           => [ 'Service Unavailable', 'other', 503 ],
+			'activecampaign 503'            => [ 'ActiveCampaign REST returned status 503 for /api/3/users/me.', 'other' ],
+			'too many requests'             => [ 'Too Many Requests', 'other', 429 ],
+			'status opening the message'    => [ '403: Forbidden', 'publisher' ],
+			'curl connect after 402 ms'     => [ "cURL error 7: Failed to connect to example.test port 443 after 402 ms: Couldn't connect to server", 'other' ],
+		];
+	}
+
+	/**
+	 * A non-WP_Error value classifies as other rather than throwing.
+	 */
+	public function test_classify_health_error_without_wp_error() {
+		$method = new \ReflectionMethod( Alert_Manager::class, 'classify_health_error' );
+		$method->setAccessible( true );
+
+		$this->assertSame( 'other', $method->invoke( null, null ) );
 	}
 }
