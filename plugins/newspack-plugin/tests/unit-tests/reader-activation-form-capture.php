@@ -6,6 +6,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Data_Events\Connectors\Contact_Sync_Connector;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
@@ -369,6 +370,48 @@ class Test_Form_Capture extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( $hook, $args, $group );
 		Integrations::disable( Form_Capture::ID );
+	}
+
+	/**
+	 * A new reader's contact sync names the capture that registered them, as an
+	 * existing reader's does, so Sync Activity tells captures apart from other
+	 * sign-ups. Each integration names only its own registrations, whether or
+	 * not it is enabled.
+	 */
+	public function test_new_reader_sync_names_the_capture() {
+		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Naming must not depend on the enabled state.' );
+		$this->assertFalse( Integrations::is_enabled( Form_Capture::ID ), 'Naming must not depend on the enabled state.' );
+		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+		$contexts = [];
+		add_filter(
+			'newspack_esp_sync_contact',
+			function ( $contact, $context ) use ( &$contexts ) {
+				$contexts[] = $context;
+				return $contact;
+			},
+			10,
+			2
+		);
+
+		$user              = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
+		$context_by_method = [
+			Gravity_Forms::get_registration_method() => 'Gravity Forms registration',
+			Form_Capture::get_registration_method()  => 'Form Capture registration',
+			'registration-block'                     => 'RAS Reader registration',
+		];
+		foreach ( $context_by_method as $registration_method => $expected_context ) {
+			$contexts = [];
+			Contact_Sync_Connector::reader_registered(
+				time(),
+				[
+					'user_id'  => $user->ID,
+					'email'    => $user->user_email,
+					'metadata' => [ 'registration_method' => $registration_method ],
+				],
+				0
+			);
+			$this->assertSame( [ $expected_context ], $contexts, "A registration through $registration_method." );
+		}
 	}
 
 	/**

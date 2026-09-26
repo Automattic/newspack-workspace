@@ -581,6 +581,8 @@ To allow an integration to drive frontend reader registration (e.g. a third-part
 
 Each integration's registration traffic is rate-limited per IP in its own bucket (see `Reader_Registration::get_rate_limit_bucket_for()`); integrations expecting more than the default 10/hour should size their bucket via the `newspack_frontend_registration_rate_limit` filter, as `form-capture` does.
 
+A new reader's first contact sync reaches Sync Activity as `RAS Reader registration` unless an integration names its own sign-ups: filter `newspack_reader_registered_sync_context` and match the event data's `metadata.registration_method`, as `form-capture` does.
+
 The built-in JS client (`newspackReaderActivation.register()`) always sends the value returned by `get_registration_key()`. Custom key schemes that diverge from this default need their own client-side code to compute and submit the key.
 
-The built-in `form-capture` integration ([class-form-capture.php](class-form-capture.php) and `src/reader-activation-form-capture/`) is the reference implementation of this section end to end: enabled-gated key emission, a capture script driving `register()`, magic-link suppression for repeat captures, and existing-reader sync scheduling.
+The built-in `form-capture` integration ([class-form-capture.php](class-form-capture.php) and `src/reader-activation-form-capture/`) is the reference implementation of this section end to end: enabled-gated key emission, a capture script driving `register()`, magic-link suppression for repeat captures, existing-reader sync scheduling, and new-reader sync naming.

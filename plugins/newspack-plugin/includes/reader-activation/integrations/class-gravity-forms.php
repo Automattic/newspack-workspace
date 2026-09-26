@@ -50,6 +50,11 @@ class Gravity_Forms extends Form_Capture {
 	const SYNC_CONTEXT = 'Gravity Forms registration (existing reader)';
 
 	/**
+	 * Context of the contact sync a capture of a new reader triggers.
+	 */
+	const NEW_READER_SYNC_CONTEXT = 'Gravity Forms registration';
+
+	/**
 	 * Handle for the block editor extension that adds the toggle to the
 	 * Gravity Forms block.
 	 */
