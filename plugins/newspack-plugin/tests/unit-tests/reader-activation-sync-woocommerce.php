@@ -152,7 +152,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test payment metadata extraction using a failed order.
+	 * An order whose payment failed syncs no last-payment date or amount.
 	 */
 	public function test_payment_metadata_with_failed_order() {
 		$order = \wc_create_order(
@@ -160,20 +160,18 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 				'customer_id' => self::$user_id,
 				'status'      => 'failed',
 				'total'       => 60,
+				// WooCommerce sets a paid date only when payment completes, so an
+				// order that fails at checkout has none. The mock stamps one on
+				// every order unless told otherwise.
+				'date_paid'   => '',
 			]
 		);
-
-		$previous_order      = self::$current_order;
 		self::$current_order = $order;
 
 		$contact_data = Sync\WooCommerce::get_contact_from_order( $order );
 
-		$this->assertEquals(
-			// Disregard the seconds in comparison to avoid flaky tests.
-			substr( $contact_data['metadata']['last_payment_date'], 0, -3 ),
-			substr( $previous_order->get_date_paid()->date( Metadata::DATE_FORMAT ), 0, -3 )
-		);
-		$this->assertEquals( $contact_data['metadata']['last_payment_amount'], self::$current_order->get_total() );
+		$this->assertSame( '', $contact_data['metadata']['last_payment_date'] );
+		$this->assertSame( '', $contact_data['metadata']['last_payment_amount'] );
 	}
 
 	/**
