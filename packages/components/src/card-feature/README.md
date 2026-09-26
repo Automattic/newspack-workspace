@@ -19,7 +19,7 @@ When enabling leaves nothing to configure, the primary button goes away while it
 |---|---|---|---|---|
 | **Unmet requirements** | `requirements` is set | "Enable" — blocked but still focusable, and described by the badge (clickable if `requirementsActionable`) | Shown if `enabled` and `requirementsActionable` (and `moreControls` provided); otherwise hidden | High-intent badge with `requirements` text |
 | **Disabled** | `!enabled`, no requirements | "Enable" | Hidden | None |
-| **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Stable-intent badge ("Enabled") |
+| **Enabled** | `enabled`, no requirements | "Configure", or none without `onConfigure` | Shown if `moreControls` provided | Stable-intent badge ("Enabled") |
 
 When `requirements` is set the title drops to the muted text colour. The description already uses that colour in every state, so the unmet-requirements state is signalled by the title colour plus the high-intent badge.
 
