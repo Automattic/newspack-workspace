@@ -110,7 +110,7 @@ n sites-add|sites-list|sites-drop <name>   # Extra sites at <name>.test, sharing
 
 Run any command with `--help` for its full options.
 
-**The build/test family takes an optional project name** (`newspack-` optional); without one, a command resolves the project from your cwd. For `test-php`, `composer` and `npm` the name must come first and match a project exactly. Anything else is forwarded to the tool, so `n test-php tests/test-foo.php` still hands PHPUnit a path.
+**The build/test family takes an optional project name** (`newspack-` optional); without one, a command resolves the project from your cwd. For `test-php`, `composer` and `npm` the name must come first and match a project exactly. Anything else is forwarded to the tool, so `n test-php tests/test-foo.php` hands PHPUnit a path.
 
 **First-time setup**
 
@@ -134,9 +134,9 @@ The main container is `newspack_dev`; an isolated env is `newspack_env_<name>`, 
 
 **`n test-php`** uses its own database (`wp_tests`, or `wp_tests_<env>` in an isolated env), separate from the site DB. All containers share one MariaDB server, so the per-env name is what stops concurrent test runs truncating each other's tables.
 
-**`n test-php` and `n test-js` refuse to run from a worktree that no isolated env mounts.** The main container sees only the root checkout, so the run would test the root's code and report it as the branch's. Mount the worktree with `n env create --worktree`, or set `NEWSPACK_TEST_ROOT_OK=1` to test the root anyway.
+**`n test-php` and `n test-js` refuse to run from a worktree unless an isolated env mounts the project under test from it.** Otherwise the container reads that project from the main checkout, and the run would report the main checkout's result as the branch's. Mount the worktree with `n env create --worktree`, or set `NEWSPACK_TEST_ROOT_OK=1` to test the main checkout anyway.
 
-**Under a coding agent** (`CLAUDECODE`, `AI_AGENT` or `CODEX_SANDBOX` set), both print a short summary instead of the runner's output: the branch and commit under test, a PASS, FAIL or NO TESTS RAN verdict, and each failure's message and location. Full output goes to `logs/test-php/` or `logs/test-js/`. `NEWSPACK_TEST_OUTPUT=full` restores the normal output, and `=compact` forces the summary.
+**Under a coding agent** (`CLAUDECODE`, `AI_AGENT` or `CODEX_SANDBOX` set), both print a short summary for monorepo projects instead of the runner's output (`repos/` projects keep their full output): the branch and commit under test, a PASS, FAIL or NO TESTS RAN verdict, and each failure's message and location. Full output goes to `logs/test-php/` or `logs/test-js/` in the main checkout. PHPUnit's `--list-*`, `--help` and `--version` modes always print in full. `NEWSPACK_TEST_OUTPUT=full` restores the normal output, and `=compact` forces the summary.
 
 **`n watch`** from inside a project runs that project's incremental webpack watcher — sub-second rebuilds, and the right choice when iterating on one thing. From the root with no argument it starts a global dispatcher that spawns a watcher lazily the first time you touch a unit, so only units you actually edit get one.
 
