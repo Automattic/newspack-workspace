@@ -58,6 +58,13 @@ php_summary "$WORK/pass.xml" 0
 expect "php: a clean run is PASS with its counts" '^result:  PASS - 3 tests, 5 assertions' "$WORK/out"
 expect "php: names the code under test" '^code:    main@abc1234 \(plugins/newspack-demo\)$' "$WORK/out"
 expect "php: names the project" '^project: /newspack-plugins/newspack-demo$' "$WORK/out"
+expect "php: the full log path is relative without a host root" '^full log: '"$WORK"'/php.log$' "$WORK/out"
+
+php_summary_rooted() { # the log as test-php.sh names it, under /newspack-monorepo
+	NEWSPACK_HOST_ROOT=/Users/dev/newspack-workspace php "$BIN/test-php-summary.php" "$1" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
+}
+php_summary_rooted "$WORK/pass.xml"
+expect "php: the full log path is a host path under the main checkout" '^full log: /Users/dev/newspack-workspace/logs/test-php/demo.log$' "$WORK/out"
 
 cat > "$WORK/fail.xml" <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -161,6 +168,31 @@ js_summary "$WORK/js-install.log" 0 1
 expect "js: a failed install is reported" '^install: FAILED \(exit 1\)' "$WORK/out"
 expect "js: with pnpm's error" 'ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY' "$WORK/out"
 expect "js: and the tests still report" '^result:  PASS' "$WORK/out"
+
+NEWSPACK_HOST_ROOT=/Users/dev/newspack-workspace bash "$BIN/test-js-summary.sh" "$WORK/js-pass.log" /newspack-plugins/newspack-demo newspack-demo 0 "$WORK" 0 > "$WORK/out" 2>&1
+expect "js: the full log path is a host path under the main checkout" '^full log: /Users/dev/newspack-workspace/js-pass.log$' "$WORK/out"
+
+# --- test-js.sh compact mode, end to end with pnpm stubbed ---------------------
+# A scoped package name must not reach the log file name: "@scope/name" would
+# put the log in a directory that does not exist, and no test would run.
+
+M="$WORK/monorepo"
+mkdir -p "$M/plugins/newspack-scoped" "$WORK/stub"
+cat > "$M/plugins/newspack-scoped/package.json" <<'JSON'
+{ "name": "@automattic/newspack-scoped", "scripts": { "test": "newspack-scripts test" } }
+JSON
+cat > "$WORK/stub/pnpm" <<'STUB'
+#!/usr/bin/env bash
+if [ "$1" = "install" ]; then echo "Done"; exit 0; fi
+printf '\n> @automattic/newspack-scoped@1.0.0 test /newspack-monorepo/plugins/newspack-scoped\n\n'
+printf 'Test Suites: 1 passed, 1 total\nTests:       3 passed, 3 total\n'
+STUB
+chmod +x "$WORK/stub/pnpm"
+PATH="$WORK/stub:$PATH" PLUGINS_PATH="$M/plugins" THEMES_PATH="$M/themes" REPOS_PATH="$M/repos" \
+	MONOREPO_ROOT="$M" NEWSPACK_TEST_OUTPUT=compact bash "$BIN/test-js.sh" newspack-scoped > "$WORK/out" 2>&1
+expect "test-js.sh: a scoped package runs its tests in compact mode" '^result:  PASS \(exit 0\)$' "$WORK/out"
+reject "test-js.sh: and its install is not reported failed" '^install:' "$WORK/out"
+expect "test-js.sh: the log is named after the directory" 'logs/test-js/newspack-scoped-[0-9TZ]+-[0-9]+\.log$' "$WORK/out"
 
 if [[ $failures -gt 0 ]]; then
 	echo "$failures failure(s)"

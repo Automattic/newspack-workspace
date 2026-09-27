@@ -94,7 +94,9 @@ else
     # install and test output go to logs/test-js/ and only the summary prints.
     LOG_DIR="$MONOREPO_ROOT/logs/test-js"
     mkdir -p "$LOG_DIR"
-    LOG="$LOG_DIR/$PKG-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
+    # Named after the directory: a scoped package name (@scope/name) would put a
+    # slash in the file name.
+    LOG="$LOG_DIR/$(basename "$PROJECT_DIR")-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
     # Full mode carries on after a failed install and tests whatever node_modules
     # already holds, so compact mode does too, and reports the failure instead.
     pnpm install > "$LOG" 2>&1

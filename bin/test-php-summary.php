@@ -11,8 +11,10 @@
  */
 
 list( , $junit, $log, $project, $db, $exit ) = array_pad( $argv, 6, '' );
-// Shown relative to the workspace root, where the host can find it too.
-$log_shown = preg_replace( '#^/newspack-monorepo/#', '', $log );
+// Shown as a host path: /newspack-monorepo is the main checkout, which `n` names
+// in NEWSPACK_HOST_ROOT. A relative path would resolve against a worktree's root.
+$host_root = rtrim( (string) getenv( 'NEWSPACK_HOST_ROOT' ), '/' );
+$log_shown = preg_replace( '#^/newspack-monorepo/#', '' === $host_root ? '' : $host_root . '/', $log );
 $args = implode( ' ', array_slice( $argv, 6 ) );
 
 echo "project: $project\n";

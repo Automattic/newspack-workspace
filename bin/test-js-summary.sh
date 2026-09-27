@@ -18,7 +18,13 @@ PKG="$3"
 STATUS="$4"
 ROOT="$5"
 INSTALL_STATUS="${6:-0}"
-LOG_SHOWN="${LOG#"$ROOT"/}"
+# Shown as a host path when `n` supplies the main checkout's location; a path
+# relative to the monorepo root would resolve against a worktree's root.
+if [ -n "${NEWSPACK_HOST_ROOT:-}" ]; then
+    LOG_SHOWN="${NEWSPACK_HOST_ROOT%/}/${LOG#"$ROOT"/}"
+else
+    LOG_SHOWN="${LOG#"$ROOT"/}"
+fi
 
 # Only the test half of the log; test-js.sh writes the install output above this marker.
 TEST_OUT=$(sed -n '/^=== pnpm run test ===$/,$p' "$LOG" | tail -n +2)

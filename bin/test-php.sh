@@ -65,6 +65,14 @@ bin/install-wp-tests.sh "$TEST_DB_NAME" root $MYSQL_ROOT_PASSWORD $MYSQL_HOST la
 # summary always names the project path, test database and test count: a bare
 # PASS would hide a run against the wrong checkout or a filter that matched
 # nothing.
+# PHPUnit's listing and help modes run no tests and write no JUnit log, so their
+# output is the answer and passes through whole.
+for arg in "${@:2}"; do
+	case "$arg" in
+		--list-*|--help|-h|--version) NEWSPACK_TEST_OUTPUT=full ;;
+	esac
+done
+
 if [ "$NEWSPACK_TEST_OUTPUT" != "compact" ]; then
 	echo "Running: phpunit ${*:2}"
 	XDEBUG_MODE=coverage phpunit "${@:2}"
