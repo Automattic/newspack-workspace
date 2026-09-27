@@ -1,6 +1,9 @@
 #!/bin/bash
 
 NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# Where n was called from. The script cds to its own directory before dispatching
+# a command, so anything that needs the caller's directory later must read this.
+N_CALLER_PWD="$PWD"
 source "$(dirname "${BASH_SOURCE[0]}")/bin/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/bin/repos.sh"
 
@@ -163,7 +166,7 @@ prepare_test_run() {
     fi
 
     local base="$NABSPATH"
-    if [[ "$PWD" == "$NABSPATH/worktrees/"* || "$PWD" == "$NABSPATH/worktrees-repos/"* ]]; then
+    if [[ "$N_CALLER_PWD" == "$NABSPATH/worktrees/"* || "$N_CALLER_PWD" == "$NABSPATH/worktrees-repos/"* ]]; then
         if [[ "$TARGET_CONTAINER" == "newspack_dev" ]]; then
             if [[ "${NEWSPACK_TEST_ROOT_OK:-}" != "1" ]]; then
                 echo "Error: no isolated env mounts this worktree, so the tests would run" >&2
@@ -173,7 +176,7 @@ prepare_test_run() {
                 exit 1
             fi
         else
-            base=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null) || base="$PWD"
+            base=$(git -C "$N_CALLER_PWD" rev-parse --show-toplevel 2>/dev/null) || base="$N_CALLER_PWD"
         fi
     fi
 

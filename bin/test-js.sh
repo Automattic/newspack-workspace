@@ -97,7 +97,9 @@ else
     LOG="$LOG_DIR/$PKG-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
     if ! pnpm install > "$LOG" 2>&1; then
         echo "project: $PROJECT_DIR"
-        echo "result:  INSTALL FAILED - see ${LOG#"$MONOREPO_ROOT"/}"
+        echo "result:  INSTALL FAILED (pnpm install) - last lines:"
+        tail -n 5 "$LOG" | sed 's/^/  /'
+        echo "full log: ${LOG#"$MONOREPO_ROOT"/}"
         exit 1
     fi
     echo "=== pnpm run test ===" >> "$LOG"
