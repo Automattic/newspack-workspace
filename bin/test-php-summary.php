@@ -16,6 +16,8 @@ $log_shown = preg_replace( '#^/newspack-monorepo/#', '', $log );
 $args = implode( ' ', array_slice( $argv, 6 ) );
 
 echo "project: $project\n";
+// Set by `n` on the host, which can resolve a worktree's branch; git in the container cannot.
+echo 'code:    ' . ( getenv( 'NEWSPACK_TEST_CODE' ) ?: 'unknown' ) . "\n";
 echo "test db: $db\n";
 echo 'args:    ' . ( '' === $args ? '(none)' : $args ) . "\n";
 

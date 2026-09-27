@@ -148,6 +148,54 @@ require_target_folder() {
     fi
 }
 
+# Shared setup for test-php and test-js. Sets test_output (compact for coding
+# agents; NEWSPACK_TEST_OUTPUT=full or =compact overrides) and test_code, the
+# branch@commit of the code the container will actually run, which the compact
+# summaries print.
+#
+# Refuses to run from a worktree that no isolated env mounts: the main container
+# only sees the root checkout, so the run would test the root's code and report
+# its result as the worktree's. NEWSPACK_TEST_ROOT_OK=1 runs it anyway.
+prepare_test_run() {
+    test_output=${NEWSPACK_TEST_OUTPUT:-}
+    if [[ -z "$test_output" && ( -n "${CLAUDECODE:-}" || -n "${AI_AGENT:-}" || -n "${CODEX_SANDBOX:-}" ) ]]; then
+        test_output=compact
+    fi
+
+    local base="$NABSPATH"
+    if [[ "$PWD" == "$NABSPATH/worktrees/"* || "$PWD" == "$NABSPATH/worktrees-repos/"* ]]; then
+        if [[ "$TARGET_CONTAINER" == "newspack_dev" ]]; then
+            if [[ "${NEWSPACK_TEST_ROOT_OK:-}" != "1" ]]; then
+                echo "Error: no isolated env mounts this worktree, so the tests would run" >&2
+                echo "against the root checkout's code, not this branch's." >&2
+                echo "  Mount it:  n env create <name> --worktree <repo>:<branch> --up" >&2
+                echo "  Or test the root anyway:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
+                exit 1
+            fi
+        else
+            base=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null) || base="$PWD"
+        fi
+    fi
+
+    local code_dir="$base" candidate
+    for candidate in "$base/plugins/$target_folder" "$base/themes/$target_folder" \
+        "$base/repos/plugins/$target_folder" "$base/repos/themes/$target_folder"; do
+        if [[ -d "$candidate" ]]; then
+            code_dir="$candidate"
+            break
+        fi
+    done
+    test_code="unknown"
+    local ref sha
+    if ref=$(git -C "$code_dir" rev-parse --abbrev-ref HEAD 2>/dev/null) && sha=$(git -C "$code_dir" rev-parse --short HEAD 2>/dev/null); then
+        test_code="$ref@$sha"
+        if [[ -n "$(git -C "$code_dir" status --porcelain --untracked-files=no -- . 2>/dev/null)" ]]; then
+            test_code="$test_code +uncommitted changes"
+        fi
+        test_code="$test_code (${code_dir#"$NABSPATH"/})"
+    fi
+}
+
 start() {
     file="docker-compose.yml"
         if [ "$1" == "8.2" ]; then
@@ -430,14 +478,9 @@ case $1 in
         ;;
     test-php)
         require_target_folder
+        prepare_test_run test-php
         command="/var/scripts/test-php.sh $target_folder ${@:2}"
-        # Coding agents get a compact summary instead of full PHPUnit output (see
-        # bin/test-php.sh). NEWSPACK_TEST_OUTPUT=full or =compact overrides this.
-        test_output=${NEWSPACK_TEST_OUTPUT:-}
-        if [[ -z "$test_output" && ( -n "${CLAUDECODE:-}" || -n "${AI_AGENT:-}" || -n "${CODEX_SANDBOX:-}" ) ]]; then
-            test_output=compact
-        fi
-        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" $TARGET_CONTAINER sh -c "$command"
+        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" $TARGET_CONTAINER sh -c "$command"
         ;;
     test-js)
         if [[ -n "$2" ]]; then
@@ -447,7 +490,8 @@ case $1 in
         # Run the script directly (no `sh -c`) and quote the folder: it can now
         # come from the command line, where an unquoted value would word-split
         # or be read as shell syntax by the container.
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
+        prepare_test_run test-js
+        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
         ;;
     composer)
         require_target_folder

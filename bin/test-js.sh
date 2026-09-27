@@ -84,6 +84,25 @@ else
     # unreachable root would otherwise leave the shell wherever it started and run
     # `pnpm --filter` against that directory instead of the workspace.
     cd "$MONOREPO_ROOT" || exit 1
-    pnpm install
-    pnpm --filter "$PKG" run test
+    if [ "$NEWSPACK_TEST_OUTPUT" != "compact" ]; then
+        pnpm install
+        pnpm --filter "$PKG" run test
+        exit $?
+    fi
+
+    # Compact mode for coding agents (set by `n`; see bin/test-php.sh). The
+    # install and test output go to logs/test-js/ and only the summary prints.
+    LOG_DIR="$MONOREPO_ROOT/logs/test-js"
+    mkdir -p "$LOG_DIR"
+    LOG="$LOG_DIR/$PKG-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
+    if ! pnpm install > "$LOG" 2>&1; then
+        echo "project: $PROJECT_DIR"
+        echo "result:  INSTALL FAILED - see ${LOG#"$MONOREPO_ROOT"/}"
+        exit 1
+    fi
+    echo "=== pnpm run test ===" >> "$LOG"
+    pnpm --filter "$PKG" run test >> "$LOG" 2>&1
+    STATUS=$?
+    bash "$SCRIPT_DIR/test-js-summary.sh" "$LOG" "$PROJECT_DIR" "$PKG" "$STATUS" "$MONOREPO_ROOT"
+    exit $STATUS
 fi
