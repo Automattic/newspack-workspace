@@ -175,42 +175,78 @@ project_name_arg() {
 }
 
 # Shared setup for test-php and test-js. Sets test_output (compact for coding
-# agents; NEWSPACK_TEST_OUTPUT=full or =compact overrides) and test_code, the
-# branch@commit of the code the container will actually run, which the compact
-# summaries print.
+# agents; NEWSPACK_TEST_OUTPUT=full or =compact overrides), test_code (the
+# branch@commit of the code the container will run, printed by the compact
+# summaries) and test_host_root (the main checkout, where logs/ lands).
 #
-# Refuses to run from a worktree that no isolated env mounts: the main container
-# only sees the root checkout, so the run would test the root's code and report
-# its result as the worktree's. NEWSPACK_TEST_ROOT_OK=1 runs it anyway.
+# Refuses when the caller is in a git worktree but the container would run the
+# project from the main checkout: either no isolated env mounts the worktree, or
+# the env mounts other projects from it but not this one. The run would test the
+# main checkout's code and report it as the worktree's. NEWSPACK_TEST_ROOT_OK=1
+# runs it anyway.
 prepare_test_run() {
     test_output=${NEWSPACK_TEST_OUTPUT:-}
     if [[ -z "$test_output" && ( -n "${CLAUDECODE:-}" || -n "${AI_AGENT:-}" || -n "${CODEX_SANDBOX:-}" ) ]]; then
         test_output=compact
     fi
 
-    local base="$NABSPATH"
-    if [[ "$N_CALLER_PWD" == "$NABSPATH/worktrees/"* || "$N_CALLER_PWD" == "$NABSPATH/worktrees-repos/"* ]]; then
-        if [[ "$TARGET_CONTAINER" == "newspack_dev" ]]; then
-            if [[ "${NEWSPACK_TEST_ROOT_OK:-}" != "1" ]]; then
-                echo "Error: no isolated env mounts this worktree, so the tests would run" >&2
-                echo "against the root checkout's code, not this branch's." >&2
-                echo "  Mount it:  n env create <name> --worktree <repo>:<branch> --up" >&2
-                echo "  Or test the root anyway:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
-                exit 1
-            fi
-        else
-            base=$(git -C "$N_CALLER_PWD" rev-parse --show-toplevel 2>/dev/null) || base="$N_CALLER_PWD"
-        fi
+    # The containers mount the main checkout, including when this n is a
+    # worktree's own copy, so resolve it from git rather than from NABSPATH.
+    local root="$NABSPATH" common
+    common=$(git -C "$NABSPATH" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=""
+    if [[ "$common" == */.git ]]; then
+        root="${common%/.git}"
+    fi
+    test_host_root="$root"
+
+    # A linked worktree has its own git dir; the main checkout and a standalone
+    # repos/ clone do not.
+    local in_worktree=0 git_dir="" common_dir=""
+    git_dir=$(git -C "$N_CALLER_PWD" rev-parse --path-format=absolute --git-dir 2>/dev/null) || git_dir=""
+    common_dir=$(git -C "$N_CALLER_PWD" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common_dir=""
+    if [[ -n "$git_dir" && "$git_dir" != "$common_dir" ]]; then
+        in_worktree=1
     fi
 
-    local code_dir="$base" candidate
-    for candidate in "$base/plugins/$target_folder" "$base/themes/$target_folder" \
-        "$base/repos/plugins/$target_folder" "$base/repos/themes/$target_folder"; do
-        if [[ -d "$candidate" ]]; then
-            code_dir="$candidate"
-            break
+    # Where the container reads this project from: an env's worktree mount for
+    # it, else the main checkout.
+    local code_dir="" compose mount host
+    if [[ "$TARGET_CONTAINER" != "newspack_dev" ]]; then
+        compose=$(grep -l -E "^[[:space:]]*container_name:[[:space:]]*${TARGET_CONTAINER}[[:space:]]*$" "$root"/docker-compose.env-*.yml 2>/dev/null | head -n 1)
+        if [[ -n "$compose" ]]; then
+            while IFS= read -r mount; do
+                [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./(worktrees(-repos)?/[^[:space:]:]+):/newspack-(plugins|themes|repos/plugins|repos/themes)/([^[:space:]:/]+) ]] || continue
+                if [[ "${BASH_REMATCH[4]}" == "$target_folder" ]]; then
+                    host="${BASH_REMATCH[1]}"
+                    code_dir="$root/$host"
+                    break
+                fi
+            done < "$compose"
         fi
-    done
+    fi
+    if [[ -z "$code_dir" ]]; then
+        if [[ $in_worktree -eq 1 && "${NEWSPACK_TEST_ROOT_OK:-}" != "1" ]]; then
+            if [[ "$TARGET_CONTAINER" == "newspack_dev" ]]; then
+                echo "Error: no isolated env mounts this worktree, so the tests would run" >&2
+            else
+                echo "Error: $TARGET_CONTAINER does not mount $target_folder from this worktree, so the tests would run" >&2
+            fi
+            echo "against the main checkout's code, not this branch's." >&2
+            echo "  Mount it:  n env create <name> --worktree <repo>:<branch> --up" >&2
+            echo "  Or test the main checkout anyway:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
+            exit 1
+        fi
+        local candidate
+        code_dir="$root"
+        for candidate in "$root/plugins/$target_folder" "$root/themes/$target_folder" \
+            "$root/repos/plugins/$target_folder" "$root/repos/themes/$target_folder"; do
+            if [[ -d "$candidate" ]]; then
+                code_dir="$candidate"
+                break
+            fi
+        done
+    fi
+
     test_code="unknown"
     local ref sha
     if ref=$(git -C "$code_dir" rev-parse --abbrev-ref HEAD 2>/dev/null) && sha=$(git -C "$code_dir" rev-parse --short HEAD 2>/dev/null); then
@@ -218,7 +254,7 @@ prepare_test_run() {
         if [[ -n "$(git -C "$code_dir" status --porcelain --untracked-files=no -- . 2>/dev/null)" ]]; then
             test_code="$test_code +uncommitted changes"
         fi
-        test_code="$test_code (${code_dir#"$NABSPATH"/})"
+        test_code="$test_code (${code_dir#"$root"/})"
     fi
 }
 
@@ -510,18 +546,20 @@ case $1 in
         require_target_folder
         prepare_test_run test-php
         command="/var/scripts/test-php.sh $target_folder ${@:2}"
-        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" $TARGET_CONTAINER sh -c "$command"
+        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" -e NEWSPACK_HOST_ROOT="$test_host_root" $TARGET_CONTAINER sh -c "$command"
         ;;
     test-js)
-        if [[ -n "$2" ]]; then
+        if named=$(project_name_arg "${2:-}"); then
+            target_folder=$named
+        elif [[ -n "$2" ]]; then
             target_folder=$2
         fi
         require_target_folder
+        prepare_test_run test-js
         # Run the script directly (no `sh -c`) and quote the folder: it can now
         # come from the command line, where an unquoted value would word-split
         # or be read as shell syntax by the container.
-        prepare_test_run test-js
-        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
+        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" -e NEWSPACK_HOST_ROOT="$test_host_root" $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
         ;;
     composer)
         if named=$(project_name_arg "${2:-}"); then
