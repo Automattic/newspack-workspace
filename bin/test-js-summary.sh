@@ -2,7 +2,7 @@
 #
 # Condenses a Jest run's output into a short summary for agents.
 #
-# Usage: test-js-summary.sh <log> <project-dir> <package> <exit-code> <monorepo-root>
+# Usage: test-js-summary.sh <log> <project-dir> <package> <exit-code> <monorepo-root> <install-exit-code>
 #
 # <project-dir> is accepted for symmetry with the PHP summary but not printed:
 # the directory pnpm reports running in is the one that matters.
@@ -17,6 +17,7 @@ LOG="$1"
 PKG="$3"
 STATUS="$4"
 ROOT="$5"
+INSTALL_STATUS="${6:-0}"
 LOG_SHOWN="${LOG#"$ROOT"/}"
 
 # Only the test half of the log; test-js.sh writes the install output above this marker.
@@ -29,6 +30,11 @@ RAN_IN=$(grep -m1 -oE '^> [^ ]+ test (/.*)$' <<< "$TEST_OUT" | sed -E 's/^> [^ ]
 echo "project: $PKG"
 echo "ran in:  ${RAN_IN:-unknown (pnpm matched no package, or never started)}"
 echo "code:    ${NEWSPACK_TEST_CODE:-unknown}"
+if [ "$INSTALL_STATUS" != "0" ]; then
+    INSTALL_ERR=$(sed -n '/^=== pnpm run test ===$/q;p' "$LOG" | grep -m1 -E 'ERR_|ERROR' | sed 's/^ *//')
+    echo "install: FAILED (exit $INSTALL_STATUS) - tests ran against the existing node_modules"
+    echo "  ${INSTALL_ERR:-see the full log}"
+fi
 
 TESTS_LINE=$(grep -E '^Tests:' <<< "$TEST_OUT" | tail -1)
 SUITES_LINE=$(grep -E '^Test Suites:' <<< "$TEST_OUT" | tail -1)

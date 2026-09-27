@@ -95,16 +95,13 @@ else
     LOG_DIR="$MONOREPO_ROOT/logs/test-js"
     mkdir -p "$LOG_DIR"
     LOG="$LOG_DIR/$PKG-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
-    if ! pnpm install > "$LOG" 2>&1; then
-        echo "project: $PROJECT_DIR"
-        echo "result:  INSTALL FAILED (pnpm install) - last lines:"
-        tail -n 5 "$LOG" | sed 's/^/  /'
-        echo "full log: ${LOG#"$MONOREPO_ROOT"/}"
-        exit 1
-    fi
+    # Full mode carries on after a failed install and tests whatever node_modules
+    # already holds, so compact mode does too, and reports the failure instead.
+    pnpm install > "$LOG" 2>&1
+    INSTALL_STATUS=$?
     echo "=== pnpm run test ===" >> "$LOG"
     pnpm --filter "$PKG" run test >> "$LOG" 2>&1
     STATUS=$?
-    bash "$SCRIPT_DIR/test-js-summary.sh" "$LOG" "$PROJECT_DIR" "$PKG" "$STATUS" "$MONOREPO_ROOT"
+    bash "$SCRIPT_DIR/test-js-summary.sh" "$LOG" "$PROJECT_DIR" "$PKG" "$STATUS" "$MONOREPO_ROOT" "$INSTALL_STATUS"
     exit $STATUS
 fi
