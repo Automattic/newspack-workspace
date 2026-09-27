@@ -151,6 +151,29 @@ require_target_folder() {
     fi
 }
 
+# Prints the project a command-line argument names, or fails if it names none.
+# Lets test-php, composer and npm take a project name the way build and test-js
+# do, instead of forwarding it to the tool as a path or subcommand. Only exact
+# project names match (with or without the newspack- prefix), so PHPUnit paths
+# and composer subcommands still pass through untouched.
+project_name_arg() {
+    local arg="$1" candidate p
+    [[ -n "$arg" && "$arg" != -* && "$arg" != */* ]] || return 1
+    for candidate in "$arg" "newspack-$arg"; do
+        for p in "${projects[@]}"; do
+            if [[ "$p" == "$candidate" ]]; then
+                echo "$candidate"
+                return 0
+            fi
+        done
+        if [[ -d "$NABSPATH/repos/plugins/$candidate" || -d "$NABSPATH/repos/themes/$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Shared setup for test-php and test-js. Sets test_output (compact for coding
 # agents; NEWSPACK_TEST_OUTPUT=full or =compact overrides) and test_code, the
 # branch@commit of the code the container will actually run, which the compact
@@ -480,6 +503,10 @@ case $1 in
         fi
         ;;
     test-php)
+        if named=$(project_name_arg "${2:-}"); then
+            target_folder=$named
+            set -- "$1" "${@:3}"
+        fi
         require_target_folder
         prepare_test_run test-php
         command="/var/scripts/test-php.sh $target_folder ${@:2}"
@@ -497,11 +524,19 @@ case $1 in
         docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
         ;;
     composer)
+        if named=$(project_name_arg "${2:-}"); then
+            target_folder=$named
+            set -- "$1" "${@:3}"
+        fi
         require_target_folder
         command="/var/scripts/composer.sh $target_folder ${@:2}"
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
         ;;
     npm)
+        if named=$(project_name_arg "${2:-}"); then
+            target_folder=$named
+            set -- "$1" "${@:3}"
+        fi
         require_target_folder
         command="/var/scripts/npm.sh $target_folder ${@:2}"
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
@@ -582,10 +617,10 @@ case $1 in
         echo "  build [folder]               Build the specified folder (plugin/theme) or all for every repo."
         echo "  ci-build [folder]            Build for CI environment with specific optimizations."
         echo "  watch [folder]               Watch & rebuild the given/current repo; no arg watches every unit from the root."
-        echo "  test-php [args]              Run PHP tests for the current repo with optional arguments."
+        echo "  test-php [project] [args]    Run PHP tests for the current (or named) repo with optional arguments."
         echo "  test-js                      Run JavaScript tests for the current repo."
-        echo "  composer [args]              Run a composer command for the current repo."
-        echo "  npm [args]                   Run an npm command for the current repo."
+        echo "  composer [project] [args]    Run a composer command for the current (or named) repo."
+        echo "  npm [project] [args]         Run an npm command for the current (or named) repo."
         echo ""
         echo "Multi-site:"
         echo "  sites-add [name]             Add a new additional site with the given name."
