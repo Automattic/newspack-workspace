@@ -268,4 +268,27 @@ class Test_Institutional_Access_Prompt extends WP_UnitTestCase {
 		$this->assertStringContainsString( '>Reading from the &lt;b&gt;library&lt;/b&gt;?</a>', $content );
 		$this->assertStringNotContainsString( 'Check for access', $content );
 	}
+
+	/**
+	 * The text is rendered into page-cached gate HTML, so changing it flushes the
+	 * `batcache` group, where Batcache keeps rendered pages. Otherwise a page warmed
+	 * before the save serves the old copy until its entry expires. The flush is
+	 * group-scoped, and a save that leaves the text as it was flushes nothing.
+	 */
+	public function test_changing_the_text_flushes_cached_pages() {
+		update_option( 'newspack_content_gate_institutional_access_text', 'On campus?' );
+		$GLOBALS['_wp_using_ext_object_cache'] = true; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		try {
+			wp_cache_set( 'page', 'cached', 'batcache' );
+			Content_Gate_Advanced_Settings::update_settings( [ 'institutional_access_text' => 'On campus?' ] );
+			$this->assertSame( 'cached', wp_cache_get( 'page', 'batcache' ), 'An unchanged text leaves cached pages alone.' );
+
+			wp_cache_set( 'other', 'cached', 'options' );
+			Content_Gate_Advanced_Settings::update_settings( [ 'institutional_access_text' => 'At the library?' ] );
+			$this->assertFalse( wp_cache_get( 'page', 'batcache' ), 'A new text flushes cached pages.' );
+			$this->assertSame( 'cached', wp_cache_get( 'other', 'options' ), 'Other cache groups survive.' );
+		} finally {
+			$GLOBALS['_wp_using_ext_object_cache'] = false; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		}
+	}
 }

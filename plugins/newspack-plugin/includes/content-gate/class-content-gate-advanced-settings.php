@@ -325,10 +325,34 @@ class Content_Gate_Advanced_Settings {
 			update_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', boolval( $settings['newsletter_link_bypass_enabled'] ) ? 1 : 0, false );
 		}
 		if ( isset( $settings['institutional_access_text'] ) ) {
-			update_option( self::OPTION_PREFIX . 'institutional_access_text', sanitize_text_field( $settings['institutional_access_text'] ), false );
+			$institutional_access_text = sanitize_text_field( $settings['institutional_access_text'] );
+			// The text is part of the gate HTML served from the page cache.
+			if ( (string) get_option( self::OPTION_PREFIX . 'institutional_access_text', '' ) !== $institutional_access_text ) {
+				update_option( self::OPTION_PREFIX . 'institutional_access_text', $institutional_access_text, false );
+				self::flush_page_cache();
+			}
 		}
 		self::reset_cache();
 		return self::get_settings();
+	}
+
+	/**
+	 * Flush rendered pages, so a change to gate output reaches readers now rather
+	 * than when their cached pages expire.
+	 *
+	 * Batcache stores rendered pages in the object cache's `batcache` group, and has
+	 * no per-URL purge for "every gated page", so the whole group goes. Without a
+	 * persistent object cache there are no rendered pages to strand.
+	 */
+	private static function flush_page_cache() {
+		if ( ! wp_using_ext_object_cache() ) {
+			return;
+		}
+		if ( function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
+			wp_cache_flush_group( 'batcache' );
+		} else {
+			wp_cache_flush();
+		}
 	}
 
 	/**
