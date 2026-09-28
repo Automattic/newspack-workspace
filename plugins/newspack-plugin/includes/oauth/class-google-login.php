@@ -136,7 +136,7 @@ class Google_Login {
 
 		$saved_csrf_token = OAuth::retrieve_csrf_token( self::CSRF_TOKEN_NAMESPACE );
 
-		if ( $_REQUEST['csrf_token'] !== $saved_csrf_token ) {
+		if ( ! is_string( $saved_csrf_token ) || ! hash_equals( $saved_csrf_token, sanitize_text_field( wp_unslash( $_REQUEST['csrf_token'] ) ) ) ) {
 			self::handle_error(
 				/* translators: %s is a unique user id */
 				sprintf( __( 'CSRF token verification failed for id: %s', 'newspack-plugin' ), OAuth::get_unique_id() ),
