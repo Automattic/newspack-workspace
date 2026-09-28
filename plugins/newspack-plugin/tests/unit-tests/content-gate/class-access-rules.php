@@ -1057,10 +1057,10 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 			[
 				960           => 'Publish tier',
 				961           => 'Private tier',
-				962           => 'Draft tier [invalid status: draft]',
-				963           => 'Pending tier [invalid status: pending]',
-				964           => 'Draft membership [invalid status: draft]',
-				$variation_id => 'Draft membership - Annual [invalid status: draft]',
+				962           => 'Draft tier [invalid status: Draft]',
+				963           => 'Pending tier [invalid status: Pending]',
+				964           => 'Draft membership [invalid status: Draft]',
+				$variation_id => 'Draft membership - Annual [invalid status: Draft]',
 			],
 			array_column( $options, 'label', 'value' )
 		);
@@ -1099,15 +1099,39 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'selectable', $rule_options[970] );
 		$this->assertSame(
 			[
-				'label'      => 'Future tier [invalid status: future]',
+				'label'      => 'Future tier [invalid status: Scheduled]',
 				'value'      => 971,
 				'ineligible' => true,
 				'selectable' => false,
 			],
 			$rule_options[971]
 		);
-		$this->assertSame( 'Trash tier [invalid status: trash]', $rule_options[972]['label'] );
+		$this->assertSame( 'Trash tier [invalid status: Trash]', $rule_options[972]['label'] );
 		$this->assertFalse( $rule_options[972]['selectable'] );
+	}
+
+	/**
+	 * WooCommerce trashes a variable subscription's variations along with it, so a gate
+	 * holding one of those variation IDs can only keep its name if the label-only entries
+	 * read trashed variations too.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_rule_options_name_variations_of_a_trashed_variable_subscription() {
+		wc_create_mock_product(
+			[
+				'id'     => 980,
+				'type'   => 'variable-subscription',
+				'name'   => 'Retired membership',
+				'status' => 'trash',
+			]
+		);
+		$variation_id = $this->create_variation_post( 980, 'Retired membership - Annual', '', 'trash' );
+
+		$rule_options = array_column( Access_Rules::get_access_rules()['subscription']['options'], null, 'value' );
+
+		$this->assertSame( 'Retired membership - Annual [invalid status: Trash]', $rule_options[ $variation_id ]['label'] ?? null );
+		$this->assertFalse( $rule_options[ $variation_id ]['selectable'] );
 	}
 
 	/**

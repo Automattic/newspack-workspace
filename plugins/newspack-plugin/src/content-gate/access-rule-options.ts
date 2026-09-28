@@ -351,6 +351,7 @@ export function hasUnlistedAccessRuleValues( options: AccessRuleOption[], value:
  */
 const UNLISTED_VALUES_NOTICES: Record< string, () => string > = {
 	subscription: () =>
+		// translators: "invalid status" quotes the product label marker, a separate PHP string ('%1$s [invalid status: %2$s]'); keep the two in step.
 		__(
 			'Entries marked “not listed” or “invalid status” are not products you currently sell — a draft, pending, scheduled or trashed product, a product or variation that was deleted, or a product that is no longer a subscription. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
 			'newspack-plugin'

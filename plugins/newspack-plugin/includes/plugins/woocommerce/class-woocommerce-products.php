@@ -28,7 +28,8 @@ class WooCommerce_Products {
 
 	/**
 	 * Label a product for a picker, marking a status outside `ELIGIBLE_PRODUCT_STATUSES`,
-	 * e.g. "All Access [invalid status: draft]".
+	 * e.g. "All Access [invalid status: Draft]". The status reads as WordPress admin names
+	 * it ("Scheduled" rather than `future`), in the site's language.
 	 *
 	 * The marker keeps a saved product's name visible after it is drafted, scheduled or
 	 * trashed, rather than falling back to a generic "deleted" or "not listed" stand-in.
@@ -44,11 +45,12 @@ class WooCommerce_Products {
 		if ( in_array( $status, self::ELIGIBLE_PRODUCT_STATUSES, true ) ) {
 			return $name;
 		}
+		$status_object = \get_post_status_object( $status );
 		return sprintf(
-			/* translators: 1: product name, 2: product post status slug, e.g. "draft" or "trash". */
+			/* translators: 1: product name, 2: post status label, e.g. "Draft" or "Trash". Keep "invalid status" in step with the Access Control picker notice that quotes it. */
 			__( '%1$s [invalid status: %2$s]', 'newspack-plugin' ),
 			$name,
-			$status
+			$status_object ? $status_object->label : $status
 		);
 	}
 

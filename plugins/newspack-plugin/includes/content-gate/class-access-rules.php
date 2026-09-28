@@ -647,7 +647,7 @@ class Access_Rules {
 	 * produces for a variation, and nothing can have been bought in it.
 	 *
 	 * Draft and pending products keep granting access, but their labels carry a status
-	 * marker ("[invalid status: draft]") so a publisher can tell them from the products
+	 * marker ("[invalid status: Draft]") so a publisher can tell them from the products
 	 * they currently sell. Private products don't: they're a normal state for legacy tiers.
 	 *
 	 * The result is memoized per request. The list itself is still unbounded and is
@@ -705,7 +705,9 @@ class Access_Rules {
 				$option['selectable'] = false;
 				return $option;
 			},
-			self::build_subscription_product_options( $products )
+			// WooCommerce trashes a variable product's variations along with it, so a trashed
+			// parent's saved variation IDs can only be named by reading trashed variations.
+			self::build_subscription_product_options( $products, [ 'publish', 'private', 'trash' ] )
 		);
 		return self::$unselectable_subscription_products_options;
 	}
@@ -729,12 +731,13 @@ class Access_Rules {
 	 * since a variation can't be bought while its parent is unavailable. The flag is what
 	 * the picker reads to warn that the entry still grants access.
 	 *
-	 * @param \WC_Product[] $products The subscription products.
+	 * @param \WC_Product[] $products           The subscription products.
+	 * @param string[]      $variation_statuses Variation statuses to read. See `get_subscription_variation_posts()`.
 	 *
 	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible'? => true ].
 	 */
-	private static function build_subscription_product_options( $products ) {
-		$variations_by_parent = self::get_subscription_variation_posts( $products );
+	private static function build_subscription_product_options( $products, $variation_statuses = [ 'publish', 'private' ] ) {
+		$variations_by_parent = self::get_subscription_variation_posts( $products, $variation_statuses );
 		$options              = [];
 		foreach ( $products as $product ) {
 			$status     = $product->get_status();
@@ -790,13 +793,16 @@ class Access_Rules {
 	 * Publish and private is the whole set WooCommerce itself reads a variable product's
 	 * children as, so it is every variation that can exist for a publisher to have sold.
 	 * Private earns its place: a reader can hold an active subscription to a tier the
-	 * publisher has since hidden, and the rule still has to be able to name it.
+	 * publisher has since hidden, and the rule still has to be able to name it. The one
+	 * exception is a trashed parent, whose variations WooCommerce trashes with it; the
+	 * label-only entries pass `trash` to name those.
 	 *
 	 * @param \WC_Product[] $products The subscription products to collect variations for.
+	 * @param string[]      $statuses Variation post statuses to read.
 	 *
 	 * @return array<int, \WP_Post[]> Variation posts keyed by parent product ID.
 	 */
-	private static function get_subscription_variation_posts( $products ) {
+	private static function get_subscription_variation_posts( $products, $statuses = [ 'publish', 'private' ] ) {
 		$parent_ids = [];
 		foreach ( $products as $product ) {
 			if ( $product->is_type( 'variable-subscription' ) ) {
@@ -810,7 +816,7 @@ class Access_Rules {
 			[
 				'post_type'              => 'product_variation',
 				'post_parent__in'        => $parent_ids,
-				'post_status'            => [ 'publish', 'private' ],
+				'post_status'            => $statuses,
 				'posts_per_page'         => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Variations of the subscription products already fetched; config-scale.
 				'orderby'                => [
 					'menu_order' => 'ASC',

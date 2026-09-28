@@ -982,9 +982,8 @@ class Audience_Campaigns extends Wizard {
 			array_map(
 				function( $post ) {
 					return [
-						'id'     => $post->ID,
-						'title'  => WooCommerce_Products::get_product_label_with_status( $post->post_title, $post->post_status ),
-						'status' => $post->post_status,
+						'id'    => $post->ID,
+						'title' => WooCommerce_Products::get_product_label_with_status( $post->post_title, $post->post_status ),
 					];
 				},
 				$posts
