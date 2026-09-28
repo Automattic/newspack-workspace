@@ -15,6 +15,8 @@ import domReady from '@wordpress/dom-ready';
 const PANEL_ID = 'newspack-comments-panel';
 const BODY_OPEN_CLASS = 'comments-panel-open';
 const SLIDE_FALLBACK_MS = 600;
+// Slide duration (250ms in style.scss) plus a short buffer before scrolling to a linked comment.
+const SCROLL_TO_COMMENT_DELAY_MS = 400;
 
 // Focusable element selector.
 const FOCUSABLE_SELECTOR =
@@ -118,8 +120,23 @@ const createCommentsPanel = ( panel, triggers ) => {
 				first.focus();
 			}
 		};
+		// Tab presses inside iframes (e.g. Disqus) never reach this document, so
+		// also pull focus back if it lands outside the panel.
+		const handleFocusIn = e => {
+			if ( panel.contains( e.target ) ) {
+				return;
+			}
+			const first = getVisibleFocusable( panel )[ 0 ] || closeBtn;
+			if ( first ) {
+				first.focus();
+			}
+		};
 		document.addEventListener( 'keydown', handleKeyDown, true );
-		return () => document.removeEventListener( 'keydown', handleKeyDown, true );
+		document.addEventListener( 'focusin', handleFocusIn );
+		return () => {
+			document.removeEventListener( 'keydown', handleKeyDown, true );
+			document.removeEventListener( 'focusin', handleFocusIn );
+		};
 	};
 
 	const openPanel = () => {
@@ -291,11 +308,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 			.then( response => {
 				if ( response.status === 429 ) {
 					setLoading( commentsBlock, false );
-					showCommentFormError(
-						form,
-						window.newspackScreenReaderText?.comment_too_fast ||
-							'You are posting comments too quickly. Please wait a moment before trying again.'
-					);
+					showCommentFormError( form, panel.dataset.rateLimitMessage );
 					return null;
 				}
 				if ( ! response.ok ) {
@@ -360,7 +373,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 				if ( target ) {
 					target.scrollIntoView( { behavior: 'smooth', block: 'start' } );
 				}
-			}, SLIDE_FALLBACK_MS );
+			}, SCROLL_TO_COMMENT_DELAY_MS );
 		}
 	}
 };

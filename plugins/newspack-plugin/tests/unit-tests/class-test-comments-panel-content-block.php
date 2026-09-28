@@ -119,6 +119,13 @@ class Newspack_Test_Comments_Panel_Content_Block extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The translatable rate-limit message is passed to the view script.
+	 */
+	public function test_rate_limit_message_attribute() {
+		$this->assertStringContainsString( 'data-rate-limit-message="You are posting comments too quickly.', $this->render() );
+	}
+
+	/**
 	 * Inner blocks content is output inside the panel content wrapper.
 	 */
 	public function test_inner_content_is_rendered() {

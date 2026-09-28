@@ -55,21 +55,29 @@
 		margin-top: 0;
 		margin-bottom: 0;
 	}
+
+	&:not(:has(.comment-respond)) .wp-block-comments-title {
+		margin-top: 0;
+	}
+
+	.newspack-ui__notice {
+		margin-bottom: 0;
+	}
 }
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 .comments-panel__panel {
-	--comments-panel-slide-duration: 325ms;
+	--comments-panel-slide-duration: 250ms;
 
 	background: var(--wp--preset--color--base, #fff);
 	bottom: 0;
 	color: var(--wp--preset--color--contrast, #1e1e1e);
 	opacity: 0;
 	overflow-y: auto;
-	padding: var(--wp--preset--spacing--30, 1rem);
+	padding: 0 var(--wp--preset--spacing--30, 1rem) var(--wp--preset--spacing--30, 1rem);
 	position: fixed;
-	top: var(--wp-admin--admin-bar--height, 0);
+	top: 0;
 	transition:
 		opacity 125ms ease-in-out,
 		left var(--comments-panel-slide-duration) ease-in-out,
@@ -82,7 +90,23 @@
 		max-width: calc(
 			var(--wp--preset--spacing--40, 1.5rem) + var(--wp--style--global--content-size, 680px) + var(--wp--preset--spacing--40, 1.5rem)
 		);
-		padding: var(--wp--preset--spacing--40, 1.5rem);
+		padding: 0 var(--wp--preset--spacing--40, 1.5rem) var(--wp--preset--spacing--40, 1.5rem);
+	}
+
+	// The admin bar scrolls away on small screens, so cover it there instead of sitting below it.
+	.admin-bar & {
+		z-index: 100000;
+
+		@media (min-width: breakpoints.$mobile_width) {
+			top: var(--wp-admin--admin-bar--height, 0);
+			z-index: 99998;
+		}
+	}
+
+	&:has(#disqus_thread) { /* stylelint-disable-line selector-id-pattern */
+		max-width:
+			calc((var(--wp--style--global--content-size) - (var(--wp--preset--spacing--50) * 5)) / 6 * 7 +
+			(var(--wp--preset--spacing--50) * 6));
 	}
 
 	&--left {

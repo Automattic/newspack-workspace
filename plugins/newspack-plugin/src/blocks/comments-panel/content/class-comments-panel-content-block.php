@@ -65,14 +65,15 @@ final class Comments_Panel_Content_Block {
 		$panel_class = 'comments-panel__panel is-layout-constrained comments-panel__panel--right';
 
 		$extra_attributes = [
-			'id'                 => 'newspack-comments-panel',
-			'class'              => $panel_class,
-			'data-overlay-color' => $overlay_color,
-			'aria-hidden'        => 'true',
-			'inert'              => 'true',
-			'role'               => 'dialog',
-			'aria-modal'         => 'true',
-			'aria-label'         => __( 'Comments', 'newspack-plugin' ),
+			'id'                      => 'newspack-comments-panel',
+			'class'                   => $panel_class,
+			'data-overlay-color'      => $overlay_color,
+			'data-rate-limit-message' => __( 'You are posting comments too quickly. Please wait a moment before trying again.', 'newspack-plugin' ),
+			'aria-hidden'             => 'true',
+			'inert'                   => 'true',
+			'role'                    => 'dialog',
+			'aria-modal'              => 'true',
+			'aria-label'              => __( 'Comments', 'newspack-plugin' ),
 		];
 		$wrapper_attributes = get_block_wrapper_attributes( $extra_attributes );
 
@@ -85,7 +86,7 @@ final class Comments_Panel_Content_Block {
 						<?php \Newspack\Newspack_UI_Icons::print_svg( 'close' ); ?>
 					</span>
 					<span class="screen-reader-text">
-						<?php esc_html_e( 'Close', 'newspack-plugin' ); ?>
+						<?php esc_html_e( 'Close Comments', 'newspack-plugin' ); ?>
 					</span>
 				</button>
 			</div>

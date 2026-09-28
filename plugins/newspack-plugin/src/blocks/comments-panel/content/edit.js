@@ -182,7 +182,7 @@ export default function CommentsPanelContentEdit( { attributes, clientId, setAtt
 								<span className="comments-panel__icon" aria-hidden="true">
 									{ closeIcon }
 								</span>
-								<span className="screen-reader-text">{ __( 'Close', 'newspack-plugin' ) }</span>
+								<span className="screen-reader-text">{ __( 'Close Comments', 'newspack-plugin' ) }</span>
 							</button>
 						</div>
 						<div className="comments-panel__content">
