@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { comment as icon } from '@wordpress/icons';
-import { InnerBlocks, useBlockProps } from '@wordpress/block-editor';
+import { InnerBlocks } from '@wordpress/block-editor';
 
 /**
  * Internal dependencies
@@ -24,9 +24,5 @@ export const settings = {
 	},
 	description: metadata.description,
 	edit: Edit,
-	save: () => (
-		<div { ...useBlockProps.save() }>
-			<InnerBlocks.Content />
-		</div>
-	),
+	save: () => <InnerBlocks.Content />,
 };
