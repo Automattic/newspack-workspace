@@ -1,13 +1,17 @@
 #!/bin/bash
 
-source /var/scripts/_common.sh
+# Sourced relative to this script rather than by absolute container path, so
+# bin/tests/ can run it on the host. In the container bin/ is mounted at
+# /var/scripts, so this resolves to the same files.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/_common.sh"
 # _common.sh derives NABSPATH from its own location, which in here is /var — not
 # a workspace root. repos.sh's host-only helpers key off NABSPATH being unset in
 # the container to fail visibly rather than probe /var/repos/..., so hand that
 # invariant back: keep the value only if it points at a real workspace.
 [ -f "${NABSPATH:-}/n" ] || unset NABSPATH
-source /var/scripts/repos.sh
-source /var/scripts/resolve-project-path.sh
+source "$SCRIPT_DIR/repos.sh"
+source "$SCRIPT_DIR/resolve-project-path.sh"
 
 find_project() {
     local path=$(resolve_project_path "$1")
@@ -79,10 +83,10 @@ if [ "$NEWSPACK_TEST_OUTPUT" != "compact" ]; then
 	exit $?
 fi
 
-LOG_DIR=/newspack-monorepo/logs/test-php
+LOG_DIR="${MONOREPO_ROOT:-/newspack-monorepo}/logs/test-php"
 mkdir -p "$LOG_DIR"
 LOG_BASE="$LOG_DIR/$PROJECT_NAME-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 XDEBUG_MODE=coverage phpunit --log-junit "$LOG_BASE.xml" "${@:2}" > "$LOG_BASE.log" 2>&1
 STATUS=$?
-php "$(dirname "$0")/test-php-summary.php" "$LOG_BASE.xml" "$LOG_BASE.log" "$PROJECT_DIR" "$TEST_DB_NAME" "$STATUS" "${@:2}"
+php "$SCRIPT_DIR/test-php-summary.php" "$LOG_BASE.xml" "$LOG_BASE.log" "$PROJECT_DIR" "$TEST_DB_NAME" "$STATUS" "${@:2}"
 exit $STATUS

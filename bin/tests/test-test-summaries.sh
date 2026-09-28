@@ -58,7 +58,8 @@ php_summary "$WORK/pass.xml" 0
 expect "php: a clean run is PASS with its counts" '^result:  PASS - 3 tests, 5 assertions' "$WORK/out"
 expect "php: names the code under test" '^code:    main@abc1234 \(plugins/newspack-demo\)$' "$WORK/out"
 expect "php: names the project" '^project: /newspack-plugins/newspack-demo$' "$WORK/out"
-expect "php: the full log path is relative without a host root" '^full log: '"$WORK"'/php.log$' "$WORK/out"
+php "$BIN/test-php-summary.php" "$WORK/pass.xml" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
+expect "php: without a host root the log path is relative to the monorepo" '^full log: logs/test-php/demo.log$' "$WORK/out"
 
 php_summary_rooted() { # the log as test-php.sh names it, under /newspack-monorepo
 	NEWSPACK_HOST_ROOT=/Users/dev/newspack-workspace php "$BIN/test-php-summary.php" "$1" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
@@ -83,6 +84,27 @@ expect "php: lists a failure by test id" '^- failure: Demo_Test::test_fails$' "$
 expect "php: lists an error by test id" '^- error: Demo_Test::test_errors$' "$WORK/out"
 expect "php: keeps the failure location" '/tests/test-demo.php:3$' "$WORK/out"
 reject "php: drops the repeated test id from the message" '^    Demo_Test::test_fails$' "$WORK/out"
+
+cat > "$WORK/array.xml" <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites><testsuite name="demo" tests="1" assertions="1" errors="0" warnings="0" failures="1" skipped="0" time="0.1">
+<testcase name="test_array" class="Demo_Test"><failure type="PHPUnit\Framework\ExpectationFailedException">Demo_Test::test_array
+Failed asserting that two arrays are identical.
+--- Expected
++++ Actual
+@@ @@
+ Array &amp;0 (
+-    'a' =&gt; 1
++    'a' =&gt; 2
+     'b' =&gt; 2
+     'c' =&gt; 3
+ )
+
+/tests/test-array.php:12</failure></testcase>
+</testsuite></testsuites>
+XML
+php_summary "$WORK/array.xml" 1
+expect "php: keeps a location that follows a long diff" '/tests/test-array.php:12$' "$WORK/out"
 
 printf '<?xml version="1.0" encoding="UTF-8"?>\n<testsuites/>\n' > "$WORK/empty.xml"
 php_summary "$WORK/empty.xml" 0
@@ -193,6 +215,39 @@ PATH="$WORK/stub:$PATH" PLUGINS_PATH="$M/plugins" THEMES_PATH="$M/themes" REPOS_
 expect "test-js.sh: a scoped package runs its tests in compact mode" '^result:  PASS \(exit 0\)$' "$WORK/out"
 reject "test-js.sh: and its install is not reported failed" '^install:' "$WORK/out"
 expect "test-js.sh: the log is named after the directory" 'logs/test-js/newspack-scoped-[0-9TZ]+-[0-9]+\.log$' "$WORK/out"
+
+# --- test-php.sh, end to end with phpunit stubbed -------------------------------
+# PHPUnit's listing modes write no JUnit log, so compact mode must pass them
+# through whole rather than report NO REPORT.
+
+mkdir -p "$M/plugins/newspack-php/bin" "$M/plugins/newspack-php/vendor/composer"
+echo '{}' > "$M/plugins/newspack-php/composer.json"
+printf '{\n    "dev": true,\n    "packages": []\n}\n' > "$M/plugins/newspack-php/vendor/composer/installed.json"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$M/plugins/newspack-php/bin/install-wp-tests.sh"
+chmod +x "$M/plugins/newspack-php/bin/install-wp-tests.sh"
+cat > "$WORK/stub/phpunit" <<'STUB'
+#!/usr/bin/env bash
+for a in "$@"; do
+	[ "$a" = "--list-groups" ] && { printf 'Available test group(s):\n - alpha\n - beta\n'; exit 0; }
+done
+while [ $# -gt 0 ]; do
+	if [ "$1" = "--log-junit" ]; then
+		printf '<?xml version="1.0"?>\n<testsuites><testsuite name="s" tests="2" assertions="2" errors="0" warnings="0" failures="0" skipped="0" time="0.1"/></testsuites>\n' > "$2"
+	fi
+	shift
+done
+echo "OK (2 tests)"
+STUB
+chmod +x "$WORK/stub/phpunit"
+run_test_php() {
+	PATH="$WORK/stub:$PATH" PLUGINS_PATH="$M/plugins" THEMES_PATH="$M/themes" REPOS_PATH="$M/repos" \
+		MONOREPO_ROOT="$M" NEWSPACK_TEST_OUTPUT=compact bash "$BIN/test-php.sh" newspack-php "$@" > "$WORK/out" 2>&1
+}
+run_test_php --list-groups
+expect "test-php.sh: --list-groups prints the groups in compact mode" '^ - beta$' "$WORK/out"
+reject "test-php.sh: and gives no verdict" '^result:' "$WORK/out"
+run_test_php
+expect "test-php.sh: a normal compact run gives a verdict" '^result:  PASS - 2 tests' "$WORK/out"
 
 if [[ $failures -gt 0 ]]; then
 	echo "$failures failure(s)"
