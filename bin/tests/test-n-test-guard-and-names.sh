@@ -51,6 +51,9 @@ WT="$R/worktrees/wt"
 STANDALONE="$R/repos/plugins/standalone-thing"
 mkdir -p "$STANDALONE" && touch "$STANDALONE/.keep"
 g -C "$STANDALONE" init -q && g -C "$STANDALONE" add -A && g -C "$STANDALONE" commit -q -m init
+# A worktree of that clone checked out in place under repos/, which the
+# container mounts as a project of its own.
+g -C "$STANDALONE" worktree add -q -b h1 "$R/repos/plugins/standalone-thing-h1"
 
 write_env() { # an env that mounts newspack-plugin, and only it, from the worktree
 	cat > "$R/docker-compose.env-demo.yml" <<'YML'
@@ -145,10 +148,18 @@ echo "      - ./worktrees/wt2/plugins/newspack-ads:/newspack-plugins/newspack-ad
 run_n "$R/n" "$WT" test-php newspack-ads
 check "env mounts the project from another worktree: refuses" "1" "$(status)"
 check "env mounts the project from another worktree: calls no docker" "no" "$(called_docker)"
+NEWSPACK_TEST_ROOT_OK=1 run_n "$R/n" "$WT" test-php newspack-ads
+check "override: code names the worktree the env really mounts" "yes" \
+	"$(env_value NEWSPACK_TEST_CODE | grep -q '(worktrees/wt2/plugins/newspack-ads)$' && echo yes || echo no)"
 rm -f "$R/docker-compose.env-demo.yml"
 
 run_n "$R/n" "$WT" test-js standalone-thing
 check "a repos/ project named from a monorepo worktree runs" "0" "$(status)"
+
+run_n "$R/n" "$R/repos/plugins/standalone-thing-h1" test-php
+check "a repos/ worktree checked out in place runs" "0" "$(status)"
+check "and code names that worktree" "yes" \
+	"$(env_value NEWSPACK_TEST_CODE | grep -q '^h1@.*(repos/plugins/standalone-thing-h1)$' && echo yes || echo no)"
 
 run_n "$R/n" "$STANDALONE" test-js
 check "standalone repos/ clone is not a worktree: runs" "0" "$(status)"

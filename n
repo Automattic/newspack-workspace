@@ -219,19 +219,25 @@ prepare_test_run() {
     if [[ -n "$git_dir" && "$git_dir" != "$caller_common" && "$caller_common" == "$project_common" ]]; then
         guarded=1
         caller_top=$(git -C "$N_CALLER_PWD" rev-parse --show-toplevel 2>/dev/null) || caller_top=""
+        # A worktree checked out in place under repos/ is itself what the
+        # container mounts, so it tests the caller's own code.
+        if [[ -n "$caller_top" && ( "$root_dir" == "$caller_top" || "$root_dir" == "$caller_top"/* ) ]]; then
+            guarded=0
+        fi
     fi
 
     # An env's mount of the project counts only when it comes from the caller's
     # worktree; a mount from another worktree tests another branch.
-    local code_dir="" compose mount
+    local code_dir="" mounted_dir="" compose mount
     if [[ "$TARGET_CONTAINER" != "newspack_dev" ]]; then
         compose=$(grep -l -E "^[[:space:]]*container_name:[[:space:]]*${TARGET_CONTAINER}[[:space:]]*$" "$root"/docker-compose.env-*.yml 2>/dev/null | head -n 1)
         if [[ -n "$compose" ]]; then
             while IFS= read -r mount; do
                 [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./(worktrees(-repos)?/[^[:space:]:]+):/newspack-(plugins|themes|repos/plugins|repos/themes)/([^[:space:]:/]+) ]] || continue
                 [[ "${BASH_REMATCH[4]}" == "$target_folder" ]] || continue
-                if [[ $guarded -eq 0 || "$root/${BASH_REMATCH[1]}" == "$caller_top" || "$root/${BASH_REMATCH[1]}" == "$caller_top"/* ]]; then
-                    code_dir="$root/${BASH_REMATCH[1]}"
+                mounted_dir="$root/${BASH_REMATCH[1]}"
+                if [[ $guarded -eq 0 || "$mounted_dir" == "$caller_top" || "$mounted_dir" == "$caller_top"/* ]]; then
+                    code_dir="$mounted_dir"
                 fi
                 break
             done < "$compose"
@@ -255,7 +261,9 @@ prepare_test_run() {
             echo "  Or test the main checkout anyway:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
             exit 1
         fi
-        code_dir="$root_dir"
+        # Overridden: name what the container will really read, which is the
+        # env's mount when it has one, even from another worktree.
+        code_dir="${mounted_dir:-$root_dir}"
     fi
 
     test_code="unknown"
