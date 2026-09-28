@@ -1,3 +1,10 @@
+## newspack [6.53.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.0...newspack@6.53.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **perfmatters:** load the ads stylesheet up front so sticky ads show ([#1186](https://github.com/Automattic/newspack-workspace/issues/1186)) ([b94a11d](https://github.com/Automattic/newspack-workspace/commit/b94a11ddafae9c28058cf0a0e00c87234c1b8fb2))
+
 # newspack [6.53.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.9...newspack@6.53.0) (2026-09-28)
 
 
