@@ -1,3 +1,20 @@
+# newspack-components [4.9.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.8.0...newspack-components@4.9.0) (2026-09-28)
+
+
+### Bug Fixes
+
+* **components:** confirm before the footer's destructive actions ([#965](https://github.com/Automattic/newspack-workspace/issues/965)) ([e4e6676](https://github.com/Automattic/newspack-workspace/commit/e4e66763aa5ce74265689aa6fee4941f2f7348be))
+* **empty-state:** adopt the shared component on three screens ([#1035](https://github.com/Automattic/newspack-workspace/issues/1035)) ([ddfc071](https://github.com/Automattic/newspack-workspace/commit/ddfc071f905e37b20addce7a6416f22665c9042d))
+* **subscribers:** use core Notice for load-failure states ([#1029](https://github.com/Automattic/newspack-workspace/issues/1029)) ([f13281b](https://github.com/Automattic/newspack-workspace/commit/f13281b9d5a176d8beb9667aba6f8d599c6ad331))
+
+
+### Features
+
+* **audience:** refresh the Integrations brand marks ([#1155](https://github.com/Automattic/newspack-workspace/issues/1155)) ([af2729c](https://github.com/Automattic/newspack-workspace/commit/af2729cc6a5dd69cebe18456762eb21c55ae16a3))
+* **audience:** refresh the Integrations screen icons, order and copy ([#1151](https://github.com/Automattic/newspack-workspace/issues/1151)) ([1d3f5a6](https://github.com/Automattic/newspack-workspace/commit/1d3f5a6c074f18491b3047c0e679e6c4f7b1f3cd))
+* **reader-activation:** split Gravity Forms into its own integration ([#1170](https://github.com/Automattic/newspack-workspace/issues/1170)) ([7bd756b](https://github.com/Automattic/newspack-workspace/commit/7bd756bc30b12856091c126c6d054d45e6b78244))
+* **sync:** read the push log in a sync activity tab ([#1114](https://github.com/Automattic/newspack-workspace/issues/1114)) ([c1a2d2d](https://github.com/Automattic/newspack-workspace/commit/c1a2d2d299b8a0150ce1c4de37e14edf437176b3))
+
 # newspack-components [4.8.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.7.0...newspack-components@4.8.0) (2026-09-14)
 
 
