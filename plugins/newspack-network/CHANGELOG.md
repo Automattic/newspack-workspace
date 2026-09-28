@@ -1,3 +1,17 @@
+## newspack-network [2.22.10](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.9...newspack-network@2.22.10) (2026-09-28)
+
+
+### Bug Fixes
+
+* **network:** describe the images the receiving site actually stores ([#981](https://github.com/Automattic/newspack-workspace/issues/981)) ([055ad63](https://github.com/Automattic/newspack-workspace/commit/055ad63653c0ed8bae773d1fccb36f7006132473))
+
+## newspack-network [2.22.9](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.8...newspack-network@2.22.9) (2026-09-22)
+
+
+### Bug Fixes
+
+* **event-log:** index timestamp so checkout skips a full-table scan ([#1132](https://github.com/Automattic/newspack-workspace/issues/1132)) ([c2ecf7c](https://github.com/Automattic/newspack-workspace/commit/c2ecf7cd8b9f0d7dd29b29e85171a7c79d8d3a94))
+
 ## newspack-network [2.22.8](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.7...newspack-network@2.22.8) (2026-09-15)
 
 

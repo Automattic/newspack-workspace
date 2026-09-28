@@ -1,3 +1,11 @@
+## newspack-theme [2.27.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.27.0...newspack-theme@2.27.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **theme:** style WooCommerce content outside native WC routes ([#980](https://github.com/Automattic/newspack-workspace/issues/980)) ([56527d0](https://github.com/Automattic/newspack-workspace/commit/56527d0eb6642ec6c81db1d3de82a52f8a94189c))
+* **theme:** tighten post subtitle handling ([#1024](https://github.com/Automattic/newspack-workspace/issues/1024)) ([609cd84](https://github.com/Automattic/newspack-workspace/commit/609cd84ad058a21b5b99841394cc7d0c4c1ba4b9))
+
 # newspack-theme [2.27.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.26.1...newspack-theme@2.27.0) (2026-09-14)
 
 

@@ -28,6 +28,7 @@ final class Newspack_Popups_Data_Api {
 		\add_action( 'newspack_campaigns_after_campaign_render', [ __CLASS__, 'get_rendered_popups' ] );
 		\add_action( 'wp_footer', [ __CLASS__, 'print_popups_data' ], 999 );
 		add_filter( 'newspack_blocks_modal_checkout_cart_item_data', [ __CLASS__, 'checkout_cart_item_data' ], 10, 2 );
+		add_filter( 'newspack_donations_cart_item_data', [ __CLASS__, 'donation_cart_item_data' ] );
 		add_action( 'woocommerce_checkout_create_order_line_item', [ __CLASS__, 'checkout_create_order_line_item' ], 10, 4 );
 		add_filter( 'newspack_auth_form_metadata', [ __CLASS__, 'register_reader_metadata' ] );
 		add_filter( 'newspack_register_reader_form_metadata', [ __CLASS__, 'register_reader_metadata' ] );
@@ -276,6 +277,38 @@ final class Newspack_Popups_Data_Api {
 		if ( ! empty( $prompt_title ) ) {
 			$cart_item_data['prompt_title'] = $prompt_title;
 		}
+		return self::add_contextual_prompt_source( $cart_item_data );
+	}
+
+	/**
+	 * The donate block's own submit path (Newspack\Donations) builds cart item
+	 * data through a different filter; carry the source there too.
+	 *
+	 * @param array $cart_item_data The cart item data.
+	 * @return array
+	 */
+	public static function donation_cart_item_data( $cart_item_data ) {
+		return self::add_contextual_prompt_source( $cart_item_data );
+	}
+
+	/**
+	 * Copy the contextual prompt source triple from the request into cart item
+	 * data. Validation happens when the order is written; here the raw values
+	 * ride along the way the popup id does.
+	 *
+	 * @param array $cart_item_data The cart item data.
+	 * @return array
+	 */
+	private static function add_contextual_prompt_source( $cart_item_data ) {
+		if ( ! class_exists( 'Newspack_Popups_Contextual_Prompt_Render' ) ) {
+			return $cart_item_data;
+		}
+		foreach ( Newspack_Popups_Contextual_Prompt_Render::SOURCE_KEYS as $key ) {
+			$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
+			if ( ! empty( $value ) ) {
+				$cart_item_data[ $key ] = $value;
+			}
+		}
 		return $cart_item_data;
 	}
 
@@ -294,6 +327,16 @@ final class Newspack_Popups_Data_Api {
 		}
 		if ( ! empty( $values['prompt_title'] ) ) {
 			$order->add_meta_data( '_prompt_title', $values['prompt_title'] );
+		}
+		if ( class_exists( 'Newspack_Popups_Contextual_Prompt_Render' ) ) {
+			$source = Newspack_Popups_Contextual_Prompt_Render::validate_source(
+				array_intersect_key( (array) $values, array_flip( Newspack_Popups_Contextual_Prompt_Render::SOURCE_KEYS ) )
+			);
+			foreach ( $source as $key => $value ) {
+				// One order can carry several prompt line items; the story it is
+				// attributed to belongs on it once.
+				$order->add_meta_data( '_newspack_' . $key, $value, true );
+			}
 		}
 	}
 

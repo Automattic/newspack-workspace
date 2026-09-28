@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Blocks plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Blocks 4.31.2\n"
+"Project-Id-Version: Newspack Blocks 4.34.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-14T18:14:26+00:00\n"
+"POT-Creation-Date: 2026-09-28T17:15:16+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-blocks\n"
@@ -35,130 +35,134 @@ msgstr ""
 msgid "Automattic"
 msgstr ""
 
-#: includes/class-modal-checkout.php:377
-#: includes/class-modal-checkout.php:646
+#: includes/class-modal-checkout.php:412
+#: includes/class-modal-checkout.php:899
 msgid "Invalid nonce."
 msgstr ""
 
-#: includes/class-modal-checkout.php:656
+#: includes/class-modal-checkout.php:844
+msgid "Complete your purchase"
+msgstr ""
+
+#: includes/class-modal-checkout.php:909
 msgid "Cart has been emptied."
 msgstr ""
 
 #. Translators: %s is the maximum price.
-#: includes/class-modal-checkout.php:773
+#: includes/class-modal-checkout.php:1026
 #, php-format
 msgid "Adjusted price must be less than the maximum of %s."
 msgstr ""
 
 #. Translators: %s is the name-your-price custom price.
-#: includes/class-modal-checkout.php:802
+#: includes/class-modal-checkout.php:1055
 #, php-format
 msgid "Adjusted price must be greater than base price of %s."
 msgstr ""
 
-#: includes/class-modal-checkout.php:829
-#: includes/class-modal-checkout.php:933
+#: includes/class-modal-checkout.php:1082
+#: includes/class-modal-checkout.php:1186
 msgid "This product could not be added to the cart."
 msgstr ""
 
-#: includes/class-modal-checkout.php:892
+#: includes/class-modal-checkout.php:1145
 msgid "Go back and choose the number you want before changing your subscription."
 msgstr ""
 
-#: includes/class-modal-checkout.php:909
+#: includes/class-modal-checkout.php:1162
 msgid "This product is not in the cart."
 msgstr ""
 
-#: includes/class-modal-checkout.php:995
+#: includes/class-modal-checkout.php:1248
 msgid "Updated."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1050
-#: includes/class-modal-checkout.php:1133
+#: includes/class-modal-checkout.php:1303
+#: includes/class-modal-checkout.php:1386
 #: dist/editor.js:26
 #: src/components/reorder-modal.js:254
 msgid "Close"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1076
+#: includes/class-modal-checkout.php:1329
 msgid "per"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1187
+#: includes/class-modal-checkout.php:1440
 msgid "Something went wrong. Please try again."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1191
+#: includes/class-modal-checkout.php:1444
 msgid "Or"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1425
-#: includes/class-modal-checkout.php:1429
+#: includes/class-modal-checkout.php:1678
+#: includes/class-modal-checkout.php:1682
 msgid "Processing payment..."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1433
+#: includes/class-modal-checkout.php:1686
 msgid "Verifying details..."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1437
+#: includes/class-modal-checkout.php:1690
 msgid "Finalizing transaction..."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1493
+#: includes/class-modal-checkout.php:1746
 msgid "We're sorry, there was an unexpected error. Please try again in a few minutes."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1505
+#: includes/class-modal-checkout.php:1758
 msgid "Go back"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1945
+#: includes/class-modal-checkout.php:2201
 msgid "Password mismatch"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1946
+#: includes/class-modal-checkout.php:2202
 msgid "Password strength: Very weak"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1947
+#: includes/class-modal-checkout.php:2203
 msgid "Password strength: Weak"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1948
+#: includes/class-modal-checkout.php:2204
 msgid "Password strength: Medium"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1949
+#: includes/class-modal-checkout.php:2205
 msgid "Password strength: Strong"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2329
+#: includes/class-modal-checkout.php:2585
 msgid "Please enter someone else' email address to receive this gift."
 msgstr ""
 
-#: includes/class-modal-checkout.php:2330
+#: includes/class-modal-checkout.php:2586
 msgid "Please enter a valid email address to receive this gift."
 msgstr ""
 
-#: includes/class-modal-checkout.php:2444
+#: includes/class-modal-checkout.php:2717
 msgid "Close window"
 msgstr ""
 
 #. translators: %s: Site name.
-#: includes/class-modal-checkout.php:2535
+#: includes/class-modal-checkout.php:2817
 #, php-format
 msgid "You're already a subscriber! You can only have one active subscription at a time. Thank you for supporting %s."
 msgstr ""
 
-#: includes/class-modal-checkout.php:2546
+#: includes/class-modal-checkout.php:2828
 msgid "You're already a subscriber! You can only have one subscription at a time. If you wish to renew an expired subscription, please sign in and visit the subscriptions page on your account."
 msgstr ""
 
 #. translators: 1: Checkout button confirmation text. 2: Order total.
 #. translators: 1 is the name of the item. 2 is the price of the item.
 #. translators: keep %1$s first: it repeats the button's visible label, which speech input matches on. 1: the control's visible label. 2: title of the content being moved.
-#: includes/class-modal-checkout.php:2700
+#: includes/class-modal-checkout.php:2982
 #: includes/modal-checkout/class-checkout-data.php:72
 #: dist/editor.js:24
 #: src/components/reorder-modal.js:57
@@ -166,65 +170,65 @@ msgstr ""
 msgid "%1$s: %2$s"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2883
+#: includes/class-modal-checkout.php:3165
 #: dist/editor.js:67
 #: src/blocks/iframe/iframe-placeholder.js:153
 msgid "Update"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3161
+#: includes/class-modal-checkout.php:3443
 msgid "Billing details"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3162
+#: includes/class-modal-checkout.php:3444
 msgid "Shipping details"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3163
+#: includes/class-modal-checkout.php:3445
 msgid "Gift recipient"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3164
-#: includes/class-modal-checkout.php:3165
-#: includes/class-modal-checkout.php:3166
+#: includes/class-modal-checkout.php:3446
+#: includes/class-modal-checkout.php:3447
+#: includes/class-modal-checkout.php:3448
 msgid "Complete your transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3167
+#: includes/class-modal-checkout.php:3449
 msgctxt "Login modal title when logged out user attempts to checkout."
 msgid "Sign in to complete transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3172
+#: includes/class-modal-checkout.php:3454
 msgctxt "Login modal title when unregistered user attempts to checkout"
 msgid "Register to complete transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3177
+#: includes/class-modal-checkout.php:3459
 msgid "Continue browsing"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3178
+#: includes/class-modal-checkout.php:3460
 msgid "This donation is a gift"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3183
+#: includes/class-modal-checkout.php:3465
 msgid "This purchase is a gift"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3185
+#: includes/class-modal-checkout.php:3467
 msgid "Complete transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3186
+#: includes/class-modal-checkout.php:3468
 msgid "Purchase"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3187
+#: includes/class-modal-checkout.php:3469
 msgid "Edit billing information"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3188
+#: includes/class-modal-checkout.php:3470
 #: dist/editor.js:26
 #: dist/editor.js:40
 #: dist/editor.js:43
@@ -235,33 +239,33 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3189
+#: includes/class-modal-checkout.php:3471
 msgid "Transaction successful"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3190
+#: includes/class-modal-checkout.php:3472
 msgid "Your contribution directly funds our work. If you're moved to do so, you can opt to pay more than the standard rate."
 msgstr ""
 
-#: includes/class-modal-checkout.php:3191
+#: includes/class-modal-checkout.php:3473
 msgid "Thank you for your generosity! We couldn't do this without you!"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3192
+#: includes/class-modal-checkout.php:3474
 msgid "Increase your support"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3193
+#: includes/class-modal-checkout.php:3475
 #: src/modal-checkout/templates/form-coupon.php:29
 msgid "Apply"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3194
+#: includes/class-modal-checkout.php:3476
 msgid "We ran into a problem processing this request. Please try again."
 msgstr ""
 
 #. Translators: %s is the site name.
-#: includes/class-modal-checkout.php:3332
+#: includes/class-modal-checkout.php:3614
 #, php-format
 msgid "Thank you for supporting %s. Your transaction was completed successfully."
 msgstr ""
@@ -294,52 +298,52 @@ msgstr ""
 msgid "Newspack Subscribe"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1062
+#: includes/class-newspack-blocks.php:1132
 msgid "Common"
 msgstr ""
 
 #. translators: separates last two sponsor names; needs a space on either side.
-#: includes/class-newspack-blocks.php:1163
+#: includes/class-newspack-blocks.php:1233
 msgid " and "
 msgstr ""
 
 #. translators: separates all but the last two sponsor names; needs a space at the end.
-#: includes/class-newspack-blocks.php:1166
+#: includes/class-newspack-blocks.php:1236
 msgid ", "
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1501
+#: includes/class-newspack-blocks.php:1571
 msgid "Jetpack donations is disabled in favour of Newspack donations."
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1534
+#: includes/class-newspack-blocks.php:1604
 #: dist/editor.js:30
 #: src/shared/js/utils.js:54
 msgid "Draft"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1535
+#: includes/class-newspack-blocks.php:1605
 #: dist/editor.js:30
 #: src/shared/js/utils.js:54
 msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1733
+#: includes/class-newspack-blocks.php:1803
 #: dist/editor.js:52
 #, php-format,js-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1764
+#: includes/class-newspack-blocks.php:1834
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1767
+#: includes/class-newspack-blocks.php:1837
 msgid " per "
 msgstr ""
 
-#: includes/modal-checkout/class-checkout-data.php:362
+#: includes/modal-checkout/class-checkout-data.php:392
 #: dist/editor.js:52
 #: src/blocks/donate/index.js:31
 msgid "Donate"
@@ -523,14 +527,14 @@ msgstr ""
 #: dist/editor.js:19
 #: dist/editor.js:20
 #: dist/editor.js:40
-#: src/blocks/author-profile/edit.js:59
-#: src/blocks/author-profile/edit.js:635
-#: src/blocks/author-profile/edit.js:689
-#: src/blocks/author-profile/edit.js:710
-#: src/blocks/author-profile/edit.js:756
-#: src/blocks/author-profile/edit.js:821
-#: src/blocks/author-profile/edit.js:912
-#: src/blocks/author-profile/edit.js:950
+#: src/blocks/author-profile/edit.js:64
+#: src/blocks/author-profile/edit.js:616
+#: src/blocks/author-profile/edit.js:670
+#: src/blocks/author-profile/edit.js:691
+#: src/blocks/author-profile/edit.js:737
+#: src/blocks/author-profile/edit.js:793
+#: src/blocks/author-profile/edit.js:884
+#: src/blocks/author-profile/edit.js:918
 #: src/blocks/author-profile/index.js:30
 msgid "Author Profile"
 msgstr ""
@@ -541,8 +545,8 @@ msgstr ""
 #: dist/editor.js:17
 #: dist/editor.js:21
 #: dist/editor.js:40
-#: src/blocks/author-profile/edit.js:85
-#: src/blocks/author-profile/single-author.js:84
+#: src/blocks/author-profile/edit.js:90
+#: src/blocks/author-profile/single-author.js:79
 #: src/blocks/author-profile/templates.js:126
 #, php-format,js-format
 msgid "More by %s"
@@ -565,24 +569,24 @@ msgid "Centered"
 msgstr ""
 
 #. translators: %d: Slide number.
-#: src/blocks/carousel/view.php:237
+#: src/blocks/carousel/view.php:243
 #, php-format
 msgid "Go to slide %d"
 msgstr ""
 
-#: src/blocks/carousel/view.php:258
+#: src/blocks/carousel/view.php:264
 msgid "Previous Slide"
 msgstr ""
 
-#: src/blocks/carousel/view.php:259
+#: src/blocks/carousel/view.php:265
 msgid "Next Slide"
 msgstr ""
 
-#: src/blocks/carousel/view.php:303
+#: src/blocks/carousel/view.php:309
 msgid "Pause Slideshow"
 msgstr ""
 
-#: src/blocks/carousel/view.php:304
+#: src/blocks/carousel/view.php:310
 msgid "Play Slideshow"
 msgstr ""
 
@@ -637,21 +641,21 @@ msgstr ""
 msgid "Other"
 msgstr ""
 
-#: src/blocks/homepage-articles/view.php:409
+#: src/blocks/homepage-articles/view.php:415
 #: dist/editor.js:64
 msgid "Load more posts"
 msgstr ""
 
-#: src/blocks/homepage-articles/view.php:416
+#: src/blocks/homepage-articles/view.php:422
 msgid "Something went wrong. Please refresh the page and/or try again."
 msgstr ""
 
-#: src/blocks/homepage-articles/view.php:491
+#: src/blocks/homepage-articles/view.php:497
 msgctxt "post author"
 msgid "by"
 msgstr ""
 
-#: src/blocks/homepage-articles/view.php:508
+#: src/blocks/homepage-articles/view.php:514
 msgctxt "post author"
 msgid " and "
 msgstr ""
@@ -787,8 +791,8 @@ msgstr ""
 #. translators: label for small size option
 #: dist/editor.js:17
 #: dist/editor.js:58
-#: src/blocks/author-profile/edit.js:136
-#: src/blocks/author-profile/edit.js:160
+#: src/blocks/author-profile/edit.js:141
+#: src/blocks/author-profile/edit.js:165
 msgid "Small"
 msgstr ""
 
@@ -797,8 +801,8 @@ msgstr ""
 #. translators: abbreviation for small size
 #: dist/editor.js:17
 #: dist/editor.js:58
-#: src/blocks/author-profile/edit.js:137
-#: src/blocks/author-profile/edit.js:161
+#: src/blocks/author-profile/edit.js:142
+#: src/blocks/author-profile/edit.js:166
 msgid "S"
 msgstr ""
 
@@ -807,8 +811,8 @@ msgstr ""
 #. translators: label for medium size option
 #: dist/editor.js:17
 #: dist/editor.js:58
-#: src/blocks/author-profile/edit.js:141
-#: src/blocks/author-profile/edit.js:165
+#: src/blocks/author-profile/edit.js:146
+#: src/blocks/author-profile/edit.js:170
 msgid "Medium"
 msgstr ""
 
@@ -817,8 +821,8 @@ msgstr ""
 #. translators: abbreviation for medium size
 #: dist/editor.js:17
 #: dist/editor.js:58
-#: src/blocks/author-profile/edit.js:142
-#: src/blocks/author-profile/edit.js:166
+#: src/blocks/author-profile/edit.js:147
+#: src/blocks/author-profile/edit.js:171
 msgid "M"
 msgstr ""
 
@@ -827,8 +831,8 @@ msgstr ""
 #. translators: label for large size option
 #: dist/editor.js:17
 #: dist/editor.js:58
-#: src/blocks/author-profile/edit.js:146
-#: src/blocks/author-profile/edit.js:170
+#: src/blocks/author-profile/edit.js:151
+#: src/blocks/author-profile/edit.js:175
 msgid "Large"
 msgstr ""
 
@@ -837,8 +841,8 @@ msgstr ""
 #. translators: abbreviation for large size
 #: dist/editor.js:17
 #: dist/editor.js:58
-#: src/blocks/author-profile/edit.js:147
-#: src/blocks/author-profile/edit.js:171
+#: src/blocks/author-profile/edit.js:152
+#: src/blocks/author-profile/edit.js:176
 msgid "L"
 msgstr ""
 
@@ -846,7 +850,7 @@ msgstr ""
 #. translators: label for extra large size option
 #: dist/editor.js:17
 #: dist/editor.js:58
-#: src/blocks/author-profile/edit.js:151
+#: src/blocks/author-profile/edit.js:156
 msgid "Extra Large"
 msgstr ""
 
@@ -855,56 +859,56 @@ msgstr ""
 #. translators: abbreviation for extra large size
 #: dist/editor.js:17
 #: dist/editor.js:58
-#: src/blocks/author-profile/edit.js:152
-#: src/blocks/author-profile/edit.js:176
+#: src/blocks/author-profile/edit.js:157
+#: src/blocks/author-profile/edit.js:181
 msgid "XL"
 msgstr ""
 
 #. translators: label for extra-large avatar size option
 #: dist/editor.js:17
-#: src/blocks/author-profile/edit.js:175
+#: src/blocks/author-profile/edit.js:180
 msgid "Extra-large"
 msgstr ""
 
 #: dist/editor.js:17
-#: src/blocks/author-profile/edit.js:205
+#: src/blocks/author-profile/edit.js:210
 msgid "Select a layout to start with:"
 msgstr ""
 
 #. translators: %s: error text for when no authors are found.
 #: dist/editor.js:18
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:420
-#: src/blocks/author-profile/edit.js:431
+#: src/blocks/author-profile/edit.js:417
+#: src/blocks/author-profile/edit.js:428
 #, js-format
 msgid "No authors or guest authors found for ID %s."
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:464
+#: src/blocks/author-profile/edit.js:461
 msgid "Error fetching authors for this post."
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:495
+#: src/blocks/author-profile/edit.js:487
 msgid "Error fetching byline authors."
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:23
 #: dist/editor.js:58
-#: src/blocks/author-profile/edit.js:557
+#: src/blocks/author-profile/edit.js:538
 #: src/blocks/carousel/edit.js:237
 msgid "Display"
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:559
+#: src/blocks/author-profile/edit.js:540
 msgid "Show authors without bio"
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:560
+#: src/blocks/author-profile/edit.js:541
 msgid "Display author profiles even if their bio is empty."
 msgstr ""
 
@@ -913,7 +917,7 @@ msgstr ""
 #: dist/editor.js:43
 #: dist/editor.js:58
 #: dist/editor.js:70
-#: src/blocks/author-profile/edit.js:568
+#: src/blocks/author-profile/edit.js:549
 #: src/blocks/carousel/edit.js:209
 #: src/blocks/checkout-button/edit.js:324
 #: src/blocks/video-playlist/edit.js:191
@@ -921,28 +925,28 @@ msgid "Settings"
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:570
+#: src/blocks/author-profile/edit.js:551
 msgid "Text size"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:277
-#: src/blocks/author-profile/edit.js:585
+#: src/blocks/author-profile/edit.js:566
 msgid "Avatar"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:279
-#: src/blocks/author-profile/edit.js:587
+#: src/blocks/author-profile/edit.js:568
 msgid "Display avatar"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:285
-#: src/blocks/author-profile/edit.js:594
+#: src/blocks/author-profile/edit.js:575
 msgid "Hide default avatar"
 msgstr ""
 
@@ -950,28 +954,28 @@ msgstr ""
 #: dist/editor.js:39
 #: dist/editor.js:64
 #: src/blocks/author-list/edit.js:292
-#: src/blocks/author-profile/edit.js:602
+#: src/blocks/author-profile/edit.js:583
 msgid "Size"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:293
-#: src/blocks/author-profile/edit.js:603
+#: src/blocks/author-profile/edit.js:584
 msgid "Avatar size"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:306
-#: src/blocks/author-profile/edit.js:616
+#: src/blocks/author-profile/edit.js:597
 msgid "Border radius"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:307
-#: src/blocks/author-profile/edit.js:617
+#: src/blocks/author-profile/edit.js:598
 msgid "Avatar border radius"
 msgstr ""
 
@@ -979,70 +983,70 @@ msgstr ""
 #: dist/editor.js:20
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:446
-#: src/blocks/author-profile/edit.js:638
-#: src/blocks/author-profile/edit.js:959
+#: src/blocks/author-profile/edit.js:619
+#: src/blocks/author-profile/edit.js:927
 msgid "Fetching authors…"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:345
-#: src/blocks/author-profile/edit.js:652
+#: src/blocks/author-profile/edit.js:633
 msgid "Show avatar on left"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:351
-#: src/blocks/author-profile/edit.js:658
+#: src/blocks/author-profile/edit.js:639
 msgid "Show avatar on right"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:362
-#: src/blocks/author-profile/edit.js:670
+#: src/blocks/author-profile/edit.js:651
 msgid "Edit selection"
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:690
+#: src/blocks/author-profile/edit.js:671
 msgid "Select a type:"
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:693
+#: src/blocks/author-profile/edit.js:674
 msgid "Contextual"
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:696
+#: src/blocks/author-profile/edit.js:677
 msgid "Specific"
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:712
+#: src/blocks/author-profile/edit.js:693
 msgid "This block was created with a block theme and is not supported in the current theme. It will render using the classic layout on the frontend."
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:20
-#: src/blocks/author-profile/edit.js:744
-#: src/blocks/author-profile/edit.js:900
+#: src/blocks/author-profile/edit.js:725
+#: src/blocks/author-profile/edit.js:872
 msgid "Author bio is hidden because Custom Byline is active on this post."
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:20
-#: src/blocks/author-profile/edit.js:763
-#: src/blocks/author-profile/edit.js:964
+#: src/blocks/author-profile/edit.js:744
+#: src/blocks/author-profile/edit.js:932
 msgid "Search for an author to display"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:20
-#: src/blocks/author-profile/edit.js:764
-#: src/blocks/author-profile/edit.js:965
+#: src/blocks/author-profile/edit.js:745
+#: src/blocks/author-profile/edit.js:933
 msgid "Begin typing name, click autocomplete result to select."
 msgstr ""
 
@@ -1051,8 +1055,8 @@ msgstr ""
 #: dist/editor.js:27
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:249
-#: src/blocks/author-profile/edit.js:785
-#: src/blocks/author-profile/edit.js:994
+#: src/blocks/author-profile/edit.js:757
+#: src/blocks/author-profile/edit.js:952
 #: src/components/query-controls.js:104
 #: src/components/query-controls.js:119
 msgid "(no name)"
@@ -1065,8 +1069,8 @@ msgstr ""
 #: dist/editor.js:40
 #: src/blocks/author-list/edit.js:256
 #: src/blocks/author-list/index.js:48
-#: src/blocks/author-profile/edit.js:807
-#: src/blocks/author-profile/edit.js:1021
+#: src/blocks/author-profile/edit.js:779
+#: src/blocks/author-profile/edit.js:979
 #: src/blocks/author-profile/index.js:50
 msgid "author"
 msgstr ""
@@ -1075,26 +1079,26 @@ msgstr ""
 #: dist/editor.js:20
 #: dist/editor.js:39
 #: src/blocks/author-list/edit.js:257
-#: src/blocks/author-profile/edit.js:808
-#: src/blocks/author-profile/edit.js:1022
+#: src/blocks/author-profile/edit.js:780
+#: src/blocks/author-profile/edit.js:980
 msgid "authors"
 msgstr ""
 
 #: dist/editor.js:19
 #: dist/editor.js:20
-#: src/blocks/author-profile/edit.js:822
-#: src/blocks/author-profile/edit.js:913
+#: src/blocks/author-profile/edit.js:794
+#: src/blocks/author-profile/edit.js:885
 msgid "No authors found for this post."
 msgstr ""
 
 #: dist/editor.js:19
-#: src/blocks/author-profile/edit.js:851
+#: src/blocks/author-profile/edit.js:823
 msgid "Preview author"
 msgstr ""
 
 #. translators: %d: number of authors
 #: dist/editor.js:20
-#: src/blocks/author-profile/edit.js:860
+#: src/blocks/author-profile/edit.js:832
 #, js-format
 msgid "Previewing 1 of %d authors. All authors display on frontend."
 msgstr ""

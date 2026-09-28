@@ -19,12 +19,6 @@
  */
 class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	/**
-	 * The donate block's own wrapper class, which is what marks a rendered card
-	 * as carrying the native form.
-	 */
-	const DONATE_STUB_MARKUP = '<div class="wpbnbd"><button type="submit">Donate</button></div>';
-
-	/**
 	 * Copy an instance carries as its own pattern override.
 	 */
 	const INSTANCE_COPY = 'Ask.';
@@ -42,7 +36,9 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 				'newspack-blocks/donate',
 				[
 					'render_callback' => function () {
-						return self::DONATE_STUB_MARKUP;
+						ob_start();
+						do_action( 'newspack_blocks_donate_before_form_fields' );
+						return '<div class="wpbnbd"><form>' . ob_get_clean() . '<button type="submit">Donate</button></form></div>';
 					},
 				]
 			);
@@ -62,6 +58,9 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 		delete_option( 'newspack_contextual_prompts_override_label' );
 		delete_option( 'newspack_contextual_prompts_override_url' );
 		delete_option( 'newspack_popups_donor_landing_page' );
+		delete_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION );
+		delete_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION );
 		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' ) ) {
 			unregister_block_type( 'newspack-blocks/donate' );
 		}
@@ -74,10 +73,16 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	 * between tests the way a new request would.
 	 */
 	private function reset_request_state() {
-		foreach ( [ 'in_instance', 'repaired' ] as $name ) {
+		$state = [
+			'in_instance'        => false,
+			'repaired'           => false,
+			'card_open'          => false,
+			'rendered_condition' => null,
+		];
+		foreach ( $state as $name => $value ) {
 			$property = new ReflectionProperty( 'Newspack_Popups_Contextual_Prompt_Render', $name );
 			$property->setAccessible( true );
-			$property->setValue( null, false );
+			$property->setValue( null, $value );
 		}
 	}
 
@@ -163,18 +168,49 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	 * @return string Rendered markup.
 	 */
 	private function render_post( $content ) {
-		$rendered = '';
-		$query    = new WP_Query(
-			[
-				'p' => self::factory()->post->create(
-					[
-						'post_type'    => 'post',
-						'post_status'  => 'publish',
-						'post_content' => $content,
-					]
-				),
-			]
+		return $this->render_in_loop(
+			self::factory()->post->create(
+				[
+					'post_type'    => 'post',
+					'post_status'  => 'publish',
+					'post_content' => $content,
+				]
+			)
 		);
+	}
+
+	/**
+	 * A published post carrying the markup whose id is, or is not, a multiple of
+	 * the control interval — the id is what decides the condition.
+	 *
+	 * @param string $content  Post content.
+	 * @param int    $interval Control interval.
+	 * @param bool   $selected Whether the id should be a multiple of it.
+	 * @return int Post id.
+	 */
+	private function post_for_interval( $content, $interval, $selected ) {
+		do {
+			$post_id = self::factory()->post->create(
+				[
+					'post_type'    => 'post',
+					'post_status'  => 'publish',
+					'post_content' => $content,
+				]
+			);
+		} while ( ( 0 === $post_id % $interval ) !== $selected );
+		return $post_id;
+	}
+
+	/**
+	 * Render a post in the loop, the way a reader gets it — the stamped post id
+	 * comes from the post being rendered.
+	 *
+	 * @param int $post_id Post to render.
+	 * @return string Rendered markup.
+	 */
+	private function render_in_loop( $post_id ) {
+		$rendered = '';
+		$query    = new WP_Query( [ 'p' => $post_id ] );
 		while ( $query->have_posts() ) {
 			$query->the_post();
 			$rendered = do_blocks( get_the_content() );
@@ -459,5 +495,326 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
 
 		$this->assertStringContainsString( 'data-newspack-cp-cta="button"', do_blocks( $this->instance_markup() ) );
+	}
+
+	/**
+	 * The condition is stamped while the control is on, and absent when it's off.
+	 */
+	public function test_render_stamps_the_condition() {
+		$this->set_platform( false );
+		$this->set_donor_landing_page();
+		$content = $this->content_with_prompt( 0, 3, $this->instance_markup() );
+
+		$this->assertStringNotContainsString( 'data-newspack-cp-condition', $this->render_post( $content ) );
+
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '1' );
+		update_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, 'Support local news.' );
+		update_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION, '3' );
+		$rendered = $this->render_post( $content );
+		$this->assertMatchesRegularExpression( '/data-newspack-cp-condition="(story_aware|generic_control)"/', $rendered );
+
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'button' );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund drive' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="override"', $this->render_post( $content ) );
+	}
+
+	/**
+	 * Native mode: the donate form inside the card carries the source triple,
+	 * so the donation can be attributed to this story, placement and condition.
+	 */
+	public function test_donate_form_inside_the_card_carries_the_source() {
+		$this->set_platform( true );
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '1' );
+		update_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, 'Support local news.' );
+		$rendered = $this->render_post( $this->content_with_prompt( 0, 3, $this->instance_markup() ) );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_post_id"[^>]*value="\d+"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_placement"[^>]*value="top"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_condition"[^>]*value="(story_aware|generic_control)"/', $rendered );
+	}
+
+	/**
+	 * A donate form outside any card gets nothing, unless the request arrived
+	 * from a plain-button card (landing page), in which case the URL's triple is
+	 * forwarded so the same attribution path applies.
+	 */
+	public function test_donate_form_outside_the_card_forwards_a_request_source_only() {
+		$this->set_platform( true );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', do_blocks( '<!-- wp:newspack-blocks/donate /-->' ) );
+
+		$post_id                             = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		$_GET['contextual_prompt_post_id']   = (string) $post_id;
+		$_GET['contextual_prompt_placement'] = 'end';
+		$_GET['contextual_prompt_condition'] = 'generic_control';
+		$rendered                            = do_blocks( '<!-- wp:newspack-blocks/donate /-->' );
+		unset( $_GET['contextual_prompt_post_id'], $_GET['contextual_prompt_placement'], $_GET['contextual_prompt_condition'] );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_post_id"[^>]*value="' . $post_id . '"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_condition"[^>]*value="generic_control"/', $rendered );
+	}
+
+	/**
+	 * Junk in the URL is not forwarded.
+	 */
+	public function test_request_source_is_validated_before_forwarding() {
+		$this->set_platform( true );
+		$_GET['contextual_prompt_post_id']   = 'abc';
+		$_GET['contextual_prompt_placement'] = 'sideways';
+		$_GET['contextual_prompt_condition'] = '<script>';
+		$rendered                            = do_blocks( '<!-- wp:newspack-blocks/donate /-->' );
+		unset( $_GET['contextual_prompt_post_id'], $_GET['contextual_prompt_placement'], $_GET['contextual_prompt_condition'] );
+		$this->assertStringNotContainsString( 'contextual_prompt_', $rendered );
+	}
+
+	/**
+	 * Plain-button mode: the button destination carries the triple at render.
+	 * The stored pattern's button does not, so nothing is baked into content.
+	 *
+	 * A post whose only top-level block is the card buckets as 'top'
+	 * (bucket_placement() special-cases a single block), not 'end'.
+	 */
+	public function test_button_href_carries_the_source_at_render_only() {
+		$this->set_platform( false );
+		$landing = $this->set_donor_landing_page();
+		$post_id = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => $this->content_with_prompt( 0, 0, $this->instance_markup() ),
+			]
+		);
+		$query = new WP_Query( [ 'p' => $post_id ] );
+		$query->the_post();
+		$rendered = do_blocks( get_the_content() );
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( 'contextual_prompt_post_id=' . $post_id, $rendered );
+		$this->assertStringContainsString( 'contextual_prompt_placement=top', $rendered );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', get_post( Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() )->post_content );
+		$this->assertStringContainsString( esc_url( $landing ), html_entity_decode( $rendered ) );
+	}
+
+	/**
+	 * Turn the control test on.
+	 *
+	 * @param string $body     Control copy.
+	 * @param int    $interval Every Nth story.
+	 */
+	private function set_control( $body = 'Support local news.', $interval = 3 ) {
+		update_option( Newspack_Popups_Settings::CONTROL_ENABLED_OPTION, '1' );
+		update_option( Newspack_Popups_Settings::CONTROL_BODY_OPTION, $body );
+		update_option( Newspack_Popups_Settings::CONTROL_INTERVAL_OPTION, (string) $interval );
+	}
+
+	/**
+	 * A detached card is still a prompt, so a selected story swaps its copy for
+	 * the control copy, reports the swap as `generic_control`, and hands the
+	 * donate form this story's source triple.
+	 */
+	public function test_detached_card_in_a_selected_story_renders_the_control() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup(), 3, true ) );
+
+		$this->assertStringContainsString( 'Support local news.', $rendered );
+		$this->assertStringNotContainsString( 'Detached copy.', $rendered );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="generic_control"', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_post_id"[^>]*value="\d+"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_placement"[^>]*value="top"/', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_condition"[^>]*value="generic_control"/', $rendered );
+	}
+
+	/**
+	 * An unselected story keeps the publisher's own copy, and the stamp says so:
+	 * the label follows what actually rendered.
+	 */
+	public function test_detached_card_in_an_unselected_story_keeps_its_copy() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup(), 3, false ) );
+
+		$this->assertStringContainsString( 'Detached copy.', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="story_aware"', $rendered );
+	}
+
+	/**
+	 * A fund drive replaces every card, detached ones included, and the stamp
+	 * reports the override rather than the control the drive paused.
+	 */
+	public function test_detached_card_takes_the_fund_drive_override() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'form' );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund drive copy' );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup(), 3, true ) );
+
+		$this->assertStringContainsString( 'Fund drive copy', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="override"', $rendered );
+	}
+
+	/**
+	 * The same card with its copy paragraph deleted — a publisher can remove it
+	 * from a detached card — so there is nothing for a swap to replace.
+	 *
+	 * @return string Serialized block markup.
+	 */
+	private function detached_markup_without_copy() {
+		return preg_replace( '#<!-- wp:paragraph.*?<!-- /wp:paragraph -->#s', '', $this->detached_markup(), 1 );
+	}
+
+	/**
+	 * Withdrawing the admin opt-in stops the fund drive and the control test at
+	 * every card, detached ones included: a detached card renders the copy its
+	 * post carries, reports no condition, and hands a donate form nothing.
+	 */
+	public function test_the_feature_switch_reaches_detached_cards() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'form' );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund drive copy' );
+		$content = $this->detached_markup();
+
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+		$rendered = $this->render_in_loop( $this->post_for_interval( $content, 3, true ) );
+
+		$this->assertStringContainsString( 'Detached copy.', $rendered );
+		$this->assertStringNotContainsString( 'Fund drive copy', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+		$this->assertStringNotContainsString( 'data-newspack-cp-condition', $rendered );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', $rendered );
+	}
+
+	/**
+	 * Attribution reports the condition the card rendered under, not the one the
+	 * story is assigned. A selected story whose card has no copy paragraph swaps
+	 * nothing, so the impression, the hidden inputs and the button destination all
+	 * say `story_aware` — otherwise the same donation lands on both sides of the
+	 * comparison.
+	 */
+	public function test_attribution_uses_the_condition_that_rendered() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup_without_copy(), 3, true ) );
+
+		$this->assertStringContainsString( 'data-newspack-cp-condition="story_aware"', $rendered );
+		$this->assertMatchesRegularExpression( '/name="contextual_prompt_condition"[^>]*value="story_aware"/', $rendered );
+	}
+
+	/**
+	 * The marker is a whole class, not a prefix: a Group the publisher gave a
+	 * class of their own that happens to start with it is their content, so it is
+	 * not swapped, not stamped, and does not leave a card open for the next
+	 * donate form on the page to attribute itself to.
+	 */
+	public function test_a_class_merely_prefixed_with_the_marker_is_not_a_card() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		$content = '<!-- wp:group {"className":"' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS . "-custom\"} -->\n"
+			. '<div class="wp-block-group ' . Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS . '-custom">'
+			. "<!-- wp:paragraph -->\n<p>Custom copy.</p>\n<!-- /wp:paragraph -->"
+			. "</div>\n<!-- /wp:group -->\n"
+			. '<!-- wp:newspack-blocks/donate /-->';
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $content, 3, true ) );
+
+		$this->assertStringContainsString( 'Custom copy.', $rendered );
+		$this->assertStringNotContainsString( 'Support local news.', $rendered );
+		$this->assertStringNotContainsString( 'data-newspack-cp-condition', $rendered );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', $rendered );
+	}
+
+	/**
+	 * A fund drive in button mode replaces a detached card's CTA too: during a
+	 * drive every card carries the drive's ask and the drive's button.
+	 */
+	public function test_fund_drive_button_mode_replaces_a_detached_cta() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+		update_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION, true );
+		update_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION, 'button' );
+		update_option( 'newspack_contextual_prompts_override_body', 'Fund drive copy' );
+		update_option( 'newspack_contextual_prompts_override_label', 'Give now' );
+		update_option( 'newspack_contextual_prompts_override_url', 'https://example.com/drive/' );
+
+		$rendered = $this->render_in_loop( $this->post_for_interval( $this->detached_markup(), 3, true ) );
+
+		$this->assertStringContainsString( 'Fund drive copy', $rendered );
+		$this->assertStringNotContainsString( 'Detached copy.', $rendered );
+		$this->assertStringContainsString( 'Give now', $rendered );
+		$this->assertStringContainsString( 'https://example.com/drive/', html_entity_decode( $rendered ) );
+		$this->assertStringContainsString( 'data-newspack-cp-condition="override"', $rendered );
+	}
+
+	/**
+	 * A prompt card the content gate hides comes back as an empty string before
+	 * the analytics filter runs — block-visibility's `render_block` filter blanks a
+	 * hidden Group, and `render_block` runs before `render_block_core/group`. The
+	 * attribution window `normalize_group()` opened has to close on the parsed
+	 * block anyway, or the next donate form on the page attributes itself to the
+	 * hidden story. Simulated with a `render_block` filter that blanks the card's
+	 * Group, since wiring the real content gate needs newspack-plugin.
+	 */
+	public function test_a_hidden_card_does_not_leak_its_source_to_a_later_form() {
+		$this->set_platform( true );
+
+		$marker = Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS;
+		add_filter(
+			'render_block',
+			function ( $content, $block ) use ( $marker ) {
+				if ( 'core/group' === ( $block['blockName'] ?? '' )
+					&& false !== strpos( (string) ( $block['attrs']['className'] ?? '' ), $marker ) ) {
+					return '';
+				}
+				return $content;
+			},
+			10,
+			2
+		);
+
+		$content  = $this->detached_markup() . "\n" . '<!-- wp:newspack-blocks/donate /-->';
+		$rendered = $this->render_post( $content );
+
+		$this->assertStringNotContainsString( 'Detached copy.', $rendered, 'The hidden card rendered nothing.' );
+		$this->assertStringNotContainsString( 'contextual_prompt_post_id', $rendered, 'The standalone donate form must not inherit the hidden card source.' );
+	}
+
+	/**
+	 * Rendered off the loop — an archive, an excerpt, a REST or widget render where
+	 * get_the_ID() is 0 — a card has no story to assign, so with the control on it
+	 * is stamped no condition rather than a bare `story_aware` next to post-id="0".
+	 */
+	public function test_off_loop_render_stamps_no_condition() {
+		$this->set_platform( true );
+		$this->set_control( 'Support local news.', 3 );
+
+		// do_blocks() outside the loop: no post is set up, so get_the_ID() is 0.
+		$rendered = do_blocks( $this->detached_markup() );
+
+		$this->assertStringContainsString( Newspack_Popups_Contextual_Prompt_Pattern::MARKER_CLASS, $rendered, 'The card still renders.' );
+		$this->assertStringNotContainsString( 'data-newspack-cp-condition', $rendered );
+		$this->assertStringContainsString( 'data-newspack-cp-post-id="0"', $rendered, 'The card is still stamped; only the condition is withheld.' );
+	}
+
+	/**
+	 * With the admin opt-in withdrawn the feature reports nothing, so even a
+	 * detached card the publisher keeps — its content survives the strip — is no
+	 * longer stamped, and the view script emits no interaction for it.
+	 */
+	public function test_opt_in_off_leaves_a_detached_card_unstamped() {
+		$this->set_platform( true );
+		update_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION, false );
+
+		$rendered = $this->render_post( $this->detached_markup() );
+
+		$this->assertStringContainsString( 'Detached copy.', $rendered, "The publisher's own card still renders." );
+		$this->assertStringNotContainsString( 'data-newspack-cp-post-id', $rendered );
 	}
 }

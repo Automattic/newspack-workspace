@@ -110,3 +110,9 @@ body {
 		}
 	}
 }
+
+// The verification prompt sits above the publisher's gate layout. Twice the box
+// default separates them enough to read as two offers rather than one block.
+.newspack-ui.newspack-content-gate__verification-prompt > .newspack-ui__box {
+	margin-bottom: var(--newspack-ui-spacer-9);
+}

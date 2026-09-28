@@ -152,6 +152,10 @@ const authStrategies = [ 'pwd', 'link' ];
 /**
  * Start the authentication modal with an optional custom callback.
  *
+ * Pass `skipAuthenticatedCheck` to open the modal for a reader who is already
+ * logged in — the content gate's verification prompt needs it, since an
+ * unverified reader is authenticated but still has to enter an OTP.
+ *
  * @param {Object} config Config.
  */
 export function openAuthModal( config = {} ) {
@@ -161,6 +165,7 @@ export function openAuthModal( config = {} ) {
 		onError: null,
 		initialState: null,
 		skipSuccess: false,
+		skipAuthenticatedCheck: false,
 		skipNewslettersSignup: false,
 		labels: {
 			signin: {
@@ -176,7 +181,7 @@ export function openAuthModal( config = {} ) {
 		...config,
 	};
 
-	if ( newspack_ras_config.is_logged_in ) {
+	if ( ! config.skipAuthenticatedCheck && newspack_ras_config.is_logged_in ) {
 		if ( config.onSuccess && typeof config.onSuccess === 'function' ) {
 			config.onSuccess();
 		}
@@ -667,11 +672,11 @@ const readerActivation = {
 	refreshAuthentication,
 	getReader,
 	openNewslettersSignupModal,
-	// openVerificationModal and maybeConfirmRegistration are attached at runtime by
-	// the reader-activation-auth bundle (see reader-activation-auth/index.js). They
-	// aren't included in this literal because they depend on auth-modal markup that
-	// only ships when the auth modal is rendered. Cross-plugin consumers gate access
-	// with `typeof ras?.openVerificationModal === 'function'`.
+	// openVerificationModal is attached at runtime by the reader-activation-auth
+	// bundle (see reader-activation-auth/index.js). It isn't included in this
+	// literal because it depends on auth-modal markup that only ships when the auth
+	// modal is rendered. Cross-plugin consumers gate access with
+	// `typeof ras?.openVerificationModal === 'function'`.
 	hasAuthLink,
 	getOTPHash,
 	setOTPTimer,

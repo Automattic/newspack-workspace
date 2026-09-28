@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Newsletters 3.40.3\n"
+"Project-Id-Version: Newspack Newsletters 3.41.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-newsletters\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-14T18:15:21+00:00\n"
+"POT-Creation-Date: 2026-09-28T17:16:04+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -1633,6 +1633,7 @@ msgstr ""
 #: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2385
 #: includes/service-providers/class-newspack-newsletters-service-provider.php:571
 #: src/newsletter-editor/sidebar/send-to.js:44
+#: src/newsletter-editor/utils.js:104
 msgid "list"
 msgstr ""
 
@@ -2423,13 +2424,13 @@ msgstr ""
 
 #: dist/admin-shell.js:193
 #: src/admin-shell/screens/newsletters-list/status-label.js:15
-#: src/components/send-button/index.js:217
+#: src/components/send-button/index.js:218
 msgid "Published"
 msgstr ""
 
 #: dist/admin-shell.js:193
 #: src/admin-shell/screens/newsletters-list/status-label.js:15
-#: src/components/send-button/index.js:219
+#: src/components/send-button/index.js:220
 msgid "Sent"
 msgstr ""
 
@@ -2437,7 +2438,7 @@ msgstr ""
 #: dist/admin-shell.js:198
 #: src/admin-shell/screens/ads-list/status-label.js:15
 #: src/admin-shell/screens/newsletters-list/status-label.js:16
-#: src/components/send-button/index.js:227
+#: src/components/send-button/index.js:228
 msgid "Scheduled"
 msgstr ""
 
@@ -2522,7 +2523,7 @@ msgstr ""
 #: src/admin-shell/screens/settings/local-list-delete-modal.js:32
 #: src/admin-shell/screens/settings/local-list-modal.js:209
 #: src/components/ad-placements/index.js:59
-#: src/components/send-button/index.js:397
+#: src/components/send-button/index.js:414
 #: src/newsletter-editor/layout/index.js:248
 #: src/newsletter-editor/layout/index.js:272
 #: src/newsletter-editor/layout/index.js:303
@@ -2901,7 +2902,7 @@ msgstr ""
 
 #: dist/admin-shell.js:201
 #: dist/editorBlocks.js:1
-#: src/editor/blocks/posts-inserter/utils.js:104
+#: src/editor/blocks/posts-inserter/utils.js:183
 msgctxt "comma separator for multiple authors"
 msgid ","
 msgstr ""
@@ -4415,70 +4416,70 @@ msgstr ""
 msgid "Preview email"
 msgstr ""
 
-#: src/components/send-button/index.js:215
+#: src/components/send-button/index.js:216
 msgid "Publishing…"
 msgstr ""
 
-#: src/components/send-button/index.js:215
+#: src/components/send-button/index.js:216
 msgid "Sending…"
 msgstr ""
 
-#: src/components/send-button/index.js:219
+#: src/components/send-button/index.js:220
 msgid "Sent and Published"
 msgstr ""
 
-#: src/components/send-button/index.js:224
-#: src/components/send-button/index.js:232
+#: src/components/send-button/index.js:225
+#: src/components/send-button/index.js:233
 msgid "Publish"
 msgstr ""
 
-#: src/components/send-button/index.js:224
-#: src/components/send-button/index.js:234
+#: src/components/send-button/index.js:225
+#: src/components/send-button/index.js:235
 msgid "Send"
 msgstr ""
 
-#: src/components/send-button/index.js:230
+#: src/components/send-button/index.js:231
 msgid "Schedule"
 msgstr ""
 
-#: src/components/send-button/index.js:230
+#: src/components/send-button/index.js:231
 msgid "Schedule sending"
 msgstr ""
 
-#: src/components/send-button/index.js:234
+#: src/components/send-button/index.js:235
 msgid "Send and Publish"
 msgstr ""
 
-#: src/components/send-button/index.js:239
+#: src/components/send-button/index.js:240
 msgid "Updating…"
 msgstr ""
 
-#: src/components/send-button/index.js:241
+#: src/components/send-button/index.js:242
 msgid "Update and copy HTML"
 msgstr ""
 
-#: src/components/send-button/index.js:243
+#: src/components/send-button/index.js:244
 #: src/newsletter-editor/layout/index.js:269
 msgid "Update"
 msgstr ""
 
-#: src/components/send-button/index.js:287
+#: src/components/send-button/index.js:288
 msgid "Unschedule"
 msgstr ""
 
-#: src/components/send-button/index.js:312
+#: src/components/send-button/index.js:313
 msgid "Newsletter HTML"
 msgstr ""
 
-#: src/components/send-button/index.js:352
+#: src/components/send-button/index.js:353
 msgid "Something went wrong when converting the post to email"
 msgstr ""
 
-#: src/components/send-button/index.js:377
+#: src/components/send-button/index.js:394
 msgid "Publish your newsletter?"
 msgstr ""
 
-#: src/components/send-button/index.js:377
+#: src/components/send-button/index.js:394
 msgid "Send your newsletter?"
 msgstr ""
 
@@ -4899,8 +4900,10 @@ msgstr ""
 
 #. Translators: Warning shown when a newsletter's stored list isn't available in the connected ESP. %s is the ESP's label for the list entity.
 #. Translators: Warning shown when a newsletter's stored sublist isn't available in the connected ESP. %s is the ESP's label for the sublist entity or entities.
+#. Translators: Shown when a newsletter's stored list isn't available in the connected ESP. %s is the ESP's label for the list entity.
 #: src/newsletter-editor/sidebar/send-to.js:99
 #: src/newsletter-editor/sidebar/send-to.js:113
+#: src/newsletter-editor/utils.js:108
 #, js-format
 msgid "The saved %s isn’t available in the connected email service provider. Choose a new one before sending."
 msgstr ""
@@ -5012,11 +5015,11 @@ msgstr ""
 msgid "Send a test email"
 msgstr ""
 
-#: src/newsletter-editor/utils.js:53
+#: src/newsletter-editor/utils.js:92
 msgid "Missing required sender info."
 msgstr ""
 
-#: src/newsletter-editor/utils.js:56
+#: src/newsletter-editor/utils.js:95
 msgid "Missing required list."
 msgstr ""
 

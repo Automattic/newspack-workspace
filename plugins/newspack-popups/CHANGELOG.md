@@ -1,3 +1,31 @@
+## newspack-popups [3.19.2](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.19.1...newspack-popups@3.19.2) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
+## newspack-popups [3.19.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.19.0...newspack-popups@3.19.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* make block centring more specific ([#1158](https://github.com/Automattic/newspack-workspace/issues/1158)) ([a8c86f7](https://github.com/Automattic/newspack-workspace/commit/a8c86f7d5265f2c25092035ee711993df1fe8b10))
+
+# newspack-popups [3.19.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.18.1...newspack-popups@3.19.0) (2026-09-18)
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([49a00c4](https://github.com/Automattic/newspack-workspace/commit/49a00c4e1bfa141c9c67cc1786f9d80b1eee5863))
+
+## newspack-popups [3.18.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.18.0...newspack-popups@3.18.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **popups:** drop a range max of 0 or less as invalid (NPPM-3389) ([#1071](https://github.com/Automattic/newspack-workspace/issues/1071)) ([193406c](https://github.com/Automattic/newspack-workspace/commit/193406c81054ec4f9a436831f25898518129e079))
+
 # newspack-popups [3.18.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.17.0...newspack-popups@3.18.0) (2026-09-14)
 
 

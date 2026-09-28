@@ -32,6 +32,7 @@ import {
 	GenerateButton,
 	CandidateList,
 } from './candidates';
+import { ControlConditionNotice } from './condition-notice';
 
 // The block editor and the document-settings panel are separate entries with
 // separate localized objects; either may be the one present. Both stringify the
@@ -358,6 +359,7 @@ const PromptInstanceInspector = ( { clientId, attributes } ) => {
 		<InspectorControls group="content">
 			<PanelBody title={ __( 'Prompt Copy', 'newspack-popups' ) } initialOpen>
 				<VStack spacing={ 4 }>
+					<ControlConditionNotice />
 					{ error && (
 						<Notice status="error" isDismissible={ false }>
 							{ error }
