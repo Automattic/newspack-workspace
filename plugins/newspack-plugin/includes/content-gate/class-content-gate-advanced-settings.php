@@ -247,6 +247,7 @@ class Content_Gate_Advanced_Settings {
 			'restrict_feeds'                 => (int) get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
 			'feed_restriction_mode'          => self::sanitize_feed_mode( get_option( self::OPTION_PREFIX . 'feed_restriction_mode', self::FEED_MODE_TRUNCATE ) ),
 			'newsletter_link_bypass_enabled' => (int) get_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', 0 ),
+			'institutional_access_text'      => (string) get_option( self::OPTION_PREFIX . 'institutional_access_text', '' ),
 		];
 
 		self::$settings = $settings;
@@ -322,6 +323,9 @@ class Content_Gate_Advanced_Settings {
 		}
 		if ( isset( $settings['newsletter_link_bypass_enabled'] ) ) {
 			update_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', boolval( $settings['newsletter_link_bypass_enabled'] ) ? 1 : 0, false );
+		}
+		if ( isset( $settings['institutional_access_text'] ) ) {
+			update_option( self::OPTION_PREFIX . 'institutional_access_text', sanitize_text_field( $settings['institutional_access_text'] ), false );
 		}
 		self::reset_cache();
 		return self::get_settings();

@@ -104,6 +104,7 @@ declare global {
 			// controls inert until cutover. Same wp_localize_script() stringification
 			// as presave_checks_enabled above ('1'/''), so read it truthily.
 			feeds_governed_by_memberships?: boolean | string;
+			institutional_access_default_text?: string;
 			// Audience Management is a prerequisite for content gates. Only ever the
 			// string wp_localize_script() produced ('1' on, '' off) - nothing writes a
 			// real boolean back, so typing it wider would invite a `=== true` that can
