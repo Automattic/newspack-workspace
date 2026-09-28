@@ -89,6 +89,9 @@ mkdir -p "$LOG_DIR"
 # One directory per run, created atomically: every env mounts the same logs/, and
 # process IDs repeat across containers, so a name built from them can collide.
 RUN_DIR=$(mktemp -d "$LOG_DIR/$PROJECT_NAME-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX") || exit 1
+# mktemp makes it 0700; the host user has to be able to read what a root
+# container wrote.
+chmod 755 "$RUN_DIR"
 LOG_BASE="$RUN_DIR/phpunit"
 XDEBUG_MODE=coverage phpunit --log-junit "$LOG_BASE.xml" "${@:2}" > "$LOG_BASE.log" 2>&1
 STATUS=$?

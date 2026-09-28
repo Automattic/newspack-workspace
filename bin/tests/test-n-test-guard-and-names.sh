@@ -4,12 +4,14 @@
 #
 # Self-proving spec for three host-side behaviors of `n`:
 #
-# 1. `n test-php` and `n test-js` refuse to run from a git worktree unless an
-#    isolated env mounts the project under test from it, because otherwise the
-#    container reads the project from the main checkout and the run would report
-#    the main checkout's result as the branch's. NEWSPACK_TEST_ROOT_OK=1
-#    overrides. The `code:` value `n` passes on names the checkout the container
-#    actually reads.
+# 1. `n test-php` and `n test-js` refuse to run from a git worktree when the
+#    container would read the project under test from a different checkout (the
+#    main checkout, or another worktree an env mounts), since the result would
+#    read as the branch's. They run when an env mounts the project from the
+#    caller's worktree, when the worktree is itself the project's directory under
+#    repos/, and for a repos/ project named from a monorepo worktree.
+#    NEWSPACK_TEST_ROOT_OK=1 overrides. The `code:` value `n` passes on names
+#    the checkout the container actually reads.
 # 2. `n test-php`, `n test-js`, `n composer` and `n npm` take a leading project
 #    name, and forward anything else (paths, subcommands, flags) untouched.
 # 3. The compact-output mode and the host root reach the container.
@@ -122,11 +124,11 @@ for cmd in test-php test-js; do
 	check "unmounted worktree: $cmd calls no docker" "no" "$(called_docker)"
 done
 check "unmounted worktree: names the checkout it would read" "yes" "$(out_has 'would read newspack-ads from plugins/newspack-ads, not from this')"
-check "unmounted worktree: offers to mount it" "yes" "$(out_has 'n env create <name> --worktree')"
+check "unmounted worktree: says an env has to mount it" "yes" "$(out_has 'An isolated env has to mount')"
 
 run_n "$R/n" "$R/.claude/worktrees/cw/plugins/newspack-ads" test-php
 check "worktree outside worktrees/: refuses" "1" "$(status)"
-check "worktree outside worktrees/: says no env can mount it" "yes" "$(out_has 'no env can mount it')"
+check "worktree outside worktrees/: says no env can serve it" "yes" "$(out_has 'no env can serve this one')"
 check "worktree outside worktrees/: does not offer n env create" "no" "$(out_has 'n env create')"
 
 run_n "$WT/n" "$WT" test-php newspack-ads

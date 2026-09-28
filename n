@@ -252,12 +252,12 @@ prepare_test_run() {
                 echo "  This is a worktree's own copy of n, which cannot see isolated envs." >&2
                 echo "  Run the main checkout's n instead:  $root/n $1 ..." >&2
             elif [[ "$caller_top" == "$root/worktrees/"* || "$caller_top" == "$root/worktrees-repos/"* ]]; then
-                echo "  If an env already mounts $target_folder from this worktree, run from inside" >&2
-                echo "  that project's directory so n picks that env. Otherwise mount it:" >&2
-                echo "    n env create <name> --worktree <repo>:<branch> --up" >&2
+                echo "  An isolated env has to mount this worktree's copy of $target_folder (see" >&2
+                echo "  n env create --help). If one already does, run from inside that project's" >&2
+                echo "  directory so n picks it." >&2
             else
-                echo "  Isolated envs mount only worktrees under $root/worktrees/ or" >&2
-                echo "  worktrees-repos/; this one is elsewhere, so no env can mount it." >&2
+                echo "  n picks an isolated env only for directories under $root/worktrees/" >&2
+                echo "  or $root/worktrees-repos/, so no env can serve this one." >&2
             fi
             echo "  Or run anyway, testing ${would_read#"$root"/}:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
             exit 1
