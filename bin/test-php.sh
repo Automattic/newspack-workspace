@@ -86,7 +86,10 @@ fi
 
 LOG_DIR="${MONOREPO_ROOT:-/newspack-monorepo}/logs/test-php"
 mkdir -p "$LOG_DIR"
-LOG_BASE="$LOG_DIR/$PROJECT_NAME-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+# One directory per run, created atomically: every env mounts the same logs/, and
+# process IDs repeat across containers, so a name built from them can collide.
+RUN_DIR=$(mktemp -d "$LOG_DIR/$PROJECT_NAME-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX") || exit 1
+LOG_BASE="$RUN_DIR/phpunit"
 XDEBUG_MODE=coverage phpunit --log-junit "$LOG_BASE.xml" "${@:2}" > "$LOG_BASE.log" 2>&1
 STATUS=$?
 php "$SCRIPT_DIR/test-php-summary.php" "$LOG_BASE.xml" "$LOG_BASE.log" "$PROJECT_DIR" "$TEST_DB_NAME" "$STATUS" "${@:2}"

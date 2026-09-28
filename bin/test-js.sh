@@ -94,9 +94,11 @@ else
     # install and test output go to logs/test-js/ and only the summary prints.
     LOG_DIR="$MONOREPO_ROOT/logs/test-js"
     mkdir -p "$LOG_DIR"
-    # Named after the directory: a scoped package name (@scope/name) would put a
-    # slash in the file name.
-    LOG="$LOG_DIR/$(basename "$PROJECT_DIR")-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
+    # One directory per run, created atomically: every env mounts the same logs/,
+    # and process IDs repeat across containers. Named after the project directory,
+    # since a scoped package name (@scope/name) carries a slash.
+    RUN_DIR=$(mktemp -d "$LOG_DIR/$(basename "$PROJECT_DIR")-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX") || exit 1
+    LOG="$RUN_DIR/output.log"
     # Full mode carries on after a failed install and tests whatever node_modules
     # already holds, so compact mode does too, and reports the failure instead.
     pnpm install > "$LOG" 2>&1

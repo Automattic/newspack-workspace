@@ -234,7 +234,7 @@ PATH="$WORK/stub:$PATH" PLUGINS_PATH="$M/plugins" THEMES_PATH="$M/themes" REPOS_
 	MONOREPO_ROOT="$M" NEWSPACK_TEST_OUTPUT=compact bash "$BIN/test-js.sh" newspack-scoped > "$WORK/out" 2>&1
 expect "test-js.sh: a scoped package runs its tests in compact mode" '^result:  PASS \(exit 0\)$' "$WORK/out"
 reject "test-js.sh: and its install is not reported failed" '^install:' "$WORK/out"
-expect "test-js.sh: the log is named after the directory" 'logs/test-js/newspack-scoped-[0-9TZ]+-[0-9]+\.log$' "$WORK/out"
+expect "test-js.sh: the log is in a per-run directory named after the project" 'logs/test-js/newspack-scoped-[0-9TZ]+-[A-Za-z0-9]{6}/output\.log$' "$WORK/out"
 
 # --- test-php.sh, end to end with phpunit stubbed -------------------------------
 # PHPUnit's listing modes write no JUnit log, so compact mode must pass them
@@ -250,10 +250,13 @@ cat > "$WORK/stub/phpunit" <<'STUB'
 for a in "$@"; do
 	[ "$a" = "--list-groups" ] && { printf 'Available test group(s):\n - alpha\n - beta\n'; exit 0; }
 done
-# Like PHPUnit, the last --log-junit wins.
+# Like PHPUnit, the last --log-junit wins, in either form.
 junit=""
 while [ $# -gt 0 ]; do
-	[ "$1" = "--log-junit" ] && junit="$2"
+	case "$1" in
+		--log-junit) junit="$2" ;;
+		--log-junit=*) junit="${1#--log-junit=}" ;;
+	esac
 	shift
 done
 [ -n "$junit" ] && printf '<?xml version="1.0"?>\n<testsuites><testsuite name="s" tests="2" assertions="2" errors="0" warnings="0" failures="0" skipped="0" time="0.1"/></testsuites>\n' > "$junit"
@@ -271,7 +274,9 @@ run_test_php
 expect "test-php.sh: a normal compact run gives a verdict" '^result:  PASS - 2 tests' "$WORK/out"
 run_test_php --log-junit "$WORK/caller.xml"
 reject "test-php.sh: a caller's --log-junit does not end in NO REPORT" 'NO REPORT' "$WORK/out"
-expect "test-php.sh: and the caller's report is written" '' "$WORK/caller.xml"
+run_test_php --log-junit="$WORK/caller.xml"
+reject "test-php.sh: nor does the --log-junit= form" 'NO REPORT' "$WORK/out"
+
 
 if [[ $failures -gt 0 ]]; then
 	echo "$failures failure(s)"
