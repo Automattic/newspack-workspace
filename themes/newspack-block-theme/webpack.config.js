@@ -14,17 +14,6 @@ const { exec } = require( 'child_process' );
 /**
  * Internal variables
  */
-const frontEndDir = path.join( __dirname, 'src', 'js', 'front-end' );
-const frontEnd = fs
-	.readdirSync( frontEndDir )
-	.filter( asset => /.(j|t)sx?$/.test( asset ) )
-	.reduce(
-		( acc, filename ) => ( {
-			...acc,
-			[ filename.replace( /\.[^/.]+$/, '' ) ]: path.join( __dirname, 'src', 'js', 'front-end', filename ),
-		} ),
-		{}
-	);
 const blocks = fs.readdirSync( path.join( __dirname, 'includes', 'blocks' ) ).reduce( ( acc, asset ) => {
 	if ( fs.lstatSync( path.join( __dirname, 'includes', 'blocks', asset ) ).isDirectory() ) {
 		fs.readdirSync( path.join( __dirname, 'includes', 'blocks', asset ) )
@@ -42,7 +31,7 @@ const editor = path.join( __dirname, 'src', 'js', 'editor' );
 const style = [ path.join( __dirname, 'src', 'scss' ) ];
 
 const webpackConfig = getBaseWebpackConfig( {
-	entry: { editor, ...frontEnd, ...blocks, style },
+	entry: { editor, ...blocks, style },
 	output: {
 		path: path.join( __dirname, 'dist' ),
 	},
