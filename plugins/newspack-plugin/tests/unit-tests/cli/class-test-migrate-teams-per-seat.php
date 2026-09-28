@@ -259,6 +259,52 @@ class Test_Migrate_Teams_Per_Seat extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A paid Teams subscription keeps its own line, but on a per-seat product that
+	 * line's quantity is the group's capacity. Teams sold per-member seats without
+	 * counting an owner who takes no seat, so the line is raised to fit the owner,
+	 * and its totals are held so the customer's recurring charge does not change.
+	 */
+	public function test_paid_per_seat_subscription_gains_the_owner_seat_at_the_same_price() {
+		$this->create_migration_product( Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		$owner   = $this->create_reader();
+		$members = [ $this->create_reader(), $this->create_reader(), $this->create_reader() ];
+
+		// Three paid member seats, as Teams sells them: the owner sits outside them.
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$item = new WC_Order_Item_Product( [ 'id' => 7200 ] );
+		$item->set_product( wc_get_product( self::PRODUCT_ID ) );
+		$item->set_quantity( 3 );
+		$item->set_subtotal( 30 );
+		$item->set_total( 30 );
+		$subscription->add_item( $item );
+		$subscription->calculate_totals();
+		$subscription->save();
+
+		$team_id = $this->create_unlinked_team( $owner, $members, 3 );
+		update_post_meta( $team_id, '_subscription_id', $subscription->get_id() );
+
+		( new Teams_Migration() )->migrate_teams(
+			[],
+			[
+				'skip-unlinked' => true,
+				'live'          => true,
+			]
+		);
+
+		foreach ( $members as $member ) {
+			$this->assertTrue( (bool) Group_Subscription::user_is_member( $member, $subscription ), 'Every member of the full team should be added to the group.' );
+		}
+		$this->assertSame( 4, $this->line_item_quantity( $subscription ), 'The paid line should gain the owner seat: 3 member seats + the owner.' );
+		$this->assertSame( 30.0, (float) $subscription->get_total(), 'Raising the seats must not change what the customer pays.' );
+	}
+
+	/**
 	 * Re-running the command re-aligns the team's $0 group onto the migration
 	 * product. For a per-seat product that must not shrink the group to one seat.
 	 */
