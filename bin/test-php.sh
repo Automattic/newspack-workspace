@@ -70,10 +70,11 @@ bin/install-wp-tests.sh "$TEST_DB_NAME" root $MYSQL_ROOT_PASSWORD $MYSQL_HOST la
 # PASS would hide a run against the wrong checkout or a filter that matched
 # nothing.
 # PHPUnit's listing and help modes run no tests and write no JUnit log, so their
-# output is the answer and passes through whole.
+# output is the answer and passes through whole. A caller's own --log-junit
+# replaces the report the summary reads, so that run passes through too.
 for arg in "${@:2}"; do
 	case "$arg" in
-		--list-*|--help|-h|--version) NEWSPACK_TEST_OUTPUT=full ;;
+		--list-*|--help|-h|--version|--log-junit|--log-junit=*) NEWSPACK_TEST_OUTPUT=full ;;
 	esac
 done
 

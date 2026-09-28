@@ -106,6 +106,26 @@ XML
 php_summary "$WORK/array.xml" 1
 expect "php: keeps a location that follows a long diff" '/tests/test-array.php:12$' "$WORK/out"
 
+cat > "$WORK/trace.xml" <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites><testsuite name="demo" tests="1" assertions="0" errors="1" warnings="0" failures="0" skipped="0" time="0.1">
+<testcase name="test_trace" class="Demo_Test"><error type="RuntimeException">Demo_Test::test_trace
+RuntimeException: deep
+/includes/a.php:10
+/includes/b.php:20
+/includes/c.php:30
+/includes/d.php:40
+/includes/e.php:50
+/includes/f.php:60
+/includes/g.php:70
+/includes/h.php:80
+/includes/i.php:90</error></testcase>
+</testsuite></testsuites>
+XML
+php_summary "$WORK/trace.xml" 2
+expect "php: shows the first stack frame" '/includes/a.php:10$' "$WORK/out"
+reject "php: adds no elision when a location is already shown" '^    \.\.\.$' "$WORK/out"
+
 printf '<?xml version="1.0" encoding="UTF-8"?>\n<testsuites/>\n' > "$WORK/empty.xml"
 php_summary "$WORK/empty.xml" 0
 expect "php: a filter matching nothing is NO TESTS RAN" '^result:  NO TESTS RAN' "$WORK/out"
@@ -230,12 +250,13 @@ cat > "$WORK/stub/phpunit" <<'STUB'
 for a in "$@"; do
 	[ "$a" = "--list-groups" ] && { printf 'Available test group(s):\n - alpha\n - beta\n'; exit 0; }
 done
+# Like PHPUnit, the last --log-junit wins.
+junit=""
 while [ $# -gt 0 ]; do
-	if [ "$1" = "--log-junit" ]; then
-		printf '<?xml version="1.0"?>\n<testsuites><testsuite name="s" tests="2" assertions="2" errors="0" warnings="0" failures="0" skipped="0" time="0.1"/></testsuites>\n' > "$2"
-	fi
+	[ "$1" = "--log-junit" ] && junit="$2"
 	shift
 done
+[ -n "$junit" ] && printf '<?xml version="1.0"?>\n<testsuites><testsuite name="s" tests="2" assertions="2" errors="0" warnings="0" failures="0" skipped="0" time="0.1"/></testsuites>\n' > "$junit"
 echo "OK (2 tests)"
 STUB
 chmod +x "$WORK/stub/phpunit"
@@ -248,6 +269,9 @@ expect "test-php.sh: --list-groups prints the groups in compact mode" '^ - beta$
 reject "test-php.sh: and gives no verdict" '^result:' "$WORK/out"
 run_test_php
 expect "test-php.sh: a normal compact run gives a verdict" '^result:  PASS - 2 tests' "$WORK/out"
+run_test_php --log-junit "$WORK/caller.xml"
+reject "test-php.sh: a caller's --log-junit does not end in NO REPORT" 'NO REPORT' "$WORK/out"
+expect "test-php.sh: and the caller's report is written" '' "$WORK/caller.xml"
 
 if [[ $failures -gt 0 ]]; then
 	echo "$failures failure(s)"

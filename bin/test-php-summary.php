@@ -92,7 +92,8 @@ foreach ( $xml->xpath( '//testcase[failure or error or warning]' ) as $case ) {
 	$shown_lines = array_slice( $detail, 0, 8 );
 	// PHPUnit prints the file:line after an array or multi-line diff, which can
 	// fall past the cut; keep it, since the location is what the reader acts on.
-	foreach ( array_slice( $detail, 8 ) as $line ) {
+	$has_location = (bool) preg_grep( '#^\s*/\S+:\d+$#', $shown_lines );
+	foreach ( $has_location ? [] : array_slice( $detail, 8 ) as $line ) {
 		if ( preg_match( '#^/\S+:\d+$#', trim( $line ) ) ) {
 			$shown_lines[] = '...';
 			$shown_lines[] = $line;
