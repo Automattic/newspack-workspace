@@ -1,11 +1,14 @@
 <?php
 /**
- * Inbound Form Capture integration.
+ * Form Capture integration.
  *
- * Captures email submissions from publisher-designated frontend forms (built
- * with any form tool) and registers them as readers via the frontend
- * registration endpoint. Capture-only: neither a sync destination nor a
- * pull source (see supports_push()/supports_pull()).
+ * Captures email submissions from publisher-designated frontend forms built
+ * with any tool but Gravity Forms (an ActiveCampaign embed, a WPForms form)
+ * and registers them as readers via the frontend registration endpoint.
+ * Gravity Forms forms belong to the Gravity Forms integration, which extends
+ * this one. Registered behind a flag, or where a site already enabled it (see
+ * Integrations::register_integrations()). Capture-only: neither a sync
+ * destination nor a pull source (see supports_push()/supports_pull()).
  *
  * Capture semantics publishers must understand before opting a form in:
  * - Capture fires on the browser's submit event (native validity checked)
@@ -13,8 +16,7 @@
  *   submission the vendor's JS or server later rejects may still have
  *   registered the reader.
  * - Programmatic HTMLFormElement.submit() dispatches no submit event and
- *   is not captured. Gravity Forms — which submits every form this way —
- *   is captured through its own submission filter bus instead.
+ *   is not captured.
  * - Forms that collect somebody else's email address (e.g. "email a
  *   friend") must never be opted in.
  *
@@ -33,7 +35,7 @@ use Newspack\Recaptcha;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Inbound Form Capture integration class.
+ * Form Capture integration class.
  */
 class Form_Capture extends Integration {
 	/**
@@ -52,6 +54,22 @@ class Form_Capture extends Integration {
 	const SCRIPT_HANDLE = 'newspack-form-capture';
 
 	/**
+	 * Key of this integration's entry in the capture script's config: the
+	 * forms it covers.
+	 */
+	const SCRIPT_CONFIG_KEY = 'other_forms';
+
+	/**
+	 * Context of the contact sync a capture of an existing reader schedules.
+	 */
+	const SYNC_CONTEXT = 'Form Capture registration (existing reader)';
+
+	/**
+	 * Context of the contact sync a capture of a new reader triggers.
+	 */
+	const NEW_READER_SYNC_CONTEXT = 'Form Capture registration';
+
+	/**
 	 * Default per-IP hourly limit for this integration's rate-limit bucket.
 	 * Sized for form traffic rather than explicit signup forms: capture fires
 	 * on every opted-in submission across the site, and on hosts where
@@ -60,13 +78,16 @@ class Form_Capture extends Integration {
 	const RATE_LIMIT_DEFAULT = 100;
 
 	/**
-	 * Constructor.
+	 * Constructor. A subclass passes its own name and description.
+	 *
+	 * @param string|null $name        Optional. The display name.
+	 * @param string|null $description Optional. A short description.
 	 */
-	public function __construct() {
+	public function __construct( $name = null, $description = null ) {
 		parent::__construct(
-			self::ID,
-			__( 'Inbound Form Capture', 'newspack-plugin' ),
-			__( 'Register readers from email signup forms built with any form tool.', 'newspack-plugin' )
+			static::ID,
+			$name ?? __( 'Form Capture', 'newspack-plugin' ),
+			$description ?? __( 'Register readers from email signup forms built with any form tool other than Gravity Forms.', 'newspack-plugin' )
 		);
 	}
 
@@ -79,8 +100,9 @@ class Form_Capture extends Integration {
 		\add_filter( 'newspack_reader_activation_send_magic_link_on_reregistration', [ $this, 'filter_send_magic_link' ], 10, 3 );
 		\add_action( 'newspack_registered_reader', [ $this, 'handle_registered_reader' ], 10, 5 );
 		\add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ], 20 );
-		// Priority 5 so a publisher's own filter at default priority wins.
+		// Priority 5 so a publisher's own filters at default priority win.
 		\add_filter( 'newspack_frontend_registration_rate_limit', [ $this, 'filter_rate_limit' ], 5, 3 );
+		\add_filter( 'newspack_reader_registered_sync_context', [ $this, 'filter_new_reader_sync_context' ], 5, 2 );
 	}
 
 	/**
@@ -92,7 +114,7 @@ class Form_Capture extends Integration {
 	 * @return string
 	 */
 	public static function get_registration_method() {
-		return Reader_Registration::get_registration_method_for( self::ID );
+		return Reader_Registration::get_registration_method_for( static::ID );
 	}
 
 	/**
@@ -106,7 +128,11 @@ class Form_Capture extends Integration {
 				'key'         => 'selectors',
 				'type'        => 'textarea',
 				'label'       => __( 'Form selectors', 'newspack-plugin' ),
-				'description' => __( 'CSS selectors (one per line) of forms to capture, in addition to any form with the newspack-form-capture class. Bare tag selectors (e.g. "form") are ignored — they would opt in every form on the site. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission, so submissions its spam checks would discard still create readers and count toward your ESP contacts. Captures are rate-limited per visitor IP (100/hour by default).', 'newspack-plugin' ),
+				'description' => sprintf(
+					/* translators: %s: the CSS class that opts a form into capture. */
+					__( 'CSS selectors (one per line) of forms to capture, in addition to any form with the %s class. Gravity Forms forms are captured only through the Gravity Forms integration. Bare tag selectors (e.g. "form") are ignored — they would opt in every form on the site. Only opt in forms whose submissions should always create a reader account: capture runs even if the form tool itself later rejects the submission, so submissions its spam checks would discard still create readers and count toward your ESP contacts. Captures are rate-limited per visitor IP (100/hour by default).', 'newspack-plugin' ),
+					self::MARKER_CLASS
+				),
 				'default'     => '',
 			],
 		];
@@ -157,7 +183,7 @@ class Form_Capture extends Integration {
 	 * @return int The limit.
 	 */
 	public function filter_rate_limit( $limit, $ip, $bucket ) {
-		if ( Reader_Registration::get_rate_limit_bucket_for( self::ID ) === $bucket ) {
+		if ( Reader_Registration::get_rate_limit_bucket_for( $this->get_id() ) === $bucket ) {
 			return self::RATE_LIMIT_DEFAULT;
 		}
 		return $limit;
@@ -222,9 +248,10 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Frontend registration is available while the integration is enabled and
-	 * the site's configuration supports capture. This gates the registration
-	 * endpoint, the page-emitted key, and the capture script together.
+	 * Frontend registration is available while the integration is enabled
+	 * and the site's configuration supports capture. This gates the
+	 * registration endpoint, the page-emitted key, and the capture script
+	 * together.
 	 *
 	 * The unsupported check runs here, not only at enable time: a site that
 	 * switches to reCAPTCHA v2 after enabling would otherwise keep emitting a
@@ -233,7 +260,7 @@ class Form_Capture extends Integration {
 	 * @return bool
 	 */
 	public function supports_frontend_registration(): bool {
-		return Integrations::is_enabled( self::ID ) && ! $this->get_unsupported_reason();
+		return Integrations::is_enabled( $this->get_id() ) && ! $this->get_unsupported_reason();
 	}
 
 	/**
@@ -314,7 +341,11 @@ class Form_Capture extends Integration {
 	}
 
 	/**
-	 * Enqueue the frontend capture script when the integration is active.
+	 * Enqueue the frontend capture script while the integration captures, and
+	 * hand it this integration's forms. The Gravity Forms integration shares
+	 * the script, so each integration adds its own entry: the script registers
+	 * each form under the integration whose entry covers it, and a disabled
+	 * integration's forms have no entry to match.
 	 */
 	public function enqueue_scripts() {
 		if ( ! Reader_Activation::is_enabled() || ! $this->supports_frontend_registration() ) {
@@ -330,12 +361,19 @@ class Form_Capture extends Integration {
 				'in_footer' => true,
 			]
 		);
-		\wp_localize_script(
+		\wp_add_inline_script(
 			self::SCRIPT_HANDLE,
-			'newspack_form_capture',
-			[
-				'selectors' => $this->get_selectors(),
-			]
+			sprintf(
+				'window.newspack_form_capture = window.newspack_form_capture || {}; window.newspack_form_capture[%s] = %s;',
+				\wp_json_encode( static::SCRIPT_CONFIG_KEY ),
+				\wp_json_encode(
+					[
+						'integration' => $this->get_id(),
+						'selectors'   => $this->get_selectors(),
+					]
+				)
+			),
+			'before'
 		);
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'defer', true );
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'amp-plus', true );
@@ -353,7 +391,7 @@ class Form_Capture extends Integration {
 	 * @return bool Whether the registration is a form capture.
 	 */
 	private function is_capture_registration( $metadata ) {
-		return Integrations::is_enabled( self::ID ) && ( $metadata['registration_method'] ?? '' ) === self::get_registration_method();
+		return Integrations::is_enabled( $this->get_id() ) && ( $metadata['registration_method'] ?? '' ) === static::get_registration_method();
 	}
 
 	/**
@@ -417,9 +455,28 @@ class Form_Capture extends Integration {
 			return;
 		}
 		$hook = 'newspack_scheduled_esp_sync';
-		$args = [ $existing_user->ID, 'Form Capture registration (existing reader)' ];
+		$args = [ $existing_user->ID, static::SYNC_CONTEXT ];
 		if ( false === \as_next_scheduled_action( $hook, $args, $this->get_action_group() ) ) {
 			\as_schedule_single_action( time() + MINUTE_IN_SECONDS, $hook, $args, $this->get_action_group() );
 		}
+	}
+
+	/**
+	 * Name this integration in the contact sync a new reader's capture
+	 * triggers, so Sync Activity tells captures apart from other sign-ups. It
+	 * goes by the registration method alone, not the enabled state: the name
+	 * records where the reader came from. Hooked at priority 5 so a publisher's
+	 * own filter at default priority can still rename it.
+	 *
+	 * @param string $context The context of the sync.
+	 * @param array  $data    The reader_registered event data.
+	 *
+	 * @return string The context of the sync.
+	 */
+	public function filter_new_reader_sync_context( $context, $data ) {
+		if ( ( $data['metadata']['registration_method'] ?? '' ) === static::get_registration_method() ) {
+			return static::NEW_READER_SYNC_CONTEXT;
+		}
+		return $context;
 	}
 }
