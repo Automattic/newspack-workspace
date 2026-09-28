@@ -2,7 +2,7 @@
 # This file is distributed under the GNU General Public License v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Block Theme 1.31.5\n"
+"Project-Id-Version: Newspack Block Theme 1.31.7\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/theme/newspack-block-theme\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"

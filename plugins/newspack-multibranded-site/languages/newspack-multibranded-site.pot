@@ -2,7 +2,7 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Multibranded Site 2.4.7\n"
+"Project-Id-Version: Newspack Multibranded Site 2.4.8\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-multibranded-site\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"

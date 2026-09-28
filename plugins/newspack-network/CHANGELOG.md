@@ -1,3 +1,10 @@
+## newspack-network [2.22.11](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.10...newspack-network@2.22.11) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.3
+
 ## newspack-network [2.22.10](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.9...newspack-network@2.22.10) (2026-09-28)
 
 
