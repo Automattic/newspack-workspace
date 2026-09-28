@@ -1673,9 +1673,18 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 			$id = is_object( $product ) ? $product->get_id() : (int) $product;
 			return $wcs_grouped_parents[ $id ] ?? [];
 		}
+		/**
+		 * Real WCS passes its type check through `woocommerce_is_subscription`, which is
+		 * the seam subscription plans use to mark a cart item with a chosen plan. The mock
+		 * applies it too, or no test could see a plan purchase.
+		 *
+		 * @param mixed $product Product.
+		 */
 		public static function is_subscription( $product ) {
-			return is_object( $product ) && method_exists( $product, 'get_type' )
+			$is_subscription = is_object( $product ) && method_exists( $product, 'get_type' )
 				&& in_array( $product->get_type(), [ 'subscription', 'variable-subscription', 'subscription_variation' ], true );
+			$product_id      = is_object( $product ) && method_exists( $product, 'get_id' ) ? $product->get_id() : 0;
+			return apply_filters( 'woocommerce_is_subscription', $is_subscription, $product_id, $product );
 		}
 		public static function get_period( $product ) {
 			$period = is_object( $product ) && method_exists( $product, 'get_meta' ) ? $product->get_meta( '_subscription_period' ) : '';
@@ -1684,6 +1693,30 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 		public static function get_interval( $product ) {
 			$interval = is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_period_interval' ) : 0;
 			return $interval > 0 ? $interval : 1;
+		}
+		/**
+		 * Number of billing periods before the subscription ends, 0 for never-ending.
+		 *
+		 * @param mixed $product Product.
+		 */
+		public static function get_length( $product ) {
+			return is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_length' ) : 0;
+		}
+		/**
+		 * Length of the free trial, in trial periods.
+		 *
+		 * @param mixed $product Product.
+		 */
+		public static function get_trial_length( $product ) {
+			return is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_trial_length' ) : 0;
+		}
+		/**
+		 * The free trial's period (day/week/month/year).
+		 *
+		 * @param mixed $product Product.
+		 */
+		public static function get_trial_period( $product ) {
+			return is_object( $product ) && method_exists( $product, 'get_meta' ) ? (string) $product->get_meta( '_subscription_trial_period' ) : '';
 		}
 		/**
 		 * Mirror of WCS's expiration-date resolver: `_subscription_length`
