@@ -184,7 +184,7 @@ class Newspack_Test_Revision_Cleanup extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A full pass that deletes nothing switches the cron to daily.
+	 * A run that reaches the last post with nothing to delete switches the cron to daily.
 	 */
 	public function test_backs_off_to_daily_when_a_pass_deletes_nothing() {
 		$this->schedule( 'hourly' );
@@ -195,28 +195,38 @@ class Newspack_Test_Revision_Cleanup extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A pass that deletes anything, even in an earlier run, stays hourly.
+	 * A run that hits the per-run maximum stays hourly; the run that clears the rest switches to daily.
 	 */
-	public function test_stays_hourly_until_a_whole_pass_deletes_nothing() {
+	public function test_goes_daily_once_a_run_clears_the_backlog() {
 		$this->schedule( 'hourly' );
 		$this->create_post_with_revisions( 10 );
 
 		$this->assertSame( 5, Revision_Cleanup::run_cron( 5 ) );
-		$this->assertSame( 2, Revision_Cleanup::run_cron( 5 ) );
 		$this->assertSame( 'hourly', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
 
-		$this->assertSame( 0, Revision_Cleanup::run_cron( 5 ) );
+		$this->assertSame( 2, Revision_Cleanup::run_cron( 5 ) );
 		$this->assertSame( 'daily', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
 	}
 
 	/**
-	 * A daily run that deletes something switches back to hourly.
+	 * A daily run that clears everything it finds stays daily.
 	 */
-	public function test_daily_run_that_deletes_goes_back_to_hourly() {
+	public function test_daily_run_under_the_maximum_stays_daily() {
 		$this->schedule( 'daily' );
 		$this->create_post_with_revisions( 5 );
 
 		$this->assertSame( 2, Revision_Cleanup::run_cron() );
+		$this->assertSame( 'daily', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
+	}
+
+	/**
+	 * A daily run that hits the per-run maximum switches back to hourly.
+	 */
+	public function test_daily_run_at_the_maximum_goes_back_to_hourly() {
+		$this->schedule( 'daily' );
+		$this->create_post_with_revisions( 5 );
+
+		$this->assertSame( 1, Revision_Cleanup::run_cron( 1 ) );
 		$this->assertSame( 'hourly', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
 	}
 

@@ -83,7 +83,7 @@ WordPress trims a post to the limit each time it's saved. When the limit is lowe
 
 - Each save deletes at most 10 revisions, the oldest first.
 - An hourly cron (`newspack_revision_cleanup`) deletes up to 500 more per run. It works through posts in ID order, picking up where the last run stopped, and starts over after the last one.
-- Once a full pass over the posts deletes nothing, the cron runs daily instead. It goes back to hourly when a run deletes something or the revision limit setting is saved.
+- Once a run reaches the last post without hitting the 500 limit, everything it found has been deleted, so the cron runs daily instead. It goes back to hourly when a run hits the 500 limit or the revision limit setting is saved.
 
 Both skip revisions under the minimum age, major revisions and autosaves. The cron deletes nothing while the limit is off, unlimited or 0 (WordPress treats a limit of 0 as revisions turned off).
 

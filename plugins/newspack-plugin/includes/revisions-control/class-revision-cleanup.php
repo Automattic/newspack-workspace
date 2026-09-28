@@ -24,7 +24,6 @@ final class Revision_Cleanup {
 	const PAGE_SIZE      = 500;
 	const CRON_HOOK      = 'newspack_revision_cleanup';
 	const CURSOR_OPTION  = 'newspack_revision_cleanup_cursor';
-	const PASS_OPTION    = 'newspack_revision_cleanup_pass_deleted';
 	const LOGGER_HEADER  = 'NEWSPACK-REVISION-CLEANUP';
 
 	/**
@@ -78,10 +77,8 @@ final class Revision_Cleanup {
 	public static function cron_deactivate(): void {
 		wp_clear_scheduled_hook( self::CRON_HOOK );
 		// This runs on every request while the cron is disabled; get_option() caches a missing option, delete_option() doesn't.
-		foreach ( [ self::CURSOR_OPTION, self::PASS_OPTION ] as $option ) {
-			if ( false !== get_option( $option ) ) {
-				delete_option( $option );
-			}
+		if ( false !== get_option( self::CURSOR_OPTION ) ) {
+			delete_option( self::CURSOR_OPTION );
 		}
 	}
 
@@ -147,8 +144,9 @@ final class Revision_Cleanup {
 	 * post where the last one stopped and starts over once it reaches the end,
 	 * so every post is reached in turn. Vetoed deletions are skipped.
 	 *
-	 * Runs hourly while there's a backlog. Once a full pass over the posts
-	 * deletes nothing, it runs daily, until a run deletes something again.
+	 * Runs hourly while a run hits $max, since more is waiting. Once a run
+	 * reaches the last post without hitting $max, everything it found has
+	 * been deleted, so it runs daily until a run hits $max again.
 	 *
 	 * @param int $max Maximum revisions to delete in this run.
 	 * @return int Number deleted.
@@ -163,29 +161,25 @@ final class Revision_Cleanup {
 		}
 
 		$deleted = 0;
-		// Past the last candidate, the pass is done and the next run starts over.
-		$pass_done  = count( $candidates ) <= self::MAX_CANDIDATES;
+		// Past the last candidate, the next run starts over.
+		$last_batch = count( $candidates ) <= self::MAX_CANDIDATES;
 		$candidates = array_slice( $candidates, 0, self::MAX_CANDIDATES );
-		$next       = $pass_done ? 0 : (int) end( $candidates );
+		$next       = $last_batch ? 0 : (int) end( $candidates );
 		foreach ( $candidates as $post_id ) {
 			$deleted += count( self::delete_revisions( self::get_excess_ids( $post_id, $max - $deleted ) ) );
 			if ( $deleted >= $max ) {
 				// This post may still be over the limit, so the next run starts with it.
-				$pass_done = false;
-				$next      = $post_id - 1;
+				$next = $post_id - 1;
 				break;
 			}
 		}
 		update_option( self::CURSOR_OPTION, $next, false );
 
-		$pass_deleted = (int) get_option( self::PASS_OPTION, 0 ) + $deleted;
-		if ( $pass_done ) {
-			self::set_recurrence( $pass_deleted ? 'hourly' : 'daily' );
-			$pass_deleted = 0;
-		} elseif ( $deleted ) {
+		if ( $deleted >= $max ) {
 			self::set_recurrence( 'hourly' );
+		} elseif ( $last_batch ) {
+			self::set_recurrence( 'daily' );
 		}
-		update_option( self::PASS_OPTION, $pass_deleted, false );
 
 		if ( $deleted ) {
 			Logger::log( sprintf( 'Deleted %d revisions over the limit.', $deleted ), self::LOGGER_HEADER );
