@@ -26,6 +26,7 @@ import { __ } from '@wordpress/i18n';
 import './block-visibility.scss';
 import {
 	formatAccessRuleOptionLabel,
+	getAccessRuleOptionSuggestions,
 	getAccessRuleOptionTokens,
 	MAX_OPTION_SUGGESTIONS,
 	getAccessRuleTokenFieldMessages,
@@ -234,7 +235,7 @@ export const AccessRuleValueControl = ( {
 						label={ config.name }
 						disabled={ isAccessRulePickerInert( config, value, hasOptions ) }
 						value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
-						suggestions={ options.map( formatAccessRuleOptionLabel ) }
+						suggestions={ getAccessRuleOptionSuggestions( options ) }
 						maxSuggestions={ MAX_OPTION_SUGGESTIONS }
 						onChange={ ( tokens: ( string | TokenItem )[] ) =>
 							onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )

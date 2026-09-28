@@ -27,7 +27,15 @@ import { __ } from '@wordpress/i18n';
 import { decodeEntities } from '@wordpress/html-entities';
 import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 
-export type AccessRuleOption = { value: string | number; label: string };
+/**
+ * An option in an access-rule picker.
+ *
+ * `ineligible` marks a product whose status is outside the ones a publisher currently
+ * sells under (published or private); its label already carries the status marker.
+ * `selectable: false` marks an entry that only names a stored value — a scheduled or
+ * trashed product — and is never offered as a suggestion.
+ */
+export type AccessRuleOption = { value: string | number; label: string; ineligible?: boolean; selectable?: boolean };
 
 /**
  * How many suggestions a picker renders when nothing has been typed.
@@ -129,6 +137,18 @@ export function findAccessRuleOption( options: AccessRuleOption[], value: unknow
  */
 export function formatAccessRuleOptionLabel( option: AccessRuleOption ): string {
 	return `${ decodeEntities( option.label ) } (#${ option.value })`;
+}
+
+/**
+ * Build the suggestion labels for a picker: every option it may offer, leaving out the
+ * label-only entries that exist to name stored values.
+ *
+ * @param options The rule options.
+ *
+ * @return The suggestion labels.
+ */
+export function getAccessRuleOptionSuggestions( options: AccessRuleOption[] ): string[] {
+	return options.filter( option => option.selectable !== false ).map( formatAccessRuleOptionLabel );
 }
 
 /**
@@ -303,15 +323,23 @@ export function getAccessRuleOptionsFetchFailedNotice(): string {
 }
 
 /**
- * Whether a rule holds values that no option describes.
+ * Whether a rule holds values that no option describes, or that name a product with an
+ * ineligible status. Both still count when access is evaluated, and both read as dead
+ * configuration, so both get the same caution.
  *
  * @param options The available rule options.
  * @param value   The selected option values.
  *
- * @return Whether any stored value is absent from the option list.
+ * @return Whether any stored value is absent from the option list or ineligible.
  */
 export function hasUnlistedAccessRuleValues( options: AccessRuleOption[], value: unknown ): boolean {
-	return Array.isArray( value ) && value.some( stored => ! findAccessRuleOption( options, stored ) );
+	return (
+		Array.isArray( value ) &&
+		value.some( stored => {
+			const option = findAccessRuleOption( options, stored );
+			return ! option || option.ineligible;
+		} )
+	);
 }
 
 /**
@@ -324,7 +352,7 @@ export function hasUnlistedAccessRuleValues( options: AccessRuleOption[], value:
 const UNLISTED_VALUES_NOTICES: Record< string, () => string > = {
 	subscription: () =>
 		__(
-			'Entries marked “not listed” are not in this list — a product or variation that was deleted, or a product that is no longer a subscription. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+			'Entries marked “not listed” or “invalid status” are not products you currently sell — a draft, pending, scheduled or trashed product, a product or variation that was deleted, or a product that is no longer a subscription. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
 			'newspack-plugin'
 		),
 	institution: () =>

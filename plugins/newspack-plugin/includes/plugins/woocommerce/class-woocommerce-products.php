@@ -17,6 +17,41 @@ defined( 'ABSPATH' ) || exit;
 class WooCommerce_Products {
 
 	const DONATION_FLAG_META_KEY = '_newspack_is_donation';
+
+	/**
+	 * Product statuses that access rules and segment pickers treat as current. Private
+	 * counts: sites moving from Woo Memberships keep readers on legacy products they have
+	 * hidden from the storefront, and those products still have to be selectable by name.
+	 * Any other status is flagged in picker labels by `get_product_label_with_status()`.
+	 */
+	const ELIGIBLE_PRODUCT_STATUSES = [ 'publish', 'private' ];
+
+	/**
+	 * Label a product for a picker, marking a status outside `ELIGIBLE_PRODUCT_STATUSES`,
+	 * e.g. "All Access [invalid status: draft]".
+	 *
+	 * The marker keeps a saved product's name visible after it is drafted, scheduled or
+	 * trashed, rather than falling back to a generic "deleted" or "not listed" stand-in.
+	 * It also keeps the label distinct from the same product's name while eligible, which
+	 * matters to pickers that map labels back to IDs.
+	 *
+	 * @param string $name   The product name.
+	 * @param string $status The product's post status.
+	 *
+	 * @return string The label.
+	 */
+	public static function get_product_label_with_status( $name, $status ) {
+		if ( in_array( $status, self::ELIGIBLE_PRODUCT_STATUSES, true ) ) {
+			return $name;
+		}
+		return sprintf(
+			/* translators: 1: product name, 2: product post status slug, e.g. "draft" or "trash". */
+			__( '%1$s [invalid status: %2$s]', 'newspack-plugin' ),
+			$name,
+			$status
+		);
+	}
+
 	/**
 	 * Initialize.
 	 *

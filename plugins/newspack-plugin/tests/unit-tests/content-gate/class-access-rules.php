@@ -1017,6 +1017,100 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A draft or pending product stays selectable but is labeled with its status, so a
+	 * publisher can tell it from the products they sell. Its variations carry the parent's
+	 * marker, since they can't be bought while the parent is unavailable. Private products
+	 * are a normal state for legacy tiers and stay unmarked.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_marks_ineligible_statuses() {
+		$statuses_by_id = [
+			960 => 'publish',
+			961 => 'private',
+			962 => 'draft',
+			963 => 'pending',
+		];
+		foreach ( $statuses_by_id as $id => $status ) {
+			wc_create_mock_product(
+				[
+					'id'     => $id,
+					'type'   => 'subscription',
+					'name'   => ucfirst( $status ) . ' tier',
+					'status' => $status,
+				]
+			);
+		}
+		wc_create_mock_product(
+			[
+				'id'     => 964,
+				'type'   => 'variable-subscription',
+				'name'   => 'Draft membership',
+				'status' => 'draft',
+			]
+		);
+		$variation_id = $this->create_variation_post( 964, 'Draft membership - Annual' );
+
+		$options = array_column( Access_Rules::get_subscription_products_options(), null, 'value' );
+
+		$this->assertSame(
+			[
+				960           => 'Publish tier',
+				961           => 'Private tier',
+				962           => 'Draft tier [invalid status: draft]',
+				963           => 'Pending tier [invalid status: pending]',
+				964           => 'Draft membership [invalid status: draft]',
+				$variation_id => 'Draft membership - Annual [invalid status: draft]',
+			],
+			array_column( $options, 'label', 'value' )
+		);
+		$this->assertSame( [ 962, 963, 964, $variation_id ], array_keys( array_filter( array_column( $options, 'ineligible', 'value' ) ) ), 'Only non-eligible products and their variations are flagged.' );
+	}
+
+	/**
+	 * A gate saved while a product was live keeps naming it after the product is
+	 * scheduled or trashed, since the rule still matches subscriptions to it. The rule's
+	 * options carry those products as label-only entries; the list the picker offers, and
+	 * that the CLI audit mirrors, does not.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_rule_options_name_scheduled_and_trashed_products_without_offering_them() {
+		$statuses_by_id = [
+			970 => 'publish',
+			971 => 'future',
+			972 => 'trash',
+		];
+		foreach ( $statuses_by_id as $id => $status ) {
+			wc_create_mock_product(
+				[
+					'id'     => $id,
+					'type'   => 'subscription',
+					'name'   => ucfirst( $status ) . ' tier',
+					'status' => $status,
+				]
+			);
+		}
+
+		$rule_options = array_column( Access_Rules::get_access_rules()['subscription']['options'], null, 'value' );
+
+		$this->assertSame( [ 970 ], array_column( Access_Rules::get_subscription_products_options(), 'value' ), 'The offered list leaves out scheduled and trashed products.' );
+		$this->assertSame( [ 970, 971, 972 ], array_keys( $rule_options ) );
+		$this->assertArrayNotHasKey( 'selectable', $rule_options[970] );
+		$this->assertSame(
+			[
+				'label'      => 'Future tier [invalid status: future]',
+				'value'      => 971,
+				'ineligible' => true,
+				'selectable' => false,
+			],
+			$rule_options[971]
+		);
+		$this->assertSame( 'Trash tier [invalid status: trash]', $rule_options[972]['label'] );
+		$this->assertFalse( $rule_options[972]['selectable'] );
+	}
+
+	/**
 	 * The options are built once per request. `get_access_rules()` resolves every registered
 	 * rule's options callback on every call, and more than one admin screen localizes it, so
 	 * without the memo a request reaching it twice runs the full-catalog product query and

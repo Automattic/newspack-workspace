@@ -8,6 +8,7 @@ import { useEffect, useState, Fragment } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import find from 'lodash/find';
 import { applyFilters, addFilter } from '@wordpress/hooks';
+import { addQueryArgs } from '@wordpress/url';
 
 /**
  * Internal dependencies.
@@ -377,6 +378,7 @@ addFilter( 'newspack.criteria.input', 'newspack.activeSubscriptions', function (
 			<ListsControl
 				placeholder={ __( 'Start typing to search for products…', 'newspack-plugin' ) }
 				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
+				savedInfoPath={ ids => addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: ids } ) }
 				value={ value }
 				onChange={ update }
 				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }

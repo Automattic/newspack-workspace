@@ -10,7 +10,7 @@ import type { TokenItem } from '@wordpress/components/build-types/form-token-fie
  */
 import { FormTokenField } from '../../../../../../packages/components/src';
 import {
-	formatAccessRuleOptionLabel,
+	getAccessRuleOptionSuggestions,
 	getAccessRuleOptionTokens,
 	MAX_OPTION_SUGGESTIONS,
 	getAccessRuleTokenFieldMessages,
@@ -53,7 +53,7 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 						onChange={ ( tokens: ( string | TokenItem )[] ) =>
 							onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
 						}
-						suggestions={ options.map( formatAccessRuleOptionLabel ) }
+						suggestions={ getAccessRuleOptionSuggestions( options ) }
 						maxSuggestions={ MAX_OPTION_SUGGESTIONS }
 						messages={ getAccessRuleTokenFieldMessages( slug ) }
 						__experimentalValidateInput={ ( input: string ) => isAccessRuleOptionInput( input, options, slug ) }

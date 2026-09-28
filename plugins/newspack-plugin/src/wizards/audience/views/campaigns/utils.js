@@ -386,7 +386,7 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 						: __( 'Does not have active subscription(s):', 'newspack-plugin' )
 				}
 				ids={ item.value }
-				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
+				path={ addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: item.value } ) }
 				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }
 			/>
 		);

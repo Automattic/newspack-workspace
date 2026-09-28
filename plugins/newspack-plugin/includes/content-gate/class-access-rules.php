@@ -36,6 +36,15 @@ class Access_Rules {
 	private static $subscription_products_options = null;
 
 	/**
+	 * Request-scoped memo for the label-only subscription product options.
+	 *
+	 * Same reasoning as {@see self::$subscription_products_options}.
+	 *
+	 * @var array|null
+	 */
+	private static $unselectable_subscription_products_options = null;
+
+	/**
 	 * Request-scoped memo for the one-time purchase product options.
 	 *
 	 * Same reasoning as {@see self::$subscription_products_options}, over a shop's whole
@@ -235,7 +244,7 @@ class Access_Rules {
 			'subscription'      => [
 				'name'        => __( 'Active subscription', 'newspack-plugin' ),
 				'description' => __( 'Requires an active subscription to selected products.', 'newspack-plugin' ),
-				'options'     => [ __CLASS__, 'get_subscription_products_options' ],
+				'options'     => [ __CLASS__, 'get_subscription_products_rule_options' ],
 				'callback'    => [ __CLASS__, 'has_active_subscription' ],
 			],
 			'one_time_purchase' => [
@@ -637,11 +646,15 @@ class Access_Rules {
 	 * as `post_status IN ( 'publish', 'private' )`, so draft is not a state its own admin
 	 * produces for a variation, and nothing can have been bought in it.
 	 *
+	 * Draft and pending products keep granting access, but their labels carry a status
+	 * marker ("[invalid status: draft]") so a publisher can tell them from the products
+	 * they currently sell. Private products don't: they're a normal state for legacy tiers.
+	 *
 	 * The result is memoized per request. The list itself is still unbounded and is
 	 * serialized into every editor payload; NPPD-2132 replaces it with a searchable
 	 * picker, which is what removes that cost rather than deferring it.
 	 *
-	 * @return array Array of [ 'label' => string, 'value' => int ].
+	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible'? => true ].
 	 */
 	public static function get_subscription_products_options() {
 		if ( null !== self::$subscription_products_options ) {
@@ -656,21 +669,96 @@ class Access_Rules {
 				'limit' => -1,
 			]
 		);
+		self::$subscription_products_options = self::build_subscription_product_options( $products );
+		return self::$subscription_products_options;
+	}
+
+	/**
+	 * Get subscriptions a stored rule may still name but the picker must not offer:
+	 * scheduled (`future`) and trashed products, which `wc_get_products()` leaves out by
+	 * default and so `get_subscription_products_options()` never lists.
+	 *
+	 * A gate saved while such a product was live still holds its ID, and the rule still
+	 * matches subscriptions to it. Without these entries the picker could only render that
+	 * ID as "not listed"; with them it keeps the product's name, marked with its status.
+	 * They are flagged `selectable => false`, so the picker names them but never suggests
+	 * them.
+	 *
+	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible' => true, 'selectable' => false ].
+	 */
+	public static function get_unselectable_subscription_products_options() {
+		if ( null !== self::$unselectable_subscription_products_options ) {
+			return self::$unselectable_subscription_products_options;
+		}
+		if ( ! function_exists( 'wc_get_products' ) ) {
+			return [];
+		}
+		$products = \wc_get_products(
+			[
+				'type'   => [ 'subscription', 'variable-subscription' ],
+				'status' => [ 'future', 'trash' ],
+				'limit'  => -1,
+			]
+		);
+		self::$unselectable_subscription_products_options = array_map(
+			function ( $option ) {
+				$option['selectable'] = false;
+				return $option;
+			},
+			self::build_subscription_product_options( $products )
+		);
+		return self::$unselectable_subscription_products_options;
+	}
+
+	/**
+	 * The "Active subscription" rule's options: every product the picker offers, followed by
+	 * the label-only entries that name stored products it no longer offers.
+	 *
+	 * @return array Array of options; see `get_subscription_products_options()` and
+	 *               `get_unselectable_subscription_products_options()`.
+	 */
+	public static function get_subscription_products_rule_options() {
+		return array_merge( self::get_subscription_products_options(), self::get_unselectable_subscription_products_options() );
+	}
+
+	/**
+	 * Build picker options for subscription products and their variations.
+	 *
+	 * A product whose status is outside `WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES`
+	 * gets a status marker in its label and an `ineligible` flag, and so do its variations,
+	 * since a variation can't be bought while its parent is unavailable. The flag is what
+	 * the picker reads to warn that the entry still grants access.
+	 *
+	 * @param \WC_Product[] $products The subscription products.
+	 *
+	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible'? => true ].
+	 */
+	private static function build_subscription_product_options( $products ) {
 		$variations_by_parent = self::get_subscription_variation_posts( $products );
 		$options              = [];
 		foreach ( $products as $product ) {
-			$options[] = [
-				'label' => $product->get_name(),
-				'value' => $product->get_id(),
+			$status     = $product->get_status();
+			$ineligible = ! in_array( $status, WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES, true );
+			$entries    = [
+				[
+					'label' => $product->get_name(),
+					'value' => $product->get_id(),
+				],
 			];
 			foreach ( $variations_by_parent[ $product->get_id() ] ?? [] as $variation ) {
-				$options[] = [
+				$entries[] = [
 					'label' => self::get_variation_option_label( $product->get_name(), $variation ),
 					'value' => $variation->ID,
 				];
 			}
+			foreach ( $entries as $entry ) {
+				if ( $ineligible ) {
+					$entry['label']      = WooCommerce_Products::get_product_label_with_status( $entry['label'], $status );
+					$entry['ineligible'] = true;
+				}
+				$options[] = $entry;
+			}
 		}
-		self::$subscription_products_options = $options;
 		return $options;
 	}
 
@@ -684,8 +772,9 @@ class Access_Rules {
 	 * @return void
 	 */
 	public static function flush_product_options_memos() {
-		self::$subscription_products_options      = null;
-		self::$one_time_purchase_products_options = null;
+		self::$subscription_products_options              = null;
+		self::$unselectable_subscription_products_options = null;
+		self::$one_time_purchase_products_options         = null;
 	}
 
 	/**
