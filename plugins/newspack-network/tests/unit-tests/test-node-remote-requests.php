@@ -8,6 +8,7 @@
 use Newspack_Network\Hub\Nodes;
 use Newspack_Network\Hub\Node;
 use Newspack_Network\Hub\Admin\Membership_Plans;
+use Newspack_Network\Hub\Admin\Nodes_List;
 use Newspack_Network\Utils\Network;
 
 /**
@@ -152,5 +153,25 @@ class TestNodeRemoteRequests extends WP_UnitTestCase {
 		Membership_Plans::fetch_collection_from_api( $this->make_node( 'http://93.184.216.34' ), 'wc/v2/memberships/plans', 'membership-plans' );
 		$this->assertCount( 1, $this->requests );
 		$this->assertTrue( $this->requests[0][1]['reject_unsafe_urls'] );
+	}
+
+	/**
+	 * A Node whose site info comes back empty is requested once per page, not once per column.
+	 */
+	public function test_nodes_list_requests_unavailable_site_info_once() {
+		$empty_body = function ( $response ) {
+			$response['body'] = '';
+			return $response;
+		};
+		add_filter( 'pre_http_request', $empty_body, 11 );
+
+		$node_id = $this->make_node( 'http://93.184.216.34' )->get_id();
+		ob_start();
+		Nodes_List::posts_columns_values( 'links', $node_id );
+		Nodes_List::posts_columns_values( 'links', $node_id );
+		ob_end_clean();
+
+		remove_filter( 'pre_http_request', $empty_body, 11 );
+		$this->assertCount( 1, $this->requests );
 	}
 }

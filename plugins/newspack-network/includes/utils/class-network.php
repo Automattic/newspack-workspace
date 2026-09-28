@@ -136,14 +136,15 @@ class Network {
 			if ( method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
 				\Newspack\Logger::newspack_log(
 					'newspack_network_peer_request',
-					'Refused a request to a peer: the URL resolves to a private or reserved address, or its lookup failed.',
+					'Refused a request to a peer: the URL is not http(s) on an allowed port, resolves to a private or reserved address, or its lookup failed.',
 					[
 						'host' => is_string( $url ) ? wp_parse_url( $url, PHP_URL_HOST ) : null,
+						'port' => is_string( $url ) ? wp_parse_url( $url, PHP_URL_PORT ) : null,
 					],
 					'error'
 				);
 			}
-			return new \WP_Error( 'newspack_network_unsafe_peer_url', __( 'Refused a request to a private or reserved address.', 'newspack-network' ) );
+			return new \WP_Error( 'newspack_network_unsafe_peer_url', __( 'Refused a request to a URL that is not a public http(s) address on an allowed port.', 'newspack-network' ) );
 		}
 
 		add_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
