@@ -77,7 +77,7 @@ class Newspack_Blocks {
 
 					// A block with no usable source renders nothing; taking over the page would
 					// leave it blank, since the fullscreen body class hides the rest of it.
-					if ( '' === $rendered ) {
+					if ( '' === trim( $rendered ) ) {
 						continue;
 					}
 

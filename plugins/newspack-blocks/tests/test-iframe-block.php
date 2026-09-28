@@ -116,6 +116,22 @@ class IframeBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Document mode checks the source before building the viewer URL, so a rejected
+	 * source renders nothing rather than a viewer frame.
+	 */
+	public function test_document_mode_unsupported_source_renders_nothing() {
+		$this->assertSame(
+			'',
+			$this->render_iframe(
+				[
+					'src'  => 'javascript:void(0)',
+					'mode' => 'document',
+				]
+			)
+		);
+	}
+
+	/**
 	 * Run the full-screen content filter on a post holding one full-screen Iframe block.
 	 *
 	 * @param string $src Block source.
