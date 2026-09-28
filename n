@@ -179,11 +179,11 @@ project_name_arg() {
 # branch@commit of the code the container will run, printed by the compact
 # summaries) and test_host_root (the main checkout, where logs/ lands).
 #
-# Refuses when the caller is in a git worktree but the container would run the
-# project from the main checkout: either no isolated env mounts the worktree, or
-# the env mounts other projects from it but not this one. The run would test the
-# main checkout's code and report it as the worktree's. NEWSPACK_TEST_ROOT_OK=1
-# runs it anyway.
+# Refuses when the caller is in a git worktree of the repository that holds the
+# project under test, but the container would read that project from elsewhere:
+# no isolated env mounts it from this worktree, or this n is the worktree's own
+# copy, which cannot see the envs. The run would report another checkout's
+# result as this branch's. NEWSPACK_TEST_ROOT_OK=1 runs it anyway.
 prepare_test_run() {
     test_output=${NEWSPACK_TEST_OUTPUT:-}
     if [[ -z "$test_output" && ( -n "${CLAUDECODE:-}" || -n "${AI_AGENT:-}" || -n "${CODEX_SANDBOX:-}" ) ]]; then
@@ -199,52 +199,63 @@ prepare_test_run() {
     fi
     test_host_root="$root"
 
-    # A linked worktree has its own git dir; the main checkout and a standalone
-    # repos/ clone do not.
-    local in_worktree=0 git_dir="" common_dir=""
+    # The project's copy in the main checkout, which is what the container reads
+    # unless an env mounts a worktree's copy over it.
+    local root_dir="$root" candidate
+    for candidate in "$root/plugins/$target_folder" "$root/themes/$target_folder" \
+        "$root/repos/plugins/$target_folder" "$root/repos/themes/$target_folder"; do
+        if [[ -d "$candidate" ]]; then
+            root_dir="$candidate"
+            break
+        fi
+    done
+
+    # Guard only a caller in a linked worktree of the project's own repository. A
+    # repos/ project named from a monorepo worktree has no copy in that worktree.
+    local guarded=0 git_dir="" caller_common="" project_common="" caller_top=""
     git_dir=$(git -C "$N_CALLER_PWD" rev-parse --path-format=absolute --git-dir 2>/dev/null) || git_dir=""
-    common_dir=$(git -C "$N_CALLER_PWD" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common_dir=""
-    if [[ -n "$git_dir" && "$git_dir" != "$common_dir" ]]; then
-        in_worktree=1
+    caller_common=$(git -C "$N_CALLER_PWD" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || caller_common=""
+    project_common=$(git -C "$root_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || project_common=""
+    if [[ -n "$git_dir" && "$git_dir" != "$caller_common" && "$caller_common" == "$project_common" ]]; then
+        guarded=1
+        caller_top=$(git -C "$N_CALLER_PWD" rev-parse --show-toplevel 2>/dev/null) || caller_top=""
     fi
 
-    # Where the container reads this project from: an env's worktree mount for
-    # it, else the main checkout.
-    local code_dir="" compose mount host
+    # An env's mount of the project counts only when it comes from the caller's
+    # worktree; a mount from another worktree tests another branch.
+    local code_dir="" compose mount
     if [[ "$TARGET_CONTAINER" != "newspack_dev" ]]; then
         compose=$(grep -l -E "^[[:space:]]*container_name:[[:space:]]*${TARGET_CONTAINER}[[:space:]]*$" "$root"/docker-compose.env-*.yml 2>/dev/null | head -n 1)
         if [[ -n "$compose" ]]; then
             while IFS= read -r mount; do
                 [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./(worktrees(-repos)?/[^[:space:]:]+):/newspack-(plugins|themes|repos/plugins|repos/themes)/([^[:space:]:/]+) ]] || continue
-                if [[ "${BASH_REMATCH[4]}" == "$target_folder" ]]; then
-                    host="${BASH_REMATCH[1]}"
-                    code_dir="$root/$host"
-                    break
+                [[ "${BASH_REMATCH[4]}" == "$target_folder" ]] || continue
+                if [[ $guarded -eq 0 || "$root/${BASH_REMATCH[1]}" == "$caller_top" || "$root/${BASH_REMATCH[1]}" == "$caller_top"/* ]]; then
+                    code_dir="$root/${BASH_REMATCH[1]}"
                 fi
+                break
             done < "$compose"
         fi
     fi
     if [[ -z "$code_dir" ]]; then
-        if [[ $in_worktree -eq 1 && "${NEWSPACK_TEST_ROOT_OK:-}" != "1" ]]; then
-            if [[ "$TARGET_CONTAINER" == "newspack_dev" ]]; then
-                echo "Error: no isolated env mounts this worktree, so the tests would run" >&2
+        if [[ $guarded -eq 1 && "${NEWSPACK_TEST_ROOT_OK:-}" != "1" ]]; then
+            if [[ "$root" != "$NABSPATH" ]]; then
+                echo "Error: this is a worktree's own copy of n, which cannot see isolated envs," >&2
+                echo "so the tests would run against the main checkout's code, not this branch's." >&2
+                echo "  Run the main checkout's n instead:  $root/n $1 ..." >&2
             else
-                echo "Error: $TARGET_CONTAINER does not mount $target_folder from this worktree, so the tests would run" >&2
+                if [[ "$TARGET_CONTAINER" == "newspack_dev" ]]; then
+                    echo "Error: no isolated env mounts this worktree, so the tests would run" >&2
+                else
+                    echo "Error: $TARGET_CONTAINER does not mount $target_folder from this worktree, so the tests would run" >&2
+                fi
+                echo "against another checkout's code, not this branch's." >&2
+                echo "  Mount it:  n env create <name> --worktree <repo>:<branch> --up" >&2
             fi
-            echo "against the main checkout's code, not this branch's." >&2
-            echo "  Mount it:  n env create <name> --worktree <repo>:<branch> --up" >&2
             echo "  Or test the main checkout anyway:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
             exit 1
         fi
-        local candidate
-        code_dir="$root"
-        for candidate in "$root/plugins/$target_folder" "$root/themes/$target_folder" \
-            "$root/repos/plugins/$target_folder" "$root/repos/themes/$target_folder"; do
-            if [[ -d "$candidate" ]]; then
-                code_dir="$candidate"
-                break
-            fi
-        done
+        code_dir="$root_dir"
     fi
 
     test_code="unknown"

@@ -45,6 +45,7 @@ touch "$R/plugins/newspack-ads/.keep" "$R/plugins/newspack-plugin/.keep"
 printf 'worktrees/\nrepos/\ndocker-compose.env-*.yml\n' > "$R/.gitignore"
 g -C "$R" init -q && g -C "$R" add -A && g -C "$R" commit -q -m init && g -C "$R" branch -q -M main
 g -C "$R" worktree add -q -b wt "$R/worktrees/wt"
+g -C "$R" worktree add -q -b wt2 "$R/worktrees/wt2"
 WT="$R/worktrees/wt"
 
 STANDALONE="$R/repos/plugins/standalone-thing"
@@ -134,7 +135,20 @@ check "env mounts the project: code names the worktree" "wt@$WT_SHA (worktrees/w
 run_n "$R/n" "$WT" test-php newspack-ads
 check "env mounts a sibling only: refuses" "1" "$(status)"
 check "env mounts a sibling only: says which project" "yes" "$(out_has 'does not mount newspack-ads from this worktree')"
+run_n "$WT/n" "$WT/plugins/newspack-plugin" test-php
+check "worktree's own ./n with an env present: refuses" "1" "$(status)"
+check "worktree's own ./n: points at the main checkout's n" "yes" "$(out_has "Run the main checkout's n instead")"
+check "worktree's own ./n: does not claim no env mounts it" "no" "$(out_has 'no isolated env mounts')"
+
+# The same env also mounts newspack-ads, but from a different worktree.
+echo "      - ./worktrees/wt2/plugins/newspack-ads:/newspack-plugins/newspack-ads" >> "$R/docker-compose.env-demo.yml"
+run_n "$R/n" "$WT" test-php newspack-ads
+check "env mounts the project from another worktree: refuses" "1" "$(status)"
+check "env mounts the project from another worktree: calls no docker" "no" "$(called_docker)"
 rm -f "$R/docker-compose.env-demo.yml"
+
+run_n "$R/n" "$WT" test-js standalone-thing
+check "a repos/ project named from a monorepo worktree runs" "0" "$(status)"
 
 run_n "$R/n" "$STANDALONE" test-js
 check "standalone repos/ clone is not a worktree: runs" "0" "$(status)"
