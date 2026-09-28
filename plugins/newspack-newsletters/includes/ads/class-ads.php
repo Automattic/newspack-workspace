@@ -52,6 +52,7 @@ final class Ads {
 		add_action( 'admin_init', [ __CLASS__, 'maybe_recount_advertiser_terms' ] );
 		add_action( 'save_post_' . self::CPT, [ __CLASS__, 'ad_default_fields' ], 10, 3 );
 		add_action( 'rest_api_init', [ __CLASS__, 'rest_api_init' ] );
+		add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'restrict_rest_reads' ], 10, 3 );
 		add_action( 'admin_menu', [ __CLASS__, 'add_ads_page' ] );
 		add_action( 'current_screen', [ __CLASS__, 'prevent_direct_taxonomy_access' ] );
 		add_filter( 'get_post_metadata', [ __CLASS__, 'migrate_diable_ads' ], 10, 4 );
@@ -88,6 +89,47 @@ final class Ads {
 				'methods'             => 'GET',
 				'permission_callback' => [ 'Newspack_Newsletters', 'api_authoring_permissions_check' ],
 			]
+		);
+	}
+
+	/**
+	 * Limit reads of ads through the core posts REST routes to users who can edit ads.
+	 *
+	 * The post type is in REST for the block editor and the ads list, but an ad's
+	 * price, campaign dates and delivery counts are for the people managing it, and
+	 * nothing reads them from a logged-out request. Guarding the route rather than
+	 * each meta key keeps fields added later behind the same check. The match is on
+	 * the controller the request was dispatched to, not the route text, because
+	 * core matches routes case-insensitively.
+	 *
+	 * @param mixed           $response Earlier filter result; passed through if non-null.
+	 * @param array           $handler  Route handler details.
+	 * @param WP_REST_Request $request  Incoming REST request.
+	 * @return mixed WP_Error when the current user cannot edit ads, otherwise $response.
+	 */
+	public static function restrict_rest_reads( $response, $handler, $request ) {
+		if ( null !== $response || ! $request instanceof \WP_REST_Request ) {
+			return $response;
+		}
+
+		if ( ! in_array( $request->get_method(), [ 'GET', 'HEAD' ], true ) ) {
+			return $response;
+		}
+
+		$post_type = get_post_type_object( self::CPT );
+		$callback  = $handler['callback'] ?? null;
+		if ( ! $post_type || ! is_array( $callback ) || $callback[0] !== $post_type->get_rest_controller() ) {
+			return $response;
+		}
+
+		if ( current_user_can( $post_type->cap->edit_posts ) ) {
+			return $response;
+		}
+
+		return new \WP_Error(
+			'rest_forbidden',
+			__( 'Sorry, you are not allowed to view newsletter ads.', 'newspack-newsletters' ),
+			[ 'status' => rest_authorization_required_code() ]
 		);
 	}
 
