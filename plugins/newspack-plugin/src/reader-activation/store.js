@@ -14,9 +14,17 @@ import { getApiNonce } from './session';
  * @property {number}  collections.maxItems Maximum number of items in a collection.
  * @property {number}  collections.maxAge   Maximum age of a collection item if 'timestamp' is set.
  */
+/**
+ * A switched session (an admin browsing as a reader through User Switching)
+ * keeps its store in sessionStorage and never syncs, like a temporary one, but
+ * unlike a temporary one it still hydrates the reader's server items: prompts
+ * and pricing read the reader's stored snapshot, so the browser must hold it.
+ */
+const isSwitchedSession = () => !! newspack_reader_data?.is_switched_session;
+
 const config = {
 	storePrefix: newspack_reader_data?.store_prefix || 'np_reader_',
-	storage: newspack_reader_data?.is_temporary ? window.sessionStorage : window.localStorage,
+	storage: newspack_reader_data?.is_temporary || isSwitchedSession() ? window.sessionStorage : window.localStorage,
 	collections: {
 		maxItems: 1000,
 		maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days.
@@ -76,8 +84,8 @@ function rehydrateItem( key, serverValue ) {
  */
 function initializeSyncInterval( queue ) {
 	setInterval( () => {
-		// Bail if there are no items to sync or if it's a temporary session.
-		if ( ! queue.length || newspack_reader_data?.is_temporary ) {
+		// Bail if there are no items to sync or if the session never syncs.
+		if ( ! queue.length || newspack_reader_data?.is_temporary || isSwitchedSession() ) {
 			return;
 		}
 		const key = queue.shift();
