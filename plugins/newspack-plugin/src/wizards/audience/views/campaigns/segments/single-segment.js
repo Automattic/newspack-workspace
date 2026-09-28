@@ -379,6 +379,7 @@ addFilter( 'newspack.criteria.input', 'newspack.activeSubscriptions', function (
 				placeholder={ __( 'Start typing to search for products…', 'newspack-plugin' ) }
 				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
 				savedInfoPath={ ids => addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: ids } ) }
+				labelWithId
 				value={ value }
 				onChange={ update }
 				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }

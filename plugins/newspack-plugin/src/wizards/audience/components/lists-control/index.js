@@ -23,12 +23,21 @@ import AutocompleteTokenField from '../../../../../packages/components/src/autoc
  *                                          path that looks them up. Use when saved items
  *                                          can fall out of the selectable list but still
  *                                          need their names.
+ * @param {boolean}  props.labelWithId      Optional. Append " (#<id>)" to every label. The
+ *                                          token field maps a chosen label back to an ID by
+ *                                          text, so items sharing a name (a legacy and a
+ *                                          current "Annual", say) collapse into one ID
+ *                                          unless their labels differ.
  */
-export default function ListsControl( { label, help, placeholder, value, onChange, path, deletedItemLabel, savedInfoPath } ) {
-	const getSuggestions = item => ( {
-		value: /^\d+$/.test( item.id.toString() ) ? parseInt( item.id ) : item.id.toString(),
-		label: item.title || item.name || deletedItemLabel,
-	} );
+export default function ListsControl( { label, help, placeholder, value, onChange, path, deletedItemLabel, savedInfoPath, labelWithId } ) {
+	const getSuggestions = item => {
+		const itemValue = /^\d+$/.test( item.id.toString() ) ? parseInt( item.id ) : item.id.toString();
+		const itemLabel = item.title || item.name || deletedItemLabel;
+		return {
+			value: itemValue,
+			label: labelWithId ? `${ itemLabel } (#${ itemValue })` : itemLabel,
+		};
+	};
 
 	return (
 		<AutocompleteTokenField
