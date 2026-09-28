@@ -413,6 +413,37 @@ class Newspack_Test_Revision_Cleanup extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A last batch of exactly MAX_CANDIDATES posts still completes the pass.
+	 */
+	public function test_pass_completes_with_exactly_a_full_batch() {
+		$this->schedule( 'hourly' );
+		for ( $i = 0; $i < Revision_Cleanup::MAX_CANDIDATES; $i++ ) {
+			$post_id = $this->create_post( 1 );
+			// Over the limit, but too recent to delete.
+			for ( $r = 0; $r < 4; $r++ ) {
+				$this->create_revision( $post_id, 1 );
+			}
+		}
+
+		$this->assertSame( 0, Revision_Cleanup::run_cron() );
+		$this->assertSame( 0, Revision_Cleanup::run_cron() );
+		$this->assertSame( 'daily', wp_get_schedule( Revision_Cleanup::CRON_HOOK ) );
+	}
+
+	/**
+	 * A post with more excess revisions than one page is read across pages, oldest first.
+	 */
+	public function test_get_excess_ids_reads_across_pages() {
+		$count       = Revision_Cleanup::PAGE_SIZE + 13;
+		[ , $ids ]   = $this->create_post_with_revisions( $count );
+		$post_id     = get_post( $ids[0] )->post_parent;
+		$excess      = array_slice( $ids, 0, $count - 3 );
+
+		$this->assertSame( $excess, Revision_Cleanup::get_excess_ids( $post_id, PHP_INT_MAX ) );
+		$this->assertSame( array_slice( $excess, 0, 5 ), Revision_Cleanup::get_excess_ids( $post_id, 5 ) );
+	}
+
+	/**
 	 * Revisions whose post no longer exists don't stop a run.
 	 */
 	public function test_run_cron_skips_orphaned_revisions() {

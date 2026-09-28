@@ -21,6 +21,7 @@ final class Revision_Cleanup {
 	const MAX_PER_SAVE   = 10;
 	const MAX_PER_RUN    = 500;
 	const MAX_CANDIDATES = 200;
+	const PAGE_SIZE      = 500;
 	const CRON_HOOK      = 'newspack_revision_cleanup';
 	const CURSOR_OPTION  = 'newspack_revision_cleanup_cursor';
 	const PASS_OPTION    = 'newspack_revision_cleanup_pass_deleted';
@@ -124,7 +125,8 @@ final class Revision_Cleanup {
 		$revisions = array_values( $revisions );
 		$keep      = wp_revisions_to_keep( $post );
 		$excess    = count( $revisions ) - $keep;
-		if ( $keep < 0 || $excess <= self::MAX_PER_SAVE ) {
+		// Below 1 means unlimited or revisions off; WordPress trims neither.
+		if ( $keep < 1 || $excess <= self::MAX_PER_SAVE ) {
 			return $revisions;
 		}
 
@@ -152,17 +154,19 @@ final class Revision_Cleanup {
 	 * @return int Number deleted.
 	 */
 	public static function run_cron( int $max = self::MAX_PER_RUN ): int {
+		// Fetch one extra to tell whether any posts are left after this batch.
 		$cursor     = (int) get_option( self::CURSOR_OPTION, 0 );
-		$candidates = self::get_candidates( $cursor );
+		$candidates = self::get_candidates( $cursor, 0, self::MAX_CANDIDATES + 1 );
 		if ( empty( $candidates ) && $cursor ) {
 			$cursor     = 0;
-			$candidates = self::get_candidates( 0 );
+			$candidates = self::get_candidates( 0, 0, self::MAX_CANDIDATES + 1 );
 		}
 
 		$deleted = 0;
 		// Past the last candidate, the pass is done and the next run starts over.
-		$pass_done = count( $candidates ) < self::MAX_CANDIDATES;
-		$next      = $pass_done ? 0 : (int) end( $candidates );
+		$pass_done  = count( $candidates ) <= self::MAX_CANDIDATES;
+		$candidates = array_slice( $candidates, 0, self::MAX_CANDIDATES );
+		$next       = $pass_done ? 0 : (int) end( $candidates );
 		foreach ( $candidates as $post_id ) {
 			$deleted += count( self::delete_revisions( self::get_excess_ids( $post_id, $max - $deleted ) ) );
 			if ( $deleted >= $max ) {
@@ -205,13 +209,14 @@ final class Revision_Cleanup {
 	 *
 	 * @param int $after_id Only return post IDs greater than this.
 	 * @param int $post_id  Limit to one post, 0 for all.
+	 * @param int $limit    Maximum post IDs to return.
 	 * @return int[] Post IDs, ascending.
 	 */
-	public static function get_candidates( int $after_id = 0, int $post_id = 0 ): array {
+	public static function get_candidates( int $after_id = 0, int $post_id = 0, int $limit = self::MAX_CANDIDATES ): array {
 		global $wpdb;
 
-		$limit = Revisions_Control::get_number();
-		if ( ! Revisions_Control::is_active() || $limit < 1 ) {
+		$threshold = Revisions_Control::get_number();
+		if ( ! Revisions_Control::is_active() || $threshold < 1 ) {
 			return [];
 		}
 
@@ -229,8 +234,8 @@ final class Revision_Cleanup {
 				$after_id,
 				$post_id,
 				$post_id,
-				(int) $limit,
-				self::MAX_CANDIDATES
+				(int) $threshold,
+				$limit
 			)
 		);
 
@@ -259,29 +264,48 @@ final class Revision_Cleanup {
 		}
 
 		// Unlike a save, autosaves don't count toward the limit here; this keeps at most one more regular revision, so the two never fight.
+		$autosave_like = '%' . $wpdb->esc_like( 'autosave' ) . '%';
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$rows = $wpdb->get_results(
+		$total  = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT ID, post_parent, post_type, post_name, post_date
-				FROM {$wpdb->posts}
-				WHERE post_parent = %d
-					AND post_type = 'revision'
-					AND post_name NOT LIKE %s
-				ORDER BY post_date ASC, ID ASC",
+				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_parent = %d AND post_type = 'revision' AND post_name NOT LIKE %s",
 				$post_id,
-				'%' . $wpdb->esc_like( 'autosave' ) . '%'
+				$autosave_like
 			)
 		);
+		$excess = $total - $keep;
 
+		// Read the excess oldest first, a page at a time, so a post with a long history isn't loaded all at once.
 		$ids = [];
-		foreach ( array_slice( $rows, 0, max( 0, count( $rows ) - $keep ) ) as $row ) {
-			// Mark the partial row as raw so get_post() uses it instead of loading the full row.
-			// The SELECT has every field is_deletable() reads; unselected fields fall back to WP_Post defaults.
-			$row->filter = 'raw';
-			if ( self::is_deletable( new WP_Post( $row ) ) ) {
-				$ids[] = (int) $row->ID;
-				if ( count( $ids ) === $max ) {
-					break;
+		for ( $offset = 0; $offset < $excess; $offset += self::PAGE_SIZE ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT ID, post_parent, post_type, post_name, post_date
+					FROM {$wpdb->posts}
+					WHERE post_parent = %d
+						AND post_type = 'revision'
+						AND post_name NOT LIKE %s
+					ORDER BY post_date ASC, ID ASC
+					LIMIT %d OFFSET %d",
+					$post_id,
+					$autosave_like,
+					min( self::PAGE_SIZE, $excess - $offset ),
+					$offset
+				)
+			);
+			if ( empty( $rows ) ) {
+				break;
+			}
+			foreach ( $rows as $row ) {
+				// Mark the partial row as raw so get_post() uses it instead of loading the full row.
+				// The SELECT has every field is_deletable() reads; unselected fields fall back to WP_Post defaults.
+				$row->filter = 'raw';
+				if ( self::is_deletable( new WP_Post( $row ) ) ) {
+					$ids[] = (int) $row->ID;
+					if ( count( $ids ) === $max ) {
+						return $ids;
+					}
 				}
 			}
 		}
