@@ -191,6 +191,58 @@ else
 fi
 
 echo
+echo "case 1 — a guard whose argument is a class constant resolves to the constant it holds:"
+json_epsilon=$(php "$SCANNER" --source=epsilon="$FIXTURES/epsilon" --format=json)
+undocumented_epsilon_md=$(php "$SCANNER" --source=epsilon="$FIXTURES/epsilon" --undocumented)
+indirect=$(jq '.constants[] | select(.name == "NEWSPACK_FIXTURE_INDIRECT")' <<<"$json_epsilon")
+assert_eq "defined( self::FLAG ) is catalogued from the const it holds" "NEWSPACK_FIXTURE_INDIRECT" "$(jq -r '.name' <<<"$indirect")"
+assert_eq "its docblock is read" "bool" "$(jq -r '.type' <<<"$indirect")"
+assert_eq "its location is the file holding the guard" "includes/indirect-guard.php" "$(jq -r '.locations[0].file' <<<"$indirect")"
+
+echo
+echo "case 1 — an undocumented indirect guard is visible, not silently dropped:"
+if [[ "$undocumented_epsilon_md" == *"NEWSPACK_FIXTURE_INDIRECT_UNDOCUMENTED"* ]]; then
+	echo "  ok: defined( self::FEATURE_FLAG_NAME ) with no docblock lists as undocumented"
+else
+	echo "  FAIL: an indirect guard with no docblock never reached the undocumented list: $undocumented_epsilon_md"
+	failures=$((failures + 1))
+fi
+
+echo
+echo "case 2 — a docblock in one file documents a guard in another:"
+orphan=$(jq '.constants[] | select(.name == "NEWSPACK_FIXTURE_ORPHAN")' <<<"$json_epsilon")
+assert_eq "documented from orphan-doc.php" "bool" "$(jq -r '.type' <<<"$orphan")"
+assert_eq "its location is the guard, not the docblock" "includes/orphan-guard.php" "$(jq -r '.locations[0].file' <<<"$orphan")"
+assert_eq "has_docblock stays false for a guard with nothing adjacent" "false" "$(jq -r '.locations[0].has_docblock' <<<"$orphan")"
+
+echo
+echo "case 3 — code between the docblock and the guard still documents it:"
+non_adjacent=$(jq '.constants[] | select(.name == "NEWSPACK_FIXTURE_NON_ADJACENT")' <<<"$json_epsilon")
+assert_eq "documented despite the multi-line condition" "bool" "$(jq -r '.type' <<<"$non_adjacent")"
+
+echo
+echo "a documented constant that is guarded nowhere is still not catalogued:"
+assert_eq "absent from the catalog" "" "$(jq -r '.constants[] | select(.name == "NEWSPACK_FIXTURE_DOC_ONLY")' <<<"$json_epsilon")"
+if [[ "$undocumented_epsilon_md" == *"NEWSPACK_FIXTURE_DOC_ONLY"* ]]; then
+	echo "  FAIL: a docblock with no guard anywhere invented a constant"
+	failures=$((failures + 1))
+else
+	echo "  ok: absent from the undocumented list too"
+fi
+
+echo
+echo "an indirect guard that cannot be resolved invents nothing:"
+assert_eq "a const holding a non-Newspack name is ignored" "" "$(jq -r '.constants[] | select(.name == "SOMETHING_ELSE_ENTIRELY")' <<<"$json_epsilon")"
+for unresolvable in SOMETHING_ELSE_ENTIRELY OTHER_FLAG NOT_DECLARED_HERE; do
+	if [[ "$undocumented_epsilon_md" == *"$unresolvable"* ]]; then
+		echo "  FAIL: $unresolvable leaked into the undocumented list from an unresolvable guard"
+		failures=$((failures + 1))
+	else
+		echo "  ok: $unresolvable never becomes a constant"
+	fi
+done
+
+echo
 echo "the envelope carries schema_version, generated_at, sources and constants:"
 assert_eq "schema_version" "1" "$(jq -r '.schema_version' <<<"$json_ab")"
 assert_match "generated_at is an ISO-8601 UTC timestamp" '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$(jq -r '.generated_at' <<<"$json_ab")"

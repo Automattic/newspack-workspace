@@ -22,6 +22,7 @@ import classNames from 'classnames';
 
 const CoreCard = ( {
 	actions,
+	actionsLabel,
 	actionType,
 	as,
 	buttonsCard,
@@ -169,7 +170,7 @@ const CoreCard = ( {
 						/>
 					) }
 					{ actions?.length > 0 && (
-						<DropdownMenu icon={ moreVertical } label={ __( 'More', 'newspack-plugin' ) }>
+						<DropdownMenu icon={ moreVertical } label={ actionsLabel || __( 'More actions', 'newspack-plugin' ) }>
 							{ () =>
 								actions.map( ( action, index ) => {
 									// Actions can be an array of sub-actions, which are rendered within a MenuGroup.
@@ -183,6 +184,7 @@ const CoreCard = ( {
 															icon={ subAction.icon }
 															onClick={ subAction.action }
 															href={ subAction.href }
+															aria-label={ subAction.ariaLabel }
 															disabled={ subAction.disabled || false }
 															isDestructive={ subAction.destructive || false }
 														>
@@ -199,6 +201,7 @@ const CoreCard = ( {
 											icon={ action.icon }
 											onClick={ action.action }
 											href={ action.href }
+											aria-label={ action.ariaLabel }
 											disabled={ action.disabled || false }
 											isDestructive={ action.destructive || false }
 										>

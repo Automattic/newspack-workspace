@@ -13,7 +13,7 @@ import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
-import { LogsView } from './logs-view';
+import { LogsView, getLogsTabs } from './logs-view';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
@@ -272,14 +272,19 @@ const AudienceIntegrations = ( props, ref ) => {
 					render: SettingsSection,
 					props: sharedProps,
 					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
+					subHeaderText: __(
+						'Manage how Newspack syncs reader data with your tools. Connect an integration to start syncing reader activity across your stack.',
+						'newspack-plugin'
+					),
 				},
 				{
-					path: '/settings/:integrationId/logs',
+					path: '/settings/:integrationId/logs/:tab?',
 					render: LogsView,
 					props: sharedProps,
 					isHidden: true,
 					fullWidth: true,
 					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
+					tabbedNavigation: getLogsTabs,
 				},
 				{
 					path: '/settings/:integrationId',

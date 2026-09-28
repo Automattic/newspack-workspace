@@ -44,6 +44,12 @@ class Group_Subscription_Settings {
 	const GROUP_NAME_MAX_LENGTH = 100;
 
 	/**
+	 * Subscription meta holding the comma-separated email domains whose readers join
+	 * the group on verifying their address. Set per group, never inherited from the product.
+	 */
+	const EMAIL_DOMAINS_META_KEY = self::GROUP_SUBSCRIPTION_META_PREFIX . 'email_domains';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -316,6 +322,20 @@ class Group_Subscription_Settings {
 	public static function normalize_limit( $limit ) {
 		$limit = absint( $limit );
 		return $limit > 0 ? max( 2, $limit ) : 0;
+	}
+
+	/**
+	 * Normalize an email domain list to one canonical form, e.g. "example.com,example.org",
+	 * so matching never depends on how the admin typed it.
+	 *
+	 * @param mixed $domains The raw domain list.
+	 *
+	 * @return string The normalized list, e.g. "example.com,example.org".
+	 */
+	public static function sanitize_email_domains( $domains ) {
+		$domains = preg_split( '/[\s,]+/', strtolower( (string) $domains ) );
+		$domains = array_map( fn( $domain ) => ltrim( $domain, '@' ), $domains );
+		return implode( ',', array_unique( array_filter( $domains ) ) );
 	}
 
 	/**
@@ -746,6 +766,19 @@ class Group_Subscription_Settings {
 							'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
 						]
 					);
+					\woocommerce_wp_text_input(
+						[
+							'id'            => self::EMAIL_DOMAINS_META_KEY,
+							'name'          => self::EMAIL_DOMAINS_META_KEY,
+							'label'         => __( 'Auto-join email domains', 'newspack-plugin' ),
+							'desc_tip'      => true,
+							'description'   => __( 'Readers who verify an email address on one of these domains join this group automatically while it has a free seat. Separate domains with commas.', 'newspack-plugin' ),
+							'placeholder'   => 'example.com, example.org',
+							'value'         => $subscription->get_meta( self::EMAIL_DOMAINS_META_KEY, true ),
+							'type'          => 'text',
+							'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
+						]
+					);
 					?>
 				</div>
 				<div class="form-row">
@@ -937,6 +970,14 @@ class Group_Subscription_Settings {
 
 		if ( ! empty( $changed ) ) {
 			self::update_subscription_settings( $subscription, $changed );
+		}
+
+		if ( isset( $_POST[ self::EMAIL_DOMAINS_META_KEY ] ) ) {
+			$email_domains = self::sanitize_email_domains( sanitize_text_field( wp_unslash( $_POST[ self::EMAIL_DOMAINS_META_KEY ] ) ) );
+			if ( $email_domains !== $subscription->get_meta( self::EMAIL_DOMAINS_META_KEY, true ) ) {
+				$subscription->update_meta_data( self::EMAIL_DOMAINS_META_KEY, $email_domains );
+				$subscription->save();
+			}
 		}
 
 		// Effective group status can flip via inherited product settings without a meta write; refresh the cached ID set when it changed.

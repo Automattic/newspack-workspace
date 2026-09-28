@@ -145,6 +145,48 @@ class Group_Subscription {
 		\add_action( 'added_user_meta', [ __CLASS__, 'maybe_reset_cache_on_user_meta' ], 10, 3 );
 		\add_action( 'updated_user_meta', [ __CLASS__, 'maybe_reset_cache_on_user_meta' ], 10, 3 );
 		\add_action( 'deleted_user_meta', [ __CLASS__, 'maybe_reset_cache_on_user_meta' ], 10, 3 );
+		// Auto-join trusts the same verified flag as email-domain gate rules, so it fires on
+		// verification, not registration. Paid checkout verifies without an inbox round trip.
+		\add_action( 'newspack_reader_verified', [ __CLASS__, 'auto_join_by_email_domain' ] );
+	}
+
+	/**
+	 * Add a verified reader to every active group subscription that lists their email domain.
+	 *
+	 * A group with no free seat is skipped: update_members() refuses the add, and the
+	 * reader is left out rather than pushing the group over its limit.
+	 *
+	 * @param \WP_User $user The reader who just verified their email address.
+	 */
+	public static function auto_join_by_email_domain( $user ) {
+		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+			return;
+		}
+		$subscriptions = \wcs_get_subscriptions(
+			[
+				'subscriptions_per_page' => -1,
+				'subscription_status'    => WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES,
+				'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'     => Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY,
+						'value'   => '',
+						'compare' => '!=',
+					],
+				],
+			]
+		);
+		foreach ( $subscriptions as $subscription ) {
+			$domains = $subscription->get_meta( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, true );
+			if (
+				(int) $subscription->get_user_id() !== $user->ID
+				// Not is_group_subscription(): it reads false on My Account when WC Memberships is
+				// active, and the verification link lands there.
+				&& ! empty( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'] )
+				&& Access_Rules::email_matches_domains( $user->user_email, $domains )
+			) {
+				self::update_members( $subscription, [ $user->ID ] );
+			}
+		}
 	}
 
 	/**
@@ -726,9 +768,9 @@ class Group_Subscription {
 		// the invite path and get_member_capacity (the owner occupies one of the limited seats).
 		// The count and the writes below are not atomic: nothing locks between reading the members
 		// and invites here and adding the member meta, so two adds racing for the last seat (two
-		// admins, or an admin add racing an invite acceptance) can both pass this check and both
-		// land, leaving the group one seat over. That has always been true of this code path; the
-		// exposure is admin-only and low-concurrency, so it is accepted rather than locked against.
+		// admins, an invite acceptance, or an email-domain auto-join) can both pass this check and
+		// both land, leaving the group one seat over. Collisions are rare enough, and one seat over
+		// mild enough, that it is accepted rather than locked against.
 		$seat_limit = self::get_member_seat_limit( $subscription );
 		if ( ! empty( $members_to_add ) && null !== $seat_limit ) {
 			// Pending (non-expired) invites reserve a spot, so count them alongside existing members --

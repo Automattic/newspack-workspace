@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.33.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.1...newspack-blocks@4.33.2) (2026-09-26)
+
+
+### Bug Fixes
+
+* skip Content Loop/Carousel render for REST revisions and autosaves ([26b84c9](https://github.com/Automattic/newspack-workspace/commit/26b84c9e2bbf0021a534c20984eb95b0b33aec43))
+
 ## @automattic/newspack-blocks [4.33.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.0...newspack-blocks@4.33.1) (2026-09-21)
 
 

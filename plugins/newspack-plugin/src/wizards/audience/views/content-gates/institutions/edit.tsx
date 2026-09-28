@@ -350,10 +350,8 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 		message: __( 'This will permanently delete this institution. This action cannot be undone.', 'newspack-plugin' ),
 	} );
 
-	// Set header navigation and actions.
 	useEffect( () => {
 		setHeaderData( {
-			backNav: '#/institutions',
 			sectionName: isNew ? __( 'Add Institution', 'newspack-plugin' ) : __( 'Edit Institution', 'newspack-plugin' ),
 		} );
 	}, [ isNew, setHeaderData ] );

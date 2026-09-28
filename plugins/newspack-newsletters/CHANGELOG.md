@@ -1,3 +1,10 @@
+## newspack-newsletters [3.41.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.1...newspack-newsletters@3.41.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* **newsletters:** subscribing no longer prompts to create an account ([#1108](https://github.com/Automattic/newspack-workspace/issues/1108)) ([99c8e63](https://github.com/Automattic/newspack-workspace/commit/99c8e6300675ceff8fe7365348d1f912716fb4da))
+
 ## newspack-newsletters [3.41.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.0...newspack-newsletters@3.41.1) (2026-09-15)
 
 

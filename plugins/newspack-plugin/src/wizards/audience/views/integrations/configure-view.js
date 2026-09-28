@@ -487,7 +487,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				{ /* Section 2: Inbound */ }
 				{ inboundField && ( inboundOptions.length > 0 || !! inboundToggleField ) && (
 					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
+						<Divider alignment="full-width" variant="tertiary" />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Stack direction="column" gap="xl">
@@ -558,7 +558,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				{ /* Section 3: Outbound */ }
 				{ ( outboundGroups.length > 0 || visibleOutboundSettingsFields.length > 0 || !! outboundToggleField ) && (
 					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
+						<Divider alignment="full-width" variant="tertiary" />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
 							<Stack direction="column" gap="xl">
