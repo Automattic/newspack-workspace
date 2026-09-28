@@ -26,6 +26,19 @@ window.newspackRAS.push( readerActivation => {
 
 	const captured = new Set();
 	const attached = new WeakSet();
+	// Gravity Forms ids of matched GF forms. Only forms whose element id is
+	// gform_<formid> are remembered: WPForms stamps data-formid too, and a
+	// publisher's selectors may match one of its forms. GF's AJAX postback
+	// re-renders the form from GFFormDisplay::get_form(), outside the block
+	// render filter that adds the marker class, so after a validation error
+	// or a page change the form on the page carries no marker. Its data-formid
+	// survives every render, and GF does not support the same form twice on a
+	// page, so an id remembered at first attach stands in for the class in
+	// two places: the pre_submission callback matches on it, and the
+	// observer's rescan re-attaches the re-rendered form by it, so the form
+	// warms a fresh reCAPTCHA v3 token on focus and is still captured past
+	// the token TTL.
+	const matchedFormIds = new Set();
 	let warmToken = null;
 	let warming = false;
 
@@ -139,11 +152,21 @@ window.newspackRAS.push( readerActivation => {
 	const handleSubmit = event => captureForm( event.target );
 
 	const attach = () => {
-		getMatchedForms( selectors ).forEach( form => {
+		const forms = new Set( getMatchedForms( selectors ) );
+		document.querySelectorAll( 'form[id^="gform_"][data-formid]' ).forEach( form => {
+			if ( matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) {
+				forms.add( form );
+			}
+		} );
+		forms.forEach( form => {
 			if ( attached.has( form ) ) {
 				return;
 			}
 			attached.add( form );
+			const formId = form.getAttribute( 'data-formid' );
+			if ( formId && form.id === `gform_${ formId }` ) {
+				matchedFormIds.add( formId );
+			}
 			form.addEventListener( 'focusin', warmCaptcha );
 			// No capture flag: submit always fires at the form itself, where
 			// capture and bubble listeners run together in registration order,
@@ -193,8 +216,9 @@ window.newspackRAS.push( readerActivation => {
 		gformHooked = true;
 		window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
 			try {
-				if ( data?.form && getMatchedForms( selectors ).includes( data.form ) ) {
-					const pending = captureForm( data.form );
+				const form = data?.form;
+				if ( form && ( getMatchedForms( selectors ).includes( form ) || matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) ) {
+					const pending = captureForm( form );
 					if ( pending ) {
 						// GF awaits this filter, so hold the submission until
 						// the registration response lands its auth cookies —

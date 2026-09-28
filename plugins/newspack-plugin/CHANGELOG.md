@@ -1,3 +1,10 @@
+## newspack [6.52.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.7...newspack@6.52.8) (2026-09-24)
+
+
+### Bug Fixes
+
+* **content-gate:** let the highest-priority gate decide access alone ([#1146](https://github.com/Automattic/newspack-workspace/issues/1146)) ([1d563a4](https://github.com/Automattic/newspack-workspace/commit/1d563a457e06a9361fe6b4ed9dd5d5cf211e756f))
+
 ## newspack [6.52.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.52.6...newspack@6.52.7) (2026-09-24)
 
 

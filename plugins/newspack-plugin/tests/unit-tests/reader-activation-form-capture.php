@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests the Inbound Form Capture integration and its Reader Activation hooks.
+ * Tests the Gravity Forms (form capture) integration and its Reader Activation hooks.
  *
  * @package Newspack\Tests
  */
@@ -13,12 +13,30 @@ use Newspack\Reader_Registration;
 
 require_once __DIR__ . '/integrations/class-inherited-validator-integration.php';
 
+if ( ! class_exists( 'GFForms' ) ) {
+	require_once dirname( __DIR__ ) . '/mocks/gravityforms-mock.php';
+}
+
 /**
  * Test the Form Capture integration.
  *
  * @group form-capture
  */
 class Test_Form_Capture extends WP_UnitTestCase {
+
+	/**
+	 * Whether a test replaced the `plugins` cache to fake Gravity Forms' state.
+	 *
+	 * @var bool
+	 */
+	private $plugins_cache_dirty = false;
+
+	/**
+	 * The `active_plugins` option before a test faked Gravity Forms' state.
+	 *
+	 * @var array|null
+	 */
+	private $original_active_plugins = null;
 
 	/**
 	 * Set up.
@@ -40,6 +58,16 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		remove_all_filters( 'newspack_magic_link_rate_interval' );
 		remove_all_filters( 'newspack_reader_activation_send_magic_link_on_reregistration' );
 		remove_all_filters( 'newspack_reader_activation_is_syncing_allowed' );
+		remove_all_filters( 'newspack_reader_activation_enabled' );
+		if ( $this->plugins_cache_dirty ) {
+			\wp_cache_delete( 'plugins', 'plugins' );
+			$this->plugins_cache_dirty = false;
+		}
+		if ( null !== $this->original_active_plugins ) {
+			\update_option( 'active_plugins', $this->original_active_plugins );
+			$this->original_active_plugins = null;
+		}
+		\Newspack\Plugin_Manager::reset_managed_plugin_status_cache();
 		parent::tear_down();
 	}
 
@@ -91,6 +119,169 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		Integrations::enable( Form_Capture::ID );
 		$this->assertTrue( $integration->supports_frontend_registration() );
 		$this->assertArrayHasKey( Form_Capture::ID, Reader_Registration::get_frontend_registration_integrations() );
+		Integrations::disable( Form_Capture::ID );
+	}
+
+	/**
+	 * Fake Gravity Forms' install state the way Plugin_Manager reads it: the
+	 * `plugins` cache decides installed, the `active_plugins` option decides
+	 * active. Mirrors the ESP tests' newsletters stub.
+	 *
+	 * @param string $status One of 'active', 'inactive', 'uninstalled'.
+	 */
+	private function stub_gravity_forms_status( $status ) {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$plugin_file = 'gravityforms/gravityforms.php';
+		if ( null === $this->original_active_plugins ) {
+			$this->original_active_plugins = \get_option( 'active_plugins', [] );
+		}
+		$plugins = \get_plugins();
+		if ( 'uninstalled' === $status ) {
+			unset( $plugins[ $plugin_file ] );
+		} else {
+			$plugins[ $plugin_file ] = [
+				'Name'    => 'Gravity Forms',
+				'Version' => '3.1.0',
+			];
+		}
+		\wp_cache_set( 'plugins', [ '' => $plugins ], 'plugins' );
+		$this->plugins_cache_dirty = true;
+		\update_option( 'active_plugins', 'active' === $status ? [ $plugin_file ] : [] );
+		\Newspack\Plugin_Manager::reset_managed_plugin_status_cache();
+	}
+
+	/**
+	 * Gravity Forms is the way in, so the card names it as a requirement in
+	 * every install state the Integrations UI distinguishes: absent
+	 * ("Requires Gravity Forms"), installed but inactive (Activate), active.
+	 */
+	public function test_requires_gravity_forms() {
+		$this->stub_gravity_forms_status( 'uninstalled' );
+		$required = ( new Form_Capture() )->get_required_plugins();
+		$this->assertCount( 1, $required );
+		$this->assertSame( 'gravityforms', $required[0]['slug'] );
+		$this->assertSame( 'Gravity Forms', $required[0]['name'] );
+		$this->assertFalse( $required[0]['is_active'] );
+		$this->assertFalse( $required[0]['is_installed'] );
+
+		$this->stub_gravity_forms_status( 'inactive' );
+		$required = ( new Form_Capture() )->get_required_plugins();
+		$this->assertFalse( $required[0]['is_active'] );
+		$this->assertTrue( $required[0]['is_installed'] );
+
+		$this->stub_gravity_forms_status( 'active' );
+		$required = ( new Form_Capture() )->get_required_plugins();
+		$this->assertTrue( $required[0]['is_active'] );
+		$this->assertTrue( $required[0]['is_installed'] );
+	}
+
+	/**
+	 * The settings page leads with a how-to guide: the steps travel in the
+	 * integrations payload under the Gravity Forms name, and the selectors
+	 * field is flagged advanced so the UI files it under Advanced options
+	 * instead of presenting it as the way in.
+	 */
+	public function test_guide_and_advanced_selectors_in_payload() {
+		$integration = Integrations::get_integration( Form_Capture::ID );
+		$guide       = $integration->get_guide();
+		$this->assertCount( 3, $guide );
+		foreach ( $guide as $step ) {
+			$this->assertNotEmpty( $step['title'] );
+			$this->assertNotEmpty( $step['description'] );
+		}
+
+		$payload = Integrations::get_all_integration_settings()[ Form_Capture::ID ];
+		$this->assertSame( 'Gravity Forms', $payload['name'] );
+		$this->assertSame( $guide, $payload['guide'] );
+		$selectors = array_values( array_filter( $payload['settings'], fn( $field ) => 'selectors' === $field['key'] ) );
+		$this->assertCount( 1, $selectors );
+		$this->assertTrue( $selectors[0]['advanced'] );
+	}
+
+	/**
+	 * The block toggle reaches the page as the marker class: the render filter
+	 * adds it to the form tag only when the attribute is set and leaves every
+	 * other placement untouched, whether or not the integration is enabled.
+	 * The attribute is also registered with Gravity Forms, whose block preview
+	 * validates attributes against the server schema and would otherwise
+	 * refuse every toggled block.
+	 */
+	public function test_block_attribute_marks_the_form() {
+		$integration = new Form_Capture();
+		$integration->register_handlers();
+		$this->assertSame( 10, has_filter( 'gform_form_block_attributes', [ $integration, 'register_block_attribute' ] ) );
+		$this->assertSame( 20, has_filter( 'render_block_gravityforms/form', [ $integration, 'mark_captured_block_form' ] ), 'Runs after GF\'s own render filter at 10.' );
+
+		$attributes = $integration->register_block_attribute( [ 'formId' => [ 'type' => 'string' ] ] );
+		$this->assertSame( [ 'type' => 'string' ], $attributes['formId'], 'GF\'s own attributes pass through.' );
+		$this->assertSame( 'boolean', $attributes[ Form_Capture::BLOCK_ATTRIBUTE ]['type'] );
+		$this->assertFalse( $attributes[ Form_Capture::BLOCK_ATTRIBUTE ]['default'] );
+
+		$html = "<div class='gform_wrapper gravity-theme'><form method='post' id='gform_1' class='signup' action='/' data-formid='1' novalidate><input type='email' name='input_1'></form></div>";
+		$on   = [
+			'blockName' => 'gravityforms/form',
+			'attrs'     => [
+				'formId'                      => '1',
+				Form_Capture::BLOCK_ATTRIBUTE => true,
+			],
+		];
+		$off  = [
+			'blockName' => 'gravityforms/form',
+			'attrs'     => [ 'formId' => '1' ],
+		];
+
+		$this->assertFalse( Integrations::is_enabled( Form_Capture::ID ), 'Marking must not depend on the enabled state.' );
+		$marked = $integration->mark_captured_block_form( $html, $on );
+		$this->assertSame( $marked, apply_filters( 'render_block_gravityforms/form', $html, $on ), 'The hook passes both arguments through.' ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- Gravity Forms' block name.
+		$this->assertMatchesRegularExpression( '/<form[^>]*class=["\'][^"\']*\bnewspack-form-capture\b/', $marked, 'The form tag carries the marker.' );
+		$this->assertStringContainsString( 'signup', $marked, 'Existing classes are kept.' );
+		$this->assertSame( 1, substr_count( $marked, Form_Capture::MARKER_CLASS ), 'Only the form tag is marked, not the wrapper.' );
+
+		$this->assertSame( $html, $integration->mark_captured_block_form( $html, $off ), 'An untoggled placement is untouched.' );
+		$this->assertSame( $html, $integration->mark_captured_block_form( $html, [ 'attrs' => [ Form_Capture::BLOCK_ATTRIBUTE => false ] ] ) );
+		$this->assertSame( '<p>No form here.</p>', $integration->mark_captured_block_form( '<p>No form here.</p>', $on ), 'Content without a form tag is returned as is.' );
+
+		$bare = "<form method='post' id='gform_2' data-formid='2'></form>";
+		$this->assertMatchesRegularExpression( '/<form[^>]*class=["\']newspack-form-capture["\']/', $integration->mark_captured_block_form( $bare, $on ), 'A form with no class attribute gets one.' );
+	}
+
+	/**
+	 * The editor extension loads wherever the Gravity Forms block can be
+	 * placed, whatever the state of the integration or of Reader Activation:
+	 * the block toggle is how publishers find the feature, and it stays
+	 * visible and saves while either is off. `active` tells the panel whether
+	 * a toggled form registers anyone yet, and is off while Reader Activation
+	 * is off.
+	 */
+	public function test_editor_script_loads_for_gravity_forms_editors() {
+		$integration = new Form_Capture();
+		$integration->register_handlers();
+		$this->assertSame( 10, has_action( 'enqueue_block_editor_assets', [ $integration, 'enqueue_editor_assets' ] ) );
+
+		$integration->enqueue_editor_assets();
+		$this->assertTrue( wp_script_is( Form_Capture::EDITOR_SCRIPT_HANDLE, 'enqueued' ), 'Loads while the integration is disabled.' );
+		$data = wp_scripts()->get_data( Form_Capture::EDITOR_SCRIPT_HANDLE, 'data' );
+		// wp_localize_script() casts scalars to strings, so the editor reads
+		// truthiness ("" or "1") rather than a boolean.
+		$this->assertStringContainsString( '"active":""', $data );
+		$this->assertStringContainsString( 'page=newspack-audience-integrations', $data );
+
+		wp_dequeue_script( Form_Capture::EDITOR_SCRIPT_HANDLE );
+		wp_deregister_script( Form_Capture::EDITOR_SCRIPT_HANDLE );
+		Integrations::enable( Form_Capture::ID );
+		$integration->enqueue_editor_assets();
+		$this->assertStringContainsString( '"active":"1"', wp_scripts()->get_data( Form_Capture::EDITOR_SCRIPT_HANDLE, 'data' ) );
+		Integrations::disable( Form_Capture::ID );
+
+		wp_dequeue_script( Form_Capture::EDITOR_SCRIPT_HANDLE );
+		wp_deregister_script( Form_Capture::EDITOR_SCRIPT_HANDLE );
+		Integrations::enable( Form_Capture::ID );
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$integration->enqueue_editor_assets();
+		$this->assertTrue( wp_script_is( Form_Capture::EDITOR_SCRIPT_HANDLE, 'enqueued' ), 'Must load while Reader Activation is off, so the toggle can still be set.' );
+		$this->assertStringContainsString( '"active":""', wp_scripts()->get_data( Form_Capture::EDITOR_SCRIPT_HANDLE, 'data' ), 'Nothing registers readers with Reader Activation off.' );
 		Integrations::disable( Form_Capture::ID );
 	}
 
@@ -166,6 +357,39 @@ class Test_Form_Capture extends WP_UnitTestCase {
 
 		$integration->enqueue_scripts();
 		$this->assertFalse( wp_script_is( Form_Capture::SCRIPT_HANDLE, 'enqueued' ), 'The capture script must not load either.' );
+
+		Integrations::disable( Form_Capture::ID );
+	}
+
+	/**
+	 * Gravity Forms is checked at runtime too. The card requires it, and with
+	 * it uninstalled the card offers no Disable, so a site that enabled
+	 * capture for another tool's forms, or removed Gravity Forms later, must
+	 * not keep registering readers behind that card.
+	 */
+	public function test_capture_stays_off_without_gravity_forms() {
+		$integration = new class() extends Form_Capture {
+			/**
+			 * Stand in for a site without Gravity Forms: the suite loads its stub class.
+			 *
+			 * @return bool
+			 */
+			protected function is_gravity_forms_active() {
+				return false;
+			}
+		};
+		foreach ( [ Form_Capture::SCRIPT_HANDLE, Form_Capture::EDITOR_SCRIPT_HANDLE ] as $handle ) {
+			wp_dequeue_script( $handle );
+			wp_deregister_script( $handle );
+		}
+		Integrations::enable( Form_Capture::ID );
+
+		$this->assertFalse( $integration->supports_frontend_registration(), 'No key, endpoint or capture script without Gravity Forms.' );
+		$integration->enqueue_scripts();
+		$this->assertFalse( wp_script_is( Form_Capture::SCRIPT_HANDLE, 'enqueued' ), 'The capture script must not load.' );
+		$integration->enqueue_editor_assets();
+		$this->assertFalse( wp_script_is( Form_Capture::EDITOR_SCRIPT_HANDLE, 'enqueued' ), 'There is no block to extend.' );
+		$this->assertTrue( Integrations::is_enabled( Form_Capture::ID ), 'The integration stays enabled, so capture resumes once Gravity Forms is back.' );
 
 		Integrations::disable( Form_Capture::ID );
 	}

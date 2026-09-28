@@ -240,6 +240,8 @@ class Newspack_Blocks {
 			$localized_data = [
 				'patterns'                   => self::get_patterns_for_post_type( get_post_type() ),
 				'posts_rest_url'             => rest_url( 'newspack-blocks/v1/newspack-blocks-posts' ),
+				'posts_batch_rest_url'       => rest_url( 'newspack-blocks/v1/newspack-blocks-posts-batch' ),
+				'posts_batch_max_queries'    => Newspack_Blocks_API::POSTS_BATCH_MAX_QUERIES,
 				'specific_posts_rest_url'    => rest_url( 'newspack-blocks/v1/newspack-blocks-specific-posts' ),
 				'authors_rest_url'           => rest_url( 'newspack-blocks/v1/authors' ),
 				'assets_path'                => plugins_url( '/src/assets', NEWSPACK_BLOCKS__PLUGIN_FILE ),
