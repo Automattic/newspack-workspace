@@ -1,3 +1,29 @@
+# @automattic/newspack-blocks [4.34.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.2...newspack-blocks@4.34.0) (2026-09-28)
+
+
+### Bug Fixes
+
+* **author-profile:** load a page's authors in one request instead of one per block ([#1030](https://github.com/Automattic/newspack-workspace/issues/1030)) ([cd3248f](https://github.com/Automattic/newspack-workspace/commit/cd3248fab4588091a045babbbeb70ef819d6c07f))
+* **theme:** tighten post subtitle handling ([#1024](https://github.com/Automattic/newspack-workspace/issues/1024)) ([609cd84](https://github.com/Automattic/newspack-workspace/commit/609cd84ad058a21b5b99841394cc7d0c4c1ba4b9))
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([72d80b8](https://github.com/Automattic/newspack-workspace/commit/72d80b844796b29752e33e290ad8f1ffd923c6f2))
+* **plans:** promotional URL generator for modal checkout (NPPD-1707) ([#783](https://github.com/Automattic/newspack-workspace/issues/783)) ([7f5f904](https://github.com/Automattic/newspack-workspace/commit/7f5f90416a2c9598429eae55072ebb1c65328b9b))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
+## @automattic/newspack-blocks [4.33.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.1...newspack-blocks@4.33.2) (2026-09-26)
+
+
+### Bug Fixes
+
+* skip Content Loop/Carousel render for REST revisions and autosaves ([26b84c9](https://github.com/Automattic/newspack-workspace/commit/26b84c9e2bbf0021a534c20984eb95b0b33aec43))
+
 ## @automattic/newspack-blocks [4.33.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.0...newspack-blocks@4.33.1) (2026-09-21)
 
 

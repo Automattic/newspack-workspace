@@ -41,6 +41,7 @@ const entry = {
 	'reader-auth': resolveSource( 'src', 'reader-activation-auth', 'index' ),
 	'newsletters-signup': resolveSource( 'src', 'reader-activation-newsletters', 'index' ),
 	'form-capture': resolveSource( 'src', 'reader-activation-form-capture', 'index' ),
+	'form-capture-editor': resolveSource( 'src', 'reader-activation-form-capture', 'editor' ),
 	'reader-registration-block': resolveSource( 'src', 'blocks', 'reader-registration', 'view' ),
 	'correction-box-block': resolveSource( 'src', 'blocks', 'correction-box', 'index' ),
 	'correction-item-block': resolveSource( 'src', 'blocks', 'correction-item', 'index' ),

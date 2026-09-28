@@ -96,9 +96,6 @@ declare global {
 				};
 			};
 		};
-		newspack_aux_data: {
-			is_debug_mode: boolean;
-		};
 		newspack_urls: {
 			site: string;
 		};

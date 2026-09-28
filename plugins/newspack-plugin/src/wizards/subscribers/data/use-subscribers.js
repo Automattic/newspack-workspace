@@ -26,9 +26,9 @@ const SORTABLE_FIELDS = [ 'name', 'memberSince' ];
 
 /**
  * Translate the DataViews view into the endpoint's query params. Filters are
- * matched by field id — `status` maps to the subscription-status filter; the
- * plan / group-role / tag / newsletter filters arrive in later slices and are
- * ignored here.
+ * matched by field id — `status` maps to the subscription-status filter and
+ * `plans` (the Subscription column) to the endpoint's `plan` arg; the group-role,
+ * tag and newsletter filters arrive in later slices and are ignored here.
  *
  * @param {Object} view The DataViews view.
  * @return {Object} Query params for the subscribers endpoint.
@@ -48,6 +48,11 @@ export const viewToParams = view => {
 	if ( statusFilter?.value?.length ) {
 		params.status = statusFilter.value;
 	}
+	// The column is `plans`; the endpoint arg is the singular `plan`.
+	const planFilter = ( view.filters || [] ).find( f => 'plans' === f.field );
+	if ( planFilter?.value?.length ) {
+		params.plan = planFilter.value;
+	}
 	return params;
 };
 
@@ -58,12 +63,19 @@ export const viewToParams = view => {
  * page, so the screen can tell "this site has no subscribers" apart from "we
  * could not read them" and offer `reload` as a retry.
  *
+ * `settled` turns true after the first response of either kind and never goes
+ * back, so the caller can reserve the screen-blanking spinner for the load that
+ * has nothing to show yet. Row count can't stand in for it: a filter matching
+ * nobody empties `items`, and the next refetch would blank a screen the reader
+ * is still interacting with.
+ *
  * @param {Object} view The DataViews view (page, perPage, sort, search, filters).
- * @return {{ items: Array, total: number, pages: number, loading: boolean, error: string, reload: Function }} The page.
+ * @return {{ items: Array, total: number, pages: number, loading: boolean, settled: boolean, error: string, reload: Function }} The page.
  */
 export function useSubscribers( view ) {
 	const [ result, setResult ] = useState( { items: [], total: 0, pages: 0 } );
 	const [ loading, setLoading ] = useState( true );
+	const [ settled, setSettled ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const [ attempt, setAttempt ] = useState( 0 );
 
@@ -99,6 +111,7 @@ export function useSubscribers( view ) {
 			.finally( () => {
 				if ( ! cancelled ) {
 					setLoading( false );
+					setSettled( true );
 				}
 			} );
 		return () => {
@@ -106,5 +119,5 @@ export function useSubscribers( view ) {
 		};
 	}, [ key, attempt ] );
 
-	return { ...result, loading, error, reload };
+	return { ...result, loading, settled, error, reload };
 }

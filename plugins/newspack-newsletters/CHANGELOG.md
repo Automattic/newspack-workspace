@@ -1,3 +1,17 @@
+## newspack-newsletters [3.41.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.2...newspack-newsletters@3.41.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **newsletters:** keep block editor chrome on admin typography ([#799](https://github.com/Automattic/newspack-workspace/issues/799)) ([a24636a](https://github.com/Automattic/newspack-workspace/commit/a24636a807fff48e42bf9a11c0c8fd185156f352))
+* **newsletters:** resolve the send list against the connected ESP ([#979](https://github.com/Automattic/newspack-workspace/issues/979)) ([cfc2f39](https://github.com/Automattic/newspack-workspace/commit/cfc2f39679a1660f27484e697e75426f08ffc1a3))
+* **theme:** tighten post subtitle handling ([#1024](https://github.com/Automattic/newspack-workspace/issues/1024)) ([609cd84](https://github.com/Automattic/newspack-workspace/commit/609cd84ad058a21b5b99841394cc7d0c4c1ba4b9))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
 ## newspack-newsletters [3.41.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.1...newspack-newsletters@3.41.2) (2026-09-24)
 
 
