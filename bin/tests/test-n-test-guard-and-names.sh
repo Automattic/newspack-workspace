@@ -42,7 +42,7 @@ mkdir -p "$R/bin" "$R/plugins/newspack-ads" "$R/plugins/newspack-plugin"
 cp "$SRC/n" "$R/n"
 cp "$SRC/bin/_common.sh" "$SRC/bin/repos.sh" "$R/bin/"
 touch "$R/plugins/newspack-ads/.keep" "$R/plugins/newspack-plugin/.keep"
-printf 'worktrees/\nrepos/\ndocker-compose.env-*.yml\n' > "$R/.gitignore"
+printf 'worktrees/\nworktrees-repos/\n.claude/\nrepos/\ndocker-compose.env-*.yml\n' > "$R/.gitignore"
 g -C "$R" init -q && g -C "$R" add -A && g -C "$R" commit -q -m init && g -C "$R" branch -q -M main
 g -C "$R" worktree add -q -b wt "$R/worktrees/wt"
 g -C "$R" worktree add -q -b wt2 "$R/worktrees/wt2"
@@ -54,6 +54,10 @@ g -C "$STANDALONE" init -q && g -C "$STANDALONE" add -A && g -C "$STANDALONE" co
 # A worktree of that clone checked out in place under repos/, which the
 # container mounts as a project of its own.
 g -C "$STANDALONE" worktree add -q -b h1 "$R/repos/plugins/standalone-thing-h1"
+# The shape `n env create --worktree <repos-project>:<branch>` makes.
+g -C "$STANDALONE" worktree add -q -b rb "$R/worktrees-repos/standalone-thing/rb"
+# A worktree outside worktrees/, where Claude Code puts its own.
+g -C "$R" worktree add -q -b cw "$R/.claude/worktrees/cw"
 
 write_env() { # an env that mounts newspack-plugin, and only it, from the worktree
 	cat > "$R/docker-compose.env-demo.yml" <<'YML'
@@ -117,7 +121,13 @@ for cmd in test-php test-js; do
 	check "unmounted worktree: $cmd exits non-zero" "1" "$(status)"
 	check "unmounted worktree: $cmd calls no docker" "no" "$(called_docker)"
 done
-check "unmounted worktree: says why" "yes" "$(out_has 'no isolated env mounts this worktree')"
+check "unmounted worktree: names the checkout it would read" "yes" "$(out_has 'would read newspack-ads from plugins/newspack-ads, not from this')"
+check "unmounted worktree: offers to mount it" "yes" "$(out_has 'n env create <name> --worktree')"
+
+run_n "$R/n" "$R/.claude/worktrees/cw/plugins/newspack-ads" test-php
+check "worktree outside worktrees/: refuses" "1" "$(status)"
+check "worktree outside worktrees/: says no env can mount it" "yes" "$(out_has 'no env can mount it')"
+check "worktree outside worktrees/: does not offer n env create" "no" "$(out_has 'n env create')"
 
 run_n "$WT/n" "$WT" test-php newspack-ads
 check "worktree's own ./n: still refuses" "1" "$(status)"
@@ -137,17 +147,32 @@ check "env mounts the project: code names the worktree" "wt@$WT_SHA (worktrees/w
 
 run_n "$R/n" "$WT" test-php newspack-ads
 check "env mounts a sibling only: refuses" "1" "$(status)"
-check "env mounts a sibling only: says which project" "yes" "$(out_has 'does not mount newspack-ads from this worktree')"
+check "env mounts a sibling only: points at the project's directory" "yes" "$(out_has "run from inside")"
+
+# A second env of the same worktree mounts newspack-ads; n picks it from there.
+cat > "$R/docker-compose.env-demo2.yml" <<'YML'
+services:
+  env-demo2:
+    container_name: newspack_env_demo2
+    volumes:
+      - ./worktrees/wt/plugins/newspack-ads:/newspack-plugins/newspack-ads
+YML
+run_n "$R/n" "$WT/plugins/newspack-ads" test-php
+check "second env of the worktree: runs from the project's directory" "0" "$(status)"
+check "second env of the worktree: routes to that env" "yes" "$(grep -qx newspack_env_demo2 "$WORK/argv" && echo yes || echo no)"
+rm -f "$R/docker-compose.env-demo2.yml"
 run_n "$WT/n" "$WT/plugins/newspack-plugin" test-php
 check "worktree's own ./n with an env present: refuses" "1" "$(status)"
 check "worktree's own ./n: points at the main checkout's n" "yes" "$(out_has "Run the main checkout's n instead")"
-check "worktree's own ./n: does not claim no env mounts it" "no" "$(out_has 'no isolated env mounts')"
+check "worktree's own ./n: does not offer n env create" "no" "$(out_has 'n env create')"
 
 # The same env also mounts newspack-ads, but from a different worktree.
 echo "      - ./worktrees/wt2/plugins/newspack-ads:/newspack-plugins/newspack-ads" >> "$R/docker-compose.env-demo.yml"
 run_n "$R/n" "$WT" test-php newspack-ads
 check "env mounts the project from another worktree: refuses" "1" "$(status)"
 check "env mounts the project from another worktree: calls no docker" "no" "$(called_docker)"
+check "env mounts the project from another worktree: override names that worktree" "yes" \
+	"$(out_has 'run anyway, testing worktrees/wt2/plugins/newspack-ads')"
 NEWSPACK_TEST_ROOT_OK=1 run_n "$R/n" "$WT" test-php newspack-ads
 check "override: code names the worktree the env really mounts" "yes" \
 	"$(env_value NEWSPACK_TEST_CODE | grep -q '(worktrees/wt2/plugins/newspack-ads)$' && echo yes || echo no)"
@@ -155,6 +180,21 @@ rm -f "$R/docker-compose.env-demo.yml"
 
 run_n "$R/n" "$WT" test-js standalone-thing
 check "a repos/ project named from a monorepo worktree runs" "0" "$(status)"
+
+run_n "$R/n" "$R/worktrees-repos/standalone-thing/rb" test-js
+check "worktrees-repos/ worktree with no env: refuses" "1" "$(status)"
+cat > "$R/docker-compose.env-demo3.yml" <<'YML'
+services:
+  env-demo3:
+    container_name: newspack_env_demo3
+    volumes:
+      - ./worktrees-repos/standalone-thing/rb:/newspack-repos/plugins/standalone-thing
+YML
+run_n "$R/n" "$R/worktrees-repos/standalone-thing/rb" test-js
+check "worktrees-repos/ worktree an env mounts: runs" "0" "$(status)"
+check "and code names that worktree" "yes" \
+	"$(env_value NEWSPACK_TEST_CODE | grep -q '^rb@.*(worktrees-repos/standalone-thing/rb)$' && echo yes || echo no)"
+rm -f "$R/docker-compose.env-demo3.yml"
 
 run_n "$R/n" "$R/repos/plugins/standalone-thing-h1" test-php
 check "a repos/ worktree checked out in place runs" "0" "$(status)"

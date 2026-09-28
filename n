@@ -245,20 +245,21 @@ prepare_test_run() {
     fi
     if [[ -z "$code_dir" ]]; then
         if [[ $guarded -eq 1 && "${NEWSPACK_TEST_ROOT_OK:-}" != "1" ]]; then
+            local would_read="${mounted_dir:-$root_dir}"
+            echo "Error: the container would read $target_folder from ${would_read#"$root"/}, not from this" >&2
+            echo "worktree, and the result would read as this branch's." >&2
             if [[ "$root" != "$NABSPATH" ]]; then
-                echo "Error: this is a worktree's own copy of n, which cannot see isolated envs," >&2
-                echo "so the tests would run against the main checkout's code, not this branch's." >&2
+                echo "  This is a worktree's own copy of n, which cannot see isolated envs." >&2
                 echo "  Run the main checkout's n instead:  $root/n $1 ..." >&2
+            elif [[ "$caller_top" == "$root/worktrees/"* || "$caller_top" == "$root/worktrees-repos/"* ]]; then
+                echo "  If an env already mounts $target_folder from this worktree, run from inside" >&2
+                echo "  that project's directory so n picks that env. Otherwise mount it:" >&2
+                echo "    n env create <name> --worktree <repo>:<branch> --up" >&2
             else
-                if [[ "$TARGET_CONTAINER" == "newspack_dev" ]]; then
-                    echo "Error: no isolated env mounts this worktree, so the tests would run" >&2
-                else
-                    echo "Error: $TARGET_CONTAINER does not mount $target_folder from this worktree, so the tests would run" >&2
-                fi
-                echo "against another checkout's code, not this branch's." >&2
-                echo "  Mount it:  n env create <name> --worktree <repo>:<branch> --up" >&2
+                echo "  Isolated envs mount only worktrees under $root/worktrees/ or" >&2
+                echo "  worktrees-repos/; this one is elsewhere, so no env can mount it." >&2
             fi
-            echo "  Or test the main checkout anyway:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
+            echo "  Or run anyway, testing ${would_read#"$root"/}:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
             exit 1
         fi
         # Overridden: name what the container will really read, which is the
