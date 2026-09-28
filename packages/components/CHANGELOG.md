@@ -1,3 +1,10 @@
+## newspack-components [4.9.1](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.9.0...newspack-components@4.9.1) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.3
+
 # newspack-components [4.9.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.8.0...newspack-components@4.9.0) (2026-09-28)
 
 
