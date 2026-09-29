@@ -991,10 +991,138 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A refusal another validator already made is left alone.
+	 * A refusal another validator already made is left alone: no second notice,
+	 * even for an add this filter would have refused itself.
 	 */
 	public function test_plan_less_add_to_cart_keeps_an_earlier_refusal() {
-		$this->assertFalse( Product_Purchase_Restriction::validate_add_to_cart( false, $this->open_product->get_id(), 1 ) );
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+		wc_mocks_reset_notices();
+
+		$this->assertFalse( Product_Purchase_Restriction::validate_add_to_cart( false, $hybrid->get_id(), 1 ) );
+		global $wc_mock_notices;
+		$this->assertSame( [], $wc_mock_notices );
+	}
+
+	/**
+	 * A cart WooCommerce Subscriptions rebuilds from an order (a failed first
+	 * payment, a manual or early renewal, a resubscribe) posts no plan: it hands
+	 * the plan the item was bought on to the validation filter as cart item data.
+	 * That plan is the reader's choice, so the add goes through.
+	 */
+	public function test_restored_plan_passes_add_to_cart_validation() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+		wc_mocks_reset_notices();
+		$restored = [ 'wcsatt_data' => [ 'active_subscription_scheme' => '1_month' ] ];
+
+		$this->assertTrue(
+			apply_filters( 'woocommerce_add_to_cart_validation', true, $hybrid->get_id(), 1, 0, [], $restored ),
+			'The filter WooCommerce Subscriptions runs, with the restored item data as its sixth argument.'
+		);
+		global $wc_mock_notices;
+		$this->assertSame( [], $wc_mock_notices );
+
+		$one_time = [ 'wcsatt_data' => [ 'active_subscription_scheme' => false ] ];
+		$this->assertFalse(
+			Product_Purchase_Restriction::validate_add_to_cart( true, $hybrid->get_id(), 1, 0, [], $one_time ),
+			'An order bought one-time restores no plan, and stays refused.'
+		);
+	}
+
+	/**
+	 * A separate process never ran the top-level require_once that initializes the
+	 * WooCommerce mocks' globals in the main run, so the mocks that read them need
+	 * them set here.
+	 */
+	private function init_mock_globals_in_isolation() {
+		global $subscriptions_database, $orders_database, $order_items_database, $products_database;
+		$subscriptions_database = $subscriptions_database ?? []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$orders_database        = $orders_database ?? []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$order_items_database   = $order_items_database ?? []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$products_database      = $products_database ?? []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+	}
+
+	/**
+	 * Each plan-less refusal is logged with the product and whether the cart item
+	 * came restored from an order, so a payment flow that is still refused shows
+	 * up in the logs.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_plan_less_refusal_is_logged() {
+		if ( ! defined( 'NEWSPACK_LOG_LEVEL' ) ) {
+			define( 'NEWSPACK_LOG_LEVEL', 1 );
+		}
+		$this->init_mock_globals_in_isolation();
+		$hybrid   = $this->hybrid_under_all_subscribers_rule();
+		$log_file = get_temp_dir() . 'plan-less-refusal-' . wp_generate_password( 8, false ) . '.log';
+		$previous = ini_set( 'error_log', $log_file ); // phpcs:ignore WordPress.PHP.IniSet.Risky
+		wp_set_current_user( $this->non_subscriber_id );
+
+		Product_Purchase_Restriction::validate_add_to_cart( true, $hybrid->get_id(), 1 );
+		Product_Purchase_Restriction::validate_add_to_cart( true, $hybrid->get_id(), 1, 0, [], [ 'wcsatt_data' => [ 'active_subscription_scheme' => false ] ] );
+
+		ini_set( 'error_log', $previous ); // phpcs:ignore WordPress.PHP.IniSet.Risky
+		$logged = file_exists( $log_file ) ? file_get_contents( $log_file ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Local temp file.
+		if ( file_exists( $log_file ) ) {
+			unlink( $log_file ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		}
+
+		$this->assertStringContainsString( 'product ' . $hybrid->get_id() . ' (no restored cart item data)', $logged );
+		$this->assertStringContainsString( 'product ' . $hybrid->get_id() . ' (restored cart item data)', $logged );
+	}
+
+	/**
+	 * Only the Store API skips the throwing cart item refusal: it applies the cart
+	 * item data filter outside the cart's try/catch. Any other REST request that adds
+	 * to the cart directly never runs the validation filter, so it still refuses.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_plan_less_cart_item_is_refused_over_rest_outside_the_store_api() {
+		if ( ! defined( 'REST_REQUEST' ) ) {
+			define( 'REST_REQUEST', true );
+		}
+		$this->init_mock_globals_in_isolation();
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+
+		$this->expectException( \Exception::class );
+		Product_Purchase_Restriction::refuse_plan_less_cart_item( [], $hybrid->get_id(), 0 );
+	}
+
+	/**
+	 * A Store API request leaves the refusal to the validation filter it runs.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_plan_less_cart_item_is_left_to_validation_in_the_store_api() {
+		global $newspack_test_wc;
+		$newspack_test_wc = new class() {
+			/**
+			 * Cart double.
+			 *
+			 * @var object|null
+			 */
+			public $cart = null;
+
+			/**
+			 * The request is a Store API request.
+			 */
+			public function is_store_api_request() {
+				return true;
+			}
+		};
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-cart-global-mock.php';
+		$this->init_mock_globals_in_isolation();
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+
+		$this->assertSame( [], Product_Purchase_Restriction::refuse_plan_less_cart_item( [], $hybrid->get_id(), 0 ) );
 	}
 
 	/**

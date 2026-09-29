@@ -104,8 +104,10 @@ class Product_Purchase_Restriction {
 		// filter runs in WooCommerce's request handlers but not inside
 		// WC_Cart::add_to_cart(), which the modal checkout calls directly; the cart
 		// item data filter runs inside add_to_cart(), at 9 so it answers before
-		// WooCommerce Subscriptions reads the posted plan at 10.
-		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'validate_add_to_cart' ], 10, 4 );
+		// WooCommerce Subscriptions reads the posted plan at 10. The validation
+		// filter takes all six arguments: a cart WooCommerce Subscriptions rebuilds
+		// from an order passes the plan it restores in the sixth.
+		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'validate_add_to_cart' ], 10, 6 );
 		add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'refuse_plan_less_cart_item' ], 9, 3 );
 	}
 
@@ -306,22 +308,27 @@ class Product_Purchase_Restriction {
 	 * may not buy it one-time. The product is forced onto its plans for that reader,
 	 * so WooCommerce would fill the missing choice with its default plan: a button
 	 * built for the one-time price (a Checkout Button posts none) would start a
-	 * subscription. Only a request that names a plan gets through.
+	 * subscription. Only a request that names a plan gets through, or a cart
+	 * WooCommerce Subscriptions rebuilds from an order (a failed first payment, a
+	 * renewal, a resubscribe), which carries the plan the item was bought on.
 	 *
-	 * @param bool $passed       Whether the add-to-cart is valid so far.
-	 * @param int  $product_id   Product ID.
-	 * @param int  $quantity     Quantity.
-	 * @param int  $variation_id Variation ID, if any.
+	 * @param bool  $passed         Whether the add-to-cart is valid so far.
+	 * @param int   $product_id     Product ID.
+	 * @param int   $quantity       Quantity.
+	 * @param int   $variation_id   Variation ID, if any.
+	 * @param array $variations     Variation attributes, if any.
+	 * @param array $cart_item_data Cart item data, set when the cart is rebuilt from an order.
 	 * @return bool
 	 */
-	public static function validate_add_to_cart( $passed, $product_id, $quantity = 1, $variation_id = 0 ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed
-		if ( ! $passed ) {
+	public static function validate_add_to_cart( $passed, $product_id, $quantity = 1, $variation_id = 0, $variations = [], $cart_item_data = [] ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed
+		if ( ! $passed || self::has_restored_plan( $cart_item_data ) ) {
 			return $passed;
 		}
 		$product = self::get_plan_less_refusal( (int) $product_id, (int) $variation_id );
 		if ( ! $product ) {
 			return $passed;
 		}
+		self::log_plan_less_refusal( $product, $cart_item_data );
 		wc_add_notice( self::get_restricted_message( $product ), 'error' );
 		return false;
 	}
@@ -342,18 +349,47 @@ class Product_Purchase_Restriction {
 	public static function refuse_plan_less_cart_item( $cart_item_data, $product_id, $variation_id = 0 ) {
 		// The Store API applies this filter outside the cart's try/catch, where a
 		// throw is a 500 rather than a notice; it runs the validation filter anyway.
-		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+		if ( function_exists( 'WC' ) && WC() && method_exists( WC(), 'is_store_api_request' ) && WC()->is_store_api_request() ) {
 			return $cart_item_data;
 		}
-		// A renewal or resubscribe restores the plan it was bought on.
-		if ( ! empty( $cart_item_data['wcsatt_data']['active_subscription_scheme'] ) ) {
+		if ( self::has_restored_plan( $cart_item_data ) ) {
 			return $cart_item_data;
 		}
 		$product = self::get_plan_less_refusal( (int) $product_id, (int) $variation_id );
 		if ( $product ) {
+			self::log_plan_less_refusal( $product, $cart_item_data );
 			throw new \Exception( self::get_restricted_message( $product ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- WooCommerce shows it as a notice, which carries the message's links.
 		}
 		return $cart_item_data;
+	}
+
+	/**
+	 * Whether cart item data carries a plan restored from an order: a renewal,
+	 * resubscribe or payment retry puts back the plan the item was bought on.
+	 *
+	 * @param mixed $cart_item_data Cart item data.
+	 */
+	private static function has_restored_plan( $cart_item_data ): bool {
+		return is_array( $cart_item_data ) && ! empty( $cart_item_data['wcsatt_data']['active_subscription_scheme'] );
+	}
+
+	/**
+	 * Log a plan-less refusal, so a payment flow that is refused shows up in the
+	 * logs rather than only in a reader's notice.
+	 *
+	 * @param \WC_Product $product        The refused product.
+	 * @param mixed       $cart_item_data Cart item data the add carried.
+	 */
+	private static function log_plan_less_refusal( \WC_Product $product, $cart_item_data ): void {
+		Logger::log(
+			sprintf(
+				'Refused a plan-less add-to-cart for user %d of product %d (%s)',
+				get_current_user_id(),
+				$product->get_id(),
+				is_array( $cart_item_data ) && isset( $cart_item_data['wcsatt_data'] ) ? 'restored cart item data' : 'no restored cart item data'
+			),
+			'NEWSPACK-SUBSCRIBER-COMMERCE'
+		);
 	}
 
 	/**
