@@ -180,11 +180,12 @@ describe( 'planPromptCorrections: detached card locks', () => {
 		expect( plan.unlockChildren ).toEqual( [] );
 	} );
 
-	// The CTA and anything the publisher adds are theirs to arrange: a lock the
-	// detach left on one is lifted, while the copy stays held.
-	it( 'frees the CTA and holds the copy together', () => {
+	// A seeded call to action, Donate or Buttons, carries the full lock the detach
+	// copied down: it is lifted, while the copy stays held.
+	it.each( [ 'newspack-blocks/donate', 'core/buttons' ] )( 'frees a seeded %s CTA and holds the copy together', name => {
 		const { planPromptCorrections } = loadGuard();
-		const card = detached( 'card', [ copyChild( 'copy', { metadata: { name: 'Prompt Copy' } } ), ctaChild( 'cta', { lock: CHILD_LOCK } ) ] );
+		const cta = { ...ctaChild( 'cta', { lock: CHILD_LOCK } ), name };
+		const card = detached( 'card', [ copyChild( 'copy', { metadata: { name: 'Prompt Copy' } } ), cta ] );
 		const plan = planPromptCorrections( [ card ] );
 
 		expect( plan.lockChildren ).toEqual( [ 'copy' ] );
@@ -225,9 +226,9 @@ describe( 'planPromptCorrections: detached card locks', () => {
 		expect( planPromptCorrections( [ card ] ).lockChildren ).toEqual( [ 'copy' ] );
 	} );
 
-	// A lock the publisher sets on a block of their own is not the full lock the
-	// detach copied down, so it is left in place.
-	it( 'leaves a publisher-set child lock alone', () => {
+	// A partial lock is not the full lock the detach copied down, so it stays even
+	// on the call to action.
+	it( 'leaves a partial lock on the call to action alone', () => {
 		const { planPromptCorrections } = loadGuard();
 		const card = detached( 'card', [ copyChild( 'copy' ), ctaChild( 'mine', { lock: { move: true, remove: false } } ) ] );
 

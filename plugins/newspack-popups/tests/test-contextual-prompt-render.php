@@ -528,6 +528,30 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The pre-save record is written once: a later editor save leaves it naming
+	 * the plugin's CTA, so a publisher who saves the pattern again keeps their
+	 * swap.
+	 */
+	public function test_later_editor_saves_leave_the_cta_record_alone() {
+		$this->set_platform( true );
+		$ref = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA );
+
+		$blocks                      = parse_blocks( get_post( $ref )->post_content );
+		$blocks[0]['innerBlocks'][1] = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( self::CUSTOM_URL, 'Give now' );
+		$swapped                     = [
+			'ID'           => $ref,
+			'post_content' => wp_slash( serialize_blocks( $blocks ) ),
+		];
+		wp_update_post( $swapped );
+		wp_update_post( $swapped );
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$this->assertStringContainsString( self::CUSTOM_URL, get_post( $ref )->post_content );
+	}
+
+	/**
 	 * A publisher's CTA is kept on screen only while it can render. With Newspack
 	 * Blocks off, readers get the landing-page button in place of their donate
 	 * block, and the stored pattern keeps the donate block for when it returns.
@@ -1269,7 +1293,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		Newspack_Popups_Contextual_Prompt_Pattern::repair();
 
 		$this->assertSame( $saved, get_post( $ref )->post_content, 'The publisher\'s save stands.' );
-		$this->assertSame( 'core/buttons', get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA ), 'So the CTA record still describes what is stored.' );
+		$this->assertSame( 'core/buttons', get_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA ), 'And the refused write left the CTA record where it was.' );
 	}
 
 	/**

@@ -79,7 +79,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 			return $data;
 		}
 
-		self::record_written_cta( (string) get_post_field( 'post_content', $pattern_id ) );
+		self::record_written_cta( (string) get_post_field( 'post_content', $pattern_id, 'raw' ) );
 
 		return $data;
 	}
@@ -486,6 +486,8 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		if ( ! self::save_pattern_content( $pattern_id, $content ) ) {
 			return false;
 		}
+		// From the markup just written rather than a fresh read: an editor save
+		// landing in between would otherwise be recorded as the plugin's CTA.
 		self::record_written_cta( $content );
 
 		// The description is the pattern editor's to edit too, and it describes
@@ -696,7 +698,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		}
 
 		update_option( self::OPTION_PATTERN_ID, $new_id );
-		self::record_written_cta( (string) get_post_field( 'post_content', $new_id ) );
+		self::record_written_cta( (string) get_post_field( 'post_content', $new_id, 'raw' ) );
 
 		return $new_id;
 	}
@@ -936,7 +938,8 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	 * publisher who swapped the donate form for a button on purpose: both are a
 	 * button on a native site. The record of what the plugin last wrote is what
 	 * tells them apart. With no record — a site seeded before it existed — nothing
-	 * is the publisher's yet; the first repair records the CTA it finds.
+	 * is the publisher's yet; the first editor save or repair records the CTA it
+	 * finds.
 	 *
 	 * @param string $cta_name Block name of the stored CTA.
 	 * @return bool
@@ -961,9 +964,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * Record the CTA in markup the plugin just stored, from that markup rather
-	 * than a fresh read: an editor save landing in between would otherwise be
-	 * recorded as the plugin's, and its CTA reverted on the next repair.
+	 * Record the CTA in the prompt card of the given markup as the plugin's.
 	 *
 	 * @param string $content The stored pattern markup.
 	 */

@@ -46,8 +46,8 @@ const SEEDED_CTA_BLOCKS = [ 'newspack-blocks/donate', 'core/buttons' ];
  * Whether a child is the pattern's generated copy: the paragraph the pattern
  * binds each instance's copy to. A detach drops the override binding and keeps
  * the block's name, so on a detached card the seeded name is what identifies
- * it; a copy still carrying its binding is matched by that. A name the publisher
- * gives a block of their own never matches.
+ * it; a copy still carrying its binding is matched by that. Any other name the
+ * publisher gives a block does not match.
  *
  * @param {Object} attributes Block attributes.
  * @return {boolean} Whether the block is the bound copy.
