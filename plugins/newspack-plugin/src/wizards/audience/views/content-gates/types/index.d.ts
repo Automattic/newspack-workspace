@@ -185,6 +185,7 @@ type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
 	feed_restriction_mode: FeedRestrictionMode;
 	newsletter_link_bypass_enabled: boolean;
+	institutional_access_text: string;
 };
 
 type GateSettings = {
