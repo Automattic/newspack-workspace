@@ -295,6 +295,7 @@ class Content_Gate {
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 		include __DIR__ . '/class-email-verification-prompt.php';
+		include __DIR__ . '/class-institutional-access-prompt.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();

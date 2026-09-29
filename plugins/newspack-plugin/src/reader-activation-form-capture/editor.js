@@ -13,7 +13,7 @@ import { __ } from '@wordpress/i18n';
 
 export const GF_BLOCK = 'gravityforms/form';
 
-// Must match Form_Capture::BLOCK_ATTRIBUTE, which declares the same attribute
+// Must match Gravity_Forms::BLOCK_ATTRIBUTE, which declares the same attribute
 // through Gravity Forms' block attributes filter.
 export const ATTRIBUTE = 'newspackFormCapture';
 

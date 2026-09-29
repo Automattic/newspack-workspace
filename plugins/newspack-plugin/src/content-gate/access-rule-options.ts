@@ -25,9 +25,12 @@
  */
 import { __ } from '@wordpress/i18n';
 import { decodeEntities } from '@wordpress/html-entities';
-import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
+import type { ComponentProps } from 'react';
+import type { FormTokenField } from '@wordpress/components';
 
 export type AccessRuleOption = { value: string | number; label: string };
+
+export type TokenItem = Exclude< NonNullable< ComponentProps< typeof FormTokenField >[ 'value' ] >[ number ], string >;
 
 /**
  * How many suggestions a picker renders when nothing has been typed.

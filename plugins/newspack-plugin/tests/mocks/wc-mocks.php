@@ -2353,6 +2353,21 @@ function woocommerce_wp_text_input( $field ) {
 	);
 }
 /**
+ * Textarea counterpart of woocommerce_wp_text_input(), same caveat.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_textarea_input( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><textarea id="%2$s" name="%4$s">%5$s</textarea></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
+		esc_textarea( $field['value'] ?? '' )
+	);
+}
+/**
  * Recording mock: notices land on the $wc_mock_notices global so tests can
  * assert the reader-facing half of code paths gated on
  * function_exists( 'wc_add_notice' ).
