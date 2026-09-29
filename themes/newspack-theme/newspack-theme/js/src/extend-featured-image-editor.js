@@ -91,24 +91,30 @@ const CaptionControl = compose( [
 	withDispatch( dispatch => ( {
 		updateCaption( value, meta ) {
 			dispatch( 'core/editor' ).editPost( {
-				meta: { ...meta, newspack_featured_image_caption: value },
+				meta: { ...meta, newspack_post_featured_image_caption: value },
 			} );
 		},
 		updateCaptionEnabled( value, meta ) {
 			dispatch( 'core/editor' ).editPost( {
-				meta: { ...meta, newspack_featured_image_caption_enabled: value },
+				meta: { ...meta, newspack_post_featured_image_caption_enabled: value },
+			} );
+		},
+		updateIncludeCredit( value, meta ) {
+			dispatch( 'core/editor' ).editPost( {
+				meta: { ...meta, newspack_post_featured_image_caption_include_credit: value },
 			} );
 		},
 	} ) ),
-] )( ( { featuredMediaId, meta, defaultCaption, updateCaption, updateCaptionEnabled } ) => {
+] )( ( { featuredMediaId, meta, defaultCaption, updateCaption, updateCaptionEnabled, updateIncludeCredit } ) => {
 	// Only show these controls once a featured image has been selected.
 	if ( ! featuredMediaId ) {
 		return null;
 	}
 
-	const isEnabled = !! meta.newspack_featured_image_caption_enabled;
-	const value = meta.newspack_featured_image_caption || '';
+	const isEnabled = !! meta.newspack_post_featured_image_caption_enabled;
+	const value = meta.newspack_post_featured_image_caption || '';
 	const hasOverride = value.trim().length > 0;
+	const includeCredit = !! meta.newspack_post_featured_image_caption_include_credit;
 
 	return (
 		<Fragment>
@@ -120,21 +126,30 @@ const CaptionControl = compose( [
 				__nextHasNoMarginBottom
 			/>
 			{ isEnabled && (
-				<TextControl
-					label={ __( 'Featured Image Caption', 'newspack-theme' ) }
-					value={ value }
-					placeholder={
-						defaultCaption ||
-						__( 'No default caption set for this image; the image credit (if available) will be displayed.', 'newspack-theme' )
-					}
-					onChange={ v => updateCaption( v, meta ) }
-					help={
-						hasOverride
-							? __( "This caption applies to this article only. Other articles keep the image's default caption.", 'newspack-theme' )
-							: __( "Leave blank to use the image's default caption (shown above) or credit (if available).", 'newspack-theme' )
-					}
-					__nextHasNoMarginBottom
-				/>
+				<Fragment>
+					<TextControl
+						label={ __( 'Featured Image Caption', 'newspack-theme' ) }
+						value={ value }
+						placeholder={
+							defaultCaption ||
+							__( 'No default caption set for this image; the image credit (if available) will be displayed.', 'newspack-theme' )
+						}
+						onChange={ v => updateCaption( v, meta ) }
+						help={
+							hasOverride
+								? __( "This caption applies to this article only. Other articles keep the image's default caption.", 'newspack-theme' )
+								: __( "Leave blank to use the image's default caption (shown above) or credit (if available).", 'newspack-theme' )
+						}
+						__nextHasNoMarginBottom
+					/>
+					<ToggleControl
+						label={ __( 'Include image credit', 'newspack-theme' ) }
+						help={ __( 'Append the image credit to the custom caption.', 'newspack-theme' ) }
+						checked={ includeCredit }
+						onChange={ () => updateIncludeCredit( ! includeCredit, meta ) }
+						__nextHasNoMarginBottom
+					/>
+				</Fragment>
 			) }
 		</Fragment>
 	);

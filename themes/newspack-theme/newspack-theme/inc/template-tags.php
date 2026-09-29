@@ -469,28 +469,38 @@ if ( ! function_exists( 'newspack_post_thumbnail_caption' ) ) {
 		// Check the existence of the caption separately, so filters -- like ones that add ads -- don't interfere.
 		$thumbnail = get_post( get_post_thumbnail_id() );
 		$caption   = '';
+		$credit    = '';
 
 		// Use the per-post custom caption only when the editor has enabled the override.
-		// Both meta are stored on the post (see newspack_register_meta()), not the attachment.
-		if ( get_post_meta( get_the_ID(), 'newspack_featured_image_caption_enabled', true ) ) {
-			$caption = get_post_meta( get_the_ID(), 'newspack_featured_image_caption', true );
+		// All meta are stored on the post (see newspack_register_meta()), not the attachment.
+		if ( get_post_meta( get_the_ID(), 'newspack_post_featured_image_caption_enabled', true ) ) {
+			$caption        = get_post_meta( get_the_ID(), 'newspack_post_featured_image_caption', true );
+			$include_credit = get_post_meta( get_the_ID(), 'newspack_post_featured_image_caption_include_credit', true );
+
+			// When custom caption is set, optionally append the image credit if enabled.
+			if ( $include_credit && class_exists( '\Newspack\Newspack_Image_Credits' ) ) {
+				$credit = \Newspack\Newspack_Image_Credits::get_media_credit_string( get_post_thumbnail_id() );
+			}
 		}
 
-		if ( ! $caption && $thumbnail && $thumbnail->post_excerpt ) {
+		if ( '' === $caption && $thumbnail && $thumbnail->post_excerpt ) {
 			$caption = get_the_excerpt( get_post_thumbnail_id() );
 		}
 
 		// Account for featured images that have a credit but no caption.
-		if ( empty( $caption ) && class_exists( '\Newspack\Newspack_Image_Credits' ) ) {
+		if ( '' === $caption && class_exists( '\Newspack\Newspack_Image_Credits' ) ) {
 			$maybe_newspack_image_credit = \Newspack\Newspack_Image_Credits::get_media_credit_string( get_post_thumbnail_id() );
 			if ( strlen( wp_strip_all_tags( $maybe_newspack_image_credit ) ) ) {
 				$caption = $maybe_newspack_image_credit;
 			}
 		}
 
-		if ( ! empty( $caption ) ) :
+		// Combine caption and credit if both exist.
+		$full_caption = trim( $caption . ' ' . $credit );
+
+		if ( '' !== $full_caption ) :
 			?>
-			<figcaption><span><?php echo wp_kses_post( $caption ); ?></span></figcaption>
+			<figcaption><span><?php echo wp_kses_post( $full_caption ); ?></span></figcaption>
 			<?php
 		endif;
 	}

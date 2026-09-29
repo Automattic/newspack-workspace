@@ -587,7 +587,10 @@ function newspack_enqueue_scripts() {
 	}
 
 	// Featured Image options.
-	$extend_featured_image_asset = require get_theme_file_path( '/js/dist/extend-featured-image-editor.asset.php' );
+	$extend_featured_image_asset_path = get_theme_file_path( '/js/dist/extend-featured-image-editor.asset.php' );
+	$extend_featured_image_asset      = file_exists( $extend_featured_image_asset_path )
+		? require $extend_featured_image_asset_path
+		: array( 'dependencies' => array( 'wp-blocks', 'wp-components', 'wp-core-data' ), 'version' => $theme_version );
 	// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter -- TODO: Should we set $in_footer?
 	wp_register_script(
 		'newspack-extend-featured-image-script',
@@ -905,6 +908,8 @@ add_filter( 'jetpack_photon_override_image_downsize', 'newspack_override_avatar_
 /**
  * Register the theme's editor-managed post meta:
  * - Featured image position
+ * - Featured image caption (per-post override)
+ * - Featured image caption enabled toggle
  * - Article subtitle
  * - Article summary title
  * - Article summary
@@ -924,28 +929,40 @@ function newspack_register_meta() {
 				'type'         => 'string',
 			)
 		);
+
+		register_post_meta(
+			$post_type,
+			'newspack_post_featured_image_caption_enabled',
+			array(
+				'show_in_rest' => true,
+				'single'       => true,
+				'type'         => 'boolean',
+				'default'      => false,
+			)
+		);
+
+		register_post_meta(
+			$post_type,
+			'newspack_post_featured_image_caption',
+			array(
+				'show_in_rest'      => true,
+				'single'            => true,
+				'type'              => 'string',
+				'sanitize_callback' => 'wp_kses_post',
+			)
+		);
+
+		register_post_meta(
+			$post_type,
+			'newspack_post_featured_image_caption_include_credit',
+			array(
+				'show_in_rest' => true,
+				'single'       => true,
+				'type'         => 'boolean',
+				'default'      => false,
+			)
+		);
 	}
-
-	register_post_meta(
-		'post',
-		'newspack_featured_image_caption_enabled',
-		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'boolean',
-			'default'      => false,
-		)
-	);
-
-	register_post_meta(
-		'post',
-		'newspack_featured_image_caption',
-		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'string',
-		)
-	);
 
 	register_post_meta(
 		'post',
@@ -1012,6 +1029,9 @@ add_action( 'init', 'newspack_register_meta' );
 function newspack_get_editor_managed_meta_keys() {
 	return array(
 		'newspack_featured_image_position',
+		'newspack_post_featured_image_caption',
+		'newspack_post_featured_image_caption_enabled',
+		'newspack_post_featured_image_caption_include_credit',
 		'newspack_post_subtitle',
 		'newspack_article_summary_title',
 		'newspack_article_summary',
