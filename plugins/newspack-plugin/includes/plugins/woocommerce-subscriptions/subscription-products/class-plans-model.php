@@ -89,7 +89,7 @@ final class Plans_Model {
 		$query = [
 			'post_type'      => 'product',
 			'post_status'    => $statuses,
-			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.nopaging_posts_per_page -- Catalog-scale, memoized per request by the caller.
+			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging.posts_per_page_posts_per_page -- Catalog-scale, memoized per request by the caller.
 			'fields'         => 'ids',
 			'no_found_rows'  => true,
 		];
