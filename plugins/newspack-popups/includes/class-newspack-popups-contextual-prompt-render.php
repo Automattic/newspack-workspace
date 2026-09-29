@@ -1104,14 +1104,18 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 
 	/**
 	 * Whether a CTA can render as stored: a donate block needs Newspack Blocks
-	 * active, and a button needs somewhere to send the reader.
+	 * active and a donation platform that renders it — the "other" platform
+	 * strips it from every render — and a button needs somewhere to send the
+	 * reader.
 	 *
 	 * @param array $cta Parsed CTA child.
 	 * @return bool
 	 */
 	private static function can_render_cta( $cta ) {
 		if ( 'newspack-blocks/donate' === ( $cta['blockName'] ?? '' ) ) {
-			return WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' );
+			$stripped = method_exists( '\Newspack\Donations', 'is_platform_other' ) && \Newspack\Donations::is_platform_other();
+
+			return ! $stripped && WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' );
 		}
 
 		return self::buttons_have_destination( $cta );
