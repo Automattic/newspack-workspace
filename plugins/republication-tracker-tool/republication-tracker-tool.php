@@ -398,6 +398,50 @@ final class Republication_Tracker_Tool {
 		 */
 		return apply_filters( 'republication_tracker_tool_attribution', $attribution, $post, $plain_text );
 	}
+
+	/**
+	 * Get the formatted byline and site name (e.g. "by John Doe, Site Name")
+	 * shared by the HTML and plain text versions of the republishable content.
+	 *
+	 * @param string $author The author name to start from, before filtering.
+	 * @return string The byline text (may contain HTML author links).
+	 */
+	public static function get_byline_text( $author ) {
+		/**
+		 * Allow filtering of the byline that is output in the share dialog and the copyable plaintext.
+		 *
+		 * This is to provide support for plugins that do not implement
+		 * a filter on 'the_author', or in cases where the 'the_author'
+		 * filter returns incomplete information.
+		 *
+		 * @link https://developer.wordpress.org/reference/functions/get_the_author/
+		 * @link https://github.com/INN/republication-tracker-tool/issues/46
+		 */
+		$byline = apply_filters( 'republication_tracker_tool_byline', $author );
+
+		/**
+		 * Allow filtering of the byline format (e.g. "by %s") output in the share
+		 * dialog and the copyable plaintext. Should contain a %s placeholder for
+		 * the byline itself. Substituted with str_replace(), not sprintf(), so a
+		 * malformed value degrades instead of fataling.
+		 *
+		 * @param string $format The byline format. Defaults to "by %s".
+		 * @param string $byline The resolved byline the format will wrap.
+		 */
+		$byline_format = apply_filters(
+			'republication_tracker_tool_byline_format',
+			// translators: %s is the byline (e.g. an author name or attribution).
+			__( 'by %s', 'republication-tracker-tool' ),
+			$byline
+		);
+
+		return sprintf(
+			// translators: %1$s is the formatted byline (e.g. "by John Doe"), %2$s is the site name.
+			__( '%1$s, %2$s', 'republication-tracker-tool' ),
+			wp_kses_post( str_replace( '%s', $byline, $byline_format ) ),
+			wp_kses_post( get_bloginfo( 'name' ) )
+		);
+	}
 }
 
 /**

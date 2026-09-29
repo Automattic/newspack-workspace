@@ -259,4 +259,44 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'By Jane Smith, Test Blog', $output, 'The Plain Text tab should attribute the post to the Custom Byline value.' );
 		$this->assertStringNotContainsString( 'By John Doe', $output, 'The Plain Text tab should not fall back to the WP post author when a Custom Byline is active.' );
 	}
+
+	/**
+	 * The HTML and Plain Text tabs should share the same byline format, so a
+	 * CAP byline keeps the plugin's "by" prefix in both.
+	 */
+	public function test_republish_modal_html_and_plain_text_tabs_share_byline_format() {
+		global $post, $wp_query;
+
+		update_post_meta( $this->test_post->ID, '_newspack_byline_active', false );
+		update_option( 'republication_tracker_tool_enable_plain_text', 'on' );
+		$GLOBALS['_test_cap_coauthors'] = 'CAP Guest Author';
+
+		$post                     = $this->test_post;
+		$wp_query->is_single      = true;
+		$wp_query->queried_object = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+		setup_postdata( $this->test_post );
+
+		$args = array(
+			'before_widget' => '<div class="widget">',
+			'after_widget'  => '</div>',
+			'before_title'  => '<h2>',
+			'after_title'   => '</h2>',
+		);
+
+		$instance = array(
+			'title' => 'Republish This Story',
+			'text'  => 'Republish this story',
+		);
+
+		ob_start();
+		$this->widget->widget( $args, $instance );
+		$output = ob_get_clean();
+
+		unset( $GLOBALS['_test_cap_coauthors'] );
+		delete_option( 'republication_tracker_tool_enable_plain_text' );
+
+		// Once each in the modal's visible article info, the HTML tab and the Plain Text tab.
+		$this->assertSame( 3, substr_count( $output, 'by CAP Guest Author, Test Blog' ), 'Both the HTML and Plain Text tabs should prefix the CAP byline with "by".' );
+	}
 }
