@@ -126,7 +126,7 @@ class Newspack_UI {
 			return;
 		}
 		?>
-		<div class="newspack-ui">
+		<div id="newspack-ui__notices" class="newspack-ui">
 			<div class="newspack-ui__snackbar">
 				<?php foreach ( self::$notices as $notice ) : ?>
 					<div
@@ -562,7 +562,6 @@ class Newspack_UI {
 			</template>
 			<script>
 				( function() {
-					const snackbar = document.querySelector( '.newspack-ui__snackbar' );
 					document.getElementById( 'show-snackbar-example' ).addEventListener( 'click', function() {
 						newspackUI.notices.createNotice( 'This is a snackbar message' );
 					} );
@@ -572,6 +571,7 @@ class Newspack_UI {
 					const template = document.getElementById( 'snackbar-persistent-template' );
 					document.getElementById( 'show-snackbar-persistent' ).addEventListener( 'click', function() {
 						const item = template.content.firstElementChild.cloneNode( true );
+						const snackbar = document.querySelector( '#newspack-ui__notices .newspack-ui__snackbar' ) || document.querySelector( '.newspack-ui__snackbar' );
 						snackbar.appendChild( item );
 						item.querySelectorAll( 'a, button' ).forEach( function( el ) {
 							el.addEventListener( 'click', function() {
