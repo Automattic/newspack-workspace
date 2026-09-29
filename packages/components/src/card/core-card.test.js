@@ -75,11 +75,14 @@ describe( 'CoreCard', () => {
 		expect( vertical.querySelector( '.newspack-card--core__is-vertical' ) ).not.toBeNull();
 	} );
 
-	it( 'marks the card borderless only when noBorder is passed', () => {
+	it( 'marks the card borderless only when noBorder or isBorderless is passed', () => {
 		const { container: plain } = render( <CoreCard header="Settings" /> );
 		expect( plain.querySelector( '.newspack-card--core__no-border' ) ).toBeNull();
 
 		const { container: borderless } = render( <CoreCard header="Settings" noBorder /> );
 		expect( borderless.querySelector( '.newspack-card--core__no-border' ) ).not.toBeNull();
+
+		const { container: coreBorderless } = render( <CoreCard header="Settings" isBorderless /> );
+		expect( coreBorderless.querySelector( '.newspack-card--core__no-border' ) ).not.toBeNull();
 	} );
 } );

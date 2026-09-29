@@ -9,7 +9,8 @@
 	box-shadow: 0 0 0 1px var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
 }
 
-.newspack-card--core .newspack-card--core__header.components-card__header {
+.newspack-card--core .newspack-card--core__header.components-card__header,
+.newspack-card--core .components-card__footer {
 	border-color: var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
 }
 
