@@ -10,7 +10,7 @@
 .newspack-card-feature {
 	height: 100%;
 
-	&.newspack-card-feature--disabled {
+	&.newspack-card-feature--not-enabled {
 		border-color: var( --wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100} );
 	}
 
