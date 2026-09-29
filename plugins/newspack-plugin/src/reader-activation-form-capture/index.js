@@ -2,21 +2,50 @@
  * Internal dependencies
  */
 import '../shared/js/public-path';
-import { getMatchedForms, getEmailValue, getNameValues } from './utils';
+import { getMatchedForms, getEmailValue, getNameValues, isGravityForm } from './utils';
 
 // v3 tokens expire at 120s; refresh with margin.
 const CAPTCHA_TOKEN_TTL = 100 * 1000;
 
+// Longest a Gravity Forms submission is held for the registration response
+// (ms). The hold ends when the response lands, so this is a ceiling, not a
+// delay — but it must clear the endpoint's slow path (account creation:
+// user insert plus registration hooks, observed above 1.5s), or the auth
+// cookies lose the race and the page GF navigates to renders signed out.
+// GF shows its spinner throughout, so the worst case reads as submit
+// latency rather than a stuck form.
+const GF_CAPTURE_WAIT = 3000;
+
 window.newspackRAS = window.newspackRAS || [];
 window.newspackRAS.push( readerActivation => {
 	const config = window.newspack_form_capture || {};
-	const selectors = Array.isArray( config.selectors ) ? config.selectors : [];
-	if ( ! selectors.length ) {
+	// Each form belongs to one integration: a Gravity Forms form to the Gravity
+	// Forms integration, any other form to Form Capture. The config has
+	// an entry only for an integration that captures, so a form whose
+	// integration is off stays unmatched even where the other's selectors
+	// reach it, and each integration's switch covers its own forms.
+	const ownerOf = form => ( isGravityForm( form ) ? config.gravity_forms : config.other_forms );
+	const entries = [ config.gravity_forms, config.other_forms ].filter( entry => Array.isArray( entry?.selectors ) && entry.selectors.length );
+	if ( ! entries.length ) {
 		return;
 	}
+	const getCapturedForms = () => entries.flatMap( entry => getMatchedForms( entry.selectors ).filter( form => ownerOf( form ) === entry ) );
 
 	const captured = new Set();
 	const attached = new WeakSet();
+	// Gravity Forms ids of matched GF forms. Only forms whose element id is
+	// gform_<formid> are remembered: WPForms stamps data-formid too, and a
+	// WPForms form can carry the marker class. GF's AJAX postback
+	// re-renders the form from GFFormDisplay::get_form(), outside the block
+	// render filter that adds the marker class, so after a validation error
+	// or a page change the form on the page carries no marker. Its data-formid
+	// survives every render, and GF does not support the same form twice on a
+	// page, so an id remembered at first attach stands in for the class in
+	// two places: the pre_submission callback matches on it, and the
+	// observer's rescan re-attaches the re-rendered form by it, so the form
+	// warms a fresh reCAPTCHA v3 token on focus and is still captured past
+	// the token TTL.
+	const matchedFormIds = new Set();
 	let warmToken = null;
 	let warming = false;
 
@@ -92,8 +121,7 @@ window.newspackRAS.push( readerActivation => {
 		}
 	};
 
-	const handleSubmit = event => {
-		const form = event.target;
+	const captureForm = form => {
 		if ( form.checkValidity && ! form.checkValidity() ) {
 			return;
 		}
@@ -111,7 +139,7 @@ window.newspackRAS.push( readerActivation => {
 			// v3 tokens are single-use.
 			warmToken = null;
 		}
-		readerActivation.register( email, 'form-capture', getNameValues( form ), options ).catch( error => {
+		return readerActivation.register( email, ownerOf( form ).integration, getNameValues( form ), options ).catch( error => {
 			// Only failures that can succeed on a retry within this pageview
 			// release the dedupe: a network error (the response never parsed,
 			// so no code) or a server-side registration failure. Everything
@@ -128,12 +156,24 @@ window.newspackRAS.push( readerActivation => {
 		} );
 	};
 
+	const handleSubmit = event => captureForm( event.target );
+
 	const attach = () => {
-		getMatchedForms( selectors ).forEach( form => {
+		const forms = new Set( getCapturedForms() );
+		document.querySelectorAll( 'form[id^="gform_"][data-formid]' ).forEach( form => {
+			if ( matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) {
+				forms.add( form );
+			}
+		} );
+		forms.forEach( form => {
 			if ( attached.has( form ) ) {
 				return;
 			}
 			attached.add( form );
+			const formId = form.getAttribute( 'data-formid' );
+			if ( formId && form.id === `gform_${ formId }` ) {
+				matchedFormIds.add( formId );
+			}
 			form.addEventListener( 'focusin', warmCaptcha );
 			// No capture flag: submit always fires at the form itself, where
 			// capture and bubble listeners run together in registration order,
@@ -162,4 +202,59 @@ window.newspackRAS.push( readerActivation => {
 		}, 200 );
 	} );
 	observer.observe( document.body, { childList: true, subtree: true } );
+
+	/**
+	 * Gravity Forms (2.9+ theme framework) never yields a native submit event
+	 * to capture: its button intercepts the click and submits via programmatic
+	 * form.submit(), and its own submit listener cancels any native submit
+	 * event as an "unsupported flow". Hook GF's public filter bus instead, at
+	 * the point every GF submission funnels through — whatever the submission
+	 * type (submit, next, save…) or method, matching what the submit listener
+	 * sees from tools that submit natively. The callback must return the
+	 * payload: GF's awaited filter chain hands its return value onward, and
+	 * undefined breaks the vendor submission — which is also why capture
+	 * failures are swallowed here.
+	 */
+	let gformHooked = false;
+	const hookGravityForms = () => {
+		if ( gformHooked || ! window.gform?.utils?.addAsyncFilter ) {
+			return;
+		}
+		gformHooked = true;
+		window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
+			try {
+				const form = data?.form;
+				if ( form && ( getCapturedForms().includes( form ) || matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) ) {
+					const pending = captureForm( form );
+					if ( pending ) {
+						// GF awaits this filter, so hold the submission until
+						// the registration response lands its auth cookies —
+						// the page GF navigates to then renders the reader as
+						// signed in. Bounded: past GF_CAPTURE_WAIT the
+						// submission proceeds with the request still in
+						// flight, which keepalive lets survive navigation.
+						// Settling clears the timer, so no timer outlives the
+						// hold it bounds.
+						await new Promise( resolve => {
+							const timer = setTimeout( resolve, GF_CAPTURE_WAIT );
+							const settle = () => {
+								clearTimeout( timer );
+								resolve();
+							};
+							pending.then( settle, settle );
+						} );
+					}
+				}
+			} catch ( err ) {
+				// Capture must never break the vendor's submission.
+			}
+			return data;
+		} );
+	};
+	hookGravityForms();
+	// gform.utils can land after this deferred script (order follows DOM
+	// position). Every deferred script has run by DOMContentLoaded; load
+	// covers async stragglers.
+	document.addEventListener( 'DOMContentLoaded', hookGravityForms, { once: true } );
+	window.addEventListener( 'load', hookGravityForms, { once: true } );
 } );

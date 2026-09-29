@@ -23,8 +23,10 @@ The framework is built on top of [Data Events](../../data-events/README.md) and 
 | `class-integration.php` | Abstract base class. Implements settings storage, metadata prefix, outgoing/incoming field selection, contact preparation, the health-check shell, and the data-event handler dispatcher. |
 | `class-esp.php` | Built-in ESP integration. Generic adapter for Newspack Newsletters (Mailchimp, ActiveCampaign, Constant Contact). |
 | `class-incoming-field.php` | Value object describing an external field returned by an integration. Carries display metadata plus flags for access rules and segmentation criteria. |
+| `class-date-value.php` | Date value helpers shared by the pull pipeline and the access-rule evaluator: source-format normalization to ISO and calendar-date validation. |
 | `class-contact-pull.php` | Pull pipeline. Per-integration synchronous loopback requests plus ActionScheduler-backed retries with exponential backoff. |
 | `class-contact-cron.php` | Recurring cron orchestration. Stages users for pull/push and processes both queues every 5 minutes. |
+| `class-push-log.php` | Push log. The record of what was sent to each integration: one row per reader, integration and triggering push, written by `Contact_Sync`. |
 
 The registry class is `Newspack\Reader_Activation\Integrations` (parent namespace). Classes under this folder live in `Newspack\Reader_Activation\Integrations\*`.
 
@@ -38,12 +40,16 @@ Syncs contacts and metadata fields with the active Newspack Newsletters service 
 
 ### `form-capture`
 
-Registers readers from publisher-designated frontend forms built with any form tool (opt-in via the `newspack-form-capture` CSS class or configured selectors). Registered but disabled by default. It is the first capture-only built-in — neither a sync destination nor a pull source — which makes it the working reference for two patterns:
+Form Capture. Registers readers from publisher-designated frontend forms built with any tool but Gravity Forms, such as an ActiveCampaign embed (opt-in via the `newspack-form-capture` CSS class or configured selectors). Registered while `NEWSPACK_FORM_CAPTURE_ENABLED` is set or where a site already enabled it, and disabled by default. It is the first capture-only built-in — neither a sync destination nor a pull source — which makes it the working reference for two patterns:
 
 - **Capability declarations over failing gates.** `supports_push()`/`supports_pull()` return `false` (no dead outbound/inbound controls, no bearing on `has_one_syncable_integration()`), while `can_sync()` succeeds — capture-only is a declared capability, not an error state.
 - **One switch for the frontend registration surface.** `supports_frontend_registration()` returns the integration's *enabled* state **and** its `get_unsupported_reason()` being null, so the page-emitted key, the endpoint acceptance, and the capture script share a single off switch — one that also closes when the site's configuration changes after enabling.
 
 It reports itself unsupported on reCAPTCHA v2, which cannot be pre-acquired for a page-navigating form submit, and sizes its own registration rate-limit bucket via the `newspack_frontend_registration_rate_limit` filter.
+
+### `gravity-forms`
+
+Registers readers from Gravity Forms submissions. It extends `form-capture` and shares its capture script, which sends each Gravity Forms form to this integration and every other form to `form-capture`, so a reader is registered once and each integration's switch covers its own forms. A "Register readers" toggle on the Gravity Forms block opts a placement in, and the block's render filter carries that attribute to the page as the `newspack-form-capture` class on the form tag; a form placed without the block opts in by carrying the class through its CSS Class Name setting, a route the help docs cover. It has no settings, so its card offers no settings page. It declares Gravity Forms as a required plugin, which `supports_frontend_registration()` also checks on every request, and its how-to through `get_guide()`, which the card's How it works menu item opens as a guide whose last step links the help docs. Registered on every site and disabled by default, except that a site upgrading with `form-capture` enabled and Gravity Forms active gets it enabled once (`maybe_enable_on_upgrade()`), since that site's Gravity Forms forms move here.
 
 ---
 
@@ -109,7 +115,8 @@ class My_Integration extends Integration {
     }
 
     public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
-        $contact = $this->prepare_contact( $contact );
+        // $contact arrives prepared: filtered to this integration's enabled
+        // fields and prefixed. Don't call prepare_contact() here.
         // ... push $contact to your API.
         return true;
     }
@@ -122,7 +129,7 @@ class My_Integration extends Integration {
 | --- | --- |
 | `register_settings_fields()` | Return static field declarations (key, type, default at minimum). Called from the constructor. No API calls, no conditional logic based on external state. |
 | `can_sync( $return_errors = false )` | Check whether the integration is configured and ready to sync. Return `bool` or `WP_Error` depending on `$return_errors`. Called before every push and pull. |
-| `push_contact_data( $contact, $context, $existing_contact )` | Send contact data to the external system. Return `true` on success or `WP_Error` on failure. Failed pushes are retried via Contact Sync's ActionScheduler-backed retry mechanism. |
+| `push_contact_data( $contact, $context, $existing_contact )` | Send contact data to the external system. Return `true` on success or `WP_Error` on failure. Failed pushes are retried via Contact Sync's ActionScheduler-backed retry mechanism. The framework reaches it only through the final `push_contact()` wrapper, which records the outcome (see Push below). |
 
 ### Optional overrides
 
@@ -141,7 +148,7 @@ class My_Integration extends Integration {
 | `register_handlers()` | Register data event handlers (see [Data Event Handlers](#data-event-handlers)) and any WordPress hooks the integration needs. Called once per *accepted* instance after all integrations have been registered — hook here, not in the constructor, so a rejected duplicate registration never leaves live callbacks behind. |
 | `supports_frontend_registration()` | Return `true` to expose this integration's registration key to the page and accept it on the frontend registration endpoint. Built-ins gate this on the enabled state so key, endpoint and script share one switch. |
 | `get_registration_key()` / `validate_registration_request()` | Override to implement custom registration key schemes. Default is timing-safe HMAC-SHA256 of the integration ID and a stored per-integration seed with the site's auth salt; `rotate_registration_key()` regenerates the seed, revoking the key without touching `AUTH_SALT`. |
-| `handle_logged_in_user_registration( $user, $request )` | Called when a logged-in user attempts to register again via the frontend. Use to update user data, link the account, record a new event, etc. Default is a no-op. |
+| `handle_logged_in_user_registration( $user, $request )` | Called when a logged-in user attempts to register again via the frontend. Use to update user data, link the account, record a new event, etc. Default is a no-op. Runs only after every gate ahead of the logged-in branch has passed, including the integration's own `validate_registration_request()`. |
 | `get_my_account_menu_item()` | Return `[ 'slug' => ..., 'label' => ..., 'position' => ... ]` to add a tab to the WooCommerce My Account page. Default returns `null` (no tab). |
 | `render_my_account_page( $value )` | Echo markup for the integration's My Account page. Called inside the WooCommerce account template. |
 | `delete_contact( $email )` | Remove the contact identified by `$email` from the external system. Default returns a `not_implemented` WP_Error. Required only if the integration declares it can be set to `delete` mode for account-deletion handling. |
@@ -213,9 +220,11 @@ Each integration automatically gets the fields for the directions it declares (s
 | --- | --- | --- | --- |
 | `metadata_prefix` | outbound | `text` | String prepended to every outgoing metadata field name (default `NP_`). Stored at `newspack_integration_metadata_prefix_{id}`. Required so outgoing field names are unique on the external system. |
 | `outgoing_sync_enabled` | outbound | `checkbox` | Whether outbound sync currently runs. Default `true`. Pausing it stops pushes (including account-deletion propagation) while preserving the outgoing field selection. Stored at `newspack_integration_settings_{id}_outgoing_sync_enabled`. |
-| `outgoing_metadata_fields` | outbound | `metadata` | Subset of Newspack metadata fields to push. Stored at `newspack_integration_outgoing_fields_{id}`. |
+| `outgoing_metadata_fields` | outbound | `metadata` | Subset of Newspack metadata fields to push, referenced by canonical display name rather than a raw key. Stored at `newspack_integration_outgoing_fields_{id}`. See Push (Outgoing Sync) below for how an integration without a saved selection resolves one. |
 | `incoming_sync_enabled` | inbound | `checkbox` | Whether inbound sync currently runs. Default `true`. Pausing it stops pulls while preserving the incoming field selection. Stored at `newspack_integration_settings_{id}_incoming_sync_enabled`. |
 | `incoming_metadata_fields` | inbound | `metadata` | Subset of external fields to pull and store on the Newspack user. Stored at `newspack_integration_incoming_fields_{id}` as a `key => raw_data` map. |
+
+**Field grouping.** `get_settings_config()` also attaches `grouped_options` to `outgoing_metadata_fields` — the same catalog as `options`, organized into labeled sections by originating class (`Metadata::get_grouped_default_fields()`) for the configure UI's picker. A section made entirely of fields marked `'status' => 'legacy'` in their class's field config sorts after every other section; adjacent sections sharing a label are folded into one, so `Legacy_Basic` and `Legacy_Payment` — both named "Legacy" — render as a single trailing panel instead of two identical ones.
 
 ### Built-in account-deletion fields
 
@@ -228,7 +237,9 @@ Deletion propagates through the push pipeline, so push-capable integrations also
 
 **Legacy migration.** Both fields derive from the single legacy `sync_esp_delete` boolean, which was effectively three-way in behavior: `true` hard-deleted the contact, while `false` kept the contact but removed it from every list (still a deletion signal). Because *both* states propagated a deletion, a migrated site always keeps `sync_account_deletion = true`; the legacy boolean only picks the handling mode — `true → delete`, `false → flag`. Mapping legacy `false` to `flag` (rather than disabling sync) preserves the old "don't hard-delete, but still signal the deletion" posture. Sites that never set the legacy option fall through to the field defaults. See `Integration::migrate_account_deletion_setting()`.
 
-The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the v1 `reader_delete_sync` data event handler. Legacy-mode sites continue to use the older `reader_deleted` handler that calls Newspack Newsletters directly.
+The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the `reader_delete_sync` data event handler, on every site.
+
+In `flag` mode, the dispatcher also calls the integration's `flag_deletion_cleanup( $email )` after the metadata push — independent of whether that push succeeded, since the reader must stop receiving outreach either way. The default is a no-op; the built-in ESP integration overrides it to clear the contact from every list (`Newspack_Newsletters_Contacts::update_lists()`), keeping the flagged record but ending further outreach. A provider with no list management (Campaign Monitor) has nothing to clear and reports that as success, not failure. Cleanup failures fold into `handle_account_deletion()`'s aggregated error like any other failure in the loop, but — unlike the metadata push and `delete` mode above — are **not** scheduled for retry; that gap mirrors the legacy deletion path this replaced and is tracked separately as hardening work.
 
 ### Conditional fields
 
@@ -267,19 +278,21 @@ An **undeclared** toggle field reads as enabled. An integration that overrides `
 
 ## Push (Outgoing Sync)
 
-When a contact needs to be synced, the framework calls `push_contact_data()` on every active integration. The contact array is the Newspack canonical form (email, name, metadata, etc.). Implementations should call `$this->prepare_contact( $contact )` first, which, on the v1 metadata schema:
+When a contact needs to be synced, the framework calls `push_contact()` on every active integration. That method is `final` on the base class: it delegates to your `push_contact_data()` and records one `newspack_sync_push_contact` entry through `newspack_log` — type `debug` on success, `error` on a `WP_Error` — carrying the integration id, provider slug, context, the contact exactly as handed to the integration, the options in effect, and any error messages and codes. That entry is the manager-log record of a sync for every integration, including ones that never go through Newspack Newsletters (whose upsert writes its own `newspack_esp_sync_upsert_contact` entry, so a Mailchimp push shows both). It reflects what the framework handed over: an implementation may still reshape the payload internally, and a non-error result only means the integration reported success. The contact array is the Newspack canonical form (email, name, metadata, etc.). The framework runs it through `prepare_contact()` before calling `push_contact()`, so `push_contact_data()` receives the prepared contact and must not call `prepare_contact()` itself, or any custom preparation logic in an override runs twice. `prepare_contact()`:
 
-1. Filters `$contact['metadata']` to the keys enabled on this integration.
-2. Renames keys using the integration's metadata prefix.
-3. Preserves keys already in prefixed form if the underlying field is enabled.
+1. Filters `$contact['metadata']` to the fields enabled on this integration.
+2. Renames raw keys to `prefix . field name`, using the integration's metadata prefix.
+3. Preserves keys already in prefixed form if the underlying field is enabled, or if the merged catalog doesn't know the name at all (custom fields injected by site snippets).
 
-On the legacy metadata schema (sites without `NEWSPACK_SYNC_METADATA_VERSION`), the metadata classes pre-filter and prefix the data by the **ESP integration's** field selection before it reaches `prepare_contact()`. The `esp` integration takes it unchanged; every other integration still narrows the set to its own enabled Outbound fields.
+Raw keys resolve through the merged `raw_key => name` catalog, so both members of a value-equivalent pair (legacy `account`, new `Account`) land on the same ESP key no matter which raw key the caller supplies. Only the raw keys in `Metadata::UTM_RAW_KEYS` match by suffix — an enabled `Signup UTM: ` carries `signup_page_utm_source` and its siblings, but never a bare `signup_page_utm`, which carries no value of its own. Every other field matches exactly, so a label registered through `newspack_ras_metadata_keys` that happens to end in `': '` can never carry a *different* field past the selection. A key naming a field the catalog knows but hasn't enabled here is dropped either way, whether it arrived raw or already prefixed — checked against every registered field, not only the currently-available ones, so a name left over from when its class briefly had a feature flag on still filters instead of passing through as if it were an unrecognized custom field.
 
-Matching runs on whole keys, built with the legacy pipeline's prefix (`Metadata::get_prefix()` — the prefix the data actually carries, which may differ from the integration's own). Each enabled label contributes both the key `Metadata::get_key()` produces, so keys reshaped by the `newspack_ras_metadata_key` filter still match, and the plain `prefix . label` shape. Only the raw keys in `Legacy_Metadata::UTM_RAW_KEYS` match by prefix — an enabled `Signup UTM: ` carries `Signup UTM: source` and its siblings. A label registered through `newspack_ras_metadata_keys` that happens to end in `': '` is matched exactly, so it can never carry a *different* field past the selection. Unprefixed sync-control keys (`Legacy_Metadata::SYNC_CONTROL_KEYS`: `status`, `status_if_new`) always pass through; any other unprefixed key is dropped.
+Unprefixed sync-control keys (`Metadata::SYNC_CONTROL_KEYS`: `status`, `status_if_new`) always pass through; any other unregistered unprefixed key is dropped. An already-prefixed key supplied directly in the input is never overwritten by a raw key that resolves to the same output — that protection is one-directional, though: two raw keys sharing a label (legacy `registration_page` and `current_page_url` both resolve to "Registration Page") still follow last-write-wins against each other.
 
-An integration that has **never saved** an Outbound selection inherits the ESP integration's effective selection, so un-migrated sites keep their pre-existing payloads; an explicitly saved selection always wins, and saving with nothing checked genuinely means "push no metadata fields". Override `get_inherited_legacy_outgoing_fields()` to inherit a different set, or return `[]` from it to opt out of inheritance entirely. Two legacy-mode caveats: the upstream pre-filter runs first, so an explicit selection can only narrow the ESP's set; and once a selection is saved, inheritance only returns if the integration's `newspack_integration_outgoing_fields_*` option is deleted (NPPD-2107).
+An integration that has **never saved** an Outbound selection inherits the ESP integration's effective selection, so un-migrated sites keep their pre-existing payloads; an explicitly saved selection always wins, and saving with nothing checked genuinely means "push no metadata fields". A corrupt (non-array) stored value is treated the same as no selection, so it inherits rather than failing closed to empty. Override `get_inherited_outgoing_fields()` to inherit a different set, or return `[]` from it to opt out of inheritance entirely. Once a selection is saved, inheritance only returns if the integration's `newspack_integration_outgoing_fields_*` option is deleted (NPPD-2107).
 
-**Default posture.** Inheritance preserves behavior rather than tightening it. On a site where nobody ever saved an ESP selection, `Esp::get_enabled_outgoing_fields()` falls through to `Metadata::get_default_fields()` — every available field, including Membership Status, Total Paid and Recurring Payment — and a newly connected integration inherits exactly that. Per-integration selection is what closes that exposure, and it takes an explicit save to do so.
+**ESP resolution order.** No flag gates this, and it's what every other integration's inheritance ultimately reaches too, since `get_inherited_outgoing_fields()` calls into the ESP integration for it. `Esp::get_enabled_outgoing_fields()` checks three tiers in order: its own saved outgoing-fields option; failing that, the legacy global `_newspack_metadata_fields` option (`Metadata::FIELDS_OPTION`), copied into that per-integration option **verbatim** on first read rather than through the validating setter — validating here would permanently strip a currently-unavailable name (e.g. a payment field while WooCommerce is inactive) from a publisher's existing selection; failing that, the era-scoped default described next.
+
+**Default posture.** Inheritance preserves behavior rather than tightening it. The final tier, `Metadata::get_default_enabled_fields()`, returns every available field of the schema era the site comes from — including Membership Status, Total Paid and Recurring Payment on a legacy site. The era is derived once and stamped into `newspack_sync_schema_origin` (`Metadata::SCHEMA_ORIGIN_OPTION`), and the stamp wins on every later read; only the field list is recomputed per read, so a field whose class becomes available later (WooCommerce activated, say) joins the default without a new stamp. Correcting a wrong era means changing that stored option. Per-integration selection is what closes the exposure, and it takes an explicit save to do so.
 
 ### Optional `$options` parameter
 
@@ -299,7 +312,7 @@ The abstract signature intentionally stays three-parameter (`push_contact_data( 
 
 ### Retries
 
-Failed pushes are scheduled for retry by the upstream `Contact_Sync` class with exponential backoff via ActionScheduler. Each integration's retries are grouped under `newspack-integration-{id}` so they can be inspected and managed independently in the Activity Logs UI.
+Failed pushes are scheduled for retry by the upstream `Contact_Sync` class with exponential backoff via ActionScheduler. Each integration's retries are grouped under `newspack-integration-{id}` so they can be inspected and managed independently in the Activity Logs UI. A retry chain is a single row in the [Push Log](#push-log). Retries go through `push_contact()` too, so every attempt leaves its own `newspack_sync_push_contact` entry.
 
 ---
 
@@ -332,14 +345,19 @@ Only transient failures (network errors, provider 5xx/429) are retried. A reject
 $field = new Incoming_Field( 'membership_level', $raw );
 $field
     ->set_name( __( 'Membership Level', 'my-plugin' ) )
-    ->set_value_type( 'string' )                    // 'string' or 'boolean'.
-    ->set_matching_function( 'list__in' )           // 'default', 'list__in', 'list__not_in', 'range'.
+    ->set_value_type( 'string' )                    // 'string', 'boolean', 'number', 'date', 'datetime', 'select', or 'multiselect'.
+    ->set_matching_function( 'list__in' )           // 'default', 'list__in', 'list__not_in', 'range', 'date_range'.
+    ->set_date_format( '' )                         // PHP date format (e.g. 'm/d/Y'); empty if provider sends ISO 8601 / Y-m-d.
     ->set_options( [ [ 'value' => 'gold', 'label' => 'Gold' ], ... ] )
     ->set_description( __( 'Member tier from the CRM.', 'my-plugin' ) )
     ->set_is_access_rule( true )                    // Register as a content gate access rule.
     ->set_is_segment_criteria( true )               // Register as a popups segmentation criterion.
     ->set_access_rule_callback( function ( $user_id, $args ) { /* ... */ } );
 ```
+
+**Declare `date_format` on every `date` / `datetime` field, even when it is empty.** The raw schema array is snapshotted when a publisher enables a field, and the key's presence is how the framework tells "the provider says its dates are ISO 8601" from "this entry predates source formats, so the format is unknown". An entry set to `date_range` with the key *absent* is refreshed from the live schema on the next read; a format the live schema declares is persisted back — a one-time repair. When the live schema declares nothing either, the entry is treated as ISO for that read only and re-examined on the next one, so a declaration that arrives later (a provider update, a cache that was empty) still lands — which is also why an integration that never declares the key keeps re-fetching the live schema on every read. One that declares `''` is taken at its word and never refetched.
+
+A date value the framework cannot confidently parse is stored **untouched** rather than guessed at — the matcher then rejects it, so the criterion matches nobody rather than matching wrongly. When that happens the pull writes a line to the Newspack log naming the field and the source format it used, which is the only signal that a declared format is missing or wrong.
 
 Use `configure_incoming_field()` to enrich a field after construction — it's called on every field returned by `get_available_incoming_fields()` and again whenever stored fields are re-hydrated. This is where you set `is_access_rule`, `is_segment_criteria`, and any custom callback.
 
@@ -460,6 +478,50 @@ An empty `integration_id` queries every group registered by the framework.
 
 ---
 
+## Push Log
+
+`Push_Log` records every outbound operation `Contact_Sync` performs against an integration — contact upserts, deletion flags and hard deletes — in the `{prefix}newspack_integrations_push_log` table. It answers "what did we send this reader's CRM record, when, and did it arrive?", which ActionScheduler cannot: most pushes are not actions of their own, retry args carry a user ID rather than an email, and an intermediate retry completes normally while the sync is still failing.
+
+Integrations do not write to it. `Contact_Sync` does, because only it knows which attempt of a chain a push was, whether another follows, and when a chain gives up. Pulls, dry runs and pushes that never ran (sync disabled, outbound paused) are not recorded.
+
+### What a row is
+
+One reader, one integration, one triggering push. A fan-out to three integrations writes three rows.
+
+- **Retries update the row.** The row ID rides in the retry's ActionScheduler args as `log_id`. `attempts` counts pushes made so far; `max_attempts` is the ceiling when the row was written (`MAX_RETRIES + 1`, or 1 when nothing will retry: a CLI push scoped with `--skip-lists`/`--fields`, or a contact with no account to rebuild from). It is a ceiling, not a promise: a permanent or benign result ends a row on its first attempt. Read `status` to know whether another attempt is coming.
+- **`status` describes the sync, not an action**: `success`, `retrying` or `failed`. An error row is written as `failed` and becomes `retrying` only when a retry is actually scheduled: if Action Scheduler stores nothing, the row stays `failed`. A retry that gives up before pushing ends the row as `failed` with `error_code = retry_aborted`. A benign result is a `success` that keeps `error_class = benign`.
+- **`payload`** is the prepared contact as handed to the integration: as close to the wire as the framework sees. An integration may still reshape it internally. Hard deletes have none. On an email change it also carries `previous_email`, the address the contact was matched on: that is log context, not data sent. Because it is part of the payload, the first routine push after an email change adds a row of its own rather than collapsing, which leaves the email-change row intact as the record of the change.
+- **Identical pushes collapse.** A clean successful first-attempt upsert whose payload matches the reader's latest row for that integration bumps `repeat_count` and `updated_at` on that row instead of adding one, so the recurring sync does not grow the table. The comparison ignores key order and volatile fields (`Last Active` by default; filter `newspack_integrations_push_log_volatile_fields`, whose names are field names as sent to the integration, without its prefix). Deletion rows never collapse.
+- **Flag-mode deletion is two steps.** When the flag push lands but `flag_deletion_cleanup()` fails, the row ends as `failed` with `error_code = flag_cleanup_failed`: the deleted reader is still on the lists. The same holds when the push came back benign (the contact was already deleted at the integration): no retry follows a benign result, so the failed cleanup is the only record that a list still holds the reader.
+- **Error fields are never cleared**, so a row that succeeds on a later attempt still says what the earlier ones hit.
+
+### Reading the log
+
+The Logs page of an integration (Audience → Integrations → an integration's menu → Logs) opens on a "Sync activity" tab backed by read-only methods on `Push_Log`. None writes, and every lookup leads with an equality on the leading column of an index the table already has.
+
+- **`Push_Log::query( $args )`** lists one integration's rows by last update, without payloads or error messages: a provider's message can run to thousands of characters, and a list does not show it. `search` takes a full email, which also matches rows of the account that address belongs to and of the accounts its own rows name (a reader who changed address keeps one history, and the address they left still finds the email-change push, which is logged under the new one), or the start of an address. There is no match in the middle of an address: it could not use the `email` index. `needs_attention` keeps `retrying` and `failed` rows with no later `success` for the same reader and integration. An upsert normally sends the full contact, so any later success supersedes a failed or retrying one (a retry that still runs writes its row again, so a new failure puts it back, while a row whose retry is gone is never rewritten); a failed deletion (`flag` or `delete`) is only made up for by a later successful deletion, so a reader who signs up again does not hide an erasure that never reached the provider. "Same reader" means the address or the account, asked as two lookups per open failure rather than one `OR` over both, because a dependent subquery cannot serve an `OR` from either index. It is worked out when reading; nothing is stored.
+- **Every read returns a `WP_Error`** when the table cannot be read (`query()`, `get()`, `get_predecessor()`). Reads run with the database layer's error output suppressed, the account lookup behind a full-email search included, so without it a broken or missing table would read as a log with nothing in it, or as an entry that is not there. The routes answer 500 and the screen reports a failed load instead. The message carries neither the statement nor the database's own text, either of which can quote the reader's address.
+- **`Push_Log::get( $id, $integration_id )`** returns one row with its payload and error message. A row of another integration reads as missing (`null`).
+- **`Push_Log::get_predecessor( $row )`** returns the reader's previous `success` row for that integration, and **`Push_Log::compare_payloads( $row, $predecessor, $prefix )`** compares the two field by field. It compares with the last *successful* push because a failed one never reached the provider; on a failed row the comparison reads as what did not arrive, except a `flag_cleanup_failed` row, whose push itself reached the provider. The comparison is against what Newspack last sent, so edits made at the provider are invisible to it. Volatile fields are flagged, from the same `newspack_integrations_push_log_volatile_fields` filter the collapse check uses.
+- **An operation other than an upsert is compared on its own fields.** A `flag` row carries the address and a few deletion fields by design, so only the fields that row sent take part: the rest were never cleared at the provider, and listing them as emptied would describe an erasure that did not happen. An upsert normally sends the whole contact, so a field it stopped sending stays on the list. A CLI push scoped with `--fields` is the exception: it sends only the named fields, so the rest are not really dropped. It is logged as an ordinary upsert, which carries further: it becomes the predecessor of the reader's next full push, whose comparison then shows every field the scoped push left out as changed from nothing, and as a later success it takes a failed full update off "needs attention" without having sent what failed. That is why an empty "needs attention" list reads as what the log holds, not as an all-clear. Telling scoped pushes apart needs the write side to record the scoping.
+- **The two questions use different clocks.** The predecessor is the previous row by `id`, while "needs attention" asks which push finished later by `updated_at`. When a retry chain overlaps a newer push for the same reader, a row can be compared with a push that finished after it.
+
+The wizard exposes them as `GET /newspack/v1/wizard/newspack-audience-integrations/settings/{integration_id}/push-log` and `…/push-log/{id}`. The list carries `retention_days`, so the screen names the windows the site keeps rather than repeating the defaults. A `retrying` row's `retry` says whether its Action Scheduler action is still pending or running now (the row points at a running retry until its push returns); "Run retry now" goes through the existing `…/logs/{action_id}/run` route. The second tab, "Scheduled actions", is the Action Scheduler list: it says a job ran, not that a sync worked.
+
+### Retention and privacy
+
+The hourly `newspack_integrations_push_log_cleanup` cron deletes `success` rows 30 days after their last update and `failed` or `retrying` rows after 90, in batches of 1,000. Each run stops after 5 batches that deleted rows (looking at an integration with nothing to prune does not count). A run that stops there with expired rows still left logs `newspack_integrations_push_log_cleanup_capped`, so a backlog that outgrows the cron is visible; the rest goes on the next run. Tune the windows with `newspack_integrations_push_log_retention_days`; add the hook name to `NEWSPACK_CRON_DISABLE` to turn the cron off. A collapsed row keeps refreshing `updated_at`, so an active reader whose data has not changed holds one live row per integration.
+
+Rows hold reader emails and pushed field values. A personal-data eraser (`newspack-integrations-push-log`) deletes a reader's rows by email and by account, so rows under a previous address go too. The account comes from the WP user the address resolves to and from the rows stored under that address, so a request that arrives after the account was deleted still reaches them. Guest and deletion rows name no account (`user_id` 0) and are matched by email alone.
+
+Writing the log never breaks a sync: a database failure returns 0 to the caller and is reported once per request as `newspack_integrations_push_log_write_failed`. Statements that carry reader data run with `$wpdb` error output suppressed, because a failed statement would otherwise reach the PHP error log whole, email and payload included; that report is the signal instead.
+
+### Changing the schema
+
+Edit the `CREATE TABLE` in `Push_Log::maybe_create_table()` and bump `TABLE_VERSION`. The stored version no longer matches, so `dbDelta` runs on the next request and applies the change; the version is recorded only once the table is really there, so a failed run is retried rather than leaving every write to fail. The retry is hourly, not per request, for a host that keeps refusing the table. A table that disappears after its version was recorded (a restore, a manual drop) is created again: the first failed write finds it gone and forgets the version.
+
+---
+
 ## Health Checks
 
 The framework schedules an hourly cron hook `newspack_integration_health_check` that walks every active integration and runs:
@@ -515,10 +577,12 @@ To allow an integration to drive frontend reader registration (e.g. a third-part
 
 1. Override `supports_frontend_registration()` to return `true`. The framework will output the integration's registration key on the page and accept it on the registration endpoint. Prefer returning the integration's *enabled* state, plus any runtime prerequisite the integration has (as the built-in `form-capture` does, which also refuses when the site is on reCAPTCHA v2), so the key, the endpoint and any frontend script share a single off switch. Checking a prerequisite only when the integration is enabled leaves a site that changes the prerequisite afterwards emitting a key nothing can use.
 2. Optionally override `get_registration_key()` and `validate_registration_request()` to implement a custom key scheme (asymmetric keys, time-bounded tokens, etc.). The default is HMAC-SHA256 of the integration ID and a stored per-integration seed with the site's auth salt, compared in constant time; `rotate_registration_key()` regenerates the seed to revoke a key that is being abused (PHP-only — gate any admin surface for it on a capability check and a nonce). The pre-seed key is also accepted for one release, so pages cached before the upgrade keep validating until their TTL expires.
-3. Optionally override `handle_logged_in_user_registration( $user, $request )` to react when an already-logged-in reader submits a registration request — record a new donation, link an account, fire an analytics event, etc.
+3. Optionally override `handle_logged_in_user_registration( $user, $request )` to react when an already-logged-in reader submits a registration request — record a new donation, link an account, fire an analytics event, etc. It runs only after the request has passed every gate ahead of the logged-in branch in `Reader_Registration::api_frontend_register_reader()`, including the integration's own `validate_registration_request()`. That validator also guards anonymous registration, so keep it as strict as that path needs, and make it accept what the integration's client sends for a logged-in reader. None of those gates ties the request to `$user`: `npe` and `metadata` are caller-supplied on this path, not read from the session, and the email check comes after this branch, so `npe` can even be empty. Anything the handler attaches to `$user` needs its own check that it belongs to that account.
 
 Each integration's registration traffic is rate-limited per IP in its own bucket (see `Reader_Registration::get_rate_limit_bucket_for()`); integrations expecting more than the default 10/hour should size their bucket via the `newspack_frontend_registration_rate_limit` filter, as `form-capture` does.
 
+A new reader's first contact sync reaches Sync Activity as `RAS Reader registration` unless an integration names its own sign-ups: filter `newspack_reader_registered_sync_context` and match the event data's `metadata.registration_method`, as `form-capture` does.
+
 The built-in JS client (`newspackReaderActivation.register()`) always sends the value returned by `get_registration_key()`. Custom key schemes that diverge from this default need their own client-side code to compute and submit the key.
 
-The built-in `form-capture` integration ([class-form-capture.php](class-form-capture.php) and `src/reader-activation-form-capture/`) is the reference implementation of this section end to end: enabled-gated key emission, a capture script driving `register()`, magic-link suppression for repeat captures, and existing-reader sync scheduling.
+The built-in `form-capture` integration ([class-form-capture.php](class-form-capture.php) and `src/reader-activation-form-capture/`) is the reference implementation of this section end to end: enabled-gated key emission, a capture script driving `register()`, magic-link suppression for repeat captures, existing-reader sync scheduling, and new-reader sync naming.

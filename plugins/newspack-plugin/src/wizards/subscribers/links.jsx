@@ -42,21 +42,16 @@ export const SubscriptionLink = ( { href, children } ) => {
 };
 
 /**
- * Where a group's name goes.
+ * Where a group's name goes: the in-wizard group detail screen.
  *
- * The in-wizard group detail screen is not registered yet, and the wizard
- * redirects an unmatched route back to the subscriber list — so pointing a group
- * at `#/groups/<id>` today would silently strand the user rather than 404. Until
- * that screen lands the target stays the group's own subscription edit screen,
- * which is what the group list already links to.
+ * The single switch every group affordance in the wizard follows. `/groups/:id`
+ * is registered in the wizard's sections, so a group with an id resolves to the
+ * detail screen; one without has nothing to open and renders unlinked.
  *
- * SINGLE SWITCH: when the group detail route is registered, change this to
- * return `#/groups/${ id }` and every group affordance in the wizard follows.
- *
- * @param {Object} group A group entry carrying `id` and `editUrl`.
+ * @param {Object} group A group entry carrying `id`.
  * @return {string} The href, or '' when there is nothing to open.
  */
-export const groupDetailHref = group => group?.editUrl || '';
+export const groupDetailHref = group => ( group?.id ? `#/groups/${ group.id }` : '' );
 
 /**
  * Whether a value is a safe in-wizard hash route (`#/…`).

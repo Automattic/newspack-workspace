@@ -10,6 +10,7 @@ namespace Newspack\Reader_Activation;
 use Newspack\Access_Rules;
 use Newspack\Reader_Data;
 use Newspack\Reader_Activation\Integration;
+use Newspack\Reader_Activation\Integrations\Date_Value;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
 
 defined( 'ABSPATH' ) || exit;
@@ -25,6 +26,16 @@ class Promoted_Fields {
 	 * @var array|null
 	 */
 	private static $promoted_fields = null;
+
+	/**
+	 * Matching functions that predate the newspack-popups capability probe. Any
+	 * newspack-popups build old enough to lack `supports_matching_function()`
+	 * still resolves every one of these, so they never need gating — only
+	 * operators introduced alongside or after the probe do.
+	 *
+	 * @var string[]
+	 */
+	private const BASELINE_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in' ];
 
 	/**
 	 * Initialize hooks.
@@ -120,14 +131,34 @@ class Promoted_Fields {
 			if ( ! $field->is_access_rule() ) {
 				continue;
 			}
+			$empty_grants_access = in_array( $field->get_matching_function(), [ 'list__not_in', 'range' ], true );
 			Access_Rules::register_rule(
 				[
-					'id'          => $key,
-					'name'        => self::get_display_name( $field, $integration ),
-					'description' => $field->get_description(),
-					'options'     => $field->get_options(),
-					'is_boolean'  => 'boolean' === $field->get_value_type(),
-					'callback'    => function ( $user_id, $args ) use ( $field ) {
+					'id'                  => $key,
+					'name'                => self::get_display_name( $field, $integration ),
+					'description'         => $field->get_description(),
+					'options'             => $field->get_options(),
+					// The options here are a list the provider already resolved, so
+					// Access_Rules can't derive this: a dropdown the provider has no
+					// choices for yet would register as free text.
+					'has_options'         => $field->takes_option_values(),
+					'is_boolean'          => 'boolean' === $field->get_value_type(),
+					// Read off the matching function, because that is what decides it:
+					// `list__not_in` naming nothing excludes nobody, and `range` with no
+					// bounds falls back to 0..PHP_INT_MAX. Either admits every reader who
+					// holds the field at all. `list__in`, `date_range` and `default` deny
+					// on an empty value instead.
+					'empty_grants_access' => $empty_grants_access,
+					// Narrower than the flag's own definition, which counts any empty
+					// value as unconfigured whichever way the rule then evaluates: a
+					// `list__in` field naming nothing denies every reader, saves without
+					// refusal, and reads as a blank condition in the gate summary. Only
+					// the granting ones are refused a save here, so that this change
+					// leaves promoted fields evaluating and saving as they did. Closing
+					// the gap belongs with the rest of the unconfigured-rule warnings, in
+					// NPPD-2227.
+					'requires_value'      => $empty_grants_access,
+					'callback'            => function ( $user_id, $args ) use ( $field ) {
 						return self::evaluate_field( $field, $user_id, $args );
 					},
 				]
@@ -183,13 +214,39 @@ class Promoted_Fields {
 				[
 					'name'               => self::get_display_name( $field, $integration ),
 					'category'           => 'integrations',
-					'matching_function'  => $field->get_matching_function(),
+					'matching_function'  => self::supported_matching_function( $field->get_matching_function() ),
 					'matching_attribute' => $field->get_key(),
 					'options'            => $options,
 					'description'        => $field->get_description(),
 				]
 			);
 		}
+	}
+
+	/**
+	 * Resolve a matching function the installed newspack-popups can actually run.
+	 *
+	 * Newer operators ship here before newspack-popups is updated to match, and an
+	 * old build leaves an unresolvable name as a raw string and then calls it —
+	 * a TypeError that escapes segment matching and takes prompt display down
+	 * sitewide, not just for that segment. Newer builds fail closed on their own,
+	 * but that guard is exactly what a stale build lacks, so ask first and fall
+	 * back to exact matching (a criterion that matches too narrowly, rather than
+	 * one that breaks the page).
+	 *
+	 * @param string $matching_function The field's matching function.
+	 * @return string A matching function the installed newspack-popups supports.
+	 */
+	private static function supported_matching_function( $matching_function ) {
+		if ( in_array( $matching_function, self::BASELINE_MATCHING_FUNCTIONS, true ) ) {
+			return $matching_function;
+		}
+		// An older newspack-popups has no such method. Its absence means "cannot
+		// confirm support", which for anything past the baseline means don't emit it.
+		if ( ! method_exists( '\Newspack_Popups_Criteria', 'supports_matching_function' ) ) {
+			return 'default';
+		}
+		return \Newspack_Popups_Criteria::supports_matching_function( $matching_function ) ? $matching_function : 'default';
 	}
 
 	/**
@@ -242,7 +299,30 @@ class Promoted_Fields {
 			case 'list__not_in':
 				$user_values = self::parse_list_value( $value );
 				return empty( array_intersect( (array) $args, $user_values ) );
+			case 'date_range':
+				// Access rules have no range UI — a rule still holds one typed value and
+				// still matches it exactly. Both sides go through the same normalizer:
+				// the rule, because a publisher may write it in the provider's own
+				// format ('03/04/2026') while the pull rewrites stored values to ISO;
+				// and the stored value, because the pull only rewrites a reader's value
+				// on that reader's next pull — until then it is still in the provider's
+				// format, and the rule must not deny a reader over that timing.
+				$stored_date = Date_Value::to_calendar_date(
+					Date_Value::normalize( $value, $field->get_date_format(), $field->get_value_type() )
+				);
+				$rule_date   = Date_Value::to_calendar_date(
+					Date_Value::normalize( $args, $field->get_date_format(), $field->get_value_type() )
+				);
+				return null !== $stored_date && $stored_date === $rule_date;
 			default:
+				// A rule on an options-backed field stores the chosen options as a list,
+				// because that is the shape `has_options` makes the sanitizer require,
+				// while the reader holds the single value the provider sent. Membership
+				// is the comparison there; equality still decides wherever both sides
+				// carry the same shape, which is every other field.
+				if ( is_array( $args ) && ! is_array( $value ) ) {
+					return in_array( $value, $args, true );
+				}
 				return $value === $args;
 		}
 	}

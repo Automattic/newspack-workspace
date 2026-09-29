@@ -8,11 +8,12 @@
 
 import { makeGetInitialView } from '../../utils/initial-view';
 
+// The `auto-draft` key stays so legacy deep links still land on the Draft chip.
 const POST_STATUS_TO_FILTER_VALUE = {
 	trash: 'trash',
-	draft: 'draft,pending,auto-draft',
-	pending: 'draft,pending,auto-draft',
-	'auto-draft': 'draft,pending,auto-draft',
+	draft: 'draft,pending',
+	pending: 'draft,pending',
+	'auto-draft': 'draft,pending',
 	future: 'future',
 	publish: 'publish,private',
 	private: 'publish,private',

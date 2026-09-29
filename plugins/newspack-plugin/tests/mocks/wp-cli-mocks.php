@@ -123,6 +123,18 @@ namespace {
 			}
 
 			/**
+			 * Real WP_CLI::confirm() prompts on STDIN and exits on anything but 'y';
+			 * the mock records the question and returns, standing in for a "yes".
+			 *
+			 * @param string     $question   The yes/no question.
+			 * @param array|null $assoc_args Named args (unused).
+			 */
+			public static function confirm( $question, $assoc_args = null ) {
+				self::$output[]   = 'Confirm: ' . $question;
+				self::$messages[] = [ 'confirm', (string) $question ];
+			}
+
+			/**
 			 * Real WP_CLI::error() prints and exits; the mock throws instead so the
 			 * abort is observable and the test process survives.
 			 *
@@ -160,6 +172,26 @@ namespace WP_CLI\Utils {
 	if ( ! function_exists( 'WP_CLI\Utils\wp_clear_object_cache' ) ) {
 		function wp_clear_object_cache() {
 			// No-op: the real helper trims caches to bound long-running CLI memory.
+		}
+	}
+
+	if ( ! function_exists( 'WP_CLI\Utils\make_progress_bar' ) ) {
+		/**
+		 * The real helper returns a cli\progress\Bar, or a silent no-op object when
+		 * output is not a TTY (as under PHPUnit). The mock always returns the no-op
+		 * shape so command code can call tick()/finish() without a terminal.
+		 *
+		 * @param string $message  Progress message (unused).
+		 * @param int    $count    Total ticks (unused).
+		 * @param int    $interval Redraw interval in ms (unused).
+		 *
+		 * @return object A tick()/finish() no-op stand-in.
+		 */
+		function make_progress_bar( $message, $count, $interval = 100 ) {
+			return new class() {
+				public function tick( $incr = 1, $msg = '' ) {}
+				public function finish() {}
+			};
 		}
 	}
 }

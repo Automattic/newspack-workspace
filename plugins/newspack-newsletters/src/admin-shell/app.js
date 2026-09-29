@@ -2,6 +2,7 @@ import { SnackbarList } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
 
+import { isBundledMode } from './admin-globals';
 import { HeaderActionsProvider } from './header-actions-context';
 import PageHeader from './page-header';
 
@@ -18,7 +19,7 @@ function ShellNotices() {
 }
 
 export default function App( { label, Screen } ) {
-	const isBundled = !! window.newspackNewslettersAdmin?.bundledMode;
+	const isBundled = isBundledMode();
 
 	return (
 		<HeaderActionsProvider>

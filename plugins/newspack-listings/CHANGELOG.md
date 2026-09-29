@@ -1,3 +1,55 @@
+## newspack-listings [3.7.8](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.7...newspack-listings@3.7.8) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+
+## newspack-listings [3.7.7](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.6...newspack-listings@3.7.7) (2026-09-28)
+
+
+### Bug Fixes
+
+* **content-gate:** withhold restricted bodies outside the article (NPPD-2172, [#913](https://github.com/Automattic/newspack-workspace/issues/913)) ([56a4761](https://github.com/Automattic/newspack-workspace/commit/56a4761ec9a8e9c8edcaf186baee3c77bae3ab18))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
+## newspack-listings [3.7.6](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.5...newspack-listings@3.7.6) (2026-09-14)
+
+
+### Bug Fixes
+
+* **listings:** pin expiration dates to site midnight ([#865](https://github.com/Automattic/newspack-workspace/issues/865)) ([292405b](https://github.com/Automattic/newspack-workspace/commit/292405bbc8d0a012d12e393e6ac8f556c290a7c9))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
+## newspack-listings [3.7.5](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.4...newspack-listings@3.7.5) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.7.0
+
+## newspack-listings [3.7.4](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.3...newspack-listings@3.7.4) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
+## newspack-listings [3.7.3](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.2...newspack-listings@3.7.3) (2026-08-19)
+
+
+### Bug Fixes
+
+* **listings:** resolve event dates in the site timezone (NPPM-3125) ([#863](https://github.com/Automattic/newspack-workspace/issues/863)) ([194963e](https://github.com/Automattic/newspack-workspace/commit/194963ef3bec7fe21e366829c221970dcb1650ec))
+
 ## newspack-listings [3.7.2](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.1...newspack-listings@3.7.2) (2026-08-18)
 
 

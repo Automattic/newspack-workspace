@@ -63,6 +63,35 @@ body.newspack-has-countdown-banner {
 	}
 }
 
+// A banner is pinned to the bottom of the viewport, where sticky footer ads also
+// live, so the two land on top of each other: the banner wins on z-index and the
+// ad is left partly covered (NPPM-3027). Newspack's own sticky placement is
+// switched off server-side while a banner shows, but ad units injected by
+// third-party plugins are out of that filter's reach, so hide them here for as
+// long as the banner is on screen.
+//
+// Both halves test for the banner element rather than the body class alone,
+// because either class can be on the page without a banner under it. The
+// countdown banner is printed hidden and revealed by content-banner.js once the
+// reader's view count resolves; `newspack-is-gifted-post` is set for any gifted
+// post, while `Content_Gifting_CTA::print_cta()` also requires the post to be
+// restricted, so a reader who already has access gets the class and no banner.
+// Browsers without `:has()` support drop the rule and keep the overlap they
+// have today.
+body.newspack-is-gifted-post:has(.newspack-content-gifting__cta),
+body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta:not(.newspack-countdown-banner__cta--hidden)) {
+	// Broadstreet's slide-in ("sneaker") unit. Its street.js moves the rendered
+	// bar out of the `.bsa-ad-type-sneaker` container it was authored in and
+	// reparents it to `body`, under a random id, so the only stable hook is the
+	// `.bs-sneaker-container` it wraps. Both this and our own sticky container
+	// carry an inline `display` set by the ad provider's own script, so
+	// `!important` is what actually wins here.
+	div:has(> .bs-sneaker-container),
+	.newspack_global_ad.sticky {
+		display: none !important;
+	}
+}
+
 .newspack-content-gifting,
 .newspack-countdown-banner {
 	&__cta {
@@ -77,6 +106,11 @@ body.newspack-has-countdown-banner {
 
 		&--hidden {
 			opacity: 0;
+			// The banner keeps its full-width fixed footprint while invisible, so
+			// without this it swallows clicks aimed at whatever sits under it —
+			// including the sticky footer ad this file deliberately leaves visible
+			// in that state.
+			pointer-events: none;
 		}
 
 		&__content {

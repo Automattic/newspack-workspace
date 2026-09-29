@@ -34,7 +34,16 @@ class Search {
 		/**
 		 * Enables search on custom fields in the WP Admin posts screen.
 		 *
-		 * This can slow down sites with too many posts.
+		 * This can slow down sites with too many posts. It affects only the
+		 * WP Admin posts list; the Story Budget screen's own search always
+		 * covers custom fields.
+		 *
+		 * @constant NEWSPACK_STORY_BUDGET_ENABLE_SEARCH_META
+		 * @type     bool
+		 * @default  Custom fields not searched in the WP Admin posts list
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_STORY_BUDGET_ENABLE_SEARCH_META', true );
 		 */
 		if ( ( ! defined( 'NEWSPACK_STORY_BUDGET_ENABLE_SEARCH_META' ) || ! NEWSPACK_STORY_BUDGET_ENABLE_SEARCH_META ) && $is_wp_admin_search ) {
 			return false;
@@ -75,21 +84,30 @@ class Search {
 			if ( ! $field->is_searchable() ) {
 				continue;
 			}
-			$meta_keys[] = "'" . $field->get_post_meta_name() . "'";
+			$meta_keys[] = $field->get_post_meta_name();
 		}
 
 		if ( empty( $meta_keys ) ) {
 			return $where;
 		}
 
-		$meta_search = "($wpdb->postmeta.meta_key IN (" . implode( ',', $meta_keys ) .
-						") AND $wpdb->postmeta.meta_value LIKE '%" . esc_sql( $query->query_vars['s'] ) . "%') OR ";
+		// esc_like() so % and _ in the term match literally, as they do in core's title search.
+		$meta_search = $wpdb->prepare(
+			"($wpdb->postmeta.meta_key IN (" . implode( ',', array_fill( 0, count( $meta_keys ), '%s' ) ) . ") AND $wpdb->postmeta.meta_value LIKE %s) OR ",
+			array_merge( $meta_keys, [ '%' . $wpdb->esc_like( $query->query_vars['s'] ) . '%' ] )
+		);
 
-		// Insert our condition just before the post_title LIKE condition.
+		// Insert our condition just before the post_title LIKE condition. A callback, because
+		// preg_replace() would treat backslashes and $n in the search term as replacement syntax.
 		$pattern = '/\(\s*(' . preg_quote( $wpdb->posts, '/' ) . '\.post_title LIKE)/';
-		$replacement = '(' . $meta_search . '$1';
 
-		return preg_replace( $pattern, $replacement, $where );
+		return preg_replace_callback(
+			$pattern,
+			function ( $matches ) use ( $meta_search ) {
+				return '(' . $meta_search . $matches[1];
+			},
+			$where
+		);
 	}
 
 	/**

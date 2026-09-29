@@ -42,6 +42,7 @@ import {
 	GenerateButton,
 	CandidateList,
 } from '../blocks/contextual-prompt/candidates';
+import { ControlConditionNotice } from '../blocks/contextual-prompt/condition-notice';
 
 const ContextualPromptPanel = () => {
 	// Flat values only: the panel re-renders whenever this mapping stops being
@@ -228,6 +229,11 @@ const ContextualPromptPanel = () => {
 						{ error }
 					</Notice>
 				) }
+
+				{ /* The post carries a prompt, so a generic-control assignment means this
+				     card is what's swapped: name it, the same notice the selected
+				     instance's block inspector shows. */ }
+				{ promptClientId && <ControlConditionNotice /> }
 
 				<p style={ { margin: 0 } }>
 					{ promptClientId

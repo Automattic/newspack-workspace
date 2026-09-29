@@ -16,14 +16,17 @@ import { Spinner } from '@wordpress/components';
  */
 import { Router } from '../../../../../packages/components/src';
 import RuleForm from './rule-form';
+import { isPricingPath, type PricingPath } from './recipes';
 import { RULES_API_PATH as API_PATH } from './constants';
 
 const { useHistory } = Router;
 
-export default function RuleEdit( { match }: { match: { params: { id?: string } } } ) {
+export default function RuleEdit( { match }: { match: { params: { id?: string; goal?: string } } } ) {
 	const history = useHistory();
 	const id = match.params.id;
 	const isNew = ! id;
+	const goal = match.params.goal;
+	const initialPath: PricingPath | null = goal && isPricingPath( goal ) ? goal : null;
 	const [ vocab, setVocab ] = useState< PricingRulesResponse | null >( null );
 	const [ rule, setRule ] = useState< PricingRuleRow | null >( null );
 	const [ isLoading, setIsLoading ] = useState( true );
@@ -78,6 +81,7 @@ export default function RuleEdit( { match }: { match: { params: { id?: string } 
 	}
 
 	// Key by rule id so the form remounts — re-running its mount-only state
-	// initializers — when the route switches between rules.
-	return <RuleForm key={ id ?? 'new' } isNew={ isNew } rule={ rule } vocab={ vocab } onDone={ onDone } />;
+	// initializers — when the route switches between rules. Every #/new URL keys to
+	// 'new', so choosing a goal keeps the same form instance.
+	return <RuleForm key={ id ?? 'new' } isNew={ isNew } initialPath={ initialPath } rule={ rule } vocab={ vocab } onDone={ onDone } />;
 }

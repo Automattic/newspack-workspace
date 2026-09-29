@@ -504,9 +504,19 @@ class Memberships {
 
 		// Remove the default restriction handler from 'SkyVerge\WooCommerce\Memberships\Restrictions\Posts::restrict_post'.
 		$restriction_instance = \wc_memberships()->get_restrictions_instance()->get_posts_restrictions_instance();
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes', 9 );
-		\remove_action( 'wp', spl_object_hash( $restriction_instance ) . 'handle_restriction_modes' ); // For compatibility with Woo Memberships < 1.27.2.
+		self::remove_posts_restriction_handler( $restriction_instance );
 		\add_filter( 'wc_memberships_restrictable_comment_types', '__return_empty_array' );
+	}
+
+	/**
+	 * Remove WooCommerce Memberships' default posts restriction handler.
+	 *
+	 * @param object $restriction_instance WooCommerce Memberships posts restriction instance.
+	 */
+	public static function remove_posts_restriction_handler( $restriction_instance ) {
+		$callback = [ $restriction_instance, 'handle_restriction_modes' ];
+		\remove_action( 'wp', $callback, 9 );
+		\remove_action( 'wp', $callback ); // For compatibility with Woo Memberships < 1.27.2.
 	}
 
 	/**
@@ -743,15 +753,23 @@ class Memberships {
 	/**
 	 * Remove content restriction on the front page and archives, to increase performance.
 	 * The only thing Memberships would really do on these pages is add a "You need a membership"-type message in excerpts.
+	 *
+	 * A feed is the exception: an archive requested as a feed is still an archive,
+	 * but its items carry whole post bodies, so the two callbacks that blank a
+	 * restricted body stay registered there. The taxonomy term notice goes either
+	 * way — it echoes markup a feed would emit between the channel head and the
+	 * first item.
 	 */
 	public static function remove_unnecessary_content_restriction() {
 		if ( ( is_front_page() || is_archive() ) && function_exists( 'wc_memberships' ) ) {
 			$memberships = wc_memberships();
 			$restrictions_instance = $memberships->get_restrictions_instance();
 			$posts_restrictions_instance = $restrictions_instance->get_posts_restrictions_instance();
-			remove_action( 'the_post', [ $posts_restrictions_instance, 'restrict_post' ], 0 );
-			remove_filter( 'the_content', [ $posts_restrictions_instance, 'handle_restricted_post_content_filtering' ], 999 );
 			remove_action( 'loop_start', [ $posts_restrictions_instance, 'display_restricted_taxonomy_term_notice' ], 1 );
+			if ( ! is_feed() ) {
+				remove_action( 'the_post', [ $posts_restrictions_instance, 'restrict_post' ], 0 );
+				remove_filter( 'the_content', [ $posts_restrictions_instance, 'handle_restricted_post_content_filtering' ], 999 );
+			}
 		}
 	}
 

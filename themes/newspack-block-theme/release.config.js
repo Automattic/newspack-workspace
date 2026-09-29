@@ -22,7 +22,7 @@ module.exports = {
 				// release:archive zips them — otherwise the theme's style.css Version
 				// header ships stale.
 				files: [ 'src/scss/_theme-description.scss', 'functions.php', 'style.css', 'style-rtl.css' ],
-				callback: 'npm run release:archive',
+				callback: 'bash ../../.github/scripts/stamp-pot-version.sh style.css; npm run release:archive',
 			},
 		],
 		// languages/** carries the translation files release.yml regenerates just
@@ -42,11 +42,8 @@ module.exports = {
 		[
 			'@semantic-release/github',
 			{
-				// Migrated commits reference legacy-repo PR numbers absent from the
-				// monorepo; disable PR/issue comment+label resolution so the release
-				// job doesn't fail. Re-enable post-migration (NPPM-2752 Phase 6).
-				successComment: false,
-				releasedLabels: false,
+				// A release failure is surfaced by the workflow itself, so
+				// semantic-release does not also open an issue for it.
 				failComment: false,
 				failTitle: false,
 				assets: [

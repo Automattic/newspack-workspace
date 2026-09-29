@@ -57,9 +57,12 @@ class Users {
 			if ( $remote_site ) {
 				return sprintf(
 					'<a href="%swp-admin/user-edit.php?user_id=%d">%s</a>',
-					trailingslashit( esc_url( $remote_site ) ),
+					// Escape last. esc_url() returns '' for a value it rejects, and
+					// trailingslashit( '' ) is '/', which would point the link at the
+					// hub's own user-edit screen rather than leaving the href empty.
+					esc_url( trailingslashit( $remote_site ) ),
 					$remote_id,
-					sprintf( '%s (#%d)', $remote_site, $remote_id )
+					sprintf( '%s (#%d)', esc_html( $remote_site ), $remote_id )
 				);
 			}
 		}
@@ -84,8 +87,8 @@ class Users {
 				return sprintf(
 					'%s: <code>%s</code><br><a href="%s">%s</a>',
 					__( 'Last Activity', 'newspack-network' ),
-					$last_activity[0]->get_summary(),
-					$event_log_url,
+					esc_html( $last_activity[0]->get_summary() ),
+					esc_url( $event_log_url ),
 					__( 'View all', 'newspack-network' )
 				);
 			} elseif ( Site_Role::is_node() ) {
@@ -98,7 +101,7 @@ class Users {
 				);
 				return sprintf(
 					'<a href="%s">%s</a>',
-					$event_log_url,
+					esc_url( $event_log_url ),
 					__( 'View activity', 'newspack-network' )
 				);
 			}

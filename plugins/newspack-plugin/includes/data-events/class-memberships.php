@@ -89,6 +89,19 @@ final class Memberships {
 	}
 
 	/**
+	 * The page a registration came from. Producers disagree on the key: the
+	 * Reader Registration block and the auth modal set `referer`, the Newsletter
+	 * Subscription Form block sets `current_page_url` (its form carries the gate
+	 * id since it was added to the content gate's stamped forms).
+	 *
+	 * @param array $metadata Registration metadata.
+	 * @return string URL, or '' when neither key is present.
+	 */
+	private static function referer( array $metadata ): string {
+		return (string) ( $metadata['referer'] ?? $metadata['current_page_url'] ?? '' );
+	}
+
+	/**
 	 * Add content gate metadata to the cart item.
 	 *
 	 * @param array $cart_item_data The cart item data.
@@ -130,8 +143,10 @@ final class Memberships {
 	 * @return array
 	 */
 	public static function register_reader_metadata( $metadata ) {
-		$gate_post_id = filter_input( INPUT_POST, self::METADATA_NAME, FILTER_SANITIZE_NUMBER_INT );
-		if ( ! empty( $gate_post_id ) && ( isset( $metadata['registration_method'] ) || isset( $metadata['login_method'] ) ) ) {
+		// Validated like the order path: the value is a client-supplied integer, and
+		// an arbitrary one would land in the per-gate attribution Insights groups by.
+		$gate_post_id = self::get_valid_gate_post_id( filter_input( INPUT_POST, self::METADATA_NAME, FILTER_SANITIZE_NUMBER_INT ) );
+		if ( false !== $gate_post_id && ( isset( $metadata['registration_method'] ) || isset( $metadata['login_method'] ) ) ) {
 			$metadata['gate_post_id'] = $gate_post_id;
 		}
 		return $metadata;
@@ -197,7 +212,7 @@ final class Memberships {
 			[
 				'action'      => self::FORM_SUBMISSION,
 				'action_type' => 'registration',
-				'referer'     => $metadata['referer'],
+				'referer'     => self::referer( $metadata ),
 			]
 		);
 		$data['interaction_data']['registration_method'] = $metadata['registration_method'];
@@ -230,7 +245,7 @@ final class Memberships {
 			[
 				'action'      => $action,
 				'action_type' => 'registration',
-				'referer'     => $metadata['referer'],
+				'referer'     => self::referer( $metadata ),
 			]
 		);
 		$data['interaction_data']['registration_method'] = $metadata['registration_method'];

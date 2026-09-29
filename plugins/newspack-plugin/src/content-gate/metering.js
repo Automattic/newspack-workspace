@@ -1,10 +1,6 @@
-/* globals newspack_metering_settings */
+import { getMeteringSettings, getMeteringStoreKey } from './utils/metering-settings';
 
-const settings = newspack_metering_settings;
-
-const storeKey = 'metering-' + settings.gate_id || 0;
-
-function getCurrentExpiration() {
+function getCurrentExpiration( settings ) {
 	const date = new Date();
 	// Reset time to 00:00:00:000.
 	date.setHours( 0 );
@@ -28,8 +24,9 @@ function getCurrentExpiration() {
 	return parseInt( date.getTime() / 1000, 10 );
 }
 
-function getUserData( store ) {
-	const currentExpiration = getCurrentExpiration();
+function getUserData( store, settings ) {
+	const storeKey = getMeteringStoreKey( settings );
+	const currentExpiration = getCurrentExpiration( settings );
 	const data = store.get( storeKey ) || {
 		content: [],
 		expiration: currentExpiration,
@@ -47,7 +44,7 @@ function getUserData( store ) {
 	return data;
 }
 
-function lockContent( ras ) {
+function lockContent( ras, settings ) {
 	const content = document.querySelector( '.entry-content' );
 	if ( ! content ) {
 		return;
@@ -88,11 +85,17 @@ function lockContent( ras ) {
 }
 
 function meter( ras ) {
-	const data = getUserData( ras.store );
+	const settings = getMeteringSettings();
+	// No settings means the server did not render a meter for this post, so there is
+	// no allowance to spend and nothing for the meter to do.
+	if ( ! settings ) {
+		return;
+	}
+	const data = getUserData( ras.store, settings );
 	let locked = false;
 	// Lock content if reached limit, remove gate content if not.
 	if ( settings.count <= data.content.length && ! data.content.includes( settings.post_id ) ) {
-		lockContent( ras );
+		lockContent( ras, settings );
 		ras.dispatchActivity( 'metering_restricted', { post_id: settings.post_id, metering: data } );
 		locked = true;
 	} else {
@@ -109,7 +112,7 @@ function meter( ras ) {
 		// Add current content to read content.
 		if ( ! data.content.includes( settings.post_id ) ) {
 			data.content.push( settings.post_id );
-			ras.store.set( storeKey, data );
+			ras.store.set( getMeteringStoreKey( settings ), data );
 		}
 	}
 }

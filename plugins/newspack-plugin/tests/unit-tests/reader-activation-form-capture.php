@@ -1,17 +1,24 @@
 <?php
 /**
- * Tests the Inbound Form Capture integration and its Reader Activation hooks.
+ * Tests the Form Capture integration and the capture behavior the
+ * Gravity Forms integration shares with it.
  *
  * @package Newspack\Tests
  */
 
+use Newspack\Data_Events\Connectors\Contact_Sync_Connector;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Form_Capture;
+use Newspack\Reader_Activation\Integrations\Gravity_Forms;
 use Newspack\Reader_Registration;
 
 require_once __DIR__ . '/integrations/class-inherited-validator-integration.php';
+
+if ( ! class_exists( 'GFForms' ) ) {
+	require_once dirname( __DIR__ ) . '/mocks/gravityforms-mock.php';
+}
 
 /**
  * Test the Form Capture integration.
@@ -22,16 +29,30 @@ class Test_Form_Capture extends WP_UnitTestCase {
 
 	/**
 	 * Set up.
+	 *
+	 * The integration registers behind its flag or where a site already
+	 * enabled it, and the suite starts with neither, so register it here as a
+	 * flagged site would. Its hooks go in on every test: the hooks backup
+	 * restored after each test drops them.
 	 */
 	public function set_up() {
 		parent::set_up();
 		update_option( Reader_Activation::OPTIONS_PREFIX . 'enabled', true );
+		$integration = Integrations::get_integration( Form_Capture::ID );
+		if ( ! $integration ) {
+			$integration = new Form_Capture();
+			Integrations::register( $integration );
+		}
+		$integration->register_handlers();
 	}
 
 	/**
 	 * Clean up.
 	 */
 	public function tear_down() {
+		Integrations::disable( Form_Capture::ID );
+		Integrations::disable( Gravity_Forms::ID );
+		delete_option( 'newspack_integration_settings_form-capture_selectors' );
 		delete_option( Reader_Activation::OPTIONS_PREFIX . 'enabled' );
 		delete_option( 'newspack_recaptcha_use_captcha' );
 		delete_option( 'newspack_recaptcha_version' );
@@ -40,6 +61,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		remove_all_filters( 'newspack_magic_link_rate_interval' );
 		remove_all_filters( 'newspack_reader_activation_send_magic_link_on_reregistration' );
 		remove_all_filters( 'newspack_reader_activation_is_syncing_allowed' );
+		remove_all_filters( 'newspack_reader_activation_enabled' );
 		parent::tear_down();
 	}
 
@@ -95,6 +117,19 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Forms built with other tools opt in through the marker class or a saved
+	 * selector, so the card needs no plugin and its settings page offers the
+	 * selectors.
+	 */
+	public function test_offers_selectors_and_needs_no_plugin() {
+		$this->assertSame( [], Integrations::get_integration( Form_Capture::ID )->get_required_plugins() );
+
+		$payload = Integrations::get_all_integration_settings()[ Form_Capture::ID ];
+		$this->assertSame( 'Form Capture', $payload['name'] );
+		$this->assertSame( [ 'selectors' ], wp_list_pluck( $payload['settings'], 'key' ) );
+	}
+
+	/**
 	 * Selector and list settings parse into clean arrays, and bare
 	 * element/universal selectors — which would opt in every form on the
 	 * site — are rejected.
@@ -131,7 +166,6 @@ class Test_Form_Capture extends WP_UnitTestCase {
 			$integration->get_selectors(),
 			'Lines are rebuilt from their non-empty parts, so what ships is valid CSS.'
 		);
-		$integration->update_settings_field_value( 'selectors', '' );
 	}
 
 	/**
@@ -339,6 +373,48 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A new reader's contact sync names the capture that registered them, as an
+	 * existing reader's does, so Sync Activity tells captures apart from other
+	 * sign-ups. Each integration names only its own registrations, whether or
+	 * not it is enabled.
+	 */
+	public function test_new_reader_sync_names_the_capture() {
+		$this->assertFalse( Integrations::is_enabled( Gravity_Forms::ID ), 'Naming must not depend on the enabled state.' );
+		$this->assertFalse( Integrations::is_enabled( Form_Capture::ID ), 'Naming must not depend on the enabled state.' );
+		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
+		$contexts = [];
+		add_filter(
+			'newspack_esp_sync_contact',
+			function ( $contact, $context ) use ( &$contexts ) {
+				$contexts[] = $context;
+				return $contact;
+			},
+			10,
+			2
+		);
+
+		$user              = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
+		$context_by_method = [
+			Gravity_Forms::get_registration_method() => 'Gravity Forms registration',
+			Form_Capture::get_registration_method()  => 'Form Capture registration',
+			'registration-block'                     => 'RAS Reader registration',
+		];
+		foreach ( $context_by_method as $registration_method => $expected_context ) {
+			$contexts = [];
+			Contact_Sync_Connector::reader_registered(
+				time(),
+				[
+					'user_id'  => $user->ID,
+					'email'    => $user->user_email,
+					'metadata' => [ 'registration_method' => $registration_method ],
+				],
+				0
+			);
+			$this->assertSame( [ $expected_context ], $contexts, "A registration through $registration_method." );
+		}
+	}
+
+	/**
 	 * The scheduled-sync payload must carry the reader's name for readers
 	 * without a WooCommerce billing record — an empty name pushed to the ESP
 	 * clears the contact's stored name (the repeat-capture FNAME regression).
@@ -499,6 +575,66 @@ class Test_Form_Capture extends WP_UnitTestCase {
 		$integration->enqueue_scripts();
 		$this->assertTrue( wp_script_is( Form_Capture::SCRIPT_HANDLE, 'enqueued' ) );
 		Integrations::disable( Form_Capture::ID );
+	}
+
+	/**
+	 * Each form belongs to one integration, so the capture script gets one
+	 * entry per integration that captures: Gravity Forms forms go to the
+	 * Gravity Forms integration, every other form to this one, with its
+	 * saved selectors. Each entry names the integration its forms register
+	 * under, which is what keeps either integration's Disable to its own
+	 * forms.
+	 */
+	public function test_script_gets_an_entry_per_capturing_integration() {
+		wp_dequeue_script( Form_Capture::SCRIPT_HANDLE );
+		wp_deregister_script( Form_Capture::SCRIPT_HANDLE );
+		$form_capture  = Integrations::get_integration( Form_Capture::ID );
+		$gravity_forms = Integrations::get_integration( Gravity_Forms::ID );
+		$form_capture->update_settings_field_value( 'selectors', '#signup-form' );
+		Integrations::enable( Form_Capture::ID );
+		Integrations::enable( Gravity_Forms::ID );
+
+		$form_capture->enqueue_scripts();
+		$gravity_forms->enqueue_scripts();
+
+		$this->assertSame(
+			[
+				'other_forms'   => [
+					'integration' => Form_Capture::ID,
+					'selectors'   => [ '.newspack-form-capture', '#signup-form' ],
+				],
+				'gravity_forms' => [
+					'integration' => Gravity_Forms::ID,
+					'selectors'   => [ '.newspack-form-capture' ],
+				],
+			],
+			$this->get_capture_script_config()
+		);
+
+		wp_dequeue_script( Form_Capture::SCRIPT_HANDLE );
+		wp_deregister_script( Form_Capture::SCRIPT_HANDLE );
+		Integrations::disable( Gravity_Forms::ID );
+		$form_capture->enqueue_scripts();
+		$gravity_forms->enqueue_scripts();
+		$this->assertSame( [ 'other_forms' ], array_keys( $this->get_capture_script_config() ), 'A disabled integration hands the script no forms.' );
+	}
+
+	/**
+	 * The capture script's config, as the inline scripts printed before it
+	 * build it.
+	 *
+	 * @return array Entries keyed by the forms they cover.
+	 */
+	private function get_capture_script_config() {
+		$config = [];
+		foreach ( (array) wp_scripts()->get_data( Form_Capture::SCRIPT_HANDLE, 'before' ) as $script ) {
+			if ( preg_match_all( '/window\.newspack_form_capture\[(".+?")\] = (\{.*?\});/', (string) $script, $matches, PREG_SET_ORDER ) ) {
+				foreach ( $matches as $match ) {
+					$config[ json_decode( $match[1] ) ] = json_decode( $match[2], true );
+				}
+			}
+		}
+		return $config;
 	}
 
 	/**

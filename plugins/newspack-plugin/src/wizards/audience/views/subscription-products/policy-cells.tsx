@@ -13,11 +13,12 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge, Popover } from '../../../../../packages/components/src';
+import { Popover } from '../../../../../packages/components/src';
 
 /**
  * Format a number as a currency amount using the store currency.
@@ -52,7 +53,9 @@ export function PolicyChips( { policy }: { policy: SubscriptionPolicyResolution 
 					href={ `admin.php?page=newspack-audience-pricing-rules#/edit/${ p.id }` }
 					title={ `${ p.label } — ${ p.adjustment_label }` }
 				>
-					<Badge level="success" text={ p.label } />
+					<Badge className="newspack-subscription-products__policy-chip-badge" intent="stable">
+						{ p.label }
+					</Badge>
 				</a>
 			) ) }
 		</div>

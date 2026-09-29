@@ -8,8 +8,6 @@
 namespace Newspack\Reader_Activation\Sync\Contact_Metadata;
 
 use Newspack\Reader_Activation\Sync\Contact_Metadata;
-use Newspack\Reader_Activation\Sync\Legacy_Metadata;
-use Newspack\Reader_Activation\Sync\Metadata;
 use Newspack\Access_Attribution;
 use Newspack\Content_Gate as Content_Gate_CPT;
 use Newspack\Group_Subscription;
@@ -79,7 +77,35 @@ class Content_Gate extends Contact_Metadata {
 	}
 
 	/**
-	 * Get the metadata for the given user, customer or order.
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * @return array
+	 */
+	public static function get_fields_config() {
+		return [
+			'Content_Access'        => [
+				'name'        => 'Content Access',
+				'description' => __( 'Whether the reader currently has access to gated content', 'newspack-plugin' ),
+				'status'      => 'new',
+			],
+			'Content_Access_Source' => [
+				'name'        => 'Content Access Source',
+				'description' => __( 'The specific entity granting access. Value based on subscription product name OR "group" OR "institution"', 'newspack-plugin' ),
+				'status'      => 'new',
+			],
+			'Content_Access_Group'  => [
+				'name'        => 'Content Access Group',
+				'description' => __( 'Name of the reader group or institution granting content access, when access is granted via a group subscription or institution rule', 'newspack-plugin' ),
+				'status'      => 'new',
+			],
+		];
+	}
+
+	/**
+	 * Get the metadata for the given user, customer or order, as raw keys.
+	 *
+	 * Filtering and prefixing are the integration's responsibility
+	 * (prepare_contact).
 	 *
 	 * @return array
 	 */
@@ -108,15 +134,6 @@ class Content_Gate extends Contact_Metadata {
 				'Content_Access_Source' => implode( ', ', self::collect_labels( $evaluations, $user_id, [ self::class, 'get_source_labels' ] ) ),
 				'Content_Access_Group'  => implode( ', ', self::collect_labels( $evaluations, $user_id, [ self::class, 'get_group_labels' ] ) ),
 			];
-		}
-
-		// In legacy mode the main sync path does not run a normalize step on
-		// the merged contact, so each metadata class must return keys in the
-		// prefixed shape (matching Legacy_Basic / Legacy_Payment). Without this,
-		// raw Content_Access keys are silently dropped at the ESP push.
-		if ( 'legacy' === Metadata::get_version() ) {
-			$normalized = Legacy_Metadata::normalize_contact_data( [ 'metadata' => $metadata ] );
-			return $normalized['metadata'] ?? [];
 		}
 
 		return $metadata;
@@ -231,14 +248,18 @@ class Content_Gate extends Contact_Metadata {
 	private static function get_group_labels( $slug, $value, $user_id, $context = [] ) {
 		switch ( $slug ) {
 			case 'subscription':
-				// An empty/non-array $value mirrors Access_Rules::has_active_subscription's
+				// An empty $value mirrors Access_Rules::has_active_subscription's
 				// "any active subscription" semantics — every active group sub matches.
+				// A populated non-array value fails the rule outright, so this
+				// resolver is never reached for one.
 				$product_filter = is_array( $value ) && ! empty( $value ) ? $value : null;
 				return Group_Subscription::get_group_names_for_user( $user_id, $product_filter );
 
 			case 'institution':
-				// A malformed institution rule (missing/empty/scalar value) matches everyone
-				// per Institution::evaluate(), but there's no specific institution to attribute.
+				// Defensive: neither shape reaches here, because Institution::evaluate()
+				// fails the rule on both and this resolver runs only for a rule that
+				// passed. Kept so a future caller cannot read an unmatched rule as an
+				// attribution.
 				if ( ! is_array( $value ) || empty( $value ) ) {
 					return [];
 				}

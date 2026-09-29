@@ -23,6 +23,7 @@ import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 // Wizard-bridge event contract. The newsletters bridge bundle exposes its
 // event names on `window.newspackNewslettersEvents`; we fall back to the
@@ -50,7 +51,6 @@ const isBridgeReady = () => typeof window !== 'undefined' && window.newspackNews
  * Internal dependencies
  */
 import {
-	Badge,
 	Button,
 	Card,
 	CardSettingsGroup,
@@ -715,7 +715,7 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 											/>
 											{ ( isLocal || list?.type_label ) && (
 												<HStack expanded={ false } justify="flex-start" className="newspack-newsletters-list-item__badge">
-													<Badge text={ isLocal ? __( 'Local', 'newspack-plugin' ) : list.type_label } />
+													<Badge intent="none">{ isLocal ? __( 'Local', 'newspack-plugin' ) : list.type_label }</Badge>
 												</HStack>
 											) }
 										</VStack>

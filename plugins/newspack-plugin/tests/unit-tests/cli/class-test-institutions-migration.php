@@ -399,6 +399,21 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 		$this->assertSame( '', Institutions_Migration::get_range_breadth_warning( '198.51.100.7' ), 'An ordinary public address is unremarkable.' );
 		$this->assertSame( '', Institutions_Migration::get_range_breadth_warning( '128.100.0.0/16' ), 'An ordinary public /16 is unremarkable.' );
 		$this->assertSame( '', Institutions_Migration::get_range_breadth_warning( 'not-an-ip' ), 'Non-IP values (operator-owned meta on existing institutions) are left alone.' );
+		// A dash range carries no mask, so it is judged by its address span.
+		$this->assertStringContainsString( 'very wide range', Institutions_Migration::get_range_breadth_warning( '10.0.0.0-10.1.0.0' ), 'A dash range wider than a /16 must be flagged.' );
+		$this->assertSame( '', Institutions_Migration::get_range_breadth_warning( '203.0.113.0-203.0.113.255' ), 'An ordinary /24-sized dash range is unremarkable.' );
+	}
+
+	/**
+	 * The migration accepts dash ranges — the same shapes the runtime access
+	 * check accepts — rather than rejecting them as invalid. Guards the
+	 * delegation to IP_Access_Rule so the migrator and the access check cannot
+	 * drift on what an institution IP entry may be.
+	 */
+	public function test_normalize_ip_ranges_accepts_dash_ranges() {
+		$normalized = Institutions_Migration::normalize_ip_ranges( '203.0.113.0-203.0.113.255, 10.0.0.5' );
+		$this->assertSame( [ '203.0.113.0-203.0.113.255', '10.0.0.5' ], $normalized['valid'], 'A dash range is a valid, migratable entry.' );
+		$this->assertSame( [], $normalized['invalid'] );
 	}
 
 	/**

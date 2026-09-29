@@ -16,6 +16,7 @@
 namespace Newspack\CLI;
 
 use Newspack\Content_Gate;
+use Newspack\Content_Gate\IP_Access_Rule;
 use Newspack\Institution;
 use WP_CLI;
 use WP_Error;
@@ -212,7 +213,7 @@ class Institutions_Migration {
 			);
 
 			foreach ( $result['invalid_ranges'] as $invalid_range ) {
-				WP_CLI::warning( sprintf( 'Team %d: invalid IP range "%s" — not migrated (Access Control IP rules support IPv4 addresses and CIDR blocks only).', $team_id, $invalid_range ) );
+				WP_CLI::warning( sprintf( 'Team %d: invalid IP range "%s" — not migrated (Access Control IP rules support IPv4 addresses, CIDR blocks, and IPv4 dash ranges).', $team_id, $invalid_range ) );
 			}
 
 			if ( 'unmappable' === $result['status'] ) {
@@ -428,71 +429,50 @@ class Institutions_Migration {
 	/**
 	 * Normalize a raw IP-ranges value into valid and invalid entries.
 	 *
-	 * Accepts both option-value shapes (a delimited string or an array), splits
-	 * on commas and newlines, and validates each entry against the same rules
-	 * as IP_Access_Rule: IPv4 addresses and IPv4 CIDR blocks (`/0`–`/32`).
-	 * Anything else (hostnames, IPv6, malformed CIDR) is returned as invalid so
-	 * the caller can report it instead of silently dropping it.
+	 * Delegates to {@see IP_Access_Rule::normalize_ip_ranges()} so the migration
+	 * accepts exactly what the runtime access check accepts — IPv4 addresses,
+	 * IPv4 CIDR blocks (`/0`–`/32`), and IPv4 dash ranges (`<start>-<end>`).
+	 * Anything else (hostnames, IPv6, malformed entries) is returned as invalid
+	 * so the caller can report it instead of silently dropping it.
 	 *
 	 * @param string|array $raw Raw ranges value from the option map.
 	 *
 	 * @return array {
-	 *     @type string[] $valid   Valid IPv4/CIDR entries.
+	 *     @type string[] $valid   Valid IPv4/CIDR/dash-range entries.
 	 *     @type string[] $invalid Rejected entries, for reporting.
 	 * }
 	 */
 	public static function normalize_ip_ranges( $raw ) {
-		$tokens = [];
-		foreach ( ( is_array( $raw ) ? $raw : [ $raw ] ) as $chunk ) {
-			$tokens = array_merge( $tokens, preg_split( '/[,\n\r]+/', (string) $chunk ) );
-		}
-		$tokens = array_filter( array_map( 'trim', $tokens ) );
-
-		$valid   = [];
-		$invalid = [];
-		foreach ( $tokens as $token ) {
-			if ( false !== strpos( $token, '/' ) ) {
-				list( $subnet, $bits ) = array_pad( explode( '/', $token, 2 ), 2, '' );
-				$subnet                = trim( $subnet );
-				$bits                  = trim( $bits );
-				if ( ctype_digit( $bits ) && (int) $bits <= 32 && filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
-					// (int)-cast the bits so the stored range is canonical: a
-					// leading-zero mask like `/00` would otherwise evade every
-					// string-shape breadth check while still matching numerically.
-					$valid[] = $subnet . '/' . (int) $bits;
-				} else {
-					$invalid[] = $token;
-				}
-			} elseif ( filter_var( $token, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
-				$valid[] = $token;
-			} else {
-				$invalid[] = $token;
-			}
-		}
-
-		return [
-			'valid'   => array_values( $valid ),
-			'invalid' => array_values( $invalid ),
-		];
+		return IP_Access_Rule::normalize_ip_ranges( $raw );
 	}
 
 	/**
 	 * Describe why a migrated range is dangerously broad, if it is.
 	 *
-	 * Breadth is judged by the numeric mask the access check will use
+	 * For CIDR, breadth is judged by the numeric mask the access check will use
 	 * (IP_Access_Rule casts the bits to int), never by the range's spelling.
-	 * Three shapes are flagged: a zero mask (matches every visitor), a private
-	 * or reserved subnet (never matches real visitors behind the platform's
-	 * proxy handling, and can match everyone on a misconfigured host), and a
-	 * very wide public block. Non-IPv4 values return '' — for already-migrated
-	 * institutions the ranges are operator-owned meta this command must not
-	 * second-guess.
+	 * Three CIDR/address shapes are flagged: a zero mask (matches every
+	 * visitor), a private or reserved subnet (never matches real visitors behind
+	 * the platform's proxy handling, and can match everyone on a misconfigured
+	 * host), and a very wide public block. A dash range carries no mask, so it
+	 * is judged by its address count against the same threshold as a wide CIDR
+	 * block. Non-IPv4 values return '' — for already-migrated institutions the
+	 * ranges are operator-owned meta this command must not second-guess.
 	 *
-	 * @param string $range A migrated IPv4 address or CIDR range.
+	 * @param string $range A migrated IPv4 address, CIDR block, or dash range.
 	 *
 	 * @return string Human-readable reason, or '' when the range is unremarkable.
 	 */
 	public static function get_range_breadth_warning( $range ) {
+		// A dash range carries no mask; judge it by how many addresses it spans,
+		// against the same > /16 threshold used for wide CIDR blocks below.
+		if ( 'range' === IP_Access_Rule::classify_entry( $range ) ) {
+			$size = IP_Access_Rule::get_entry_size( $range );
+			if ( $size > 65536 ) {
+				return sprintf( 'is a very wide range (~%s addresses) — confirm it really is the institution\'s public egress range', number_format( $size ) );
+			}
+			return '';
+		}
 		list( $subnet, $bits ) = array_pad( explode( '/', $range, 2 ), 2, '32' );
 		// Trim BOTH halves, exactly like the access check's parser — a spelling
 		// like `0.0.0.0 / 0` must not evade breadth judgment while matching at

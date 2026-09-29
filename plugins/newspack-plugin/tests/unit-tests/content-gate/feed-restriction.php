@@ -86,16 +86,27 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 			]
 		);
 
+		// Force an empty excerpt: the post factory otherwise auto-generates one
+		// ("Post excerpt NNNN"), which get_withheld_summary() now prefers over the
+		// constructed teaser. The teaser-fallback tests need a post with no authored
+		// excerpt; the excerpt-first tests set their own.
 		$this->post_id = $this->factory->post->create(
 			[
 				'post_status'  => 'publish',
 				'post_content' => self::POST_CONTENT,
+				'post_excerpt' => '',
 			]
 		);
 
 		// Feeds are consumed anonymously.
 		wp_set_current_user( 0 );
 		update_option( Content_Gate_Advanced_Settings::OPTION_PREFIX . 'restrict_feeds', 1, false );
+		// Most tests here exercise exclude-mode mechanics (over-fetch, drop,
+		// back-fill), so set that mode as the class precondition. The shipped
+		// default is truncate — proven in advanced-settings.php and in
+		// test_default_mode_truncates_restricted_post_in_feed below, which clears
+		// this to read the real default.
+		update_option( Content_Gate_Advanced_Settings::OPTION_PREFIX . 'feed_restriction_mode', 'exclude', false );
 		Content_Gate_Advanced_Settings::reset_cache();
 	}
 
@@ -233,6 +244,148 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A restricted post with an authored excerpt should syndicate that excerpt in
+	 * the feed <description>, not the constructed lead-paragraph teaser. This is
+	 * the WooCommerce Memberships "show excerpts" parity the truncate teaser broke.
+	 */
+	public function test_written_excerpt_is_used_for_restricted_feed_excerpt() {
+		$this->set_feed_mode( 'truncate' );
+		update_option( 'rss_use_excerpt', 1 );
+		wp_update_post(
+			[
+				'ID'           => $this->post_id,
+				'post_excerpt' => 'AUTHORED_SUMMARY written by the editor.',
+			]
+		);
+
+		$feed_excerpt = $this->render_in_feed_loop(
+			function () {
+				return apply_filters( 'the_excerpt_rss', get_the_excerpt() );
+			}
+		);
+
+		$this->assertStringContainsString( 'AUTHORED_SUMMARY', $feed_excerpt, 'The authored excerpt should be syndicated for the restricted feed item.' );
+		$this->assertStringNotContainsString( 'FREE_ONE', $feed_excerpt, 'The constructed teaser must not replace the authored excerpt.' );
+		$this->assertStringNotContainsString( 'PAID_THREE', $feed_excerpt, 'Paid content must never leak into the feed.' );
+	}
+
+	/**
+	 * The same parity on a full-text feed: <content:encoded> carries the authored
+	 * excerpt for a restricted post, never the paid body and never the teaser.
+	 */
+	public function test_written_excerpt_is_used_for_restricted_full_text_feed() {
+		$this->set_feed_mode( 'truncate' );
+		update_option( 'rss_use_excerpt', 0 );
+		wp_update_post(
+			[
+				'ID'           => $this->post_id,
+				'post_excerpt' => 'AUTHORED_SUMMARY written by the editor.',
+			]
+		);
+
+		$feed_content = $this->render_in_feed_loop(
+			function () {
+				return get_the_content_feed( 'rss2' );
+			}
+		);
+
+		$this->assertStringContainsString( 'AUTHORED_SUMMARY', $feed_content, 'The authored excerpt should be syndicated in full-text feed content.' );
+		$this->assertStringNotContainsString( 'FREE_ONE', $feed_content, 'The constructed teaser must not replace the authored excerpt.' );
+		$this->assertStringNotContainsString( 'PAID_THREE', $feed_content, 'Paid content must never leak into the feed.' );
+	}
+
+	/**
+	 * The excerpt-first behaviour is the seam a future opt-out setting hooks: with
+	 * `newspack_content_gate_prefer_written_excerpt` forced false, the constructed
+	 * teaser is restored even though the post has an authored excerpt.
+	 */
+	public function test_filter_can_restore_teaser_over_written_excerpt() {
+		$this->set_feed_mode( 'truncate' );
+		update_option( 'rss_use_excerpt', 1 );
+		wp_update_post(
+			[
+				'ID'           => $this->post_id,
+				'post_excerpt' => 'AUTHORED_SUMMARY written by the editor.',
+			]
+		);
+		add_filter( 'newspack_content_gate_prefer_written_excerpt', '__return_false' );
+
+		$feed_excerpt = $this->render_in_feed_loop(
+			function () {
+				return apply_filters( 'the_excerpt_rss', get_the_excerpt() );
+			}
+		);
+
+		remove_filter( 'newspack_content_gate_prefer_written_excerpt', '__return_false' );
+
+		$this->assertStringContainsString( 'FREE_ONE', $feed_excerpt, 'With the filter off, the constructed teaser is restored.' );
+		$this->assertStringNotContainsString( 'AUTHORED_SUMMARY', $feed_excerpt, 'With the filter off, the authored excerpt is not used.' );
+	}
+
+	/**
+	 * Both feed strings land inside CDATA, so a literal "]]>" in an authored
+	 * excerpt would end the section early and break the whole feed document.
+	 */
+	public function test_cdata_terminator_in_authored_excerpt_is_escaped() {
+		$this->set_feed_mode( 'truncate' );
+		// Save as an editor with unfiltered_html, as a newsroom would: KSES would
+		// otherwise encode the ">" on save and the raw sequence never reaches the feed.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		wp_update_post(
+			[
+				'ID'           => $this->post_id,
+				'post_excerpt' => 'AUTHORED_SUMMARY with a CDATA end ]]> inside.',
+			]
+		);
+		wp_set_current_user( 0 );
+		$this->assertStringContainsString( ']]>', get_post( $this->post_id )->post_excerpt, 'The raw sequence should be stored.' );
+
+		update_option( 'rss_use_excerpt', 1 );
+		$feed_excerpt = $this->render_in_feed_loop(
+			function () {
+				return apply_filters( 'the_excerpt_rss', get_the_excerpt() );
+			}
+		);
+		update_option( 'rss_use_excerpt', 0 );
+		$feed_content = $this->render_in_feed_loop(
+			function () {
+				return get_the_content_feed( 'rss2' );
+			}
+		);
+
+		foreach ( [ $feed_excerpt, $feed_content ] as $feed_string ) {
+			$this->assertStringContainsString( 'AUTHORED_SUMMARY', $feed_string, 'The authored excerpt should still be syndicated.' );
+			$this->assertStringNotContainsString( ']]>', $feed_string, 'A raw CDATA terminator must not reach the feed.' );
+		}
+	}
+
+	/**
+	 * A password-protected post keeps core's withheld output in the feed, as the
+	 * REST path does: feeds are read anonymously, so the password is never held.
+	 */
+	public function test_password_protected_post_keeps_core_withheld_excerpt() {
+		$this->set_feed_mode( 'truncate' );
+		update_option( 'rss_use_excerpt', 1 );
+		wp_update_post(
+			[
+				'ID'            => $this->post_id,
+				'post_excerpt'  => 'AUTHORED_SUMMARY written by the editor.',
+				'post_password' => 'example-password',
+			]
+		);
+
+		$feed_excerpt = $this->render_in_feed_loop(
+			function () {
+				return apply_filters( 'the_excerpt_rss', get_the_excerpt() );
+			}
+		);
+
+		$this->assertNotSame( '', $feed_excerpt, 'The loop should have captured the post.' );
+		$this->assertStringNotContainsString( 'AUTHORED_SUMMARY', $feed_excerpt, 'A password-protected excerpt must not be syndicated.' );
+		$this->assertStringNotContainsString( 'FREE_ONE', $feed_excerpt, 'A password-protected body must not be syndicated as a teaser.' );
+	}
+
+	/**
 	 * When the setting is off, the feed is left untouched: the filters become a
 	 * no-op and the full content flows through.
 	 */
@@ -251,20 +404,35 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Default mode (no stored value) is "exclude" for WC Memberships parity: a
-	 * restricted post is dropped from the feed query entirely.
+	 * Default mode (no stored value) is "truncate": a restricted post stays in
+	 * the feed with the gate teaser rather than being dropped, so a site that has
+	 * never chosen a mode keeps its feed intact.
 	 */
-	public function test_default_mode_excludes_restricted_post_from_feed() {
+	public function test_default_mode_truncates_restricted_post_in_feed() {
+		// Clear the exclude precondition set_up() applies, to read the real default.
+		delete_option( Content_Gate_Advanced_Settings::OPTION_PREFIX . 'feed_restriction_mode' );
+		Content_Gate_Advanced_Settings::reset_cache();
+
 		$this->assertSame(
-			'exclude',
+			'truncate',
 			Content_Gate_Advanced_Settings::get_feed_restriction_mode(),
-			'Default feed restriction mode should be exclude.'
+			'Default feed restriction mode should be truncate.'
 		);
-		$this->assertNotContains(
+		$this->assertContains(
 			$this->post_id,
 			$this->feed_post_ids(),
-			'Restricted post should be absent from the feed in exclude mode.'
+			'Restricted post should stay in the feed under the truncate default.'
 		);
+
+		// Present is not enough — prove the body is actually the teaser, so a
+		// truncate→off regression (which would also keep the post) is caught here.
+		$feed_content = $this->render_in_feed_loop(
+			function () {
+				return get_the_content_feed( 'rss2' );
+			}
+		);
+		$this->assertStringContainsString( 'FREE_ONE', $feed_content, 'Teaser should be present under the truncate default.' );
+		$this->assertStringNotContainsString( 'PAID_FIVE', $feed_content, 'Paid content must not leak under the truncate default.' );
 	}
 
 	/**
@@ -293,6 +461,51 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 
 		$this->assertContains( $free_post_id, $feed_ids, 'Unrestricted post should survive exclude mode.' );
 		$this->assertNotContains( $this->post_id, $feed_ids, 'Restricted post should be dropped in exclude mode.' );
+	}
+
+	/**
+	 * While WooCommerce Memberships is active, Access Control yields feed
+	 * restriction entirely — even under the shipped restrict_feeds/exclude
+	 * defaults a Memberships-only site cannot change (NPPM-3204). The effective
+	 * mode resolves to "off" and the restricted post survives, the opposite of
+	 * test_exclude_mode_drops_only_restricted_posts above.
+	 *
+	 * The gate cannot supply the restriction here — Content_Restriction_Control
+	 * bails on the same Memberships::is_active() check — so the post is marked
+	 * restricted through `newspack_is_post_restricted`, standing in for
+	 * Memberships restricting it. Without that nothing would drop the post
+	 * either way and the feed assertion would hold with or without the guard.
+	 *
+	 * Runs isolated because WC_Memberships, once declared, would make
+	 * Memberships::is_active() true for every later feed test in this process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_active_memberships_yields_feed_restriction_to_wcm() {
+		// Stand in for an active WooCommerce Memberships install (global scope,
+		// which is what Memberships::is_active() checks).
+		require __DIR__ . '/../../mocks/wc-memberships-active-mock.php';
+
+		// The affected sites had neither value written. set_up() persists
+		// restrict_feeds = 1, which is what the shipped default resolves to anyway,
+		// and feed_restriction_mode is left unset so it resolves to the shipped
+		// exclude default. The guard still has to override the result to off.
+
+		add_filter( 'newspack_is_post_restricted', '__return_true', 99 );
+		$feed_ids = $this->feed_post_ids();
+		remove_filter( 'newspack_is_post_restricted', '__return_true', 99 );
+
+		$this->assertSame(
+			Content_Gate_Advanced_Settings::FEED_MODE_OFF,
+			Content_Gate_Advanced_Settings::get_feed_restriction_mode(),
+			'With Memberships active, the effective feed mode should be off regardless of the exclude default.'
+		);
+		$this->assertContains(
+			$this->post_id,
+			$feed_ids,
+			'With Memberships active, Access Control must not drop the restricted post from the feed.'
+		);
 	}
 
 	/**
@@ -450,7 +663,7 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 
 	/**
 	 * A filter that returns an unrecognized mode fails closed: it is ignored in
-	 * favour of the resolved mode (exclude, by default) rather than disabling
+	 * favour of the resolved mode (exclude, per set_up) rather than disabling
 	 * restriction and leaking full content to the feed.
 	 */
 	public function test_invalid_filter_return_falls_back_to_resolved_mode() {
@@ -663,7 +876,7 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		$this->assertSame(
 			'exclude',
 			Content_Gate_Advanced_Settings::get_feed_restriction_mode(),
-			'The rejected request must not have changed the stored mode.'
+			'The rejected request must not have changed the stored mode (exclude, per set_up).'
 		);
 	}
 

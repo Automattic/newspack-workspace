@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Republication Tracker Tool plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Republication Tracker Tool 2.8.4\n"
+"Project-Id-Version: Republication Tracker Tool 2.9.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/republication-tracker-tool\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-11T17:40:51+00:00\n"
+"POT-Creation-Date: 2026-09-28T19:00:22+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: republication-tracker-tool\n"
@@ -74,10 +74,10 @@ msgstr ""
 msgid "By "
 msgstr ""
 
-#: includes/class-republish-button-block.php:120
+#: includes/class-republish-button-block.php:124
 #: includes/class-republish-pattern.php:52
-#: includes/class-widget.php:92
-#: includes/class-widget.php:99
+#: includes/class-widget.php:96
+#: includes/class-widget.php:103
 #: dist/republish-button.js:1
 #: src/blocks/republish-button/edit.js:67
 msgid "Republish This Story"
@@ -88,7 +88,7 @@ msgid "Republication"
 msgstr ""
 
 #: includes/class-republish-pattern.php:47
-#: includes/class-widget.php:157
+#: includes/class-widget.php:161
 msgid "Republish our articles for free, online or in print, under a Creative Commons license."
 msgstr ""
 
@@ -204,23 +204,23 @@ msgstr ""
 msgid "If checked, users will be able to copy both HTML and plain text versions of the republishable content."
 msgstr ""
 
-#: includes/class-widget.php:108
+#: includes/class-widget.php:112
 msgid "Creative Commons License"
 msgstr ""
 
-#: includes/class-widget.php:155
+#: includes/class-widget.php:159
 msgid "This widget will only display on single articles."
 msgstr ""
 
-#: includes/class-widget.php:161
+#: includes/class-widget.php:165
 msgid "Title:"
 msgstr ""
 
-#: includes/class-widget.php:170
+#: includes/class-widget.php:174
 msgid "Modal"
 msgstr ""
 
-#: includes/class-widget.php:174
+#: includes/class-widget.php:178
 msgid "Page"
 msgstr ""
 
@@ -335,25 +335,25 @@ msgid "Copy to Clipboard"
 msgstr ""
 
 #. translators: %1$s is the site title, %2$s is the license description.
-#: republication-tracker-tool.php:353
+#: republication-tracker-tool.php:377
 #, php-format
 msgid "This article first appeared on %1$s and is republished here under a %2$s."
 msgstr ""
 
 #. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title. %4$s is the license URL, %5$s is the license description.
-#: republication-tracker-tool.php:361
+#: republication-tracker-tool.php:385
 #, php-format
 msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a> and is republished here under a <a target=\"_blank\" href=\"%4$s\">%5$s</a>."
 msgstr ""
 
 #. translators: %s is the site title.
-#: republication-tracker-tool.php:374
+#: republication-tracker-tool.php:398
 #, php-format
 msgid "This article first appeared on %s."
 msgstr ""
 
 #. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title.
-#: republication-tracker-tool.php:382
+#: republication-tracker-tool.php:406
 #, php-format
 msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a>."
 msgstr ""

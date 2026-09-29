@@ -9,10 +9,9 @@ import { find } from 'lodash';
 import { parse } from '@wordpress/blocks';
 import { useDispatch } from '@wordpress/data';
 import { DataViewsPicker } from '@wordpress/dataviews/wp';
-import { Button, Icon, Spinner, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Button, Spinner, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { commentAuthorAvatar } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -22,6 +21,7 @@ import { isUserDefinedLayout } from '../../../../utils';
 import { useLayoutsState } from '../../../../utils/hooks';
 import { setPreventDeduplicationForPostsInserter } from '../../../../editor/blocks/posts-inserter/utils';
 import NewsletterPreview from '../../../newsletter-preview';
+import UserRow, { avatarPropsFromAuthor } from '../../../user-row';
 
 const TABS = [
 	{
@@ -54,25 +54,12 @@ function getMetaForPreview( layout ) {
 	};
 }
 
-// Mirrors `src/admin-shell/screens/layouts-list/fields.js`.
 function renderAuthor( { item } ) {
 	const author = item?._embedded?.author?.[ 0 ];
 	if ( ! author ) {
 		return null;
 	}
-	const avatarUrl = author.avatar_urls?.[ 48 ] || author.avatar_urls?.[ 24 ];
-	return (
-		<span className="newspack-newsletters-list__author">
-			{ avatarUrl ? (
-				<span className="newspack-newsletters-list__author-avatar">
-					<img src={ avatarUrl } width={ 16 } height={ 16 } alt="" />
-				</span>
-			) : (
-				<Icon className="newspack-newsletters-list__author-icon" icon={ commentAuthorAvatar } size={ 24 } />
-			) }
-			<span>{ author.name || '' }</span>
-		</span>
-	);
+	return <UserRow { ...avatarPropsFromAuthor( author ) } label={ author.name || '' } className="newspack-newsletters-layouts-picker__author" />;
 }
 
 function PreviewCard( { item } ) {

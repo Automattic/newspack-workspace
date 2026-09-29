@@ -1,37 +1,44 @@
-/* eslint-disable @wordpress/i18n-translator-comments, no-bitwise */
+/* eslint-disable no-bitwise */
 /**
  * L0 — Group list (DataViews, full-width).
  *
  * Admin-facing list of every group/team subscription on the site. Unlike the
  * subscriber list, the group set is small enough to load in full and filter,
- * sort and paginate client-side. Filterable by status and plan, sortable. Click
- * targets follow the rule both tabs share: the row (and the owner name in it)
- * opens that person's user-edit screen, while the plan name in the Subscription
- * column opens that group's subscription. Both are the native admin screens until
- * the in-wizard group detail lands (NPPD-1753 PR 4).
+ * sort and paginate client-side. Filterable by status and plan, sortable.
+ *
+ * A row is a group, so clicking it opens that group's detail screen inside the
+ * wizard. The plan name in the Subscription column keeps its own link to the
+ * WooCommerce subscription — the money screen, which the detail view does not
+ * replace — and the owner's own screen is reached from the detail view rather
+ * than from here, so one row resolves to exactly one destination.
  */
 
 /**
  * WordPress dependencies.
  */
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews, Notice, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
+import LoadFailureNotice from '../components/LoadFailureNotice';
+import { useRetryFocus } from '../use-retry-focus';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
-import { STATUS_LABELS, STATUS_BADGE_LEVEL } from '../status';
-import { GROUP_LABEL_PLURAL } from '../labels';
+import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
+import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
+
+const { useHistory } = Router;
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -53,21 +60,22 @@ const DEFAULT_VIEW = {
 
 export default function GroupList() {
 	const [ view, setView ] = useState( DEFAULT_VIEW );
+	const history = useHistory();
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const { groups, loading: groupsLoading, error, reload } = useGroups();
 
-	// The row's title is the owner, so the row resolves to that person. The group
-	// itself is reachable from the plan name, which links to its subscription.
-	// A group whose owner no longer exists has nothing to open, so its row is not
-	// clickable (isItemClickable below) rather than silently doing nothing.
-	const openOwner = item => {
-		if ( item?.owner?.editUrl ) {
-			window.location.href = item.owner.editUrl;
+	// A row is a group, so it opens that group's detail screen in the wizard. The
+	// owner's name is the title text, but their own screen is reachable from the
+	// group detail rather than from here — one row, one destination. The plan name
+	// keeps its own link to the WooCommerce subscription, which the detail screen
+	// does not replace.
+	const openGroup = item => {
+		if ( item?.id ) {
+			history.push( `/groups/${ item.id }` );
 		}
 	};
-	const hasOwnerLink = item => !! item?.owner?.editUrl;
 
 	// Resolve owner avatar URLs, keyed by group id. The table renders immediately
 	// with the avatar placeholder and each avatar fills in as it resolves.
@@ -82,8 +90,9 @@ export default function GroupList() {
 		return byId;
 	}, [ groups, avatarsByEmail ] );
 
-	// Plan filter options come from the loaded groups (the plans endpoint arrives
-	// in a later slice); distinct, in first-seen order.
+	// Plan filter options come from the loaded groups, which are the full set, not
+	// from /plans: that endpoint also lists individual plans, which match no group.
+	// Distinct, in first-seen order.
 	const planElements = useMemo(
 		() => [ ...new Set( groups.map( g => g.plan ).filter( Boolean ) ) ].map( n => ( { value: n, label: n } ) ),
 		[ groups ]
@@ -110,14 +119,11 @@ export default function GroupList() {
 							<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
 								{ item.owner ? <span>{ item.owner.name }</span> : <span>—</span> }
 								{ item.seatRequest && (
-									<Badge
-										level="warning"
-										text={
-											item.seatRequest.status === 'awaiting-payment'
-												? __( 'Awaiting payment', 'newspack-plugin' )
-												: __( 'Seat increase requested', 'newspack-plugin' )
-										}
-									/>
+									<Badge intent="medium">
+										{ item.seatRequest.status === 'awaiting-payment'
+											? __( 'Awaiting payment', 'newspack-plugin' )
+											: __( 'Seat increase requested', 'newspack-plugin' ) }
+									</Badge>
 								) }
 							</HStack>
 							<div className="newspack-subscribers__email">{ item.owner?.email }</div>
@@ -159,7 +165,8 @@ export default function GroupList() {
 					<span>
 						{ item.seatLimit > 0
 							? `${ item.members } / ${ item.seatLimit }`
-							: sprintf( __( '%s / Unlimited', 'newspack-plugin' ), item.members ) }
+							: /* translators: %s: number of members in the group. */
+							  sprintf( __( '%s / Unlimited', 'newspack-plugin' ), item.members ) }
 					</span>
 				),
 				enableSorting: true,
@@ -170,7 +177,9 @@ export default function GroupList() {
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge level={ STATUS_BADGE_LEVEL[ item.status ] } text={ STATUS_LABELS[ item.status ] } />,
+				render: ( { item } ) => (
+					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
+				),
 			},
 			{
 				id: 'createdAt',
@@ -185,9 +194,9 @@ export default function GroupList() {
 
 	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( groups, view, fields ), [ groups, view, fields ] );
 
-	// Whole-row click → the owner's user edit (DataViews only wires up the title
-	// cell). The plan name inside the row is a real link and is skipped by the
-	// `a` guard below, so it keeps its own subscription target.
+	// Whole-row click → the group's detail screen (DataViews only wires up the
+	// title cell). The plan name inside the row is a real link and is skipped by
+	// the `a` guard below, so it keeps its own subscription target.
 	//
 	// DEPENDS ON DATAVIEWS INTERNAL MARKUP: the row is located by the
 	// `dataviews-view-table__row` class, which DataViews owns and could rename on
@@ -207,28 +216,31 @@ export default function GroupList() {
 		const id = row.querySelector( '[data-group-id]' )?.getAttribute( 'data-group-id' );
 		const item = groups.find( g => String( g.id ) === String( id ) );
 		if ( item ) {
-			openOwner( item );
+			openGroup( item );
 		}
 	};
 
 	const total = paginationInfo?.totalItems ?? 0;
 
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
-	useEffect( () => {
+	// Before paint: this carries the width override, and an error arrives outside a
+	// React event, so a passive effect would paint full-bleed for one frame first.
+	useLayoutEffect( () => {
 		setHeaderData( {
-			sectionName: (
-				<>
-					{ GROUP_LABEL_PLURAL }{ ' ' }
-					<span
-						className="newspack-subscribers__header-count"
-						aria-label={ sprintf( __( '%1$s %2$s total', 'newspack-plugin' ), total.toLocaleString(), GROUP_LABEL_PLURAL ) }
-					>
-						{ `(${ total.toLocaleString() })` }
-					</span>
-				</>
-			),
+			// Header data is merged, so the explicit `undefined` is what clears a
+			// previous `false`; a retry never changes the route, so nothing else would.
+			fullWidth: error ? false : undefined,
+			sectionName: [
+				{
+					label: GROUP_LABEL_PLURAL,
+					count: groupsLoading || error ? undefined : total,
+					countLabel: groupCountLabel( total ),
+				},
+			],
 		} );
-	}, [ setHeaderData, total ] );
+	}, [ setHeaderData, total, groupsLoading, error ] );
+
+	const { retryRef, retry } = useRetryFocus( { settled: ! groupsLoading, failed: Boolean( error ), reload } );
 
 	if ( groupsLoading ) {
 		return (
@@ -241,12 +253,16 @@ export default function GroupList() {
 	// A failed read must not read as "this site has no groups": say so, and offer
 	// a retry.
 	if ( error ) {
+		const message = groupLoadFailedLabel( error );
 		return (
-			<Notice isError noticeText={ sprintf( __( 'Could not load %1$s: %2$s', 'newspack-plugin' ), GROUP_LABEL_PLURAL, error ) }>
-				<Button variant="link" onClick={ reload }>
-					{ __( 'Retry', 'newspack-plugin' ) }
-				</Button>
-			</Notice>
+			<LoadFailureNotice
+				message={ message }
+				action={
+					<Button variant="link" ref={ retryRef } onClick={ retry }>
+						{ __( 'Retry', 'newspack-plugin' ) }
+					</Button>
+				}
+			/>
 		);
 	}
 
@@ -261,8 +277,7 @@ export default function GroupList() {
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
-				onClickItem={ openOwner }
-				isItemClickable={ hasOwnerLink }
+				onClickItem={ openGroup }
 				search
 			/>
 		</div>

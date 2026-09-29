@@ -14,8 +14,7 @@ import { buildQueryParams as baseBuildQueryParams, toQueryString } from '../../u
 // these as `kind=scheduled` regardless of `start_date` meta. Without
 // `future` in the default set, WP-scheduled rows would silently
 // disappear from the list (the classic CPT list showed them).
-// `auto-draft` keeps an abandoned "Add new" visible.
-const DEFAULT_STATUSES = 'publish,private,future,draft,pending,auto-draft';
+const DEFAULT_STATUSES = 'publish,private,future,draft,pending';
 
 // Each value is the WP REST taxonomy filter param — i.e. the
 // taxonomy's `rest_base`, which defaults to the taxonomy slug when
@@ -48,17 +47,15 @@ export function buildQueryParams( view = {} ) {
 		// Active kind filter → custom REST param; no filter → wide post_status default.
 		statusFilterParam: 'newspack_newsletters_ad_status',
 		defaultStatusParam: 'status',
-		// `_fields` short-circuits `content.rendered` / `excerpt.rendered`
-		// and the unused editor REST fields (see newsletters-list note).
-		// `_links` stays in the list — `_embed` only expands links that
-		// survive the `_fields` filter.
+		// No `_embed` and no `_links` — see the newsletters-list note for what
+		// they cost. The terms field is unconditional because Quick Edit has no
+		// other source for the names, so hiding those columns would leave its
+		// pickers empty. The raw ID arrays ride along beside it: Quick Edit
+		// checks them against its own options lists to decide whether a field
+		// can safely be edited.
 		extraParams: {
-			// Unconditional, unlike the newsletters list: Quick Edit here
-			// hydrates advertiser and placement from the embedded terms
-			// alone and sends both taxonomies on every save, so dropping
-			// the embed when those columns are hidden would clear them.
-			_embed: 'wp:term',
-			_fields: 'id,status,title,date,meta,newspack_newsletters_ad_status,_links',
+			_fields:
+				'id,status,title,date,meta,newspack_newsletters_ad_status,newspack_newsletters_terms,newspack_nl_advertiser,ad_placement,categories',
 		},
 	} );
 }

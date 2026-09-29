@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/theme/newspack-theme\n"
-"POT-Creation-Date: 2026-08-11T17:40:52+00:00\n"
+"POT-Creation-Date: 2026-09-28T17:19:52+00:00\n"
 "PO-Revision-Date: 2025-03-14 10:02-0700\n"
 "Last-Translator: Luiz Eduardo Oliveira Fonseca <luizeof@gmail.com>\n"
 "Language-Team: Português do Brasil\n"
@@ -55,12 +55,12 @@ msgid "Corrections and clarifications"
 msgstr ""
 
 #: archive-newspack_correction.php:52 comments.php:116
-#: inc/template-tags.php:312
+#: inc/template-tags.php:347
 msgid "Previous"
 msgstr "Anterior"
 
 #: archive-newspack_correction.php:53 comments.php:117
-#: inc/template-tags.php:310
+#: inc/template-tags.php:345
 msgid "Next"
 msgstr "Próximo"
 
@@ -131,11 +131,11 @@ msgstr "Feito por Newspack"
 msgid "Primary Menu"
 msgstr "Menu Principal"
 
-#: functions.php:86 inc/template-tags.php:640
+#: functions.php:86 inc/template-tags.php:675
 msgid "Secondary Menu"
 msgstr "Menu Secundário"
 
-#: functions.php:87 inc/template-tags.php:671
+#: functions.php:87 inc/template-tags.php:706
 msgid "Tertiary Menu"
 msgstr "Menu Terciário"
 
@@ -143,7 +143,7 @@ msgstr "Menu Terciário"
 msgid "Topic Highlight Menu"
 msgstr ""
 
-#: functions.php:89 inc/template-tags.php:728 inc/template-tags.php:742
+#: functions.php:89 inc/template-tags.php:763 inc/template-tags.php:777
 msgid "Social Links Menu"
 msgstr "Menu de Links Sociais"
 
@@ -345,7 +345,7 @@ msgstr ""
 msgid "Close dropdown menu"
 msgstr ""
 
-#: functions.php:969
+#: functions.php:970
 msgid "Overview:"
 msgstr ""
 
@@ -523,7 +523,7 @@ msgid ""
 "visible."
 msgstr ""
 
-#: inc/customizer.php:281 inc/template-tags.php:566
+#: inc/customizer.php:281 inc/template-tags.php:601
 msgid "Donate"
 msgstr ""
 
@@ -1174,39 +1174,39 @@ msgid "by"
 msgstr "por"
 
 #. translators: %s: Name of current post. Only visible to screen readers.
-#: inc/template-tags.php:262
+#: inc/template-tags.php:297
 #, php-format
 msgid "Leave a comment<span class=\"screen-reader-text\"> on %s</span>"
 msgstr "Deixe um comentário em %s"
 
 #. translators: used between list items; followed by a space.
-#: inc/template-tags.php:286 inc/template-tags.php:329
+#: inc/template-tags.php:321 inc/template-tags.php:364
 msgid ","
 msgstr ","
 
-#: inc/template-tags.php:293
+#: inc/template-tags.php:328
 msgid "Posted in"
 msgstr "Postado em"
 
-#: inc/template-tags.php:334
+#: inc/template-tags.php:369
 msgid "Tagged:"
 msgstr "Marcado:"
 
 #. translators: %s: Name of current post; only visible to screen readers.
-#: inc/template-tags.php:345 template-parts/content/content-page.php:42
+#: inc/template-tags.php:380 template-parts/content/content-page.php:42
 #, php-format
 msgid "Edit <span class=\"screen-reader-text\">%s</span>"
 msgstr "Editar <span class=\"screen-reader-text\">%s</span>"
 
-#: inc/template-tags.php:548
+#: inc/template-tags.php:583
 msgid "Newer posts"
 msgstr "Postagens mais recentes"
 
-#: inc/template-tags.php:552
+#: inc/template-tags.php:587
 msgid "Older posts"
 msgstr "Posts mais antigos"
 
-#: inc/template-tags.php:608
+#: inc/template-tags.php:643
 msgid "Top Menu"
 msgstr "Menu do Topo"
 
@@ -1224,23 +1224,35 @@ msgstr ""
 msgid "Why you can trust %s"
 msgstr ""
 
-#: inc/typography.php:117
+#: inc/typography.php:126
 msgid "Serif"
 msgstr ""
 
-#: inc/typography.php:124
+#: inc/typography.php:133
 msgid "Sans Serif"
 msgstr ""
 
-#: inc/typography.php:131
+#: inc/typography.php:140
 msgid "Display"
 msgstr ""
 
-#: inc/typography.php:139
+#: inc/typography.php:148
 msgid "Monospace"
 msgstr ""
 
-#: inc/woocommerce.php:75
+#: inc/typography.php:289
+#, fuzzy
+msgctxt "font family name"
+msgid "Header"
+msgstr "Fonte do cabeçalho"
+
+#: inc/typography.php:294
+#, fuzzy
+msgctxt "font family name"
+msgid "Body"
+msgstr "Fonte do Corpo"
+
+#: inc/woocommerce.php:120
 msgid "Create an account"
 msgstr "Crie a sua conta aqui"
 

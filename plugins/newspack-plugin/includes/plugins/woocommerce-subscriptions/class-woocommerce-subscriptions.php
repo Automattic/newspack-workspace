@@ -20,10 +20,23 @@ class WooCommerce_Subscriptions {
 	const REACTIVATED_FOR_SWITCH_META = '_newspack_switch_reactivated_subscriptions';
 
 	/**
+	 * Option recording which WooCommerce Subscriptions product-type settings
+	 * Newspack turned on, as a list of the option names written.
+	 *
+	 * Write provenance, not a gate: once the WooCommerce row exists,
+	 * `maybe_enable_legacy_product_types()` never reconsiders it anyway. This
+	 * exists so the write is answerable afterwards — which sites Newspack
+	 * touched, and which of the two rows it created — so that a corrective
+	 * release could reverse only those and leave a publisher's own choice alone.
+	 */
+	const PRODUCT_TYPES_ENABLED_OPTION = 'newspack_subscriptions_enabled_product_types';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
 		add_action( 'plugins_loaded', [ __CLASS__, 'woocommerce_subscriptions_integration_init' ] );
+		add_action( 'admin_init', [ __CLASS__, 'maybe_enable_legacy_product_types' ] );
 		add_filter( 'woocommerce_subscriptions_product_limited_for_user', [ __CLASS__, 'maybe_limit_subscription_product_for_user' ], 10, 3 );
 		add_filter( 'woocommerce_subscriptions_product_trial_length', [ __CLASS__, 'limit_free_trials_to_one_per_user' ], 10, 2 );
 		add_filter( 'wcs_get_users_subscriptions', [ __CLASS__, 'filter_subscriptions_for_account_page' ], 10, 1 );
@@ -865,6 +878,20 @@ class WooCommerce_Subscriptions {
 	 * @return bool
 	 */
 	private static function should_count_signup_fee_on_switch( $subscription, $existing_item ) {
+		/**
+		 * Counts a paid one-time sign-up fee toward the proration baseline when
+		 * a subscription is switched, for publishers selling stepped pricing as
+		 * a sign-up fee plus a free trial. The
+		 * newspack_wc_subs_switch_include_signup_fee filter is applied after
+		 * this and can scope the decision per subscription or product.
+		 *
+		 * @constant NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE
+		 * @type     bool
+		 * @default  Sign-up fee excluded from the proration baseline
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE', true );
+		 */
 		$enabled = defined( 'NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE' ) && NEWSPACK_WC_SUBS_SWITCH_INCLUDE_SIGNUP_FEE;
 
 		/**
@@ -929,14 +956,145 @@ class WooCommerce_Subscriptions {
 		include_once __DIR__ . '/class-subscriptions-confirmation.php';
 		include_once __DIR__ . '/class-subscriptions-tiers.php';
 		include_once __DIR__ . '/class-card-expiry-warning.php';
+		include_once __DIR__ . '/class-zero-total-renewals.php';
 
 		On_Hold_Duration::init();
 		Renewal::init();
 		Subscriptions_Meta::init();
 		Subscriptions_Confirmation::init();
 		Card_Expiry_Warning::init();
+		Zero_Total_Renewals::init();
 	}
 
+	/**
+	 * Enable the `subscription` and `variable-subscription` product types, once.
+	 *
+	 * WooCommerce Subscriptions 9.0 added a "Subscription product creation" section
+	 * whose two checkboxes default to off, which removes those product types from
+	 * the product-type dropdown. Newspack still creates them — the Audience wizard
+	 * writes them directly — so on an unconfigured site a publisher cannot create
+	 * or switch to a product type our own wizard produces.
+	 *
+	 * Runs on `admin_init`, matching how the plugin writes other third-party
+	 * options (`Parsely::migrate_meta_type()`, `WooCommerce_Email_Style_Sync`,
+	 * `Emails_Section`), which keeps it off ordinary front-end pageloads, REST
+	 * requests and cron. It is not an authentication guarantee: `admin-ajax.php`
+	 * fires `admin_init` too, so a `wp_ajax_nopriv_*` action reaches this
+	 * unauthenticated. That is harmless here — the write is one-shot and the same
+	 * either way — but the hook is a narrower surface, not a logged-in one.
+	 *
+	 * Nothing is lost by waiting — a Subscriptions upgrade happens through an
+	 * admin action, so `admin_init` fires in the same session, and the
+	 * product-type dropdown this unblocks is itself only reachable in wp-admin.
+	 * It also makes the opt-out filter usable from a theme's `functions.php`,
+	 * which a `plugins_loaded` call would not.
+	 *
+	 * @return void
+	 */
+	public static function maybe_enable_legacy_product_types() {
+		if ( ! self::is_active() ) {
+			return;
+		}
+		self::enable_legacy_product_types();
+	}
+
+	/**
+	 * Write the product-type settings, for options that have never been written.
+	 *
+	 * Only an option whose row is absent is touched. Anything that has saved the
+	 * setting leaves a `'no'`, including WooCommerce's own settings screen when the
+	 * box is unticked, so an absent row is the only signal that the publisher has no
+	 * preference. That makes this self-limiting: after the first write the row
+	 * exists, so the check never passes again and an unticked box stays unticked.
+	 *
+	 * Known limitation, accepted deliberately: `WC_Admin_Settings::save_fields()`
+	 * writes every field in a section on any save of that tab, not only the fields
+	 * the publisher touched. A site that reached 9.0 and then saved WooCommerce →
+	 * Settings → Subscriptions for an unrelated reason therefore has `'no'` rows
+	 * nobody chose, and this permanently no-ops for it. Widening the test to treat
+	 * `'no'` as fair game would forfeit the one thing that makes writing another
+	 * plugin's setting safe — so those sites are left to the settings screen.
+	 *
+	 * Deliberately not gated on the Subscriptions version. Writing the option before
+	 * a site reaches 9.0 is the point — the new default then never applies.
+	 *
+	 * @return void
+	 */
+	public static function enable_legacy_product_types() {
+		/**
+		 * Filters whether Newspack enables the legacy subscription product types.
+		 *
+		 * Returning false leaves the WooCommerce settings untouched. Because the
+		 * write runs on `admin_init` and happens at most once per option, the
+		 * filter must be added before then — a plugin, mu-plugin or a theme's
+		 * `functions.php` all work; it cannot be used to undo a write already made.
+		 *
+		 * @param bool $enable Whether to enable the legacy subscription product types.
+		 */
+		if ( ! apply_filters( 'newspack_subscriptions_enable_legacy_product_types', true ) ) {
+			return;
+		}
+
+		$options = [
+			'woocommerce_subscriptions_enable_simple_subscription',
+			'woocommerce_subscriptions_enable_variable_subscription',
+		];
+
+		// A sentinel default rather than a `false ===` test: `get_option()` returns
+		// the default only when the row is absent, so this stays correct even for
+		// an option stored as `false` or an empty string.
+		$absent  = new \stdClass();
+		$written = [];
+		foreach ( $options as $option ) {
+			if ( $absent === get_option( $option, $absent ) ) {
+				$written[] = $option;
+			}
+		}
+
+		if ( empty( $written ) ) {
+			return;
+		}
+
+		foreach ( $written as $option ) {
+			update_option( $option, 'yes' );
+		}
+
+		update_option(
+			self::PRODUCT_TYPES_ENABLED_OPTION,
+			array_values( array_unique( array_merge( (array) get_option( self::PRODUCT_TYPES_ENABLED_OPTION, [] ), $written ) ) )
+		);
+
+		Logger::newspack_log(
+			'newspack_subscriptions_product_types_enabled',
+			'Enabled WooCommerce Subscriptions product types that had never been configured.',
+			[ 'options' => $written ],
+			'info'
+		);
+	}
+
+	/**
+	 * Whether a product is a subscription — a subscription, a variable subscription,
+	 * or one of its variations.
+	 *
+	 * WooCommerce Subscriptions is asked directly when it is loaded, because it is the
+	 * authority on its own product types and handles variations. The type check is the
+	 * fallback for a site whose products outlived the plugin: those read as simple, so
+	 * every caller gets `false`. Which way that errs depends on the caller — a check
+	 * for what grants a rule covers a product it would have skipped, a cart check
+	 * withholds a discount — so a new caller has to decide for itself whether that is
+	 * the safe direction. Little rides on it in practice: without the plugin no
+	 * subscription is active, so the features that consult this reach nobody either way.
+	 *
+	 * @param \WC_Product $product The product.
+	 *
+	 * @return bool
+	 */
+	public static function is_subscription_product( \WC_Product $product ): bool {
+		if ( class_exists( 'WC_Subscriptions_Product' ) ) {
+			return (bool) \WC_Subscriptions_Product::is_subscription( $product );
+		}
+		return $product->is_type( [ 'subscription', 'variable-subscription', 'subscription_variation' ] );
+	}
 
 	/**
 	 * Check if WooCommerce Subscriptions is active.
@@ -1137,7 +1295,7 @@ class WooCommerce_Subscriptions {
 		) {
 			$user_id = \Newspack_Blocks\Modal_Checkout::get_user_id_from_email();
 		}
-		if ( $trial_length && $user_id && $product && $product->is_type( [ 'subscription', 'subscription_variation', 'variable-subscription' ] ) ) {
+		if ( $trial_length && $user_id && $product instanceof \WC_Product && self::is_subscription_product( $product ) ) {
 			$user_subscriptions = array_values( \wcs_get_users_subscriptions( $user_id ) );
 			foreach ( $user_subscriptions as $subscription ) {
 				if ( $subscription->has_product( $product->get_id() ) && 'trash' !== $subscription->get_status() ) {

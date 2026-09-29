@@ -251,34 +251,7 @@ domReady( function () {
 				} );
 			};
 
-			// When post-registration verification is OFF in Audience → Configuration, intercept
-			// new-email subscriptions with a "You're about to create an account for X" confirmation
-			// step before any account is provisioned. Verification ON → fall through to subscribe
-			// immediately; the verification modal still runs after registration. Degrades to
-			// immediate subscribe when running against a newspack-plugin that doesn't expose the
-			// helper.
-			//
-			// Look the helper up synchronously instead of going through window.newspackRAS.push():
-			// the push queue is drained on domReady, so if RAS never initialises (older plugin,
-			// runtime error in the RAS bundle) the callback never fires and the form gets stuck
-			// "in progress" forever. A direct global check fails open to immediate submit.
-			const ras = window.newspackReaderActivation;
-			if ( typeof ras?.maybeConfirmRegistration !== 'function' ) {
-				submitSubscribe();
-				return;
-			}
-			ras.maybeConfirmRegistration( {
-				email: body.get( 'npe' ),
-				onProceed: submitSubscribe,
-				onCancel: () => {
-					emailInput.removeAttribute( 'disabled' );
-					submit.removeAttribute( 'disabled' );
-					if ( submit.contains( spinner ) ) {
-						submit.removeChild( spinner );
-					}
-					form.classList.remove( 'in-progress' );
-				},
-			} );
+			submitSubscribe();
 		} );
 	} );
 } );

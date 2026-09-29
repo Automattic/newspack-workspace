@@ -5,10 +5,12 @@ import {
 	closeOverlay,
 	getAbOverride,
 	getBestPrioritySegment,
+	getBestPrioritySegmentFromSnapshot,
 	getIntersectionObserver,
 	getRawId,
 	getOverride,
 	handleSeen,
+	isSwitchedSession,
 	shouldPromptBeDisplayed,
 	syncMatchedSegments,
 } from './utils';
@@ -32,7 +34,11 @@ export const handleSegmentation = prompts => {
 		// reader mid-page, and a delayed prompt's unhide() re-check must see it.
 		// Reuses carriedIds — the cookie is already consumed.
 		const getCarried = () => ( ras?.store?.get( 'reader' )?.authenticated ? [] : carriedIds );
-		const matchingSegment = getBestPrioritySegment( segments, null, getCarried() );
+		// An admin switched into the reader's account sees the reader's stored
+		// segment; a match computed here would come from the admin's browser.
+		const resolveMatchingSegment = () =>
+			isSwitchedSession() ? getBestPrioritySegmentFromSnapshot( ras, segments ) : getBestPrioritySegment( segments, null, getCarried() );
+		const matchingSegment = resolveMatchingSegment();
 		debug( 'matchingSegment', matchingSegment );
 
 		// Register segments and set match via RAS if available.
@@ -78,12 +84,11 @@ export const handleSegmentation = prompts => {
 				};
 				const unhide = () => {
 					// Conditions may have changed since the prompt was delayed.
-					// Verify whether the prompt can still be displayed. Re-derive the
-					// carried set here (via getCarried()) rather than closing over the
-					// value computed above: a reader who authenticates mid-delay must
-					// have their live matching win over a stale carried snapshot even
-					// for a prompt that was already pending when that happened.
-					const updatedMatchingSegment = getBestPrioritySegment( segments, null, getCarried() );
+					// Verify whether the prompt can still be displayed. Resolve the match
+					// again rather than reusing the one computed above: a reader who
+					// authenticates mid-delay must have their live matching win over a
+					// carried snapshot, even for a prompt that was already pending.
+					const updatedMatchingSegment = resolveMatchingSegment();
 					if ( ras?.segments ) {
 						ras.segments.setMatch( updatedMatchingSegment );
 					}

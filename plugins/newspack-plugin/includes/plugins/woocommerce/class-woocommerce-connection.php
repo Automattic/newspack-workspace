@@ -61,7 +61,14 @@ class WooCommerce_Connection {
 		\add_action( 'cli_init', [ __CLASS__, 'register_cli_commands' ] );
 
 		// Emails.
-		\add_filter( 'woocommerce_order_status_completed_notification', [ __CLASS__, 'send_customizable_receipt_email' ] );
+		/**
+		 * Priority 5, ahead of WooCommerce's own Completed Order email at 10.
+		 * disable_duplicate_wc_completed_order_email() decides by reading the
+		 * sent marker this call writes, so the send has to have happened —
+		 * or failed — before WooCommerce asks whether its email is enabled.
+		 */
+		\add_filter( 'woocommerce_order_status_completed_notification', [ __CLASS__, 'send_customizable_receipt_email' ], 5 );
+		\add_filter( 'woocommerce_email_enabled_customer_completed_order', [ __CLASS__, 'disable_duplicate_wc_completed_order_email' ], 10, 2 );
 		\add_action( 'cancelled_subscription_notification', [ __CLASS__, 'send_customizable_cancellation_email' ] );
 
 		// woocommerce-memberships-for-teams plugin.
@@ -650,6 +657,127 @@ class WooCommerce_Connection {
 	}
 
 	/**
+	 * Which customizable reader-revenue email, if any, applies to an order.
+	 *
+	 * Both emails describe the same moment — a completed purchase — and differ
+	 * only in whether the reader also gained an account on the way through
+	 * checkout. Neither is scoped to donations: a membership or subscription
+	 * purchase is exactly the transaction the Welcome email's own editor notice
+	 * describes, and the Receipt template's copy ("a receipt for your recent
+	 * transaction") reads correctly for any product.
+	 *
+	 * @param \WC_Order $order The order.
+	 *
+	 * @return string|false One of Reader_Revenue_Emails::EMAIL_TYPES, or false.
+	 */
+	private static function get_customizable_email_type_for_order( $order ) {
+		if ( empty( $order ) || ! is_a( $order, 'WC_Order' ) ) {
+			return false;
+		}
+
+		// Both templates describe the order's first line item, so an order with
+		// no items has nothing to describe.
+		if ( empty( $order->get_items() ) ) {
+			return false;
+		}
+
+		// A reader who registered during checkout gets the welcome, which carries
+		// the receipt details too. With it switched off, they still get a receipt.
+		if ( $order->get_meta( '_newspack_checkout_registration_meta' ) && Emails::can_send_email( Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'] ) ) {
+			return Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'];
+		}
+
+		if ( Emails::can_send_email( Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'] ) ) {
+			return Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'];
+		}
+
+		return false;
+	}
+
+	/**
+	 * Stand WooCommerce's Completed Order email down when Newspack sends its own.
+	 *
+	 * Scoped deliberately to `customer_completed_order` — the reader's copy, and
+	 * the only one a Newspack email replaces. The store owner's notifications
+	 * (`new_order` and friends) serve a different audience and are left alone,
+	 * as is the gift recipient's `recipient_completed_order`.
+	 *
+	 * Only ever suppresses: an email another filter has already disabled stays
+	 * disabled, and one Newspack has not replaced is left enabled.
+	 *
+	 * The decision reads the sent marker rather than recomputing whether an
+	 * email applies, so that a Newspack send which fails — a mailer error, a
+	 * filtered-out recipient — does not wave WooCommerce off and leave the
+	 * reader with no receipt at all. This depends on the Newspack send running
+	 * first, which its priority 5 registration guarantees.
+	 *
+	 * @param bool           $enabled Whether the email is enabled.
+	 * @param \WC_Order|null $object  The order the email is being sent for, if any.
+	 *
+	 * @return bool
+	 */
+	public static function disable_duplicate_wc_completed_order_email( $enabled, $object = null ) {
+		// WooCommerce also evaluates this filter with no order in hand — on the
+		// email settings screen, for one — where the publisher's own setting is
+		// the only honest answer.
+		if ( ! $enabled || ! is_a( $object, 'WC_Order' ) ) {
+			return $enabled;
+		}
+
+		// Read the marker from the data store rather than from the order handed
+		// in. WooCommerce carries one instance from the status transition all
+		// the way into the email trigger, and that instance was hydrated before
+		// the Newspack send wrote its marker on an instance of its own — its
+		// in-memory meta is stale, and trusting it lets the duplicate through.
+		$order = \wc_get_order( $object->get_id() );
+		if ( ! is_a( $order, 'WC_Order' ) ) {
+			return $enabled;
+		}
+
+		$already_sent = $order->get_meta( '_newspack_welcome_email_sent', true )
+			|| $order->get_meta( '_newspack_receipt_email_sent', true );
+		return ! $already_sent;
+	}
+
+	/**
+	 * The billing frequency an order line item bills at, as reader-facing text.
+	 *
+	 * Read from the product's own subscription period rather than a map of the
+	 * Newspack donation product IDs, so a yearly membership is described as
+	 * yearly instead of falling through to the one-time default.
+	 *
+	 * @param \WC_Order_Item_Product $item The order line item.
+	 *
+	 * @return string
+	 */
+	private static function get_item_billing_frequency( $item ) {
+		$one_time = __( 'One-time', 'newspack-plugin' );
+
+		if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
+			return $one_time;
+		}
+
+		$product = $item->get_product();
+		if ( ! $product || ! \WC_Subscriptions_Product::is_subscription( $product ) ) {
+			return $one_time;
+		}
+
+		// Periods WooCommerce Subscriptions supports. An interval greater than
+		// one ("every 3 months") has no single-word label, so it keeps the
+		// period's own — the placeholder is documented as one-time, monthly or
+		// annual, and a longer phrase would not substitute cleanly into copy
+		// written around those.
+		$labels = [
+			'day'   => __( 'Daily', 'newspack-plugin' ),
+			'week'  => __( 'Weekly', 'newspack-plugin' ),
+			'month' => __( 'Monthly', 'newspack-plugin' ),
+			'year'  => __( 'Yearly', 'newspack-plugin' ),
+		];
+
+		return $labels[ \WC_Subscriptions_Product::get_period( $product ) ] ?? $one_time;
+	}
+
+	/**
 	 * Send the customizable receipt or welcome email instead of WooCommerce's default receipt.
 	 *
 	 * @param int $order_id The order ID.
@@ -659,43 +787,17 @@ class WooCommerce_Connection {
 	public static function send_customizable_receipt_email( $order_id ) {
 		$order = \wc_get_order( $order_id );
 
-		if ( empty( $order ) || ! is_a( $order, 'WC_Order' ) ) {
+		$email_type = self::get_customizable_email_type_for_order( $order );
+		if ( ! $email_type ) {
 			return false;
 		}
 
-		// If there are no donation products in the order, do not override the default WC receipt email.
-		if ( ! Donations::get_order_donation_product_id( $order->get_id() ) ) {
-			return false;
-		}
-
-		$email_type      = Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'];
-		$email_sent_meta = '_newspack_receipt_email_sent';
-
-		// If this is a new registration, and the welcome email is enabled, send the welcome email instead.
-		if ( $order->get_meta( '_newspack_checkout_registration_meta' ) && Emails::can_send_email( Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'] ) ) {
-			$email_type      = Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'];
-			$email_sent_meta = '_newspack_welcome_email_sent';
-		}
-
-		// If the customizable email isn't enabled bail.
-		if ( ! Emails::can_send_email( $email_type ) ) {
-			return false;
-		}
+		$email_sent_meta = Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'] === $email_type
+			? '_newspack_welcome_email_sent'
+			: '_newspack_receipt_email_sent';
 
 		if ( $order->get_meta( $email_sent_meta, true ) ) {
 			return false;
-		}
-
-		$frequencies = [
-			'month' => __( 'Monthly', 'newspack-plugin' ),
-			'year'  => __( 'Yearly', 'newspack-plugin' ),
-		];
-		$product_map = [];
-		foreach ( $frequencies as $frequency => $label ) {
-			$product_id = Donations::get_donation_product( $frequency );
-			if ( $product_id ) {
-				$product_map[ $product_id ] = $label;
-			}
 		}
 
 		$items = $order->get_items();
@@ -717,7 +819,7 @@ class WooCommerce_Connection {
 			],
 			[
 				'template' => '*BILLING_FREQUENCY*',
-				'value'    => $product_map[ $item->get_product_id() ] ?? __( 'One-time', 'newspack-plugin' ),
+				'value'    => self::get_item_billing_frequency( $item ),
 			],
 			[
 				'template' => '*PRODUCT_NAME*',
@@ -784,18 +886,6 @@ class WooCommerce_Connection {
 			return false;
 		}
 
-		$frequencies = [
-			'month' => __( 'Monthly', 'newspack-plugin' ),
-			'year'  => __( 'Yearly', 'newspack-plugin' ),
-		];
-		$product_map = [];
-		foreach ( $frequencies as $frequency => $label ) {
-			$product_id = Donations::get_donation_product( $frequency );
-			if ( $product_id ) {
-				$product_map[ $product_id ] = $label;
-			}
-		}
-
 		$items = $subscription->get_items();
 
 		if ( ! empty( $items ) ) {
@@ -817,7 +907,7 @@ class WooCommerce_Connection {
 				],
 				[
 					'template' => '*BILLING_FREQUENCY*',
-					'value'    => $product_map[ $item->get_product_id() ] ?? __( 'One-time', 'newspack-plugin' ),
+					'value'    => self::get_item_billing_frequency( $item ),
 				],
 				[
 					'template' => '*PRODUCT_NAME*',

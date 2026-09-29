@@ -75,6 +75,10 @@ class Newspack_Unit_Tests_Bootstrap {
 		// Load the WP testing environment.
 		require_once $_tests_dir . '/includes/bootstrap.php';
 
+		// PHPUnit resolves the extensions in phpunit.xml after this bootstrap runs, and
+		// this one is not autoloaded.
+		require_once __DIR__ . '/class-newspack-request-memo-reset.php';
+
 		ini_set( 'error_log', 'php://stdout' ); // phpcs:ignore WordPress.PHP.IniSet.Risky
 
 		define( 'IS_TEST_ENV', 1 );

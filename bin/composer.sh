@@ -19,5 +19,5 @@ fi
 PROJECT_DIR=$(find_project "$1")
 
 cd "$PROJECT_DIR"
-echo "Running: composer ${@:2}"
+echo "Running: composer ${*:2}"
 composer "${@:2}"

@@ -1,11 +1,9 @@
 /* globals newspack_content_gifting */
 import domReady from '@wordpress/dom-ready';
 import { queuePageReload } from '../reader-activation/utils';
+import { getMeteringSettings, getMeteringStoreKey } from './utils/metering-settings';
 
 import './content-banner.scss';
-
-const settings = window.newspack_metering_settings || {};
-const storeKey = 'metering-' + settings.gate_id || 0;
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -42,7 +40,8 @@ domReady( () => {
 		if ( ! views || 0 < parseInt( views.textContent ) ) {
 			return;
 		}
-		const data = ras?.store?.get( storeKey ) || {
+		const settings = getMeteringSettings();
+		const data = ( settings && ras?.store?.get( getMeteringStoreKey( settings ) ) ) || {
 			content: [],
 		};
 		const total = parseInt( document.querySelector( '.newspack-countdown-banner__total_views' )?.textContent || 0 );

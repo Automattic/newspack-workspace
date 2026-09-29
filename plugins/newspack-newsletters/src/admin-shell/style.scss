@@ -37,14 +37,6 @@ body.newspack-newsletters-admin-screen {
 	.notice-info {
 		box-shadow: 0 0 0 1px wp-colors.$gray-300;
 	}
-
-	.newspack-section-header.newspack-section-header--page-header .newspack-section-header__icon {
-		background-color: np-colors.$primary-000;
-
-		svg {
-			fill: np-colors.$primary-600;
-		}
-	}
 }
 
 body.newspack-newsletters-admin-screen--bundled {
@@ -139,6 +131,15 @@ body.newspack-newsletters-admin-screen--bundled {
 		display: flex;
 		justify-content: center;
 		min-height: 200px;
+
+		.components-spinner {
+			margin: 0;
+		}
+
+		p {
+			font-weight: wp-vars.$font-weight-medium;
+			margin: 0;
+		}
 	}
 
 	&__notices {
@@ -187,36 +188,6 @@ body.newspack-newsletters-admin-screen--bundled {
 	}
 }
 
-// Centered over the admin content while an "All" fetch walks the
-// collection (portalled to body — inside the DataViews tree every
-// ancestor stack is a positioning context, which would pin it to the
-// actions row). `left` is set inline from #wpbody's box. The delayed
-// fade keeps fast walks from flashing the overlay in and out.
-.newspack-newsletters-fetch-all-progress {
-	animation: newspack-newsletters-fetch-all-progress-in 150ms ease-in-out 300ms both;
-	left: 50%;
-	pointer-events: none;
-	position: fixed;
-	top: 50%;
-	transform: translate(-50%, -50%);
-	z-index: 10;
-
-	.components-spinner {
-		margin: 0;
-	}
-}
-
-@keyframes newspack-newsletters-fetch-all-progress-in {
-	from {
-		opacity: 0;
-	}
-
-	to {
-		opacity: 1;
-	}
-}
-
-
 body.newspack-newsletters-admin-screen .dataviews-view-table a:not(.newspack-newsletters-list__title) {
 	color: var(--wp-admin-theme-color);
 
@@ -233,6 +204,10 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 	display: none;
 }
 
+.newspack-newsletters-admin .dataviews-filters-toggle__count {
+	display: none;
+}
+
 // Muted item count portalled next to the breadcrumbs page title.
 .newspack-newsletters-header-count {
 	color: wp-colors.$gray-700;
@@ -241,32 +216,14 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 }
 
 .newspack-newsletters-list {
-	&__author,
-	&__status,
-	&__visibility {
-		align-items: center;
-		display: inline-flex;
-		gap: wp-vars.$grid-unit-10;
+	&__title-cell,
+	&__locked {
+		min-width: 0;
 	}
 
-	&__author-icon,
-	&__status-icon,
-	&__visibility-icon {
-		@include inline-icon;
-	}
-
-	&__author-avatar {
-		align-items: center;
-		display: inline-flex;
-		flex-shrink: 0;
-		height: 24px;
-		justify-content: center;
-		width: 24px;
-
-		img {
-			border-radius: 50%;
-			display: block;
-		}
+	&__locked {
+		color: wp-colors.$gray-700;
+		font-weight: wp-vars.$font-weight-regular;
 	}
 }
 
@@ -431,13 +388,11 @@ body.newspack-newsletters-admin-screen .dataviews-filters__visibility-toggle[ari
 
 // Trim the WP icon's 4px viewBox padding to its visible 16px footprint.
 .dataviews-view-table {
-	.newspack-newsletters-list__author-icon,
-	.newspack-newsletters-list__status-icon,
-	.newspack-newsletters-list__visibility-icon {
+	.newspack-newsletters-user-row__icon {
 		margin: -4px;
 	}
 
-	.newspack-newsletters-list__author-avatar {
+	.newspack-newsletters-user-row__avatar {
 		height: 16px;
 		width: 16px;
 	}

@@ -6,24 +6,40 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-// Notice is aliased: `Notice` below is Newspack's own, which this file also uses.
-import { DropdownMenu, MenuGroup, MenuItem, Notice as CoreNotice } from '@wordpress/components';
+import {
+	DropdownMenu,
+	MenuGroup,
+	MenuItem,
+	Notice,
+	SlotFillProvider,
+	createSlotFill,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack,
+} from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, createInterpolateElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useLayoutEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { Footer, Notice, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page } from '../';
-import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
+import { Footer, DebugBadge, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
+import { activeBreadcrumbs, activeSection, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
 import WizardSnackbar from './components/WizardSnackbar';
 import WizardError from './components/WizardError';
 
 registerStore();
+
+/**
+ * Renders a view's page-level banner outside the padded content column, so it sits
+ * flush beneath the header rather than indented within the section it describes.
+ */
+const { Slot: WizardBannerSlot, Fill: WizardBanner } = createSlotFill( 'NewspackWizardBanner' );
+
+export { WizardBanner };
 
 /**
  * Icon registry for resolving icon name strings passed through the data store.
@@ -38,7 +54,7 @@ const resolveIcon = icon => {
 	return icon;
 };
 
-const { HashRouter, Redirect, Route, Switch, useLocation } = Router;
+const { HashRouter, Redirect, Route, Switch, matchPath, useLocation } = Router;
 
 /**
  * Interpolate a translated message's named tags, falling back to plain text.
@@ -75,7 +91,9 @@ const ResetHeaderData = () => {
 	const location = useLocation();
 	const { resetHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	useEffect( () => {
+	// Must stay before paint: a passive effect here would run after a section that
+	// publishes from a layout effect, wiping the header it just set.
+	useLayoutEffect( () => {
 		resetHeaderData();
 		window.scrollTo( 0, 0 );
 	}, [ location.pathname, resetHeaderData ] );
@@ -87,8 +105,34 @@ const ResetHeaderData = () => {
  * Wizard header + content region. Rendered inside the wizard's HashRouter so it
  * can read the current route and derive the active-tab breadcrumb.
  */
-const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, subTitle, actions, tabbedNavigation, children } ) => {
+const WizardHeaderRegion = ( {
+	hideHeader,
+	headerText,
+	sections,
+	sectionName,
+	subTitle,
+	actions,
+	tabbedNavigation: wizardTabbedNavigation,
+	children,
+} ) => {
 	const { pathname } = useLocation();
+
+	// A section can carry its own tabs, built from its route params, in place of
+	// the wizard's. The first match wins, as it does in the wizard's `<Switch>`.
+	let tabbedNavigation = wizardTabbedNavigation;
+	for ( const section of sections ) {
+		const match = matchPath( pathname, { path: section.path, exact: section.exact ?? false } );
+		if ( match ) {
+			if ( typeof section.tabbedNavigation === 'function' ) {
+				tabbedNavigation = (
+					<TabbedNavigation items={ section.tabbedNavigation( match.params ) }>
+						<WizardError />
+					</TabbedNavigation>
+				);
+			}
+			break;
+		}
+	}
 
 	if ( hideHeader ) {
 		// Without the Page shell the tabs still own the content: it renders
@@ -107,8 +151,10 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 	// headerData.sectionName (deduped against the current trailing label).
 	breadcrumbItems = appendSectionName( breadcrumbItems, sectionName );
 
+	const sectionSubTitle = activeSection( sections, pathname )?.subHeaderText;
+
 	return (
-		<Page breadcrumbItems={ breadcrumbItems } subTitle={ subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
+		<Page breadcrumbItems={ breadcrumbItems } subTitle={ sectionSubTitle ?? subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
 			{ children }
 		</Page>
 	);
@@ -116,11 +162,12 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 
 /**
  * @typedef  {Object}     WizardProps
- * @property {string}     headerText                The header text.
+ * @property {string}     [headerText]              Fallback heading, used only when no section declares breadcrumbs.
  * @property {string}     [subHeaderText]           The sub-header text, optional.
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.
- * @property {any[]}      sections                  Array of sections.
+ * @property {any[]}      sections                  Array of sections. A section's own `subHeaderText` replaces the wizard's while it is active.
+ *                                                  Its optional `tabbedNavigation( params )` returns the tab items shown while its route matches.
  * @property {boolean}    [hasSimpleFooter]         Indicates if a simple footer is used, optional.
  * @property {() => void} [renderAboveSections]     Function to render content above sections, optional.
  * @property {string[]}   [requiredPlugins]         Array of required plugin strings, optional.
@@ -155,8 +202,20 @@ const Wizard = (
 	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
 	const headerData = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getHeaderData() );
 	const notices = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getNotices() );
-	const { actions, backNav, badges, sectionDescription, sectionMenu, sectionName, sectionTitle, sectionPrimaryAction, sectionSecondaryAction } =
-		headerData;
+	const { invalidateResolution } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const {
+		actions,
+		backNav,
+		badges,
+		fullWidth: headerFullWidth,
+		sectionDescription,
+		sectionMenu,
+		sectionName,
+		sectionSize,
+		sectionTitle,
+		sectionPrimaryAction,
+		sectionSecondaryAction,
+	} = headerData;
 
 	const mainActions = actions?.filter( action => action.type === 'primary' || action.type === 'secondary' );
 	const moreActions = actions?.filter( action => action.type === 'more' );
@@ -168,13 +227,57 @@ const Wizard = (
 	let displayedSections = sections.filter( section => ! section.isHidden );
 
 	const [ pluginRequirementsSatisfied, setPluginRequirementsSatisfied ] = useState( requiredPlugins.length === 0 );
+	// Whether the requirements check has reported back. Until it has, the check
+	// shows the same fetching treatment as the rest of the wizard rather than
+	// the installer's own spinner and the swapped header; the installer only
+	// surfaces once a plugin is actually found missing.
+	const [ pluginRequirementsKnown, setPluginRequirementsKnown ] = useState( requiredPlugins.length === 0 );
+
+	// The data fetch above runs once per mount, while the required plugins are
+	// still missing — endpoints that need them answer empty or error outright,
+	// and either way the resolver records that as the answer. So the installer
+	// has to trigger a refetch, or the section mounts against it and renders
+	// nothing until the user saves. Requirements already met on mount are left
+	// alone: that fetch saw the real site, and refetching would cost every such
+	// wizard a second request on every load.
+	const requirementsWereUnmet = useRef( false );
+	const onPluginStatus = ( { complete } ) => {
+		// Leave the installer first: whatever happens to the refetch, the user
+		// should not be stranded on a required-plugins screen for a plugin they
+		// just installed.
+		setPluginRequirementsKnown( true );
+		setPluginRequirementsSatisfied( complete );
+		if ( ! complete ) {
+			requirementsWereUnmet.current = true;
+		} else if ( requirementsWereUnmet.current ) {
+			requirementsWereUnmet.current = false;
+			if ( apiSlug && isInitialFetchTriggered ) {
+				invalidateResolution( 'getWizardAPIData', [ apiSlug ] );
+			}
+		}
+	};
+
 	if ( ! pluginRequirementsSatisfied ) {
-		headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
+		if ( pluginRequirementsKnown ) {
+			headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
+		}
 		displayedSections = [
 			{
 				path: '/',
 				render: () => (
-					<PluginInstaller plugins={ requiredPlugins } onStatus={ ( { complete } ) => setPluginRequirementsSatisfied( complete ) } />
+					<>
+						{ ! pluginRequirementsKnown && (
+							<div className="newspack-wizard__loader">
+								<VStack alignment="center" spacing={ 2 }>
+									<Waiting noMargin />
+									<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
+								</VStack>
+							</div>
+						) }
+						<div hidden={ ! pluginRequirementsKnown }>
+							<PluginInstaller plugins={ requiredPlugins } onStatus={ onPluginStatus } />
+						</div>
+					</>
 				),
 			},
 		];
@@ -197,7 +300,7 @@ const Wizard = (
 	// as page chrome rather than as content.
 	const inertGating = window.newspack_aux_data?.inert_gating;
 	const inertGatingNotice = inertGating?.show && (
-		<CoreNotice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
+		<Notice status="warning" isDismissible={ false } className="newspack-wizard__inert-gating-notice">
 			{ /* The conversion map takes childless elements and fills them from the
 			     translated string, so jsx-a11y can't see the content they end up with. */ }
 			{ interpolateOrPlainText( inertGating.message, {
@@ -207,7 +310,7 @@ const Wizard = (
 				/* eslint-enable jsx-a11y/anchor-has-content */
 				strong: <strong />,
 			} ) }
-		</CoreNotice>
+		</Notice>
 	);
 
 	const content = (
@@ -218,6 +321,7 @@ const Wizard = (
 
 			<div className="newspack-wizard__main">
 				{ inertGatingNotice }
+				<WizardBannerSlot bubblesVirtually />
 				<Switch>
 					{ routedSections.map( ( section, index ) => {
 						const SectionComponent = section.render;
@@ -230,7 +334,7 @@ const Wizard = (
 								render={ routerProps => (
 									<div
 										className={ classnames( 'newspack-wizard__content', className, {
-											'newspack-wizard__content--full-width': section.fullWidth,
+											'newspack-wizard__content--full-width': headerFullWidth ?? section.fullWidth,
 										} ) }
 									>
 										{ 'function' === typeof renderAboveSections ? renderAboveSections() : null }
@@ -245,6 +349,7 @@ const Wizard = (
 												primaryAction={ sectionPrimaryAction || section.primaryAction }
 												secondaryAction={ sectionSecondaryAction || section.secondaryAction }
 												heading={ 2 }
+												size={ sectionSize || section.size }
 												noMargin
 											/>
 										) }
@@ -266,6 +371,7 @@ const Wizard = (
 				{ mainActions.map( ( action, index ) => (
 					<Button
 						key={ index }
+						aria-label={ action.ariaLabel }
 						className="newspack-wizard__actions__main"
 						href={ action.href }
 						icon={ resolveIcon( action.icon ) }
@@ -299,6 +405,7 @@ const Wizard = (
 									{ group.map( ( action, index ) => (
 										<MenuItem
 											key={ index }
+											aria-label={ action.ariaLabel }
 											className={
 												action.type === 'primary' || action.type === 'secondary'
 													? 'newspack-wizard__actions__more__main'
@@ -321,38 +428,40 @@ const Wizard = (
 		) : undefined;
 
 	return (
-		<div ref={ ref }>
-			<div
-				className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
-					'newspack-wizard__is-loading-quiet': isQuietLoading,
-				} ) }
-			>
-				<HashRouter hashType="slash">
-					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
-					<WizardHeaderRegion
-						hideHeader={ hideHeader }
-						headerText={ headerText }
-						sections={ routedSections }
-						sectionName={ sectionName }
-						subTitle={ subHeaderText }
-						actions={ headerActions }
-						tabbedNavigation={ tabbedNavigation }
-					>
-						{ content }
-					</WizardHeaderRegion>
-				</HashRouter>
-				{ notices?.length > 0 && (
-					<div className="newspack-wizard__snackbar-list">
-						{ notices.map( ( notice, index ) => (
-							<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
-								{ notice.message }
-							</WizardSnackbar>
-						) ) }
-					</div>
-				) }
+		<SlotFillProvider>
+			<div ref={ ref }>
+				<div
+					className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
+						'newspack-wizard__is-loading-quiet': isQuietLoading,
+					} ) }
+				>
+					<HashRouter hashType="slash">
+						<DebugBadge />
+						<WizardHeaderRegion
+							hideHeader={ hideHeader }
+							headerText={ headerText }
+							sections={ routedSections }
+							sectionName={ sectionName }
+							subTitle={ subHeaderText }
+							actions={ headerActions }
+							tabbedNavigation={ tabbedNavigation }
+						>
+							{ content }
+						</WizardHeaderRegion>
+					</HashRouter>
+					{ notices?.length > 0 && (
+						<div className="newspack-wizard__snackbar-list">
+							{ notices.map( ( notice, index ) => (
+								<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
+									{ notice.message }
+								</WizardSnackbar>
+							) ) }
+						</div>
+					) }
+				</div>
+				{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
 			</div>
-			{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
-		</div>
+		</SlotFillProvider>
 	);
 };
 

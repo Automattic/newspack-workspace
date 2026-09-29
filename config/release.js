@@ -28,18 +28,14 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 				'semantic-release-version-bump',
 				{
 					files: [ phpFile ],
-					callback: 'npm run release:archive',
+					callback: `bash ../../.github/scripts/stamp-pot-version.sh ${ phpFile }; npm run release:archive`,
 				},
 			],
 			[
 				'@semantic-release/github',
 				{
-					// Migrated commits reference legacy-repo PR numbers that don't
-					// exist as monorepo issues; the success step resolves those refs
-					// to comment on AND label them, failing the release job. Disable
-					// both. Re-enable post-migration (NPPM-2752 Phase 6).
-					successComment: false,
-					releasedLabels: false,
+					// A release failure is surfaced by the workflow itself, so
+					// semantic-release does not also open an issue for it.
 					failComment: false,
 					failTitle: false,
 					assets: [
@@ -58,7 +54,7 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 				'semantic-release-version-bump',
 				{
 					files: [ phpFile ],
-					callback: 'npm run release:archive',
+					callback: `bash ../../.github/scripts/stamp-pot-version.sh ${ phpFile }; npm run release:archive`,
 				},
 			],
 			// languages/** carries the translation files release.yml regenerates
