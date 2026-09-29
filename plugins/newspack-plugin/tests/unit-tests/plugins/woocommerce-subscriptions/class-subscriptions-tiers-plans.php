@@ -384,7 +384,9 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 
 	/**
 	 * Plan products are plain simple/variable products, which no type list finds,
-	 * yet they are offered for tier configuration.
+	 * yet a subscription-only (forced) one is offered for tier configuration: its
+	 * product-only pickers (countdown banner, gifting prompt) still start a
+	 * subscription, since WooCommerce applies the forced default plan in the cart.
 	 */
 	public function test_plan_products_are_tier_eligible() {
 		$id = self::factory()->post->create(
@@ -394,9 +396,34 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 			]
 		);
 		update_post_meta( $id, '_wcsatt_schemes_status', 'override' );
-		$this->plan_variable( [ '1_month' => [ 'period' => 'month' ] ], $id );
+		$this->plan_variable( [ '1_month' => [ 'period' => 'month' ] ], $id, true );
 		$ids = array_map( fn( $p ) => $p->get_id(), Subscriptions_Tiers::get_tier_eligible_products() );
 		$this->assertContains( $id, $ids );
+	}
+
+	/**
+	 * A hybrid product, sold both one-time and on plans, is left out of
+	 * get_tier_eligible_products(): its product-only pickers (countdown banner,
+	 * gifting prompt) post only a product ID, and posting nothing for the plan
+	 * would charge it once instead of starting a subscription. It keeps its plan
+	 * tiers for get_tiers_by_frequency(), which the tiers modal uses and which
+	 * does post a plan.
+	 */
+	public function test_hybrid_plan_products_are_not_tier_eligible() {
+		$id = self::factory()->post->create(
+			[
+				'post_type'   => 'product',
+				'post_status' => 'publish',
+			]
+		);
+		update_post_meta( $id, '_wcsatt_schemes_status', 'override' );
+		$hybrid = $this->plan_variable( [ '1_month' => [ 'period' => 'month' ] ], $id, false );
+
+		$ids = array_map( fn( $p ) => $p->get_id(), Subscriptions_Tiers::get_tier_eligible_products() );
+		$this->assertNotContains( $id, $ids, 'A hybrid product needs its plan posted explicitly, which only the tiers modal does.' );
+
+		$tiers = Subscriptions_Tiers::get_tiers_by_frequency( $hybrid );
+		$this->assertSame( [ 'month_1' ], array_keys( $tiers ), 'The tiers modal still sells the hybrid product by its plan tiers.' );
 	}
 
 	/**

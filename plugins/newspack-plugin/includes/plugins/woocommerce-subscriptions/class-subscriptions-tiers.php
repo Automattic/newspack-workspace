@@ -300,10 +300,26 @@ class Subscriptions_Tiers {
 			]
 		);
 
-		// Plan-based products are plain simple/variable products, so no type list finds them.
+		// Plan-based products are plain simple/variable products, so no type list finds
+		// them. Only admit ones sold subscription-only: this list also feeds the
+		// countdown banner and gifting-prompt product pickers, whose forms post only a
+		// product ID, no plan. WooCommerce applies a forced product's default plan in
+		// the cart, so those product-only forms still start a subscription for a
+		// subscription-only product. A product also sold one-time needs its plan
+		// posted explicitly, which only the tiers modal (this list's other consumer) does.
 		$ids = array_map( fn( $product ) => $product->get_id(), $products );
 		foreach ( Subscription_Products::find_products( [ 'status' => 'publish' ] ) as $candidate ) {
-			if ( ! $candidate->is_type( [ 'subscription', 'variable-subscription' ] ) && ! in_array( $candidate->get_id(), $ids, true ) ) {
+			if ( $candidate->is_type( [ 'subscription', 'variable-subscription' ] ) || in_array( $candidate->get_id(), $ids, true ) ) {
+				continue;
+			}
+			$has_one_time_option = false;
+			foreach ( Subscription_Products::get_purchase_options( $candidate ) as $option ) {
+				if ( Purchase_Option::KIND_ONE_TIME === $option->kind ) {
+					$has_one_time_option = true;
+					break;
+				}
+			}
+			if ( ! $has_one_time_option ) {
 				$products[] = $candidate;
 			}
 		}

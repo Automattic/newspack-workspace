@@ -65,8 +65,9 @@ final class Subscription_Products {
 
 	/**
 	 * Whether this instance is being bought as a subscription: true for a legacy
-	 * type, for a cart item on a chosen plan, and for a product sold only on plans.
-	 * A product sold both ways answers false until a plan is chosen.
+	 * type, and for an instance with a plan applied (a cart item on a chosen plan).
+	 * A plan-based product reads false until a plan is applied, even one sold only
+	 * on plans; a bare catalog instance has no plan applied yet.
 	 *
 	 * @param \WC_Product $product Product instance.
 	 */
