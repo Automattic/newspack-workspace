@@ -36,6 +36,15 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	const MIGRATION_PRODUCT_ID = 909001;
 
 	/**
+	 * WCM post statuses the membership fixtures use. Registered per test and
+	 * unregistered again, because the post-status registry is process-global and
+	 * the suite does not reset it.
+	 *
+	 * @var string[]
+	 */
+	private const MEMBERSHIP_STATUSES = [ 'wcm-active', 'wcm-complimentary', 'wcm-free_trial', 'wcm-pending', 'wcm-expired' ];
+
+	/**
 	 * User IDs to clean up.
 	 *
 	 * @var int[]
@@ -77,7 +86,7 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		// The membership fixtures use WCM's custom post statuses; register them so
 		// the explicit post_status query in the command resolves them like on a
 		// live site.
-		foreach ( [ 'wcm-active', 'wcm-complimentary', 'wcm-free_trial', 'wcm-pending', 'wcm-expired' ] as $status ) {
+		foreach ( self::MEMBERSHIP_STATUSES as $status ) {
 			register_post_status( $status );
 		}
 		wc_create_mock_product(
@@ -108,6 +117,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		// remove_role() call runs.
 		if ( \get_role( 'newspack_test_guest' ) ) {
 			remove_role( 'newspack_test_guest' );
+		}
+		foreach ( self::MEMBERSHIP_STATUSES as $status ) {
+			\_unregister_post_status( $status );
 		}
 		parent::tear_down();
 	}

@@ -1224,8 +1224,9 @@ class Teams_Migration {
 					// Every status WooCommerce Memberships grants access on, not only
 					// wcm-active: a complimentary, free-trial or pending-cancellation
 					// member reads the site today and is exactly who a residual sweep
-					// or a reviewed --user-ids list has to reach.
-					'post_status'    => Memberships_Audit::ACTIVE_MEMBERSHIP_STATUSES,
+					// or a reviewed --user-ids list has to reach. Read from WCM itself
+					// so a site that filters the list is migrated on its own terms.
+					'post_status'    => Memberships_Audit::get_active_membership_statuses(),
 					'post_parent'    => $plan_id,
 					'posts_per_page' => -1,
 					'fields'         => 'ids',
