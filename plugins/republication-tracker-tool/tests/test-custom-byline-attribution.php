@@ -262,6 +262,54 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A byline format using a positional placeholder (e.g. from a
+	 * translation) should still include the byline.
+	 */
+	public function test_byline_text_supports_positional_placeholder() {
+		$positional_format = function () {
+			return 'por %1$s';
+		};
+		add_filter( 'republication_tracker_tool_byline_format', $positional_format );
+		$GLOBALS['_test_cap_coauthors'] = 'John Doe';
+
+		$byline_text = Republication_Tracker_Tool::get_byline_text( 'John Doe' );
+
+		unset( $GLOBALS['_test_cap_coauthors'] );
+		remove_filter( 'republication_tracker_tool_byline_format', $positional_format );
+
+		$this->assertSame( 'por John Doe, Test Blog', $byline_text );
+	}
+
+	/**
+	 * A null byline (e.g. get_the_author() outside the loop, or a filter
+	 * returning null) should not trigger PHP deprecation notices.
+	 */
+	public function test_byline_text_handles_null_byline() {
+		$null_byline = function () {
+			return null;
+		};
+		add_filter( 'republication_tracker_tool_byline', $null_byline, 99 );
+
+		$deprecations = array();
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler
+		set_error_handler(
+			function ( $errno, $errstr ) use ( &$deprecations ) {
+				$deprecations[] = $errstr;
+				return true;
+			},
+			E_DEPRECATED
+		);
+
+		$byline_text = Republication_Tracker_Tool::get_byline_text( null );
+
+		restore_error_handler();
+		remove_filter( 'republication_tracker_tool_byline', $null_byline, 99 );
+
+		$this->assertSame( array(), $deprecations, 'A null byline should not trigger deprecation notices.' );
+		$this->assertSame( 'by , Test Blog', $byline_text );
+	}
+
+	/**
 	 * The HTML and Plain Text tabs should share the same byline format, so a
 	 * CAP byline keeps the plugin's "by" prefix in both.
 	 */
