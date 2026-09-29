@@ -23,16 +23,19 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Subscription_Products {
 	/**
-	 * Options for this request, by `<product ID>:<user ID>`: whether a product sold
-	 * both ways keeps its one-time option depends on who is buying. A product's own
-	 * configuration, before any per-reader rule, is kept under `<product ID>:configured`.
+	 * Options for this request, by `<product ID>:<user ID>:<grace or strict>`: whether
+	 * a product sold both ways keeps its one-time option depends on who is buying, and
+	 * on whether the payment-recovery grace applies to the evaluation in progress. A
+	 * product's own configuration, before any per-reader rule, is kept under
+	 * `<product ID>:configured`.
 	 *
 	 * @var array<string, Purchase_Option[]>
 	 */
 	private static array $options = [];
 
 	/**
-	 * Verdicts of only_sells_as_subscription(), by `<product ID>:<plan key>:<user ID>`.
+	 * Verdicts of only_sells_as_subscription(), by
+	 * `<product ID>:<plan key>:<user ID>:<grace or strict>`.
 	 *
 	 * @var array<string, bool>
 	 */
@@ -129,7 +132,7 @@ final class Subscription_Products {
 	 * @param \WC_Product $instance Product instance.
 	 */
 	public static function only_sells_as_subscription( \WC_Product $instance ): bool {
-		$key = implode( ':', [ $instance->get_id(), Plans_Model::get_active_plan_key( $instance ), get_current_user_id() ] );
+		$key = implode( ':', [ $instance->get_id(), Plans_Model::get_active_plan_key( $instance ), get_current_user_id(), self::grace_segment() ] );
 		if ( ! isset( self::$subscription_only[ $key ] ) ) {
 			self::$subscription_only[ $key ] = self::is_purchased_as_subscription( $instance ) || self::is_subscription_only( $instance );
 		}
@@ -182,7 +185,7 @@ final class Subscription_Products {
 		if ( ! $product ) {
 			return [];
 		}
-		$key = $product->get_id() . ':' . get_current_user_id();
+		$key = implode( ':', [ $product->get_id(), get_current_user_id(), self::grace_segment() ] );
 		if ( ! isset( self::$options[ $key ] ) ) {
 			$stored = self::stored( $product );
 			switch ( self::model_of( $stored ) ) {
@@ -303,6 +306,16 @@ final class Subscription_Products {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * The payment-recovery segment of a per-reader memo key. A per-reader rule decides
+	 * through Subscriber_Eligibility, whose verdict changes with the grace that
+	 * Access_Rules::with_evaluation_context() swaps around each gate, so an answer
+	 * reached in one context must not be served in the other.
+	 */
+	private static function grace_segment(): string {
+		return Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) ? 'grace' : 'strict';
 	}
 
 	/**

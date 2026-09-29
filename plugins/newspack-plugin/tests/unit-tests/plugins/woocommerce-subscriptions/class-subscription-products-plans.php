@@ -330,6 +330,16 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * `_wcsatt_disabled` set to anything but "yes" is plan configuration too:
+	 * WooCommerce resolves such a product to "inherit", so it is a candidate.
+	 */
+	public function test_find_products_includes_a_product_whose_only_plan_meta_is_disabled_off() {
+		$product = $this->product( [], [ '_wcsatt_disabled' => 'no' ] );
+		WCS_ATT_Product_Schemes::mock_register( $product->get_id(), self::PLANS );
+		$this->assertSame( [ $product->get_id() ], array_map( fn( $p ) => $p->get_id(), Subscription_Products::find_products() ) );
+	}
+
+	/**
 	 * `find_product_ids()` only widens to every product once the site's default scheme
 	 * mode itself offers plans; a product with no plan meta at all is otherwise skipped.
 	 */

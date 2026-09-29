@@ -1144,6 +1144,67 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A reader in the payment-recovery window subscribes inside a gate that allows the
+	 * grace and not inside one that doesn't, so what a product sold both ways offers
+	 * them follows the evaluation context, whichever context asks first.
+	 */
+	public function test_purchase_options_follow_the_payment_recovery_context() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+		$in_grace = function ( $has_subscription, $user_id ) {
+			return $has_subscription || ( $user_id === $this->non_subscriber_id && \Newspack\Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) );
+		};
+		add_filter( 'newspack_access_rules_has_active_subscription', $in_grace, 20, 2 );
+		$strict = fn( $callback ) => \Newspack\Access_Rules::with_evaluation_context( [ 'payment_recovery_grace' => false ], $callback );
+
+		$this->assertSame(
+			[ 'plan:1_month' ],
+			$strict( fn() => wp_list_pluck( \Newspack\Subscription_Products::get_purchase_options( $hybrid ), 'key' ) ),
+			'Without the grace, the one-time option is withdrawn.'
+		);
+		$this->assertTrue( $strict( fn() => \Newspack\Subscription_Products::only_sells_as_subscription( $hybrid ) ) );
+		$this->assertSame(
+			[ 'one_time', 'plan:1_month' ],
+			wp_list_pluck( \Newspack\Subscription_Products::get_purchase_options( $hybrid ), 'key' ),
+			'With the grace, it is kept.'
+		);
+		$this->assertFalse( \Newspack\Subscription_Products::only_sells_as_subscription( $hybrid ) );
+	}
+
+	/**
+	 * The one-time purchase migrations read what a product is configured to sell, not
+	 * what the viewer running them may buy: WP-CLI runs as user 0, whom an "all
+	 * subscribers" rule refuses the one-time option of a product sold both ways.
+	 */
+	public function test_migration_split_ignores_the_viewer() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( 0 );
+		$this->assertTrue( Product_Purchase_Restriction::is_one_time_restricted( $hybrid, 0 ), 'User 0 may not buy it once.' );
+
+		$method = new \ReflectionMethod( \Newspack\CLI\Membership_Gates_Migration::class, 'classify_product_ids' );
+		$method->setAccessible( true );
+		$split = $method->invoke( null, [ $hybrid->get_id() ] );
+
+		$this->assertSame( [ $hybrid->get_id() ], $split['subscription'] );
+		$this->assertSame( [ $hybrid->get_id() ], $split['one_time'], 'Its one-time buyers keep a rule.' );
+	}
+
+	/**
+	 * Tier eligibility is a product's configuration too: a product sold both ways
+	 * stays out of the product-only pickers whoever asks.
+	 */
+	public function test_tier_eligibility_ignores_the_viewer() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		update_post_meta( $hybrid->get_id(), '_wcsatt_schemes_status', 'override' );
+		wp_set_current_user( 0 );
+		$this->assertTrue( Product_Purchase_Restriction::is_one_time_restricted( $hybrid, 0 ), 'User 0 may not buy it once.' );
+
+		$ids = array_map( fn( $p ) => $p->get_id(), \Newspack\Subscriptions_Tiers::get_tier_eligible_products() );
+		$this->assertNotContains( $hybrid->get_id(), $ids );
+	}
+
+	/**
 	 * A product no "all subscribers" rule covers is never looked up for plans:
 	 * the rule check is the cheap one, and it settles the answer.
 	 */

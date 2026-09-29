@@ -315,7 +315,8 @@ class Subscriptions_Tiers {
 			if ( $candidate->is_type( [ 'subscription', 'variable-subscription' ] ) || in_array( $candidate->get_id(), $ids, true ) ) {
 				continue;
 			}
-			if ( Subscription_Products::is_subscription_only( $candidate ) ) {
+			// Eligibility is the product's configuration, whoever is asking.
+			if ( ! Subscription_Products::is_sold_both_ways( $candidate ) ) {
 				$products[] = $candidate;
 			}
 		}

@@ -92,9 +92,12 @@ final class Plans_Model {
 	 * single query is exact. Products with any plan configuration are candidates,
 	 * including `_wcsatt_storewide_selection_mode`, the pre-9.0 meta key WooCommerce
 	 * still falls back to for "inherit" when `_wcsatt_schemes_status` was never
-	 * written. When a site changes the default mode away from "one-time only",
-	 * products with no plan data at all can sell on plans, so every product becomes
-	 * a candidate.
+	 * written, and `_wcsatt_disabled`, which WooCommerce resolves to "inherit" for
+	 * any value but "yes". When a site changes the default mode away from "one-time
+	 * only", products with no plan data at all can sell on plans, so every product
+	 * becomes a candidate. While WooCommerce Subscriptions' 9.0 data migration is
+	 * still running, it can also report a product with no plan data as "inherit";
+	 * such a product is missed until the migration completes.
 	 *
 	 * @param string[] $statuses Post statuses.
 	 * @return int[]
@@ -125,6 +128,10 @@ final class Plans_Model {
 				],
 				[
 					'key'     => '_wcsatt_schemes',
+					'compare' => 'EXISTS',
+				],
+				[
+					'key'     => '_wcsatt_disabled',
 					'compare' => 'EXISTS',
 				],
 			];

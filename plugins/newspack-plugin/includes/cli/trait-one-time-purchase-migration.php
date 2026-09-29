@@ -290,7 +290,9 @@ trait One_Time_Purchase_Migration {
 				continue;
 			}
 			$subscription[] = $product_id;
-			if ( ! \Newspack\Subscription_Products::is_subscription_only( $product_id ) ) {
+			// The product's own configuration, not what the viewer running the
+			// migration may buy.
+			if ( \Newspack\Subscription_Products::is_sold_both_ways( $product_id ) ) {
 				$one_time[] = $product_id;
 			}
 		}
