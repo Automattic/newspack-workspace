@@ -22,6 +22,20 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Plans_Model {
 	/**
+	 * Instances with a plan applied, by `<product ID>:<plan key>`, kept for the request.
+	 *
+	 * @var array<string, \WC_Product>
+	 */
+	private static array $plan_instances = [];
+
+	/**
+	 * Drop the instances kept for the request.
+	 */
+	public static function flush_cache(): void {
+		self::$plan_instances = [];
+	}
+
+	/**
 	 * Whether the plans API is loaded.
 	 */
 	public static function is_available(): bool {
@@ -119,10 +133,15 @@ final class Plans_Model {
 	}
 
 	/**
-	 * A new instance with the plan applied, so WooCommerce prices and bills it as that plan.
-	 * A plan is runtime state on the object, and with WooCommerce's product instance
-	 * caching on, wc_get_product() hands every caller the same object: the clone is what
-	 * keeps two plans from sharing one, which would price one as the other.
+	 * An instance of its own with the plan applied, so WooCommerce prices and bills it as
+	 * that plan. A plan is runtime state on the object, and with WooCommerce's product
+	 * instance caching on, wc_get_product() hands every caller the same object: the clone
+	 * is what keeps two plans from sharing one, which would price one as the other.
+	 *
+	 * Each clone is kept for the rest of the request and handed out again for the same
+	 * product and plan. WooCommerce finds an instance's plan by the object's hash, and PHP
+	 * gives a freed object's handle to the next new object, so a clone released
+	 * mid-request would pass its plan to the next fresh instance of the product.
 	 *
 	 * @param int    $product_id Product or variation ID.
 	 * @param string $plan_key   Plan key.
@@ -131,13 +150,20 @@ final class Plans_Model {
 		if ( ! self::is_available() ) {
 			return null;
 		}
-		$product = \wc_get_product( $product_id );
-		if ( ! $product instanceof \WC_Product ) {
-			return null;
+		$key = $product_id . ':' . $plan_key;
+		if ( ! isset( self::$plan_instances[ $key ] ) ) {
+			$product = \wc_get_product( $product_id );
+			if ( ! $product instanceof \WC_Product ) {
+				return null;
+			}
+			self::$plan_instances[ $key ] = clone $product;
 		}
-		$product = clone $product;
-		\WCS_ATT_Product_Schemes::set_subscription_scheme( $product, $plan_key );
-		return $product;
+		$instance = self::$plan_instances[ $key ];
+		// A caller may have changed the plan on the instance it was handed.
+		if ( self::get_active_plan_key( $instance ) !== $plan_key ) {
+			\WCS_ATT_Product_Schemes::set_subscription_scheme( $instance, $plan_key );
+		}
+		return $instance;
 	}
 
 	/**

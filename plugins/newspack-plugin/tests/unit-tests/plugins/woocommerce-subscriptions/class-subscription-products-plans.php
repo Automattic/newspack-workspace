@@ -215,6 +215,41 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * WooCommerce Subscriptions finds an instance's plan by the object's hash, and PHP
+	 * hands a freed object's handle to the next new one. A plan copy released
+	 * mid-request would leave its plan on the next fresh instance of the product,
+	 * pricing it as the plan; the copies stay alive for the request instead.
+	 */
+	public function test_a_released_plan_copy_leaves_no_plan_on_a_fresh_instance() {
+		$product = $this->hybrid();
+		$options = Subscription_Products::get_purchase_options( $product );
+		$copy    = Subscription_Products::get_option_product( $options[1] );
+		$this->assertTrue( Subscription_Products::is_purchased_as_subscription( $copy ) );
+		unset( $copy );
+
+		$fresh = clone wc_get_product( $product->get_id() );
+		$this->assertFalse( Subscription_Products::is_purchased_as_subscription( $fresh ), 'A fresh instance has no plan applied.' );
+	}
+
+	/**
+	 * The copy kept for a plan is handed out again with that plan applied, even if a
+	 * caller changed the plan on it, and a flushed cache starts over.
+	 */
+	public function test_a_kept_plan_copy_still_carries_its_plan() {
+		$product = $this->hybrid();
+		$options = Subscription_Products::get_purchase_options( $product );
+		$copy    = Subscription_Products::get_option_product( $options[1] );
+		WCS_ATT_Product_Schemes::set_subscription_scheme( $copy, '1_year' );
+
+		$again = Subscription_Products::get_option_product( $options[1] );
+		$this->assertSame( 'plan:1_month', Subscription_Products::get_instance_option( $again )->key );
+		$this->assertSame( 'plan:1_year', Subscription_Products::get_instance_option( Subscription_Products::get_option_product( $options[2] ) )->key );
+
+		Subscription_Products::flush_cache();
+		$this->assertNotSame( $copy, Subscription_Products::get_option_product( $options[1] ), 'A flush drops the kept copies.' );
+	}
+
+	/**
 	 * A product forced onto a plan is not a subscription until a plan is actually applied to
 	 * an instance of it: WooCommerce applies a forced product's default plan only in the cart,
 	 * never to the bare catalog product.

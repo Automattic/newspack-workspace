@@ -68,6 +68,7 @@ final class Subscription_Products {
 		self::$options           = [];
 		self::$found             = [];
 		self::$subscription_only = [];
+		Plans_Model::flush_cache();
 	}
 
 	/**
