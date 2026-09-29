@@ -12,6 +12,7 @@ use Newspack\Product_Targeting;
 use Newspack\Subscriber_Commerce;
 use Newspack\Subscriber_Eligibility;
 use Newspack\Subscriber_Only_Products;
+use WCS_ATT_Product_Schemes;
 
 /**
  * Tests the WooCommerce Memberships purchase-restriction parity: a reader who
@@ -73,7 +74,7 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
-		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-plans-mocks.php';
 	}
 
 	/**
@@ -86,6 +87,9 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		register_post_type( 'product', [ 'public' => true ] );
 		register_post_type( 'product_variation', [ 'public' => false ] );
 		register_taxonomy( 'product_cat', 'product', [ 'hierarchical' => true ] );
+		// WP_UnitTestCase restores hooks per test; wcs-plans-mocks.php adds this
+		// filter only once, at require_once time.
+		add_filter( 'woocommerce_is_subscription', [ 'WCS_ATT_Product_Schemes', 'filter_is_subscription' ], 10, 3 );
 
 		$this->restricted_product = $this->create_product();
 		$this->open_product       = $this->create_product();
@@ -120,6 +124,8 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		wp_set_current_user( 0 );
 		global $products_database;
 		$products_database = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		\WCS_ATT_Product_Schemes::mock_reset();
+		\Newspack\Subscription_Products::flush_cache();
 		parent::tear_down();
 	}
 
@@ -765,5 +771,123 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 			Product_Purchase_Restriction::can_purchase( $this->restricted_product, $this->non_subscriber_id ),
 			'A reader with no subscription still cannot.'
 		);
+	}
+
+	/**
+	 * A hybrid product (one-time + a monthly plan) covered by an "all subscribers" rule.
+	 */
+	private function hybrid_under_all_subscribers_rule() {
+		$hybrid = $this->create_product();
+		WCS_ATT_Product_Schemes::mock_register(
+			$hybrid->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			] 
+		);
+		$this->set_rules(
+			[
+				[
+					'id'                     => 'all',
+					'subscription_targeting' => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+					'targeting'              => 'products',
+					'product_ids'            => [ $hybrid->get_id() ],
+					'active'                 => true,
+				],
+			]
+		);
+		return $hybrid;
+	}
+
+	/**
+	 * The subscription option on a hybrid product stays exempt for a reader an
+	 * "all subscribers" rule would otherwise refuse, but its one-time option is
+	 * withdrawn so the rule's exemption for subscriptions can't be used to buy
+	 * the product once.
+	 */
+	public function test_non_subscriber_can_subscribe_to_hybrid_but_not_buy_it_once() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+		$this->assertTrue( Product_Purchase_Restriction::can_purchase( $hybrid ), 'The subscription stays on sale.' );
+		$this->assertSame(
+			[ 'plan:1_month' ],
+			wp_list_pluck( \Newspack\Subscription_Products::get_purchase_options( $hybrid ), 'key' ),
+			'The one-time option is withdrawn for this reader.'
+		);
+	}
+
+	/**
+	 * A reader the rule doesn't refuse keeps both options.
+	 */
+	public function test_subscriber_keeps_both_options() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->subscriber_id );
+		$this->assertSame(
+			[ 'one_time', 'plan:1_month' ],
+			wp_list_pluck( \Newspack\Subscription_Products::get_purchase_options( $hybrid ), 'key' )
+		);
+	}
+
+	/**
+	 * A cart safety net: a one-time line of a restricted hybrid product that
+	 * reached the cart anyway (a cart saved before the rule existed, or a
+	 * request that posted the one-time choice) is removed with a notice.
+	 */
+	public function test_cart_check_removes_one_time_line_of_restricted_hybrid() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+		$one_time_line = clone $hybrid; // No plan applied: WooCommerce would charge it once.
+		WCS_ATT_Product_Schemes::set_subscription_scheme( $one_time_line, false );
+		$cart = new \WC_Cart( [ 'line' => [ 'data' => $one_time_line ] ] );
+		global $wc_mock_notices;
+		$wc_mock_notices = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		Product_Purchase_Restriction::enforce_one_time_restriction_in_cart( $cart );
+
+		$this->assertSame( [], $cart->get_cart() );
+		$this->assertSame( 'error', $wc_mock_notices[0]['type'] ?? null );
+	}
+
+	/**
+	 * A plan line of the same restricted hybrid product is left in the cart:
+	 * only the one-time option is withdrawn.
+	 */
+	public function test_cart_check_keeps_plan_line() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+		$plan_line = clone $hybrid;
+		WCS_ATT_Product_Schemes::set_subscription_scheme( $plan_line, '1_month' );
+		$cart = new \WC_Cart( [ 'line' => [ 'data' => $plan_line ] ] );
+		Product_Purchase_Restriction::enforce_one_time_restriction_in_cart( $cart );
+		$this->assertCount( 1, $cart->get_cart() );
+	}
+
+	/**
+	 * A legacy subscription product covered by an "all subscribers" rule stays
+	 * exempt exactly as before: it has no one-time option to withdraw.
+	 */
+	public function test_legacy_subscription_exemption_is_unchanged() {
+		$legacy = $this->create_product();
+		wc_create_mock_product(
+			[
+				'id'   => $legacy->get_id(),
+				'type' => 'subscription',
+			] 
+		);
+		$this->set_rules(
+			[
+				[
+					'id'                     => 'all',
+					'subscription_targeting' => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+					'targeting'              => 'products',
+					'product_ids'            => [ $legacy->get_id() ],
+					'active'                 => true,
+				],
+			]
+		);
+		wp_set_current_user( $this->non_subscriber_id );
+		$this->assertTrue( Product_Purchase_Restriction::can_purchase( wc_get_product( $legacy->get_id() ) ) );
 	}
 }

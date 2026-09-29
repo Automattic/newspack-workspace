@@ -71,6 +71,14 @@ class Product_Purchase_Restriction {
 	const MAX_HIDDEN_PRODUCTS = 500;
 
 	/**
+	 * Guards filter_force_subscription() against re-entry: reading a product's
+	 * options consults the same filter.
+	 *
+	 * @var bool
+	 */
+	private static $forcing = false;
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -86,6 +94,10 @@ class Product_Purchase_Restriction {
 		add_filter( 'render_block', [ __CLASS__, 'filter_add_to_cart_block' ], 10, 3 );
 		// Optional, off by default: keep restricted products out of product lists.
 		add_action( 'pre_get_posts', [ __CLASS__, 'filter_product_query' ] );
+		// A product sold both on plans and one-time stays subscribable for readers
+		// outside an "all subscribers" rule, but only as a subscription.
+		add_filter( 'wcsatt_force_subscription', [ __CLASS__, 'filter_force_subscription' ], 10, 2 );
+		add_action( 'woocommerce_check_cart_items', [ __CLASS__, 'enforce_one_time_restriction_in_cart' ] );
 	}
 
 	/**
@@ -190,19 +202,20 @@ class Product_Purchase_Restriction {
 	 * @return array[] The restrictions.
 	 */
 	public static function get_restricting_rules( $product ) {
-		if ( null === self::$rules ) {
-			self::$rules = Subscriber_Only_Products::get_active_rules();
-		}
-		$matching_rules = Product_Targeting::get_matching_rules( self::$rules, $product );
+		$matching_rules = self::get_matching_rules( $product );
 
-		// A rule open to every subscriber leaves the subscriptions themselves on
-		// sale, whatever its targeting reaches. Otherwise "all subscribers" plus
-		// "all products" is a store nobody can enter: the only way to satisfy the
-		// rule is to hold a subscription, and the rule refuses the sale of one.
-		// A rule that names its subscriptions is not exempted — naming a
-		// subscription and restricting it is two deliberate choices, where this is
-		// the incidental sweep of a mode that names nothing.
-		if ( Subscription_Products::is_purchased_as_subscription( $product ) ) {
+		// A rule open to every subscriber leaves the subscription itself on sale,
+		// whatever its targeting reaches. Otherwise "all subscribers" plus "all
+		// products" is a store nobody can enter: the only way to satisfy the rule
+		// is to hold a subscription, and the rule refuses the sale of one. This
+		// exempts the subscription, not necessarily the product's one-time price:
+		// for a product sold both ways, filter_force_subscription() withdraws the
+		// one-time option from readers the rule would have refused, so the
+		// exemption here can't be used to buy it once. A rule that names its
+		// subscriptions is not exempted — naming a subscription and restricting it
+		// is two deliberate choices, where this is the incidental sweep of a mode
+		// that names nothing.
+		if ( Subscription_Products::offers_subscription( $product ) ) {
 			$matching_rules = array_values(
 				array_filter(
 					$matching_rules,
@@ -214,6 +227,93 @@ class Product_Purchase_Restriction {
 		}
 
 		return $matching_rules;
+	}
+
+	/**
+	 * Active restrictions whose targeting reaches the product, before any exemption.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 * @return array[]
+	 */
+	private static function get_matching_rules( $product ) {
+		if ( null === self::$rules ) {
+			self::$rules = Subscriber_Only_Products::get_active_rules();
+		}
+		return Product_Targeting::get_matching_rules( self::$rules, $product );
+	}
+
+	/**
+	 * Sell a product only as a subscription to a reader an "all subscribers" rule
+	 * would refuse, so the rule's exemption for subscriptions never covers its
+	 * one-time option.
+	 *
+	 * @param bool        $forced  Whether the product is already subscription-only.
+	 * @param \WC_Product $product The product.
+	 * @return bool
+	 */
+	public static function filter_force_subscription( $forced, $product ) {
+		if ( $forced || self::$forcing || ! $product instanceof \WC_Product ) {
+			return $forced;
+		}
+		self::$forcing = true;
+		try {
+			return self::is_one_time_restricted( $product, get_current_user_id() );
+		} finally {
+			self::$forcing = false;
+		}
+	}
+
+	/**
+	 * Whether a reader may not buy this product one-time: it sells as a subscription,
+	 * an "all subscribers" rule covers it, and the reader satisfies none of those rules.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 * @param int         $user_id The user ID (0 for anonymous readers).
+	 * @return bool
+	 */
+	public static function is_one_time_restricted( \WC_Product $product, int $user_id ): bool {
+		if ( ! Subscriber_Commerce::is_enforcement_active() || ! Subscription_Products::offers_subscription( $product ) ) {
+			return false;
+		}
+		if ( user_can( $user_id, 'manage_woocommerce' ) ) {
+			return false;
+		}
+		$rules = array_filter( self::get_matching_rules( $product ), [ Subscriber_Commerce::class, 'covers_all_subscriptions' ] );
+		if ( empty( $rules ) ) {
+			return false;
+		}
+		foreach ( $rules as $rule ) {
+			if ( Subscriber_Eligibility::user_matches_rule( $user_id, $rule ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Remove a one-time purchase of a restricted product that reached the cart anyway:
+	 * a cart saved before the rule existed, or a request that posted the one-time choice.
+	 *
+	 * @param \WC_Cart|null $cart Cart; defaults to the session cart.
+	 */
+	public static function enforce_one_time_restriction_in_cart( $cart = null ) {
+		if ( null === $cart && function_exists( 'WC' ) && WC() ) {
+			$cart = WC()->cart;
+		}
+		if ( ! $cart ) {
+			return;
+		}
+		$user_id = get_current_user_id();
+		foreach ( $cart->get_cart() as $key => $item ) {
+			$product = $item['data'] ?? null;
+			if ( ! $product instanceof \WC_Product || Subscription_Products::is_purchased_as_subscription( $product ) ) {
+				continue;
+			}
+			if ( self::is_one_time_restricted( $product, $user_id ) ) {
+				$cart->remove_cart_item( $key );
+				wc_add_notice( self::get_restricted_message( $product ), 'error' );
+			}
+		}
 	}
 
 	/**

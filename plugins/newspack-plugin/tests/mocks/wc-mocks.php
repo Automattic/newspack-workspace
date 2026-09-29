@@ -872,6 +872,10 @@ class WC_Cart {
 	public function get_cart_item( $key ) {
 		return $this->cart_contents[ $key ] ?? [];
 	}
+	public function remove_cart_item( $key ) {
+		unset( $this->cart_contents[ $key ] );
+		return true;
+	}
 }
 
 if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
