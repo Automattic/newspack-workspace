@@ -588,11 +588,10 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The cart branch has to ask each line what it *is*, not just what product ID
-	 * it carries: re-fetching a plan product by ID drops the plan a reader applied
-	 * to that cart line, so a plan subscription in the cart was never recognised
-	 * for an "apply at checkout" all-subscribers discount. Runs in its own process
-	 * because it needs a real WC()->cart stub.
+	 * A plan applied to a cart line counts as a subscription in the cart for an
+	 * "apply at checkout" all-subscribers discount: the cart branch asks each line
+	 * what it is, because re-fetching the product by ID would drop the plan applied
+	 * to that line. Runs in its own process because it needs a real WC()->cart stub.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -855,68 +854,54 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The Audience wizard's price-preview flag has to agree with product_grants():
-	 * a bare hybrid product previews as not-a-subscription, the same verdict that
-	 * leaves its one-time price open to discount at checkout.
+	 * Plan products for the Audience preview flag: sold both ways, and forced onto
+	 * its plans.
+	 *
+	 * @return array[]
 	 */
-	public function test_audience_flag_matches_product_grants_for_hybrids() {
-		$hybrid = wc_create_mock_product(
-			[
-				'id'    => 502,
-				'type'  => 'simple',
-				'price' => '50',
-			]
-		);
-		\WCS_ATT_Product_Schemes::mock_register(
-			$hybrid->get_id(),
-			[
-				'1_month' => [
-					'period'   => 'month',
-					'interval' => 1,
-				],
-			]
-		);
-
-		$method = new \ReflectionMethod( \Newspack\Audience_Subscriptions::class, 'get_product_data' );
-		$method->setAccessible( true );
-
-		$this->assertFalse(
-			$method->invoke( null, $hybrid )['is_subscription'],
-			'Preview discounts the one-time price, as checkout does.'
-		);
+	public function plan_products_for_the_audience_flag() {
+		return [
+			'sold both ways'     => [ 502, false, false ],
+			'forced onto a plan' => [ 506, true, true ],
+		];
 	}
 
 	/**
-	 * A subscription-only plan product can never be bought one-time, so the
-	 * preview must flag it as a subscription even on the bare catalog instance,
-	 * where is_purchased_as_subscription() alone reads false (no plan applied).
+	 * The Audience wizard's price-preview flag agrees with product_grants() on the
+	 * bare catalog instance, where no plan is applied yet: a product sold both ways
+	 * previews as not-a-subscription, the verdict that leaves its one-time price
+	 * open to discount at checkout, and a product forced onto its plans can never
+	 * be bought one-time, so it previews as a subscription.
+	 *
+	 * @dataProvider plan_products_for_the_audience_flag
+	 *
+	 * @param int  $product_id Mock product ID.
+	 * @param bool $forced     Whether the product is forced onto its plans.
+	 * @param bool $expected   The expected preview flag.
 	 */
-	public function test_audience_flag_true_for_subscription_only_plan_product() {
-		$forced = wc_create_mock_product(
+	public function test_audience_flag_matches_product_grants_for_plan_products( $product_id, $forced, $expected ) {
+		$product = wc_create_mock_product(
 			[
-				'id'    => 506,
+				'id'    => $product_id,
 				'type'  => 'simple',
 				'price' => '50',
 			]
 		);
 		\WCS_ATT_Product_Schemes::mock_register(
-			$forced->get_id(),
+			$product->get_id(),
 			[
 				'1_month' => [
 					'period'   => 'month',
 					'interval' => 1,
 				],
 			],
-			true // Forced: no one-time option.
+			$forced
 		);
 
-		$method = new \ReflectionMethod( \Newspack\Audience_Subscriptions::class, 'get_product_data' );
-		$method->setAccessible( true );
+		$get_product_data = new \ReflectionMethod( \Newspack\Audience_Subscriptions::class, 'get_product_data' );
+		$get_product_data->setAccessible( true );
 
-		$this->assertTrue(
-			$method->invoke( null, $forced )['is_subscription'],
-			'A subscription-only plan product previews as a subscription even unapplied.'
-		);
+		$this->assertSame( $expected, $get_product_data->invoke( null, $product )['is_subscription'] );
 	}
 
 	/**

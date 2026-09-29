@@ -116,13 +116,6 @@ final class Purchase_Option {
 	}
 
 	/**
-	 * Whether buying this option starts a subscription.
-	 */
-	public function is_recurring(): bool {
-		return self::KIND_ONE_TIME !== $this->kind;
-	}
-
-	/**
 	 * The `<period>_<interval>` key subscription tiers bucket by; `once_1` for one-time,
 	 * matching the value tiers already used for products with no period.
 	 */
