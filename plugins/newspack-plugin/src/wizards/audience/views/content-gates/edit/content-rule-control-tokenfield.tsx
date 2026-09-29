@@ -7,7 +7,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { FormTokenField } from '@wordpress/components';
-import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
+import type { TokenItem } from '../../../../../content-gate/access-rule-options';
 import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState, useCallback, useMemo } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';

@@ -307,4 +307,11 @@ describe( 'CardFeature', () => {
 		rerender( <CardFeature title="Content gifting" enabled requirements="Requires metering" /> );
 		expect( container.querySelector( '.newspack-card-feature--muted' ) ).toBeInTheDocument();
 	} );
+
+	it( 'marks the card as not enabled only when enabled is false', () => {
+		const { container, rerender } = render( <CardFeature title="Content gifting" /> );
+		expect( container.querySelector( '.newspack-card-feature--not-enabled' ) ).toBeInTheDocument();
+		rerender( <CardFeature title="Content gifting" enabled /> );
+		expect( container.querySelector( '.newspack-card-feature--not-enabled' ) ).toBeNull();
+	} );
 } );

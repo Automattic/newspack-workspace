@@ -10,7 +10,7 @@
 	background: np-colors.$primary-600;
 	border-radius: wp-vars.$radius-round;
 	bottom: 0;
-	box-shadow: var(--wpds-elevation-sm, #{wp-vars.$elevation-small});
+	box-shadow: wp-vars.$elevation-small;
 	display: grid;
 	height: wp-vars.$button-size;
 	margin: 0 wp-vars.$grid-unit-30 wp-vars.$grid-unit-30;
