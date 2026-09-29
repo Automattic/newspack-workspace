@@ -53,6 +53,13 @@ const filterKnown = ( value, knownIds ) =>
 		.filter( id => id && knownIds.includes( id ) );
 
 /**
+ * The handoff read from the cookie on this page. Segment reporting and prompt
+ * display both read the handoff, and the first read deletes the cookie, so the
+ * second would otherwise depend on sessionStorage being available.
+ */
+let landingValue = null;
+
+/**
  * The segment IDs carried in from a newsletter click, for this browsing session.
  *
  * @param {string[]} knownIds Segment IDs present on the page.
@@ -63,12 +70,15 @@ export const getCarriedSegmentIds = ( knownIds = [] ) => {
 	const fromCookie = readCookie();
 	if ( null !== fromCookie ) {
 		deleteCookie();
+		landingValue = fromCookie;
 		try {
 			window.sessionStorage.setItem( SESSION_KEY, fromCookie );
 		} catch ( e ) {
 			// sessionStorage unavailable; the landing-page value still stands.
 		}
-		return filterKnown( fromCookie, knownIds );
+	}
+	if ( null !== landingValue ) {
+		return filterKnown( landingValue, knownIds );
 	}
 
 	try {

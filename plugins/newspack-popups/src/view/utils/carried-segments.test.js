@@ -1,4 +1,4 @@
-import { getCarriedSegmentIds, CARRIED_SEGMENTS_NONE } from './carried-segments';
+import { CARRIED_SEGMENTS_NONE } from './carried-segments';
 
 const COOKIE = 'np_carried_segments';
 const SESSION_KEY = 'newspack-popups-carried-segments';
@@ -19,10 +19,29 @@ const clearCookie = () => {
 	document.cookie = `${ COOKIE }=; path=/; max-age=0`;
 };
 
+/**
+ * Load the module as a new pageview would: only the cookie and sessionStorage
+ * carry over from an earlier page.
+ *
+ * @return {Function} That page's getCarriedSegmentIds().
+ */
+const loadPage = () => {
+	jest.resetModules();
+	return require( './carried-segments' ).getCarriedSegmentIds;
+};
+
 describe( 'getCarriedSegmentIds', () => {
+	let getCarriedSegmentIds;
+
 	beforeEach( () => {
 		window.sessionStorage.clear();
 		clearCookie();
+		getCarriedSegmentIds = loadPage();
+	} );
+
+	afterEach( () => {
+		// Restore the Storage spies even when a test fails partway through.
+		jest.restoreAllMocks();
 	} );
 
 	it( 'returns nothing when there is no cookie and nothing remembered', () => {
@@ -47,7 +66,7 @@ describe( 'getCarriedSegmentIds', () => {
 		setCookie( '11,22' );
 		getCarriedSegmentIds( [ '11', '22' ] );
 		// Cookie is gone; a later pageview reads the remembered set.
-		expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [ '11', '22' ] );
+		expect( loadPage()( [ '11', '22' ] ) ).toEqual( [ '11', '22' ] );
 		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( '11,22' );
 	} );
 
@@ -60,7 +79,7 @@ describe( 'getCarriedSegmentIds', () => {
 		// Second arrival resolves to zero segments: PHP hands off the
 		// CARRIED_SEGMENTS_NONE sentinel, which overrides the remembered set.
 		setCookie( CARRIED_SEGMENTS_NONE );
-		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [] );
+		expect( loadPage()( [ '5', '7' ] ) ).toEqual( [] );
 		expect( window.sessionStorage.getItem( SESSION_KEY ) ).toBe( CARRIED_SEGMENTS_NONE );
 	} );
 
@@ -81,19 +100,31 @@ describe( 'getCarriedSegmentIds', () => {
 
 	it( 'still returns the landing-page IDs when the sessionStorage write is blocked', () => {
 		setCookie( '11' );
-		const setSpy = jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
+		jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
 			throw new Error( 'sessionStorage unavailable' );
 		} );
 		expect( getCarriedSegmentIds( [ '11' ] ) ).toEqual( [ '11' ] );
-		setSpy.mockRestore();
+	} );
+
+	it( 'gives a second caller on the landing page the same IDs when sessionStorage is unavailable', () => {
+		setCookie( '11' );
+		jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
+			throw new Error( 'sessionStorage unavailable' );
+		} );
+		jest.spyOn( Storage.prototype, 'getItem' ).mockImplementation( () => {
+			throw new Error( 'sessionStorage unavailable' );
+		} );
+		// Segment reporting reads the handoff first, which deletes the cookie;
+		// prompt display reads it next, on the same page.
+		getCarriedSegmentIds( [ '11' ] );
+		expect( getCarriedSegmentIds( [ '11' ] ) ).toEqual( [ '11' ] );
 	} );
 
 	it( 'fails closed when sessionStorage is fully unavailable and no cookie is present', () => {
-		const getSpy = jest.spyOn( Storage.prototype, 'getItem' ).mockImplementation( () => {
+		jest.spyOn( Storage.prototype, 'getItem' ).mockImplementation( () => {
 			throw new Error( 'sessionStorage unavailable' );
 		} );
 		expect( getCarriedSegmentIds( [ '11' ] ) ).toEqual( [] );
-		getSpy.mockRestore();
 	} );
 
 	it( 'decodes a percent-encoded cookie value as PHP setcookie() produces it', () => {
