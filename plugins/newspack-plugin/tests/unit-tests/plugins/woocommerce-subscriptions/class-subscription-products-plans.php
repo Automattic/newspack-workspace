@@ -211,12 +211,18 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A product forced onto a plan is a subscription even before any option is applied.
+	 * A product forced onto a plan is not a subscription until a plan is actually applied to
+	 * an instance of it: WooCommerce applies a forced product's default plan only in the cart,
+	 * never to the bare catalog product.
 	 */
-	public function test_forced_bare_product_is_purchased_as_subscription() {
+	public function test_forced_bare_product_is_not_a_subscription_until_a_plan_is_applied() {
 		$product = $this->product( [], [ '_wcsatt_schemes_status' => 'override' ] );
 		WCS_ATT_Product_Schemes::mock_register( $product->get_id(), self::PLANS, true );
-		$this->assertTrue( Subscription_Products::is_purchased_as_subscription( $product ) );
+		$this->assertFalse( Subscription_Products::is_purchased_as_subscription( $product ), 'No plan applied yet.' );
+		$options = Subscription_Products::get_purchase_options( $product );
+		$this->assertSame( [ 'plan:1_month', 'plan:1_year' ], wp_list_pluck( $options, 'key' ), 'Forced: still no one-time option.' );
+		$instance = Subscription_Products::get_option_product( $options[0] );
+		$this->assertTrue( Subscription_Products::is_purchased_as_subscription( $instance ) );
 	}
 
 	/**

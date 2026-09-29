@@ -93,12 +93,17 @@ if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
 		public static function set_subscription_scheme( $product, $key ) {
 			self::$active[ spl_object_id( $product ) ] = $key;
 		}
+		/**
+		 * Real WCS_ATT_Product_Schemes::get_subscription_scheme() returns null/false when no
+		 * scheme has been applied, even on a forced product: WooCommerce applies a forced
+		 * product's default plan only when it reaches the cart (WCS_ATT_Cart), never here.
+		 *
+		 * @param \WC_Product $product    Product or variation.
+		 * @param string      $return     Unused by the mock; real WCS reads 'key' or 'object'.
+		 * @param string      $scheme_key Unused by the mock.
+		 */
 		public static function get_subscription_scheme( $product, $return = 'key', $scheme_key = '' ) {
 			$key = self::$active[ spl_object_id( $product ) ] ?? null;
-			if ( null === $key && self::has_forced_subscription_scheme( $product ) ) {
-				$keys = array_keys( self::get_subscription_schemes( $product ) );
-				$key  = $keys[0] ?? false;
-			}
 			return $key ? $key : false;
 		}
 		public static function filter_is_subscription( $is_subscription, $product_id, $product ) {
