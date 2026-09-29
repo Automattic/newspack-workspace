@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -40,24 +40,42 @@ describe( 'ListsControl', () => {
 		expect( screen.queryByText( 'Deleted subscription' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'keeps same-named items apart with labelWithId, so each token maps back to its own ID', async () => {
+	it( 'keeps same-named items apart with labelWithId, so removing one leaves the other saved', async () => {
 		apiFetch.mockResolvedValue( [
 			{ id: 96, title: 'Duo Plan' },
 			{ id: 97, title: 'Duo Plan' },
 		] );
+		const onChange = jest.fn();
 
 		render(
 			<ListsControl
 				label="Products"
 				value={ [ 96, 97 ] }
-				onChange={ () => {} }
+				onChange={ onChange }
 				path="list"
 				labelWithId
 				deletedItemLabel="Deleted subscription"
 			/>
 		);
-
 		await waitFor( () => expect( screen.getByText( 'Duo Plan (#96)' ) ).toBeInTheDocument() );
-		expect( screen.getByText( 'Duo Plan (#97)' ) ).toBeInTheDocument();
+
+		fireEvent.click( screen.getAllByRole( 'button', { name: /remove/i } )[ 0 ] );
+
+		expect( onChange ).toHaveBeenLastCalledWith( [ 97 ] );
+	} );
+
+	it( 'drops typed text that matches no item, so it is never saved as an empty value', async () => {
+		apiFetch.mockResolvedValue( [ { id: 96, title: 'Duo Plan' } ] );
+		const onChange = jest.fn();
+
+		render( <ListsControl label="Products" value={ [ 96 ] } onChange={ onChange } path="list" labelWithId /> );
+		await waitFor( () => expect( screen.getByText( 'Duo Plan (#96)' ) ).toBeInTheDocument() );
+
+		const input = screen.getByRole( 'combobox' );
+		fireEvent.change( input, { target: { value: 'No such plan' } } );
+		fireEvent.keyDown( input, { key: 'Enter' } );
+
+		// Strict: a loose match would count `[ 96, undefined ]` as `[ 96 ]`.
+		expect( onChange.mock.lastCall[ 0 ] ).toStrictEqual( [ 96 ] );
 	} );
 } );

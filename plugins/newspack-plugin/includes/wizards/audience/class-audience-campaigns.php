@@ -472,11 +472,11 @@ class Audience_Campaigns extends Wizard {
 					's'       => [
 						'sanitize_callback' => 'sanitize_text_field',
 					],
+					// Deliberately untyped items: saved segments can hold a stray empty value,
+					// and one bad entry must not fail the lookup for the rest. The callback
+					// keeps only positive integers.
 					'include' => [
 						'type'    => 'array',
-						'items'   => [
-							'type' => 'integer',
-						],
 						'default' => [],
 					],
 				],

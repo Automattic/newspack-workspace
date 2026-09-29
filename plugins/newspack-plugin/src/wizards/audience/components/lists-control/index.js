@@ -70,7 +70,9 @@ export default function ListsControl( { label, help, placeholder, value, onChang
 					} )
 					.filter( Boolean );
 			} }
-			onChange={ onChange }
+			// A typed token that matches no item resolves to `undefined`. Saved, it would
+			// become a `null` in the segment, so drop it here.
+			onChange={ values => onChange( values.filter( itemValue => itemValue !== undefined && itemValue !== null ) ) }
 		/>
 	);
 }

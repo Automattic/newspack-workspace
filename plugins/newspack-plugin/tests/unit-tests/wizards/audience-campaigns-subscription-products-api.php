@@ -121,4 +121,16 @@ class Test_Audience_Campaigns_Subscription_Products_API extends \WP_UnitTestCase
 		$this->assertSame( 'Trashed Plan [invalid status: Trash]', $products[ $trashed_id ]['title'] ?? null );
 		$this->assertArrayNotHasKey( $other_id, $products, 'The lookup returns only the requested products.' );
 	}
+
+	/**
+	 * A saved segment can hold a stray empty value. It must not fail the lookup, or none of
+	 * the segment's products get named.
+	 */
+	public function test_include_ignores_a_stray_empty_value() {
+		$published_id = $this->create_subscription_product( 'Current Plan' );
+
+		$products = $this->get_products( [ 'include' => [ $published_id, '' ] ] );
+
+		$this->assertSame( [ $published_id ], array_keys( $products ) );
+	}
 }
