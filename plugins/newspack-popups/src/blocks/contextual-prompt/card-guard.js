@@ -12,10 +12,11 @@
  *   the detach copied onto the call to action — so the publisher can move the
  *   card and swap the CTA for blocks of their own. The generated copy is held in
  *   place: it is the paragraph the pattern binds its copy to, and it is what
- *   keeps the card a prompt. Core's Unlock modal writes the `lock` attribute, so
- *   holding the copy re-asserts it, and freeing the CTA strips it, whichever way
- *   the modal was used. A lock the publisher sets on a block of their own is not
- *   the one the detach copied down, so it is left alone.
+ *   keeps the card a prompt. Core's lock modal writes the `lock` attribute, so
+ *   the copy's lock is re-asserted however the modal was used. A lock the
+ *   publisher sets on a block of their own stays, with one exception: a full
+ *   lock on their own Donate or Buttons block looks exactly like the one an older
+ *   seed wrote, and is lifted with it.
  */
 
 /**
@@ -37,11 +38,16 @@ const NOTICE_ID = 'newspack-contextual-prompt-single';
 // Mirrors BLOCK_LOCK in class-newspack-popups-contextual-prompt-pattern.php.
 const CHILD_LOCK = { move: true, remove: true };
 
+// The call-to-action blocks an older seed locked, which a detach copied onto the
+// card along with their lock.
+const SEEDED_CTA_BLOCKS = [ 'newspack-blocks/donate', 'core/buttons' ];
+
 /**
  * Whether a child is the pattern's generated copy: the paragraph the pattern
- * binds each instance's copy to. It is matched by that override binding, or by
- * the seeded name it carries when a detach has dropped the binding — never by a
- * bare name, which a publisher can set on a block of their own.
+ * binds each instance's copy to. A detach drops the override binding and keeps
+ * the block's name, so on a detached card the seeded name is what identifies
+ * it; a copy still carrying its binding is matched by that. A name the publisher
+ * gives a block of their own never matches.
  *
  * @param {Object} attributes Block attributes.
  * @return {boolean} Whether the block is the bound copy.
@@ -115,17 +121,18 @@ export const planPromptCorrections = ( blocks, known = [] ) => {
 	}
 
 	// The generated copy is the one child held in place: it is what makes the
-	// card a prompt, so it is matched by its override binding — or the seeded name
-	// — and held move-and-remove locked. Every other child is the publisher's to
-	// arrange; only the full lock the detach copied down is lifted from one, so a
-	// lock the publisher set themselves is left in place.
+	// card a prompt, so it is held move-and-remove locked. Every other child is
+	// the publisher's to arrange. The only lock lifted from one is the full lock
+	// an older seed put on the call to action; a lock the publisher sets on a
+	// block of their own stays, unless it is that same full lock on a Donate or
+	// Buttons block, which cannot be told apart from the seeded one.
 	for ( const child of card.innerBlocks || [] ) {
 		const lock = child.attributes?.lock;
 		if ( isBoundCopy( child.attributes ) ) {
 			if ( true !== lock?.move || true !== lock?.remove ) {
 				plan.lockChildren.push( child.clientId );
 			}
-		} else if ( true === lock?.move && true === lock?.remove ) {
+		} else if ( SEEDED_CTA_BLOCKS.includes( child.name ) && true === lock?.move && true === lock?.remove ) {
 			plan.unlockChildren.push( child.clientId );
 		}
 	}
