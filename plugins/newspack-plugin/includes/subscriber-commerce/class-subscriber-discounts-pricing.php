@@ -449,6 +449,11 @@ class Subscriber_Discounts_Pricing {
 	 * @return bool
 	 */
 	private static function product_grants( \WC_Product $product, array $rule ) {
+		// Asked of the instance being priced, not the catalog product: a product sold
+		// both one-time and on plans keeps its one-time price discounted, while a
+		// chosen plan (applied before this filter runs) reads as a subscription and
+		// is left alone. Plan prices shown on the product page come from the stored
+		// price, which this display filter never touches.
 		return Subscriber_Commerce::covers_all_subscriptions( $rule )
 			? Subscription_Products::is_purchased_as_subscription( $product )
 			: self::product_is_one_of( $product, $rule['subscription_product_ids'] );
@@ -599,7 +604,10 @@ class Subscriber_Discounts_Pricing {
 		// again, and a verdict keyed without it leaves the reader a price they have
 		// stopped being entitled to. The payment-recovery grace: the sibling memos
 		// key on it for the same reason, since a reader mid-retry is eligible
-		// inside a gate's evaluation context and not outside it.
+		// inside a gate's evaluation context and not outside it. A plan-priced
+		// instance shares its product ID with the bare product it was cloned from,
+		// but only the plan instance is a subscription purchase — product_grants()
+		// answers differently for each, so they need separate verdicts too.
 		$cache_key = implode(
 			':',
 			[
@@ -607,6 +615,7 @@ class Subscriber_Discounts_Pricing {
 				$product->get_id(),
 				self::cart_signature(),
 				Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) ? 'grace' : 'strict',
+				Subscription_Products::is_purchased_as_subscription( $product ) ? 'recurring' : 'once',
 			]
 		);
 		if ( isset( self::$rules_for_product[ $cache_key ] ) ) {

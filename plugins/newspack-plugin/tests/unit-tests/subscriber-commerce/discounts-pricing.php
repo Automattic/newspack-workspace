@@ -40,11 +40,13 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	private $non_subscriber_id;
 
 	/**
-	 * Load the WooCommerce mocks.
+	 * Load the WooCommerce mocks, plans included: a product_grants() decision can
+	 * turn on whether a plan is applied to the instance being priced, so this
+	 * suite needs the plans API mocked, not just plain WooCommerce.
 	 */
 	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
-		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-plans-mocks.php';
 	}
 
 	/**
@@ -69,6 +71,13 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 
 		add_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10, 3 );
 
+		// WP_UnitTestCase snapshots $wp_filter once, at the first test of the whole
+		// run, and restores that snapshot after every test's tear_down() — so a
+		// filter added once at require_once time (by wcs-plans-mocks.php, loaded
+		// only in setUpBeforeClass()) survives only if this class happens to run
+		// first. Re-adding it per test makes that independent of suite order.
+		add_filter( 'woocommerce_is_subscription', [ 'WCS_ATT_Product_Schemes', 'filter_is_subscription' ], 10, 3 );
+
 		$this->flush_caches();
 	}
 
@@ -81,6 +90,8 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		remove_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10 );
 		$this->flush_caches();
 		$this->reset_products_database();
+		\WCS_ATT_Product_Schemes::mock_reset();
+		\Newspack\Subscription_Products::flush_cache();
 		parent::tear_down();
 	}
 
@@ -641,6 +652,100 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		$this->assertNull(
 			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $subscription, $this->subscriber_id ),
 			'A subscription product keeps its price.'
+		);
+	}
+
+	/**
+	 * A product sold both one-time and on a subscription plan keeps its
+	 * one-time price open to an all-subscribers rule, but a plan chosen on an
+	 * instance of it reads as a subscription and the same rule leaves it alone
+	 * — the guard `product_grants()` applies against the instance being priced,
+	 * not the catalog product, so it must see the plan once it is applied.
+	 * Runs the real WooCommerce filter chain, not the `get_subscriber_price()`
+	 * shortcut the rest of this suite uses, because that is the seam
+	 * `product_grants()`'s instance-vs-catalog decision can only be observed on.
+	 */
+	public function test_hybrid_one_time_price_is_discounted_and_plan_price_is_not() {
+		$hybrid = wc_create_mock_product(
+			[
+				'id'            => 501,
+				'type'          => 'simple',
+				'regular_price' => '100',
+				'price'         => '100',
+			]
+		);
+		\WCS_ATT_Product_Schemes::mock_register(
+			$hybrid->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+					'price'    => 10,
+				],
+			]
+		);
+		Subscriber_Discounts::save_rule(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+				'targeting'                => 'products',
+				'product_ids'              => [ $hybrid->get_id() ],
+				'discount_type'            => 'percent',
+				'amount'                   => 20,
+			]
+		);
+		$this->flush_caches();
+		\Newspack\Subscription_Products::flush_cache();
+		wp_set_current_user( $this->subscriber_id );
+		$this->enable_gates();
+		Subscriber_Discounts_Pricing::register_price_filters();
+
+		try {
+			$this->assertEquals( 80.0, (float) $hybrid->get_price(), 'One-time price is discounted.' );
+
+			$options = \Newspack\Subscription_Products::get_purchase_options( $hybrid );
+			$this->assertSame( 10.0, $options[1]->price, 'Plan price comes from the stored price, untouched by the discount.' );
+
+			$plan_line = \Newspack\Subscription_Products::get_option_product( $options[1] );
+			$this->assertTrue(
+				\Newspack\Subscription_Products::is_purchased_as_subscription( $plan_line ),
+				'The plan instance reads as a subscription once the plan is applied.'
+			);
+			$this->assertEquals( 100.0, (float) $plan_line->get_price(), 'A chosen plan is never discounted by an all-subscribers rule.' );
+		} finally {
+			self::remove_price_filters();
+		}
+	}
+
+	/**
+	 * The Audience wizard's price-preview flag has to agree with product_grants():
+	 * a bare hybrid product previews as not-a-subscription, the same verdict that
+	 * leaves its one-time price open to discount at checkout.
+	 */
+	public function test_audience_flag_matches_product_grants_for_hybrids() {
+		$hybrid = wc_create_mock_product(
+			[
+				'id'    => 502,
+				'type'  => 'simple',
+				'price' => '50',
+			]
+		);
+		\WCS_ATT_Product_Schemes::mock_register(
+			$hybrid->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			]
+		);
+
+		$method = new \ReflectionMethod( \Newspack\Audience_Subscriptions::class, 'get_product_data' );
+		$method->setAccessible( true );
+
+		$this->assertFalse(
+			$method->invoke( null, $hybrid )['is_subscription'],
+			'Preview discounts the one-time price, as checkout does.'
 		);
 	}
 }
