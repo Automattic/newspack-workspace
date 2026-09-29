@@ -10,6 +10,7 @@
 const fs = require( 'fs' );
 const path = require( 'path' );
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
+const { findSourceFile, resolveSourceFile } = require( 'newspack-scripts/config/resolveSource' );
 const loader = require.resolve( 'babel-loader' );
 
 /**
@@ -19,16 +20,16 @@ const editorSetup = path.join( __dirname, 'src', 'setup', 'editor' );
 const viewSetup = path.join( __dirname, 'src', 'setup', 'view' );
 
 function blockScripts( type, inputDir, blocks ) {
-	return blocks.map( block => path.join( inputDir, 'blocks', block, `${ type }.js` ) ).filter( fs.existsSync );
+	return blocks.map( block => findSourceFile( path.join( inputDir, 'blocks', block, type ) ) ).filter( Boolean );
 }
 
 const blocksDir = path.join( __dirname, 'src', 'blocks' );
-const blocks = fs.readdirSync( blocksDir ).filter( block => fs.existsSync( path.join( __dirname, 'src', 'blocks', block, 'editor.js' ) ) );
+const blocks = fs.readdirSync( blocksDir ).filter( block => findSourceFile( path.join( blocksDir, block, 'editor' ) ) );
 
 // Helps split up each block into its own folder view script
 const viewBlocksScripts = blocks.reduce( ( viewBlocks, block ) => {
-	const viewScriptPath = path.join( __dirname, 'src', 'blocks', block, 'view.js' );
-	if ( fs.existsSync( viewScriptPath ) ) {
+	const viewScriptPath = findSourceFile( path.join( blocksDir, block, 'view' ) );
+	if ( viewScriptPath ) {
 		viewBlocks[ block + '/view' ] = [ ...viewSetup, ...[ viewScriptPath ] ];
 	}
 	return viewBlocks;
@@ -42,7 +43,7 @@ const entry = {
 	'header-bidding-gam': path.join( __dirname, 'src', 'wizard-settings', 'header-bidding-gam' ),
 	prebid: path.join( __dirname, 'src', 'prebid' ),
 	// Media Kit Page.
-	'media-kit-frontend': path.join( __dirname, 'src', 'media-kit', 'index.js' ),
+	'media-kit-frontend': resolveSourceFile( path.join( __dirname, 'src', 'media-kit', 'index' ) ),
 };
 
 const webpackConfig = getBaseWebpackConfig( {

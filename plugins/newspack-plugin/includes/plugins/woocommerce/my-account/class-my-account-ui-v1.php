@@ -116,9 +116,10 @@ class My_Account_UI_V1 {
 				'change_payment_method_title' => __( 'Change payment method', 'newspack-plugin' ),
 				'switch_subscription_title'   => __( 'Change Subscription', 'newspack-plugin' ),
 				'invite_link_copied'          => __( 'Invite link copied.', 'newspack-plugin' ),
-				'invite_link_regenerated'     => __( 'New invite link copied. The old one no longer works.', 'newspack-plugin' ),
+				'invite_link_regenerated'     => __( 'New invite link copied. Any older link no longer works.', 'newspack-plugin' ),
 				'invite_link_copy_failed'     => __( 'Couldn\'t copy the invite link to your clipboard. Copy it manually:', 'newspack-plugin' ),
 				'invite_link_disabled'        => __( 'Invite link disabled. You can create a new link any time.', 'newspack-plugin' ),
+				'group_name_updated'          => __( 'Name updated.', 'newspack-plugin' ),
 			],
 			'rest'         => [
 				'base_url'   => get_rest_url(),
@@ -136,7 +137,10 @@ class My_Account_UI_V1 {
 				\Newspack\Newspack::plugin_url() . '/dist/account-frontend.js',
 				[],
 				\Newspack\Newspack::asset_version( 'account-frontend' ),
-				true
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
 			);
 			\wp_localize_script(
 				'newspack-account-frontend',
@@ -149,7 +153,10 @@ class My_Account_UI_V1 {
 				\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.js',
 				[ 'newspack-ui' ],
 				\Newspack\Newspack::asset_version( 'my-account-v1' ),
-				true
+				[
+					'in_footer' => true,
+					'strategy'  => 'defer',
+				]
 			);
 			\wp_localize_script(
 				'newspack-my-account-v1',
@@ -505,7 +512,7 @@ class My_Account_UI_V1 {
 			WooCommerce_Connection::add_wc_notice( __( 'Invalid nonce.', 'newspack-plugin' ), 'error' );
 			return;
 		}
-		if ( ! $token || ! $transient_token || $transient_token !== $token ) {
+		if ( ! $token || ! $transient_token || ! hash_equals( (string) $transient_token, (string) $token ) ) {
 			WooCommerce_Connection::add_wc_notice( __( 'Invalid token.', 'newspack-plugin' ), 'error' );
 			return;
 		}
@@ -572,8 +579,6 @@ class My_Account_UI_V1 {
 				__( 'Your account has been deleted.', 'newspack-plugin' ),
 				[
 					'id'       => 'after-delete-account',
-					'type'     => 'success',
-					'corner'   => 'top-right',
 					'autohide' => true,
 				]
 			);

@@ -1,0 +1,9 @@
+{
+	"name": "newspack-merge-feed",
+	"private": true,
+	"description": "Posts a plain-English summary of each PR merged to main to Slack. Run by .github/workflows/merge-feed.yml.",
+	"type": "module",
+	"dependencies": {
+		"@anthropic-ai/sdk": "0.128.0"
+	}
+}

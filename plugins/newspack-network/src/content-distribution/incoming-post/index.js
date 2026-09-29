@@ -11,7 +11,7 @@ import {
 	Button,
 	__experimentalConfirmDialog as ConfirmDialog, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { broadcast } from '../../icons';
+import { broadcast } from 'newspack-icons';
 import { registerPlugin } from '@wordpress/plugins';
 
 /**

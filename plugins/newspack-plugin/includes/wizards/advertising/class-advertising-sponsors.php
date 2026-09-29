@@ -82,20 +82,28 @@ class Advertising_Sponsors extends Wizard {
 		add_filter( 'submenu_file', [ $this, 'submenu_file' ] );
 
 		if ( $this->is_wizard_page() ) {
+			$is_settings = isset( $_GET['page'] ) && 'newspack-sponsors-settings-admin' === $_GET['page']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
 			// Initialize Wizards Admin Header.
 			$this->admin_header_init(
 				[
-					'tabs'  => [
+					'tabs'        => [
 						[
-							'textContent' => esc_html__( 'All Sponsors', 'newspack-plugin' ),
-							'href'        => admin_url( static::URL ),
+							'textContent'   => esc_html__( 'All Sponsors', 'newspack-plugin' ),
+							'href'          => admin_url( static::URL ),
+							'forceSelected' => ! $is_settings,
 						],
 						[
-							'textContent' => esc_html__( 'Settings', 'newspack-plugin' ),
-							'href'        => admin_url( static::URL . '&page=newspack-sponsors-settings-admin' ),
+							'textContent'   => esc_html__( 'Settings', 'newspack-plugin' ),
+							'href'          => admin_url( static::URL . '&page=newspack-sponsors-settings-admin' ),
+							'forceSelected' => $is_settings,
 						],
 					],
-					'title' => $this->get_name(),
+					'breadcrumbs' => [
+						[ 'label' => __( 'Advertising', 'newspack-plugin' ) ],
+						[ 'label' => __( 'Sponsors', 'newspack-plugin' ) ],
+						[ 'label' => $is_settings ? __( 'Settings', 'newspack-plugin' ) : __( 'All Sponsors', 'newspack-plugin' ) ],
+					],
 				]
 			);
 		}

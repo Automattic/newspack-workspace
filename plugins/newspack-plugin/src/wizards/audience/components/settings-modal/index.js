@@ -3,11 +3,12 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, CategoryAutocomplete, Grid, Modal, SelectControl, Settings, hooks } from '../../../../../packages/components/src';
+import { Button, CategoryAutocomplete, Grid, Modal, SelectControl, Settings, hooks } from '../../../../../packages/components/src';
 import { frequenciesForPopup, isOverlay, placementsForPopups, overlaySizesForPopups } from '../../views/campaigns/utils';
 
 const { SettingsCard } = Settings;
@@ -26,7 +27,7 @@ const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup } ) => {
 			<Button onClick={ () => onClose() } className="screen-reader-text">
 				{ __( 'Close Modal', 'newspack-plugin' ) }
 			</Button>
-			<Grid gutter={ 64 } columns={ 1 }>
+			<Grid gutter={ 48 } columns={ 1 }>
 				<SettingsCard
 					title={ __( 'Campaigns', 'newspack-plugin' ) }
 					description={ __( 'Assign a prompt to one or more campaigns for easier management', 'newspack-plugin' ) }
@@ -171,14 +172,14 @@ const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup } ) => {
 				</SettingsCard>
 			</Grid>
 
-			<Card buttonsCard noBorder className="justify-end">
+			<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 				<Button onClick={ onClose } variant="secondary">
 					{ __( 'Cancel', 'newspack-plugin' ) }
 				</Button>
 				<Button onClick={ handleSave } variant="primary">
 					{ __( 'Save', 'newspack-plugin' ) }
 				</Button>
-			</Card>
+			</HStack>
 		</Modal>
 	);
 };

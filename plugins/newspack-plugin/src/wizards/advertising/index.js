@@ -13,9 +13,10 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies.
  */
-import { withWizard, utils } from '../../../packages/components/src';
+import { withWizard, utils, Button } from '../../../packages/components/src';
 import Router from '../../../packages/components/src/proxied-imports/router';
 import { AdUnit, AdUnits, Providers, Settings, Placements } from './views';
+import { isAdUnitValid } from './views/ad-unit';
 import { getSizes } from './components/ad-unit-size-control';
 import './style.scss';
 
@@ -140,19 +141,26 @@ class AdvertisingWizard extends Component {
 		const { advertisingData } = this.state;
 		const { pluginRequirements, wizardApiFetch } = this.props;
 		const { services, adUnits, parentAdUnits } = advertisingData;
+		const newAdUnit = adUnits[ 0 ] || { id: 0, name: '', code: '', sizes: [ getSizes()[ 0 ] ], fluid: false };
+		const ROOT = [ { label: __( 'Advertising', 'newspack-plugin' ) }, { label: __( 'Display Ads', 'newspack-plugin' ) } ];
+		const PROVIDERS_TRAIL = [ ...ROOT, { label: __( 'Providers', 'newspack-plugin' ), url: '#/' } ];
+		const GAM_TRAIL = [ ...PROVIDERS_TRAIL, { label: __( 'Google Ad Manager', 'newspack-plugin' ), url: '#/google_ad_manager' } ];
 		const tabs = [
 			{
 				label: __( 'Providers', 'newspack-plugin' ),
 				path: '/',
 				exact: true,
+				breadcrumbs: [ ...ROOT, { label: __( 'Providers', 'newspack-plugin' ) } ],
 			},
 			{
 				label: __( 'Placements', 'newspack-plugin' ),
 				path: '/placements',
+				breadcrumbs: [ ...ROOT, { label: __( 'Placements', 'newspack-plugin' ) } ],
 			},
 			{
 				label: __( 'Settings', 'newspack-plugin' ),
 				path: '/settings',
+				breadcrumbs: [ ...ROOT, { label: __( 'Settings', 'newspack-plugin' ) } ],
 			},
 		];
 		return (
@@ -191,7 +199,12 @@ class AdvertisingWizard extends Component {
 							render={ () => (
 								<AdUnits
 									headerText="Google Ad Manager"
-									subHeaderText={ __( 'Monetize your content through Google Ad Manager', 'newspack-plugin' ) }
+									breadcrumbItems={ [ ...PROVIDERS_TRAIL, { label: __( 'Google Ad Manager', 'newspack-plugin' ) } ] }
+									headerActions={
+										<Button variant="primary" href={ `#/google_ad_manager/${ CREATE_AD_ID_PARAM }` }>
+											{ __( 'Add Ad Unit', 'newspack-plugin' ) }
+										</Button>
+									}
 									adUnits={ adUnits }
 									parentAdUnits={ parentAdUnits }
 									service={ 'google_ad_manager' }
@@ -208,29 +221,31 @@ class AdvertisingWizard extends Component {
 							path={ `/google_ad_manager/${ CREATE_AD_ID_PARAM }` }
 							render={ routeProps => (
 								<AdUnit
-									headerText={ __( 'Add New Ad Unit', 'newspack-plugin' ) }
-									subHeaderText={ __( 'Allows you to place ads on your site', 'newspack-plugin' ) }
-									adUnit={
-										adUnits[ 0 ] || {
-											id: 0,
-											name: '',
-											code: '',
-											sizes: [ getSizes()[ 0 ] ],
-											fluid: false,
-										}
+									headerText={ __( 'Add Ad Unit', 'newspack-plugin' ) }
+									breadcrumbItems={ [ ...GAM_TRAIL, { label: __( 'Add Ad Unit', 'newspack-plugin' ) } ] }
+									headerActions={
+										<>
+											<Button
+												variant="primary"
+												disabled={ ! isAdUnitValid( newAdUnit ) }
+												onClick={ () =>
+													this.saveAdUnit( newAdUnit.id )
+														.then( () => routeProps.history.push( '/google_ad_manager' ) )
+														.catch( () => {} )
+												}
+											>
+												{ __( 'Save', 'newspack-plugin' ) }
+											</Button>
+											<Button variant="secondary" href="#/google_ad_manager" onClick={ this.onAdUnitCancel }>
+												{ __( 'Cancel', 'newspack-plugin' ) }
+											</Button>
+										</>
 									}
+									adUnit={ newAdUnit }
 									service={ 'google_ad_manager' }
 									serviceData={ services.google_ad_manager }
 									wizardApiFetch={ wizardApiFetch }
 									onChange={ this.onAdUnitChange }
-									onSave={ id =>
-										this.saveAdUnit( id )
-											.then( () => {
-												routeProps.history.push( '/google_ad_manager' );
-											} )
-											.catch( () => {} )
-									}
-									onCancel={ this.onAdUnitCancel }
 									tabbedNavigation={ tabs }
 								/>
 							) }
@@ -239,19 +254,32 @@ class AdvertisingWizard extends Component {
 							path="/google_ad_manager/:id"
 							render={ routeProps => {
 								const adId = routeProps.match.params.id;
+								const adUnit = adUnits[ adId ] || {};
 								return (
 									<AdUnit
 										headerText={ __( 'Edit Ad Unit', 'newspack-plugin' ) }
-										subHeaderText={ __( 'Allows you to place ads on your site', 'newspack-plugin' ) }
-										adUnit={ adUnits[ adId ] || {} }
+										breadcrumbItems={ [ ...GAM_TRAIL, { label: __( 'Edit Ad Unit', 'newspack-plugin' ) } ] }
+										headerActions={
+											<>
+												<Button
+													variant="primary"
+													disabled={ ! isAdUnitValid( adUnit ) }
+													onClick={ () =>
+														this.saveAdUnit( adUnit.id )
+															.then( () => routeProps.history.push( '/google_ad_manager' ) )
+															.catch( () => {} )
+													}
+												>
+													{ __( 'Save', 'newspack-plugin' ) }
+												</Button>
+												<Button variant="secondary" href="#/google_ad_manager" onClick={ this.onAdUnitCancel }>
+													{ __( 'Cancel', 'newspack-plugin' ) }
+												</Button>
+											</>
+										}
+										adUnit={ adUnit }
 										service={ 'google_ad_manager' }
 										onChange={ this.onAdUnitChange }
-										onSave={ id =>
-											this.saveAdUnit( id ).then( () => {
-												routeProps.history.push( '/google_ad_manager' );
-											} )
-										}
-										onCancel={ this.onAdUnitCancel }
 										tabbedNavigation={ tabs }
 									/>
 								);

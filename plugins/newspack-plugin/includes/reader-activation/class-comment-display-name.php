@@ -68,10 +68,7 @@ final class Comment_Display_Name {
 
 		$user  = \wp_get_current_user();
 		$email = $user->user_email;
-		if (
-			Reader_Activation::generate_user_nicename( $email ) === $display_name ||
-			Reader_Activation::strip_email_domain( $email ) === $display_name
-		) {
+		if ( Reader_Activation::is_display_name_derived_from_email( $display_name, $email ) ) {
 			\wp_die(
 				esc_html__( 'Please choose a display name that is not derived from your email address.', 'newspack-plugin' ),
 				esc_html__( 'Comment Submission Failure', 'newspack-plugin' ),

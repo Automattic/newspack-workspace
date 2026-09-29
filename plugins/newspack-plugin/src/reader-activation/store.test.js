@@ -169,6 +169,24 @@ describe( 'Store', () => {
 			expect( all.active_memberships ).toEqual( [ 1, 2 ] );
 		} );
 	} );
+	it( 'should rehydrate remaining items when one stored value is corrupt', () => {
+		window.newspack_reader_data = {
+			items: {
+				// A legacy comma list (NPPM-3205) — unparseable as JSON, and
+				// listed first so it would abort the keys after it if the
+				// decode failure escaped the rehydrate loop.
+				active_memberships: '123,456',
+				is_donor: 'true',
+			},
+		};
+		const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const [ store ] = Store();
+		expect( () => store.rehydrate() ).not.toThrow();
+		expect( store.get( 'active_memberships' ) ).toBeNull();
+		expect( store.get( 'is_donor' ) ).toEqual( true );
+		expect( warn ).toHaveBeenCalledWith( expect.stringContaining( 'active_memberships' ), expect.any( SyntaxError ) );
+		warn.mockRestore();
+	} );
 	describe( 'Read-only keys', () => {
 		beforeEach( () => {
 			window.newspack_reader_data = {
@@ -329,6 +347,51 @@ describe( 'Store', () => {
 			expect( localStorage.getItem( 'np_reader_is_donor' ) ).toBeNull();
 			delete window.newspackRASInitialized;
 			delete window.newspackReaderActivation;
+		} );
+	} );
+	describe( 'switched sessions', () => {
+		// An admin switched into a reader's account: the reader's server items
+		// must reach the browser (prompts read the stored snapshot),
+		// but nothing this browser does may be written back, and nothing may
+		// land in the admin's own localStorage namespace.
+		afterEach( () => {
+			sessionStorage.clear();
+		} );
+		it( 'hydrates the server items into sessionStorage and never syncs', () => {
+			window.newspack_reader_data = {
+				is_switched_session: true,
+				api_url: 'http://test/api',
+				nonce: 'abc',
+				items: { matched_segments: '["3"]' },
+			};
+			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
+			let store;
+			// The storage backend is chosen when the module evaluates.
+			jest.isolateModules( () => {
+				store = require( './store' ).default()[ 0 ];
+			} );
+			store.rehydrate();
+			expect( store.get( 'matched_segments' ) ).toEqual( [ '3' ] );
+			expect( sessionStorage.getItem( 'np_reader_matched_segments' ) ).toEqual( '["3"]' );
+			expect( localStorage.getItem( 'np_reader_matched_segments' ) ).toBeNull();
+			store.set( 'pageviews', { day: { count: 1 } } );
+			jest.advanceTimersByTime( 2500 );
+			expect( openSpy ).not.toHaveBeenCalled();
+			openSpy.mockRestore();
+		} );
+		it.each( [
+			[ 'written', store => store.set( 'pageviews', { day: { count: 9 } } ) ],
+			[ 'deleted', store => store.delete( 'pageviews' ) ],
+		] )( 'still hydrates a key the switched tab has %s', ( _, write ) => {
+			window.newspack_reader_data = { is_switched_session: true, items: {} };
+			let store;
+			jest.isolateModules( () => {
+				store = require( './store' ).default()[ 0 ];
+			} );
+			write( store );
+			// The next page load in the same tab.
+			store.rehydrate( { pageviews: '{"day":{"count":1}}' } );
+			expect( store.get( 'pageviews' ) ).toEqual( { day: { count: 1 } } );
 		} );
 	} );
 } );

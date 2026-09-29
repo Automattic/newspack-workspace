@@ -338,6 +338,143 @@ class SchemasTest extends WP_UnitTestCase {
 				],
 				true,
 			],
+			'valid date range'       => [
+				[
+					'name'          => 'Test Segment',
+					'id'            => 1001,
+					'priority'      => 10,
+					'criteria'      => [
+						[
+							'criteria_id' => 'LAST_GIFT_DATE',
+							'value'       => [
+								'start' => [
+									'type' => 'absolute',
+									'date' => '2026-01-01',
+								],
+								'end'   => [
+									'type' => 'relative',
+									'days' => 0,
+								],
+							],
+						],
+					],
+					'configuration' => [
+						'max_posts' => 1,
+					],
+				],
+				true,
+			],
+			'date range one bound'   => [
+				[
+					'name'          => 'Test Segment',
+					'id'            => 1001,
+					'priority'      => 10,
+					'criteria'      => [
+						[
+							'criteria_id' => 'LAST_GIFT_DATE',
+							'value'       => [
+								'start' => [
+									'type' => 'relative',
+									'days' => -30,
+								],
+							],
+						],
+					],
+					'configuration' => [
+						'max_posts' => 1,
+					],
+				],
+				true,
+			],
+			'date range bad pattern' => [
+				[
+					'name'          => 'Test Segment',
+					'id'            => 1001,
+					'priority'      => 10,
+					'criteria'      => [
+						[
+							'criteria_id' => 'LAST_GIFT_DATE',
+							'value'       => [
+								'start' => [
+									'type' => 'absolute',
+									'date' => '01/01/2026',
+								],
+							],
+						],
+					],
+					'configuration' => [
+						'max_posts' => 1,
+					],
+				],
+				false,
+			],
+			'date range impossible'  => [
+				[
+					'name'          => 'Test Segment',
+					'id'            => 1001,
+					'priority'      => 10,
+					'criteria'      => [
+						[
+							'criteria_id' => 'LAST_GIFT_DATE',
+							'value'       => [
+								'start' => [
+									'type' => 'absolute',
+									'date' => '2026-13-45',
+								],
+							],
+						],
+					],
+					'configuration' => [
+						'max_posts' => 1,
+					],
+				],
+				false,
+			],
+			'date range last day'    => [
+				[
+					'name'          => 'Test Segment',
+					'id'            => 1001,
+					'priority'      => 10,
+					'criteria'      => [
+						[
+							'criteria_id' => 'LAST_GIFT_DATE',
+							'value'       => [
+								'start' => [
+									'type' => 'absolute',
+									'date' => '2026-12-31',
+								],
+							],
+						],
+					],
+					'configuration' => [
+						'max_posts' => 1,
+					],
+				],
+				true,
+			],
+			'date range mixed bound' => [
+				[
+					'name'          => 'Test Segment',
+					'id'            => 1001,
+					'priority'      => 10,
+					'criteria'      => [
+						[
+							'criteria_id' => 'LAST_GIFT_DATE',
+							'value'       => [
+								'start' => [
+									'type' => 'absolute',
+									'date' => '2026-01-01',
+									'days' => 5,
+								],
+							],
+						],
+					],
+					'configuration' => [
+						'max_posts' => 1,
+					],
+				],
+				false,
+			],
 			'missing required'       => [
 				[
 					'name'          => 'Test Segment',
@@ -507,5 +644,20 @@ class SchemasTest extends WP_UnitTestCase {
 	public function test_segments_schema( $value, $expected_result ) {
 		$schema = new Newspack\Campaigns\Schemas\Segments( $value );
 		$this->assertSame( $expected_result, $schema->is_valid() );
+	}
+
+	/**
+	 * A decimal min/max range value validates against the segment criteria schema.
+	 */
+	public function test_segment_criteria_allows_decimal_range() {
+		$schema = \Newspack_Segments_Model::get_meta_schema()['criteria']['items']['properties']['value'];
+		$valid  = rest_validate_value_from_schema(
+			[
+				'min' => 10.5,
+				'max' => 99.99,
+			],
+			$schema
+		);
+		$this->assertNotWPError( $valid );
 	}
 }

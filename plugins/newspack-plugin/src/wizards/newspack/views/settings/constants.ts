@@ -68,7 +68,7 @@ export const ADVANCED_SETTINGS_DEFAULTS = {
 	pwa_display_mode: 'minimal-ui',
 	// Post content fallback image.
 	newspack_default_image_url: undefined,
-	// Private Tags settings (populated from server when NEWSPACK_PRIVATE_TAGS_ENABLED is active).
+	// Private Tags settings (populated from the server unless the feature is opted out via the NEWSPACK_PRIVATE_TAGS_DISABLED constant or the newspack_private_tags_enabled filter).
 	newspack_private_tags_settings: undefined,
 };
 

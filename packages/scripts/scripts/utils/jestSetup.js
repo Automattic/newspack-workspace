@@ -54,3 +54,22 @@ Object.defineProperty( global, 'IntersectionObserver', {
 	configurable: true,
 	value: MockIntersectionObserver,
 } );
+
+// ResizeObserver does not exist in JSDOM (used by e.g. @wordpress/ui Tabs).
+class MockResizeObserver {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+}
+
+Object.defineProperty( window, 'ResizeObserver', {
+	writable: true,
+	configurable: true,
+	value: MockResizeObserver,
+} );
+
+Object.defineProperty( global, 'ResizeObserver', {
+	writable: true,
+	configurable: true,
+	value: MockResizeObserver,
+} );

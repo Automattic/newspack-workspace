@@ -4,7 +4,7 @@
 import { __ } from '@wordpress/i18n';
 import { PluginSidebar } from '@wordpress/editor';
 import { Flex, Panel, PanelBody } from '@wordpress/components';
-import { broadcast } from '../../icons';
+import { broadcast } from 'newspack-icons';
 
 /**
  * Internal dependencies.

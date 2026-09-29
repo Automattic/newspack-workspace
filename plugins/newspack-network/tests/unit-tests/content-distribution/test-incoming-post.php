@@ -161,6 +161,32 @@ class TestIncomingPost extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Local-only meta on the target must survive an incoming sync whose payload
+	 * omits it, while ordinary meta absent from the payload is removed.
+	 *
+	 * This guards the ignored-key preservation in Incoming_Post::update_meta():
+	 * a target's own Spectra (UAGB) asset meta must not be deleted or overwritten
+	 * by a sync, since those keys are excluded from the distributed payload.
+	 */
+	public function test_insert_preserves_ignored_local_meta() {
+		// Insert the linked post for the first time.
+		$post_id = $this->incoming_post->insert();
+
+		// Simulate the target site's own Spectra assets plus an unrelated local
+		// meta, neither of which is present in the incoming payload.
+		update_post_meta( $post_id, '_uag_page_assets', 'local-assets' );
+		update_post_meta( $post_id, 'local_only_key', 'local-value' );
+
+		// Run an update sync. The sample payload contains neither key.
+		$updated = new Incoming_Post( $this->get_sample_payload() );
+		$this->assertSame( $post_id, $updated->insert() );
+
+		// The ignored Spectra meta is preserved; the ordinary local meta is removed.
+		$this->assertSame( 'local-assets', get_post_meta( $post_id, '_uag_page_assets', true ) );
+		$this->assertEmpty( get_post_meta( $post_id, 'local_only_key', true ) );
+	}
+
+	/**
 	 * Test insert post when unlinked.
 	 */
 	public function test_insert_post_when_unlinked() {
@@ -285,7 +311,7 @@ class TestIncomingPost extends \WP_UnitTestCase {
 
 		// Set a different thumbnail URL.
 		$payload = $this->get_sample_payload();
-		$payload['post_data']['thumbnail_url'] = 'https://picsum.photos/id/2/300/300.jpg';
+		$payload['post_data']['thumbnail_url'] = 'https://93.184.216.34/image-2.jpg';
 
 		// Insert the linked post with the updated thumbnail.
 		$this->incoming_post->insert( $payload );
@@ -313,6 +339,39 @@ class TestIncomingPost extends \WP_UnitTestCase {
 		// Assert that the thumbnail was removed.
 		$thumbnail_id = get_post_thumbnail_id( $post_id );
 		$this->assertEmpty( $thumbnail_id );
+	}
+
+	/**
+	 * Test insert when fetching the thumbnail fails.
+	 */
+	public function test_insert_with_failing_thumbnail_fetch() {
+		// Record every HTTP request the insert makes.
+		$requested = [];
+		add_filter(
+			'pre_http_request',
+			function ( $preempt, $args, $url ) use ( &$requested ) {
+				$requested[] = $url;
+				return $preempt;
+			},
+			9,
+			3
+		);
+
+		$thumbnail_url = 'https://93.184.216.34/http-503/image-1.jpg';
+		$payload = $this->get_sample_payload();
+		$payload['post_data']['thumbnail_url'] = $thumbnail_url;
+
+		$incoming_post = new Incoming_Post( $payload );
+		$post_id = $incoming_post->insert();
+
+		// The import itself succeeds without the image.
+		$this->assertFalse( is_wp_error( $post_id ) );
+		$this->assertSame( 'Title', get_the_title( $post_id ) );
+
+		// The fetch was attempted -- an empty thumbnail alone proves nothing,
+		// since a sideload that never starts leaves the same zero behind.
+		$this->assertContains( $thumbnail_url, $requested );
+		$this->assertEmpty( get_post_thumbnail_id( $post_id ) );
 	}
 
 	/**
@@ -1007,5 +1066,78 @@ class TestIncomingPost extends \WP_UnitTestCase {
 		$tags = wp_get_post_terms( $post_id, 'post_tag' );
 		$this->assertEmpty( $categories );
 		$this->assertEmpty( $tags );
+	}
+
+	/**
+	 * Test that block attributes containing HTML survive insertion intact.
+	 *
+	 * Block-comment attribute JSON escapes `<`, `>`, `&` and `"` as \uXXXX
+	 * sequences with literal backslashes. wp_insert_post() expects slashed
+	 * input, so an unslashed insert strips those backslashes and corrupts
+	 * the attributes (e.g. Everlit player embeds rendering as
+	 * "u003ciframe title=u0022...").
+	 */
+	public function test_insert_preserves_escaped_block_attributes() {
+		$iframe = '<iframe title="Everlit Audio Player" src="https://everlit.audio/embeds/test?client=wp&amp;v=1" height="136px"></iframe>';
+		$block  = serialize_block(
+			[
+				'blockName'    => 'everlit/audio-player',
+				'attrs'        => [ 'embed' => $iframe ],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+
+		$payload                             = $this->get_sample_payload();
+		$payload['post_id']                  = 99;
+		$payload['network_post_id']          = '99999999990abcdef1234567890abcde';
+		$payload['post_data']['raw_content'] = $block;
+		$payload['post_data']['content']     = $iframe;
+
+		$incoming_post = new Incoming_Post( $payload );
+		$post_id       = $incoming_post->insert();
+
+		$this->assertFalse( is_wp_error( $post_id ) );
+
+		$stored = get_post_field( 'post_content', $post_id );
+		$this->assertStringContainsString( '\u003ciframe', $stored, 'Escaped block-attribute HTML must survive insertion with backslashes intact.' );
+		// The escaped `<` surviving with its backslash (asserted above) is what pins the
+		// fix; also assert the backslash-stripped corruption is absent, rather than a
+		// byte-exact block round-trip that couples the test to serialize_blocks internals.
+		$this->assertStringNotContainsString( '"embed":"u003c', $stored, 'The backslash-stripped corruption (bare u003c) must not appear.' );
+	}
+
+	/**
+	 * The stored payload must survive storage intact: meta functions unslash
+	 * their input, and re-links / partial updates rebuild post_content from
+	 * the stored payload — a corrupted copy re-introduces the corruption.
+	 */
+	public function test_stored_payload_preserves_escaped_block_attributes_on_reinsert() {
+		$iframe = '<iframe title="Everlit Audio Player" src="https://everlit.audio/embeds/test?client=wp&amp;v=1"></iframe>';
+		$block  = serialize_block(
+			[
+				'blockName'    => 'everlit/audio-player',
+				'attrs'        => [ 'embed' => $iframe ],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+
+		$payload                             = $this->get_sample_payload();
+		$payload['post_id']                  = 98;
+		$payload['network_post_id']          = '88888888880abcdef1234567890abcde';
+		$payload['post_data']['raw_content'] = $block;
+		$payload['post_data']['content']     = $iframe;
+
+		$post_id = ( new Incoming_Post( $payload ) )->insert();
+		$this->assertSame( $block, get_post_field( 'post_content', $post_id ) );
+
+		// Reload from the stored payload — the re-link / partial-update path.
+		$reloaded = new Incoming_Post( $post_id );
+		$this->assertFalse( is_wp_error( $reloaded->insert() ), 'The re-insert from the stored payload must succeed.' );
+
+		$this->assertSame( $block, get_post_field( 'post_content', $post_id ), 'Content must survive a re-insert from the stored payload.' );
 	}
 }

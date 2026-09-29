@@ -9,6 +9,7 @@
 namespace Newspack\Tests\Content_Gate;
 
 use Newspack\Content_Gate;
+use Newspack\Content_Restriction_Control;
 use Newspack\Content_Rules;
 use Newspack\Data_Events;
 use Newspack\Premium_Newsletters;
@@ -20,6 +21,8 @@ use Newspack\Reader_Activation;
  * @group premium-newsletters
  */
 class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
+
+	use \Newspack\Tests\Content_Gate\Traits\Trait_Restriction_Cache_Test;
 
 	/**
 	 * Gate IDs created during tests.
@@ -40,6 +43,13 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
+		// Gating is flag-gated, and these tests exercise enforcement. Defined here
+		// rather than relied on from another class: constants are process-wide, so
+		// without this the group passes only when an alphabetically-earlier class
+		// happens to define it first, and `n test-php --group ...` fails on its own.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
@@ -53,6 +63,10 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// Post IDs are reused across test cases (each case is rolled back), so a
+		// gate lookup cached for the same ID by an earlier case would otherwise be
+		// served here — reporting "no gates" for a post that has one.
+		$this->reset_restriction_cache();
 		\Newspack_Newsletters_Contacts::reset_calls();
 		\Newspack_Newsletters_Subscription::reset_calls();
 		$prop = new \ReflectionProperty( Premium_Newsletters::class, 'restricted_lists' );
@@ -61,6 +75,17 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$gates_prop = new \ReflectionProperty( Premium_Newsletters::class, 'gates' );
 		$gates_prop->setAccessible( true );
 		$gates_prop->setValue( null, null );
+
+		// Content_Restriction_Control memoizes per post for the life of the request.
+		// PHPUnit shares one process across the suite, so without this the maps
+		// carry entries keyed by post IDs that later tests reuse, and a test passes
+		// or fails depending on where its fixtures land in the auto-increment
+		// sequence. Five sibling test files in this directory reset the same four.
+		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $cache_property ) {
+			$cache_property_reflection = new \ReflectionProperty( Content_Restriction_Control::class, $cache_property );
+			$cache_property_reflection->setAccessible( true );
+			$cache_property_reflection->setValue( null, [] );
+		}
 	}
 
 	/**
@@ -163,6 +188,30 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	// =========================================================================
+	// filter_subscription_lists() — no-gates guard
+	// =========================================================================
+
+	/**
+	 * With no premium newsletter gates, the filter returns every list untouched
+	 * without evaluating per-list restriction.
+	 */
+	public function test_filter_subscription_lists_returns_all_when_no_gates() {
+		$list_id          = self::factory()->post->create(
+			[
+				'post_type'   => \Newspack\Newsletters\Subscription_Lists::CPT,
+				'post_status' => 'publish',
+			]
+		);
+		$this->post_ids[] = $list_id;
+		$list             = new \Newspack\Newsletters\Subscription_List( $list_id );
+
+		$result = Premium_Newsletters::filter_subscription_lists( [ $list ] );
+
+		$this->assertCount( 1, $result );
+		$this->assertSame( $list_id, $result[0]->get_id() );
+	}
+
+	// =========================================================================
 	// Group B — maybe_enqueue_access_check() — adding behaviour
 	// =========================================================================
 
@@ -201,7 +250,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
 		$this->assertCount( 1, $calls );
 		$this->assertEquals( $email, $calls[0]['email'] );
-		$this->assertContains( 'list-' . $list_post_id, $calls[0]['lists_to_add'] );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
 		$this->assertEmpty( $calls[0]['lists_to_remove'] );
 	}
 
@@ -263,7 +312,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		);
 
 		// Simulate user already subscribed to the list.
-		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'list-' . $list_post_id ];
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
 
 		Premium_Newsletters::maybe_enqueue_access_check(
 			time(),
@@ -300,7 +349,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 		// Simulate the user currently subscribed to the list in the ESP so that the
 		// dedup check inside add_and_remove_lists() allows the removal to proceed.
-		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'list-' . $list_post_id ];
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
 
 		Premium_Newsletters::maybe_enqueue_access_check(
 			time(),
@@ -315,7 +364,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		// The remove path has no auto_signup guard — it fires regardless of that option.
 		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
 		$this->assertCount( 1, $calls );
-		$this->assertContains( 'list-' . $list_post_id, $calls[0]['lists_to_remove'] );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
 		$this->assertEmpty( $calls[0]['lists_to_add'] );
 	}
 
@@ -617,7 +666,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
 		$this->assertCount( 1, $calls, 'One add_and_remove_lists call expected.' );
 		$this->assertEquals( 'reader@example.com', $calls[0]['email'] );
-		$this->assertContains( 'list-' . $list_post_id, $calls[0]['lists_to_add'] );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
 		$this->assertEmpty( $calls[0]['lists_to_remove'] );
 	}
 
@@ -725,7 +774,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		);
 
 		// User is still subscribed to the list in the ESP.
-		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'list-' . $list_post_id ];
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
 
 		// Simulate the subscription_renewal_attempt Data Event.
 		Premium_Newsletters::set_subscribed_lists( time(), [ 'user_id' => $user_id ], null );
@@ -740,7 +789,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
 		$this->assertCount( 1, $calls, 'A contact who remained subscribed should be re-added on renewal.' );
-		$this->assertContains( 'list-' . $list_post_id, $calls[0]['lists_to_add'] );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
 		$this->assertEmpty( $calls[0]['lists_to_remove'] );
 	}
 
@@ -802,7 +851,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
 		$this->assertCount( 1, $calls, 'Without a renewal snapshot, users should be auto-subscribed normally.' );
-		$this->assertContains( 'list-' . $list_post_id, $calls[0]['lists_to_add'] );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
 	}
 
 	/**
@@ -830,7 +879,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		);
 
 		// Snapshot the user as still subscribed in the ESP at renewal time.
-		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'list-' . $list_post_id ];
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
 		Premium_Newsletters::set_subscribed_lists( time(), [ 'user_id' => $user_id ], null );
 
 		// Confirm the snapshot was written.
@@ -903,7 +952,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
 		$this->assertCount( 1, $calls, 'A non-renewal event must auto-subscribe regardless of any snapshot.' );
-		$this->assertContains( 'list-' . $list_post_id, $calls[0]['lists_to_add'] );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
 
 		// The snapshot must remain intact for any subsequent renewal-source check.
 		$this->assertIsArray(

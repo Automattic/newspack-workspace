@@ -1,0 +1,21 @@
+{
+  "name": "newspack-e2e-tests",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:setup": "USE_SETUP=true npm run test",
+    "test:setup:ui": "USE_SETUP=true npm run test:ui",
+    "codegen": "playwright codegen",
+    "codegen:mobile": "playwright codegen --viewport-size=375,667"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@playwright/test": "^1.53.0",
+    "@types/node": "^20.11.20",
+    "dotenv": "^16.4.5"
+  }
+}

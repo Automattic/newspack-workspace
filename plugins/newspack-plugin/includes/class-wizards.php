@@ -74,13 +74,39 @@ class Wizards {
 			'audience-content-gates'  => new Audience_Content_Gates(),
 			'audience-donations'      => new Audience_Donations(),
 			'audience-integrations'   => new Audience_Integrations(),
+			'newspack-subscribers'    => new Subscribers_Wizard(),
 			'listings'                => new Listings_Wizard(),
 			'network'                 => new Network_Wizard(),
 			'newsletters'             => new Newsletters_Wizard(),
 			'premium-newsletters'     => new Premium_Newsletters_Wizard(),
 		];
-		if ( Memberships::is_active() ) {
+		// Memberships sites get the page for its subscription configuration; every
+		// Woo site with content gating gets it for the subscriber-commerce tabs.
+		// Deliberately not gated on enforcement being live: a site migrating off
+		// Memberships configures its rules first and deactivates Memberships after.
+		if ( Memberships::is_active() || Subscriber_Commerce::is_admin_available() ) {
 			self::$wizards['audience-subscriptions'] = new Audience_Subscriptions();
+		}
+		/**
+		 * Enables the Plans (Subscription Products) page under Audience. The
+		 * page additionally requires WooCommerce Subscriptions to be active,
+		 * so defining this alone does not surface it on a site without Woo
+		 * Subscriptions.
+		 *
+		 * @constant NEWSPACK_PLANS_UI
+		 * @type     bool
+		 * @default  Page not registered
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_PLANS_UI', true );
+		 */
+		if ( defined( 'NEWSPACK_PLANS_UI' ) && NEWSPACK_PLANS_UI && ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) ) {
+			self::$wizards['audience-subscription-products'] = new Audience_Subscription_Products();
+		}
+		// Pricing Rules manager, available when the dynamic-pricing engine
+		// plugin is active (it owns the rules REST API).
+		if ( Dynamic_Pricing_Bridges::is_engine_active() ) {
+			self::$wizards['audience-pricing-rules'] = new Audience_Pricing_Rules();
 		}
 	}
 

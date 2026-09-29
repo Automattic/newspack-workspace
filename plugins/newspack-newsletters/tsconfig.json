@@ -1,0 +1,8 @@
+{
+	"extends": "newspack-scripts/config/tsconfig.json",
+	"include": [
+		"src",
+		"webpack-shims",
+		"node_modules/newspack-scripts/types"
+	]
+}

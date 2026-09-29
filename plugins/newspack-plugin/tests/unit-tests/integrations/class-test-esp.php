@@ -7,6 +7,7 @@
 
 namespace Newspack\Tests\Unit\Integrations;
 
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations\ESP;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
 
@@ -36,13 +37,25 @@ class Test_ESP extends \WP_UnitTestCase {
 	private $original_active_plugins = null;
 
 	/**
+	 * Start every case on Mailchimp, the only provider this integration syncs.
+	 * Cases about other providers switch with set_provider().
+	 */
+	public function set_up() {
+		parent::set_up();
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+	}
+
+	/**
 	 * Cleanup state set up by individual tests so failures don't leak across cases.
 	 */
 	public function tear_down() {
+		\Newspack\Reader_Activation\Sync\Metadata::flush_fields_cache();
 		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters::$is_service_provider_configured = true;
 		remove_all_filters( 'newspack_ras_metadata_keys' );
 		remove_all_filters( 'newspack_ras_metadata_prefix' );
 		\delete_option( 'newspack_integration_incoming_fields_esp' );
+		\delete_option( 'newspack_newsletters_service_provider' );
 		if ( $this->plugins_cache_dirty ) {
 			\wp_cache_delete( 'plugins', 'plugins' );
 			$this->plugins_cache_dirty = false;
@@ -259,6 +272,34 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A provider that declares its own date format has it applied to the field, so
+	 * the pull can normalize the value without guessing between MM/DD and DD/MM.
+	 */
+	public function test_configure_incoming_field_applies_date_format() {
+		$field = new Incoming_Field(
+			'LAST_GIFT',
+			[
+				'key'         => 'LAST_GIFT',
+				'value_type'  => 'date',
+				'date_format' => 'm/d/Y',
+			]
+		);
+
+		$configured = $this->invoke_configure( new ESP(), $field );
+
+		$this->assertSame( 'm/d/Y', $configured->get_date_format() );
+	}
+
+	/**
+	 * An unset date format means the provider already sends ISO / Y-m-d, which is
+	 * what ActiveCampaign does — so it must not be clobbered into something else.
+	 */
+	public function test_incoming_field_date_format_defaults_to_empty() {
+		$field = new Incoming_Field( 'LAST_GIFT', [ 'key' => 'LAST_GIFT' ] );
+		$this->assertSame( '', $field->get_date_format() );
+	}
+
+	/**
 	 * Each available incoming field is piped through configure_incoming_field().
 	 */
 	public function test_get_available_incoming_fields_applies_configuration() {
@@ -441,6 +482,59 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Delete_contact() should delegate to Newspack_Newsletters_Contacts::delete()
+	 * once can_sync() passes (ESP integration enabled + master list id present).
+	 */
+	public function test_esp_delete_contact_calls_newsletters_delete() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\update_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME, [ 'esp' ] );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+
+		$esp    = new \Newspack\Reader_Activation\Integrations\ESP();
+		$result = $esp->delete_contact( 'reader@example.com' );
+
+		$this->assertTrue( $result );
+		$this->assertCount( 1, \Newspack_Newsletters_Contacts::$delete_calls );
+		$this->assertSame( 'reader@example.com', \Newspack_Newsletters_Contacts::$delete_calls[0]['email'] );
+
+		\delete_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME );
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+	}
+
+	/**
+	 * The legacy sync_esp_delete field should no longer be declared by the ESP
+	 * integration — replaced by the base-class sync_account_deletion field.
+	 */
+	public function test_esp_register_settings_does_not_include_sync_esp_delete() {
+		$esp  = new \Newspack\Reader_Activation\Integrations\ESP();
+		$keys = array_column( $esp->register_settings_fields(), 'key' );
+		$this->assertNotContains( 'sync_esp_delete', $keys );
+	}
+
+	/**
+	 * Regression: ESP's get_settings_config() filters the parent's full settings
+	 * list down to a curated allow-list. The first version of the deletion-sync
+	 * patch only allowed the explicit provider/metadata fields, dropping the
+	 * base-class auto-appended account_deletion fields before they reached the
+	 * REST response — making them invisible in the configure UI.
+	 *
+	 * Verifies via Reflection that the same auto_keys allow-list ESP uses
+	 * internally includes both new field keys.
+	 */
+	public function test_esp_get_settings_config_filter_includes_account_deletion_keys() {
+		$esp        = new \Newspack\Reader_Activation\Integrations\ESP();
+		$base_keys  = array_column( $esp->get_settings_fields(), 'key' );
+		$auto_keys  = array_merge(
+			array_column( $esp->get_account_deletion_fields(), 'key' ),
+			array_column( $esp->get_metadata_fields(), 'key' )
+		);
+		$this->assertContains( 'sync_account_deletion', $base_keys, 'Account-deletion field declared on the integration.' );
+		$this->assertContains( 'account_deletion_handling', $base_keys, 'Handling-mode field declared on the integration.' );
+		$this->assertContains( 'sync_account_deletion', $auto_keys, 'Filter must keep the deletion checkbox.' );
+		$this->assertContains( 'account_deletion_handling', $auto_keys, 'Filter must keep the handling-mode select.' );
+	}
+
+	/**
 	 * Entries without a usable string `key` are skipped rather than producing malformed fields.
 	 */
 	public function test_get_available_incoming_fields_skips_entries_without_usable_key() {
@@ -469,6 +563,55 @@ class Test_ESP extends \WP_UnitTestCase {
 		$this->assertIsArray( $result );
 		$this->assertCount( 1, $result );
 		$this->assertSame( 'good', $result[0]->get_key() );
+	}
+
+	/**
+	 * The incoming-fields options in settings config carry matching_function + has_options,
+	 * so the admin UI can build the per-field operator selector and default it.
+	 *
+	 * @group integrations
+	 */
+	public function test_settings_config_incoming_options_include_operator() {
+		\Newspack_Newsletters_Contacts::$fields_fixture = [
+			[
+				'key'                 => 'FAVS',
+				'name'                => 'Favorites',
+				'value_type'          => 'string',
+				'matching_function'   => 'list__in',
+				'options'             => [
+					[
+						'value' => 'a',
+						'label' => 'A',
+					],
+				],
+				'is_segment_criteria' => true,
+			],
+			[
+				'key'                 => 'AMOUNT',
+				'name'                => 'Amount',
+				'value_type'          => 'string',
+				'matching_function'   => 'default',
+				'options'             => [],
+				'is_segment_criteria' => true,
+			],
+		];
+
+		$esp    = $this->make_esp_with_master_list();
+		$config = $esp->get_settings_config();
+
+		$incoming = null;
+		foreach ( $config as $field ) {
+			if ( 'incoming_metadata_fields' === $field['key'] ) {
+				$incoming = $field;
+			}
+		}
+		$this->assertNotNull( $incoming );
+		$by_value = array_column( $incoming['options'], null, 'value' );
+		$this->assertSame( 'list__in', $by_value['FAVS']['matching_function'] );
+		$this->assertTrue( $by_value['FAVS']['has_options'] );
+		$this->assertFalse( $by_value['AMOUNT']['has_options'] );
+		$this->assertSame( 'string', $by_value['FAVS']['value_type'] );
+		$this->assertSame( 'string', $by_value['AMOUNT']['value_type'] );
 	}
 
 	/**
@@ -513,5 +656,260 @@ class Test_ESP extends \WP_UnitTestCase {
 		$this->assertCount( 1, $required );
 		$this->assertFalse( $required[0]['is_active'] );
 		$this->assertFalse( $required[0]['is_installed'] );
+	}
+
+	/**
+	 * Only a configured provider (stored config) — not the master list — makes
+	 * is_connected() true, which is what separates it from is_set_up(). Drives the
+	 * Connect-vs-Enable branch on the Integrations card.
+	 */
+	public function test_is_connected_reflects_provider_configuration() {
+		$esp = new ESP();
+
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$this->assertTrue( $esp->is_connected(), 'Connected when a newsletters provider is configured.' );
+
+		\Newspack_Newsletters::$is_service_provider_configured = false;
+		$this->assertFalse( $esp->is_connected(), 'Not connected when no provider is configured.' );
+	}
+
+	/**
+	 * Requires a stored master list on top of a connected provider, so a
+	 * connected-but-audience-less ESP is connected yet not set up — exactly the
+	 * state the Enable modal exists to resolve.
+	 */
+	public function test_is_set_up_requires_master_list_on_top_of_connection() {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+
+		$without_list = new ESP();
+		$this->assertTrue( $without_list->is_connected(), 'Sanity: provider is connected.' );
+		$this->assertFalse( $without_list->is_set_up(), 'Connected but no master list is not set up.' );
+
+		$with_list = $this->make_esp_with_master_list( 'list-123' );
+		$this->assertTrue( $with_list->is_set_up(), 'Connected with a master list is set up.' );
+	}
+
+	/**
+	 * Run pull_contact_data() against a staged provider payload.
+	 *
+	 * @param array  $contact_data The payload get_contact_data() should return.
+	 * @param string $list_id      The ESP's configured master list id.
+	 * @return array|\WP_Error
+	 */
+	private function pull_with_contact_data( $contact_data, $list_id = 'list-123' ) {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$user_id = self::factory()->user->create( [ 'user_email' => 'reader@example.com' ] );
+		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => $contact_data ];
+
+		$result = $this->make_esp_with_master_list( $list_id )->pull_contact_data( $user_id );
+
+		\Newspack_Newsletters_Subscription::reset_calls();
+		return $result;
+	}
+
+	/**
+	 * The enabled incoming fields are resolved from one specific list, so a
+	 * provider reporting per-list fields must be read at that list. A reader in
+	 * several lists would otherwise get whichever the provider reported last —
+	 * storing another list's values under this list's field keys.
+	 */
+	public function test_pull_reads_the_configured_list_from_a_per_list_payload() {
+		$result = $this->pull_with_contact_data(
+			[
+				// Flat map reports the last list, as merge_fields always has.
+				'metadata'         => [ 'CRM_SCORE' => '22' ],
+				'metadata_by_list' => [
+					'list-123' => [ 'CRM_SCORE' => '11' ],
+					'list-999' => [ 'CRM_SCORE' => '22' ],
+				],
+			]
+		);
+
+		$this->assertSame( [ 'CRM_SCORE' => '11' ], $result, 'The configured list wins over the flat map.' );
+	}
+
+	/**
+	 * A reader who belongs to other lists but not the configured one has no
+	 * fields to pull — better than storing a different list's values.
+	 */
+	public function test_pull_returns_nothing_when_the_configured_list_is_absent() {
+		$result = $this->pull_with_contact_data(
+			[
+				'metadata'         => [ 'CRM_SCORE' => '22' ],
+				'metadata_by_list' => [ 'list-999' => [ 'CRM_SCORE' => '22' ] ],
+			]
+		);
+
+		$this->assertSame( [], $result, 'Another list\'s values are not this list\'s values.' );
+	}
+
+	/**
+	 * Providers whose fields are account-wide (ActiveCampaign) report a single
+	 * flat map with no per-list ambiguity, and keep working unchanged.
+	 */
+	public function test_pull_falls_back_to_the_flat_map_without_a_per_list_payload() {
+		$result = $this->pull_with_contact_data( [ 'metadata' => [ 'CRM_SCORE' => '42' ] ] );
+
+		$this->assertSame( [ 'CRM_SCORE' => '42' ], $result );
+	}
+
+	/**
+	 * A contact carrying no fields at all is an empty pull, not a failure.
+	 */
+	public function test_pull_returns_empty_array_without_any_metadata() {
+		$this->assertSame( [], $this->pull_with_contact_data( [ 'lists' => [] ] ) );
+	}
+
+	/**
+	 * Providers name "no such contact" differently (Mailchimp has a dedicated
+	 * error code, ActiveCampaign a generic one). Callers get one canonical code
+	 * so batch drivers can tell "the provider does not know this reader" from a
+	 * failure without provider knowledge.
+	 */
+	public function test_pull_normalizes_provider_not_found_to_the_canonical_code() {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$user_id = self::factory()->user->create( [ 'user_email' => 'ghost@example.com' ] );
+		// No staged contact data: the subscription mock reports the contact as not found.
+
+		$result = $this->make_esp_with_master_list( 'list-123' )->pull_contact_data( $user_id );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code() );
+	}
+
+	/**
+	 * Bulk pulls read each contact once. A provider that memoizes contact
+	 * payloads per email must have the entry released after the read, or a
+	 * full-site pull grows by one payload per reader for the life of the
+	 * process — the batch loops' object-cache flush cannot free it.
+	 */
+	public function test_pull_releases_the_provider_contact_cache_entry() {
+		\Newspack_Newsletters_Service_Provider::$cleared_emails = [];
+
+		$result = $this->pull_with_contact_data( [ 'metadata' => [ 'CRM_SCORE' => '11' ] ] );
+
+		$this->assertSame( [ 'CRM_SCORE' => '11' ], $result, 'Sanity: the pull read the staged payload.' );
+		$this->assertSame( [ 'reader@example.com' ], \Newspack_Newsletters_Service_Provider::$cleared_emails, 'The provider cache entry for the pulled contact was released.' );
+	}
+
+	/**
+	 * Set the newsletters provider the mock reports (it reads this option).
+	 *
+	 * @param string|null $slug Provider slug, or null to unset.
+	 */
+	private function set_provider( $slug ) {
+		if ( null === $slug ) {
+			\delete_option( 'newspack_newsletters_service_provider' );
+		} else {
+			\update_option( 'newspack_newsletters_service_provider', $slug );
+		}
+	}
+
+	/**
+	 * The card is branded Mailchimp; the generic-ESP era name must not resurface.
+	 */
+	public function test_integration_is_branded_mailchimp() {
+		$esp = new ESP();
+		$this->assertSame( 'Mailchimp', $esp->get_name() );
+		$this->assertSame( 'Sync reader data with your Mailchimp audience.', $esp->get_description() );
+	}
+
+	/**
+	 * Any selected provider other than Mailchimp renders the card unavailable;
+	 * no provider selected is the Connect state, not an unsupported one.
+	 */
+	public function test_unsupported_reason_requires_mailchimp() {
+		$esp = new ESP();
+
+		$this->set_provider( 'active_campaign' );
+		$this->assertSame( 'Requires Mailchimp as the newsletter provider', $esp->get_unsupported_reason() );
+
+		$this->set_provider( 'manual' );
+		$this->assertSame( 'Requires Mailchimp as the newsletter provider', $esp->get_unsupported_reason() );
+
+		$this->set_provider( 'mailchimp' );
+		$this->assertNull( $esp->get_unsupported_reason() );
+
+		$this->set_provider( null );
+		$this->assertNull( $esp->get_unsupported_reason() );
+	}
+
+	/**
+	 * Sync through this integration demands the Mailchimp provider.
+	 */
+	public function test_can_sync_blocks_other_providers() {
+		$this->set_provider( 'active_campaign' );
+
+		$errors = ( new ESP() )->can_sync( true );
+
+		$this->assertContains( 'ras_esp_provider_not_supported', $errors->get_error_codes() );
+	}
+
+	/**
+	 * The restriction names the provider, not the configuration: Mailchimp
+	 * sites never see the provider error, whatever else can_sync() finds.
+	 */
+	public function test_can_sync_never_flags_the_mailchimp_provider() {
+		$this->set_provider( 'mailchimp' );
+
+		$errors = ( new ESP() )->can_sync( true );
+
+		$this->assertNotContains( 'ras_esp_provider_not_supported', $errors->get_error_codes() );
+	}
+
+	/**
+	 * The settings UI only carries Mailchimp fields now. The ActiveCampaign /
+	 * Constant Contact selects stay declared so stored values remain readable,
+	 * but no longer reach the config payload.
+	 */
+	public function test_settings_config_only_offers_mailchimp_provider_fields() {
+		$this->set_provider( 'mailchimp' );
+		$keys = array_column( ( new ESP() )->get_settings_config(), 'key' );
+		$this->assertContains( 'mailchimp_audience_id', $keys );
+		$this->assertContains( 'mailchimp_reader_default_status', $keys );
+		$this->assertNotContains( 'active_campaign_master_list', $keys );
+		$this->assertNotContains( 'constant_contact_list_id', $keys );
+
+		$this->set_provider( 'active_campaign' );
+		$keys = array_column( ( new ESP() )->get_settings_config(), 'key' );
+		$this->assertNotContains( 'active_campaign_master_list', $keys );
+	}
+
+	/**
+	 * A non-Mailchimp provider is never "set up" — that is what keeps the
+	 * integration out of get_active_configured_integrations() and prevents a
+	 * doomed sync attempt from being scheduled and retried.
+	 */
+	public function test_is_set_up_requires_mailchimp() {
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+
+		$this->set_provider( 'active_campaign' );
+		$this->assertFalse( ( new ESP() )->is_set_up() );
+
+		$this->set_provider( 'mailchimp' );
+		$this->assertTrue( ( new ESP() )->is_set_up() );
+
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+	}
+
+	/**
+	 * The `newspack_ras_metadata_prefix` filter is applied once across the ESP
+	 * accessor and Metadata::get_prefix(). A compositional callback must give
+	 * the push path (the ESP accessor) and the audit and get_key() paths
+	 * (Metadata::get_prefix()) the same prefix.
+	 */
+	public function test_prefix_filter_applies_once_across_accessors() {
+		add_filter(
+			'newspack_ras_metadata_prefix',
+			function ( $prefix ) {
+				return 'CUSTOM_' . $prefix;
+			}
+		);
+
+		$esp = \Newspack\Reader_Activation\Integrations::get_integration( 'esp' );
+		$this->assertInstanceOf( ESP::class, $esp, 'Precondition: the ESP integration is registered, so Metadata::get_prefix() reads through it.' );
+		$this->assertSame( 'CUSTOM_NP_', $esp->get_metadata_prefix() );
+		$this->assertSame( 'CUSTOM_NP_', \Newspack\Reader_Activation\Sync\Metadata::get_prefix() );
+		$this->assertSame( 'CUSTOM_NP_Account', \Newspack\Reader_Activation\Sync\Metadata::get_key( 'account' ) );
 	}
 }

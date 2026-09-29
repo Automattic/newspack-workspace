@@ -91,7 +91,7 @@ export function matchDonation( config, { store } ) {
 			return store.get( 'is_donor' ) || isDonorFromEmail();
 		case 'non-donors':
 			return ! ( store.get( 'is_donor' ) || isDonorFromEmail() );
-		case 'formers-donors':
+		case 'former-donors':
 			return store.get( 'is_former_donor' );
 	}
 }

@@ -20,7 +20,7 @@ import { registerPlugin } from '@wordpress/plugins';
 import withApiHandler from '../../components/with-api-handler';
 import SendButton from '../../components/send-button';
 import './style.scss';
-import { validateNewsletter } from '../utils';
+import { CAMPAIGN_SENT_NOTICE_ID } from '../../utils/consts';
 
 const Editor = compose( [
 	withApiHandler(),
@@ -37,21 +37,18 @@ const Editor = compose( [
 		return {
 			html: meta[ newspack_email_editor_data.email_html_meta ],
 			colorPalette: colors.reduce( ( _colors, { slug, color } ) => ( { ..._colors, [ slug ]: color } ), {} ),
-			meta,
 			sent,
 			newsletterSendErrors: meta.newsletter_send_errors,
 			isCustomFieldsMetaBoxActive: getAllMetaBoxes().some( box => box.id === 'postcustom' ),
 		};
 	} ),
 	withDispatch( dispatch => {
-		const { lockPostAutosaving, lockPostSaving, unlockPostAutosaving, unlockPostSaving, editPost } = dispatch( 'core/editor' );
+		const { lockPostAutosaving, unlockPostAutosaving, editPost } = dispatch( 'core/editor' );
 		const { createNotice, removeNotice } = dispatch( 'core/notices' );
 		const { openModal } = dispatch( 'core/interface' );
 		return {
 			lockPostAutosaving,
-			lockPostSaving,
 			unlockPostAutosaving,
-			unlockPostSaving,
 			editPost,
 			createNotice,
 			removeNotice,
@@ -65,18 +62,24 @@ const Editor = compose( [
 	html,
 	isCustomFieldsMetaBoxActive,
 	lockPostAutosaving,
-	lockPostSaving,
-	meta,
 	newsletterSendErrors,
 	openModal,
 	removeNotice,
-	unlockPostSaving,
 	sent,
 	successNote,
 } ) => {
+	// This component holds no validation-based saving lock, by design. Sending is
+	// gated by the Send button itself (see components/send-button), which is the
+	// control that dispatches to the ESP; an incomplete newsletter is still a
+	// perfectly good draft. WordPress 7.1 added the post-saving lock to core's
+	// "Save draft" disabled condition, so holding one here left authors unable to
+	// save work in progress until they had filled in sender and list (NEWS-2888).
+	//
+	// Note this is only about the *validation* lock: `editor/mjml` still takes a
+	// short-lived `newspack-newsletters-refresh-html` saving lock around the
+	// post-save HTML refresh, so a greyed-out "Save draft" is not automatically
+	// this file's doing.
 	const [ publishEl ] = useState( document.createElement( 'div' ) );
-	const newsletterValidationErrors = validateNewsletter( meta );
-	const isReady = newsletterValidationErrors.length === 0;
 
 	useEffect( () => {
 		// Create alternate publish button.
@@ -96,15 +99,6 @@ const Editor = compose( [
 		} );
 	}, [ JSON.stringify( colorPalette ) ] );
 
-	// Lock or unlock post publishing.
-	useEffect( () => {
-		if ( isReady ) {
-			unlockPostSaving( 'newspack-newsletters-post-lock' );
-		} else {
-			lockPostSaving( 'newspack-newsletters-post-lock' );
-		}
-	}, [ isReady ] );
-
 	useEffect( () => {
 		if ( sent ) {
 			const sentDate = 0 < sent ? new Date( sent * 1000 ) : null;
@@ -113,9 +107,10 @@ const Editor = compose( [
 			// Lock autosaving after a newsletter is sent.
 			lockPostAutosaving();
 
-			// Show an editor notice if the newsletter has been sent.
-			createNotice( 'success', successNote + dateTime, {
-				id: 'newspack-newsletters-campaign-sent-notice',
+			// Show an editor notice if the newsletter has been sent. The separating space lives here
+			// rather than in `successNote` so the translatable string carries no flanking whitespace.
+			createNotice( 'success', `${ successNote } ${ dateTime }`, {
+				id: CAMPAIGN_SENT_NOTICE_ID,
 				isDismissible: false,
 			} );
 

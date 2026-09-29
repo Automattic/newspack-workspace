@@ -398,6 +398,11 @@ $width__tablet: 782px;
 // Alignment for wide/full blocks inside overlay prompt content. The lightbox
 // renders as a direct child of <body> (see Newspack_Popups_Inserter::print_queued_overlays),
 // so these rules are no longer scoped to .entry-content.
+// The .newspack-lightbox / .newspack-popup__content-wrapper selectors are
+// intentionally re-opened here (first defined above) to keep these alignment
+// rules with their rationale, so the duplicate-selector lint is silenced for
+// this deliberate block.
+/* stylelint-disable no-duplicate-selectors */
 .newspack-lightbox {
 	.newspack-popup__content-wrapper {
 		.alignfull,
@@ -425,6 +430,7 @@ $width__tablet: 782px;
 		}
 	}
 }
+/* stylelint-enable no-duplicate-selectors */
 
 // In block theme grid layouts, campaigns should span all columns.
 .wp-block-post-template.wp-block-post-template-is-layout-grid > li:has(.newspack-popup-container) {

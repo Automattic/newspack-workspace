@@ -9,30 +9,22 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Fragment } from '@wordpress/element';
-import { Icon } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-/* eslint import/namespace: ['error', { allowComputed: true }] */
-import { icons } from '../../components/icons';
-import { Card, Divider, Grid } from '../../../../../packages/components/src';
+import DashboardCard from '../../components/dashboard-card';
+import { Divider, Grid, SectionHeader } from '../../../../../packages/components/src';
 
 const {
 	newspackDashboard: { sections: dashSections },
 } = window;
 
-function getIcon( iconName: keyof typeof icons ) {
-	if ( iconName in icons ) {
-		return icons[ iconName ];
-	}
-	return icons.help;
-}
-
 export default [
 	{
 		label: __( 'Dashboard', 'newspack' ),
 		path: '/',
+		breadcrumbs: [ { label: __( 'Dashboard', 'newspack' ) } ],
 		render: () => {
 			const dashSectionsKeys = Object.keys( dashSections );
 			return dashSectionsKeys.map( sectionKey => {
@@ -40,24 +32,17 @@ export default [
 					<Fragment key={ sectionKey }>
 						<Divider variant="tertiary" />
 						<div className="newspack-dashboard__section">
-							<h3>{ dashSections[ sectionKey ].title }</h3>
-							<p>{ dashSections[ sectionKey ].desc }</p>
-							<Grid columns={ 3 } gutter={ 24 } key={ `${ sectionKey }-grid` }>
-								{ dashSections[ sectionKey ].cards.map( ( sectionCard, i ) => {
-									return (
-										<a href={ sectionCard.href } key={ `${ sectionKey }-card-${ i }` }>
-											<Card className="newspack-dashboard__card">
-												<div className="newspack-dashboard__card-icon">
-													<Icon size={ 32 } icon={ getIcon( sectionCard.icon ) } />
-												</div>
-												<div className="newspack-dashboard__card-text">
-													<h4>{ sectionCard.title }</h4>
-													<p>{ sectionCard.desc }</p>
-												</div>
-											</Card>
-										</a>
-									);
-								} ) }
+							<SectionHeader heading={ 3 } title={ dashSections[ sectionKey ].title } description={ dashSections[ sectionKey ].desc } />
+							<Grid columns={ 3 } gutter={ 16 } key={ `${ sectionKey }-grid` }>
+								{ dashSections[ sectionKey ].cards.map( ( sectionCard, i ) => (
+									<DashboardCard
+										key={ `${ sectionKey }-card-${ i }` }
+										href={ sectionCard.href }
+										icon={ sectionCard.icon }
+										title={ sectionCard.title }
+										description={ sectionCard.desc }
+									/>
+								) ) }
 							</Grid>
 						</div>
 					</Fragment>

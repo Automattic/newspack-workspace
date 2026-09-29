@@ -55,6 +55,11 @@ if ( ! function_exists( 'wc_get_page_permalink' ) ) {
 
 /**
  * Test Group_Subscription_MyAccount My Account integration.
+ *
+ * PHPUnit reads @group from the class docblock, not the file's, so the group the
+ * file header advertises has to be repeated here to actually take effect.
+ *
+ * @group group-subscription-myaccount
  */
 class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 
@@ -70,6 +75,8 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		global $products_database;
+		$products_database                        = [];
 		$GLOBALS['newspack_test_is_account_page'] = true;
 	}
 
@@ -77,8 +84,10 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	 * Tear down: reset globals and subscriptions DB.
 	 */
 	public function tear_down() {
-		global $subscriptions_database;
-		$subscriptions_database = [];
+		global $subscriptions_database, $products_database, $wcs_mock_item_switchable;
+		$subscriptions_database   = [];
+		$products_database        = [];
+		$wcs_mock_item_switchable = null;
 
 		unset( $GLOBALS['newspack_test_is_account_page'] );
 
@@ -172,6 +181,8 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		$member_id = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 		$this->add_member( $member_id, $group_sub );
+		// Injection only augments the current viewer's own account.
+		wp_set_current_user( $member_id );
 
 		// Start with an empty list (member has no owned subscriptions).
 		$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
@@ -191,6 +202,7 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		$member_id = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 		$this->add_member( $member_id, $group_sub );
+		wp_set_current_user( $member_id );
 
 		// Pre-populate $existing with the group sub — simulates the sub already being present.
 		$existing = [ $group_sub->get_id() => $group_sub ];
@@ -232,6 +244,7 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		);
 		$trashed_sub->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
 		$this->add_member( $member_id, $trashed_sub );
+		wp_set_current_user( $member_id );
 
 		$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
 
@@ -255,6 +268,7 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 			$member_id = $this->create_reader_user();
 			$group_sub = $this->create_group_subscription( $owner_id );
 			$this->add_member( $member_id, $group_sub );
+			wp_set_current_user( $member_id );
 
 			$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
 		} finally {
@@ -262,6 +276,114 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		}
 
 		$this->assertEmpty( $result, 'Should not inject on the legacy My Account UI' );
+	}
+
+	/**
+	 * Regression (NPPM-3021): injection only augments the *current viewer's* own account.
+	 *
+	 * A wcs_get_users_subscriptions( $other_user ) call that runs in an account-page
+	 * request (an admin view, a cross-user read, or a contact sync) must return only the
+	 * subscriptions that user actually owns — never a group sub they are merely a member of.
+	 */
+	public function test_inject_skipped_for_non_current_user() {
+		$owner_id  = $this->create_reader_user();
+		$member_id = $this->create_reader_user();
+		$viewer_id = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+		$this->add_member( $member_id, $group_sub );
+
+		// A different user is the current viewer while the member's subscriptions are fetched.
+		wp_set_current_user( $viewer_id );
+
+		$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
+
+		$this->assertEmpty(
+			$result,
+			'Member group sub must not be injected when fetched for a non-current user'
+		);
+	}
+
+	/**
+	 * Regression (NPPM-3021): the member-injection filter must NOT run during a
+	 * user-deletion cascade.
+	 *
+	 * WCS's WC_Subscriptions_Manager::trash_users_subscriptions() is hooked on
+	 * `delete_user` and force-deletes every subscription that
+	 * wcs_get_users_subscriptions() returns. Because self-service account deletion
+	 * runs on the My Account page (is_account_page() true), injecting a member's
+	 * group subscription here would feed the *owner's* subscription into that
+	 * cascade and permanently delete it. Fix A guards the filter with
+	 * doing_action( 'delete_user' ). Captured at priority 1 to isolate the guard
+	 * from the priority-5 membership cleanup (fix B).
+	 */
+	public function test_inject_skipped_during_user_deletion_cascade() {
+		$owner_id  = $this->create_reader_user();
+		$member_id = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+		$this->add_member( $member_id, $group_sub );
+		// Faithful self-service deletion: the member is the current user and on an account
+		// page, so both is_account_page() and the current-user allowlist pass — the
+		// delete_user guard is what must stop the injection here.
+		wp_set_current_user( $member_id );
+		$GLOBALS['newspack_test_is_account_page'] = true;
+
+		$captured = null;
+		$capture  = function () use ( &$captured, $member_id ) {
+			$captured = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
+		};
+		add_action( 'delete_user', $capture, 1 );
+		try {
+			wp_delete_user( $member_id );
+		} finally {
+			remove_action( 'delete_user', $capture, 1 );
+		}
+
+		$this->assertSame(
+			[],
+			$captured,
+			'Owner group subscription must not be injected during the delete_user cascade'
+		);
+	}
+
+	/**
+	 * Regression (NPPM-3021): a deleted user is removed from the groups they are a
+	 * member of *before* WCS's deletion cascade runs.
+	 *
+	 * Fix B hooks `delete_user` at priority 5 (ahead of WCS's
+	 * trash_users_subscriptions at priority 10) and clears the departing user's
+	 * membership meta, so by the time the cascade queries their subscriptions the
+	 * owner's group sub is no longer associated with them. Captured at priority 8:
+	 * after the cleanup, before the cascade.
+	 */
+	public function test_user_deletion_removes_group_memberships_before_cascade() {
+		$owner_id  = $this->create_reader_user();
+		$member_id = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+		$this->add_member( $member_id, $group_sub );
+
+		// Wire the cleanup exactly as Group_Subscription_MyAccount::init() does. init() is
+		// gated behind the Access Control feature flag (off in the test bootstrap), so
+		// register it here to exercise the priority-5 ordering against WCS's delete_user
+		// cascade (priority 10).
+		$cleanup = [ Group_Subscription_MyAccount::class, 'remove_deleted_user_from_groups' ];
+		add_action( 'delete_user', $cleanup, 5 );
+
+		$still_member_at_cascade_time = null;
+		$capture                      = function () use ( &$still_member_at_cascade_time, $member_id, $group_sub ) {
+			$still_member_at_cascade_time = Group_Subscription::user_is_member( $member_id, $group_sub );
+		};
+		add_action( 'delete_user', $capture, 8 );
+		try {
+			wp_delete_user( $member_id );
+		} finally {
+			remove_action( 'delete_user', $capture, 8 );
+			remove_action( 'delete_user', $cleanup, 5 );
+		}
+
+		$this->assertFalse(
+			$still_member_at_cascade_time,
+			'Deleted user should be removed from their groups before the WCS deletion cascade'
+		);
 	}
 
 	// ---- grant_group_member_view_order_cap tests ----
@@ -606,5 +728,191 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 
 		// Member meta untouched.
 		$this->assertTrue( Group_Subscription::user_is_member( $member_id, $sub ) );
+	}
+
+	// ---- can_change_seats tests ----
+
+	/**
+	 * Build a group subscription whose product bills either per seat or flat, with
+	 * a single seat line item. Mirrors what the group page renders against.
+	 *
+	 * @param int    $customer_id  Owner user ID.
+	 * @param string $pricing_mode Group pricing mode meta value.
+	 * @param bool   $with_item    Whether to give the subscription a line item.
+	 *
+	 * @return WC_Subscription
+	 */
+	private function create_priced_group_subscription( int $customer_id, string $pricing_mode, bool $with_item = true ): WC_Subscription {
+		$prefix     = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		$product_id = 7301;
+		wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'type' => 'subscription',
+				'name' => 'Group plan',
+				'meta' => [
+					$prefix . 'enabled'      => 'yes',
+					$prefix . 'pricing_mode' => $pricing_mode,
+					$prefix . 'min_seats'    => 2,
+					$prefix . 'max_seats'    => 10,
+				],
+			]
+		);
+
+		$items = $with_item ? [
+			new WC_Order_Item_Product(
+				[
+					'id'         => 7311,
+					'product_id' => $product_id,
+					'quantity'   => 4,
+				]
+			),
+		] : [];
+
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $customer_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'items'          => $items,
+			]
+		);
+		$subscription->update_meta_data( $prefix . 'enabled', 'yes' );
+		return $subscription;
+	}
+
+	/**
+	 * The owner of an active per-seat group can change seats.
+	 */
+	public function test_can_change_seats_true_for_owner_of_active_per_seat_group() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+
+		$this->assertTrue( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * A manager is not the payer, so the seat change is refused for them even on
+	 * an otherwise eligible group.
+	 */
+	public function test_can_change_seats_false_for_manager() {
+		$owner_id   = $this->create_reader_user();
+		$manager_id = $this->create_reader_user();
+		$sub        = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		$this->add_member( $manager_id, $sub );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $manager_id ) );
+	}
+
+	/**
+	 * A flat-priced group sells no seats, so there is nothing to change.
+	 */
+	public function test_can_change_seats_false_for_flat_group() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_TEAM );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * A cancelled subscription can't be switched, so seats can't be changed.
+	 */
+	public function test_can_change_seats_false_for_inactive_subscription() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		$sub->set_status( 'cancelled' );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * Without a line item there is nothing for the native switch to rewrite.
+	 */
+	public function test_can_change_seats_false_without_seat_line_item() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT, false );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * WooCommerce Subscriptions has the last word. When it would refuse the
+	 * switch — switching turned off, a gateway that can't change the billed
+	 * amount — the button must not be offered, because it could only lead to a
+	 * dead end.
+	 */
+	public function test_can_change_seats_false_when_wcs_refuses_the_switch() {
+		global $wcs_mock_item_switchable;
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+
+		$wcs_mock_item_switchable = false;
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, $owner_id ) );
+	}
+
+	/**
+	 * A logged-out visitor owns nothing.
+	 */
+	public function test_can_change_seats_false_for_logged_out_visitor() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+
+		$this->assertFalse( Group_Subscription_MyAccount::can_change_seats( $sub, 0 ) );
+	}
+
+	// ---- "Change seats" action rendering ----
+
+	/**
+	 * Render the group page for the current user and return its markup.
+	 *
+	 * @param WC_Subscription $subscription The group subscription.
+	 *
+	 * @return string The rendered markup.
+	 */
+	private function render_group_page( WC_Subscription $subscription ): string {
+		ob_start();
+		Group_Subscription_MyAccount::render_group_page( $subscription );
+		return ob_get_clean();
+	}
+
+	/**
+	 * Rename and "View subscription" are how an owner gets back to a group whose
+	 * subscription has lapsed, so they render whatever the status; only inviting is
+	 * tied to an active group.
+	 */
+	public function test_group_page_keeps_rename_and_view_subscription_when_on_hold() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_group_subscription( $owner_id );
+		$sub->update_status( 'on-hold' );
+		$sub->save();
+		wp_set_current_user( $owner_id );
+
+		$html = $this->render_group_page( $sub );
+
+		$this->assertStringContainsString( 'newspack-my-account__group--rename', $html );
+		$this->assertStringContainsString( 'View subscription', $html );
+		$this->assertStringNotContainsString( 'newspack-my-account__subscription--invite-member', $html );
+	}
+
+	/**
+	 * The owner of an active per-seat group gets a link into the switch modal, since
+	 * the switch is what prices and takes payment for a seat change.
+	 */
+	public function test_group_page_renders_change_seats_for_owner() {
+		$owner_id = $this->create_reader_user();
+		$sub      = $this->create_priced_group_subscription( $owner_id, Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+		wp_set_current_user( $owner_id );
+
+		$html = $this->render_group_page( $sub );
+
+		$this->assertStringContainsString( 'Change seats', $html );
+		$this->assertStringContainsString( 'class="wcs-switch-link', $html );
+		// The href carries the params the modal's form re-submits.
+		$this->assertStringContainsString( 'switch-subscription=' . $sub->get_id(), $html );
+		$this->assertStringContainsString( 'item=7311', $html );
+		// And the nonce WooCommerce Subscriptions' switch handler refuses a request
+		// without, so the link still works for a reader with JavaScript off.
+		$this->assertStringContainsString( '_wcsnonce=', $html );
 	}
 }

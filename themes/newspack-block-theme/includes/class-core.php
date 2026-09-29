@@ -69,7 +69,16 @@ final class Core {
 		);
 
 		// Enqueue front-end JavaScript.
-		wp_enqueue_script( 'newspack-main', get_theme_file_uri( '/dist/main.js' ), array(), wp_get_theme()->get( 'Version' ), true );
+		wp_enqueue_script(
+			'newspack-main',
+			get_theme_file_uri( '/dist/main.js' ),
+			array(),
+			wp_get_theme()->get( 'Version' ),
+			array(
+				'in_footer' => true,
+				'strategy'  => 'defer',
+			)
+		);
 		wp_localize_script( 'newspack-main', 'newspackScreenReaderText', $newspack_l10n );
 	}
 

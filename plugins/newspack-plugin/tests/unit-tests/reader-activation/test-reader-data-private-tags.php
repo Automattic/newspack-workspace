@@ -1,8 +1,8 @@
 <?php
 /**
  * Tests for Private_Tags::filter_reader_activity() — strips private tag IDs from
- * the client-side reader-activity data (Part D / NPPD-1464). Always-on when the
- * feature is enabled; no behavior gate.
+ * the client-side reader-activity data (Part D / NPPD-1464). Gated by the
+ * 'reader_data' behavior, which defaults to on (so today's behavior is unchanged).
  *
  * @package Newspack\Tests
  */
@@ -192,15 +192,63 @@ class Test_Reader_Data_Private_Tags extends WP_UnitTestCase {
 	}
 
 	// -----------------------------------------------------------------
-	// Always-on guarantee: no behavior gate.
+	// Behavior gate: the 'reader_data' toggle (default on).
 	// -----------------------------------------------------------------
 
 	/**
-	 * Filter reader activity runs even with all settings off.
+	 * Filter reader activity strips when the reader_data behavior is on.
 	 */
-	public function test_filter_reader_activity_runs_even_with_all_settings_off() {
-		// Turn every behavior flag off — Part D is always-on, must still strip.
-		$this->set_private_tags_settings( [] );
+	public function test_filter_reader_activity_strips_when_reader_data_behavior_on() {
+		// Master 'all' off, but the individual reader_data behavior is on.
+		$this->set_private_tags_settings(
+			[
+				'all'         => false,
+				'reader_data' => true,
+			]
+		);
+		$private = $this->make_private_tag( 'Beastie' );
+		$public  = $this->make_public_tag( 'Jazz' );
+
+		$activity = [ 'data' => [ 'tags' => [ $private, $public ] ] ];
+		$out      = Private_Tags::filter_reader_activity( $activity );
+
+		$this->assertSame( [ $public ], $out['data']['tags'] );
+	}
+
+	/**
+	 * Filter reader activity preserves private ids when the reader_data behavior is off.
+	 */
+	public function test_filter_reader_activity_preserves_when_reader_data_behavior_off() {
+		// Both the master 'all' and the individual reader_data behavior are off.
+		$this->set_private_tags_settings(
+			[
+				'all'         => false,
+				'reader_data' => false,
+			]
+		);
+		$private = $this->make_private_tag( 'Beastie' );
+		$public  = $this->make_public_tag( 'Jazz' );
+
+		$activity = [ 'data' => [ 'tags' => [ $private, $public ] ] ];
+		$out      = Private_Tags::filter_reader_activity( $activity );
+
+		// Private IDs are preserved when the publisher opts out.
+		$this->assertSame( [ $private, $public ], $out['data']['tags'] );
+	}
+
+	/**
+	 * Filter reader activity strips when the 'all' master toggle is on.
+	 *
+	 * With 'all' on, is_behavior_enabled() returns true even if the individual
+	 * reader_data flag is off — the default state, so today's behavior is unchanged.
+	 */
+	public function test_filter_reader_activity_strips_when_all_master_on() {
+		$this->set_private_tags_settings(
+			[
+				'all'         => true,
+				'reader_data' => false,
+			]
+		);
 		$private = $this->make_private_tag( 'Beastie' );
 		$public  = $this->make_public_tag( 'Jazz' );
 

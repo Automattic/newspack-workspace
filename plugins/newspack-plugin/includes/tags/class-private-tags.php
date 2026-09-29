@@ -23,6 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * - Its slug is stripped from post/body CSS classes.
  * - Its slug is stripped from ad targeting data.
  * - It is excluded from Yoast SEO structured data and sitemaps.
+ * - Its ID is stripped from the client-side reader-activation data.
  *
  * In the admin area and Gutenberg editor:
  * - A "Private" column is added to the Tags list table, with a checkbox in Quick Edit.
@@ -84,32 +85,53 @@ class Private_Tags {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Checks if the feature is enabled.
+	 * Checks whether the Private Tags feature is enabled.
 	 *
-	 * True when:
-	 * - NEWSPACK_PRIVATE_TAGS_ENABLED is defined and true.
+	 * The feature is on by default. A site can opt out — for example one running a
+	 * conflicting custom private-tags implementation on the same `np_private_tag`
+	 * meta key (e.g. Texas Tribune) — via either:
+	 * - defining the NEWSPACK_PRIVATE_TAGS_DISABLED constant as true, or
+	 * - returning false from the `newspack_private_tags_enabled` filter.
 	 *
-	 * Feature-flagged for gradual rollout.
-	 * Remove this gate once fully released.
+	 * The constant takes final precedence: when it disables the feature, the filter
+	 * cannot re-enable it — an opt-out kill switch should not be defeatable by a filter.
+	 *
+	 * Evaluated when the feature initializes on `after_setup_theme`, so the filter
+	 * can be registered from a plugin or theme (e.g. functions.php) before this runs.
 	 *
 	 * @return bool True if the feature is enabled, false otherwise.
 	 */
 	public static function is_enabled() {
 		/**
-		 * Enables the Private Tags feature.
+		 * Disables the Private Tags feature for a single site.
 		 *
-		 * @constant NEWSPACK_PRIVATE_TAGS_ENABLED
+		 * Takes final precedence — when true, the `newspack_private_tags_enabled`
+		 * filter cannot re-enable the feature.
+		 *
+		 * @constant NEWSPACK_PRIVATE_TAGS_DISABLED
 		 * @type     bool
-		 * @default  Private tags feature disabled
+		 * @default  Private tags feature enabled
 		 * @status   draft
 		 *
-		 * @example define( 'NEWSPACK_PRIVATE_TAGS_ENABLED', true );
+		 * @example define( 'NEWSPACK_PRIVATE_TAGS_DISABLED', true );
 		 */
-		return defined( 'NEWSPACK_PRIVATE_TAGS_ENABLED' ) && NEWSPACK_PRIVATE_TAGS_ENABLED;
+		if ( defined( 'NEWSPACK_PRIVATE_TAGS_DISABLED' ) && NEWSPACK_PRIVATE_TAGS_DISABLED ) {
+			return false;
+		}
+
+		/**
+		 * Filters whether the Private Tags feature is enabled.
+		 *
+		 * @param bool $enabled Whether the feature is enabled.
+		 */
+		return (bool) apply_filters( 'newspack_private_tags_enabled', true );
 	}
 
 	/**
 	 * Initialize the class and register hooks.
+	 *
+	 * Hooked to `after_setup_theme` (see the bottom of this file) so the
+	 * `newspack_private_tags_enabled` opt-out filter can be registered first.
 	 */
 	public static function init() {
 		if ( self::$initiated || ! self::is_enabled() ) {
@@ -166,7 +188,7 @@ class Private_Tags {
 
 		// Integrations: strip private tag IDs from the client-side reader-activity data
 		// (newspack_reader_data) so they can't be round-tripped to names via the REST API.
-		// Always on when the feature is enabled — there's no legitimate reason to expose them.
+		// Gated by the 'reader_data' behavior (on by default); a publisher can opt out.
 		add_filter( 'newspack_reader_activity_article_view', [ __CLASS__, 'filter_reader_activity' ], 10, 1 );
 	}
 
@@ -427,6 +449,7 @@ class Private_Tags {
 			'gam_targeting'  => true,
 			'yoast_metadata' => true,
 			'yoast_sitemap'  => true,
+			'reader_data'    => true,
 		];
 	}
 
@@ -1144,10 +1167,18 @@ class Private_Tags {
 	 * API — reducing discoverability of private tags. Categories and other data
 	 * are left untouched.
 	 *
+	 * Gated by the 'reader_data' behavior (on by default). A publisher can opt out
+	 * — e.g. to preserve private tag IDs in reader-activation data — without
+	 * affecting the other private-tag behaviors.
+	 *
 	 * @param array $activity The 'article_view' reader activity.
 	 * @return array
 	 */
 	public static function filter_reader_activity( $activity ) {
+		if ( ! self::is_behavior_enabled( 'reader_data' ) ) {
+			return $activity;
+		}
+
 		if ( ! isset( $activity['data']['tags'] ) || ! is_array( $activity['data']['tags'] ) ) {
 			return $activity;
 		}
@@ -1252,4 +1283,7 @@ class Private_Tags {
 	}
 }
 
-Private_Tags::init();
+// Register on after_setup_theme (not at file load) so a plugin or theme can opt out
+// via the newspack_private_tags_enabled filter before is_enabled() is evaluated. The
+// NEWSPACK_PRIVATE_TAGS_DISABLED constant works either way (it's set in wp-config).
+add_action( 'after_setup_theme', [ Private_Tags::class, 'init' ] );

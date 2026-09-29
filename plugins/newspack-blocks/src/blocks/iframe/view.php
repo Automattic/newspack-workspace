@@ -13,7 +13,7 @@
  * @return string
  */
 function newspack_blocks_render_block_iframe( $attributes ) {
-	Newspack_Blocks::enqueue_view_assets( 'iframe' );
+	Newspack_Blocks::enqueue_view_assets( 'iframe', 'defer' );
 
 	return newspack_blocks_get_iframe( $attributes );
 }

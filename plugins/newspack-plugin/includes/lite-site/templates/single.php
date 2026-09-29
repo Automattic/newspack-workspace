@@ -7,10 +7,12 @@
 
 namespace Newspack;
 
-$current_post_id = get_query_var( 'lite_site_id' );
-$current_post = get_post( $current_post_id );
+// Without the guard, get_post( '' ) falls back to the global post, giving
+// every post an ID-free lite route via ?lite_site=single on its own URL.
+$current_post_id = absint( get_query_var( 'lite_site_id' ) );
+$current_post = $current_post_id ? get_post( $current_post_id ) : null;
 
-if ( ! $current_post ) {
+if ( ! Lite_Site::is_post_accessible( $current_post ) ) {
 	status_header( 404 );
 	exit( 'Post not found' );
 }
@@ -36,7 +38,7 @@ if ( ! $current_post ) {
 			<?php echo wp_kses_post( Lite_Site::get_authors( $current_post ) ); ?>
 		</div>
 		<div class="date">
-			<?php echo get_the_date(); ?>
+			<?php echo esc_html( get_the_date( '', $current_post ) ); ?>
 		</div>
 	</div>
 	<hr class="separator">

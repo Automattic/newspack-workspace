@@ -8,9 +8,7 @@
 namespace Newspack\Data_Events\Connectors;
 
 use Newspack\Data_Events;
-use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
-use Newspack_Newsletters_Contacts;
 use Newspack\WooCommerce_Connection;
 use Newspack\Reader_Activation\Sync\WooCommerce as Sync_WooCommerce;
 use Newspack\Reader_Activation\Sync\Metadata as Sync_Metadata;
@@ -38,7 +36,8 @@ class Contact_Sync_Connector {
 			return;
 		}
 		Data_Events::register_handler( [ __CLASS__, 'reader_registered' ], 'reader_registered' );
-		Data_Events::register_handler( [ __CLASS__, 'reader_deleted' ], 'reader_deleted' );
+		// Deletion always routes through Contact_Sync::handle_account_deletion(),
+		// which honors each integration's own account_deletion_handling setting.
 		Data_Events::register_handler( [ __CLASS__, 'reader_delete_sync' ], 'reader_delete_sync' );
 		Data_Events::register_handler( [ __CLASS__, 'reader_logged_in' ], 'reader_logged_in' );
 		Data_Events::register_handler( [ __CLASS__, 'order_completed' ], 'order_completed' );
@@ -91,7 +90,15 @@ class Contact_Sync_Connector {
 			return;
 		}
 
-		Contact_Sync::sync_contact( $data['user_id'], 'RAS Reader registration' );
+		/**
+		 * Filters the context of the contact sync a new reader's registration
+		 * triggers, which Sync Activity shows as the push's trigger.
+		 *
+		 * @param string $context The context of the sync.
+		 * @param array  $data    The event data: `user_id`, `email` and `metadata`.
+		 */
+		$context = \apply_filters( 'newspack_reader_registered_sync_context', 'RAS Reader registration', $data );
+		Contact_Sync::sync_contact( $data['user_id'], $context );
 	}
 
 	/**
@@ -103,6 +110,12 @@ class Contact_Sync_Connector {
 	 */
 	public static function reader_logged_in( $timestamp, $data, $client_id ) {
 		if ( empty( $data['email'] ) || empty( $data['user_id'] ) ) {
+			return;
+		}
+
+		// Without WooCommerce there are no orders or subscriptions that could
+		// make a login worth a resync, and WC_Customer does not exist.
+		if ( ! class_exists( 'WC_Customer' ) ) {
 			return;
 		}
 
@@ -202,25 +215,6 @@ class Contact_Sync_Connector {
 	}
 
 	/**
-	 * Handle a user deletion.
-	 *
-	 * @param int   $timestamp Timestamp of the event.
-	 * @param array $data      Data associated with the event.
-	 * @param int   $client_id ID of the client that triggered the event.
-	 */
-	public static function reader_deleted( $timestamp, $data, $client_id ) {
-		if ( ! isset( $data['user']['data']['user_email'] ) ) {
-			return;
-		}
-		if ( true === Reader_Activation::get_setting( 'sync_esp_delete' ) ) {
-			$result = Newspack_Newsletters_Contacts::delete( $data['user']['data']['user_email'], 'RAS Reader deleted' );
-		} else {
-			$result = Newspack_Newsletters_Contacts::update_lists( $data['user']['data']['user_email'], [], 'Reader account deleted' );
-		}
-		return $result;
-	}
-
-	/**
 	 * Handle a reader delete sync.
 	 *
 	 * @param int   $timestamp Timestamp of the event.
@@ -228,74 +222,57 @@ class Contact_Sync_Connector {
 	 * @param int   $client_id ID of the client that triggered the event.
 	 */
 	public static function reader_delete_sync( $timestamp, $data, $client_id ) {
-		if ( empty( $data['user_id'] ) ) {
+		if ( empty( $data['email'] ) ) {
 			return;
 		}
-		// Get the stored data from before the user was deleted.
-		$stored_data = get_transient( 'newspack_user_deletion_data_' . $data['user_id'] );
+		$email   = $data['email'];
+		$user_id = $data['user_id'] ?? 0;
 
+		$stored_data = $user_id ? get_transient( 'newspack_user_deletion_data_' . $user_id ) : false;
 		if ( $stored_data && ! empty( $stored_data['customer_data'] ) ) {
 			$contact = $stored_data['customer_data'];
-			$contact['metadata'] = array_merge(
-				$contact['metadata'],
-				[
-					'membership_status' => 'user-deleted',
-				]
-			);
 		} else {
-			// If we don't have anything stored, send what we can.
 			$contact = [
-				'email'    => $data['user']['data']['user_email'] ?? '',
-				'metadata' => [
-					'account'           => $data['user_id'],
-					'membership_status' => 'user-deleted',
-				],
+				'email'    => $email,
+				'metadata' => $user_id ? [ 'account' => $user_id ] : [],
 			];
 		}
 
-		// Clean up the transient.
-		delete_transient( 'newspack_user_deletion_data_' . $data['user_id'] );
+		if ( $user_id ) {
+			delete_transient( 'newspack_user_deletion_data_' . $user_id );
+		}
 
-		// Sync contact information with ESP.
-		$sync_result = Contact_Sync::sync( $contact, 'RAS Reader deletion' );
+		Contact_Sync::handle_account_deletion( $email, $contact, 'RAS Reader deletion' );
 	}
 
 	/**
-	 * Handle newsletter subscription update.
+	 * Handle a newsletter subscription change.
+	 *
+	 * The contact is rebuilt from stored data, so the "Newsletter Selection"
+	 * field comes from the legacy metadata class rather than from this handler.
+	 * The reader-data handler for the same event stores the lists that class
+	 * reads, and the queued sync runs at shutdown, after both handlers.
+	 *
+	 * That field is the only synced field a list change affects, so the sync
+	 * is skipped when no push-enabled integration sends it. It is part of the
+	 * legacy era's default selection and off by default on new-schema sites,
+	 * where a publisher can still enable it from the Legacy panel. Where it is
+	 * sent, every list change syncs the reader, including bulk ones such as
+	 * membership activation and the membership-tied subscribers CLI, which
+	 * fan out one upsert per reader. That is what keeps the field current; a
+	 * publisher who unticks the field everywhere pays nothing per change.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
 	 */
 	public static function newsletter_updated( $timestamp, $data ) {
-		if ( empty( $data['user_id'] ) || empty( $data['email'] ) || empty( $data['contact'] ) ) {
+		if ( empty( $data['user_id'] ) ) {
 			return;
 		}
-		$contact          = $data['contact'];
-		$subscribed_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $data['email'] );
-		if ( is_wp_error( $subscribed_lists ) || ! is_array( $subscribed_lists ) ) {
+		if ( ! Sync_Metadata::is_field_push_enabled( 'newsletter_selection' ) ) {
 			return;
 		}
-		$lists = \Newspack_Newsletters_Subscription::get_lists();
-		if ( is_wp_error( $lists ) ) {
-			return;
-		}
-		$lists_names = [];
-		foreach ( $subscribed_lists as $subscribed_list_id ) {
-			foreach ( $lists as $list ) {
-				if ( $list['id'] === $subscribed_list_id ) {
-					$lists_names[] = $list['name'];
-				}
-			}
-		}
-
-		$contact['metadata'] = array_merge(
-			$contact['metadata'] ?? [],
-			[
-				'account'              => $data['user_id'],
-				'newsletter_selection' => implode( ', ', $lists_names ),
-			]
-		);
-		Contact_Sync::sync( $contact, 'Updating newsletter_selection field after a change in the subscription lists.' );
+		Contact_Sync::sync_contact( $data['user_id'], 'RAS Newsletter subscription updated' );
 	}
 
 	/**

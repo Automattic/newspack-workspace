@@ -14,18 +14,15 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import {
-	TextControl,
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-} from '@wordpress/components';
+import { Notice, TextControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, Modal, Notice, useConfirmDialog } from '../../../../../../packages/components/src';
+import { Button, Modal, useConfirmDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
@@ -239,10 +236,20 @@ const SettingsModal = ( { showModal, closeModal }: { showModal: boolean; closeMo
 		<div className="newspack-emails__settings-modal-wrap">
 			{ confirmDialog }
 			<Modal onRequestClose={ handleClose } size="medium" title={ __( 'Settings', 'newspack-plugin' ) }>
-				<p>{ __( 'Configure the sender details and reply-to address for transactional emails sent to your readers.', 'newspack-plugin' ) }</p>
-				{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
-				<VStack>
+				<Stack direction="column" gap="xl" className="newspack-emails__settings-modal">
+					<p>
+						{ __(
+							'Configure the sender details and reply-to address for transactional emails sent to your readers.',
+							'newspack-plugin'
+						) }
+					</p>
+					{ errorMessage && (
+						<Notice status="error" isDismissible={ false } politeness="polite">
+							{ errorMessage }
+						</Notice>
+					) }
 					<TextControl
+						__nextHasNoMarginBottom
 						label={ __( 'Sender Name', 'newspack-plugin' ) }
 						help={ __( 'Name to use as the sender of transactional emails. Leave blank to use your site title.', 'newspack-plugin' ) }
 						value={ settings.sender_name }
@@ -250,6 +257,7 @@ const SettingsModal = ( { showModal, closeModal }: { showModal: boolean; closeMo
 						onChange={ ( value: string ) => setSettings( { ...settings, sender_name: value } ) }
 					/>
 					<TextControl
+						__nextHasNoMarginBottom
 						label={ __( 'Sender Email Address', 'newspack-plugin' ) }
 						help={
 							isSenderEmailInvalid
@@ -266,6 +274,7 @@ const SettingsModal = ( { showModal, closeModal }: { showModal: boolean; closeMo
 						onChange={ ( value: string ) => setSettings( { ...settings, sender_email_address: value } ) }
 					/>
 					<TextControl
+						__nextHasNoMarginBottom
 						label={ __( 'Contact Email Address', 'newspack-plugin' ) }
 						help={
 							isContactEmailInvalid
@@ -281,20 +290,20 @@ const SettingsModal = ( { showModal, closeModal }: { showModal: boolean; closeMo
 						aria-invalid={ isContactEmailInvalid }
 						onChange={ ( value: string ) => setSettings( { ...settings, contact_email_address: value } ) }
 					/>
-				</VStack>
-				<HStack justify="end">
-					<Button variant="tertiary" disabled={ isFetching } onClick={ handleClose }>
-						{ __( 'Cancel', 'newspack-plugin' ) }
-					</Button>
-					<Button
-						variant="primary"
-						disabled={ ! loaded || isFetching || ! isDirty || ! isClientSideValid }
-						loading={ isFetching }
-						onClick={ handleSave }
-					>
-						{ __( 'Save', 'newspack-plugin' ) }
-					</Button>
-				</HStack>
+					<Stack direction="row" justify="flex-end" gap="sm">
+						<Button variant="tertiary" disabled={ isFetching } onClick={ handleClose }>
+							{ __( 'Cancel', 'newspack-plugin' ) }
+						</Button>
+						<Button
+							variant="primary"
+							disabled={ ! loaded || isFetching || ! isDirty || ! isClientSideValid }
+							loading={ isFetching }
+							onClick={ handleSave }
+						>
+							{ __( 'Save', 'newspack-plugin' ) }
+						</Button>
+					</Stack>
+				</Stack>
 			</Modal>
 		</div>
 	);

@@ -70,6 +70,83 @@ class Newsletter_Controlled_Statuses_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The front-end refresh/exit in fix_public_status() must be suppressed on
+	 * programmatic requests (REST, AJAX, cron, WP-CLI, XML-RPC) and feed
+	 * renders, where an exit would truncate the response mid-flight. The REST
+	 * branch — the actual regression this fixes — is pinned separately in
+	 * test_public_status_refresh_suppressed_during_rest(); the WP_CLI and
+	 * XMLRPC_REQUEST branches hinge on `define()` constants and share this same
+	 * guard, so the filter-toggleable AJAX/cron/feed branches cover them here.
+	 */
+	public function test_public_status_refresh_suppressed_off_page() {
+		$is_front_end = new ReflectionMethod( 'Newspack_Newsletters', 'is_front_end_page_request' );
+		$is_front_end->setAccessible( true );
+
+		// A plain (non-admin) context reads as a front-end page request.
+		$this->assertTrue( $is_front_end->invoke( null ), 'A plain request should be treated as a page view.' );
+
+		// AJAX must suppress the refresh.
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$this->assertFalse( $is_front_end->invoke( null ), 'Refresh must be suppressed during AJAX.' );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+
+		// Cron must suppress the refresh.
+		add_filter( 'wp_doing_cron', '__return_true' );
+		$this->assertFalse( $is_front_end->invoke( null ), 'Refresh must be suppressed during cron.' );
+		remove_filter( 'wp_doing_cron', '__return_true' );
+
+		// A feed render must suppress the refresh (an exit would truncate the XML).
+		global $wp_query;
+		$wp_query->is_feed = true;
+		$this->assertFalse( $is_front_end->invoke( null ), 'Refresh must be suppressed during a feed render.' );
+		$wp_query->is_feed = false;
+	}
+
+	/**
+	 * Pins the REST branch — the exact regression this fix addresses — in CI.
+	 * `REST_REQUEST` is a `define()` constant, so this runs in a separate
+	 * process to set it without leaking the constant into other tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_public_status_refresh_suppressed_during_rest() {
+		define( 'REST_REQUEST', true );
+		$is_front_end = new ReflectionMethod( 'Newspack_Newsletters', 'is_front_end_page_request' );
+		$is_front_end->setAccessible( true );
+		$this->assertFalse( $is_front_end->invoke( null ), 'Refresh must be suppressed during a REST request.' );
+	}
+
+	/**
+	 * Corrects an invalid publish + non-public newsletter to private on a
+	 * programmatic request (via fix_public_status()), without exiting.
+	 */
+	public function test_fix_public_status_corrects_without_exit_off_page() {
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status' => 'draft',
+			]
+		);
+		\Newspack_Newsletters::set_newsletter_sent( $post_id );
+
+		// Force the invalid publish + non-public state directly, bypassing the
+		// publish-time guard, so fix_public_status() has something to correct.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Test setup forces an invalid state that the publish-time guard would otherwise correct.
+		$wpdb->update( $wpdb->posts, [ 'post_status' => 'publish' ], [ 'ID' => $post_id ] );
+		clean_post_cache( $post_id );
+
+		// Simulate a cron request so the redirect/exit path is not taken; before
+		// the guard fix this call would `exit` and abort the test run.
+		add_filter( 'wp_doing_cron', '__return_true' );
+		\Newspack_Newsletters::fix_public_status( get_post( $post_id ) );
+		remove_filter( 'wp_doing_cron', '__return_true' );
+
+		$this->assertEquals( 'private', get_post( $post_id )->post_status, 'A non-public newsletter should be corrected to private.' );
+	}
+
+	/**
 	 * Test that is_newsletter_sent handles valid and invalid publish dates correctly.
 	 */
 	public function test_is_newsletter_sent_with_invalid_date() {

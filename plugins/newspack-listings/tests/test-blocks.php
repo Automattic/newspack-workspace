@@ -23,7 +23,7 @@ class BlocksTest extends WP_UnitTestCase {
 
 		// Set default block options for Curated List.
 		$block_json = json_decode(
-			file_get_contents( NEWSPACK_LISTINGS_PLUGIN_FILE . '/src/blocks/curated-list/block.json' ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			file_get_contents( NEWSPACK_LISTINGS_PLUGIN_FILE . '/src/blocks/curated-list/block.json' ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Reads the block's bundled block.json from the local filesystem.
 			true
 		);
 		foreach ( $block_json['attributes'] as $attribute => $options ) {

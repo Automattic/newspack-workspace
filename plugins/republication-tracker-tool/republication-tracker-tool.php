@@ -6,7 +6,7 @@
  * Author URI:      https://labs.inn.org
  * Text Domain:     republication-tracker-tool
  * Domain Path:     /languages
- * Version:         2.8.2
+ * Version:         2.9.3
  *
  * @package         Republication_Tracker_Tool
  */
@@ -32,6 +32,9 @@ require plugin_dir_path( __FILE__ ) . 'includes/class-article-settings.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-widget.php';
 require plugin_dir_path( __FILE__ ) . 'includes/compatibility-co-authors-plus.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republication-rewrite.php';
+require plugin_dir_path( __FILE__ ) . 'includes/class-republish-button-block.php';
+require plugin_dir_path( __FILE__ ) . 'includes/class-republish-pattern.php';
+require plugin_dir_path( __FILE__ ) . 'includes/pixel-functions.php';
 
 /**
  * Main initiation class.
@@ -71,6 +74,13 @@ final class Republication_Tracker_Tool {
 	 * @since  1.0
 	 */
 	protected static $single_instance = null;
+
+	/**
+	 * Whether the modal has been rendered on this page.
+	 *
+	 * @var bool
+	 */
+	public static $modal_rendered = false;
 
 	/**
 	 * Instance of Republication_Tracker_Tool_Settings
@@ -235,6 +245,29 @@ final class Republication_Tracker_Tool {
 		$vars[] .= 'post';
 
 		return $vars;
+	}
+
+	/**
+	 * Whether a post may be offered for republication.
+	 *
+	 * One rule for every republish surface (the `/republish/` page, the widget
+	 * and the block), since each copies `post_content` without WordPress's own
+	 * visibility handling: only what a logged-out visitor could read at the
+	 * permalink, and never a password-protected post.
+	 *
+	 * The password test reads the post rather than the visitor's password
+	 * cookie. The copy carries a republication license, and a post password
+	 * limits who may read a post, not who may redistribute it, so entering the
+	 * password must not unlock the copy.
+	 *
+	 * @param int|\WP_Post $post Post ID or object.
+	 * @return bool
+	 */
+	public static function is_post_republishable( $post ): bool {
+		$post = get_post( $post );
+		return $post instanceof \WP_Post
+			&& is_post_publicly_viewable( $post )
+			&& '' === (string) $post->post_password;
 	}
 
 	/**

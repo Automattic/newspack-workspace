@@ -1,4 +1,8 @@
+@use "../mixins";
+
 :root {
+	// Enables the snackbar height 0<->auto collapse to animate. Chromium 129+ only; elsewhere the
+	// stacked reflow snaps instantly on dismiss while the slide-out still animates everywhere.
 	/* stylelint-disable-next-line property-no-unknown */
 	interpolate-size: allow-keywords;
 }
@@ -73,124 +77,98 @@
 			}
 		}
 		&__snackbar {
-			max-width: 434px;
-			color: var(--newspack-ui-color-body-bg);
+			--newspack-ui-snackbar-slide-from: calc(100% + var(--newspack-ui-spacer-5));
+			max-width: 100%;
+			color: var(--newspack-ui-color-neutral-0);
 			font-size: var(--newspack-ui-font-size-xs);
-			left: 0;
 			line-height: var(--newspack-ui-line-height-xs);
 			overflow: hidden;
-			padding: var(--newspack-ui-spacer-2);
+			padding: var(--newspack-ui-spacer-5);
 			position: fixed;
-			top: var(--newspack-ui-spacer-2);
+			top: var(--wp-admin--admin-bar--height, 0);
+			right: 0;
 			z-index: 100000;
 			pointer-events: none;
-			&--top-left,
-			&--top-right {
-				.admin-bar & {
-					@media only screen and ( min-width: 601px ) {
-						top: 46px;
-					}
-					@media only screen and ( min-width: 782px ) {
-						top: 32px;
-					}
-				}
-			}
-			&--top-right {
-				--newspack-ui-snackbar-slide-from: 100%;
-				left: auto;
-				right: 0;
-			}
-			&--bottom-left {
-				left: 0;
-				top: auto;
-				bottom: 0;
-			}
-			&--bottom-right {
-				--newspack-ui-snackbar-slide-from: 100%;
-				left: auto;
-				right: 0;
-				top: auto;
-				bottom: 0;
-			}
 			&__item {
+				@include mixins.newspack-ui-elevation( 2 );
+
 				background-color: var(--newspack-ui-color-neutral-90);
 				border-radius: var(--newspack-ui-border-radius-s);
 				overflow: hidden;
-				display: flex;
-				opacity: 0;
+				display: grid;
+				grid-template-columns: auto auto;
+				align-items: start;
+				width: fit-content;
+				max-width: var(--newspack-ui-width-s);
+				margin-left: auto;
+				height: 0;
 				pointer-events: none;
 				position: relative;
-				max-height: 0;
 				transform: translateX(var(--newspack-ui-snackbar-slide-from, -100%));
-				transition: max-height 125ms ease-out, opacity 250ms ease-out, transform 250ms ease-out;
-				&:has([class*="=__close"]) {
-					grid-template-columns: auto var(--newspack-ui-spacer-9) auto;
+				// Exit totals ~450ms (transform 250ms + height 200ms delayed 250ms). The DOM removal
+				// in notices.js waits 500ms for this; keep that >= the total here if these change.
+				transition:
+					transform 250ms ease-out,
+					height 200ms ease-out 250ms,
+					margin-bottom 200ms ease-out 250ms;
+				@media ( prefers-reduced-motion: reduce ) {
+					transform: none;
+					transition: none;
+
+					&:not(.active) {
+						box-shadow: none;
+					}
+				}
+				&:has(.newspack-ui__snackbar__icon) {
+					grid-template-columns: auto auto auto;
 				}
 				&.active {
-					max-height: 200px;
-					opacity: 1;
+					height: auto;
 					pointer-events: auto;
 					transform: translateX(0);
-					&[data-autohide="true"] {
-						.newspack-ui__snackbar__content::after {
-							opacity: 1;
-							transition: background-color 125ms ease-out, transform 8000ms linear;
-							transform: translateX(-100%);
-						}
+					transition: transform 250ms ease-out, height 0ms;
+					@media ( prefers-reduced-motion: reduce ) {
+						transition: none;
 					}
 				}
-				&--success {
-					.newspack-ui__snackbar__content::after {
-						background-color: var(--newspack-ui-color-success-60);
-					}
+				&.active:not(:last-child) {
+					margin-bottom: var(--newspack-ui-spacer-2);
 				}
-				&--error {
-					.newspack-ui__snackbar__content::after {
-						background-color: var(--newspack-ui-color-error-60);
-					}
+
+				&[data-type="warning"] {
+					border-left: 3px solid var(--newspack-ui-color-warning-30);
 				}
-				&--warning {
-					.newspack-ui__snackbar__content::after {
-						background-color: var(--newspack-ui-color-warning-40);
-					}
+				&[data-type="error"] {
+					border-left: 3px solid var(--newspack-ui-color-error-50);
 				}
-				& + .newspack-ui__snackbar__item {
-					margin-top: var(--newspack-ui-spacer-2);
+			}
+			&__icon {
+				order: 1;
+				align-self: start;
+				display: flex;
+				margin-block: -2px;
+				padding: var(--newspack-ui-spacer-2);
+				padding-right: 0;
+
+				svg {
+					display: block;
+					width: var(--newspack-ui-spacer-5);
+					height: var(--newspack-ui-spacer-5);
+					fill: var(--newspack-ui-color-neutral-0);
 				}
 			}
 			&__content {
+				order: 2;
 				padding: var(--newspack-ui-spacer-2);
 				a {
 					text-decoration: underline;
 				}
-				&::after {
-					background-color: var(--newspack-ui-color-neutral-90);
-					bottom: 0;
-					content: '';
-					display: block;
-					left: 0;
-					height: 3px;
-					position: absolute;
-					transform: none;
-					transition: background-color 125ms ease-out;
-					width: 100%;
-				}
 			}
 			&__close {
-				background: none;
-				border: none;
-				cursor: pointer;
-				padding: 0;
+				order: 3;
+				align-self: center;
 				margin: 0;
-				order: 1;
-				display: grid;
-				place-items: center;
-				width: var(--newspack-ui-spacer-9);
-				height: var(--newspack-ui-spacer-9);
-
-				&:hover {
-					opacity: 0.7;
-				}
+				margin-right: calc(var(--newspack-ui-spacer-1) / 2);
 			}
 		}
 	}

@@ -8,6 +8,7 @@
 import { __ } from '@wordpress/i18n';
 import { ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useDispatch } from '@wordpress/data';
+import { decodeEntities } from '@wordpress/html-entities';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 /**
@@ -26,7 +27,7 @@ type PremiumNewslettersConfig = {
 const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; showModal: boolean } ) => {
 	const wizardData = useWizardData( PREMIUM_NEWSLETTERS_WIZARD_SLUG ) as WizardData;
 	const initialConfig = { ...( ( wizardData?.config as PremiumNewslettersConfig ) || { auto_signup: true } ) };
-	const { wizardApiFetch, isFetching, resetError, setError } = useWizardApiFetch( PREMIUM_NEWSLETTERS_WIZARD_SLUG );
+	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( PREMIUM_NEWSLETTERS_WIZARD_SLUG );
 	const { addNotice, resetNotices, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ config, setConfig ] = useState< PremiumNewslettersConfig >( initialConfig );
 
@@ -67,7 +68,11 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 					} );
 				},
 				onError: ( fetchError: WpFetchError ) => {
-					setError( fetchError );
+					addNotice( {
+						message: decodeEntities( fetchError.message ),
+						type: 'error',
+						id: 'premium-newsletters-advanced-settings-error',
+					} );
 				},
 				onFinally: () => {
 					closeModal();
@@ -78,10 +83,10 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	updateConfig.current = handleUpdateConfig;
 	return (
 		showModal && (
-			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<VStack>
 					<ToggleControl
-						label={ __( 'Auto signup', 'newspack-plugin' ) }
+						label={ __( 'Auto Signup', 'newspack-plugin' ) }
 						help={ __( 'Automatically sign up users when they meet access requirements for premium newsletters.', 'newspack-plugin' ) }
 						checked={ config?.auto_signup }
 						onChange={ value => setConfig( { ...config, auto_signup: value } ) }

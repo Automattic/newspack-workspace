@@ -1,3 +1,54 @@
+## republication-tracker-tool [2.9.3](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.2...republication-tracker-tool@2.9.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **republication:** republish only public posts ([#1068](https://github.com/Automattic/newspack-workspace/issues/1068)) ([1aeee39](https://github.com/Automattic/newspack-workspace/commit/1aeee39e093e23144ab3ee28b2ef99bf680d33d8))
+
+## republication-tracker-tool [2.9.2](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.1...republication-tracker-tool@2.9.2) (2026-09-14)
+
+
+### Performance Improvements
+
+* **rtt:** skip the referrer title fetch when there is no referrer (NPPM-2981) ([#988](https://github.com/Automattic/newspack-workspace/issues/988)) ([3199175](https://github.com/Automattic/newspack-workspace/commit/3199175906bfc7f108e2e12697ab5e652c5f9cba))
+
+## republication-tracker-tool [2.9.1](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.0...republication-tracker-tool@2.9.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* **rtt:** filter bots and dedup repeat views in pixel counter ([#593](https://github.com/Automattic/newspack-workspace/issues/593)) ([2f1af3c](https://github.com/Automattic/newspack-workspace/commit/2f1af3cf7ce5047acec4eaf52fc79fde1d664eb2))
+
+# republication-tracker-tool [2.9.0](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.4...republication-tracker-tool@2.9.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **republication-tracker-tool:** load block from shipped paths ([#720](https://github.com/Automattic/newspack-workspace/issues/720)) ([f73f183](https://github.com/Automattic/newspack-workspace/commit/f73f1838a0b7327766283bec9da8988bd748169c))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.11.0
+
+## republication-tracker-tool [2.8.4](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.3...republication-tracker-tool@2.8.4) (2026-08-03)
+
+
+### Bug Fixes
+
+* add project-level .eslintrc.js to align lint setup ([#340](https://github.com/Automattic/newspack-workspace/issues/340)) ([9d05641](https://github.com/Automattic/newspack-workspace/commit/9d056414fe9ec3b9bf9885203ff423b9d884d002))
+* **republication-tracker-tool:** load block from shipped paths ([#720](https://github.com/Automattic/newspack-workspace/issues/720)) ([d850db8](https://github.com/Automattic/newspack-workspace/commit/d850db86de5d43aae9e1e04e450b19ec656f71c5))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
 ## republication-tracker-tool [2.8.3](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.2...republication-tracker-tool@2.8.3) (2026-06-01)
 
 

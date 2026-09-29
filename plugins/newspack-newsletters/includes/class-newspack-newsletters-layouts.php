@@ -77,7 +77,8 @@ final class Newspack_Newsletters_Layouts {
 			'show_ui'      => true,
 			'show_in_menu' => false,
 			'show_in_rest' => true,
-			// `author` so `_embed` populates `_embedded.author[0]` for the list.
+			// `author` so the layout keeps a `post_author`, which both the
+			// list's author field and `get_layouts()` read.
 			'supports'     => [ 'editor', 'title', 'custom-fields', 'author' ],
 			'taxonomies'   => [],
 		];
@@ -353,7 +354,7 @@ final class Newspack_Newsletters_Layouts {
 		$layouts_query = new WP_Query(
 			[
 				'post_type'      => self::NEWSPACK_NEWSLETTERS_LAYOUT_CPT,
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Newsletter layout CPT; config-scale.
 			]
 		);
 		$author_cache  = [];

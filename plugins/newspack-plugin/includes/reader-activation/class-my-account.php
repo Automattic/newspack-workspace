@@ -69,7 +69,6 @@ class My_Account {
 				$message,
 				[
 					'type'           => 'error' === $type ? 'error' : 'success',
-					'corner'         => 'top-right',
 					'autohide'       => true,
 					'active_on_load' => true,
 				]
@@ -84,7 +83,7 @@ class My_Account {
 	 * @return bool
 	 */
 	protected static function reader_must_verify(): bool {
-		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php.
 			return false;
 		}
 		if ( ! \class_exists( 'Newspack\WooCommerce_My_Account' ) ) {
@@ -158,7 +157,7 @@ class My_Account {
 		if ( ! \is_user_logged_in() ) {
 			\wp_add_inline_style(
 				'newspack-my-account-v1',
-				'.newspack-my-account--logged-out .newspack-reader-auth__inline-wrapper{margin-left:auto;margin-right:auto;max-width:var(--newspack-ui-modal-width-s)}'
+				'.newspack-my-account--logged-out .newspack-reader-auth__inline-wrapper{margin-left:auto;margin-right:auto;max-width:var(--newspack-ui-width-s)}'
 			);
 			return;
 		}
@@ -190,7 +189,8 @@ class My_Account {
 						} );
 					}
 				} );
-			} )();"
+			} )();",
+			'before'
 		);
 	}
 
@@ -951,7 +951,7 @@ class My_Account {
 
 		$token           = isset( $_GET['token'] ) ? \sanitize_text_field( \wp_unslash( $_GET['token'] ) ) : '';
 		$transient_token = \get_transient( 'np_reader_account_delete_' . \get_current_user_id() );
-		if ( ! $token || ! $transient_token || $token !== $transient_token ) {
+		if ( ! $token || ! $transient_token || ! hash_equals( (string) $transient_token, (string) $token ) ) {
 			echo '<p>' . \esc_html__( 'Invalid request.', 'newspack-plugin' ) . '</p>';
 			return;
 		}

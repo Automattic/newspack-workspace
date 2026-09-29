@@ -36,6 +36,34 @@ class Sync {
 	}
 
 	/**
+	 * Whether reader data syncing is allowed.
+	 *
+	 * @return bool True if reader data syncing is allowed, false otherwise.
+	 */
+	public static function is_syncing_allowed() {
+		/**
+		 * Enables reader data syncing to ESP on staging or non-production sites.
+		 * By default, syncing is disabled on staging sites to prevent test data
+		 * from being sent to production ESP lists.
+		 *
+		 * @constant NEWSPACK_ALLOW_READER_SYNC
+		 * @type     bool
+		 * @default  Sync disabled on staging/non-production sites
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_ALLOW_READER_SYNC', true );
+		 */
+		$is_allowed = defined( 'NEWSPACK_ALLOW_READER_SYNC' ) && NEWSPACK_ALLOW_READER_SYNC;
+
+		/**
+		 * Filter whether reader data syncing is allowed.
+		 *
+		 * @param bool $is_allowed Whether reader data syncing is allowed. Default false.
+		 */
+		return apply_filters( 'newspack_reader_activation_is_syncing_allowed', $is_allowed );
+	}
+
+	/**
 	 * Whether reader data can be synced.
 	 *
 	 * @param bool $return_errors Optional. Whether to return a WP_Error object. Default false.
@@ -60,25 +88,13 @@ class Sync {
 		}
 
 		$site_url = strtolower( \untrailingslashit( \get_site_url() ) );
-		/**
-		 * Enables reader data syncing to ESP on staging or non-production sites.
-		 * By default, syncing is disabled on staging sites to prevent test data
-		 * from being sent to production ESP lists.
-		 *
-		 * @constant NEWSPACK_ALLOW_READER_SYNC
-		 * @type     bool
-		 * @default  Sync disabled on staging/non-production sites
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_ALLOW_READER_SYNC', true );
-		 */
 		if (
 			(
 				false !== stripos( $site_url, '.newspackstaging.com' ) ||
 				! method_exists( 'Newspack_Manager', 'is_connected_to_production_manager' ) ||
 				! \Newspack_Manager::is_connected_to_production_manager()
 			) &&
-			( ! defined( 'NEWSPACK_ALLOW_READER_SYNC' ) || ! NEWSPACK_ALLOW_READER_SYNC )
+			( ! self::is_syncing_allowed() )
 		) {
 			$errors->add(
 				'esp_sync_not_allowed',
@@ -150,12 +166,66 @@ class Sync {
 		$result = new \WP_Error();
 
 		foreach ( $integrations as $integration ) {
+			// This predicate answers "can at least one integration receive contact
+			// data" — a push-path question, so integrations without an (enabled)
+			// push never satisfy it, even when their can_sync() reports no errors
+			// (an inbound-only integration has nothing to gate there).
+			if ( ! $integration->is_push_enabled() ) {
+				// Only collect a reason when one will be read: the boolean return
+				// paths discard $result, and this is a gating predicate on hot paths,
+				// so building translated messages there is pure waste.
+				if ( $return_errors ) {
+					if ( $integration->supports_push() ) {
+						$result->add(
+							'integration_push_disabled',
+							sprintf(
+								/* translators: %s: integration name. */
+								__( 'Outbound sync is disabled for the %s integration.', 'newspack-plugin' ),
+								$integration->get_name()
+							)
+						);
+					} else {
+						$result->add(
+							'integration_push_not_supported',
+							sprintf(
+								/* translators: %s: integration name. */
+								__( 'The %s integration does not support outbound sync.', 'newspack-plugin' ),
+								$integration->get_name()
+							)
+						);
+					}
+				}
+				continue;
+			}
+
 			$can_sync_integration = $integration->can_sync( true );
 
-			// If any integration can sync, return true.
+			// can_sync() is declared `bool|\WP_Error`, so a subclass may honor that
+			// signature and ignore $return_errors — normalize a bare bool rather than
+			// fatal on has_errors() below. All known subclasses return the WP_Error,
+			// but the contract invites third-party integrations not to.
+			if ( ! is_wp_error( $can_sync_integration ) ) {
+				$normalized = new \WP_Error();
+				if ( ! $can_sync_integration ) {
+					$normalized->add(
+						'integration_cannot_sync',
+						sprintf(
+							/* translators: %s: integration name. */
+							__( 'The %s integration is not ready to sync.', 'newspack-plugin' ),
+							$integration->get_name()
+						)
+					);
+				}
+				$can_sync_integration = $normalized;
+			}
+
+			// If any integration can sync, report success. In errors mode that must
+			// be a fresh WP_Error: $result may already hold reasons collected from
+			// integrations skipped or failed above, and every $return_errors caller
+			// reads has_errors() as "cannot sync".
 			if ( ! $can_sync_integration->has_errors() ) {
 				if ( $return_errors ) {
-					return $result;
+					return new \WP_Error();
 				} else {
 					return true;
 				}

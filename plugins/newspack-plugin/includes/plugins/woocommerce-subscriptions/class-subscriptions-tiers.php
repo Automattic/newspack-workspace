@@ -33,9 +33,25 @@ class Subscriptions_Tiers {
 		add_filter( 'woocommerce_order_button_text', [ __CLASS__, 'order_button_text' ], 20 );
 		add_filter( 'option_woocommerce_subscriptions_order_button_text', [ __CLASS__, 'order_button_text' ], 9 );
 
+		add_filter( 'newspack_blocks_modal_checkout_quantity', [ __CLASS__, 'vouch_switch_quantity' ], 10, 3 );
+
 		// Link-triggered modal rendering.
 		add_action( 'wp_footer', [ __CLASS__, 'print_modal' ] );
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
+
+		// Server-side backstop preventing a switch to the subscription the reader
+		// already owns (NPPM-2952). The front-end guard is the primary defense.
+		// Registered on both filters because they cover different entry points:
+		// `woocommerce_add_to_cart_validation` is applied by WooCommerce's request
+		// handlers (form handler, AJAX, Store API, session restore) but NOT by
+		// `WC_Cart::add_to_cart()` itself, which `Modal_Checkout` calls directly —
+		// `woocommerce_add_cart_item_data` runs inside `add_to_cart()` on every
+		// path and covers those direct calls, at priority 9 so the request is
+		// rejected just before WooCommerce Subscriptions consumes the same switch
+		// params (priority 10). Both no-op unless the switch targets a product the
+		// current user's own subscription already holds.
+		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'prevent_switch_to_same_subscription' ], 10, 4 );
+		add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'prevent_switch_to_same_subscription_cart_item_data' ], 9, 3 );
 
 		// Unhook Upgrade/Downgrade switch direction text.
 		add_action(
@@ -127,6 +143,63 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Vouch for the quantity a switch is carrying over from the subscription it
+	 * is changing.
+	 *
+	 * The modal checkout adds the chosen product at a quantity of one unless a
+	 * plugin vouches for another, so a tier change on a multi-quantity line item
+	 * would otherwise rewrite it down to one.
+	 *
+	 * Only a quantity matching the line item being switched is vouched for, which
+	 * is what makes it safe to honour from a request that needs no nonce. Raising
+	 * the count is a seat change, and belongs to whoever sells seats.
+	 *
+	 * @param null|int $vouched    The quantity vouched for so far, or null.
+	 * @param int      $product_id Product the quantity is for (variation preferred).
+	 * @param int      $requested  Requested quantity, at least 1.
+	 *
+	 * @return null|int The carried-over quantity, or the unchanged incoming value.
+	 */
+	public static function vouch_switch_quantity( $vouched, $product_id, $requested = 1 ) {
+		if ( null !== $vouched || ! is_user_logged_in() || ! function_exists( 'wcs_get_subscription' ) ) {
+			return $vouched;
+		}
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Reads only, and answers nothing for a subscription the requester does not own.
+		$subscription_id = isset( $_REQUEST['switch-subscription'] ) ? absint( wp_unslash( $_REQUEST['switch-subscription'] ) ) : 0;
+		$item_id         = isset( $_REQUEST['item'] ) ? absint( wp_unslash( $_REQUEST['item'] ) ) : 0;
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		if ( ! $subscription_id || ! $item_id ) {
+			return $vouched;
+		}
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
+		if ( ! $subscription || (int) $subscription->get_user_id() !== get_current_user_id() ) {
+			return $vouched;
+		}
+		$line_item = $subscription->get_item( $item_id, false );
+		if ( ! $line_item ) {
+			return $vouched;
+		}
+		return max( 1, (int) $line_item->get_quantity() ) === (int) $requested ? (int) $requested : $vouched;
+	}
+
+	/**
+	 * Register a switch modal for a subscription line item.
+	 *
+	 * WooCommerce Subscriptions' own switch links fire
+	 * `woocommerce_subscriptions_switch_link_text`, so they get a modal for free
+	 * via `cache_switch_subscription_link_data()`. A screen that prints its own
+	 * switch link — the group page's "Change seats" — never fires that filter, so
+	 * it calls this to record the same entry the footer reads.
+	 *
+	 * @param int                    $item_id      The ID of the item.
+	 * @param \WC_Order_Item_Product $item         The order line item data.
+	 * @param \WC_Subscription       $subscription The subscription.
+	 */
+	public static function register_switch_modal( $item_id, $item, $subscription ) {
+		self::cache_switch_subscription_link_data( '', $item_id, $item, $subscription );
+	}
+
+	/**
 	 * Print modals for switch subscription links rendered in the page.
 	 */
 	public static function print_switch_subscription_link_modal() {
@@ -137,10 +210,19 @@ class Subscriptions_Tiers {
 			return;
 		}
 		foreach ( self::$switch_subscription_links as $switch_data ) {
-			if ( ! wcs_is_product_switchable_type( $switch_data['item']['product_id'] ) ) {
+			// The canonical ID, so a tiered plan is judged on the variation the reader
+			// holds: per-seat meta lives on the variation, and asking about the parent
+			// would print no modal behind a switch link this class already rendered.
+			$switchable_id = function_exists( 'wcs_get_canonical_product_id' )
+				? wcs_get_canonical_product_id( $switch_data['item'] )
+				: $switch_data['item']['product_id'];
+			if ( ! wcs_is_product_switchable_type( $switchable_id ) ) {
 				continue;
 			}
 			$product = wc_get_product( $switch_data['item']['product_id'] );
+			// Reset per iteration: a product that resolves to no parent must not
+			// inherit the previous link's modal.
+			$parent_product  = null;
 			$parent_products = \WC_Subscriptions_Product::get_visible_grouped_parent_product_ids( $product );
 			if ( ! empty( $parent_products ) ) {
 				$parent_product = wc_get_product( reset( $parent_products ) );
@@ -148,11 +230,16 @@ class Subscriptions_Tiers {
 				$parent_product = $product;
 			} elseif ( $product->get_parent_id() ) {
 				$parent_product = wc_get_product( $product->get_parent_id() );
+			} elseif ( 'subscription' === $product->get_type() ) {
+				// A simple subscription is the only tier it offers, and reaching here
+				// means something declared it switchable (a per-seat group plan does).
+				$parent_product = $product;
 			}
 			if ( ! $parent_product ) {
 				continue;
 			}
 			$label = __( 'Change subscription', 'newspack-plugin' );
+			$title = null; // Reset per iteration, so a donation's title cannot carry to the next link.
 			if ( Donations::is_donation_product( $parent_product->get_id() ) ) {
 				$title = __( 'Edit donation', 'newspack-plugin' );
 				$label = __( 'Confirm donation', 'newspack-plugin' );
@@ -345,6 +432,58 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Find the tier the current user is actively subscribed to, if any.
+	 *
+	 * A subscription counts as "current" when it holds one of the tier products
+	 * and is in one of the statuses we treat as owned:
+	 * {@see WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES} (`active` or
+	 * `pending-cancel`). This must stay in sync with the status set used to
+	 * decide switch eligibility in
+	 * {@see WooCommerce_Subscriptions::get_user_subscription()}. If the two
+	 * diverge, a switch can be offered for a subscription that is never flagged
+	 * as "current" — which drops the "Current" badge and the front-end guard
+	 * that stops a reader switching to the subscription they already own
+	 * (NPPM-2952).
+	 *
+	 * @param array<string, \WC_Product[]> $tiers   Tier products grouped by frequency.
+	 * @param int|null                     $user_id Optional user ID. Defaults to the current user.
+	 *
+	 * @return array The current frequency (string|null), tier product
+	 *               (\WC_Product|null) and subscription (\WC_Subscription|null),
+	 *               or a triple of nulls when the user owns none of the tiers.
+	 */
+	public static function get_current_tier( $tiers, $user_id = null ) {
+		$none = [ null, null, null ];
+		if ( ! function_exists( 'wcs_get_users_subscriptions' ) ) {
+			return $none;
+		}
+		$user_id = $user_id ?? get_current_user_id();
+		if ( ! $user_id ) {
+			return $none;
+		}
+		$user_subscriptions = wcs_get_users_subscriptions( $user_id );
+		foreach ( $tiers as $frequency => $products ) {
+			foreach ( $products as $product ) {
+				foreach ( $user_subscriptions as $subscription ) {
+					if (
+						$subscription->has_product( $product->get_id() )
+						&& $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
+						// `wcs_get_users_subscriptions` is filtered (e.g. group
+						// subscriptions inject subs the user is only a member of, owned
+						// by someone else); only a subscription the user owns is their
+						// "current" tier — matching the ownership test the switch
+						// backstop applies.
+						&& (int) $subscription->get_user_id() === (int) $user_id
+					) {
+						return [ $frequency, $product, $subscription ];
+					}
+				}
+			}
+		}
+		return $none;
+	}
+
+	/**
 	 * Get product title.
 	 *
 	 * @param \WC_Product $product                   Product.
@@ -354,13 +493,12 @@ class Subscriptions_Tiers {
 	 */
 	private static function get_product_title( $product, $show_variation_attributes = false ) {
 		$product_name = $product->get_title();
-		if ( $product->is_type( 'variation' ) ) {
-			if ( $show_variation_attributes ) {
-				$product_name = sprintf(
-					'%s (%s)',
-					$product_name,
-					implode( ', ', $product->get_variation_attributes() )
-				);
+		if ( $product->is_type( 'variation' ) && $show_variation_attributes ) {
+			// An "Any <attribute>" variation stores that attribute as an empty
+			// string, which would print as "Plan ()" or "Plan (, Annual)".
+			$attributes = implode( ', ', array_filter( $product->get_variation_attributes(), 'strlen' ) );
+			if ( '' !== $attributes ) {
+				$product_name = sprintf( '%s (%s)', $product_name, $attributes );
 			}
 		}
 		return $product_name;
@@ -406,18 +544,28 @@ class Subscriptions_Tiers {
 	 * @param bool        $show_variation_attributes Whether the card should render the product variation attributes.
 	 * @param bool        $current                   Whether the product should have the "current" badge.
 	 * @param bool        $selected                  Whether the product should be checked.
+	 * @param int         $seats_ceiling             Seats the current plan already holds, so its radio advertises the same widened maximum as the seats field. 0 for every card but the current one.
 	 */
-	private static function render_product_card( $product, $show_variation_attributes = false, $current = false, $selected = false ) {
-		if ( function_exists( 'wcs_price_string' ) ) {
-			$price = wcs_price_string(
-				[
-					'recurring_amount'      => $product->get_price(),
-					'subscription_period'   => $product->get_meta( '_subscription_period' ),
-					'subscription_interval' => $product->get_meta( '_subscription_period_interval' ),
-				]
-			);
-		} else {
-			$price = $product->get_price_html();
+	private static function render_product_card( $product, $show_variation_attributes = false, $current = false, $selected = false, $seats_ceiling = 0 ) {
+		// A name-your-price product has no fixed price to print — get_price() is
+		// empty, so wcs_price_string() would render a bare "/ month" — and the
+		// amount is carried by the form's own input instead.
+		$is_nyp = class_exists( '\WC_Name_Your_Price_Helpers' )
+			? \WC_Name_Your_Price_Helpers::is_nyp( $product->get_id() )
+			: 'yes' === $product->get_meta( '_nyp' );
+		$price  = '';
+		if ( ! $is_nyp ) {
+			if ( function_exists( 'wcs_price_string' ) ) {
+				$price = wcs_price_string(
+					[
+						'recurring_amount'      => $product->get_price(),
+						'subscription_period'   => $product->get_meta( '_subscription_period' ),
+						'subscription_interval' => $product->get_meta( '_subscription_period_interval' ),
+					]
+				);
+			} else {
+				$price = $product->get_price_html();
+			}
 		}
 
 		/**
@@ -434,17 +582,34 @@ class Subscriptions_Tiers {
 		$should_render_description = ! defined( 'NEWSPACK_DISABLE_SUBSCRIPTION_DESCRIPTION' ) || ! NEWSPACK_DISABLE_SUBSCRIPTION_DESCRIPTION;
 		$description               = $product->get_description();
 
+		// Each tier publishes its own seat bounds so the form's single seats field can
+		// follow whichever one is checked. A tier with no attributes here sells no
+		// seats, which is what tells the field to hide and stop submitting.
+		$seats = Group_Subscription_Seats::get_field_args( $product );
+
+		// The plan the reader already holds carries the same widened ceiling the seats
+		// field uses: a group that outgrew a since-lowered maximum keeps the seats it
+		// pays for. The client clamp reads this radio, not the field, so without the
+		// match it would pull those seats back down to the plan's raw maximum on load.
+		// Only the current plan has a ceiling (render_form() sets it only when staying
+		// on plan), and only a per-seat, bounded tier has a maximum to raise.
+		if ( $seats && $current && $seats_ceiling > 0 && $seats['max'] > 0 ) {
+			$seats['max'] = max( $seats['max'], $seats_ceiling );
+		}
+
 		?>
 		<label class="newspack-ui__input-card <?php echo $current ? esc_attr( 'current' ) : ''; ?>">
 			<?php if ( $current ) : ?>
 				<span class="newspack-ui__badge newspack-ui__badge--primary"><?php _e( 'Current', 'newspack-plugin' ); ?></span>
 			<?php endif; ?>
-			<input type="radio" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>" <?php echo esc_attr( $selected ? 'checked' : '' ); ?>>
+			<input type="radio" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>"<?php echo $seats ? ' data-per-seat="1" data-seats-min="' . esc_attr( $seats['min'] ) . '" data-seats-max="' . esc_attr( $seats['max'] > 0 ? $seats['max'] : '' ) . '"' : ''; ?> <?php echo esc_attr( $selected ? 'checked' : '' ); ?>>
 			<strong><?php echo esc_html( self::get_product_title( $product, $show_variation_attributes ) ); ?></strong>
 			<?php if ( $should_render_description && $description ) : ?>
 				<span class="newspack-ui__helper-text"><?php echo $description; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
 			<?php endif; ?>
-			<span class="newspack-ui__helper-text"><?php echo $price; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+			<?php if ( $price ) : ?>
+				<span class="newspack-ui__helper-text"><?php echo $price; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+			<?php endif; ?>
 		</label>
 		<?php
 	}
@@ -484,7 +649,7 @@ class Subscriptions_Tiers {
 			<label for="nyp_amount"><?php _e( 'Amount', 'newspack-plugin' ); ?></label>
 			<div class="newspack-ui__currency-input">
 				<span class="newspack-ui__currency-input__currency"><?php echo esc_html( $symbol ); ?></span>
-				<input type="number" name="price" id="nyp_amount" value="<?php echo esc_attr( $value ); ?>" data-original-value="<?php echo esc_attr( $value ); ?>" data-currency="<?php echo esc_attr( $currency ); ?>" data-frequency="<?php echo esc_attr( $frequency ); ?>" class="<?php echo esc_attr( $current ? 'current' : '' ); ?>">
+				<input type="number" name="price" id="nyp_amount" value="<?php echo esc_attr( $value ); ?>" data-original-value="<?php echo esc_attr( $value ); ?>" data-currency="<?php echo esc_attr( $currency ); ?>" data-price-decimals="<?php echo esc_attr( wc_get_price_decimals() ); ?>" data-frequency="<?php echo esc_attr( $frequency ); ?>" class="<?php echo esc_attr( $current ? 'current' : '' ); ?>">
 			</div>
 		</p>
 		<?php
@@ -506,7 +671,7 @@ class Subscriptions_Tiers {
 				<?php
 				printf(
 					/* translators: %s: subscription product name */
-					esc_html__( 'You currently have an active subscription: %s. If you’d like to make changes, you can manage it from your subscription page.', 'newspack-plugin' ),
+					esc_html__( 'You currently have a subscription: %s. If you’d like to make changes, you can manage it from your subscription page.', 'newspack-plugin' ),
 					wp_kses_post( '<strong>' . self::get_product_title( $product, true ) . '</strong>' )
 				);
 				?>
@@ -589,29 +754,94 @@ class Subscriptions_Tiers {
 		$current_product   = null;
 		$user_subscription = null;
 		if ( is_user_logged_in() ) {
-			$user_subscriptions = wcs_get_users_subscriptions( get_current_user_id() );
-			foreach ( $frequencies as $frequency ) {
-				foreach ( $tiers[ $frequency ] as $product ) {
-					foreach ( $user_subscriptions as $subscription ) {
-						if ( $subscription->has_product( $product->get_id() ) && $subscription->has_status( 'active' ) ) {
-							$current_frequency = $frequency;
-							$current_product   = $product;
-							$user_subscription = $subscription;
-							break 2;
-						}
-					}
-				}
-			}
+			[ $current_frequency, $current_product, $user_subscription ] = self::get_current_tier( $tiers );
 		}
+
+		// The line item being switched, when this form is a switch modal.
+		$line_product = $switch_data ? $switch_data['item']->get_product() : null;
 
 		if ( ! $switch_data ) {
 			$current_frequency = $frequencies[0];
+		} elseif ( ! $current_product ) {
+			// The reader's plan matched none of the offered tiers. The case that
+			// prompted this is a plan the publisher retired by setting it to Private
+			// (kept out of the tiers so nobody new may buy in), but a product dropped
+			// from the group, a trashed product, or a variation mismatch lands here
+			// too, so don't narrow this to the Private status. The billing period
+			// is still known from the line item being switched away from, so open
+			// the modal on that period, or failing that on the first one, rather
+			// than on none: a modal with no period selected renders as an empty box.
+			$line_frequency    = $line_product ? self::get_frequency( $line_product ) : null;
+			$current_frequency = $line_frequency && isset( $tiers[ $line_frequency ] ) ? $line_frequency : $frequencies[0];
 		}
 
 		if ( $switch_data && $current_product ) {
 			$selected_product = $current_product;
 		} else {
 			$selected_product = $tiers[ $current_frequency ][0];
+		}
+
+		// The seats the reader already pays for. Every switch has to carry it: the
+		// modal checkout adds the new product at a quantity of one, so a tier change
+		// on a multi-seat line item would silently rewrite it down to a single seat.
+		$line_quantity = $switch_data ? max( 1, (int) $switch_data['item']->get_quantity() ) : null;
+
+		// Seat bounds belong to the tier being bought, not to the reader's current
+		// one: two per-seat tiers can sell different minimums, and a flat tier sells
+		// no seats at all. Every product here is concrete — get_tiers_by_frequency()
+		// expands a variable subscription into its variations, which is where
+		// per-seat meta lives for those.
+		$line_seats     = $line_product ? Group_Subscription_Seats::get_field_args( $line_product ) : null;
+		$selected_seats = $selected_product ? Group_Subscription_Seats::get_field_args( $selected_product ) : null;
+
+		// The field is rendered whenever any offered tier sells seats, and hidden
+		// (and disabled, so it submits nothing) while a flat tier is selected — that
+		// way picking a per-seat tier brings it back without a round trip.
+		$seats_field = $selected_seats;
+		if ( ! $seats_field ) {
+			foreach ( $tiers as $tier_products ) {
+				foreach ( $tier_products as $tier_product ) {
+					$seats_field = Group_Subscription_Seats::get_field_args( $tier_product );
+					if ( $seats_field ) {
+						break 2;
+					}
+				}
+			}
+		}
+
+		// One page can hold several of these forms -- one modal per switch link -- so
+		// the input's id has to be unique or the labels all point at the first one.
+		$seats_input_id = 'newspack-group-seats-' . ( $switch_data
+			? 'item-' . absint( $switch_data['item_id'] )
+			: 'product-' . ( $product ? absint( $product->get_id() ) : 0 ) );
+
+		// A group can never shrink below the people already in it, so the field's floor
+		// is whichever is higher: the plan's minimum, or the seats in use. Enforced on
+		// the server either way (see Group_Subscription_Seats::get_quantity_error()).
+		$seats_floor = $switch_data ? Group_Subscription_Seats::get_occupancy( $switch_data['subscription'] ) : 0;
+
+		// A group that already holds more seats than its own plan now sells keeps them:
+		// the maximum bounds what may be bought, not what has been. Only on the plan
+		// they already hold — moving to a different tier is buying that tier, and its
+		// maximum binds.
+		$line_product_id  = $line_product ? $line_product->get_id() : 0;
+		$staying_on_plan  = $line_product_id && $selected_product && $line_product_id === $selected_product->get_id();
+		$seats_ceiling    = $staying_on_plan && $line_seats && $line_quantity ? $line_quantity : 0;
+
+		// Start from the seats the reader already pays for when that line sells
+		// seats, otherwise from the tier's own minimum — then hold it inside the
+		// selected tier's bounds, which a differently-priced tier may narrow.
+		$seats_original = $line_seats && $line_quantity ? $line_quantity : '';
+		$seats_value    = null;
+		if ( $seats_field ) {
+			$seats_field['min'] = max( $seats_field['min'], $seats_floor );
+			if ( $seats_field['max'] > 0 ) {
+				$seats_field['max'] = max( $seats_field['max'], $seats_ceiling, $seats_field['min'] );
+			}
+			$seats_value = max( $seats_field['min'], (int) ( $seats_original ? $seats_original : $seats_field['min'] ) );
+			if ( $seats_field['max'] > 0 ) {
+				$seats_value = min( $seats_field['max'], $seats_value );
+			}
 		}
 
 		$default_title        = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
@@ -660,7 +890,7 @@ class Subscriptions_Tiers {
 									self::render_nyp_product_card( $products[0], $products[0] === $current_product, $switch_data );
 								} else {
 									foreach ( $products as $product ) {
-										self::render_product_card( $product, false, $switch_data && $product === $current_product, $product === $selected_product );
+										self::render_product_card( $product, false, $switch_data && $product === $current_product, $product === $selected_product, $seats_ceiling );
 									}
 								}
 								?>
@@ -673,7 +903,7 @@ class Subscriptions_Tiers {
 			if ( ! $should_render_tabs ) {
 				foreach ( $tiers as $products ) {
 					foreach ( $products as $product ) {
-						self::render_product_card( $product, true, $switch_data && $product === $current_product, $product === $selected_product );
+						self::render_product_card( $product, true, $switch_data && $product === $current_product, $product === $selected_product, $seats_ceiling );
 					}
 				}
 			}
@@ -683,6 +913,21 @@ class Subscriptions_Tiers {
 			<?php if ( ! empty( $switch_data ) ) : ?>
 				<input type="hidden" name="switch-subscription" value="<?php echo esc_attr( $switch_data['subscription']->get_id() ); ?>">
 				<input type="hidden" name="item" value="<?php echo absint( $switch_data['item_id'] ); ?>">
+			<?php endif; ?>
+			<?php if ( $seats_field ) : ?>
+				<p class="newspack__subscription-tiers__seats" data-seats-floor="<?php echo esc_attr( $seats_floor ); ?>"<?php echo $selected_seats ? '' : ' hidden'; ?>>
+					<label for="<?php echo esc_attr( $seats_input_id ); ?>"><?php echo esc_html( $seats_field['label'] ); ?></label>
+					<input type="number" name="quantity" id="<?php echo esc_attr( $seats_input_id ); ?>" step="1" min="<?php echo esc_attr( $seats_field['min'] ); ?>"<?php echo $seats_field['max'] > 0 ? ' max="' . esc_attr( $seats_field['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $seats_value ); ?>" data-original-value="<?php echo esc_attr( $seats_original ); ?>"<?php echo $selected_seats ? '' : ' disabled'; ?>>
+					<span class="newspack-ui__helper-text"><?php echo esc_html( $seats_field['help'] ); ?></span>
+				</p>
+				<?php
+			elseif ( $line_quantity ) :
+				// No tier here sells seats, so there is no seats field to submit the
+				// count -- but the line item being switched may still hold more than
+				// one, and the modal checkout buys one unless vouch_switch_quantity()
+				// vouches for this exact number.
+				?>
+				<input type="hidden" name="quantity" value="<?php echo esc_attr( $line_quantity ); ?>">
 			<?php endif; ?>
 
 			<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide"><?php echo esc_html( $button_label ); ?></button>
@@ -833,6 +1078,232 @@ class Subscriptions_Tiers {
 			}
 		}
 		return $switch_data;
+	}
+
+	/**
+	 * Prevent a reader from "switching" to the subscription they already own.
+	 *
+	 * The tiers/upgrade modal submits a WooCommerce Subscriptions switch
+	 * (`switch-subscription` + `item`) straight into the modal checkout, which
+	 * adds the product to the cart directly and so bypasses WCS's own
+	 * "you can't switch to the same subscription" validation. The front-end
+	 * guard (a disabled submit button on the current tier) is the primary
+	 * protection; this is the server-side backstop for crafted requests or
+	 * disabled JavaScript (NPPM-2952).
+	 *
+	 * A no-op for anything that isn't a switch onto a product the reader's own
+	 * subscription already holds — at the same per-period amount for name-your-price.
+	 *
+	 * @param bool $passed       Whether add-to-cart validation has passed so far.
+	 * @param int  $product_id   The product being added to the cart.
+	 * @param int  $quantity     The quantity (unused; a deliberate quantity change is read from the request).
+	 * @param int  $variation_id The variation being added, if any.
+	 *
+	 * @return bool Whether the product may be added to the cart.
+	 */
+	public static function prevent_switch_to_same_subscription( $passed, $product_id, $quantity = 1, $variation_id = 0 ) {
+		if ( true !== $passed ) {
+			return $passed;
+		}
+		$error = self::get_same_subscription_switch_error( $product_id, $variation_id );
+		if ( null !== $error ) {
+			if ( function_exists( 'wc_add_notice' ) ) {
+				wc_add_notice( $error, 'error' );
+			}
+			return false;
+		}
+		return $passed;
+	}
+
+	/**
+	 * The same guard, for cart additions that never run the validation filter.
+	 *
+	 * `woocommerce_add_to_cart_validation` is applied by WooCommerce's request
+	 * handlers, not by `WC_Cart::add_to_cart()` itself, so direct calls — notably
+	 * `Modal_Checkout::process_checkout_request()`, the flow the tiers modal
+	 * submits to — bypass it. This filter runs inside `add_to_cart()` on every
+	 * path. Throwing is WooCommerce's documented way for a plugin to abort the
+	 * add: the cart catches the exception, queues its message as an error notice
+	 * and returns false to the caller.
+	 *
+	 * @param array $cart_item_data Cart item data.
+	 * @param int   $product_id     The product being added to the cart.
+	 * @param int   $variation_id   The variation being added, if any.
+	 *
+	 * @throws \Exception When the request is a switch onto the subscription the reader already owns.
+	 *
+	 * @return array Cart item data, unchanged.
+	 */
+	public static function prevent_switch_to_same_subscription_cart_item_data( $cart_item_data, $product_id, $variation_id = 0 ) {
+		// The Store API applies this filter outside `WC_Cart::add_to_cart()`'s
+		// try/catch (StoreApi CartController::filter_request_data()), where a throw
+		// surfaces as a generic 500 instead of a clean cart error — and the same
+		// applies to any non-WC_Cart caller. Let the validation-filter registration
+		// handle REST requests: on the Store API path it runs right after this one.
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return $cart_item_data;
+		}
+		$error = self::get_same_subscription_switch_error( $product_id, $variation_id );
+		if ( null !== $error ) {
+			throw new \Exception( esc_html( $error ) );
+		}
+		return $cart_item_data;
+	}
+
+	/**
+	 * Get the blocking error when an add-to-cart is a switch onto the very
+	 * subscription the current reader already owns.
+	 *
+	 * Null means the request is not such a no-op: not a switch at all, a switch
+	 * on someone else's subscription (left for WCS to authorize), a different
+	 * product, variation or quantity, or a name-your-price amount change.
+	 *
+	 * @param int $product_id   The product being added to the cart.
+	 * @param int $variation_id The variation being added, if any.
+	 *
+	 * @return string|null Error message when the switch must be blocked, null otherwise.
+	 */
+	private static function get_same_subscription_switch_error( $product_id, $variation_id = 0 ) {
+		if ( ! function_exists( 'wcs_get_subscription' ) ) {
+			return null;
+		}
+
+		// The tiers modal submits the switch as query params, but read from
+		// $_REQUEST so the backstop also covers a crafted POST request. The
+		// logged-in test runs before the subscription is loaded so anonymous
+		// requests never trigger a subscription post load.
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		if ( empty( $_REQUEST['switch-subscription'] ) || ! is_user_logged_in() ) {
+			return null;
+		}
+		$subscription = wcs_get_subscription( absint( wp_unslash( $_REQUEST['switch-subscription'] ) ) );
+		if ( ! $subscription || (int) $subscription->get_user_id() !== get_current_user_id() ) {
+			return null;
+		}
+		$target_id = $variation_id ? (int) $variation_id : (int) $product_id;
+
+		// Identify the specific line item being switched. Prefer the `item` the modal
+		// (and WCS's own switch flow) submits, resolved against the subscription's own
+		// items — order item IDs are globally unique, so the default (unscoped)
+		// `get_item()` lookup would resolve a crafted `item` from an unrelated order
+		// and let a same-tier switch through. Fall back to scanning for the target
+		// product so a crafted request that omits `item` is still covered.
+		$line_item = null;
+		if ( ! empty( $_REQUEST['item'] ) ) {
+			$line_item = $subscription->get_item( absint( wp_unslash( $_REQUEST['item'] ) ), false );
+		}
+		if ( ! $line_item ) {
+			foreach ( $subscription->get_items() as $item ) {
+				$item_product_id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
+				if ( (int) $item_product_id === $target_id ) {
+					$line_item = $item;
+					break;
+				}
+			}
+		}
+
+		// No such line item, or the located item holds a different product than the one
+		// being switched to: it's a real switch, not a no-op.
+		if ( ! $line_item ) {
+			return null;
+		}
+		$current_id = $line_item->get_variation_id() ? (int) $line_item->get_variation_id() : (int) $line_item->get_product_id();
+		if ( $current_id !== $target_id ) {
+			return null;
+		}
+
+		// WCS treats a switch as identical only when product, variation *and* quantity
+		// all match, so a deliberate quantity change on the same plan is a legitimate
+		// switch. Only an explicitly submitted quantity counts as deliberate: the tiers
+		// modal always submits one when the target tier can carry seats, so an absent
+		// quantity is not a seat change, and reading it as one would skip the product
+		// and amount checks below for the crafted-request and no-JavaScript cases this
+		// backstop exists for.
+		$line_quantity = max( 1, (int) $line_item->get_quantity() );
+		if ( isset( $_REQUEST['quantity'] ) && absint( wp_unslash( $_REQUEST['quantity'] ) ) !== $line_quantity ) {
+			return null;
+		}
+
+		// Only name-your-price tiers have an amount to compare, and it must be read on
+		// the same basis the modal submits: the NYP <input> carries a per-billing-period
+		// amount, so the line total is divided by the interval and (for parity with the
+		// per-unit price the submitted value becomes) by the quantity. A fixed-price
+		// tier keeps a null amount, so re-selecting it is always a no-op — appending a
+		// spurious `price` to a fixed tier can't slip a same-tier switch past this
+		// check. The value is a plain period-decimal string from an
+		// <input type="number">, so (float) is correct; wc_format_decimal() would
+		// misread it on comma-decimal stores.
+		$target_amount  = null;
+		$current_amount = null;
+		$target_product = wc_get_product( $target_id );
+		$target_is_nyp  = $target_product && (
+			class_exists( '\WC_Name_Your_Price_Helpers' )
+				// The helper resolves the variation/parent lookup; a bare meta read on a
+				// variation would miss `_nyp` stored on the parent and misclassify the
+				// tier as fixed-price, blocking a genuine amount change.
+				? \WC_Name_Your_Price_Helpers::is_nyp( $target_id )
+				: 'yes' === $target_product->get_meta( '_nyp' )
+		);
+		if ( $target_is_nyp && isset( $_REQUEST['price'] ) ) {
+			$price_param = sanitize_text_field( wp_unslash( $_REQUEST['price'] ) );
+			if ( '' !== $price_param ) {
+				// WCS's canonical interval accessor, like the `_nyp` helper above:
+				// it normalizes empty meta to 1 and applies WCS's product filters,
+				// so the per-period basis tracks whatever WCS itself would use.
+				$interval       = max(
+					1,
+					(int) ( class_exists( '\WC_Subscriptions_Product' )
+						? \WC_Subscriptions_Product::get_interval( $target_product )
+						: $target_product->get_meta( '_subscription_period_interval' ) )
+				);
+				$target_amount  = (float) $price_param;
+				// get_subtotal() is the pre-discount line amount. A coupon on the
+				// existing subscription discounts get_total(), which would make an
+				// unchanged name-your-price re-submission compare unequal and skip
+				// the guard.
+				$current_amount = (float) $line_item->get_subtotal() / $interval / $line_quantity;
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		if ( self::is_same_subscription_switch( $current_id, $current_amount, $target_id, $target_amount ) ) {
+			return __( 'You’re already subscribed to this option. Choose a different one to change your subscription.', 'newspack-plugin' );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Whether a switch would land on the same subscription the reader already has.
+	 *
+	 * Mirrors the front-end guard: the current tier can't be re-selected, and a
+	 * name-your-price tier can only be "switched" to when the amount changes.
+	 *
+	 * @param int        $current_product_id Canonical product ID of the current subscription item.
+	 * @param float|null $current_amount     Current recurring amount, or null if unknown.
+	 * @param int        $target_product_id  Canonical product ID being switched to.
+	 * @param float|null $target_amount      Target amount for name-your-price, or null for a fixed-price tier.
+	 *
+	 * @return bool True when the switch is a no-op (same product and, for NYP, an unchanged amount).
+	 */
+	public static function is_same_subscription_switch( $current_product_id, $current_amount, $target_product_id, $target_amount ) {
+		if ( (int) $current_product_id !== (int) $target_product_id ) {
+			return false;
+		}
+		// Same product. A fixed-price tier has no amount to change, so it is a no-op.
+		if ( null === $target_amount ) {
+			return true;
+		}
+		// Name-your-price: without a known current amount, don't risk blocking a real change.
+		if ( null === $current_amount ) {
+			return false;
+		}
+		// Compare in minor units so binary float noise can't misclassify a smallest-step
+		// change (abs( 10.01 - 10.00 ) is 0.00999… in PHP, which an epsilon of 0.01
+		// classifies as unchanged), sized by the store's price decimals so zero- and
+		// three-decimal currencies keep a correct smallest step.
+		$factor = pow( 10, function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2 );
+		return (int) round( (float) $target_amount * $factor ) === (int) round( (float) $current_amount * $factor );
 	}
 
 	/**

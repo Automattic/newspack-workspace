@@ -2,7 +2,9 @@
  * Content gates group
  */
 
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 .audience_page_newspack-audience-access-control,
@@ -24,17 +26,27 @@
 					margin-top: wp-vars.$grid-unit-40 !important;
 				}
 			}
+			.components-notice {
+				margin: wp-vars.$grid-unit-20 wp-vars.$grid-unit-20 0;
+			}
 			&__settings {
+				grid-template-columns: minmax(0, 1fr);
+				padding: wp-vars.$grid-unit-20;
+				@media screen and ( min-width: wp-breakpoints.$break-medium ) {
+					grid-auto-columns: minmax(0, 1fr);
+					grid-auto-flow: column;
+					grid-template-columns: none;
+				}
 				h4 {
-					font-size: wp-vars.$font-size-small;
-					font-weight: wp-vars.$font-weight-medium;
-					line-height: wp-vars.$font-line-height-small;
+					@include wp-mixins.heading-small();
 					margin-bottom: wp-vars.$grid-unit-10;
 					text-transform: uppercase;
 				}
 				p {
-					color: wp-colors.$gray-700;
 					margin: 0;
+				}
+				strong {
+					font-weight: wp-vars.$font-weight-medium;
 				}
 				.components-button {
 					justify-content: center;
@@ -70,8 +82,30 @@
 		}
 	}
 
+	// Caution under a picker holding IDs the option list cannot describe.
+	.newspack-access-rule-values-notice {
+		color: wp-colors.$gray-700;
+		font-size: wp-vars.$helptext-font-size;
+		margin: wp-vars.$grid-unit-10 0 0;
+	}
+
 	.newspack-grid .newspack-section-header {
 		margin-top: 0;
 		margin-bottom: 0;
 	}
+}
+
+.newspack-countdown-banner__fields {
+	border: 0;
+	margin: 0;
+	min-width: 0;
+	padding: 0;
+
+	&:disabled {
+		opacity: 0.5;
+	}
+}
+
+.newspack-countdown-banner__preview--disabled {
+	opacity: 0.5;
 }

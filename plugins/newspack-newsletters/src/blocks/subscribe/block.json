@@ -70,6 +70,17 @@
 			"type": "string",
 			"default": "Thank you for signing up!"
 		},
+		"afterSuccessBehavior": {
+			"type": "string",
+			"default": ""
+		},
+		"afterSuccessButtonLabel": {
+			"type": "string",
+			"default": "Continue"
+		},
+		"afterSuccessURL": {
+			"type": "string"
+		},
 		"className": {
 			"type": "string"
 		},

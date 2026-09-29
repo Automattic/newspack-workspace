@@ -1,6 +1,9 @@
 <?php
 /**
- * Tests for Group_Subscription_Invite link-invite acceptance.
+ * Tests for Group_Subscription_Invite.
+ *
+ * Covers the link-invite acceptance flow (NPPD-1593) and the invite request
+ * handler / is_valid_invite() gate (NPPM-2966).
  *
  * @package Newspack\Tests
  * @group WooCommerce_Subscriptions_Integration
@@ -16,6 +19,8 @@ use Newspack\Group_Subscription_Settings;
  * array with an empty members_added) must not fatal on get_error_message().
  */
 class Test_Group_Subscription_Invite extends WP_UnitTestCase {
+
+	const REDIRECTED = 'group-invite-test-redirected'; // phpcs:ignore Squiz.Commenting.VariableComment.Missing
 
 	/**
 	 * User IDs to clean up.
@@ -39,6 +44,7 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 		parent::set_up();
 		global $subscriptions_database;
 		$subscriptions_database = [];
+		wp_set_current_user( 0 );
 	}
 
 	/**
@@ -52,7 +58,7 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 		}
 		$this->user_ids = [];
 		wp_set_current_user( 0 );
-		unset( $_GET['action'], $_GET['subscription'], $_GET['manager'], $_GET['key'] );
+		unset( $_GET['action'], $_GET['subscription'], $_GET['manager'], $_GET['key'], $_GET['email'] );
 		parent::tear_down();
 	}
 
@@ -79,6 +85,27 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 		if ( $is_reader ) {
 			update_user_meta( $user_id, '_newspack_reader', true );
 		}
+		return $user_id;
+	}
+
+	/**
+	 * Create an author user: holds no `_newspack_reader` meta and is not a Reader
+	 * Activation reader, but is an eligible group member under
+	 * Group_Subscription::is_eligible_member() (authors/contributors by default).
+	 *
+	 * @return int User ID.
+	 */
+	private function create_author_user(): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'author-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'author-' . wp_generate_password( 6, false ) . '@test.com',
+				'role'       => 'author',
+			]
+		);
+		$this->assertNotWPError( $user_id, 'Fixture author user creation should succeed.' );
+		$this->user_ids[] = $user_id;
 		return $user_id;
 	}
 
@@ -137,7 +164,6 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 
 		$_GET['action']       = Group_Subscription_Invite::LINK_QUERY_ARG;
 		$_GET['subscription'] = (string) $subscription->get_id();
-		$_GET['manager']      = (string) $owner_id;
 		$_GET['key']          = $invite['key'];
 
 		$log_events = $this->capture_link_invite_log_events();
@@ -152,6 +178,51 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 			$subscription->get_id(),
 			Group_Subscription::get_group_subscriptions_for_user( $non_reader_id, true ),
 			'The non-reader should not have been added to the group.'
+		);
+	}
+
+	/**
+	 * The compat promise of the subscription-wide invite link: a URL already sitting in a reader's
+	 * inbox still carries `manager=`, and pointing at a user who no longer manages the group -- or
+	 * never did -- must not stop the click from working.
+	 */
+	public function test_legacy_manager_url_still_joins_the_group() {
+		$owner_id     = $this->create_user( true );
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		// The pre-change storage shape, minted by the owner (still a manager, so still live).
+		$subscription->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				$owner_id => [
+					'key'        => 'legacykey',
+					'created_at' => 1000,
+				],
+			]
+		);
+		$subscription->save();
+
+		$reader_id = $this->create_user( true );
+		wp_set_current_user( $reader_id );
+
+		$_GET['action']       = Group_Subscription_Invite::LINK_QUERY_ARG;
+		$_GET['subscription'] = (string) $subscription->get_id();
+		$_GET['manager']      = '999999';
+		$_GET['key']          = 'legacykey';
+
+		$log_events = $this->capture_link_invite_log_events();
+
+		$this->assertEmpty( $log_events, 'A legacy invite-link URL should be accepted without an error event.' );
+		$this->assertContains(
+			$subscription->get_id(),
+			Group_Subscription::get_group_subscriptions_for_user( $reader_id, true ),
+			'The reader should have joined the group via their existing manager-scoped URL.'
 		);
 	}
 
@@ -219,12 +290,334 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 		$key = array_key_first( Group_Subscription_Invite::get_invites( $subscription ) );
 		Group_Subscription::update_members( $subscription, [ $member_id ] );
 
+		// Every caller binds the invited email to the acting user before accepting -- when logged in,
+		// process_invite_request() rejects any mismatch; when not, it creates and logs in the account
+		// for that email. Model that here rather than accepting as nobody.
+		wp_set_current_user( $member_id );
 		$result = Group_Subscription_Invite::accept_invite( $subscription, $key, $email );
 
 		$this->assertTrue( $result, 'Accepting when already a member should succeed.' );
 		$this->assertNull(
 			Group_Subscription_Invite::get_invite_by_key( $subscription, $key ),
 			'The now-stale invite should be cancelled so it stops counting toward the member limit.'
+		);
+	}
+
+	/**
+	 * A member who loses eligibility after joining (e.g. an author promoted to editor)
+	 * must still be recognised as an existing member when re-accepting a stale invite.
+	 * user_is_member() reads through get_group_subscriptions_for_user(), which filters
+	 * out ineligible users entirely -- so before the fix, re-accepting looked like the
+	 * user was never a member, fell through to update_members() (which also can't add
+	 * an ineligible user), and reported the "not added" failure instead of recognising
+	 * the existing membership.
+	 */
+	public function test_email_invite_acceptance_succeeds_for_member_who_lost_eligibility() {
+		$owner_id     = $this->create_user( true );
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		// Invite an eligible author, add them to the group, then have their role change
+		// to editor -- still holding the membership meta, but no longer eligible.
+		$member_id = $this->create_author_user();
+		$email     = get_userdata( $member_id )->user_email;
+		$invite    = Group_Subscription_Invite::generate_invite( $subscription, $email );
+		$this->assertIsArray( $invite, 'The fixture should create an email invite.' );
+		$key = array_key_first( Group_Subscription_Invite::get_invites( $subscription ) );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+
+		$member = get_user_by( 'id', $member_id );
+		$member->set_role( 'editor' );
+
+		wp_set_current_user( $member_id );
+		$result = Group_Subscription_Invite::accept_invite( $subscription, $key, $email );
+
+		$this->assertTrue( $result, 'Accepting when already a member should succeed even if the member is no longer eligible.' );
+		$this->assertNull(
+			Group_Subscription_Invite::get_invite_by_key( $subscription, $key ),
+			'The now-stale invite should be cancelled so it stops counting toward the member limit.'
+		);
+	}
+
+	/**
+	 * An existing account that is an eligible non-reader (author/contributor) must be
+	 * accepted by generate_invite(), not just a Reader Activation reader. Authors hold
+	 * no `_newspack_reader` meta, so the old is_user_reader() guard rejected them even
+	 * though Group_Subscription::is_eligible_member() treats them as eligible members.
+	 */
+	public function test_generate_invite_accepts_existing_author_account() {
+		$owner_id     = $this->create_user( true );
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		$author_id = $this->create_author_user();
+		$email     = get_userdata( $author_id )->user_email;
+
+		$invite = Group_Subscription_Invite::generate_invite( $subscription, $email );
+
+		$this->assertIsArray( $invite, 'An existing eligible author account should receive an invite, not the non-reader error.' );
+	}
+
+	/**
+	 * A member who loses eligibility after joining must still be reported as an
+	 * existing member, not as ineligible, when re-invited. generate_invite() used to
+	 * check eligibility before existing membership, so this returned the "not
+	 * eligible" error instead of "already a member" -- masking the real reason the
+	 * invite could not be sent.
+	 */
+	public function test_generate_invite_reports_existing_member_before_eligibility() {
+		$owner_id     = $this->create_user( true );
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		$member_id = $this->create_author_user();
+		$email     = get_userdata( $member_id )->user_email;
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+
+		$member = get_user_by( 'id', $member_id );
+		$member->set_role( 'editor' );
+
+		$result = Group_Subscription_Invite::generate_invite( $subscription, $email );
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'Re-inviting an existing member should fail.' );
+		$this->assertSame(
+			'newspack_group_subscription_invite_existing_user',
+			$result->get_error_code(),
+			'Existing membership should be reported ahead of the eligibility check.'
+		);
+	}
+
+	/**
+	 * Run process_invite_request(), converting its terminal redirect into a
+	 * catchable signal so the test can continue.
+	 *
+	 * Only the redirect is treated as expected; any other exception propagates,
+	 * and the absence of a redirect fails the test.
+	 *
+	 * @throws \RuntimeException If the request fails for a reason other than the redirect.
+	 */
+	private function run_invite_request() {
+		$redirect = function ( $location ) {
+			throw new \RuntimeException( self::REDIRECTED ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+		};
+		add_filter( 'wp_redirect', $redirect, 1 );
+		try {
+			Group_Subscription_Invite::process_invite_request();
+			$this->fail( 'Expected the invite request to end in a redirect.' );
+		} catch ( \RuntimeException $e ) {
+			if ( self::REDIRECTED !== $e->getMessage() ) {
+				throw $e;
+			}
+		} finally {
+			remove_filter( 'wp_redirect', $redirect, 1 );
+		}
+	}
+
+	/**
+	 * An invalid invite key must not create a reader account for a new email.
+	 */
+	public function test_invalid_key_does_not_create_account() {
+		$email = 'nppm2966-invitee@example.test';
+		self::assertFalse( get_user_by( 'email', $email ), 'Precondition: no account for the email.' );
+
+		$_GET['action']       = Group_Subscription_Invite::QUERY_ARG;
+		$_GET['key']          = 'this-key-is-not-valid';
+		$_GET['email']        = $email;
+		$_GET['subscription'] = '999';
+
+		$this->run_invite_request();
+
+		self::assertFalse(
+			get_user_by( 'email', $email ),
+			'An invalid invite key must not create a reader account.'
+		);
+	}
+
+	/**
+	 * A valid invite still creates a reader account for a new invitee.
+	 */
+	public function test_valid_key_creates_account() {
+		$email        = 'nppm2966-valid@example.test';
+		$key          = 'valid-invite-key';
+		$subscription = wcs_create_subscription(
+			[
+				'id'     => 10,
+				'status' => 'active',
+				'meta'   => [
+					'newspack_group_subscription_invites' => [
+						$key => [
+							'email'      => $email,
+							'expiration' => time() + HOUR_IN_SECONDS,
+						],
+					],
+				],
+			]
+		);
+		self::assertFalse( get_user_by( 'email', $email ), 'Precondition: no account for the email.' );
+
+		$_GET['action']       = Group_Subscription_Invite::QUERY_ARG;
+		$_GET['key']          = $key;
+		$_GET['email']        = $email;
+		$_GET['subscription'] = (string) $subscription->get_id();
+
+		$this->run_invite_request();
+
+		self::assertInstanceOf(
+			WP_User::class,
+			get_user_by( 'email', $email ),
+			'A valid invite creates a reader account for a new invitee.'
+		);
+	}
+
+	/**
+	 * A wrong key against a real active subscription is rejected at the invite-key
+	 * lookup (past the subscription check) and creates no account.
+	 */
+	public function test_wrong_key_with_active_subscription_does_not_create_account() {
+		$email        = 'nppm2966-wrongkey@example.test';
+		$subscription = wcs_create_subscription(
+			[
+				'id'     => 20,
+				'status' => 'active',
+				'meta'   => [
+					'newspack_group_subscription_invites' => [
+						'the-real-key' => [
+							'email'      => $email,
+							'expiration' => time() + HOUR_IN_SECONDS,
+						],
+					],
+				],
+			]
+		);
+		self::assertFalse( get_user_by( 'email', $email ), 'Precondition: no account for the email.' );
+
+		$_GET['action']       = Group_Subscription_Invite::QUERY_ARG;
+		$_GET['key']          = 'not-the-real-key';
+		$_GET['email']        = $email;
+		$_GET['subscription'] = (string) $subscription->get_id();
+
+		$this->run_invite_request();
+
+		self::assertFalse(
+			get_user_by( 'email', $email ),
+			'A wrong key against an active subscription must not create an account.'
+		);
+	}
+
+	/**
+	 * A valid key whose invite is for a different email is rejected at the email-match
+	 * check and creates no account for the requesting address.
+	 */
+	public function test_mismatched_email_with_valid_key_does_not_create_account() {
+		$invited_email  = 'nppm2966-invited@example.test';
+		$attacker_email = 'nppm2966-attacker@example.test';
+		$key            = 'the-real-key';
+		$subscription   = wcs_create_subscription(
+			[
+				'id'     => 21,
+				'status' => 'active',
+				'meta'   => [
+					'newspack_group_subscription_invites' => [
+						$key => [
+							'email'      => $invited_email,
+							'expiration' => time() + HOUR_IN_SECONDS,
+						],
+					],
+				],
+			]
+		);
+		self::assertFalse( get_user_by( 'email', $attacker_email ), 'Precondition: no account for the email.' );
+
+		$_GET['action']       = Group_Subscription_Invite::QUERY_ARG;
+		$_GET['key']          = $key;
+		$_GET['email']        = $attacker_email;
+		$_GET['subscription'] = (string) $subscription->get_id();
+
+		$this->run_invite_request();
+
+		self::assertFalse(
+			get_user_by( 'email', $attacker_email ),
+			'A valid key with a mismatched email must not create an account for the requesting address.'
+		);
+	}
+
+	/**
+	 * An invitation email names whoever issued it, and never nobody.
+	 *
+	 * `added_by` is the sender a recipient should see and reply to. It is absent on
+	 * invitations issued before it was recorded, and resolves to nothing once that
+	 * account is deleted. The placeholders are publisher-editable, so a template
+	 * reading "*SENDER_NAME* invited you" renders a headless sentence on an empty
+	 * value: resolution falls through the owner to the site instead.
+	 *
+	 * This is deliberately unlike how an invite LINK is attributed. A link belongs to
+	 * the subscription and is validated without regard to who minted it, but minting
+	 * one still takes a manager identity, so an admin mints the owner\'s link rather
+	 * than a dead one of their own. See
+	 * Group_Subscription_API::resolve_link_manager_id(). An email is a message from a
+	 * person; a link is an artifact of the group.
+	 */
+	public function test_invite_email_always_names_a_sender() {
+		$owner_id  = $this->create_user( true );
+		$owner     = get_userdata( $owner_id );
+		$sender_id = $this->create_user( true );
+		$sender    = get_userdata( $sender_id );
+
+		$owned_group = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$owned_group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		$resolve_invite_sender_method = new ReflectionMethod( Group_Subscription_Invite::class, 'resolve_invite_sender' );
+		$resolve_invite_sender_method->setAccessible( true );
+
+		$this->assertSame(
+			[ $sender->display_name, $sender->user_email ],
+			$resolve_invite_sender_method->invoke( null, $owned_group->get_id(), [ 'added_by' => $sender_id ] ),
+			'The person who issued the invitation is the one the recipient sees, so a reply reaches them.'
+		);
+
+		$this->assertSame(
+			[ $owner->display_name, $owner->user_email ],
+			$resolve_invite_sender_method->invoke( null, $owned_group->get_id(), [ 'added_by' => 0 ] ),
+			'An invitation with no recorded sender is signed by the group owner rather than by nobody.'
+		);
+
+		$ownerless_group = wcs_create_subscription(
+			[
+				'customer_id'    => 0,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$ownerless_group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+
+		$this->assertSame(
+			[ get_bloginfo( 'name' ), get_option( 'admin_email' ) ],
+			$resolve_invite_sender_method->invoke( null, $ownerless_group->get_id(), [ 'added_by' => 0 ] ),
+			'An ownerless group has nobody to fall back to, so the site signs the invitation.'
 		);
 	}
 }

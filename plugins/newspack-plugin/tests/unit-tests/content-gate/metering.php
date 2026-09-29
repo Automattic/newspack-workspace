@@ -10,6 +10,7 @@ namespace Newspack\Tests\Content_Gate;
 use Newspack\Content_Gate;
 use Newspack\Metering;
 use Newspack\Reader_Activation;
+use Newspack\Site_Meter;
 
 /**
  * Tests for the Metering class.
@@ -45,9 +46,24 @@ class Test_Metering extends \WP_UnitTestCase {
 	private static $reader_email = 'reader@metering-test.com';
 
 	/**
+	 * Turn the gating feature on, so the restriction path these tests wire up is
+	 * reachable when this class runs on its own. The constant is process-wide and
+	 * other content-gate suites define it too, so this only fixes the ordering.
+	 */
+	public static function setUpBeforeClass(): void {
+		parent::setUpBeforeClass();
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+	}
+
+	/**
 	 * Teardown after tests.
 	 */
 	public function tear_down() {
+		remove_action( 'the_post', [ Content_Gate::class, 'restrict_post' ], 10 );
+		remove_filter( 'newspack_content_gate_restrict_post', [ Metering::class, 'restrict_post' ] );
+		$this->reset_gate_render_state();
 		foreach ( $this->gate_ids as $gate_id ) {
 			wp_delete_post( $gate_id, true );
 		}
@@ -71,6 +87,8 @@ class Test_Metering extends \WP_UnitTestCase {
 	 *     @type bool   $metering_enabled     Whether metering is enabled.
 	 *     @type int    $metering_count       Number of metered views allowed.
 	 *     @type string $metering_period      Metering period (day, week, month).
+	 *     @type string $metering_scope       Whether the allowance comes from the site
+	 *                                        meter ('site') or the gate ('gate').
 	 * }
 	 * @return int Gate ID.
 	 */
@@ -80,6 +98,9 @@ class Test_Metering extends \WP_UnitTestCase {
 			'metering_enabled'     => true,
 			'metering_count'       => 3,
 			'metering_period'      => 'month',
+			// These assert on each gate's own count, so they opt out. The shared path has
+			// its own test class.
+			'metering_scope'       => Site_Meter::SCOPE_GATE,
 		];
 		$args = wp_parse_args( $args, $defaults );
 
@@ -98,30 +119,55 @@ class Test_Metering extends \WP_UnitTestCase {
 						'value' => [ 'post' ],
 					],
 				],
-				'registration'  => $args['registration'] ?? [
-					'active'               => true,
-					'metering'             => [
-						'enabled' => $args['metering_enabled'],
-						'count'   => $args['metering_count'],
-						'period'  => $args['metering_period'],
+				'registration'  => isset( $args['registration'] )
+					? $this->with_metering_scope( $args['registration'], $args['metering_scope'] )
+					: [
+						'active'               => true,
+						'metering'             => [
+							'enabled' => $args['metering_enabled'],
+							'count'   => $args['metering_count'],
+							'period'  => $args['metering_period'],
+							'scope'   => $args['metering_scope'],
+						],
+						'require_verification' => $args['require_verification'],
+						'gate_id'              => 0,
 					],
-					'require_verification' => $args['require_verification'],
-					'gate_id'              => 0,
-				],
-				'custom_access' => $args['custom_access'] ?? [
-					'active'       => true,
-					'metering'     => [
-						'enabled' => $args['metering_enabled'],
-						'count'   => $args['metering_count'],
-						'period'  => $args['metering_period'],
+				'custom_access' => isset( $args['custom_access'] )
+					? $this->with_metering_scope( $args['custom_access'], $args['metering_scope'] )
+					: [
+						'active'       => true,
+						'metering'     => [
+							'enabled' => $args['metering_enabled'],
+							'count'   => $args['metering_count'],
+							'period'  => $args['metering_period'],
+							'scope'   => $args['metering_scope'],
+						],
+						'gate_id'      => 0,
+						'access_rules' => [],
 					],
-					'gate_id'      => 0,
-					'access_rules' => [],
-				],
 			]
 		);
 
 		return $gate_id;
+	}
+
+	/**
+	 * Stamp a metering scope onto an audience path that does not name one.
+	 *
+	 * Tests that hand-build a path assert on the count they wrote there, so they need
+	 * that count to be the one in force. Without a scope the gate would fall through
+	 * to the site meter and every such assertion would read the site's default.
+	 *
+	 * @param array  $section Registration or custom access settings.
+	 * @param string $scope   Scope to apply when the section does not set one.
+	 *
+	 * @return array The settings, with a metering scope.
+	 */
+	private function with_metering_scope( $section, $scope ) {
+		if ( isset( $section['metering'] ) && is_array( $section['metering'] ) && ! isset( $section['metering']['scope'] ) ) {
+			$section['metering']['scope'] = $scope;
+		}
+		return $section;
 	}
 
 	/**
@@ -612,5 +658,870 @@ class Test_Metering extends \WP_UnitTestCase {
 		// Front-end metering should fall back to registered settings if anonymous settings are not enabled.
 		$this->assertTrue( Metering::is_frontend_metering(), 'Front-end metering should fall back to registered settings if anonymous settings are not enabled' );
 		$this->assertEquals( $registered_settings['count'], Metering::get_total_metered_views(), 'Total metered views should be the same as registered settings' );
+	}
+
+	/**
+	 * Test that front-end metering does not fall back to registered settings when
+	 * registered access is active but has metering disabled.
+	 */
+	public function test_metering_settings_do_not_fall_back_when_registration_is_active() {
+		// Registered access active with metering OFF, paid access active with metering ON.
+		$gate_id = $this->create_gate_with_settings(
+			[
+				'registration'  => [
+					'active'   => true,
+					'metering' => [
+						// Metering is off, but a stale count remains stored from when it was on.
+						'enabled' => false,
+						'count'   => 2,
+						'period'  => 'month',
+					],
+				],
+				// Load-bearing: paid access must stay active with metering ON, since it is
+				// the allowance the pre-fix code wrongly handed to anonymous readers.
+				// Disabling either would make this test pass with the bug present.
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+
+		// Create a post.
+		$post_id = $this->factory->post->create();
+		$this->post_ids[] = $post_id;
+
+		// Set query to current post.
+		global $wp_query;
+		$wp_query = new \WP_Query( [ 'p' => $post_id ] );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+
+		// Ensure no user is logged in.
+		wp_set_current_user( 0 );
+
+		// Apply the filter to control the gate context for testing.
+		add_filter(
+			'newspack_content_gate_post_id',
+			function() use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+
+		// Anonymous metering is not enabled, because registered access has metering off.
+		$anonymous_settings = Metering::get_anonymous_settings( $gate_id );
+		$this->assertFalse( $anonymous_settings['enabled'], 'Anonymous settings should not be enabled' );
+
+		// Anonymous readers should hit the registered access gate immediately, without
+		// borrowing the paid access metering allowance.
+		$this->assertFalse( Metering::is_frontend_metering(), 'Front-end metering should not fall back to registered settings while registered access is active' );
+		$this->assertFalse( Metering::get_total_metered_views(), 'Anonymous readers should have no metered views' );
+	}
+
+	/**
+	 * Test that anonymous readers are still metered by registered access settings when
+	 * registered access is active and its metering is enabled.
+	 */
+	public function test_anonymous_metering_uses_registration_settings_when_enabled() {
+		// Both access rules active, each metering with a distinct count and period.
+		$gate_id = $this->create_gate_with_settings(
+			[
+				'registration'  => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 1,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+
+		// Create a post.
+		$post_id = $this->factory->post->create();
+		$this->post_ids[] = $post_id;
+
+		// Set query to current post.
+		global $wp_query;
+		$wp_query = new \WP_Query( [ 'p' => $post_id ] );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+
+		// Ensure no user is logged in.
+		wp_set_current_user( 0 );
+
+		// Apply the filter to control the gate context for testing.
+		add_filter(
+			'newspack_content_gate_post_id',
+			function() use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+
+		// Anonymous readers get the registered access allowance, not the paid access one.
+		$this->assertTrue( Metering::is_frontend_metering(), 'Front-end metering should be enabled' );
+		$this->assertEquals( 1, Metering::get_total_metered_views(), 'Anonymous readers should get the registered access count' );
+		$this->assertEquals( 'week', Metering::get_metering_period( $post_id ), 'Anonymous readers should get the registered access period' );
+	}
+
+	/**
+	 * Test that the metering period for logged-in readers comes from the paid access
+	 * settings, which are what governs their metered views.
+	 */
+	public function test_metering_period_for_logged_in_readers_uses_paid_settings() {
+		// Both access rules active, each metering with a distinct period.
+		$gate_id = $this->create_gate_with_settings(
+			[
+				'registration'  => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 1,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+
+		// Create a post.
+		$post_id = $this->factory->post->create();
+		$this->post_ids[] = $post_id;
+
+		// Set query to current post.
+		global $wp_query;
+		$wp_query = new \WP_Query( [ 'p' => $post_id ] );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+
+		// Apply the filter to control the gate context for testing.
+		add_filter(
+			'newspack_content_gate_post_id',
+			function() use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+
+		// Log in a reader.
+		$user_id = $this->register_reader();
+		wp_set_current_user( $user_id );
+
+		// The period must match the one the logged-in metering expiration is computed from.
+		$this->assertEquals( 'month', Metering::get_metering_period( $post_id ), 'Logged-in readers should get the paid access period' );
+		$this->assertEquals( 3, Metering::get_total_metered_views( true ), 'Logged-in readers should get the paid access count' );
+	}
+
+	/**
+	 * Test that a logged-in reader who has not verified their email is governed by the
+	 * registered access settings, not the paid access ones.
+	 *
+	 * Such a reader is shown the registered access gate layout, so the paid access
+	 * allowance must not leak into the metering surfaces they see.
+	 */
+	public function test_unverified_reader_uses_registration_settings() {
+		// Registered access active, verification required, metering OFF. Paid access
+		// active with metering ON — the allowance that must not be borrowed.
+		$gate_id = $this->create_gate_with_settings(
+			[
+				'registration'  => [
+					'active'               => true,
+					'require_verification' => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 2,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+
+		// Create a post.
+		$post_id = $this->factory->post->create();
+		$this->post_ids[] = $post_id;
+
+		// Set query to current post.
+		global $wp_query;
+		$wp_query = new \WP_Query( [ 'p' => $post_id ] );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+
+		// Apply the filter to control the gate context for testing.
+		add_filter(
+			'newspack_content_gate_post_id',
+			function() use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+
+		// Register a reader but leave them unverified.
+		$user_id = $this->register_reader( 'unverified-reader@metering-test.com' );
+		wp_set_current_user( $user_id );
+		$user = wp_get_current_user();
+		$this->assertTrue( Reader_Activation::is_user_reader( $user ), 'User should be a reader' );
+		$this->assertFalse( Reader_Activation::is_reader_verified( $user ), 'Reader should not be verified' );
+
+		// The reader sees the registered access gate immediately - no metered views.
+		$this->assertFalse( Metering::is_logged_in_metering_allowed( $post_id ), 'Unverified readers should not be metered' );
+
+		// The metering surfaces must report the registered access settings, not the paid ones.
+		$this->assertFalse( Metering::get_total_metered_views( true ), 'Unverified readers should not be offered the paid access allowance' );
+		$this->assertEquals( 'week', Metering::get_metering_period( $post_id ), 'Unverified readers should get the registered access period' );
+	}
+
+	/**
+	 * Test that a logged-in reader who HAS verified their email is still governed by the
+	 * paid access settings on a gate that requires verification.
+	 */
+	public function test_verified_reader_uses_paid_settings() {
+		$gate_id = $this->create_gate_with_settings(
+			[
+				'registration'  => [
+					'active'               => true,
+					'require_verification' => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 2,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+				],
+			]
+		);
+
+		// Create a post.
+		$post_id = $this->factory->post->create();
+		$this->post_ids[] = $post_id;
+
+		// Set query to current post.
+		global $wp_query;
+		$wp_query = new \WP_Query( [ 'p' => $post_id ] );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+
+		// Apply the filter to control the gate context for testing.
+		add_filter(
+			'newspack_content_gate_post_id',
+			function() use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+
+		// Register and verify the reader.
+		$user_id = $this->register_reader( 'verified-reader@metering-test.com' );
+		Reader_Activation::set_reader_verified( $user_id );
+		wp_set_current_user( $user_id );
+		$this->assertTrue( Reader_Activation::is_reader_verified( wp_get_current_user() ), 'Reader should be verified' );
+
+		// Past the registration wall, so the paid access settings govern.
+		$this->assertEquals( 3, Metering::get_total_metered_views( true ), 'Verified readers should get the paid access count' );
+		$this->assertEquals( 'month', Metering::get_metering_period( $post_id ), 'Verified readers should get the paid access period' );
+	}
+
+	/**
+	 * Content_Gate::is_metering_enabled() answers "may this site use metering-dependent
+	 * features" for the Audience wizards. It has to read the gate's metering through
+	 * Metering, since the gate array exposes metering under its registration and paid
+	 * access sections rather than at the top level.
+	 */
+	public function test_is_metering_enabled_finds_a_metered_gate() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 3 ] );
+
+		$this->assertTrue( Metering::is_gate_metered( $gate_id ), 'A gate granting 3 free views meters' );
+		$this->assertTrue( Content_Gate::is_metering_enabled(), 'A metered gate makes metering available to the wizard' );
+	}
+
+	/**
+	 * Metering switched on with 0 free views gates every reader on their first view, so
+	 * it is metering in name only - the countdown banner has nothing to count down. The
+	 * wizard must not offer those features on the strength of such a gate (NPPD-2056).
+	 */
+	public function test_a_gate_granting_no_free_views_does_not_meter() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 0 ] );
+
+		$this->assertFalse( Metering::is_gate_metered( $gate_id ), 'Metering enabled with 0 free views does not meter' );
+		$this->assertFalse( Content_Gate::is_metering_enabled(), 'A gate granting no free views must not advertise metering to the wizard' );
+	}
+
+	/**
+	 * A count belonging to a section whose metering is switched off must not rescue
+	 * another section that meters 0 views.
+	 */
+	public function test_a_disabled_sections_count_does_not_rescue_another() {
+		$gate_id = $this->create_gate_with_settings(
+			[
+				// Anonymous readers: a leftover count, but metering switched off.
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => false,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+					'require_verification' => false,
+					'gate_id'              => 0,
+				],
+				// Registered readers: metering on, but no free views to give.
+				'custom_access' => [
+					'active'       => true,
+					'metering'     => [
+						'enabled' => true,
+						'count'   => 0,
+						'period'  => 'month',
+					],
+					'gate_id'      => 0,
+					'access_rules' => [],
+				],
+			]
+		);
+
+		$this->assertFalse( Metering::is_gate_metered( $gate_id ), 'Neither audience meters, so the gate does not meter' );
+	}
+
+	/**
+	 * The default layout a new gate generates has to match what the gate actually grants.
+	 * A paid tier that is active but meters 0 free views gates every reader immediately, so
+	 * its registration layout must not advertise "free articles" it never delivers - a
+	 * metering paid tier still gets the metering layout (NPPD-2056).
+	 */
+	public function test_zero_view_paid_tier_generates_a_non_metering_layout() {
+		$metered_gate_id = $this->create_gate_generating_layouts( 3 );
+		$gated_gate_id   = $this->create_gate_generating_layouts( 0 );
+
+		$this->assertStringContainsString(
+			'free article',
+			$this->get_registration_layout_content( $metered_gate_id ),
+			'A metering paid tier advertises its free articles'
+		);
+		$this->assertStringNotContainsString(
+			'free article',
+			$this->get_registration_layout_content( $gated_gate_id ),
+			'A paid tier granting 0 free views must not advertise free articles it never delivers'
+		);
+	}
+
+	/**
+	 * The excerpt printed for the frontend metering script leaves the gate content
+	 * pipeline already rendered. Running that pipeline over it again re-renders blocks and
+	 * re-expands shortcodes, and — do_blocks() suppresses wpautop only while block
+	 * delimiters are still there — reflows markup the first pass deliberately spared.
+	 */
+	public function test_metering_excerpt_applies_the_gate_content_filter_once() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 3 ] );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_content' => "<!-- wp:paragraph -->\n<p>First paragraph.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Second paragraph.</p>\n<!-- /wp:paragraph -->",
+			]
+		);
+		$this->post_ids[] = $post_id;
+
+		$layout_id = $this->factory->post->create( [ 'post_type' => Content_Gate::GATE_LAYOUT_CPT ] );
+		$this->post_ids[] = $layout_id;
+		update_post_meta( $layout_id, 'style', 'inline' );
+		update_post_meta( $layout_id, 'use_more_tag', false );
+		update_post_meta( $layout_id, 'visible_paragraphs', 2 );
+
+		$this->go_to( get_permalink( $post_id ) );
+		wp_set_current_user( 0 );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+		add_filter(
+			'newspack_content_gate_post_id',
+			function() use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+		add_filter(
+			'newspack_content_gate_layout_id',
+			function() use ( $layout_id ) {
+				return $layout_id;
+			}
+		);
+
+		$applications        = 0;
+		$count_applications  = function( $content ) use ( &$applications ) {
+			++$applications;
+			return $content;
+		};
+		add_filter( 'newspack_gate_content', $count_applications, 1 );
+
+		// The settings travel as a printed JSON element, so capture what enqueue_scripts() echoes.
+		ob_start();
+		try {
+			Metering::enqueue_scripts();
+		} finally {
+			$printed_settings = ob_get_clean();
+			remove_filter( 'newspack_gate_content', $count_applications, 1 );
+		}
+
+		$this->assertStringContainsString( 'First paragraph.', $printed_settings, 'The metering settings element should carry the restricted post excerpt' );
+		$this->assertSame( 1, $applications, 'The metering excerpt should pass through the newspack_gate_content pipeline exactly once' );
+	}
+
+	/**
+	 * The allowance has to reach the browser as data, not as a script. An executable tag is
+	 * one a performance optimizer may hold back or reorder, and the meter is the only thing
+	 * withholding the article: metering makes the server send it in full (NPPD-2281).
+	 */
+	public function test_metering_allowance_is_printed_as_parseable_non_executable_data() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 2 ] );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_content' => "<!-- wp:paragraph -->\n<p>First paragraph.</p>\n<!-- /wp:paragraph -->",
+			]
+		);
+		$this->post_ids[] = $post_id;
+
+		$this->go_to( get_permalink( $post_id ) );
+		wp_set_current_user( 0 );
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+		add_filter(
+			'newspack_content_gate_post_id',
+			function () use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+
+		ob_start();
+		Metering::enqueue_scripts();
+		$printed_settings = ob_get_clean();
+
+		$this->assertStringContainsString( 'type="application/json"', $printed_settings, 'The allowance must be printed as data an optimizer will not execute' );
+
+		// The literal, not the constant: the element ID is a DOM contract the frontend and a
+		// site's optimizer allowlist both key on, so a rename has to fail here.
+		$this->assertStringContainsString( 'id="newspack-content-gate-metering-settings"', $printed_settings, 'The allowance element ID is a DOM contract and must not change silently' );
+
+		preg_match( '#<script[^>]*id="' . Metering::SETTINGS_ELEMENT_ID . '"[^>]*>(.*?)</script>#s', $printed_settings, $matches );
+		$this->assertNotEmpty( $matches, 'The allowance element should be printed under the shared element ID' );
+
+		$decoded_allowance = json_decode( $matches[1], true );
+		$this->assertIsArray( $decoded_allowance, 'The printed allowance should survive as parseable JSON' );
+		$this->assertSame( 2, $decoded_allowance['count'], 'The printed allowance should carry the gate\'s free-view count' );
+		$this->assertSame( $post_id, $decoded_allowance['post_id'], 'The printed allowance should carry the post being metered' );
+	}
+
+	/**
+	 * Create a gate the way the wizard does - passing full settings to create_gate() so the
+	 * default layouts are generated against the gate's real metering, not empty defaults.
+	 *
+	 * @param int $custom_access_count Free views the paid tier grants.
+	 *
+	 * @return int Gate ID.
+	 */
+	private function create_gate_generating_layouts( $custom_access_count ) {
+		$metering = [
+			'enabled' => true,
+			'count'   => $custom_access_count,
+			'period'  => 'month',
+		];
+		$gate_id  = Content_Gate::create_gate(
+			[
+				'title'         => 'Test Gate',
+				'registration'  => [
+					'active'   => true,
+					'metering' => $metering,
+					'gate_id'  => 0,
+				],
+				'custom_access' => [
+					'active'       => true,
+					'metering'     => $metering,
+					'gate_id'      => 0,
+					'access_rules' => [],
+				],
+			]
+		);
+		$this->gate_ids[] = $gate_id;
+		return $gate_id;
+	}
+
+	/**
+	 * An integration that gates its own embed — an audio player, a video — hooks
+	 * 'the_content' above Content_Gate::RESTRICTION_PRIORITY and asks
+	 * Metering::is_metering() whether this reader may have it. The server-side
+	 * teaser reaches such a callback as the locked view (NPPD-2096); the excerpt
+	 * the frontend strategy swaps in once the meter is spent has to as well, or
+	 * the embed plays on past the paywall.
+	 *
+	 * Both halves ride on the one substitution: the callback has to run over the
+	 * excerpt at all, and it has to see metering answering false while it does.
+	 */
+	public function test_metered_excerpt_reaches_third_party_gating_as_the_locked_view() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create(
+			[
+				'post_content' => '<p>[PLAYER] Opening paragraph.</p><p>Second paragraph.</p><p>Third paragraph.</p>',
+			]
+		);
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		add_filter(
+			'the_content',
+			function ( $content ) {
+				return str_replace( '[PLAYER]', Metering::is_metering() ? '[PLAYER]' : '[CTA]', $content );
+			},
+			999999
+		);
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertStringContainsString( '[CTA]', $excerpt, 'The metered excerpt should reach the integration with metering off, so it swaps its embed for the CTA.' );
+		$this->assertStringNotContainsString( '[PLAYER]', $excerpt, 'The metered excerpt should not carry the ungated embed.' );
+	}
+
+	/**
+	 * The excerpt is handed only the callbacks that would have run after the
+	 * server-side teaser was substituted in. Anything at or below the substitution
+	 * priority — ad inserters, prompt injectors — never sees a teaser today and
+	 * must not start seeing this one.
+	 */
+	public function test_metered_excerpt_skips_filters_below_the_restriction_priority() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>Opening paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		$append = function ( $marker ) {
+			return function ( $content ) use ( $marker ) {
+				return $content . $marker;
+			};
+		};
+		add_filter( 'the_content', $append( '[EARLY]' ), Content_Gate::RESTRICTION_PRIORITY );
+		add_filter( 'the_content', $append( '[LATE]' ), Content_Gate::RESTRICTION_PRIORITY + 1 );
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertStringContainsString( '[LATE]', $excerpt, 'Filters above the substitution priority process the excerpt.' );
+		$this->assertStringNotContainsString( '[EARLY]', $excerpt, 'Filters at or below the substitution priority do not.' );
+	}
+
+	/**
+	 * The short-circuit is scoped to the excerpt build. A late callback that throws
+	 * must not leave it behind: metering would then report itself off for the rest of
+	 * the request, and the gate would stop metering anyone.
+	 */
+	public function test_metered_excerpt_removes_its_metering_short_circuit_when_a_filter_throws() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>Opening paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		add_filter(
+			'the_content',
+			// phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.TerminatingInsteadOfReturn -- Throwing is what this test is about.
+			function () {
+				throw new \RuntimeException( 'third-party filter blew up' );
+			},
+			Content_Gate::RESTRICTION_PRIORITY + 1
+		);
+
+		try {
+			Metering::get_metered_excerpt( get_post( $post_id ) );
+			$this->fail( 'The exception should propagate rather than be swallowed.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertTrue( Metering::is_frontend_metering(), 'Metering should answer for the request again once the excerpt build has unwound.' );
+		}
+	}
+
+	/**
+	 * A per-post integration decides whether to lock its embed by asking which post
+	 * it is on. Server-side it reads that inside a real 'the_content' pass, where
+	 * the article is the current post; the excerpt is built at wp_footer, where the
+	 * global may be on whatever a widget's secondary loop left behind. It has to see
+	 * the metered post there too, or it skips an excerpt it believes belongs to
+	 * someone else — and the caller's own loop state has to survive the build.
+	 */
+	public function test_metered_excerpt_runs_late_filters_with_the_metered_post_current() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>[PLAYER] Opening paragraph.</p>' ] );
+		$other_id = $this->factory->post->create( [ 'post_content' => '<p>A sidebar post.</p>' ] );
+		$this->post_ids[] = $post_id;
+		$this->post_ids[] = $other_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		add_filter(
+			'the_content',
+			function ( $content ) use ( $post_id ) {
+				return get_the_ID() === $post_id ? str_replace( '[PLAYER]', '[CTA]', $content ) : $content;
+			},
+			Content_Gate::RESTRICTION_PRIORITY + 1
+		);
+
+		$GLOBALS['post'] = get_post( $other_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- The drifted global this defends against.
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertStringContainsString( '[CTA]', $excerpt, 'The integration should see the metered post as the current one and lock its embed.' );
+		$this->assertSame( $other_id, get_the_ID(), 'The global post the build displaced should be put back.' );
+	}
+
+	/**
+	 * A late callback that builds the excerpt again must not take the outer build's
+	 * metering short-circuit with it when it unwinds: the outer excerpt — the one
+	 * actually served — would then be composed with metering answering true, which
+	 * is an ungated embed for a reader who is out of views.
+	 */
+	public function test_metered_excerpt_keeps_its_short_circuit_through_a_reentrant_filter() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>[PLAYER] Opening paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		add_filter(
+			'the_content',
+			function ( $content ) use ( $post_id ) {
+				static $reentered = false;
+				if ( ! $reentered ) {
+					$reentered = true;
+					Metering::get_metered_excerpt( get_post( $post_id ) );
+				}
+				return str_replace( '[PLAYER]', Metering::is_metering() ? '[PLAYER]' : '[CTA]', $content );
+			},
+			Content_Gate::RESTRICTION_PRIORITY + 1
+		);
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertStringContainsString( '[CTA]', $excerpt, 'The nested build should leave the outer short-circuit in place.' );
+	}
+
+	/**
+	 * The excerpt is the teaser alone. Content_Gate's closing 'the_content' callback
+	 * is what would append the gate: it runs at PHP_INT_MAX — above the priority
+	 * apply_late_content_filters() dispatches from — and appends whatever restriction
+	 * the request has recorded for the current post. Skipping that callback is what
+	 * keeps the gate out of the string the browser swaps in, whatever the request
+	 * happens to be carrying by the time the excerpt is built.
+	 */
+	public function test_metered_excerpt_excludes_the_gate_markup() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>Opening paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		$restricted_content = new \ReflectionProperty( Content_Gate::class, 'restricted_content' );
+		$restricted_content->setAccessible( true );
+		$restricted_content->setValue(
+			null,
+			[
+				$post_id => [
+					'teaser' => '<p>Opening paragraph.</p>',
+					'gate'   => '<div>[GATE]</div>',
+				],
+			]
+		);
+
+		try {
+			$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+		} finally {
+			$restricted_content->setValue( null, [] );
+		}
+
+		$this->assertStringContainsString( 'Opening paragraph.', $excerpt, 'The metered excerpt is the teaser.' );
+		$this->assertStringNotContainsString( '[GATE]', $excerpt, 'The metered excerpt must not carry the gate markup.' );
+	}
+
+	/**
+	 * Building the excerpt must not restrict the post it describes.
+	 *
+	 * Content_Gate::restrict_post() listens on 'the_post', and at wp_footer on a
+	 * frontend-metered post none of its guards bail: no gate render has been
+	 * claimed (the frontend strategy renders none server-side), the metered post
+	 * is the main query's post, and the build's own metering short-circuit makes
+	 * should_restrict_post() answer true. Restricting there rewrites the post
+	 * object, leaves Content_Gate::$is_content_locked set for the rest of the
+	 * request — the flag the comment filters key on, whose contract is that a
+	 * still-readable metered post is left alone — and folds the gate into the very
+	 * string the browser swaps in, doubling the gate on a short post whose teaser
+	 * is its whole body.
+	 *
+	 * Wired here the way production wires it, which the other tests in this class
+	 * do not need: 'the_post' carries no listener and metering answers no
+	 * restriction filter unless a test says so.
+	 */
+	public function test_metered_excerpt_does_not_restrict_the_post_it_describes() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		// One paragraph, fewer than the layout's visible_paragraphs, so the teaser is
+		// the whole post and anything the gate adds to it is unambiguous.
+		$post_id          = $this->factory->post->create( [ 'post_content' => '<p>The only paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+		$this->wire_production_restriction();
+
+		$the_post_dispatches = 0;
+		add_action(
+			'the_post',
+			function () use ( &$the_post_dispatches ) {
+				$the_post_dispatches++;
+			}
+		);
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertSame( 0, $the_post_dispatches, 'Building the excerpt must not announce a post to the loop — setup_postdata() dispatches this action.' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $excerpt, 'The metered excerpt must not carry the gate markup.' );
+		$this->assertFalse( $this->get_gate_property( 'is_content_locked' ), 'Building the excerpt must leave the request unlocked — the comment filters read that flag.' );
+	}
+
+	/**
+	 * The same restriction has a second way in, and closing the first does not
+	 * close it: a late 'the_content' callback that runs a secondary loop — a
+	 * related-posts list, an ad inserter — ends it with wp_reset_postdata(), which
+	 * re-fires 'the_post' for the main post. Metering is short-circuited off for
+	 * the build, so the restriction that would normally decline runs instead. The
+	 * excerpt string is already composed by then, so what leaks is the request
+	 * state: Content_Gate's content-locked flag, which the comment filters read, is
+	 * left set for a reader the gate has not actually locked out.
+	 */
+	public function test_metered_excerpt_survives_a_secondary_loop_in_a_late_filter() {
+		$gate_id          = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id          = $this->factory->post->create( [ 'post_content' => '<p>The only paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+		$this->wire_production_restriction();
+
+		add_filter(
+			'the_content',
+			function ( $content ) {
+				$related = new \WP_Query( [ 'posts_per_page' => 1 ] );
+				while ( $related->have_posts() ) {
+					$related->the_post();
+				}
+				wp_reset_postdata();
+				return $content;
+			},
+			Content_Gate::RESTRICTION_PRIORITY + 1
+		);
+
+		Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertFalse( $this->get_gate_property( 'is_content_locked' ), 'A secondary loop inside the excerpt build must not lock the request.' );
+	}
+
+	/**
+	 * Register the restriction path the way production does — Content_Gate on
+	 * 'the_post', metering answering the restriction filter. The test bootstrap
+	 * runs neither class's init(), so nothing here is wired unless a test asks
+	 * for it. Removed again in tear_down().
+	 */
+	private function wire_production_restriction() {
+		$this->reset_gate_render_state();
+		add_action( 'the_post', [ Content_Gate::class, 'restrict_post' ], 10, 2 );
+		add_filter( 'newspack_content_gate_restrict_post', [ Metering::class, 'restrict_post' ] );
+	}
+
+	/**
+	 * Read one of Content_Gate's private render-time statics.
+	 *
+	 * @param string $property Property name.
+	 *
+	 * @return mixed
+	 */
+	private function get_gate_property( $property ) {
+		$reflection = new \ReflectionProperty( Content_Gate::class, $property );
+		$reflection->setAccessible( true );
+		return $reflection->getValue();
+	}
+
+	/**
+	 * Clear the render-time statics Content_Gate carries across a request, so a
+	 * gate another test claimed cannot stand in for the guard under test here.
+	 */
+	private function reset_gate_render_state() {
+		foreach ( [ 'gate_rendered', 'is_gated', 'is_content_locked' ] as $property ) {
+			$reflection = new \ReflectionProperty( Content_Gate::class, $property );
+			$reflection->setAccessible( true );
+			$reflection->setValue( null, false );
+		}
+		$reflection = new \ReflectionProperty( Content_Gate::class, 'restricted_content' );
+		$reflection->setAccessible( true );
+		$reflection->setValue( null, [] );
+	}
+
+	/**
+	 * Put an anonymous reader on a post the given gate meters, the only state the
+	 * frontend metering strategy — and so the excerpt it carries — exists in.
+	 *
+	 * @param int $post_id Post ID.
+	 * @param int $gate_id Gate ID.
+	 */
+	private function go_to_metered_post( $post_id, $gate_id ) {
+		// go_to() rather than a hand-built WP_Query: it assigns $wp_the_query as
+		// well, so is_main_query() answers true. Everything Content_Gate does on
+		// the front end is behind that guard, so a query that is not the main one
+		// leaves the code under test unreachable.
+		$this->go_to( get_permalink( $post_id ) );
+		$GLOBALS['wp_query']->the_post();
+		wp_set_current_user( 0 );
+
+		// The layout carries the excerpt's own settings — how many paragraphs survive
+		// the cut — and is normally resolved by the restriction evaluation this class
+		// stands in for, so it has to be named alongside the gate.
+		$registration_layout_id = Content_Gate::get_registration_settings( $gate_id )['gate_layout_id'] ?? 0;
+
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+		add_filter(
+			'newspack_content_gate_post_id',
+			function () use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+		add_filter(
+			'newspack_content_gate_layout_id',
+			function () use ( $registration_layout_id ) {
+				return $registration_layout_id;
+			}
+		);
+		$this->assertTrue( Metering::is_frontend_metering(), 'The reader should be on the frontend metering strategy.' );
+	}
+
+	/**
+	 * The post content of the registration-mode layout a gate generated on save.
+	 *
+	 * @param int $gate_id Gate ID.
+	 *
+	 * @return string
+	 */
+	private function get_registration_layout_content( $gate_id ) {
+		$layout_id = Content_Gate::get_registration_settings( $gate_id )['gate_layout_id'] ?? 0;
+		return $layout_id ? (string) get_post_field( 'post_content', $layout_id ) : '';
 	}
 }

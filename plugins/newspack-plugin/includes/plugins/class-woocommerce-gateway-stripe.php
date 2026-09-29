@@ -53,6 +53,13 @@ class WooCommerce_Gateway_Stripe {
 		add_action( 'plugins_loaded', [ __CLASS__, 'maybe_register_post_meta_guard' ], 20 );
 		add_action( 'woocommerce_before_subscription_object_save', [ __CLASS__, 'maybe_strip_stripe_customer_id_before_save' ] );
 		add_filter( 'wcs_renewal_order_created', [ __CLASS__, 'clear_stripe_customer_id_on_renewal' ], 10, 2 );
+
+		// Disable Stripe Adaptive Pricing when modal checkout omits the billing country field.
+		add_action( 'wp_loaded', [ __CLASS__, 'maybe_disable_adaptive_pricing_on_modal_checkout_request' ], 20 );
+		add_action( 'woocommerce_stripe_updated', [ __CLASS__, 'maybe_disable_adaptive_pricing_without_country_field' ], 10 );
+
+		// NPPM-3244: keep saved-card expiry in step with the connected Stripe PaymentMethod.
+		add_action( 'woocommerce_stripe_add_payment_method', [ __CLASS__, 'refresh_card_token_metadata' ], 10, 2 );
 	}
 
 	/**
@@ -348,6 +355,193 @@ class WooCommerce_Gateway_Stripe {
 		}
 
 		return $renewal_order;
+	}
+
+	/**
+	 * Disable Adaptive Pricing only when handling a modal checkout request.
+	 *
+	 * Uses Modal_Checkout::is_modal_checkout() so the guard also covers checkout
+	 * AJAX requests (where modal_checkout=1 travels in post_data) and express
+	 * checkout, while excluding My Account flows, which render the country field.
+	 */
+	public static function maybe_disable_adaptive_pricing_on_modal_checkout_request(): void {
+		if ( ! \class_exists( '\Newspack_Blocks\Modal_Checkout' ) || ! \Newspack_Blocks\Modal_Checkout::is_modal_checkout() ) {
+			return;
+		}
+
+		self::maybe_disable_adaptive_pricing_without_country_field();
+	}
+
+	/**
+	 * Disable Adaptive Pricing when modal checkout cannot provide billing country.
+	 *
+	 * Stripe Adaptive Pricing requires a billing country during Checkout Sessions
+	 * confirmation. Newspack modal checkout can be configured to omit that field,
+	 * which makes one-time modal payments fail at confirm.
+	 *
+	 * The store-wide, persistent write is intentional, and deliberately one-way:
+	 *
+	 * - Persisting keeps the admin toggle truthful. A request-scoped filter would
+	 *   report Adaptive Pricing as enabled while checkout behaves otherwise, and
+	 *   it would have to cover every settings read path (render, wc-ajax,
+	 *   confirm), where one missed path brings the fatal back.
+	 * - It durably neutralizes the WC Stripe 10.8 migration, which force-enables
+	 *   Adaptive Pricing for existing stores regardless of a previous 'no'.
+	 * - There is no automatic re-enable path: re-enabling while donation fields
+	 *   still omit billing_country would re-break donations. The flip is logged
+	 *   (locally and via newspack_log) so support can see why the toggle does
+	 *   not stick.
+	 *
+	 * Known trade-off: the decision is keyed on the donation billing-fields
+	 * config, while a shippable modal cart keeps the full field set (country
+	 * included). Adaptive Pricing is a single store-wide setting, so per-checkout
+	 * precision is not possible with a persistent write; sites mixing
+	 * country-less donations with shippable modal carts lose Adaptive Pricing
+	 * everywhere. Accepted, since modal checkout is overwhelmingly virtual
+	 * products on Newspack sites.
+	 */
+	public static function maybe_disable_adaptive_pricing_without_country_field(): void {
+		// Relevance check, not a code dependency: without newspack-blocks there is
+		// no modal checkout, the standard checkout renders the country field, and
+		// Adaptive Pricing works, so disabling it would be over-reach.
+		if ( ! \class_exists( '\Newspack_Blocks\Modal_Checkout' ) ) {
+			return;
+		}
+
+		$billing_fields = \apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) || \in_array( 'billing_country', $billing_fields, true ) ) {
+			return;
+		}
+
+		if (
+			! \class_exists( '\WC_Stripe_Helper' ) ||
+			! \method_exists( '\WC_Stripe_Helper', 'get_stripe_settings' ) ||
+			! \method_exists( '\WC_Stripe_Helper', 'update_main_stripe_settings' )
+		) {
+			return;
+		}
+
+		$stripe_settings = \WC_Stripe_Helper::get_stripe_settings();
+
+		if ( ! \is_array( $stripe_settings ) || 'yes' !== ( $stripe_settings['adaptive_pricing'] ?? 'no' ) ) {
+			return;
+		}
+
+		$stripe_settings['adaptive_pricing'] = 'no';
+		\WC_Stripe_Helper::update_main_stripe_settings( $stripe_settings );
+
+		$message = 'Disabled Stripe Adaptive Pricing because Newspack modal checkout does not collect billing country.';
+		Logger::log( $message, 'NEWSPACK-WOOCOMMERCE' );
+		Logger::newspack_log(
+			'newspack_stripe_adaptive_pricing_disabled',
+			$message,
+			[ 'billing_fields' => $billing_fields ],
+			'debug'
+		);
+	}
+
+	/**
+	 * Refresh a saved card token's expiry, brand, and last4 from the Stripe
+	 * PaymentMethod it points at.
+	 *
+	 * NPPM-3244: when a reader re-adds a card they already saved (same card
+	 * number, so the same Stripe fingerprint) with a new expiry, the Stripe
+	 * gateway re-points the existing Woo token at the new PaymentMethod but
+	 * leaves the token's expiry meta on the old values, so My Account keeps
+	 * showing the old date. Gateway 10.7.0 refreshes that meta in
+	 * WC_Stripe_Payment_Tokens::add_token_to_user() (STRIPE-1082), but the
+	 * My Account "Add payment method" flow goes through
+	 * WC_Stripe_UPE_Payment_Method::update_payment_token(), which only swaps
+	 * the ID. Reported upstream on STRIPE-1082; remove this once the gateway
+	 * refreshes metadata on that path too.
+	 *
+	 * Runs on woocommerce_stripe_add_payment_method, which the gateway fires
+	 * after every save path (My Account, the UPE redirect return, and checkout
+	 * with "save card"). The checkout path can pass a bare PaymentMethod ID
+	 * instead of an object, which is why the shape is checked before use.
+	 *
+	 * @param int           $user_id        User ID.
+	 * @param object|string $payment_method Stripe PaymentMethod object, or a bare PaymentMethod ID on the checkout path.
+	 */
+	public static function refresh_card_token_metadata( int $user_id, $payment_method ): void {
+		// A falsy user_id drops the user predicate from WC_Payment_Tokens::get_tokens(),
+		// which would scan every customer's tokens; guests never have saved cards.
+		if (
+			$user_id < 1 ||
+			! \is_object( $payment_method ) ||
+			empty( $payment_method->id ) ||
+			'card' !== ( $payment_method->type ?? '' ) ||
+			! \is_object( $payment_method->card ?? null ) ||
+			! \class_exists( 'WC_Payment_Tokens' )
+		) {
+			return;
+		}
+
+		// Read the rows directly, as the gateway's own duplicate lookup does: the
+		// get_customer_tokens() filter would run the gateway's Stripe sync mid-save.
+		$tokens = \WC_Payment_Tokens::get_tokens(
+			[
+				'user_id'    => $user_id,
+				'gateway_id' => 'stripe',
+				'type'       => 'CC',
+				'limit'      => 100,
+			]
+		);
+		foreach ( $tokens as $token ) {
+			if ( ! $token instanceof \WC_Payment_Token_CC || $token->get_token() !== $payment_method->id ) {
+				continue;
+			}
+
+			$card       = $payment_method->card;
+			$card_type  = \strtolower( $card->display_brand ?? $card->networks->preferred ?? $card->brand ?? '' );
+			$exp_month  = (string) ( $card->exp_month ?? '' );
+			$new_values = [
+				// WooCommerce stores the month zero-padded; an absent month stays '' so it is skipped below.
+				'expiry_month' => '' === $exp_month ? '' : \str_pad( $exp_month, 2, '0', STR_PAD_LEFT ),
+				'expiry_year'  => (string) ( $card->exp_year ?? '' ),
+				'last4'        => (string) ( $card->last4 ?? '' ),
+				'card_type'    => $card_type,
+			];
+			$changed    = [];
+			foreach ( $new_values as $prop => $value ) {
+				// Compare raw stored values so a site filter on the getters can't force a write.
+				if ( '' !== $value && (string) $token->{"get_$prop"}( 'edit' ) !== $value ) {
+					$token->{"set_$prop"}( $value );
+					$changed[] = $prop;
+				}
+			}
+
+			if ( empty( $changed ) ) {
+				return;
+			}
+
+			// The checkout call site fires this action after Stripe has charged and before the
+			// order is marked paid, so a token that fails WooCommerce's validation must not throw.
+			try {
+				$token->save();
+			} catch ( \Exception $e ) {
+				Logger::log(
+					\sprintf( 'Could not refresh saved-card token metadata for user %d from Stripe PaymentMethod %s: %s', $user_id, $payment_method->id, $e->getMessage() ),
+					'NEWSPACK-WOOCOMMERCE'
+				);
+				return;
+			}
+
+			$message = \sprintf( 'Refreshed saved-card token metadata (%s) for user %d from Stripe PaymentMethod %s.', \implode( ', ', $changed ), $user_id, $payment_method->id );
+			Logger::log( $message, 'NEWSPACK-WOOCOMMERCE' );
+			Logger::newspack_log(
+				'newspack_stripe_card_token_metadata_refreshed',
+				$message,
+				[
+					'user_id'        => $user_id,
+					'payment_method' => $payment_method->id,
+					'changed'        => $changed,
+				],
+				'debug'
+			);
+			return;
+		}
 	}
 }
 WooCommerce_Gateway_Stripe::init();

@@ -20,7 +20,6 @@ foreach ( $notices as $notice ) {
 		[
 			'id'             => uniqid( 'newspack-myaccount-error-' ),
 			'type'           => 'error',
-			'corner'         => 'top-right',
 			'autohide'       => ! apply_filters( 'newspack_ui_notice_is_urgent', false, $notice['notice'] ),
 			'active_on_load' => true,
 		]

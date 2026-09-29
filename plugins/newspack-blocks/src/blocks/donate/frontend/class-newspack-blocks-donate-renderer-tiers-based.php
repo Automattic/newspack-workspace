@@ -64,7 +64,7 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 							data-frequency-slug="<?php echo esc_attr( $frequency_slug ); ?>"
 							data-amount="<?php echo esc_attr( $amount ); ?>"
 							data-tier-index="<?php echo esc_attr( $index ); ?>"
-							data-checkout="<?php echo esc_attr( wp_json_encode( Checkout_Data::get_donation_checkout_data( $frequency_slug, $amount ) ) ); ?>"
+							<?php Checkout_Data::print_data_checkout_attr( Checkout_Data::get_donation_checkout_data( $frequency_slug, $amount ) ); ?>
 						>
 							<?php echo wp_kses_post( Newspack_Blocks::get_formatted_amount( $amount, $frequency_slug ) ); ?>
 						</span>

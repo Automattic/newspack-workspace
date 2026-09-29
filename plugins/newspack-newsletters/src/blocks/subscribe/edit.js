@@ -11,7 +11,7 @@ import classnames from 'classnames';
 import apiFetch from '@wordpress/api-fetch';
 import { __, sprintf } from '@wordpress/i18n';
 import { Fragment, useState, useEffect } from '@wordpress/element';
-import { TextControl, ToggleControl, CheckboxControl, PanelBody, Notice, Spinner, Button } from '@wordpress/components';
+import { TextControl, ToggleControl, CheckboxControl, PanelBody, Notice, Spinner, Button, SelectControl } from '@wordpress/components';
 import { useBlockProps, InspectorControls, RichText, PanelColorSettings, getColorObjectByColorValue } from '@wordpress/block-editor';
 import { select } from '@wordpress/data';
 
@@ -57,6 +57,9 @@ export default function SubscribeEdit( {
 		lastNameLabel,
 		label,
 		successMessage,
+		afterSuccessBehavior,
+		afterSuccessButtonLabel,
+		afterSuccessURL,
 		lists,
 		listsCheckboxes,
 		displayDescription,
@@ -175,6 +178,34 @@ export default function SubscribeEdit( {
 							label={ __( 'Display list description', 'newspack-newsletters' ) }
 							checked={ displayDescription }
 							onChange={ () => setAttributes( { displayDescription: ! displayDescription } ) }
+						/>
+					) }
+				</PanelBody>
+				<PanelBody title={ __( 'After subscribe', 'newspack-newsletters' ) } initialOpen={ false }>
+					<SelectControl
+						label={ __( 'Post-signup button', 'newspack-newsletters' ) }
+						help={ __( 'After a successful signup, present a button that sends the reader to another page.', 'newspack-newsletters' ) }
+						value={ afterSuccessBehavior }
+						options={ [
+							{ label: __( 'Show the success message', 'newspack-newsletters' ), value: '' },
+							{ label: __( 'Go to a custom URL', 'newspack-newsletters' ), value: 'custom' },
+							{ label: __( 'Go to the previous page', 'newspack-newsletters' ), value: 'referrer' },
+						] }
+						onChange={ value => setAttributes( { afterSuccessBehavior: value } ) }
+					/>
+					{ '' !== afterSuccessBehavior && (
+						<TextControl
+							label={ __( 'Button label', 'newspack-newsletters' ) }
+							value={ afterSuccessButtonLabel || '' }
+							onChange={ value => setAttributes( { afterSuccessButtonLabel: value } ) }
+						/>
+					) }
+					{ 'custom' === afterSuccessBehavior && (
+						<TextControl
+							label={ __( 'Custom URL', 'newspack-newsletters' ) }
+							placeholder={ __( 'https://example.com', 'newspack-newsletters' ) }
+							value={ afterSuccessURL || '' }
+							onChange={ value => setAttributes( { afterSuccessURL: value } ) }
 						/>
 					) }
 				</PanelBody>
@@ -412,6 +443,17 @@ export default function SubscribeEdit( {
 										allowedFormats={ [ 'core/bold', 'core/italic' ] }
 									/>
 								</div>
+								{ afterSuccessBehavior &&
+									// Mirror the front-end guard: a 'custom' redirect with no URL
+									// renders no button on the published page, so don't preview one.
+									! ( 'custom' === afterSuccessBehavior && ! afterSuccessURL ) && (
+										<div
+											className="newspack-newsletters-subscribe__continue submit-button"
+											style={ { backgroundColor, color: textColor } }
+										>
+											{ afterSuccessButtonLabel || __( 'Continue', 'newspack-newsletters' ) }
+										</div>
+									) }
 							</div>
 						) }
 					</div>

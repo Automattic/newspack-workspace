@@ -5,21 +5,26 @@
  * field so sent/scheduled is never re-derived client-side.
  */
 
-import { Icon } from '@wordpress/components';
+import { ExternalLink, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { __, sprintf } from '@wordpress/i18n';
-import { commentAuthorAvatar, drafts, envelope, globe, published, scheduled, trash } from '@wordpress/icons';
+import { envelope, globe } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
+import { StatusIndicator } from 'newspack-components';
+
+import UserRow, { avatarPropsFromAuthor } from '../../../components/user-row';
+import { useLockedPost } from '../../hooks/use-locked-posts';
 import { getAdminUrl } from '../../admin-globals';
+import { isManualProvider } from '../../../utils/service-provider';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
 
-const STATUS_KIND_ICONS = {
-	sent: published,
-	scheduled,
-	draft: drafts,
-	trash,
+export const STATUS_KIND_STATUSES = {
+	sent: 'done',
+	scheduled: 'scheduled',
+	draft: 'draft',
+	trash: 'trash',
 };
 
 const formatDate = timestamp => {
@@ -40,29 +45,53 @@ const editUrl = item => `${ getAdminUrl() }post.php?post=${ item.id }&action=edi
 // search / sort / display stay consistent.
 const getTitle = item => item?.title?.raw ?? item?.title?.rendered ?? '';
 
-const renderTitle = ( { item } ) => {
+// `lock` is a `wp_check_locked_posts()` payload: pre-translated text and
+// avatar URLs for whoever holds the lock, mirroring the classic list table.
+const renderLock = lock => (
+	<UserRow
+		avatarUrl={ lock.avatar_src }
+		avatarSrcSet={ lock.avatar_src_2x ? `${ lock.avatar_src_2x } 2x` : undefined }
+		label={ lock.text }
+		className="newspack-newsletters-list__locked"
+	/>
+);
+
+// A component, not a render callback: it reads the lock for its own row from
+// context, so a lock change re-renders the affected cells instead of rebuilding
+// the field definitions DataViews uses as each cell's element type.
+const TitleCell = ( { item } ) => {
 	const raw = getTitle( item );
-	// New newsletters carry WordPress's "Auto Draft" placeholder title; show a friendly label instead.
-	const title = ! raw || 'auto-draft' === item?.status ? __( '(no subject)', 'newspack-newsletters' ) : raw;
+	const title = raw || __( '(no subject)', 'newspack-newsletters' );
+	const lock = useLockedPost( item?.id );
+	// DataViews lays the title cell out as a nowrap flex row, so the lock
+	// line needs its own column wrapper to sit under the subject.
 	return (
-		<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-			<strong>{ title }</strong>
-		</a>
+		<VStack className="newspack-newsletters-list__title-cell" spacing={ 1 }>
+			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
+				<strong>{ title }</strong>
+			</a>
+			{ lock && renderLock( lock ) }
+		</VStack>
 	);
 };
 
 const renderStatus = ( { item } ) => {
 	const status = item?.newspack_newsletters_status || {};
 	const kind = status.kind || 'draft';
-	const icon = STATUS_KIND_ICONS[ kind ] || STATUS_KIND_ICONS.draft;
+	const statusName = STATUS_KIND_STATUSES[ kind ] || STATUS_KIND_STATUSES.draft;
 
 	let label;
 	if ( 'sent' === kind && status.sent_at ) {
-		label = sprintf(
+		// The manual provider publishes rather than sends through an ESP, so the date reads "Published %s".
+		let dateFormat;
+		if ( isManualProvider() ) {
+			/* translators: %s: formatted publish date */
+			dateFormat = __( 'Published %s', 'newspack-newsletters' );
+		} else {
 			/* translators: %s: formatted send date */
-			__( 'Sent %s', 'newspack-newsletters' ),
-			formatDate( status.sent_at )
-		);
+			dateFormat = __( 'Sent %s', 'newspack-newsletters' );
+		}
+		label = sprintf( dateFormat, formatDate( status.sent_at ) );
 	} else if ( 'scheduled' === kind && status.scheduled_at ) {
 		label = sprintf(
 			/* translators: %s: formatted scheduled date */
@@ -73,12 +102,7 @@ const renderStatus = ( { item } ) => {
 		label = statusKindLabel( kind );
 	}
 
-	return (
-		<span className="newspack-newsletters-list__status">
-			<Icon className="newspack-newsletters-list__status-icon" icon={ icon } size={ 24 } />
-			<span>{ label }</span>
-		</span>
-	);
+	return <StatusIndicator status={ statusName }>{ label }</StatusIndicator>;
 };
 
 const renderSendDate = ( { item } ) => {
@@ -97,42 +121,40 @@ const renderSendList = ( { item } ) => {
 };
 
 const renderAuthor = ( { item } ) => {
-	const author = item?._embedded?.author?.[ 0 ];
+	const author = item?.newspack_newsletters_author;
 	if ( ! author ) {
 		return '';
 	}
-	const avatarUrl = author.avatar_urls?.[ 48 ] || author.avatar_urls?.[ 24 ];
-	return (
-		<span className="newspack-newsletters-list__author">
-			{ avatarUrl ? (
-				<span className="newspack-newsletters-list__author-avatar">
-					<img src={ avatarUrl } width={ 16 } height={ 16 } alt="" />
-				</span>
-			) : (
-				<Icon className="newspack-newsletters-list__author-icon" icon={ commentAuthorAvatar } size={ 24 } />
-			) }
-			<span>{ author.name || '' }</span>
-		</span>
-	);
+	return <UserRow { ...avatarPropsFromAuthor( author ) } label={ author.name || '' } />;
 };
+
+const termNames = ( item, taxonomy ) =>
+	termsForTaxonomy( item, taxonomy )
+		.map( term => term?.name )
+		.filter( Boolean );
 
 const renderTerms =
 	taxonomy =>
 	( { item } ) =>
-		termsForTaxonomy( item, taxonomy )
-			.map( term => term?.name )
-			.filter( Boolean )
-			.join( ', ' );
+		termNames( item, taxonomy ).join( ', ' );
 
 const renderPublicPage = ( { item } ) => {
 	const isPublic = !! item?.meta?.is_public;
 	const icon = isPublic ? globe : envelope;
 	const label = isPublic ? __( 'Email and web', 'newspack-newsletters' ) : __( 'Email only', 'newspack-newsletters' );
+	// Real anchor so the public page opens in one click and supports
+	// cmd/middle-click; mirrors the `view-public-page` action's gate.
+	const publicUrl = isPublic && 'publish' === item?.status && item?.link ? item.link : null;
 	return (
-		<span className="newspack-newsletters-list__visibility">
-			<Icon className="newspack-newsletters-list__visibility-icon" icon={ icon } size={ 24 } />
-			<span>{ label }</span>
-		</span>
+		<StatusIndicator icon={ icon }>
+			{ publicUrl ? (
+				<ExternalLink href={ publicUrl } onClickCapture={ event => event.stopPropagation() }>
+					{ label }
+				</ExternalLink>
+			) : (
+				label
+			) }
+		</StatusIndicator>
 	);
 };
 
@@ -147,7 +169,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 			label: __( 'Subject', 'newspack-newsletters' ),
 			enableGlobalSearch: true,
 			getValue: ( { item } ) => getTitle( item ),
-			render: renderTitle,
+			render: TitleCell,
 		},
 		{
 			id: 'status',
@@ -156,16 +178,17 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				{ value: 'publish,private', label: statusLabels.sent },
 				{ value: 'future', label: statusLabels.scheduled },
 				// Match `get_status_for_post`'s draft fallthrough.
-				{ value: 'draft,pending,auto-draft', label: statusLabels.draft },
+				{ value: 'draft,pending', label: statusLabels.draft },
 				{ value: 'trash', label: statusLabels.trash },
 			],
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			getValue: ( { item } ) => item?.newspack_newsletters_status?.kind || 'draft',
 			render: renderStatus,
 		},
 		{
 			id: 'send_date',
-			label: __( 'Send date', 'newspack-newsletters' ),
+			// For the manual provider the date is a publish date, not an ESP send date.
+			label: isManualProvider() ? __( 'Publish date', 'newspack-newsletters' ) : __( 'Send date', 'newspack-newsletters' ),
 			enableSorting: true,
 			getValue: ( { item } ) => item?.newspack_newsletters_status?.sent_at || item?.newspack_newsletters_status?.scheduled_at || 0,
 			render: renderSendDate,
@@ -177,7 +200,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				value: String( id ),
 				label: String( label ),
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
 			getValue: ( { item } ) => item?.meta?.send_list_id || '',
 			render: renderSendList,
@@ -189,9 +212,9 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				value: String( id ),
 				label: String( label ),
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: true,
-			getValue: ( { item } ) => String( item?._embedded?.author?.[ 0 ]?.id || '' ),
+			getValue: ( { item } ) => String( item?.newspack_newsletters_author?.id || '' ),
 			render: renderAuthor,
 		},
 		{
@@ -201,13 +224,9 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				value: String( id ),
 				label: String( label ),
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
-			getValue: ( { item } ) =>
-				termsForTaxonomy( item, 'category' )
-					.map( term => term?.name )
-					.filter( Boolean )
-					.join( ', ' ),
+			getValue: ( { item } ) => termNames( item, 'category' ).join( ', ' ),
 			render: renderTerms( 'category' ),
 		},
 		{
@@ -217,13 +236,9 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				value: String( id ),
 				label: String( label ),
 			} ) ),
-			filterBy: { operators: [ 'isAny' ] },
+			filterBy: { operators: [ 'isAny' ], isPrimary: true },
 			enableSorting: false,
-			getValue: ( { item } ) =>
-				termsForTaxonomy( item, 'post_tag' )
-					.map( term => term?.name )
-					.filter( Boolean )
-					.join( ', ' ),
+			getValue: ( { item } ) => termNames( item, 'post_tag' ).join( ', ' ),
 			render: renderTerms( 'post_tag' ),
 		},
 		{
@@ -233,7 +248,7 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 				{ value: '1', label: __( 'Email and web', 'newspack-newsletters' ) },
 				{ value: '0', label: __( 'Email only', 'newspack-newsletters' ) },
 			],
-			filterBy: { operators: [ 'is' ] },
+			filterBy: { operators: [ 'is' ], isPrimary: true },
 			getValue: ( { item } ) => ( item?.meta?.is_public ? '1' : '0' ),
 			render: renderPublicPage,
 		},
@@ -246,3 +261,5 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 		},
 	];
 }
+
+export const FIELD_IDS = getFields().map( field => field.id );

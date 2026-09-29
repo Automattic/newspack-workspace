@@ -97,13 +97,13 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/class-plugin-manager.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-theme-manager.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-admin-plugins-screen.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-admin-list-table-layout.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-activation.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-registration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-activation-emails.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-data.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/sync/class-sync.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/sync/class-metadata.php';
-		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/sync/class-legacy-metadata.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/sync/class-woocommerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/sync/class-contact-sync.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/sync/class-contact-sync-admin.php';
@@ -149,8 +149,24 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/bylines/class-bylines.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-post-date.php';
 		include_once NEWSPACK_ABSPATH . 'includes/lite-site/class-lite-site.php';
+		// Classifies CTA link targets by conversion intent; used by the content gate
+		// (below) to stamp landing-page CTAs for order-meta attribution (NPPD-1887).
+		include_once NEWSPACK_ABSPATH . 'includes/class-cta-intent-classifier.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/trait-content-gate-layout.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-content-gate.php';
+		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-inert-gating-notice.php';
+
+		// Shared infrastructure for rules that tie store products to subscriptions.
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-commerce.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-product-targeting.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-eligibility.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-discounts.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-discounts-pricing.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-discounts-admin.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-discounts-display.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-only-products.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-product-purchase-restriction.php';
+		include_once NEWSPACK_ABSPATH . 'includes/subscriber-commerce/class-subscriber-only-products-api.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/starter_content/class-starter-content-provider.php';
 		include_once NEWSPACK_ABSPATH . 'includes/starter_content/class-starter-content-generated.php';
@@ -163,6 +179,8 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-components-demo.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-wizards-admin-header.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-content-gate-preferences.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-audience-management-dependency.php';
 
 		// Newspack Wizards and Sections.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-newspack-dashboard.php';
@@ -193,7 +211,11 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-content-gates.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-donations.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscriptions.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-promo-url-config.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscription-products.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-pricing-rules.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-integrations.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-subscribers-wizard.php';
 
 		// Network Wizard.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-network-wizard.php';
@@ -225,6 +247,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-mailchimp-for-woocommerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-onesignal.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-organic-profile-block.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce-content-detector.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-perfmatters.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-pwa.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-author-rest-fields.php';
@@ -238,13 +261,19 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/wc-memberships/class-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/class-subscription-policy-resolver.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/class-dynamic-pricing-bridges.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/class-available-deals-bridge.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions-gifting.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-api.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-invite.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-teams-invite.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-myaccount.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-seats.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce-gateway-stripe.php';
+		include_once NEWSPACK_ABSPATH . 'includes/export/class-csv-exports.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-teams-for-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-newspack-elections.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-yoast.php';
@@ -350,6 +379,9 @@ final class Newspack {
 	 */
 	public function activation_hook() {
 		set_transient( NEWSPACK_ACTIVATION_TRANSIENT, 1, 30 );
+		// Freeze a fresh install's metadata-schema era before any ESP setup can
+		// blur the evidence; a no-op for sites that completed setup earlier.
+		Reader_Activation\Sync\Metadata::stamp_schema_origin_on_activation();
 		/**
 		 * Fires on the newspack plugin activation hook
 		 */
@@ -575,6 +607,11 @@ final class Newspack {
 			true
 		);
 		wp_enqueue_script( 'newspack_commons' );
+
+		// Defer on the front end only; admin and block editor requests (is_admin()) are left untouched.
+		if ( ! is_admin() ) {
+			wp_script_add_data( 'newspack_commons', 'strategy', 'defer' );
+		}
 
 		wp_register_style(
 			'newspack-commons',
