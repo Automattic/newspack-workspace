@@ -176,3 +176,53 @@ class Newspack_Fixture_Indirect_Guards {
 		return '' !== $flag;
 	}
 }
+
+/**
+ * A second class in the same file, reusing member names the class above also
+ * declares. Each guard has to resolve against its own class, not against
+ * whichever declaration the file happened to reach first.
+ */
+class Newspack_Fixture_Colliding_Guards {
+	const DOCUMENTED_FLAG = 'NEWSPACK_INDIRECT_SECOND_CLASS';
+
+	/**
+	 * Same member name as the class above, holding a name nothing documents.
+	 *
+	 * @return bool
+	 */
+	public static function own(): bool {
+		return defined( self::DOCUMENTED_FLAG ); // ERROR: this class's value is undocumented.
+	}
+
+	/**
+	 * An explicit reference to the other class's documented member.
+	 *
+	 * @return bool
+	 */
+	public static function other_documented(): bool {
+		return defined( Newspack_Fixture_Indirect_Guards::DOCUMENTED_FLAG ); // OK: resolves to the documented name.
+	}
+
+	/**
+	 * An explicit reference to the other class's undocumented member.
+	 *
+	 * @return bool
+	 */
+	public static function other_undocumented(): bool {
+		return defined( Newspack_Fixture_Indirect_Guards::BARE_FLAG ); // ERROR: resolves to an undocumented name.
+	}
+}
+
+/**
+ * Inherits the colliding member, and reaches it through parent::.
+ */
+class Newspack_Fixture_Inheriting_Guards extends Newspack_Fixture_Colliding_Guards {
+	/**
+	 * The parent is declared in this file, so the member resolves.
+	 *
+	 * @return bool
+	 */
+	public static function inherited(): bool {
+		return defined( parent::DOCUMENTED_FLAG ); // ERROR: the parent's value is undocumented.
+	}
+}

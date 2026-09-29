@@ -41,11 +41,26 @@ class ConstantDocblockSniff implements Sniff {
 
 	/**
 	 * Class constants declared in the file currently being walked that hold a
-	 * NEWSPACK_ constant name, keyed by the class constant's own name.
+	 * NEWSPACK_ constant name, as [ class name => [ member name => value ] ].
+	 *
+	 * Keyed by declaring class rather than by member name alone: two classes
+	 * in one file may each declare `FLAG`, and a flat map would resolve both
+	 * guards to whichever was read first, letting an undocumented constant
+	 * pass behind a documented one.
+	 *
+	 * @var array<string, string[]>
+	 */
+	private $class_constants = [];
+
+	/**
+	 * Parent class of each class declared in the file, for resolving
+	 * `parent::FLAG`, as [ class name => parent name ]. A class whose parent
+	 * lives in another file is absent, so such a guard stays unresolved
+	 * rather than resolving against the wrong declaration.
 	 *
 	 * @var string[]
 	 */
-	private $class_constants = [];
+	private $class_parents = [];
 
 	/**
 	 * Path the $documented list was built from, used to detect when PHPCS has
@@ -84,6 +99,7 @@ class ConstantDocblockSniff implements Sniff {
 			$this->current_file    = $phpcs_file->path;
 			$this->documented      = $this->collect_documented( $phpcs_file );
 			$this->class_constants = $this->collect_class_constants( $phpcs_file );
+			$this->class_parents   = $this->collect_class_parents( $phpcs_file );
 		}
 
 		$constant = $this->get_guarded_constant( $phpcs_file, $stack_ptr );
@@ -156,7 +172,13 @@ class ConstantDocblockSniff implements Sniff {
 			if ( false === $closer || T_CLOSE_PARENTHESIS !== $tokens[ $closer ]['code'] ) {
 				return null;
 			}
-			return $this->class_constants[ $tokens[ $member ]['content'] ] ?? null;
+
+			$class = $this->resolve_qualifier( $phpcs_file, $stack_ptr, $argument );
+			if ( null === $class ) {
+				return null;
+			}
+
+			return $this->class_constants[ $class ][ $tokens[ $member ]['content'] ] ?? null;
 		}
 
 		if ( T_CONSTANT_ENCAPSED_STRING !== $tokens[ $argument ]['code'] ) {
@@ -176,18 +198,95 @@ class ConstantDocblockSniff implements Sniff {
 	}
 
 	/**
+	 * Resolves the class a `Qualifier::MEMBER` guard refers to.
+	 *
+	 * `self` and `static` mean the class the guard sits in, `parent` means that
+	 * class's parent, and an explicit name means itself. A namespaced reference
+	 * (`\Other\Thing::FLAG`) begins with a separator rather than a name and is
+	 * not resolved, nor is a guard written outside any class.
+	 *
+	 * @param File $phpcs_file The file being scanned.
+	 * @param int  $stack_ptr  Position of the T_STRING holding `defined`.
+	 * @param int  $qualifier  Position of the token before `::`.
+	 * @return string|null Class name, or null when it cannot be determined.
+	 */
+	private function resolve_qualifier( File $phpcs_file, $stack_ptr, $qualifier ) {
+		$tokens = $phpcs_file->getTokens();
+
+		if ( T_STRING === $tokens[ $qualifier ]['code'] ) {
+			return $tokens[ $qualifier ]['content'];
+		}
+
+		$enclosing = $this->enclosing_class( $phpcs_file, $stack_ptr );
+		if ( null === $enclosing ) {
+			return null;
+		}
+
+		if ( T_PARENT === $tokens[ $qualifier ]['code'] ) {
+			return $this->class_parents[ $enclosing ] ?? null;
+		}
+
+		return $enclosing;
+	}
+
+	/**
+	 * Names the innermost class a token sits inside.
+	 *
+	 * @param File $phpcs_file The file being scanned.
+	 * @param int  $stack_ptr  Position of the token.
+	 * @return string|null Class name, or null when the token is outside any class.
+	 */
+	private function enclosing_class( File $phpcs_file, $stack_ptr ) {
+		$tokens = $phpcs_file->getTokens();
+
+		foreach ( array_reverse( $tokens[ $stack_ptr ]['conditions'] ?? [], true ) as $pointer => $code ) {
+			if ( T_CLASS === $code || T_TRAIT === $code ) {
+				$name = $phpcs_file->getDeclarationName( $pointer );
+				return '' === (string) $name ? null : $name;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Maps each class declared in the file to the class it extends.
+	 *
+	 * @param File $phpcs_file The file being scanned.
+	 * @return string[] Class name => parent class name.
+	 */
+	private function collect_class_parents( File $phpcs_file ) {
+		$map   = [];
+		$class = $phpcs_file->findNext( T_CLASS, 0 );
+
+		while ( false !== $class ) {
+			$name = $phpcs_file->getDeclarationName( $class );
+			if ( '' !== (string) $name ) {
+				$parent = $phpcs_file->findExtendedClassName( $class );
+				if ( false !== $parent && '' !== $parent ) {
+					$map[ $name ] = ltrim( $parent, '\\' );
+				}
+			}
+			$class = $phpcs_file->findNext( T_CLASS, $class + 1 );
+		}
+
+		return $map;
+	}
+
+	/**
 	 * Maps the class constants in a file that hold a NEWSPACK_ constant name.
 	 *
 	 * Only a plain string literal counts, so `const FLAG = self::PREFIX . '_X';`
-	 * resolves to nothing rather than to a guessed name. Keyed by the class
-	 * constant's own name, which is what the guard writes.
+	 * resolves to nothing rather than to a guessed name. Keyed by declaring
+	 * class and then by the member name the guard writes, so two classes in one
+	 * file can each declare `FLAG` without shadowing one another.
 	 *
 	 * This mirrors collect_class_constants() in
 	 * bin/class-newspack-constants-scanner.php; the two read the same shape and
 	 * should be changed together.
 	 *
 	 * @param File $phpcs_file The file being scanned.
-	 * @return string[] Class constant name => NEWSPACK_ constant name.
+	 * @return array<string, string[]> Class name => [ member name => NEWSPACK_ constant name ].
 	 */
 	private function collect_class_constants( File $phpcs_file ) {
 		$tokens = $phpcs_file->getTokens();
@@ -206,8 +305,9 @@ class ConstantDocblockSniff implements Sniff {
 						$after = $phpcs_file->findNext( Tokens::$emptyTokens, $value + 1, null, true );
 						$ends  = false !== $after && in_array( $tokens[ $after ]['code'], [ T_SEMICOLON, T_COMMA ], true );
 						$held  = trim( $tokens[ $value ]['content'], "'\"" );
-						if ( $ends && preg_match( '/^NEWSPACK_[A-Z0-9_]+$/', $held ) && ! isset( $map[ $tokens[ $name ]['content'] ] ) ) {
-							$map[ $tokens[ $name ]['content'] ] = $held;
+						$owner = $this->enclosing_class( $phpcs_file, $const );
+						if ( $ends && null !== $owner && preg_match( '/^NEWSPACK_[A-Z0-9_]+$/', $held ) && ! isset( $map[ $owner ][ $tokens[ $name ]['content'] ] ) ) {
+							$map[ $owner ][ $tokens[ $name ]['content'] ] = $held;
 						}
 					}
 				}
