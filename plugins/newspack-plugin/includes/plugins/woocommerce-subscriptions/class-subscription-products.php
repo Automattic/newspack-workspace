@@ -186,6 +186,31 @@ final class Subscription_Products {
 	}
 
 	/**
+	 * The plan option the current request posted for the product going in the cart,
+	 * or null when it posted none, chose a one-time purchase, or the product does not
+	 * sell on plans. Posting nothing is not "no plan" to WooCommerce, which then falls
+	 * back to the product's default plan; callers decide what that means for them.
+	 *
+	 * @param \WC_Product $target Simple product or variation being added.
+	 */
+	public static function get_posted_plan_option( \WC_Product $target ): ?Purchase_Option {
+		if ( 'plans' !== self::model_of( $target ) ) {
+			return null;
+		}
+		$field_id = $target->is_type( 'variation' ) ? (int) $target->get_parent_id() : (int) $target->get_id();
+		$plan_key = Plans_Model::get_posted_plan_key( $field_id );
+		if ( '' === $plan_key ) {
+			return null;
+		}
+		foreach ( self::get_purchase_options( $target ) as $option ) {
+			if ( Purchase_Option::KIND_PLAN === $option->kind && $option->plan_key === $plan_key && $option->product_id === (int) $target->get_id() ) {
+				return $option;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Resolve a product, variation, or ID to a product instance.
 	 *
 	 * @param \WC_Product|int|false $product Product, variation, or ID.

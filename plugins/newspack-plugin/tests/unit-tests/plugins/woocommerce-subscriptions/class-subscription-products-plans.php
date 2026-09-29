@@ -265,6 +265,68 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The option a request posted for a product: a variation's plan is read from
+	 * its parent's field, as WooCommerce reads it at add-to-cart; nothing posted,
+	 * the one-time choice, or an unknown plan is no option.
+	 */
+	public function test_posted_plan_option_reads_the_parent_field() {
+		$parent    = $this->product(
+			[
+				'type'     => 'variable',
+				'children' => [],
+			],
+			[ '_wcsatt_schemes_status' => 'override' ]
+		);
+		$parent_id = $parent->get_id();
+		WCS_ATT_Product_Schemes::mock_register( $parent_id, self::PLANS );
+		$variation = wc_create_mock_product(
+			[
+				'id'            => $parent_id + 1000,
+				'type'          => 'variation',
+				'parent_id'     => $parent_id,
+				'regular_price' => '10',
+			]
+		);
+		$field     = 'convert_to_sub_' . $parent_id;
+
+		try {
+			$this->assertNull( Subscription_Products::get_posted_plan_option( $variation ), 'Nothing posted.' );
+
+			$_REQUEST[ $field ] = '1_year';
+			$option             = Subscription_Products::get_posted_plan_option( $variation );
+			$this->assertSame( 'plan:1_year', $option->key );
+			$this->assertSame( $variation->get_id(), $option->product_id );
+
+			$_REQUEST[ $field ] = '0';
+			$this->assertNull( Subscription_Products::get_posted_plan_option( $variation ), 'One-time purchase.' );
+
+			$_REQUEST[ $field ] = 'no_such_plan';
+			$this->assertNull( Subscription_Products::get_posted_plan_option( $variation ), 'Unknown plan.' );
+		} finally {
+			unset( $_REQUEST[ $field ] );
+		}
+	}
+
+	/**
+	 * A legacy product has no plan to post, whatever the request carries.
+	 */
+	public function test_posted_plan_option_is_null_for_legacy_products() {
+		$legacy = wc_create_mock_product(
+			[
+				'id'   => 777,
+				'type' => 'subscription',
+			]
+		);
+		WCS_ATT_Product_Schemes::mock_register( 777, self::PLANS );
+		$_REQUEST['convert_to_sub_777'] = '1_month';
+		try {
+			$this->assertNull( Subscription_Products::get_posted_plan_option( $legacy ) );
+		} finally {
+			unset( $_REQUEST['convert_to_sub_777'] );
+		}
+	}
+
+	/**
 	 * The deprecated WooCommerce_Subscriptions::is_subscription_product() alias keeps the
 	 * instance-level semantics it always had: false for a bare hybrid product, true once a
 	 * plan is applied to an instance of it.

@@ -159,6 +159,21 @@ final class Plans_Model {
 	}
 
 	/**
+	 * The plan a request posted for a product, or '' when it posted none or chose a
+	 * one-time purchase. A variation's plan is posted on its parent's field, which is
+	 * the ID WooCommerce reads it with at add-to-cart.
+	 *
+	 * @param int $product_id Product ID, or a variation's parent ID.
+	 */
+	public static function get_posted_plan_key( int $product_id ): string {
+		if ( ! self::is_available() || ! method_exists( '\WCS_ATT_Product_Schemes', 'get_posted_subscription_scheme' ) ) {
+			return '';
+		}
+		$key = \WCS_ATT_Product_Schemes::get_posted_subscription_scheme( $product_id );
+		return is_string( $key ) && '' !== $key && '0' !== $key ? $key : '';
+	}
+
+	/**
 	 * Options for a simple product or a single variation.
 	 *
 	 * @param \WC_Product $product Product or variation.

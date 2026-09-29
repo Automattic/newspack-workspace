@@ -106,6 +106,20 @@ if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
 			$key = self::$active[ spl_object_id( $product ) ] ?? null;
 			return $key ? $key : false;
 		}
+		/**
+		 * Real WCS reads `convert_to_sub_<id>` from the request, returning null when it is
+		 * absent and false for the one-time choice.
+		 *
+		 * @param int|string $product_id Product ID, or a variation's parent ID.
+		 */
+		public static function get_posted_subscription_scheme( $product_id = '' ) {
+			$field = '' !== $product_id ? 'convert_to_sub_' . absint( $product_id ) : 'convert_to_sub';
+			if ( ! isset( $_REQUEST[ $field ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				return null;
+			}
+			$value = sanitize_text_field( wp_unslash( $_REQUEST[ $field ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return in_array( $value, [ '', '0' ], true ) ? false : $value;
+		}
 		public static function filter_is_subscription( $is_subscription, $product_id, $product ) {
 			if ( $is_subscription || ! is_object( $product ) || ! self::has_subscription_schemes( $product ) ) {
 				return $is_subscription;
