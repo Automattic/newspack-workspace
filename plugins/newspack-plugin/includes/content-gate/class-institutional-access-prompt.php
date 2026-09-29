@@ -216,30 +216,51 @@ class Institutional_Access_Prompt {
 		}
 		foreach ( Content_Restriction_Control::get_post_gates( $post_id ) as $gate ) {
 			if ( (int) $gate['id'] === $gate_id ) {
-				return self::gate_admits_ip_institution( $gate['custom_access'] ?? [] ) ? $post_id : 0;
+				return self::gate_admits_ip_institution( $gate ) ? $post_id : 0;
 			}
 		}
 		return 0;
 	}
 
 	/**
-	 * Whether a gate's access rules let an anonymous reader in on an institution's IP range.
+	 * Whether a gate lets an anonymous reader in on an institution's IP range.
+	 *
+	 * Institutions in paid access skip both walls. Institutions in registered access
+	 * skip only the registration wall, so they open the article only when no paid
+	 * access follows it (NPPD-2310).
+	 *
+	 * @param array $gate The gate.
+	 *
+	 * @return bool
+	 */
+	private static function gate_admits_ip_institution( array $gate ): bool {
+		$paid_rules = ! empty( $gate['custom_access']['active'] ) ? ( $gate['custom_access']['access_rules'] ?? [] ) : [];
+		if ( self::rules_admit_ip_institution( $paid_rules ) ) {
+			return true;
+		}
+		return ! empty( $gate['registration']['active'] )
+			&& empty( $paid_rules )
+			&& self::rules_admit_ip_institution( $gate['registration']['access_rules'] ?? [] );
+	}
+
+	/**
+	 * Whether access rules let an anonymous reader in on an institution's IP range.
 	 *
 	 * A group qualifies only when it holds nothing but institution rules, and every one
 	 * of them names an institution with a valid IP range. The rules in a group are ANDed,
 	 * so any other rule, or an institution rule the reader can only meet by email, still
 	 * fails for the reader after the check.
 	 *
-	 * @param array $custom_access The gate's custom access settings.
+	 * @param array $access_rules Access rules, flat or grouped.
 	 *
 	 * @return bool
 	 */
-	private static function gate_admits_ip_institution( array $custom_access ): bool {
-		if ( empty( $custom_access['active'] ) || empty( $custom_access['access_rules'] ) ) {
+	private static function rules_admit_ip_institution( array $access_rules ): bool {
+		if ( empty( $access_rules ) ) {
 			return false;
 		}
 		$institutions = Institution::get_cached_institutions();
-		foreach ( Access_Rules::normalize_rules( $custom_access['access_rules'] ) as $group ) {
+		foreach ( Access_Rules::normalize_rules( $access_rules ) as $group ) {
 			if ( empty( $group ) || ! is_array( $group ) ) {
 				continue;
 			}

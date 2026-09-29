@@ -79,6 +79,19 @@ class Content_Gate_API {
 						],
 					],
 				],
+				'access_rules'         => [
+					'type'  => 'array',
+					'items' => [
+						'type'  => 'array',
+						'items' => [
+							'type'       => 'object',
+							'properties' => [
+								'slug'  => [ 'type' => 'string' ],
+								'value' => [ 'type' => [ 'string', 'array', 'object' ] ],
+							],
+						],
+					],
+				],
 			],
 		],
 		'custom_access'       => [
@@ -177,7 +190,16 @@ class Content_Gate_API {
 			$sanitized['content_rules'] = self::sanitize_rules( $gate['content_rules'], 'content' );
 		}
 		if ( isset( $gate['registration'] ) ) {
-			$sanitized['registration'] = self::sanitize_registration( $gate['registration'] );
+			$sanitized_registration = self::sanitize_registration( $gate['registration'], ! self::save_leaves_gate_unpublished( $sanitized, $gate_id ) );
+			if ( is_wp_error( $sanitized_registration ) ) {
+				// Told only to a caller who could act on it, as with custom access below.
+				if ( self::caller_can_manage_gates() ) {
+					return $sanitized_registration;
+				}
+				unset( $gate['registration']['access_rules'] );
+				$sanitized_registration = self::sanitize_registration( $gate['registration'] );
+			}
+			$sanitized['registration'] = $sanitized_registration;
 		}
 		if ( isset( $gate['custom_access'] ) ) {
 			$sanitized_custom_access = self::sanitize_custom_access( $gate['custom_access'] );
@@ -456,10 +478,23 @@ class Content_Gate_API {
 		if ( isset( $gate['custom_access']['active'] ) && ! boolval( $gate['custom_access']['active'] ) ) {
 			return true;
 		}
-		// A save that omits `status` leaves the stored one in place. Guarded like the
-		// other stored reads in this class, since sanitization runs ahead of the route's
-		// `permission_callback`; an unreadable status counts as a draft, which leaves the
-		// request to fail on permissions as it would have anyway.
+		return self::save_leaves_gate_unpublished( $sanitized_gate, $gate_id );
+	}
+
+	/**
+	 * Whether the gate is unpublished once the save lands.
+	 *
+	 * A save that omits `status` leaves the stored one in place. Guarded like the
+	 * other stored reads in this class, since sanitization runs ahead of the route's
+	 * `permission_callback`; an unreadable status counts as a draft, which leaves the
+	 * request to fail on permissions as it would have anyway.
+	 *
+	 * @param array $sanitized_gate The gate sanitized so far, `status` included.
+	 * @param int   $gate_id        The gate's ID, or 0 when it is being created.
+	 *
+	 * @return bool
+	 */
+	private static function save_leaves_gate_unpublished( $sanitized_gate, $gate_id ) {
 		$status = $sanitized_gate['status'] ?? ( self::caller_can_save_gate( $gate_id ) ? get_post_status( $gate_id ) : 'draft' );
 		return 'publish' !== $status;
 	}
@@ -517,11 +552,20 @@ class Content_Gate_API {
 	 * Sanitize registration settings.
 	 *
 	 * @param array $registration The registration settings.
+	 * @param bool  $is_live      Whether the gate is published once the save lands.
 	 *
-	 * @return array The sanitized registration.
+	 * @return array|\WP_Error The sanitized registration, or an error when its
+	 *                         access rules can't do what the setting promises.
 	 */
-	public static function sanitize_registration( $registration ) {
+	public static function sanitize_registration( $registration, $is_live = false ) {
 		$sanitized = [];
+		if ( isset( $registration['access_rules'] ) ) {
+			$access_rules = self::sanitize_registration_access_rules( $registration['access_rules'], $is_live && ! empty( $registration['active'] ) );
+			if ( is_wp_error( $access_rules ) ) {
+				return $access_rules;
+			}
+			$sanitized['access_rules'] = $access_rules;
+		}
 		if ( isset( $registration['active'] ) ) {
 			$sanitized['active'] = boolval( $registration['active'] );
 		}
@@ -535,6 +579,47 @@ class Content_Gate_API {
 			$sanitized['gate_layout_id'] = absint( $registration['gate_layout_id'] );
 		}
 		return $sanitized;
+	}
+
+	/**
+	 * Sanitize the rules that let a visitor count as registered without an account.
+	 *
+	 * Every rule here is judged for a signed-out visitor, so a rule that needs a
+	 * signed-in reader could never match anyone the registration wall is shown to.
+	 * Those are refused rather than stored doing nothing.
+	 *
+	 * @param array $access_rules The access rules, flat or grouped.
+	 * @param bool  $is_enforced  Whether the registration wall is live once the save
+	 *                            lands. Only then is a rule with nothing selected
+	 *                            refused; a gate being set up may hold one.
+	 *
+	 * @return array|\WP_Error The grouped rules, or an error naming the rule at fault.
+	 */
+	private static function sanitize_registration_access_rules( $access_rules, $is_enforced ) {
+		$access_rules = self::sanitize_rules( $access_rules, 'access' );
+		if ( is_wp_error( $access_rules ) ) {
+			return $access_rules;
+		}
+		foreach ( $access_rules as $group ) {
+			foreach ( $group as $rule ) {
+				$registered = Access_Rules::get_rule( $rule['slug'] );
+				if ( empty( $registered['supports_anonymous'] ) ) {
+					return new \WP_Error(
+						'invalid_registration_access_rule',
+						sprintf(
+							/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
+							__( 'The “%s” access rule needs a signed-in reader, so it can’t let visitors skip registration. Use it under Paid access instead.', 'newspack-plugin' ),
+							$registered['name'] ?? $rule['slug']
+						),
+						[ 'status' => 400 ]
+					);
+				}
+				if ( $is_enforced && ! empty( $registered['requires_value'] ) && self::rule_value_is_empty( $rule['value'] ?? null ) ) {
+					return self::empty_access_rule_value_error( $registered );
+				}
+			}
+		}
+		return $access_rules;
 	}
 
 	/**

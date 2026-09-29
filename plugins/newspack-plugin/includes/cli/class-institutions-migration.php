@@ -301,12 +301,11 @@ class Institutions_Migration {
 		}
 
 		// Institutions grant nothing on their own — a content gate must select
-		// them, and a gate whose institutional rule is enabled with NO
-		// institutions selected admits every visitor. Name the step so the
-		// closing success line can't read as "migration done, job done".
+		// them, and the two places it can do so grant different things. Name the
+		// step so the closing success line can't read as "migration done, job done".
 		if ( ! empty( $summary ) ) {
 			WP_CLI::line( '' );
-			WP_CLI::line( 'Next step: institutions grant access only where a content gate\'s institutional-access rule selects them. Configure the gates after migrating — a gate with the rule enabled and no institutions selected admits EVERY visitor.' );
+			WP_CLI::line( 'Next step: institutions grant access only where a content gate selects them. Configure the gates after migrating: select institutions under Registered access to let their visitors skip registration, or under Paid access to let them skip registration and payment.' );
 		}
 
 		if ( ! $dry_run ) {

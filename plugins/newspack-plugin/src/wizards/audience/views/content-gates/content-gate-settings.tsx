@@ -16,7 +16,7 @@ import { useWizardData } from '../../../../../packages/components/src/wizard/sto
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeIntent, getPriorityWarnings } from './utils';
-import { getGateSummarySections } from './gate-summary';
+import { getGateSummarySections, groupSummaryColumns } from './gate-summary';
 import { useAccessRuleOptions } from './use-access-rule-options';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
@@ -264,10 +264,14 @@ export default function ContentGateSettings( {
 						</Notice>
 					) }
 					<Grid className="newspack-content-gates__gate__settings" gutter={ 16 } noMargin>
-						{ getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions ).map( section => (
-							<div key={ section.key }>
-								<h4>{ section.label }</h4>
-								{ section.content }
+						{ groupSummaryColumns( getGateSummarySections( gate, isNewsletter, siteMeter, accessRuleOptions ) ).map( column => (
+							<div key={ column[ 0 ].key }>
+								{ column.map( section => (
+									<div key={ section.key } className="newspack-content-gates__gate__summary-section">
+										<h4>{ section.label }</h4>
+										{ section.content }
+									</div>
+								) ) }
 							</div>
 						) ) }
 					</Grid>

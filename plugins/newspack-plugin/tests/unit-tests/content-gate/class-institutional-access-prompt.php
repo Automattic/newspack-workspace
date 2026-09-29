@@ -97,6 +97,41 @@ class Test_Institutional_Access_Prompt extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create a published registration wall over all posts whose registered access
+	 * names institutions.
+	 *
+	 * @param array $registration_rules Registered access rules in grouped format.
+	 * @param array $paid_rules         Paid access rules in grouped format; none turns paid access off.
+	 */
+	private function create_registration_gate( array $registration_rules, array $paid_rules = [] ): void {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Registration wall' ] );
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Registration wall',
+				'status'        => 'publish',
+				'priority'      => 1,
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'registration'  => [
+					'active'       => true,
+					'access_rules' => $registration_rules,
+				],
+				'custom_access' => [
+					'active'       => ! empty( $paid_rules ),
+					'access_rules' => $paid_rules,
+				],
+			]
+		);
+		Content_Gate::flush_gates_cache();
+		$this->reset_restriction_cache();
+	}
+
+	/**
 	 * Visit a gated post and render the gate layout, as a front-end request would.
 	 *
 	 * @param int    $user_id    Visitor ID, 0 for anonymous.
@@ -238,6 +273,38 @@ class Test_Institutional_Access_Prompt extends WP_UnitTestCase {
 			1
 		);
 		$this->create_gate( [ [ $this->institution_rule( [ $institution_id ] ) ] ], 2 );
+
+		$this->assertSame( self::LAYOUT, $this->render_gate_as( 0 ) );
+	}
+
+	/**
+	 * A registration wall whose registered access names an IP institution offers
+	 * the check: passing it opens the article.
+	 */
+	public function test_links_when_registered_access_admits_the_ip() {
+		$institution_id = $this->create_institution( [ 'ip_range' => '10.0.0.0/8' ] );
+		$this->create_registration_gate( [ [ $this->institution_rule( [ $institution_id ] ) ] ] );
+
+		$this->assertStringContainsString( 'institutional-access=1', $this->render_gate_as( 0 ) );
+	}
+
+	/**
+	 * Registered access's institutions only count the visitor as registered. With
+	 * paid access after it, passing the check would trade one wall for the next.
+	 */
+	public function test_no_link_when_registered_access_admits_the_ip_but_paid_access_follows() {
+		$institution_id = $this->create_institution( [ 'ip_range' => '10.0.0.0/8' ] );
+		$this->create_registration_gate(
+			[ [ $this->institution_rule( [ $institution_id ] ) ] ],
+			[
+				[
+					[
+						'slug'  => 'email_domain',
+						'value' => 'example.test',
+					],
+				],
+			]
+		);
 
 		$this->assertSame( self::LAYOUT, $this->render_gate_as( 0 ) );
 	}

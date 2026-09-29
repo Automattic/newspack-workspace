@@ -33,6 +33,8 @@ type AccessRule = {
 	has_options: boolean;
 	empty_grants_access?: boolean;
 	requires_value?: boolean;
+	// Whether the rule can judge a signed-out visitor, and so can let one skip registration.
+	supports_anonymous?: boolean;
 	placeholder?: string;
 	value: GateAccessRuleValue;
 };
@@ -135,6 +137,9 @@ type Registration = {
 	// Optional: the edit UI rebuilds this object without `gate_layout_id`
 	// (see edit/registration.tsx), and the server falls back to the gate ID.
 	gate_layout_id?: number;
+	// Conditions that count a signed-out visitor as registered. Optional: gates
+	// saved before the setting existed, and block attributes, don't carry it.
+	access_rules?: GateAccessRuleGroup[];
 };
 
 type GateAccessRuleGroup = GateAccessRule[];

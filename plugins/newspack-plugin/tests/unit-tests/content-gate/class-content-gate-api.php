@@ -892,4 +892,109 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		$this->assertWPError( $refused );
 		$this->assertStringContainsString( 'active again', $refused->get_error_message() );
 	}
+
+	/**
+	 * Registered access with institutions, as the gate editor sends it.
+	 *
+	 * @param bool   $active Whether registered access is on.
+	 * @param array  $value  The institution rule's value.
+	 * @param string $status The gate status the save leaves.
+	 *
+	 * @return array
+	 */
+	private function gate_with_registration_institutions( $active, $value, $status = 'publish' ) {
+		return [
+			'status'       => $status,
+			'registration' => [
+				'active'       => $active,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => $value,
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * The registration wall's institutions survive sanitization, so the editor
+	 * can save them.
+	 */
+	public function test_registration_access_rules_are_saved() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate( $this->gate_with_registration_institutions( true, [ '12' ] ) );
+
+		$this->assertNotWPError( $sanitized_gate );
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			],
+			$sanitized_gate['registration']['access_rules']
+		);
+	}
+
+	/**
+	 * A rule that needs a signed-in reader can't let a visitor skip signing in.
+	 * Saved there, it would never match anyone the wall is shown to.
+	 */
+	public function test_registration_refuses_a_rule_that_needs_a_signed_in_reader() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'registration' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'example.test',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertWPError( $sanitized_gate );
+		$this->assertSame( 'invalid_registration_access_rule', $sanitized_gate->get_error_code() );
+	}
+
+	/**
+	 * Turning institutions on and selecting none would leave the wall exactly as
+	 * it was while the editor showed the setting on.
+	 */
+	public function test_a_live_registration_wall_refuses_institutions_with_nothing_selected() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate( $this->gate_with_registration_institutions( true, [] ) );
+
+		$this->assertWPError( $sanitized_gate );
+		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
+	}
+
+	/**
+	 * A gate that isn't live, or whose registration wall is off, can hold a
+	 * selection the operator hasn't finished.
+	 */
+	public function test_an_unfinished_registration_selection_saves_while_it_is_not_enforced() {
+		$this->assertNotWPError( Content_Gate_API::sanitize_gate( $this->gate_with_registration_institutions( true, [], 'draft' ) ) );
+		$this->assertNotWPError( Content_Gate_API::sanitize_gate( $this->gate_with_registration_institutions( false, [] ) ) );
+	}
+
+	/**
+	 * Sanitization runs before the route's permission check, so only a caller
+	 * who could save the gate hears why it was refused. The refused rules are
+	 * dropped rather than saved.
+	 */
+	public function test_a_registration_refusal_is_withheld_from_a_caller_who_could_not_save_the_gate() {
+		wp_set_current_user( 0 );
+		$sanitized_gate = Content_Gate_API::sanitize_gate( $this->gate_with_registration_institutions( true, [] ) );
+
+		$this->assertNotWPError( $sanitized_gate );
+		$this->assertArrayNotHasKey( 'access_rules', $sanitized_gate['registration'] );
+	}
 }

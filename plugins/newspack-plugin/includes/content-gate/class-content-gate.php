@@ -2841,6 +2841,10 @@ class Content_Gate {
 			'metering'             => isset( $registration['metering'] ) && is_array( $registration['metering'] ) ? wp_parse_args( $registration['metering'], $default_metering ) : $default_metering,
 			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
 			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
+			// Conditions that let a visitor count as registered without an account.
+			// Only rules that can judge a signed-out visitor belong here; today that
+			// is `institution`. See Content_Restriction_Control::is_post_restricted().
+			'access_rules'         => Access_Rules::normalize_rules( isset( $registration['access_rules'] ) && is_array( $registration['access_rules'] ) ? $registration['access_rules'] : [] ),
 		];
 	}
 

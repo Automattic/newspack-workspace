@@ -2,13 +2,14 @@
  * WordPress dependencies.
  */
 import { CardBody, CardDivider, ToggleControl } from '@wordpress/components';
-import { useCallback } from '@wordpress/element';
+import { Fragment, useCallback } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import { ActionCard } from '../../../../../../packages/components/src';
+import AccessRule from './access-rule';
 import Metering from './metering';
 
 interface RegistrationProps {
@@ -31,6 +32,23 @@ export default function Registration( { registration, onChange, isNewsletter = f
 		},
 		[ registration, onChange ]
 	);
+
+	// Only a rule that can judge a signed-out visitor can let one skip registration;
+	// the server refuses any other (Content_Gate_API::sanitize_registration_access_rules()).
+	const availableAccessRules: AccessRules = window.newspackAudienceContentGates?.available_access_rules ?? {};
+	const anonymousRuleSlugs = Object.keys( availableAccessRules ).filter( slug => availableAccessRules[ slug ].supports_anonymous );
+	// One rule per group, so matching any of them is enough.
+	const currentRules = ( registration.access_rules ?? [] ).map( group => group[ 0 ] ).filter( Boolean );
+	const setRules = ( rules: GateAccessRule[] ) => handleChange( { access_rules: rules.map( rule => [ rule ] ) } );
+	const toggleRule = ( slug: string ) =>
+		setRules(
+			currentRules.some( rule => rule.slug === slug )
+				? currentRules.filter( rule => rule.slug !== slug )
+				: [ ...currentRules, { slug, value: availableAccessRules[ slug ].default } ]
+		);
+	const changeRuleValue = ( slug: string ) => ( value: GateAccessRuleValue ) =>
+		setRules( currentRules.map( rule => ( rule.slug === slug ? { ...rule, value } : rule ) ) );
+
 	return (
 		<>
 			{ ! isNewsletter && (
@@ -55,6 +73,29 @@ export default function Registration( { registration, onChange, isNewsletter = f
 					onChange={ () => handleChange( { require_verification: ! registration.require_verification } ) }
 				/>
 			</CardBody>
+			{ ! isNewsletter &&
+				anonymousRuleSlugs.map( slug => (
+					<Fragment key={ slug }>
+						<CardDivider />
+						<AccessRule
+							config={ {
+								...availableAccessRules[ slug ],
+								description:
+									'institution' === slug
+										? __(
+												'Visitors from the selected institutions can read without registering. If paid access is on, they still need to meet it.',
+												'newspack-plugin'
+										  )
+										: availableAccessRules[ slug ].description,
+							} }
+							enabled={ currentRules.some( rule => rule.slug === slug ) }
+							rule={ currentRules.find( rule => rule.slug === slug ) }
+							slug={ slug }
+							onChange={ changeRuleValue( slug ) }
+							onToggle={ toggleRule }
+						/>
+					</Fragment>
+				) ) }
 		</>
 	);
 }

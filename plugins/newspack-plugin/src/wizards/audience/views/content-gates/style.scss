@@ -29,6 +29,12 @@
 			.components-notice {
 				margin: wp-vars.$grid-unit-20 wp-vars.$grid-unit-20 0;
 			}
+			// A section stacked in another's column still reads as its own section.
+			&__summary-section {
+				& + & {
+					margin-top: wp-vars.$grid-unit-30;
+				}
+			}
 			&__settings {
 				grid-template-columns: minmax(0, 1fr);
 				padding: wp-vars.$grid-unit-20;

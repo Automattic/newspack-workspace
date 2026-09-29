@@ -2323,6 +2323,299 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->reset_visitor_state();
 	}
 
+	// =========================================================================
+	// Institutions on registered access (NPPD-2310)
+	//
+	// A registration wall can name institutions whose visitors count as
+	// registered. Unlike institutions in paid access, which count as paying and
+	// so skip both walls, these skip registration only: a gate that also has
+	// paid access still asks the visitor to pay.
+	// =========================================================================
+
+	/**
+	 * Create an institution matching the 10.0.0.0/8 range.
+	 *
+	 * @return int Institution ID.
+	 */
+	private function create_ip_institution() {
+		$inst_id          = Institution::create( 'University', '', [ 'ip_range' => '10.0.0.0/8' ] );
+		$this->post_ids[] = $inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		return $inst_id;
+	}
+
+	/**
+	 * Access rules naming one institution, in grouped format.
+	 *
+	 * @param int $inst_id Institution ID.
+	 *
+	 * @return array
+	 */
+	private function institution_rules( $inst_id ) {
+		return [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [ $inst_id ],
+				],
+			],
+		];
+	}
+
+	/**
+	 * The case the setting exists for: a registration wall with no paid access
+	 * lets an on-campus visitor read without an account.
+	 */
+	public function test_registration_institutions_admit_a_matching_anonymous_visitor() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Any other anonymous visitor still meets the registration wall.
+	 */
+	public function test_registration_institutions_show_other_anonymous_visitors_the_registration_layout() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '192.168.1.1' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame( $layouts['registration_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Naming institutions adds a way in; it takes nothing away from readers
+	 * who registered. This is what an institution-only paid access broke.
+	 */
+	public function test_registration_institutions_leave_logged_in_readers_admitted() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'subscriber' ] ) );
+		$this->set_visitor_ip( '192.168.1.1' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Counting as registered is not counting as paying. The visitor gets past
+	 * the registration wall and meets paid access, like a registered reader
+	 * without a subscription would.
+	 */
+	public function test_registration_institutions_do_not_skip_paid_access() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => 'paid.example',
+						],
+					],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame(
+			$layouts['custom_access_layout_id'],
+			Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ),
+			'The visitor got past registration, so the wall they meet is the paid one.'
+		);
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Institutions in paid access keep skipping both walls when registered
+	 * access names institutions of its own.
+	 */
+	public function test_paid_access_institutions_still_skip_both_walls() {
+		$paid_inst_id         = $this->create_ip_institution();
+		$registration_inst_id = Institution::create( 'Library', '', [ 'ip_range' => '172.16.0.0/12' ] );
+		$this->post_ids[]     = $registration_inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $registration_inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $paid_inst_id ),
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Without the IP-access cookie the page may be served from cache, so the
+	 * visitor's IP is not read and the registration wall stands.
+	 */
+	public function test_registration_institutions_need_the_ip_access_cookie() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3', false );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame( $layouts['registration_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * A reader who signed in but hasn't verified still has to verify. The
+	 * institutions stand in for an account, not for verifying one.
+	 */
+	public function test_registration_institutions_do_not_skip_email_verification() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'               => true,
+				'require_verification' => true,
+				'access_rules'         => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		wp_delete_user( $user_id );
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The institutions belong to the registration wall, so a gate with
+	 * registered access off doesn't apply them.
+	 */
+	public function test_registration_institutions_do_nothing_while_registered_access_is_off() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => false,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => 'paid.example',
+						],
+					],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame( $layouts['custom_access_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The stored rules come back in grouped format, and a gate saved before
+	 * the setting existed reads as naming none.
+	 */
+	public function test_registration_settings_carry_access_rules() {
+		$gate_id = $this->gate_ids[2];
+		$this->assertSame( [], Content_Gate::get_registration_settings( $gate_id )['access_rules'] );
+
+		Content_Gate::update_registration_settings(
+			$gate_id,
+			[
+				'access_rules' => [
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			],
+			Content_Gate::get_registration_settings( $gate_id )['access_rules']
+		);
+	}
+
 	/**
 	 * Pin the gate-layout cache contract: get_gate_layout_id() must read for
 	 * the *current* user (via get_current_user_id()), not for whichever user

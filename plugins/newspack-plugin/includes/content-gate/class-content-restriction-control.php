@@ -487,8 +487,9 @@ class Content_Restriction_Control {
 				if ( $user_id === 0 ) {
 					// Anonymous visitors can still pass via the gate's custom_access rules if they
 					// match a populated rule with `supports_anonymous` (currently only `institution`).
-					// A rule left with no value names no condition, so it cannot be what lets a
-					// visitor past the registration wall.
+					// A visitor who counts as paying doesn't need to register first, so this skips
+					// both walls. A rule left with no value names no condition, so it cannot be
+					// what lets a visitor past the registration wall.
 					//
 					// Inside a listing teaser this bypass yields nothing:
 					// evaluate_anonymous_rules() declines there, because its one rule
@@ -496,8 +497,20 @@ class Content_Restriction_Control {
 					// everyone. {@see Content_Gate::is_withheld_outside_article()}.
 					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
 						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
-					$is_restricted  = ! $anonymous_bypass_passed;
-					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+					if ( $anonymous_bypass_passed ) {
+						$is_restricted = false;
+					} elseif ( Access_Rules::evaluate_anonymous_rules( $gate['registration']['access_rules'] ?? [] ) ) {
+						// Registered access's own rules let the visitor count as registered, which
+						// is all they skip: paid access still applies, and the paid check above
+						// has already refused them (NPPD-2310).
+						$is_restricted = ! empty( $gate['custom_access']['active'] ) && ! empty( $gate['custom_access']['access_rules'] );
+						if ( $is_restricted ) {
+							$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
+						}
+					} else {
+						$is_restricted  = true;
+						$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+					}
 				} elseif ( ! empty( $gate['registration']['require_verification'] ) ) {
 					// Check if email verification is required. A hypothetical evaluation
 					// asking what this reader would see if they verified has to be answered
