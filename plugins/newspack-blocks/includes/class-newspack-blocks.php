@@ -133,8 +133,8 @@ class Newspack_Blocks {
 	 * This says the post is built to take over the page, not that the iframe is on screen:
 	 * a content gate can swap the block for its teaser, on the server or in the browser once
 	 * a metered reader runs out, and neither is known when the body class prints. The
-	 * stylesheet hides the rest of the page only while the block is present, which is what
-	 * keeps the gate visible to that reader.
+	 * stylesheet hides the rest of the page only while the block's iframe is present, which
+	 * is what keeps the gate visible to that reader.
 	 *
 	 * @return bool
 	 */
