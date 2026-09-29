@@ -2,11 +2,17 @@ import notices from './notices';
 
 describe( 'newspack-ui notices', () => {
 	beforeEach( () => {
+		jest.useFakeTimers();
 		document.body.innerHTML = `
 			<div class="newspack-popup-container" hidden>
 				<div class="newspack-registration newspack-ui"></div>
 			</div>
 		`;
+	} );
+
+	afterEach( () => {
+		jest.runOnlyPendingTimers();
+		jest.useRealTimers();
 	} );
 
 	it( 'hosts snackbars and live regions outside other .newspack-ui elements', () => {
