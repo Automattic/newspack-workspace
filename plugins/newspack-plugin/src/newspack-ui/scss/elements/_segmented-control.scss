@@ -86,6 +86,34 @@
 					border-color: var(--newspack-ui-color-neutral-30);
 					color: var(--newspack-ui-color-neutral-90);
 				}
+
+				// Plan-based frequency pills wrap a radio input (to post the chosen
+				// plan - see Subscriptions_Tiers::render_frequency_control()), which
+				// otherwise matches the global radio-label layout in _labels.scss
+				// (two-column grid with a visible radio dot). Override it back to a
+				// plain pill and hide the input visually only: `display: none` would
+				// drop it from the accessibility tree and from keyboard focus.
+				&:has(input[type="radio"]) {
+					display: inline-flex !important;
+					position: relative;
+
+					input[type="radio"] {
+						position: absolute;
+						width: 1px;
+						height: 1px;
+						margin: -1px;
+						padding: 0;
+						overflow: hidden;
+						white-space: nowrap;
+						clip-path: inset(50%);
+						border: 0;
+					}
+
+					&:has(input:focus-visible) {
+						outline: 2px solid var(--newspack-ui-color-button-bg);
+						outline-offset: 1px;
+					}
+				}
 			}
 		}
 
