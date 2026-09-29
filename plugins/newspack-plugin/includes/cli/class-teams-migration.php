@@ -1023,7 +1023,7 @@ class Teams_Migration {
 			WP_CLI::error( 'WooCommerce Subscriptions is not active. Aborting.' );
 		}
 
-		// Without WooCommerce Memberships the wcm-active post status is
+		// Without WooCommerce Memberships the wcm-* post statuses are
 		// unregistered, so the member queries return zero rows and the run would
 		// masquerade as a clean no-op.
 		if ( ! class_exists( 'WC_Memberships_User_Membership' ) ) {
@@ -1221,7 +1221,11 @@ class Teams_Migration {
 			$memberships = \get_posts(
 				[
 					'post_type'      => 'wc_user_membership',
-					'post_status'    => 'wcm-active',
+					// Every status WooCommerce Memberships grants access on, not only
+					// wcm-active: a complimentary, free-trial or pending-cancellation
+					// member reads the site today and is exactly who a residual sweep
+					// or a reviewed --user-ids list has to reach.
+					'post_status'    => Memberships_Audit::ACTIVE_MEMBERSHIP_STATUSES,
 					'post_parent'    => $plan_id,
 					'posts_per_page' => -1,
 					'fields'         => 'ids',
