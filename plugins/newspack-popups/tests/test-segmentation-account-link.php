@@ -12,6 +12,8 @@ require_once __DIR__ . '/mocks/class-newspack-newsletters.php';
 require_once __DIR__ . '/mocks/class-utils.php';
 require_once __DIR__ . '/mocks/class-metadata.php';
 require_once __DIR__ . '/mocks/class-service-provider.php';
+require_once __DIR__ . '/mocks/class-integrations.php';
+require_once __DIR__ . '/mocks/class-integration.php';
 
 /**
  * Test appending the account param to newsletter links.
@@ -26,7 +28,15 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 	private $provider;
 
 	/**
-	 * Set up: a Mailchimp-syntax provider that knows the Account field's tag.
+	 * The stand-in integration syncing reader data to the provider.
+	 *
+	 * @var Newspack_Popups_Test_Integration
+	 */
+	private $integration;
+
+	/**
+	 * Set up: a Mailchimp-syntax provider that knows the Account field's tag,
+	 * and an integration syncing that field to it.
 	 */
 	public function set_up() {
 		parent::set_up();
@@ -34,7 +44,9 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 		$this->provider->tags               = [ 'NP_Account' => 'NP_ACCOUNT' ];
 		Newspack_Newsletters::$provider     = $this->provider;
 		\Newspack_Newsletters\Tracking\Utils::$syntax = '*|%s|*';
-		\Newspack\Reader_Activation\Sync\Metadata::$keys = [ 'Account' => 'NP_Account' ];
+		\Newspack\Reader_Activation\Sync\Metadata::$keys = [ 'Account' => 'Account' ];
+		$this->integration = new Newspack_Popups_Test_Integration();
+		\Newspack\Reader_Activation\Integrations::$integrations = [ 'esp' => $this->integration ];
 	}
 
 	/**
@@ -42,6 +54,7 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		Newspack_Newsletters::$provider = null;
+		\Newspack\Reader_Activation\Integrations::$integrations = [];
 		parent::tear_down();
 	}
 
@@ -169,11 +182,49 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Each integration owns the prefix of the fields it syncs, so the field to
+	 * look up is named by the integration syncing to the newsletter provider.
+	 */
+	public function test_names_the_field_with_the_syncing_integrations_prefix() {
+		$this->integration->prefix = 'CUSTOM_';
+		$this->provider->tags      = [ 'CUSTOM_Account' => 'CUSTOM_ACCOUNT' ];
+		$url    = home_url( '/some-article/' );
+		$result = Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() );
+		$this->assertStringContainsString( 'np_account=*|CUSTOM_ACCOUNT|*', $result );
+	}
+
+	/**
+	 * A field left in the ESP by an earlier selection still has a tag there,
+	 * but its values stopped updating when the field was turned off.
+	 */
+	public function test_skips_when_the_integration_does_not_sync_the_account_field() {
+		$this->integration->enabled_fields = [ 'Registration Date' ];
+		$url = home_url( '/some-article/' );
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
+	 * An integration syncing to another platform says nothing about the fields
+	 * of the ESP sending the newsletter.
+	 */
+	public function test_skips_when_no_integration_syncs_to_the_newsletter_provider() {
+		$this->integration->provider_slug = 'active_campaign';
+		$url = home_url( '/some-article/' );
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
 	 * The legacy metadata schema keys the Account field as 'account'. Both
 	 * schemas must resolve.
 	 */
 	public function test_resolves_legacy_metadata_raw_key() {
-		\Newspack\Reader_Activation\Sync\Metadata::$keys = [ 'account' => 'NP_Account' ];
+		\Newspack\Reader_Activation\Sync\Metadata::$keys = [ 'account' => 'Account' ];
 		$url    = home_url( '/some-article/' );
 		$result = Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() );
 		$this->assertStringContainsString( 'np_account=*|NP_ACCOUNT|*', $result );

@@ -329,8 +329,8 @@ final class Newspack_Popups_Segmentation {
 	/**
 	 * Filter callback: append the reader's account-ID merge tag to first-party
 	 * newsletter links. Skips when the required helpers are unavailable, the
-	 * post isn't a newsletter, the link is third-party, or the Account field
-	 * has no resolvable ESP tag (i.e. it isn't synced there).
+	 * post isn't a newsletter, the link is third-party, no integration syncs
+	 * the Account field to the newsletter's ESP, or the field has no tag there.
 	 *
 	 * @param string        $url          Processed URL (may already carry other params).
 	 * @param string        $original_url Original URL before processing.
@@ -344,7 +344,13 @@ final class Newspack_Popups_Segmentation {
 		if ( ! method_exists( '\Newspack_Newsletters\Tracking\Utils', 'get_merge_tag' ) ) {
 			return $url;
 		}
-		if ( ! method_exists( '\Newspack\Reader_Activation\Sync\Metadata', 'get_key' ) ) {
+		if ( ! method_exists( '\Newspack_Newsletters', 'get_service_provider' ) ) {
+			return $url;
+		}
+		if ( ! method_exists( '\Newspack\Reader_Activation\Sync\Metadata', 'get_keys' ) ) {
+			return $url;
+		}
+		if ( ! method_exists( '\Newspack\Reader_Activation\Integrations', 'get_active_configured_integrations' ) ) {
 			return $url;
 		}
 		if ( ! self::is_newsletter_post( $post ) ) {
@@ -408,20 +414,51 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
-	 * The prefixed ESP field name carrying the reader's account ID. The raw key
-	 * is 'Account' in the v1 metadata schema and 'account' in legacy, and the
-	 * prefix is configurable, so resolve through Metadata::get_key().
+	 * The prefixed ESP field name carrying the reader's account ID, as named by
+	 * the integration syncing reader data to the newsletter's ESP. Each
+	 * integration owns its prefix and its selection of fields, so neither can
+	 * be read site-wide.
 	 *
-	 * @return string Prefixed field name, or '' when unresolvable.
+	 * @return string Prefixed field name, or '' when no integration syncs the
+	 *                field to the newsletter's ESP.
 	 */
 	private static function get_account_field_name() {
-		foreach ( [ 'Account', 'account' ] as $raw_key ) {
-			$key = \Newspack\Reader_Activation\Sync\Metadata::get_key( $raw_key );
-			if ( ! empty( $key ) ) {
-				return (string) $key;
+		$integration = self::get_newsletter_esp_integration();
+		if ( null === $integration ) {
+			return '';
+		}
+		// The raw key is 'Account' in the current metadata schema and 'account'
+		// in the legacy one; both name the same field.
+		$catalog = \Newspack\Reader_Activation\Sync\Metadata::get_keys();
+		$name    = (string) ( $catalog['Account'] ?? $catalog['account'] ?? '' );
+		if ( '' === $name || ! in_array( $name, (array) $integration->get_enabled_outgoing_fields(), true ) ) {
+			return '';
+		}
+		return $integration->get_metadata_prefix() . $name;
+	}
+
+	/**
+	 * The enabled, set-up integration syncing reader data to the ESP that sends
+	 * newsletters.
+	 *
+	 * @return object|null The integration, or null when there is none.
+	 */
+	private static function get_newsletter_esp_integration() {
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider->service ) ) {
+			return null;
+		}
+		foreach ( \Newspack\Reader_Activation\Integrations::get_active_configured_integrations() as $integration ) {
+			if (
+				is_callable( [ $integration, 'get_provider_slug' ] ) &&
+				is_callable( [ $integration, 'get_metadata_prefix' ] ) &&
+				is_callable( [ $integration, 'get_enabled_outgoing_fields' ] ) &&
+				$provider->service === $integration->get_provider_slug()
+			) {
+				return $integration;
 			}
 		}
-		return '';
+		return null;
 	}
 
 	/**

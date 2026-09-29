@@ -2,9 +2,9 @@
 /**
  * Mock of the newspack-plugin reader-activation sync Metadata class.
  *
- * Resolves an unprefixed metadata raw key to the prefixed ESP field name.
- * Tests set $keys to control which raw keys resolve, mirroring the difference
- * between the v1 schema (raw key 'Account') and legacy (raw key 'account').
+ * Holds the catalog of fields available to sync. Tests set $keys to control
+ * which raw keys exist, mirroring the difference between the current schema
+ * (raw key 'Account') and the legacy one (raw key 'account').
  *
  * @package Newspack_Popups
  */
@@ -17,20 +17,19 @@ if ( ! class_exists( __NAMESPACE__ . '\Metadata' ) ) {
 	 */
 	class Metadata {
 		/**
-		 * Raw key => prefixed ESP field name.
+		 * Raw key => field name, unprefixed.
 		 *
 		 * @var array
 		 */
-		public static $keys = [ 'Account' => 'NP_Account' ];
+		public static $keys = [ 'Account' => 'Account' ];
 
 		/**
-		 * Resolve a raw metadata key to its prefixed field name.
+		 * The catalog of fields available to sync.
 		 *
-		 * @param string $key Raw metadata key.
-		 * @return string|false Prefixed field name, or false when unknown.
+		 * @return array Raw key => field name.
 		 */
-		public static function get_key( $key ) {
-			return self::$keys[ $key ] ?? false;
+		public static function get_keys() {
+			return self::$keys;
 		}
 	}
 }

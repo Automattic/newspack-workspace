@@ -14,6 +14,13 @@ if ( ! class_exists( 'Newspack_Popups_Test_Service_Provider' ) ) {
 	 */
 	class Newspack_Popups_Test_Service_Provider {
 		/**
+		 * The ESP's slug.
+		 *
+		 * @var string
+		 */
+		public $service = 'mailchimp';
+
+		/**
 		 * Tag name to return, keyed by field name.
 		 *
 		 * @var array
