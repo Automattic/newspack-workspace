@@ -8,6 +8,10 @@
 /**
  * Test that the /republish/ page attributes the republished post, not
  * whatever post the page's main query left as the global post.
+ *
+ * These tests rely on the CAP and Newspack\Bylines mocks falling back to the
+ * global post, like the real ones; that's what makes them fail if the
+ * template stops setting it.
  */
 class RepublishTemplateBylineTest extends WP_UnitTestCase {
 
