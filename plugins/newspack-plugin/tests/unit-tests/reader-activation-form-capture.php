@@ -632,13 +632,14 @@ class Test_Form_Capture extends WP_UnitTestCase {
 			\Newspack_Popups_Model::$has_above_header = false;
 		}
 		$delay_keywords = \Newspack\Perfmatters::set_defaults( [] )['assets']['delay_js_inclusions'];
+		$this->assertContains( 'window.newspack', $delay_keywords, 'Precondition: the keyword that delayed the config is in the list.' );
 		Integrations::enable( Form_Capture::ID );
 		Integrations::get_integration( Form_Capture::ID )->enqueue_scripts();
 
 		$config_tag = wp_scripts()->get_inline_script_tag( Form_Capture::SCRIPT_HANDLE, 'before' );
 		$this->assertNotEmpty( $config_tag, 'Precondition: the config is printed.' );
 		foreach ( $delay_keywords as $keyword ) {
-			$this->assertStringNotContainsString( $keyword, $config_tag, "Perfmatters would delay the capture config on '$keyword'." );
+			$this->assertStringNotContainsStringIgnoringCase( $keyword, $config_tag, "Perfmatters would delay the capture config on '$keyword'." );
 		}
 		Integrations::disable( Form_Capture::ID );
 	}
