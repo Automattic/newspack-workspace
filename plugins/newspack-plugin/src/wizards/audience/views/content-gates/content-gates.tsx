@@ -167,7 +167,10 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 					description={ getMeteringDescription( siteMeter ) }
 					// Always on: nothing to enable, so the badge carries whether a gate draws on it.
 					enabled
-					badge={ { label: getMeteringBadge( hasMetering, !! config.countdown_banner?.enabled ), intent: hasMetering ? 'stable' : 'none' } }
+					badge={ {
+						label: getMeteringBadge( hasMetering, !! config.countdown_banner?.enabled ),
+						intent: hasMetering ? 'stable' : 'draft',
+					} }
 					href={ '/settings/metering' }
 				/>
 				<SettingsCard
