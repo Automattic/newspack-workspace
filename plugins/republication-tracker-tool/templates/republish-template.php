@@ -20,6 +20,12 @@ if ( ! $post_object instanceof WP_Post ) {
 	wp_die( esc_html__( 'Invalid post ID.', 'republication-tracker-tool' ) );
 }
 
+// This page's main query isn't the republished post, so point the global post
+// at it for byline filters that read the current post (e.g. CAP's coauthors()).
+global $post;
+$post = $post_object; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+setup_postdata( $post );
+
 $content = Republication_Tracker_Tool_Content::get_republishable_content( $post_object->post_content, $republish_post_id );
 
 $license_statement = get_option( 'republication_tracker_tool_policy' );
@@ -45,11 +51,7 @@ $article_subtitle = get_post_meta( $republish_post_id, 'newspack_post_subtitle',
 // Get article author byline.
 $author_byline = apply_filters(
 	'republication_tracker_tool_author_byline',
-	sprintf(
-		'%1$s, %2$s',
-		__( 'By ', 'republication-tracker-tool' ) . get_the_author_meta( 'display_name', $post_object->post_author ),
-		get_bloginfo( 'name' )
-	)
+	Republication_Tracker_Tool::get_byline_text( get_the_author(), $post_object )
 );
 
 // Get article date and time in current timezone.
@@ -296,5 +298,7 @@ if ( $plain_text_enabled ) {
 </section>
 
 <?php
+
+wp_reset_postdata();
 
 get_footer();

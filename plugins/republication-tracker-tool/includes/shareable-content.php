@@ -31,7 +31,7 @@ $content_footer = Republication_Tracker_Tool::create_content_footer( $post );
  *
  * @var HTML $article_info The article title, etc.
  */
-$byline_text = Republication_Tracker_Tool::get_byline_text( get_the_author() );
+$byline_text = Republication_Tracker_Tool::get_byline_text( get_the_author(), $post );
 
 // Not translatable — layout markup only.
 $article_info = sprintf(

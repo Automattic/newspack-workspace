@@ -310,6 +310,41 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Plain Text content should use the Custom Byline of the post it's built
+	 * for, not the global post's (e.g. on the /republish/ page, where the
+	 * global post is the newest post).
+	 */
+	public function test_plain_text_uses_custom_byline_of_given_post_not_global_post() {
+		global $post;
+
+		$post_without_custom_byline = $this->factory->post->create_and_get(
+			array(
+				'post_title'  => 'Post without Custom Byline',
+				'post_status' => 'publish',
+				'post_author' => $this->test_post->post_author,
+			)
+		);
+
+		// The global post has an active Custom Byline; the requested post doesn't.
+		$post = $this->test_post;
+		setup_postdata( $this->test_post );
+
+		$without_output = Republication_Tracker_Tool_Content::get_republishable_plain_text_content( $post_without_custom_byline );
+
+		// And the other way around.
+		$post = $post_without_custom_byline;
+		setup_postdata( $post_without_custom_byline );
+
+		$with_output = Republication_Tracker_Tool_Content::get_republishable_plain_text_content( $this->test_post );
+
+		wp_delete_post( $post_without_custom_byline->ID, true );
+
+		$this->assertStringContainsString( 'by John Doe, Test Blog', $without_output, 'Plain Text should use the requested post\'s author when only the global post has a Custom Byline.' );
+		$this->assertStringNotContainsString( 'Jane Smith', $without_output, 'Plain Text should not use the global post\'s Custom Byline.' );
+		$this->assertStringContainsString( 'By Jane Smith, Test Blog', $with_output, 'Plain Text should use the requested post\'s Custom Byline when the global post has none.' );
+	}
+
+	/**
 	 * The HTML and Plain Text tabs should share the same byline format, so a
 	 * CAP byline keeps the plugin's "by" prefix in both.
 	 */
