@@ -126,7 +126,7 @@ class Newspack_UI {
 			return;
 		}
 		?>
-		<div class="newspack-ui">
+		<div id="newspack-ui__notices" class="newspack-ui">
 			<div class="newspack-ui__snackbar">
 				<?php foreach ( self::$notices as $notice ) : ?>
 					<div
