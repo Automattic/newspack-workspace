@@ -56,7 +56,32 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		add_action( 'pre_get_posts', [ __CLASS__, 'hide_pattern_from_admin_list' ] );
 		add_filter( 'wp_count_posts', [ __CLASS__, 'hide_pattern_from_counts' ], 10, 2 );
 		add_filter( 'wp_insert_post_data', [ __CLASS__, 'lock_pattern_title' ], 10, 2 );
+		add_filter( 'wp_insert_post_data', [ __CLASS__, 'record_cta_before_save' ], 10, 2 );
 		add_filter( 'rest_pre_insert_wp_block', [ __CLASS__, 'prevent_pattern_duplication' ], 10, 2 );
+	}
+
+	/**
+	 * Record the plugin's CTA before an editor save can replace it. The record is
+	 * what marks a publisher's CTA as theirs, and a pattern seeded before it
+	 * existed has none until repair() writes one. A save landing first would put
+	 * the publisher's CTA in a pattern whose next repair cannot tell it from a
+	 * stale one, and would revert it. So the CTA stored before the save is
+	 * recorded here, while it is still the plugin's.
+	 *
+	 * @param array $data    Slashed post data about to be written.
+	 * @param array $postarr Raw post array, carrying the target ID.
+	 *
+	 * @return array The post data, unchanged.
+	 */
+	public static function record_cta_before_save( $data, $postarr ) {
+		$pattern_id = (int) get_option( self::OPTION_PATTERN_ID, 0 );
+		if ( ! $pattern_id || (int) ( $postarr['ID'] ?? 0 ) !== $pattern_id || '' !== (string) get_option( self::OPTION_WRITTEN_CTA, '' ) ) {
+			return $data;
+		}
+
+		self::record_written_cta( (string) get_post_field( 'post_content', $pattern_id ) );
+
+		return $data;
 	}
 
 	/**
@@ -457,10 +482,11 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 			return false;
 		}
 
-		if ( ! self::save_pattern_content( $pattern_id, self::build_pattern_content() ) ) {
+		$content = self::build_pattern_content();
+		if ( ! self::save_pattern_content( $pattern_id, $content ) ) {
 			return false;
 		}
-		self::record_written_cta( $pattern_id );
+		self::record_written_cta( $content );
 
 		// The description is the pattern editor's to edit too, and it describes
 		// what this pattern is for rather than what it looks like.
@@ -670,7 +696,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		}
 
 		update_option( self::OPTION_PATTERN_ID, $new_id );
-		self::record_written_cta( $new_id );
+		self::record_written_cta( (string) get_post_field( 'post_content', $new_id ) );
 
 		return $new_id;
 	}
@@ -846,9 +872,15 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 			// describes.
 			$restamped = self::maybe_restamp_accent( $group );
 
+			// A CTA the publisher chose stays in the stored pattern, whatever the
+			// render shows in its place: persisting a fallback here would discard
+			// it for good.
 			$before = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
-			$group  = Newspack_Popups_Contextual_Prompt_Render::normalize_cta( $group );
-			$after  = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
+			$owned  = null !== $before && self::is_cta_publisher_owned( $before['name'] );
+			if ( ! $owned ) {
+				$group = Newspack_Popups_Contextual_Prompt_Render::normalize_cta( $group );
+			}
+			$after = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
 
 			// Nothing is configured to point a CTA at, so normalization dropped it.
 			// Persisting that fallback would discard the publisher's CTA for good —
@@ -858,10 +890,10 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 				continue;
 			}
 
-			// A CTA the admin chose is left as it is, and so is the record: it
-			// still names the one the plugin wrote, which is how the choice stays
-			// recognizable. Any other CTA is the plugin's, as normalized.
-			if ( null !== $after && ! self::is_cta_publisher_owned( $before['name'] ?? '' ) ) {
+			// The record is left alone under a publisher's CTA: it still names the
+			// one the plugin wrote, which is how the choice stays recognizable. Any
+			// other CTA is the plugin's, as normalized.
+			if ( null !== $after && ! $owned ) {
 				$cta = $after['name'];
 			}
 
@@ -879,7 +911,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		$content = serialize_blocks( $blocks );
 		if ( $content === $post->post_content ) {
 			// Nothing to write, but a pattern seeded before the CTA record existed
-			// gets one here, so the admin's next swap reads as theirs.
+			// gets one here, so the publisher's next swap reads as theirs.
 			self::record_cta( $cta );
 			return;
 		}
@@ -898,13 +930,13 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * Whether the stored pattern's CTA is one the admin put there, rather than the
-	 * one this plugin wrote. Normalization exists for a CTA left behind by a change
-	 * of donation platform, and on its own it cannot tell that apart from an admin
-	 * who swapped the donate form for a button on purpose: both are a button on a
-	 * native site. The record of what the plugin last wrote is what tells them
-	 * apart. With no record — a site seeded before it existed — nothing is the
-	 * admin's yet; the first repair records the CTA it finds.
+	 * Whether the stored pattern's CTA is one the publisher put there, rather than
+	 * the one this plugin wrote. Normalization exists for a CTA left behind by a
+	 * change of donation platform, and on its own it cannot tell that apart from a
+	 * publisher who swapped the donate form for a button on purpose: both are a
+	 * button on a native site. The record of what the plugin last wrote is what
+	 * tells them apart. With no record — a site seeded before it existed — nothing
+	 * is the publisher's yet; the first repair records the CTA it finds.
 	 *
 	 * @param string $cta_name Block name of the stored CTA.
 	 * @return bool
@@ -929,15 +961,20 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * Record the CTA a seed or a reset just stored, read back from the pattern.
+	 * Record the CTA in markup the plugin just stored, from that markup rather
+	 * than a fresh read: an editor save landing in between would otherwise be
+	 * recorded as the plugin's, and its CTA reverted on the next repair.
 	 *
-	 * @param int $pattern_id Pattern post ID.
+	 * @param string $content The stored pattern markup.
 	 */
-	private static function record_written_cta( $pattern_id ) {
-		$blocks = parse_blocks( (string) get_post_field( 'post_content', $pattern_id ) );
-		$cta    = isset( $blocks[0] ) ? Newspack_Popups_Contextual_Prompt_Render::find_cta( $blocks[0] ) : null;
-
-		self::record_cta( $cta['name'] ?? null );
+	private static function record_written_cta( $content ) {
+		foreach ( parse_blocks( $content ) as $block ) {
+			if ( self::is_prompt_card( $block ) ) {
+				$cta = Newspack_Popups_Contextual_Prompt_Render::find_cta( $block );
+				self::record_cta( $cta['name'] ?? null );
+				return;
+			}
+		}
 	}
 
 	/**
@@ -1115,13 +1152,13 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 	}
 
 	/**
-	 * Lift the locks the seed no longer bakes in. An earlier seed pinned the
-	 * group with a `templateLock` and locked the CTA child, then relaxed both so
-	 * a detached card could take the publisher's own blocks in place of the CTA.
-	 * A pattern seeded before that keeps the old attributes in its stored markup,
-	 * which reads as a design change against the current seed and leaves the CTA
-	 * unremovable in the pattern editor. Only the bound copy stays locked; every
-	 * other child is freed, matching what the seed writes now.
+	 * Lift the locks an older seed baked in: the group's `templateLock` and the
+	 * lock on its call to action, which kept a detached card from taking the
+	 * publisher's own blocks. A pattern still carrying them reads as a design
+	 * change against the seed and keeps the CTA unremovable in the pattern editor.
+	 * Any lock on a child other than the bound copy is lifted, not only the seeded
+	 * one as in the card guard: the pattern editor offers no way to set a lock
+	 * (see lock_pattern_editor()), so none here is the publisher's.
 	 *
 	 * @param array $group Parsed prompt card, mutated in place.
 	 * @return bool Whether anything changed.
@@ -1147,7 +1184,9 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 
 	/**
 	 * Whether a child is the pattern's generated copy: the paragraph the pattern
-	 * binds each instance's copy to. Mirrors isBoundCopy in card-guard.js.
+	 * binds each instance's copy to. The binding alone is enough here, where
+	 * isBoundCopy in card-guard.js also matches the seeded name: repair() restores
+	 * the binding before this runs, while a detached card has lost it.
 	 *
 	 * @param array $block Parsed block.
 	 * @return bool
