@@ -403,10 +403,11 @@ final class Republication_Tracker_Tool {
 	 * Get the formatted byline and site name (e.g. "by John Doe, Site Name")
 	 * shared by the HTML and plain text versions of the republishable content.
 	 *
-	 * @param string $author The author name to start from, before filtering.
+	 * @param string       $author The author name to start from, before filtering.
+	 * @param WP_Post|null $post   Optional. The post being republished; defaults to the current post.
 	 * @return string The byline text (may contain HTML author links).
 	 */
-	public static function get_byline_text( $author ) {
+	public static function get_byline_text( $author, $post = null ) {
 		/**
 		 * Allow filtering of the byline that is output in the share dialog and the copyable plaintext.
 		 *
@@ -416,8 +417,11 @@ final class Republication_Tracker_Tool {
 		 *
 		 * @link https://developer.wordpress.org/reference/functions/get_the_author/
 		 * @link https://github.com/INN/republication-tracker-tool/issues/46
+		 *
+		 * @param string       $author The author name.
+		 * @param WP_Post|null $post   The post being republished, if known.
 		 */
-		$byline = (string) apply_filters( 'republication_tracker_tool_byline', $author );
+		$byline = (string) apply_filters( 'republication_tracker_tool_byline', $author, $post );
 
 		/**
 		 * Allow filtering of the byline format (e.g. "by %s") output in the share
@@ -425,14 +429,16 @@ final class Republication_Tracker_Tool {
 		 * placeholder for the byline itself. Substituted with str_replace(), not
 		 * sprintf(), so a malformed value degrades instead of fataling.
 		 *
-		 * @param string $format The byline format. Defaults to "by %s".
-		 * @param string $byline The resolved byline the format will wrap.
+		 * @param string       $format The byline format. Defaults to "by %s".
+		 * @param string       $byline The resolved byline the format will wrap.
+		 * @param WP_Post|null $post   The post being republished, if known.
 		 */
 		$byline_format = (string) apply_filters(
 			'republication_tracker_tool_byline_format',
 			// translators: %s is the byline (e.g. an author name or attribution).
 			__( 'by %s', 'republication-tracker-tool' ),
-			$byline
+			$byline,
+			$post
 		);
 
 		return sprintf(
