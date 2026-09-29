@@ -90,8 +90,9 @@ export default function GroupList() {
 		return byId;
 	}, [ groups, avatarsByEmail ] );
 
-	// Plan filter options come from the loaded groups (the plans endpoint arrives
-	// in a later slice); distinct, in first-seen order.
+	// Plan filter options come from the loaded groups, which are the full set, not
+	// from /plans: that endpoint also lists individual plans, which match no group.
+	// Distinct, in first-seen order.
 	const planElements = useMemo(
 		() => [ ...new Set( groups.map( g => g.plan ).filter( Boolean ) ) ].map( n => ( { value: n, label: n } ) ),
 		[ groups ]

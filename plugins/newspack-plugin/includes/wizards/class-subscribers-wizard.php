@@ -685,8 +685,8 @@ class Subscribers_Wizard extends Wizard {
 			'seatLimit'   => (int) $settings['limit'],
 			'members'     => Group_Subscription::get_member_count( $subscription ),
 			'createdAt'   => $created_at,
-			// Interim click-through target: the WooCommerce subscription edit
-			// screen (HPOS-safe), until the in-wizard group detail lands (PR 4).
+			// The WooCommerce subscription edit screen (HPOS-safe), linked from the
+			// group's "View subscription" drawer.
 			'editUrl'     => $this->subscription_edit_url( $subscription ),
 			// Always null: nothing on the site records a seat-increase request yet,
 			// so there is nothing to report. The field stays in the response because
