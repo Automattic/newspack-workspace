@@ -79,6 +79,29 @@ final class Subscription_Products {
 	}
 
 	/**
+	 * Whether the product can only ever be bought as a subscription: no purchase
+	 * option is one-time, so a reader can never end up with a one-time purchase
+	 * of it. True for every legacy subscription type (which never offers one) and
+	 * for a plan-based product forced onto its plans, even on the bare catalog
+	 * instance before any plan is chosen; false for a product sold both ways, a
+	 * plain product, or anything the facade cannot resolve.
+	 *
+	 * @param \WC_Product|int|false $product Product, variation, or ID.
+	 */
+	public static function is_subscription_only( $product ): bool {
+		$product = self::resolve( $product );
+		if ( ! $product || ! self::offers_subscription( $product ) ) {
+			return false;
+		}
+		foreach ( self::get_purchase_options( $product ) as $option ) {
+			if ( Purchase_Option::KIND_ONE_TIME === $option->kind ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * Every way a reader can buy the product. A variable product lists its variations'.
 	 *
 	 * @param \WC_Product|int|false $product Product, variation, or ID.

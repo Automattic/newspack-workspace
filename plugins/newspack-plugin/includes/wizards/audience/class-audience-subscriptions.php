@@ -337,8 +337,11 @@ class Audience_Subscriptions extends Wizard {
 			// A rule open to every subscriber never discounts a subscription, so the
 			// editor's price preview has to know which of the products it lists are
 			// ones. `type_label` is display copy and cannot answer that. Must match the
-			// flag product_grants() uses to decide the same question at checkout.
-			'is_subscription' => Subscription_Products::is_purchased_as_subscription( $product ),
+			// flag product_grants() uses to decide the same question at checkout,
+			// including a plan-based product forced onto its plans: it has no
+			// one-time price to preview a discount on, even on the bare instance
+			// listed here before any plan is chosen.
+			'is_subscription' => Subscription_Products::is_purchased_as_subscription( $product ) || Subscription_Products::is_subscription_only( $product ),
 		];
 	}
 

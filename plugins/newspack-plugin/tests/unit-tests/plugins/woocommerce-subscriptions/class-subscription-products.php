@@ -188,4 +188,25 @@ class Newspack_Test_Subscription_Products extends WP_UnitTestCase {
 		$this->assertInstanceOf( Purchase_Option::class, $option );
 		$this->assertSame( Purchase_Option::KIND_LEGACY, $option->kind );
 	}
+
+	/**
+	 * A legacy subscription type never offers a one-time option, so it is always
+	 * subscription-only; a plain product offers nothing, let alone only a
+	 * subscription; an unresolvable product answers false rather than erroring.
+	 */
+	public function test_is_subscription_only_matches_expectations() {
+		$this->assertTrue( Subscription_Products::is_subscription_only( $this->legacy_simple() ) );
+
+		$simple = wc_create_mock_product(
+			[
+				'id'    => 303,
+				'type'  => 'simple',
+				'price' => '5',
+			]
+		);
+		$this->assertFalse( Subscription_Products::is_subscription_only( $simple ) );
+
+		$this->assertFalse( Subscription_Products::is_subscription_only( 999999 ) );
+		$this->assertFalse( Subscription_Products::is_subscription_only( false ) );
+	}
 }

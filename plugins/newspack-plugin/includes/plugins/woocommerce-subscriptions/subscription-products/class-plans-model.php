@@ -75,9 +75,12 @@ final class Plans_Model {
 	 * Candidate product IDs; the caller confirms each with applies_to().
 	 *
 	 * Plans can come from the store-wide list (an option, not product data), so no
-	 * single query is exact. Products with any plan configuration are candidates.
-	 * When a site changes the default mode away from "one-time only", products with no
-	 * plan data at all can sell on plans, so every product becomes a candidate.
+	 * single query is exact. Products with any plan configuration are candidates,
+	 * including `_wcsatt_storewide_selection_mode`, the pre-9.0 meta key WooCommerce
+	 * still falls back to for "inherit" when `_wcsatt_schemes_status` was never
+	 * written. When a site changes the default mode away from "one-time only",
+	 * products with no plan data at all can sell on plans, so every product becomes
+	 * a candidate.
 	 *
 	 * @param string[] $statuses Post statuses.
 	 * @return int[]
@@ -101,6 +104,10 @@ final class Plans_Model {
 					'key'     => '_wcsatt_schemes_status',
 					'value'   => [ 'override', 'inherit' ],
 					'compare' => 'IN',
+				],
+				[
+					'key'     => '_wcsatt_storewide_selection_mode',
+					'compare' => 'EXISTS',
 				],
 				[
 					'key'     => '_wcsatt_schemes',

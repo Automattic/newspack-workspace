@@ -226,6 +226,20 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A product forced onto its plans has no one-time option at all, so it is
+	 * subscription-only even on the bare catalog instance; a product sold both
+	 * ways keeps a one-time option and so is not.
+	 */
+	public function test_is_subscription_only_for_plan_products() {
+		$forced = $this->product( [], [ '_wcsatt_schemes_status' => 'override' ] );
+		WCS_ATT_Product_Schemes::mock_register( $forced->get_id(), self::PLANS, true );
+		$this->assertTrue( Subscription_Products::is_subscription_only( $forced ) );
+
+		$hybrid = $this->hybrid();
+		$this->assertFalse( Subscription_Products::is_subscription_only( $hybrid ) );
+	}
+
+	/**
 	 * `find_products()` includes a plan-based product but not a plain one.
 	 */
 	public function test_find_products_includes_plan_products() {
@@ -241,6 +255,18 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	public function test_find_products_drops_inherit_without_storewide_plans() {
 		$this->product( [], [ '_wcsatt_schemes_status' => 'inherit' ] ); // No plans registered.
 		$this->assertSame( [], Subscription_Products::find_products() );
+	}
+
+	/**
+	 * `_wcsatt_storewide_selection_mode` is the pre-9.0 meta key WooCommerce still
+	 * falls back to for a product that never got `_wcsatt_schemes_status` written
+	 * (its presence alone means "inherit", whatever its value): a candidate query
+	 * that ignores it would silently drop such a product from `find_products()`.
+	 */
+	public function test_find_products_includes_legacy_storewide_selection_mode_meta() {
+		$product = $this->product( [], [ '_wcsatt_storewide_selection_mode' => 'yes' ] );
+		WCS_ATT_Product_Schemes::mock_register( $product->get_id(), self::PLANS );
+		$this->assertSame( [ $product->get_id() ], array_map( fn( $p ) => $p->get_id(), Subscription_Products::find_products() ) );
 	}
 
 	/**
