@@ -86,10 +86,14 @@ The block is typically placed in a header template part. Example markup:
 
 ```html
 <!-- wp:newspack/overlay-menu -->
+<div class="wp-block-newspack-overlay-menu">
   <!-- wp:newspack/overlay-menu-trigger {"triggerText":"Menu"} /-->
   <!-- wp:newspack/overlay-menu-panel {"slideDirection":"left"} -->
+  <div class="wp-block-newspack-overlay-menu-panel">
     <!-- wp:navigation {"overlayMenu":"never","layout":{"type":"flex","orientation":"vertical"}} /-->
+  </div>
   <!-- /wp:newspack/overlay-menu-panel -->
+</div>
 <!-- /wp:newspack/overlay-menu -->
 ```
 

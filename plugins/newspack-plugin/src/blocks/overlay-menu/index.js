@@ -3,7 +3,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { menu as icon } from '@wordpress/icons';
-import { InnerBlocks } from '@wordpress/block-editor';
+import { InnerBlocks, useBlockProps } from '@wordpress/block-editor';
 
 /**
  * Internal dependencies
@@ -34,5 +34,9 @@ export const settings = {
 	],
 	description: __( 'A trigger button that opens an overlay drawer panel with customizable content.', 'newspack-plugin' ),
 	edit: Edit,
-	save: () => <InnerBlocks.Content />,
+	save: () => (
+		<div { ...useBlockProps.save() }>
+			<InnerBlocks.Content />
+		</div>
+	),
 };

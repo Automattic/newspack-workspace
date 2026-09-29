@@ -3,7 +3,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { sidebar as icon } from '@wordpress/icons';
-import { InnerBlocks } from '@wordpress/block-editor';
+import { InnerBlocks, useBlockProps } from '@wordpress/block-editor';
 
 /**
  * Internal dependencies
@@ -25,6 +25,10 @@ export const settings = {
 		foreground: colors[ 'primary-400' ],
 	},
 	edit: Edit,
-	// Dynamic block — PHP renders the wrapper, so save only the inner blocks.
-	save: () => <InnerBlocks.Content />,
+	// Dynamic block — PHP renders the panel wrapper. Save persists a minimal wrapper div with InnerBlocks content.
+	save: () => (
+		<div { ...useBlockProps.save() }>
+			<InnerBlocks.Content />
+		</div>
+	),
 };
