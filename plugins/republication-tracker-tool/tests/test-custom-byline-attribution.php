@@ -106,6 +106,7 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Jane Smith', $output, 'Modal should attribute the post to the Custom Byline value.' );
 		$this->assertStringNotContainsString( 'John Doe', $output, 'Modal should not fall back to the WP post author when a Custom Byline is active.' );
 		$this->assertStringNotContainsString( 'by By', $output, 'Modal should not double up its own "by" prefix with a Custom Byline that already includes one.' );
+		$this->assertStringNotContainsString( 'author vcard', $output, 'Custom Byline author links should be stripped, matching the plain-text WP author and CAP bylines.' );
 	}
 
 	/**
