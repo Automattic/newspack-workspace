@@ -234,7 +234,8 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 
 	/**
 	 * The copy kept for a plan is handed out again with that plan applied, even if a
-	 * caller changed the plan on it, and a flushed cache starts over.
+	 * caller changed the plan on it. A flush stops handing the copies out but keeps
+	 * them alive, so none leaves its plan on an instance created afterwards.
 	 */
 	public function test_a_kept_plan_copy_still_carries_its_plan() {
 		$product = $this->hybrid();
@@ -246,8 +247,10 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 		$this->assertSame( 'plan:1_month', Subscription_Products::get_instance_option( $again )->key );
 		$this->assertSame( 'plan:1_year', Subscription_Products::get_instance_option( Subscription_Products::get_option_product( $options[2] ) )->key );
 
+		unset( $copy, $again );
 		Subscription_Products::flush_cache();
-		$this->assertNotSame( $copy, Subscription_Products::get_option_product( $options[1] ), 'A flush drops the kept copies.' );
+		$fresh = clone wc_get_product( $product->get_id() );
+		$this->assertFalse( Subscription_Products::is_purchased_as_subscription( $fresh ), 'An instance created after a flush has no plan applied.' );
 	}
 
 	/**

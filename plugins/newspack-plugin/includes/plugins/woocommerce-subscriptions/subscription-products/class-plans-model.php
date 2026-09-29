@@ -29,9 +29,19 @@ final class Plans_Model {
 	private static array $plan_instances = [];
 
 	/**
-	 * Drop the instances kept for the request.
+	 * Instances no longer handed out, held until the request ends so their object
+	 * handles are never reused. Never read.
+	 *
+	 * @var \WC_Product[]
+	 */
+	private static array $retired_instances = [];
+
+	/**
+	 * Stop handing out the instances kept for the request. They stay alive, because a
+	 * released instance would pass its plan to the next new object that takes its handle.
 	 */
 	public static function flush_cache(): void {
+		array_push( self::$retired_instances, ...array_values( self::$plan_instances ) );
 		self::$plan_instances = [];
 	}
 
