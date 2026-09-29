@@ -133,4 +133,15 @@ describe( 'getCarriedSegmentIds', () => {
 		setCookie( '5%2C7' );
 		expect( getCarriedSegmentIds( [ '5', '7' ] ) ).toEqual( [ '5', '7' ] );
 	} );
+
+	it( 'clears a cookie it cannot decode, and keeps what the session remembered', () => {
+		setCookie( '11' );
+		getCarriedSegmentIds( [ '11' ] );
+		// A cut-off percent sequence is not a value the server writes, so it
+		// says nothing about the reader. Left in place, it would fail the same
+		// way on every page of the session.
+		setCookie( '%E0%A4%A' );
+		expect( loadPage()( [ '11' ] ) ).toEqual( [ '11' ] );
+		expect( document.cookie ).not.toContain( COOKIE );
+	} );
 } );

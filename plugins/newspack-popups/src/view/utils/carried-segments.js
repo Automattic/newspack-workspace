@@ -21,20 +21,30 @@ const SESSION_KEY = 'newspack-popups-carried-segments';
 export const CARRIED_SEGMENTS_NONE = 'none';
 
 /**
- * Read the handoff cookie.
- *
- * @return {string|null} Raw cookie value, or null when absent.
- */
-const readCookie = () => {
-	const match = document.cookie.match( new RegExp( `(?:^|;\\s*)${ COOKIE_NAME }=([^;]*)` ) );
-	return match ? decodeURIComponent( match[ 1 ] ) : null;
-};
-
-/**
  * Expire the handoff cookie.
  */
 const deleteCookie = () => {
 	document.cookie = `${ COOKIE_NAME }=; path=/; max-age=0`;
+};
+
+/**
+ * Read the handoff cookie.
+ *
+ * @return {string|null} Raw cookie value, or null when there is no handoff.
+ */
+const readCookie = () => {
+	const match = document.cookie.match( new RegExp( `(?:^|;\\s*)${ COOKIE_NAME }=([^;]*)` ) );
+	if ( ! match ) {
+		return null;
+	}
+	try {
+		return decodeURIComponent( match[ 1 ] );
+	} catch ( e ) {
+		// Not a value the server writes, so it says nothing about the reader.
+		// Cleared, or it would fail the same way on every page of the session.
+		deleteCookie();
+		return null;
+	}
 };
 
 /**
