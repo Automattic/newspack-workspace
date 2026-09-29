@@ -130,10 +130,18 @@ class Newspack_Blocks {
 	 * the same for the whole request: the body class is printed before the loop runs, and a
 	 * fullscreen post rendered inside another post's page must not affect that page.
 	 *
+	 * A reader the post is restricted for gets the content gate's teaser instead of the
+	 * block, so nothing covers the page. The body class would hide the gate along with the
+	 * rest of the page and leave that reader a blank screen.
+	 *
 	 * @return bool
 	 */
 	private static function is_fullscreen_iframe_page() {
-		return is_singular() && null !== self::get_fullscreen_iframe_block( get_queried_object() );
+		$post = get_queried_object();
+		if ( ! is_singular() || null === self::get_fullscreen_iframe_block( $post ) ) {
+			return false;
+		}
+		return ! apply_filters( 'newspack_is_post_restricted', false, $post->ID );
 	}
 
 	/**

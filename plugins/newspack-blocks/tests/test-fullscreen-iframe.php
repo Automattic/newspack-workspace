@@ -84,6 +84,17 @@ class Test_Fullscreen_Iframe extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A reader the post is restricted for sees the content gate, so the page is left visible.
+	 */
+	public function test_restricted_fullscreen_post_page_is_left_visible() {
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+		$this->go_to( get_permalink( $this->fullscreen_post ) );
+
+		$this->assertNotContains( 'newspack-post-with-fullscreen-iframe', get_body_class() );
+		$this->assertFalse( $this->prompts_suppressed() );
+	}
+
+	/**
 	 * Rendering a fullscreen post inside another post's page leaves that page alone.
 	 */
 	public function test_other_post_page_is_unaffected_by_a_rendered_fullscreen_post() {
