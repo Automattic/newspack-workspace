@@ -47,6 +47,11 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 		\Newspack\Reader_Activation\Sync\Metadata::$keys = [ 'Account' => 'Account' ];
 		$this->integration = new Newspack_Popups_Test_Integration();
 		\Newspack\Reader_Activation\Integrations::$integrations = [ 'esp' => $this->integration ];
+
+		// The handler keeps what it resolved for each newsletter for the request.
+		$resolved_merge_tags = new ReflectionProperty( Newspack_Popups_Segmentation::class, 'account_merge_tags' );
+		$resolved_merge_tags->setAccessible( true );
+		$resolved_merge_tags->setValue( null, [] );
 	}
 
 	/**
@@ -129,6 +134,8 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 	 * (NPPM-3032).
 	 */
 	public function test_appends_activecampaign_percent_syntax() {
+		$this->provider->service          = 'active_campaign';
+		$this->integration->provider_slug = 'active_campaign';
 		\Newspack_Newsletters\Tracking\Utils::$syntax = '%%%s%%';
 		$url    = home_url( '/some-article/' );
 		$result = Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() );
@@ -220,6 +227,125 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A site can run several integrations. Only the one syncing to the ESP that
+	 * sends the newsletter names the field.
+	 */
+	public function test_picks_the_integration_syncing_to_the_newsletters_esp() {
+		$activecampaign                = new Newspack_Popups_Test_Integration();
+		$activecampaign->provider_slug = 'active_campaign';
+		$activecampaign->prefix        = 'AC_';
+		\Newspack\Reader_Activation\Integrations::$integrations = [
+			'esp'            => $this->integration,
+			'activecampaign' => $activecampaign,
+		];
+		$this->provider->service = 'active_campaign';
+		$this->provider->tags    = [ 'AC_Account' => 'AC_ACCOUNT' ];
+		\Newspack_Newsletters\Tracking\Utils::$syntax = '%%%s%%';
+
+		$url    = home_url( '/some-article/' );
+		$result = Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() );
+		$this->assertStringContainsString( 'np_account=%AC_ACCOUNT%', $result );
+	}
+
+	/**
+	 * Pausing an integration's outbound sync keeps its field selection, but
+	 * the field's values stop updating.
+	 */
+	public function test_skips_when_the_integrations_outbound_sync_is_paused() {
+		$this->integration->push_enabled = false;
+		$url                             = home_url( '/some-article/' );
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
+	 * Integrations are third-party code running inside newsletter rendering; one
+	 * that throws must cost the parameter, not the newsletter.
+	 */
+	public function test_leaves_the_link_alone_when_an_integration_throws() {
+		$throwing_integration = new class() extends Newspack_Popups_Test_Integration {
+			/**
+			 * Fail the way a misbehaving integration would.
+			 *
+			 * @throws \RuntimeException Always.
+			 */
+			public function get_enabled_outgoing_fields() {
+				throw new \RuntimeException( 'integration failure' );
+			}
+		};
+		\Newspack\Reader_Activation\Integrations::$integrations = [ 'esp' => $throwing_integration ];
+		$url = home_url( '/some-article/' );
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
+	 * Resolving the tag can take a request to the ESP, and an unresponsive ESP
+	 * holds each request until it times out. A newsletter pays that once, not
+	 * once per link, whether or not a tag was found.
+	 *
+	 * @param array $tags Tag names the provider knows, keyed by field name.
+	 *
+	 * @dataProvider provider_tags_provider
+	 */
+	public function test_looks_the_tag_up_once_per_newsletter( $tags ) {
+		$this->provider->tags = $tags;
+		$newsletter           = $this->make_newsletter();
+		foreach ( [ '/first-article/', '/second-article/' ] as $path ) {
+			$url = home_url( $path );
+			Newspack_Popups_Segmentation::append_account_param( $url, $url, $newsletter );
+		}
+		$this->assertSame( 1, $this->provider->lookups );
+	}
+
+	/**
+	 * A provider that knows the Account field's tag, and one that doesn't.
+	 *
+	 * @return array[]
+	 */
+	public function provider_tags_provider() {
+		return [
+			'tag found'    => [ [ 'NP_Account' => 'NP_ACCOUNT' ] ],
+			'no tag found' => [ [] ],
+		];
+	}
+
+	/**
+	 * The tag name comes from the ESP and lands unescaped in the link, so one
+	 * that could break out of the parameter or the attribute is not used.
+	 *
+	 * @param string $tag_name Tag name as the ESP returned it.
+	 *
+	 * @dataProvider unsafe_tag_name_provider
+	 */
+	public function test_skips_a_tag_name_that_is_unsafe_in_a_link( $tag_name ) {
+		$this->provider->tags = [ 'NP_Account' => $tag_name ];
+		$url                  = home_url( '/some-article/' );
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() )
+		);
+	}
+
+	/**
+	 * Tag names that would change the URL or the markup around it.
+	 *
+	 * @return array[]
+	 */
+	public function unsafe_tag_name_provider() {
+		return [
+			'adds a parameter'     => [ 'ACCOUNT&next=1' ],
+			'starts a fragment'    => [ 'ACCOUNT#top' ],
+			'closes the attribute' => [ 'ACCOUNT" onclick="x' ],
+			'contains a space'     => [ 'NP ACCOUNT' ],
+		];
+	}
+
+	/**
 	 * The legacy metadata schema keys the Account field as 'account'. Both
 	 * schemas must resolve.
 	 */
@@ -248,6 +374,19 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 		$url = home_url( '/some-article/' );
 		Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() );
 		$this->assertNull( $this->provider->received_list_id );
+	}
+
+	/**
+	 * A provider from a Newsletters version that can't resolve tag names must
+	 * not fatal mid-render — that would break every newsletter on the site.
+	 */
+	public function test_skips_when_the_provider_cannot_resolve_tags() {
+		Newspack_Newsletters::$provider = (object) [ 'service' => 'mailchimp' ];
+		$url                            = home_url( '/some-article/' );
+		$this->assertSame(
+			$url,
+			Newspack_Popups_Segmentation::append_account_param( $url, $url, $this->make_newsletter() )
+		);
 	}
 
 	/**

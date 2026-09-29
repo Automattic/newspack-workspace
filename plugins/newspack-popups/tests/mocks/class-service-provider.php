@@ -35,6 +35,13 @@ if ( ! class_exists( 'Newspack_Popups_Test_Service_Provider' ) ) {
 		public $received_list_id = 'unset';
 
 		/**
+		 * How many times a tag name was looked up.
+		 *
+		 * @var int
+		 */
+		public $lookups = 0;
+
+		/**
 		 * Resolve a field's merge-tag name.
 		 *
 		 * @param string      $field_name Field name.
@@ -43,6 +50,7 @@ if ( ! class_exists( 'Newspack_Popups_Test_Service_Provider' ) ) {
 		 */
 		public function get_field_merge_tag_name( $field_name, $list_id = null ) {
 			$this->received_list_id = $list_id;
+			++$this->lookups;
 			return $this->tags[ $field_name ] ?? '';
 		}
 	}

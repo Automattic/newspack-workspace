@@ -45,8 +45,9 @@ final class Newspack_Popups_Segmentation {
 	 * per recipient at send time. On arrival the ID resolves to the reader's
 	 * last-known matched segments for the browsing session.
 	 *
-	 * Unsigned, forgeable, and enumerable: drives prompt segmentation only —
-	 * never content access, analytics identity, or reader-profile writes.
+	 * Unsigned, forgeable, and enumerable: drives prompt segmentation and its
+	 * reach reporting only — never content access, analytics identity, or
+	 * reader-profile writes.
 	 *
 	 * Emitted for every supported ESP, including ActiveCampaign's `%FIELD%`
 	 * syntax (unsafe when unsubstituted, NPPM-3032), because
@@ -70,6 +71,15 @@ final class Newspack_Popups_Segmentation {
 	 * (positive-integer term IDs). Mirrored in carried-segments.js — keep in sync.
 	 */
 	const CARRIED_SEGMENTS_NONE = 'none';
+
+	/**
+	 * Account merge tags resolved in this request, keyed by newsletter ID. An
+	 * empty string is kept too: resolving can take a request to the ESP, and a
+	 * newsletter must not repeat one that failed for every link it carries.
+	 *
+	 * @var array<int, string>
+	 */
+	private static $account_merge_tags = [];
 
 	/**
 	 * Installed version number of the custom table.
@@ -367,24 +377,46 @@ final class Newspack_Popups_Segmentation {
 			return $url;
 		}
 
-		$field_name = self::get_account_field_name();
-		if ( '' === $field_name ) {
-			return $url;
-		}
-
-		$tag_name = self::get_esp_field_tag_name( $field_name, $post );
-		if ( '' === $tag_name ) {
-			return $url;
-		}
-
-		$merge_tag = \Newspack_Newsletters\Tracking\Utils::get_merge_tag( $tag_name );
-		if ( empty( $merge_tag ) ) {
+		$merge_tag = self::get_account_merge_tag( $post );
+		if ( '' === $merge_tag ) {
 			return $url;
 		}
 
 		// No is_url_safe_merge_tag() guard, unlike the donor handler: an
 		// unsubstituted np_account is always redirected away before output.
 		return self::append_raw_query_param( $url, self::ACCOUNT_QUERY_PARAM, $merge_tag );
+	}
+
+	/**
+	 * The ESP merge tag for the Account field, for a newsletter's links.
+	 *
+	 * Resolved once per newsletter per request, and contained: integrations and
+	 * the ESP provider are code this plugin doesn't own, running inside
+	 * newsletter rendering.
+	 *
+	 * @param \WP_Post $post Newsletter post.
+	 *
+	 * @return string Merge tag, or '' when there is none to emit.
+	 */
+	private static function get_account_merge_tag( $post ): string {
+		if ( isset( self::$account_merge_tags[ $post->ID ] ) ) {
+			return self::$account_merge_tags[ $post->ID ];
+		}
+
+		$merge_tag = '';
+		try {
+			$field_name = self::get_account_field_name();
+			$tag_name   = '' === $field_name ? '' : self::get_esp_field_tag_name( $field_name, $post );
+			// The tag name comes from the ESP and lands unescaped in the link.
+			if ( 1 === preg_match( '/^[A-Za-z0-9_-]+$/', $tag_name ) ) {
+				$merge_tag = (string) \Newspack_Newsletters\Tracking\Utils::get_merge_tag( $tag_name );
+			}
+		} catch ( \Throwable $e ) {
+			$merge_tag = '';
+		}
+
+		self::$account_merge_tags[ $post->ID ] = $merge_tag;
+		return $merge_tag;
 	}
 
 	/**
@@ -422,7 +454,7 @@ final class Newspack_Popups_Segmentation {
 	 * @return string Prefixed field name, or '' when no integration syncs the
 	 *                field to the newsletter's ESP.
 	 */
-	private static function get_account_field_name() {
+	private static function get_account_field_name(): string {
 		$integration = self::get_newsletter_esp_integration();
 		if ( null === $integration ) {
 			return '';
@@ -438,25 +470,36 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
-	 * The enabled, set-up integration syncing reader data to the ESP that sends
+	 * The enabled, set-up integration pushing reader data to the ESP that sends
 	 * newsletters.
+	 *
+	 * Matched on the integration's provider slug. The framework defines that
+	 * slug for the integration's brand mark, and an ESP integration reports the
+	 * Newsletters provider's own slug there; one that reported anything else
+	 * would stop matching, and its links would carry no parameter.
 	 *
 	 * @return object|null The integration, or null when there is none.
 	 */
-	private static function get_newsletter_esp_integration() {
+	private static function get_newsletter_esp_integration(): ?object {
 		$provider = \Newspack_Newsletters::get_service_provider();
 		if ( empty( $provider->service ) ) {
 			return null;
 		}
 		foreach ( \Newspack\Reader_Activation\Integrations::get_active_configured_integrations() as $integration ) {
 			if (
-				is_callable( [ $integration, 'get_provider_slug' ] ) &&
-				is_callable( [ $integration, 'get_metadata_prefix' ] ) &&
-				is_callable( [ $integration, 'get_enabled_outgoing_fields' ] ) &&
-				$provider->service === $integration->get_provider_slug()
+				! is_callable( [ $integration, 'get_provider_slug' ] ) ||
+				! is_callable( [ $integration, 'get_metadata_prefix' ] ) ||
+				! is_callable( [ $integration, 'get_enabled_outgoing_fields' ] ) ||
+				$provider->service !== $integration->get_provider_slug()
 			) {
-				return $integration;
+				continue;
 			}
+			// Pausing outbound sync keeps the field selection while the field's
+			// values stop updating.
+			if ( is_callable( [ $integration, 'is_push_enabled' ] ) && ! $integration->is_push_enabled() ) {
+				continue;
+			}
+			return $integration;
 		}
 		return null;
 	}

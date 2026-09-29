@@ -35,6 +35,13 @@ if ( ! class_exists( 'Newspack_Popups_Test_Integration' ) ) {
 		public $enabled_fields = [ 'Account' ];
 
 		/**
+		 * Whether outbound sync is on.
+		 *
+		 * @var bool
+		 */
+		public $push_enabled = true;
+
+		/**
 		 * The platform this integration syncs to.
 		 *
 		 * @return string|null
@@ -59,6 +66,15 @@ if ( ! class_exists( 'Newspack_Popups_Test_Integration' ) ) {
 		 */
 		public function get_enabled_outgoing_fields() {
 			return $this->enabled_fields;
+		}
+
+		/**
+		 * Whether outbound sync is on.
+		 *
+		 * @return bool
+		 */
+		public function is_push_enabled() {
+			return $this->push_enabled;
 		}
 	}
 }
