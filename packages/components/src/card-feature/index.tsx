@@ -110,6 +110,7 @@ const CardFeature = ( {
 	const isMuted = !! requirements;
 	const classes = classnames( 'newspack-card-feature', className, {
 		'newspack-card-feature--muted': isMuted,
+		'newspack-card-feature--disabled': ! enabled,
 	} );
 
 	let badge: { label: string; intent: BadgeIntent } | undefined;
