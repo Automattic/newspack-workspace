@@ -786,6 +786,25 @@ class WC_Product {
 	public function get_children() {
 		return $this->data['children'] ?? [];
 	}
+	/**
+	 * Real WooCommerce lists only purchasable, visible variations, each as an array
+	 * carrying its `variation_id`; every mock child counts as available.
+	 */
+	public function get_available_variations() {
+		return array_map(
+			function ( $id ) {
+				return [ 'variation_id' => $id ];
+			},
+			$this->get_children()
+		);
+	}
+	/**
+	 * The product's data, current meta included, so a subclass constructed by ID
+	 * can re-hydrate from the mock products database.
+	 */
+	public function get_mock_data() {
+		return array_merge( $this->data, [ 'meta' => $this->meta ] );
+	}
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
 	}
@@ -890,6 +909,21 @@ function wc_create_mock_product( $data = [] ) {
 	$product = new WC_Product( $data );
 	$products_database[ $product->get_id() ] = $product;
 	return $product;
+}
+
+if ( ! class_exists( 'WC_Product_Variation' ) ) {
+	/**
+	 * `new WC_Product_Variation( $id )` loads the variation by ID, as the real
+	 * constructor does, which is how Subscriptions_Tiers rebuilds a variable
+	 * subscription's variations.
+	 */
+	class WC_Product_Variation extends WC_Product {
+		public function __construct( $id = 0 ) {
+			global $products_database;
+			$existing = $products_database[ $id ] ?? null;
+			parent::__construct( $existing ? $existing->get_mock_data() : [ 'id' => $id ] );
+		}
+	}
 }
 
 /**
