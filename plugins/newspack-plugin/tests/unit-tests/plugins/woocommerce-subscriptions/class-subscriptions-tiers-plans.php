@@ -285,8 +285,10 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Two plans sharing a billing period each keep their own bucket, in plan order,
-	 * and each bucket still reads as that period.
+	 * Two plans sharing a billing period each keep their own bucket, in plan order.
+	 * Each tab names what sets its plan apart, so neither a sighted reader nor a
+	 * screen reader hears the same "Monthly" twice, and the radios are announced as
+	 * one labelled group.
 	 */
 	public function test_two_plans_same_frequency_get_separate_buckets() {
 		$product = $this->plan_variable(
@@ -294,7 +296,7 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 				'monthly'          => [ 'period' => 'month' ],
 				'monthly_discount' => [
 					'period' => 'month',
-					'price'  => 3,
+					'length' => 12,
 				],
 			]
 		);
@@ -307,7 +309,55 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 		$this->assertSame( [ 'monthly', 'monthly_discount' ], $keys );
 
 		$html = $this->render( $product );
-		$this->assertSame( 2, substr_count( $html, 'Monthly' ), 'The second monthly bucket is labelled as monthly too.' );
+		$this->assertSame( [ 'Monthly', 'Monthly · 12 payments' ], $this->tab_labels( $html ) );
+		$this->assertMatchesRegularExpression( '/<div class="newspack-ui__segmented-control__tabs" role="radiogroup" aria-label="Frequency">/', $html );
+	}
+
+	/**
+	 * Two plans nothing sets apart but their order still get distinct labels.
+	 */
+	public function test_identical_plans_on_one_period_are_numbered() {
+		$html = $this->render(
+			$this->plan_variable(
+				[
+					'monthly'       => [ 'period' => 'month' ],
+					'monthly_again' => [ 'period' => 'month' ],
+				]
+			)
+		);
+		$this->assertSame( [ 'Monthly', 'Monthly (2)' ], $this->tab_labels( $html ) );
+	}
+
+	/**
+	 * The label text of every plan tab.
+	 *
+	 * @param string $html Markup.
+	 * @return string[]
+	 */
+	private function tab_labels( $html ) {
+		preg_match( '/<div class="newspack-ui__segmented-control__tabs".*?<\/div>/s', $html, $tabs );
+		preg_match_all( '/<input type="radio"[^>]*>\s*(.*?)\s*<\/label>/s', $tabs[0] ?? '', $labels );
+		return array_map( 'html_entity_decode', $labels[1] );
+	}
+
+	/**
+	 * A name-your-price product sold on a single plan is not the legacy
+	 * name-your-price card: that card reads its schedule from legacy subscription
+	 * meta, which a plan product does not have.
+	 */
+	public function test_single_plan_name_your_price_product_is_not_a_nyp_form() {
+		wc_create_mock_product(
+			[
+				'id'    => 48,
+				'type'  => 'simple',
+				'price' => '5',
+				'meta'  => [ '_nyp' => 'yes' ],
+			]
+		);
+		WCS_ATT_Product_Schemes::mock_register( 48, [ '1_month' => [ 'period' => 'month' ] ], true );
+		$html = $this->render( wc_get_product( 48 ) );
+		$this->assertStringContainsString( 'class="newspack__subscription-tiers__form "', $html );
+		$this->assertCount( 1, $this->plan_inputs( $html, 'convert_to_sub_48' ), 'Still sold on its plan.' );
 	}
 
 	/**
@@ -395,6 +445,38 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 		$this->plan_variable( [ '1_month' => [ 'period' => 'month' ] ], $id, true );
 		$ids = array_map( fn( $p ) => $p->get_id(), Subscriptions_Tiers::get_tier_eligible_products() );
 		$this->assertContains( $id, $ids );
+	}
+
+	/**
+	 * A draft plan product is offered for tier configuration like a draft legacy
+	 * one: the admin pickers list WooCommerce's default statuses.
+	 */
+	public function test_draft_plan_products_are_tier_eligible() {
+		$id = self::factory()->post->create(
+			[
+				'post_type'   => 'product',
+				'post_status' => 'draft',
+			]
+		);
+		update_post_meta( $id, '_wcsatt_schemes_status', 'override' );
+		$this->plan_variable( [ '1_month' => [ 'period' => 'month' ] ], $id, true );
+		$this->assertContains( $id, array_map( fn( $p ) => $p->get_id(), Subscriptions_Tiers::get_tier_eligible_products() ) );
+	}
+
+	/**
+	 * Plan products are subscriptions, so a caller that asks for no subscription
+	 * type gets none of them.
+	 */
+	public function test_plan_products_follow_the_requested_types() {
+		$id = self::factory()->post->create(
+			[
+				'post_type'   => 'product',
+				'post_status' => 'publish',
+			]
+		);
+		update_post_meta( $id, '_wcsatt_schemes_status', 'override' );
+		$this->plan_variable( [ '1_month' => [ 'period' => 'month' ] ], $id, true );
+		$this->assertNotContains( $id, array_map( fn( $p ) => $p->get_id(), Subscriptions_Tiers::get_tier_eligible_products( [ 'grouped' ] ) ) );
 	}
 
 	/**

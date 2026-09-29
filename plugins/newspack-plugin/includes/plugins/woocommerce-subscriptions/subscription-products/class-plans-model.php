@@ -153,7 +153,12 @@ final class Plans_Model {
 	}
 
 	/**
-	 * The plan a line item was bought on, or '' when none.
+	 * The plan a line item was bought on, or '' when none. Given the item's product,
+	 * WooCommerce maps a key stored in an older spelling onto the plan the product
+	 * defines now; without it, an item bought under standalone All Products for
+	 * Subscriptions never matches a current plan. The product is fetched by ID, not
+	 * with `$item->get_product()`, which re-enters this lookup through
+	 * `woocommerce_order_item_product`.
 	 *
 	 * @param \WC_Order_Item_Product $item Line item.
 	 */
@@ -161,7 +166,15 @@ final class Plans_Model {
 		if ( ! class_exists( '\WCS_ATT_Order' ) || ! method_exists( '\WCS_ATT_Order', 'get_subscription_scheme' ) ) {
 			return '';
 		}
-		$key = \WCS_ATT_Order::get_subscription_scheme( $item );
+		$args = [];
+		if ( method_exists( $item, 'get_product_id' ) ) {
+			$product_id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
+			$product    = $product_id ? \wc_get_product( $product_id ) : null;
+			if ( $product instanceof \WC_Product ) {
+				$args['product'] = $product;
+			}
+		}
+		$key = \WCS_ATT_Order::get_subscription_scheme( $item, $args );
 		return is_string( $key ) ? $key : '';
 	}
 

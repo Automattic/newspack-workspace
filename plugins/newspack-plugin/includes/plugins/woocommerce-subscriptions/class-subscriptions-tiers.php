@@ -307,8 +307,11 @@ class Subscriptions_Tiers {
 		// the cart, so those product-only forms still start a subscription for a
 		// subscription-only product. A product also sold one-time needs its plan
 		// posted explicitly, which only the tiers modal (this list's other consumer) does.
+		// They count as subscriptions, so only a caller asking for a subscription type
+		// gets them, in the same statuses the type query above returns.
 		$ids = array_map( fn( $product ) => $product->get_id(), $products );
-		foreach ( Subscription_Products::find_products( [ 'status' => 'publish' ] ) as $candidate ) {
+		$candidates = array_intersect( (array) $types, [ 'subscription', 'variable-subscription' ] ) ? Subscription_Products::find_products() : [];
+		foreach ( $candidates as $candidate ) {
 			if ( $candidate->is_type( [ 'subscription', 'variable-subscription' ] ) || in_array( $candidate->get_id(), $ids, true ) ) {
 				continue;
 			}
@@ -491,8 +494,7 @@ class Subscriptions_Tiers {
 			if ( ! $frequency ) {
 				continue;
 			}
-			// Legacy products post no plan field, so they bucket by frequency alone,
-			// exactly as before plans existed.
+			// Legacy products post no plan field, so they bucket by frequency alone.
 			$field  = self::get_plan_field( $selected );
 			$posted = $field ? (string) array_key_first( $field ) . '=' . reset( $field ) : '';
 			$bucket = $frequency;
@@ -630,6 +632,84 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Labels for plan buckets that share a period and interval with another bucket
+	 * (`month_1` and `month_1_2`), which would otherwise both read "Monthly". Each
+	 * names what sets its plan apart: its price when the buckets' prices differ, its
+	 * length, trial and sign-up fee; a bucket nothing sets apart gets its position.
+	 *
+	 * @param array $tiers       Tiers by bucket.
+	 * @param array $plan_fields Bucket => the field that buys its plan.
+	 *
+	 * @return array<string, string> Bucket => label, for the plan buckets that need one.
+	 */
+	private static function get_plan_bucket_labels( $tiers, $plan_fields ) {
+		$groups = [];
+		foreach ( array_keys( $tiers ) as $bucket ) {
+			$groups[ implode( '_', array_slice( explode( '_', $bucket ), 0, 2 ) ) ][] = $bucket;
+		}
+		$labels = [];
+		foreach ( $groups as $buckets ) {
+			if ( count( $buckets ) < 2 ) {
+				continue;
+			}
+			$prices = [];
+			foreach ( $buckets as $bucket ) {
+				$prices[ $bucket ] = min( array_map( fn( $product ) => (float) $product->get_price(), $tiers[ $bucket ] ) );
+			}
+			$prices_differ = count( array_unique( $prices ) ) > 1;
+			$seen          = [];
+			foreach ( $buckets as $position => $bucket ) {
+				if ( empty( $plan_fields[ $bucket ] ) ) {
+					$seen[] = WooCommerce_Subscriptions::get_frequency_label( $bucket );
+					continue;
+				}
+				$option = Subscription_Products::get_instance_option( reset( $tiers[ $bucket ] ) );
+				$parts  = [];
+				if ( $prices_differ ) {
+					$parts[] = self::format_amount( $prices[ $bucket ] );
+				}
+				if ( $option && $option->length ) {
+					/* translators: %s: number of payments before the subscription ends. */
+					$parts[] = sprintf( _n( '%s payment', '%s payments', $option->length, 'newspack-plugin' ), number_format_i18n( $option->length ) );
+				}
+				if ( $option && $option->trial_length ) {
+					// WooCommerce Subscriptions' period string carries the number only when it is above one.
+					$period  = function_exists( 'wcs_get_subscription_period_strings' ) ? wcs_get_subscription_period_strings( $option->trial_length, $option->trial_period ) : $option->trial_period;
+					$trial   = $option->trial_length > 1 && function_exists( 'wcs_get_subscription_period_strings' ) ? $period : number_format_i18n( $option->trial_length ) . ' ' . $period;
+					/* translators: %s: trial length, e.g. "7 days". */
+					$parts[] = sprintf( __( '%s free trial', 'newspack-plugin' ), $trial );
+				}
+				if ( $option && $option->sign_up_fee > 0 ) {
+					/* translators: %s: sign-up fee amount. */
+					$parts[] = sprintf( __( '%s sign-up fee', 'newspack-plugin' ), self::format_amount( $option->sign_up_fee ) );
+				}
+				$label = WooCommerce_Subscriptions::get_frequency_label( $bucket );
+				if ( $parts ) {
+					$label .= ' · ' . implode( ', ', $parts );
+				}
+				if ( in_array( $label, $seen, true ) ) {
+					/* translators: 1: frequency label, 2: the option's position among those sharing the label. */
+					$label = sprintf( __( '%1$s (%2$s)', 'newspack-plugin' ), $label, number_format_i18n( $position + 1 ) );
+				}
+				$seen[]            = $label;
+				$labels[ $bucket ] = $label;
+			}
+		}
+		return $labels;
+	}
+
+	/**
+	 * An amount in the store currency, as plain text.
+	 *
+	 * @param float $amount Amount.
+	 *
+	 * @return string
+	 */
+	private static function format_amount( $amount ) {
+		return function_exists( 'wc_price' ) ? wp_strip_all_tags( wc_price( $amount ) ) : number_format_i18n( $amount, 2 );
+	}
+
+	/**
 	 * Get product title.
 	 *
 	 * @param \WC_Product $product                   Product.
@@ -666,7 +746,9 @@ class Subscriptions_Tiers {
 	}
 
 	/**
-	 * Whether the given tiers are all "name your price" products.
+	 * Whether the given tiers are all "name your price" products. A plan tier never
+	 * is: the name-your-price card reads its schedule from legacy subscription meta,
+	 * which a plan product does not have.
 	 *
 	 * @param array $tiers Tiers.
 	 *
@@ -675,7 +757,7 @@ class Subscriptions_Tiers {
 	private static function is_nyp( $tiers ) {
 		foreach ( $tiers as $frequency ) {
 			foreach ( $frequency as $product ) {
-				if ( $product->get_meta( '_nyp' ) !== 'yes' ) {
+				if ( $product->get_meta( '_nyp' ) !== 'yes' || self::get_plan_field( $product ) ) {
 					return false;
 				}
 			}
@@ -858,8 +940,10 @@ class Subscriptions_Tiers {
 	 * @param string $current_frequency Current frequency.
 	 * @param bool   $is_form_control     Whether to treat it as a form input.
 	 * @param array  $plan_fields       Frequency => the `[ field => value ]` that buys its plan.
+	 * @param array  $labels            Frequency => label, for a frequency that needs more
+	 *                                  than its period and interval to tell it apart.
 	 */
-	public static function render_frequency_control( $frequencies, $current_frequency, $is_form_control = false, array $plan_fields = [] ) {
+	public static function render_frequency_control( $frequencies, $current_frequency, $is_form_control = false, array $plan_fields = [], array $labels = [] ) {
 		if ( $is_form_control ) :
 			?>
 			<div class="newspack-ui__segmented-control__form-control">
@@ -867,17 +951,18 @@ class Subscriptions_Tiers {
 				<?php
 		endif;
 		if ( count( $frequencies ) <= 3 || ! empty( $plan_fields ) ) :
+			// Every tab a radio: announce them as one named choice.
+			$is_radiogroup = ! array_diff( $frequencies, array_keys( array_filter( $plan_fields ) ) );
 			?>
-			<div class="newspack-ui__segmented-control__tabs">
+			<div class="newspack-ui__segmented-control__tabs"<?php echo $is_radiogroup ? ' role="radiogroup" aria-label="' . esc_attr__( 'Frequency', 'newspack-plugin' ) . '"' : ''; ?>>
 				<?php foreach ( $frequencies as $frequency ) : ?>
 					<?php
 					if ( ! empty( $plan_fields[ $frequency ] ) ) :
 						$field_name = (string) array_key_first( $plan_fields[ $frequency ] );
-						// A suffixed bucket (`month_1_2`) still labels as its period and interval.
 						?>
 					<label class="newspack-ui__button newspack-ui__button--small <?php echo esc_attr( $frequency === $current_frequency ? 'selected' : '' ); ?>">
 						<input type="radio" name="<?php echo esc_attr( $field_name ); ?>" value="<?php echo esc_attr( $plan_fields[ $frequency ][ $field_name ] ); ?>"<?php checked( $frequency, $current_frequency ); ?>>
-						<?php echo esc_html( WooCommerce_Subscriptions::get_frequency_label( $frequency ) ); ?>
+						<?php echo esc_html( $labels[ $frequency ] ?? WooCommerce_Subscriptions::get_frequency_label( $frequency ) ); ?>
 					</label>
 					<?php else : ?>
 					<button type="button" class="newspack-ui__button newspack-ui__button--small <?php echo esc_attr( $frequency === $current_frequency ? 'selected' : '' ); ?>">
@@ -1063,7 +1148,7 @@ class Subscriptions_Tiers {
 				<div class="newspack-ui__segmented-control">
 					<?php
 					if ( count( $frequencies ) > 1 ) {
-						self::render_frequency_control( $frequencies, $current_frequency, $is_nyp, $plan_fields );
+						self::render_frequency_control( $frequencies, $current_frequency, $is_nyp, $plan_fields, self::get_plan_bucket_labels( $tiers, $plan_fields ) );
 					}
 					?>
 					<div class="newspack-ui__segmented-control__content">

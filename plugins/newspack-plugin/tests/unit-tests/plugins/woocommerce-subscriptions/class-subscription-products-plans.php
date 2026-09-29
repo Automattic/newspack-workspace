@@ -309,6 +309,22 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A key stored in an older spelling (standalone All Products for Subscriptions
+	 * wrote `1_month_0`) resolves to the plan the product defines now, so a reader
+	 * who bought on it still holds that plan.
+	 */
+	public function test_purchased_plan_key_resolves_an_older_spelling() {
+		$product = $this->hybrid();
+		$item    = new WC_Order_Item_Product(
+			[
+				'product_id' => $product->get_id(),
+				'meta'       => [ '_wcsatt_scheme' => '1_month_0' ],
+			]
+		);
+		$this->assertSame( '1_month', Subscription_Products::get_purchased_plan_key( $item ) );
+	}
+
+	/**
 	 * The option a request posted for a product: a variation's plan is read from
 	 * its parent's field, as WooCommerce reads it at add-to-cart; nothing posted,
 	 * the one-time choice, or an unknown plan is no option.

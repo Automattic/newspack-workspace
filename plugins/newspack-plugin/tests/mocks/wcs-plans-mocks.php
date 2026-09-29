@@ -146,9 +146,27 @@ if ( ! class_exists( 'WCS_ATT_Product' ) ) {
 
 if ( ! class_exists( 'WCS_ATT_Order' ) ) {
 	class WCS_ATT_Order {
+		/**
+		 * Real WCS maps a stored key onto the plans the product defines now only when
+		 * handed the product: an item bought under standalone All Products for
+		 * Subscriptions can hold `4_week_0` for today's `4_week`.
+		 *
+		 * @param \WC_Order_Item_Product $order_item Line item.
+		 * @param array                  $args       `product`: the item's product.
+		 */
 		public static function get_subscription_scheme( $order_item, $args = [] ) {
 			$key = method_exists( $order_item, 'get_meta' ) ? $order_item->get_meta( '_wcsatt_scheme', true ) : '';
-			return '' === $key ? false : $key;
+			if ( '' === $key ) {
+				return false;
+			}
+			if ( ! empty( $args['product'] ) && is_object( $args['product'] ) ) {
+				$plans     = WCS_ATT_Product_Schemes::get_subscription_schemes( $args['product'] );
+				$canonical = preg_replace( '/_0$/', '', $key );
+				if ( ! isset( $plans[ $key ] ) && isset( $plans[ $canonical ] ) ) {
+					return $canonical;
+				}
+			}
+			return $key;
 		}
 	}
 }
