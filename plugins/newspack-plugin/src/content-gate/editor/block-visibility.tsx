@@ -27,6 +27,7 @@ import './block-visibility.scss';
 import {
 	formatAccessRuleOptionLabel,
 	getAccessRuleOptionSuggestions,
+	hasSelectableAccessRuleOptions,
 	getAccessRuleOptionTokens,
 	MAX_OPTION_SUGGESTIONS,
 	getAccessRuleTokenFieldMessages,
@@ -224,7 +225,7 @@ export const AccessRuleValueControl = ( {
 		control = <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
 	} else if ( isOptionBackedAccessRule( slug, staticOptions, config.has_options ) ) {
 		const selected = Array.isArray( value ) ? value : [];
-		const hasOptions = options.length > 0;
+		const hasOptions = hasSelectableAccessRuleOptions( options );
 		// Both the caution and the inert state come from the shared module, so this picker
 		// and the Audience wizard's reach the same verdict on one stored value.
 		const valueNotice = getAccessRuleValueNotice( config, value, hasOptions );
@@ -250,7 +251,7 @@ export const AccessRuleValueControl = ( {
 				</AccessRuleValueNotice>
 				{ /* A different state from the ones above, and it can stand alongside a
 				     value the picker holds tokens for: these are stored IDs no option
-				     describes. */ }
+				     describes, or that it marks as ineligible. */ }
 				<UnlistedValuesNotice slug={ slug } options={ options } value={ selected } />
 			</>
 		);

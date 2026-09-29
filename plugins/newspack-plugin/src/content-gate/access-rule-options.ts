@@ -140,6 +140,18 @@ export function formatAccessRuleOptionLabel( option: AccessRuleOption ): string 
 }
 
 /**
+ * Whether a picker has anything to offer. Label-only entries name stored values but are
+ * never suggested, so a list made only of them offers nothing.
+ *
+ * @param options The rule options.
+ *
+ * @return Whether any option is selectable.
+ */
+export function hasSelectableAccessRuleOptions( options: AccessRuleOption[] ): boolean {
+	return options.some( option => option.selectable !== false );
+}
+
+/**
  * Build the suggestion labels for a picker: every option it may offer, leaving out the
  * label-only entries that exist to name stored values.
  *
@@ -343,8 +355,8 @@ export function hasUnlistedAccessRuleValues( options: AccessRuleOption[], value:
 }
 
 /**
- * Caution shown alongside a picker holding values no option describes, keyed by rule slug
- * the way `MISSING_OPTION_LABELS` is. What a picker can fail to list differs per rule: the
+ * Caution shown alongside a picker holding values no option describes, or products marked
+ * with an ineligible status, keyed by rule slug the way `MISSING_OPTION_LABELS` is. What a picker can fail to list differs per rule: the
  * subscription picker offers a variable subscription's variations, while the institution
  * picker offers published institutions only, so naming a cause the rule cannot have sends
  * a publisher looking for the wrong thing.
@@ -374,8 +386,8 @@ const DEFAULT_UNLISTED_VALUES_NOTICE = () =>
 	);
 
 /**
- * The caution shown alongside a picker holding values no option describes, so the reading
- * that the token invites — stale entry, safe to delete — does not go unchallenged.
+ * The caution shown alongside a picker holding values no option describes, or products
+ * marked with an ineligible status, so the reading that the token invites — stale entry, safe to delete — does not go unchallenged.
  *
  * @param slug The rule slug.
  *

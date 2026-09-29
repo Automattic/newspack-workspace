@@ -29,12 +29,10 @@ class WooCommerce_Products {
 	/**
 	 * Label a product for a picker, marking a status outside `ELIGIBLE_PRODUCT_STATUSES`,
 	 * e.g. "All Access [invalid status: Draft]". The status reads as WordPress admin names
-	 * it ("Scheduled" rather than `future`), in the site's language.
+	 * it ("Scheduled" rather than `future`), in the viewer's admin language.
 	 *
 	 * The marker keeps a saved product's name visible after it is drafted, scheduled or
 	 * trashed, rather than falling back to a generic "deleted" or "not listed" stand-in.
-	 * It also keeps the label distinct from the same product's name while eligible, which
-	 * matters to pickers that map labels back to IDs.
 	 *
 	 * @param string $name   The product name.
 	 * @param string $status The product's post status.

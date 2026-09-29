@@ -108,6 +108,8 @@ describe( 'segmentDescription', () => {
 		const { container } = render( <div>{ segmentDescription( segment ) }</div> );
 
 		await waitFor( () => expect( container.textContent ).toContain( 'Has active subscription(s): Deleted subscription' ) );
+		// Names come from a lookup of the saved IDs, so products the picker no longer lists keep theirs.
+		expect( apiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( 'include' ) } );
 	} );
 
 	it( 'renders a date range criterion instead of "[object Object]"', () => {
