@@ -9,6 +9,7 @@ namespace Newspack\Reader_Activation;
 
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Integrations;
+use Newspack\Reader_Activation\Integrations\Push_Log;
 use Newspack\Data_Events;
 use Newspack\Logger;
 use Newspack\Reader_Activation\Sync\Metadata;
@@ -84,6 +85,68 @@ class Contact_Sync extends Sync {
 	const RETRY_BACKOFF = [ 30, 120, 480, 1800, 7200 ];
 
 	/**
+	 * Substring signatures (lowercase) that classify an ESP error message on
+	 * the push/upsert direction.
+	 *
+	 * Matched in order against the lowercased error message. The HTTP status
+	 * code that would identify these cleanly is discarded upstream by the ESP
+	 * layer (only a "{Title}: {detail}" string survives), so classification is
+	 * necessarily string-based. Extend the lists as ESP error copy evolves —
+	 * they are private so they can do so without becoming public API (tests
+	 * reach classify_error() via reflection).
+	 *
+	 *   - permanent_contact: bad contact data; retrying can never succeed.
+	 *   - permanent_config:  site-level ESP account problem; actionable.
+	 *   - benign:            the contact already exists; no retry needed.
+	 *
+	 * Anything not matched here is treated as 'transient' and retried.
+	 */
+	private const ERROR_SIGNATURES = [
+		'permanent_contact' => [
+			'was permanently deleted',
+			'looks fake or invalid',
+			'merge fields were invalid',
+			'please provide a valid email',
+			'contact email address is not valid',
+		],
+		'permanent_config'  => [
+			'api access has been disabled',
+			'payment required',
+		],
+		'benign'            => [
+			'member exists',
+			'already a list member',
+		],
+	];
+
+	/**
+	 * Signature map for the deletion direction, where two push-oriented classes
+	 * invert their meaning:
+	 *
+	 *   - 'member exists' / 'already a list member' are deliberately absent: on
+	 *     a deletion push they mean the ESP contact still exists WITHOUT the
+	 *     account_deleted/membership_status flags, so the push must be retried
+	 *     (they fall through to 'transient') rather than skipped as benign.
+	 *   - 'was permanently deleted' is benign here: the contact is already gone
+	 *     from the ESP, which is the deletion end-state for both modes.
+	 */
+	private const DELETION_ERROR_SIGNATURES = [
+		'permanent_contact' => [
+			'looks fake or invalid',
+			'merge fields were invalid',
+			'please provide a valid email',
+			'contact email address is not valid',
+		],
+		'permanent_config'  => [
+			'api access has been disabled',
+			'payment required',
+		],
+		'benign'            => [
+			'was permanently deleted',
+		],
+	];
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init_hooks() {
@@ -130,10 +193,16 @@ class Contact_Sync extends Sync {
 	 * @param array  $contact          The contact data to sync.
 	 * @param string $context          The context of the sync. Defaults to static::$context.
 	 * @param array  $existing_contact Optional. Existing contact data to merge with. Defaults to null.
+	 * @param array  $options          Optional. Sync options threaded to the integration push:
+	 *                                 `skip_lists` (bool) and `fields` (string[]|null). These apply
+	 *                                 only to the direct push path below — not the queued Data Events
+	 *                                 branch, which never runs under WP-CLI. `integration_id`
+	 *                                 (string|null) restricts the push fan-out to a single active
+	 *                                 integration.
 	 *
 	 * @return true|\WP_Error True if succeeded or WP_Error.
 	 */
-	public static function sync( $contact, $context = '', $existing_contact = null ) {
+	public static function sync( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		$can_sync = static::can_sync( true );
 		if ( $can_sync->has_errors() ) {
 			return $can_sync;
@@ -162,28 +231,131 @@ class Contact_Sync extends Sync {
 			}
 		}
 
-		// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-		if ( 'legacy' !== Metadata::get_version() ) {
-			Logger::log( sprintf( 'Syncing contact %s for context "%s".', $contact['email'] ?? 'unknown', $context ) );
-			Logger::log( $contact );
+		return self::push_to_integrations( $contact, $context, $existing_contact, $options );
+	}
+
+	/**
+	 * Whether the given sync options are the default (no CLI field/list scoping).
+	 *
+	 * @param array $options Sync options.
+	 *
+	 * @return bool True when neither `skip_lists` nor `fields` scoping is set.
+	 */
+	private static function options_are_default( $options ): bool {
+		return empty( $options['skip_lists'] ) && empty( $options['fields'] );
+	}
+
+	/**
+	 * Prepare a contact for a single integration, applying the integration's own
+	 * `prepare_contact()` and then the CLI field/name scoping from `$options`.
+	 *
+	 * When `$options['fields']` is set: the reader `name` is dropped (so a
+	 * field-scoped backfill can't rewrite reader names — ESPs only set first/last
+	 * name when a name is present), and metadata is filtered to just the requested
+	 * labels. Filtering runs after `prepare_contact()`, so keys already arrive
+	 * prefixed; a key is kept when its de-prefixed remainder equals a requested
+	 * label, or begins with a requested label ending in `': '` (the UTM label
+	 * shape, e.g. `Signup UTM: source`). Everything else — including `status` /
+	 * `status_if_new` — is dropped.
+	 *
+	 * @param \Newspack\Reader_Activation\Integration $integration The target integration.
+	 * @param array                                   $contact     The contact data.
+	 * @param array                                   $options     Sync options.
+	 *
+	 * @return array The prepared, scoped contact.
+	 */
+	private static function prepare_contact_for_integration( $integration, $contact, $options = [] ): array {
+		$integration_contact = $integration->prepare_contact( $contact );
+
+		if ( empty( $options['fields'] ) ) {
+			return $integration_contact;
 		}
 
-		return self::push_to_integrations( $contact, $context, $existing_contact );
+		// Drop the reader name so a field-scoped backfill can't rewrite names (ESPs
+		// only set first/last name when a name is present). Applied to the prepared
+		// contact — after prepare_contact() — so an integration override that derives
+		// a name can't re-introduce it and defeat the guarantee.
+		unset( $integration_contact['name'] );
+
+		$prefix   = $integration->get_metadata_prefix();
+		$labels   = $options['fields'];
+		$filtered = [];
+		foreach ( $integration_contact['metadata'] ?? [] as $key => $value ) {
+			$remainder = 0 === strpos( $key, $prefix ) ? substr( $key, strlen( $prefix ) ) : $key;
+			foreach ( $labels as $label ) {
+				if ( $remainder === $label ) {
+					$filtered[ $key ] = $value;
+					break;
+				}
+				// UTM-style labels end in ": " and match any suffixed key (e.g. "Signup UTM: source").
+				// This trailing-": " shape is the contract defined by the UTM labels in
+				// Legacy_Basic::get_fields() ("Signup UTM: ") and
+				// Legacy_Payment::get_fields() ("Payment UTM: ").
+				if ( ': ' === substr( $label, -2 ) && 0 === strpos( $remainder, $label ) ) {
+					$filtered[ $key ] = $value;
+					break;
+				}
+			}
+		}
+
+		$integration_contact['metadata'] = $filtered;
+		return $integration_contact;
+	}
+
+	/**
+	 * Record an outbound operation in the push log.
+	 *
+	 * Recorded here rather than inside Integration::push_contact() because
+	 * only this class knows which attempt of a chain a push was and whether
+	 * another attempt follows.
+	 *
+	 * @param Integration $integration The integration the operation targeted.
+	 * @param array       $args        Push_Log::record_attempt() arguments, without the
+	 *                                 integration's own. `direction` ('push' or 'deletion')
+	 *                                 picks the error classification map.
+	 *
+	 * @return int The push log row ID, or 0 when nothing was written.
+	 */
+	private static function log_push_attempt( $integration, array $args ) {
+		$result = $args['result'] ?? true;
+		// `direction` is this method's own argument, not a push log field.
+		$direction = $args['direction'] ?? 'push';
+		unset( $args['direction'] );
+		return Push_Log::record_attempt(
+			array_merge(
+				$args,
+				[
+					'integration_id' => $integration->get_id(),
+					'hash_prefix'    => $integration->get_metadata_prefix(),
+					'error_class'    => \is_wp_error( $result ) ? self::classify_error( $result, $direction ) : null,
+				]
+			)
+		);
 	}
 
 	/**
 	 * Push contact data to all active integrations.
 	 *
 	 * Failed integrations are scheduled for retry via ActionScheduler
-	 * with exponential backoff.
+	 * with exponential backoff — unless `$options` carries CLI field/list scoping,
+	 * in which case retries are suppressed (see below).
 	 *
 	 * @param array  $contact          The contact data to sync.
 	 * @param string $context          The context of the sync.
 	 * @param array  $existing_contact Optional. Existing contact data to merge with.
+	 * @param array  $options          Optional. Sync options: `skip_lists` (bool) and
+	 *                                 `fields` (string[]|null). When non-default, contacts
+	 *                                 are field/name-scoped per integration and failed pushes
+	 *                                 are NOT auto-retried — the AS retry handler rebuilds the
+	 *                                 full contact and would push it with the master list,
+	 *                                 undoing the list-less/field-scoped intent. Operators
+	 *                                 re-run the affected `--offset` window instead.
+	 *                                 `integration_id` (string|null) restricts the fan-out to
+	 *                                 that integration; retries for it are scheduled normally.
 	 *
 	 * @return true|\WP_Error True if all succeeded, or WP_Error with combined messages.
 	 */
-	private static function push_to_integrations( $contact, $context, $existing_contact = null ) {
+	private static function push_to_integrations( $contact, $context, $existing_contact = null, $options = [] ) {
 		/**
 		 * Filters the contact data before syncing to the integration, allowing modifications or additions to the contact data.
 		 *
@@ -192,7 +364,10 @@ class Contact_Sync extends Sync {
 		 */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
 		$integrations = Integrations::get_active_configured_integrations();
-		$errors       = [];
+		if ( ! empty( $options['integration_id'] ) ) {
+			$integrations = array_intersect_key( $integrations, [ $options['integration_id'] => true ] );
+		}
+		$errors = [];
 
 		// Resolve user ID for retry scheduling.
 		$user    = ! empty( $contact['email'] ) ? \get_user_by( 'email', $contact['email'] ) : false;
@@ -206,15 +381,33 @@ class Contact_Sync extends Sync {
 		}
 
 		foreach ( $integrations as $integration_id => $integration ) {
-			$integration_contact = $integration->prepare_contact( $contact );
-
-			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
-			if ( 'legacy' !== Metadata::get_version() ) {
-				Logger::log( sprintf( 'Syncing contact %s for integration %s with context "%s".', $integration_contact['email'] ?? 'unknown', $integration_id, $context ) );
-				Logger::log( $integration_contact );
+			// Skip integrations without an (enabled) push: pausing the outbound
+			// toggle stops pushes while the stored outgoing-field selection waits
+			// for re-enable, and push-less integrations have nothing to push to.
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
 			}
 
-			$result = $integration->push_contact_data( $integration_contact, $context, $existing_contact );
+			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
+
+			$result = $integration->push_contact( $integration_contact, $context, $existing_contact, $options );
+
+			// A failure is only retried for a full, unscoped push of a contact
+			// with an account to rebuild it from (see schedule_integration_retry()).
+			$can_retry = self::options_are_default( $options ) && $user_id > 0;
+			$log_id    = self::log_push_attempt(
+				$integration,
+				[
+					'operation'    => Push_Log::OPERATION_UPSERT,
+					'email'        => $integration_contact['email'] ?? '',
+					'user_id'      => $user_id,
+					'context'      => $context,
+					'payload'      => '' === (string) $previous_email ? $integration_contact : array_merge( $integration_contact, [ 'previous_email' => $previous_email ] ),
+					'result'       => $result,
+					'max_attempts' => $can_retry ? self::MAX_RETRIES + 1 : 1,
+				]
+			);
+
 			if ( \is_wp_error( $result ) ) {
 				/**
 				 * Fires when a contact sync fails on the original attempt (before retries).
@@ -228,6 +421,10 @@ class Contact_Sync extends Sync {
 				 *     @type array  $contact        The contact data that failed to sync.
 				 *     @type string $context        The sync context.
 				 *     @type string $reason         The error message.
+				 *     @type string $error_class    Error classification — 'transient', 'benign',
+				 *                                  'permanent_contact' or 'permanent_config' — so
+				 *                                  consumers can keep never-fixable failures out
+				 *                                  of pattern detection.
 				 * }
 				 */
 				do_action(
@@ -237,9 +434,14 @@ class Contact_Sync extends Sync {
 						'contact'        => $contact,
 						'context'        => $context,
 						'reason'         => $result->get_error_message(),
+						'error_class'    => self::classify_error( $result ),
 					]
 				);
-				self::schedule_integration_retry( $integration_id, $user_id, $context, 0, $result, $previous_email );
+				if ( self::options_are_default( $options ) ) {
+					self::schedule_integration_retry( $integration_id, $user_id, $context, 0, $result, $previous_email, $log_id );
+				} else {
+					static::log( sprintf( 'Retry skipped for integration "%s" sync of %s: CLI sync with custom options (skip-lists/fields). Re-run the affected batch to retry.', $integration_id, $contact['email'] ?? 'unknown' ) );
+				}
 				$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 				if ( self::$current_as_action_id ) {
 					\ActionScheduler_Logger::instance()->log(
@@ -271,7 +473,10 @@ class Contact_Sync extends Sync {
 	 * - sync_account_deletion=false → skip this integration entirely.
 	 * - sync_account_deletion=true + handling='delete' → call $integration->delete_contact($email).
 	 * - sync_account_deletion=true + handling='flag' → push the contact with the
-	 *   `account_deleted` metadata field set to an ISO8601 timestamp.
+	 *   `account_deleted` metadata field set to an ISO8601 timestamp. The push
+	 *   carries `skip_lists` (a deletion must never attach the master list) and
+	 *   runs only for integrations that implement flag_deletion_cleanup() —
+	 *   the base no-op cannot stop outreach, so those integrations are skipped.
 	 *
 	 * The WP user no longer exists by the time this runs, so the standard
 	 * push_to_integrations() retry path (which keys retries on user_id) is
@@ -341,6 +546,12 @@ class Contact_Sync extends Sync {
 		$flag_contact = \apply_filters( 'newspack_esp_sync_contact', $flag_contact, $context );
 
 		foreach ( $integrations as $integration_id => $integration ) {
+			// Deletion propagates through the push pipeline (delete_contact() /
+			// flag-mode push_contact_data()), so it follows the push capability
+			// and the outbound toggle like any other outbound sync.
+			if ( ! $integration->is_push_enabled() ) {
+				continue;
+			}
 			if ( ! $integration->get_settings_field_value( 'sync_account_deletion' ) ) {
 				continue;
 			}
@@ -348,10 +559,22 @@ class Contact_Sync extends Sync {
 
 			if ( 'delete' === $mode ) {
 				$result = $integration->delete_contact( $email );
+				// The WP user is already gone, so deletion rows carry the email alone.
+				$log_id = self::log_push_attempt(
+					$integration,
+					[
+						'operation'    => Push_Log::OPERATION_DELETE,
+						'email'        => $email,
+						'context'      => $context,
+						'result'       => $result,
+						'direction'    => 'deletion',
+						'max_attempts' => self::MAX_RETRIES + 1,
+					]
+				);
 				if ( \is_wp_error( $result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 					static::log( sprintf( 'Delete failed for integration "%s" of %s: %s', $integration_id, $email, $result->get_error_message() ) );
-					self::schedule_deletion_retry( $integration_id, 'delete', $email, [], $context, 0, $result );
+					$error_class = self::schedule_deletion_retry( $integration_id, 'delete', $email, [], $context, 0, $result, $log_id );
 					/**
 					 * Fires when a contact deletion sync fails.
 					 *
@@ -367,6 +590,8 @@ class Contact_Sync extends Sync {
 					 *     @type string $context        The sync context.
 					 *     @type string $reason         The error message.
 					 *     @type string $mode           The deletion mode: 'delete' or 'flag'.
+					 *     @type string $error_class    Error classification, from the
+					 *                                  deletion-direction signature map.
 					 * }
 					 */
 					do_action(
@@ -377,6 +602,7 @@ class Contact_Sync extends Sync {
 							'context'        => $context,
 							'reason'         => $result->get_error_message(),
 							'mode'           => 'delete',
+							'error_class'    => $error_class,
 						]
 					);
 					if ( self::$current_as_action_id ) {
@@ -395,6 +621,17 @@ class Contact_Sync extends Sync {
 					}
 				}
 			} elseif ( 'flag' === $mode ) {
+				// Flag mode's contract is a two-step: push the deletion signal,
+				// then flag_deletion_cleanup() stops list/audience outreach. An
+				// integration inheriting the base no-op cleanup cannot complete
+				// the second step, so pushing would leave the deleted reader
+				// reachable at the provider (and an upsert may even create the
+				// contact there). Skip those entirely — the pre-unification
+				// behavior for integrations without deletion support.
+				if ( ! self::implements_flag_deletion_cleanup( $integration ) ) {
+					static::log( sprintf( 'Integration "%s" implements no flag-deletion cleanup; skipping flag-mode deletion sync of %s.', $integration_id, $email ) );
+					continue;
+				}
 				// Push through the integration's normal pipeline so prepare_contact applies metadata
 				// prefixing and outgoing-field filtering to publisher-configured metadata. Then
 				// re-inject the account_deleted signal: it's a system-level signal that must
@@ -407,20 +644,43 @@ class Contact_Sync extends Sync {
 				$prefix              = $integration->get_metadata_prefix();
 				$integration_contact['metadata'] = $integration_contact['metadata'] ?? [];
 				$integration_contact['metadata'][ $prefix . 'Account_Deleted' ] = $flag_contact['metadata']['account_deleted'];
-				// Re-inject the membership status as a system-level deletion signal too.
-				// `membership_status` isn't a v1 outgoing field, so prepare_contact drops
-				// it; add it back under the prefixed key so the historical 'user-deleted'
-				// value always reaches the ESP regardless of outgoing-fields config.
+				// Re-inject the membership status too: it's a system-level deletion
+				// signal that must reach the ESP regardless of outgoing-fields
+				// config, same as Account_Deleted. But unlike Account_Deleted,
+				// `membership_status` is itself a registered catalog field
+				// ('Membership Status', declared by Legacy_Payment) — so on
+				// legacy-era sites where it's selected, prepare_contact() may
+				// already have emitted it under that spelling. Both can land in
+				// the payload (`NP_Membership Status` alongside this re-injection's
+				// `NP_Membership_Status`) — accepted duplication, since the signal
+				// must never depend on selection state.
 				$integration_contact['metadata'][ $prefix . 'Membership_Status' ] = $flag_contact['metadata']['membership_status'];
 
-				$result = $integration->push_contact_data( $integration_contact, $context );
+				// skip_lists: a deletion upsert must never attach the master list,
+				// re-adding — or first-creating — the deleted reader on it. The
+				// deletion-signal metadata needs no list membership, and the
+				// un-retried cleanup below stays a best-effort extra rather than
+				// the only thing standing between a deleted reader and a list.
+				$result = $integration->push_contact( $integration_contact, $context, null, [ 'skip_lists' => true ] );
+				$log_id = self::log_push_attempt(
+					$integration,
+					[
+						'operation'    => Push_Log::OPERATION_FLAG,
+						'email'        => $email,
+						'context'      => $context,
+						'payload'      => $integration_contact,
+						'result'       => $result,
+						'direction'    => 'deletion',
+						'max_attempts' => self::MAX_RETRIES + 1,
+					]
+				);
 				if ( \is_wp_error( $result ) ) {
 					$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 					static::log( sprintf( 'Flag-push failed for integration "%s" of %s: %s', $integration_id, $email, $result->get_error_message() ) );
 					// Stash the already-prepared payload so the retry re-pushes the
 					// exact contact (prefix + Account_Deleted re-injection) without
 					// rebuilding it from a user that no longer exists.
-					self::schedule_deletion_retry( $integration_id, 'flag', $email, $integration_contact, $context, 0, $result );
+					$error_class = self::schedule_deletion_retry( $integration_id, 'flag', $email, $integration_contact, $context, 0, $result, $log_id );
 					/** This action is documented above in the 'delete' branch of this method. */
 					do_action(
 						'newspack_sync_contact_failed',
@@ -430,6 +690,7 @@ class Contact_Sync extends Sync {
 							'context'        => $context,
 							'reason'         => $result->get_error_message(),
 							'mode'           => 'flag',
+							'error_class'    => $error_class,
 						]
 					);
 					if ( self::$current_as_action_id ) {
@@ -447,6 +708,30 @@ class Contact_Sync extends Sync {
 						);
 					}
 				}
+
+				// List cleanup is independent of whether the flag metadata push
+				// landed: the reader must stop receiving outreach either way.
+				// No retry scheduling here — parity with the legacy deletion
+				// path this replaces; retry hardening is tracked separately.
+				$cleanup_result = $integration->flag_deletion_cleanup( $email );
+				if ( \is_wp_error( $cleanup_result ) ) {
+					$errors[] = sprintf( '[%s] %s', $integration_id, $cleanup_result->get_error_message() );
+					static::log( sprintf( 'Flag-deletion cleanup failed for integration "%s" of %s: %s', $integration_id, $email, $cleanup_result->get_error_message() ) );
+					// Only when the push did not end the row as failed. A failed
+					// push is already on the row and must not be overwritten, and
+					// a transient one is retried, which runs the cleanup again. A
+					// benign answer is a success with no retry behind it, so
+					// nothing else would record that the reader is still on a list.
+					$push_was_benign = \is_wp_error( $result ) && 'benign' === $error_class;
+					if ( ! \is_wp_error( $result ) || $push_was_benign ) {
+						$reason = $push_was_benign
+							? 'The contact was already deleted at the integration, but removing the reader from lists failed: %s'
+							: 'The deletion flag was pushed, but removing the reader from lists failed: %s';
+						Push_Log::mark_failed( $log_id, 'flag_cleanup_failed', sprintf( $reason, $cleanup_result->get_error_message() ) );
+					}
+				} else {
+					static::log( sprintf( 'Flag-deletion cleanup succeeded for integration "%s" of %s.', $integration_id, $email ) );
+				}
 			} else {
 				static::log( sprintf( 'Unknown handling mode "%s" for integration "%s"; skipping.', $mode, $integration_id ) );
 			}
@@ -459,28 +744,162 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
+	 * Whether an integration provides its own flag_deletion_cleanup(),
+	 * rather than inheriting the base no-op.
+	 *
+	 * Flag-mode deletion is gated on this: the cleanup is the half of the
+	 * contract that stops outreach to the deleted reader, and an integration
+	 * lands in flag mode precisely because it cannot hard-delete — so one
+	 * that also cannot clean up must not receive the flag push at all.
+	 *
+	 * @param Integration $integration The integration instance.
+	 *
+	 * @return bool
+	 */
+	private static function implements_flag_deletion_cleanup( Integration $integration ) {
+		return Integration::class !== ( new \ReflectionMethod( $integration, 'flag_deletion_cleanup' ) )->getDeclaringClass()->getName();
+	}
+
+	/**
+	 * Classify an ESP sync error to decide retry behavior.
+	 *
+	 * Matches against every message carried by the error — the ESP layer
+	 * aggregates messages (invalid-list errors, exception detail) ahead of the
+	 * provider's own error, so reading only the first message would miss a
+	 * real signature exactly when a site is misconfigured.
+	 *
+	 * @param string|\WP_Error $error     The error from a failed push.
+	 * @param string           $direction The sync direction: 'push' (default) or 'deletion'.
+	 *                                    Deletion uses its own signature map because some
+	 *                                    push-oriented classes invert their meaning on the
+	 *                                    removal path.
+	 * @return string One of 'permanent_contact', 'permanent_config', 'benign', or 'transient'.
+	 */
+	private static function classify_error( $error, $direction = 'push' ) {
+		$message  = $error instanceof \WP_Error ? implode( ' ', $error->get_error_messages() ) : (string) $error;
+		$haystack = strtolower( $message );
+
+		$signature_map = 'deletion' === $direction ? self::DELETION_ERROR_SIGNATURES : self::ERROR_SIGNATURES;
+		foreach ( $signature_map as $class => $signatures ) {
+			foreach ( $signatures as $signature ) {
+				if ( str_contains( $haystack, $signature ) ) {
+					return $class;
+				}
+			}
+		}
+
+		return 'transient';
+	}
+
+	/**
 	 * Schedule a retry for a failed integration sync via ActionScheduler.
 	 *
 	 * @param string           $integration_id The integration ID.
-	 * @param int              $user_id        The WordPress user ID.
+	 * @param int              $user_id        The WordPress user ID (0 when the contact has no
+	 *                                         resolvable WP user).
 	 * @param string           $context        The sync context.
 	 * @param int              $retry_count    Current retry count (0 = first failure).
 	 * @param string|\WP_Error $error          The error from the failure.
 	 * @param string           $previous_email Optional. Previous email for email-change retries.
+	 * @param int              $log_id         Optional. The push log row of this sync, carried by the
+	 *                                         retry so its attempt lands on the same row.
+	 *
+	 * @return string The error classification that decided the retry handling — one of
+	 *                'benign', 'permanent_contact', 'permanent_config' or 'transient'.
+	 *                Callers use 'benign' to detect a deliberately-ended retry chain.
 	 */
-	private static function schedule_integration_retry( $integration_id, $user_id, $context, $retry_count, $error, $previous_email = '' ) {
+	private static function schedule_integration_retry( $integration_id, $user_id, $context, $retry_count, $error, $previous_email = '', $log_id = 0 ) {
+		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
+		$error_class   = self::classify_error( $error );
+
 		if ( ! function_exists( 'as_schedule_single_action' ) ) {
-			return;
+			return $error_class;
 		}
 
-		$user = ! empty( $user_id ) ? get_userdata( $user_id ) : false;
+		// Classification handling runs before the user-existence bail below so
+		// benign and permanent results — including the actionable permanent_config
+		// alert — apply even to syncs without a resolvable WP user (guest
+		// checkouts, users deleted mid-flight).
+		$user       = ! empty( $user_id ) ? get_userdata( $user_id ) : false;
+		$user_email = $user ? $user->user_email : 'unknown';
+
+		if ( 'benign' === $error_class ) {
+			static::log(
+				sprintf(
+					'Skipping retry for integration "%s" sync of user %d (%s); ESP reports contact already synced. Detail: %s',
+					$integration_id,
+					$user_id,
+					$user_email,
+					$error_message
+				)
+			);
+			if ( self::$current_as_action_id ) {
+				\ActionScheduler_Logger::instance()->log(
+					self::$current_as_action_id,
+					'Benign result (contact already synced); retry chain deliberately ended.'
+				);
+			}
+			return $error_class;
+		}
+		if ( 'transient' !== $error_class ) {
+			static::log(
+				sprintf(
+					'Permanent %s failure for integration "%s" sync of user %d (%s); not retrying. Error: %s',
+					$error_class,
+					$integration_id,
+					$user_id,
+					$user_email,
+					$error_message
+				)
+			);
+			if ( self::$current_as_action_id ) {
+				\ActionScheduler_Logger::instance()->log(
+					self::$current_as_action_id,
+					sprintf( 'Permanent failure (%s); not retrying.', $error_class )
+				);
+			}
+			if ( 'permanent_config' === $error_class ) {
+				/**
+				 * Fires when a contact sync fails with a permanent config-level
+				 * error (disabled/unpaid ESP account) that can never succeed on
+				 * retry. Permanent contact-data errors are skipped silently on
+				 * this path — the contact re-syncs on the reader's next event;
+				 * only actionable config failures are surfaced. (The deletion
+				 * path also fires this hook for permanent contact-data errors —
+				 * see schedule_deletion_retry().)
+				 *
+				 * @param array $alert_data {
+				 *     Alert data.
+				 *
+				 *     @type string $integration_id The integration that failed.
+				 *     @type int    $user_id        The WordPress user ID (0 when the contact
+				 *                                  has no resolvable WP user).
+				 *     @type string $email          The contact's email address; empty when no
+				 *                                  WP user could be resolved.
+				 *     @type string $context        The sync context.
+				 *     @type string $reason         The final error message.
+				 *     @type string $error_class    'permanent_config' on this path.
+				 * }
+				 */
+				do_action(
+					'newspack_sync_permanent_failure',
+					[
+						'integration_id' => $integration_id,
+						'user_id'        => $user_id,
+						'email'          => $user ? $user->user_email : '',
+						'context'        => $context,
+						'reason'         => $error_message,
+						'error_class'    => $error_class,
+					]
+				);
+			}
+			return $error_class;
+		}
+
 		if ( ! $user ) {
 			static::log( sprintf( 'Cannot schedule retry for integration "%s": user %d not found.', $integration_id, $user_id ) );
-			return;
+			return $error_class;
 		}
-
-		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
-		$user_email    = $user ? $user->user_email : 'unknown';
 
 		$next_retry = $retry_count + 1;
 		if ( $next_retry > self::MAX_RETRIES ) {
@@ -523,7 +942,7 @@ class Contact_Sync extends Sync {
 					'reason'         => $error_message,
 				]
 			);
-			return;
+			return $error_class;
 		}
 
 		$backoff_index   = min( $retry_count, count( self::RETRY_BACKOFF ) - 1 );
@@ -537,14 +956,16 @@ class Contact_Sync extends Sync {
 			'max_retries'    => self::MAX_RETRIES,
 			'reason'         => $error_message,
 			'previous_email' => $previous_email,
+			'log_id'         => (int) $log_id,
 		];
 
-		\as_schedule_single_action(
+		$action_id = \as_schedule_single_action(
 			time() + $backoff_seconds,
 			self::RETRY_HOOK,
 			[ $retry_data ],
 			Integrations::get_action_group( $integration_id )
 		);
+		Push_Log::mark_retrying( (int) $log_id, (int) $action_id );
 
 		static::log(
 			sprintf(
@@ -558,6 +979,7 @@ class Contact_Sync extends Sync {
 				$error_message
 			)
 		);
+		return $error_class;
 	}
 
 	/**
@@ -578,35 +1000,54 @@ class Contact_Sync extends Sync {
 		$context        = $retry_data['context'] ?? static::$context;
 		$retry_count    = $retry_data['retry_count'] ?? 1;
 		$previous_email = $retry_data['previous_email'] ?? '';
+		$log_id         = (int) ( $retry_data['log_id'] ?? 0 );
 
+		// Each early return below ends the chain without pushing, so it ends the
+		// push log row too: nothing else will ever update it.
 		$user = \get_userdata( $user_id );
 		if ( ! $user ) {
 			Logger::log( sprintf( 'User %d not found on retry %d.', $user_id, $retry_count ), 'NEWSPACK-SYNC', 'error' );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The reader account no longer exists.' );
 			return;
 		}
 
 		$contact = self::get_contact_data( $user_id );
 		if ( is_wp_error( $contact ) ) {
 			Logger::log( sprintf( 'Error getting contact data for user %d on retry %d: %s', $user_id, $retry_count, $contact->get_error_message() ), 'NEWSPACK-SYNC', 'error' );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', sprintf( 'The contact could not be rebuilt: %s', $contact->get_error_message() ) );
 			return;
 		}
 
 		$integration = Integrations::get_integration( $integration_id );
 		if ( ! $integration ) {
 			Logger::log( sprintf( 'Integration "%s" not found on retry %d.', $integration_id, $retry_count ), 'NEWSPACK-SYNC', 'error' );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is no longer registered.' );
 			return;
 		}
 
 		if ( ! $integration->is_set_up() ) {
 			static::log( sprintf( 'Integration "%s" no longer set up on retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is no longer set up.' );
+			return;
+		}
+
+		if ( ! $integration->is_push_enabled() ) {
+			static::log( sprintf( 'Outbound sync disabled for integration "%s" on retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'Outbound sync is paused for this integration.' );
 			return;
 		}
 
 		static::log( sprintf( 'Executing retry %d/%d for integration "%s" sync of user %d (%s).', $retry_count, self::MAX_RETRIES, $integration_id, $user_id, $contact['email'] ?? 'unknown' ) );
 
+		// get_contact_data() already normalizes the contact when WooCommerce is
+		// active, via get_contact_with_metadata(); normalizing again here would
+		// fire `newspack_esp_sync_normalize_contact` a second time per retry,
+		// double-applying any non-idempotent publisher callback. Without
+		// WooCommerce, get_contact_data() early-returns before that call, so
+		// the filter never fires here — but enrichment is a no-op on that path
+		// too, since metadata is empty regardless.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$contact = Sync\Metadata::normalize_contact_data( $contact );
 
 		// Reconstruct existing_contact for email-change retries so integrations
 		// can upsert against the previous email address.
@@ -616,7 +1057,27 @@ class Contact_Sync extends Sync {
 		}
 
 		$integration_contact = $integration->prepare_contact( $contact );
-		$result              = $integration->push_contact_data( $integration_contact, $context, $existing_contact );
+		$result              = $integration->push_contact( $integration_contact, $context, $existing_contact );
+		$logged_row_id       = self::log_push_attempt(
+			$integration,
+			[
+				'log_id'       => $log_id,
+				'operation'    => Push_Log::OPERATION_UPSERT,
+				'email'        => $integration_contact['email'] ?? $user->user_email,
+				'user_id'      => $user_id,
+				'context'      => $context,
+				'payload'      => '' === (string) $previous_email ? $integration_contact : array_merge( $integration_contact, [ 'previous_email' => $previous_email ] ),
+				'result'       => $result,
+				'attempts'     => (int) $retry_count + 1,
+				'max_attempts' => self::MAX_RETRIES + 1,
+			]
+		);
+		// A failed log write answers 0. Keep the row this chain started on, so
+		// the next retry still lands there instead of opening a second row and
+		// leaving the first stuck retrying.
+		if ( $logged_row_id > 0 ) {
+			$log_id = $logged_row_id;
+		}
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
 			static::log(
@@ -629,13 +1090,14 @@ class Contact_Sync extends Sync {
 					$error_messages
 				)
 			);
-			self::schedule_integration_retry(
+			$error_class   = self::schedule_integration_retry(
 				$integration_id,
 				$user_id,
 				$context,
 				$retry_count,
 				$result,
-				$previous_email
+				$previous_email,
+				$log_id
 			);
 			$error_message = sprintf(
 				'Retry %d/%d failed for integration "%s" sync of user %d (%s): %s',
@@ -654,7 +1116,9 @@ class Contact_Sync extends Sync {
 			}
 			// Only throw on the last retry so ActionScheduler marks it as "failed".
 			// Intermediate retries schedule the next attempt and complete normally.
-			if ( $retry_count >= self::MAX_RETRIES ) {
+			// A benign result is an effectively-synced outcome, not a failure, so
+			// its deliberately-ended chain must not mark the action as failed.
+			if ( $retry_count >= self::MAX_RETRIES && 'benign' !== $error_class ) {
 				throw new \Exception( esc_html( $error_message ) );
 			}
 		} else {
@@ -686,14 +1150,93 @@ class Contact_Sync extends Sync {
 	 * @param string           $context        The sync context.
 	 * @param int              $retry_count    Current retry count (0 = first failure).
 	 * @param string|\WP_Error $error          The error from the failure.
+	 * @param int              $log_id         Optional. The push log row of this deletion, carried by
+	 *                                         the retry so its attempt lands on the same row.
+	 *
+	 * @return string The error classification that decided the retry handling — one of
+	 *                'benign', 'permanent_contact', 'permanent_config' or 'transient'.
+	 *                Callers use 'benign' to detect a deliberately-ended retry chain.
 	 */
-	private static function schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $error ) {
+	private static function schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $error, $log_id = 0 ) {
+		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
+		$error_class   = self::classify_error( $error, 'deletion' );
+
 		if ( ! function_exists( 'as_schedule_single_action' ) ) {
-			return;
+			return $error_class;
 		}
 
-		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
-		$next_retry    = $retry_count + 1;
+		if ( 'benign' === $error_class ) {
+			static::log(
+				sprintf(
+					'Skipping retry for deletion (%s) sync of %s in integration "%s"; ESP reports the contact is already gone. Detail: %s',
+					$mode,
+					$email,
+					$integration_id,
+					$error_message
+				)
+			);
+			if ( self::$current_as_action_id ) {
+				\ActionScheduler_Logger::instance()->log(
+					self::$current_as_action_id,
+					'Benign result (contact already gone from the ESP); retry chain deliberately ended.'
+				);
+			}
+			return $error_class;
+		}
+		if ( 'transient' !== $error_class ) {
+			static::log(
+				sprintf(
+					'Permanent %s failure for deletion (%s) sync of %s in integration "%s"; not retrying. Error: %s',
+					$error_class,
+					$mode,
+					$email,
+					$integration_id,
+					$error_message
+				)
+			);
+			if ( self::$current_as_action_id ) {
+				\ActionScheduler_Logger::instance()->log(
+					self::$current_as_action_id,
+					sprintf( 'Permanent failure (%s); not retrying.', $error_class )
+				);
+			}
+			/**
+			 * Fires when a deletion sync fails with a permanent (non-retryable) error.
+			 *
+			 * Mirrors `newspack_sync_permanent_failure` on the contact-sync path
+			 * (documented in includes/reader-activation/sync/class-contact-sync.php)
+			 * with two differences: the payload substitutes `email` + `mode` for
+			 * `user_id`, since the WP user is already gone, and the hook also fires
+			 * for permanent contact-data errors — a skipped deletion retry has no
+			 * natural re-trigger, so the dropped deletion signal must stay
+			 * observable.
+			 *
+			 * @param array $alert_data {
+			 *     Alert data.
+			 *
+			 *     @type string $integration_id The integration that failed.
+			 *     @type string $email          Email of the deleted reader.
+			 *     @type string $mode           Deletion mode: 'delete' or 'flag'.
+			 *     @type string $context        The sync context.
+			 *     @type string $reason         The final error message.
+			 *     @type string $error_class    'permanent_config' or 'permanent_contact'.
+			 * }
+			 */
+			do_action(
+				'newspack_sync_permanent_failure',
+				[
+					'integration_id' => $integration_id,
+					'email'          => $email,
+					'mode'           => $mode,
+					'context'        => $context,
+					'reason'         => $error_message,
+					'error_class'    => $error_class,
+				]
+			);
+			return $error_class;
+		}
+
+		$next_retry = $retry_count + 1;
 		if ( $next_retry > self::MAX_RETRIES ) {
 			static::log(
 				sprintf(
@@ -739,7 +1282,7 @@ class Contact_Sync extends Sync {
 					'reason'         => $error_message,
 				]
 			);
-			return;
+			return $error_class;
 		}
 
 		$backoff_index   = min( $retry_count, count( self::RETRY_BACKOFF ) - 1 );
@@ -754,14 +1297,16 @@ class Contact_Sync extends Sync {
 			'retry_count'    => $next_retry,
 			'max_retries'    => self::MAX_RETRIES,
 			'reason'         => $error_message,
+			'log_id'         => (int) $log_id,
 		];
 
-		\as_schedule_single_action(
+		$action_id = \as_schedule_single_action(
 			time() + $backoff_seconds,
 			self::RETRY_DELETION_HOOK,
 			[ $retry_data ],
 			Integrations::get_action_group( $integration_id )
 		);
+		Push_Log::mark_retrying( (int) $log_id, (int) $action_id );
 
 		static::log(
 			sprintf(
@@ -775,6 +1320,7 @@ class Contact_Sync extends Sync {
 				$error_message
 			)
 		);
+		return $error_class;
 	}
 
 	/**
@@ -801,15 +1347,27 @@ class Contact_Sync extends Sync {
 		$contact        = isset( $retry_data['contact'] ) && is_array( $retry_data['contact'] ) ? $retry_data['contact'] : [];
 		$context        = $retry_data['context'] ?? static::$context;
 		$retry_count    = $retry_data['retry_count'] ?? 1;
+		$log_id         = (int) ( $retry_data['log_id'] ?? 0 );
 
+		// Each early return below ends the chain without reaching the provider,
+		// so it ends the push log row too: a deletion has no later event to
+		// re-trigger it.
 		$integration = Integrations::get_integration( $integration_id );
 		if ( ! $integration ) {
 			Logger::log( sprintf( 'Integration "%s" not found on deletion retry %d.', $integration_id, $retry_count ), 'NEWSPACK-SYNC', 'error' );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is no longer registered.' );
 			return;
 		}
 
 		if ( ! $integration->is_set_up() ) {
 			static::log( sprintf( 'Integration "%s" no longer set up on deletion retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is no longer set up.' );
+			return;
+		}
+
+		if ( ! $integration->is_push_enabled() ) {
+			static::log( sprintf( 'Outbound sync disabled for integration "%s" on deletion retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'Outbound sync is paused for this integration.' );
 			return;
 		}
 
@@ -818,10 +1376,34 @@ class Contact_Sync extends Sync {
 		if ( 'delete' === $mode ) {
 			$result = $integration->delete_contact( $email );
 		} elseif ( 'flag' === $mode ) {
-			$result = $integration->push_contact_data( $contact, $context );
+			// Same skip_lists as the original flag push: the retried payload
+			// must not attach the master list either.
+			$result = $integration->push_contact( $contact, $context, null, [ 'skip_lists' => true ] );
 		} else {
 			Logger::log( sprintf( 'Unknown deletion retry mode "%s" for integration "%s".', $mode, $integration_id ), 'NEWSPACK-SYNC', 'error' );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The deletion handling mode is no longer recognized.' );
 			return;
+		}
+
+		$logged_row_id = self::log_push_attempt(
+			$integration,
+			[
+				'log_id'       => $log_id,
+				'operation'    => 'delete' === $mode ? Push_Log::OPERATION_DELETE : Push_Log::OPERATION_FLAG,
+				'email'        => $email,
+				'context'      => $context,
+				'payload'      => 'flag' === $mode ? $contact : null,
+				'result'       => $result,
+				'direction'    => 'deletion',
+				'attempts'     => (int) $retry_count + 1,
+				'max_attempts' => self::MAX_RETRIES + 1,
+			]
+		);
+		// A failed log write answers 0. Keep the row this chain started on, so
+		// the next retry still lands there instead of opening a second row and
+		// leaving the first stuck retrying.
+		if ( $logged_row_id > 0 ) {
+			$log_id = $logged_row_id;
 		}
 
 		if ( \is_wp_error( $result ) ) {
@@ -836,7 +1418,7 @@ class Contact_Sync extends Sync {
 					$error_messages
 				)
 			);
-			self::schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $result );
+			$error_class   = self::schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $result, $log_id );
 			$error_message = sprintf(
 				'Retry %d/%d failed for deletion (%s) sync of %s in integration "%s": %s',
 				$retry_count,
@@ -851,7 +1433,10 @@ class Contact_Sync extends Sync {
 			}
 			// Only throw on the last retry so ActionScheduler marks it as "failed".
 			// Intermediate retries schedule the next attempt and complete normally.
-			if ( $retry_count >= self::MAX_RETRIES ) {
+			// A benign result (contact already gone from the ESP) is the deletion
+			// end-state, not a failure, so its deliberately-ended chain must not
+			// mark the action as failed.
+			if ( $retry_count >= self::MAX_RETRIES && 'benign' !== $error_class ) {
 				throw new \Exception( esc_html( $error_message ) );
 			}
 		} else {
@@ -866,6 +1451,21 @@ class Contact_Sync extends Sync {
 			static::log( $success_message );
 			if ( self::$current_as_action_id ) {
 				\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $success_message );
+			}
+			if ( 'flag' === $mode ) {
+				// The retried push can re-attach the reader to lists: `skip_lists`
+				// is advisory, and an integration on the three-argument contract
+				// never sees it. The original deletion already ran the cleanup,
+				// so run it again here to leave the provider state where that
+				// deletion left it. As on the original path, a cleanup failure
+				// is logged, not retried.
+				$cleanup_result = $integration->flag_deletion_cleanup( $email );
+				if ( \is_wp_error( $cleanup_result ) ) {
+					static::log( sprintf( 'Flag-deletion cleanup failed after retry %d for integration "%s" of %s: %s', $retry_count, $integration_id, $email, $cleanup_result->get_error_message() ) );
+					Push_Log::mark_failed( $log_id, 'flag_cleanup_failed', sprintf( 'The deletion flag was pushed, but removing the reader from lists failed: %s', $cleanup_result->get_error_message() ) );
+				} else {
+					static::log( sprintf( 'Flag-deletion cleanup succeeded after retry %d for integration "%s" of %s.', $retry_count, $integration_id, $email ) );
+				}
 			}
 		}
 	}
@@ -959,24 +1559,23 @@ class Contact_Sync extends Sync {
 	/**
 	 * Get contact data for syncing.
 	 *
-	 * @param int $user_id The user ID.
+	 * @param int           $user_id The user ID.
+	 * @param string[]|null $fields  Optional. Canonical field labels to restrict the computed
+	 *                               metadata to. `null` computes every available field.
 	 *
 	 * @return array|\WP_Error The contact data or WP_Error.
 	 */
-	public static function get_contact_data( $user_id ) {
+	public static function get_contact_data( $user_id, $fields = null ) {
 		$user = \get_userdata( $user_id );
 		if ( ! $user ) {
 			return new \WP_Error( 'newspack_esp_sync_contact', __( 'User not found.', 'newspack-plugin' ) );
 		}
 
-		$contact = [
-			'email'    => $user->user_email,
-			'name'     => $user->display_name,
-			'metadata' => [],
-		];
-
 		if ( ! class_exists( '\WC_Customer' ) ) {
-			return $contact;
+			// No WooCommerce customer to read from: the providers still compute
+			// everything they can from the WordPress user alone (registration,
+			// content access, ...).
+			return Sync\Metadata::get_contact_with_metadata( $user, $fields );
 		}
 		$customer = new \WC_Customer( $user_id );
 		if ( ! $customer || ! $customer->get_id() ) {
@@ -996,7 +1595,7 @@ class Contact_Sync extends Sync {
 			$customer->save();
 		}
 
-		$contact = Sync\Metadata::get_contact_with_metadata( $customer );
+		$contact = Sync\Metadata::get_contact_with_metadata( $customer, $fields );
 
 		return $contact;
 	}
@@ -1008,10 +1607,16 @@ class Contact_Sync extends Sync {
 	 * @param int|\WC_order $user_id_or_order User ID or WC_Order object.
 	 * @param string        $context          The context of the sync.
 	 * @param bool          $is_dry_run       True if a dry run.
+	 * @param array         $options          Optional. Sync options: `skip_lists` (bool) and
+	 *                                        `fields` (string[]|null, canonical labels). `fields`
+	 *                                        restricts both what metadata is computed and what is
+	 *                                        pushed; `skip_lists` upserts without a master list.
+	 *                                        `integration_id` (string|null) restricts the push
+	 *                                        fan-out to a single active integration.
 	 *
 	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise.
 	 */
-	public static function sync_contact( $user_id_or_order, $context = '', $is_dry_run = false ) {
+	public static function sync_contact( $user_id_or_order, $context = '', $is_dry_run = false, $options = [] ) {
 		$can_sync = static::can_sync( true );
 		if ( ! $is_dry_run && $can_sync->has_errors() ) {
 			return $can_sync;
@@ -1020,12 +1625,18 @@ class Contact_Sync extends Sync {
 		$is_order = $user_id_or_order instanceof \WC_Order;
 		$order    = $is_order ? $user_id_or_order : false;
 		$user_id  = $is_order ? $order->get_customer_id() : $user_id_or_order;
+		$fields   = $options['fields'] ?? null;
 
-		$contact = $is_order ? Sync\Metadata::get_contact_with_metadata( $order ) : self::get_contact_data( $user_id );
+		$contact = $is_order ? Sync\Metadata::get_contact_with_metadata( $order, $fields ) : self::get_contact_data( $user_id, $fields );
 		if ( \is_wp_error( $contact ) || empty( $contact['email'] ) ) {
 			return \is_wp_error( $contact ) ? $contact : new \WP_Error( 'newspack_esp_sync_contact', __( 'Contact email is empty.', 'newspack-plugin' ) );
 		}
-		$result = $is_dry_run ? true : self::sync( $contact, $context );
+
+		if ( $is_dry_run && ! self::options_are_default( $options ) ) {
+			self::log_dry_run_with_options( $contact, $context, $options );
+		}
+
+		$result = $is_dry_run ? true : self::sync( $contact, $context, null, $options );
 
 		if ( $result && ! \is_wp_error( $result ) ) {
 			static::log(
@@ -1039,6 +1650,67 @@ class Contact_Sync extends Sync {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Log, per active integration, the field/list-scoped payload a `--dry-run`
+	 * with custom options would push. Warns when scoping leaves no metadata to
+	 * send (e.g. requested fields aren't enabled as outgoing for that integration).
+	 *
+	 * @param array  $contact The computed contact data.
+	 * @param string $context The sync context.
+	 * @param array  $options Sync options (`skip_lists`, `fields`).
+	 *
+	 * @return void
+	 */
+	private static function log_dry_run_with_options( $contact, $context, $options ) {
+		// Mirror the real push path (push_to_integrations): run the contact filter
+		// before per-integration scoping so the preview reflects any metadata a
+		// publisher filter contributes.
+		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
+		$contact    = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
+		$skip_lists   = ! empty( $options['skip_lists'] );
+		$integrations = Integrations::get_active_configured_integrations();
+		if ( ! empty( $options['integration_id'] ) ) {
+			$integrations = array_intersect_key( $integrations, [ $options['integration_id'] => true ] );
+		}
+		foreach ( $integrations as $integration_id => $integration ) {
+			// The real push path skips integrations without an (enabled) push, so
+			// report the skip rather than a payload the run would never send —
+			// a preview that disagrees with the run defeats the point of --dry-run.
+			if ( ! $integration->is_push_enabled() ) {
+				static::log(
+					sprintf(
+						'[dry-run] SKIPPED integration "%s": %s.',
+						$integration_id,
+						$integration->supports_push() ? 'outbound sync is paused' : 'integration does not support outbound sync'
+					)
+				);
+				continue;
+			}
+
+
+			$prepared = self::prepare_contact_for_integration( $integration, $contact, $options );
+			$metadata = $prepared['metadata'] ?? [];
+			static::log(
+				sprintf(
+					'[dry-run] %s → integration "%s": lists %s, %d field(s): %s',
+					$prepared['email'] ?? 'unknown',
+					$integration_id,
+					$skip_lists ? 'skipped' : 'master list',
+					count( $metadata ),
+					implode( ', ', array_keys( $metadata ) )
+				)
+			);
+			if ( ! empty( $options['fields'] ) && empty( $metadata ) ) {
+				static::log(
+					sprintf(
+						'[dry-run] WARNING: no metadata to sync for integration "%s" — this reader likely has no values for the requested fields (the CLI pre-flight already confirmed they are enabled as outgoing fields).',
+						$integration_id
+					)
+				);
+			}
+		}
 	}
 
 	/**

@@ -1,3 +1,95 @@
+## newspack-block-theme [1.31.7](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.6...newspack-block-theme@1.31.7) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+
+## newspack-block-theme [1.31.6](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.5...newspack-block-theme@1.31.6) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.1
+
+## newspack-block-theme [1.31.5](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.4...newspack-block-theme@1.31.5) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
+## newspack-block-theme [1.31.4](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.3...newspack-block-theme@1.31.4) (2026-09-14)
+
+
+### Bug Fixes
+
+* **blocks:** keep tag labels clear of cat-links styling ([#736](https://github.com/Automattic/newspack-workspace/issues/736)) ([4cb3fb7](https://github.com/Automattic/newspack-workspace/commit/4cb3fb76849ca05bf29d06788e0148afab204227))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
+## newspack-block-theme [1.31.3](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.2...newspack-block-theme@1.31.3) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.7.0
+
+## newspack-block-theme [1.31.2](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.1...newspack-block-theme@1.31.2) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
+## newspack-block-theme [1.31.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.0...newspack-block-theme@1.31.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+# newspack-block-theme [1.31.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.30.1...newspack-block-theme@1.31.0) (2026-08-17)
+
+
+### Bug Fixes
+
+* **blocks:** APCA contrast picker and derived accent-contrast color ([#730](https://github.com/Automattic/newspack-workspace/issues/730)) ([b05a658](https://github.com/Automattic/newspack-workspace/commit/b05a6588f4d9ebdeb3dbdbc17b5c06c901012ca7))
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-block-theme [1.30.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.30.0...newspack-block-theme@1.30.1) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.0
+* **newspack-scripts:** upgraded to 5.10.0
+
+# newspack-block-theme [1.30.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.29.1...newspack-block-theme@1.30.0) (2026-07-20)
+
+
+### Features
+
+* **block-theme:** add ad slots and spacing control (NPPD-1558, [#300](https://github.com/Automattic/newspack-workspace/issues/300)) ([7823f2f](https://github.com/Automattic/newspack-workspace/commit/7823f2fefd7cc1eaf854b08d8b4422289fa75f62))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.5.0
+
 ## newspack-block-theme [1.29.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.29.0...newspack-block-theme@1.29.1) (2026-07-09)
 
 

@@ -60,6 +60,11 @@ class Newspack_UI {
 			true
 		);
 
+		// Defer on the front end only; admin and block editor requests (is_admin()) are left untouched.
+		if ( ! is_admin() ) {
+			wp_script_add_data( 'newspack-ui', 'strategy', 'defer' );
+		}
+
 		$icons = [];
 		foreach ( self::get_type_icons() as $type => $icon_name ) {
 			$icons[ $type ] = wp_kses( Newspack_UI_Icons::get_svg( $icon_name ), Newspack_UI_Icons::sanitize_svgs() );

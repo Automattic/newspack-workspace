@@ -42,6 +42,15 @@ The build is parameterised by these variables (set in TeamCity, not committed):
    variables). `setupSite` forwards them to the remote provisioning, which applies
    them to the WooCommerce Stripe gateway so the `@with-woo` donation test can
    complete. See also the "Payments" section below.
+4. `E2E_EMAIL_SENDBOX_SECRET` – shared secret gating the `/_email` sendbox, which
+   exposes captured reader emails (password-reset and verification links).
+   **Required for any non-local target**: provisioning hard-errors as a precondition
+   (before rebuilding the site) rather than serve the sendbox with a guessable
+   default. `setupSite` forwards it to the remote provisioning, which writes the
+   `NEWSPACK_E2E_SENDBOX_SECRET` wp-config constant, and the suite sends it as a
+   request header when reading the sendbox. Local runs fall back to a committed dev
+   default, so this is unset for local development. Generate a strong value
+   (`openssl rand -hex 32`) and treat it as a credential.
 
 ### Payments
 

@@ -14,7 +14,25 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Prevent the admin email confirmation screen
+/*
+ * Refuse to do anything unless the site was provisioned as an e2e target.
+ *
+ * Everything below is unsafe outside a throwaway site: /_email exposes every
+ * captured message — password-reset and magic links included — pre_wp_mail
+ * swallows all outgoing mail while reporting success, and the logout endpoint
+ * answers without a nonce. Two safeguards keep that contained: this constant
+ * gate makes a stray copy onto any other site inert, and /_email additionally
+ * requires the per-run NEWSPACK_E2E_SENDBOX_SECRET, so an e2e host that is
+ * internet-reachable (staging) still won't hand its captured mail to anyone.
+ *
+ * e2e-setup.sh writes both constants to wp-config.php before it installs and
+ * activates this plugin, so a correctly provisioned site always has them.
+ */
+if ( ! defined( 'NEWSPACK_IS_E2E' ) || ! NEWSPACK_IS_E2E ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/class-starter-content.php.
+	return;
+}
+
+// Prevent the admin email confirmation screen.
 add_filter( 'admin_email_check_interval', '__return_false' );
 
 // Register custom post type for email logs.
@@ -36,7 +54,7 @@ add_action(
 		];
 		$result = register_post_type( 'email_log', $args );
 		if ( is_wp_error( $result ) ) {
-			error_log( 'Failed to create the email_log CPT.' );
+			error_log( 'Failed to create the email_log CPT.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Test harness; surfacing setup failure in the container log is the point.
 		}
 	}
 );
@@ -45,9 +63,10 @@ add_action(
 add_action(
 	'init',
 	function () {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Logging out without a nonce is precisely what this e2e-only endpoint provides.
 		if ( isset( $_GET['action'] ) && $_GET['action'] === 'logout_without_nonce' ) {
 			wp_logout();
-			wp_redirect( home_url() );
+			wp_safe_redirect( home_url() );
 			exit;
 		}
 	}
@@ -95,7 +114,52 @@ add_filter(
 add_action(
 	'init',
 	function () {
-		if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/_email' ) === 0 ) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Compared against a literal prefix and never output; a sanitizer would alter the string being matched.
+		if ( isset( $_SERVER['REQUEST_URI'] ) && str_starts_with( wp_unslash( $_SERVER['REQUEST_URI'] ), '/_email' ) ) {
+			// The gate below varies the response on a secret request header, but page
+			// caches key on the URL, not that header — so a stored authorized 200
+			// would be replayed to an unauthenticated request at the same URL, a
+			// bypass. Exclude every /_email response from the page cache before the
+			// gate runs. batcache_cancel() is the load-bearing one on WordPress.com /
+			// Atomic: Batcache serves stored copies before plugins load, so stopping
+			// the store is the only reliable point (this Batcache ignores
+			// DONOTCACHEPAGE, which is kept only for other page caches on other
+			// hosts). nocache_headers() on each branch below covers the edge, proxies
+			// and browser. batcache_cancel() is defined only on cached web requests,
+			// hence the guard.
+			if ( function_exists( 'batcache_cancel' ) ) {
+				batcache_cancel();
+			}
+			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+				define( 'DONOTCACHEPAGE', true );
+			}
+			// The sendbox dumps every captured outgoing email — including reader
+			// password-reset and account-verification links — so it must never be
+			// served to an unauthenticated visitor. Gate it behind a per-run shared
+			// secret that provisioning writes to the NEWSPACK_E2E_SENDBOX_SECRET
+			// constant, and fail closed (403) — before emitting any email content —
+			// whenever that constant is unset/empty or the request does not present
+			// a matching secret. The secret travels in a request header, not the URL,
+			// so it stays out of access logs, published Playwright artifacts and
+			// browser history; hash_equals keeps the compare timing-safe. Both
+			// branches send no-cache headers so an intermediary — the managed edge in
+			// front of a non-local target, which this repo can't inspect or pin —
+			// can't retain either the dump or the refusal.
+			$configured_secret = defined( 'NEWSPACK_E2E_SENDBOX_SECRET' ) ? (string) constant( 'NEWSPACK_E2E_SENDBOX_SECRET' ) : ''; // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Compared via hash_equals against a configured secret and never output; sanitizing would alter the string being matched.
+			$provided_secret = isset( $_SERVER['HTTP_X_NEWSPACK_E2E_SENDBOX_SECRET'] ) && is_string( $_SERVER['HTTP_X_NEWSPACK_E2E_SENDBOX_SECRET'] ) ? (string) wp_unslash( $_SERVER['HTTP_X_NEWSPACK_E2E_SENDBOX_SECRET'] ) : '';
+			if ( '' === $configured_secret || ! hash_equals( $configured_secret, $provided_secret ) ) {
+				nocache_headers();
+				status_header( 403 );
+				header( 'Content-Type: text/plain' );
+				echo 'Forbidden';
+				exit;
+			}
+			nocache_headers();
+			// The sendbox renders captured email HTML verbatim — a page of links — so
+			// suppress the Referer to keep the request URL out of any off-site
+			// request a followed link might trigger.
+			header( 'Referrer-Policy: no-referrer' );
 			header( 'Content-Type: text/html' );
 			?>
 			<html><head><title>Email Sendbox</title></head><body>
@@ -110,6 +174,7 @@ add_action(
 
 			global $wpdb;
 
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- DirectQuery: reads every captured email in one pass, whatever its post status. NoCaching: the sendbox must see rows the test wrote moments ago.
 			$results = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}posts WHERE post_type = 'email_log' ORDER BY post_date DESC", ARRAY_A );
 
 			if ( ! empty( $results ) ) {
@@ -122,7 +187,7 @@ add_action(
 								<strong><?php echo esc_html( $email['post_title'] ); ?></strong> - <?php echo esc_html( $email['post_date'] ); ?>
 							</summary>
 							<div class="email-content">
-								<?php echo $email['post_content']; ?>
+								<?php echo $email['post_content']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Captured email HTML is rendered verbatim so tests can assert on its markup. ?>
 							</div>
 						</details>
 					</div>

@@ -1,7 +1,9 @@
 @use "newspack-colors" as np-colors;
 
 .newspack-checkout-button {
-	&__product-field {
+	&__product-field,
+	&__coupon-field {
+		margin-bottom: 16px;
 		&__error {
 			color: np-colors.$error-500;
 			font-size: 0.9em;
@@ -64,4 +66,3 @@
 		width: auto;
 	}
 }
-

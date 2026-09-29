@@ -8,9 +8,11 @@
 import { __ } from '@wordpress/i18n';
 
 import { createStatusLabelModule } from '../../utils/status-label';
+import { isManualProvider } from '../../../utils/service-provider';
 
 export const { STATUS_KIND_LABELS, statusKindLabel } = createStatusLabelModule( () => ( {
-	sent: __( 'Sent', 'newspack-newsletters' ),
+	// The manual provider doesn't send through an ESP, so a published newsletter reads "Published", not "Sent".
+	sent: isManualProvider() ? __( 'Published', 'newspack-newsletters' ) : __( 'Sent', 'newspack-newsletters' ),
 	scheduled: __( 'Scheduled', 'newspack-newsletters' ),
 	draft: __( 'Draft', 'newspack-newsletters' ),
 	trash: __( 'Trash', 'newspack-newsletters' ),

@@ -67,6 +67,13 @@ if ( ! function_exists( 'WC' ) ) {
 				public $cart = null;
 
 				/**
+				 * Session double, set by tests.
+				 *
+				 * @var object|null
+				 */
+				public $session = null;
+
+				/**
 				 * Countries double exposing a US-only states list.
 				 *
 				 * @var object
@@ -91,6 +98,42 @@ if ( ! function_exists( 'WC' ) ) {
 					};
 				}
 
+				/**
+				 * Number of times the checkout double's process_checkout() ran.
+				 *
+				 * @var int
+				 */
+				public $process_checkout_calls = 0;
+				/**
+				 * Mimic WC()->checkout() with a double that records process_checkout() calls.
+				 *
+				 * @return object
+				 */
+				public function checkout() {
+					$container = $this;
+					return new class( $container ) {
+						/**
+						 * The container to record on.
+						 *
+						 * @var object
+						 */
+						private $container;
+						/**
+						 * Keep the container.
+						 *
+						 * @param object $container The WC() double.
+						 */
+						public function __construct( $container ) {
+							$this->container = $container;
+						}
+						/**
+						 * Record the call instead of processing a checkout.
+						 */
+						public function process_checkout() {
+							++$this->container->process_checkout_calls;
+						}
+					};
+				}
 				/**
 				 * Mimic WC()->payment_gateways() with no registered gateways.
 				 *
@@ -134,6 +177,36 @@ if ( ! class_exists( 'WC_Validation' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wc_nocache_headers' ) ) {
+	/**
+	 * Mock WooCommerce nocache headers as a no-op.
+	 */
+	function wc_nocache_headers() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+	}
+}
+if ( ! function_exists( 'wc_get_cart_url' ) ) {
+	/**
+	 * Mock WooCommerce cart URL.
+	 *
+	 * @return string
+	 */
+	function wc_get_cart_url() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		return home_url( '/cart/' );
+	}
+}
+if ( ! function_exists( 'wc_maybe_define_constant' ) ) {
+	/**
+	 * Mock WooCommerce constant helper.
+	 *
+	 * @param string $name  Constant name.
+	 * @param mixed  $value Constant value.
+	 */
+	function wc_maybe_define_constant( $name, $value ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		if ( ! defined( $name ) ) {
+			define( $name, $value );
+		}
+	}
+}
 if ( ! function_exists( 'wc_get_checkout_url' ) ) {
 	/**
 	 * Mock WooCommerce checkout URL helper.
@@ -145,22 +218,392 @@ if ( ! function_exists( 'wc_get_checkout_url' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wc_coupons_enabled' ) ) {
+	/**
+	 * Mock WooCommerce coupons-enabled flag. Defaults to enabled; a test can
+	 * force it off via the $newspack_blocks_test_coupons_enabled global.
+	 *
+	 * @return bool
+	 */
+	function wc_coupons_enabled() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		global $newspack_blocks_test_coupons_enabled;
+		return null === $newspack_blocks_test_coupons_enabled ? true : (bool) $newspack_blocks_test_coupons_enabled;
+	}
+}
+
+if ( ! function_exists( 'wc_format_coupon_code' ) ) {
+	/**
+	 * Mock WooCommerce coupon code formatter (lowercase + trim, as core does).
+	 *
+	 * @param string $code Coupon code.
+	 *
+	 * @return string
+	 */
+	function wc_format_coupon_code( $code ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		return strtolower( trim( (string) $code ) );
+	}
+}
+
+if ( ! function_exists( 'wc_add_notice' ) ) {
+	/**
+	 * Mock WooCommerce notice queue: record notices in a global.
+	 *
+	 * @param string $message     Notice message.
+	 * @param string $notice_type Notice type.
+	 *
+	 * @return void
+	 */
+	function wc_add_notice( $message, $notice_type = 'success' ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		global $newspack_blocks_test_notices;
+		if ( ! is_array( $newspack_blocks_test_notices ) ) {
+			$newspack_blocks_test_notices = [];
+		}
+		$newspack_blocks_test_notices[] = [
+			'message' => $message,
+			'type'    => $notice_type,
+		];
+	}
+}
+
+if ( ! function_exists( 'wc_clear_notices' ) ) {
+	/**
+	 * Mock WooCommerce notice clearing: empty the queue and count the calls so
+	 * tests can assert the auto-apply cleared the success notice.
+	 *
+	 * @return void
+	 */
+	function wc_clear_notices() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		global $newspack_blocks_test_notices, $newspack_blocks_test_cleared_notices_count;
+		$newspack_blocks_test_notices               = [];
+		$newspack_blocks_test_cleared_notices_count = (int) $newspack_blocks_test_cleared_notices_count + 1;
+	}
+}
+
+if ( ! function_exists( 'wc_get_notices' ) ) {
+	/**
+	 * Mock WooCommerce notice reading: return the recorded notices of one type in
+	 * WooCommerce's own shape, where each entry carries a `notice` key.
+	 *
+	 * @param string $notice_type Notice type.
+	 *
+	 * @return array
+	 */
+	function wc_get_notices( $notice_type = '' ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		global $newspack_blocks_test_notices;
+		$notices = is_array( $newspack_blocks_test_notices ) ? $newspack_blocks_test_notices : [];
+		$matched = [];
+		foreach ( $notices as $notice ) {
+			if ( $notice_type && $notice['type'] !== $notice_type ) {
+				continue;
+			}
+			$matched[] = [
+				'notice' => $notice['message'],
+				'data'   => [],
+			];
+		}
+		return $matched;
+	}
+}
+
+if ( ! class_exists( 'WC_Coupon' ) ) {
+	/**
+	 * Minimal WooCommerce coupon stub carrying its code.
+	 */
+	class WC_Coupon {
+		/**
+		 * Coupon code.
+		 *
+		 * @var string
+		 */
+		private $code;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param string $code Coupon code.
+		 */
+		public function __construct( $code = '' ) {
+			$this->code = $code;
+		}
+
+		/**
+		 * Get the coupon code.
+		 *
+		 * @return string
+		 */
+		public function get_code() {
+			return $this->code;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Discounts' ) ) {
+	/**
+	 * Minimal WooCommerce discounts stub. A coupon is valid only when its code
+	 * is in the test-configured valid list; otherwise a WP_Error is returned,
+	 * matching WC_Discounts::is_coupon_valid().
+	 */
+	class WC_Discounts {
+		/**
+		 * Constructor.
+		 *
+		 * @param mixed $cart Cart (unused by the stub).
+		 */
+		public function __construct( $cart = null ) {
+			unset( $cart );
+		}
+
+		/**
+		 * Whether a coupon is valid.
+		 *
+		 * @param WC_Coupon $coupon Coupon.
+		 *
+		 * @return bool|WP_Error
+		 */
+		public function is_coupon_valid( $coupon ) {
+			global $newspack_blocks_test_valid_coupons;
+			$valid = is_array( $newspack_blocks_test_valid_coupons ) ? $newspack_blocks_test_valid_coupons : [];
+			if ( in_array( $coupon->get_code(), $valid, true ) ) {
+				return true;
+			}
+			return new WP_Error( 'invalid_coupon', 'Invalid coupon.' );
+		}
+	}
+}
+
+// `WC_Cart` and `WC_Product` are stubbed by tests/test-modal-checkout-data.php,
+// which PHPUnit loads first (it sorts ahead of this file). Guarding the subclass
+// on the parent's existence keeps this file from fataling at load time if that
+// ever stops being true; the tests that need it skip instead.
+if ( class_exists( 'WC_Cart' ) && ! class_exists( 'Newspack_Blocks_Test_Mutable_Cart' ) ) {
+	/**
+	 * A cart double that actually mutates, for the empty-and-re-add round trip
+	 * Modal_Checkout::update_cart_quantity() performs. Extends the WC_Cart stub so
+	 * Checkout_Data::get_checkout_data()'s `instanceof \WC_Cart` branch is reached.
+	 */
+	class Newspack_Blocks_Test_Mutable_Cart extends WC_Cart {
+		/**
+		 * Cart contents, keyed by cart item key.
+		 *
+		 * @var array
+		 */
+		public $contents = [];
+
+		/**
+		 * Applied coupon codes.
+		 *
+		 * @var string[]
+		 */
+		public $applied = [];
+
+		/**
+		 * Quantities add_to_cart() should reject, as an add-to-cart guard would.
+		 *
+		 * @var int[]
+		 */
+		public $rejected_quantities = [];
+
+		/**
+		 * Counter behind the generated cart item keys.
+		 *
+		 * @var int
+		 */
+		private $key_count = 0;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param array $contents Initial cart contents, keyed by cart item key.
+		 */
+		public function __construct( $contents = [] ) {
+			parent::__construct( $contents );
+			$this->contents = $contents;
+		}
+
+		/**
+		 * Get the cart contents.
+		 *
+		 * @return array
+		 */
+		public function get_cart() {
+			return $this->contents;
+		}
+
+		/**
+		 * Get a single cart item.
+		 *
+		 * @param string $key Cart item key.
+		 *
+		 * @return array|false
+		 */
+		public function get_cart_item( $key ) {
+			return isset( $this->contents[ $key ] ) ? $this->contents[ $key ] : false;
+		}
+
+		/**
+		 * Empty the cart.
+		 */
+		public function empty_cart() {
+			$this->contents = [];
+			// Real WC_Cart::empty_cart() drops applied coupons too, and the code under
+			// test re-applies them afterwards.
+			$this->applied = [];
+		}
+
+		/**
+		 * Add an item, or reject it the way a guard-thrown exception makes
+		 * WC_Cart::add_to_cart() do: queue an error notice and return false.
+		 *
+		 * @param int   $product_id     Product ID.
+		 * @param int   $quantity       Quantity.
+		 * @param int   $variation_id   Variation ID.
+		 * @param array $variation      Variation attributes.
+		 * @param array $cart_item_data Cart item data.
+		 *
+		 * @return string|false Cart item key, or false when rejected.
+		 */
+		public function add_to_cart( $product_id, $quantity = 1, $variation_id = 0, $variation = [], $cart_item_data = [] ) {
+			unset( $variation );
+			if ( in_array( (int) $quantity, $this->rejected_quantities, true ) ) {
+				wc_add_notice( 'Choose at least 2 seats.', 'error' );
+				return false;
+			}
+			$key                    = 'item_' . ++$this->key_count;
+			$this->contents[ $key ] = array_merge(
+				$cart_item_data,
+				[
+					'product_id'   => (int) $product_id,
+					'variation_id' => (int) $variation_id,
+					'quantity'     => (int) $quantity,
+					'data'         => new WC_Product( (int) $product_id, 'simple', [], '10', 'Product ' . (int) $product_id ),
+				]
+			);
+			return $key;
+		}
+
+		/**
+		 * Get the applied coupon codes.
+		 *
+		 * @return string[]
+		 */
+		public function get_applied_coupons() {
+			return $this->applied;
+		}
+
+		/**
+		 * Apply a coupon.
+		 *
+		 * @param string $code Coupon code.
+		 *
+		 * @return bool
+		 */
+		public function apply_coupon( $code ) {
+			$this->applied[] = $code;
+			return true;
+		}
+	}
+}
+
 class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
+	/**
+	 * Reset coupon/notice test state to deterministic defaults before each test.
+	 */
+	public function set_up() {
+		parent::set_up();
+		global $newspack_blocks_test_notices, $newspack_blocks_test_cleared_notices_count, $newspack_blocks_test_valid_coupons, $newspack_blocks_test_coupons_enabled;
+		$newspack_blocks_test_notices               = [];
+		$newspack_blocks_test_cleared_notices_count = 0;
+		$newspack_blocks_test_valid_coupons         = [];
+		$newspack_blocks_test_coupons_enabled       = null;
+	}
+
 	/**
 	 * Clean up request data.
 	 */
 	public function tear_down() {
-		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id, $newspack_blocks_test_wc;
-		$newspack_blocks_test_limited_product_id = null;
-		$newspack_blocks_test_limited_user_id    = null;
-		$newspack_blocks_test_wc                 = null;
+		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id, $newspack_blocks_test_wc, $newspack_blocks_test_notices, $newspack_blocks_test_cleared_notices_count, $newspack_blocks_test_valid_coupons, $newspack_blocks_test_coupons_enabled;
+		$newspack_blocks_test_limited_product_id    = null;
+		$newspack_blocks_test_limited_user_id       = null;
+		$newspack_blocks_test_wc                    = null;
+		$newspack_blocks_test_notices               = [];
+		$newspack_blocks_test_cleared_notices_count = 0;
+		$newspack_blocks_test_valid_coupons         = [];
+		$newspack_blocks_test_coupons_enabled       = null;
 		if ( property_exists( \Newspack\WooCommerce_My_Account::class, 'is_from_my_account' ) ) {
 			\Newspack\WooCommerce_My_Account::$is_from_my_account = false;
 		}
 		remove_all_filters( 'woocommerce_cart_item_removed_message' );
 		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
-		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'], $_SERVER['HTTP_REFERER'] );
+		remove_all_filters( 'newspack_blocks_modal_checkout_quantity_field' );
+		remove_all_filters( 'newspack_blocks_modal_checkout_quantity' );
+		unset(
+			$_POST['billing_email'],
+			$_POST['post_data'],
+			$_POST['express_payment_type'],
+			$_POST['quantity'],
+			$_POST['is_validation_only'],
+			$_POST['newspack_blocks_checkout_action'],
+			$_POST['newspack_checkout_nonce'],
+			$_POST['woocommerce_checkout_update_totals'],
+			$_GET['quantity'],
+			$_REQUEST['modal_checkout'],
+			$_REQUEST['post_data'],
+			$_REQUEST['quantity'],
+			$_REQUEST['woocommerce-process-checkout-nonce'],
+			$_SERVER['HTTP_REFERER']
+		);
+		$this->reset_validation_only_request();
 		parent::tear_down();
+	}
+
+	/**
+	 * A requested quantity, once a plugin has claimed the product's quantity rules.
+	 *
+	 * @return array<string,array{0:?string,1:int}>
+	 */
+	public function requested_quantity_provider() {
+		return [
+			'absent'   => [ null, 1 ],
+			'zero'     => [ '0', 1 ],
+			// (int), not absint(): absint() takes the absolute value, so ?quantity=-5
+			// would become 5 rather than flooring at 1 like any other out-of-range ask.
+			'negative' => [ '-5', 1 ],
+			'in range' => [ '7', 7 ],
+		];
+	}
+
+	/**
+	 * @dataProvider requested_quantity_provider
+	 *
+	 * @param string|null $requested The quantity in the request, or null for none.
+	 * @param int         $expected  The quantity the checkout will use.
+	 */
+	public function test_requested_quantity_is_floored_at_one( $requested, $expected ) {
+		$this->vouch_for_requested_quantity();
+		if ( null === $requested ) {
+			unset( $_GET['quantity'], $_REQUEST['quantity'] );
+		} else {
+			$_GET['quantity']     = $requested;
+			$_REQUEST['quantity'] = $requested;
+		}
+
+		$this->assertSame( $expected, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
+
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
+	}
+
+	/**
+	 * `newspack_checkout=1` needs no nonce, so a quantity in the request is the
+	 * caller's claim and nothing more. Without a plugin vouching for it, a crafted
+	 * link would otherwise multiply what the reader pays.
+	 */
+	public function test_requested_quantity_is_one_when_nobody_vouches_for_it() {
+		$_GET['quantity']     = '250';
+		$_REQUEST['quantity'] = '250';
+
+		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
+
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
 	}
 
 	/**
@@ -171,143 +614,6 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	private function set_serialized_post_data( $post_data ) {
 		$_POST['post_data']    = $post_data;
 		$_REQUEST['post_data'] = $post_data;
-	}
-
-	/**
-	 * Invoke the private cart product summary helper.
-	 *
-	 * @param object $cart Cart-like object.
-	 *
-	 * @return string
-	 */
-	private function get_cart_product_summary( $cart ) {
-		$method = new ReflectionMethod( \Newspack_Blocks\Modal_Checkout::class, 'get_cart_product_summary' );
-		$method->setAccessible( true );
-		return $method->invoke( null, $cart );
-	}
-
-	/**
-	 * Create a cart-like object for product summary tests.
-	 *
-	 * @param array  $items Cart items.
-	 * @param string $subtotal Product subtotal HTML.
-	 *
-	 * @return object
-	 */
-	private function get_mock_cart( $items, $subtotal = '<span class="amount"><bdi>$29.00</bdi></span>' ) {
-		return new class( $items, $subtotal ) {
-			/**
-			 * Cart items.
-			 *
-			 * @var array
-			 */
-			private $items;
-
-			/**
-			 * Product subtotal HTML.
-			 *
-			 * @var string
-			 */
-			private $subtotal;
-
-			/**
-			 * Constructor.
-			 *
-			 * @param array  $items Cart items.
-			 * @param string $subtotal Product subtotal HTML.
-			 */
-			public function __construct( $items, $subtotal ) {
-				$this->items    = $items;
-				$this->subtotal = $subtotal;
-			}
-
-			/**
-			 * Get the cart contents count.
-			 *
-			 * @return int
-			 */
-			public function get_cart_contents_count() {
-				return array_sum( array_column( $this->items, 'quantity' ) );
-			}
-
-			/**
-			 * Get cart items.
-			 *
-			 * @return array
-			 */
-			public function get_cart() {
-				return $this->items;
-			}
-
-			/**
-			 * Get a cart item.
-			 *
-			 * @param string $key Cart item key.
-			 *
-			 * @return array
-			 */
-			public function get_cart_item( $key ) {
-				return $this->items[ $key ];
-			}
-
-			/**
-			 * Get the product subtotal.
-			 *
-			 * @param object $product Product.
-			 * @param int    $quantity Quantity.
-			 *
-			 * @return string
-			 */
-			public function get_product_subtotal( $product = null, $quantity = 1 ) {
-				unset( $product, $quantity );
-				return $this->subtotal;
-			}
-		};
-	}
-
-	/**
-	 * Create a product-like object for product summary tests.
-	 *
-	 * @param string $name Product name.
-	 *
-	 * @return object
-	 */
-	private function get_mock_product( $name = 'Newsroom Pro' ) {
-		return new class( $name ) {
-			/**
-			 * Product name.
-			 *
-			 * @var string
-			 */
-			private $name;
-
-			/**
-			 * Constructor.
-			 *
-			 * @param string $name Product name.
-			 */
-			public function __construct( $name ) {
-				$this->name = $name;
-			}
-
-			/**
-			 * Whether the product exists.
-			 *
-			 * @return bool
-			 */
-			public function exists() {
-				return true;
-			}
-
-			/**
-			 * Get the product name.
-			 *
-			 * @return string
-			 */
-			public function get_name() {
-				return $this->name;
-			}
-		};
 	}
 
 	/**
@@ -477,51 +783,6 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->set_serialized_post_data( 'billing_first_name=Repeat&billing_email=repeat%40example.com' );
 
 		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::subscriptions_product_limited_for_user( false, $product, 0 ) );
-	}
-
-	/**
-	 * It returns a sanitized product summary for a single-item cart.
-	 */
-	public function test_get_cart_product_summary_returns_sanitized_single_item_summary() {
-		$cart = $this->get_mock_cart(
-			[
-				'abc123' => [
-					'data'     => $this->get_mock_product( 'Newsroom Pro <script>alert(1)</script>' ),
-					'quantity' => 1,
-				],
-			],
-			'<span class="amount"><bdi>$29.00</bdi></span><script>alert(1)</script>'
-		);
-
-		$summary = $this->get_cart_product_summary( $cart );
-
-		$this->assertStringContainsString( 'Newsroom Pro', $summary );
-		$this->assertStringContainsString( '<span class="amount"><bdi>$29.00</bdi></span>', $summary );
-		$this->assertStringNotContainsString( '<script', $summary );
-	}
-
-	/**
-	 * It returns an empty summary for empty and multi-item carts.
-	 */
-	public function test_get_cart_product_summary_returns_empty_for_unsupported_cart_counts() {
-		$this->assertSame( '', $this->get_cart_product_summary( $this->get_mock_cart( [] ) ) );
-		$this->assertSame(
-			'',
-			$this->get_cart_product_summary(
-				$this->get_mock_cart(
-					[
-						'abc123' => [
-							'data'     => $this->get_mock_product( 'Monthly' ),
-							'quantity' => 1,
-						],
-						'def456' => [
-							'data'     => $this->get_mock_product( 'Annual' ),
-							'quantity' => 1,
-						],
-					]
-				)
-			)
-		);
 	}
 
 	/**
@@ -971,5 +1232,902 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
 		$this->set_mock_checkout_cart( true );
 		$this->assertSame( $locale, \Newspack_Blocks\Modal_Checkout::relax_configured_off_locale_fields( $locale ), 'Shipping carts should not be relaxed.' );
+	}
+
+	/**
+	 * Set WC()->cart to a coupon-aware cart double.
+	 *
+	 * @param string[] $applied Initially-applied coupon codes.
+	 */
+	private function set_mock_coupon_cart( $applied = [] ) {
+		WC()->cart = new class( $applied ) {
+			/**
+			 * Applied coupon codes.
+			 *
+			 * @var string[]
+			 */
+			private $applied;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param string[] $applied Applied coupon codes.
+			 */
+			public function __construct( $applied ) {
+				$this->applied = $applied;
+			}
+
+			/**
+			 * Apply a coupon: record it (formatted) and queue a success notice,
+			 * mirroring WC_Cart::apply_coupon().
+			 *
+			 * @param string $code Coupon code.
+			 *
+			 * @return bool
+			 */
+			public function apply_coupon( $code ) {
+				$this->applied[] = wc_format_coupon_code( $code );
+				wc_add_notice( 'Coupon code applied successfully.', 'success' );
+				return true;
+			}
+
+			/**
+			 * Get the applied coupon codes.
+			 *
+			 * @return string[]
+			 */
+			public function get_applied_coupons() {
+				return $this->applied;
+			}
+		};
+	}
+
+	/**
+	 * Set WC()->session to a simple array-backed session double.
+	 *
+	 * @param array $data Initial session data.
+	 */
+	private function set_mock_session( $data = [] ) {
+		WC()->session = new class( $data ) {
+			/**
+			 * Session data.
+			 *
+			 * @var array
+			 */
+			private $data;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param array $data Session data.
+			 */
+			public function __construct( $data ) {
+				$this->data = $data;
+			}
+
+			/**
+			 * Get a session value.
+			 *
+			 * @param string $key           Key.
+			 * @param mixed  $default_value Default value.
+			 *
+			 * @return mixed
+			 */
+			public function get( $key, $default_value = null ) {
+				return array_key_exists( $key, $this->data ) ? $this->data[ $key ] : $default_value;
+			}
+
+			/**
+			 * Set a session value.
+			 *
+			 * @param string $key   Key.
+			 * @param mixed  $value Value.
+			 */
+			public function set( $key, $value ) {
+				$this->data[ $key ] = $value;
+			}
+		};
+	}
+
+	/**
+	 * Configure which coupon codes the WC_Discounts stub treats as valid.
+	 *
+	 * @param string[] $codes Valid coupon codes.
+	 */
+	private function set_valid_coupons( $codes ) {
+		global $newspack_blocks_test_valid_coupons;
+		$newspack_blocks_test_valid_coupons = $codes;
+	}
+
+	/**
+	 * A valid attached coupon is applied to the cart, tracked in the session
+	 * (formatted), and its success notice is cleared so the auto-apply is silent.
+	 */
+	public function test_auto_apply_valid_coupon_applies_and_tracks_silently() {
+		global $newspack_blocks_test_notices, $newspack_blocks_test_cleared_notices_count;
+		$this->set_mock_coupon_cart();
+		$this->set_mock_session();
+		$this->set_valid_coupons( [ 'SUMMER25' ] );
+
+		\Newspack_Blocks\Modal_Checkout::maybe_auto_apply_coupon( 'SUMMER25' );
+
+		$this->assertContains( 'summer25', WC()->cart->get_applied_coupons(), 'A valid coupon should be applied to the cart.' );
+		$this->assertSame(
+			'summer25',
+			WC()->session->get( \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY ),
+			'The applied coupon should be tracked in the session as the formatted code.'
+		);
+		$this->assertSame( [], $newspack_blocks_test_notices, 'The success notice should be cleared so the auto-apply is silent.' );
+		$this->assertSame( 1, $newspack_blocks_test_cleared_notices_count, 'wc_clear_notices() should be called once on a successful auto-apply.' );
+	}
+
+	/**
+	 * An invalid coupon (one that fails validation) is never applied, tracks
+	 * nothing, and surfaces no error notice — the reader never typed it.
+	 */
+	public function test_auto_apply_invalid_coupon_is_skipped_silently() {
+		global $newspack_blocks_test_notices;
+		$this->set_mock_coupon_cart();
+		$this->set_mock_session();
+		$this->set_valid_coupons( [ 'SUMMER25' ] );
+
+		\Newspack_Blocks\Modal_Checkout::maybe_auto_apply_coupon( 'BOGUS' );
+
+		$this->assertSame( [], WC()->cart->get_applied_coupons(), 'An invalid coupon should not be applied.' );
+		$this->assertNull(
+			WC()->session->get( \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY ),
+			'No coupon should be tracked for an invalid code.'
+		);
+		$this->assertSame( [], $newspack_blocks_test_notices, 'No error notice should be shown for a coupon the reader never typed.' );
+	}
+
+	/**
+	 * An empty coupon code applies nothing and clears any prior auto-apply
+	 * marker from the session.
+	 */
+	public function test_auto_apply_empty_coupon_resets_tracking() {
+		$this->set_mock_coupon_cart();
+		$this->set_mock_session( [ \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY => 'stale' ] );
+		$this->set_valid_coupons( [ 'SUMMER25' ] );
+
+		\Newspack_Blocks\Modal_Checkout::maybe_auto_apply_coupon( '' );
+
+		$this->assertNull(
+			WC()->session->get( \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY ),
+			'An empty coupon should clear any prior auto-apply marker.'
+		);
+	}
+
+	/**
+	 * When coupons are disabled site-wide, no coupon is applied or tracked.
+	 */
+	public function test_auto_apply_skipped_when_coupons_disabled() {
+		global $newspack_blocks_test_coupons_enabled;
+		$newspack_blocks_test_coupons_enabled = false;
+		$this->set_mock_coupon_cart();
+		$this->set_mock_session();
+		$this->set_valid_coupons( [ 'SUMMER25' ] );
+
+		\Newspack_Blocks\Modal_Checkout::maybe_auto_apply_coupon( 'SUMMER25' );
+
+		$this->assertSame( [], WC()->cart->get_applied_coupons(), 'No coupon should be applied when coupons are disabled.' );
+		$this->assertNull(
+			WC()->session->get( \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY ),
+			'No coupon should be tracked when coupons are disabled.'
+		);
+	}
+
+	/**
+	 * The coupon form is hidden when an auto-applied coupon is still on the cart.
+	 */
+	public function test_should_hide_coupon_form_true_when_auto_applied_and_in_cart() {
+		$this->set_mock_coupon_cart( [ 'summer25' ] );
+		$this->set_mock_session( [ \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY => 'summer25' ] );
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * The coupon form reappears when the reader removes the auto-applied coupon.
+	 */
+	public function test_should_hide_coupon_form_false_when_auto_applied_coupon_removed() {
+		$this->set_mock_coupon_cart( [] );
+		$this->set_mock_session( [ \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY => 'summer25' ] );
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * A coupon the reader typed themselves (no session marker) does not hide the
+	 * form, even though it is applied to the cart.
+	 */
+	public function test_should_hide_coupon_form_false_without_auto_applied_marker() {
+		$this->set_mock_coupon_cart( [ 'summer25' ] );
+		$this->set_mock_session();
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * With no session, the form is shown (never hidden).
+	 */
+	public function test_should_hide_coupon_form_false_without_session() {
+		$this->set_mock_coupon_cart( [ 'summer25' ] );
+		WC()->session = null;
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * With no cart, the form is shown (never hidden).
+	 */
+	public function test_should_hide_coupon_form_false_without_cart() {
+		$this->set_mock_session( [ \Newspack_Blocks\Modal_Checkout::AUTO_APPLIED_COUPON_SESSION_KEY => 'summer25' ] );
+		WC()->cart = null;
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form() );
+	}
+
+	/**
+	 * Set WC()->cart to a mutable cart double holding one line item.
+	 *
+	 * @param int   $product_id Product ID of the line item.
+	 * @param int   $quantity   Quantity of the line item.
+	 * @param array $extra      Extra cart item data (e.g. preserved keys).
+	 *
+	 * @return Newspack_Blocks_Test_Mutable_Cart
+	 */
+	private function set_mutable_cart( $product_id = 920, $quantity = 2, $extra = [] ) {
+		if ( ! class_exists( 'Newspack_Blocks_Test_Mutable_Cart' ) ) {
+			$this->markTestSkipped( 'Requires the WC_Cart stub from test-modal-checkout-data.php.' );
+		}
+		$cart = new Newspack_Blocks_Test_Mutable_Cart(
+			[
+				'existing' => array_merge(
+					$extra,
+					[
+						'product_id'   => $product_id,
+						'variation_id' => 0,
+						'quantity'     => $quantity,
+						'data'         => new WC_Product( $product_id, 'simple', [], '10', 'Product ' . $product_id ),
+					]
+				),
+			]
+		);
+		WC()->cart = $cart;
+		return $cart;
+	}
+
+	/**
+	 * Hook the quantity field filter, returning the given args.
+	 *
+	 * @param array $args Field args to return.
+	 */
+	private function set_quantity_field_args( $args ) {
+		add_filter(
+			'newspack_blocks_modal_checkout_quantity_field',
+			function () use ( $args ) {
+				return $args;
+			}
+		);
+	}
+
+	/**
+	 * Vouch for whatever quantity the request asks for, as a plugin that owns a
+	 * product's quantity rules would.
+	 */
+	private function vouch_for_requested_quantity() {
+		add_filter(
+			'newspack_blocks_modal_checkout_quantity',
+			function ( $vouched, $product_id, $requested ) {
+				return $requested;
+			},
+			10,
+			3
+		);
+	}
+
+	/**
+	 * Field args a per-seat product's filter callback would return.
+	 *
+	 * @return array
+	 */
+	private function get_quantity_field_args_fixture() {
+		return [
+			'label' => 'Number of team seats',
+			'min'   => 2,
+			'max'   => 10,
+			'help'  => 'Seats include the team owner.',
+		];
+	}
+
+	/**
+	 * A filter returning field args renders the quantity form, seeded with the
+	 * quantity already in the cart.
+	 */
+	public function test_quantity_form_renders_when_filter_returns_args() {
+		$this->set_modal_checkout_request();
+		$this->set_mutable_cart( 920, 2 );
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'form class="modal_checkout_quantity"', $output );
+		$this->assertStringContainsString( 'name="quantity"', $output );
+		$this->assertStringContainsString( 'value="2"', $output );
+		$this->assertStringContainsString( 'min="2"', $output );
+		$this->assertStringContainsString( 'max="10"', $output );
+		$this->assertStringContainsString( 'Number of team seats', $output );
+		$this->assertStringContainsString( 'Seats include the team owner.', $output );
+		$this->assertStringContainsString( 'name="product_id" value="920"', $output );
+		// The label is associated with the input, not just placed near it: a screen
+		// reader landing on the number field must hear what the number means.
+		$this->assertStringContainsString( '<label for="modal_checkout_quantity">Number of team seats</label>', $output );
+		$this->assertStringContainsString( 'id="modal_checkout_quantity"', $output );
+	}
+
+	/**
+	 * An unlimited maximum omits the max attribute rather than emitting max="0".
+	 */
+	public function test_quantity_form_omits_max_when_unlimited() {
+		$this->set_modal_checkout_request();
+		$this->set_mutable_cart( 920, 3 );
+		$args        = $this->get_quantity_field_args_fixture();
+		$args['max'] = 0;
+		$this->set_quantity_field_args( $args );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'form class="modal_checkout_quantity"', $output );
+		$this->assertStringNotContainsString( 'max=', $output );
+	}
+
+	/**
+	 * Without a filter enabling it, the form is not rendered at all: the modal
+	 * stays single-quantity for every product that has no opinion about seats.
+	 */
+	public function test_quantity_form_renders_nothing_without_filter() {
+		$this->set_modal_checkout_request();
+		$this->set_mutable_cart( 920, 2 );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertSame( '', $output );
+	}
+
+	/**
+	 * Outside modal checkout the form never renders, even with the filter on.
+	 */
+	public function test_quantity_form_renders_nothing_outside_modal_checkout() {
+		$this->set_mutable_cart( 920, 2 );
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertSame( '', $output );
+	}
+
+	/**
+	 * The filter receives the cart's product and cart item, so a consumer can
+	 * decide per product whether the field applies.
+	 */
+	public function test_quantity_form_filter_receives_product_and_cart_item() {
+		$this->set_modal_checkout_request();
+		$this->set_mutable_cart( 920, 2 );
+
+		$received = [];
+		add_filter(
+			'newspack_blocks_modal_checkout_quantity_field',
+			function ( $args, $product, $cart_item ) use ( &$received ) {
+				$received = [
+					'product_id' => $product->get_id(),
+					'quantity'   => $cart_item['quantity'],
+				];
+				return $args;
+			},
+			10,
+			3
+		);
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		ob_get_clean();
+
+		$this->assertSame(
+			[
+				'product_id' => 920,
+				'quantity'   => 2,
+			],
+			$received
+		);
+	}
+
+	/**
+	 * WooCommerce Subscriptions writes these onto the cart item from the request that
+	 * started the switch, renewal, resubscribe or first payment, and the quantity
+	 * AJAX carries no such request. Re-adding would drop the record, and the checkout
+	 * would raise a second full-price subscription while the one the reader meant to
+	 * pay for or change stays as it was -- so the rebuild is refused and the cart is
+	 * left exactly as it was.
+	 *
+	 * @dataProvider wcs_subscription_cart_item_key_provider
+	 *
+	 * @param string $key The cart item key WooCommerce Subscriptions writes.
+	 */
+	public function test_update_cart_quantity_refuses_a_subscription_cart( $key ) {
+		$this->vouch_for_requested_quantity();
+		$cart = $this->set_mutable_cart( 920, 4, [ $key => [ 'subscription_id' => 77 ] ] );
+
+		$result = \Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 8 );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_blocks_quantity_subscription_cart', $result->get_error_code() );
+		$item = reset( $cart->contents );
+		$this->assertSame( 4, $item['quantity'], 'The cart item is untouched.' );
+		$this->assertSame( [ 'subscription_id' => 77 ], $item[ $key ] );
+	}
+
+	/**
+	 * The keys WooCommerce Subscriptions writes onto a cart it built to change or
+	 * take payment for a subscription the reader already has.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function wcs_subscription_cart_item_key_provider() {
+		return [
+			'switch'          => [ 'subscription_switch' ],
+			'renewal'         => [ 'subscription_renewal' ],
+			'resubscribe'     => [ 'subscription_resubscribe' ],
+			'initial payment' => [ 'subscription_initial_payment' ],
+		];
+	}
+
+	/**
+	 * A control the reader could use on such a cart would only ever produce the
+	 * refusal above, so it is not offered.
+	 *
+	 * @dataProvider wcs_subscription_cart_item_key_provider
+	 *
+	 * @param string $key The cart item key WooCommerce Subscriptions writes.
+	 */
+	public function test_quantity_form_is_not_rendered_on_a_subscription_cart( $key ) {
+		$this->set_modal_checkout_request();
+		$this->set_mutable_cart( 920, 4, [ $key => [ 'subscription_id' => 77 ] ] );
+		$this->set_quantity_field_args( $this->get_quantity_field_args_fixture() );
+
+		ob_start();
+		\Newspack_Blocks\Modal_Checkout::render_quantity_form();
+		$output = ob_get_clean();
+
+		$this->assertSame( '', $output );
+	}
+
+	/**
+	 * The happy path: the line item comes back at the new quantity, the data the
+	 * original add attached survives the round trip, and coupons are re-applied.
+	 */
+	public function test_update_cart_quantity_re_adds_at_the_new_quantity() {
+		$this->vouch_for_requested_quantity();
+		$cart          = $this->set_mutable_cart( 920, 2, [ 'gate_post_id' => 55 ] );
+		$cart->applied = [ 'summer25' ];
+
+		$result = \Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 5 );
+
+		$this->assertIsString( $result );
+		$this->assertCount( 1, $cart->get_cart() );
+		$item = reset( $cart->contents );
+		$this->assertSame( 5, $item['quantity'] );
+		$this->assertSame( 55, $item['gate_post_id'] );
+		$this->assertSame( [ 'summer25' ], $cart->applied, 'The saved coupon should be re-applied to the rebuilt cart.' );
+	}
+
+	/**
+	 * A rejected re-add must not leave the cart empty. WooCommerce answers
+	 * update_order_review on an empty cart by replacing the whole checkout form
+	 * with a session-expired notice, so the reader's original line item has to go
+	 * back before the rejection is reported.
+	 */
+	public function test_update_cart_quantity_restores_the_original_item_when_rejected() {
+		$this->vouch_for_requested_quantity();
+		$cart                      = $this->set_mutable_cart( 920, 2, [ 'gate_post_id' => 55 ] );
+		$cart->applied             = [ 'summer25' ];
+		$cart->rejected_quantities = [ 99 ];
+
+		$result = \Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 99 );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'Choose at least 2 seats.', $result->get_error_message(), 'The cart\'s own rejection notice should be surfaced.' );
+		$this->assertCount( 1, $cart->get_cart(), 'The cart must not be left empty.' );
+		$item = reset( $cart->contents );
+		$this->assertSame( 2, $item['quantity'], 'The original quantity should be restored.' );
+		$this->assertSame( 55, $item['gate_post_id'], 'The restored item should keep its preserved data.' );
+		$this->assertSame( [ 'summer25' ], $cart->applied, 'Coupons should survive a rejected change.' );
+	}
+
+	/**
+	 * A product that is not in the cart is not a quantity change: emptying the
+	 * cart for it would destroy whatever the reader is actually buying.
+	 */
+	public function test_update_cart_quantity_bails_when_the_product_is_not_in_the_cart() {
+		$cart = $this->set_mutable_cart( 920, 2 );
+
+		$result = \Newspack_Blocks\Modal_Checkout::update_cart_quantity( 999, 5 );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'newspack_blocks_quantity_not_in_cart', $result->get_error_code() );
+		$this->assertCount( 1, $cart->get_cart() );
+		$item = reset( $cart->contents );
+		$this->assertSame( 920, $item['product_id'], 'The untouched cart should still hold the original product.' );
+		$this->assertSame( 2, $item['quantity'] );
+	}
+
+	/**
+	 * The payload the AJAX handler returns alongside its message reports the new
+	 * seat count. `update_checkout` replaces only the review-order table and the
+	 * payment box, so `#modal-checkout-product-details` — which carries this data
+	 * to the GA4 events — has to be rewritten from the response instead.
+	 */
+	public function test_update_cart_quantity_payload_reports_the_new_quantity() {
+		$this->vouch_for_requested_quantity();
+		$cart = $this->set_mutable_cart( 920, 2 );
+
+		\Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 5 );
+		$data = \Newspack_Blocks\Modal_Checkout\Checkout_Data::get_checkout_data( $cart );
+
+		$this->assertSame( 5, $data['quantity'] );
+	}
+
+	/**
+	 * The modal checkout doesn't know which products may be sold in multiples, so
+	 * a requested quantity is offered to whoever does — with the product it is for
+	 * — and their answer is the one used.
+	 */
+	public function test_requested_quantity_is_filtered_with_the_product() {
+		$_GET['quantity']     = '5';
+		$_REQUEST['quantity'] = '5';
+		$seen                 = [];
+
+		$filter = function ( $vouched, $product_id, $requested ) use ( &$seen ) {
+			$seen[] = [ $vouched, $product_id, $requested ];
+			return 920 === $product_id ? $requested : $vouched;
+		};
+		add_filter( 'newspack_blocks_modal_checkout_quantity', $filter, 10, 3 );
+
+		$this->assertSame( 5, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
+		$this->assertSame(
+			[ [ null, 920, 5 ] ],
+			$seen,
+			'The callback should see nothing vouched for yet, the product, and the floored request.'
+		);
+
+		remove_filter( 'newspack_blocks_modal_checkout_quantity', $filter, 10 );
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
+	}
+
+	/**
+	 * A callback cannot push the quantity below one: the floor is re-applied to
+	 * whatever it returns, so a stray 0 can't reach the cart as a silent removal.
+	 */
+	public function test_filtered_quantity_is_floored_at_one() {
+		$_GET['quantity']     = '4';
+		$_REQUEST['quantity'] = '4';
+
+		$filter = function () {
+			return 0;
+		};
+		add_filter( 'newspack_blocks_modal_checkout_quantity', $filter );
+
+		$this->assertSame( 1, \Newspack_Blocks\Modal_Checkout::get_requested_quantity( 920 ) );
+
+		remove_filter( 'newspack_blocks_modal_checkout_quantity', $filter );
+		unset( $_GET['quantity'], $_REQUEST['quantity'] );
+	}
+
+	/**
+	 * The in-modal quantity form runs through the same clamp as the initial add,
+	 * so a product that may not be sold in multiples cannot be raised past one
+	 * from inside the modal either.
+	 */
+	public function test_update_cart_quantity_respects_the_filter() {
+		$cart = $this->set_mutable_cart( 920, 1 );
+
+		$filter = function () {
+			return 1;
+		};
+		add_filter( 'newspack_blocks_modal_checkout_quantity', $filter );
+
+		\Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 5 );
+
+		$item = reset( $cart->contents );
+		$this->assertSame( 1, $item['quantity'], 'The clamped quantity should be the one added.' );
+
+		remove_filter( 'newspack_blocks_modal_checkout_quantity', $filter );
+	}
+
+	/**
+	 * The modal_checkout request param marks a request as modal-origin.
+	 */
+	public function test_is_modal_checkout_origin_true_for_request_param() {
+		$this->set_modal_checkout_request();
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * A modal-checkout referer alone marks a request as modal-origin. This is
+	 * the shape of an express-wallet (Apple Pay / Google Pay) Store API
+	 * submission: JSON body, no request params, referer set to the modal
+	 * checkout iframe URL.
+	 */
+	public function test_is_modal_checkout_origin_true_for_modal_referer_only() {
+		$this->set_modal_checkout_referer();
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * A classic express-checkout submission (express_payment_type in POST plus
+	 * the modal referer, no modal_checkout param) is modal-origin.
+	 */
+	public function test_is_modal_checkout_origin_true_for_express_post_with_modal_referer() {
+		$_POST['express_payment_type'] = 'apple_pay';
+		$this->set_modal_checkout_referer();
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * With no modal signals at all, a request is not modal-origin.
+	 */
+	public function test_is_modal_checkout_origin_false_without_signals() {
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * A referer pointing at the standard checkout page (no modal_checkout
+	 * query) is not modal-origin — a block-based /checkout/ purchase keeps
+	 * vanilla behavior.
+	 */
+	public function test_is_modal_checkout_origin_false_for_plain_checkout_referer() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * When a request presents as My Account-originated and its only modal
+	 * signal is the request param, the My Account exclusion inside
+	 * is_modal_checkout() still applies to the origin check.
+	 */
+	public function test_is_modal_checkout_origin_respects_my_account_exclusion_for_param_only() {
+		if ( ! property_exists( \Newspack\WooCommerce_My_Account::class, 'is_from_my_account' ) ) {
+			$this->markTestSkipped( 'The WooCommerce_My_Account mock is not in use.' );
+		}
+
+		\Newspack\WooCommerce_My_Account::$is_from_my_account = true;
+		$this->set_modal_checkout_request();
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * A modal-checkout referer marks a request as modal-origin even when the
+	 * request also presents as My Account-originated. No real flow produces
+	 * this shape since #2121 strips the my_account_checkout marker from every
+	 * URL the modal opens; the My Account exclusion targets the legacy
+	 * non-modal flows, whose referers never carry modal_checkout.
+	 */
+	public function test_is_modal_checkout_origin_true_for_modal_referer_despite_my_account_flag() {
+		if ( ! property_exists( \Newspack\WooCommerce_My_Account::class, 'is_from_my_account' ) ) {
+			$this->markTestSkipped( 'The WooCommerce_My_Account mock is not in use.' );
+		}
+
+		\Newspack\WooCommerce_My_Account::$is_from_my_account = true;
+		$this->set_modal_checkout_referer();
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() );
+	}
+
+	/**
+	 * The order-received URL is decorated with the modal params for a
+	 * modal-origin Store API request (express wallet shape: modal referer,
+	 * no request params), so the wallet's follow-up page load renders the
+	 * modal thank-you and fires the front-end GA4 purchase event.
+	 */
+	public function test_return_url_decorated_for_modal_origin_store_api_request() {
+		$this->set_modal_checkout_referer();
+		$order = new WC_Order( 123, 'wc_order_testkey' );
+
+		$url = \Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order );
+
+		$query = [];
+		wp_parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+		$this->assertSame( '1', $query['modal_checkout'] ?? null );
+		$this->assertSame( '123', $query['order_id'] ?? null );
+		$this->assertSame( 'wc_order_testkey', $query['key'] ?? null );
+	}
+
+	/**
+	 * A destination carrying its own query string reaches the thank-you page
+	 * whole, instead of its second param becoming a param of the thank-you URL.
+	 */
+	public function test_return_url_keeps_a_destination_that_carries_its_own_query_string() {
+		$this->set_modal_checkout_referer();
+		$destination                        = home_url( '/thanks/?src=a&ref=b' );
+		$_REQUEST['after_success_behavior'] = 'custom';
+		$_REQUEST['after_success_url']      = $destination;
+		$order                              = new WC_Order( 123, 'wc_order_testkey' );
+
+		$url = \Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order );
+		unset( $_REQUEST['after_success_behavior'], $_REQUEST['after_success_url'] );
+
+		$query = [];
+		wp_parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+		$this->assertSame( $destination, $query['after_success_url'] ?? null );
+		$this->assertArrayNotHasKey( 'ref', $query );
+	}
+
+	/**
+	 * The order-received URL is untouched when a request carries no modal
+	 * signals.
+	 */
+	public function test_return_url_untouched_without_modal_signals() {
+		$order = new WC_Order( 123, 'wc_order_testkey' );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
+	 * The order-received URL is untouched for a standard checkout-page
+	 * referer — a block-based /checkout/ purchase keeps its vanilla
+	 * thank-you page.
+	 */
+	public function test_return_url_untouched_for_plain_checkout_referer() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$order                   = new WC_Order( 123, 'wc_order_testkey' );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
+	 * Helper: clear the request-scoped validation-only trust between tests.
+	 */
+	private function reset_validation_only_request() {
+		$property = new \ReflectionProperty( \Newspack_Blocks\Modal_Checkout::class, 'is_validation_only_request' );
+		$property->setAccessible( true );
+		$property->setValue( null, false );
+	}
+
+	/**
+	 * Helper: run the three filters that consult the validation-only state.
+	 *
+	 * @return array{needs_payment: bool, verify_captcha: bool, createaccount: int}
+	 */
+	private function checkout_filter_outcomes() {
+		$data = \Newspack_Blocks\Modal_Checkout::skip_account_creation(
+			[
+				'createaccount' => 1,
+				'billing_email' => 'nobody-' . wp_rand() . '@example.com',
+			]
+		);
+		return [
+			'needs_payment'  => \Newspack_Blocks\Modal_Checkout::cart_needs_payment( true ),
+			'verify_captcha' => \Newspack_Blocks\Modal_Checkout::recaptcha_verify_captcha( true, '', 'checkout' ),
+			'createaccount'  => $data['createaccount'],
+		];
+	}
+
+	public function test_validation_only_request_flags_alone_change_nothing() {
+		$_REQUEST['modal_checkout']  = '1';
+		$_POST['is_validation_only'] = '1';
+
+		$this->assertSame(
+			[
+				'needs_payment'  => true,
+				'verify_captcha' => true,
+				'createaccount'  => 1,
+			],
+			$this->checkout_filter_outcomes()
+		);
+	}
+
+	public function test_validation_only_flag_is_not_set_outside_the_handler() {
+		// Belt to the filter check above: assert the stored flag directly, not only the
+		// filters that read it. A request shaped like the original exploit — the raw
+		// flags present, process_checkout_action() never reached — must leave the flag
+		// false. Bites against any future code that sets it from the raw request rather
+		// than from the nonce-verified handler.
+		$_REQUEST['modal_checkout']  = '1';
+		$_POST['is_validation_only'] = '1';
+
+		$property = new \ReflectionProperty( \Newspack_Blocks\Modal_Checkout::class, 'is_validation_only_request' );
+		$property->setAccessible( true );
+		$this->assertFalse(
+			$property->getValue(),
+			'The validation-only flag must be set only by the nonce-verified handler.'
+		);
+	}
+
+	public function test_checkout_action_with_invalid_nonce_does_not_trust_validation_only() {
+		$_REQUEST['modal_checkout']               = '1';
+		$_POST['is_validation_only']              = '1';
+		$_POST['newspack_blocks_checkout_action'] = '1';
+		$_POST['newspack_checkout_nonce']         = 'not-a-nonce';
+
+		// Outside AJAX, wp_send_json_error() calls the plain PHP die() and would halt the test
+		// runner; forcing AJAX routes it through wp_die(), which this handler turns into a
+		// catchable exception. Both filters are removed in the finally so they cannot leak
+		// wp_doing_ajax()==true or this handler into later tests.
+		$doing_ajax  = '__return_true';
+		$die_handler = function () {
+			return function () {
+				throw new \WPDieException( 'wp_die' );
+			};
+		};
+		add_filter( 'wp_doing_ajax', $doing_ajax );
+		add_filter( 'wp_die_ajax_handler', $die_handler );
+
+		try {
+			\Newspack_Blocks\Modal_Checkout::process_checkout_action();
+			$this->fail( 'An invalid nonce should stop the handler.' );
+		} catch ( \WPDieException $e ) {
+			// Expected: the handler ended the request before trusting the flag.
+		} finally {
+			remove_filter( 'wp_doing_ajax', $doing_ajax );
+			remove_filter( 'wp_die_ajax_handler', $die_handler );
+		}
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::cart_needs_payment( true ) );
+		$this->assertArrayNotHasKey( 'woocommerce_checkout_update_totals', $_POST );
+	}
+
+	// Runs the handler to completion, which defines WOOCOMMERCE_CHECKOUT process-globally
+	// via wc_maybe_define_constant(). That define cannot be undone in tear_down(), so any
+	// later test that drives process_checkout_action() would hit the defined() early-return
+	// at class-modal-checkout.php and never reach process_checkout(). Keep this test last,
+	// or give a future full-flow test its own process.
+	public function test_checkout_action_with_valid_nonce_trusts_validation_only() {
+		$_REQUEST['modal_checkout']               = '1';
+		$_POST['is_validation_only']              = '1';
+		$_POST['newspack_blocks_checkout_action'] = '1';
+		$_POST['newspack_checkout_nonce']         = wp_create_nonce( 'newspack_modal_checkout_nonce' );
+
+		WC()->cart = new class() {
+			/**
+			 * The cart has items.
+			 *
+			 * @return bool
+			 */
+			public function is_empty() {
+				return false;
+			}
+		};
+
+		\Newspack_Blocks\Modal_Checkout::process_checkout_action();
+
+		$this->assertSame( 1, WC()->process_checkout_calls );
+		$this->assertSame( '1', $_POST['woocommerce_checkout_update_totals'] );
+		$this->assertSame(
+			[
+				'needs_payment'  => false,
+				'verify_captcha' => false,
+				'createaccount'  => 0,
+			],
+			$this->checkout_filter_outcomes()
+		);
 	}
 }

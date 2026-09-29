@@ -23,7 +23,8 @@ import { PublicSettings } from './public';
 import registerEditorPlugin from './editor/';
 import withApiHandler from '../components/with-api-handler';
 import { registerStore, fetchNewsletterData, useNewsletterDataError } from './store';
-import { isLayoutEditor, isManualESP, isSupportedESP } from './utils';
+import { isLayoutEditor, isSupportedESP } from './utils';
+import { isManualProvider } from '../utils/service-provider';
 import CampaignLink from './campaign-link';
 import './debug-send';
 
@@ -122,7 +123,7 @@ function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFli
 
 			{ ! isLayout && <PluginPostStatusInfo>{ isConnected && <PublicSettings /> }</PluginPostStatusInfo> }
 
-			{ ! isLayout && isSupportedESP() && ! isManualESP() && (
+			{ ! isLayout && isSupportedESP() && ! isManualProvider() && (
 				<PluginDocumentSettingPanel name="newsletters-settings-panel" title={ __( 'Newsletter Campaign', 'newspack-newsletters' ) }>
 					<VStack spacing={ 4 }>
 						<Sidebar inFlight={ inFlight } isConnected={ isConnected } oauthUrl={ oauthUrl } onAuthorize={ verifyToken } />
@@ -133,7 +134,7 @@ function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFli
 
 			{ /* Newsletters need ESP for the per-provider /test route.
 			   Layouts hit a wp_mail-based endpoint, no ESP gate needed. */ }
-			{ ( isLayout || ( isSupportedESP() && ! isManualESP() ) ) && (
+			{ ( isLayout || ( isSupportedESP() && ! isManualProvider() ) ) && (
 				<PluginDocumentSettingPanel name="newsletters-testing-panel" title={ __( 'Testing', 'newspack-newsletters' ) }>
 					<Testing testEmail={ testEmail } onChangeEmail={ setTestEmail } disabled={ ! isLayout && ! isConnected } />
 				</PluginDocumentSettingPanel>

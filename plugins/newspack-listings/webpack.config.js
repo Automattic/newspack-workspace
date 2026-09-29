@@ -9,6 +9,10 @@
  */
 const fs = require( 'fs' );
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
+const {
+	SOURCE_FILE_REGEX,
+	findSourceFile,
+} = require( 'newspack-scripts/config/resolveSource' );
 const path = require( 'path' );
 
 /**
@@ -16,16 +20,24 @@ const path = require( 'path' );
  */
 const editor = path.join( __dirname, 'src', 'editor' );
 const assetsDir = path.join( __dirname, 'src', 'assets', 'front-end' );
-const assets = fs
-	.readdirSync( assetsDir )
-	.filter( asset => /.js?$/.test( asset ) )
-	.reduce(
-		( acc, fileName ) => ( {
-			...acc,
-			[ fileName.replace( '.js', '' ) ]: path.join( __dirname, 'src', 'assets', 'front-end', fileName ),
-		} ),
-		{}
-	);
+// Basenames are deduped and re-resolved via findSourceFile (TS-first) so a .ts twin
+// deterministically wins over a leftover .js one, rather than whichever readdirSync
+// happens to return last for that basename.
+const assetBasenames = [
+	...new Set(
+		fs
+			.readdirSync( assetsDir )
+			.filter( ( asset ) => SOURCE_FILE_REGEX.test( asset ) )
+			.map( ( asset ) => asset.replace( SOURCE_FILE_REGEX, '' ) )
+	),
+];
+const assets = assetBasenames.reduce( ( acc, basename ) => {
+	const source = findSourceFile( path.join( assetsDir, basename ) );
+	if ( source ) {
+		acc[ basename ] = source;
+	}
+	return acc;
+}, {} );
 
 const entry = {
 	editor,

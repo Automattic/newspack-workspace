@@ -9,9 +9,18 @@ import '../../shared/js/public-path';
 /**
  * WordPress dependencies.
  */
-import { CardBody, CardDivider, CardMedia, ExternalLink, ToggleControl, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import {
+	CardBody,
+	CardDivider,
+	CardMedia,
+	CheckboxControl,
+	ExternalLink,
+	ToggleControl,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 import { Component, Fragment, render, createInterpolateElement, createRef } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { Icon, plus, postList, settings } from '@wordpress/icons';
 
 /**
@@ -21,31 +30,37 @@ import {
 	ActionCard,
 	AutocompleteWithSuggestions,
 	AutocompleteWithLatestPosts,
-	BoxContrast,
 	Button,
 	Card,
 	CardFeature,
 	CardForm,
 	CardSettingsGroup,
+	CollapsibleGroup,
 	ColorPicker,
+	DebugBadge,
+	EmptyState,
 	Footer,
 	Grid,
 	Handoff,
 	ImageUpload,
+	InfoButton,
 	Modal,
-	Notice,
 	Page,
 	PluginInstaller,
 	PluginSettings,
 	PluginToggle,
 	ProgressBar,
 	SelectControl,
+	StatCard,
+	TableCard,
 	TextControl,
 	Divider,
+	Drawer,
 	Waiting,
 	WebPreview,
 } from '../../../packages/components/src';
 import * as newspackIcons from '../../../packages/icons';
+import colors from '../../../packages/colors/colors.module.scss';
 
 class ComponentsDemo extends Component {
 	/**
@@ -64,6 +79,10 @@ class ComponentsDemo extends Component {
 			selectValue3: '',
 			selectValues: [],
 			modalShown: false,
+			drawerShown: false,
+			drawerActionCount: 2,
+			drawerSize: 'medium',
+			drawerIsDirty: false,
 			color1: '#003da5',
 			draggableList: [
 				{ id: 1, title: 'Draggable Item 1' },
@@ -81,6 +100,48 @@ class ComponentsDemo extends Component {
 		this.dragWrapperRef = createRef();
 	}
 
+	drawerActions( count ) {
+		const close = () => this.setState( { drawerShown: false } );
+		const save = (
+			<Drawer.Action
+				key="save"
+				variant="primary"
+				/* translators: extended name for the Save action. Must contain "Save" as translated below. */
+				ariaLabel={ __( 'Save the drawer demo', 'newspack-plugin' ) }
+				onClick={ close }
+			>
+				{ __( 'Save', 'newspack-plugin' ) }
+			</Drawer.Action>
+		);
+		const cancel = (
+			<Drawer.Action
+				key="cancel"
+				variant="secondary"
+				/* translators: extended name for the Cancel action. Must contain "Cancel" as translated below. */
+				ariaLabel={ __( 'Cancel the drawer demo', 'newspack-plugin' ) }
+				closes
+			>
+				{ __( 'Cancel', 'newspack-plugin' ) }
+			</Drawer.Action>
+		);
+		const reset = (
+			<Drawer.Action
+				key="reset"
+				variant="tertiary"
+				isDestructive
+				/* translators: extended name for the Reset action. Must contain "Reset" as translated below. */
+				ariaLabel={ __( 'Reset the drawer demo', 'newspack-plugin' ) }
+				closes
+			>
+				{ __( 'Reset', 'newspack-plugin' ) }
+			</Drawer.Action>
+		);
+		if ( 1 === count ) {
+			return [ save ];
+		}
+		return 2 === count ? [ cancel, save ] : [ save, cancel, reset ];
+	}
+
 	/**
 	 * Render the example stub.
 	 */
@@ -94,13 +155,17 @@ class ComponentsDemo extends Component {
 			selectValue2,
 			selectValue3,
 			modalShown,
+			drawerShown,
+			drawerActionCount,
+			drawerSize,
+			drawerIsDirty,
 			actionCardToggleChecked,
 			color1,
 		} = this.state;
 
 		return (
 			<Fragment>
-				{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+				<DebugBadge />
 				<Page
 					breadcrumbItems={ [ { label: __( 'Components Demo', 'newspack-plugin' ) } ] }
 					subTitle={ __( 'Simple components used for composing the UI of Newspack', 'newspack-plugin' ) }
@@ -177,7 +242,7 @@ class ComponentsDemo extends Component {
 						</Card>
 						<Card>
 							<h2>{ __( 'Web Previews', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder className="items-center">
+							<HStack justify="flex-start" alignment="center" spacing={ 4 } wrap>
 								<WebPreview url="//newspack.com/" label={ __( 'Preview Newspack Site', 'newspack-plugin' ) } variant="primary" />
 								<WebPreview
 									url="//newspack.com/"
@@ -188,24 +253,22 @@ class ComponentsDemo extends Component {
 									) }
 									title={ __( 'Preview Newspack Site', 'newspack-plugin' ) }
 								/>
-							</Card>
+							</HStack>
 						</Card>
 						<Card>
 							<h2>{ __( 'Waiting', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder>
-								<Grid columns={ 1 } gutter={ 16 } className="w-100">
-									<Waiting />
-									<div className="flex items-center">
-										<Waiting isLeft />
-										{ __( 'Spinner on the left', 'newspack-plugin' ) }
-									</div>
-									<div className="flex items-center">
-										<Waiting isRight />
-										{ __( 'Spinner on the right', 'newspack-plugin' ) }
-									</div>
-									<Waiting isCenter />
-								</Grid>
-							</Card>
+							<Grid columns={ 1 } gutter={ 16 }>
+								<Waiting />
+								<HStack justify="flex-start" alignment="center" spacing={ 2 } expanded={ false }>
+									<Waiting isLeft />
+									<span>{ __( 'Spinner on the left', 'newspack-plugin' ) }</span>
+								</HStack>
+								<HStack justify="flex-start" alignment="center" spacing={ 2 } expanded={ false }>
+									<Waiting isRight />
+									<span>{ __( 'Spinner on the right', 'newspack-plugin' ) }</span>
+								</HStack>
+								<Waiting isCenter />
+							</Grid>
 						</Card>
 						<Card>
 							<h2>{ __( 'Color picker', 'newspack-plugin' ) }</h2>
@@ -217,7 +280,7 @@ class ComponentsDemo extends Component {
 						</Card>
 						<Card>
 							<h2>{ __( 'Handoff Buttons', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder>
+							<HStack justify="flex-start" spacing={ 4 } wrap>
 								<Handoff plugin="jetpack" />
 								<Handoff plugin="google-site-kit" />
 								<Handoff plugin="woocommerce" />
@@ -231,15 +294,15 @@ class ComponentsDemo extends Component {
 								>
 									{ __( 'Go to Dashboard', 'newspack-plugin' ) }
 								</Handoff>
-							</Card>
+							</HStack>
 						</Card>
 						<Card>
 							<h2>{ __( 'Modal', 'newspack-plugin' ) }</h2>
-							<Card buttonsCard noBorder>
+							<HStack justify="flex-start" spacing={ 4 } wrap>
 								<Button isPrimary onClick={ () => this.setState( { modalShown: true } ) }>
 									{ __( 'Open modal', 'newspack-plugin' ) }
 								</Button>
-							</Card>
+							</HStack>
 							{ modalShown && (
 								<Modal
 									title={ __( 'This is the modal title', 'newspack-plugin' ) }
@@ -251,24 +314,246 @@ class ComponentsDemo extends Component {
 											'newspack-plugin'
 										) }
 									</p>
-									<Card buttonsCard noBorder className="justify-end">
+									<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 										<Button isPrimary onClick={ () => this.setState( { modalShown: false } ) }>
 											{ __( 'Dismiss', 'newspack-plugin' ) }
 										</Button>
 										<Button isSecondary onClick={ () => this.setState( { modalShown: false } ) }>
 											{ __( 'Also dismiss', 'newspack-plugin' ) }
 										</Button>
-									</Card>
+									</HStack>
 								</Modal>
 							) }
 						</Card>
 						<Card>
-							<h2>{ __( 'Notice', 'newspack-plugin' ) }</h2>
-							<Notice noticeText={ __( 'This is an info notice.', 'newspack-plugin' ) } />
-							<Notice noticeText={ __( 'This is an error notice.', 'newspack-plugin' ) } isError />
-							<Notice noticeText={ __( 'This is a help notice.', 'newspack-plugin' ) } isHelp />
-							<Notice noticeText={ __( 'This is a success notice.', 'newspack-plugin' ) } isSuccess />
-							<Notice noticeText={ __( 'This is a warning notice.', 'newspack-plugin' ) } isWarning />
+							<h2>{ __( 'Drawer', 'newspack-plugin' ) }</h2>
+							<VStack spacing={ 4 }>
+								<Grid columns={ 2 } gutter={ 16 } noMargin>
+									<SelectControl
+										label={ __( 'Footer actions', 'newspack-plugin' ) }
+										value={ String( drawerActionCount ) }
+										options={ [
+											{ label: '1', value: '1' },
+											{ label: '2', value: '2' },
+											{ label: '3', value: '3' },
+										] }
+										onChange={ value => this.setState( { drawerActionCount: parseInt( value, 10 ) } ) }
+									/>
+									<SelectControl
+										label={ __( 'Size', 'newspack-plugin' ) }
+										value={ drawerSize }
+										options={ [
+											{ label: __( 'Small', 'newspack-plugin' ), value: 'small' },
+											{ label: __( 'Medium', 'newspack-plugin' ), value: 'medium' },
+											{ label: __( 'Large', 'newspack-plugin' ), value: 'large' },
+											{ label: __( 'X-Large', 'newspack-plugin' ), value: 'x-large' },
+											{ label: __( 'Full', 'newspack-plugin' ), value: 'full' },
+										] }
+										onChange={ value => this.setState( { drawerSize: value } ) }
+									/>
+								</Grid>
+								<CheckboxControl
+									label={ __( 'Unsaved changes (confirm before closing)', 'newspack-plugin' ) }
+									checked={ drawerIsDirty }
+									onChange={ value => this.setState( { drawerIsDirty: value } ) }
+								/>
+								<HStack justify="flex-start">
+									<Button isPrimary onClick={ () => this.setState( { drawerShown: true } ) }>
+										{ __( 'Open drawer', 'newspack-plugin' ) }
+									</Button>
+								</HStack>
+							</VStack>
+							<Drawer.Root
+								isOpen={ drawerShown }
+								size={ drawerSize }
+								isDirty={ drawerIsDirty }
+								onRequestClose={ () => this.setState( { drawerShown: false } ) }
+							>
+								<Drawer.Header>
+									<Icon className="newspack-drawer__icon" icon={ settings } size={ 24 } />
+									<Drawer.Title>{ __( 'Drawer title', 'newspack-plugin' ) }</Drawer.Title>
+									<Drawer.CloseIcon />
+								</Drawer.Header>
+								<Drawer.Content>
+									<p>
+										{ __(
+											'A drawer is a modal: the page behind it is inert, and clicking the scrim closes it. Each Drawer.Content is a section, and a Drawer.Divider draws a full-width rule between two of them.',
+											'newspack-plugin'
+										) }
+									</p>
+								</Drawer.Content>
+								<Drawer.Divider />
+								<Drawer.Content padding={ 0 }>
+									<p style={ { margin: 0, padding: '16px 24px' } }>
+										{ __( 'This section is flush (padding 0) and brings its own spacing.', 'newspack-plugin' ) }
+									</p>
+								</Drawer.Content>
+								<Drawer.Footer>{ this.drawerActions( drawerActionCount ) }</Drawer.Footer>
+							</Drawer.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'StatCard', 'newspack-plugin' ) }</h2>
+							<Grid columns={ 4 } gutter={ 16 } noMargin>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Subscribers reached', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value
+											value="1,284"
+											suffix={
+												<StatCard.Delta direction="up" tone="positive">
+													2%
+												</StatCard.Delta>
+											}
+										/>
+										<StatCard.Secondary>{ __( 'Up from 1,190 last month', 'newspack-plugin' ) }</StatCard.Secondary>
+									</StatCard.Body>
+									<StatCard.Footer>{ __( 'Readers who received at least one campaign.', 'newspack-plugin' ) }</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label
+										suffix={
+											<InfoButton
+												description={ __( 'Averaged across the timeframe.', 'newspack-plugin' ) }
+												triggerLabel={ __( 'More information about Average order value', 'newspack-plugin' ) }
+											/>
+										}
+									>
+										{ __( 'Average order value', 'newspack-plugin' ) }
+									</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value
+											value="$1.2M"
+											valueLabel={ __( '1.2 million dollars', 'newspack-plugin' ) }
+											suffix={
+												<StatCard.Delta direction="down" tone="negative">
+													4%
+												</StatCard.Delta>
+											}
+										/>
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'Products this rule applies to.', 'newspack-plugin' ) }
+										<Button isLink className="newspack-stat-card__action" onClick={ () => console.log( 'StatCard action' ) }>
+											{ __( 'See the products', 'newspack-plugin' ) }
+										</Button>
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Refund rate', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value={ null } />
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'The null glyph, named "Not applicable" to screen readers.', 'newspack-plugin' ) }
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label>{ __( 'Paywall conversions', 'newspack-plugin' ) }</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value value={ __( '0 of 17', 'newspack-plugin' ) } variant="text" />
+									</StatCard.Body>
+									<StatCard.Footer>
+										{ __( 'A phrase rather than a number, so it drops the hero scale.', 'newspack-plugin' ) }
+									</StatCard.Footer>
+								</StatCard.Root>
+							</Grid>
+						</Card>
+						<Card>
+							<h2>{ __( 'CollapsibleGroup', 'newspack-plugin' ) }</h2>
+							<p>
+								{ __(
+									'A stack of independently collapsible items, separated by dividers and sitting flush with the surrounding column. A collapsed item stays reachable by the browser find-in-page, which expands it to reveal the match.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup titleLevel={ 3 }>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) } defaultOpen>
+									<p>{ __( 'An item set to defaultOpen starts expanded.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Tags and segments', 'newspack-plugin' ) }>
+									<p>{ __( 'Items are independent: opening one does not close the others.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+								<CollapsibleGroup.Item title={ __( 'Sync options', 'newspack-plugin' ) }>
+									<p>{ __( 'A divider separates each item from the next, but never trails the last one.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
+							<h3>{ __( 'Single item', 'newspack-plugin' ) }</h3>
+							<p>
+								{ __(
+									'With nothing to collapse against, hideSingleTitle renders a lone item open and drops its title.',
+									'newspack-plugin'
+								) }
+							</p>
+							<CollapsibleGroup hideSingleTitle>
+								<CollapsibleGroup.Item title={ __( 'Contact fields', 'newspack-plugin' ) }>
+									<p>{ __( 'This content is always visible.', 'newspack-plugin' ) }</p>
+								</CollapsibleGroup.Item>
+							</CollapsibleGroup>
+						</Card>
+						<Card>
+							<h2>{ __( 'Table card', 'newspack-plugin' ) }</h2>
+							<TableCard
+								title={ __( 'Price Schedule', 'newspack-plugin' ) }
+								titleId="components-demo-table-card-title"
+								actions={
+									<Button variant="secondary" size="compact">
+										{ __( 'Add Price', 'newspack-plugin' ) }
+									</Button>
+								}
+							>
+								<div role="region" aria-labelledby="components-demo-table-card-title">
+									{ /* Real tables supply the 24px card-padding alignment from their stylesheet. */ }
+									<table style={ { borderCollapse: 'collapse', width: '100%' } }>
+										<thead>
+											<tr>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Cycles', 'newspack-plugin' ) }</th>
+												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Price', 'newspack-plugin' ) }</th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>1 → 3</td>
+												<td style={ { padding: '8px 24px' } }>$3.00</td>
+											</tr>
+											<tr>
+												<td style={ { padding: '8px 24px' } }>4 onward</td>
+												<td style={ { padding: '8px 24px' } }>$6.00</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</TableCard>
+						</Card>
+						<Card>
+							<h2>{ __( 'Empty state', 'newspack-plugin' ) }</h2>
+							<EmptyState.Root>
+								<EmptyState.Header
+									icon={ postList }
+									title={ __( 'Get started with posts', 'newspack-plugin' ) }
+									description={ __( 'Nothing here yet. Once you publish, your posts show up in this list.', 'newspack-plugin' ) }
+									heading={ 3 }
+								/>
+								<EmptyState.Actions>
+									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
+								</EmptyState.Actions>
+							</EmptyState.Root>
+						</Card>
+						<Card>
+							<h2>{ __( 'Empty state (small, stacked actions)', 'newspack-plugin' ) }</h2>
+							<EmptyState.Root size="small">
+								<EmptyState.Header
+									icon={ postList }
+									title={ __( 'Nothing to show yet', 'newspack-plugin' ) }
+									description={ __(
+										'The small size suits an empty state standing in for a panel inside a card.',
+										'newspack-plugin'
+									) }
+								/>
+								<EmptyState.Actions orientation="column">
+									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
+									<p style={ { margin: 0 } }>{ __( 'A note under the action.', 'newspack-plugin' ) }</p>
+								</EmptyState.Actions>
+							</EmptyState.Root>
 						</Card>
 						<Card>
 							<h2>{ __( 'Plugin installer', 'newspack-plugin' ) }</h2>
@@ -378,7 +663,7 @@ class ComponentsDemo extends Component {
 							toggleChecked={ actionCardToggleChecked }
 						/>
 						<ActionCard
-							badge={ __( 'Premium', 'newspack-plugin' ) }
+							badges={ [ { label: __( 'Premium', 'newspack-plugin' ) } ] }
 							title={ __( 'Example Ten', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with a badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -414,7 +699,10 @@ class ComponentsDemo extends Component {
 							checkbox="checked"
 						/>
 						<ActionCard
-							badge={ [ __( 'Premium', 'newspack-plugin' ), __( 'Archived', 'newspack-plugin' ) ] }
+							badges={ [
+								{ label: __( 'Premium', 'newspack-plugin' ), intent: 'informational' },
+								{ label: __( 'Archived', 'newspack-plugin' ), intent: 'draft' },
+							] }
 							title={ __( 'Example Fourteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with two badges.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -423,8 +711,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'It works', 'newspack-plugin' ) }
-							badgeLevel="success"
+							badges={ [ { label: __( 'It works', 'newspack-plugin' ), intent: 'stable' } ] }
 							title={ __( 'Example Fifteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with a success badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -433,8 +720,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'Uh oh', 'newspack-plugin' ) }
-							badgeLevel="warning"
+							badges={ [ { label: __( 'Uh oh', 'newspack-plugin' ), intent: 'medium' } ] }
 							title={ __( 'Example Sixteen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with a warning badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -443,8 +729,7 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'Oh no', 'newspack-plugin' ) }
-							badgeLevel="error"
+							badges={ [ { label: __( 'Oh no', 'newspack-plugin' ), intent: 'high' } ] }
 							title={ __( 'Example Seventeen', 'newspack-plugin' ) }
 							description={ __( 'An example of an action card with an error badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
@@ -453,10 +738,9 @@ class ComponentsDemo extends Component {
 							} }
 						/>
 						<ActionCard
-							badge={ __( 'Brand awareness', 'newspack-plugin' ) }
-							badgeLevel="brand"
+							badges={ [ { label: __( 'Brand awareness', 'newspack-plugin' ), intent: 'informational' } ] }
 							title={ __( 'Example Eighteen', 'newspack-plugin' ) }
-							description={ __( 'An example of an action card with a brand-colored badge.', 'newspack-plugin' ) }
+							description={ __( 'An example of an action card with an informational badge.', 'newspack-plugin' ) }
 							actionText={ __( 'Install', 'newspack-plugin' ) }
 							onClick={ () => {
 								console.log( 'Install clicked' );
@@ -586,16 +870,10 @@ class ComponentsDemo extends Component {
 									] }
 									onChange={ selectValues => this.setState( { selectValues } ) }
 								/>
-								<Notice
-									noticeText={
-										<>
-											{ __( 'Selected:', 'newspack-plugin' ) }{ ' ' }
-											{ this.state.selectValues.length > 0
-												? this.state.selectValues.join( ', ' )
-												: __( 'none', 'newspack-plugin' ) }
-										</>
-									}
-								/>
+								<p>
+									{ __( 'Selected:', 'newspack-plugin' ) }{ ' ' }
+									{ this.state.selectValues.length > 0 ? this.state.selectValues.join( ', ' ) : __( 'none', 'newspack-plugin' ) }
+								</p>
 							</Grid>
 						</Card>
 						<Card>
@@ -604,18 +882,18 @@ class ComponentsDemo extends Component {
 								<p>
 									<strong>{ __( 'Default', 'newspack-plugin' ) }</strong>
 								</p>
-								<Card buttonsCard noBorder>
+								<HStack justify="flex-start" spacing={ 4 } wrap>
 									<Button variant="primary">{ __( 'Primary', 'newspack-plugin' ) }</Button>
 									<Button variant="secondary">{ __( 'Secondary', 'newspack-plugin' ) }</Button>
 									<Button variant="tertiary">{ __( 'Tertiary', 'newspack-plugin' ) }</Button>
 									<Button>{ __( 'Default', 'newspack-plugin' ) }</Button>
 									<Button isLink>{ __( 'isLink', 'newspack-plugin' ) }</Button>
-								</Card>
+								</HStack>
 								<Divider variant="tertiary" />
 								<p>
 									<strong>{ __( 'Disabled', 'newspack-plugin' ) }</strong>
 								</p>
-								<Card buttonsCard noBorder>
+								<HStack justify="flex-start" spacing={ 4 } wrap>
 									<Button variant="primary" disabled>
 										{ __( 'Primary', 'newspack-plugin' ) }
 									</Button>
@@ -629,12 +907,12 @@ class ComponentsDemo extends Component {
 									<Button isLink disabled>
 										{ __( 'isLink', 'newspack-plugin' ) }
 									</Button>
-								</Card>
+								</HStack>
 								<Divider variant="tertiary" />
 								<p>
 									<strong>{ __( 'Small', 'newspack-plugin' ) }</strong>
 								</p>
-								<Card buttonsCard noBorder>
+								<HStack justify="flex-start" spacing={ 4 } wrap>
 									<Button variant="primary" isSmall>
 										{ __( 'isPrimary', 'newspack-plugin' ) }
 									</Button>
@@ -648,7 +926,7 @@ class ComponentsDemo extends Component {
 									<Button isLink isSmall>
 										{ __( 'isLink', 'newspack-plugin' ) }
 									</Button>
-								</Card>
+								</HStack>
 							</Grid>
 						</Card>
 						<Card>
@@ -849,27 +1127,6 @@ class ComponentsDemo extends Component {
 							</div>
 						</Card>
 						<Card>
-							<h2>{ __( 'Box Contrast', 'newspack-plugin' ) }</h2>
-							<p>
-								Component for adding color black/white depending on contrast ratio for <code>hexColor</code> prop value.
-							</p>
-							<h3>{ __( 'Demo 1:', 'newspack-plugin' ) }</h3>
-							<BoxContrast hexColor="#e5bd13">#e5bd13</BoxContrast>
-							<BoxContrast hexColor="#e5bd13" isInverted>
-								#e5bd13 / Inverted
-							</BoxContrast>
-							<h3>{ __( 'Demo 2:', 'newspack-plugin' ) }</h3>
-							<BoxContrast hexColor="#003da5">#003da5</BoxContrast>
-							<BoxContrast hexColor="#003da5" isInverted>
-								#003da5 / Inverted
-							</BoxContrast>
-							<h3>{ __( 'Demo 3:', 'newspack-plugin' ) }</h3>
-							<BoxContrast hexColor="#51f1ff">#e5bd13</BoxContrast>
-							<BoxContrast hexColor="#51f1ff" isInverted>
-								#51f1ff / Inverted
-							</BoxContrast>
-						</Card>
-						<Card>
 							<h2>{ __( 'CardFeature', 'newspack-plugin' ) }</h2>
 							<p>
 								{ __(
@@ -880,6 +1137,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'States', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -890,6 +1148,7 @@ class ComponentsDemo extends Component {
 									onConfigure={ () => {} }
 								/>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -904,6 +1163,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'Interactive toggle', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Metered countdown', 'newspack-plugin' ) }
 									description={ __(
 										'Show a countdown banner letting readers know how many free views they have left.',
@@ -920,17 +1180,27 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With a custom icon', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-									icon={ { node: <Icon icon={ settings } />, fill: '#757575', backgroundColor: '#f0f0f0' } }
+									icon={ {
+										node: <Icon icon={ settings } />,
+										fill: colors[ 'neutral-600' ],
+										backgroundColor: colors[ 'neutral-100' ],
+									} }
 									enabled={ false }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }
 								/>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Content gifting', 'newspack-plugin' ) }
 									description={ __( 'Let subscribers share gated articles with non-subscribers.', 'newspack-plugin' ) }
-									icon={ { node: <Icon icon={ settings } />, fill: '#003da5', backgroundColor: '#dfe7f4', radius: 'full' } }
+									icon={ {
+										node: <Icon icon={ settings } />,
+										fill: colors[ 'primary-600' ],
+										backgroundColor: colors[ 'primary-000' ],
+									} }
 									enabled={ true }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }
@@ -940,6 +1210,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With custom button labels', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Apple News', 'newspack-plugin' ) }
 									description={ __( 'Automatically publish articles to Apple News.', 'newspack-plugin' ) }
 									enabled={ this.state.cardFeatureCustomEnabled }
@@ -958,11 +1229,11 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With a custom badge', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Stripe', 'newspack-plugin' ) }
 									description={ __( 'Accept payments via Stripe.', 'newspack-plugin' ) }
 									enabled={ true }
-									badgeText={ __( 'Live mode', 'newspack-plugin' ) }
-									badgeLevel="info"
+									badge={ { label: __( 'Live mode', 'newspack-plugin' ), intent: 'informational' } }
 									onEnable={ () => {} }
 									onConfigure={ () => {} }
 									moreControls={ [ { title: __( 'Disable', 'newspack-plugin' ), onClick: () => {} } ] }
@@ -971,6 +1242,7 @@ class ComponentsDemo extends Component {
 							<h3>{ __( 'With multiple dropdown controls', 'newspack-plugin' ) }</h3>
 							<Grid columns={ 2 } gutter={ 16 }>
 								<CardFeature
+									headingLevel={ 4 }
 									title={ __( 'Newsletters', 'newspack-plugin' ) }
 									description={ __( 'Send newsletters directly from the WordPress editor.', 'newspack-plugin' ) }
 									enabled={ true }
@@ -997,7 +1269,7 @@ class ComponentsDemo extends Component {
 								<CardForm
 									title={ __( 'Above Header', 'newspack-plugin' ) }
 									description={ __( 'Displays an ad above the site header.', 'newspack-plugin' ) }
-									badge={ this.state.cardFormEnabled ? { level: 'success', text: __( 'Enabled', 'newspack-plugin' ) } : undefined }
+									badge={ this.state.cardFormEnabled ? { intent: 'stable', label: __( 'Enabled', 'newspack-plugin' ) } : undefined }
 									actions={
 										this.state.cardFormEnabled ? (
 											<Button
@@ -1042,14 +1314,18 @@ class ComponentsDemo extends Component {
 									isOpen={ false }
 								/>
 							</VStack>
-							<h3>{ __( 'Badge levels', 'newspack-plugin' ) }</h3>
+							<h3>{ __( 'Badge intents', 'newspack-plugin' ) }</h3>
 							<VStack spacing={ 2 }>
-								{ [ 'success', 'info', 'warning', 'error' ].map( level => (
+								{ [ 'high', 'medium', 'low', 'stable', 'informational', 'draft', 'none' ].map( intent => (
 									<CardForm
-										key={ level }
+										key={ intent }
 										title={ __( 'Example placement', 'newspack-plugin' ) }
-										description={ __( 'Badge level: ', 'newspack-plugin' ) + level }
-										badge={ { level, text: level.charAt( 0 ).toUpperCase() + level.slice( 1 ) } }
+										description={ sprintf(
+											// translators: %s is a badge intent name, e.g. "stable".
+											__( 'Badge intent: %s', 'newspack-plugin' ),
+											intent
+										) }
+										badge={ { intent, label: intent.charAt( 0 ).toUpperCase() + intent.slice( 1 ) } }
 										actions={
 											<Button variant="tertiary" size="compact">
 												{ __( 'Edit', 'newspack-plugin' ) }
@@ -1075,12 +1351,12 @@ class ComponentsDemo extends Component {
 									}
 								) }
 							</p>
-							<Grid columns={ 4 } gutter={ 16 } className="items-start">
+							<Grid columns={ 4 } gutter={ 16 }>
 								{ Object.entries( newspackIcons ).map( ( [ name, icon ] ) => (
-									<div key={ name } className="flex flex-column items-center tc">
+									<VStack key={ name } alignment="center" spacing={ 2 }>
 										<Icon icon={ icon } />
-										<code style={ { marginTop: 8 } }>{ name }</code>
-									</div>
+										<code>{ name }</code>
+									</VStack>
 								) ) }
 							</Grid>
 						</Card>

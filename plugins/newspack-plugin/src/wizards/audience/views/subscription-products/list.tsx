@@ -1,30 +1,46 @@
 /**
  * Subscription Products list view using DataViews.
  *
- * Columns (name, type, price + period, active subscriptions, category, status)
- * are built from live WooCommerce Subscriptions data.
+ * Columns (name, type, price + period, active subscriptions, category, status) are
+ * built from live WooCommerce Subscriptions data. The applied-rules and effective-price
+ * columns come from the PHP rule-resolution seam, which reads the live pricing-rule
+ * engine; see Subscription_Policy_Resolver.
  */
 
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import type { Action, Field, View } from '@wordpress/dataviews';
-import { Spinner, Button } from '@wordpress/components';
+import type { Action, Field, View, RenderModalProps } from '@wordpress/dataviews';
+import { Spinner, Notice, Button } from '@wordpress/components';
+import { gift, globe, lock } from '@wordpress/icons';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Badge, Router } from '../../../../../packages/components/src';
+import { DataViews, Router, StatusIndicator, WizardBanner } from '../../../../../packages/components/src';
+import { formatCount } from '../../../../../packages/components/src/breadcrumbs/format-count';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { postStatus } from '../../post-status';
+import { PolicyChips, EffectivePrice } from './policy-cells';
+import PromoUrlModal from './promo-url-modal';
 
 const { useHistory } = Router;
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
+
+const DEFAULT_CURRENCY: SubscriptionProductsCurrency = {
+	code: 'USD',
+	symbol: '$',
+	decimals: 2,
+	decimal_separator: '.',
+	thousand_separator: ',',
+};
 
 type Scope = 'subscriptions' | 'donations' | 'groups';
 
@@ -39,20 +55,58 @@ const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
 	return scope === 'donations' ? item.is_donation : ! item.is_donation;
 };
 
-const DEFAULT_VIEW: View = {
+// Availability is a configuration fact, not a problem, so Private is not a warning. Private
+// takes the `informational` the design system documents for it; Free takes `low` ("worth
+// noticing") so the three stay distinct. Public is the default state and stays quiet.
+export const AVAILABILITY_ICON = { free: gift, private: lock, public: globe } as const;
+
+// Breadcrumb leaf per scope. Kept in step with the tab labels in index.tsx.
+const SCOPE_LABELS: Record< Scope, string > = {
+	subscriptions: __( 'Subscriptions', 'newspack-plugin' ),
+	donations: __( 'Donations', 'newspack-plugin' ),
+	groups: __( 'Plan bundles', 'newspack-plugin' ),
+};
+
+// Each scope names what it counts, so the heading announces "12 donations" rather
+// than the generic "12 items" every other counted surface avoids. No "total": the
+// list ships a default status filter, so the number describes the current view.
+const SCOPE_COUNT_LABELS: Record< Scope, ( total: number ) => string > = {
+	subscriptions: total =>
+		sprintf(
+			/* translators: %s: number of subscription plans matching the current view. */
+			_n( '%s subscription', '%s subscriptions', total, 'newspack-plugin' ),
+			formatCount( total )
+		),
+	donations: total =>
+		sprintf(
+			/* translators: %s: number of donation products matching the current view. */
+			_n( '%s donation', '%s donations', total, 'newspack-plugin' ),
+			formatCount( total )
+		),
+	groups: total =>
+		sprintf(
+			/* translators: %s: number of plan bundles matching the current view. */
+			_n( '%s plan bundle', '%s plan bundles', total, 'newspack-plugin' ),
+			formatCount( total )
+		),
+};
+
+// `fields` is optional on `View`, but this default always declares it — the scope
+// filter below narrows it, so keep it non-optional here.
+const DEFAULT_VIEW: View & { fields: string[] } = {
 	type: 'table',
 	page: 1,
 	perPage: 25,
 	sort: { field: 'name', direction: 'asc' },
 	search: '',
-	// Default columns = hard facts (price, active subs, status) + what the product
-	// unlocks. Derived/secondary attributes stay defined below — so they remain filters
-	// and toggleable columns — but are off by default:
+	// Default columns = hard facts (price, active subs, status) + the differentiating
+	// columns (applied rules, effective price, unlocks). Derived/secondary attributes stay
+	// defined below — so they remain filters and toggleable columns — but are off by default:
 	//  - `type`: a raw Woo mechanic; the Price column already signals simple vs variable.
 	//  - `category`: 4 of 6 sampled publishers leave subscription products uncategorized.
 	//  - `availability`: derived heuristic (placeholder for a real entitlement field), and
 	//    mostly "Public" for most publishers — low signal density for a default slot.
-	fields: [ 'price', 'active_subscriptions', 'unlocks', 'status' ],
+	fields: [ 'price', 'active_subscriptions', 'unlocks', 'status', 'policies', 'effective_price' ],
 	// Default to published only. The REST query returns every non-trashed status, so
 	// draft/private/pending products remain reachable behind the Status filter without
 	// cluttering the default view with "(TEST COPY)" drafts and hidden strategy products.
@@ -62,11 +116,17 @@ const DEFAULT_VIEW: View = {
 };
 
 export default function SubscriptionProductsList( { scope = 'subscriptions' }: { scope?: Scope } ) {
-	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const history = useHistory();
 	const [ data, setData ] = useState< SubscriptionProduct[] >( [] );
+	const [ currency, setCurrency ] = useState< SubscriptionProductsCurrency >( DEFAULT_CURRENCY );
+	const [ policyIsMock, setPolicyIsMock ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( true );
-	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	const [ hasError, setHasError ] = useState( false );
+	const [ view, setView ] = useState< View >( () => ( {
+		...DEFAULT_VIEW,
+		fields: DEFAULT_VIEW.fields.filter( field => scope === 'subscriptions' || ( field !== 'policies' && field !== 'effective_price' ) ),
+	} ) );
 
 	const globals = window.newspackAudienceSubscriptionProducts;
 
@@ -83,7 +143,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				},
 				{
 					type: 'primary',
-					label: __( 'Add plan', 'newspack-plugin' ),
+					label: __( 'Add Plan', 'newspack-plugin' ),
 					href: '#/new',
 				},
 			],
@@ -92,19 +152,18 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
+		setHasError( false );
 		apiFetch< SubscriptionProductsResponse >( { path: API_PATH } )
 			.then( response => {
 				setData( response.products || [] );
+				if ( response.currency ) {
+					setCurrency( response.currency );
+				}
+				setPolicyIsMock( Boolean( response.policy_source_is_mock ) );
 			} )
-			.catch( () => {
-				addNotice( {
-					message: __( 'Failed to load subscription products. Please refresh the page.', 'newspack-plugin' ),
-					type: 'error',
-					id: 'subscription-products-fetch-error',
-				} );
-			} )
+			.catch( () => setHasError( true ) )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice ] );
+	}, [] );
 
 	useEffect( () => {
 		fetchData();
@@ -165,7 +224,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 						return item.bundled_products.length ? (
 							<div className="newspack-subscription-products__bundled">
 								{ item.bundled_products.map( bundled => (
-									<Badge key={ bundled.id } level="default" text={ bundled.name } />
+									<Badge key={ bundled.id } intent="none">
+										{ bundled.name }
+									</Badge>
 								) ) }
 							</div>
 						) : (
@@ -184,7 +245,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				enableSorting: false,
 				render: ( { item } ) =>
 					item.is_group_subscription ? (
-						<Badge level="info" text={ item.group_member_label } />
+						<span>{ item.group_member_label }</span>
 					) : (
 						<span className="newspack-subscription-products__muted">&mdash;</span>
 					),
@@ -198,7 +259,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 					item.bundled_products.length ? (
 						<div className="newspack-subscription-products__bundled">
 							{ item.bundled_products.map( bundled => (
-								<Badge key={ bundled.id } level="default" text={ bundled.name } />
+								<Badge key={ bundled.id } intent="none">
+									{ bundled.name }
+								</Badge>
 							) ) }
 						</div>
 					) : (
@@ -236,10 +299,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'availability',
 				label: __( 'Availability', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.availability,
-				render: ( { item } ) => {
-					const levels = { free: 'info', private: 'warning', public: 'default' } as const;
-					return <Badge level={ levels[ item.availability ] } text={ item.availability_label } />;
-				},
+				render: ( { item } ) => (
+					<StatusIndicator icon={ AVAILABILITY_ICON[ item.availability ] ?? globe }>{ item.availability_label }</StatusIndicator>
+				),
 				elements: [
 					{ value: 'public', label: __( 'Public', 'newspack-plugin' ) },
 					{ value: 'private', label: __( 'Private', 'newspack-plugin' ) },
@@ -259,7 +321,9 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 					item.unlocks.length ? (
 						<div className="newspack-subscription-products__unlocks">
 							{ item.unlocks.map( gate => (
-								<Badge key={ gate.id } level="default" text={ gate.title } />
+								<Badge key={ gate.id } intent="none">
+									{ gate.title }
+								</Badge>
 							) ) }
 						</div>
 					) : (
@@ -270,12 +334,25 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => <Badge level={ item.status === 'publish' ? 'success' : 'default' } text={ item.status_label } />,
+				render: ( { item } ) => <StatusIndicator status={ postStatus( item.status ) }>{ item.status_label }</StatusIndicator>,
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},
+			{
+				id: 'policies',
+				label: __( 'Applied rules', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.policy?.policies?.map( p => p.label ).join( ', ' ) || '',
+				render: ( { item } ) => <PolicyChips policy={ item.policy } />,
+				enableSorting: false,
+			},
+			{
+				id: 'effective_price',
+				label: __( 'Effective price', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.policy?.effective_price ?? -1,
+				render: ( { item } ) => <EffectivePrice policy={ item.policy } currency={ currency } />,
+			},
 		],
-		[ statusElements, categoryElements, history ]
+		[ statusElements, categoryElements, currency, history ]
 	);
 
 	const actions: Action< SubscriptionProduct >[] = useMemo(
@@ -286,11 +363,45 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				isPrimary: true,
 				callback: ( items: SubscriptionProduct[] ) => history.push( `/edit/${ items[ 0 ].id }` ),
 			},
+			{
+				id: 'promotional-url',
+				label: __( 'Get promotional link', 'newspack-plugin' ),
+				isEligible: ( item: SubscriptionProduct ) => item.status === 'publish' && globals?.promo_links_supported !== false,
+				modalHeader: __( 'Promotional link', 'newspack-plugin' ),
+				RenderModal: ( { items, closeModal }: RenderModalProps< SubscriptionProduct > ) => (
+					<PromoUrlModal item={ items[ 0 ] } closeModal={ closeModal } />
+				),
+			},
 		],
-		[ history ]
+		[ history, globals ]
 	);
 
-	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( scopedData, view, fields ), [ scopedData, view, fields ] );
+	// Applied-rule + effective-price columns only apply to subscription products —
+	// donations and plan bundles are engine-excluded, so they never carry a rule.
+	// Hide the two columns (and their column-picker entries) outside that scope.
+	const visibleFields = useMemo(
+		() => ( scope === 'subscriptions' ? fields : fields.filter( field => field.id !== 'policies' && field.id !== 'effective_price' ) ),
+		[ fields, scope ]
+	);
+
+	const { data: processedData, paginationInfo } = useMemo(
+		() => filterSortAndPaginate( scopedData, view, visibleFields ),
+		[ scopedData, view, visibleFields ]
+	);
+
+	// No count while the fetch is in flight or after it failed: a "(0)" would read as an empty scope.
+	const totalItems = paginationInfo.totalItems;
+	useEffect( () => {
+		setHeaderData( {
+			sectionName: [
+				{
+					label: SCOPE_LABELS[ scope ],
+					count: isLoading || hasError ? undefined : totalItems,
+					countLabel: SCOPE_COUNT_LABELS[ scope ]( totalItems ),
+				},
+			],
+		} );
+	}, [ setHeaderData, scope, totalItems, isLoading, hasError ] );
 
 	if ( isLoading ) {
 		return (
@@ -300,12 +411,35 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 		);
 	}
 
+	if ( hasError ) {
+		return (
+			<WizardBanner>
+				<Notice
+					className="newspack-wizard__load-error"
+					status="error"
+					isDismissible={ false }
+					actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: fetchData } ] }
+				>
+					{ __( 'Could not load subscription products.', 'newspack-plugin' ) }
+				</Notice>
+			</WizardBanner>
+		);
+	}
+
 	return (
 		<div className="newspack-subscription-products">
+			{ policyIsMock && (
+				<Notice status="info" isDismissible={ false } className="newspack-subscription-products__mock-notice">
+					{ __(
+						'Applied policies and effective price use mock data. They swap to the live policy engine through a single read API with no UI change.',
+						'newspack-plugin'
+					) }
+				</Notice>
+			) }
 			<DataViews
 				className="newspack-subscription-products__dataviews"
 				data={ processedData }
-				fields={ fields }
+				fields={ visibleFields }
 				view={ view }
 				onChangeView={ setView }
 				actions={ actions }

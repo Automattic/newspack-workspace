@@ -1,4 +1,4 @@
-@use "../../../colors/colors.module" as colors;
+@use "../../../colors/colors.module" as np-colors;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/variables" as wp-vars;
@@ -20,21 +20,21 @@
 // without per-component overrides.
 /* stylelint-disable plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the wpds brand tokens. */
 :root {
-	--wpds-color-background-interactive-brand-strong: #{colors.$primary-600};
-	--wpds-color-background-interactive-brand-strong-active: #{colors.$primary-800};
-	--wpds-color-background-interactive-brand-weak-active: #{colors.$primary-000};
-	--wpds-color-background-surface-brand: #{colors.$primary-000};
-	--wpds-color-background-thumb-brand: #{colors.$primary-600};
-	--wpds-color-background-thumb-brand-active: #{colors.$primary-600};
-	--wpds-color-foreground-interactive-brand: #{colors.$primary-600};
-	--wpds-color-foreground-interactive-brand-active: #{colors.$primary-800};
-	--wpds-color-foreground-interactive-brand-disabled: #{colors.$primary-400};
-	--wpds-color-stroke-focus: #{colors.$primary-600};
-	--wpds-color-stroke-interactive-brand: #{colors.$primary-600};
-	--wpds-color-stroke-interactive-brand-active: #{colors.$primary-800};
-	--wpds-color-stroke-interactive-brand-disabled: #{colors.$primary-100};
-	--wpds-color-stroke-surface-brand: #{colors.$primary-000};
-	--wpds-color-stroke-surface-brand-strong: #{colors.$primary-600};
+	--wpds-color-background-interactive-brand-strong: #{np-colors.$primary-600};
+	--wpds-color-background-interactive-brand-strong-active: #{np-colors.$primary-800};
+	--wpds-color-background-interactive-brand-weak-active: #{np-colors.$primary-000};
+	--wpds-color-background-surface-brand: #{np-colors.$primary-000};
+	--wpds-color-background-thumb-brand: #{np-colors.$primary-600};
+	--wpds-color-background-thumb-brand-active: #{np-colors.$primary-600};
+	--wpds-color-foreground-interactive-brand: #{np-colors.$primary-600};
+	--wpds-color-foreground-interactive-brand-active: #{np-colors.$primary-800};
+	--wpds-color-foreground-interactive-brand-disabled: #{np-colors.$primary-400};
+	--wpds-color-stroke-focus: #{np-colors.$primary-600};
+	--wpds-color-stroke-interactive-brand: #{np-colors.$primary-600};
+	--wpds-color-stroke-interactive-brand-active: #{np-colors.$primary-800};
+	--wpds-color-stroke-interactive-brand-disabled: #{np-colors.$primary-100};
+	--wpds-color-stroke-surface-brand: #{np-colors.$primary-000};
+	--wpds-color-stroke-surface-brand-strong: #{np-colors.$primary-600};
 }
 /* stylelint-enable plugin-wpds/no-setting-wpds-custom-properties */
 

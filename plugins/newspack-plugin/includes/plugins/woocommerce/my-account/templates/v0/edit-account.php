@@ -32,8 +32,9 @@ if ( isset( $_GET['is_error'] ) ) { // phpcs:ignore WordPress.Security.NonceVeri
 $without_password        = true === Reader_Activation::is_reader_without_password( $user );
 $is_reader               = true === Reader_Activation::is_user_reader( $user );
 $is_email_change_enabled = true === WooCommerce_My_Account::is_email_change_enabled();
-$is_pending_email_change = $user->get( WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META ) ? true : false;
-$display_email           = $is_pending_email_change ? $user->get( WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META ) : $user->user_email;
+$pending_email_change    = WooCommerce_My_Account::get_pending_email_change( $user->ID );
+$is_pending_email_change = '' !== $pending_email_change;
+$display_email           = $is_pending_email_change ? $pending_email_change : $user->user_email;
 ?>
 
 <?php
@@ -50,7 +51,7 @@ endif;
 
 	<?php \do_action( 'newspack_woocommerce_edit_account_form_start' ); ?>
 
-	<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide mt0">
+	<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
 		<label for="account_display_name"><?php \esc_html_e( 'Display name', 'newspack-plugin' ); ?>&nbsp;<span class="required">*</span></label>
 		<input
 			type="text"
@@ -64,7 +65,7 @@ endif;
 		<span><em><?php esc_html_e( 'This is how your name is displayed publicly.', 'newspack-plugin' ); ?></em></span>
 	</p>
 
-	<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide mt0">
+	<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
 		<label for="account_email_display"><?php \esc_html_e( 'Email address', 'newspack-plugin' ); ?>
 		<?php
 		if ( $is_email_change_enabled ) :
@@ -113,9 +114,9 @@ endif;
 	<p class="woocommerce-buttons-card">
 		<?php \wp_nonce_field( 'save_account_details', 'save-account-details-nonce' ); ?>
 		<?php if ( $is_email_change_enabled && $is_pending_email_change ) : ?>
-			<a href="<?php echo esc_url( WooCommerce_My_Account::get_email_change_url( WooCommerce_My_Account::CANCEL_EMAIL_CHANGE_PARAM, $user->user_email ) ); ?>" class="woocommerce-Button button ma0"><?php \esc_html_e( 'Cancel email change', 'newspack-plugin' ); ?></a>
+			<a href="<?php echo esc_url( WooCommerce_My_Account::get_cancel_email_change_url( $user->ID ) ); ?>" class="woocommerce-Button button"><?php \esc_html_e( 'Cancel email change', 'newspack-plugin' ); ?></a>
 		<?php endif; ?>
-		<button type="submit" class="woocommerce-Button button secondary ma0" name="save_account_details" value="<?php \esc_attr_e( 'Save changes', 'newspack-plugin' ); ?>"><?php \esc_html_e( 'Save changes', 'newspack-plugin' ); ?></button>
+		<button type="submit" class="woocommerce-Button button secondary" name="save_account_details" value="<?php \esc_attr_e( 'Save changes', 'newspack-plugin' ); ?>"><?php \esc_html_e( 'Save changes', 'newspack-plugin' ); ?></button>
 		<input type="hidden" name="action" value="save_account_details" />
 	</p>
 

@@ -1,5 +1,13 @@
-@use "../../node_modules/tachyons/css/tachyons.min.css";
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+$wizard-column-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+
+@mixin wizard-column {
+	margin: 0 auto;
+	max-width: $wizard-column-width;
+	padding: 0 var(--newspack-wizard-section-space);
+}
 
 :root {
 	/* Sections */
@@ -153,15 +161,19 @@ h1 {
 	background: #{wp-colors.$white};
 }
 
-// Only apply styles if there are sections and is immediate descendent.
+.newspack-wizard,
+.newspack-wizard *,
+.newspack-wizard__content,
+.newspack-wizard__content *,
+#newspack-wizards-admin-header,
+#newspack-wizards-admin-header * {
+	box-sizing: border-box;
+}
+
 .newspack-wizard__content:has(> .newspack-wizard__sections) {
 	margin: 0;
 	max-width: 100%;
 	padding: 0 0 32px;
-
-	* {
-		box-sizing: border-box;
-	}
 }
 .newspack-wizard-page:not(.newspack-admin-header) {
 	#screen-meta-links {
@@ -176,27 +188,47 @@ h1 {
 		place-items: center;
 		position: absolute;
 		width: 100%;
+
+		strong {
+			font-weight: wp-vars.$font-weight-medium;
+		}
 	}
 
 	&.newspack-dashboard {
 		.newspack-dashboard__section {
 			&:first-of-type {
-				margin-top: 3.5rem;
+				margin-top: wp-vars.$grid-unit-60;
 			}
 		}
 	}
 }
 
-.newspack-wizard__content--full-width {
+.newspack-wizard__content--full-width.newspack-wizard__content--full-width {
 	max-width: 100%;
 	padding-left: 0;
 	padding-right: 0;
 }
 
+// The inert-gating warning describes the state of the whole site rather than of the
+// section beneath it, so it spans the full width in every view and sits flush against
+// the header region above. Core's Notice ships margins meant for inline placement,
+// which would open a gap there and break the seam.
+.newspack-wizard__inert-gating-notice.components-notice {
+	border-radius: 0;
+	margin: 0;
+	width: 100%;
+}
+
+.newspack-wizard__load-error.components-notice {
+	border-radius: 0;
+	margin: 0;
+	width: 100%;
+}
+
 .newspack-wizard__sections {
 	margin: 0 auto;
 	padding: calc(var(--newspack-wizard-section-space) * 2) var(--newspack-wizard-section-space) 0;
-	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+	max-width: $wizard-column-width;
 	> .newspack-wizard__heading {
 		margin-bottom: 8px;
 	}
@@ -220,15 +252,15 @@ h1 {
 		margin-top: 8px;
 
 		// Match the width of a single card in the 2-column CardFeature grid
-		// (grid has 16px gutter; falls back to 1 column below 744px viewport).
+		// (grid has 32px gutter; falls back to 1 column below 744px viewport).
 		@media screen and ( min-width: 744px ) {
-			max-width: calc((100% - 16px) / 2);
+			max-width: calc((100% - 32px) / 2);
 		}
 	}
 }
 
 .newspack-wizard__section {
-	margin-block-end: 4rem;
+	margin-block-end: wp-vars.$grid-unit-60;
 
 	&:last-child {
 		margin-block-end: 0;
@@ -241,38 +273,37 @@ h1 {
 	}
 }
 
+.newspack-wizard__column {
+	@include wizard-column;
+}
+
 .newspack-dashboard__section {
-	margin: 0 auto;
-	max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
-	padding: 0 var(--newspack-wizard-section-space);
-
-	> h3 {
-		font-size: 1.25rem;
-		font-weight: normal;
-		line-height: 1.75;
-		margin-bottom: calc(var(--newspack-wizard-section-child-space) / 2);
-	}
-
-	> p {
-		color: wp-colors.$gray-700;
-		margin: 0;
-	}
+	@include wizard-column;
 
 	a {
 		text-decoration: none;
 	}
-
-	.newspack-grid:not(.newspack-grid--no-margin) {
-		--np-dash-card-icon-size: 80px;
-
-		margin: 1.5rem 0 2rem;
-	}
 }
 
-// tachyons overrides
-table.fixed {
-	position: static;
-	table-layout: fixed;
+// Notice spacing inside wizard layouts.
+.newspack-notice--flush {
+	margin: 0;
+}
+
+.newspack-notice--spaced-top {
+	margin: wp-vars.$grid-unit-10 0 0;
+}
+
+.newspack-notice--spaced-bottom {
+	margin: 0 0 wp-vars.$grid-unit-10;
+}
+
+.newspack-text-muted {
+	color: wp-colors.$gray-700;
+}
+
+.newspack-is-dimmed {
+	opacity: 0.5;
 }
 
 // Overrides
@@ -298,14 +329,6 @@ table.fixed {
 	}
 
 	&.newspack-action-card {
-		.newspack-action-card__notification {
-			&.newspack-action-card__region-children {
-				.newspack-notice {
-					margin-top: 1rem;
-				}
-			}
-		}
-
 		.newspack-action-card__region-children:not(:last-child) {
 			padding-bottom: 0;
 			padding-top: 2rem;

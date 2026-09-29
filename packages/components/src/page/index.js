@@ -36,9 +36,10 @@ import './style.scss';
  * @param {*}      [props.actions]
  * @param {*}      [props.tabbedNavigation] A `TabbedNavigation` element; its bar renders inside
  *                                          the sticky header block and the page children render
- *                                          inside its active tab panel.
+ *                                          inside its active tab panel — or, when no visible tab
+ *                                          owns the route, as a sibling of the panels.
  * @param {string} [props.className]
- * @param {*}      props.children
+ * @param {*}      [props.children]
  * @return {JSX.Element} Page component.
  */
 const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigation, className, children } ) => {

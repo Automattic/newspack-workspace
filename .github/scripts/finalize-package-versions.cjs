@@ -25,9 +25,12 @@
  * Run from the repo root after multi-semantic-release, before pushing. Commits
  * the changed manifests with [skip ci]; the caller pushes.
  *
- * packages/* are intentionally not handled here — they have no internal
- * workspace deps, so their own release configs still commit package.json
- * directly (no lockfile hazard).
+ * packages/* are handled here too. They were originally excluded because they
+ * had no internal workspace deps, but that stopped being true once
+ * packages/components took a dep on newspack-icons and packages/{icons,colors}
+ * on newspack-scripts. Their release config (config/release-package.js) no
+ * longer commits package.json itself, so — exactly like plugins/themes — their
+ * version bump is committed here with internal deps reverted to workspace:*.
  */
 
 const fs = require( 'fs' );
@@ -64,7 +67,7 @@ if ( workspaceNames.size === 0 ) {
 }
 
 const changedPaths = [];
-for ( const group of [ 'plugins', 'themes' ] ) {
+for ( const group of [ 'plugins', 'themes', 'packages' ] ) {
 	if ( ! fs.existsSync( group ) ) {
 		continue;
 	}
@@ -97,8 +100,8 @@ for ( const group of [ 'plugins', 'themes' ] ) {
 	}
 }
 
-// Stage every plugin/theme manifest; git only records the ones that actually
-// differ from HEAD (msr-bumped version and/or the reverted deps).
+// Stage every plugin/theme/package manifest; git only records the ones that
+// actually differ from HEAD (msr-bumped version and/or the reverted deps).
 for ( const rel of changedPaths ) {
 	execFileSync( 'git', [ 'add', '--', rel ] );
 }

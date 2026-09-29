@@ -7,13 +7,15 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { WizardError } from '../../../../errors';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
-import { Button, Grid, Notice, TextControl, utils } from '../../../../../../packages/components/src';
+import { Button, Grid, TextControl, utils } from '../../../../../../packages/components/src';
 import { ERROR_MESSAGES } from './constants';
 
 /**
@@ -101,7 +103,7 @@ function CustomEvents() {
 	}
 
 	return (
-		<div className="newspack__analytics-configuration">
+		<Stack className="newspack__analytics-configuration" direction="column" gap="xl">
 			<div className="newspack__analytics-configuration__header">
 				<p>
 					{ __(
@@ -133,14 +135,20 @@ function CustomEvents() {
 					autoComplete="one-time-code"
 				/>
 			</Grid>
-			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
-			<Button className="mr2" variant="primary" onClick={ updateGa4Credentials } disabled={ isInputsEmpty() || !! errorMessage }>
-				{ __( 'Save', 'newspack-plugin' ) }
-			</Button>
-			<Button variant="secondary" onClick={ resetGa4Credentials } disabled={ isInputsEmpty() }>
-				{ __( 'Reset', 'newspack-plugin' ) }
-			</Button>
-		</div>
+			{ errorMessage && (
+				<Notice status="error" isDismissible={ false } politeness="polite">
+					{ errorMessage }
+				</Notice>
+			) }
+			<Stack direction="row" justify="flex-start" gap="sm">
+				<Button variant="primary" onClick={ updateGa4Credentials } disabled={ isInputsEmpty() || !! errorMessage }>
+					{ __( 'Save', 'newspack-plugin' ) }
+				</Button>
+				<Button variant="secondary" onClick={ resetGa4Credentials } disabled={ isInputsEmpty() }>
+					{ __( 'Reset', 'newspack-plugin' ) }
+				</Button>
+			</Stack>
+		</Stack>
 	);
 }
 

@@ -307,16 +307,6 @@ body.toplevel_page_newspack-story-budget {
 			}
 		}
 
-		/**
-		 * Overrides for the Newspack Action Card component to match the design.
-		 */
-		.newspack-action-card {
-			&__badge {
-				color: #f0f0f0 !important;
-				background-color: var(--wp-components-color-accent) !important;
-				border-radius: 999px !important;
-			}
-		}
 		.newspack-action-card__region.newspack-action-card__region-top {
 			padding: 0 24px;
 			height: 80px;

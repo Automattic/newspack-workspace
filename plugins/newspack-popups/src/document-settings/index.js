@@ -8,6 +8,11 @@ import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
 import { ToggleControl } from '@wordpress/components';
 
+/**
+ * Internal dependencies
+ */
+import ContextualPromptPanel from './contextual-prompt-panel';
+
 const PopupsSettingsPanel = ( { hasDisabledPopups, onChange } ) => (
 	<PluginDocumentSettingPanel name="newsletters-popups-settings-panel" title={ __( 'Newspack Campaigns Settings', 'newspack-popups' ) }>
 		<ToggleControl
@@ -36,5 +41,10 @@ const PopupsSettingsPanelWithSelect = compose( [
 
 registerPlugin( 'newspack-popups-post-status-info', {
 	render: PopupsSettingsPanelWithSelect,
+	icon: false,
+} );
+
+registerPlugin( 'newspack-contextual-prompt', {
+	render: ContextualPromptPanel,
 	icon: false,
 } );

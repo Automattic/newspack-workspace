@@ -46,10 +46,10 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 	/**
 	 * Single-selection enumerated types use 'default' matching (strict equality
 	 * against the chosen option). Per AC's Contact Custom Fields API Guide:
-	 * dropdown / radio / listbox are single selection.
+	 * dropdown / radio are single selection.
 	 */
 	public function test_single_select_types_use_default_matching() {
-		foreach ( [ 'dropdown', 'radio', 'listbox' ] as $type ) {
+		foreach ( [ 'dropdown', 'radio' ] as $type ) {
 			$mapped = $this->map_field(
 				[
 					'perstag' => 'X',
@@ -64,9 +64,13 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 	 * Multi-selection enumerated types use 'list__in'. AC stores their value
 	 * with `||` delimiters; the consumer's parse_list_value() recognizes that
 	 * format. Strict equality cannot match `||A||B||` against `'A'`.
+	 *
+	 * AC's "Checkbox" type is a multi-select checkbox group (not a boolean
+	 * toggle) and its "List Box" is a multi-select list — per AC's docs a
+	 * contact can hold several ||-delimited values for either.
 	 */
 	public function test_multi_select_types_use_list_in_matching() {
-		foreach ( [ 'checkbox', 'multiselect' ] as $type ) {
+		foreach ( [ 'checkbox', 'listbox', 'multiselect' ] as $type ) {
 			$mapped = $this->map_field(
 				[
 					'perstag' => 'X',
@@ -74,6 +78,83 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 				]
 			);
 			$this->assertSame( 'list__in', $mapped['matching_function'], "$type should use 'list__in' matching" );
+		}
+	}
+
+	/**
+	 * A date field is useless under exact-match text, so enabling one should seed
+	 * the date range operator — the same way a Mailchimp number seeds range.
+	 */
+	public function test_date_types_default_to_date_range_operator() {
+		foreach ( [ 'date', 'datetime' ] as $type ) {
+			$mapped = $this->map_field(
+				[
+					'perstag' => 'LAST_GIFT',
+					'title'   => 'Last Gift',
+					'type'    => $type,
+				]
+			);
+			$this->assertSame( 'date_range', $mapped['matching_function'], "$type matching_function" );
+			// Declared explicitly even though ActiveCampaign always sends ISO: the
+			// consumer tells "declared as ISO" from "never stored, format unknown" by
+			// the key's presence, and refreshes the latter from the live schema.
+			$this->assertArrayHasKey( 'date_format', $mapped, "$type date_format" );
+			$this->assertSame( '', $mapped['date_format'], "$type date_format" );
+		}
+	}
+
+	/**
+	 * The operator originates here and the plugins update independently: on a
+	 * site whose newspack-plugin predates date-range support, date_range would
+	 * reach newspack-popups unvalidated and a stale build crashes on it. The
+	 * mapper probes the consumer and degrades to exact matching. (The stub in
+	 * tests/mocks/class-newspack-plugin-incoming-field-mock.php is what makes
+	 * the probe resolve true for the other tests in this file.)
+	 */
+	public function test_date_types_degrade_to_exact_match_without_consumer_support() {
+		add_filter( 'newspack_newsletters_integrations_supports_date_range', '__return_false' );
+		$mapped = $this->map_field(
+			[
+				'perstag' => 'LAST_GIFT',
+				'title'   => 'Last Gift',
+				'type'    => 'date',
+			]
+		);
+		remove_filter( 'newspack_newsletters_integrations_supports_date_range', '__return_false' );
+
+		$this->assertSame( 'default', $mapped['matching_function'] );
+		// Only the operator degrades — the field still describes itself fully, so
+		// nothing downstream has to special-case the degraded shape.
+		$this->assertSame( 'date', $mapped['value_type'] );
+		$this->assertSame( '', $mapped['date_format'] );
+	}
+
+	/**
+	 * Value-type mapping is derived from AC's field type so the framework constrains
+	 * the segment operator per field shape. Mirrors newspack-manager's ActiveCampaign
+	 * integration so the same field types identically across both AC integrations.
+	 */
+	public function test_value_type_by_field_type() {
+		$expected = [
+			'text'        => 'string',
+			'textarea'    => 'string',
+			'hidden'      => 'string',
+			'dropdown'    => 'select',
+			'radio'       => 'select',
+			'listbox'     => 'multiselect',
+			'checkbox'    => 'multiselect',
+			'multiselect' => 'multiselect',
+			'date'        => 'date',
+			'datetime'    => 'datetime',
+		];
+		foreach ( $expected as $type => $value_type ) {
+			$mapped = $this->map_field(
+				[
+					'perstag' => 'X',
+					'type'    => $type,
+				]
+			);
+			$this->assertSame( $value_type, $mapped['value_type'], "$type should map to value_type '$value_type'" );
 		}
 	}
 
@@ -122,7 +203,7 @@ class ActiveCampaignIntegrationsSchemaTest extends WP_UnitTestCase {
 				'descript' => 'Picked at signup',
 			]
 		);
-		foreach ( [ 'key', 'name', 'value_type', 'matching_function', 'options', 'description', 'is_access_rule', 'is_segment_criteria' ] as $key ) {
+		foreach ( [ 'key', 'name', 'value_type', 'matching_function', 'date_format', 'options', 'description', 'is_access_rule', 'is_segment_criteria' ] as $key ) {
 			$this->assertArrayHasKey( $key, $mapped );
 		}
 		$this->assertSame( 'FAVCOLOR', $mapped['key'] );

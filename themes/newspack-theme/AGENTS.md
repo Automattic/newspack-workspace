@@ -13,7 +13,7 @@ This file covers what is specific to `newspack-theme`. Shared conventions (Docke
 
 ## Common Gotchas
 
-- **`npm run lint` skips PHP.** Run `npm run lint:php` separately for PHP linting.
+- **`npm run lint` skips PHP.** Lint PHP from the workspace root (see the root guide).
 - **No Composer autoloading.** There are only two PHP classes (`Newspack_SVG_Icons`, `Newspack_Walker_Comment`), both manually required in `functions.php`. No namespace is used. Do not introduce PSR-4 autoloading or namespaces.
 - **SCSS compilation uses a custom Node script**, not standard webpack/PostCSS. `scripts/compile-scss.js` handles all themes, RTL generation, and cssnano optimization. Don't try to run it through webpack.
 - **Webpack entry points are auto-discovered.** Any `newspack-theme/js/src/*.js` file or `newspack-theme/js/src/*/index.js` file becomes an entry point automatically. No changes to `webpack.config.js` are needed when adding JS files that follow this convention.

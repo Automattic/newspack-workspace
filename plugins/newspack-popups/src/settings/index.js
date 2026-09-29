@@ -12,7 +12,7 @@ import { Button, Card, CardBody, CheckboxControl, Notice, SelectControl, SlotFil
 /**
  * Newspack dependencies.
  */
-import { Page } from 'newspack-components';
+import { PageControl, Page } from 'newspack-components';
 
 /**
  * Internal dependencies
@@ -58,6 +58,19 @@ const App = () => {
 				disabled: inFlight,
 				onChange: handleSettingChange( setting.key ),
 			};
+			// A `control` overrides the default control for the setting's data type.
+			if ( 'page' === setting.control ) {
+				return (
+					<PageControl
+						key={ setting.key }
+						label={ setting.description }
+						help={ setting.help }
+						disabled={ inFlight }
+						selected={ setting.selected || null }
+						onChange={ handleSettingChange( setting.key ) }
+					/>
+				);
+			}
 			switch ( setting.type ) {
 				case 'string':
 					return (

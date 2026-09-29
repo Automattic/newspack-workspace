@@ -148,7 +148,7 @@ class Co_Authors_Plus {
 
 		$get_posts_args = [
 			'post_type'      => 'guest-author',
-			'posts_per_page' => -1,
+			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 			'post_status'    => 'any',
 		];
 		if ( self::$guest_author_ids !== false && is_array( self::$guest_author_ids ) ) {
@@ -365,7 +365,7 @@ class Co_Authors_Plus {
 		$linked_guest_authors = get_posts(
 			[
 				'post_type'      => 'guest-author',
-				'posts_per_page' => -1,
+				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Operator-run CLI command; unbounded by design.
 				'post_status'    => 'any',
 				'meta_query'     => [ $meta_query ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 			]

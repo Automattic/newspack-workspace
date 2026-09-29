@@ -1,5 +1,13 @@
 import { registerCriteria } from '../../criteria/utils';
-import { getBestPrioritySegment, getOverride, shouldPromptBeDisplayed, periods } from './index.js';
+import {
+	getBestPrioritySegment,
+	getBestPrioritySegmentFromSnapshot,
+	getMatchingSegmentIds,
+	syncMatchedSegments,
+	getOverride,
+	shouldPromptBeDisplayed,
+	periods,
+} from './index.js';
 
 // Mock the window.location object. See: https://developer.mozilla.org/en-US/docs/Web/API/Location
 const setWindowLocation = ( domain = 'example.com', search = '' ) => {
@@ -236,6 +244,49 @@ describe( 'segmentation API', () => {
 		expect( shouldPromptBeDisplayed( prompt, null, ras, pidOverride ) ).toBeTruthy();
 	} );
 
+	it( 'getMatchingSegmentIds returns all matching segment IDs, sorted', () => {
+		ras.store.set( 'simple', 'simple-match' );
+		// Out-of-order fixture so the assertion actually exercises the sort.
+		const outOfOrder = { segment3: segments.segment3, segment2: segments.segment2 };
+		expect( getMatchingSegmentIds( outOfOrder ) ).toEqual( [ 'segment2', 'segment3' ] );
+	} );
+
+	it( 'getMatchingSegmentIds returns an empty array when nothing matches', () => {
+		ras.store.set( 'simple', 'no-match' );
+		expect( getMatchingSegmentIds( segments ) ).toEqual( [] );
+	} );
+
+	it( 'syncMatchedSegments writes the set for an authenticated reader on change', () => {
+		ras.store.set( 'reader', { authenticated: true } );
+		ras.store.set( 'simple', 'simple-match' );
+		syncMatchedSegments( ras, segments );
+		expect( ras.store.get( 'matched_segments' ) ).toEqual( [ 'segment2', 'segment3' ] );
+	} );
+
+	it( 'syncMatchedSegments does not write for an anonymous reader', () => {
+		ras.store.set( 'reader', { authenticated: false } );
+		ras.store.set( 'simple', 'simple-match' );
+		syncMatchedSegments( ras, segments );
+		expect( ras.store.get( 'matched_segments' ) ).toBeUndefined();
+	} );
+
+	it( 'syncMatchedSegments does not write when no reader key is set', () => {
+		// beforeEach cleared the store; no 'reader' key exists (typical anonymous visitor).
+		ras.store.set( 'simple', 'simple-match' );
+		syncMatchedSegments( ras, segments );
+		expect( ras.store.get( 'matched_segments' ) ).toBeUndefined();
+	} );
+
+	it( 'syncMatchedSegments does not rewrite when the set is unchanged', () => {
+		ras.store.set( 'reader', { authenticated: true } );
+		ras.store.set( 'simple', 'simple-match' );
+		ras.store.set( 'matched_segments', [ 'segment2', 'segment3' ] );
+		const setSpy = jest.spyOn( ras.store, 'set' );
+		syncMatchedSegments( ras, segments );
+		expect( setSpy ).not.toHaveBeenCalledWith( 'matched_segments', expect.anything() );
+		setSpy.mockRestore();
+	} );
+
 	it( 'should return false if the reader has or had the UTM Suppression value in utm_source params', () => {
 		const prompt = createPrompt( [], '0,0,0,month', '1', 'inline', 'suppress_this' );
 
@@ -249,5 +300,59 @@ describe( 'segmentation API', () => {
 		// Once the reader has had the UTM suppression value, the prompt should no longer be displayed.
 		setWindowLocation( 'example.com', '' );
 		expect( shouldPromptBeDisplayed( prompt, null, ras ) ).toBeFalsy();
+	} );
+} );
+
+describe( 'switched sessions', () => {
+	// An admin who switched into a reader's account browses with the reader's
+	// stored data hydrated but their own device and history: the live match is
+	// theirs, and must never replace the reader's snapshot.
+	beforeEach( () => {
+		window.newspackPopupsCriteria = { criteria: {} };
+		for ( const criteriaId in criteria ) {
+			registerCriteria( criteriaId, criteria[ criteriaId ] );
+		}
+		ras.store.clear();
+	} );
+
+	afterEach( () => {
+		delete window.newspack_reader_data;
+	} );
+
+	it( 'syncMatchedSegments leaves the stored snapshot alone in a switched session', () => {
+		window.newspack_reader_data = { is_switched_session: true };
+		ras.store.set( 'reader', { authenticated: true } );
+		ras.store.set( 'simple', 'simple-match' );
+		ras.store.set( 'matched_segments', [ 'segment4' ] );
+		syncMatchedSegments( ras, segments );
+		expect( ras.store.get( 'matched_segments' ) ).toEqual( [ 'segment4' ] );
+	} );
+
+	it( 'getBestPrioritySegmentFromSnapshot picks the highest-priority stored segment', () => {
+		// segment1 has priority 0, segment3 priority 1; order in the snapshot is irrelevant.
+		ras.store.set( 'matched_segments', [ 'segment3', 'segment1' ] );
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBe( 'segment1' );
+	} );
+
+	it( 'getBestPrioritySegmentFromSnapshot ignores a stored id the page does not know', () => {
+		ras.store.set( 'matched_segments', [ 'deleted-segment', 'segment3' ] );
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBe( 'segment3' );
+	} );
+
+	it( 'getBestPrioritySegmentFromSnapshot normalizes numeric ids and survives a malformed snapshot', () => {
+		// The REST route accepts any JSON, and older writers stored numeric ids;
+		// prompt targeting compares ids as strings, so numbers must come back as
+		// strings and a non-list must read as no snapshot rather than throw.
+		const numericSegments = { 12: { criteria: [], priority: 1 }, 43: { criteria: [], priority: 0 } };
+		ras.store.set( 'matched_segments', [ 12, 43 ] );
+		expect( getBestPrioritySegmentFromSnapshot( ras, numericSegments ) ).toBe( '43' );
+		ras.store.set( 'matched_segments', { 0: 'segment1' } );
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBeNull();
+	} );
+
+	it( 'getBestPrioritySegmentFromSnapshot returns null with no snapshot', () => {
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBeNull();
+		ras.store.set( 'matched_segments', [] );
+		expect( getBestPrioritySegmentFromSnapshot( ras, segments ) ).toBeNull();
 	} );
 } );

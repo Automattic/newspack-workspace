@@ -43,7 +43,7 @@ type PluginCard = {
 	slug: string;
 	actionText?: PluginCardActionText;
 	editLink?: string;
-	badge?: string;
+	badges?: ActionCardProps[ 'badges' ];
 	description?: string | React.ReactNode;
 	title: string;
 	subTitle?: string;

@@ -26,12 +26,14 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Badge, Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { PolicyChips, EffectivePrice } from './policy-cells';
 
 const BASE_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
 const CONVENTION_SLUGS = [ 'private-subscriptions', 'free-subscriptions' ];
@@ -80,6 +82,7 @@ export default function ProductForm( {
 	initial,
 	categories,
 	bundleOptions,
+	currency,
 	groupSubscriptionsEnabled,
 	onDone,
 }: {
@@ -87,6 +90,7 @@ export default function ProductForm( {
 	initial?: SubscriptionProduct;
 	categories: { id: number; label: string }[];
 	bundleOptions: { id: number; label: string }[];
+	currency: SubscriptionProductsCurrency;
 	groupSubscriptionsEnabled: boolean;
 	onDone: () => void;
 } ) {
@@ -95,7 +99,7 @@ export default function ProductForm( {
 
 	const [ name, setName ] = useState( initial?.name ?? '' );
 	const [ type, setType ] = useState< ProductType >( ( initial?.type as ProductType ) ?? 'subscription' );
-	const [ status, setStatus ] = useState( initial?.status === 'draft' ? 'draft' : 'publish' );
+	const [ status, setStatus ] = useState< 'publish' | 'draft' >( initial?.status === 'draft' ? 'draft' : 'publish' );
 	const [ isDonation, setIsDonation ] = useState( initial?.is_donation ?? false );
 	const [ availability, setAvailability ] = useState( initial?.availability ?? 'public' );
 
@@ -268,11 +272,11 @@ export default function ProductForm( {
 	useEffect( () => {
 		setHeaderData( {
 			backNav: '#/',
-			sectionName: isEdit ? __( 'Edit plan', 'newspack-plugin' ) : __( 'Add plan', 'newspack-plugin' ),
+			sectionName: isEdit ? __( 'Edit Plan', 'newspack-plugin' ) : __( 'Add Plan', 'newspack-plugin' ),
 			actions: [
 				{
 					type: 'primary',
-					label: isEdit ? __( 'Save changes', 'newspack-plugin' ) : __( 'Create plan', 'newspack-plugin' ),
+					label: isEdit ? __( 'Save', 'newspack-plugin' ) : __( 'Create Plan', 'newspack-plugin' ),
 					icon: null,
 					action: submit,
 					disabled: isSaving,
@@ -280,6 +284,19 @@ export default function ProductForm( {
 			],
 		} );
 	}, [ isEdit, isSaving, submit, setHeaderData ] );
+
+	// Read-only "Policies & access": a variable subscription resolves a rule stack +
+	// effective price PER plan (variation), so list each priced plan rather than only
+	// the representative one (which hid rules carried by non-representative plans). A
+	// single/simple subscription has just the one resolution, shown without a label.
+	let policyRows: { key: string; label: string; policy: SubscriptionPolicyResolution }[] = [];
+	if ( initial && initial.type === 'variable-subscription' ) {
+		policyRows = initial.variations
+			.filter( variation => variation.policy?.policies?.length )
+			.map( variation => ( { key: String( variation.id ), label: variation.name, policy: variation.policy } ) );
+	} else if ( initial && initial.policy.policies.length > 0 ) {
+		policyRows = [ { key: String( initial.id ), label: '', policy: initial.policy } ];
+	}
 
 	return (
 		<div className="newspack-subscription-products__edit">
@@ -453,7 +470,7 @@ export default function ProductForm( {
 							) ) }
 							<div>
 								<Button variant="secondary" onClick={ addPlan }>
-									{ __( 'Add plan', 'newspack-plugin' ) }
+									{ __( 'Add Plan', 'newspack-plugin' ) }
 								</Button>
 							</div>
 						</>
@@ -543,23 +560,45 @@ export default function ProductForm( {
 				</VStack>
 			</Grid>
 
-			{ isEdit && initial && initial.unlocks.length > 0 && (
+			{ isEdit && initial && ( initial.unlocks.length > 0 || policyRows.length > 0 ) && (
 				<>
 					<Divider alignment="full-width" variant="tertiary" />
 					<Grid columns={ 2 } gutter={ 32 } noMargin>
 						<SectionHeader
-							title={ __( 'Access', 'newspack-plugin' ) }
-							description={ __( 'Read-only: the content this plan unlocks.', 'newspack-plugin' ) }
+							title={ __( 'Policies & access', 'newspack-plugin' ) }
+							description={ __( 'Read-only: pricing policies applied to this plan and the content it unlocks.', 'newspack-plugin' ) }
 						/>
 						<VStack spacing={ 4 }>
-							<div>
-								<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
-								<div className="newspack-subscription-products__unlocks">
-									{ initial.unlocks.map( gate => (
-										<Badge key={ gate.id } level="default" text={ gate.title } />
-									) ) }
+							{ policyRows.length > 0 && (
+								<div>
+									<span className="newspack-subscription-products__modal-label">
+										{ __( 'Applied policies', 'newspack-plugin' ) }
+									</span>
+									<VStack spacing={ 3 }>
+										{ policyRows.map( row => (
+											<HStack key={ row.key } alignment="center" spacing={ 3 } justify="flex-start">
+												{ row.label && (
+													<span className="newspack-subscription-products__policy-plan-label">{ row.label }</span>
+												) }
+												<PolicyChips policy={ row.policy } />
+												<EffectivePrice policy={ row.policy } currency={ currency } />
+											</HStack>
+										) ) }
+									</VStack>
 								</div>
-							</div>
+							) }
+							{ initial.unlocks.length > 0 && (
+								<div>
+									<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
+									<div className="newspack-subscription-products__unlocks">
+										{ initial.unlocks.map( gate => (
+											<Badge key={ gate.id } intent="none">
+												{ gate.title }
+											</Badge>
+										) ) }
+									</div>
+								</div>
+							) }
 						</VStack>
 					</Grid>
 				</>

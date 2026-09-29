@@ -22,6 +22,7 @@ import classNames from 'classnames';
 
 const CoreCard = ( {
 	actions,
+	actionsLabel,
 	actionType,
 	as,
 	buttonsCard,
@@ -34,13 +35,23 @@ const CoreCard = ( {
 	footerStyle,
 	disabled,
 	icon,
+	iconElement,
 	iconBackgroundColor,
 	isActive,
 	isDraggable,
 	isFirstTarget,
 	isLastTarget,
 	isNarrow,
+	/**
+	 * Renders the card as a chooser: strips the button chrome an `as="button"` card
+	 * inherits, and adds the hover and focus rings. Pair with `isActive` for the
+	 * chosen one. Unlike `buttonsCard` this leaves `as` alone, so the consumer keeps
+	 * the element and the ARIA it needs (`radio`, `option`, …).
+	 */
+	isSelectable,
 	isSmall,
+	isVertical,
+	size,
 	dragIndex,
 	onDragCallback = () => {},
 	onToggle = () => {},
@@ -52,6 +63,7 @@ const CoreCard = ( {
 	hasHeaderBorder = true,
 	...otherProps
 } ) => {
+	const bodySize = isSmall ? undefined : size;
 	const classes = classNames(
 		'newspack-card--core',
 		className,
@@ -60,7 +72,10 @@ const CoreCard = ( {
 		isDraggable && 'newspack-card--core__is-draggable',
 		isNarrow && 'newspack-card--core__is-narrow',
 		isSmall && 'newspack-card--core__is-small',
-		icon && 'newspack-card--core__has-icon',
+		isSelectable && 'newspack-card--core__is-selectable',
+		bodySize === 'large' && 'newspack-card--core__is-large',
+		isVertical && 'newspack-card--core__is-vertical',
+		( icon || iconElement ) && 'newspack-card--core__has-icon',
 		iconBackgroundColor && 'newspack-card--core__has-icon-background-color',
 		isActive && 'newspack-card--core__is-active',
 		disabled && 'newspack-card--core__is-disabled',
@@ -68,7 +83,7 @@ const CoreCard = ( {
 		noMargin && 'newspack-card--core__no-margin',
 		hasGreyHeader && 'newspack-card--core__has-grey-header'
 	);
-	let sizeProps = isSmall ? 'small' : otherProps.size;
+	let sizeProps = isSmall ? 'small' : size;
 	if ( buttonsCard || as === 'a' ) {
 		if ( ! isSmall ) {
 			sizeProps = 'large';
@@ -86,8 +101,8 @@ const CoreCard = ( {
 	const hasInteractiveHeaderChildren = actionType === 'toggle' || !! headerAction || actions?.length > 0 || isDraggable;
 	const headerIsButton = !! onHeaderClick && ! hasInteractiveHeaderChildren;
 	return (
-		<CardWrapper as={ as } className={ classes } { ...otherProps }>
-			{ ( header || icon ) && (
+		<CardWrapper as={ as } className={ classes } size={ bodySize } { ...otherProps }>
+			{ ( header || icon || iconElement ) && (
 				<CardHeader
 					as={ headerIsButton ? 'button' : undefined }
 					className={ classNames(
@@ -125,16 +140,19 @@ const CoreCard = ( {
 							</div>
 						</div>
 					) }
-					{ icon && (
-						<div className="newspack-card--core__icon">
-							<Icon icon={ icon } height={ isSmall ? 24 : 48 } width={ isSmall ? 24 : 48 } />
-						</div>
+					{ iconElement ? (
+						<div className="newspack-card--core__icon-slot">{ iconElement }</div>
+					) : (
+						icon && (
+							<div className="newspack-card--core__icon">
+								<Icon icon={ icon } height={ isSmall ? 24 : 48 } width={ isSmall ? 24 : 48 } />
+							</div>
+						)
 					) }
 					{ actions?.length > 0 && actionType === 'toggle' && (
 						<ToggleControl
 							className="newspack-card--core__action"
 							label={ otherProps.title }
-							hideLabelFromVision
 							checked={ isActive }
 							onChange={ onToggle }
 						/>
@@ -147,13 +165,12 @@ const CoreCard = ( {
 						<ToggleControl
 							className="newspack-card--core__action"
 							label={ otherProps.title }
-							hideLabelFromVision
 							checked={ isActive }
 							onChange={ onToggle }
 						/>
 					) }
 					{ actions?.length > 0 && (
-						<DropdownMenu icon={ moreVertical } label={ __( 'More', 'newspack-plugin' ) }>
+						<DropdownMenu icon={ moreVertical } label={ actionsLabel || __( 'More actions', 'newspack-plugin' ) }>
 							{ () =>
 								actions.map( ( action, index ) => {
 									// Actions can be an array of sub-actions, which are rendered within a MenuGroup.
@@ -167,6 +184,7 @@ const CoreCard = ( {
 															icon={ subAction.icon }
 															onClick={ subAction.action }
 															href={ subAction.href }
+															aria-label={ subAction.ariaLabel }
 															disabled={ subAction.disabled || false }
 															isDestructive={ subAction.destructive || false }
 														>
@@ -183,6 +201,7 @@ const CoreCard = ( {
 											icon={ action.icon }
 											onClick={ action.action }
 											href={ action.href }
+											aria-label={ action.ariaLabel }
 											disabled={ action.disabled || false }
 											isDestructive={ action.destructive || false }
 										>

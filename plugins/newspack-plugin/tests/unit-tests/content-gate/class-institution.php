@@ -136,6 +136,30 @@ class Newspack_Test_Institution extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The has_institutions() helper reflects existence without depending on the
+	 * cache being a countable array, which count() at the call site would have.
+	 */
+	public function test_has_institutions() {
+		delete_transient( Institution::TRANSIENT_KEY );
+		$this->assertFalse( Institution::has_institutions(), 'No institutions means has_institutions() is false.' );
+
+		$institution_id = Institution::create( 'Existence University' );
+		$this->assertIsInt( $institution_id );
+		$this->post_ids[] = $institution_id;
+
+		$this->assertTrue( Institution::has_institutions(), 'A published institution means has_institutions() is true.' );
+
+		// A filter returning a non-array transient value must not fatal the way
+		// count() at the call site would; existence is all the caller needs.
+		$non_array_transient = function () {
+			return 'not-an-array';
+		};
+		add_filter( 'pre_transient_' . Institution::TRANSIENT_KEY, $non_array_transient );
+		$this->assertTrue( Institution::has_institutions(), 'A scalar cache value is treated as present, not fatal.' );
+		remove_filter( 'pre_transient_' . Institution::TRANSIENT_KEY, $non_array_transient );
+	}
+
+	/**
 	 * Test cache is built and can be invalidated.
 	 */
 	public function test_cache_built_and_invalidated() {
@@ -430,6 +454,34 @@ class Newspack_Test_Institution extends WP_UnitTestCase {
 		$this->assertFalse(
 			\Newspack\Access_Rules::evaluate_rule( 'institution', [ $inst_id ], 0 )
 		);
+	}
+
+	/**
+	 * Test that a rule naming no institution matches nobody, whichever way it was
+	 * left empty, and that a value of a shape the rule cannot read does the same.
+	 *
+	 * The empty case is the one that decides whether switching the rule on before
+	 * publishing any institution opens the gate to everyone or closes it to
+	 * everyone. The contrast at the end is what stops a regression here from
+	 * reading as "institutions never match".
+	 */
+	public function test_evaluate_matches_nobody_when_no_institution_is_named() {
+		$reader_id = $this->create_reader( 'reader@fail-closed.edu' );
+
+		$this->assertFalse( Institution::evaluate( $reader_id, [] ), 'An empty array names no institution.' );
+		$this->assertFalse( Institution::evaluate( $reader_id, null ), 'Null names no institution.' );
+		$this->assertFalse( Institution::evaluate( $reader_id, '' ), 'An empty string names no institution.' );
+		$this->assertFalse( Institution::evaluate( 0, [] ), 'An anonymous visitor is denied on the same value.' );
+
+		$this->assertFalse( Institution::evaluate( $reader_id, 'Springfield University' ), 'A populated non-array value must not grant access.' );
+		$this->assertFalse( Institution::evaluate( $reader_id, '0' ), 'A falsy string is still a value someone typed.' );
+		$this->assertFalse( Institution::evaluate( $reader_id, 0 ), 'A falsy number is still a value someone typed.' );
+
+		$inst_id = Institution::create( 'Fail Closed University', '', [ 'email_domain' => 'fail-closed.edu' ] );
+		$this->assertIsInt( $inst_id );
+		$this->post_ids[] = $inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		$this->assertTrue( Institution::evaluate( $reader_id, [ $inst_id ] ), 'A rule naming an institution the reader belongs to still grants.' );
 	}
 
 	/**

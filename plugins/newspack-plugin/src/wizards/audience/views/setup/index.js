@@ -22,7 +22,7 @@ import ContentGating from './content-gating';
 import Payment from './payment';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import PlatformSelection from '../../components/platform-selection';
-import Groups from './groups';
+import AdvancedSettings from './advanced-settings';
 // NPPD-1538: Emails relocated under Audience > Configuration; grafted into
 // the existing chooser/platform-toggle setup flow as a tab + route.
 import Emails from './emails';
@@ -145,7 +145,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 				// sense when the Newspack Content Gate / Group subscriptions feature is on.
 				newspackAudience.is_newspack_feature_enabled && {
 					label: __( 'Advanced Settings', 'newspack-plugin' ),
-					path: '/groups',
+					path: '/advanced-settings',
 					breadcrumbs: [ ...ROOT, { label: __( 'Advanced Settings', 'newspack-plugin' ) } ],
 				},
 		  ];
@@ -220,7 +220,10 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 					/>
 					<Route path="/content-gating" render={ () => <ContentGating { ...props } /> } />
 					<Route path="/payment" render={ () => <Payment { ...props } /> } />
-					{ newspackAudience.is_newspack_feature_enabled && <Route path="/groups" render={ () => <Groups { ...props } /> } /> }
+					{ newspackAudience.is_newspack_feature_enabled && (
+						<Route path="/advanced-settings" render={ () => <AdvancedSettings { ...props } /> } />
+					) }
+					<Redirect from="/groups" to="/advanced-settings" />
 					<Route
 						path="/emails"
 						render={ () =>

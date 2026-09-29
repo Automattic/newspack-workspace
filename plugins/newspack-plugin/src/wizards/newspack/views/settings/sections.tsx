@@ -91,15 +91,28 @@ if ( 'experimental-tools' in settingsTabs ) {
 	sectionComponents[ 'experimental-tools' ] = lazy( () => import( /* webpackChunkName: "newspack-wizards" */ './experimental-tools' ) );
 }
 
+// The tab crumb links back to these views from their sub-screens. On the view itself it is the last crumb, which never renders as a link.
+const sectionsWithSubScreens: SectionKeys[] = [ 'experimental-tools' ];
+
 const settingsSectionKeys = Object.keys( settingsTabs ) as SectionKeys[];
 
 export default settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
+	// The keys come from the object itself, so the tab is always there; the
+	// lookup is nullable only because optional entries can be absent.
+	const tab = settingsTabs[ sectionPath ];
+	if ( ! tab ) {
+		return acc;
+	}
+	const path = tab.path ?? `/${ sectionPath }`;
 	acc.push( {
-		label: settingsTabs[ sectionPath ].label,
-		exact: '/' === ( settingsTabs[ sectionPath ].path ?? '' ),
-		path: settingsTabs[ sectionPath ].path ?? `/${ sectionPath }`,
-		activeTabPaths: settingsTabs[ sectionPath ].activeTabPaths ?? undefined,
-		breadcrumbs: [ { label: __( 'Settings', 'newspack' ) }, { label: settingsTabs[ sectionPath ].label } ],
+		label: tab.label,
+		exact: '/' === ( tab.path ?? '' ),
+		path,
+		activeTabPaths: tab.activeTabPaths ?? undefined,
+		breadcrumbs: [
+			{ label: __( 'Settings', 'newspack-plugin' ) },
+			{ label: tab.label, ...( sectionsWithSubScreens.includes( sectionPath ) ? { url: `#${ path }` } : {} ) },
+		],
 		render: sectionComponents[ sectionPath ] ?? sectionComponents.default,
 	} );
 	return acc;

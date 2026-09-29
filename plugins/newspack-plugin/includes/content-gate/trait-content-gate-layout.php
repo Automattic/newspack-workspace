@@ -145,7 +145,21 @@ trait Content_Gate_Layout {
 		}
 		$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-editor.asset.php';
 		wp_enqueue_script( 'newspack-content-gate', Newspack::plugin_url() . '/dist/content-gate-editor.js', $asset['dependencies'], $asset['version'], true );
-		wp_localize_script( 'newspack-content-gate', 'newspack_content_gate', [ 'has_campaigns' => class_exists( 'Newspack_Popups' ) ] );
+		wp_localize_script(
+			'newspack-content-gate',
+			'newspack_content_gate',
+			[
+				'has_campaigns' => class_exists( 'Newspack_Popups' ),
+				// Preview is only offered for Access Control gate layouts while Access
+				// Control owns the front-end (parity: no Woo Memberships bypass). The
+				// Memberships gate layout CPT and WCM-active sites get no preview data.
+				'preview'       => (
+					Content_Gate::GATE_LAYOUT_CPT === $post_type
+					&& Content_Gate::is_newspack_feature_enabled()
+					&& ! Memberships::is_active()
+				) ? Content_Gate\Gate_Preview::get_editor_preview_data() : null,
+			]
+		);
 		wp_enqueue_style( 'newspack-content-gate', Newspack::plugin_url() . '/dist/content-gate-editor.css', [], $asset['version'] );
 	}
 
@@ -203,7 +217,15 @@ trait Content_Gate_Layout {
 		// Build gate content.
 		$gate_content = '<div style=\'content:"";clear:both;display:table;\'></div>';
 		if ( $gate_layout_post ) {
-			$gate_content        .= \get_the_content( null, false, $gate_layout_post );
+			/**
+			 * Filters the raw layout content before it is wrapped and run through
+			 * the gate content pipeline. Lets the gate preview substitute autosaved
+			 * content for the previewed layout.
+			 *
+			 * @param string $content        The layout post content.
+			 * @param int    $gate_layout_id The gate layout ID.
+			 */
+			$gate_content        .= \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, false, $gate_layout_post ), $gate_layout_id );
 			$visible_paragraphs   = self::get_visible_paragraphs( $gate_layout_id );
 			$inline_fade          = \get_post_meta( $gate_layout_id, 'inline_fade', true );
 		} else {
@@ -230,19 +252,20 @@ trait Content_Gate_Layout {
 	}
 
 	/**
-	 * Get the restricted post excerpt based on gate settings.
+	 * The layout settings that decide how much of a post is free.
 	 *
-	 * @param \WP_Post $post         The post object to get excerpt from.
-	 * @param int      $gate_layout_id The gate layout ID.
+	 * Resolved in one place because a caller that caches a teaser has to key on
+	 * exactly what shaped it: these three settings live on the layout post's meta,
+	 * and editing them leaves the article's own modified time untouched.
+	 * {@see Content_Gate::get_teaser_outside_article()} is that caller.
 	 *
-	 * @return string The restricted post excerpt HTML.
+	 * @param int $gate_layout_id The gate layout ID.
+	 *
+	 * @return array{style: string, use_more_tag: mixed, count: int}
 	 */
-	public static function get_restricted_post_excerpt_for_gate( $post, $gate_layout_id ) {
-		$content          = $post->post_content;
-		$gate_layout_post = \get_post( $gate_layout_id );
-
-		// Get settings from layout post, or use defaults if post doesn't exist.
-		if ( $gate_layout_post ) {
+	public static function get_teaser_layout_settings( $gate_layout_id ) {
+		// Settings from the layout post, or the defaults when it does not exist.
+		if ( \get_post( $gate_layout_id ) ) {
 			$style        = \get_post_meta( $gate_layout_id, 'style', true );
 			$use_more_tag = \get_post_meta( $gate_layout_id, 'use_more_tag', true );
 			$count        = self::get_visible_paragraphs( $gate_layout_id );
@@ -257,8 +280,36 @@ trait Content_Gate_Layout {
 			$style = self::get_layout_meta_default( 'style' );
 		}
 
-		// Use <!--more--> as threshold if it exists.
-		if ( $use_more_tag && strpos( $content, '<!--more-->' ) ) {
+		return [
+			'style'        => $style,
+			'use_more_tag' => $use_more_tag,
+			'count'        => (int) $count,
+		];
+	}
+
+	/**
+	 * Get the restricted post excerpt based on gate settings.
+	 *
+	 * @param \WP_Post $post         The post object to get excerpt from.
+	 * @param int      $gate_layout_id The gate layout ID.
+	 *
+	 * @return string Rendered excerpt HTML. Already through the `newspack_gate_content`
+	 *                pipeline: callers must not apply that filter again, or blocks get
+	 *                re-rendered and shortcodes re-expanded over the rendered output.
+	 */
+	public static function get_restricted_post_excerpt_for_gate( $post, $gate_layout_id ) {
+		$content = $post->post_content;
+
+		[
+			'style'        => $style,
+			'use_more_tag' => $use_more_tag,
+			'count'        => $count,
+		] = self::get_teaser_layout_settings( $gate_layout_id );
+
+		// Use <!--more--> as threshold if it exists. Compared against false rather
+		// than tested for truth: a post that opens with the tag puts it at offset 0,
+		// and "0" is what an author means by "no free preview".
+		if ( $use_more_tag && false !== strpos( $content, '<!--more-->' ) ) {
 			$content = apply_filters( 'newspack_gate_content', explode( '<!--more-->', $content )[0] );
 		} else {
 			if ( 0 === $count ) {
@@ -282,9 +333,13 @@ trait Content_Gate_Layout {
 
 	/**
 	 * Get the inline gate content.
+	 *
+	 * @param int|null $post_id Post ID to resolve the gate layout for. Pass
+	 *                          explicitly outside a singular main-query view
+	 *                          (e.g. a REST callback); see get_inline_gate_html().
 	 */
-	public static function get_inline_gate_content() {
-		return self::get_inline_gate_content_for_post( self::get_gate_layout_id() );
+	public static function get_inline_gate_content( $post_id = null ) {
+		return self::get_inline_gate_content_for_post( self::get_gate_layout_id( $post_id ) );
 	}
 
 	/**
@@ -309,10 +364,19 @@ trait Content_Gate_Layout {
 	/**
 	 * Get the inline gate HTML for rendering.
 	 *
+	 * Resolving the gate layout without an explicit post ID depends on
+	 * is_singular() and the queried object, which is only reliable inside a
+	 * singular main-query view. Every existing caller runs there and keeps
+	 * relying on that default; a caller outside that view (e.g. a REST
+	 * callback) must pass $post_id explicitly, or get_gate_layout_id() falls
+	 * through to false and get_post( false ) resolves to whatever the global
+	 * $post happens to be instead of "no gate layout".
+	 *
+	 * @param int|null $post_id Post ID to resolve the gate layout for.
 	 * @return string
 	 */
-	public static function get_inline_gate_html() {
-		return self::annotate_gate_ctas( apply_filters( 'newspack_gate_content', self::get_inline_gate_content() ) );
+	public static function get_inline_gate_html( $post_id = null ) {
+		return self::annotate_gate_ctas( apply_filters( 'newspack_gate_content', self::get_inline_gate_content( $post_id ) ) );
 	}
 
 	/**
@@ -323,7 +387,9 @@ trait Content_Gate_Layout {
 	public static function render_overlay_gate_html( $gate_post_id ) {
 		$position = \get_post_meta( $gate_post_id, 'overlay_position', true );
 		$size     = \get_post_meta( $gate_post_id, 'overlay_size', true );
-		$content  = self::annotate_gate_ctas( \apply_filters( 'newspack_gate_content', \get_the_content( null, null, $gate_post_id ) ) );
+		// $gate_post_id is the layout ID here despite the name; the preview seam keys off it.
+		/** This filter is documented in includes/content-gate/trait-content-gate-layout.php */
+		$content = self::annotate_gate_ctas( \apply_filters( 'newspack_gate_content', \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, null, $gate_post_id ), $gate_post_id ) ) );
 		?>
 		<div class="newspack-content-gate__gate newspack-content-gate__overlay-gate" style="display:none;" data-position="<?php echo \esc_attr( $position ); ?>" data-size="<?php echo \esc_attr( $size ); ?>">
 			<div class="newspack-content-gate__overlay-gate__container">

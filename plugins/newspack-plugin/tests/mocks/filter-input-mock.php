@@ -9,7 +9,7 @@ namespace Newspack;
 
 if ( ! function_exists( __NAMESPACE__ . '\\filter_input' ) ) {
 	/**
-	 * Provides access to $_GET during PHPUnit runs where filter_input() is not populated.
+	 * Provides access to $_GET / $_POST during PHPUnit runs where filter_input() is not populated.
 	 *
 	 * @param int       $type          One of INPUT_* constants.
 	 * @param string    $variable_name Variable name.
@@ -18,13 +18,14 @@ if ( ! function_exists( __NAMESPACE__ . '\\filter_input' ) ) {
 	 * @return mixed Sanitized value or null.
 	 */
 	function filter_input( $type, $variable_name, $filter = FILTER_DEFAULT, $options = 0 ) {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		if ( INPUT_GET === $type && array_key_exists( $variable_name, $_GET ) ) {
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			$value = $_GET[ $variable_name ];
-
-			return \filter_var( $value, $filter, $options );
+			return \filter_var( $_GET[ $variable_name ], $filter, $options );
 		}
+		if ( INPUT_POST === $type && array_key_exists( $variable_name, $_POST ) ) {
+			return \filter_var( $_POST[ $variable_name ], $filter, $options );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 		return \filter_input( $type, $variable_name, $filter, $options );
 	}

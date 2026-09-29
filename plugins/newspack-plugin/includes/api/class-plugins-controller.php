@@ -366,6 +366,7 @@ class Plugins_Controller extends WP_REST_Controller {
 		$banner_button_text   = (string) $request->get_param( 'bannerButtonText' );
 
 		update_option( NEWSPACK_HANDOFF, 'url' );
+		update_option( NEWSPACK_HANDOFF_DESTINATION_URL, $destination_url );
 		update_option( NEWSPACK_HANDOFF_SHOW_ON_BLOCK_EDITOR, (bool) $show_on_block_editor );
 		update_option( NEWSPACK_HANDOFF_BANNER_TEXT, $banner_text );
 		update_option( NEWSPACK_HANDOFF_BANNER_BUTTON_TEXT, $banner_button_text );

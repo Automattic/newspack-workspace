@@ -9,9 +9,14 @@
 		display: none;
 	}
 	&.enabled {
-		.show_if_newspack_group_subscription_enabled {
+		// :not([hidden]) so the `hidden` attribute — which is what actually gates the add-member
+		// form at capacity, server-side and from the JS — isn't overridden by this reveal rule.
+		.show_if_newspack_group_subscription_enabled:not([hidden]) {
 			display: block;
 		}
+	}
+	.newspack-group-subscription__limit-notice .notice {
+		margin: 0 0 16px;
 	}
 	h3 {
 		font-size: 14px;
@@ -32,6 +37,11 @@
 		.newspack-group-subscription__add-member {
 			flex: 1;
 			min-width: 250px;
+		}
+		// The notice spans the metabox rather than being wedged in as a narrow column
+		// beside its flex siblings.
+		.newspack-group-subscription__limit-notice {
+			flex: 0 0 100%;
 		}
 	}
 	.newspack-group-subscription__members-list {

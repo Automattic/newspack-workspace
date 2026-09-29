@@ -22,6 +22,9 @@ phpcs.xml
 .phpcs.xml.dist
 phpcs.xml.dist
 README.md
+AGENTS.md
+CLAUDE.md
+.claude
 PULL_REQUEST_TEMPLATE.md
 webpack.config.js
 _.sql

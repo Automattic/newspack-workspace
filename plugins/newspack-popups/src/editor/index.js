@@ -151,6 +151,32 @@ registerPlugin( 'newspack-popups-editor', {
 	icon: null,
 } );
 
+// Show a CLS warning above the editor while an above-header placement is selected.
+registerPlugin( 'newspack-popups-above-header-notice', {
+	render: function AboveHeaderNotice() {
+		const { createNotice, removeNotice } = useDispatch( 'core/notices' );
+		const placement = useSelect( select => select( 'core/editor' ).getEditedPostAttribute( 'meta' )?.placement );
+		useEffect( () => {
+			const noticeId = 'newspack-popups__above-header-cls';
+			if ( 'above_header' === placement ) {
+				createNotice(
+					'warning',
+					__(
+						'Above-header prompts appear at the very top of the page and push the rest of the content down as they load, which can lower your Cumulative Layout Shift (CLS) score. To reduce the impact, keep the prompt short, or use an overlay placement instead.',
+						'newspack-popups'
+					),
+					{ id: noticeId, isDismissible: false }
+				);
+			}
+			// The cleanup removes the notice on unmount and before every placement
+			// change, so a non-above-header placement leaves no notice behind.
+			return () => removeNotice( noticeId );
+		}, [ placement ] );
+		return null;
+	},
+	icon: null,
+} );
+
 // Hide Newspack's Homepage Posts block deduplication toggle when the popup is an overlay.
 registerPlugin( 'newspack-popups-disable-newspack-blocks-deduplication', {
 	render: function HideDeduplicationToggle() {

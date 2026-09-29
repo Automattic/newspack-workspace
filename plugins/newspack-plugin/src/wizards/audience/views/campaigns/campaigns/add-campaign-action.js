@@ -8,11 +8,12 @@
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { ENTER } from '@wordpress/keycodes';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, Modal, TextControl } from '../../../../../../packages/components/src';
+import { Button, Modal, TextControl } from '../../../../../../packages/components/src';
 
 const AddCampaignAction = ( { createCampaignGroup } ) => {
 	const [ modalVisible, setModalVisible ] = useState( false );
@@ -57,14 +58,14 @@ const AddCampaignAction = ( { createCampaignGroup } ) => {
 							}
 						} }
 					/>
-					<Card buttonsCard noBorder className="justify-end">
+					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 						<Button variant="secondary" onClick={ () => setModalVisible( false ) }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
 						<Button variant="primary" disabled={ ! campaignName } onClick={ submit }>
 							{ __( 'Add', 'newspack-plugin' ) }
 						</Button>
-					</Card>
+					</HStack>
 				</Modal>
 			) }
 		</>

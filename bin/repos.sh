@@ -75,10 +75,11 @@ get_standalone_repo_host_path() {
 # Prints nothing; returns 0 when standalone, 1 otherwise. Needs $NABSPATH.
 #
 # Both toplevels are taken from git (physical, symlink-resolved paths) so the
-# comparison holds even when $NABSPATH reaches the workspace through a symlink
-# (bin/_common.sh derives it with a plain `pwd`, which keeps symlinks). A raw
-# string compare against $NABSPATH would misclassify an unzipped plugin as
-# standalone in that case.
+# comparison holds even when $NABSPATH reaches the workspace through a symlink,
+# which it can: bin/_common.sh derives it with a plain `pwd`, which keeps
+# symlinks, unless the caller set it first (`n` resolves them with `pwd -P`).
+# Against a symlinked $NABSPATH a raw string compare would misclassify an
+# unzipped plugin as standalone.
 is_standalone_git_repo() {
 	local host_path="$1"
 	local dir="$NABSPATH/$host_path"

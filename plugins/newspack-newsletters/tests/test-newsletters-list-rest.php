@@ -5,6 +5,8 @@
  * @package Newspack_Newsletters
  */
 
+// phpcs:disable WordPressVIPMinimum.Performance.NoPaging -- Unbounded queries are acceptable in tests.
+
 use Newspack\Newsletters\Admin\Newsletters_List_REST;
 
 /**
@@ -312,6 +314,88 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The author and term fields are registered too. They exist so the
+	 * list never has to ask for `_links`, which is what makes core build
+	 * a link set and compute target hints for every row.
+	 */
+	public function test_author_and_term_fields_are_registered_on_newsletters_cpt() {
+		do_action( 'rest_api_init' );
+
+		global $wp_rest_additional_fields;
+
+		$cpt    = Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT;
+		$fields = isset( $wp_rest_additional_fields[ $cpt ] ) ? $wp_rest_additional_fields[ $cpt ] : [];
+
+		foreach ( [ 'newspack_newsletters_author', 'newspack_newsletters_terms' ] as $field ) {
+			$this->assertArrayHasKey( $field, $fields );
+			$this->assertIsCallable( $fields[ $field ]['get_callback'] );
+		}
+	}
+
+	/**
+	 * The author field carries everything the Author column renders —
+	 * the display name and an avatar URL — so the column no longer needs
+	 * `_embed=author`.
+	 */
+	public function test_author_field_returns_display_name_and_avatar() {
+		$user_id = self::factory()->user->create(
+			[
+				'role'         => 'editor',
+				'display_name' => 'Ada Lovelace',
+			]
+		);
+		$post_id = $this->make_newsletter( [ 'post_author' => $user_id ] );
+
+		$author = Newsletters_List_REST::get_author_payload( $post_id );
+
+		$this->assertSame( $user_id, $author['id'] );
+		$this->assertSame( 'Ada Lovelace', $author['name'] );
+		$this->assertArrayHasKey( 24, $author['avatar_urls'] );
+		$this->assertArrayHasKey( 48, $author['avatar_urls'] );
+	}
+
+	/**
+	 * A post whose author no longer exists renders a blank cell rather
+	 * than tripping on a missing user.
+	 */
+	public function test_author_field_is_null_when_the_user_is_gone() {
+		$post_id = $this->make_newsletter( [ 'post_author' => 999999 ] );
+
+		$this->assertNull( Newsletters_List_REST::get_author_payload( $post_id ) );
+		$this->assertNull( Newsletters_List_REST::get_author_payload( 0 ) );
+	}
+
+	/**
+	 * The terms field returns `{ id, name }` per taxonomy: the columns
+	 * render the names, Quick Edit seeds its pickers from the IDs.
+	 */
+	public function test_terms_field_returns_names_per_taxonomy() {
+		$post_id = $this->make_newsletter();
+		// Hierarchical taxonomies take IDs — passing names casts them to 0.
+		$category_ids = [
+			self::factory()->category->create( [ 'name' => 'Weekly' ] ),
+			self::factory()->category->create( [ 'name' => 'Culture' ] ),
+		];
+		wp_set_post_terms( $post_id, $category_ids, 'category' );
+		wp_set_post_terms( $post_id, [ 'digest' ], 'post_tag' );
+
+		$terms = Newsletters_List_REST::get_terms_payload( $post_id, Newsletters_List_REST::LIST_TAXONOMIES );
+
+		$this->assertEqualSets( [ 'Weekly', 'Culture' ], wp_list_pluck( $terms['category'], 'name' ) );
+		$this->assertEqualSets( $category_ids, wp_list_pluck( $terms['category'], 'id' ) );
+		$this->assertSame( [ 'digest' ], wp_list_pluck( $terms['post_tag'], 'name' ) );
+
+		$empty = Newsletters_List_REST::get_terms_payload( $this->make_newsletter(), Newsletters_List_REST::LIST_TAXONOMIES );
+		$this->assertSame(
+			[
+				'category' => [],
+				'post_tag' => [],
+			],
+			$empty
+		);
+	}
+
+	/**
 	 * Helper: build a REST request with the given query params.
 	 *
 	 * @param array $params Query params keyed by name.
@@ -449,7 +533,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 			[ 'status' => 'publish' ],
 			[ 'status' => 'publish,private' ],
 			[ 'status' => [ 'publish', 'private' ] ],
-			[ 'status' => 'draft,pending,auto-draft' ],
+			[ 'status' => 'draft,pending' ],
 			[ 'status' => 'trash' ],
 		];
 
@@ -516,25 +600,25 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 
 	/**
 	 * Draft selection widens `post_status` to include publish/private so
-	 * scheduling_error fallthrough rows are reachable. Other selections
-	 * don't need widening.
+	 * scheduling_error fallthrough rows are reachable. The selection always
+	 * drives `post_status`, so nothing the controller wrote survives it.
 	 */
 	public function test_align_status_filter_widens_post_status_when_draft_selected() {
 		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
 			[],
-			$this->rest_request( [ 'status' => [ 'draft', 'pending', 'auto-draft' ] ] )
+			$this->rest_request( [ 'status' => [ 'draft', 'pending' ] ] )
 		);
 
 		$this->assertContains( 'publish', $args['post_status'] );
 		$this->assertContains( 'private', $args['post_status'] );
 		$this->assertContains( 'draft', $args['post_status'] );
 
-		// Sent-only doesn't need widening.
+		// Sent-only needs no widening, and still replaces the incoming value.
 		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
-			[ 'post_status' => 'preserved' ],
+			[ 'post_status' => [ 'publish', 'private', 'auto-draft' ] ],
 			$this->rest_request( [ 'status' => [ 'publish', 'private' ] ] )
 		);
-		$this->assertSame( 'preserved', $args['post_status'] );
+		$this->assertSame( [ 'publish', 'private' ], $args['post_status'] );
 	}
 
 	/**
@@ -610,10 +694,16 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 				'post_date'   => '2026-04-20 10:00:00',
 			]
 		);
+		$abandoned = $this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
 
 		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
 			[],
-			$this->rest_request( [ 'status' => [ 'draft', 'pending', 'auto-draft' ] ] )
+			$this->rest_request( [ 'status' => [ 'draft', 'pending' ] ] )
 		);
 
 		// `align_status_filter_with_scheduled_meta` widens `post_status`
@@ -626,6 +716,109 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 		$this->assertContains( $errored_draft, $query->posts, 'draft with scheduling_error surfaces' );
 		$this->assertContains( $errored_publish, $query->posts, 'publish row with scheduling_error surfaces — renders as Draft' );
 		$this->assertNotContains( $plain_publish, $query->posts, 'plain publish stays out — it renders as Sent, not Draft' );
+		$this->assertNotContains( $abandoned, $query->posts, 'auto-draft stays out — the Draft filter must not widen it back in' );
+	}
+
+	/**
+	 * The widening must not add `auto-draft` back to the default set.
+	 */
+	public function test_default_status_set_excludes_auto_draft() {
+		$plain_draft = $this->make_newsletter( [ 'post_status' => 'draft' ] );
+		$abandoned   = $this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$defaults = [ 'publish', 'private', 'future', 'draft', 'pending' ];
+		// Seed `post_status` the way the posts controller does, so the widening
+		// either leaves it or overwrites it, and the query runs on the result.
+		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => $defaults ],
+			$this->rest_request( [ 'status' => $defaults ] )
+		);
+
+		$this->assertNotContains( 'auto-draft', (array) $args['post_status'] );
+
+		$query = $this->run_newsletter_query( $args );
+		$this->assertContains( $plain_draft, $query->posts, 'saved draft still surfaces' );
+		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
+	}
+
+	/**
+	 * A request for `auto-draft` and nothing else matches nothing. It must
+	 * neither answer with a different status nor fall through to an
+	 * unfiltered `post_status = auto-draft` query.
+	 */
+	public function test_auto_draft_only_status_request_matches_nothing() {
+		$this->make_newsletter( [ 'post_status' => 'draft' ] );
+		$this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => [ 'auto-draft' ] ],
+			$this->rest_request( [ 'status' => [ 'auto-draft' ] ] )
+		);
+
+		$query = $this->run_newsletter_query( $args );
+		$this->assertSame( [], $query->posts );
+	}
+
+	/**
+	 * `auto-draft` alongside a real status is dropped rather than answered,
+	 * leaving the remaining selection to bucket as it normally would.
+	 */
+	public function test_auto_draft_is_dropped_from_a_mixed_status_request() {
+		$plain_draft = $this->make_newsletter( [ 'post_status' => 'draft' ] );
+		$abandoned   = $this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => [ 'auto-draft', 'draft' ] ],
+			$this->rest_request( [ 'status' => [ 'auto-draft', 'draft' ] ] )
+		);
+
+		$this->assertNotContains( 'auto-draft', (array) $args['post_status'] );
+
+		$query = $this->run_newsletter_query( $args );
+		$this->assertContains( $plain_draft, $query->posts, 'the Draft half of the selection still answers' );
+		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
+	}
+
+	/**
+	 * The pre-deploy default set, which a browser holding the previous
+	 * bundle still sends, carried `auto-draft`. The widening must strip it
+	 * from `post_status` even though it adds nothing else to the set.
+	 */
+	public function test_legacy_default_status_set_drops_auto_draft() {
+		$plain_draft = $this->make_newsletter( [ 'post_status' => 'draft' ] );
+		$abandoned   = $this->make_newsletter(
+			[
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Auto Draft',
+			]
+		);
+
+		$legacy = [ 'publish', 'private', 'future', 'draft', 'pending', 'auto-draft' ];
+		$args   = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
+			[ 'post_status' => $legacy ],
+			$this->rest_request( [ 'status' => $legacy ] )
+		);
+
+		$this->assertNotContains( 'auto-draft', (array) $args['post_status'] );
+
+		$query = $this->run_newsletter_query( $args );
+		$this->assertContains( $plain_draft, $query->posts, 'saved draft still surfaces' );
+		$this->assertNotContains( $abandoned, $query->posts, 'abandoned "Add new" never reaches the list' );
 	}
 
 	/**
@@ -663,11 +856,11 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 
 		$args = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
 			[],
-			$this->rest_request( [ 'status' => [ 'publish', 'private', 'draft', 'pending', 'auto-draft' ] ] )
+			$this->rest_request( [ 'status' => [ 'publish', 'private', 'draft', 'pending' ] ] )
 		);
 
 		$query = $this->run_newsletter_query(
-			array_merge( $args, [ 'post_status' => [ 'publish', 'private', 'draft', 'pending', 'auto-draft' ] ] )
+			array_merge( $args, [ 'post_status' => [ 'publish', 'private', 'draft', 'pending' ] ] )
 		);
 
 		$this->assertContains( $plain_publish, $query->posts, 'plain published row surfaces' );
@@ -723,7 +916,7 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 		// Scheduled+Draft: errored_publish renders as Draft → in.
 		$args  = Newsletters_List_REST::align_status_filter_with_scheduled_meta(
 			[],
-			$this->rest_request( [ 'status' => [ 'future', 'draft', 'pending', 'auto-draft' ] ] )
+			$this->rest_request( [ 'status' => [ 'future', 'draft', 'pending' ] ] )
 		);
 		$query = $this->run_newsletter_query( $args );
 		$this->assertContains( $future_post, $query->posts, 'Scheduled+Draft: future post surfaces' );
@@ -1383,5 +1576,157 @@ class Newsletters_List_REST_Test extends WP_UnitTestCase {
 		$this->assertContains( $their_cat, array_column( $options['categories'], 'id' ) );
 		$this->assertContains( 'mine-list', array_column( $options['send_lists'], 'id' ) );
 		$this->assertContains( 'their-list', array_column( $options['send_lists'], 'id' ) );
+	}
+
+	/**
+	 * Helper: dispatch a collection request through the REST server.
+	 *
+	 * @param array $params Query params keyed by name.
+	 * @return array First item of the response body.
+	 */
+	private function dispatch_collection( $params = [] ) {
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		$response = rest_do_request( $this->rest_request( $params ) );
+		$this->assertSame( 200, $response->get_status(), 'Collection request failed: ' . wp_json_encode( $response->get_data() ) );
+		$data = $response->get_data();
+
+		return isset( $data[0] ) ? $data[0] : [];
+	}
+
+	/**
+	 * The fields have to survive an actual dispatch, not just be
+	 * registered: the list reads them off the response body.
+	 */
+	public function test_the_new_fields_reach_the_response_body() {
+		$user_id = self::factory()->user->create(
+			[
+				'role'         => 'editor',
+				'display_name' => 'Ada Lovelace',
+			]
+		);
+		wp_set_current_user( $user_id );
+
+		$post_id  = $this->make_newsletter( [ 'post_author' => $user_id ] );
+		$category = self::factory()->category->create( [ 'name' => 'Weekly' ] );
+		wp_set_post_terms( $post_id, [ $category ], 'category' );
+
+		$item = $this->dispatch_collection(
+			[
+				'context' => 'edit',
+				'status'  => 'draft',
+			]
+		);
+
+		$this->assertSame( 'Ada Lovelace', $item['newspack_newsletters_author']['name'] );
+		$this->assertSame(
+			[
+				[
+					'id'   => $category,
+					'name' => 'Weekly',
+				],
+			],
+			$item['newspack_newsletters_terms']['category']
+		);
+		$this->assertSame( [], $item['newspack_newsletters_terms']['post_tag'] );
+	}
+
+	/**
+	 * The newsletters CPT is public, so an anonymous caller can read the
+	 * collection. Only the list screens need these fields, and they all
+	 * ask for `edit`.
+	 */
+	public function test_the_new_fields_are_absent_from_an_anonymous_read() {
+		$this->make_newsletter(
+			[
+				'post_status' => 'publish',
+				'meta_input'  => [ 'is_public' => 1 ],
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$item = $this->dispatch_collection();
+
+		$this->assertNotEmpty( $item );
+		$this->assertArrayNotHasKey( 'newspack_newsletters_author', $item );
+		$this->assertArrayNotHasKey( 'newspack_newsletters_terms', $item );
+	}
+
+	/**
+	 * `_fields` selection has to keep working, since that is what keeps
+	 * `content.rendered` out of the list's responses.
+	 */
+	public function test_the_new_fields_can_be_selected_with_fields() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->make_newsletter();
+
+		$item = $this->dispatch_collection(
+			[
+				'context' => 'edit',
+				'status'  => 'draft',
+				'_fields' => 'id,newspack_newsletters_author',
+			]
+		);
+
+		$this->assertArrayHasKey( 'newspack_newsletters_author', $item );
+		$this->assertArrayNotHasKey( 'content', $item );
+		$this->assertArrayNotHasKey( 'newspack_newsletters_terms', $item );
+	}
+
+	/**
+	 * The point of the fields is that they read primed caches. If either
+	 * ever went to the database per row, the query count would climb with
+	 * the number of rows.
+	 */
+	public function test_the_new_fields_do_not_query_per_row() {
+		$user_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $user_id );
+
+		$category = self::factory()->category->create( [ 'name' => 'Weekly' ] );
+		for ( $i = 0; $i < 20; $i++ ) {
+			$post_id = $this->make_newsletter( [ 'post_author' => $user_id ] );
+			wp_set_post_terms( $post_id, [ $category ], 'category' );
+			wp_set_post_terms( $post_id, [ 'digest' ], 'post_tag' );
+		}
+
+		$base = 'id,status,title,date';
+
+		$without = $this->count_queries_for_fields( $base );
+		$with    = $this->count_queries_for_fields( $base . ',newspack_newsletters_author,newspack_newsletters_terms' );
+
+		// Both fields read caches `WP_Query` primes for the page, so the
+		// cost is flat. Per-row lookups across 20 rows and two taxonomies
+		// would add dozens, not a handful.
+		$this->assertLessThanOrEqual(
+			$without + 4,
+			$with,
+			"Adding the fields took the query count from {$without} to {$with} over 20 rows."
+		);
+	}
+
+	/**
+	 * Helper: queries run by one collection dispatch for a `_fields` set.
+	 *
+	 * @param string $fields Comma-joined `_fields` value.
+	 * @return int Query count.
+	 */
+	private function count_queries_for_fields( $fields ) {
+		global $wpdb;
+
+		wp_cache_flush();
+		$before = $wpdb->num_queries;
+
+		$this->dispatch_collection(
+			[
+				'context'  => 'edit',
+				'status'   => 'draft',
+				'per_page' => 100,
+				'_fields'  => $fields,
+			]
+		);
+
+		return $wpdb->num_queries - $before;
 	}
 }

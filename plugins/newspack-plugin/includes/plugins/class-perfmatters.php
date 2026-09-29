@@ -86,20 +86,79 @@ class Perfmatters {
 	}
 
 	/**
+	 * Scripts on the reveal path of above-header prompts.
+	 *
+	 * These are excluded from JS delay when published above-header prompts exist so the
+	 * prompts show immediately: the Campaigns view script (newspack-popups) removes the
+	 * prompt's `hidden` class, and the reader data library (window.newspack /
+	 * newspack-plugin) drives that reveal when segments are configured.
+	 *
+	 * @return string[] Script identifiers.
+	 */
+	private static function above_header_reveal_scripts() {
+		return [ 'newspack-popups', 'window.newspack', 'newspack-plugin' ];
+	}
+
+	/**
+	 * Reveal-path scripts to exclude from JS deferral when above-header prompts exist.
+	 *
+	 * Derived from above_header_reveal_scripts() minus `window.newspack`: that token
+	 * matches an inline script, and Perfmatters' deferral only applies to external
+	 * `<script src>` files, so it is meaningless as a defer exclusion. Kept derived from
+	 * the reveal-script set so the delay and defer lists cannot silently drift.
+	 *
+	 * @return string[] Script identifiers.
+	 */
+	private static function above_header_defer_exclusions() {
+		return array_values( array_diff( self::above_header_reveal_scripts(), [ 'window.newspack' ] ) );
+	}
+
+	/**
+	 * Whether above-header prompts should be revealed immediately (excluded from JS
+	 * delay/deferral). True when the Campaigns plugin reports at least one published
+	 * above-header prompt.
+	 *
+	 * @return bool
+	 */
+	private static function has_immediate_above_header_prompts() {
+		return method_exists( 'Newspack_Popups_Model', 'has_published_above_header_prompts' )
+			&& \Newspack_Popups_Model::has_published_above_header_prompts();
+	}
+
+	/**
 	 * Stylesheets to exclude from the "Unused CSS" feature.
+	 *
+	 * Perfmatters substring-matches each entry against the whole `<link>` tag. An
+	 * entry that stops matching fails silently: the stylesheet is withheld until the
+	 * reader's first interaction, and wherever its rules are not already inlined in
+	 * the generated used-CSS, that part of the page renders unstyled — with no error
+	 * and no log line.
+	 *
+	 * Prefer a component's stable identifier over a path, because both halves of a
+	 * path move. Jetpack relocated its social logos into `_inc/build/` in 15.7 and
+	 * the entry went dead across the fleet for months (NPPM-3167); Jetpack's Asset
+	 * CDN serves the same files from a path with no `plugins/jetpack/` segment, so a
+	 * prefixed entry stops matching wherever those assets are CDN-hosted
+	 * (Automattic/newspack-plugin#3810). The identifier survives both, since the
+	 * tag's handle carries it as well as the URL.
+	 *
+	 * @return string[] Stylesheet identifiers.
 	 */
 	private static function unused_css_excluded_stylesheets() {
 		return [
+			'plugins/newspack-ads', // Newspack Ads; the sticky footer ad never renders if this loads late.
 			'plugins/newspack-blocks', // Newspack Blocks.
 			'plugins/newspack-newsletters', // Newspack Newsletters.
 			'plugins/newspack-plugin', // Newspack main plugin.
 			'plugins/newspack-popups', // Newspack Campaigns.
 			'modules/sharedaddy', // Jetpack's share buttons.
-			'_inc/social-logos', // Jetpack's social logos CSS.
-			'plugins/jetpack/css/jetpack.css', // Jetpack's main CSS.
-			'plugins/jetpack/_inc/blocks/swiper.css', // Jetpack's Swiper CSS.
+			'social-logos', // Jetpack's social logos CSS.
+			'plugins/jetpack/css/jetpack.css', // Jetpack's main CSS; Jetpack no longer ships this file (NPPM-3407).
+			'plugins/jetpack/_inc/blocks/swiper.css', // Jetpack's Swiper CSS; path-based, so it misses the CDN-hosted copy (NPPM-3407).
 			'plugins/the-events-calendar', // The Events Calendar.
 			'plugins/events-calendar-pro', // The Events Calendar Pro.
+			'plugins/complianz-gdpr', // Complianz plugin CSS; substring also matches the premium plugin dir (NPPM-3052).
+			'uploads/complianz', // Complianz generated cookie-banner CSS (NPPM-3052).
 			'/themes/newspack-', // Any Newspack theme stylesheet.
 			'cache/perfmatters', // Perfmatters' cache.
 			'wp-includes',
@@ -151,15 +210,24 @@ class Perfmatters {
 		// https://perfmatters.io/docs/disable-woocommerce-cart-fragments-ajax/
 		$options['disable_woocommerce_cart_fragmentation'] = true;
 
+		// Resolve once per filter pass – this is read on essentially every front-end
+		// request, and both the defer and delay blocks below need it (NPPM-2934).
+		$reveal_above_header = self::has_immediate_above_header_prompts();
+
 		// JS deferral.
 		if ( ! isset( $options['assets'] ) ) {
 			$options['assets'] = [];
 		}
-		$defer_js_exclusions           = [
+		$defer_js_exclusions = [
 			'wp-includes',
 			'jwplayer.com', // This platform won't work if the JS is deferred.
 			'adsrvr.org', // This platform won't work if the JS is deferred.
 		];
+		// When the site has published above-header prompts, exclude the prompt reveal
+		// scripts from deferral too, so they execute as early as possible (NPPM-2934).
+		if ( $reveal_above_header ) {
+			$defer_js_exclusions = array_merge( $defer_js_exclusions, self::above_header_defer_exclusions() );
+		}
 		$options['assets']['defer_js'] = true;
 		if ( isset( $options['assets']['js_exclusions'] ) && is_array( $options['assets']['js_exclusions'] ) ) {
 			$options['assets']['js_exclusions'] = array_unique(
@@ -175,16 +243,20 @@ class Perfmatters {
 
 		// JS delay.
 		$options['assets']['delay_js'] = true;
+		$delay_js_inclusions           = self::scripts_to_delay();
 		if ( isset( $options['assets']['delay_js_inclusions'] ) && is_array( $options['assets']['delay_js_inclusions'] ) ) {
-			$options['assets']['delay_js_inclusions'] = array_unique(
-				array_merge(
-					$options['assets']['delay_js_inclusions'],
-					self::scripts_to_delay()
-				)
-			);
-		} else {
-			$options['assets']['delay_js_inclusions'] = self::scripts_to_delay();
+			$delay_js_inclusions = array_merge( $options['assets']['delay_js_inclusions'], $delay_js_inclusions );
 		}
+		// When the site has published above-header prompts, keep the scripts that reveal them
+		// out of the delay queue so the prompts appear immediately instead of after the first
+		// interaction. The subtraction runs on the merged list, not just on Newspack's own
+		// contribution: Perfmatters persists its delay list whenever its settings are saved
+		// through the UI, so on a configured site the stored list already contains the reveal
+		// scripts and merging alone would put them straight back (NPPM-2934).
+		if ( $reveal_above_header ) {
+			$delay_js_inclusions = array_diff( $delay_js_inclusions, self::above_header_reveal_scripts() );
+		}
+		$options['assets']['delay_js_inclusions'] = array_values( array_unique( $delay_js_inclusions ) );
 		$options['assets']['delay_timeout'] = true;
 		$options['assets']['fastclick']     = true;
 
@@ -379,6 +451,16 @@ class Perfmatters {
 	public static function should_delay_js( $delay_js ) {
 		// Don't delay JS on lite site requests.
 		if ( Lite_Site::is_lite_site_request() ) {
+			return false;
+		}
+		// The IP-access landing page auto-redirects with no user interaction, so
+		// delayed analytics would never execute and the visit would go unrecorded.
+		// Like the lite-site veto above, this holds even under
+		// NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS: it is a functional requirement of
+		// the page, not a configuration default.
+		// No autoload: the class self-initializes on load, and it is only ever
+		// loaded deliberately, when content gates are enabled.
+		if ( class_exists( 'Newspack\Content_Gate\IP_Access_Rule', false ) && Content_Gate\IP_Access_Rule::is_landing_page_request() ) {
 			return false;
 		}
 		return $delay_js;

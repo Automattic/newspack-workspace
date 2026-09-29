@@ -1,0 +1,28 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+// Anatomy only. Hosts set their own density (see the table override in
+// `admin-shell/style.scss` and the picker's in `init-modal/style.scss`).
+.newspack-newsletters-user-row {
+	align-items: center;
+	display: inline-flex;
+	gap: wp-vars.$grid-unit-10;
+
+	&__icon {
+		fill: currentcolor;
+		flex-shrink: 0;
+	}
+
+	&__avatar {
+		align-items: center;
+		display: inline-flex;
+		flex-shrink: 0;
+		height: wp-vars.$grid-unit-30;
+		justify-content: center;
+		width: wp-vars.$grid-unit-30;
+
+		img {
+			border-radius: 50%;
+			display: block;
+		}
+	}
+}

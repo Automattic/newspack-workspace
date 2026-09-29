@@ -109,7 +109,10 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 				'lists'           => $lists,
 				'context'         => $context,
 			];
-			return true;
+			// Honors $next_return like its siblings, so tests can drive the
+			// provider-error branches (e.g. the 'not supported' answer a
+			// provider without list management returns).
+			return null === self::$next_return ? true : self::$next_return;
 		}
 
 		public static function get_fields( $list_id = null ) {
@@ -164,15 +167,52 @@ if ( ! class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 		 */
 		public static $contact_lists = [];
 
+		/**
+		 * Configurable per-email contact data returned by get_contact_data().
+		 * Keys are email addresses; values are the provider payload (or WP_Error).
+		 *
+		 * @var array
+		 */
+		public static $contact_data = [];
+
+		/**
+		 * Configurable lists config returned by get_lists(). Null keeps the
+		 * default single list; a WP_Error is returned as-is.
+		 *
+		 * @var array|\WP_Error|null
+		 */
+		public static $lists = null;
+
+		/**
+		 * Number of get_lists() calls since the last reset.
+		 *
+		 * @var int
+		 */
+		public static $get_lists_calls = 0;
+
 		public static function reset_calls() {
-			self::$contact_lists = [];
+			self::$contact_lists   = [];
+			self::$contact_data    = [];
+			self::$lists           = null;
+			self::$get_lists_calls = 0;
 		}
 
 		public static function get_contact_lists( $email ) {
 			return self::$contact_lists[ $email ] ?? [];
 		}
 
+		public static function get_contact_data( $email, $return_details = false ) {
+			if ( ! isset( self::$contact_data[ $email ] ) ) {
+				return new \WP_Error( 'newspack_newsletters_contact_not_found', 'Contact not found' );
+			}
+			return self::$contact_data[ $email ];
+		}
+
 		public static function get_lists() {
+			self::$get_lists_calls++;
+			if ( null !== self::$lists ) {
+				return self::$lists;
+			}
 			return [
 				[
 					'active' => true,
@@ -188,6 +228,15 @@ if ( ! class_exists( 'Newspack_Newsletters_Service_Provider' ) ) {
 	class Newspack_Newsletters_Service_Provider {
 		public $service = 'mailchimp';
 
+		/**
+		 * Emails passed to clear_contact_data(), in call order. Static because
+		 * Newspack_Newsletters::get_service_provider() returns a fresh instance
+		 * per call; reset directly in tests that assert on it.
+		 *
+		 * @var string[]
+		 */
+		public static $cleared_emails = [];
+
 		public static function get_lists() {
 			return [
 				[
@@ -196,6 +245,10 @@ if ( ! class_exists( 'Newspack_Newsletters_Service_Provider' ) ) {
 					'id'     => '123',
 				],
 			];
+		}
+
+		public function clear_contact_data( $email ) {
+			self::$cleared_emails[] = $email;
 		}
 	}
 }

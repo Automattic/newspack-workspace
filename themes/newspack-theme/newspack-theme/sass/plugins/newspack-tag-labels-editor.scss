@@ -16,9 +16,14 @@
 
 .block-editor {
 	article {
-		.tag-labels,
-		.tag-labels + .cat-links {
+		// Tag labels follow the category on the same line (category → tag), matching the
+		// front-end order.
+		.cat-links:not( .sponsor-label ):has( + .tag-labels ),
+		.tag-labels {
 			display: inline-flex;
+		}
+		.cat-links + .tag-labels {
+			margin-left: 0.5em;
 		}
 		.tag-label + .tag-label {
 			margin-left: 0.3em; // Don't collapse multiple labels.

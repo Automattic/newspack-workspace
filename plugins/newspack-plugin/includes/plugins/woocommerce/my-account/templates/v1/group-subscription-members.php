@@ -30,14 +30,18 @@ if ( ! empty( $managers_and_members ) ) {
 		$members_by_id[ $member_user->ID ] = $member_user;
 	}
 }
-$member_limit         = Group_Subscription_Settings::get_subscription_settings( $subscription )['limit'];
+// The seat limit, not the owner-inclusive configured limit: $members excludes the owner,
+// so this is the threshold the server actually gates additions and invites on.
+$member_limit         = Group_Subscription::get_member_seat_limit( $subscription );
 $all_invites          = Group_Subscription_Invite::get_invites( $subscription );
 $pending_invites      = Group_Subscription_Invite::get_invites( $subscription, false );
 $current_user_id      = get_current_user_id();
-$invite_link          = Group_Subscription_Invite::get_link_invite( $subscription, $current_user_id );
-$invite_link_url      = $invite_link ? Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $current_user_id, $invite_link['key'] ) : '';
+$invite_link          = Group_Subscription_Invite::get_link_invite( $subscription );
+$invite_link_url      = $invite_link ? Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $invite_link['key'] ) : '';
 $is_at_limit         = $member_limit > 0 && ( count( $members ) + count( $pending_invites ) ) >= $member_limit;
 $is_manageable       = Group_Subscription_MyAccount::is_subscription_manageable( $subscription );
+// Role changes (and touching peer managers) are the owner's call; a manager only manages plain members.
+$viewer_is_owner     = $current_user_id === (int) $subscription->get_user_id();
 $is_active           = Group_Subscription_MyAccount::is_subscription_active( $subscription );
 $active_tab          = ( isset( $_GET['activeTab'] ) && 'invites' === sanitize_key( wp_unslash( $_GET['activeTab'] ) ) ) ? 'invites' : 'members'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $group_label_lower   = Group_Subscription::get_label_lower( 'singular' );
@@ -156,14 +160,20 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 			<tr>
 				<td data-title="<?php esc_attr_e( 'Name', 'newspack-plugin' ); ?>">
 					<strong><?php echo esc_html( newspack_get_user_display_label( $user ) ); ?></strong>
-					<?php if ( $is_owner ) : ?>
+					<?php if ( $user_id === $current_user_id ) : ?>
 						<?php esc_html_e( ' (you)', 'newspack-plugin' ); ?>
 					<?php endif; ?>
 				</td>
 				<td data-title="<?php esc_attr_e( 'Email', 'newspack-plugin' ); ?>"><a href="mailto:<?php echo esc_attr( sanitize_email( $user->user_email ) ); ?>"><?php echo esc_html( sanitize_email( $user->user_email ) ); ?></a></td>
 				<td data-title="<?php esc_attr_e( 'Role', 'newspack-plugin' ); ?>"><?php echo esc_html( $member_role ); ?></td>
-				<td class="newspack-my-account__group_subscription__members--actions order-actions <?php echo esc_attr( $is_manager ? 'newspack-my-account__group_subscription__members--actions--manager' : '' ); ?>">
-					<?php if ( ! $is_manager && $is_manageable ) : ?>
+				<td class="newspack-my-account__group_subscription__members--actions order-actions">
+					<?php
+					// The owner's row has no actions. A manager row is only actionable by
+					// the owner (peer managers are off limits); a manager viewing manages
+					// plain members only.
+					$show_row_actions = ! $is_owner && $is_manageable && ( $viewer_is_owner || ! $is_manager );
+					?>
+					<?php if ( $show_row_actions ) : ?>
 					<div class="newspack-ui__dropdown">
 						<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-ui__dropdown__toggle newspack-ui__button--icon">
 							<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
@@ -171,6 +181,20 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 						</button>
 							<div class="newspack-ui__dropdown__content">
 								<ul>
+									<?php if ( $viewer_is_owner ) : ?>
+									<li>
+										<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+											<input type="hidden" name="action" value="newspack_group_subscription_set_manager_role">
+											<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription->get_id() ); ?>">
+											<input type="hidden" name="member_id" value="<?php echo esc_attr( $user->ID ); ?>">
+											<input type="hidden" name="role" value="<?php echo esc_attr( $is_manager ? 'member' : 'manager' ); ?>">
+											<?php wp_nonce_field( Group_Subscription_MyAccount::SET_MANAGER_ROLE_NONCE_ACTION ); ?>
+											<button type="submit" class="newspack-ui__button newspack-ui__button--ghost">
+												<?php echo esc_html( $is_manager ? __( 'Remove manager', 'newspack-plugin' ) : __( 'Make manager', 'newspack-plugin' ) ); ?>
+											</button>
+										</form>
+									</li>
+									<?php endif; ?>
 									<li>
 										<button
 											type="button"
@@ -341,7 +365,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 
 				<section class="newspack-ui__modal__content">
 						<p>
-							<?php esc_html_e( 'The current link will stop working. You\'ll get a new link to share, and anyone who hasn\'t joined yet will need the new link.', 'newspack-plugin' ); ?>
+							<?php esc_html_e( 'Any invite link for this group will stop working. You\'ll get a new link to share, and anyone who hasn\'t joined yet will need the new link.', 'newspack-plugin' ); ?>
 						</p>
 
 						<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-my-account__group_subscription__invite-link__regenerate" data-error-text="<?php echo esc_attr( __( 'Could not regenerate. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Regenerate link', 'newspack-plugin' ); ?></span></button>
@@ -415,7 +439,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 				<section class="newspack-ui__modal__content">
 						<h2 class="font-size newspack-ui__font--l"><?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?></h2>
 						<p>
-							<?php esc_html_e( 'The current link will stop working. Anyone who hasn\'t joined yet will no longer be able to. You can create a new link at any time.', 'newspack-plugin' ); ?>
+							<?php esc_html_e( 'Any invite link for this group will stop working. Anyone who hasn\'t joined yet will no longer be able to. You can create a new link at any time.', 'newspack-plugin' ); ?>
 						</p>
 
 						<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide newspack-ui__button--destructive newspack-my-account__group_subscription__invite-link__disable" data-error-text="<?php echo esc_attr( __( 'Could not disable. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Disable link', 'newspack-plugin' ); ?></span></button>

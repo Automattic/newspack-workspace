@@ -22,6 +22,9 @@ multisite.xml.dist
 phpcs.xml
 phpcs.xml.dist
 README.md
+AGENTS.md
+CLAUDE.md
+.claude
 wp-cli.local.yml
 tests
 vendor

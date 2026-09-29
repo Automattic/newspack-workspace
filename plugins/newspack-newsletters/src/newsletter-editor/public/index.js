@@ -15,10 +15,16 @@ import { withDispatch, withSelect } from '@wordpress/data';
 import { useMemo, useState } from '@wordpress/element';
 import { closeSmall, envelope, globe } from '@wordpress/icons';
 
+/**
+ * Internal dependencies
+ */
+import { getNewsletterVisibilityDescriptions } from '../../utils/service-provider';
+
 const PublicSettingsComponent = ( { meta, updateIsPublic } ) => {
 	const isPublic = !! meta.is_public;
 	const currentLabel = isPublic ? __( 'Email and web', 'newspack-newsletters' ) : __( 'Email only', 'newspack-newsletters' );
 	const currentIcon = isPublic ? globe : envelope;
+	const visibilityDescriptions = getNewsletterVisibilityDescriptions();
 
 	const [ popoverAnchor, setPopoverAnchor ] = useState( null );
 	const popoverProps = useMemo(
@@ -61,12 +67,12 @@ const PublicSettingsComponent = ( { meta, updateIsPublic } ) => {
 									{
 										label: __( 'Email and web', 'newspack-newsletters' ),
 										value: 'public',
-										description: __( 'Sent by email and published as an article on your site.', 'newspack-newsletters' ),
+										description: visibilityDescriptions.public,
 									},
 									{
 										label: __( 'Email only', 'newspack-newsletters' ),
 										value: 'private',
-										description: __( 'Sent by email only; not visible on your site.', 'newspack-newsletters' ),
+										description: visibilityDescriptions.private,
 									},
 								] }
 								onChange={ value => updateIsPublic( value === 'public' ) }

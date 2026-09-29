@@ -43,7 +43,8 @@ const defaultRenderShell = ( bar, content ) => (
 /**
  * Router-driven tabs: a real WAI-ARIA tabs widget. The routed page content
  * renders inside the active tab's `Tabs.Panel`, so each tab's `aria-controls`
- * points at the panel that actually contains its content.
+ * points at the panel that actually contains its content — or, when no visible
+ * tab owns the route, as a sibling of the panels (see `unownedContent` below).
  */
 const RoutedTabbedNavigation = ( { items, className, disableUpcoming, content = null, renderShell = defaultRenderShell, children = null } ) => {
 	const history = useHistory();
@@ -118,9 +119,27 @@ const RoutedTabbedNavigation = ( { items, className, disableUpcoming, content = 
 		);
 	} );
 
+	// A route no visible tab owns — a hidden sub-view (an edit screen), or a path
+	// with no matching tab at all — still has to render its content, outside the
+	// panels: with no active tab there is no panel entitled to hold it. Without
+	// this the page body is blank, and because the router's own fallback (the
+	// wizard's trailing `<Redirect>`) lives inside that content, it never mounts
+	// to correct the route either.
+	//
+	// This renders without the panels' `__panel` class, which is styleless today.
+	// Keep it that way: styling `__panel` would silently indent/pad owned routes
+	// only, and the divergence would be hard to trace back to here.
+	const unownedContent = null === activeValue ? content : null;
+
 	return (
 		<Tabs.Root value={ activeValue } className="newspack-tabbed-navigation__root">
-			{ renderShell( bar, panels ) }
+			{ renderShell(
+				bar,
+				<>
+					{ panels }
+					{ unownedContent }
+				</>
+			) }
 		</Tabs.Root>
 	);
 };
@@ -160,13 +179,21 @@ const LinkTabbedNavigation = ( { items, className, content = null, renderShell =
  * Items with router `path`s render as a real tabs widget whose active panel
  * contains `content`; href-only items render as plain navigation links.
  *
+ * When no visible tab owns the current route — a hidden sub-view, or an unknown
+ * URL — `content` renders as a sibling of the panels with no tab selected. That
+ * is a safety net, not the preferred shape: for a route that is conceptually a
+ * sub-view of a tab, give that tab an `activeTabPaths` entry (e.g.
+ * `activeTabPaths: [ '/edit/*' ]`) so it stays selected and its panel keeps
+ * owning the content.
+ *
  * `renderShell( bar, content )` is a layout injection point used by `Page` to
  * place the bar inside its sticky header region while the content flows below.
  *
  * @param {Object}  props
  * @param {Array}   props.items             Navigation items.
  * @param {boolean} [props.disableUpcoming] Disable tabs after the active one (setup flows).
- * @param {*}       [props.content]         Page content, rendered inside the active tab's panel.
+ * @param {*}       [props.content]         Page content, rendered inside the active tab's panel — or
+ *                                          as a sibling of the panels when no visible tab owns the route.
  * @param {*}       [props.renderShell]     Layout callback `( bar, content ) => element`.
  * @param {string}  [props.className]
  * @param {*}       [props.children]        Extra elements rendered inside the bar (e.g. error notices).

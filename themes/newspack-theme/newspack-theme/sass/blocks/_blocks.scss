@@ -388,6 +388,18 @@ p.has-background {
 	}
 }
 
+//! Newspack Contextual Prompt Block
+.wp-block-newspack-popups-contextual-prompt {
+	// The card's padding owns the vertical rhythm at its edges.
+	> *:first-child {
+		margin-top: 0 !important; // !important to override inline styles from child block attributes.
+	}
+
+	> *:last-child {
+		margin-bottom: 0 !important; // !important to override inline styles from child block attributes.
+	}
+}
+
 //! Columns
 .wp-block-columns {
 	.wp-block-cover,
@@ -995,6 +1007,23 @@ body:not(.wp-child-theme-newspack-joseph):not(.wp-child-theme-newspack-nelson) .
 	}
 
 	figcaption {
+		text-align: left;
+	}
+
+	&.aligncenter figcaption,
+	.aligncenter figcaption {
+		text-align: center;
+	}
+
+	&.alignright figcaption,
+	.alignright figcaption {
+		/* rtl:ignore */
+		text-align: right;
+	}
+
+	&.alignleft figcaption,
+	.alignleft figcaption {
+		/* rtl:ignore */
 		text-align: left;
 	}
 

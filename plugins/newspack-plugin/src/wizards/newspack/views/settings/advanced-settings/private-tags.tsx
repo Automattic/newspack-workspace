@@ -1,14 +1,20 @@
 /**
+ * Newspack > Settings > Advanced Settings > Private Tags
+ */
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl } from '@wordpress/components';
-
-/**
- * Internal dependencies
- */
-import WizardsActionCard from '../../../../wizards-action-card';
-import { Grid } from '../../../../../../packages/components/src';
+import {
+	BaseControl,
+	CheckboxControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControl as ToggleGroupControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
+} from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 const PUBLIC_TOGGLES = [
 	{ key: 'archives', label: __( 'Disable private tag archive pages', 'newspack-plugin' ) },
@@ -24,6 +30,11 @@ const INTEGRATION_TOGGLES = [
 	{ key: 'yoast_metadata', label: __( 'Exclude private tags from Yoast SEO metadata', 'newspack-plugin' ) },
 	{ key: 'yoast_sitemap', label: __( 'Exclude private tags from Yoast XML sitemaps', 'newspack-plugin' ) },
 	{ key: 'reader_data', label: __( 'Remove private tags from audience management data', 'newspack-plugin' ) },
+];
+
+const GROUPS = [
+	{ key: 'public', legend: __( 'Public-facing site', 'newspack-plugin' ), toggles: PUBLIC_TOGGLES },
+	{ key: 'integrations', legend: __( 'Data and integrations', 'newspack-plugin' ), toggles: INTEGRATION_TOGGLES },
 ];
 
 export default function PrivateTags( { data, isFetching, update }: ThemeModComponentProps< AdvancedSettings > ) {
@@ -43,50 +54,42 @@ export default function PrivateTags( { data, isFetching, update }: ThemeModCompo
 	};
 
 	return (
-		<WizardsActionCard
-			isMedium
-			title={ __( 'Customize where private tags are hidden', 'newspack-plugin' ) }
-			description={ __(
-				'By default, private tags are hidden in all supported locations. Turn this on to choose where private tags should be hidden.',
-				'newspack-plugin'
-			) }
-			disabled={ isFetching }
-			toggleChecked={ isCustom }
-			toggleOnChange={ ( value: boolean ) => updateSetting( 'all', ! value ) }
-			hasGreyHeader={ isCustom }
-		>
-			{ isCustom && (
-				<Grid columns={ 2 } gutter={ 24 } style={ { marginTop: -8, marginBottom: -8 } }>
-					<fieldset style={ { border: 0, margin: 0, padding: 0 } }>
-						<legend className="components-base-control__label">{ __( 'Public-facing site', 'newspack-plugin' ) }</legend>
-						<Grid columns={ 1 } rowGap={ 16 }>
-							{ PUBLIC_TOGGLES.map( ( { key, label } ) => (
+		<>
+			<ToggleGroupControl
+				__nextHasNoMarginBottom
+				__next40pxDefaultSize
+				isBlock
+				label={ __( 'Hide private tags', 'newspack-plugin' ) }
+				help={ __(
+					'By default, private tags are hidden in all supported locations. Choose Custom to pick where they are hidden.',
+					'newspack-plugin'
+				) }
+				value={ isCustom ? 'custom' : 'all' }
+				onChange={ value => updateSetting( 'all', value !== 'custom' ) }
+			>
+				<ToggleGroupControlOption value="all" label={ __( 'Everywhere', 'newspack-plugin' ) } disabled={ isFetching } />
+				<ToggleGroupControlOption value="custom" label={ __( 'Custom', 'newspack-plugin' ) } disabled={ isFetching } />
+			</ToggleGroupControl>
+			{ isCustom &&
+				GROUPS.map( ( { key, legend, toggles } ) => (
+					<fieldset key={ key } className="newspack-private-tags__group">
+						<legend>
+							<BaseControl.VisualLabel>{ legend }</BaseControl.VisualLabel>
+						</legend>
+						<Stack direction="column" gap="xs">
+							{ toggles.map( toggle => (
 								<CheckboxControl
-									key={ key }
-									label={ label }
+									__nextHasNoMarginBottom
+									key={ toggle.key }
+									label={ toggle.label }
 									disabled={ isFetching }
-									checked={ Boolean( settings[ key ] ) }
-									onChange={ ( value: boolean ) => updateSetting( key, value ) }
+									checked={ Boolean( settings[ toggle.key ] ) }
+									onChange={ ( value: boolean ) => updateSetting( toggle.key, value ) }
 								/>
 							) ) }
-						</Grid>
+						</Stack>
 					</fieldset>
-					<fieldset style={ { border: 0, margin: 0, padding: 0 } }>
-						<legend className="components-base-control__label">{ __( 'Data and integrations', 'newspack-plugin' ) }</legend>
-						<Grid columns={ 1 } rowGap={ 16 }>
-							{ INTEGRATION_TOGGLES.map( ( { key, label } ) => (
-								<CheckboxControl
-									key={ key }
-									label={ label }
-									disabled={ isFetching }
-									checked={ Boolean( settings[ key ] ) }
-									onChange={ ( value: boolean ) => updateSetting( key, value ) }
-								/>
-							) ) }
-						</Grid>
-					</fieldset>
-				</Grid>
-			) }
-		</WizardsActionCard>
+				) ) }
+		</>
 	);
 }

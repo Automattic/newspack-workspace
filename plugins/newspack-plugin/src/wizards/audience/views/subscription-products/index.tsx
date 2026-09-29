@@ -1,8 +1,9 @@
 /**
  * Subscription Products management screen.
  *
- * A DataViews list of WooCommerce Subscriptions products using the consolidated
- * product model (name, type, price, active subscriptions, category, status).
+ * A DataViews list of WooCommerce Subscriptions products with the consolidated product
+ * model, plus the applied-rule stack + effective price (behind the
+ * Subscription_Policy_Resolver seam).
  */
 
 import '../../../../shared/js/public-path';
@@ -21,13 +22,14 @@ import SubscriptionProductsList from './list';
 import ProductEdit from './product-edit';
 import './style.scss';
 
+const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
+const PLANS = [ ...ROOT, { label: __( 'Plans', 'newspack-plugin' ) } ];
+const PLANS_TRAIL = [ ...ROOT, { label: __( 'Plans', 'newspack-plugin' ), url: '#/' } ];
+
 const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivElement > ) => {
 	return (
 		<Wizard
-			title={ __( 'Plans', 'newspack-plugin' ) }
-			headerText={ __( 'Audience Management / Plans', 'newspack-plugin' ) }
 			ref={ ref }
-			fixedHeader
 			sections={ [
 				// Scope tabs. Each renders the same list, filtered to its scope (passed via
 				// `props`). The first two are *individual* products by purpose; "Plan bundles"
@@ -39,6 +41,7 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: SubscriptionProductsList,
 					props: { scope: 'subscriptions' },
 					exact: true,
+					breadcrumbs: PLANS,
 					fullWidth: true,
 				},
 				{
@@ -47,6 +50,7 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: SubscriptionProductsList,
 					props: { scope: 'donations' },
 					exact: true,
+					breadcrumbs: PLANS,
 					fullWidth: true,
 				},
 				{
@@ -55,6 +59,7 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: SubscriptionProductsList,
 					props: { scope: 'groups' },
 					exact: true,
+					breadcrumbs: PLANS,
 					fullWidth: true,
 				},
 				{
@@ -62,16 +67,16 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: ProductEdit,
 					isHidden: true,
 					exact: true,
+					breadcrumbs: PLANS_TRAIL,
 					backNav: '#/',
-					title: __( 'Add plan', 'newspack-plugin' ),
 				},
 				{
 					path: '/edit/:id',
 					render: ProductEdit,
 					isHidden: true,
 					exact: true,
+					breadcrumbs: PLANS_TRAIL,
 					backNav: '#/',
-					title: __( 'Edit plan', 'newspack-plugin' ),
 				},
 			] }
 		/>

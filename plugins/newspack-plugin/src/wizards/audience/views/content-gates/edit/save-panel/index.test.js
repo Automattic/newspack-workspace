@@ -1,12 +1,21 @@
 /**
  * External dependencies.
  */
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 /**
  * Internal dependencies.
  */
 import SavePanel from './index';
+
+// SavePanel only reads Divider from the components barrel, but the
+// barrel's index evaluates all ~50 components — seconds of module
+// execution per suite that made these tests fragile under CPU load.
+// Re-export just the real Divider; everything else the panel renders
+// (@wordpress/components Modal & controls) stays fully real.
+jest.mock( '../../../../../../../packages/components/src', () => ( {
+	Divider: jest.requireActual( '../../../../../../../packages/components/src/divider' ).default,
+} ) );
 
 const baseProps = {
 	initialStatus: 'draft',
@@ -75,9 +84,22 @@ describe( 'Content Gate SavePanel', () => {
 		} );
 	} );
 
-	it( 'calls onCancel from the Cancel button after the slide-out', async () => {
-		render( <SavePanel { ...baseProps } /> );
-		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
-		await waitFor( () => expect( baseProps.onCancel ).toHaveBeenCalled() );
+	it( 'calls onCancel from the Cancel button after the slide-out', () => {
+		// The Cancel handler waits out the 200ms slide-out (SLIDE_OUT_MS in
+		// index.tsx) on a real setTimeout before invoking onCancel. Drive the
+		// timer with fake timers instead of polling waitFor against the wall
+		// clock, so the test stays deterministic when CPU load delays timers.
+		jest.useFakeTimers();
+		try {
+			render( <SavePanel { ...baseProps } /> );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
+			expect( baseProps.onCancel ).not.toHaveBeenCalled();
+			act( () => {
+				jest.advanceTimersByTime( 200 );
+			} );
+			expect( baseProps.onCancel ).toHaveBeenCalled();
+		} finally {
+			jest.useRealTimers();
+		}
 	} );
 } );

@@ -16,6 +16,17 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Modal_Checkout {
 	/**
+	 * Whether the current request is a validation-only checkout that process_checkout_action()
+	 * accepted. Set true only alongside the woocommerce_checkout_update_totals write, which is
+	 * what stops process_checkout() from creating an order — that coupling is the guarantee, not
+	 * the nonce, which is only a CSRF check. Request-scoped on purpose: the filters that consult
+	 * it run on every checkout request, so the request flag on its own is never enough.
+	 *
+	 * @var bool
+	 */
+	private static $is_validation_only_request = false;
+
+	/**
 	 * Checkout registration flag.
 	 *
 	 * @var string
@@ -30,6 +41,14 @@ final class Modal_Checkout {
 	const CHECKOUT_REGISTRATION_ORDER_META_KEY = '_newspack_checkout_registration_meta';
 
 	/**
+	 * Session key tracking a coupon auto-applied from a Checkout Button block,
+	 * used to hide the in-modal coupon form for that coupon.
+	 *
+	 * @var string
+	 */
+	const AUTO_APPLIED_COUPON_SESSION_KEY = 'newspack_blocks_auto_applied_coupon';
+
+	/**
 	 * Billing fields with server-side format validation in the Store API,
 	 * mapped from their classic checkout keys to Store API address keys.
 	 *
@@ -41,11 +60,72 @@ final class Modal_Checkout {
 	];
 
 	/**
+	 * Cart item keys carrying the contextual prompt source a donation or
+	 * purchase started from: which story, placement and test condition.
+	 * Shared by `PRESERVED_CART_ITEM_KEYS`, `pass_url_param_on_redirect()`,
+	 * and `Checkout_Data`, so the three stay in lockstep.
+	 *
+	 * @var string[]
+	 */
+	const CONTEXTUAL_PROMPT_KEYS = [
+		'contextual_prompt_post_id',
+		'contextual_prompt_placement',
+		'contextual_prompt_condition',
+	];
+
+	/**
+	 * Cart item keys the in-modal quantity form carries over when it re-adds the
+	 * product at a new quantity.
+	 *
+	 * WC_Cart has no "change this line item's quantity, keep everything else"
+	 * path that also re-runs the add-to-cart guards, so the item is emptied and
+	 * re-added. Anything the original add attached to it — the name-your-price
+	 * amount, the prompt/gate attribution the Data Events layer reads back at
+	 * checkout — would be lost without this.
+	 *
+	 * @var string[]
+	 */
+	const PRESERVED_CART_ITEM_KEYS = [
+		'nyp',
+		'base_price',
+		'referer',
+		'gate_post_id',
+		'newspack_popup_id',
+		'prompt_title',
+		...self::CONTEXTUAL_PROMPT_KEYS,
+	];
+
+	/**
+	 * Cart item keys by which WooCommerce Subscriptions marks a cart it built to
+	 * change or take payment for a subscription the reader already has. Each is
+	 * written from the request that started it, so a cart rebuilt without that
+	 * request loses it -- and the checkout then raises a new subscription instead.
+	 *
+	 * Taken from the `$cart_item_key` property of the class that sets each one.
+	 *
+	 * @var string[]
+	 */
+	const WCS_SUBSCRIPTION_CART_ITEM_KEYS = [
+		'subscription_switch',
+		'subscription_renewal',
+		'subscription_resubscribe',
+		'subscription_initial_payment',
+	];
+
+	/**
 	 * Whether the modal checkout has been enqueued.
 	 *
 	 * @var boolean
 	 */
 	private static $has_modal = false;
+
+	/**
+	 * Block markup synthesized from URL trigger params, echoed (hidden) in the
+	 * footer. Empty when the request carries no valid trigger.
+	 *
+	 * @var string
+	 */
+	private static $url_triggered_block_html = '';
 
 	/**
 	 * Products that are being rendered a checkout modal for.
@@ -159,6 +239,7 @@ final class Modal_Checkout {
 		add_filter( 'wp_redirect', [ __CLASS__, 'pass_url_param_on_redirect' ] );
 		add_filter( 'woocommerce_cart_product_cannot_be_purchased_message', [ __CLASS__, 'woocommerce_cart_product_cannot_be_purchased_message' ], 10, 2 );
 		add_filter( 'woocommerce_add_error', [ __CLASS__, 'hide_expiry_message_shop_link' ] );
+		add_action( 'wp', [ __CLASS__, 'maybe_setup_url_triggered_checkout' ], 11 );
 		add_action( 'wp_footer', [ __CLASS__, 'render_modal_markup' ], 100 );
 		add_action( 'wp_footer', [ __CLASS__, 'render_variation_selection' ], 100 );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
@@ -179,6 +260,7 @@ final class Modal_Checkout {
 		add_filter( 'option_woocommerce_subscriptions_order_button_text', [ __CLASS__, 'order_button_text' ], 5 );
 		add_action( 'woocommerce_before_checkout_form', [ __CLASS__, 'render_before_checkout_form' ] );
 		add_action( 'woocommerce_before_checkout_form', [ __CLASS__, 'render_name_your_price_form' ], 11 );
+		add_action( 'woocommerce_before_checkout_form', [ __CLASS__, 'render_quantity_form' ], 12 );
 		add_action( 'woocommerce_checkout_before_customer_details', [ __CLASS__, 'render_before_customer_details' ] );
 		add_filter( 'woocommerce_enable_order_notes_field', [ __CLASS__, 'enable_order_notes_field' ] );
 		add_action( 'woocommerce_checkout_process', [ __CLASS__, 'wcsg_apply_gift_subscription' ] );
@@ -188,6 +270,8 @@ final class Modal_Checkout {
 		add_action( 'default_option_woocommerce_default_customer_address', [ __CLASS__, 'ensure_base_default_customer_address' ] );
 		add_action( 'wp_ajax_process_name_your_price_request', [ __CLASS__, 'process_name_your_price_request' ] );
 		add_action( 'wp_ajax_nopriv_process_name_your_price_request', [ __CLASS__, 'process_name_your_price_request' ] );
+		add_action( 'wp_ajax_process_quantity_request', [ __CLASS__, 'process_quantity_request' ] );
+		add_action( 'wp_ajax_nopriv_process_quantity_request', [ __CLASS__, 'process_quantity_request' ] );
 		add_filter( 'option_woocommerce_woocommerce_payments_settings', [ __CLASS__, 'filter_woocommerce_payments_settings' ] );
 		add_action( 'init', [ __CLASS__, 'unhook_woocommerce_payments_update_billing_fields' ] );
 		add_action( 'init', [ __CLASS__, 'unhook_woocommerce_payments_express_checkout_buttons' ], 20 );
@@ -218,8 +302,6 @@ final class Modal_Checkout {
 		// Make the current cart price available to the JavaScript.
 		add_action( 'wp_ajax_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
 		add_action( 'wp_ajax_nopriv_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
-		add_action( 'wp_ajax_get_cart_product_summary', [ __CLASS__, 'get_cart_product_summary_js' ] );
-		add_action( 'wp_ajax_nopriv_get_cart_product_summary', [ __CLASS__, 'get_cart_product_summary_js' ] );
 
 		// Wrap required checkbox text in a span so it works nicely with the Newspack UI grid layout.
 		add_filter( 'woocommerce_form_field_checkbox', [ __CLASS__, 'wrap_required_checkbox_text' ], 10, 4 );
@@ -350,12 +432,66 @@ final class Modal_Checkout {
 		// rely on this checkout nonce requried by process checkout.
 		$_REQUEST['woocommerce-process-checkout-nonce'] = wp_create_nonce( 'woocommerce-process_checkout' );
 
-		// If this is a validation-only request, set the flag that tells process_checkout() to only validate the order.
+		// Accept the validation-only flag here, coupled with the update-totals write
+		// in the same branch. That write is what actually stops process_checkout()
+		// from creating an order, so the flag must never be true without it. Setting
+		// it before the WOOCOMMERCE_CHECKOUT early return above would let the two
+		// diverge on a request where WooCommerce has already defined the constant.
 		if ( isset( $_POST['is_validation_only'] ) ) {
+			self::$is_validation_only_request              = true;
 			$_POST['woocommerce_checkout_update_totals'] = '1';
 		}
 
 		\WC()->checkout()->process_checkout();
+	}
+
+	/**
+	 * Seats (line-item quantity) requested when the modal checkout is opened.
+	 * Reads $_GET and $_POST, since a Checkout Button sends its default seats as a
+	 * query argument and the tier picker posts them as a form field.
+	 *
+	 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
+	 *
+	 * @return int
+	 */
+	public static function get_requested_quantity( $product_id = 0 ) {
+		// intval(), not absint(): absint() takes the absolute value, so a negative
+		// request (e.g. ?quantity=-5) would floor at 5 instead of 1.
+		$quantity = isset( $_REQUEST['quantity'] ) ? intval( wp_unslash( $_REQUEST['quantity'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return self::clamp_quantity( $quantity, $product_id );
+	}
+
+	/**
+	 * Floor a quantity at one and let the product's owner clamp it further.
+	 *
+	 * The one place a requested quantity becomes the quantity actually added to
+	 * the cart, so every path shares one rule: the initial request via
+	 * get_requested_quantity(), and the in-modal seats form via
+	 * update_cart_quantity().
+	 *
+	 * @param int $quantity   Requested quantity.
+	 * @param int $product_id Product the quantity is for (variation preferred), 0 when unknown.
+	 *
+	 * @return int
+	 */
+	private static function clamp_quantity( $quantity, $product_id ) {
+		$quantity = max( 1, (int) $quantity );
+		/**
+		 * Filters the line-item quantity the modal checkout will use for a product.
+		 *
+		 * The modal is single-quantity by default. A quantity arrives in the request,
+		 * and `newspack_checkout=1` needs no nonce, so on its own it is the caller's
+		 * claim about how many of something to charge for — which is what makes a
+		 * crafted link a multiplier on the price. Answering this filter is how a
+		 * plugin that owns the product's quantity rules vouches for one. Null —
+		 * nobody has claimed this product — means one, whatever the request asked for.
+		 *
+		 * @param null|int $vouched    The quantity to use, or null for the default of one.
+		 * @param int      $product_id Product the quantity is for (variation preferred), 0 when unknown.
+		 * @param int      $requested  Requested quantity, at least 1.
+		 */
+		$vouched = apply_filters( 'newspack_blocks_modal_checkout_quantity', null, (int) $product_id, $quantity );
+		return null === $vouched ? 1 : max( 1, (int) $vouched );
 	}
 
 	/**
@@ -377,6 +513,7 @@ final class Modal_Checkout {
 		$after_success_behavior     = filter_input( INPUT_GET, 'after_success_behavior', FILTER_SANITIZE_SPECIAL_CHARS );
 		$after_success_url          = filter_input( INPUT_GET, 'after_success_url', FILTER_SANITIZE_URL );
 		$after_success_button_label = filter_input( INPUT_GET, 'after_success_button_label', FILTER_SANITIZE_SPECIAL_CHARS );
+		$after_success_token        = filter_input( INPUT_GET, 'after_success_token', FILTER_SANITIZE_SPECIAL_CHARS );
 
 		if ( $variation_id ) {
 			$product_id = $variation_id;
@@ -395,7 +532,8 @@ final class Modal_Checkout {
 			wp_parse_str( $parsed_url['query'], $params );
 		}
 
-		$params = array_merge( $params, compact( 'after_success_behavior', 'after_success_url', 'after_success_button_label' ) );
+		$params = array_merge( $params, compact( 'after_success_behavior', 'after_success_url', 'after_success_button_label', 'after_success_token' ) );
+		$params = self::merge_request_utm_params( $params );
 
 		if ( function_exists( 'wpcom_vip_url_to_postid' ) ) {
 			$referer_post_id = wpcom_vip_url_to_postid( $referer );
@@ -449,7 +587,14 @@ final class Modal_Checkout {
 		$cart_item_data = apply_filters( 'newspack_blocks_modal_checkout_cart_item_data', $cart_item_data );
 
 		\WC()->cart->empty_cart();
-		\WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, self::get_requested_quantity( $product_id ), 0, [], $cart_item_data );
+
+		// Auto-apply a coupon attached to the Checkout Button block, if present and
+		// valid. Read with a sanitizing filter (satisfies input-sanitization
+		// checks); the validate-and-apply gate lives in maybe_auto_apply_coupon()
+		// so it can be unit-tested in isolation.
+		$coupon_code = (string) filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		self::maybe_auto_apply_coupon( $coupon_code );
 
 		// Set checkout registration flag if user is logged not logged in.
 		if ( ! is_user_logged_in() ) {
@@ -469,11 +614,14 @@ final class Modal_Checkout {
 		}
 
 		// Pass through UTM and after_success params so they can be forwarded to the WooCommerce checkout flow.
+		// Values are encoded here because add_query_arg() does not encode them:
+		// an ampersand or space in a campaign name would otherwise split into a
+		// stray param or be dropped by the redirect sanitizer.
 		foreach ( $params as $param => $value ) {
 			if ( 'utm' === substr( $param, 0, 3 ) || 'after_success' === substr( $param, 0, 13 ) ) {
 				if ( ! empty( $value ) ) {
 					$param                = sanitize_text_field( $param );
-					$query_args[ $param ] = sanitize_text_field( $value );
+					$query_args[ $param ] = rawurlencode( sanitize_text_field( $value ) );
 				}
 			}
 		}
@@ -491,12 +639,30 @@ final class Modal_Checkout {
 			'referrer'   => $referer,
 		];
 
-		/**
-		 * Action to fire for checkout button block modal.
-		 */
-		\do_action( 'newspack_blocks_checkout_button_modal', $checkout_button_metadata );
+		if ( $cart_item_key ) {
+			/**
+			 * Action to fire for checkout button block modal.
+			 *
+			 * Fires only when the product actually entered the cart, so consumers
+			 * recording checkout-initiated events stay in step with adds rejected
+			 * by an add-to-cart guard.
+			 */
+			\do_action( 'newspack_blocks_checkout_button_modal', $checkout_button_metadata );
+		}
 
 		$checkout_url = apply_filters( 'newspack_blocks_checkout_url', $checkout_url );
+
+		// If the product could not be added (e.g. rejected by an add-to-cart guard),
+		// the cart is empty and the checkout would render blank: point the modal at
+		// its error screen, which prints the queued error notice and a back button.
+		// Like the success path above, an unsupported payment gateway means a
+		// full-page rather than iframed checkout, so modal_checkout is omitted.
+		if ( ! $cart_item_key ) {
+			$checkout_url = \wc_get_cart_url();
+			if ( ! self::has_unsupported_payment_gateway() ) {
+				$checkout_url = add_query_arg( 'modal_checkout', 1, $checkout_url );
+			}
+		}
 
 		if ( defined( 'DOING_AJAX' ) ) {
 			echo wp_json_encode( [ 'url' => $checkout_url ] );
@@ -506,6 +672,215 @@ final class Modal_Checkout {
 			\wp_safe_redirect( $checkout_url );
 			exit;
 		}
+	}
+
+	/**
+	 * Merge utm_* parameters from the current request into a params array.
+	 *
+	 * The modal form's own submission is what carries a promo link's values here:
+	 * appendUtmFields() in modal.js copies the landing page's utm params onto the
+	 * form as hidden fields before it GET-submits into the checkout iframe, so
+	 * they arrive in this request's $_GET rather than depending on the referer.
+	 * Request params win over referer params.
+	 *
+	 * @param array $params Params parsed from the referer query string.
+	 * @return array Params with the request's utm_* params merged in.
+	 */
+	public static function merge_request_utm_params( $params ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		foreach ( wp_unslash( $_GET ) as $key => $value ) {
+			if ( 'utm' === substr( $key, 0, 3 ) && is_string( $value ) && '' !== $value ) {
+				$params[ sanitize_text_field( $key ) ] = sanitize_text_field( $value );
+			}
+		}
+		return $params;
+	}
+
+	/**
+	 * Serve a `?checkout=1&type=…` trigger on any front-end URL by rendering the
+	 * block it needs into the footer (hidden), so no page has to carry one.
+	 * Rendering the real block brings everything the trigger relies on: the form
+	 * it submits, the variation/tiers picker modals, and the modal assets. A page
+	 * that does carry a matching block still wins — its form comes first in DOM
+	 * order, so block-level context such as a coupon keeps applying.
+	 *
+	 * Runs on `wp` so the render-time asset enqueues land in the normal queue.
+	 */
+	public static function maybe_setup_url_triggered_checkout() {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		// The trigger-param test is the cheapest and most selective guard, so it
+		// runs first: nearly all traffic carries no trigger, and is_checkout()
+		// below is the one call here that touches WooCommerce page-type state
+		// and its filters.
+		if ( ! isset( $_GET['checkout'] ) || ! isset( $_GET['type'] ) || ! is_string( $_GET['type'] ) ) {
+			return;
+		}
+		if ( is_admin() || wp_doing_ajax() || is_feed() || ( function_exists( 'is_checkout' ) && is_checkout() ) ) {
+			return;
+		}
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return;
+		}
+		$type = sanitize_text_field( wp_unslash( $_GET['type'] ) );
+		if ( 'donate' === $type ) {
+			// The trigger script only fires when layout, frequency and amount are
+			// all present, so a request missing any of them would render a form
+			// nothing ever submits. Donations must also be on the WooCommerce
+			// platform for the block to produce a servable form.
+			if ( empty( $_GET['layout'] ) || empty( $_GET['frequency'] ) || empty( $_GET['amount'] ) ) {
+				return;
+			}
+			if ( ! method_exists( '\Newspack\Donations', 'is_platform_wc' ) || ! \Newspack\Donations::is_platform_wc() ) {
+				return;
+			}
+			// Defaults resolve to the site's donation settings, which is what the
+			// generator derived its frequency/amount options from.
+			self::$url_triggered_block_html = do_blocks( '<!-- wp:newspack-blocks/donate /-->' );
+		} elseif ( 'checkout_button' === $type ) {
+			$attrs = self::build_url_triggered_button_attrs_from_request();
+			if ( empty( $attrs ) ) {
+				return;
+			}
+			self::$url_triggered_block_html = do_blocks( '<!-- wp:newspack-blocks/checkout-button ' . serialize_block_attributes( $attrs ) . ' /-->' );
+		} else {
+			return;
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		if ( '' !== self::$url_triggered_block_html ) {
+			add_action( 'wp_footer', [ __CLASS__, 'render_url_triggered_block' ], 1 );
+		}
+	}
+
+	/**
+	 * Resolve checkout button attributes from the current request, validating the
+	 * product and variation. Returns [] when the request can't be served.
+	 *
+	 * Reads $_GET rather than filter_input(): the guard in
+	 * maybe_setup_url_triggered_checkout() tests $_GET, and filter_input()
+	 * consults PHP's request snapshot instead — anything that adjusts the
+	 * superglobal after parsing (a test, a mu-plugin rewriting the query) would
+	 * pass the guard and read back empty.
+	 *
+	 * @return array Block attributes.
+	 */
+	public static function build_url_triggered_button_attrs_from_request() {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$product_id   = isset( $_GET['product_id'] ) && is_scalar( $_GET['product_id'] ) ? absint( $_GET['product_id'] ) : 0;
+		$variation_id = isset( $_GET['variation_id'] ) && is_scalar( $_GET['variation_id'] ) ? absint( $_GET['variation_id'] ) : 0;
+		if ( ! $product_id ) {
+			return [];
+		}
+		$product = wc_get_product( $product_id );
+		if ( ! $product || 'publish' !== $product->get_status() ) {
+			return [];
+		}
+		if ( $variation_id ) {
+			$variation = wc_get_product( $variation_id );
+			if ( ! $variation || $variation->get_parent_id() !== $product_id || 'publish' !== $variation->get_status() ) {
+				return [];
+			}
+		}
+		// The coupon and label are non-HTML text values: sanitize_text_field()
+		// keeps their raw characters, where an entity-encoding filter would break
+		// the coupon's title lookup and show readers an encoded label. Escaping
+		// happens at output (view.php / the thank-you template). The destination
+		// is a URL: esc_url_raw() keeps its query intact and drops disallowed
+		// schemes before sanitize_after_success_url() validates the host.
+		$coupon       = isset( $_GET['coupon'] ) && is_string( $_GET['coupon'] ) ? sanitize_text_field( wp_unslash( $_GET['coupon'] ) ) : '';
+		$button_label = isset( $_GET['after_success_button_label'] ) && is_string( $_GET['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $_GET['after_success_button_label'] ) ) : '';
+		$behavior     = isset( $_GET['after_success_behavior'] ) && is_string( $_GET['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $_GET['after_success_behavior'] ) ) : '';
+		$after_url    = isset( $_GET['after_success_url'] ) && is_string( $_GET['after_success_url'] ) ? esc_url_raw( wp_unslash( $_GET['after_success_url'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		return self::build_url_triggered_button_attrs(
+			$product->get_type(),
+			$product_id,
+			$variation_id,
+			$coupon,
+			[
+				'behavior'     => $behavior,
+				'url'          => $after_url,
+				'button_label' => $button_label,
+			]
+		);
+	}
+
+	/**
+	 * Block attributes serving a URL trigger for the given product shape.
+	 *
+	 * Mirrors what the block editor stores: a variable product carries
+	 * `is_variable` with the parent as `product` and any lock as `variation`
+	 * (view.php collapses the pair onto the variation), while grouped parents
+	 * and specific products are `product` alone. A variation lock on a
+	 * non-variable product has no serving form, so it is rejected.
+	 *
+	 * A coupon and after-success settings become block attributes, so they ride to
+	 * the checkout as hidden fields exactly as block-configured ones do.
+	 *
+	 * Only `custom` after-success is accepted: `referrer` returns the reader where
+	 * they came from, which a link opened from an email or a QR code has no
+	 * referrer or history entry to satisfy.
+	 *
+	 * @param string $product_type  Product type slug from WC_Product::get_type().
+	 * @param int    $product_id    Requested product ID.
+	 * @param int    $variation_id  Requested variation ID (0 for none).
+	 * @param string $coupon        Requested coupon code ('' for none).
+	 * @param array  $after_success {
+	 *     Optional. Requested after-checkout behavior.
+	 *     @type string $behavior     'custom' to send the reader onward; anything
+	 *                                else leaves the thank-you screen alone.
+	 *     @type string $url          Destination for the 'custom' behavior.
+	 *     @type string $button_label Label for the continue button.
+	 * }
+	 * @return array Block attributes, or [] when the combination can't be served.
+	 */
+	public static function build_url_triggered_button_attrs( $product_type, $product_id, $variation_id = 0, $coupon = '', $after_success = [] ) {
+		$is_variable = in_array( $product_type, [ 'variable', 'variable-subscription' ], true );
+		if ( $variation_id && ! $is_variable ) {
+			return [];
+		}
+		$attrs = [
+			'product' => (string) $product_id,
+			// The button is submitted programmatically and never shown.
+			'text'    => __( 'Complete your purchase', 'newspack-blocks' ),
+		];
+		if ( $is_variable ) {
+			$attrs['is_variable'] = true;
+			if ( $variation_id ) {
+				$attrs['variation'] = (string) $variation_id;
+			}
+		}
+		// Strict check so a coupon code of "0" still rides along.
+		if ( '' !== $coupon ) {
+			$attrs['coupon'] = $coupon;
+		}
+		// The destination is restricted to allowed hosts here (sanitize_after_success_url()
+		// with no token), before it becomes a block attribute. view.php mints an
+		// after_success_token for any afterSuccessURL it renders — including this
+		// synthesized one — so that token only ever vouches for a destination this
+		// pre-validation already accepts. Loosening the check here would widen what
+		// the minted token blesses; an off-site destination still has to come from
+		// a block an editor authored.
+		$after_success_url = isset( $after_success['url'] ) ? self::sanitize_after_success_url( $after_success['url'] ) : '';
+		if ( isset( $after_success['behavior'] ) && 'custom' === $after_success['behavior'] && '' !== $after_success_url ) {
+			$attrs['afterSuccessBehavior'] = 'custom';
+			$attrs['afterSuccessURL']      = $after_success_url;
+			if ( ! empty( $after_success['button_label'] ) ) {
+				$attrs['afterSuccessButtonLabel'] = $after_success['button_label'];
+			}
+		}
+		return $attrs;
+	}
+
+	/**
+	 * Output the synthesized block, hidden. The URL trigger drives it
+	 * programmatically; any picker modals render separately via
+	 * render_variation_selection(), outside this hidden wrapper.
+	 */
+	public static function render_url_triggered_block() {
+		if ( '' === self::$url_triggered_block_html ) {
+			return;
+		}
+		echo '<div class="newspack-blocks__url-triggered-checkout" style="display:none">' . self::$url_triggered_block_html . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 
 	/**
@@ -659,10 +1034,15 @@ final class Modal_Checkout {
 
 		$cart_item_data = self::amend_cart_item_data( [ 'referer' => wp_get_referer() ] );
 
+		$quantity = 1;
 		foreach ( \WC()->cart->get_cart() as $cart_item_key => $cart_item ) { // phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
 			if ( $cart_item['product_id'] !== (int) $product_id && $cart_item['variation_id'] !== (int) $product_id ) {
 				continue;
 			}
+
+			// Re-adding the item for the adjusted price must not silently drop the
+			// seats already in the cart.
+			$quantity = max( 1, (int) $cart_item['quantity'] );
 
 			$cart_item_data['nyp'] = $price;
 			$cart_item_data['base_price'] = isset( $cart_item['base_price'] ) ? $cart_item['base_price'] : $cart_item['nyp'];
@@ -685,7 +1065,26 @@ final class Modal_Checkout {
 		$coupons = \WC()->cart->get_applied_coupons();
 
 		\WC()->cart->empty_cart();
-		\WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
+		$cart_item_key = \WC()->cart->add_to_cart( $product_id, $quantity, 0, [], $cart_item_data );
+
+		// A rejected add (e.g. an add-to-cart guard) must not report success: surface
+		// the error notice the cart queued for it instead of a thank-you message.
+		// The consumer appends this message as an HTML string, and unlike template-
+		// rendered notices it never passes through kses on output — so filter any
+		// third-party notice content here.
+		if ( ! $cart_item_key ) {
+			$error_notices = \wc_get_notices( 'error' );
+			\wc_clear_notices( 'error' );
+			wp_send_json_error(
+				[
+					'message' => ! empty( $error_notices[0]['notice'] )
+						? wp_kses_post( $error_notices[0]['notice'] )
+						: __( 'This product could not be added to the cart.', 'newspack-blocks' ),
+				]
+			);
+
+			wp_die();
+		}
 
 		if ( ! empty( $coupons ) ) {
 			foreach ( $coupons as $coupon ) {
@@ -704,10 +1103,187 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Re-add the cart's product at a new quantity, preserving the line item's data.
+	 *
+	 * WC_Cart offers no "change this quantity and re-run the add-to-cart guards"
+	 * path, so the item is emptied and re-added. That makes the rejected case
+	 * dangerous: an add_to_cart() a guard turned down leaves the cart empty, and
+	 * WooCommerce answers update_order_review on an empty cart by replacing the
+	 * whole checkout form with a "your session has expired" notice
+	 * (WC_AJAX::update_order_review_expired()). So a rejection puts the reader's
+	 * original line item back before it reports anything.
+	 *
+	 * Separate from the AJAX handler so it can be tested: filter_input( INPUT_POST )
+	 * reads the real request body, which a PHPUnit process does not have.
+	 *
+	 * @param int $product_id Product ID of the cart's line item.
+	 * @param int $quantity   Requested quantity.
+	 *
+	 * @return string|\WP_Error New cart item key, or a WP_Error carrying the message to show the reader.
+	 */
+	public static function update_cart_quantity( $product_id, $quantity ) {
+		// Same clamp the initial add goes through, so a product that may not be sold
+		// in multiples cannot be raised past one from inside the modal either.
+		$quantity       = self::clamp_quantity( $quantity, $product_id );
+		$cart           = \WC()->cart;
+		$cart_item_data = self::amend_cart_item_data( [ 'referer' => wp_get_referer() ] );
+
+		$original_quantity = 0;
+		foreach ( $cart->get_cart() as $cart_item ) {
+			if ( (int) $cart_item['product_id'] !== (int) $product_id && (int) $cart_item['variation_id'] !== (int) $product_id ) {
+				continue;
+			}
+			// WooCommerce Subscriptions writes these onto the cart item from the request
+			// that started the switch, renewal, resubscribe or first payment, and this
+			// rebuild has no such request behind it. Re-adding would drop the record and
+			// raise a second full-price subscription at checkout. A switch chooses its
+			// seat count in the tier picker, which submits the whole switch again.
+			foreach ( self::WCS_SUBSCRIPTION_CART_ITEM_KEYS as $wcs_key ) {
+				if ( ! empty( $cart_item[ $wcs_key ] ) ) {
+					return new \WP_Error(
+						'newspack_blocks_quantity_subscription_cart',
+						__( 'Go back and choose the number you want before changing your subscription.', 'newspack-blocks' )
+					);
+				}
+			}
+			$original_quantity = max( 1, (int) $cart_item['quantity'] );
+			foreach ( self::get_preserved_cart_item_keys() as $key ) {
+				if ( isset( $cart_item[ $key ] ) ) {
+					$cart_item_data[ $key ] = $cart_item[ $key ];
+				}
+			}
+		}
+
+		// Nothing to change, and emptying the cart for a product that was never in
+		// it would destroy whatever the reader is actually buying.
+		if ( ! $original_quantity ) {
+			return new \WP_Error(
+				'newspack_blocks_quantity_not_in_cart',
+				__( 'This product is not in the cart.', 'newspack-blocks' )
+			);
+		}
+
+		$coupons = $cart->get_applied_coupons();
+
+		$cart->empty_cart();
+		$cart_item_key = $cart->add_to_cart( $product_id, $quantity, 0, [], $cart_item_data );
+
+		if ( ! $cart_item_key ) {
+			// Read the rejection before restoring, so the restore's own notices
+			// cannot be mistaken for it.
+			$error_notices = \wc_get_notices( 'error' );
+			\wc_clear_notices( 'error' );
+			$cart->add_to_cart( $product_id, $original_quantity, 0, [], $cart_item_data );
+			self::reapply_coupons( $coupons );
+
+			// The consumer appends this message as an HTML string, and unlike
+			// template-rendered notices it never passes through kses on output — so
+			// filter any third-party notice content here.
+			return new \WP_Error(
+				'newspack_blocks_quantity_rejected',
+				! empty( $error_notices[0]['notice'] )
+					? wp_kses_post( $error_notices[0]['notice'] )
+					: __( 'This product could not be added to the cart.', 'newspack-blocks' )
+			);
+		}
+
+		self::reapply_coupons( $coupons );
+
+		return $cart_item_key;
+	}
+
+	/**
+	 * Re-apply coupons to the cart after it has been emptied and rebuilt.
+	 *
+	 * @param string[] $coupons Coupon codes.
+	 */
+	private static function reapply_coupons( $coupons ) {
+		if ( empty( $coupons ) ) {
+			return;
+		}
+		foreach ( $coupons as $coupon ) {
+			\WC()->cart->apply_coupon( $coupon );
+		}
+	}
+
+	/**
+	 * Process an in-modal quantity change: re-add the cart's single product at
+	 * the requested quantity.
+	 */
+	public static function process_quantity_request() {
+		if ( ! defined( 'DOING_AJAX' ) ) {
+			return;
+		}
+
+		if ( ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return;
+		}
+
+		check_ajax_referer( 'newspack_checkout_quantity' );
+
+		$product_id = filter_input( INPUT_POST, 'product_id', FILTER_SANITIZE_NUMBER_INT );
+		$quantity   = filter_input( INPUT_POST, 'quantity', FILTER_SANITIZE_NUMBER_INT );
+
+		// A missing quantity is a malformed request. "0" is a real value the floor
+		// below handles, so it must not be mistaken for an absent one.
+		if ( ! $product_id || ! is_string( $quantity ) || '' === $quantity ) {
+			return;
+		}
+
+		// The real bounds check belongs to whoever hooked the field filter and runs
+		// inside add_to_cart(). This only keeps a 0 or negative from reaching the
+		// cart as a silent item removal.
+		$quantity = max( 1, (int) $quantity );
+
+		$result = self::update_cart_quantity( (int) $product_id, $quantity );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+
+			wp_die();
+		}
+
+		wp_send_json_success(
+			[
+				'message'       => __( 'Updated.', 'newspack-blocks' ),
+				// update_order_review only returns the review-order table and payment-box
+				// fragments, so the #modal-checkout-product-details data carrier — which
+				// sits outside the checkout form and feeds the GA4 events — would keep
+				// reporting the page-load quantity.
+				'checkout_data' => Checkout_Data::get_checkout_data( \WC()->cart ),
+			]
+		);
+
+		wp_die();
+	}
+
+	/**
+	 * The cart item keys a quantity change carries over.
+	 *
+	 * @return string[]
+	 */
+	private static function get_preserved_cart_item_keys() {
+		/**
+		 * Filters the cart item keys the in-modal quantity form carries over when it
+		 * re-adds the product at a new quantity. A plugin that turned the quantity
+		 * field on for a product is the one that knows what its cart item holds.
+		 *
+		 * @param string[] $keys Cart item keys to preserve.
+		 */
+		return (array) apply_filters( 'newspack_blocks_modal_checkout_preserved_cart_item_keys', self::PRESERVED_CART_ITEM_KEYS );
+	}
+
+	/**
 	 * Render the markup necessary for the modal checkout.
 	 */
 	public static function render_modal_markup() {
 		if ( ! self::$has_modal ) {
+			return;
+		}
+		// Never inside the iframe this markup creates: the container would nest in
+		// itself, putting a second "Complete your transaction" dialog in the
+		// reader's checkout (NPPD-2170).
+		if ( self::is_modal_checkout() ) {
 			return;
 		}
 		/**
@@ -860,6 +1436,8 @@ final class Modal_Checkout {
 			[
 				'ajax_url'              => admin_url( 'admin-ajax.php' ),
 				'nyp_nonce'             => wp_create_nonce( 'newspack_checkout_name_your_price' ),
+				'quantity_nonce'        => wp_create_nonce( 'newspack_checkout_quantity' ),
+				'quantity_error'        => __( 'Something went wrong. Please try again.', 'newspack-blocks' ),
 				'checkout_nonce'        => wp_create_nonce( 'newspack_modal_checkout_nonce' ),
 				'newspack_class_prefix' => self::get_class_prefix(),
 				'is_checkout_complete'  => function_exists( 'is_order_received_page' ) && is_order_received_page(),
@@ -1189,6 +1767,346 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Behaviors that have somewhere to go once checkout finishes.
+	 *
+	 * Anything else leaves the reader in a modal that won't move and won't close, so it is
+	 * treated as "close the modal" instead.
+	 *
+	 * @var string[]
+	 */
+	const AFTER_SUCCESS_BEHAVIORS = [ 'custom', 'referrer' ];
+
+	/**
+	 * Reduce a post-checkout destination to a single comparable form.
+	 *
+	 * Signing and verifying have to agree on the exact string, and the value passes through
+	 * sanitising on its way between them, so both sides normalise here rather than each
+	 * doing their own.
+	 *
+	 * @param string $url The requested destination.
+	 *
+	 * @return string The normalised destination, or an empty string.
+	 */
+	public static function normalize_after_success_url( $url ) {
+		$url = sanitize_url( (string) $url );
+
+		if ( empty( $url ) ) {
+			return '';
+		}
+
+		// Core compares hosts case-sensitively; host names aren't. Rebuild from the parsed
+		// parts rather than replacing the host in the string: the host can appear again
+		// inside a query parameter, and a `user@host` authority never matches `://host` at
+		// all, so a string replacement either rewrites too much or nothing.
+		$parts = wp_parse_url( $url );
+		if ( ! empty( $parts['host'] ) && strtolower( $parts['host'] ) !== $parts['host'] ) {
+			$parts['host'] = strtolower( $parts['host'] );
+			$url           = self::build_url( $parts );
+		}
+
+		return $url;
+	}
+
+	/**
+	 * Reassemble a URL from `wp_parse_url()` parts.
+	 *
+	 * @param array $parts Parsed URL parts.
+	 *
+	 * @return string
+	 */
+	private static function build_url( $parts ) {
+		$user = $parts['user'] ?? '';
+		$pass = isset( $parts['pass'] ) ? ':' . $parts['pass'] : '';
+		$auth = $user ? $user . $pass . '@' : '';
+
+		// A destination with a host but no scheme is protocol-relative. Losing the `//` here
+		// would turn it into a relative path, which changes where the reader lands and makes
+		// this function non-idempotent — and the token signs a normalised value at mint and
+		// normalises again at read, so idempotence is what makes it verify.
+		$prefix = isset( $parts['scheme'] )
+			? $parts['scheme'] . '://'
+			: ( isset( $parts['host'] ) ? '//' : '' );
+
+		return $prefix
+			. $auth
+			. ( $parts['host'] ?? '' )
+			. ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' )
+			. ( $parts['path'] ?? '' )
+			. ( isset( $parts['query'] ) ? '?' . $parts['query'] : '' )
+			. ( isset( $parts['fragment'] ) ? '#' . $parts['fragment'] : '' );
+	}
+
+	/**
+	 * Whether a post is published, read from the stored status.
+	 *
+	 * `get_post_status()` reports an attachment as `publish` whatever its stored status, so a
+	 * token could be minted from one and could not be revoked by unpublishing. Reading the
+	 * field directly returns the real status, and also steps around the `get_post_status`
+	 * filter, which would otherwise let any plugin move this gate.
+	 *
+	 * @param int $post_id The post to check.
+	 *
+	 * @return boolean
+	 */
+	private static function is_published_post( $post_id ) {
+		return 'publish' === get_post_field( 'post_status', (int) $post_id );
+	}
+
+	/**
+	 * The post a block is being rendered for.
+	 *
+	 * `get_the_ID()` is empty outside the loop, which is where a block in a widget or a footer
+	 * template part renders. The queried object covers that, but only when it is a post: on an
+	 * archive it is a term, whose ID would otherwise be read as an unrelated post's.
+	 *
+	 * @return int Post ID, or 0.
+	 */
+	private static function get_after_success_post_id() {
+		$post_id = (int) get_the_ID();
+
+		if ( $post_id ) {
+			return $post_id;
+		}
+
+		$queried = get_queried_object();
+
+		return $queried instanceof \WP_Post ? (int) $queried->ID : 0;
+	}
+
+	/**
+	 * Sign a value for the post-checkout destination it belongs to.
+	 *
+	 * Namespaced so this never produces the same digest as another use of the same key —
+	 * `wp_hash()` with the auth salt also backs the magic-link and email-change secrets, and
+	 * these signatures are published in page HTML.
+	 *
+	 * @param string $payload The value to sign.
+	 *
+	 * @return string
+	 */
+	private static function sign_after_success_payload( $payload ) {
+		// The namespace prefix is what separates this from every other use of the same key and
+		// algorithm. `Reader_Registration::get_frontend_registration_key()` also produces
+		// `hash_hmac( 'sha256', …, wp_salt( 'auth' ) )` and publishes the result to the front
+		// end, so nothing but this prefix distinguishes the two. Never register an integration
+		// ID that begins with it.
+		//
+		// The blog ID is included because `wp_salt()` is network-scoped: without it, a token
+		// minted on one site of a network verifies on every other site in that network.
+		$namespace = 'newspack_blocks_after_success|' . get_current_blog_id() . '|';
+
+		return hash_hmac( 'sha256', $namespace . $payload, wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * Mint a token vouching for a post-checkout destination a block was configured with.
+	 *
+	 * Minted where the block renders, which is the last point this site knows the destination
+	 * came from its own content rather than from the request. Two properties matter:
+	 *
+	 * The destination travels *inside* the token rather than beside it. The token's alphabet
+	 * is URL-safe base64 plus a dot, so the sanitising the value meets in transit — which
+	 * variously deletes percent-encoded octets, drops non-ASCII bytes and HTML-encodes `&`
+	 * and `'` — cannot alter it. Signing the bare URL and hoping every transit point leaves
+	 * it alone is what this avoids.
+	 *
+	 * The token is bound to the post being rendered, and only published posts are signed, so
+	 * a token cannot be minted through the block-renderer REST route or a draft preview by
+	 * someone who can edit posts but not publish them.
+	 *
+	 * `hash_hmac` rather than a nonce: the token has to survive page caching and a reader who
+	 * signs in partway through checkout, and a nonce is bound to a user and a time window.
+	 *
+	 * @param string $url     The destination to vouch for.
+	 * @param int    $post_id The post being rendered. Defaults to the current post.
+	 *
+	 * @return string The token, or an empty string if there is nothing to vouch for.
+	 */
+	public static function get_after_success_token( $url, $post_id = 0 ) {
+		$url = self::normalize_after_success_url( $url );
+
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$post_id = $post_id ? (int) $post_id : self::get_after_success_post_id();
+
+		if ( ! $post_id || ! self::is_published_post( $post_id ) ) {
+			return '';
+		}
+
+		$payload = self::encode_after_success_payload(
+			[
+				'u' => $url,
+				'p' => $post_id,
+			]
+		);
+
+		return $payload . '.' . self::sign_after_success_payload( $payload );
+	}
+
+	/**
+	 * Read a destination back out of a token, if this site vouched for it.
+	 *
+	 * @param string $token The token offered with the request.
+	 *
+	 * @return string The destination, or an empty string if the token is not this site's.
+	 */
+	public static function parse_after_success_token( $token ) {
+		$token = (string) $token;
+
+		if ( '' === $token || false === strpos( $token, '.' ) ) {
+			return '';
+		}
+
+		list( $payload, $signature ) = explode( '.', $token, 2 );
+
+		if ( '' === $payload || '' === $signature ) {
+			return '';
+		}
+
+		if ( ! hash_equals( self::sign_after_success_payload( $payload ), $signature ) ) {
+			return '';
+		}
+
+		$claims = self::decode_after_success_payload( $payload );
+
+		if ( empty( $claims['u'] ) || empty( $claims['p'] ) ) {
+			return '';
+		}
+
+		// Checked at read time as well as at mint time: a post that has since been
+		// unpublished should stop vouching for its destination.
+		if ( ! self::is_published_post( (int) $claims['p'] ) ) {
+			return '';
+		}
+
+		return self::normalize_after_success_url( $claims['u'] );
+	}
+
+	/**
+	 * Encode token claims into a form transit cannot alter.
+	 *
+	 * @param array $claims The claims to encode.
+	 *
+	 * @return string URL-safe base64.
+	 */
+	private static function encode_after_success_payload( $claims ) {
+		return rtrim( strtr( base64_encode( (string) wp_json_encode( $claims ) ), '+/', '-_' ), '=' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+	}
+
+	/**
+	 * Decode token claims.
+	 *
+	 * @param string $payload URL-safe base64.
+	 *
+	 * @return array The claims, or an empty array if the payload is unreadable.
+	 */
+	private static function decode_after_success_payload( $payload ) {
+		$json = base64_decode( strtr( $payload, '-_', '+/' ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+
+		if ( false === $json ) {
+			return [];
+		}
+
+		$claims = json_decode( $json, true );
+
+		return is_array( $claims ) ? $claims : [];
+	}
+
+	/**
+	 * Reduce a post-checkout destination to one this site is willing to send readers to.
+	 *
+	 * The destination reaches the thank-you page through the request, whether it came from
+	 * the block's own settings or from the link the reader followed, and by that point the
+	 * two look alike. A signature tells them apart: one is minted when a block renders a
+	 * destination a publisher configured, so a destination carrying a valid one is this
+	 * site's own and is honoured wherever it points.
+	 *
+	 * Everything else falls to core's redirect validation, which accepts what
+	 * `allowed_redirect_hosts` reports — this site's own host, plus whatever a publisher
+	 * adds through that filter, plus anything another plugin has added (`Newspack\NRH`
+	 * registers one). A destination arriving in a link with no signature has to clear that
+	 * bar, which is what keeps a crafted link from choosing where a reader lands.
+	 *
+	 * @param string $url   The requested destination.
+	 * @param string $token Token offered with the request, if any.
+	 *
+	 * @return string The destination, or an empty string if it is not allowed.
+	 */
+	public static function sanitize_after_success_url( $url, $token = '' ) {
+		// A token carries its own destination, so a mutated `after_success_url` alongside it
+		// is ignored rather than compared against.
+		$vouched = self::parse_after_success_token( $token );
+
+		if ( '' !== $vouched ) {
+			// Returned as verified. `wp_sanitize_redirect()` is deliberately not applied to
+			// this branch: it strips `'` and percent-encodes non-ASCII, so it would rewrite a
+			// destination this site has already established is the publisher's own — the same
+			// drift the token exists to prevent. The untrusted branch below still gets it, via
+			// `wp_validate_redirect()`. Both have been through `sanitize_url()` in normalising.
+			return $vouched;
+		}
+
+		$url = self::normalize_after_success_url( $url );
+
+		if ( empty( $url ) ) {
+			return '';
+		}
+
+		$validated = (string) wp_validate_redirect( $url, '' );
+
+		if ( '' === $validated ) {
+			/**
+			 * Fires when a post-checkout destination is refused.
+			 *
+			 * The reader is sent nowhere and the modal simply closes, which looks the same
+			 * as a publisher not configuring a destination at all. This is the hook to
+			 * watch if you need to tell those two apart.
+			 *
+			 * @param string $url The refused destination.
+			 */
+			do_action( 'newspack_blocks_modal_checkout_after_success_url_rejected', $url );
+		}
+
+		return $validated;
+	}
+
+	/**
+	 * Drop an after-success behavior the reader can't act on.
+	 *
+	 * A behavior with nowhere to go renders a modal that neither navigates nor closes, so
+	 * the destination, the behavior and its button label all fall away together and the
+	 * reader gets the ordinary "close" button instead of one labelled for a page they
+	 * won't be taken to.
+	 *
+	 * @param array $params After-success params.
+	 *
+	 * @return array The params, less any the reader can't act on.
+	 */
+	public static function filter_after_success_params( $params ) {
+		$behavior = $params['after_success_behavior'] ?? '';
+
+		if ( '' === $behavior ) {
+			return $params;
+		}
+
+		$is_unknown  = ! in_array( $behavior, self::AFTER_SUCCESS_BEHAVIORS, true );
+		$has_nowhere = 'custom' === $behavior && empty( $params['after_success_url'] );
+
+		if ( $is_unknown || $has_nowhere ) {
+			unset(
+				$params['after_success_behavior'],
+				$params['after_success_url'],
+				$params['after_success_button_label'],
+				$params['after_success_token']
+			);
+		}
+
+		return $params;
+	}
+
+	/**
 	 * Get after success button params.
 	 */
 	private static function get_after_success_params() {
@@ -1201,14 +2119,19 @@ final class Modal_Checkout {
 				\wp_parse_str( $referrer_query, $request_params );
 			}
 		}
-		return array_filter(
+		$token = isset( $request_params['after_success_token'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		$params = array_filter(
 			[
 				'after_success_behavior'     => isset( $request_params['after_success_behavior'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_behavior'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				'after_success_url'          => isset( $request_params['after_success_url'] ) ? sanitize_url( wp_unslash( $request_params['after_success_url'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'after_success_url'          => isset( $request_params['after_success_url'] ) ? self::sanitize_after_success_url( wp_unslash( $request_params['after_success_url'] ), $token ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				'after_success_button_label' => isset( $request_params['after_success_button_label'] ) ? sanitize_text_field( wp_unslash( $request_params['after_success_button_label'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				'after_success_token'        => $token,
 				'action_type'                => isset( $request_params['action_type'] ) ? sanitize_text_field( wp_unslash( $request_params['action_type'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			]
 		);
+
+		return self::filter_after_success_params( $params );
 	}
 
 	/**
@@ -1225,22 +2148,30 @@ final class Modal_Checkout {
 	/**
 	 * Return URL for modal checkout "thank you" page.
 	 *
+	 * Origin detection covers the referer so that express-wallet (Apple Pay /
+	 * Google Pay) Store API submissions — JSON bodies with no request params —
+	 * get a decorated return URL and land on the modal thank-you, where the
+	 * front-end GA4 purchase event fires.
+	 *
 	 * @param string   $url The URL to redirect to.
 	 * @param WC_Order $order The order related to the transaction.
 	 *
 	 * @return string
 	 */
 	public static function woocommerce_get_return_url( $url, $order ) {
-		if ( ! self::is_modal_checkout() || self::has_unsupported_payment_gateway() ) {
+		if ( ! self::is_modal_checkout_origin() || self::has_unsupported_payment_gateway() ) {
 			return $url;
 		}
 
+		// Encoded because add_query_arg() does not encode what it is given: a
+		// destination carrying its own query string would otherwise split, and
+		// its second param would become a param of the thank-you URL.
 		$args = array_merge(
 			[
 				'modal_checkout' => '1',
 				'email'          => isset( $_REQUEST['billing_email'] ) ? rawurlencode( \sanitize_email( \wp_unslash( $_REQUEST['billing_email'] ) ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			],
-			self::get_after_success_params()
+			array_map( 'rawurlencode', self::get_after_success_params() )
 		);
 
 		// Pass order ID for modal checkout templates.
@@ -1550,7 +2481,7 @@ final class Modal_Checkout {
 	 * @return array
 	 */
 	public static function relax_configured_off_locale_fields( $locale ) {
-		if ( ! self::is_modal_checkout_referer() && ! self::is_modal_checkout() ) {
+		if ( ! self::is_modal_checkout_origin() ) {
 			return $locale;
 		}
 
@@ -1666,61 +2597,96 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Auto-apply a coupon attached to a Checkout Button block to the current
+	 * cart, gated on validation.
+	 *
+	 * The reader never typed the code, so anything that would surface it is kept
+	 * silent: an invalid, expired, restricted or usage-capped coupon is skipped
+	 * with no error notice (validation runs before apply), and the "applied
+	 * successfully" success notice that WC_Cart::apply_coupon() queues is
+	 * cleared. A successful application is tracked in the session so the modal
+	 * can hide its coupon form for that coupon (see should_hide_coupon_form());
+	 * any prior marker is reset first.
+	 *
+	 * @param string $coupon_code Raw coupon code from the request (already
+	 *                            sanitized by the caller, e.g. via filter_input()).
+	 *
+	 * @return void
+	 */
+	public static function maybe_auto_apply_coupon( $coupon_code ) {
+		if ( ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return;
+		}
+		if ( \WC()->session ) {
+			\WC()->session->set( self::AUTO_APPLIED_COUPON_SESSION_KEY, null );
+		}
+		// Decode entities so a literal code (e.g. one containing "&") still
+		// matches. The strict empty-string check keeps a coupon code of "0" valid.
+		$coupon_code = html_entity_decode( (string) $coupon_code, ENT_QUOTES );
+		if ( '' === $coupon_code || ! function_exists( 'wc_coupons_enabled' ) || ! \wc_coupons_enabled() ) {
+			return;
+		}
+		try {
+			$coupon    = new \WC_Coupon( $coupon_code );
+			$discounts = new \WC_Discounts( \WC()->cart );
+			$applied   = true === $discounts->is_coupon_valid( $coupon ) && \WC()->cart->apply_coupon( $coupon_code );
+		} catch ( \Exception $e ) {
+			// A persistent object cache can hold a code-to-ID mapping that
+			// outlives the coupon post, and WooCommerce's data store throws
+			// when it reads the missing post. Skip the coupon rather than
+			// fataling the checkout the reader is standing on — but leave a
+			// trail: without it, a cache stuck in this state silently charges
+			// every reader on the promo link full price.
+			if ( function_exists( 'wc_get_logger' ) ) {
+				wc_get_logger()->warning(
+					sprintf( 'Modal checkout: skipped auto-applying coupon "%s": %s', $coupon_code, $e->getMessage() ),
+					[ 'source' => 'newspack-blocks' ]
+				);
+			}
+			return;
+		}
+		if ( $applied ) {
+			// apply_coupon() queues a "Coupon code applied successfully." success
+			// notice; clear it so the auto-apply stays silent for the reader.
+			if ( function_exists( 'wc_clear_notices' ) ) {
+				\wc_clear_notices();
+			}
+			if ( \WC()->session ) {
+				\WC()->session->set( self::AUTO_APPLIED_COUPON_SESSION_KEY, \wc_format_coupon_code( $coupon_code ) );
+			}
+		}
+	}
+
+	/**
+	 * Whether the in-modal coupon form should be hidden.
+	 *
+	 * True when a coupon was auto-applied from a Checkout Button block (tracked
+	 * in the session) and is still applied to the cart. The reader never entered
+	 * the code, so they should not be prompted to add or stack coupons. If they
+	 * remove the auto-applied coupon, the form is shown again.
+	 *
+	 * @return bool
+	 */
+	public static function should_hide_coupon_form() {
+		if ( ! function_exists( 'WC' ) || ! \WC()->session || ! \WC()->cart ) {
+			return false;
+		}
+		$auto_applied = \WC()->session->get( self::AUTO_APPLIED_COUPON_SESSION_KEY );
+		return ! empty( $auto_applied ) && in_array( $auto_applied, \WC()->cart->get_applied_coupons(), true );
+	}
+
+	/**
 	 * Whether to show order details table.
 	 *
 	 * @return bool
 	 */
 	public static function should_show_order_details() {
+		// The transaction details table is always shown for any non-empty cart. Simple
+		// single-item carts previously hid it and relied on the static price-summary card
+		// above the form; that card was removed, so the real, deal-accurate order details
+		// must always be visible. Guard against a missing cart (early hooks / edge AJAX).
 		$cart = \WC()->cart;
-		if ( $cart->is_empty() ) {
-			return false;
-		}
-		if ( ! empty( $cart->get_applied_coupons() ) ) {
-			return true;
-		}
-		if ( \wc_tax_enabled() && ! $cart->display_prices_including_tax() ) {
-			return true;
-		}
-		if ( 1 < $cart->get_cart_contents_count() ) {
-			return true;
-		}
-		if ( ! empty( $cart->get_fees() ) ) {
-			return true;
-		}
-		if ( method_exists( 'WC_Subscriptions_Switcher', 'cart_contains_switches' ) && \WC_Subscriptions_Switcher::cart_contains_switches( 'any' ) ) {
-			return true;
-		}
-		if ( $cart->needs_shipping_address() ) {
-			$shipping       = \WC()->shipping;
-			$packages       = $shipping->get_packages();
-			$totals         = $cart->get_totals();
-			$shipping_rates = [];
-
-			// Find all the shipping rates that apply to the current transaction.
-			foreach ( $packages as $package ) {
-				if ( ! empty( $package['rates'] ) ) {
-					foreach ( $package['rates'] as $rate_key => $rate ) {
-						$shipping_rates[ $rate_key ] = $rate;
-					}
-				}
-			}
-
-			// Show details if shipping requires a fee or if there are multiple shipping rates to choose from.
-			if ( (float) $totals['total'] !== (float) $totals['subtotal'] || 1 < count( array_values( $shipping_rates ) ) ) {
-				return true;
-			}
-		}
-
-		if ( class_exists( 'WC_Subscriptions_Cart' ) && \WC_Subscriptions_Cart::cart_contains_subscription() ) {
-			return true;
-		}
-
-		// Show details if the cart contains a subscription renewal.
-		if ( function_exists( 'wcs_cart_contains_renewal' ) && \wcs_cart_contains_renewal() ) {
-			return true;
-		}
-
-		return false;
+		return $cart && ! $cart->is_empty();
 	}
 
 	/**
@@ -1765,10 +2731,13 @@ final class Modal_Checkout {
 	/**
 	 * Is the current request only to validate billing field inputs on the first modal screen?
 	 *
+	 * True only for a request whose nonce process_checkout_action() has verified and
+	 * which it accepted as validation-only.
+	 *
 	 * @return bool True if the request is for validation only.
 	 */
 	private static function is_validation_only() {
-		return boolval( filter_input( INPUT_POST, 'is_validation_only', FILTER_SANITIZE_NUMBER_INT ) );
+		return self::$is_validation_only_request;
 	}
 
 	/**
@@ -1825,6 +2794,12 @@ final class Modal_Checkout {
 			}
 			if ( $gate_post_id ) {
 				$params['gate_post_id'] = $gate_post_id;
+			}
+			foreach ( self::CONTEXTUAL_PROMPT_KEYS as $key ) {
+				$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
+				if ( $value ) {
+					$params[ $key ] = $value;
+				}
 			}
 			$location = \add_query_arg( $params, $location );
 		}
@@ -1895,6 +2870,11 @@ final class Modal_Checkout {
 
 	/**
 	 * Is this request using the modal checkout?
+	 *
+	 * Detects modal request *data* (request params, serialized post_data, or a
+	 * classic express-checkout submission). For origin detection that also
+	 * covers parameter-less Store API JSON submissions, see
+	 * is_modal_checkout_origin().
 	 */
 	public static function is_modal_checkout() {
 		// Until we use the modal checkout flow from My Account, we don't want to show the modal checkout thank you template for checkouts originating from My Account.
@@ -1912,6 +2892,31 @@ final class Modal_Checkout {
 		}
 
 		return $is_modal_checkout;
+	}
+
+	/**
+	 * Does this request originate from the modal checkout?
+	 *
+	 * Superset of is_modal_checkout(): additionally true for Store API JSON
+	 * submissions (express wallets such as Apple Pay and Google Pay) whose only
+	 * modal signal is the referer query, since JSON bodies carry no request
+	 * params and leave $_POST empty.
+	 *
+	 * The referer is client-controlled, so this gates analytics and
+	 * presentation decisions only — never authorization.
+	 *
+	 * Known edge: a wallet submission from the My Account-origin modal reads as
+	 * modal-origin, because the modal strips the my_account_checkout marker
+	 * from every URL it opens (src/modal-checkout/modal.js). Since #2121 that
+	 * is also how My Account card checkouts behave, so wallet and card flows
+	 * stay in parity; the My Account exclusion inside is_modal_checkout()
+	 * continues to govern the legacy non-modal flows, whose referers never
+	 * carry modal_checkout.
+	 *
+	 * @return bool
+	 */
+	public static function is_modal_checkout_origin() {
+		return self::is_modal_checkout() || self::is_modal_checkout_referer();
 	}
 
 	/**
@@ -1981,112 +2986,6 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Get validated cart item context for the modal checkout product summary.
-	 *
-	 * @param \WC_Cart $cart Cart object.
-	 *
-	 * @return array|null
-	 */
-	private static function get_cart_product_summary_context( $cart ) {
-		if ( ! $cart || 1 !== $cart->get_cart_contents_count() ) {
-			return null;
-		}
-		$cart_item_key = array_key_first( $cart->get_cart() );
-		$cart_item     = $cart->get_cart_item( $cart_item_key );
-
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
-		$product    = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
-		$is_visible = $product && $product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key );
-		// phpcs:enable
-
-		return [
-			'cart_item_key' => $cart_item_key,
-			'cart_item'     => $cart_item,
-			'product'       => $product,
-			'is_visible'    => $is_visible,
-		];
-	}
-
-	/**
-	 * Get the cart product summary shown at the top of modal checkout.
-	 *
-	 * @param \WC_Cart|null $cart    Cart object.
-	 * @param array|null    $context Validated cart item context.
-	 */
-	private static function get_cart_product_summary( $cart = null, $context = null ) {
-		if ( ! $cart ) {
-			if ( ! function_exists( 'WC' ) ) {
-				return '';
-			}
-			$cart = \WC()->cart;
-		}
-		$context = $context ? $context : self::get_cart_product_summary_context( $cart );
-		if ( ! $context || ! $context['is_visible'] ) {
-			return '';
-		}
-
-		$cart_item_key    = $context['cart_item_key'];
-		$cart_item        = $context['cart_item'];
-		$product          = $context['product'];
-		$allowed_html     = self::get_cart_product_summary_allowed_html();
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
-		$product_name     = apply_filters(
-			'woocommerce_cart_item_name',
-			$product->get_name(),
-			$cart_item,
-			$cart_item_key
-		);
-		$product_subtotal = apply_filters(
-			'woocommerce_cart_item_subtotal',
-			$cart->get_product_subtotal( $product, $cart_item['quantity'] ),
-			$cart_item,
-			$cart_item_key
-		);
-		// phpcs:enable
-
-		$summary = $product_name . ': ';
-		if ( function_exists( 'wc_get_formatted_cart_item_data' ) ) {
-			$summary .= wc_get_formatted_cart_item_data( $cart_item );
-		}
-		$summary .= $product_subtotal;
-		return wp_kses( $summary, $allowed_html );
-	}
-
-	/**
-	 * Get allowed HTML for the modal checkout product summary.
-	 *
-	 * @return array Allowed HTML tags and attributes.
-	 */
-	private static function get_cart_product_summary_allowed_html() {
-		$allowed_html = wp_kses_allowed_html( 'post' );
-
-		$allowed_html['bdi'] = [
-			'class' => true,
-			'dir'   => true,
-		];
-
-		if ( ! isset( $allowed_html['span'] ) ) {
-			$allowed_html['span'] = [];
-		}
-		$allowed_html['span']['class'] = true;
-
-		if ( ! isset( $allowed_html['small'] ) ) {
-			$allowed_html['small'] = [];
-		}
-		$allowed_html['small']['class'] = true;
-
-		return $allowed_html;
-	}
-
-	/**
-	 * Get the updated cart product summary for JavaScript.
-	 */
-	public static function get_cart_product_summary_js() {
-		echo self::get_cart_product_summary(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-		wp_die();
-	}
-
-	/**
 	 * Get the updated price for updating the "Place order" button.
 	 */
 	public static function get_cart_total_js() {
@@ -2109,25 +3008,28 @@ final class Modal_Checkout {
 			return;
 		}
 		$cart = \WC()->cart;
-		if ( 1 !== $cart->get_cart_contents_count() ) {
+		// Line-item count, not get_cart_contents_count(): that sums quantities, which
+		// would hide this order-summary data carrier for any multi-seat purchase.
+		if ( 1 !== count( $cart->get_cart() ) ) {
 			return;
 		}
-		$summary_context = self::get_cart_product_summary_context( $cart );
-		$class_prefix    = self::get_class_prefix();
+		$cart_item_key = array_key_first( $cart->get_cart() );
+		$cart_item = $cart->get_cart_item( $cart_item_key );
 		?>
-			<div class="<?php echo esc_attr( "order-details-summary {$class_prefix}__box {$class_prefix}__box--text-center" ); ?>">
 			<?php
-			if ( $summary_context && $summary_context['is_visible'] ) :
+			// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
+			$_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
+			// Hidden data carrier only — the visible price-summary card was removed. The modal
+			// dialog (modal.js) still reads this element's data-checkout for the RAS
+			// checkout_completed event and post-auth checkout routing. It is intentionally not
+			// gated on woocommerce_checkout_cart_item_visible (it carries data, not a visible
+			// row), so the JS anchor and analytics survive a plugin hiding the cart item.
+			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 ) :
 				?>
-				<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ); ?>'>
-					<strong>
-						<?php echo self::get_cart_product_summary( $cart, $summary_context ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-					</strong>
-				</p>
+				<p id="modal-checkout-product-details" <?php Checkout_Data::print_data_checkout_attr( Checkout_Data::get_checkout_data( $cart ) ); ?> hidden></p>
 				<?php
 			endif;
 			?>
-			</div>
 		<?php
 	}
 
@@ -2146,7 +3048,9 @@ final class Modal_Checkout {
 		}
 
 		$cart = \WC()->cart;
-		if ( 1 !== $cart->get_cart_contents_count() ) {
+		// Line-item count, not get_cart_contents_count(): that sums quantities, which
+		// would hide this order-summary data carrier for any multi-seat purchase.
+		if ( 1 !== count( $cart->get_cart() ) ) {
 			return;
 		}
 		$class_prefix = self::get_class_prefix();
@@ -2185,6 +3089,83 @@ final class Modal_Checkout {
 				// phpcs:enable
 				?>
 			</div>
+		<?php
+	}
+
+	/**
+	 * Render the in-modal quantity form, when a plugin has asked for one.
+	 *
+	 * The modal is single-quantity by default, and stays that way unless a
+	 * consumer of the field filter below returns arguments for this product.
+	 * The label and bounds all come from the filter.
+	 */
+	public static function render_quantity_form() {
+		if ( ! self::is_modal_checkout() || ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return;
+		}
+
+		// Donation carts have their own amount controls; a quantity field on top of
+		// them would be a second, conflicting way to change what the reader pays.
+		$is_donation = method_exists( 'Newspack\Donations', 'is_donation_cart' ) && \Newspack\Donations::is_donation_cart();
+		if ( $is_donation ) {
+			return;
+		}
+
+		$cart = \WC()->cart;
+		// Line-item count, not get_cart_contents_count(): that sums quantities, so a
+		// multi-seat purchase would fail this guard and hide its own field.
+		if ( 1 !== count( $cart->get_cart() ) ) {
+			return;
+		}
+		$cart_item_key = array_key_first( $cart->get_cart() );
+		$cart_item     = $cart->get_cart_item( $cart_item_key );
+		$product       = isset( $cart_item['data'] ) ? $cart_item['data'] : null;
+		// The filter's consumers are handed this product to decide on.
+		if ( ! $product || ! method_exists( $product, 'get_id' ) ) {
+			return;
+		}
+		// A cart WooCommerce Subscriptions is holding for an existing subscription
+		// cannot be rebuilt at a new quantity without losing that record (see
+		// update_cart_quantity()), so it gets no control that would invite one.
+		if ( array_intersect_key( array_filter( $cart_item ), array_flip( self::WCS_SUBSCRIPTION_CART_ITEM_KEYS ) ) ) {
+			return;
+		}
+
+		/**
+		 * Lets a plugin turn on a quantity field for this purchase. Null keeps the
+		 * modal single-quantity. Array keys: label, min, max (0 = none), help.
+		 *
+		 * @param null|array  $args      Field arguments or null.
+		 * @param \WC_Product $product   The product in the cart.
+		 * @param array       $cart_item The cart item.
+		 */
+		$args = apply_filters( 'newspack_blocks_modal_checkout_quantity_field', null, $product, $cart_item );
+		if ( empty( $args ) ) {
+			return;
+		}
+		$args = wp_parse_args(
+			$args,
+			[
+				'label' => '',
+				'min'   => 1,
+				'max'   => 0,
+				'help'  => '',
+			]
+		);
+
+		$class_prefix = self::get_class_prefix();
+		$quantity     = max( 1, (int) $cart_item['quantity'] );
+		?>
+		<form class="modal_checkout_quantity">
+			<?php // A single line item per modal, so one fixed input id cannot collide. ?>
+			<h3><label for="modal_checkout_quantity"><?php echo esc_html( $args['label'] ); ?></label></h3>
+			<input type="hidden" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>" />
+			<p class="input-quantity">
+				<input type="number" id="modal_checkout_quantity" name="quantity" step="1" min="<?php echo esc_attr( $args['min'] ); ?>" <?php echo $args['max'] > 0 ? 'max="' . esc_attr( $args['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $quantity ); ?>" onwheel="return false" />
+				<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--outline" ); ?>"><?php esc_html_e( 'Update', 'newspack-blocks' ); ?></button>
+			</p>
+			<p class="result <?php echo esc_attr( "{$class_prefix}__helper-text" ); ?>"><?php echo esc_html( $args['help'] ); ?></p>
+		</form>
 		<?php
 	}
 

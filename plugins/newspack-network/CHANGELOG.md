@@ -1,3 +1,115 @@
+## newspack-network [2.22.11](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.10...newspack-network@2.22.11) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.3
+
+## newspack-network [2.22.10](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.9...newspack-network@2.22.10) (2026-09-28)
+
+
+### Bug Fixes
+
+* **network:** describe the images the receiving site actually stores ([#981](https://github.com/Automattic/newspack-workspace/issues/981)) ([055ad63](https://github.com/Automattic/newspack-workspace/commit/055ad63653c0ed8bae773d1fccb36f7006132473))
+
+## newspack-network [2.22.9](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.8...newspack-network@2.22.9) (2026-09-22)
+
+
+### Bug Fixes
+
+* **event-log:** index timestamp so checkout skips a full-table scan ([#1132](https://github.com/Automattic/newspack-workspace/issues/1132)) ([c2ecf7c](https://github.com/Automattic/newspack-workspace/commit/c2ecf7cd8b9f0d7dd29b29e85171a7c79d8d3a94))
+
+## newspack-network [2.22.8](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.7...newspack-network@2.22.8) (2026-09-15)
+
+
+### Bug Fixes
+
+* use update_option instead of add_option in migration and setup ([cbae9a6](https://github.com/Automattic/newspack-workspace/commit/cbae9a63d0b30b6cf2ac36a46f00541dcbc94266))
+
+## newspack-network [2.22.7](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.6...newspack-network@2.22.7) (2026-09-08)
+
+
+### Bug Fixes
+
+* **content-distribution:** authorize the post on unlink and pull ([#1049](https://github.com/Automattic/newspack-workspace/issues/1049)) ([816b1d6](https://github.com/Automattic/newspack-workspace/commit/816b1d638c127234596277ae3c6adddafe6592a2))
+
+## newspack-network [2.22.6](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.5...newspack-network@2.22.6) (2026-09-02)
+
+
+### Bug Fixes
+
+* **network:** harden remote media handling in distribution ([#885](https://github.com/Automattic/newspack-workspace/issues/885)) ([f450a66](https://github.com/Automattic/newspack-workspace/commit/f450a663c6c876d89ca26b549c9c23aac17cab7a))
+
+## newspack-network [2.22.5](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.4...newspack-network@2.22.5) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.2
+
+## newspack-network [2.22.4](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.3...newspack-network@2.22.4) (2026-08-26)
+
+
+### Bug Fixes
+
+* **network:** process each hub webhook delivery at most once ([#940](https://github.com/Automattic/newspack-workspace/issues/940)) ([6976c7b](https://github.com/Automattic/newspack-workspace/commit/6976c7bc35117b0dc859fa8903e13c3071cd3731))
+
+## newspack-network [2.22.3](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.2...newspack-network@2.22.3) (2026-08-26)
+
+
+### Bug Fixes
+
+* **content-distribution:** filter caller-supplied content on insert ([#924](https://github.com/Automattic/newspack-workspace/issues/924)) ([1deb19a](https://github.com/Automattic/newspack-workspace/commit/1deb19a6a239394bcda09c4a5d58623d22a4335c))
+
+## newspack-network [2.22.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.1...newspack-network@2.22.2) (2026-08-24)
+
+
+### Bug Fixes
+
+* **network:** escape node-supplied hub admin output ([#871](https://github.com/Automattic/newspack-workspace/issues/871)) ([4dbe67d](https://github.com/Automattic/newspack-workspace/commit/4dbe67d6c36c365254a4517d031ab725a57637e3))
+
+## newspack-network [2.22.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.0...newspack-network@2.22.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **network:** distribute dynamic galleries as resolved images ([#918](https://github.com/Automattic/newspack-workspace/issues/918)) ([0e1d1a1](https://github.com/Automattic/newspack-workspace/commit/0e1d1a149e48ba2f6425477eea41164fc6b195d7))
+
+# newspack-network [2.22.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.2...newspack-network@2.22.0) (2026-08-17)
+
+
+### Features
+
+* **network:** distribute posts from the front-end admin bar ([#679](https://github.com/Automattic/newspack-workspace/issues/679)) ([1b95d41](https://github.com/Automattic/newspack-workspace/commit/1b95d41fca34eb506b8790ef0401e93e79ce61af))
+* **network:** product network ID assignment + verification CLI (NPPD-2057, [#636](https://github.com/Automattic/newspack-workspace/issues/636)) ([f07c970](https://github.com/Automattic/newspack-workspace/commit/f07c97022180030c88d1f02c276a9d07e2ac0dbc))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.1
+* **newspack-scripts:** upgraded to 5.11.0
+
+## newspack-network [2.21.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.1...newspack-network@2.21.2) (2026-08-03)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.10.0
+
+## newspack-network [2.21.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.21.0...newspack-network@2.21.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* **content-distribution:** don't mark failed dispatch as distributed ([#702](https://github.com/Automattic/newspack-workspace/issues/702)) ([c8792bb](https://github.com/Automattic/newspack-workspace/commit/c8792bb4f6983d8358f8b8dd23a31ba38edc9379))
+
+# newspack-network [2.21.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.6...newspack-network@2.21.0) (2026-07-20)
+
+
+### Features
+
+* **integrity-check:** add --fix flag to reconcile membership discrepancies ([#307](https://github.com/Automattic/newspack-workspace/issues/307), NPPM-386) ([e8d26af](https://github.com/Automattic/newspack-workspace/commit/e8d26af6e0aa3a4f26b289f92c7a2ec9392e7450))
+
 ## newspack-network [2.20.6](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.5...newspack-network@2.20.6) (2026-07-13)
 
 

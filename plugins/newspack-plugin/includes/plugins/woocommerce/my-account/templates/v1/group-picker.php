@@ -44,20 +44,22 @@ usort(
 		<?php foreach ( $managed as $subscription ) : ?>
 			<?php
 			$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
-			// The owner counts as a member, so use the owner-inclusive count and a
-			// capacity (limit + owner) so the card matches the group's Members tab.
+			// The owner occupies a seat, so pair the owner-inclusive count with the
+			// owner-inclusive capacity (the limit) so the card matches the group's Members tab.
+			// "Seats" rather than "members" because the owner fills one of them without
+			// being a member.
 			$member_count        = Group_Subscription::get_member_count( $subscription );
 			$capacity            = Group_Subscription::get_member_capacity( $subscription );
 			$count_label         = $capacity
 				? sprintf(
-					/* translators: 1: member count, 2: member capacity */
-					_x( '%1$d of %2$d members', 'group member count', 'newspack-plugin' ),
+					/* translators: 1: number of seats taken, 2: total seats */
+					_x( '%1$d of %2$d seats', 'group seat count', 'newspack-plugin' ),
 					$member_count,
 					$capacity
 				)
 				: sprintf(
-					/* translators: %d: member count */
-					_n( '%d member', '%d members', $member_count, 'newspack-plugin' ),
+					/* translators: %d: number of seats taken */
+					_n( '%d seat used', '%d seats used', $member_count, 'newspack-plugin' ),
 					$member_count
 				);
 			$subscription_status = $subscription->get_status();

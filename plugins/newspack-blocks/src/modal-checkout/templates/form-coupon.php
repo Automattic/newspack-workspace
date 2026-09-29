@@ -12,6 +12,15 @@ if ( ! wc_coupons_enabled() ) { // @codingStandardsIgnoreLine.
 	return;
 }
 
+// Hide the coupon form when a coupon was auto-applied from a Checkout Button
+// block — the reader didn't enter the code, so don't prompt them for one.
+if (
+	class_exists( '\Newspack_Blocks\Modal_Checkout' )
+	&& \Newspack_Blocks\Modal_Checkout::should_hide_coupon_form()
+) {
+	return;
+}
+
 ?>
 <form class="modal_checkout_coupon woocommerce-form-coupon" method="post">
 	<h3><?php esc_html_e( 'Apply a coupon code', 'newspack-blocks' ); ?></h3>

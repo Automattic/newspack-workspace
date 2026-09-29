@@ -164,7 +164,7 @@ Available CLI commands are (add `--help` flag to learn more about each command):
 
 ### `wp newspack-network process-webhooks`
 * Will process `pending` `np_webhook_request`s and delete after processing.
-* `--per-page=1000` to process x amount of requests. Default is `-1`.
+* `--per-page=500` to process x amount of requests, oldest first. Default is `1000`; run again to process the next batch.
 * `--status='killed'` to process requests of a different status. Default is `'pending'`
 * `--dry-run` enabled. Will run through process without deleting.
 * `--yes` enabled. Will bypass confirmations.

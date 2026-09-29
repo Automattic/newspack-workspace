@@ -7,12 +7,19 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
-import { TextareaControl, ToggleControl } from '@wordpress/components';
+import {
+	TextareaControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControl as ToggleGroupControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
+} from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Grid, SelectControl, TextControl } from '../../../../../../packages/components/src';
+import { SelectControl, TextControl } from '../../../../../../packages/components/src';
 import { getFontImportURL, getFontsList, isFontInOptions, TYPOGRAPHY_OPTIONS } from './utils';
 
 /**
@@ -27,7 +34,7 @@ type FontGroup = {
 	} >;
 };
 
-export default function Typography( { data, isFetching, update }: ThemeModComponentProps & { isFetching: boolean } ) {
+export default function Typography( { data, update }: ThemeModComponentProps ) {
 	const [ typographyOptionsType, updateTypographyOptionsType ] = useState< null | 'curated' | 'custom' >( null );
 
 	useEffect( () => {
@@ -62,7 +69,7 @@ export default function Typography( { data, isFetching, update }: ThemeModCompon
 		const isHeadings = type === 'headings';
 		const label = isHeadings ? __( 'Headings', 'newspack-plugin' ) : __( 'Body', 'newspack-plugin' );
 		return (
-			<Grid columns={ 1 } gutter={ 16 }>
+			<>
 				<TextareaControl
 					label={ label + ' - ' + __( 'Font provider import code or URL', 'newspack-plugin' ) }
 					placeholder={ 'https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap' }
@@ -73,6 +80,7 @@ export default function Typography( { data, isFetching, update }: ThemeModCompon
 					rows={ 3 }
 				/>
 				<TextControl
+					withMargin={ false }
 					label={ label + ' - ' + __( 'Font name', 'newspack-plugin' ) }
 					value={ isHeadings ? data.font_header : data.font_body }
 					onChange={ ( e: string ) => {
@@ -102,69 +110,68 @@ export default function Typography( { data, isFetching, update }: ThemeModCompon
 					value={ isHeadings ? data.font_header_stack : data.font_body_stack }
 					onChange={ ( e: string ) => updateTypographyState( isHeadings ? 'font_header_stack' : 'font_body_stack', e ) }
 				/>
-			</Grid>
+			</>
 		);
 	};
 
 	return (
-		<Grid columns={ 1 } gutter={ 16 }>
-			<SelectControl
+		<Stack direction="column" gap="xl">
+			<ToggleGroupControl
+				__nextHasNoMarginBottom
+				__next40pxDefaultSize
+				isBlock
 				label={ __( 'Typography Options', 'newspack-plugin' ) }
-				hideLabelFromVision
-				disabled={ true }
-				value={ typographyOptionsType ? typographyOptionsType : 'curated' }
-				onChange={ updateTypographyOptionsType }
-				buttonOptions={
-					isFetching
-						? [
-								{
-									label: __( 'Loading…', 'newspack-plugin' ),
-									value: null,
-								},
-						  ]
-						: TYPOGRAPHY_OPTIONS
-				}
-			/>
-			<Grid gutter={ 32 }>
-				{ typographyOptionsType === 'curated' || null === typographyOptionsType ? (
-					<>
-						<SelectControl
-							label={ __( 'Headings', 'newspack-plugin' ) }
-							optgroups={ getFontsList( true ) }
-							value={ data.font_header }
-							onChange={ ( value: string, group: FontGroup ) => {
-								updateTypographyState( {
-									font_header: value,
-									custom_font_import_code: getFontImportURL( value ),
-									font_header_stack: group?.fallback,
-								} );
-							} }
-						/>
-						<SelectControl
-							label={ __( 'Body', 'newspack-plugin' ) }
-							optgroups={ getFontsList() }
-							value={ data.font_body }
-							onChange={ ( value: string, group: FontGroup ) => {
-								updateTypographyState( {
-									font_body: value,
-									custom_font_import_code_alternate: getFontImportURL( value ),
-									font_body_stack: group?.fallback,
-								} );
-							} }
-						/>
-					</>
-				) : (
-					<>
-						{ renderCustomFontChoice( 'headings' ) }
-						{ renderCustomFontChoice( 'body' ) }
-					</>
-				) }
-			</Grid>
-			<ToggleControl
-				checked={ data.accent_allcaps }
-				onChange={ checked => updateTypographyState( 'accent_allcaps', checked ) }
-				label={ __( 'Use all-caps for accent text', 'newspack-plugin' ) }
-			/>
-		</Grid>
+				value={ typographyOptionsType ?? 'curated' }
+				onChange={ value => updateTypographyOptionsType( value as 'curated' | 'custom' ) }
+			>
+				{ TYPOGRAPHY_OPTIONS.map( option => (
+					<ToggleGroupControlOption key={ option.value } value={ option.value } label={ option.label } />
+				) ) }
+			</ToggleGroupControl>
+			{ typographyOptionsType === 'curated' || null === typographyOptionsType ? (
+				<>
+					<SelectControl
+						label={ __( 'Headings', 'newspack-plugin' ) }
+						optgroups={ getFontsList( true ) }
+						value={ data.font_header }
+						onChange={ ( value: string, group: FontGroup ) => {
+							updateTypographyState( {
+								font_header: value,
+								custom_font_import_code: getFontImportURL( value ),
+								font_header_stack: group?.fallback,
+							} );
+						} }
+					/>
+					<SelectControl
+						label={ __( 'Body', 'newspack-plugin' ) }
+						optgroups={ getFontsList() }
+						value={ data.font_body }
+						onChange={ ( value: string, group: FontGroup ) => {
+							updateTypographyState( {
+								font_body: value,
+								custom_font_import_code_alternate: getFontImportURL( value ),
+								font_body_stack: group?.fallback,
+							} );
+						} }
+					/>
+				</>
+			) : (
+				<>
+					{ renderCustomFontChoice( 'headings' ) }
+					{ renderCustomFontChoice( 'body' ) }
+				</>
+			) }
+			<ToggleGroupControl
+				__nextHasNoMarginBottom
+				__next40pxDefaultSize
+				isBlock
+				label={ __( 'Accent Text', 'newspack-plugin' ) }
+				value={ data.accent_allcaps ? 'allcaps' : 'as-written' }
+				onChange={ value => updateTypographyState( 'accent_allcaps', value === 'allcaps' ) }
+			>
+				<ToggleGroupControlOption value="allcaps" label={ __( 'All caps', 'newspack-plugin' ) } />
+				<ToggleGroupControlOption value="as-written" label={ __( 'As written', 'newspack-plugin' ) } />
+			</ToggleGroupControl>
+		</Stack>
 	);
 }

@@ -24,6 +24,63 @@ class InDesign_Exporter {
 	public const MODULE_NAME = 'indesign-export';
 
 	/**
+	 * Option name storing the Tagged Text platform for exports.
+	 *
+	 * Values are keys of InDesign_Converter::FORMATS ('win' or 'mac'). Rows
+	 * written by the setting's earlier releases may hold 'auto', from a removed
+	 * User-Agent mode; get_platform_setting() maps those to the default.
+	 *
+	 * @var string
+	 */
+	public const PLATFORM_OPTION = 'newspack_indesign_export_platform';
+
+	/**
+	 * Option name storing the list of post types whose admin screens get the export action.
+	 *
+	 * @var string
+	 */
+	public const POST_TYPES_OPTION = 'newspack_indesign_export_post_types';
+
+	/**
+	 * Default value for the post types option.
+	 *
+	 * @var string[]
+	 */
+	public const POST_TYPES_DEFAULT = [ 'post' ];
+
+	/**
+	 * Option name storing whether photo captions and credits are excluded from
+	 * exports.
+	 *
+	 * One setting covers both fields: they are appended together as the
+	 * export's photo-information section (NPPM-3098).
+	 *
+	 * @var string
+	 */
+	public const EXCLUDE_CAPTIONS_OPTION = 'newspack_indesign_export_exclude_captions';
+
+	/**
+	 * Default value for the exclude-captions option.
+	 *
+	 * @var bool
+	 */
+	public const EXCLUDE_CAPTIONS_DEFAULT = false;
+
+	/**
+	 * Post types hidden from the admin setting because they have no editorial
+	 * "article content" to export (lists, feeds, store products, etc.).
+	 *
+	 * @var string[]
+	 */
+	private const EXCLUDED_POST_TYPES = [
+		'attachment',
+		'partner_rss_feed',  // Newspack RSS feeds.
+		'newspack_nl_list',  // Newspack Newsletters subscription lists.
+		'newspack_collection', // Newspack Collections.
+		'product',           // WooCommerce products.
+	];
+
+	/**
 	 * Initialize the module.
 	 */
 	public static function init() {
@@ -39,15 +96,39 @@ class InDesign_Exporter {
 
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 
+		// The list-table bulk and row actions depend on the configured post types,
+		// which may include custom post types. CPTs register on `init`, but this
+		// module boots at file scope while plugins load — before `init` — so the
+		// supported-types list would be resolved before CPTs exist and their
+		// `bulk_actions-edit-{$post_type}` filters would never be added. Defer that
+		// registration to `init` (priority 20, after CPTs register). Matches the
+		// deferred-registration pattern used by the sibling optional modules.
+		add_action( 'init', [ __CLASS__, 'register_list_table_actions' ], 20 );
+		add_action( 'admin_post_export_indesign_single', [ __CLASS__, 'handle_single_export' ] );
+		add_action( 'admin_notices', [ __CLASS__, 'admin_notices' ] );
+	}
+
+	/**
+	 * Register the list-table bulk and row export actions.
+	 *
+	 * Hooked to `init` (priority 20) so every configured post type — including
+	 * custom post types registered on `init` — is present when the supported
+	 * list is resolved. The `bulk_actions-edit-{$post_type}` filter names are
+	 * built from that list here; the shared row-action filters are added
+	 * alongside them. Both sets of filters fire during list-table render, well
+	 * after `init`, so late registration is safe.
+	 */
+	public static function register_list_table_actions() {
 		$supported_post_types = self::get_supported_post_types();
 		foreach ( $supported_post_types as $post_type ) {
 			add_filter( "bulk_actions-edit-{$post_type}", [ __CLASS__, 'add_bulk_action' ] );
 			add_filter( "handle_bulk_actions-edit-{$post_type}", [ __CLASS__, 'handle_bulk_action' ], 100, 3 );
 		}
 
+		// WordPress dispatches to `page_row_actions` for hierarchical post types
+		// (pages, hierarchical CPTs) and `post_row_actions` for the rest, so hook both.
 		add_filter( 'post_row_actions', [ __CLASS__, 'add_row_action' ], 10, 2 );
-		add_action( 'admin_post_export_indesign_single', [ __CLASS__, 'handle_single_export' ] );
-		add_action( 'admin_notices', [ __CLASS__, 'admin_notices' ] );
+		add_filter( 'page_row_actions', [ __CLASS__, 'add_row_action' ], 10, 2 );
 	}
 
 	/**
@@ -67,17 +148,99 @@ class InDesign_Exporter {
 	/**
 	 * Get supported post types for InDesign export.
 	 *
-	 * @return array Array of supported post types.
+	 * Reads from the site setting (defaulting to the built-in post type) and
+	 * then runs the `newspack_indesign_export_supported_post_types` filter so
+	 * code-level extension points still work alongside the admin setting.
+	 *
+	 * @return array Array of supported post type slugs.
 	 */
 	public static function get_supported_post_types() {
-		$supported_post_types = [ 'post' ];
+		$supported_post_types = self::get_post_types_setting();
 
 		/**
 		 * Filters the post types that support InDesign export.
 		 *
 		 * @param array $supported_post_types Array of post type names that support InDesign export.
 		 */
-		return apply_filters( 'newspack_indesign_export_supported_post_types', $supported_post_types );
+		return (array) apply_filters( 'newspack_indesign_export_supported_post_types', $supported_post_types );
+	}
+
+	/**
+	 * Get the stored post types setting, sanitized.
+	 *
+	 * Constrains the stored slugs to the same "available" list the settings UI
+	 * offers (public post types with an admin UI, minus the excluded ones). This
+	 * drops slugs whose post type is no longer registered (e.g. a CPT plugin was
+	 * deactivated) as well as types intentionally hidden from the picker (lists,
+	 * feeds, products, etc.) that may have leaked in via direct option writes or
+	 * older configs — so a stored value can never expose export actions for a
+	 * type the admin can't see or uncheck. Returns the default when the option is
+	 * unset or contains a non-array value.
+	 *
+	 * @return string[] Sanitized array of post type slugs.
+	 */
+	public static function get_post_types_setting() {
+		$value = get_option( self::POST_TYPES_OPTION, self::POST_TYPES_DEFAULT );
+		if ( ! is_array( $value ) ) {
+			return self::POST_TYPES_DEFAULT;
+		}
+
+		$available = array_column( self::get_available_post_types(), 'value' );
+
+		return array_values(
+			array_filter(
+				$value,
+				static function ( $slug ) use ( $available ) {
+					return is_string( $slug ) && in_array( $slug, $available, true );
+				}
+			)
+		);
+	}
+
+	/**
+	 * Get the list of post types eligible to appear in the admin setting.
+	 *
+	 * Returns post types registered as public and with an admin UI, excluding
+	 * attachments and any post type listed in EXCLUDED_POST_TYPES (lists, feeds,
+	 * products, etc. — types with no editorial article content).
+	 *
+	 * @return array<int, array{value:string, label:string}> Available options.
+	 */
+	public static function get_available_post_types() {
+		$post_types = get_post_types(
+			[
+				'public'  => true,
+				'show_ui' => true,
+			],
+			'objects'
+		);
+
+		/**
+		 * Filters the list of post type slugs hidden from the InDesign export
+		 * setting. Lets sites add or remove exclusions for custom post types
+		 * that aren't editorial content.
+		 *
+		 * @param string[] $excluded Default exclusions: attachments, RSS feeds,
+		 *                           subscription lists, collections, WooCommerce
+		 *                           products.
+		 */
+		$excluded = (array) apply_filters(
+			'newspack_indesign_export_excluded_post_types',
+			self::EXCLUDED_POST_TYPES
+		);
+
+		$options = [];
+		foreach ( $post_types as $post_type ) {
+			if ( in_array( $post_type->name, $excluded, true ) ) {
+				continue;
+			}
+			$options[] = [
+				'value' => $post_type->name,
+				'label' => $post_type->labels->name ?? $post_type->name,
+			];
+		}
+
+		return $options;
 	}
 
 	/**
@@ -106,7 +269,7 @@ class InDesign_Exporter {
 	 * @return array Modified bulk actions.
 	 */
 	public static function add_bulk_action( $bulk_actions ) {
-		$bulk_actions['export_indesign'] = __( 'Export as Adobe InDesign', 'newspack' );
+		$bulk_actions['export_indesign'] = __( 'Export as Adobe InDesign', 'newspack-plugin' );
 		return $bulk_actions;
 	}
 
@@ -123,16 +286,45 @@ class InDesign_Exporter {
 			return $redirect_to;
 		}
 
-		if ( ! current_user_can( 'edit_posts' ) ) {
-			return add_query_arg( 'indesign_export_error', 'capability', $redirect_to );
-		}
-
 		if ( ! isset( $_REQUEST['_wpnonce'] ) || ! wp_verify_nonce( $_REQUEST['_wpnonce'], 'bulk-posts' ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 			return add_query_arg( 'indesign_export_error', 'nonce', $redirect_to );
 		}
 
 		if ( empty( $post_ids ) ) {
 			return add_query_arg( 'indesign_export_error', 'no_posts', $redirect_to );
+		}
+
+		// Resolve the supported post types once for the whole selection rather than
+		// re-running is_post_supported() (and its post-type registry walk) per ID.
+		$supported_post_types = self::get_supported_post_types();
+		$post_ids             = array_values(
+			array_filter(
+				$post_ids,
+				static function ( $post_id ) use ( $supported_post_types ) {
+					$post = get_post( $post_id );
+					return $post && in_array( $post->post_type, $supported_post_types, true );
+				}
+			)
+		);
+		if ( empty( $post_ids ) ) {
+			return add_query_arg( 'indesign_export_error', 'unsupported_post_type', $redirect_to );
+		}
+
+		// Gate on the per-object capability rather than the generic `edit_posts`.
+		// With arbitrary post types now exportable, a user may be able to edit the
+		// selected items (e.g. a custom role scoped to a CPT) without holding the
+		// generic cap — and vice versa. This mirrors the per-post check used by the
+		// row action and single-export handler.
+		$post_ids = array_values(
+			array_filter(
+				$post_ids,
+				static function ( $post_id ) {
+					return current_user_can( 'edit_post', $post_id );
+				}
+			)
+		);
+		if ( empty( $post_ids ) ) {
+			return add_query_arg( 'indesign_export_error', 'capability', $redirect_to );
 		}
 
 		self::export_posts( $post_ids );
@@ -164,7 +356,7 @@ class InDesign_Exporter {
 					'export_indesign' => sprintf(
 						'<a href="%s">%s</a>',
 						esc_url( $export_url ),
-						__( 'Export as Adobe InDesign', 'newspack' )
+						__( 'Export as Adobe InDesign', 'newspack-plugin' )
 					),
 				]
 			);
@@ -200,8 +392,35 @@ class InDesign_Exporter {
 			exit;
 		}
 
+		if ( ! self::is_post_supported( $post_id ) ) {
+			wp_safe_redirect(
+				add_query_arg( 'indesign_export_error', 'unsupported_post_type', admin_url( 'edit.php' ) )
+			);
+			exit;
+		}
+
 		self::export_posts( [ $post_id ] );
 		exit;
+	}
+
+	/**
+	 * Whether the given post may be exported under the current settings.
+	 *
+	 * Defense in depth — the bulk and row UI actions only appear for
+	 * post types in get_supported_post_types(), but the underlying
+	 * `admin_post_export_indesign_single` action and bulk handler could
+	 * otherwise be invoked with a post of a disabled type by anyone who can
+	 * edit that post.
+	 *
+	 * @param int|\WP_Post $post Post ID or object.
+	 * @return bool True when the post type is enabled for export.
+	 */
+	public static function is_post_supported( $post ) {
+		$post = get_post( $post );
+		if ( ! $post ) {
+			return false;
+		}
+		return in_array( $post->post_type, self::get_supported_post_types(), true );
 	}
 
 	/**
@@ -210,8 +429,10 @@ class InDesign_Exporter {
 	 * @param array $post_ids Array of post IDs to export.
 	 */
 	private static function export_posts( $post_ids ) {
-		$converter      = new InDesign_Converter();
-		$exported_files = [];
+		$converter        = new InDesign_Converter();
+		$include_captions = ! self::get_exclude_captions_setting();
+		$platform         = self::get_platform_setting();
+		$exported_files   = [];
 
 		foreach ( $post_ids as $post_id ) {
 			$post = get_post( $post_id );
@@ -219,7 +440,13 @@ class InDesign_Exporter {
 				continue;
 			}
 
-			$content          = $converter->convert_post( $post );
+			$content          = $converter->convert_post(
+				$post,
+				[
+					'include_captions' => $include_captions,
+					'platform'         => $platform,
+				]
+			);
 			$filename         = self::generate_filename( $post );
 			$exported_files[] = [
 				'filename' => $filename,
@@ -235,6 +462,28 @@ class InDesign_Exporter {
 			// Multiple files export as zip.
 			self::download_zip_file( $exported_files );
 		}
+	}
+
+	/**
+	 * Get the configured Tagged Text platform.
+	 *
+	 * The stored value is constrained to the formats the converter can emit;
+	 * unknown values — including legacy 'auto' rows — fall back to the default.
+	 *
+	 * @return string A key of InDesign_Converter::FORMATS.
+	 */
+	public static function get_platform_setting() {
+		$value = get_option( self::PLATFORM_OPTION, InDesign_Converter::DEFAULT_PLATFORM );
+		return is_string( $value ) && isset( InDesign_Converter::FORMATS[ $value ] ) ? $value : InDesign_Converter::DEFAULT_PLATFORM;
+	}
+
+	/**
+	 * Whether photo captions and credits should be excluded from exports.
+	 *
+	 * @return bool True when captions and credits should be omitted.
+	 */
+	public static function get_exclude_captions_setting() {
+		return (bool) get_option( self::EXCLUDE_CAPTIONS_OPTION, self::EXCLUDE_CAPTIONS_DEFAULT );
 	}
 
 	/**
@@ -313,19 +562,22 @@ class InDesign_Exporter {
 
 			switch ( $error ) {
 				case 'capability':
-					$message = __( 'You do not have permission to export posts.', 'newspack' );
+					$message = __( 'You do not have permission to export posts.', 'newspack-plugin' );
 					break;
 				case 'nonce':
-					$message = __( 'Security check failed. Please try again.', 'newspack' );
+					$message = __( 'Security check failed. Please try again.', 'newspack-plugin' );
 					break;
 				case 'no_posts':
-					$message = __( 'No posts were selected for export.', 'newspack' );
+					$message = __( 'No posts were selected for export.', 'newspack-plugin' );
+					break;
+				case 'unsupported_post_type':
+					$message = __( 'The selected post type is not enabled for InDesign export.', 'newspack-plugin' );
 					break;
 				case 'zip_error':
-					$message = __( 'Could not create ZIP file for export.', 'newspack' );
+					$message = __( 'Could not create ZIP file for export.', 'newspack-plugin' );
 					break;
 				default:
-					$message = __( 'An error occurred during export.', 'newspack' );
+					$message = __( 'An error occurred during export.', 'newspack-plugin' );
 			}
 
 			printf(

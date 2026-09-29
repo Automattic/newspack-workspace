@@ -7,6 +7,8 @@
 
 namespace Newspack\Reader_Activation\Sync;
 
+use Newspack\Reader_Activation;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -94,6 +96,22 @@ abstract class Contact_Metadata {
 	abstract public static function get_fields();
 
 	/**
+	 * Per-field configuration for the fields handled by this class.
+	 *
+	 * Defaults to deriving minimal config from get_fields(). Subclasses
+	 * override to add status and dynamic_suffix.
+	 *
+	 * @return array Map of raw key => config array with at least a 'name'.
+	 */
+	public static function get_fields_config() {
+		$config = [];
+		foreach ( static::get_fields() as $raw_key => $name ) {
+			$config[ $raw_key ] = [ 'name' => $name ];
+		}
+		return $config;
+	}
+
+	/**
 	 * Get the metadata for the given user, customer or order, returned as an array of key/value pairs where the key is the key of the field that will be prefixed and synced, and the value is the value of the field for that user, customer or order.
 	 *
 	 * @return array
@@ -116,15 +134,64 @@ abstract class Contact_Metadata {
 	}
 
 	/**
-	 * Get the full name for the contact from the WC_Customer billing name.
+	 * Get the full name for the contact, preferring the WC_Customer billing name.
+	 *
+	 * Falls back to the WP user's first/last name, then a display name the
+	 * reader actually has, so readers without a WooCommerce billing record
+	 * (e.g. created by frontend registration integrations) don't sync an empty
+	 * name that clears the ESP contact's name. A reader who registered with no
+	 * name at all has neither, and returns '' rather than a stand-in.
 	 *
 	 * @return string
 	 */
 	public function get_full_name() {
 		if ( $this->customer ) {
-			return trim( $this->customer->get_billing_first_name() . ' ' . $this->customer->get_billing_last_name() );
+			$name = trim( $this->customer->get_billing_first_name() . ' ' . $this->customer->get_billing_last_name() );
+			if ( $name ) {
+				return $name;
+			}
+		}
+		if ( $this->user ) {
+			$name = trim( $this->user->first_name . ' ' . $this->user->last_name );
+			if ( $name ) {
+				return $name;
+			}
+			if ( ! $this->has_email_derived_display_name() ) {
+				return (string) $this->user->display_name;
+			}
 		}
 		return '';
+	}
+
+	/**
+	 * Whether the user's display name is a placeholder generated from their email.
+	 *
+	 * Accounts are named after the email when the reader supplies no name, so
+	 * display_name is `jane-doe` for jane.doe@example.com. That is a
+	 * placeholder, not a name: syncing it would write the local part into the
+	 * ESP's first-name field, overwriting whatever is there — including a name
+	 * that arrived by list import.
+	 *
+	 * Applies the reader's own saved-name meta as a short-circuit, but not the
+	 * NEWSPACK_ALLOW_GENERIC_READER_DISPLAY_NAMES constant that
+	 * Reader_Activation::reader_has_generic_display_name() also honors: the
+	 * constant answers whether to stop prompting readers for a real name, and
+	 * a site setting it would otherwise put the placeholder back on the wire.
+	 *
+	 * @return bool
+	 */
+	private function has_email_derived_display_name(): bool {
+		$display_name = (string) $this->user->display_name;
+		$email        = (string) $this->user->user_email;
+		if ( '' === $display_name || '' === $email ) {
+			return true;
+		}
+		// A reader who deliberately saved a display name we would call generic
+		// has chosen it; it is their name, and it syncs.
+		if ( \get_user_meta( $this->user->ID, Reader_Activation::READER_SAVED_GENERIC_DISPLAY_NAME, true ) ) {
+			return false;
+		}
+		return Reader_Activation::is_display_name_derived_from_email( $display_name, $email );
 	}
 
 	/**

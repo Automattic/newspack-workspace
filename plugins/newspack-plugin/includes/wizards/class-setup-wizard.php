@@ -328,9 +328,12 @@ class Setup_Wizard extends Wizard {
 			if ( in_array( $key, $this->media_theme_mods ) ) {
 				$attachment = wp_get_attachment_image_src( $theme_mod, 'large' );
 				if ( $attachment ) {
+					$metadata  = wp_get_attachment_metadata( $theme_mod );
 					$theme_mod = [
-						'id'  => $theme_mod,
-						'url' => is_array( $attachment ) ? $attachment[0] : null,
+						'id'     => $theme_mod,
+						'url'    => is_array( $attachment ) ? $attachment[0] : null,
+						'width'  => $metadata['width'] ?? null,
+						'height' => $metadata['height'] ?? null,
 					];
 				}
 			}
