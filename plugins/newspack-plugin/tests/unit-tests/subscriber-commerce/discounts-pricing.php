@@ -842,9 +842,7 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		try {
 			$this->assertEquals( 80.0, (float) $hybrid->get_price(), 'One-time price is discounted.' );
 
-			$options = \Newspack\Subscription_Products::get_purchase_options( $hybrid );
-			$this->assertSame( 10.0, $options[1]->price, 'Plan price comes from the stored price, untouched by the discount.' );
-
+			$options   = \Newspack\Subscription_Products::get_purchase_options( $hybrid );
 			$plan_line = \Newspack\Subscription_Products::get_option_product( $options[1] );
 			$this->assertTrue(
 				\Newspack\Subscription_Products::is_purchased_as_subscription( $plan_line ),
@@ -919,5 +917,27 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 			$method->invoke( null, $forced )['is_subscription'],
 			'A subscription-only plan product previews as a subscription even unapplied.'
 		);
+	}
+
+	/**
+	 * With no active discount rule there is nothing to decide, so pricing a product
+	 * never asks whether it is a subscription: that question runs on every price
+	 * read on the storefront.
+	 */
+	public function test_no_active_rules_skip_the_subscription_check() {
+		// Written, not just deleted: the rules memo is flushed by the option write
+		// hooks, and a rolled-back row from an earlier test fires none.
+		update_option( Subscriber_Discounts::OPTION_NAME, [] );
+		$checks  = 0;
+		$counter = function ( $is_subscription ) use ( &$checks ) {
+			++$checks;
+			return $is_subscription;
+		};
+		add_filter( 'woocommerce_is_subscription', $counter );
+		\WCS_ATT_Product_Schemes::$mock_lookups = 0;
+
+		$this->assertNull( Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id ) );
+		$this->assertSame( 0, $checks, 'No subscription check.' );
+		$this->assertSame( 0, \WCS_ATT_Product_Schemes::$mock_lookups, 'No plan lookup.' );
 	}
 }

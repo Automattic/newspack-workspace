@@ -82,7 +82,6 @@ final class Legacy_Model {
 				'trial_period' => (string) \WC_Subscriptions_Product::get_trial_period( $product ),
 				'trial_length' => (int) \WC_Subscriptions_Product::get_trial_length( $product ),
 				'sign_up_fee'  => (float) \WC_Subscriptions_Product::get_sign_up_fee( $product ),
-				'price'        => (float) \WC_Subscriptions_Product::get_price( $product ),
 			]
 		);
 	}

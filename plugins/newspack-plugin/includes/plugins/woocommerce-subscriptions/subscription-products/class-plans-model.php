@@ -196,7 +196,6 @@ final class Plans_Model {
 					'kind'       => Purchase_Option::KIND_ONE_TIME,
 					'product_id' => (int) $product->get_id(),
 					'parent_id'  => $parent_id,
-					'price'      => (float) $product->get_price(),
 				]
 			);
 		}
@@ -215,7 +214,6 @@ final class Plans_Model {
 					'trial_period' => (string) $scheme->get_trial_period(),
 					'trial_length' => (int) $scheme->get_trial_length(),
 					'sign_up_fee'  => (float) $scheme->get_signup_fee(),
-					'price'        => (float) \WCS_ATT_Product_Prices::get_price( $product, $plan_key ),
 				]
 			);
 		}

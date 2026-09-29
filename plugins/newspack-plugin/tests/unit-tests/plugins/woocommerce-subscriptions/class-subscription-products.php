@@ -134,7 +134,6 @@ class Newspack_Test_Subscription_Products extends WP_UnitTestCase {
 		$this->assertSame( 'legacy', $options[0]->key );
 		$this->assertSame( 101, $options[0]->product_id );
 		$this->assertSame( 'month_1', $options[0]->get_frequency() );
-		$this->assertSame( 10.0, $options[0]->price );
 		$this->assertSame( [], $options[0]->get_plan_request_args(), 'Legacy products need no plan field.' );
 	}
 

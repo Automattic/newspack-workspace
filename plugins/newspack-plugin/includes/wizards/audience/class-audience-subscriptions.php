@@ -341,7 +341,7 @@ class Audience_Subscriptions extends Wizard {
 			// including a plan-based product forced onto its plans: it has no
 			// one-time price to preview a discount on, even on the bare instance
 			// listed here before any plan is chosen.
-			'is_subscription' => Subscription_Products::is_purchased_as_subscription( $product ) || Subscription_Products::is_subscription_only( $product ),
+			'is_subscription' => Subscription_Products::only_sells_as_subscription( $product ),
 		];
 	}
 

@@ -22,7 +22,6 @@ if ( ! class_exists( 'WCS_ATT_Scheme' ) ) {
 					'trial_period' => '',
 					'trial_length' => 0,
 					'signup_fee'   => 0.0,
-					'price'        => null,
 				],
 				$data
 			);
@@ -48,9 +47,6 @@ if ( ! class_exists( 'WCS_ATT_Scheme' ) ) {
 		public function get_signup_fee(): float {
 			return (float) $this->data['signup_fee'];
 		}
-		public function mock_price() {
-			return $this->data['price'];
-		}
 	}
 }
 
@@ -63,6 +59,13 @@ if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
 		private static $plans  = [];
 		private static $forced = [];
 		private static $active = [];
+		/**
+		 * How many times has_subscription_schemes() ran: the plan lookup a caller
+		 * that has nothing to decide should never reach.
+		 *
+		 * @var int
+		 */
+		public static $mock_lookups = 0;
 
 		public static function mock_register( int $product_id, array $plans, bool $forced = false ) {
 			self::$plans[ $product_id ]  = $plans;
@@ -71,13 +74,15 @@ if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
 		public static function mock_reset() {
 			self::$plans  = [];
 			self::$forced = [];
-			self::$active = [];
+			self::$active       = [];
+			self::$mock_lookups = 0;
 		}
 		private static function source_id( $product ) {
 			$id = $product->get_id();
 			return ! isset( self::$plans[ $id ] ) && $product->get_parent_id() ? $product->get_parent_id() : $id;
 		}
 		public static function has_subscription_schemes( $product, $context = 'any' ) {
+			++self::$mock_lookups;
 			return ! empty( self::$plans[ self::source_id( $product ) ] );
 		}
 		public static function get_subscription_schemes( $product, $context = 'any' ) {
@@ -128,26 +133,6 @@ if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
 		}
 	}
 	add_filter( 'woocommerce_is_subscription', [ 'WCS_ATT_Product_Schemes', 'filter_is_subscription' ], 10, 3 );
-}
-
-if ( ! class_exists( 'WCS_ATT_Product_Prices' ) ) {
-	class WCS_ATT_Product_Prices {
-		/**
-		 * A plan's own price when set, else the product's stored price. Real WCS reads the
-		 * stored (`edit`) price here, which display-price filters never touch.
-		 *
-		 * @param \WC_Product $product    Product or variation.
-		 * @param string      $scheme_key Plan key.
-		 * @param string      $context    Unused by the mock; real WCS reads 'view' or 'edit'.
-		 */
-		public static function get_price( $product, $scheme_key = '', $context = 'view' ) {
-			$schemes = WCS_ATT_Product_Schemes::get_subscription_schemes( $product );
-			if ( isset( $schemes[ $scheme_key ] ) && null !== $schemes[ $scheme_key ]->mock_price() ) {
-				return $schemes[ $scheme_key ]->mock_price();
-			}
-			return $product->get_regular_price();
-		}
-	}
 }
 
 if ( ! class_exists( 'WCS_ATT_Product' ) ) {

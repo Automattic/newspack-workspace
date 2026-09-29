@@ -23,12 +23,10 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 		'1_month' => [
 			'period'   => 'month',
 			'interval' => 1,
-			'price'    => 8,
 		],
 		'1_year'  => [
 			'period'   => 'year',
 			'interval' => 1,
-			'price'    => 80,
 		],
 	];
 
@@ -113,7 +111,6 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 		$options = Subscription_Products::get_purchase_options( $product );
 		$this->assertSame( [ 'one_time', 'plan:1_month', 'plan:1_year' ], wp_list_pluck( $options, 'key' ) );
 		$this->assertSame( [ 'once_1', 'month_1', 'year_1' ], array_map( fn( $o ) => $o->get_frequency(), $options ) );
-		$this->assertSame( [ 10.0, 8.0, 80.0 ], wp_list_pluck( $options, 'price' ) );
 	}
 
 	/**
@@ -237,6 +234,27 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 
 		$hybrid = $this->hybrid();
 		$this->assertFalse( Subscription_Products::is_subscription_only( $hybrid ) );
+	}
+
+	/**
+	 * Whether buying an instance can only start a subscription: false for a bare
+	 * hybrid, true once a plan is applied, true for a product sold only on plans.
+	 * Asked on every price read, so the verdict is remembered per product and plan.
+	 */
+	public function test_only_sells_as_subscription_is_remembered_per_plan() {
+		$hybrid = $this->hybrid();
+		$this->assertFalse( Subscription_Products::only_sells_as_subscription( $hybrid ), 'Bare hybrid.' );
+		$lookups = WCS_ATT_Product_Schemes::$mock_lookups;
+		$this->assertFalse( Subscription_Products::only_sells_as_subscription( $hybrid ) );
+		$this->assertSame( $lookups, WCS_ATT_Product_Schemes::$mock_lookups, 'Asked again, answered from memory.' );
+
+		$options  = Subscription_Products::get_purchase_options( $hybrid );
+		$instance = Subscription_Products::get_option_product( $options[1] );
+		$this->assertTrue( Subscription_Products::only_sells_as_subscription( $instance ), 'A plan applied: its own verdict.' );
+
+		$forced = $this->product( [], [ '_wcsatt_schemes_status' => 'override' ] );
+		WCS_ATT_Product_Schemes::mock_register( $forced->get_id(), self::PLANS, true );
+		$this->assertTrue( Subscription_Products::only_sells_as_subscription( $forced ), 'Sold only on plans.' );
 	}
 
 	/**

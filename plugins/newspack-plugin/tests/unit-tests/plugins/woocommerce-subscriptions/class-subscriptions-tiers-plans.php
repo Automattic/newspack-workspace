@@ -201,22 +201,19 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An annual plan is bucketed as annual and priced from the plan, and every
-	 * variation is sold on every plan.
+	 * An annual plan is bucketed as annual, and every variation is sold on every plan.
 	 */
-	public function test_plan_frequency_and_price_come_from_the_plan() {
+	public function test_plan_frequency_comes_from_the_plan() {
 		$tiers = Subscriptions_Tiers::get_tiers_by_frequency(
 			$this->plan_variable(
 				[
 					'1_month' => [
 						'period'   => 'month',
 						'interval' => 1,
-						'price'    => 5,
 					],
 					'1_year'  => [
 						'period'   => 'year',
 						'interval' => 1,
-						'price'    => 50,
 					],
 				]
 			)
@@ -225,7 +222,6 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 		$this->assertCount( 2, $tiers['year_1'], 'Every variation is sold on every plan.' );
 		$option = Subscription_Products::get_instance_option( $tiers['year_1'][0] );
 		$this->assertSame( 'plan:1_year', $option->key );
-		$this->assertSame( 50.0, $option->price );
 	}
 
 	/**

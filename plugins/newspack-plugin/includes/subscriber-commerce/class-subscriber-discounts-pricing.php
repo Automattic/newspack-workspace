@@ -454,33 +454,12 @@ class Subscriber_Discounts_Pricing {
 		// chosen plan (applied before this filter runs) reads as a subscription and
 		// is left alone. Plan prices shown on the product page come from the stored
 		// price, which this display filter never touches. A plan-based product
-		// forced onto its plans has no one-time price to protect either way, so
-		// is_subscription_only() catches it on the bare catalog instance too, before
-		// any plan has been applied.
+		// forced onto its plans has no one-time price to protect either way, so it
+		// counts as a subscription on the bare catalog instance too, before any plan
+		// has been applied.
 		return Subscriber_Commerce::covers_all_subscriptions( $rule )
-			? ( Subscription_Products::is_purchased_as_subscription( $product ) || self::is_subscription_only_while_suspended( $product ) )
+			? Subscription_Products::only_sells_as_subscription( $product )
 			: self::product_is_one_of( $product, $rule['subscription_product_ids'] );
-	}
-
-	/**
-	 * Subscription_Products::is_subscription_only(), with price adjustments stood
-	 * down for the call.
-	 *
-	 * Enumerating a plan-based product's purchase options reads its one-time
-	 * price, and this is called from inside the price filters themselves — an
-	 * unsuspended read would re-enter filter_price() for the same product before
-	 * this call returns, recursing until the stack overflows.
-	 *
-	 * @param \WC_Product $product Product being priced.
-	 * @return bool
-	 */
-	private static function is_subscription_only_while_suspended( \WC_Product $product ) {
-		self::suspend();
-		try {
-			return Subscription_Products::is_subscription_only( $product );
-		} finally {
-			self::resume();
-		}
 	}
 
 	/**
@@ -674,6 +653,13 @@ class Subscriber_Discounts_Pricing {
 	 * @return array[]
 	 */
 	private static function get_rules_for( $product, $user_id ) {
+		// Nothing to decide, so none of the key below is worth building: this runs
+		// on every price read for a logged-in reader.
+		$active_rules = Subscriber_Discounts::get_active_rules();
+		if ( empty( $active_rules ) ) {
+			return [];
+		}
+
 		// Rule and settings writes flush this memo, so the key does not need to
 		// carry the rule set — and must not, since hashing it on every call
 		// would do the work the memo exists to avoid, several times per product
@@ -689,9 +675,9 @@ class Subscriber_Discounts_Pricing {
 		// instance shares its product ID with the bare product it was cloned from,
 		// but only the plan instance is a subscription purchase — product_grants()
 		// answers differently for each, so they need separate verdicts too. The same
-		// combined predicate product_grants() uses, so a subscription-only plan
-		// product's bare catalog instance never shares a key with an ordinary
-		// product's.
+		// predicate product_grants() uses, remembered by Subscription_Products, so a
+		// subscription-only plan product's bare catalog instance never shares a key
+		// with an ordinary product's.
 		$cache_key = implode(
 			':',
 			[
@@ -699,14 +685,14 @@ class Subscriber_Discounts_Pricing {
 				$product->get_id(),
 				self::cart_signature(),
 				Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) ? 'grace' : 'strict',
-				( Subscription_Products::is_purchased_as_subscription( $product ) || self::is_subscription_only_while_suspended( $product ) ) ? 'recurring' : 'once',
+				Subscription_Products::only_sells_as_subscription( $product ) ? 'recurring' : 'once',
 			]
 		);
 		if ( isset( self::$rules_for_product[ $cache_key ] ) ) {
 			return self::$rules_for_product[ $cache_key ];
 		}
 
-		$covering_rules = Product_Targeting::get_matching_rules( Subscriber_Discounts::get_active_rules(), $product );
+		$covering_rules = Product_Targeting::get_matching_rules( $active_rules, $product );
 
 		$qualifying_rules = array_values(
 			array_filter(

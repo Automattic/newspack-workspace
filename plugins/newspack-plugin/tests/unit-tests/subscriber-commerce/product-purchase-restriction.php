@@ -996,4 +996,32 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	public function test_plan_less_add_to_cart_keeps_an_earlier_refusal() {
 		$this->assertFalse( Product_Purchase_Restriction::validate_add_to_cart( false, $this->open_product->get_id(), 1 ) );
 	}
+
+	/**
+	 * Purchase options are per viewer: a reader who logs in mid-request (modal
+	 * checkout registration) is offered what their account allows, not the list
+	 * built while they were logged out.
+	 */
+	public function test_purchase_options_follow_the_current_reader() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+		$this->assertSame( [ 'plan:1_month' ], wp_list_pluck( \Newspack\Subscription_Products::get_purchase_options( $hybrid ), 'key' ) );
+
+		wp_set_current_user( $this->subscriber_id );
+		$this->assertSame(
+			[ 'one_time', 'plan:1_month' ],
+			wp_list_pluck( \Newspack\Subscription_Products::get_purchase_options( $hybrid ), 'key' ),
+			'Same request, another reader.'
+		);
+	}
+
+	/**
+	 * A product no "all subscribers" rule covers is never looked up for plans:
+	 * the rule check is the cheap one, and it settles the answer.
+	 */
+	public function test_one_time_restriction_skips_the_plan_lookup_when_no_rule_covers_the_product() {
+		WCS_ATT_Product_Schemes::$mock_lookups = 0;
+		$this->assertFalse( Product_Purchase_Restriction::is_one_time_restricted( $this->open_product, $this->non_subscriber_id ) );
+		$this->assertSame( 0, WCS_ATT_Product_Schemes::$mock_lookups );
+	}
 }

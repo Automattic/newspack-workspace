@@ -16,6 +16,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * Newspack stores and matches products, never options. Options exist so that
  * anything a reader chooses from can list every choice and post the right one.
+ * An option carries no price: prices are read from the product instance
+ * get_option_product() returns, where WooCommerce applies the plan and any price
+ * filters for the reader looking at it.
  */
 final class Purchase_Option {
 	const KIND_ONE_TIME = 'one_time';
@@ -98,13 +101,6 @@ final class Purchase_Option {
 	 * @var float
 	 */
 	public $sign_up_fee = 0.0;
-
-	/**
-	 * Price per period, or the one-time price.
-	 *
-	 * @var float
-	 */
-	public $price = 0.0;
 
 	/**
 	 * Constructor.

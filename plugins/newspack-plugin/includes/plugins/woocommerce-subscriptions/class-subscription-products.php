@@ -23,12 +23,20 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Subscription_Products {
 	/**
-	 * Options by product ID, for this request; a product's own configuration is
-	 * kept under `<ID>:configured`.
+	 * Options for this request, by `<product ID>:<user ID>`: whether a product sold
+	 * both ways keeps its one-time option depends on who is buying. A product's own
+	 * configuration, before any per-reader rule, is kept under `<product ID>:configured`.
 	 *
-	 * @var array<int|string, Purchase_Option[]>
+	 * @var array<string, Purchase_Option[]>
 	 */
 	private static $options = [];
+
+	/**
+	 * Verdicts of only_sells_as_subscription(), by `<product ID>:<plan key>:<user ID>`.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static $subscription_only = [];
 
 	/**
 	 * Cached find_products() results, for this request.
@@ -57,8 +65,9 @@ final class Subscription_Products {
 	 * Drop the per-request caches.
 	 */
 	public static function flush_cache() {
-		self::$options = [];
-		self::$found   = [];
+		self::$options           = [];
+		self::$found             = [];
+		self::$subscription_only = [];
 	}
 
 	/**
@@ -110,6 +119,23 @@ final class Subscription_Products {
 	}
 
 	/**
+	 * Whether buying this instance can only start a subscription: it is being bought
+	 * as one (is_purchased_as_subscription()), or the product has no one-time option
+	 * for the current reader (is_subscription_only()). A bare hybrid reads false and
+	 * the same product with a plan applied reads true, so the verdict is remembered
+	 * per product, plan and reader: price filters ask it on every price read.
+	 *
+	 * @param \WC_Product $instance Product instance.
+	 */
+	public static function only_sells_as_subscription( \WC_Product $instance ): bool {
+		$key = implode( ':', [ $instance->get_id(), Plans_Model::get_active_plan_key( $instance ), get_current_user_id() ] );
+		if ( ! isset( self::$subscription_only[ $key ] ) ) {
+			self::$subscription_only[ $key ] = self::is_purchased_as_subscription( $instance ) || self::is_subscription_only( $instance );
+		}
+		return self::$subscription_only[ $key ];
+	}
+
+	/**
 	 * Whether the product's own configuration sells it both one-time and on a plan,
 	 * whatever any per-reader rule withdraws for the current viewer. False for a
 	 * legacy subscription (never sold one-time), a product sold only on plans, and a
@@ -126,7 +152,7 @@ final class Subscription_Products {
 		if ( ! isset( self::$options[ $key ] ) ) {
 			self::$reading_configuration = true;
 			try {
-				self::$options[ $key ] = Plans_Model::get_options( $product );
+				self::$options[ $key ] = Plans_Model::get_options( self::stored( $product ) );
 			} finally {
 				self::$reading_configuration = false;
 			}
@@ -155,20 +181,21 @@ final class Subscription_Products {
 		if ( ! $product ) {
 			return [];
 		}
-		$id = (int) $product->get_id();
-		if ( ! isset( self::$options[ $id ] ) ) {
-			switch ( self::model_of( $product ) ) {
+		$key = $product->get_id() . ':' . get_current_user_id();
+		if ( ! isset( self::$options[ $key ] ) ) {
+			$stored = self::stored( $product );
+			switch ( self::model_of( $stored ) ) {
 				case 'legacy':
-					self::$options[ $id ] = Legacy_Model::get_options( $product );
+					self::$options[ $key ] = Legacy_Model::get_options( $stored );
 					break;
 				case 'plans':
-					self::$options[ $id ] = Plans_Model::get_options( $product );
+					self::$options[ $key ] = Plans_Model::get_options( $stored );
 					break;
 				default:
-					self::$options[ $id ] = [];
+					self::$options[ $key ] = [];
 			}
 		}
-		return self::$options[ $id ];
+		return self::$options[ $key ];
 	}
 
 	/**
@@ -287,6 +314,19 @@ final class Subscription_Products {
 			$product = \wc_get_product( (int) $product );
 		}
 		return $product instanceof \WC_Product ? $product : null;
+	}
+
+	/**
+	 * The product as stored, rather than the instance a caller holds. WooCommerce keeps
+	 * plan state on each instance, and a cart item restored for a renewal, resubscribe
+	 * or retry carries its own, so an answer built from whichever instance was asked
+	 * first would be served to every later caller.
+	 *
+	 * @param \WC_Product $product Product instance.
+	 */
+	private static function stored( \WC_Product $product ): \WC_Product {
+		$stored = $product->get_id() ? self::resolve( (int) $product->get_id() ) : null;
+		return $stored ? $stored : $product;
 	}
 
 	/**

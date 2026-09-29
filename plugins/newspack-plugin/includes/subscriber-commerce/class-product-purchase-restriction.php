@@ -281,14 +281,16 @@ class Product_Purchase_Restriction {
 	 * @return bool
 	 */
 	public static function is_one_time_restricted( \WC_Product $product, int $user_id ): bool {
-		if ( ! Subscriber_Commerce::is_enforcement_active() || ! Subscription_Products::offers_subscription( $product ) ) {
+		if ( ! Subscriber_Commerce::is_enforcement_active() ) {
+			return false;
+		}
+		// The cached rule match first: it settles the answer for every product no
+		// "all subscribers" rule covers, without looking up the product's plans.
+		$rules = array_filter( self::get_matching_rules( $product ), [ Subscriber_Commerce::class, 'covers_all_subscriptions' ] );
+		if ( empty( $rules ) || ! Subscription_Products::offers_subscription( $product ) ) {
 			return false;
 		}
 		if ( user_can( $user_id, 'manage_woocommerce' ) ) {
-			return false;
-		}
-		$rules = array_filter( self::get_matching_rules( $product ), [ Subscriber_Commerce::class, 'covers_all_subscriptions' ] );
-		if ( empty( $rules ) ) {
 			return false;
 		}
 		foreach ( $rules as $rule ) {

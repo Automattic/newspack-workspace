@@ -312,14 +312,7 @@ class Subscriptions_Tiers {
 			if ( $candidate->is_type( [ 'subscription', 'variable-subscription' ] ) || in_array( $candidate->get_id(), $ids, true ) ) {
 				continue;
 			}
-			$has_one_time_option = false;
-			foreach ( Subscription_Products::get_purchase_options( $candidate ) as $option ) {
-				if ( Purchase_Option::KIND_ONE_TIME === $option->kind ) {
-					$has_one_time_option = true;
-					break;
-				}
-			}
-			if ( ! $has_one_time_option ) {
+			if ( Subscription_Products::is_subscription_only( $candidate ) ) {
 				$products[] = $candidate;
 			}
 		}

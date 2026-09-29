@@ -290,8 +290,7 @@ trait One_Time_Purchase_Migration {
 				continue;
 			}
 			$subscription[] = $product_id;
-			$kinds          = wp_list_pluck( \Newspack\Subscription_Products::get_purchase_options( $product_id ), 'kind' );
-			if ( in_array( \Newspack\Subscription_Products\Purchase_Option::KIND_ONE_TIME, $kinds, true ) ) {
+			if ( ! \Newspack\Subscription_Products::is_subscription_only( $product_id ) ) {
 				$one_time[] = $product_id;
 			}
 		}
