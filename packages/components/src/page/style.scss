@@ -9,10 +9,10 @@
 // postcss-import cannot resolve exports maps, and resolving the public
 // specifier through sass/webpack leaks a bogus `wp-theme/design-tokens.css`
 // script dependency into consumers' asset manifests, which silently blocks
-// their enqueues. If upstream moves `src/prebuilt/`, this fails loudly at
+// their enqueues. If upstream moves `prebuilt/`, this fails loudly at
 // build time.
 /* stylelint-disable-next-line no-invalid-position-at-import-rule -- sass @use must precede the CSS @import; postcss-import inlines it at build time. */
-@import "@wordpress/theme/src/prebuilt/css/design-tokens.css";
+@import "@wordpress/theme/prebuilt/css/design-tokens.css";
 
 // Newspack brand mapping: the wpds brand color tokens ship in WordPress
 // blue; remap them onto the Newspack primary scale so every design-system
