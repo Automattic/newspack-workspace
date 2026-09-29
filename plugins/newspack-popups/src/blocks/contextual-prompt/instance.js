@@ -55,6 +55,12 @@ export const isPromptInstance = ( name, attributes ) => 'core/block' === name &&
 // the pattern still has to identify it by.
 export const MARKER_CLASS = 'newspack-contextual-prompt';
 
+// Mirrors BOUND_NAME in class-newspack-popups-contextual-prompt-pattern.php: the
+// name the pattern binds its copy paragraph under. It is a fixed key, not a
+// translated label, so it identifies the generated copy on a detached card even
+// when the override binding did not survive the detach.
+export const BOUND_NAME = 'Prompt Copy';
+
 /**
  * Whether a block is a Contextual Prompt detached from the pattern: the card's
  * own markup, no longer referencing the pattern post.

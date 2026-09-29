@@ -680,14 +680,16 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * donation platform the stored CTA can disagree with the site. Normalize:
 	 * the native platform renders the donate form, off-site renders a button to
 	 * the donor landing page — or copy only when none is configured. Matching
-	 * CTAs pass through untouched, preserving publisher customization.
+	 * CTAs pass through untouched, preserving publisher customization, and so
+	 * does a CTA the admin swapped in from the pattern editor: that is their
+	 * choice, not a platform left behind.
 	 *
 	 * @param array $parsed_block Parsed prompt card.
 	 * @return array
 	 */
 	public static function normalize_cta( $parsed_block ) {
 		$cta = self::find_cta( $parsed_block );
-		if ( null === $cta ) {
+		if ( null === $cta || Newspack_Popups_Contextual_Prompt_Pattern::is_cta_publisher_owned( $cta['name'] ) ) {
 			return $parsed_block;
 		}
 

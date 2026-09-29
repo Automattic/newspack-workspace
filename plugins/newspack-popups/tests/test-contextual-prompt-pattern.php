@@ -42,6 +42,7 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA );
 		delete_option( 'newspack_popups_donor_landing_page' );
 		if ( get_stylesheet() !== $this->original_stylesheet ) {
 			switch_theme( $this->original_stylesheet );
@@ -578,6 +579,51 @@ class ContextualPromptPatternTest extends WP_UnitTestCase {
 		Newspack_Popups_Contextual_Prompt_Pattern::reset_pattern();
 
 		$this->assertFalse( Newspack_Popups_Contextual_Prompt_Pattern::is_design_modified(), 'And the reset settles it.' );
+	}
+
+	/**
+	 * A pattern seeded before the CTA was unlocked keeps the old group
+	 * `templateLock` and CTA `lock` in its stored markup. Against the current seed
+	 * that reads as a design change — and it pins the CTA in the pattern editor —
+	 * so repair() lifts those locks while holding the bound copy, and the pattern
+	 * reads as unmodified again, with no reset to offer.
+	 */
+	public function test_repair_lifts_the_locks_an_older_seed_baked_in() {
+		add_filter( 'newspack_contextual_prompts_use_donate_block', '__return_true' );
+		$pattern_id = Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id();
+
+		// Rewrite the stored pattern to the shape an older seed left behind: the
+		// group pinned with a templateLock, the CTA locked against removal.
+		$blocks                                       = parse_blocks( get_post( $pattern_id )->post_content );
+		$blocks[0]['attrs']['templateLock']           = 'insert';
+		$blocks[0]['innerBlocks'][1]['attrs']['lock'] = [
+			'move'   => true,
+			'remove' => true,
+		];
+		Newspack_Popups_Contextual_Prompt_Pattern::save_pattern_content( $pattern_id, serialize_blocks( $blocks ) );
+
+		$this->assertTrue(
+			Newspack_Popups_Contextual_Prompt_Pattern::is_design_modified(),
+			'The baked-in locks read as a design change against the current seed.'
+		);
+
+		Newspack_Popups_Contextual_Prompt_Pattern::repair();
+
+		$group = $this->seeded_group();
+		$this->assertArrayNotHasKey( 'templateLock', $group['attrs'], 'The group templateLock is lifted.' );
+		$this->assertArrayNotHasKey( 'lock', $group['innerBlocks'][1]['attrs'], 'The CTA lock is lifted.' );
+		$this->assertSame(
+			[
+				'move'   => true,
+				'remove' => true,
+			],
+			$group['innerBlocks'][0]['attrs']['lock'],
+			'The bound copy stays held.'
+		);
+		$this->assertFalse(
+			Newspack_Popups_Contextual_Prompt_Pattern::is_design_modified(),
+			'And the pattern reads as unmodified, so no reset is offered.'
+		);
 	}
 
 	/**

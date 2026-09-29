@@ -18,6 +18,7 @@ defined( 'ABSPATH' ) || exit;
 final class Newspack_Popups_Contextual_Prompt_Pattern {
 	const OPTION_PATTERN_ID     = 'newspack_contextual_prompts_pattern_id';
 	const OPTION_STAMPED_ACCENT = 'newspack_contextual_prompts_stamped_accent';
+	const OPTION_WRITTEN_CTA    = 'newspack_contextual_prompts_written_cta';
 	const MARKER_CLASS          = 'newspack-contextual-prompt';
 	const BOUND_NAME            = 'Prompt Copy';
 	const SEEDING_LOCK_OPTION   = 'newspack_contextual_prompts_seeding';
@@ -459,6 +460,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		if ( ! self::save_pattern_content( $pattern_id, self::build_pattern_content() ) ) {
 			return false;
 		}
+		self::record_written_cta( $pattern_id );
 
 		// The description is the pattern editor's to edit too, and it describes
 		// what this pattern is for rather than what it looks like.
@@ -668,6 +670,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		}
 
 		update_option( self::OPTION_PATTERN_ID, $new_id );
+		self::record_written_cta( $new_id );
 
 		return $new_id;
 	}
@@ -820,6 +823,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		$read_at = $post->post_modified_gmt;
 		$blocks  = parse_blocks( $post->post_content );
 		$stamp   = null;
+		$cta     = null;
 
 		foreach ( $blocks as $index => $group ) {
 			if ( ! self::is_prompt_card( $group ) ) {
@@ -832,6 +836,7 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 				self::restore_marker_class( $group ),
 				self::restore_copy_binding( $group['innerBlocks'] ),
 				self::repin_bound_name( $group['innerBlocks'] ),
+				self::strip_legacy_locks( $group ),
 			];
 			if ( in_array( true, $restored, true ) ) {
 				$blocks[ $index ] = $group;
@@ -853,6 +858,13 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 				continue;
 			}
 
+			// A CTA the admin chose is left as it is, and so is the record: it
+			// still names the one the plugin wrote, which is how the choice stays
+			// recognizable. Any other CTA is the plugin's, as normalized.
+			if ( null !== $after && ! self::is_cta_publisher_owned( $before['name'] ?? '' ) ) {
+				$cta = $after['name'];
+			}
+
 			$was_donate = 'newspack-blocks/donate' === ( $before['name'] ?? '' );
 			$is_donate  = 'newspack-blocks/donate' === ( $after['name'] ?? '' );
 			if ( $was_donate !== $is_donate ) {
@@ -866,16 +878,66 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 
 		$content = serialize_blocks( $blocks );
 		if ( $content === $post->post_content ) {
+			// Nothing to write, but a pattern seeded before the CTA record existed
+			// gets one here, so the admin's next swap reads as theirs.
+			self::record_cta( $cta );
 			return;
 		}
 
-		// The record describes the stored pattern's donate child, so it is only
-		// truthful once that pattern has actually been written — which a pattern
-		// saved from the editor since it was read here refuses, rather than
-		// overwriting the publisher's edit with content derived from before it.
-		if ( self::save_pattern_content( $pattern_id, $content, $read_at ) && null !== $stamp ) {
+		// The records describe the stored pattern, so they are only truthful once
+		// that pattern has actually been written — which a pattern saved from the
+		// editor since it was read here refuses, rather than overwriting the
+		// publisher's edit with content derived from before it.
+		if ( ! self::save_pattern_content( $pattern_id, $content, $read_at ) ) {
+			return;
+		}
+		if ( null !== $stamp ) {
 			self::record_stamp( $stamp );
 		}
+		self::record_cta( $cta );
+	}
+
+	/**
+	 * Whether the stored pattern's CTA is one the admin put there, rather than the
+	 * one this plugin wrote. Normalization exists for a CTA left behind by a change
+	 * of donation platform, and on its own it cannot tell that apart from an admin
+	 * who swapped the donate form for a button on purpose: both are a button on a
+	 * native site. The record of what the plugin last wrote is what tells them
+	 * apart. With no record — a site seeded before it existed — nothing is the
+	 * admin's yet; the first repair records the CTA it finds.
+	 *
+	 * @param string $cta_name Block name of the stored CTA.
+	 * @return bool
+	 */
+	public static function is_cta_publisher_owned( $cta_name ) {
+		$recorded = (string) get_option( self::OPTION_WRITTEN_CTA, '' );
+
+		return '' !== $recorded && $recorded !== $cta_name;
+	}
+
+	/**
+	 * Record the CTA this plugin wrote to the stored pattern.
+	 *
+	 * @param string|null $cta_name Block name, or null when there is nothing to record.
+	 */
+	private static function record_cta( $cta_name ) {
+		if ( null === $cta_name ) {
+			return;
+		}
+
+		update_option( self::OPTION_WRITTEN_CTA, $cta_name );
+	}
+
+	/**
+	 * Record the CTA a seed or a reset just stored, read back from the pattern.
+	 *
+	 * @param int $pattern_id Pattern post ID.
+	 */
+	private static function record_written_cta( $pattern_id ) {
+		$blocks = parse_blocks( (string) get_post_field( 'post_content', $pattern_id ) );
+		$cta    = isset( $blocks[0] ) ? Newspack_Popups_Contextual_Prompt_Render::find_cta( $blocks[0] ) : null;
+
+		self::record_cta( $cta['name'] ?? null );
 	}
 
 	/**
@@ -1050,6 +1112,58 @@ final class Newspack_Popups_Contextual_Prompt_Pattern {
 		if ( empty( $block['attrs']['metadata'] ) ) {
 			unset( $block['attrs']['metadata'] );
 		}
+	}
+
+	/**
+	 * Lift the locks the seed no longer bakes in. An earlier seed pinned the
+	 * group with a `templateLock` and locked the CTA child, then relaxed both so
+	 * a detached card could take the publisher's own blocks in place of the CTA.
+	 * A pattern seeded before that keeps the old attributes in its stored markup,
+	 * which reads as a design change against the current seed and leaves the CTA
+	 * unremovable in the pattern editor. Only the bound copy stays locked; every
+	 * other child is freed, matching what the seed writes now.
+	 *
+	 * @param array $group Parsed prompt card, mutated in place.
+	 * @return bool Whether anything changed.
+	 */
+	private static function strip_legacy_locks( &$group ) {
+		$changed = false;
+
+		if ( isset( $group['attrs']['templateLock'] ) ) {
+			unset( $group['attrs']['templateLock'] );
+			$changed = true;
+		}
+
+		foreach ( $group['innerBlocks'] ?? [] as $index => $child ) {
+			if ( self::is_bound_copy( $child ) || ! isset( $child['attrs']['lock'] ) ) {
+				continue;
+			}
+			unset( $group['innerBlocks'][ $index ]['attrs']['lock'] );
+			$changed = true;
+		}
+
+		return $changed;
+	}
+
+	/**
+	 * Whether a child is the pattern's generated copy: the paragraph the pattern
+	 * binds each instance's copy to. Mirrors isBoundCopy in card-guard.js.
+	 *
+	 * @param array $block Parsed block.
+	 * @return bool
+	 */
+	private static function is_bound_copy( $block ) {
+		if ( 'core/paragraph' !== ( $block['blockName'] ?? '' ) ) {
+			return false;
+		}
+
+		foreach ( $block['attrs']['metadata']['bindings'] ?? [] as $binding ) {
+			if ( 'core/pattern-overrides' === ( $binding['source'] ?? '' ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

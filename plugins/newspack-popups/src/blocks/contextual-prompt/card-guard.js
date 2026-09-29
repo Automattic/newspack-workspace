@@ -8,12 +8,14 @@
  *   it lands — whichever position it lands in.
  * - A card detached from the pattern is the publisher's to reshape, but only so
  *   far. Detaching copies the card's markup into the post, locks and all; those
- *   locks are lifted — the group's own lock and its `templateLock`, and any lock
- *   on the call to action — so the publisher can move the card and swap the CTA
- *   for blocks of their own. The generated copy is held in place: it is the one
- *   child the pattern names, and it is what keeps the card a prompt. Core's
- *   Unlock modal writes the `lock` attribute, so holding the copy re-asserts it,
- *   and freeing the rest strips it, whichever way the modal was used.
+ *   locks are lifted — the group's own lock and its `templateLock`, and the lock
+ *   the detach copied onto the call to action — so the publisher can move the
+ *   card and swap the CTA for blocks of their own. The generated copy is held in
+ *   place: it is the paragraph the pattern binds its copy to, and it is what
+ *   keeps the card a prompt. Core's Unlock modal writes the `lock` attribute, so
+ *   holding the copy re-asserts it, and freeing the CTA strips it, whichever way
+ *   the modal was used. A lock the publisher sets on a block of their own is not
+ *   the one the detach copied down, so it is left alone.
  */
 
 /**
@@ -27,13 +29,33 @@ import { store as blockEditorStore } from '@wordpress/block-editor';
 /**
  * Internal dependencies.
  */
-import { findPromptCards, isDetachedPromptCard, PATTERN_ID } from './instance';
+import { findPromptCards, isDetachedPromptCard, BOUND_NAME, PATTERN_ID } from './instance';
 import { isEditingPattern, resolveEditedEntity } from './editor-locks';
 
 const NOTICE_ID = 'newspack-contextual-prompt-single';
 
 // Mirrors BLOCK_LOCK in class-newspack-popups-contextual-prompt-pattern.php.
 const CHILD_LOCK = { move: true, remove: true };
+
+/**
+ * Whether a child is the pattern's generated copy: the paragraph the pattern
+ * binds each instance's copy to. It is matched by that override binding, or by
+ * the seeded name it carries when a detach has dropped the binding — never by a
+ * bare name, which a publisher can set on a block of their own.
+ *
+ * @param {Object} attributes Block attributes.
+ * @return {boolean} Whether the block is the bound copy.
+ */
+const isBoundCopy = attributes => {
+	const metadata = attributes?.metadata;
+	if ( ! metadata ) {
+		return false;
+	}
+	if ( BOUND_NAME === metadata.name ) {
+		return true;
+	}
+	return Object.values( metadata.bindings || {} ).some( binding => 'core/pattern-overrides' === binding?.source );
+};
 
 // The plan's correction lists, as opposed to the cards it hands the next pass.
 const CORRECTIONS = [ 'remove', 'unlockRemovals', 'stripGroupLock', 'stripTemplateLock', 'lockChildren', 'unlockChildren' ];
@@ -53,7 +75,7 @@ const CORRECTIONS = [ 'remove', 'unlockRemovals', 'stripGroupLock', 'stripTempla
  *
  * @param {Object[]} blocks Block tree.
  * @param {string[]} known  Client ids of the cards the previous pass kept.
- * @return {{keep: string[], remove: string[], unlockRemovals: string[], stripGroupLock: string[], pinTemplateLock: string[], lockChildren: string[]}} The corrections, and the cards to know next pass.
+ * @return {{keep: string[], remove: string[], unlockRemovals: string[], stripGroupLock: string[], stripTemplateLock: string[], lockChildren: string[], unlockChildren: string[]}} The corrections, and the cards to know next pass.
  */
 export const planPromptCorrections = ( blocks, known = [] ) => {
 	const cards = findPromptCards( blocks );
@@ -93,16 +115,17 @@ export const planPromptCorrections = ( blocks, known = [] ) => {
 	}
 
 	// The generated copy is the one child held in place: it is what makes the
-	// card a prompt. The pattern names only that child, so a `metadata` name
-	// tells it from the CTA and anything the publisher adds — those are theirs to
-	// arrange, and any lock the detach left on one is lifted.
+	// card a prompt, so it is matched by its override binding — or the seeded name
+	// — and held move-and-remove locked. Every other child is the publisher's to
+	// arrange; only the full lock the detach copied down is lifted from one, so a
+	// lock the publisher set themselves is left in place.
 	for ( const child of card.innerBlocks || [] ) {
 		const lock = child.attributes?.lock;
-		if ( child.attributes?.metadata?.name ) {
+		if ( isBoundCopy( child.attributes ) ) {
 			if ( true !== lock?.move || true !== lock?.remove ) {
 				plan.lockChildren.push( child.clientId );
 			}
-		} else if ( undefined !== lock ) {
+		} else if ( true === lock?.move && true === lock?.remove ) {
 			plan.unlockChildren.push( child.clientId );
 		}
 	}

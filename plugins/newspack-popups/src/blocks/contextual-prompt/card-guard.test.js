@@ -190,6 +190,40 @@ describe( 'planPromptCorrections: detached card locks', () => {
 		expect( plan.unlockChildren ).toEqual( [ 'cta' ] );
 	} );
 
+	// A block the publisher adds and names is not the generated copy — only the
+	// override-bound paragraph is. So a named custom block is freed like any other
+	// CTA rather than pinned in place by its name alone.
+	it( 'does not mistake a named publisher block for the copy', () => {
+		const { planPromptCorrections } = loadGuard();
+		const card = detached( 'card', [
+			copyChild( 'copy', { metadata: { name: 'Prompt Copy' } } ),
+			paragraph( 'mine', { lock: CHILD_LOCK, metadata: { name: 'Editor note' } } ),
+		] );
+		const plan = planPromptCorrections( [ card ] );
+
+		expect( plan.lockChildren ).toEqual( [ 'copy' ] );
+		expect( plan.unlockChildren ).toEqual( [ 'mine' ] );
+	} );
+
+	// The copy is the pattern's override-bound paragraph, so it is still held when
+	// a detach drops the seeded name and leaves only the binding behind.
+	it( 'holds the copy identified by its override binding alone', () => {
+		const { planPromptCorrections } = loadGuard();
+		const bound = paragraph( 'copy', { metadata: { bindings: { __default: { source: 'core/pattern-overrides' } } } } );
+		const card = detached( 'card', [ bound, ctaChild( 'cta' ) ] );
+
+		expect( planPromptCorrections( [ card ] ).lockChildren ).toEqual( [ 'copy' ] );
+	} );
+
+	// A lock the publisher sets on a block of their own is not the full lock the
+	// detach copied down, so it is left in place.
+	it( 'leaves a publisher-set child lock alone', () => {
+		const { planPromptCorrections } = loadGuard();
+		const card = detached( 'card', [ copyChild( 'copy' ), ctaChild( 'mine', { lock: { move: true, remove: false } } ) ] );
+
+		expect( planPromptCorrections( [ card ] ).unlockChildren ).toEqual( [] );
+	} );
+
 	// Only the card's own children are touched: what sits under one is the
 	// publisher's to arrange.
 	it( 'leaves blocks below the card alone', () => {
