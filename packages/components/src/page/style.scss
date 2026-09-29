@@ -51,7 +51,6 @@
 }
 
 .newspack-page__header {
-	/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
 	background: var(--wpds-color-background-surface-neutral-strong);
 	border-block-end: var(--wpds-border-width-xs) solid var(--wpds-color-stroke-surface-neutral-weak);
 	padding: var(--wpds-dimension-padding-lg) var(--wpds-dimension-padding-2xl);
@@ -62,7 +61,6 @@
 }
 
 .newspack-page__header-subtitle {
-	/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
 	color: var(--wpds-color-foreground-content-neutral-weak);
 	padding-block-end: var(--wpds-dimension-padding-xs);
 }
