@@ -73,7 +73,8 @@
 	},
 	"pnpm": {
 		"overrides": {
-			"@wordpress/stylelint-config>@wordpress/theme": "^0.16.0",
+			"@wordpress/private-apis": "^1.56.0",
+			"@wordpress/stylelint-config>@wordpress/theme": "^2.2.0",
 			"basic-ftp": "5.3.1",
 			"@typescript-eslint/parser": "8.61.0",
 			"prettier": "npm:wp-prettier@^3.0.3",
