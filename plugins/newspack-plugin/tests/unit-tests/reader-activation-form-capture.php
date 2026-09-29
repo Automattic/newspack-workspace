@@ -620,6 +620,30 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Perfmatters delays every inline script whose tag contains a keyword
+	 * Newspack hands it, while the capture script itself loads undelayed on
+	 * reader-activation sites. A delayed config lands after the script has
+	 * read it, so capture stays off for the whole page view, with no error.
+	 */
+	public function test_capture_config_matches_no_perfmatters_delay_keyword() {
+		wp_dequeue_script( Form_Capture::SCRIPT_HANDLE );
+		wp_deregister_script( Form_Capture::SCRIPT_HANDLE );
+		if ( class_exists( 'Newspack_Popups_Model' ) ) {
+			\Newspack_Popups_Model::$has_above_header = false;
+		}
+		$delay_keywords = \Newspack\Perfmatters::set_defaults( [] )['assets']['delay_js_inclusions'];
+		Integrations::enable( Form_Capture::ID );
+		Integrations::get_integration( Form_Capture::ID )->enqueue_scripts();
+
+		$config_tag = wp_scripts()->get_inline_script_tag( Form_Capture::SCRIPT_HANDLE, 'before' );
+		$this->assertNotEmpty( $config_tag, 'Precondition: the config is printed.' );
+		foreach ( $delay_keywords as $keyword ) {
+			$this->assertStringNotContainsString( $keyword, $config_tag, "Perfmatters would delay the capture config on '$keyword'." );
+		}
+		Integrations::disable( Form_Capture::ID );
+	}
+
+	/**
 	 * The capture script's config, as the inline scripts printed before it
 	 * build it.
 	 *
@@ -628,7 +652,7 @@ class Test_Form_Capture extends WP_UnitTestCase {
 	private function get_capture_script_config() {
 		$config = [];
 		foreach ( (array) wp_scripts()->get_data( Form_Capture::SCRIPT_HANDLE, 'before' ) as $script ) {
-			if ( preg_match_all( '/window\.newspack_form_capture\[(".+?")\] = (\{.*?\});/', (string) $script, $matches, PREG_SET_ORDER ) ) {
+			if ( preg_match_all( '/window\["newspack_form_capture"\]\[(".+?")\] = (\{.*?\});/', (string) $script, $matches, PREG_SET_ORDER ) ) {
 				foreach ( $matches as $match ) {
 					$config[ json_decode( $match[1] ) ] = json_decode( $match[2], true );
 				}
