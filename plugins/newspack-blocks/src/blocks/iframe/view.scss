@@ -1,4 +1,6 @@
-body.newspack-post-with-fullscreen-iframe {
+// Only while the block is on the page: a content gate may have replaced it with a teaser,
+// and hiding the page then would hide the gate too.
+body.newspack-post-with-fullscreen-iframe:has( .wp-block-newspack-blocks-iframe ) {
 	#page {
 		visibility: hidden;
 	}

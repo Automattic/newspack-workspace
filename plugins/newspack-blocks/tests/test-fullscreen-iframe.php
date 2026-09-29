@@ -84,14 +84,15 @@ class Test_Fullscreen_Iframe extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A reader the post is restricted for sees the content gate, so the page is left visible.
+	 * Restriction does not change the takeover: a metered reader still gets the iframe, and
+	 * the stylesheet leaves the page visible when a gate replaces it.
 	 */
-	public function test_restricted_fullscreen_post_page_is_left_visible() {
+	public function test_fullscreen_post_page_takes_over_whatever_the_restriction() {
 		add_filter( 'newspack_is_post_restricted', '__return_true' );
 		$this->go_to( get_permalink( $this->fullscreen_post ) );
 
-		$this->assertNotContains( 'newspack-post-with-fullscreen-iframe', get_body_class() );
-		$this->assertFalse( $this->prompts_suppressed() );
+		$this->assertContains( 'newspack-post-with-fullscreen-iframe', get_body_class() );
+		$this->assertTrue( $this->prompts_suppressed() );
 	}
 
 	/**
