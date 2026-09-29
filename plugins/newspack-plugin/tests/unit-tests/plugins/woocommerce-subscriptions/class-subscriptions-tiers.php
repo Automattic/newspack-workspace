@@ -761,6 +761,54 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The picker prints a variation as "Plan (Annual)". WooCommerce's "Any
+	 * <attribute>" variation stores that attribute with an empty value, and
+	 * nothing should be printed for it: "Plan ()" reads as a broken name, and
+	 * a reader picking between it and "Plan (Annual)" cannot tell what they
+	 * are choosing.
+	 *
+	 * @dataProvider variation_attribute_titles
+	 *
+	 * @param array  $variation_attributes What the variation stores per attribute.
+	 * @param string $expected_title       The printed title.
+	 */
+	public function test_variation_title_prints_only_the_attributes_that_have_a_value( $variation_attributes, $expected_title ) {
+		$variation = wc_create_mock_product(
+			[
+				'id'                   => 103,
+				'type'                 => 'subscription_variation',
+				'name'                 => 'Membership Plan',
+				'parent_id'            => 100,
+				'variation_attributes' => $variation_attributes,
+			]
+		);
+
+		$get_product_title_method = new ReflectionMethod( Subscriptions_Tiers::class, 'get_product_title' );
+		$get_product_title_method->setAccessible( true );
+
+		$this->assertSame( $expected_title, $get_product_title_method->invoke( null, $variation, true ) );
+	}
+
+	/**
+	 * Attribute maps as a variation stores them, and the title each prints.
+	 *
+	 * @return array[]
+	 */
+	public function variation_attribute_titles() {
+		return [
+			'a populated attribute'           => [ [ 'attribute_billing-period' => 'Annual' ], 'Membership Plan (Annual)' ],
+			'an "Any" attribute'              => [ [ 'attribute_billing-period' => '' ], 'Membership Plan' ],
+			'an "Any" beside a populated one' => [
+				[
+					'attribute_billing-period' => '',
+					'attribute_tier'           => 'Premium',
+				],
+				'Membership Plan (Premium)',
+			],
+		];
+	}
+
+	/**
 	 * Build a monthly subscription tier product registered in the mock products
 	 * database.
 	 *
@@ -901,6 +949,141 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$html = $this->render_tier_form( $product, $switch_data );
 
 		$this->assertStringContainsString( '<input type="hidden" name="quantity" value="4">', $html );
+	}
+
+	/**
+	 * A reader whose plan was retired by setting it to Private still gets a usable
+	 * switch modal. The private plan is (rightly) left out of the tiers offered as
+	 * targets, so it can't be found there to pick the billing period from; the
+	 * period comes from the line item being switched instead. Without that, no
+	 * period tab was selected and the modal opened as an empty box (NPPM-3406).
+	 */
+	public function test_switch_form_opens_on_the_period_of_a_private_current_plan() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		$year_meta = [
+			'_subscription_period'          => 'year',
+			'_subscription_period_interval' => 1,
+		];
+		wc_create_mock_product(
+			[
+				'id'   => 311,
+				'type' => 'subscription',
+				'name' => 'Monthly',
+				'meta' => [
+					'_subscription_period'          => 'month',
+					'_subscription_period_interval' => 1,
+				],
+			]
+		);
+		// Two monthly tiers, so the form renders period tabs rather than a flat list.
+		wc_create_mock_product(
+			[
+				'id'   => 314,
+				'type' => 'subscription',
+				'name' => 'Monthly Plus',
+				'meta' => [
+					'_subscription_period'          => 'month',
+					'_subscription_period_interval' => 1,
+				],
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'   => 312,
+				'type' => 'subscription',
+				'name' => 'Annual',
+				'meta' => $year_meta,
+			]
+		);
+		$switch_data = $this->make_switch_data( $user_id, [ 313 ], 313, 1 );
+		wc_create_mock_product(
+			[
+				'id'     => 313,
+				'type'   => 'subscription',
+				'name'   => 'Retired Annual',
+				'status' => 'private',
+				'meta'   => $year_meta,
+			]
+		);
+		$grouped = wc_create_mock_product(
+			[
+				'id'       => 310,
+				'type'     => 'grouped',
+				'name'     => 'Upgrade',
+				'children' => [ 311, 314, 312, 313 ],
+			]
+		);
+
+		$html = $this->render_tier_form( $grouped, $switch_data );
+
+		// The retired plan is not offered as a target.
+		$this->assertStringNotContainsString( 'Retired Annual', $html );
+		// The modal opens on the reader's own billing period, not the first one.
+		$this->assertMatchesRegularExpression( '/<button[^>]*class="[^"]*selected[^"]*"[^>]*>\s*Yearly\s*</', $html );
+		$this->assertDoesNotMatchRegularExpression( '/<button[^>]*class="[^"]*selected[^"]*"[^>]*>\s*Monthly\s*</', $html );
+		// And a product on that period is preselected, so submitting is meaningful.
+		$this->assertMatchesRegularExpression( '/<input[^>]*type="radio"[^>]*value="312"[^>]*checked/', $html );
+	}
+
+	/**
+	 * When no public plan shares the retired plan's billing period, the modal
+	 * still opens on a period rather than on none: the first one offered, with
+	 * its first plan preselected.
+	 */
+	public function test_switch_form_falls_back_to_the_first_period_when_none_matches_a_private_plan() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		$month_meta = [
+			'_subscription_period'          => 'month',
+			'_subscription_period_interval' => 1,
+		];
+		wc_create_mock_product(
+			[
+				'id'   => 321,
+				'type' => 'subscription',
+				'name' => 'Monthly',
+				'meta' => $month_meta,
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'   => 322,
+				'type' => 'subscription',
+				'name' => 'Monthly Plus',
+				'meta' => $month_meta,
+			]
+		);
+		$switch_data = $this->make_switch_data( $user_id, [ 323 ], 323, 1 );
+		wc_create_mock_product(
+			[
+				'id'     => 323,
+				'type'   => 'subscription',
+				'name'   => 'Retired Annual',
+				'status' => 'private',
+				'meta'   => [
+					'_subscription_period'          => 'year',
+					'_subscription_period_interval' => 1,
+				],
+			]
+		);
+		$grouped = wc_create_mock_product(
+			[
+				'id'       => 320,
+				'type'     => 'grouped',
+				'name'     => 'Upgrade',
+				'children' => [ 321, 322, 323 ],
+			]
+		);
+
+		$html = $this->render_tier_form( $grouped, $switch_data );
+
+		$this->assertStringNotContainsString( 'Retired Annual', $html );
+		$this->assertStringNotContainsString( 'Yearly', $html );
+		$this->assertMatchesRegularExpression( '/<input[^>]*type="radio"[^>]*value="321"[^>]*checked/', $html );
+		$this->assertDoesNotMatchRegularExpression( '/<input[^>]*type="radio"[^>]*value="322"[^>]*checked/', $html );
 	}
 
 	/**

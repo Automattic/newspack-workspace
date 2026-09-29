@@ -11,13 +11,15 @@ A card component for presenting a named feature or setting with a predictable, s
 
 Cards sit side by side, so a bare "Enable" names no feature out of context. The card appends `title` to the primary button's accessible name ("Enable Metered Countdown") and to the "More" menu ("More options for Metered Countdown"). The visible label leads, so voice control still matches on the word the user can see. Nothing to pass — this is automatic.
 
+When enabling leaves nothing to configure, the primary button goes away while it still has focus; the card moves that focus to the "More" menu rather than letting it fall to the page.
+
 ## States
 
 | State | Condition | Button | Dropdown | Badge |
 |---|---|---|---|---|
 | **Unmet requirements** | `requirements` is set | "Enable" — blocked but still focusable, and described by the badge (clickable if `requirementsActionable`) | Shown if `enabled` and `requirementsActionable` (and `moreControls` provided); otherwise hidden | High-intent badge with `requirements` text |
 | **Disabled** | `!enabled`, no requirements | "Enable" | Hidden | None |
-| **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Stable-intent badge ("Enabled") |
+| **Enabled** | `enabled`, no requirements | "Configure", or none without `onConfigure` | Shown if `moreControls` provided | Stable-intent badge ("Enabled") |
 
 When `requirements` is set the title drops to the muted text colour. The description already uses that colour in every state, so the unmet-requirements state is signalled by the title colour plus the high-intent badge.
 
@@ -75,9 +77,9 @@ import { __ } from '@wordpress/i18n';
 
 ## With a custom icon
 
-`icon` takes either a descriptor object or a ready React element. A descriptor gets the standard treatment: pass `node` for the icon element, `fill` for the SVG colour, `backgroundColor` for a container background, and `radius` for the corner treatment. A ready element renders exactly as given, with no container, background or radius, which is the escape hatch for an icon that already carries its own chrome.
+`icon` takes either a descriptor object or a ready React element. A descriptor gets the standard treatment: pass `node` for the icon element, `fill` for the SVG colour, and `backgroundColor` for a container background. A ready element renders exactly as given, with no container or background, which is the escape hatch for an icon that already carries its own chrome.
 
-A descriptor's container is always **40 × 40 px** with the SVG at **24 × 24 px**. Setting `backgroundColor` without a `radius` gives 2px corners; pass `radius: 'full'` for a circle.
+A descriptor's container is always **40 × 40 px** with the SVG at **24 × 24 px**. Setting `backgroundColor` makes the container a circle.
 
 `fill` sets the container's `color`, which the SVG picks up through `fill: currentcolor`. That only recolours single-colour icons that inherit their fill, such as those from `@wordpress/icons`. A vendor's own mark carries `fill` on its paths and keeps its colours, so pair it with `backgroundColor` rather than trying to tint it.
 
@@ -101,9 +103,9 @@ import colors from 'newspack-colors';
 
 // A vendor mark on its own brand background, keeping the mark's colours
 <CardFeature
-	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	title="Mailchimp"
 	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
-	icon={ { node: <MailchimpMark />, backgroundColor: '#ffe01b', radius: 'full' } }
+	icon={ { node: <MailchimpMark />, backgroundColor: '#ffe01b' } }
 	enabled={ isEnabled }
 	onEnable={ handleEnable }
 	onConfigure={ handleConfigure }
@@ -112,7 +114,7 @@ import colors from 'newspack-colors';
 
 // A ready element, rendered as-is
 <CardFeature
-	title={ __( 'Mailchimp', 'newspack-plugin' ) }
+	title="Mailchimp"
 	description={ __( 'Sync reader activity with your Mailchimp audience.', 'newspack-plugin' ) }
 	icon={ <IntegrationIcon provider="mailchimp" /> }
 	enabled={ isEnabled }
@@ -203,7 +205,7 @@ The card is built on `Card.Root`, `Card.Header` and `Card.Content` from `@wordpr
 | `enableLabel` | `string` | `"Enable"` | Label for the primary button in its "Enable" states: not enabled, or enabled with an unmet requirement |
 | `configureLabel` | `string` | `"Configure"` | Label for the primary button in its "Configure" state: enabled, with no unmet requirement |
 | `onEnable` | `() => void` | — | Called when the primary button is clicked while it reads "Enable". That covers the not-enabled case and the enabled-with-unmet-requirements case, where the feature is on but the requirement is what the button acts on |
-| `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements |
+| `onConfigure` | `() => void` | — | Called when the primary button is clicked while it reads "Configure", which is the enabled state with no unmet requirements. Omit it for a feature with nothing to configure, and that state shows no primary button |
 | `moreControls` | `MoreControl[]` | — | Items for the "More" dropdown. Shown when `enabled` and either there are no `requirements` or `requirementsActionable` is set |
 | `badge` | `{ label?: string; intent?: BadgeIntent }` | `{ label: "Enabled", intent: "stable" }` | Badge shown when enabled. Ignored while `requirements` is set, which takes the badge |
 | `busy` | `boolean` | `false` | Shows the primary button as busy and blocks it while an action is in flight |
@@ -215,10 +217,7 @@ The card is built on `Card.Root`, `Card.Header` and `Card.Content` from `@wordpr
 type CardFeatureIcon = {
 	node: React.ReactNode;       // The icon element to render
 	fill?: string;               // SVG fill colour (applied via currentColor)
-	backgroundColor?: string;    // Background colour of the 40×40 container
-	radius?: 'small' | 'full';   // 'small' = 2px ($radius-small), 'full' = 50% ($radius-round)
-	                             // Defaults to 'small' whenever backgroundColor is set,
-	                             // and has nothing to round without one.
+	backgroundColor?: string;    // Background colour of the 40×40 container, always a circle
 };
 ```
 

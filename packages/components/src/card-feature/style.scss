@@ -49,11 +49,7 @@
 			width: wp-vars.$grid-unit-30;
 		}
 
-		&--radius-small {
-			border-radius: wp-vars.$radius-small;
-		}
-
-		&--radius-full {
+		&--has-background {
 			border-radius: wp-vars.$radius-round;
 		}
 	}

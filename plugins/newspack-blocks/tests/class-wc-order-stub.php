@@ -44,16 +44,25 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		protected $items = [];
 
 		/**
+		 * Order meta, keyed by meta key.
+		 *
+		 * @var array
+		 */
+		protected $meta = [];
+
+		/**
 		 * Constructor.
 		 *
 		 * @param int    $id        Order ID.
 		 * @param string $order_key Order key.
 		 * @param array  $items     Line items.
+		 * @param array  $meta      Order meta, keyed by meta key.
 		 */
-		public function __construct( $id = 0, $order_key = '', $items = [] ) {
+		public function __construct( $id = 0, $order_key = '', $items = [], $meta = [] ) {
 			$this->id        = $id;
 			$this->order_key = $order_key;
 			$this->items     = $items;
+			$this->meta      = $meta;
 		}
 
 		/**
@@ -91,8 +100,7 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		 * @return string
 		 */
 		public function get_meta( $key ) {
-			unset( $key );
-			return '';
+			return $this->meta[ $key ] ?? '';
 		}
 	}
 }

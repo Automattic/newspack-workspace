@@ -100,7 +100,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 
 - **`ActionCard`** – Use when one concept (e.g. a feature or setting) can be toggled on/off and may have extra content below. Internal padding (24px default; 16px/8px for isMedium/isSmall) and 24px between regions keep hierarchy clear; expandable content uses 24px top padding and 24px between siblings.
 - **`CollapsibleGroup`** / **`CollapsibleGroup.Item`** – A stack of independently collapsible items, separated by dividers and flush with the surrounding column. Not a W3C accordion: the items do not coordinate.
-- **`Notice`** – Use for outcome feedback (success/error/warning) or short contextual messages. Vertical margin is 32px so notices don’t collide with cards; keep one primary message per area when possible.
+- **`Notice`** – Being retired in favour of core’s `Notice` from `@wordpress/components`, which announces itself to assistive technology. Reach for core’s in new work; ours stays for the screens still on it. Where ours is used, vertical margin is 32px so notices don’t collide with cards, and one primary message per area reads best.
 - **`ProgressBar`** – Progress indicator.
 - **`StepsList`** / **`StepsListItem`** – Step-by-step list components.
 - **`StyleCard`** – Style preview card.
@@ -131,6 +131,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 
 ### Utility Components
 
+- **`DebugBadge`** - Floating indicator that Newspack debug mode is on. Takes no props and renders nothing unless the site defines `WP_NEWSPACK_DEBUG`
 - **`GlobalNotices`** - Global notice system component
 - **`InfoButton`** - Reveals supplementary context from a `description` prop. Anything a reader needs in order to use a control belongs in visible help text instead
 - **`Modal`** - Modal dialog component
@@ -176,7 +177,7 @@ import {
 	ActionCard,
 	Button,
 	Card,
-	Notice,
+	SectionHeader,
 	TextControl,
 } from '../../../../../packages/components/src';
 ```
@@ -187,21 +188,21 @@ import {
 
 ```jsx
 // ✅ CORRECT - Within newspack-plugin monorepo
-import { Button, Card, Notice } from '../../../../../packages/components/src';
+import { Button, Card, SectionHeader } from '../../../../../packages/components/src';
 ```
 
 **As an npm package:** If `newspack-components` is installed as a dependency in another plugin, import from the package name:
 
 ```jsx
 // ✅ CORRECT - When installed as npm package
-import { Button, Card, Notice } from 'newspack-components';
+import { Button, Card, SectionHeader } from 'newspack-components';
 ```
 
 **Import individual components** – Import only what you need; do not import the whole namespace. List named imports **alphabetically** (e.g. from `@wordpress/components` or `newspack-components`):
 
 ```jsx
 // ✅ CORRECT – alphabetical
-import { Button, Card, Notice } from '../../../../../packages/components/src';
+import { Button, Card, SectionHeader } from '../../../../../packages/components/src';
 
 // ❌ WRONG – Don't import all
 import * as Components from '../../../../../packages/components/src';
@@ -253,7 +254,7 @@ This section shows how to use components **by context** (backend, blocks, fronte
 /**
  * WordPress dependencies
  */
-import { CheckboxControl, ExternalLink, RangeControl } from '@wordpress/components';
+import { CheckboxControl, ExternalLink, Notice, RangeControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -262,9 +263,8 @@ import {
 	ActionCard,
 	Button,
 	Card,
-	Grid,
-	Notice,
 	Divider,
+	Grid,
 	SectionHeader,
 	TextControl,
 	Waiting,
@@ -273,14 +273,13 @@ import {
 
 **Example – Audience Setup Wizard (real reference):**
 ```jsx
-import { CheckboxControl, ExternalLink, RangeControl } from '@wordpress/components';
+import { CheckboxControl, ExternalLink, Notice, RangeControl } from '@wordpress/components';
 import {
 	ActionCard,
 	Button,
 	Card,
-	Grid,
-	Notice,
 	Divider,
+	Grid,
 	PluginInstaller,
 	SectionHeader,
 	TextControl,
@@ -291,7 +290,9 @@ import {
 export default withWizardScreen( ( { config, updateConfig } ) => {
 	return (
 		<>
-			<Notice noticeText={ __( 'Audience Management is enabled.', 'newspack-plugin' ) } isSuccess />
+			<Notice status="success" isDismissible={ false }>
+				{ __( 'Audience Management is enabled.', 'newspack-plugin' ) }
+			</Notice>
 			<Card noBorder>
 				<ActionCard
 					title={ __( 'Present newsletter signup after checkout', 'newspack-plugin' ) }
@@ -374,7 +375,7 @@ import { Fragment } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { GlobalNotices, Notice, Wizard } from '../../../../../packages/components/src';
+import { GlobalNotices, Wizard } from '../../../../../packages/components/src';
 import sections from './sections';
 
 function Dashboard() {
@@ -541,7 +542,7 @@ When Newspack components don't provide what you need, use these WordPress compon
 ### Feedback and overlays
 
 - **`Spinner`** – Loading spinner
-- **`Notice`** – Inline notice (success/error/warning); prefer Newspack `Notice` in wizards when it fits
+- **`Notice`** – Inline notice (success/error/warning); prefer this over the Newspack `Notice`, which is being retired
 - **`Placeholder`** – Empty state in blocks
 - **`Modal`** – Modal dialog
 - **`Popover`** – Popover (e.g. webhooks endpoint actions, corrections modal)
@@ -622,7 +623,7 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 | **8px** | Tight gaps, badge padding, small padding (e.g. ActionCard is-small) | Inline or dense UI |
 | **16px** | Gaps between related controls, buttons card gap, margins inside ActionCard region-children for Card/Grid/TextControl | Related items, form rows |
 | **24px** | Default ActionCard region padding, toggle/region gaps, expandable content padding and sibling spacing | Default internal padding and gaps within a card |
-| **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Notice margin, Divider margin | Section rhythm, between blocks |
+| **32px** | Card vertical margin, Grid default gap and margin, SectionHeader first-child top, Newspack Notice margin, Divider margin | Section rhythm, between blocks |
 | **48px** | SectionHeader container margin-top, Card horizontal padding (small screens) | Section separation |
 | **64px** | SectionHeader top margin, Divider margins (large breakpoint), buttons card margin, Card horizontal padding (large screens) | Major section separation |
 
@@ -693,7 +694,7 @@ Components rely on WordPress design system states where applicable; a few Newspa
 - **ActionCard (clickable)** – Hover: `box-shadow: 0 4px 8px rgba(black, 0.08)`; transition 125ms ease-in-out. Use for cards that navigate or open.
 - **Button** – Primary, secondary, disabled, and link variants follow `@wordpress/components` Button; focus and hover come from WordPress base styles.
 - **Toggle (inside ActionCard)** – Checked/unchecked and focus states from WordPress ToggleControl; label is visually hidden but available for accessibility.
-- **Notice** – Success (green), error (red), warning (yellow), info (gray) variants; use for feedback only and one primary message per area when possible.
+- **Notice** – Core's `Notice` carries the status in a tinted, bordered box (info, success, warning, error) and announces itself. The Newspack one, still in place on the screens that have not moved, tints the background and adds an icon. Either way, use notices for feedback only, and one primary message per area when possible.
 
 When adding new interactive components, preserve focus visibility and use the same state patterns (hover shadow, transition) so the UI feels consistent.
 
@@ -724,7 +725,7 @@ When adding new interactive components, preserve focus visibility and use the sa
 - **[@wordpress/components](https://www.npmjs.com/package/@wordpress/components)** – WordPress component library (fallback when Newspack components don’t exist)
 - **[@wordpress/base-styles](https://www.npmjs.com/package/@wordpress/base-styles)** – WordPress Design System styles and colors
 
-**Design resources:** For layout, components, and spacing, refer to the [WordPress Figma Library](https://www.figma.com/community/file/1149596986784498103/wordpress-design-library) and the [Block Editor Handbook](https://developer.wordpress.org/block-editor/reference-guides/components/). The **Components Demo** (`/wp-admin/admin.php?page=newspack-components-demo`) is the live reference for how Newspack components look and behave; use it to confirm spacing and hierarchy when building new screens.
+**Design resources:** For layout, components, and spacing, refer to the [WordPress Figma Library](https://www.figma.com/community/file/1149596986784498103/wordpress-design-library) and the [Block Editor Handbook](https://developer.wordpress.org/block-editor/reference-guides/components/). The **Components Demo** (`/wp-admin/admin.php?page=newspack-components-demo`) is the live reference for how Newspack components look and behave; use it to confirm spacing and hierarchy when building new screens. It no longer catalogues `Notice`; the Action Card examples are the place to see one rendered.
 
 ## Component Patterns
 

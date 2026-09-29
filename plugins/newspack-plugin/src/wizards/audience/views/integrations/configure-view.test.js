@@ -19,6 +19,7 @@ jest.mock( '@wordpress/data', () => ( {
 // layout props back: `direction` and `gap` are the only things carrying the
 // column rhythm now that the controls supply no margins of their own.
 jest.mock( '@wordpress/ui', () => ( {
+	Badge: ( { children } ) => <span data-testid="badge">{ children }</span>,
 	Stack: ( { children, direction, gap } ) => (
 		<div data-testid="stack" data-direction={ direction } data-gap={ gap }>
 			{ children }
@@ -29,14 +30,18 @@ jest.mock( '@wordpress/ui', () => ( {
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
 jest.mock( '@wordpress/components', () => ( {
 	// Real inputs (not null stubs) so the per-direction section tests can assert
-	// on picker visibility and drive the enable toggles.
-	CheckboxControl: ( { label, checked, onChange } ) => (
-		<input
-			type="checkbox"
-			aria-label={ typeof label === 'string' ? label : undefined }
-			checked={ !! checked }
-			onChange={ e => onChange( e.target.checked ) }
-		/>
+	// on picker visibility and drive the enable toggles. `help` renders as a
+	// sibling node (as the real control does) so tests can assert on it.
+	CheckboxControl: ( { label, help, checked, onChange } ) => (
+		<>
+			<input
+				type="checkbox"
+				aria-label={ typeof label === 'string' ? label : undefined }
+				checked={ !! checked }
+				onChange={ e => onChange( e.target.checked ) }
+			/>
+			{ help && <span>{ help }</span> }
+		</>
 	),
 	ToggleControl: ( { label, checked, onChange } ) => (
 		<input
@@ -955,5 +960,83 @@ describe( 'ConfigureView per-direction sections', () => {
 			[ 'column', 'xl' ],
 			[ 'column', 'sm' ],
 		] );
+	} );
+} );
+
+describe( 'ConfigureView outbound field details', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// No toggle fields, matching a payload predating outgoing_sync_enabled: the
+	// picker still renders unconditionally (see the "payload lacking the toggle
+	// fields" case above), which keeps this fixture minimal.
+	const withFieldDetails = () => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{
+					key: 'outgoing_metadata_fields',
+					type: 'metadata',
+					label: 'Outgoing metadata fields',
+					value: [],
+					grouped_options: [
+						{
+							section: 'Identity',
+							fields: [ 'User Role', 'First name', 'Membership Tier', 'Undetailed Field' ],
+							field_details: {
+								'User Role': { status: 'new', description: 'WordPress role of the reader.' },
+								'First name': { status: 'existing', description: "Reader's first name." },
+								'Membership Tier': { status: 'updated', description: 'Current membership tier of the reader.' },
+							},
+						},
+						{
+							section: 'Legacy',
+							fields: [ 'Account' ],
+							field_details: {
+								Account: { status: 'legacy', description: 'WordPress user account ID.' },
+							},
+						},
+					],
+				},
+			],
+		},
+	} );
+
+	it( "renders a field's description as CheckboxControl help text", () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		expect( screen.getByText( 'WordPress role of the reader.' ) ).toBeInTheDocument();
+		expect( screen.getByText( "Reader's first name." ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders a New badge for new and updated fields', () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		const badges = screen.getAllByTestId( 'badge' );
+		expect( badges ).toHaveLength( 2 );
+		badges.forEach( badge => expect( badge ).toHaveTextContent( 'New' ) );
+		// The badges sit on User Role's and Membership Tier's rows, not First name's.
+		expect( screen.getByLabelText( 'User Role' ).parentElement ).toContainElement( badges[ 0 ] );
+		expect( screen.getByLabelText( 'Membership Tier' ).parentElement ).toContainElement( badges[ 1 ] );
+	} );
+
+	it( 'renders no badge for existing or legacy fields', () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		// Only User Role ('new') and Membership Tier ('updated') get badges;
+		// existing/legacy rows get none.
+		expect( screen.getAllByTestId( 'badge' ) ).toHaveLength( 2 );
+		for ( const label of [ 'First name', 'Account' ] ) {
+			const checkbox = screen.getByLabelText( label );
+			expect( checkbox ).toBeInTheDocument();
+			expect( checkbox.parentElement.querySelector( '[data-testid="badge"]' ) ).toBeNull();
+		}
+	} );
+
+	it( 'renders a field with no field_details entry with no help text and no badge', () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		const checkbox = screen.getByLabelText( 'Undetailed Field' );
+		expect( checkbox ).toBeInTheDocument();
+		expect( checkbox.parentElement.querySelector( '[data-testid="badge"]' ) ).toBeNull();
 	} );
 } );
