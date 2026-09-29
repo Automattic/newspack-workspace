@@ -196,7 +196,9 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A hybrid product is not a subscription until a plan is applied to an instance of it.
+	 * A hybrid product is not a subscription until a plan is applied to an instance
+	 * of it, and the deprecated WooCommerce_Subscriptions::is_subscription_product()
+	 * alias gives the same answer.
 	 */
 	public function test_is_purchased_as_subscription_follows_the_chosen_plan() {
 		$product = $this->hybrid();
@@ -205,6 +207,11 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 		$instance = Subscription_Products::get_option_product( $options[1] );
 		$this->assertTrue( Subscription_Products::is_purchased_as_subscription( $instance ) );
 		$this->assertSame( 'plan:1_month', Subscription_Products::get_instance_option( $instance )->key );
+		$this->assertSame(
+			[ false, true ],
+			[ \Newspack\WooCommerce_Subscriptions::is_subscription_product( $product ), \Newspack\WooCommerce_Subscriptions::is_subscription_product( $instance ) ],
+			'The deprecated alias answers the same question.'
+		);
 	}
 
 	/**
@@ -384,18 +391,5 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 		} finally {
 			unset( $_REQUEST['convert_to_sub_777'] );
 		}
-	}
-
-	/**
-	 * The deprecated WooCommerce_Subscriptions::is_subscription_product() alias keeps the
-	 * instance-level semantics it always had: false for a bare hybrid product, true once a
-	 * plan is applied to an instance of it.
-	 */
-	public function test_deprecated_helper_keeps_instance_semantics() {
-		$product = $this->hybrid();
-		$this->assertFalse( \Newspack\WooCommerce_Subscriptions::is_subscription_product( $product ), 'Unchanged from main: bare hybrid is not a subscription purchase.' );
-		$options  = Subscription_Products::get_purchase_options( $product );
-		$instance = Subscription_Products::get_option_product( $options[1] );
-		$this->assertTrue( \Newspack\WooCommerce_Subscriptions::is_subscription_product( $instance ), 'A plan applied to the instance makes it a subscription purchase.' );
 	}
 }

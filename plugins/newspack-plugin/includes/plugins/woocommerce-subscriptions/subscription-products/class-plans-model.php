@@ -119,9 +119,10 @@ final class Plans_Model {
 	}
 
 	/**
-	 * A fresh instance with the plan applied, so WooCommerce prices and bills it as that plan.
-	 * Fresh rather than cloned: a plan is runtime state on the object, and sharing one
-	 * object between two plans would price one as the other.
+	 * A new instance with the plan applied, so WooCommerce prices and bills it as that plan.
+	 * A plan is runtime state on the object, and with WooCommerce's product instance
+	 * caching on, wc_get_product() hands every caller the same object: the clone is what
+	 * keeps two plans from sharing one, which would price one as the other.
 	 *
 	 * @param int    $product_id Product or variation ID.
 	 * @param string $plan_key   Plan key.
@@ -162,17 +163,15 @@ final class Plans_Model {
 	 *
 	 * @param \WC_Order_Item_Product $item Line item.
 	 */
-	public static function get_item_plan_key( $item ): string {
+	public static function get_item_plan_key( \WC_Order_Item_Product $item ): string {
 		if ( ! class_exists( '\WCS_ATT_Order' ) || ! method_exists( '\WCS_ATT_Order', 'get_subscription_scheme' ) ) {
 			return '';
 		}
-		$args = [];
-		if ( method_exists( $item, 'get_product_id' ) ) {
-			$product_id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
-			$product    = $product_id ? \wc_get_product( $product_id ) : null;
-			if ( $product instanceof \WC_Product ) {
-				$args['product'] = $product;
-			}
+		$args       = [];
+		$product_id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
+		$product    = $product_id ? \wc_get_product( $product_id ) : null;
+		if ( $product instanceof \WC_Product ) {
+			$args['product'] = $product;
 		}
 		$key = \WCS_ATT_Order::get_subscription_scheme( $item, $args );
 		return is_string( $key ) ? $key : '';

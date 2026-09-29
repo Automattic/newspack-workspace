@@ -76,7 +76,7 @@ class Product_Purchase_Restriction {
 	 *
 	 * @var bool
 	 */
-	private static $forcing = false;
+	private static bool $forcing = false;
 
 	/**
 	 * Initialize hooks.

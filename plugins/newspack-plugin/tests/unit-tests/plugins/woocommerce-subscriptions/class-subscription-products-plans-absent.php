@@ -1,7 +1,7 @@
 <?php
 /**
  * The layer on a site without the subscription plans API (Subscriptions before 9.0,
- * no standalone plugin): nothing changes from today.
+ * no standalone plugin): only legacy subscription types sell as subscriptions.
  *
  * Runs in a separate process so no other file's plans mocks leak in.
  *

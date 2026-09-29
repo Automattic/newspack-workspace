@@ -30,77 +30,77 @@ final class Purchase_Option {
 	 *
 	 * @var string `one_time`, `legacy`, or `plan:<plan key>`.
 	 */
-	public $key = '';
+	public string $key = '';
 
 	/**
 	 * One of the KIND_* constants.
 	 *
 	 * @var string
 	 */
-	public $kind = self::KIND_ONE_TIME;
+	public string $kind = self::KIND_ONE_TIME;
 
 	/**
 	 * Product or variation that goes in the cart.
 	 *
 	 * @var int
 	 */
-	public $product_id = 0;
+	public int $product_id = 0;
 
 	/**
 	 * Parent product ID for a variation, else 0.
 	 *
 	 * @var int
 	 */
-	public $parent_id = 0;
+	public int $parent_id = 0;
 
 	/**
 	 * WooCommerce Subscriptions plan key.
 	 *
 	 * @var string|null
 	 */
-	public $plan_key = null;
+	public ?string $plan_key = null;
 
 	/**
 	 * Billing period, null when one-time.
 	 *
 	 * @var string|null
 	 */
-	public $period = null;
+	public ?string $period = null;
 
 	/**
 	 * Billing interval.
 	 *
 	 * @var int
 	 */
-	public $interval = 1;
+	public int $interval = 1;
 
 	/**
 	 * Number of periods, 0 for never-ending.
 	 *
 	 * @var int
 	 */
-	public $length = 0;
+	public int $length = 0;
 
 	/**
 	 * Trial period.
 	 *
 	 * @var string
 	 */
-	public $trial_period = '';
+	public string $trial_period = '';
 
 	/**
 	 * Trial length.
 	 *
 	 * @var int
 	 */
-	public $trial_length = 0;
+	public int $trial_length = 0;
 
 	/**
 	 * Sign-up fee.
 	 *
 	 * @var float
 	 */
-	public $sign_up_fee = 0.0;
+	public float $sign_up_fee = 0.0;
 
 	/**
 	 * Constructor.

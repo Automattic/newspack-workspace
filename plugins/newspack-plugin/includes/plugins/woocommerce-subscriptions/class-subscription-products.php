@@ -29,33 +29,33 @@ final class Subscription_Products {
 	 *
 	 * @var array<string, Purchase_Option[]>
 	 */
-	private static $options = [];
+	private static array $options = [];
 
 	/**
 	 * Verdicts of only_sells_as_subscription(), by `<product ID>:<plan key>:<user ID>`.
 	 *
 	 * @var array<string, bool>
 	 */
-	private static $subscription_only = [];
+	private static array $subscription_only = [];
 
 	/**
 	 * Cached find_products() results, for this request.
 	 *
 	 * @var array<string, \WC_Product[]>
 	 */
-	private static $found = [];
+	private static array $found = [];
 
 	/**
 	 * Whether options are being read as the product itself configures them.
 	 *
 	 * @var bool
 	 */
-	private static $reading_configuration = false;
+	private static bool $reading_configuration = false;
 
 	/**
 	 * Hooks.
 	 */
-	public static function init() {
+	public static function init(): void {
 		add_action( 'woocommerce_new_product', [ __CLASS__, 'flush_cache' ] );
 		add_action( 'woocommerce_update_product', [ __CLASS__, 'flush_cache' ] );
 		add_action( 'woocommerce_update_product_variation', [ __CLASS__, 'flush_cache' ] );
@@ -64,7 +64,7 @@ final class Subscription_Products {
 	/**
 	 * Drop the per-request caches.
 	 */
-	public static function flush_cache() {
+	public static function flush_cache(): void {
 		self::$options           = [];
 		self::$found             = [];
 		self::$subscription_only = [];
@@ -275,7 +275,7 @@ final class Subscription_Products {
 	 *
 	 * @param \WC_Order_Item_Product $item Line item.
 	 */
-	public static function get_purchased_plan_key( $item ): string {
+	public static function get_purchased_plan_key( \WC_Order_Item_Product $item ): string {
 		return Plans_Model::is_available() ? Plans_Model::get_item_plan_key( $item ) : '';
 	}
 

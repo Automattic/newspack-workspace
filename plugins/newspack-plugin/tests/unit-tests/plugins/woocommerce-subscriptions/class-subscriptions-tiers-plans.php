@@ -191,7 +191,7 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Legacy tiers bucket by frequency and sort by price exactly as before plans existed.
+	 * Legacy tiers bucket by frequency alone and sort by price.
 	 */
 	public function test_legacy_tiers_are_unchanged() {
 		$tiers = Subscriptions_Tiers::get_tiers_by_frequency( $this->legacy_variable() );
@@ -257,9 +257,9 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A simple product on two plans holds one tier per plan, which used to take the
-	 * flat card layout: every plan's card printed while nothing posted which plan
-	 * was chosen. More than one plan always renders the control that posts it.
+	 * A simple product on two plans holds one tier per plan, and each plan's card
+	 * is the same product, so a card cannot say which plan was chosen. More than
+	 * one plan always renders the control that posts it.
 	 */
 	public function test_one_tier_per_plan_still_posts_the_chosen_plan() {
 		wc_create_mock_product(

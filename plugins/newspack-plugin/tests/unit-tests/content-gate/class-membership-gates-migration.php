@@ -587,7 +587,6 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
 		$this->assertSame( [ $hybrid_id, $legacy_id ], $split['subscription'] );
 		$this->assertSame( [ $hybrid_id, $plain_id ], $split['one_time'] );
-		\WCS_ATT_Product_Schemes::mock_reset();
 	}
 
 	/**
