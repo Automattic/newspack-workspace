@@ -8,6 +8,12 @@
  * but nothing records what it does, what it defaults to, or whether it is safe
  * for a publisher to set.
  *
+ * DUPLICATED IN newspack-manager, at the same path. That repository lints with
+ * its own composer dependencies and cannot reference this directory, so it
+ * carries a copy rather than installing one. Change both together. The sniff
+ * is small and changes rarely; if that stops being true, split it into a
+ * `phpcodesniffer-standard` package and require it from both instead.
+ *
  * @package phpcsSniffs
  */
 
@@ -32,6 +38,14 @@ class ConstantDocblockSniff implements Sniff {
 	 * @var string[]
 	 */
 	private $documented = [];
+
+	/**
+	 * Class constants declared in the file currently being walked that hold a
+	 * NEWSPACK_ constant name, keyed by the class constant's own name.
+	 *
+	 * @var string[]
+	 */
+	private $class_constants = [];
 
 	/**
 	 * Path the $documented list was built from, used to detect when PHPCS has
@@ -66,14 +80,15 @@ class ConstantDocblockSniff implements Sniff {
 			return;
 		}
 
+		if ( $phpcs_file->path !== $this->current_file ) {
+			$this->current_file    = $phpcs_file->path;
+			$this->documented      = $this->collect_documented( $phpcs_file );
+			$this->class_constants = $this->collect_class_constants( $phpcs_file );
+		}
+
 		$constant = $this->get_guarded_constant( $phpcs_file, $stack_ptr );
 		if ( null === $constant ) {
 			return;
-		}
-
-		if ( $phpcs_file->path !== $this->current_file ) {
-			$this->current_file = $phpcs_file->path;
-			$this->documented   = $this->collect_documented( $phpcs_file );
 		}
 
 		if ( in_array( $constant, $this->documented, true ) ) {
@@ -119,7 +134,32 @@ class ConstantDocblockSniff implements Sniff {
 		}
 
 		$argument = $phpcs_file->findNext( Tokens::$emptyTokens, $open + 1, null, true );
-		if ( false === $argument || T_CONSTANT_ENCAPSED_STRING !== $tokens[ $argument ]['code'] ) {
+		if ( false === $argument ) {
+			return null;
+		}
+
+		// A guard can name its constant through a class constant rather than a
+		// literal: `defined( self::FEATURE_FLAG_NAME )`. Resolve it against the
+		// class constants declared in this file, so the flags written that way
+		// are covered rather than silently exempt.
+		$scopes = [ T_SELF, T_STATIC, T_PARENT, T_STRING ];
+		if ( in_array( $tokens[ $argument ]['code'], $scopes, true ) ) {
+			$operator = $phpcs_file->findNext( Tokens::$emptyTokens, $argument + 1, null, true );
+			if ( false === $operator || T_DOUBLE_COLON !== $tokens[ $operator ]['code'] ) {
+				return null;
+			}
+			$member = $phpcs_file->findNext( Tokens::$emptyTokens, $operator + 1, null, true );
+			if ( false === $member || T_STRING !== $tokens[ $member ]['code'] ) {
+				return null;
+			}
+			$closer = $phpcs_file->findNext( Tokens::$emptyTokens, $member + 1, null, true );
+			if ( false === $closer || T_CLOSE_PARENTHESIS !== $tokens[ $closer ]['code'] ) {
+				return null;
+			}
+			return $this->class_constants[ $tokens[ $member ]['content'] ] ?? null;
+		}
+
+		if ( T_CONSTANT_ENCAPSED_STRING !== $tokens[ $argument ]['code'] ) {
 			return null;
 		}
 
@@ -133,6 +173,49 @@ class ConstantDocblockSniff implements Sniff {
 		$name = trim( $tokens[ $argument ]['content'], "'\"" );
 
 		return preg_match( '/^NEWSPACK_[A-Z0-9_]+$/', $name ) ? $name : null;
+	}
+
+	/**
+	 * Maps the class constants in a file that hold a NEWSPACK_ constant name.
+	 *
+	 * Only a plain string literal counts, so `const FLAG = self::PREFIX . '_X';`
+	 * resolves to nothing rather than to a guessed name. Keyed by the class
+	 * constant's own name, which is what the guard writes.
+	 *
+	 * This mirrors collect_class_constants() in
+	 * bin/class-newspack-constants-scanner.php; the two read the same shape and
+	 * should be changed together.
+	 *
+	 * @param File $phpcs_file The file being scanned.
+	 * @return string[] Class constant name => NEWSPACK_ constant name.
+	 */
+	private function collect_class_constants( File $phpcs_file ) {
+		$tokens = $phpcs_file->getTokens();
+		$map    = [];
+		$const  = $phpcs_file->findNext( T_CONST, 0 );
+
+		while ( false !== $const ) {
+			$name = $phpcs_file->findNext( Tokens::$emptyTokens, $const + 1, null, true );
+			if ( false !== $name && T_STRING === $tokens[ $name ]['code'] ) {
+				$equal = $phpcs_file->findNext( Tokens::$emptyTokens, $name + 1, null, true );
+				if ( false !== $equal && T_EQUAL === $tokens[ $equal ]['code'] ) {
+					$value = $phpcs_file->findNext( Tokens::$emptyTokens, $equal + 1, null, true );
+					if ( false !== $value && T_CONSTANT_ENCAPSED_STRING === $tokens[ $value ]['code'] ) {
+						// The declaration has to end right after the literal, so
+						// a concatenation is not read as the whole value.
+						$after = $phpcs_file->findNext( Tokens::$emptyTokens, $value + 1, null, true );
+						$ends  = false !== $after && in_array( $tokens[ $after ]['code'], [ T_SEMICOLON, T_COMMA ], true );
+						$held  = trim( $tokens[ $value ]['content'], "'\"" );
+						if ( $ends && preg_match( '/^NEWSPACK_[A-Z0-9_]+$/', $held ) && ! isset( $map[ $tokens[ $name ]['content'] ] ) ) {
+							$map[ $tokens[ $name ]['content'] ] = $held;
+						}
+					}
+				}
+			}
+			$const = $phpcs_file->findNext( T_CONST, $const + 1 );
+		}
+
+		return $map;
 	}
 
 	/**

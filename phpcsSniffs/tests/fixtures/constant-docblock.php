@@ -77,3 +77,102 @@ echo "defined( 'NEWSPACK_IN_STRING' )"; // OK: a guard quoted inside a string.
  * @example define( 'NEWSPACK_ELSEWHERE', true );
  */
 function newspack_fixture_noop() {}
+
+/**
+ * Guards that name their constant through a class constant.
+ */
+class Newspack_Fixture_Indirect_Guards {
+	const DOCUMENTED_FLAG = 'NEWSPACK_INDIRECT_DOCUMENTED';
+	const BARE_FLAG       = 'NEWSPACK_INDIRECT_UNDOCUMENTED';
+	const NON_NEWSPACK    = 'SOMETHING_ELSE_ENTIRELY';
+	const BUILT_FLAG      = 'NEWSPACK_INDIRECT_' . 'BUILT';
+
+	/**
+	 * Documented elsewhere in this file, so the guard is satisfied.
+	 *
+	 * @constant NEWSPACK_INDIRECT_DOCUMENTED
+	 * @type     bool
+	 * @default  Off
+	 * @status   draft
+	 *
+	 * @example define( 'NEWSPACK_INDIRECT_DOCUMENTED', true );
+	 *
+	 * @return bool
+	 */
+	public static function documented(): bool {
+		return defined( self::DOCUMENTED_FLAG ); // OK: the const resolves to a documented name.
+	}
+
+	/**
+	 * No docblock names this one.
+	 *
+	 * @return bool
+	 */
+	public static function undocumented(): bool {
+		return defined( self::BARE_FLAG ); // ERROR: resolves to an undocumented NEWSPACK_ name.
+	}
+
+	/**
+	 * Same shape, reached through static:: instead of self::.
+	 *
+	 * @return bool
+	 */
+	public static function late_bound(): bool {
+		return defined( static::BARE_FLAG ); // ERROR: static:: resolves the same way.
+	}
+
+	/**
+	 * A class constant holding a name outside the NEWSPACK_ namespace.
+	 *
+	 * @return bool
+	 */
+	public static function other_namespace(): bool {
+		return defined( self::NON_NEWSPACK ); // OK: not a NEWSPACK_ constant.
+	}
+
+	/**
+	 * A class constant built by concatenation cannot be resolved.
+	 *
+	 * @return bool
+	 */
+	public static function built(): bool {
+		return defined( self::BUILT_FLAG ); // OK: not a plain literal, so nothing is assumed.
+	}
+
+	/**
+	 * A class constant this file never declares.
+	 *
+	 * @return bool
+	 */
+	public static function undeclared(): bool {
+		return defined( self::NEVER_DECLARED_HERE ); // OK: unresolvable, so nothing is assumed.
+	}
+
+	/**
+	 * A bare global constant reference, with no :: at all.
+	 *
+	 * @return bool
+	 */
+	public static function bare_reference(): bool {
+		return defined( NEWSPACK_BARE_REFERENCE ); // OK: not a literal, and nothing to resolve it against.
+	}
+
+	/**
+	 * A static method that merely ends in defined is not the guard.
+	 *
+	 * @return bool
+	 */
+	public static function not_the_function(): bool {
+		return Newspack_Fixture_Indirect_Guards::defined( self::BARE_FLAG ); // OK: a method call, not defined().
+	}
+
+	/**
+	 * Stand-in so the call above resolves.
+	 *
+	 * @param string $flag Flag name.
+	 * @return bool
+	 */
+	public static function defined( string $flag ): bool {
+		return '' !== $flag;
+	}
+}
