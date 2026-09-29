@@ -10,6 +10,8 @@ jest.mock( './utils', () => ( {
 	debug: jest.fn(),
 	closeOverlay: jest.fn(),
 	getBestPrioritySegment: jest.fn( () => null ),
+	getBestPrioritySegmentFromSnapshot: jest.fn( () => null ),
+	isSwitchedSession: jest.fn( () => false ),
 	getIntersectionObserver: jest.fn(),
 	getRawId: jest.fn( () => 1 ),
 	getOverride: jest.fn( () => null ),
