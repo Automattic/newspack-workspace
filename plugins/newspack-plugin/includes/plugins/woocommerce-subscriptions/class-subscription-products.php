@@ -23,9 +23,10 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Subscription_Products {
 	/**
-	 * Options by product ID, for this request.
+	 * Options by product ID, for this request; a product's own configuration is
+	 * kept under `<ID>:configured`.
 	 *
-	 * @var array<int, Purchase_Option[]>
+	 * @var array<int|string, Purchase_Option[]>
 	 */
 	private static $options = [];
 
@@ -35,6 +36,13 @@ final class Subscription_Products {
 	 * @var array<string, \WC_Product[]>
 	 */
 	private static $found = [];
+
+	/**
+	 * Whether options are being read as the product itself configures them.
+	 *
+	 * @var bool
+	 */
+	private static $reading_configuration = false;
 
 	/**
 	 * Hooks.
@@ -99,6 +107,41 @@ final class Subscription_Products {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Whether the product's own configuration sells it both one-time and on a plan,
+	 * whatever any per-reader rule withdraws for the current viewer. False for a
+	 * legacy subscription (never sold one-time), a product sold only on plans, and a
+	 * plain product.
+	 *
+	 * @param \WC_Product|int|false $product Product, variation, or ID.
+	 */
+	public static function is_sold_both_ways( $product ): bool {
+		$product = self::resolve( $product );
+		if ( ! $product || 'plans' !== self::model_of( $product ) ) {
+			return false;
+		}
+		$key = $product->get_id() . ':configured';
+		if ( ! isset( self::$options[ $key ] ) ) {
+			self::$reading_configuration = true;
+			try {
+				self::$options[ $key ] = Plans_Model::get_options( $product );
+			} finally {
+				self::$reading_configuration = false;
+			}
+		}
+		$kinds = wp_list_pluck( self::$options[ $key ], 'kind' );
+		return in_array( Purchase_Option::KIND_ONE_TIME, $kinds, true ) && in_array( Purchase_Option::KIND_PLAN, $kinds, true );
+	}
+
+	/**
+	 * Whether the facade is reading a product's own configuration. A per-reader rule
+	 * that changes what a product offers (by filtering whether it is forced onto its
+	 * plans) must leave the answer alone while this is true.
+	 */
+	public static function is_reading_configuration(): bool {
+		return self::$reading_configuration;
 	}
 
 	/**

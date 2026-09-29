@@ -890,4 +890,110 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		wp_set_current_user( $this->non_subscriber_id );
 		$this->assertTrue( Product_Purchase_Restriction::can_purchase( wc_get_product( $legacy->get_id() ) ) );
 	}
+
+	/**
+	 * An add-to-cart that posts no plan for a restricted hybrid product is refused:
+	 * WooCommerce would otherwise put the product's first plan in the cart, starting
+	 * a subscription from a button that showed the one-time price. Posting the
+	 * one-time choice is refused the same way.
+	 */
+	public function test_plan_less_add_to_cart_of_restricted_hybrid_is_refused() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+		$field = 'convert_to_sub_' . $hybrid->get_id();
+		global $wc_mock_notices;
+		$wc_mock_notices = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		try {
+			$this->assertFalse( Product_Purchase_Restriction::validate_add_to_cart( true, $hybrid->get_id(), 1 ), 'No plan posted.' );
+			$this->assertSame( 'error', $wc_mock_notices[0]['type'] ?? null );
+			$this->assertSame( Product_Purchase_Restriction::get_restricted_message( $hybrid ), $wc_mock_notices[0]['notice'] ?? null );
+
+			$_REQUEST[ $field ] = '0';
+			$this->assertFalse( Product_Purchase_Restriction::validate_add_to_cart( true, $hybrid->get_id(), 1 ), 'One-time choice posted.' );
+
+			$_REQUEST[ $field ] = '1_month';
+			$this->assertTrue( Product_Purchase_Restriction::validate_add_to_cart( true, $hybrid->get_id(), 1 ), 'A posted plan goes through.' );
+		} finally {
+			unset( $_REQUEST[ $field ] );
+		}
+	}
+
+	/**
+	 * The same refusal on the path that never runs the validation filter: a direct
+	 * WC_Cart::add_to_cart() call, which is how the modal checkout adds a product.
+	 * A cart item that already carries a plan (a renewal or resubscribe restoring
+	 * one) goes through.
+	 */
+	public function test_plan_less_cart_item_of_restricted_hybrid_is_refused() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+
+		$data = [ 'wcsatt_data' => [ 'active_subscription_scheme' => '1_month' ] ];
+		$this->assertSame( $data, Product_Purchase_Restriction::refuse_plan_less_cart_item( $data, $hybrid->get_id(), 0 ), 'A restored plan goes through.' );
+
+		$this->expectException( \Exception::class );
+		Product_Purchase_Restriction::refuse_plan_less_cart_item( [], $hybrid->get_id(), 0 );
+	}
+
+	/**
+	 * A reader the rule doesn't refuse may add the hybrid with no plan posted,
+	 * which is an ordinary one-time purchase.
+	 */
+	public function test_plan_less_add_to_cart_is_allowed_for_a_subscriber() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->subscriber_id );
+		$this->assertTrue( Product_Purchase_Restriction::validate_add_to_cart( true, $hybrid->get_id(), 1 ) );
+		$this->assertSame( [], Product_Purchase_Restriction::refuse_plan_less_cart_item( [], $hybrid->get_id(), 0 ) );
+	}
+
+	/**
+	 * A product sold only on plans, or a legacy subscription, has no one-time price
+	 * a plan-less button could have shown, so a plan-less add stays allowed: forms
+	 * that post only a product ID (the countdown banner, the gifting prompt) keep
+	 * selling them.
+	 */
+	public function test_plan_less_add_to_cart_is_allowed_for_subscription_only_products() {
+		$forced = $this->create_product();
+		WCS_ATT_Product_Schemes::mock_register(
+			$forced->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			],
+			true
+		);
+		$legacy = $this->create_product();
+		wc_create_mock_product(
+			[
+				'id'   => $legacy->get_id(),
+				'type' => 'subscription',
+			]
+		);
+		$this->set_rules(
+			[
+				[
+					'id'                     => 'all',
+					'subscription_targeting' => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+					'targeting'              => 'products',
+					'product_ids'            => [ $forced->get_id(), $legacy->get_id() ],
+					'active'                 => true,
+				],
+			]
+		);
+		wp_set_current_user( $this->non_subscriber_id );
+
+		$this->assertTrue( Product_Purchase_Restriction::validate_add_to_cart( true, $forced->get_id(), 1 ), 'Sold only on plans.' );
+		$this->assertTrue( Product_Purchase_Restriction::validate_add_to_cart( true, $legacy->get_id(), 1 ), 'Legacy subscription.' );
+		$this->assertSame( [], Product_Purchase_Restriction::refuse_plan_less_cart_item( [], $legacy->get_id(), 0 ) );
+	}
+
+	/**
+	 * A refusal another validator already made is left alone.
+	 */
+	public function test_plan_less_add_to_cart_keeps_an_earlier_refusal() {
+		$this->assertFalse( Product_Purchase_Restriction::validate_add_to_cart( false, $this->open_product->get_id(), 1 ) );
+	}
 }

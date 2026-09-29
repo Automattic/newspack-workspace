@@ -98,6 +98,15 @@ class Product_Purchase_Restriction {
 		// outside an "all subscribers" rule, but only as a subscription.
 		add_filter( 'wcsatt_force_subscription', [ __CLASS__, 'filter_force_subscription' ], 10, 2 );
 		add_action( 'woocommerce_check_cart_items', [ __CLASS__, 'enforce_one_time_restriction_in_cart' ] );
+		// A request that posts no plan puts a forced product's default plan in the
+		// cart, so the forcing above would turn a one-time button into a subscription.
+		// Both filters, because they cover different entry points: the validation
+		// filter runs in WooCommerce's request handlers but not inside
+		// WC_Cart::add_to_cart(), which the modal checkout calls directly; the cart
+		// item data filter runs inside add_to_cart(), at 9 so it answers before
+		// WooCommerce Subscriptions reads the posted plan at 10.
+		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'validate_add_to_cart' ], 10, 4 );
+		add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'refuse_plan_less_cart_item' ], 9, 3 );
 	}
 
 	/**
@@ -252,7 +261,7 @@ class Product_Purchase_Restriction {
 	 * @return bool
 	 */
 	public static function filter_force_subscription( $forced, $product ) {
-		if ( $forced || self::$forcing || ! $product instanceof \WC_Product ) {
+		if ( $forced || self::$forcing || Subscription_Products::is_reading_configuration() || ! $product instanceof \WC_Product ) {
 			return $forced;
 		}
 		self::$forcing = true;
@@ -288,6 +297,85 @@ class Product_Purchase_Restriction {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Refuse a plan-less add-to-cart of a product sold both ways, for a reader who
+	 * may not buy it one-time. The product is forced onto its plans for that reader,
+	 * so WooCommerce would fill the missing choice with its default plan: a button
+	 * built for the one-time price (a Checkout Button posts none) would start a
+	 * subscription. Only a request that names a plan gets through.
+	 *
+	 * @param bool $passed       Whether the add-to-cart is valid so far.
+	 * @param int  $product_id   Product ID.
+	 * @param int  $quantity     Quantity.
+	 * @param int  $variation_id Variation ID, if any.
+	 * @return bool
+	 */
+	public static function validate_add_to_cart( $passed, $product_id, $quantity = 1, $variation_id = 0 ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed
+		if ( ! $passed ) {
+			return $passed;
+		}
+		$product = self::get_plan_less_refusal( (int) $product_id, (int) $variation_id );
+		if ( ! $product ) {
+			return $passed;
+		}
+		wc_add_notice( self::get_restricted_message( $product ), 'error' );
+		return false;
+	}
+
+	/**
+	 * The same refusal, for a WC_Cart::add_to_cart() call that never runs the
+	 * validation filter. Throwing is how a plugin aborts the add there: the cart
+	 * catches it, shows the message as an error notice and returns false.
+	 *
+	 * @param array $cart_item_data Cart item data.
+	 * @param int   $product_id     Product ID.
+	 * @param int   $variation_id   Variation ID, if any.
+	 *
+	 * @throws \Exception When the add would start a plan the reader never chose.
+	 *
+	 * @return array Cart item data, unchanged.
+	 */
+	public static function refuse_plan_less_cart_item( $cart_item_data, $product_id, $variation_id = 0 ) {
+		// The Store API applies this filter outside the cart's try/catch, where a
+		// throw is a 500 rather than a notice; it runs the validation filter anyway.
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return $cart_item_data;
+		}
+		// A renewal or resubscribe restores the plan it was bought on.
+		if ( ! empty( $cart_item_data['wcsatt_data']['active_subscription_scheme'] ) ) {
+			return $cart_item_data;
+		}
+		$product = self::get_plan_less_refusal( (int) $product_id, (int) $variation_id );
+		if ( $product ) {
+			throw new \Exception( self::get_restricted_message( $product ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- WooCommerce shows it as a notice, which carries the message's links.
+		}
+		return $cart_item_data;
+	}
+
+	/**
+	 * The product a plan-less add-to-cart must be refused for, or null to allow it.
+	 *
+	 * @param int $product_id   Product ID.
+	 * @param int $variation_id Variation ID, or 0.
+	 * @return \WC_Product|null
+	 */
+	private static function get_plan_less_refusal( int $product_id, int $variation_id ): ?\WC_Product {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return null;
+		}
+		$product = \wc_get_product( $variation_id ? $variation_id : $product_id );
+		if ( ! $product instanceof \WC_Product || ! self::is_one_time_restricted( $product, get_current_user_id() ) ) {
+			return null;
+		}
+		// Only a product sold one-time can have a button showing its one-time price;
+		// one sold only on plans (or a legacy subscription) is a subscription whatever
+		// the form posts.
+		if ( ! Subscription_Products::is_sold_both_ways( $product ) ) {
+			return null;
+		}
+		return null === Subscription_Products::get_posted_plan_option( $product ) ? $product : null;
 	}
 
 	/**
