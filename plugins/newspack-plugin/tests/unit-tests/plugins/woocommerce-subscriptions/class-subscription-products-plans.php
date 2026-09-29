@@ -263,4 +263,17 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 		$item = new WC_Order_Item_Product( [ 'meta' => [ '_wcsatt_scheme' => '1_year' ] ] );
 		$this->assertSame( '1_year', Subscription_Products::get_purchased_plan_key( $item ) );
 	}
+
+	/**
+	 * The deprecated WooCommerce_Subscriptions::is_subscription_product() alias keeps the
+	 * instance-level semantics it always had: false for a bare hybrid product, true once a
+	 * plan is applied to an instance of it.
+	 */
+	public function test_deprecated_helper_keeps_instance_semantics() {
+		$product = $this->hybrid();
+		$this->assertFalse( \Newspack\WooCommerce_Subscriptions::is_subscription_product( $product ), 'Unchanged from main: bare hybrid is not a subscription purchase.' );
+		$options  = Subscription_Products::get_purchase_options( $product );
+		$instance = Subscription_Products::get_option_product( $options[1] );
+		$this->assertTrue( \Newspack\WooCommerce_Subscriptions::is_subscription_product( $instance ), 'A plan applied to the instance makes it a subscription purchase.' );
+	}
 }

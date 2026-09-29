@@ -52,7 +52,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 2 ) . '/mocks/wp-cli-mocks.php';
 		require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-namespaced-mocks.php';
-		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-plans-mocks.php';
 	}
 
 	/**
@@ -88,7 +88,12 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
 	/**
 	 * Remember the argument vector the bare-flag tests overwrite, and the mock product
-	 * database the product fixtures write into.
+	 * database the product fixtures write into. Also re-adds the plans mocks'
+	 * `woocommerce_is_subscription` filter: WP_UnitTestCase snapshots $wp_filter once,
+	 * at the very first test of the whole run, and restores that snapshot after every
+	 * test's tear_down() — so a filter added once at require_once time (by
+	 * wcs-plans-mocks.php, loaded only in set_up_before_class()) survives only if this
+	 * class happens to be the first to run in the process.
 	 */
 	public function set_up() {
 		parent::set_up();
@@ -98,11 +103,13 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 		$this->original_products_database = $products_database;
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Raw argv, kept verbatim so tear_down() can restore it.
 		$this->original_argv = $_SERVER['argv'] ?? null;
+		add_filter( 'woocommerce_is_subscription', [ 'WCS_ATT_Product_Schemes', 'filter_is_subscription' ], 10, 3 );
 	}
 
 	/**
 	 * Put the argument vector and the mock product database back so neither can leak
-	 * into another test class.
+	 * into another test class, and reset the plans mocks and the products layer's
+	 * per-request cache.
 	 */
 	public function tear_down() {
 		global $products_database;
@@ -119,6 +126,8 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 		} else {
 			$_SERVER['argv'] = $this->original_argv;
 		}
+		\WCS_ATT_Product_Schemes::mock_reset();
+		\Newspack\Subscription_Products::flush_cache();
 		parent::tear_down();
 	}
 
@@ -532,6 +541,53 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 		$this->assertSame( [ $subscription, $one_time ], $resolved['product_ids'] );
 		$this->assertSame( [ $subscription ], $resolved['subscription_ids'] );
 		$this->assertSame( [ $one_time ], $resolved['one_time_ids'] );
+	}
+
+	/**
+	 * A product sold both one-time and on a subscription plan has buyers holding
+	 * either kind of record, so it has to go in both buckets: leaving it out of either
+	 * one would write a gate that drops the buyers who hold that record.
+	 */
+	public function test_hybrid_plan_product_is_carried_by_both_rules() {
+		$hybrid_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		\wc_create_mock_product(
+			[
+				'id'    => $hybrid_id,
+				'type'  => 'simple',
+				'price' => '10',
+			] 
+		);
+		\WCS_ATT_Product_Schemes::mock_register(
+			$hybrid_id,
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			] 
+		);
+		$legacy_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		\wc_create_mock_product(
+			[
+				'id'   => $legacy_id,
+				'type' => 'subscription',
+			] 
+		);
+		$plain_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		\wc_create_mock_product(
+			[
+				'id'   => $plain_id,
+				'type' => 'simple',
+			] 
+		);
+
+		$method = new \ReflectionMethod( \Newspack\CLI\Membership_Gates_Migration::class, 'classify_product_ids' );
+		$method->setAccessible( true );
+		$split = $method->invoke( null, [ $hybrid_id, $legacy_id, $plain_id ] );
+
+		$this->assertSame( [ $hybrid_id, $legacy_id ], $split['subscription'] );
+		$this->assertSame( [ $hybrid_id, $plain_id ], $split['one_time'] );
+		\WCS_ATT_Product_Schemes::mock_reset();
 	}
 
 	/**

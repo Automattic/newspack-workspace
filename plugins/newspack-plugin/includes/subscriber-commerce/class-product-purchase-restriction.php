@@ -202,7 +202,7 @@ class Product_Purchase_Restriction {
 		// A rule that names its subscriptions is not exempted — naming a
 		// subscription and restricting it is two deliberate choices, where this is
 		// the incidental sweep of a mode that names nothing.
-		if ( WooCommerce_Subscriptions::is_subscription_product( $product ) ) {
+		if ( Subscription_Products::is_purchased_as_subscription( $product ) ) {
 			$matching_rules = array_values(
 				array_filter(
 					$matching_rules,
