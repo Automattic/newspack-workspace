@@ -229,6 +229,12 @@ describe( 'reportMatchedSegments', () => {
 		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '45' ] );
 	} );
 
+	it( 'still reads the handoff for a signed-in reader, which is what clears the cookie', () => {
+		getMatchingSegmentIds.mockReturnValue( [ '45' ] );
+		reportMatchedSegments( rasWithReader( true ) );
+		expect( getCarriedSegmentIds ).toHaveBeenCalled();
+	} );
+
 	it( 'withholds a carried segment whose criteria are not registered on this site', () => {
 		window.newspack_popups_view = {
 			segments: {

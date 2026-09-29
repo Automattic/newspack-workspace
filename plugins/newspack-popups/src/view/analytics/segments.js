@@ -214,8 +214,8 @@ const reportFreshMatches = ras => {
 	if ( ! Object.keys( reportableSegments ).length ) {
 		return;
 	}
-	// Read the handoff for every reader, signed in or not, so the cookie is
-	// cleared on pages that never reach prompt display.
+	// Read for every reader, signed in or not: reading is what clears the
+	// cookie, and prompt display may never run on this page.
 	const carriedIds = getCarriedSegmentIds( Object.keys( reportableSegments ) );
 	const liveIds = getMatchingSegmentIds( reportableSegments );
 	// A signed-in reader's prompts follow their live match alone.
