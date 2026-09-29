@@ -62,6 +62,7 @@ final class Subscription_Products {
 		add_action( 'woocommerce_new_product', [ __CLASS__, 'flush_cache' ] );
 		add_action( 'woocommerce_update_product', [ __CLASS__, 'flush_cache' ] );
 		add_action( 'woocommerce_update_product_variation', [ __CLASS__, 'flush_cache' ] );
+		Plans_Model::init();
 	}
 
 	/**

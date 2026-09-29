@@ -831,6 +831,63 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A rule change takes effect in the same request: a reader the deleted rule
+	 * restricted gets the one-time option back without anything else flushing.
+	 */
+	public function test_deleting_a_rule_restores_the_one_time_option() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		wp_set_current_user( $this->non_subscriber_id );
+		$this->assertSame( [ 'plan:1_month' ], wp_list_pluck( \Newspack\Subscription_Products::get_purchase_options( $hybrid ), 'key' ) );
+
+		Subscriber_Only_Products::delete_rule( 'all' );
+
+		$this->assertSame(
+			[ 'one_time', 'plan:1_month' ],
+			wp_list_pluck( \Newspack\Subscription_Products::get_purchase_options( $hybrid ), 'key' )
+		);
+	}
+
+	/**
+	 * A catalog button for a product sold both ways posts no plan, which the
+	 * plan-less refusal turns away for a reader the rule restricts. That reader's
+	 * catalog button links to the product page instead, where the form posts the
+	 * plan. A product sold only on plans keeps its catalog button: a plan-less add
+	 * of it is never refused.
+	 */
+	public function test_restricted_reader_is_sent_to_the_product_page_to_subscribe() {
+		$hybrid = $this->hybrid_under_all_subscribers_rule();
+		$forced = $this->create_product();
+		WCS_ATT_Product_Schemes::mock_register(
+			$forced->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			],
+			true
+		);
+		$this->set_rules(
+			[
+				[
+					'id'                     => 'all',
+					'subscription_targeting' => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+					'targeting'              => 'products',
+					'product_ids'            => [ $hybrid->get_id(), $forced->get_id() ],
+					'active'                 => true,
+				],
+			]
+		);
+
+		wp_set_current_user( $this->non_subscriber_id );
+		$this->assertTrue( apply_filters( 'wcsatt_prompt_plan_selection_in_catalog', false, $hybrid ), 'Restricted reader, sold both ways.' );
+		$this->assertFalse( apply_filters( 'wcsatt_prompt_plan_selection_in_catalog', false, $forced ), 'Sold only on plans.' );
+
+		wp_set_current_user( $this->subscriber_id );
+		$this->assertFalse( apply_filters( 'wcsatt_prompt_plan_selection_in_catalog', false, $hybrid ), 'A reader the rule allows.' );
+	}
+
+	/**
 	 * A cart safety net: a one-time line of a restricted hybrid product that
 	 * reached the cart anyway (a cart saved before the rule existed, or a
 	 * request that posted the one-time choice) is removed with a notice.
@@ -1075,6 +1132,26 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A refused cart rebuilt from an order is a payment flow that failed, so it is
+	 * reported whatever the site's log level. A plain plan-less refusal is not.
+	 */
+	public function test_a_refused_restored_cart_is_reported() {
+		$hybrid   = $this->hybrid_under_all_subscribers_rule();
+		$reported = [];
+		$capture  = function ( $code, $message, $params ) use ( &$reported ) {
+			$reported[] = [ $code, $params['data']['product_id'] ?? null ];
+		};
+		add_action( 'newspack_log', $capture, 10, 3 );
+		wp_set_current_user( $this->non_subscriber_id );
+
+		Product_Purchase_Restriction::validate_add_to_cart( true, $hybrid->get_id(), 1 );
+		$this->assertSame( [], $reported, 'A plain plan-less refusal.' );
+
+		Product_Purchase_Restriction::validate_add_to_cart( true, $hybrid->get_id(), 1, 0, [], [ 'wcsatt_data' => [ 'active_subscription_scheme' => false ] ] );
+		$this->assertSame( [ [ 'newspack_subscriber_commerce_plan_less_refusal', $hybrid->get_id() ] ], $reported );
+	}
+
+	/**
 	 * Only the Store API skips the throwing cart item refusal: it applies the cart
 	 * item data filter outside the cart's try/catch. Any other REST request that adds
 	 * to the cart directly never runs the validation filter, so it still refuses.
@@ -1095,12 +1172,13 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A Store API request leaves the refusal to the validation filter it runs.
+	 * A Store API request is never refused here, where a throw would be a 500:
+	 * WooCommerce Subscriptions puts a plan-less add on the product's default plan.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_plan_less_cart_item_is_left_to_validation_in_the_store_api() {
+	public function test_plan_less_cart_item_is_not_refused_in_the_store_api() {
 		global $newspack_test_wc;
 		$newspack_test_wc = new class() {
 			/**

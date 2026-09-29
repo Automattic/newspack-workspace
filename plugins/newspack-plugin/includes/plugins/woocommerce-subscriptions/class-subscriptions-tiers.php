@@ -1009,8 +1009,9 @@ class Subscriptions_Tiers {
 		$is_nyp         = $is_single_tier && self::is_nyp( $tiers ); // Only treat as NYP form if there's only 1 tier.
 
 		// The field that buys each plan-based bucket on its plan. Without it WooCommerce
-		// falls back to the product's default, a one-time charge for a product sold
-		// both ways, so a plan bucket must always post it. get_tiers_by_frequency()
+		// falls back to the product's default, which for a product sold both ways is,
+		// by the product's own configuration, a one-time charge, so a plan bucket must
+		// always post it. get_tiers_by_frequency()
 		// keeps every bucket on a single field, and drops any tier that has none.
 		$plan_fields = [];
 		foreach ( $tiers as $frequency => $tier_products ) {

@@ -134,8 +134,9 @@ final class Purchase_Option {
 	 * The request fields that select this option at add-to-cart.
 	 *
 	 * Plans are selected by `convert_to_sub_<parent or product ID>`. Posting nothing
-	 * lets WooCommerce fall back to a default, which for a product sold both ways is a
-	 * one-time charge, so every form that sells a plan must post this.
+	 * lets WooCommerce fall back to a default, which for a product sold both ways is,
+	 * by the product's own configuration, a one-time charge, so every form that sells
+	 * a plan must post this.
 	 *
 	 * @return array<string, string>
 	 */

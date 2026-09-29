@@ -109,6 +109,9 @@ class Product_Purchase_Restriction {
 		// from an order passes the plan it restores in the sixth.
 		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'validate_add_to_cart' ], 10, 6 );
 		add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'refuse_plan_less_cart_item' ], 9, 3 );
+		// A catalog button posts no plan, so for a reader the refusal above applies
+		// to, it links to the product page, where the form posts the plan.
+		add_filter( 'newspack_subscription_products_prompt_plan_selection', [ __CLASS__, 'filter_prompt_plan_selection' ], 10, 2 );
 	}
 
 	/**
@@ -304,6 +307,22 @@ class Product_Purchase_Restriction {
 	}
 
 	/**
+	 * Send a reader who may not buy a product one-time to its product page to
+	 * subscribe, when the product is sold both ways. A catalog button posts only
+	 * the product ID, which validate_add_to_cart() refuses for that reader.
+	 *
+	 * @param bool        $prompt  Whether the button already links to the product page.
+	 * @param \WC_Product $product The product.
+	 * @return bool
+	 */
+	public static function filter_prompt_plan_selection( $prompt, $product ) {
+		if ( $prompt || ! $product instanceof \WC_Product ) {
+			return (bool) $prompt;
+		}
+		return self::is_one_time_restricted( $product, get_current_user_id() ) && Subscription_Products::is_sold_both_ways( $product );
+	}
+
+	/**
 	 * Refuse a plan-less add-to-cart of a product sold both ways, for a reader who
 	 * may not buy it one-time. The product is forced onto its plans for that reader,
 	 * so WooCommerce would fill the missing choice with its default plan: a button
@@ -348,7 +367,10 @@ class Product_Purchase_Restriction {
 	 */
 	public static function refuse_plan_less_cart_item( $cart_item_data, $product_id, $variation_id = 0 ) {
 		// The Store API applies this filter outside the cart's try/catch, where a
-		// throw is a 500 rather than a notice; it runs the validation filter anyway.
+		// throw is a 500 rather than a notice. A plan-less Store API add from a
+		// restricted reader lands on the product's default plan instead, a
+		// subscription the rule allows: WooCommerce Subscriptions fills in that plan
+		// before any validation runs.
 		if ( function_exists( 'WC' ) && WC() && method_exists( WC(), 'is_store_api_request' ) && WC()->is_store_api_request() ) {
 			return $cart_item_data;
 		}
@@ -364,8 +386,11 @@ class Product_Purchase_Restriction {
 	}
 
 	/**
-	 * Whether cart item data carries a plan restored from an order: a renewal,
-	 * resubscribe or payment retry puts back the plan the item was bought on.
+	 * Whether cart item data carries a plan: a cart WooCommerce Subscriptions
+	 * rebuilds from an order (a renewal, resubscribe or payment retry) puts back the
+	 * plan the item was bought on. A plan-less Store API add carries one too, the
+	 * product's default plan, which WooCommerce Subscriptions fills in before
+	 * validation, so the add lands on that plan.
 	 *
 	 * @param mixed $cart_item_data Cart item data.
 	 */
@@ -381,15 +406,19 @@ class Product_Purchase_Restriction {
 	 * @param mixed       $cart_item_data Cart item data the add carried.
 	 */
 	private static function log_plan_less_refusal( \WC_Product $product, $cart_item_data ): void {
-		Logger::log(
-			sprintf(
-				'Refused a plan-less add-to-cart for user %d of product %d (%s)',
-				get_current_user_id(),
-				$product->get_id(),
-				is_array( $cart_item_data ) && isset( $cart_item_data['wcsatt_data'] ) ? 'restored cart item data' : 'no restored cart item data'
-			),
-			'NEWSPACK-SUBSCRIBER-COMMERCE'
+		$restored = is_array( $cart_item_data ) && isset( $cart_item_data['wcsatt_data'] );
+		$message  = sprintf(
+			'Refused a plan-less add-to-cart for user %d of product %d (%s)',
+			get_current_user_id(),
+			$product->get_id(),
+			$restored ? 'restored cart item data' : 'no restored cart item data'
 		);
+		Logger::log( $message, 'NEWSPACK-SUBSCRIBER-COMMERCE' );
+		// A cart rebuilt from an order that restored no plan is a payment flow that
+		// failed, so it is reported whatever the site's log level.
+		if ( $restored ) {
+			Logger::newspack_log( 'newspack_subscriber_commerce_plan_less_refusal', $message, [ 'product_id' => $product->get_id() ], 'error' );
+		}
 	}
 
 	/**

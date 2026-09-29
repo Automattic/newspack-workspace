@@ -37,6 +37,37 @@ final class Plans_Model {
 	private static array $retired_instances = [];
 
 	/**
+	 * Hooks.
+	 */
+	public static function init(): void {
+		add_filter( 'wcsatt_prompt_plan_selection_in_catalog', [ __CLASS__, 'filter_prompt_plan_selection' ], 10, 2 );
+	}
+
+	/**
+	 * Whether a catalog button links to the product page to choose a plan, rather
+	 * than adding the product to the cart. Answered through
+	 * `newspack_subscription_products_prompt_plan_selection`, so code outside this
+	 * class needs no knowledge of the plans API.
+	 *
+	 * @param bool        $prompt  Whether WooCommerce already prompts for a plan.
+	 * @param \WC_Product $product Product.
+	 * @return bool
+	 */
+	public static function filter_prompt_plan_selection( $prompt, $product ) {
+		if ( ! $product instanceof \WC_Product ) {
+			return (bool) $prompt;
+		}
+		/**
+		 * Filters whether a catalog button sends the reader to the product page to
+		 * choose a plan, instead of adding the product to the cart.
+		 *
+		 * @param bool        $prompt  Whether the button sends the reader to the product page.
+		 * @param \WC_Product $product Product.
+		 */
+		return (bool) apply_filters( 'newspack_subscription_products_prompt_plan_selection', (bool) $prompt, $product );
+	}
+
+	/**
 	 * Stop handing out the instances kept for the request. They stay alive, because a
 	 * released instance would pass its plan to the next new object that takes its handle.
 	 */
