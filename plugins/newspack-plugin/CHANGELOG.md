@@ -1,3 +1,11 @@
+## newspack [6.53.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.2...newspack@6.53.3) (2026-09-29)
+
+
+### Bug Fixes
+
+* **cli:** fit the owner seat on paid per-seat Teams subscriptions ([8bb7c5b](https://github.com/Automattic/newspack-workspace/commit/8bb7c5b1054f5783af179f422e0b3f227ea1e84d))
+* **cli:** handle per-seat pricing in Teams migration (NPPD-2278) ([d9824b6](https://github.com/Automattic/newspack-workspace/commit/d9824b6e29f69b6919d9b648f651657dbdb715a3))
+
 ## newspack [6.53.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.1...newspack@6.53.2) (2026-09-28)
 
 
