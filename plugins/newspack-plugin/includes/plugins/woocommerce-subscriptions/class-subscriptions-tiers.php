@@ -686,7 +686,8 @@ class Subscriptions_Tiers {
 				}
 				$label = WooCommerce_Subscriptions::get_frequency_label( $bucket );
 				if ( $parts ) {
-					$label .= ' · ' . implode( ', ', $parts );
+					/* translators: 1: frequency label, e.g. "Monthly"; 2: what sets the plan apart, e.g. "12 payments and a $5.00 sign-up fee". */
+					$label = sprintf( __( '%1$s · %2$s', 'newspack-plugin' ), $label, wp_sprintf_l( '%l', $parts ) );
 				}
 				if ( in_array( $label, $seen, true ) ) {
 					/* translators: 1: frequency label, 2: the option's position among those sharing the label. */
@@ -952,8 +953,11 @@ class Subscriptions_Tiers {
 				<?php
 		endif;
 		if ( count( $frequencies ) <= 3 || ! empty( $plan_fields ) ) :
-			// Every tab a radio: announce them as one named choice.
-			$is_radiogroup = ! array_diff( $frequencies, array_keys( array_filter( $plan_fields ) ) );
+			// Every tab a radio posting the same field: announce them as one named
+			// choice. Radios posting different fields are separate groups to a browser.
+			$tab_fields    = array_filter( $plan_fields );
+			$is_radiogroup = ! array_diff( $frequencies, array_keys( $tab_fields ) )
+				&& 1 === count( array_unique( array_map( 'array_key_first', $tab_fields ) ) );
 			?>
 			<div class="newspack-ui__segmented-control__tabs"<?php echo $is_radiogroup ? ' role="radiogroup" aria-label="' . esc_attr__( 'Frequency', 'newspack-plugin' ) . '"' : ''; ?>>
 				<?php foreach ( $frequencies as $frequency ) : ?>

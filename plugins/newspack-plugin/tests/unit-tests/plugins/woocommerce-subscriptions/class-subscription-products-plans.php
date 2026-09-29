@@ -201,6 +201,7 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	 * alias gives the same answer.
 	 */
 	public function test_is_purchased_as_subscription_follows_the_chosen_plan() {
+		$this->setExpectedDeprecated( 'Newspack\\WooCommerce_Subscriptions::is_subscription_product' );
 		$product = $this->hybrid();
 		$this->assertFalse( Subscription_Products::is_purchased_as_subscription( $product ), 'No plan chosen yet.' );
 		$options  = Subscription_Products::get_purchase_options( $product );

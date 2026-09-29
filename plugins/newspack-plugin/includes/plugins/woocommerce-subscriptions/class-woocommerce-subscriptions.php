@@ -1085,6 +1085,7 @@ class WooCommerce_Subscriptions {
 	 * @return bool
 	 */
 	public static function is_subscription_product( \WC_Product $product ): bool {
+		_deprecated_function( __METHOD__, '6.53.0', 'Newspack\\Subscription_Products::is_purchased_as_subscription()' );
 		return Subscription_Products::is_purchased_as_subscription( $product );
 	}
 

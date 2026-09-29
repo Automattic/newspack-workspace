@@ -329,6 +329,54 @@ class Newspack_Test_Subscriptions_Tiers_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A tab label's separators are translatable: a translation can reorder the
+	 * frequency and the plan details, and the details read as a localized list.
+	 */
+	public function test_plan_label_separators_are_translatable() {
+		$reorder = function ( $translation, $text ) {
+			return '%1$s · %2$s' === $text ? '%2$s | %1$s' : $translation;
+		};
+		add_filter( 'gettext', $reorder, 10, 2 );
+		$html = $this->render(
+			$this->plan_variable(
+				[
+					'monthly'          => [ 'period' => 'month' ],
+					'monthly_discount' => [
+						'period'     => 'month',
+						'length'     => 12,
+						'signup_fee' => 5,
+					],
+				]
+			)
+		);
+		remove_filter( 'gettext', $reorder, 10 );
+
+		$labels = $this->tab_labels( $html );
+		$this->assertSame( 'Monthly', $labels[0] );
+		$this->assertMatchesRegularExpression( '/^12 payments and .+ sign-up fee \| Monthly$/', $labels[1] );
+	}
+
+	/**
+	 * Radios that post different fields are separate groups to a browser, so the tabs
+	 * are announced as one radio group only when every tab posts the same field.
+	 */
+	public function test_tabs_posting_different_fields_are_not_one_radiogroup() {
+		ob_start();
+		Subscriptions_Tiers::render_frequency_control(
+			[ 'month_1', 'month_1_2' ],
+			'month_1',
+			false,
+			[
+				'month_1'   => [ 'convert_to_sub_20' => 'monthly' ],
+				'month_1_2' => [ 'convert_to_sub_30' => 'monthly' ],
+			]
+		);
+		$html = ob_get_clean();
+		$this->assertStringNotContainsString( 'role="radiogroup"', $html );
+		$this->assertStringContainsString( 'name="convert_to_sub_30"', $html );
+	}
+
+	/**
 	 * The label text of every plan tab.
 	 *
 	 * @param string $html Markup.

@@ -674,10 +674,7 @@ class Subscriber_Discounts_Pricing {
 		// inside a gate's evaluation context and not outside it. A plan-priced
 		// instance shares its product ID with the bare product it was cloned from,
 		// but only the plan instance is a subscription purchase — product_grants()
-		// answers differently for each, so they need separate verdicts too. The same
-		// predicate product_grants() uses, remembered by Subscription_Products, so a
-		// subscription-only plan product's bare catalog instance never shares a key
-		// with an ordinary product's.
+		// answers differently for each, so they need separate verdicts too.
 		$cache_key = implode(
 			':',
 			[
