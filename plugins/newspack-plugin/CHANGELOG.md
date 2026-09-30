@@ -1,3 +1,10 @@
+## newspack [6.53.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.3...newspack@6.53.4) (2026-09-30)
+
+
+### Bug Fixes
+
+* **woocommerce:** refuse free products in the Store API (NPPD-2307, [#1205](https://github.com/Automattic/newspack-workspace/issues/1205)) ([03719a3](https://github.com/Automattic/newspack-workspace/commit/03719a304457259169229f9418ecb554fa42e150))
+
 ## newspack [6.53.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.2...newspack@6.53.3) (2026-09-29)
 
 
