@@ -79,12 +79,43 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The panel loads for exactly the roles the institution route lets read names.
+	 * The enqueue gate checks Block_Visibility::CONFIGURE_CAPABILITY.
 	 *
 	 * The panel's institution picker is filled from that route, so a role shown the
 	 * panel but refused the route gets an empty picker with nothing failing
-	 * (NPPM-3128). The route side is pinned in Newspack_Test_Institution_REST_Controller;
-	 * this pins the panel side, so a literal put back into the enqueue gate fails here.
+	 * (NPPM-3128). The route's read gate is defined as this constant, so checking
+	 * it here keeps the two on one capability. Records the capability the gate
+	 * asks for rather than comparing values, so it fails on any change to what the
+	 * gate checks, and it needs no built asset: the capability check runs before
+	 * the asset lookup.
+	 */
+	public function test_enqueue_gate_checks_the_configure_capability() {
+		// A user without the capability, so the gate returns before anything else
+		// asks for one.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+
+		$checked = [];
+		$record  = function ( $allcaps, $caps, $args ) use ( &$checked ) {
+			$checked[] = $args[0];
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $record, 10, 3 );
+		try {
+			Block_Visibility::enqueue_block_editor_assets();
+		} finally {
+			remove_filter( 'user_has_cap', $record, 10 );
+		}
+
+		$this->assertSame( [ Block_Visibility::CONFIGURE_CAPABILITY ], $checked );
+	}
+
+	/**
+	 * The panel loads for exactly the roles the institution route lets read names.
+	 *
+	 * Runs the whole enqueue per built-in role, so it also catches a later guard
+	 * that hides the panel from a role the route admits. Fails when the two gates
+	 * stop admitting the same built-in roles. Skips without a built asset, which
+	 * is the case in CI; the test above covers the capability check there.
 	 */
 	public function test_panel_loads_for_exactly_the_institution_read_tier() {
 		// The enqueue also bails when the built asset is absent, which would make the

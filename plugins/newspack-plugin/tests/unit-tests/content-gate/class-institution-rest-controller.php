@@ -545,8 +545,10 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	 * The panel is the only non-administrator consumer of this route, so the two
 	 * gates have to agree: a panel shown to a role the route refuses renders an
 	 * empty institution picker with nothing failing, which is how NPPM-3128 was
-	 * found. Both sides reference Block_Visibility::CONFIGURE_CAPABILITY; this
-	 * pins that the route did not go back to a literal of its own.
+	 * found. Fails when the read gate names a different capability from the
+	 * panel's constant. The second assertion pins the value, so re-tiering both
+	 * together is a change this test has to be told about. What the panel's
+	 * enqueue gate checks is pinned in Newspack_Test_Block_Visibility.
 	 */
 	public function test_read_capability_is_the_block_visibility_panel_capability() {
 		$this->assertSame( Block_Visibility::CONFIGURE_CAPABILITY, Institution_REST_Controller::READ_CAPABILITY );
@@ -558,7 +560,8 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	 * no role that is refused the panel can read the names.
 	 *
 	 * Asserted per built-in role against the panel's own capability, so a change
-	 * to either gate that leaves them disagreeing turns this red.
+	 * to either gate that leaves them disagreeing turns this red. Sends the
+	 * panel's own request, edit context included.
 	 */
 	public function test_panel_request_succeeds_for_exactly_the_roles_shown_the_panel() {
 		$users = [
@@ -569,77 +572,19 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 			'subscriber'    => $this->subscriber_id,
 		];
 		foreach ( $users as $role => $user_id ) {
-			$response  = $this->read_as_block_visibility_panel( $user_id );
-			$sees      = 200 === $response->get_status() && in_array( $this->institution_id, wp_list_pluck( (array) $response->get_data(), 'id' ), true );
-			$has_panel = user_can( $user_id, Block_Visibility::CONFIGURE_CAPABILITY );
-
-			$this->assertSame( $has_panel, $sees, "The $role role must read institution names exactly when it is shown the panel." );
-		}
-	}
-
-	/**
-	 * An Editor reads institution names through the panel's request, and gets
-	 * the id and title only.
-	 */
-	public function test_editor_reads_institution_names_through_the_panel_request() {
-		$response = $this->read_as_block_visibility_panel( $this->editor_id );
-		$data     = $response->get_data();
-
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertCount( 1, $data );
-		$this->assertSame( [ 'id', 'title' ], array_keys( $data[0] ) );
-		$this->assertSame( $this->institution_id, $data[0]['id'] );
-		$this->assertSame( 'Test University', $data[0]['title']['raw'] );
-	}
-
-	/**
-	 * An Author or a Contributor cannot read institution names through the
-	 * panel's request.
-	 *
-	 * Edit context is what the panel sends, and the tests above that refuse these
-	 * roles use view context, so this is the one that covers the panel's path.
-	 */
-	public function test_panel_request_is_refused_for_author_and_contributor() {
-		$refused = [
-			'author'      => $this->author_id,
-			'contributor' => $this->contributor_id,
-		];
-		foreach ( $refused as $role => $user_id ) {
 			$response = $this->read_as_block_visibility_panel( $user_id );
+			$data     = $response->get_data();
 
-			$this->assertStringNotContainsString(
-				'Test University',
-				wp_json_encode( $response->get_data() ),
-				"A refused $role response must not carry institution names."
-			);
-			$this->assertSame( 403, $response->get_status(), "The $role role must be refused." );
-		}
-	}
-
-	/**
-	 * Each stored access-rule field reaches an administrator and nobody below.
-	 *
-	 * Names all three fields, so a field that stops being registered, or starts
-	 * reaching an Editor, fails here by name.
-	 */
-	public function test_each_rule_field_is_administrator_only() {
-		$expected = [
-			Institution::META_PREFIX . 'email_domain' => 'test-university.example',
-			Institution::META_PREFIX . 'ip_range'     => '10.0.0.0/8',
-			Institution::META_PREFIX . 'reader_data'  => 'org=test-university',
-		];
-
-		$admin = $this->read_collection( $this->admin_id, 'edit' );
-		$this->assertSame( 200, $admin->get_status() );
-		foreach ( $expected as $key => $value ) {
-			$this->assertSame( $value, $admin->get_data()[0]['meta'][ $key ], "An administrator reads $key." );
-		}
-
-		$editor = $this->read_collection( $this->editor_id, 'edit' );
-		$this->assertSame( 200, $editor->get_status() );
-		$this->assert_meta_withheld( $editor->get_data()[0]['meta'] );
-		foreach ( $expected as $value ) {
-			$this->assertStringNotContainsString( $value, wp_json_encode( $editor->get_data() ), 'No rule value may reach an Editor.' );
+			if ( user_can( $user_id, Block_Visibility::CONFIGURE_CAPABILITY ) ) {
+				$this->assertSame( 200, $response->get_status(), "The $role role is shown the panel and must read institution names." );
+				$this->assertCount( 1, $data, "The $role role gets the one institution." );
+				$this->assertSame( [ 'id', 'title' ], array_keys( $data[0] ), "The $role role gets the fields the panel asks for." );
+				$this->assertSame( $this->institution_id, $data[0]['id'] );
+				$this->assertSame( 'Test University', $data[0]['title']['raw'] );
+			} else {
+				$this->assertSame( 403, $response->get_status(), "The $role role is refused the panel and must be refused the route." );
+				$this->assertStringNotContainsString( 'Test University', wp_json_encode( $data ), "A refused $role response must not carry institution names." );
+			}
 		}
 	}
 
@@ -652,6 +597,9 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assert_meta_withheld( $data[0]['meta'] );
+		foreach ( [ 'test-university.example', '10.0.0.0/8', 'org=test-university' ] as $value ) {
+			$this->assertStringNotContainsString( $value, wp_json_encode( $data ), 'No stored rule value may appear anywhere in the response.' );
+		}
 	}
 
 	/**
@@ -664,6 +612,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( '10.0.0.0/8', $data[0]['meta'][ Institution::META_PREFIX . 'ip_range' ] );
 		$this->assertSame( 'test-university.example', $data[0]['meta'][ Institution::META_PREFIX . 'email_domain' ] );
+		$this->assertSame( 'org=test-university', $data[0]['meta'][ Institution::META_PREFIX . 'reader_data' ] );
 	}
 
 	/**
