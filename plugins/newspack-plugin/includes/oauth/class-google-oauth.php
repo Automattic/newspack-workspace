@@ -422,7 +422,7 @@ class Google_OAuth {
 					$token_client_id = '' !== ( $token_info->audience ?? '' )
 						? $token_info->audience
 						: ( $token_info->issued_to ?? '' );
-					if ( (string) $expected_client_id !== (string) $token_client_id ) {
+					if ( ! is_string( $token_client_id ) || $expected_client_id !== $token_client_id ) {
 						Logger::error( 'OAuth token was issued to a different client id than expected.' );
 						// Surface via the always-on log so a rejection (an attack attempt, or a
 						// legitimate login broken by a client-id skew) is auditable fleet-wide.

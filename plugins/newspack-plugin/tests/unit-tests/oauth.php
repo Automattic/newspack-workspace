@@ -701,6 +701,26 @@ class Newspack_Test_OAuth extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A non-string client id in the token is treated as a mismatch with the expected one.
+	 */
+	public function test_tokeninfo_non_string_audience_yields_error() {
+		$this->set_expected_client_id( 'site-client-id.apps.googleusercontent.com' );
+		$this->stub_tokeninfo(
+			[
+				'audience'       => [ 'id' => 'site-client-id.apps.googleusercontent.com' ],
+				'scope'          => 'https://www.googleapis.com/auth/userinfo.email',
+				'email'          => 'reader@example.com',
+				'verified_email' => true,
+			]
+		);
+
+		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
+
+		self::assertTrue( is_wp_error( $result ), 'A non-string audience must return a WP_Error.' );
+		self::assertSame( 'Invalid Google credentials. Please reconnect.', $result->get_error_message() );
+	}
+
+	/**
 	 * A tokeninfo email that is not a string is treated as missing, so the caller never
 	 * receives an array where it expects an address.
 	 */
