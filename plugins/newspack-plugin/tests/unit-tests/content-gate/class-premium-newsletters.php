@@ -1312,15 +1312,27 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A plan switch reports the same status before and after, but it changes the
-	 * group's products, so the members still need a check.
+	 * A plan switch, including a seat-count change, reports the same status before
+	 * and after. Members are checked against their lists from before the switch, so
+	 * with auto-signup on, a switch doesn't re-add a premium list a member left.
 	 */
-	public function test_plan_switch_queues_members() {
+	public function test_plan_switch_does_not_readd_member_who_unsubscribed() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
 		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
 		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
 		Group_Subscription::update_members( $subscription, [ $member_id ] );
 		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		// The member left the premium list on their own.
+		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [];
 
 		Premium_Newsletters::handle_product_subscription_changed(
 			time(),
@@ -1333,7 +1345,49 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			null
 		);
 
-		$this->assertContains( $member_id, $this->get_queued_user_ids(), 'A plan switch must queue members.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_RENEWAL, $this->get_queued_source( $member_id ), 'A plan switch must check members against their saved lists.' );
+		Premium_Newsletters::process_access_check_queue();
+		$this->assertEmpty( $this->get_list_calls_for( $member_email ), 'A plan switch must not re-add a list a member left.' );
+	}
+
+	/**
+	 * A switch to a plan that no longer covers a premium list removes it from the
+	 * members, even though their lists were saved before the switch.
+	 */
+	public function test_plan_switch_removes_member_lists_the_new_plan_does_not_cover() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [ 'newspack-' . $list_post_id ];
+		$subscription->products = [ 200 ];
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'active',
+			],
+			null
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $member_email );
+		$this->assertCount( 1, $calls, 'A downgrade must remove the list from the member.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $calls[0]['lists_to_add'] );
 	}
 
 	/**

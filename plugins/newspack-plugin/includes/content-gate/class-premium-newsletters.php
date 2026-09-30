@@ -63,9 +63,10 @@ class Premium_Newsletters {
 
 	/**
 	 * User meta key for the renewal-time snapshot of the contact's full ESP list
-	 * membership. Captured by set_subscribed_lists() when a renewal fires; consulted
-	 * by check_access() to suppress auto-signup of any restricted list the contact
-	 * had unsubscribed from before the renewal. Cleared after a successful access
+	 * membership. Captured by set_subscribed_lists() when a renewal fires, and for
+	 * group members by maybe_enqueue_access_check() when their group switches plans;
+	 * consulted by check_access() to suppress auto-signup of any restricted list the
+	 * contact had unsubscribed from before then. Cleared after a successful access
 	 * check. Note: this stores the contact's complete ESP list set, not only the
 	 * restricted lists — the auto-signup branch filters down to restricted lists
 	 * at check time.
@@ -316,7 +317,8 @@ class Premium_Newsletters {
 	 * Check list access for the user.
 	 *
 	 * The renewal snapshot is only consulted when this access check was enqueued
-	 * by a renewal event (source === SOURCE_RENEWAL). Other event flows that
+	 * with the renewal source (source === SOURCE_RENEWAL): by a renewal, or for group
+	 * members, by a plan switch. Other event flows that
 	 * happen to dequeue the same user must not be silently filtered by a snapshot
 	 * that was captured for a different reason.
 	 *
@@ -617,10 +619,16 @@ class Premium_Newsletters {
 
 	/**
 	 * Snapshot a reader's current lists and queue their renewal-source access check.
+	 * Used for renewals, and for group members when their group switches plans.
 	 *
-	 * @param \WP_User $user The reader whose access the renewal decides.
+	 * @param \WP_User $user The reader to check.
 	 */
 	private static function snapshot_lists_and_enqueue_renewal_check( $user ) {
+		// The snapshot costs a remote ESP round-trip, and it only informs a check
+		// that can't run while access control is inactive.
+		if ( ! self::is_access_control_active() ) {
+			return;
+		}
 		// Capture the renewal-time snapshot when auto-signup is enabled. Without
 		// auto-signup the snapshot has no effect (check_access only consults it
 		// inside the auto-signup branch), so skip the ESP fetch in that case.
@@ -697,8 +705,21 @@ class Premium_Newsletters {
 		if ( ! self::event_changes_group_access( $data ) ) {
 			return;
 		}
+		// A plan switch reports the same status on both sides, so it can't show
+		// whether the products that grant access changed; a seat-count change
+		// doesn't change them. Checking members against their lists from before the
+		// switch keeps auto-signup from re-adding lists they left, while a downgrade
+		// still removes lists the new plan doesn't cover.
+		$is_plan_switch = ! empty( $data['status_before'] ) && ( $data['status_after'] ?? '' ) === $data['status_before'];
 		foreach ( self::get_group_member_ids( $data ) as $member_id ) {
-			self::add_user_to_queue( $member_id, $source );
+			if ( ! $is_plan_switch ) {
+				self::add_user_to_queue( $member_id, $source );
+				continue;
+			}
+			$member = get_user_by( 'id', $member_id );
+			if ( $member ) {
+				self::snapshot_lists_and_enqueue_renewal_check( $member );
+			}
 		}
 	}
 
