@@ -714,10 +714,16 @@ class WC_Product {
 	/**
 	 * Price reads apply their WooCommerce filters, as WC_Data::get_prop() does
 	 * in `view` context. Without this, code that filters a price and code that
-	 * reads one can disagree with no test able to see it.
+	 * reads one can disagree with no test able to see it. `edit` context returns
+	 * the stored price unfiltered, as WC_Data::get_prop() does.
+	 *
+	 * @param string $context `view` or `edit`.
 	 */
-	public function get_price() {
+	public function get_price( $context = 'view' ) {
 		$price = $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		if ( 'edit' === $context ) {
+			return $price;
+		}
 		return apply_filters( 'woocommerce_product_get_price', $price, $this );
 	}
 	public function set_price( $price ) {

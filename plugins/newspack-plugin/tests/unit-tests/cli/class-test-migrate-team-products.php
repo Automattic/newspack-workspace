@@ -67,10 +67,11 @@ class Test_Migrate_Team_Products extends WP_UnitTestCase {
 	 * get_posts() meta_query finds it, plus a matching mock WC_Product carrying the
 	 * team member-count meta so wc_get_product() can read and write it.
 	 *
-	 * @param int $max_members The product's team "Maximum member count".
+	 * @param int   $max_members The product's team "Maximum member count".
+	 * @param array $meta        Further product meta, e.g. the Teams pricing mode.
 	 * @return int The product ID.
 	 */
-	private function create_team_product( int $max_members ): int {
+	private function create_team_product( int $max_members, array $meta = [] ): int {
 		$product_id = wp_insert_post(
 			[
 				'post_type'   => 'product',
@@ -88,7 +89,7 @@ class Test_Migrate_Team_Products extends WP_UnitTestCase {
 				'id'   => $product_id,
 				'name' => 'Team subscription',
 				'type' => 'subscription',
-				'meta' => [ '_wc_memberships_for_teams_max_member_count' => $max_members ],
+				'meta' => array_merge( [ '_wc_memberships_for_teams_max_member_count' => $max_members ], $meta ),
 			]
 		);
 		return $product_id;
@@ -110,5 +111,63 @@ class Test_Migrate_Team_Products extends WP_UnitTestCase {
 		$product = $products_database[ $product_id ];
 		$this->assertSame( 'yes', $product->get_meta( '_newspack_group_subscription_enabled' ), 'The command must enable group subscriptions on the product.' );
 		$this->assertSame( 6, $product->get_meta( '_newspack_group_subscription_limit' ), 'A 5-member product must persist a limit of 6 (owner + 5), not the raw 5.' );
+	}
+
+	/**
+	 * Teams' per-member pricing charges for every seat bought, which is what a
+	 * per-seat group does. A live run must carry it over along with the seat bounds,
+	 * each gaining the owner's seat unless "Owners must be members" reserves one
+	 * already (the same adjustment the flat limit makes).
+	 */
+	public function test_per_member_pricing_maps_to_per_seat_with_owner_inclusive_bounds() {
+		$product_id = $this->create_team_product(
+			10,
+			[
+				'_wc_memberships_for_teams_pricing' => 'per_member',
+				'_wc_memberships_for_teams_min_member_count' => 2,
+			]
+		);
+
+		( new Teams_Migration() )->migrate_team_products( [], [ 'live' => true ] );
+
+		$settings = \Newspack\Group_Subscription_Settings::get_product_settings( $product_id );
+		$this->assertSame( 'per_seat', $settings['pricing_mode'], 'Per-member pricing should become per-seat group pricing.' );
+		$this->assertSame( 3, $settings['min_seats'], 'A 2-member minimum should become 3 seats (owner + 2).' );
+		$this->assertSame( 11, $settings['max_seats'], 'A 10-member maximum should become 11 seats (owner + 10).' );
+	}
+
+	/**
+	 * When "Owners must be members" is on, the owner already holds one of the Teams
+	 * seats, so the bounds carry over unchanged. An unset maximum stays unbounded.
+	 */
+	public function test_per_member_bounds_carry_over_unchanged_when_owner_takes_a_seat() {
+		update_option( 'wc_memberships_for_teams_owners_must_take_seat', 'yes' );
+		$product_id = $this->create_team_product(
+			0,
+			[
+				'_wc_memberships_for_teams_pricing' => 'per_member',
+				'_wc_memberships_for_teams_min_member_count' => 2,
+			]
+		);
+
+		( new Teams_Migration() )->migrate_team_products( [], [ 'live' => true ] );
+
+		$settings = \Newspack\Group_Subscription_Settings::get_product_settings( $product_id );
+		$this->assertSame( 'per_seat', $settings['pricing_mode'], 'Per-member pricing should become per-seat group pricing.' );
+		$this->assertSame( 2, $settings['min_seats'], 'The owner already holds a seat, so the minimum carries over as-is.' );
+		$this->assertSame( 0, $settings['max_seats'], 'An unset Teams maximum should leave the seat count unbounded.' );
+	}
+
+	/**
+	 * A per-team (flat) product stays flat-priced.
+	 */
+	public function test_per_team_pricing_stays_flat() {
+		$product_id = $this->create_team_product( 5, [ '_wc_memberships_for_teams_pricing' => 'per_team' ] );
+
+		( new Teams_Migration() )->migrate_team_products( [], [ 'live' => true ] );
+
+		$settings = \Newspack\Group_Subscription_Settings::get_product_settings( $product_id );
+		$this->assertSame( 'per_team', $settings['pricing_mode'], 'A per-team product should keep flat group pricing.' );
+		$this->assertSame( 6, $settings['limit'], 'The flat limit mapping is unchanged.' );
 	}
 }
