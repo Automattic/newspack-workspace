@@ -107,7 +107,10 @@ abstract class Abstract_Backfiller {
 				$requests = $this->find_webhook_requests( $event->get_action_name(), $event->get_timestamp(), $event->get_data() );
 				if ( count( $requests ) > 0 ) {
 					Data_Backfill::increment_results_counter( $event->get_action_name(), 'duplicate' );
-					return;
+					if ( ! $this->verbose ) {
+						Data_Backfill::$progress->tick();
+					}
+					continue;
 				}
 			}
 
