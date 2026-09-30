@@ -942,9 +942,9 @@ class Audience_Campaigns extends Wizard {
 	 *
 	 * Without `include`, lists the products a segment can be pointed at: published and
 	 * private. With `include`, looks up those saved IDs whatever their status, so a segment
-	 * keeps naming a product after it's drafted, scheduled or trashed. The name then carries
-	 * a status marker. Segment matching compares product IDs only, so the status doesn't
-	 * change who matches.
+	 * keeps naming a product after it's drafted, scheduled or trashed. In both, any status
+	 * but published carries a marker in the name. Segment matching compares product IDs
+	 * only, so the status doesn't change who matches.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.

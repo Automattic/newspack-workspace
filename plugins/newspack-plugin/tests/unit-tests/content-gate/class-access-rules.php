@@ -1019,13 +1019,14 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	/**
 	 * A draft or pending product stays selectable but is labeled with its status, so a
 	 * publisher can tell it from the products they sell. Its variations carry the parent's
-	 * marker, since they can't be bought while the parent is unavailable. A private product
-	 * or variation is marked as private but not flagged ineligible, so a hidden legacy tier
-	 * reads apart from a current one without the "still grants access" warning.
+	 * marker, since they can't be bought while the parent is unavailable. A private product,
+	 * its (still published) variations, and a private variation under a published parent
+	 * are marked as private but not flagged ineligible, so a hidden legacy tier reads apart
+	 * from a current one without the "still grants access" warning.
 	 *
 	 * @group Access_Rules
 	 */
-	public function test_get_subscription_products_options_marks_ineligible_statuses() {
+	public function test_get_subscription_products_options_marks_unpublished_statuses() {
 		$statuses_by_id = [
 			960 => 'publish',
 			961 => 'private',
@@ -1059,6 +1060,15 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 			]
 		);
 		$private_variation_id = $this->create_variation_post( 965, 'Membership - Legacy', '', 'private' );
+		wc_create_mock_product(
+			[
+				'id'     => 966,
+				'type'   => 'variable-subscription',
+				'name'   => 'Legacy membership',
+				'status' => 'private',
+			]
+		);
+		$hidden_tier_id = $this->create_variation_post( 966, 'Legacy membership - Annual' );
 
 		$options = array_column( Access_Rules::get_subscription_products_options(), null, 'value' );
 
@@ -1072,6 +1082,8 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 				$variation_id         => 'Draft membership - Annual [invalid status: Draft]',
 				965                   => 'Membership',
 				$private_variation_id => 'Membership - Legacy [status: Private]',
+				966                   => 'Legacy membership [status: Private]',
+				$hidden_tier_id       => 'Legacy membership - Annual [status: Private]',
 			],
 			array_column( $options, 'label', 'value' )
 		);

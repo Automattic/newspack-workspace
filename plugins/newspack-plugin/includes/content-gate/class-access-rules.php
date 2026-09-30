@@ -730,9 +730,11 @@ class Access_Rules {
 	 * A product whose status is outside `WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES`
 	 * gets a status marker in its label and an `ineligible` flag, and so do its variations,
 	 * since a variation can't be bought while its parent is unavailable. The flag is what
-	 * the picker reads to warn that the entry still grants access. Otherwise each entry is
-	 * labeled by its own status, so a private product or variation carries the private
-	 * marker.
+	 * the picker reads to warn that the entry still grants access. A private product's
+	 * variations take its private marker the same way: WooCommerce leaves them published
+	 * when the parent goes private, so without it a hidden tier would read like a current
+	 * one of the same name. Under a published parent, a variation is labeled by its own
+	 * status.
 	 *
 	 * @param \WC_Product[] $products           The subscription products.
 	 * @param string[]      $variation_statuses Variation statuses to read. See `get_subscription_variation_posts()`.
@@ -756,7 +758,7 @@ class Access_Rules {
 				$entries[] = [
 					'label'  => self::get_variation_option_label( $product->get_name(), $variation ),
 					'value'  => $variation->ID,
-					'status' => $ineligible ? $status : $variation->post_status,
+					'status' => 'publish' === $status ? $variation->post_status : $status,
 				];
 			}
 			foreach ( $entries as $entry ) {
