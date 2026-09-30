@@ -1190,4 +1190,54 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 			'The same gate set in a different order must reuse the cached result.'
 		);
 	}
+
+	/**
+	 * A block following a gate agrees with the gate's page: an on-campus visitor
+	 * whom registered access counts as registered sees it without an account.
+	 */
+	public function test_gate_mode_registration_institutions_show_the_block_to_a_matching_visitor() {
+		$institution_id = \Newspack\Institution::create( 'Example University', '', [ 'ip_range' => '10.0.0.0/8' ] );
+		\Newspack\Institution::invalidate_cache();
+		$gate_id = $this->make_gate( false );
+		update_post_meta(
+			$gate_id,
+			'registration',
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [ $institution_id ],
+						],
+					],
+				],
+			]
+		);
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		// Later suites read the visitor's address, so it is put back as found.
+		$original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
+		$_SERVER['REMOTE_ADDR'] = '10.1.2.3';
+		$_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] = '1';
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		$block  = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_id ],
+			]
+		);
+		$result = Block_Visibility::filter_render_block( '<div>members</div>', $block );
+
+		unset( $_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] );
+		if ( null === $original_remote_addr ) {
+			unset( $_SERVER['REMOTE_ADDR'] );
+		} else {
+			$_SERVER['REMOTE_ADDR'] = $original_remote_addr;
+		}
+		// phpcs:enable
+		$this->assertSame( '<div>members</div>', $result );
+	}
 }
