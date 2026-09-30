@@ -87,10 +87,12 @@ class Subscription_Changed extends Woo_Item_Changed {
 			$current_value[ $this->get_site() ] = [];
 		}
 
+		$previous_products = $current_value[ $this->get_site() ][ $this->get_id() ]['products'] ?? [];
+
 		$current_value[ $this->get_site() ][ $this->get_id() ] = [
 			'id'       => $this->get_id(),
 			'status'   => $this->get_status_after(),
-			'products' => $this->get_products(),
+			'products' => self::keep_network_ids( $this->get_products(), $previous_products ),
 		];
 
 		Debugger::log( sprintf( 'Adding meta for site %s and subscription id %d. Value: %s', $this->get_site(), $this->get_id(), wp_json_encode( $current_value, true ) ) );
@@ -98,6 +100,40 @@ class Subscription_Changed extends Woo_Item_Changed {
 		update_user_meta( $existing_user->ID, self::USER_SUBSCRIPTIONS_META_KEY, $current_value );
 	}
 
+	/**
+	 * Copy each product's Network ID from the record being replaced.
+	 *
+	 * A record pulled from the subscription's own site names each product's Network ID,
+	 * which the event doesn't carry. Keeping it means a status change doesn't drop the
+	 * match for a product whose sync event never reached this site.
+	 *
+	 * @param array $products          Products from the event.
+	 * @param array $previous_products Products from the record being replaced.
+	 * @return array
+	 */
+	private static function keep_network_ids( $products, $previous_products ) {
+		$previous_network_ids = [];
+		foreach ( (array) $previous_products as $previous_product ) {
+			$previous_product = (array) $previous_product;
+			if ( isset( $previous_product['id'] ) && ! empty( $previous_product['network_id'] ) ) {
+				$previous_network_ids[ (string) $previous_product['id'] ] = $previous_product['network_id'];
+			}
+		}
+		if ( empty( $previous_network_ids ) ) {
+			return $products;
+		}
+
+		$result = [];
+		foreach ( (array) $products as $key => $product ) {
+			$product    = (array) $product;
+			$product_id = (string) ( $product['id'] ?? '' );
+			if ( empty( $product['network_id'] ) && isset( $previous_network_ids[ $product_id ] ) ) {
+				$product['network_id'] = $previous_network_ids[ $product_id ];
+			}
+			$result[ $key ] = $product;
+		}
+		return $result;
+	}
 
 	/**
 	 * Returns the start_date property

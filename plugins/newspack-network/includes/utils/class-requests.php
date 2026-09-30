@@ -22,15 +22,16 @@ class Requests {
 	 * @param string $endpoint The endpoint to request.
 	 * @param array  $params The parameters to send.
 	 * @param string $method The request method.
+	 * @param int    $timeout Seconds to wait for the Hub.
 	 */
-	public static function request_to_hub( $endpoint, $params, $method = 'POST' ) {
+	public static function request_to_hub( $endpoint, $params, $method = 'POST', $timeout = 60 ) {
 		$url = trailingslashit( Settings::get_hub_url() ) . $endpoint;
 		return wp_remote_request(
 			$url,
 			[
 				'method'  => $method,
 				'body'    => self::sign_params( $params ),
-				'timeout' => 60, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
+				'timeout' => $timeout, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
 			]
 		);
 	}
