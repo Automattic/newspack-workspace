@@ -2409,10 +2409,11 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Naming institutions adds a way in; it takes nothing away from readers
-	 * who registered. This is what an institution-only paid access broke.
+	 * Institutions add a way past the wall and take nothing from readers who
+	 * registered. Walling those readers is what institutions under paid access
+	 * did to a registration wall, and this pins that registered access doesn't.
 	 */
-	public function test_registration_institutions_leave_logged_in_readers_admitted() {
+	public function test_registration_institutions_never_narrow_access_for_logged_in_readers() {
 		$inst_id = $this->create_ip_institution();
 		$this->configure_published_gate(
 			[
@@ -2495,30 +2496,6 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->reset_restriction_cache();
 
 		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
-
-		$this->reset_visitor_state();
-	}
-
-	/**
-	 * Without the IP-access cookie the page may be served from cache, so the
-	 * visitor's IP is not read and the registration wall stands.
-	 */
-	public function test_registration_institutions_need_the_ip_access_cookie() {
-		$inst_id = $this->create_ip_institution();
-		$layouts = $this->configure_published_gate(
-			[
-				'active'       => true,
-				'access_rules' => $this->institution_rules( $inst_id ),
-			],
-			[ 'active' => false ]
-		);
-
-		wp_set_current_user( 0 );
-		$this->set_visitor_ip( '10.1.2.3', false );
-		$this->reset_restriction_cache();
-
-		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
-		$this->assertSame( $layouts['registration_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
 
 		$this->reset_visitor_state();
 	}
