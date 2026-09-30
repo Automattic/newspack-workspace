@@ -438,13 +438,14 @@ class TestHubWebhook extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Set the fixture Node's author, deliver one event, and collect what was
-	 * reported through newspack_log about the Node's origin.
+	 * Set the fixture Node's author, deliver events from it, and collect what
+	 * was reported through newspack_log about the Node's origin.
 	 *
-	 * @param int $author_id The user to record as the Node's author.
-	 * @return array{0: \WP_REST_Response, 1: array} The response and the matching log entries.
+	 * @param int $author_id  The user to record as the Node's author.
+	 * @param int $deliveries How many distinct deliveries to send.
+	 * @return array{0: \WP_REST_Response, 1: array} The last response and the matching log entries.
 	 */
-	private function deliver_from_node_authored_by( $author_id ) {
+	private function deliver_from_node_authored_by( $author_id, $deliveries = 1 ) {
 		wp_update_post(
 			[
 				'ID'          => $this->node_id,
@@ -460,7 +461,11 @@ class TestHubWebhook extends \WP_UnitTestCase {
 		};
 		add_action( 'newspack_log', $capture, 10, 3 );
 
-		$response = Webhook::handle_webhook( $this->build_request( time(), Crypto::generate_nonce(), $this->probe_payload() ) );
+		$timestamp = time();
+		for ( $i = 0; $i < $deliveries; $i++ ) {
+			// Distinct timestamps, so the Event Log records each delivery.
+			$response = Webhook::handle_webhook( $this->build_request( $timestamp + $i * HOUR_IN_SECONDS, Crypto::generate_nonce(), $this->probe_payload() ) );
+		}
 
 		remove_action( 'newspack_log', $capture, 10 );
 
@@ -482,6 +487,7 @@ class TestHubWebhook extends \WP_UnitTestCase {
 		$this->assertStringContainsString( (string) $this->node_id, $logged[0][0] );
 		$this->assertStringContainsString( self::NODE_URL, $logged[0][0] );
 		$this->assertSame( 'warning', $logged[0][1]['type'] );
+		$this->assertStringContainsString( 'has no author who is currently an administrator', $logged[0][0] );
 	}
 
 	/**
@@ -506,6 +512,41 @@ class TestHubWebhook extends \WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 1, $this->event_log_count() );
 		$this->assertCount( 0, $logged );
+	}
+
+	/**
+	 * Repeated deliveries from the same Node log one line a day, and every
+	 * delivery is still processed.
+	 */
+	public function test_node_origin_is_logged_once_a_day() {
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+
+		list( $response, $logged ) = $this->deliver_from_node_authored_by( $editor_id, 2 );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 2, $this->event_log_count(), 'Both deliveries are processed.' );
+		$this->assertCount( 1, $logged, 'The Node is logged once.' );
+	}
+
+	/**
+	 * A newspack_log listener that throws does not change how the delivery is
+	 * handled.
+	 */
+	public function test_throwing_log_listener_does_not_change_delivery_handling() {
+		$throw = function ( $code ) {
+			if ( 'newspack_network_node_origin' === $code ) {
+				throw new \RuntimeException( 'Listener failed.' );
+			}
+		};
+		add_action( 'newspack_log', $throw, 5 );
+
+		list( $response ) = $this->deliver_from_node_authored_by( 0 );
+
+		remove_action( 'newspack_log', $throw, 5 );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'success', $response->get_data() );
+		$this->assertSame( 1, $this->event_log_count(), 'The event is processed.' );
 	}
 
 	/**
