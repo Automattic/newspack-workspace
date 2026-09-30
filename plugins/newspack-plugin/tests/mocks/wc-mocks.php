@@ -408,9 +408,9 @@ $wc_mock_is_product = false;
  *
  * Every WC_Order_Item_Product construction across the whole suite registers
  * itself in $order_items_database (mirroring WooCommerce, where order item IDs
- * are globally unique), and test fixtures reuse low integer IDs across files —
- * call this from a test class's set_up() before staging order items so a stale
- * item created by an unrelated suite can't resolve.
+ * are globally unique), and test fixtures reuse low integer IDs across files.
+ * Newspack_Request_Memo_Reset already clears the table before each test; call
+ * this only to clear it partway through one.
  */
 function wc_mocks_reset_order_items() {
 	global $order_items_database;
