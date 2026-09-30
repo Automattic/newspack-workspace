@@ -36,7 +36,7 @@ const { InteractiveDiv } = utils;
  */
 const ColorPicker = ( { label, help, color = '#ffffff', onChange, className, disabled = false } ) => {
 	const [ isExpanded, setIsExpanded ] = useState( false );
-	const ref = useRef();
+	const ref = useRef( undefined );
 	const id = useInstanceId( ColorPicker, 'newspack-color-picker' );
 	const labelId = `${ id }-label`;
 	const colordColor = colord( color );

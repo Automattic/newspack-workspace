@@ -131,7 +131,7 @@ export const hasValidEmail = string => /\S+@\S+/.test( string );
  * @return {*} The previous value of the prop or state.
  */
 export const usePrevious = value => {
-	const ref = useRef();
+	const ref = useRef( undefined );
 	useEffect( () => {
 		ref.current = value;
 	}, [ value ] );
