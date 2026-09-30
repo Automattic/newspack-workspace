@@ -103,7 +103,7 @@ class Node {
 
 	/**
 	 * Records that the Node holds its key: it retrieved the key through the
-	 * connect link, or sent a delivery signed with it.
+	 * connect link, or sent a delivery or a pull request signed with it.
 	 *
 	 * @return void
 	 */

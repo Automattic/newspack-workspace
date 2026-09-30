@@ -473,10 +473,10 @@ class TestHubWebhook extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An event from a Node an editor created is processed as before, and one line
-	 * is logged naming the Node.
+	 * An event from a Node whose author is not currently an administrator (here,
+	 * an editor) is processed as before, and one line is logged naming the Node.
 	 */
-	public function test_event_from_node_not_created_by_administrator_is_processed_and_logged() {
+	public function test_event_from_node_whose_author_is_not_currently_administrator_is_processed_and_logged() {
 		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
 
 		list( $response, $logged ) = $this->deliver_from_node_authored_by( $editor_id );
@@ -502,9 +502,9 @@ class TestHubWebhook extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An event from a Node an administrator created logs nothing.
+	 * An event from a Node whose author is currently an administrator logs nothing.
 	 */
-	public function test_event_from_node_created_by_administrator_is_not_logged() {
+	public function test_event_from_node_whose_author_is_currently_administrator_is_not_logged() {
 		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
 
 		list( $response, $logged ) = $this->deliver_from_node_authored_by( $admin_id );
