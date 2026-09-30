@@ -698,17 +698,19 @@ class Block_Visibility {
 		$registration_passes = true;
 		if ( ! empty( $registration['active'] ) ) {
 			if ( ! $user_id ) {
-				// A signed-out visitor whom paid access counts as paying doesn't need to
-				// register first, so they skip both walls, as they do on the gate's own
-				// page ({@see Content_Restriction_Control::is_post_restricted()}). Without
-				// this, an on-campus visitor reads the post but not the blocks that follow
-				// its gate. A block's own rules answer the same way, so a block and a gate
-				// holding the same rules never disagree.
+				// A signed-out visitor who passes paid access doesn't need to register
+				// first, as on the gate's own page ({@see Content_Restriction_Control::is_post_restricted()}),
+				// so once paid access is on with rules, its answer decides both walls.
+				// Without this, an on-campus visitor reads the post but not the blocks set
+				// to its gate. A block's own rules answer the same way, so a block and a
+				// gate holding the same rules never disagree.
 				//
-				// Registered access can also count the visitor as registered (NPPD-2310).
-				// The block editor never writes these rules into block attributes.
-				$registration_passes = ( $has_access_rules && $access_passes )
-					|| Access_Rules::evaluate_anonymous_rules( $registration['access_rules'] ?? [] );
+				// With no paid rules, registered access's own rules can count the visitor
+				// as registered (NPPD-2310). The block editor never writes registration
+				// rules into block attributes.
+				$registration_passes = $has_access_rules
+					? $access_passes
+					: Access_Rules::evaluate_anonymous_rules( $registration['access_rules'] ?? [] );
 			} elseif ( ! empty( $registration['require_verification'] ) ) {
 				$registration_passes = (bool) get_user_meta( $user_id, Reader_Activation::EMAIL_VERIFIED, true );
 			}
