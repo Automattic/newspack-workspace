@@ -633,57 +633,40 @@ class Newspack_Test_OAuth extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A tokeninfo request that fails outright yields the invalid-credentials error.
-	 */
-	public function test_tokeninfo_failed_request_yields_error() {
-		$this->stub_tokeninfo_raw( new WP_Error( 'http_request_failed', 'Operation timed out' ) );
-
-		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
-
-		self::assertTrue( is_wp_error( $result ), 'A failed tokeninfo request must return a WP_Error.' );
-		self::assertSame( 'Invalid Google credentials. Please reconnect.', $result->get_error_message() );
-	}
-
-	/**
-	 * A 200 tokeninfo response whose body is not JSON yields the invalid-credentials error.
+	 * Tokeninfo bodies that are not a JSON object.
 	 *
-	 * The message is asserted so the test fails if the body is still read before the
-	 * guard: that path reports missing scopes instead.
+	 * @return array
 	 */
-	public function test_tokeninfo_unparseable_body_yields_error() {
+	public function unusable_tokeninfo_bodies() {
+		return [
+			'HTML page'  => [ '<html><body>Service Unavailable</body></html>' ],
+			'JSON array' => [ '["https://www.googleapis.com/auth/userinfo.email"]' ],
+		];
+	}
+
+	/**
+	 * A 200 tokeninfo response whose body is not a JSON object yields the invalid-credentials error.
+	 *
+	 * @dataProvider unusable_tokeninfo_bodies
+	 *
+	 * @param string $body Response body.
+	 */
+	public function test_tokeninfo_unusable_body_yields_error( $body ) {
 		$this->stub_tokeninfo_raw(
 			[
 				'response' => [ 'code' => 200 ],
-				'body'     => '<html><body>Service Unavailable</body></html>',
+				'body'     => $body,
 			]
 		);
 
 		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
 
-		self::assertTrue( is_wp_error( $result ), 'An unparseable tokeninfo body must return a WP_Error.' );
+		self::assertTrue( is_wp_error( $result ), 'A tokeninfo body that is not a JSON object must return a WP_Error.' );
 		self::assertSame( 'Invalid Google credentials. Please reconnect.', $result->get_error_message() );
 	}
 
 	/**
-	 * A tokeninfo body that is JSON but not an object yields the invalid-credentials error.
-	 */
-	public function test_tokeninfo_non_object_body_yields_error() {
-		$this->stub_tokeninfo_raw(
-			[
-				'response' => [ 'code' => 200 ],
-				'body'     => '["https://www.googleapis.com/auth/userinfo.email"]',
-			]
-		);
-
-		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
-
-		self::assertTrue( is_wp_error( $result ), 'A non-object tokeninfo body must return a WP_Error.' );
-		self::assertSame( 'Invalid Google credentials. Please reconnect.', $result->get_error_message() );
-	}
-
-	/**
-	 * A tokeninfo scope that is not a string yields the invalid-credentials error rather
-	 * than reaching explode(), which raises a TypeError on an array.
+	 * A non-string tokeninfo scope is treated as invalid credentials.
 	 */
 	public function test_tokeninfo_non_string_scope_yields_error() {
 		$this->stub_tokeninfo(
@@ -769,8 +752,7 @@ class Newspack_Test_OAuth extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A revoke request that fails outright returns an error and keeps the stored
-	 * credentials, instead of reading the failure as a response array.
+	 * A revoke request that fails outright returns an error and keeps the stored credentials.
 	 */
 	public function test_revoke_failed_request_yields_error() {
 		$this->prepare_revoke( new WP_Error( 'http_request_failed', 'Could not resolve host' ) );
