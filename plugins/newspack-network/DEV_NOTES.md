@@ -95,6 +95,20 @@ When they pull events, they get an array of events. Each event has a an action n
 
 The Node instantiates the corresponding `Incoming_Event` for each action and then calls the `process_in_node` method of the event object.
 
+## Reader access across sites
+
+A reader who holds a product on one site passes gates on the others when the products share a Network ID. Three kinds of holding count: a subscription the reader owns, a seat on someone else's group subscription, and a paid one-time order within the gate's duration.
+
+Subscription events only reach sites that already have an account for the reader, and orders and group members only reach the Hub. So the site being read asks the Hub:
+
+1. A Node calls the Hub's `POST /newspack-network/v1/reader-access` (`Hub\Reader_Access_Endpoint`). The Hub answers from its copies of every site's subscriptions and orders, plus the member lists sent by the `newspack_node_group_members_changed` action (Hub-only; Nodes don't pull it). The answer is encrypted with the Node's key and names the reader and request it answers (`Content_Gate\Reader_Access_Envelope`).
+2. `Content_Gate\Reader_Access_Sync` stores the answer on the reader: owned subscriptions next to the ones subscription events write, and group seats and orders in their own user meta. It asks on the reader's first gated check with nothing stored and on the first gated check after each login, then refreshes in the background after 12 hours. Readers whose synced subscription already matches never trigger a request.
+3. `Content_Gate\Access` answers newspack-plugin's `newspack_access_rules_has_active_subscription` and `newspack_access_rules_has_one_time_purchase` filters from what is stored.
+
+The Hub finds a reader's copies through a per-email meta key that only copies written with their site's ID carry. Copies written before copies were kept per site stay out of answers until an event or `wp newspack-network rebuild-hub-copies --apply` rewrites them.
+
+After updating a network, run on the Hub `wp newspack-network rebuild-hub-copies --apply`, then on every site `wp newspack-network data-backfill newspack_node_order_changed --live` (with `--start`/`--end` on large sites) and `wp newspack-network data-backfill newspack_node_group_members_changed --live`. One-time products need a Network ID too; `wp newspack-network assign-product-network-ids --apply` tags the ones linked to membership plans.
+
 ## Stores
 
 Stores are simple abstraction layers used by the Hub to persist data on the database. They are used to store and read data.
@@ -169,6 +183,10 @@ Available CLI commands are (add `--help` flag to learn more about each command):
 * `--dry-run` enabled. Will run through process without deleting.
 * `--yes` enabled. Will bypass confirmations.
 
+
+### `wp newspack-network rebuild-hub-copies`
+* Hub only. Rewrites the Hub's copies of orders and subscriptions from each site's latest logged event, so copies written before copies were kept per site can answer reader access questions again.
+* `--apply` to write. Without it the command only reports how many copies it would rewrite.
 
 ### `wp newspack-network sync-all`
 * Will pull all events from the Hub
