@@ -18,7 +18,11 @@ use Newspack_Network\Hub\Stores\Subscriptions;
 class Group_Members_Changed extends Subscription_Changed {
 
 	/**
-	 * Keep the hub's copy of the subscription and its current members.
+	 * Keep the hub's current members on its copy of the subscription.
+	 *
+	 * The status this event carries is as of when it was sent, and webhook retries
+	 * can deliver it after a later status change, so it only creates a missing copy
+	 * and never overwrites an existing one's status; status events keep that current.
 	 *
 	 * @return void
 	 */
@@ -26,7 +30,10 @@ class Group_Members_Changed extends Subscription_Changed {
 		if ( ! $this->get_email() || ! $this->get_id() ) {
 			return;
 		}
-		$local_id = Subscriptions::persist( $this );
+		$local_id = Subscriptions::find_local_id( $this );
+		if ( ! $local_id ) {
+			$local_id = Subscriptions::persist( $this );
+		}
 		if ( $local_id ) {
 			Subscriptions::update_group_members( $local_id, $this->is_group_enabled() ? $this->get_group_members() : [] );
 		}

@@ -36,6 +36,11 @@ class Events {
 		}
 
 		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_order_changed', [ __CLASS__, 'order_changed' ] );
+		// Trashing, deleting and restoring an order don't change its status through the
+		// status hook, so the hub's copy would keep a trashed paid order granting access.
+		Data_Events::register_listener( 'woocommerce_trash_order', 'newspack_node_order_changed', [ __CLASS__, 'order_trashed' ] );
+		Data_Events::register_listener( 'woocommerce_before_delete_order', 'newspack_node_order_changed', [ __CLASS__, 'order_deleted' ] );
+		Data_Events::register_listener( 'woocommerce_untrash_order', 'newspack_node_order_changed', [ __CLASS__, 'order_untrashed' ] );
 		Data_Events::register_listener( 'woocommerce_subscription_status_changed', 'newspack_node_subscription_changed', [ __CLASS__, 'subscription_changed' ] );
 		Data_Events::register_listener( 'newspack_network_save_product', 'newspack_network_product_updated', [ __CLASS__, 'product_updated' ] );
 	}
@@ -130,6 +135,48 @@ class Events {
 	}
 
 	/**
+	 * Callback for the order trashed listener.
+	 *
+	 * @param int $order_id The Order ID.
+	 * @return array|null
+	 */
+	public static function order_trashed( $order_id ) {
+		$order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : false;
+		if ( ! $order || 'shop_order' !== $order->get_type() ) {
+			return null;
+		}
+		return self::order_changed( $order_id, '', 'trash', $order );
+	}
+
+	/**
+	 * Callback for the order deleted listener, which fires just before deletion.
+	 *
+	 * @param int       $order_id The Order ID.
+	 * @param \WC_Order $order    The Order object.
+	 * @return array|null
+	 */
+	public static function order_deleted( $order_id, $order = null ) {
+		if ( ! $order || ! is_object( $order ) || 'shop_order' !== $order->get_type() ) {
+			return null;
+		}
+		return self::order_changed( $order_id, $order->get_status(), 'trash', $order );
+	}
+
+	/**
+	 * Callback for the order restored listener.
+	 *
+	 * @param int $order_id The Order ID.
+	 * @return array|null
+	 */
+	public static function order_untrashed( $order_id ) {
+		$order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : false;
+		if ( ! $order || 'shop_order' !== $order->get_type() ) {
+			return null;
+		}
+		return self::order_changed( $order_id, 'trash', $order->get_status(), $order );
+	}
+
+	/**
 	 * An order's line items, so the hub can tell which products a reader bought.
 	 *
 	 * Items whose product no longer exists are left out: whether they were
@@ -190,18 +237,32 @@ class Events {
 		$result['next_payment_date'] = $item->get_date( 'next_payment_date' );
 		$result['last_payment_date'] = $item->get_date( 'last_order_date_created' );
 		$result['end_date'] = $item->get_date( 'end_date' );
-		$result['products'] = [];
+		$result['products'] = self::get_subscription_products( $item );
 
-		$items = $item->get_items();
-		foreach ( $items as $item ) {
+		return $result;
+	}
+
+	/**
+	 * A subscription's products, keyed by ID.
+	 *
+	 * Line items whose product was deleted are left out rather than failing the event.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @return array[] Each with id, name and slug.
+	 */
+	public static function get_subscription_products( $subscription ) {
+		$products = [];
+		foreach ( $subscription->get_items() as $item ) {
 			$product = $item->get_product();
-			$result['products'][ $product->get_id() ] = [
+			if ( ! $product ) {
+				continue;
+			}
+			$products[ $product->get_id() ] = [
 				'id'   => $product->get_id(),
 				'name' => $product->get_name(),
 				'slug' => $product->get_slug(),
 			];
 		}
-
-		return $result;
+		return $products;
 	}
 }

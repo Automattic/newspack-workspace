@@ -129,4 +129,68 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			Events::get_order_products( $order )
 		);
 	}
+	/**
+	 * A subscription's products are reported by ID, name and slug; a line item whose
+	 * product was deleted is left out instead of failing the whole event.
+	 */
+	public function test_subscription_products_skip_deleted_products() {
+		$product = new class() {
+			/**
+			 * Product ID.
+			 *
+			 * @return int
+			 */
+			public function get_id() {
+				return 7;
+			}
+
+			/**
+			 * Product name.
+			 *
+			 * @return string
+			 */
+			public function get_name() {
+				return 'Premium';
+			}
+
+			/**
+			 * Product slug.
+			 *
+			 * @return string
+			 */
+			public function get_slug() {
+				return 'premium';
+			}
+		};
+		$items   = [ $this->item( 7, 0, 'subscription' ), $this->item( 8, 0, null ) ];
+		$items[0]->product = $product;
+		$subscription      = new class( $items ) {
+			/**
+			 * Constructor.
+			 *
+			 * @param array $items Line items.
+			 */
+			public function __construct( public $items ) {}
+
+			/**
+			 * Line items.
+			 *
+			 * @return array
+			 */
+			public function get_items() {
+				return $this->items;
+			}
+		};
+
+		$this->assertSame(
+			[
+				7 => [
+					'id'   => 7,
+					'name' => 'Premium',
+					'slug' => 'premium',
+				],
+			],
+			Events::get_subscription_products( $subscription )
+		);
+	}
 }

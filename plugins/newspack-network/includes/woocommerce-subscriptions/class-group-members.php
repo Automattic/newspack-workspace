@@ -42,6 +42,12 @@ class Group_Members {
 	const HUB_MEMBER_META_KEY = 'group_member';
 
 	/**
+	 * Product meta newspack-plugin reads a group subscription's on/off setting from
+	 * when the subscription doesn't set its own.
+	 */
+	const PRODUCT_ENABLED_META_KEY = '_newspack_group_subscription_enabled';
+
+	/**
 	 * Group subscription IDs whose members changed during this request.
 	 *
 	 * @var array<int, true>
@@ -58,6 +64,12 @@ class Group_Members {
 		add_action( 'update_user_meta', [ __CLASS__, 'queue_from_meta_ids' ], 10, 3 );
 		add_action( 'updated_user_meta', [ __CLASS__, 'queue_from_meta' ], 10, 4 );
 		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'queue_from_settings' ], 10, 2 );
+		add_action( 'set_user_role', [ __CLASS__, 'queue_user_groups' ] );
+		add_action( 'add_user_role', [ __CLASS__, 'queue_user_groups' ] );
+		add_action( 'remove_user_role', [ __CLASS__, 'queue_user_groups' ] );
+		add_action( 'added_post_meta', [ __CLASS__, 'queue_from_product_meta' ], 10, 3 );
+		add_action( 'updated_post_meta', [ __CLASS__, 'queue_from_product_meta' ], 10, 3 );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'queue_from_product_meta' ], 10, 3 );
 		add_action( 'shutdown', [ __CLASS__, 'dispatch_queued' ] );
 	}
 
@@ -116,6 +128,43 @@ class Group_Members {
 	public static function queue_from_settings( $subscription, $changed_keys ) {
 		if ( in_array( 'enabled', (array) $changed_keys, true ) ) {
 			self::queue( is_object( $subscription ) ? $subscription->get_id() : $subscription );
+		}
+	}
+
+	/**
+	 * Queue the groups of a user whose role changed.
+	 *
+	 * Eligibility for a seat depends on the user's role, and the member list sent to
+	 * the hub only includes eligible members.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public static function queue_user_groups( $user_id ) {
+		foreach ( (array) get_user_meta( $user_id, self::MEMBER_META_KEY, false ) as $subscription_id ) {
+			self::queue( $subscription_id );
+		}
+	}
+
+	/**
+	 * Queue every group with members when a product's group setting changes.
+	 *
+	 * Subscriptions without their own setting inherit the product's, so turning groups
+	 * off on a product ends every such group's seats. Finding which subscriptions
+	 * inherit it would mean loading each one; groups with members are few, so they
+	 * are all reported and each report reads its own current setting.
+	 *
+	 * @param int|int[] $meta_ids  Meta ID(s).
+	 * @param int       $object_id Post ID.
+	 * @param string    $meta_key  Meta key.
+	 */
+	public static function queue_from_product_meta( $meta_ids, $object_id, $meta_key ) {
+		if ( self::PRODUCT_ENABLED_META_KEY !== $meta_key || 'product' !== get_post_type( $object_id ) ) {
+			return;
+		}
+		global $wpdb;
+		$subscription_ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT meta_value FROM $wpdb->usermeta WHERE meta_key = %s", self::MEMBER_META_KEY ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		foreach ( $subscription_ids as $subscription_id ) {
+			self::queue( $subscription_id );
 		}
 	}
 
