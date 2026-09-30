@@ -119,7 +119,7 @@ class Tag_Labels {
 		$labels_html  = '';
 		$labels_html .= '<' . $outer_element . ' class="' . join( ' ', array_map( 'esc_attr', $outer_classes ) ) . '">';
 		foreach ( $labels as $label ) {
-			if ( $links && isset( $label['flag'] ) && $label['link'] ) {
+			if ( $links && isset( $label['flag'] ) && ! empty( $label['link'] ) ) {
 				$labels_html .= '<a class="' . join( ' ', array_map( 'esc_attr', $inner_classes ) ) . '" href="' . esc_url( $label['link'] ) . '" rel="tag">' . esc_html( $label['flag'] ) . '</a>';
 			} elseif ( isset( $label['flag'] ) ) {
 				$labels_html .= '<span class="' . join( ' ', array_map( 'esc_attr', $inner_classes ) ) . '">' . esc_html( $label['flag'] ) . '</span>';
