@@ -82,7 +82,7 @@ describe( 'gate summary, institutions on Registered access', () => {
 			'registration_institutions'
 		);
 		expect( registrationWith( { active: true, access_rules: [] } ).map( s => s.key ) ).not.toContain( 'registration_institutions' );
-		// A gate saved before the setting existed carries no rules at all.
+		// A registration object built without the key.
 		expect( registrationWith( { active: true } ).map( s => s.key ) ).not.toContain( 'registration_institutions' );
 	} );
 } );

@@ -682,8 +682,8 @@ class Block_Visibility {
 		if ( ! empty( $registration['active'] ) ) {
 			if ( ! $user_id ) {
 				// A gate's registered access can count a signed-out visitor as registered,
-				// as it does on the gate's own page (NPPD-2310). Block attributes never
-				// carry these rules.
+				// as it does on the gate's own page (NPPD-2310). The block editor never
+				// writes these rules into block attributes.
 				$registration_passes = Access_Rules::evaluate_anonymous_rules( $registration['access_rules'] ?? [] );
 			} elseif ( ! empty( $registration['require_verification'] ) ) {
 				$registration_passes = (bool) get_user_meta( $user_id, Reader_Activation::EMAIL_VERIFIED, true );

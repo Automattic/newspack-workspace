@@ -137,8 +137,9 @@ type Registration = {
 	// Optional: the edit UI rebuilds this object without `gate_layout_id`
 	// (see edit/registration.tsx), and the server falls back to the gate ID.
 	gate_layout_id?: number;
-	// Conditions that count a signed-out visitor as registered. Optional: gates
-	// saved before the setting existed, and block attributes, don't carry it.
+	// Conditions that count a signed-out visitor as registered. The server always
+	// sends it; optional so registration objects built in the editor without it
+	// still type-check.
 	access_rules?: GateAccessRuleGroup[];
 };
 
