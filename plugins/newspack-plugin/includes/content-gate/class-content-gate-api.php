@@ -158,7 +158,7 @@ class Content_Gate_API {
 	 * Sanitize the gate.
 	 *
 	 * TODO: Handle errors from the remaining sanitization methods (content rules,
-	 * registration, metering) the way custom access errors already propagate.
+	 * metering) the way custom access errors already propagate.
 	 *
 	 * @param array            $gate    The gate.
 	 * @param \WP_REST_Request $request Optional. The request being sanitized, as WP passes it
@@ -190,7 +190,7 @@ class Content_Gate_API {
 			$sanitized['content_rules'] = self::sanitize_rules( $gate['content_rules'], 'content' );
 		}
 		if ( isset( $gate['registration'] ) ) {
-			$sanitized_registration = self::sanitize_registration( $gate['registration'], ! self::save_leaves_gate_unpublished( $sanitized, $gate_id ) );
+			$sanitized_registration = self::sanitize_registration( $gate['registration'], self::registration_wall_is_live( $gate['registration'], $sanitized, $gate_id ) );
 			if ( is_wp_error( $sanitized_registration ) ) {
 				// Told only to a caller who could act on it, as with custom access below.
 				if ( self::caller_can_manage_gates() ) {
@@ -500,6 +500,28 @@ class Content_Gate_API {
 	}
 
 	/**
+	 * Whether the gate's registration wall is live once the save lands.
+	 *
+	 * A save that omits `active` keeps the stored value, which is read under the
+	 * same guard as the stored status above.
+	 *
+	 * @param array $registration   The registration settings the save carries.
+	 * @param array $sanitized_gate The gate sanitized so far, `status` included.
+	 * @param int   $gate_id        The gate's ID, or 0 when it is being created.
+	 *
+	 * @return bool
+	 */
+	private static function registration_wall_is_live( $registration, $sanitized_gate, $gate_id ) {
+		if ( self::save_leaves_gate_unpublished( $sanitized_gate, $gate_id ) ) {
+			return false;
+		}
+		if ( isset( $registration['active'] ) ) {
+			return (bool) $registration['active'];
+		}
+		return self::caller_can_save_gate( $gate_id ) && ! empty( Content_Gate::get_registration_settings( $gate_id )['active'] );
+	}
+
+	/**
 	 * Whether a request's access rules are the ones the gate already stores.
 	 *
 	 * Both sides are cast through the same conversions the sanitizer applies to a
@@ -552,15 +574,15 @@ class Content_Gate_API {
 	 * Sanitize registration settings.
 	 *
 	 * @param array $registration The registration settings.
-	 * @param bool  $is_live      Whether the gate is published once the save lands.
+	 * @param bool  $is_enforced  Whether the registration wall is live once the save lands.
 	 *
 	 * @return array|\WP_Error The sanitized registration, or an error when its
 	 *                         access rules can't do what the setting promises.
 	 */
-	public static function sanitize_registration( $registration, $is_live = false ) {
+	public static function sanitize_registration( $registration, $is_enforced = false ) {
 		$sanitized = [];
 		if ( isset( $registration['access_rules'] ) ) {
-			$access_rules = self::sanitize_registration_access_rules( $registration['access_rules'], $is_live && ! empty( $registration['active'] ) );
+			$access_rules = self::sanitize_registration_access_rules( $registration['access_rules'], $is_enforced );
 			if ( is_wp_error( $access_rules ) ) {
 				return $access_rules;
 			}
@@ -597,6 +619,12 @@ class Content_Gate_API {
 	 */
 	private static function sanitize_registration_access_rules( $access_rules, $is_enforced ) {
 		$access_rules = self::sanitize_rules( $access_rules, 'access' );
+		// Paid access refuses a set emptied by dropping unregistered rules, because an
+		// empty set there admits everyone. Here it admits nobody past the wall, so the
+		// emptied set is saved instead.
+		if ( is_wp_error( $access_rules ) && 'invalid_access_rules' === $access_rules->get_error_code() ) {
+			return [];
+		}
 		if ( is_wp_error( $access_rules ) ) {
 			return $access_rules;
 		}
@@ -615,7 +643,20 @@ class Content_Gate_API {
 					);
 				}
 				if ( $is_enforced && ! empty( $registered['requires_value'] ) && self::rule_value_is_empty( $rule['value'] ?? null ) ) {
-					return self::empty_access_rule_value_error( $registered );
+					// The same rule can sit under Paid access too, so the refusal names the card.
+					return new \WP_Error(
+						'empty_access_rule_value',
+						sprintf(
+							/* translators: %s: the access rule's name, e.g. "Institutional access". */
+							__( 'Registered access has “%s” turned on with nothing selected, so no visitor can use it to skip registration. Select at least one option, or turn it off.', 'newspack-plugin' ),
+							$registered['name']
+						),
+						[
+							'status'              => 400,
+							'rule_name'           => $registered['name'],
+							'empty_grants_access' => false,
+						]
+					);
 				}
 			}
 		}
