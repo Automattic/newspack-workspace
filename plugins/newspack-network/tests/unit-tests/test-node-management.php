@@ -218,15 +218,18 @@ class TestNodeManagement extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Once the node has paired, the details show when instead of the key.
+	 * Once the node has paired, the details show when instead of the key, and
+	 * keep the link button so the node can be linked again.
 	 */
 	public function test_details_hide_key_after_pairing() {
 		update_post_meta( $this->node_id, 'paired-at', strtotime( '2026-01-15 12:00:00 UTC' ) );
 
 		$output = $this->render_details();
 		$this->assertStringNotContainsString( $this->secret_key, $output );
-		$this->assertStringNotContainsString( 'Link the site', $output );
 		$this->assertStringContainsString( 'Linked on', $output );
 		$this->assertStringContainsString( '2026', $output );
+		$this->assertStringContainsString( 'Link the site', $output );
+		$this->assertStringContainsString( 'connect_nonce=', $output );
+		$this->assertStringContainsString( esc_url( self::NODE_URL . '/wp-admin/admin.php' ), $output );
 	}
 }

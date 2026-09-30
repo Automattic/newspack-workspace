@@ -88,6 +88,12 @@ class Webhook {
 			return new WP_REST_Response( array( 'error' => 'INVALID_SIGNATURE' ), 403 );
 		}
 
+		// A delivery the Node could sign shows it holds its key, which also covers
+		// Nodes linked before pairing was recorded or by pasting the key.
+		if ( ! $node->is_paired() ) {
+			$node->mark_paired();
+		}
+
 		$verified_data = json_decode( $verified_data, true );
 
 		if ( empty( $verified_data ) ) {

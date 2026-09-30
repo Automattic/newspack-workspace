@@ -232,22 +232,25 @@ class Nodes {
 			Node URL: <input type="text" name="newspack-node-url" value="<?php echo esc_attr( $node->get_url() ); ?>" />
 		</div>
 
-		<?php if ( $node->is_paired() ) : ?>
-			<div class="misc-pub-section">
-				<?php
-				echo esc_html(
-					sprintf(
-						/* translators: %s: the date the node was linked to the Hub */
-						__( 'Linked on %s.', 'newspack-network' ),
-						wp_date( get_option( 'date_format' ), $node->get_paired_at() )
-					)
-				);
-				?>
-			</div>
-		<?php elseif ( $secret_key ) : ?>
-			<div class="misc-pub-section">
-				Secret Key: <code><?php echo esc_html( $secret_key ); ?></code>
-			</div>
+		<?php if ( $secret_key ) : ?>
+			<?php if ( $node->is_paired() ) : ?>
+				<div class="misc-pub-section">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: the date the node was linked to the Hub */
+							__( 'Linked on %s.', 'newspack-network' ),
+							wp_date( get_option( 'date_format' ), $node->get_paired_at() )
+						)
+					);
+					?>
+				</div>
+			<?php else : ?>
+				<div class="misc-pub-section">
+					Secret Key: <code><?php echo esc_html( $secret_key ); ?></code>
+				</div>
+			<?php endif; ?>
+			<?php // Kept once linked: a node that never received its key, or lost it, is linked again from here. ?>
 			<div class="misc-pub-section">
 				<a
 					target="_blank"
