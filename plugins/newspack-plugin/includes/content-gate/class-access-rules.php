@@ -830,7 +830,7 @@ class Access_Rules {
 					'menu_order' => 'ASC',
 					'ID'         => 'ASC',
 				],
-				// Only the title, excerpt, ID and parent are read.
+				// Only the title, excerpt, ID, parent and status are read.
 				'update_post_meta_cache' => false,
 				'update_post_term_cache' => false,
 			]
