@@ -1,6 +1,6 @@
 <?php
 /**
- * Resets request-scoped memos between tests.
+ * Resets request-scoped memos and WooCommerce mock stores between tests.
  *
  * @package Newspack\Tests
  */
@@ -19,9 +19,10 @@ use PHPUnit\Runner\BeforeTestHook;
  * new test class inherits the guarantee instead of each one having to remember it.
  *
  * The WooCommerce mocks' stores stand in for database tables, which WordPress rolls
- * back after each test; clearing them here gives the stores the same boundary.
- * Without it, a class's last test leaves its orders and subscriptions to later
- * classes, where they attach to any user created with a reused ID.
+ * back after each test. Clearing them here is stricter than that rollback: records
+ * created in set_up_before_class() are gone before the first test, so seed them in
+ * set_up(). Without the reset, a class's last test leaves its orders and
+ * subscriptions to later classes, where they attach to a later user with the same ID.
  */
 class Newspack_Request_Memo_Reset implements BeforeTestHook {
 	/**
@@ -52,8 +53,9 @@ class Newspack_Request_Memo_Reset implements BeforeTestHook {
 		Access_Rules::flush_one_time_purchase_memo();
 		User_Gate_Access::reset_memo();
 
-		// The mocks load only where a test class requires them, so a store that was
-		// never created stays absent rather than appearing in every other test.
+		// Every full or filtered run has these stores. A run scoped to files that don't
+		// create them at file scope may lack them; leave them absent there rather than
+		// adding mock globals to a run that isn't using the mocks.
 		foreach ( self::WC_MOCK_STORES as $store ) {
 			if ( array_key_exists( $store, $GLOBALS ) ) {
 				$GLOBALS[ $store ] = [];
