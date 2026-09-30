@@ -22,17 +22,21 @@ class WooCommerce_Products {
 	 * Product statuses that access rules and segment pickers treat as current. Private
 	 * counts: sites moving from Woo Memberships keep readers on legacy products they have
 	 * hidden from the storefront, and those products still have to be selectable by name.
-	 * Any other status is flagged in picker labels by `get_product_label_with_status()`.
+	 * `get_product_label_with_status()` marks every status but published in picker labels,
+	 * and marks the statuses outside this list as invalid.
 	 */
 	const ELIGIBLE_PRODUCT_STATUSES = [ 'publish', 'private' ];
 
 	/**
-	 * Label a product for a picker, marking a status outside `ELIGIBLE_PRODUCT_STATUSES`,
-	 * e.g. "All Access [invalid status: Draft]". The status reads as WordPress admin names
-	 * it ("Scheduled" rather than `future`), in the viewer's admin language.
+	 * Label a product for a picker, marking any status other than published. An eligible
+	 * status reads "All Access [status: Private]"; any other reads "All Access [invalid
+	 * status: Draft]". The status reads as WordPress admin names it ("Scheduled" rather than
+	 * `future`), in the viewer's admin language.
 	 *
-	 * The marker keeps a saved product's name visible after it is drafted, scheduled or
-	 * trashed, rather than falling back to a generic "deleted" or "not listed" stand-in.
+	 * The private marker tells a hidden legacy tier apart from a current product of the same
+	 * name. The invalid marker keeps a saved product's name visible after it is drafted,
+	 * scheduled or trashed, rather than falling back to a generic "deleted" or "not listed"
+	 * stand-in.
 	 *
 	 * @param string $name   The product name.
 	 * @param string $status The product's post status.
@@ -40,15 +44,24 @@ class WooCommerce_Products {
 	 * @return string The label.
 	 */
 	public static function get_product_label_with_status( $name, $status ) {
-		if ( in_array( $status, self::ELIGIBLE_PRODUCT_STATUSES, true ) ) {
+		if ( 'publish' === $status ) {
 			return $name;
 		}
 		$status_object = \get_post_status_object( $status );
+		$status_label  = $status_object ? $status_object->label : $status;
+		if ( in_array( $status, self::ELIGIBLE_PRODUCT_STATUSES, true ) ) {
+			return sprintf(
+				/* translators: 1: product name, 2: post status label, e.g. "Private". */
+				__( '%1$s [status: %2$s]', 'newspack-plugin' ),
+				$name,
+				$status_label
+			);
+		}
 		return sprintf(
 			/* translators: 1: product name, 2: post status label, e.g. "Draft" or "Trash". Keep "invalid status" in step with the Access Control picker notice that quotes it. */
 			__( '%1$s [invalid status: %2$s]', 'newspack-plugin' ),
 			$name,
-			$status_object ? $status_object->label : $status
+			$status_label
 		);
 	}
 

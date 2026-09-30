@@ -1019,8 +1019,9 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	/**
 	 * A draft or pending product stays selectable but is labeled with its status, so a
 	 * publisher can tell it from the products they sell. Its variations carry the parent's
-	 * marker, since they can't be bought while the parent is unavailable. Private products
-	 * are a normal state for legacy tiers and stay unmarked.
+	 * marker, since they can't be bought while the parent is unavailable. A private product
+	 * or variation is marked as private but not flagged ineligible, so a hidden legacy tier
+	 * reads apart from a current one without the "still grants access" warning.
 	 *
 	 * @group Access_Rules
 	 */
@@ -1050,17 +1051,27 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 			]
 		);
 		$variation_id = $this->create_variation_post( 964, 'Draft membership - Annual' );
+		wc_create_mock_product(
+			[
+				'id'   => 965,
+				'type' => 'variable-subscription',
+				'name' => 'Membership',
+			]
+		);
+		$private_variation_id = $this->create_variation_post( 965, 'Membership - Legacy', '', 'private' );
 
 		$options = array_column( Access_Rules::get_subscription_products_options(), null, 'value' );
 
 		$this->assertSame(
 			[
-				960           => 'Publish tier',
-				961           => 'Private tier',
-				962           => 'Draft tier [invalid status: Draft]',
-				963           => 'Pending tier [invalid status: Pending]',
-				964           => 'Draft membership [invalid status: Draft]',
-				$variation_id => 'Draft membership - Annual [invalid status: Draft]',
+				960                   => 'Publish tier',
+				961                   => 'Private tier [status: Private]',
+				962                   => 'Draft tier [invalid status: Draft]',
+				963                   => 'Pending tier [invalid status: Pending]',
+				964                   => 'Draft membership [invalid status: Draft]',
+				$variation_id         => 'Draft membership - Annual [invalid status: Draft]',
+				965                   => 'Membership',
+				$private_variation_id => 'Membership - Legacy [status: Private]',
 			],
 			array_column( $options, 'label', 'value' )
 		);

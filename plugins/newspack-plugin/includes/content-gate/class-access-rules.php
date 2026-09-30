@@ -648,7 +648,8 @@ class Access_Rules {
 	 *
 	 * Draft and pending products keep granting access, but their labels carry a status
 	 * marker ("[invalid status: Draft]") so a publisher can tell them from the products
-	 * they currently sell. Private products don't: they're a normal state for legacy tiers.
+	 * they currently sell. Private products and variations are marked too ("[status:
+	 * Private]"), so a hidden legacy tier reads apart from a current one of the same name.
 	 *
 	 * The result is memoized per request. The list itself is still unbounded and is
 	 * serialized into every editor payload; NPPD-2132 replaces it with a searchable
@@ -729,7 +730,9 @@ class Access_Rules {
 	 * A product whose status is outside `WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES`
 	 * gets a status marker in its label and an `ineligible` flag, and so do its variations,
 	 * since a variation can't be bought while its parent is unavailable. The flag is what
-	 * the picker reads to warn that the entry still grants access.
+	 * the picker reads to warn that the entry still grants access. Otherwise each entry is
+	 * labeled by its own status, so a private product or variation carries the private
+	 * marker.
 	 *
 	 * @param \WC_Product[] $products           The subscription products.
 	 * @param string[]      $variation_statuses Variation statuses to read. See `get_subscription_variation_posts()`.
@@ -744,19 +747,22 @@ class Access_Rules {
 			$ineligible = ! in_array( $status, WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES, true );
 			$entries    = [
 				[
-					'label' => $product->get_name(),
-					'value' => $product->get_id(),
+					'label'  => $product->get_name(),
+					'value'  => $product->get_id(),
+					'status' => $status,
 				],
 			];
 			foreach ( $variations_by_parent[ $product->get_id() ] ?? [] as $variation ) {
 				$entries[] = [
-					'label' => self::get_variation_option_label( $product->get_name(), $variation ),
-					'value' => $variation->ID,
+					'label'  => self::get_variation_option_label( $product->get_name(), $variation ),
+					'value'  => $variation->ID,
+					'status' => $ineligible ? $status : $variation->post_status,
 				];
 			}
 			foreach ( $entries as $entry ) {
+				$entry['label'] = WooCommerce_Products::get_product_label_with_status( $entry['label'], $entry['status'] );
+				unset( $entry['status'] );
 				if ( $ineligible ) {
-					$entry['label']      = WooCommerce_Products::get_product_label_with_status( $entry['label'], $status );
 					$entry['ineligible'] = true;
 				}
 				$options[] = $entry;

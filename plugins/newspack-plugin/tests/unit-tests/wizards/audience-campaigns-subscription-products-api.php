@@ -97,7 +97,7 @@ class Test_Audience_Campaigns_Subscription_Products_API extends \WP_UnitTestCase
 		$products = $this->get_products();
 
 		$this->assertSame( 'Current Plan', $products[ $published_id ]['title'] ?? null );
-		$this->assertSame( 'Legacy Plan', $products[ $private_id ]['title'] ?? null, 'A private product is listed under its plain name.' );
+		$this->assertSame( 'Legacy Plan [status: Private]', $products[ $private_id ]['title'] ?? null, 'A private product is listed, marked as private.' );
 		$this->assertArrayNotHasKey( $draft_id, $products, 'A draft product is not offered.' );
 		$this->assertArrayNotHasKey( $trashed_id, $products, 'A trashed product is not offered.' );
 	}
@@ -115,7 +115,7 @@ class Test_Audience_Campaigns_Subscription_Products_API extends \WP_UnitTestCase
 
 		$products = $this->get_products( [ 'include' => [ $private_id, $draft_id, $future_id, $trashed_id ] ] );
 
-		$this->assertSame( 'Legacy Plan', $products[ $private_id ]['title'] ?? null );
+		$this->assertSame( 'Legacy Plan [status: Private]', $products[ $private_id ]['title'] ?? null );
 		$this->assertSame( 'Draft Plan [invalid status: Draft]', $products[ $draft_id ]['title'] ?? null );
 		$this->assertSame( 'Scheduled Plan [invalid status: Scheduled]', $products[ $future_id ]['title'] ?? null );
 		$this->assertSame( 'Trashed Plan [invalid status: Trash]', $products[ $trashed_id ]['title'] ?? null );
