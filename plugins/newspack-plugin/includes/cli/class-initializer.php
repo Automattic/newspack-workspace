@@ -43,6 +43,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-convert-subscription-variation.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-autosaves.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-revisions.php';
 	}
 
 	/**
@@ -170,6 +171,11 @@ class Initializer {
 		WP_CLI::add_command(
 			'newspack autosaves prune',
 			[ 'Newspack\CLI\Autosaves', 'cmd_prune' ]
+		);
+
+		WP_CLI::add_command(
+			'newspack revisions prune',
+			[ 'Newspack\CLI\Revisions', 'cmd_prune' ]
 		);
 
 		Optional_Modules::register_commands();
