@@ -1196,9 +1196,8 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	 * whom registered access counts as registered sees it without an account.
 	 */
 	public function test_gate_mode_registration_institutions_show_the_block_to_a_matching_visitor() {
-		$institution_id = \Newspack\Institution::create( 'Example University', '', [ 'ip_range' => '10.0.0.0/8' ] );
-		\Newspack\Institution::invalidate_cache();
-		$gate_id = $this->make_gate( false );
+		$institution_id = $this->make_campus_institution();
+		$gate_id        = $this->make_gate( false );
 		update_post_meta(
 			$gate_id,
 			'registration',
@@ -1214,30 +1213,131 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 				],
 			]
 		);
-		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
-		// Later suites read the visitor's address, so it is put back as found.
-		$original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
-		$_SERVER['REMOTE_ADDR'] = '10.1.2.3';
-		$_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] = '1';
-
-		wp_set_current_user( 0 );
-		Block_Visibility::reset_cache_for_tests();
-		$block  = $this->make_block(
+		$block = $this->make_block(
 			'core/group',
 			[
 				'newspackAccessControlMode'    => 'gate',
 				'newspackAccessControlGateIds' => [ $gate_id ],
 			]
 		);
-		$result = Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		$this->assertSame( '<div>members</div>', $this->render_for_signed_out_visitor_at( $block, '10.1.2.3' ) );
+	}
 
-		unset( $_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] );
-		if ( null === $original_remote_addr ) {
-			unset( $_SERVER['REMOTE_ADDR'] );
-		} else {
-			$_SERVER['REMOTE_ADDR'] = $original_remote_addr;
+	/**
+	 * Create an institution whose IP range is 10.0.0.0/8.
+	 *
+	 * @return int Institution ID.
+	 */
+	private function make_campus_institution() {
+		$institution_id = \Newspack\Institution::create( 'Example University', '', [ 'ip_range' => '10.0.0.0/8' ] );
+		\Newspack\Institution::invalidate_cache();
+		return $institution_id;
+	}
+
+	/**
+	 * Render a block for a signed-out visitor at an address, carrying the
+	 * institutional-access cookie that lets their IP be checked.
+	 *
+	 * Later suites read the visitor's address, so it is put back as found even
+	 * when the render throws.
+	 *
+	 * @param array  $block Parsed block.
+	 * @param string $ip    The visitor's IP address.
+	 * @return string Rendered block content.
+	 */
+	private function render_for_signed_out_visitor_at( $block, $ip ) {
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
+		$_SERVER['REMOTE_ADDR'] = $ip;
+		$_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] = '1';
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		try {
+			return Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		} finally {
+			unset( $_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] );
+			if ( null === $original_remote_addr ) {
+				unset( $_SERVER['REMOTE_ADDR'] );
+			} else {
+				$_SERVER['REMOTE_ADDR'] = $original_remote_addr;
+			}
 		}
 		// phpcs:enable
-		$this->assertSame( '<div>members</div>', $result );
+	}
+
+	/**
+	 * Registered access on, paid access granted to one institution.
+	 *
+	 * @param int $institution_id Institution ID.
+	 * @return array Rules in the shape a gate stores them.
+	 */
+	private function registration_and_institution_rules( $institution_id ) {
+		return [
+			'registration'  => [ 'active' => true ],
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [ $institution_id ],
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * A block following a gate agrees with the gate's page: an on-campus visitor
+	 * whom paid access counts as paying reads the post without registering, so
+	 * they see the block too.
+	 */
+	public function test_gate_mode_paid_institutions_show_the_block_to_a_matching_visitor() {
+		$rules   = $this->registration_and_institution_rules( $this->make_campus_institution() );
+		$gate_id = $this->make_gate( false );
+		update_post_meta( $gate_id, 'registration', $rules['registration'] );
+		update_post_meta( $gate_id, 'custom_access', $rules['custom_access'] );
+
+		$block = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_id ],
+			]
+		);
+		$this->assertSame( '<div>members</div>', $this->render_for_signed_out_visitor_at( $block, '10.1.2.3' ) );
+	}
+
+	/**
+	 * The same gate still walls a signed-out visitor outside the institution.
+	 */
+	public function test_gate_mode_paid_institutions_hide_the_block_from_a_visitor_off_campus() {
+		$rules   = $this->registration_and_institution_rules( $this->make_campus_institution() );
+		$gate_id = $this->make_gate( false );
+		update_post_meta( $gate_id, 'registration', $rules['registration'] );
+		update_post_meta( $gate_id, 'custom_access', $rules['custom_access'] );
+
+		$block = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_id ],
+			]
+		);
+		$this->assertSame( '', $this->render_for_signed_out_visitor_at( $block, '192.168.1.1' ) );
+	}
+
+	/**
+	 * A block's own rules answer the way a gate holding the same rules does.
+	 */
+	public function test_custom_mode_paid_institutions_show_the_block_to_a_matching_visitor() {
+		$block = $this->make_block_with_rules(
+			'core/group',
+			$this->registration_and_institution_rules( $this->make_campus_institution() )
+		);
+		$this->assertSame( '<div>members</div>', $this->render_for_signed_out_visitor_at( $block, '10.1.2.3' ) );
+		$this->assertSame( '', $this->render_for_signed_out_visitor_at( $block, '192.168.1.1' ) );
 	}
 }
