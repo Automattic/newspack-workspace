@@ -1,3 +1,10 @@
+## newspack [6.53.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.4...newspack@6.53.5) (2026-09-30)
+
+
+### Bug Fixes
+
+* **reader-activation:** stop Perfmatters from delaying form capture ([#1203](https://github.com/Automattic/newspack-workspace/issues/1203)) ([4ad3262](https://github.com/Automattic/newspack-workspace/commit/4ad3262d1606a9f15deb456ecddeb97637a61d38))
+
 ## newspack [6.53.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.3...newspack@6.53.4) (2026-09-30)
 
 
