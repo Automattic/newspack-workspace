@@ -177,6 +177,44 @@ class TestGroupMembers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A copy written before copies were kept per site may hold another site's
+	 * subscription, so a members event rewrites it from its own data before its
+	 * members can be answered.
+	 */
+	public function test_members_event_rewrites_a_legacy_copy() {
+		$legacy_copy = self::factory()->post->create(
+			[
+				'post_type'   => Subscriptions_DB::POST_TYPE_SLUG,
+				'post_status' => Subscriptions_DB::POST_STATUS_PREFIX . 'cancelled',
+			]
+		);
+		update_post_meta( $legacy_copy, 'remote_id', 900 );
+		update_post_meta( $legacy_copy, 'node_id', 0 );
+		update_post_meta( $legacy_copy, 'user_email', 'owner@example.test' );
+		add_post_meta( $legacy_copy, 'products', [ 'id' => 7 ] );
+
+		$this->event( [ 'a@example.test' ] )->always_process_in_hub();
+
+		$this->assertSame( Subscriptions_DB::POST_STATUS_PREFIX . 'active', get_post_status( $legacy_copy ) );
+		$this->assertSame( [], get_post_meta( $legacy_copy, 'products', false ) );
+	}
+
+	/**
+	 * Group settings can be set on a variation as well as on its product.
+	 */
+	public function test_variation_group_setting_reports_groups_with_members() {
+		$member = self::factory()->user->create();
+		add_user_meta( $member, Group_Members::MEMBER_META_KEY, 123 );
+		Group_Members::dispatch_queued();
+		$this->reported = [];
+
+		update_post_meta( self::factory()->post->create( [ 'post_type' => 'product_variation' ] ), Group_Members::PRODUCT_ENABLED_META_KEY, 'no' );
+		Group_Members::dispatch_queued();
+
+		$this->assertSame( [ 123 ], $this->reported );
+	}
+
+	/**
 	 * Members who stay in the group keep their rows; only joins and departures are written.
 	 */
 	public function test_unchanged_members_are_not_rewritten() {

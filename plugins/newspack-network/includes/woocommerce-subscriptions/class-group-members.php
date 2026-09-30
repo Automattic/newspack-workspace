@@ -146,7 +146,7 @@ class Group_Members {
 	}
 
 	/**
-	 * Queue every group with members when a product's group setting changes.
+	 * Queue every group with members when a product's or variation's group setting changes.
 	 *
 	 * Subscriptions without their own setting inherit the product's, so turning groups
 	 * off on a product ends every such group's seats. Finding which subscriptions
@@ -158,7 +158,7 @@ class Group_Members {
 	 * @param string    $meta_key  Meta key.
 	 */
 	public static function queue_from_product_meta( $meta_ids, $object_id, $meta_key ) {
-		if ( self::PRODUCT_ENABLED_META_KEY !== $meta_key || 'product' !== get_post_type( $object_id ) ) {
+		if ( self::PRODUCT_ENABLED_META_KEY !== $meta_key || ! in_array( get_post_type( $object_id ), [ 'product', 'product_variation' ], true ) ) {
 			return;
 		}
 		global $wpdb;

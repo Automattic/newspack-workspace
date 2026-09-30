@@ -121,6 +121,73 @@ class TestRebuildHubCopies extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Events from a site that has since been removed from the network are skipped:
+	 * they must not be replayed as the hub's own, over the hub's copy with the same ID.
+	 */
+	public function test_rebuild_skips_events_from_removed_sites() {
+		foreach ( [ 'wp_delete_post', 'wp_trash_post' ] as $remove ) {
+			$removed_node = self::factory()->post->create(
+				[
+					'post_type'   => Nodes::POST_TYPE_SLUG,
+					'post_status' => 'publish',
+				]
+			);
+			update_post_meta( $removed_node, 'node-url', 'https://removed-' . $remove . '.example.test' );
+			$this->log( 'https://removed-' . $remove . '.example.test', 'carol@example.test', 'cancelled', 9, 400 );
+			$remove( $removed_node );
+		}
+		// The hub's own event is the newest, so a removed site's event replayed as the
+		// hub's would be the last write to the hub's copy.
+		$this->log( get_bloginfo( 'url' ), 'alice@example.test', 'active', 8, 500 );
+
+		Rebuild_Hub_Copies::rebuild( [], [ 'apply' => true ] );
+
+		$alice = Hub_Endpoint::collect( 'alice@example.test', $this->node_id )[ get_bloginfo( 'url' ) ]['subscriptions'][500];
+		$this->assertSame( 'active', $alice['status'] );
+		$this->assertSame( [], Hub_Endpoint::collect( 'carol@example.test', $this->node_id ) );
+	}
+
+	/**
+	 * An event logged while the rebuild runs is newer than anything the rebuild
+	 * replays, so it decides the copy even if the rebuild reaches an older event for
+	 * the same item afterwards.
+	 */
+	public function test_event_logged_during_the_rebuild_wins() {
+		$injected = false;
+		add_action(
+			'added_post_meta',
+			function ( $meta_id, $post_id, $meta_key ) use ( &$injected ) {
+				if ( $injected || 'remote_id' !== $meta_key ) {
+					return;
+				}
+				$injected = true;
+				$live     = new Subscription_Changed(
+					get_bloginfo( 'url' ),
+					[
+						'id'           => 500,
+						'email'        => 'alice@example.test',
+						'status_after' => 'on-hold',
+						'products'     => [
+							8 => [ 'id' => 8 ],
+						],
+					],
+					500
+				);
+				Event_Log::persist( $live );
+				$live->always_process_in_hub();
+			},
+			10,
+			3
+		);
+
+		Rebuild_Hub_Copies::rebuild( [], [ 'apply' => true ] );
+
+		$this->assertTrue( $injected );
+		$alice = Hub_Endpoint::collect( 'alice@example.test', $this->node_id )[ get_bloginfo( 'url' ) ]['subscriptions'][500];
+		$this->assertSame( 'on-hold', $alice['status'] );
+	}
+
+	/**
 	 * Without --apply, the command only reports.
 	 */
 	public function test_dry_run_changes_nothing() {
