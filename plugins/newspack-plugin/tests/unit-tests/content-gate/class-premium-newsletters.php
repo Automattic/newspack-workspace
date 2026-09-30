@@ -1139,9 +1139,29 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * When a group subscription lapses, its members lose the premium lists it paid for.
+	 * Ways a group subscription lapses. On hold still grants access while a payment
+	 * retry is pending, so leaving On hold ends access too; that's how a group
+	 * lapses after its payment retries run out.
+	 *
+	 * @return array[]
 	 */
-	public function test_lapsed_group_subscription_removes_member_lists() {
+	public function data_group_lapse_transitions() {
+		return [
+			'active to expired'    => [ 'active', 'expired' ],
+			'on-hold to expired'   => [ 'on-hold', 'expired' ],
+			'on-hold to cancelled' => [ 'on-hold', 'cancelled' ],
+		];
+	}
+
+	/**
+	 * When a group subscription lapses, its members lose the premium lists it paid for.
+	 *
+	 * @dataProvider data_group_lapse_transitions
+	 *
+	 * @param string $status_before Status before the lapse.
+	 * @param string $status_after  Status after the lapse.
+	 */
+	public function test_lapsed_group_subscription_removes_member_lists( $status_before, $status_after ) {
 		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
 
 		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
@@ -1157,15 +1177,15 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		delete_option( Premium_Newsletters::QUEUE_OPTION );
 
 		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [ 'newspack-' . $list_post_id ];
-		$subscription->set_status( 'expired' );
+		$subscription->set_status( $status_after );
 
 		Premium_Newsletters::handle_product_subscription_changed(
 			time(),
 			[
 				'user_id'         => $owner_id,
 				'subscription_id' => $subscription->get_id(),
-				'status_before'   => 'active',
-				'status_after'    => 'expired',
+				'status_before'   => $status_before,
+				'status_after'    => $status_after,
 			],
 			null
 		);

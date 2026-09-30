@@ -705,12 +705,16 @@ class Premium_Newsletters {
 	/**
 	 * Whether a subscription event can change what a group's members are entitled to.
 	 *
-	 * Members are checked only when the status moves between granting access and
-	 * not, such as Active to Cancelled or On hold to Active. A change that leaves
-	 * access as it was, such as Active to Pending cancel, would otherwise re-add
-	 * every premium list a member had left whenever auto-signup is on. A plan switch
-	 * reports the same status on both sides, but it changes the products, so it
-	 * counts as a change.
+	 * Members are skipped only when the status moves between two statuses that both
+	 * grant access, such as Active to Pending cancel. Checking them then would
+	 * re-add every premium list a member had left whenever auto-signup is on. Any
+	 * other move may change access: On hold still grants it while a payment retry is
+	 * pending, so On hold to Expired, the last step of a lapse after failed
+	 * payments, ends it. A plan switch reports the same status on both sides, but it
+	 * changes the products, so it counts as a change too.
+	 *
+	 * The status pair can't show payment recovery, so On hold to Active after a
+	 * successful retry still checks members, as it does the owner.
 	 *
 	 * @param array $data Data associated with the event.
 	 *
@@ -719,11 +723,10 @@ class Premium_Newsletters {
 	private static function event_changes_group_access( $data ) {
 		$status_before = $data['status_before'] ?? '';
 		$status_after  = $data['status_after'] ?? '';
-		if ( '' === $status_before || '' === $status_after || $status_before === $status_after ) {
+		if ( $status_before === $status_after ) {
 			return true;
 		}
-		$access_statuses = WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES;
-		return in_array( $status_before, $access_statuses, true ) !== in_array( $status_after, $access_statuses, true );
+		return ! ( WooCommerce_Connection::is_subscription_active( $status_before ) && WooCommerce_Connection::is_subscription_active( $status_after ) );
 	}
 }
 
