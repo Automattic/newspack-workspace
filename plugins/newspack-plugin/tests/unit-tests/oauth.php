@@ -615,4 +615,184 @@ class Newspack_Test_OAuth extends WP_UnitTestCase {
 			'An unusable client id must not replace the stored one, which would turn the audience check off.'
 		);
 	}
+
+	/**
+	 * Stub Google's oauth2/v1/tokeninfo endpoint with a raw response.
+	 *
+	 * @param array|WP_Error $response Response array, or an error as returned for a failed request.
+	 */
+	private function stub_tokeninfo_raw( $response ) {
+		add_filter(
+			'pre_http_request',
+			function ( $pre, $args, $url ) use ( $response ) {
+				return false !== strpos( $url, 'oauth2/v1/tokeninfo' ) ? $response : $pre;
+			},
+			10,
+			3
+		);
+	}
+
+	/**
+	 * A tokeninfo request that fails outright yields the invalid-credentials error.
+	 */
+	public function test_tokeninfo_failed_request_yields_error() {
+		$this->stub_tokeninfo_raw( new WP_Error( 'http_request_failed', 'Operation timed out' ) );
+
+		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
+
+		self::assertTrue( is_wp_error( $result ), 'A failed tokeninfo request must return a WP_Error.' );
+		self::assertSame( 'Invalid Google credentials. Please reconnect.', $result->get_error_message() );
+	}
+
+	/**
+	 * A 200 tokeninfo response whose body is not JSON yields the invalid-credentials error.
+	 *
+	 * The message is asserted so the test fails if the body is still read before the
+	 * guard: that path reports missing scopes instead.
+	 */
+	public function test_tokeninfo_unparseable_body_yields_error() {
+		$this->stub_tokeninfo_raw(
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => '<html><body>Service Unavailable</body></html>',
+			]
+		);
+
+		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
+
+		self::assertTrue( is_wp_error( $result ), 'An unparseable tokeninfo body must return a WP_Error.' );
+		self::assertSame( 'Invalid Google credentials. Please reconnect.', $result->get_error_message() );
+	}
+
+	/**
+	 * A tokeninfo body that is JSON but not an object yields the invalid-credentials error.
+	 */
+	public function test_tokeninfo_non_object_body_yields_error() {
+		$this->stub_tokeninfo_raw(
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => '["https://www.googleapis.com/auth/userinfo.email"]',
+			]
+		);
+
+		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
+
+		self::assertTrue( is_wp_error( $result ), 'A non-object tokeninfo body must return a WP_Error.' );
+		self::assertSame( 'Invalid Google credentials. Please reconnect.', $result->get_error_message() );
+	}
+
+	/**
+	 * A tokeninfo scope that is not a string yields the invalid-credentials error rather
+	 * than reaching explode(), which raises a TypeError on an array.
+	 */
+	public function test_tokeninfo_non_string_scope_yields_error() {
+		$this->stub_tokeninfo(
+			[
+				'scope'          => [ 'https://www.googleapis.com/auth/userinfo.email' ],
+				'email'          => 'reader@example.com',
+				'verified_email' => true,
+			]
+		);
+
+		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
+
+		self::assertTrue( is_wp_error( $result ), 'A non-string scope must return a WP_Error.' );
+		self::assertSame( 'Invalid Google credentials. Please reconnect.', $result->get_error_message() );
+	}
+
+	/**
+	 * A tokeninfo email that is not a string is treated as missing, so the caller never
+	 * receives an array where it expects an address.
+	 */
+	public function test_tokeninfo_non_string_email_yields_error() {
+		$this->stub_tokeninfo(
+			[
+				'scope'          => 'https://www.googleapis.com/auth/userinfo.email',
+				'email'          => [ 'reader@example.com' ],
+				'verified_email' => true,
+			]
+		);
+
+		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
+
+		self::assertTrue( is_wp_error( $result ), 'A non-string email must return a WP_Error.' );
+		self::assertSame( 'User email missing in the response.', $result->get_error_message() );
+	}
+
+	/**
+	 * Store Google credentials with a refresh token, and stub the revoke endpoint.
+	 *
+	 * @param array|WP_Error $response Response the revoke endpoint returns.
+	 */
+	private function prepare_revoke( $response ) {
+		self::set_api_key();
+		if ( ! defined( 'NEWSPACK_GOOGLE_OAUTH_PROXY' ) ) {
+			define( 'NEWSPACK_GOOGLE_OAUTH_PROXY', 'http://dummy.proxy' );
+		}
+		$this->login_admin_user();
+		update_option(
+			Google_OAuth::AUTH_DATA_META_NAME,
+			[
+				'access_token'  => 'access-token-123',
+				'refresh_token' => 'refresh-token-123',
+				'expires_at'    => time() + 3600,
+			]
+		);
+		add_filter(
+			'pre_http_request',
+			function ( $pre, $args, $url ) use ( $response ) {
+				return false !== strpos( $url, 'oauth2.googleapis.com/revoke' ) ? $response : $pre;
+			},
+			10,
+			3
+		);
+	}
+
+	/**
+	 * A revoke request that fails outright returns an error and keeps the stored
+	 * credentials, instead of reading the failure as a response array.
+	 */
+	public function test_revoke_failed_request_yields_error() {
+		$this->prepare_revoke( new WP_Error( 'http_request_failed', 'Could not resolve host' ) );
+
+		$result = Google_OAuth::api_google_auth_revoke();
+
+		self::assertTrue( is_wp_error( $result ), 'A failed revoke request must return a WP_Error.' );
+		self::assertSame( 'Could not revoke credentials.', $result->get_error_message() );
+		self::assertArrayHasKey(
+			'refresh_token',
+			get_option( Google_OAuth::AUTH_DATA_META_NAME ),
+			'Credentials must be kept when the revoke request fails.'
+		);
+	}
+
+	/**
+	 * A revoke response with no status yields the same error.
+	 */
+	public function test_revoke_malformed_response_yields_error() {
+		$this->prepare_revoke( [ 'body' => '' ] );
+
+		$result = Google_OAuth::api_google_auth_revoke();
+
+		self::assertTrue( is_wp_error( $result ), 'A revoke response without a status must return a WP_Error.' );
+		self::assertSame( 'Could not revoke credentials.', $result->get_error_message() );
+	}
+
+	/**
+	 * A successful revoke removes the stored credentials.
+	 */
+	public function test_revoke_success_removes_credentials() {
+		$this->prepare_revoke(
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => '',
+			]
+		);
+
+		$result = Google_OAuth::api_google_auth_revoke();
+
+		self::assertFalse( is_wp_error( $result ), 'A successful revoke must not return a WP_Error.' );
+		self::assertSame( [ 'status' => 'ok' ], $result->get_data() );
+		self::assertFalse( get_option( Google_OAuth::AUTH_DATA_META_NAME ), 'Credentials must be removed after a successful revoke.' );
+	}
 }
