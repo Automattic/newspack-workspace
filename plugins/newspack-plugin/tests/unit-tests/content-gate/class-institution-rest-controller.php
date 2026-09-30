@@ -559,9 +559,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	 * Every role that is shown the panel can fill its institution picker, and
 	 * no role that is refused the panel can read the names.
 	 *
-	 * Asserted per built-in role against the panel's own capability, so a change
-	 * to either gate that leaves them disagreeing turns this red. Sends the
-	 * panel's own request, edit context included.
+	 * Sends the panel's own request, edit context included.
 	 */
 	public function test_panel_request_succeeds_for_exactly_the_roles_shown_the_panel() {
 		$users = [
@@ -598,7 +596,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assert_meta_withheld( $data[0]['meta'] );
 		foreach ( [ 'test-university.example', '10.0.0.0/8', 'org=test-university' ] as $value ) {
-			$this->assertStringNotContainsString( $value, wp_json_encode( $data ), 'No stored rule value may appear anywhere in the response.' );
+			$this->assertStringNotContainsString( $value, wp_json_encode( $data, JSON_UNESCAPED_SLASHES ), 'No stored rule value may appear anywhere in the response.' );
 		}
 	}
 

@@ -81,7 +81,7 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	/**
 	 * The enqueue gate checks Block_Visibility::CONFIGURE_CAPABILITY.
 	 *
-	 * The panel's institution picker is filled from that route, so a role shown the
+	 * The panel's institution picker is filled from the institution REST route, so a role shown the
 	 * panel but refused the route gets an empty picker with nothing failing
 	 * (NPPM-3128). The route's read gate is defined as this constant, so checking
 	 * it here keeps the two on one capability. Records the capability the gate
@@ -132,6 +132,7 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 			'editor'        => true,
 			'author'        => false,
 			'contributor'   => false,
+			'subscriber'    => false,
 		];
 		try {
 			foreach ( $expected as $role => $loads ) {
