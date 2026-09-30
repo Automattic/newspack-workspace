@@ -1164,6 +1164,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			[
 				'user_id'         => $owner_id,
 				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'expired',
 			],
 			null
 		);
@@ -1176,9 +1178,10 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With auto-signup on, members of an active group subscription gain its premium lists.
+	 * With auto-signup on, members of a group subscription that comes back to Active
+	 * gain its premium lists.
 	 */
-	public function test_active_group_subscription_adds_member_lists_with_auto_signup() {
+	public function test_reactivated_group_subscription_adds_member_lists_with_auto_signup() {
 		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
 
 		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
@@ -1198,6 +1201,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			[
 				'user_id'         => $owner_id,
 				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'on-hold',
+				'status_after'    => 'active',
 			],
 			null
 		);
@@ -1213,7 +1218,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 * With auto-signup off, a member check never adds lists, exactly as for any
 	 * other reader: an entitled member who isn't on a premium list stays off it.
 	 */
-	public function test_active_group_subscription_does_not_add_member_lists_without_auto_signup() {
+	public function test_reactivated_group_subscription_does_not_add_member_lists_without_auto_signup() {
 		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
 
 		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
@@ -1233,6 +1238,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			[
 				'user_id'         => $owner_id,
 				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'on-hold',
+				'status_after'    => 'active',
 			],
 			null
 		);
@@ -1240,6 +1247,72 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		Premium_Newsletters::process_access_check_queue();
 
 		$this->assertEmpty( $this->get_list_calls_for( $member_email ), 'With auto-signup off, a member check must not add lists.' );
+	}
+
+	/**
+	 * A status change that leaves the group's access as it was, like the owner
+	 * cancelling at the end of the term (Active to Pending cancel), doesn't check
+	 * the members. With auto-signup on, that check would re-add premium lists
+	 * members had left.
+	 */
+	public function test_status_change_that_keeps_access_does_not_queue_members() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		// The member left the premium list on their own.
+		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [];
+		$subscription->set_status( 'pending-cancel' );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'pending-cancel',
+			],
+			null
+		);
+
+		$this->assertNotContains( $member_id, $this->get_queued_user_ids(), 'A change that keeps access must not queue members.' );
+		Premium_Newsletters::process_access_check_queue();
+		$this->assertEmpty( $this->get_list_calls_for( $member_email ) );
+	}
+
+	/**
+	 * A plan switch reports the same status before and after, but it changes the
+	 * group's products, so the members still need a check.
+	 */
+	public function test_plan_switch_queues_members() {
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'active',
+			],
+			null
+		);
+
+		$this->assertContains( $member_id, $this->get_queued_user_ids(), 'A plan switch must queue members.' );
 	}
 
 	/**
@@ -1326,7 +1399,17 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			'subscription_id' => $subscription->get_id(),
 		];
 		Premium_Newsletters::set_subscribed_lists( time(), $event_data, null );
-		Premium_Newsletters::handle_product_subscription_changed( time(), $event_data, null );
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			array_merge(
+				$event_data,
+				[
+					'status_before' => 'active',
+					'status_after'  => 'on-hold',
+				]
+			),
+			null
+		);
 
 		$this->assertSame( Premium_Newsletters::SOURCE_RENEWAL, $this->get_queued_source( $member_id ), 'A renewal must queue members with the renewal source, like the owner.' );
 		$this->assertSame( [], get_user_meta( $member_id, Premium_Newsletters::SUBSCRIBED_LISTS_META_KEY, true ), "A renewal must snapshot the member's lists." );

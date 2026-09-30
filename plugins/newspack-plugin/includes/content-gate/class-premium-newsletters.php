@@ -678,7 +678,8 @@ class Premium_Newsletters {
 
 	/**
 	 * Maybe add or remove the user from restricted lists based on their access status.
-	 * When the event names a group subscription, its members are queued too.
+	 * When the event names a group subscription and can change its access, the
+	 * members are queued too.
 	 *
 	 * @param int    $timestamp Timestamp of the event.
 	 * @param array  $data      Data associated with the event.
@@ -693,9 +694,36 @@ class Premium_Newsletters {
 			return;
 		}
 		self::add_user_to_queue( (int) $data['user_id'], $source );
+		if ( ! self::event_changes_group_access( $data ) ) {
+			return;
+		}
 		foreach ( self::get_group_member_ids( $data ) as $member_id ) {
 			self::add_user_to_queue( $member_id, $source );
 		}
+	}
+
+	/**
+	 * Whether a subscription event can change what a group's members are entitled to.
+	 *
+	 * Members are checked only when the status moves between granting access and
+	 * not, such as Active to Cancelled or On hold to Active. A change that leaves
+	 * access as it was, such as Active to Pending cancel, would otherwise re-add
+	 * every premium list a member had left whenever auto-signup is on. A plan switch
+	 * reports the same status on both sides, but it changes the products, so it
+	 * counts as a change.
+	 *
+	 * @param array $data Data associated with the event.
+	 *
+	 * @return bool
+	 */
+	private static function event_changes_group_access( $data ) {
+		$status_before = $data['status_before'] ?? '';
+		$status_after  = $data['status_after'] ?? '';
+		if ( '' === $status_before || '' === $status_after || $status_before === $status_after ) {
+			return true;
+		}
+		$access_statuses = WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES;
+		return in_array( $status_before, $access_statuses, true ) !== in_array( $status_after, $access_statuses, true );
 	}
 }
 
