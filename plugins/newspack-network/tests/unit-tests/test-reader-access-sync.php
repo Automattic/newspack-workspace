@@ -80,25 +80,23 @@ class TestReaderAccessSync extends WP_UnitTestCase {
 	/**
 	 * Answer the node's requests to the hub.
 	 *
-	 * @param array       $sites        Site URL => what the reader holds there.
-	 * @param string[]    $failed_sites Sites that didn't answer.
-	 * @param string|null $request_id   Request ID to answer with; null echoes the one sent.
-	 * @param int         $status       HTTP status.
+	 * @param array       $sites      Site URL => what the reader holds there.
+	 * @param string|null $request_id Request ID to answer with; null echoes the one sent.
+	 * @param int         $status     HTTP status.
 	 */
-	private function mock_hub( $sites, $failed_sites = [], $request_id = null, $status = 200 ) {
+	private function mock_hub( $sites, $request_id = null, $status = 200 ) {
 		add_filter(
 			'pre_http_request',
-			function ( $response, $args, $url ) use ( $sites, $failed_sites, $request_id, $status ) {
+			function ( $response, $args, $url ) use ( $sites, $request_id, $status ) {
 				if ( 0 !== strpos( $url, self::HUB_URL ) ) {
 					return $response;
 				}
 				++$this->hub_calls;
 				$envelope = Reader_Access_Envelope::seal(
 					[
-						'email'        => $args['body']['email'],
-						'request_id'   => $request_id ?? $args['body']['request_id'],
-						'sites'        => $sites,
-						'failed_sites' => $failed_sites,
+						'email'      => $args['body']['email'],
+						'request_id' => $request_id ?? $args['body']['request_id'],
+						'sites'      => $sites,
 					],
 					$this->secret
 				);
@@ -199,22 +197,23 @@ class TestReaderAccessSync extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A site that answered replaces what was stored for it, including dropping records
-	 * it no longer reports; a site that didn't answer keeps what was stored.
+	 * A site the answer names replaces the subscriptions stored for it; a site it
+	 * doesn't name keeps the records its subscription events wrote. Group seats and
+	 * orders only come from the hub, so they are replaced outright.
 	 */
-	public function test_sync_replaces_answered_sites_and_keeps_failed_ones() {
+	public function test_sync_replaces_named_sites_and_keeps_others() {
 		update_user_meta(
 			$this->user_id,
 			Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY,
 			[
-				self::OTHER_SITE            => [
+				self::OTHER_SITE             => [
 					1 => [
 						'id'       => 1,
 						'status'   => 'active',
 						'products' => [],
 					],
 				],
-				'https://down.example.test' => [
+				'https://quiet.example.test' => [
 					2 => [
 						'id'       => 2,
 						'status'   => 'active',
@@ -223,40 +222,29 @@ class TestReaderAccessSync extends WP_UnitTestCase {
 				],
 			]
 		);
-		$seat = [
-			'id'          => 901,
-			'status'      => 'active',
-			'network_ids' => [ 'premium' ],
-		];
 		$this->set_snapshot(
 			0,
 			[
-				self::OTHER_SITE            => [
-					'groups' => [ $seat ],
-					'orders' => [],
-				],
-				'https://down.example.test' => [
-					'groups' => [ $seat ],
+				'https://quiet.example.test' => [
+					'groups' => [
+						[
+							'id'          => 901,
+							'status'      => 'active',
+							'network_ids' => [ 'premium' ],
+						],
+					],
 					'orders' => [],
 				],
 			]
 		);
-		$this->mock_hub(
-			[
-				self::OTHER_SITE => [
-					'subscriptions' => [],
-					'groups'        => [],
-					'orders'        => [],
-				],
-			],
-			[ 'https://down.example.test' ]
-		);
+		$this->mock_hub( $this->other_site_with_subscription() );
 
 		Reader_Access_Sync::sync( $this->user_id );
 
 		$subscriptions = get_user_meta( $this->user_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true );
-		$this->assertSame( [ 'https://down.example.test' ], array_keys( $subscriptions ) );
-		$this->assertSame( [ 'https://down.example.test' ], wp_list_pluck( Reader_Access_Sync::get_group_seats( $this->user_id ), 'site' ) );
+		$this->assertSame( [ 42 ], array_keys( $subscriptions[ self::OTHER_SITE ] ) );
+		$this->assertSame( [ 2 ], array_keys( $subscriptions['https://quiet.example.test'] ) );
+		$this->assertSame( [], Reader_Access_Sync::get_group_seats( $this->user_id ) );
 	}
 
 	/**
@@ -264,7 +252,7 @@ class TestReaderAccessSync extends WP_UnitTestCase {
 	 * is recorded so the next check backs off.
 	 */
 	public function test_sync_rejects_answer_for_another_request() {
-		$this->mock_hub( $this->other_site_with_subscription(), [], 'replayed-request' );
+		$this->mock_hub( $this->other_site_with_subscription(), 'replayed-request' );
 
 		$this->assertInstanceOf( WP_Error::class, Reader_Access_Sync::sync( $this->user_id ) );
 
@@ -334,7 +322,7 @@ class TestReaderAccessSync extends WP_UnitTestCase {
 	 * After a failed pull, gated checks don't retry on every page view.
 	 */
 	public function test_failed_pull_backs_off() {
-		$this->mock_hub( [], [], null, 500 );
+		$this->mock_hub( [], null, 500 );
 		wp_set_current_user( $this->user_id );
 
 		$this->passes_premium_gate();

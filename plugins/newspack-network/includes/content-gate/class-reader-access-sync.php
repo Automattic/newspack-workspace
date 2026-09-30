@@ -21,8 +21,8 @@ use WP_Error;
  * group subscriptions, and their paid one-time orders.
  *
  * Subscription events only reach a site that already has an account for the
- * reader, and no event carries orders or group seats, so this site asks the hub
- * instead. It asks on the reader's first gated check with nothing stored, which
+ * reader, and orders and group seats only reach the hub, so this site asks the hub,
+ * which keeps copies of every site's subscriptions, orders and group members. It asks on the reader's first gated check with nothing stored, which
  * covers readers who were logged in before this existed and accounts created
  * after the purchase; on the first gated check after each login; and in the
  * background once the copy is older than the refresh interval.
@@ -43,10 +43,10 @@ class Reader_Access_Sync {
 	const REFRESH_HOOK = 'newspack_network_refresh_reader_access';
 
 	/**
-	 * Seconds the hub may take to answer. The hub asks each node in turn, and a pull
-	 * can hold up a page view, so this stays well under the default.
+	 * Seconds the hub may take to answer. A pull can hold up a page view, so this stays
+	 * well under the default; the hub answers from its own database.
 	 */
-	const HUB_TIMEOUT = 15;
+	const HUB_TIMEOUT = 5;
 
 	/**
 	 * Seconds after a failed pull before a gated check tries again, so an unreachable
@@ -209,26 +209,25 @@ class Reader_Access_Sync {
 			return $result;
 		}
 
-		self::store( $user->ID, $result['sites'], $result['failed_sites'] );
+		self::store( $user->ID, $result );
 		return true;
 	}
 
 	/**
-	 * Store a pull's answers.
+	 * Store a pull's answer.
 	 *
-	 * Each site that answered replaces what was stored for it, so records it no longer
-	 * reports are dropped. A site that didn't answer keeps what was stored, so a node
-	 * being down never takes away access.
+	 * Group seats and orders are replaced outright: the hub is their only source. A
+	 * site's owned subscriptions replace what was stored for that site, dropping the
+	 * ones it no longer reports; a site the answer doesn't name keeps the records its
+	 * subscription events wrote.
 	 *
-	 * @param int      $user_id      User ID.
-	 * @param array    $sites        Site URL => what the reader holds there.
-	 * @param string[] $failed_sites Sites that didn't answer.
+	 * @param int   $user_id User ID.
+	 * @param array $sites   Site URL => what the reader holds there.
 	 * @return void
 	 */
-	private static function store( $user_id, $sites, $failed_sites ) {
+	private static function store( $user_id, $sites ) {
 		$subscriptions = get_user_meta( $user_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true );
 		$subscriptions = is_array( $subscriptions ) ? $subscriptions : [];
-		$previous      = (array) ( self::get_snapshot( $user_id )['sites'] ?? [] );
 		$stored_sites  = [];
 
 		foreach ( $sites as $site => $site_data ) {
@@ -243,12 +242,6 @@ class Reader_Access_Sync {
 				'orders' => array_values( (array) ( $site_data['orders'] ?? [] ) ),
 			];
 		}
-		foreach ( $failed_sites as $site ) {
-			if ( isset( $previous[ $site ] ) ) {
-				$stored_sites[ $site ] = $previous[ $site ];
-			}
-		}
-
 		if ( empty( $subscriptions ) ) {
 			delete_user_meta( $user_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY );
 		} else {
@@ -266,14 +259,14 @@ class Reader_Access_Sync {
 	}
 
 	/**
-	 * Ask the network what the reader holds on every other site.
+	 * Ask the hub what the reader holds on every other site.
 	 *
 	 * @param string $email Reader email.
-	 * @return array|WP_Error With 'sites' and 'failed_sites'.
+	 * @return array|WP_Error Site URL => what the reader holds there.
 	 */
 	private static function fetch( $email ) {
 		if ( Site_Role::is_hub() ) {
-			return Hub_Endpoint::collect( $email );
+			return Hub_Endpoint::collect( $email, 0 );
 		}
 		if ( ! self::is_network_site() ) {
 			return new WP_Error( 'newspack_network_reader_access_not_connected', __( 'This site is not connected to a network.', 'newspack-network' ) );
@@ -301,10 +294,7 @@ class Reader_Access_Sync {
 		if ( is_wp_error( $payload ) ) {
 			return $payload;
 		}
-		return [
-			'sites'        => array_filter( (array) ( $payload['sites'] ?? [] ), 'is_array' ),
-			'failed_sites' => array_filter( (array) ( $payload['failed_sites'] ?? [] ), 'is_string' ),
-		];
+		return array_filter( (array) ( $payload['sites'] ?? [] ), 'is_array' );
 	}
 
 	/**

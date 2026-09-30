@@ -7,27 +7,41 @@
 
 namespace Newspack_Network\Hub;
 
-use Newspack_Network\Content_Gate\Reader_Access_Collector;
 use Newspack_Network\Content_Gate\Reader_Access_Envelope;
-use Newspack_Network\Debugger;
-use Newspack_Network\Node\Reader_Access_Endpoint as Node_Endpoint;
+use Newspack_Network\Hub\Database\Orders as Orders_DB;
+use Newspack_Network\Hub\Database\Subscriptions as Subscriptions_DB;
+use Newspack_Network\Incoming_Events\Product_Updated;
 use Newspack_Network\Utils\Requests;
+use Newspack_Network\Woocommerce_Subscriptions\Group_Members;
 use WP_REST_Request;
 use WP_REST_Response;
 
 /**
- * Answers a node's question about what a reader holds across the rest of the
- * network: the hub's own data, plus each other node's answer.
+ * Answers a node's question about what a reader holds on the rest of the network:
+ * the subscriptions they own, their seats on other people's group subscriptions,
+ * and their paid one-time orders.
  *
- * Nodes only share a key with the hub, so the hub is the one site that can ask
- * all of them.
+ * The answer comes from the copies the hub keeps of every site's subscriptions and
+ * orders, so a node's question never turns into requests to other nodes.
  */
 class Reader_Access_Endpoint {
 
 	/**
-	 * Seconds the hub waits for each node's answer.
+	 * Most records of each kind read per answer.
 	 */
-	const NODE_TIMEOUT = 5;
+	const MAX_RECORDS = 500;
+
+	/**
+	 * Every status the hub's subscription copies can have. Access only counts active
+	 * and pending-cancel ones, but the others are answered too, so a node replaces a
+	 * record it holds as active with the ended one.
+	 */
+	const SUBSCRIPTION_STATUSES = [ 'pending', 'active', 'on-hold', 'cancelled', 'switched', 'expired', 'pending-cancel' ];
+
+	/**
+	 * Order statuses that count as paid, as WooCommerce's own defaults do.
+	 */
+	const PAID_ORDER_STATUSES = [ 'processing', 'completed' ];
 
 	/**
 	 * Initializer.
@@ -78,17 +92,13 @@ class Reader_Access_Endpoint {
 			return new WP_REST_Response( [ 'error' => 'Bad request.' ], 400 );
 		}
 
-		$node   = Nodes::get_node_by_url( $site );
-		$result = self::collect( $email, $node->get_id() );
-
+		$node     = Nodes::get_node_by_url( $site );
 		$envelope = Reader_Access_Envelope::seal(
-			array_merge(
-				$result,
-				[
-					'email'      => $email,
-					'request_id' => $request_id,
-				]
-			),
+			[
+				'email'      => $email,
+				'request_id' => $request_id,
+				'sites'      => self::collect( $email, $node->get_id() ),
+			],
 			$node->get_secret_key()
 		);
 		if ( is_wp_error( $envelope ) ) {
@@ -98,76 +108,254 @@ class Reader_Access_Endpoint {
 	}
 
 	/**
-	 * What the reader holds on every network site except the one asking.
+	 * What the reader holds on every network site except one.
 	 *
-	 * @param string   $email             Reader email.
-	 * @param int|null $asking_node_id    The node asking, or null when the hub asks for itself.
-	 * @return array {
-	 *     @type array    $sites        Site URL => what the reader holds there.
-	 *     @type string[] $failed_sites Sites that didn't answer; what was stored for them should be kept.
-	 * }
+	 * @param string $email           Reader email.
+	 * @param int    $excluded_node_id The site asking, whose own rules cover its own data: a node's ID, or 0 for the hub.
+	 * @return array Site URL => [ 'subscriptions' => array, 'groups' => array[], 'orders' => array[] ], for sites with any.
 	 */
-	public static function collect( $email, $asking_node_id = null ) {
-		$sites  = [];
-		$failed = [];
-
-		if ( null !== $asking_node_id ) {
-			$sites[ get_bloginfo( 'url' ) ] = Reader_Access_Collector::collect( $email );
+	public static function collect( $email, $excluded_node_id ) {
+		$email = strtolower( sanitize_email( $email ) );
+		if ( ! $email ) {
+			return [];
 		}
 
-		foreach ( Nodes::get_all_nodes() as $node ) {
-			if ( null !== $asking_node_id && (int) $node->get_id() === (int) $asking_node_id ) {
-				continue;
+		$sites = [];
+		$add   = function ( $post_id, $type, $record, $key = null ) use ( &$sites, $excluded_node_id ) {
+			$node_id = (int) get_post_meta( $post_id, 'node_id', true );
+			if ( (int) $excluded_node_id === $node_id ) {
+				return;
 			}
-			$answer = self::ask_node( $node, $email );
-			if ( is_wp_error( $answer ) ) {
-				Debugger::log( sprintf( 'Reader access: no answer from %s: %s', $node->get_url(), $answer->get_error_message() ) );
-				$failed[] = $node->get_url();
-				continue;
+			$site = self::get_site_url( $node_id );
+			if ( ! $site ) {
+				return;
 			}
-			$sites[ $node->get_url() ] = [
-				'subscriptions' => (array) ( $answer['subscriptions'] ?? [] ),
-				'groups'        => (array) ( $answer['groups'] ?? [] ),
-				'orders'        => (array) ( $answer['orders'] ?? [] ),
-			];
+			if ( ! isset( $sites[ $site ] ) ) {
+				$sites[ $site ] = [
+					'subscriptions' => [],
+					'groups'        => [],
+					'orders'        => [],
+				];
+			}
+			if ( null === $key ) {
+				$sites[ $site ][ $type ][] = $record;
+			} else {
+				$sites[ $site ][ $type ][ $key ] = $record;
+			}
+		};
+
+		foreach ( self::find_copies( Subscriptions_DB::POST_TYPE_SLUG, self::SUBSCRIPTION_STATUSES, 'user_email', $email ) as $post_id ) {
+			$site     = self::get_site_url( (int) get_post_meta( $post_id, 'node_id', true ) );
+			$products = [];
+			foreach ( get_post_meta( $post_id, 'products', false ) as $product ) {
+				$product    = (array) $product;
+				$product_id = (int) ( $product['id'] ?? 0 );
+				if ( $product_id ) {
+					$products[ $product_id ] = array_merge( $product, [ 'network_id' => self::get_network_id( $site, $product_id ) ] );
+				}
+			}
+			$remote_id = (int) get_post_meta( $post_id, 'remote_id', true );
+			$add(
+				$post_id,
+				'subscriptions',
+				[
+					'id'       => $remote_id,
+					'status'   => self::get_status( $post_id, Subscriptions_DB::POST_STATUS_PREFIX ),
+					'products' => $products,
+				],
+				$remote_id
+			);
 		}
 
-		return [
-			'sites'        => $sites,
-			'failed_sites' => $failed,
-		];
+		foreach ( self::find_copies( Subscriptions_DB::POST_TYPE_SLUG, self::SUBSCRIPTION_STATUSES, Group_Members::HUB_MEMBER_META_KEY, $email ) as $post_id ) {
+			$site        = self::get_site_url( (int) get_post_meta( $post_id, 'node_id', true ) );
+			$network_ids = [];
+			foreach ( get_post_meta( $post_id, 'products', false ) as $product ) {
+				$network_ids[] = self::get_network_id( $site, (int) ( ( (array) $product )['id'] ?? 0 ) );
+			}
+			$add(
+				$post_id,
+				'groups',
+				[
+					'id'          => (int) get_post_meta( $post_id, 'remote_id', true ),
+					'status'      => self::get_status( $post_id, Subscriptions_DB::POST_STATUS_PREFIX ),
+					'network_ids' => array_values( array_unique( array_filter( $network_ids ) ) ),
+				]
+			);
+		}
+
+		foreach ( self::get_newest_orders_per_network_id( $email ) as $post_id => $order ) {
+			$add( $post_id, 'orders', $order );
+		}
+
+		return $sites;
 	}
 
 	/**
-	 * Ask one node what the reader holds there.
+	 * The reader's paid orders that can grant one-time access: for each site and
+	 * Network ID, only the newest, since an older order can never grant more.
 	 *
-	 * @param Node   $node  Node.
 	 * @param string $email Reader email.
-	 * @return array|\WP_Error The node's answer.
+	 * @return array Hub post ID => [ 'id', 'date_created', 'network_ids' ], newest first.
 	 */
-	private static function ask_node( $node, $email ) {
-		$headers = $node->get_authorization_headers( Node_Endpoint::ENDPOINT_ID );
-		if ( ! is_array( $headers ) ) {
-			return new \WP_Error( 'newspack_network_reader_access_sign', __( 'Could not sign the request.', 'newspack-network' ) );
+	private static function get_newest_orders_per_network_id( $email ) {
+		$orders = [];
+		foreach ( self::find_copies( Orders_DB::POST_TYPE_SLUG, self::PAID_ORDER_STATUSES, 'user_email', $email ) as $post_id ) {
+			$node_id      = (int) get_post_meta( $post_id, 'node_id', true );
+			$site         = self::get_site_url( $node_id );
+			$date_created = self::parse_date( get_post_meta( $post_id, 'date_created', true ) );
+			$network_ids  = [];
+			foreach ( get_post_meta( $post_id, 'products', false ) as $product ) {
+				$product = (array) $product;
+				// Subscription products are left out: a renewal isn't a one-time purchase.
+				if ( ! empty( $product['subscription'] ) || ! array_key_exists( 'subscription', $product ) ) {
+					continue;
+				}
+				$network_id = self::get_network_id( $site, (int) ( $product['variation_id'] ?? 0 ) );
+				if ( ! $network_id ) {
+					$network_id = self::get_network_id( $site, (int) ( $product['id'] ?? 0 ) );
+				}
+				$network_ids[] = $network_id;
+			}
+			$network_ids = array_values( array_unique( array_filter( $network_ids ) ) );
+			if ( $date_created && $network_ids ) {
+				$orders[ $post_id ] = [
+					'node_id'      => $node_id,
+					'id'           => (int) get_post_meta( $post_id, 'remote_id', true ),
+					'date_created' => $date_created,
+					'network_ids'  => $network_ids,
+				];
+			}
 		}
-		$request_id = wp_generate_uuid4();
-		$response   = wp_remote_post(
-			$node->get_url() . '/wp-json/newspack-network/v1/reader-access',
+
+		uasort(
+			$orders,
+			function ( $a, $b ) {
+				return $b['date_created'] <=> $a['date_created'];
+			}
+		);
+
+		$seen   = [];
+		$newest = [];
+		foreach ( $orders as $post_id => $order ) {
+			$new_network_ids = [];
+			foreach ( $order['network_ids'] as $network_id ) {
+				$key = $order['node_id'] . '|' . $network_id;
+				if ( ! isset( $seen[ $key ] ) ) {
+					$seen[ $key ]      = true;
+					$new_network_ids[] = $network_id;
+				}
+			}
+			if ( $new_network_ids ) {
+				unset( $order['node_id'] );
+				$order['network_ids'] = $new_network_ids;
+				$newest[ $post_id ]   = $order;
+			}
+		}
+		return $newest;
+	}
+
+	/**
+	 * IDs of the hub's copies whose given meta matches the reader's email.
+	 *
+	 * @param string   $post_type Post type of the copies.
+	 * @param string[] $statuses  Statuses to include, without the hub's prefix.
+	 * @param string   $meta_key  Meta holding an email.
+	 * @param string   $email     Reader email.
+	 * @return int[]
+	 */
+	private static function find_copies( $post_type, $statuses, $meta_key, $email ) {
+		$post_statuses = array_map(
+			function ( $status ) {
+				return Subscriptions_DB::POST_STATUS_PREFIX . $status;
+			},
+			$statuses
+		);
+		$posts         = get_posts(
 			[
-				'headers' => $headers,
-				'body'    => [
-					'email'      => $email,
-					'request_id' => $request_id,
+				'post_type'      => $post_type,
+				'post_status'    => $post_statuses,
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'   => $meta_key,
+						'value' => $email,
+					],
 				],
-				'timeout' => self::NODE_TIMEOUT, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
+				'posts_per_page' => self::MAX_RECORDS,
+				'orderby'        => 'ID',
+				'order'          => 'DESC',
+				'no_found_rows'  => true,
 			]
 		);
-		if ( is_wp_error( $response ) ) {
-			return $response;
+		$ids           = [];
+		foreach ( $posts as $post ) {
+			// WP_Query drops statuses that aren't registered instead of matching nothing,
+			// which would let a pending or refunded copy through, so check each one here too.
+			if ( in_array( $post->post_status, $post_statuses, true ) ) {
+				$ids[] = (int) $post->ID;
+			}
 		}
-		if ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
-			return new \WP_Error( 'newspack_network_reader_access_status', sprintf( 'HTTP %d', wp_remote_retrieve_response_code( $response ) ) );
+		return $ids;
+	}
+
+	/**
+	 * A copy's status, without the hub's prefix.
+	 *
+	 * @param int    $post_id Hub post ID.
+	 * @param string $prefix  Status prefix.
+	 * @return string
+	 */
+	private static function get_status( $post_id, $prefix ) {
+		$status = (string) get_post_status( $post_id );
+		return 0 === strpos( $status, $prefix ) ? substr( $status, strlen( $prefix ) ) : $status;
+	}
+
+	/**
+	 * The URL a copy's site is known by, as its events name it.
+	 *
+	 * @param int $node_id Node ID, or 0 for the hub.
+	 * @return string Empty for a node that is no longer registered.
+	 */
+	private static function get_site_url( $node_id ) {
+		static $urls = [];
+		if ( ! $node_id ) {
+			return get_bloginfo( 'url' );
 		}
-		return Reader_Access_Envelope::open( json_decode( wp_remote_retrieve_body( $response ), true ), $node->get_secret_key(), $email, $request_id );
+		if ( ! isset( $urls[ $node_id ] ) ) {
+			$urls[ $node_id ] = (string) ( new Node( $node_id ) )->get_url();
+		}
+		return $urls[ $node_id ];
+	}
+
+	/**
+	 * A product's Network ID, from the product data every site syncs to the hub.
+	 *
+	 * @param string $site       Site URL.
+	 * @param int    $product_id Product ID on that site.
+	 * @return string
+	 */
+	private static function get_network_id( $site, $product_id ) {
+		if ( ! $product_id ) {
+			return '';
+		}
+		$network_products = get_option( Product_Updated::OPTION_NAME, [] );
+		return (string) ( $network_products[ $site ][ $product_id ]['network_id'] ?? '' );
+	}
+
+	/**
+	 * An order's creation date, as the order event reported it, in Unix time.
+	 *
+	 * The event sends the date in UTC without a zone designator.
+	 *
+	 * @param mixed $date Date string.
+	 * @return int 0 when missing or unreadable.
+	 */
+	private static function parse_date( $date ) {
+		if ( ! is_string( $date ) || '' === $date ) {
+			return 0;
+		}
+		$has_zone  = (bool) preg_match( '/(Z|[+-]\d{2}:?\d{2})$/', $date );
+		$timestamp = strtotime( $has_zone ? $date : $date . 'Z' );
+		return false === $timestamp ? 0 : $timestamp;
 	}
 }

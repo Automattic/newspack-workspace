@@ -43,7 +43,6 @@ class Initializer {
 				Node\Info_Endpoints::init();
 				Node\Integrity_Check_Endpoints::init();
 				Node\Pulling::init();
-				Node\Reader_Access_Endpoint::init();
 				Rest_Authenticaton::init_node_filters();
 			}
 		}

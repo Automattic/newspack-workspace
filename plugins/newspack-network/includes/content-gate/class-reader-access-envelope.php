@@ -11,11 +11,12 @@ use Newspack_Network\Crypto;
 use WP_Error;
 
 /**
- * Seals and opens the answers network sites send each other about a reader.
+ * Seals and opens the hub's answer to a node asking what a reader holds on the
+ * other network sites.
  *
- * An answer decides who reads for free, so it is encrypted with the key the two
- * sites share, which also proves who sent it, and it names the reader and the
- * request it answers. Without that, a recorded answer could be replayed for a
+ * An answer decides who reads for free, so it is encrypted with the key the hub
+ * and the node share, which also proves who sent it, and it names the reader and
+ * the request it answers. Without that, a recorded answer could be replayed for a
  * later request or passed off as another reader's.
  */
 class Reader_Access_Envelope {
@@ -24,7 +25,7 @@ class Reader_Access_Envelope {
 	 * Encrypt an answer.
 	 *
 	 * @param array  $payload    The answer, including 'email' and 'request_id'.
-	 * @param string $secret_key Key shared by the two sites.
+	 * @param string $secret_key Key the hub and the node share.
 	 * @return array|WP_Error Envelope with 'nonce' and 'data'.
 	 */
 	public static function seal( $payload, $secret_key ) {
@@ -47,7 +48,7 @@ class Reader_Access_Envelope {
 	 * Decrypt an answer and check it answers this request about this reader.
 	 *
 	 * @param mixed  $envelope   Envelope as decoded from the response body.
-	 * @param string $secret_key Key shared by the two sites.
+	 * @param string $secret_key Key the hub and the node share.
 	 * @param string $email      Email the request asked about.
 	 * @param string $request_id ID the request was sent with.
 	 * @return array|WP_Error The answer.
