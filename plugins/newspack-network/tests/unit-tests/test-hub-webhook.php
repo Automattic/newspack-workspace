@@ -507,4 +507,32 @@ class TestHubWebhook extends \WP_UnitTestCase {
 		$this->assertSame( 1, $this->event_log_count() );
 		$this->assertCount( 0, $logged );
 	}
+
+	/**
+	 * A verified delivery from a Node with no pairing on record records one, so
+	 * a Node linked by pasting its key stops showing the key once it delivers.
+	 */
+	public function test_verified_delivery_records_pairing() {
+		$this->assertSame( '', get_post_meta( $this->node_id, 'paired-at', true ) );
+
+		$before   = time();
+		$response = Webhook::handle_webhook( $this->build_request( time(), Crypto::generate_nonce(), $this->probe_payload() ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertGreaterThanOrEqual( $before, (int) get_post_meta( $this->node_id, 'paired-at', true ) );
+	}
+
+	/**
+	 * A delivery that fails the signature check records no pairing.
+	 */
+	public function test_unverified_delivery_does_not_record_pairing() {
+		$nonce   = Crypto::generate_nonce();
+		$request = $this->build_request( time(), $nonce, $this->probe_payload() );
+		$request->set_param( 'data', Crypto::encrypt_message( $this->probe_payload(), Crypto::generate_secret_key(), $nonce ) );
+
+		$response = Webhook::handle_webhook( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( '', get_post_meta( $this->node_id, 'paired-at', true ) );
+	}
 }

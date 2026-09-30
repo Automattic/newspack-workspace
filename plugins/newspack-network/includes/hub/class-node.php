@@ -84,16 +84,16 @@ class Node {
 	}
 
 	/**
-	 * Returns when the Node retrieved its key through the connect link.
+	 * Returns when the Node was recorded as holding its key.
 	 *
-	 * @return int Unix timestamp, or 0 if it has not.
+	 * @return int Unix timestamp, or 0 if it has not been.
 	 */
 	public function get_paired_at() {
 		return (int) get_post_meta( $this->get_id(), 'paired-at', true );
 	}
 
 	/**
-	 * Whether the Node has retrieved its key through the connect link.
+	 * Whether the Node has been recorded as holding its key.
 	 *
 	 * @return bool
 	 */
@@ -102,7 +102,8 @@ class Node {
 	}
 
 	/**
-	 * Records that the Node has retrieved its key through the connect link.
+	 * Records that the Node holds its key: it retrieved the key through the
+	 * connect link, or sent a delivery signed with it.
 	 *
 	 * @return void
 	 */
