@@ -10,6 +10,7 @@ namespace Newspack_Network\Hub\Stores;
 use Newspack_Network\Debugger;
 use Newspack_Network\Incoming_Events\Subscription_Changed;
 use Newspack_Network\Hub\Database\Subscriptions as Subscriptions_DB;
+use Newspack_Network\Woocommerce_Subscriptions\Group_Members;
 
 /**
  * Class to handle Woocommerce Subscriptions Store
@@ -98,5 +99,22 @@ class Subscriptions extends Woo_Store {
 		Debugger::log( 'Updated post status: ' . $update );
 
 		return $local_id;
+	}
+
+	/**
+	 * Replace the member emails on the hub's copy of a group subscription.
+	 *
+	 * Each email is its own meta row, so a reader's seats can be found by email.
+	 *
+	 * @param int      $local_id The hub's copy of the subscription.
+	 * @param string[] $emails   Member emails; empty when the group is off.
+	 * @return void
+	 */
+	public static function update_group_members( $local_id, $emails ) {
+		delete_post_meta( $local_id, Group_Members::HUB_MEMBER_META_KEY );
+		$emails = array_unique( array_filter( array_map( 'strtolower', array_map( 'sanitize_email', (array) $emails ) ) ) );
+		foreach ( $emails as $email ) {
+			add_post_meta( $local_id, Group_Members::HUB_MEMBER_META_KEY, $email );
+		}
 	}
 }

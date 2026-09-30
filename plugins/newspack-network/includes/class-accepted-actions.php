@@ -46,6 +46,7 @@ class Accepted_Actions {
 		'newspack_network_distributor_migrate_incoming_posts' => 'Distributor_Migrate_Incoming_Posts',
 		'network_hub_name_updated'                 => 'Hub_Name_Updated',
 		'newspack_network_product_updated'         => 'Product_Updated',
+		'newspack_node_group_members_changed'      => 'Group_Members_Changed',
 	];
 
 	/**
