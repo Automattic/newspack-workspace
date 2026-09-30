@@ -643,7 +643,7 @@ class Content_Gate_API {
 					);
 				}
 				if ( $is_enforced && ! empty( $registered['requires_value'] ) && self::rule_value_is_empty( $rule['value'] ?? null ) ) {
-					// The same rule can sit under Paid access too, so the refusal names the card.
+					// The same rule can sit under Paid Access too, so the refusal names the card.
 					return new \WP_Error(
 						'empty_access_rule_value',
 						sprintf(

@@ -974,21 +974,40 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 
 		$this->assertWPError( $sanitized_gate );
 		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
-		// The same rule can be empty under Paid access too, so the refusal says which.
+		// The same rule can be empty under Paid Access too, so the refusal says which.
 		$this->assertStringContainsString( 'Registered Access', $sanitized_gate->get_error_message() );
 	}
 
 	/**
-	 * A save that sends rules but leaves out `active` keeps the stored value, so
-	 * it is refused on a live wall just as a full save would be.
+	 * Stored registration states for a live gate, and whether an unfinished
+	 * selection saved to it without `active` is refused.
+	 *
+	 * @return array[]
 	 */
-	public function test_rules_saved_without_active_are_refused_on_a_stored_live_wall() {
-		$gate_id = Content_Gate::create_gate( [ 'title' => 'Live registration wall' ] );
+	public function data_stored_registration_wall() {
+		return [
+			'stored wall on'  => [ true, true ],
+			'stored wall off' => [ false, false ],
+		];
+	}
+
+	/**
+	 * A save that sends an unfinished selection but leaves out `active` keeps the
+	 * stored value, so the stored wall decides whether it is refused, just as a
+	 * full save would be.
+	 *
+	 * @dataProvider data_stored_registration_wall
+	 *
+	 * @param bool $stored_active Whether the stored registration wall is on.
+	 * @param bool $is_refused    Whether the save is expected to be refused.
+	 */
+	public function test_an_unfinished_selection_saved_without_active_follows_the_stored_wall( $stored_active, $is_refused ) {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Registration wall' ] );
 		Content_Gate::update_gate_settings(
 			$gate_id,
 			[
 				'status'       => 'publish',
-				'registration' => [ 'active' => true ],
+				'registration' => [ 'active' => $stored_active ],
 			]
 		);
 		$partial = $this->gate_with_registration_institutions( true, [] );
@@ -996,8 +1015,7 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 
 		$sanitized_gate = Content_Gate_API::sanitize_gate( $partial, $this->gate_update_request( $gate_id ) );
 
-		$this->assertWPError( $sanitized_gate );
-		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
+		$this->assertSame( $is_refused ? 'empty_access_rule_value' : null, is_wp_error( $sanitized_gate ) ? $sanitized_gate->get_error_code() : null );
 	}
 
 	/**
@@ -1042,24 +1060,6 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		}
 	}
 
-	/**
-	 * The stored value decides both ways: rules saved without `active` to a live
-	 * gate whose stored wall is off are not refused.
-	 */
-	public function test_rules_saved_without_active_are_accepted_on_a_stored_open_wall() {
-		$gate_id = Content_Gate::create_gate( [ 'title' => 'Open registration wall' ] );
-		Content_Gate::update_gate_settings(
-			$gate_id,
-			[
-				'status'       => 'publish',
-				'registration' => [ 'active' => false ],
-			]
-		);
-		$partial = $this->gate_with_registration_institutions( true, [] );
-		unset( $partial['status'], $partial['registration']['active'] );
-
-		$this->assertNotWPError( Content_Gate_API::sanitize_gate( $partial, $this->gate_update_request( $gate_id ) ) );
-	}
 
 	/**
 	 * Sanitization runs before the route's permission check, so only a caller
