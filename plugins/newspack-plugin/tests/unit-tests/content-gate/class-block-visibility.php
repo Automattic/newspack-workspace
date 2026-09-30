@@ -1192,13 +1192,12 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A block following a gate agrees with the gate's page: an on-campus visitor
+	 * A block set to a gate agrees with the gate's page: an on-campus visitor
 	 * whom registered access counts as registered sees it without an account.
 	 */
 	public function test_gate_mode_registration_institutions_show_the_block_to_a_matching_visitor() {
-		$institution_id = \Newspack\Institution::create( 'Example University', '', [ 'ip_range' => '10.0.0.0/8' ] );
-		\Newspack\Institution::invalidate_cache();
-		$gate_id = $this->make_gate( false );
+		$institution_id = $this->make_campus_institution();
+		$gate_id        = $this->make_gate( false );
 		update_post_meta(
 			$gate_id,
 			'registration',
@@ -1214,30 +1213,130 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 				],
 			]
 		);
-		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
-		// Later suites read the visitor's address, so it is put back as found.
-		$original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
-		$_SERVER['REMOTE_ADDR'] = '10.1.2.3';
-		$_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] = '1';
-
-		wp_set_current_user( 0 );
-		Block_Visibility::reset_cache_for_tests();
-		$block  = $this->make_block(
+		$block = $this->make_block(
 			'core/group',
 			[
 				'newspackAccessControlMode'    => 'gate',
 				'newspackAccessControlGateIds' => [ $gate_id ],
 			]
 		);
-		$result = Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		$this->assertSame( '<div>members</div>', $this->render_for_signed_out_visitor_at( $block, '10.1.2.3' ) );
+	}
 
-		unset( $_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] );
-		if ( null === $original_remote_addr ) {
-			unset( $_SERVER['REMOTE_ADDR'] );
-		} else {
-			$_SERVER['REMOTE_ADDR'] = $original_remote_addr;
+	/**
+	 * Create an institution whose IP range is 10.0.0.0/8.
+	 *
+	 * @return int Institution ID.
+	 */
+	private function make_campus_institution() {
+		$institution_id = \Newspack\Institution::create( 'Example University', '', [ 'ip_range' => '10.0.0.0/8' ] );
+		\Newspack\Institution::invalidate_cache();
+		return $institution_id;
+	}
+
+	/**
+	 * Render a block for a signed-out visitor at an address, carrying the
+	 * institutional-access cookie that lets their IP be checked.
+	 *
+	 * Later suites read the visitor's address, so it is put back as found even
+	 * when the render throws.
+	 *
+	 * @param array  $block Parsed block.
+	 * @param string $ip    The visitor's IP address.
+	 * @return string Rendered block content.
+	 */
+	private function render_for_signed_out_visitor_at( $block, $ip ) {
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
+		$_SERVER['REMOTE_ADDR'] = $ip;
+		$_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] = '1';
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		try {
+			return Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		} finally {
+			unset( $_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] );
+			if ( null === $original_remote_addr ) {
+				unset( $_SERVER['REMOTE_ADDR'] );
+			} else {
+				$_SERVER['REMOTE_ADDR'] = $original_remote_addr;
+			}
 		}
 		// phpcs:enable
-		$this->assertSame( '<div>members</div>', $result );
+	}
+
+	/**
+	 * Registered access on, paid access granted to one institution.
+	 *
+	 * @param int  $institution_id     Institution ID.
+	 * @param bool $paid_access_active Whether paid access is on. Switching it off in
+	 *                                 the gate editor keeps its rules stored.
+	 * @return array Rules in the shape a gate stores them.
+	 */
+	private function registration_and_institution_rules( $institution_id, $paid_access_active ) {
+		return [
+			'registration'  => [ 'active' => true ],
+			'custom_access' => [
+				'active'       => $paid_access_active,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [ $institution_id ],
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * Cases for test_paid_institutions_let_a_signed_out_visitor_skip_registration().
+	 *
+	 * @return array[] Access mode, whether paid access is on, visitor IP, whether the visitor sees the block.
+	 */
+	public function paid_institution_cases() {
+		return [
+			'gate, on campus'                      => [ 'gate', true, '10.1.2.3', true ],
+			'gate, off campus'                     => [ 'gate', true, '192.168.1.1', false ],
+			'gate, paid access off, on campus'     => [ 'gate', false, '10.1.2.3', false ],
+			'block rules, on campus'               => [ 'custom', true, '10.1.2.3', true ],
+			'block rules, off campus'              => [ 'custom', true, '192.168.1.1', false ],
+			'block rules, paid access off, campus' => [ 'custom', false, '10.1.2.3', false ],
+		];
+	}
+
+	/**
+	 * A block agrees with the gate's page: a signed-out visitor whom paid access
+	 * lets in reads the post without registering, so they see the block too. Only
+	 * paid access that is on can do that, and a block's own rules answer the same
+	 * way as a gate holding them.
+	 *
+	 * @dataProvider paid_institution_cases
+	 *
+	 * @param string $mode               Access mode, 'gate' or 'custom'.
+	 * @param bool   $paid_access_active Whether paid access is on.
+	 * @param string $ip                 The visitor's IP address.
+	 * @param bool   $sees_block         Whether the visitor sees the block.
+	 */
+	public function test_paid_institutions_let_a_signed_out_visitor_skip_registration( $mode, $paid_access_active, $ip, $sees_block ) {
+		$rules = $this->registration_and_institution_rules( $this->make_campus_institution(), $paid_access_active );
+		if ( 'gate' === $mode ) {
+			$gate_id = $this->make_gate( false );
+			update_post_meta( $gate_id, 'registration', $rules['registration'] );
+			update_post_meta( $gate_id, 'custom_access', $rules['custom_access'] );
+			$block = $this->make_block(
+				'core/group',
+				[
+					'newspackAccessControlMode'    => 'gate',
+					'newspackAccessControlGateIds' => [ $gate_id ],
+				]
+			);
+		} else {
+			$block = $this->make_block_with_rules( 'core/group', $rules );
+		}
+
+		$this->assertSame( $sees_block ? '<div>members</div>' : '', $this->render_for_signed_out_visitor_at( $block, $ip ) );
 	}
 }

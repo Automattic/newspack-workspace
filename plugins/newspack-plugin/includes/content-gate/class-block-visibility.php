@@ -675,23 +675,12 @@ class Block_Visibility {
 	 * @return bool
 	 */
 	private static function compute_rules_match( $rules, $user_id ) {
-		$registration  = $rules['registration'] ?? [];
-		$custom_access = $rules['custom_access'] ?? [];
-
-		$registration_passes = true;
-		if ( ! empty( $registration['active'] ) ) {
-			if ( ! $user_id ) {
-				// A gate's registered access can count a signed-out visitor as registered,
-				// as it does on the gate's own page (NPPD-2310). The block editor never
-				// writes these rules into block attributes.
-				$registration_passes = Access_Rules::evaluate_anonymous_rules( $registration['access_rules'] ?? [] );
-			} elseif ( ! empty( $registration['require_verification'] ) ) {
-				$registration_passes = (bool) get_user_meta( $user_id, Reader_Activation::EMAIL_VERIFIED, true );
-			}
-		}
+		$registration     = $rules['registration'] ?? [];
+		$custom_access    = $rules['custom_access'] ?? [];
+		$has_access_rules = ! empty( $custom_access['active'] ) && ! empty( $custom_access['access_rules'] );
 
 		$access_passes = true;
-		if ( ! empty( $custom_access['active'] ) && ! empty( $custom_access['access_rules'] ) ) {
+		if ( $has_access_rules ) {
 			// Gate-derived rules carry the gate's stored setting; rules parsed from
 			// block attributes never contain the key, so block-attribute visibility
 			// is deliberately always grace-ON — the block editor exposes no
@@ -704,6 +693,27 @@ class Block_Visibility {
 			// the same reason the withholding decision does. The article page still
 			// honours the grant.
 			$access_passes = Access_Rules::evaluate_rules_for_visitor( $custom_access['access_rules'], $user_id, $rule_context );
+		}
+
+		$registration_passes = true;
+		if ( ! empty( $registration['active'] ) ) {
+			if ( ! $user_id ) {
+				// A signed-out visitor who passes paid access doesn't need to register
+				// first, as on the gate's own page ({@see Content_Restriction_Control::is_post_restricted()}),
+				// so once paid access is on with rules, its answer decides both walls.
+				// Without this, an on-campus visitor reads the post but not the blocks set
+				// to its gate. A block's own rules answer the same way, so a block and a
+				// gate holding the same rules never disagree.
+				//
+				// With no paid rules, registered access's own rules can count the visitor
+				// as registered (NPPD-2310). The block editor never writes registration
+				// rules into block attributes.
+				$registration_passes = $has_access_rules
+					? $access_passes
+					: Access_Rules::evaluate_anonymous_rules( $registration['access_rules'] ?? [] );
+			} elseif ( ! empty( $registration['require_verification'] ) ) {
+				$registration_passes = (bool) get_user_meta( $user_id, Reader_Activation::EMAIL_VERIFIED, true );
+			}
 		}
 
 		// AND logic: both must pass when both are configured.
