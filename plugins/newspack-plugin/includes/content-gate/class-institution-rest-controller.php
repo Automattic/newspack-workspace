@@ -23,8 +23,10 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	 * Defined as the block editor visibility panel's own capability rather than a
 	 * literal of its own: the panel is this route's only non-administrator
 	 * consumer, and a panel shown to a role this gate refuses renders an empty
-	 * institution picker with nothing failing. Grants institution names (id and
-	 * title) only; the stored rules stay behind RULES_CAPABILITY below.
+	 * institution picker with nothing failing. Admits the institution posts
+	 * without their stored rules, which stay behind RULES_CAPABILITY below; every
+	 * other field, excerpt included, is returned. The panel requests only id and
+	 * title.
 	 *
 	 * @var string
 	 */
