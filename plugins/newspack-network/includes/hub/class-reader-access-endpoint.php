@@ -23,7 +23,8 @@ use WP_REST_Response;
  * and their paid one-time orders.
  *
  * The answer comes from the copies the hub keeps of every site's subscriptions and
- * orders, so a node's question never turns into requests to other nodes.
+ * orders, found through indexed per-email keys, so it costs the hub a few lookups
+ * and no requests to other sites.
  */
 class Reader_Access_Endpoint {
 

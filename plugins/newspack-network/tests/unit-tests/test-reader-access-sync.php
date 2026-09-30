@@ -334,6 +334,26 @@ class TestReaderAccessSync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * After a failed background refresh, a stale copy isn't queued again on every page view.
+	 */
+	public function test_failed_refresh_backs_off() {
+		update_user_meta(
+			$this->user_id,
+			Reader_Access_Sync::META_KEY,
+			[
+				'synced_at'    => time() - 13 * HOUR_IN_SECONDS,
+				'attempted_at' => time(),
+				'sites'        => [],
+			]
+		);
+		wp_set_current_user( $this->user_id );
+
+		$this->passes_premium_gate();
+
+		$this->assertFalse( wp_next_scheduled( Reader_Access_Sync::REFRESH_HOOK, [ $this->user_id ] ) );
+	}
+
+	/**
 	 * After a failed pull, gated checks don't retry on every page view.
 	 */
 	public function test_failed_pull_backs_off() {

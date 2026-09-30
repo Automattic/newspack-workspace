@@ -36,11 +36,16 @@ class Events {
 		}
 
 		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_order_changed', [ __CLASS__, 'order_changed' ] );
-		// Trashing, deleting and restoring an order don't change its status through the
-		// status hook, so the hub's copy would keep a trashed paid order granting access.
+		// Trashing and deleting an order don't go through the status hook, so the hub's copy
+		// would keep a trashed paid order granting access. The WooCommerce hooks cover the
+		// order tables and the order data store; the post hooks cover the classic orders
+		// screen, which trashes, restores and deletes order posts directly. Restoring from
+		// the order tables saves the order, which fires the status hook.
 		Data_Events::register_listener( 'woocommerce_trash_order', 'newspack_node_order_changed', [ __CLASS__, 'order_trashed' ] );
 		Data_Events::register_listener( 'woocommerce_before_delete_order', 'newspack_node_order_changed', [ __CLASS__, 'order_deleted' ] );
-		Data_Events::register_listener( 'woocommerce_untrash_order', 'newspack_node_order_changed', [ __CLASS__, 'order_untrashed' ] );
+		Data_Events::register_listener( 'trashed_post', 'newspack_node_order_changed', [ __CLASS__, 'order_post_trashed' ] );
+		Data_Events::register_listener( 'untrashed_post', 'newspack_node_order_changed', [ __CLASS__, 'order_post_untrashed' ] );
+		Data_Events::register_listener( 'before_delete_post', 'newspack_node_order_changed', [ __CLASS__, 'order_post_deleted' ] );
 		Data_Events::register_listener( 'woocommerce_subscription_status_changed', 'newspack_node_subscription_changed', [ __CLASS__, 'subscription_changed' ] );
 		Data_Events::register_listener( 'newspack_network_save_product', 'newspack_network_product_updated', [ __CLASS__, 'product_updated' ] );
 	}
@@ -163,17 +168,46 @@ class Events {
 	}
 
 	/**
-	 * Callback for the order restored listener.
+	 * Callback for a trashed post, for orders stored as posts.
 	 *
-	 * @param int $order_id The Order ID.
+	 * @param int $post_id Post ID.
 	 * @return array|null
 	 */
-	public static function order_untrashed( $order_id ) {
-		$order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : false;
-		if ( ! $order || 'shop_order' !== $order->get_type() ) {
+	public static function order_post_trashed( $post_id ) {
+		if ( 'shop_order' !== get_post_type( $post_id ) ) {
 			return null;
 		}
-		return self::order_changed( $order_id, 'trash', $order->get_status(), $order );
+		return self::order_trashed( $post_id );
+	}
+
+	/**
+	 * Callback for a restored post, for orders stored as posts. Fires after the restore.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array|null
+	 */
+	public static function order_post_untrashed( $post_id ) {
+		if ( 'shop_order' !== get_post_type( $post_id ) || ! function_exists( 'wc_get_order' ) ) {
+			return null;
+		}
+		$order = wc_get_order( $post_id );
+		if ( ! $order ) {
+			return null;
+		}
+		return self::order_changed( $post_id, 'trash', $order->get_status(), $order );
+	}
+
+	/**
+	 * Callback for a post about to be deleted, for orders stored as posts.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array|null
+	 */
+	public static function order_post_deleted( $post_id ) {
+		if ( 'shop_order' !== get_post_type( $post_id ) || ! function_exists( 'wc_get_order' ) ) {
+			return null;
+		}
+		return self::order_deleted( $post_id, wc_get_order( $post_id ) );
 	}
 
 	/**

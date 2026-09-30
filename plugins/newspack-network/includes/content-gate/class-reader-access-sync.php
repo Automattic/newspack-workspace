@@ -60,7 +60,7 @@ class Reader_Access_Sync {
 
 	/**
 	 * Seconds after a failed pull before a gated check tries again, so an unreachable
-	 * hub doesn't slow down every page view.
+	 * hub doesn't slow down every page view or queue a refresh on each one.
 	 */
 	const RETRY_AFTER = 10 * MINUTE_IN_SECONDS;
 
@@ -179,7 +179,9 @@ class Reader_Access_Sync {
 			return;
 		}
 
-		if ( time() - $synced_at > self::get_refresh_interval() ) {
+		$refresh_due = time() - $synced_at > self::get_refresh_interval();
+		$backed_off  = time() - (int) ( $snapshot['attempted_at'] ?? 0 ) >= self::RETRY_AFTER;
+		if ( $refresh_due && $backed_off ) {
 			self::schedule_refresh( $user_id );
 		}
 	}
@@ -250,7 +252,9 @@ class Reader_Access_Sync {
 			update_option( self::LAST_ERROR_OPTION, sprintf( '%s UTC: %s', gmdate( 'Y-m-d H:i' ), $result->get_error_message() ), false );
 			return $result;
 		}
-		delete_option( self::LAST_ERROR_OPTION );
+		if ( false !== get_option( self::LAST_ERROR_OPTION, false ) ) {
+			delete_option( self::LAST_ERROR_OPTION );
+		}
 
 		self::store( $user->ID, $result );
 		return true;
