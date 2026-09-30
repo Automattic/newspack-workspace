@@ -1140,8 +1140,9 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 	/**
 	 * Ways a group subscription lapses. On hold still grants access while a payment
-	 * retry is pending, so leaving On hold ends access too; that's how a group
-	 * lapses after its payment retries run out.
+	 * retry is pending, so moving from On hold to Expired or Cancelled ends access
+	 * too. On hold to Expired is how a group lapses after its payment retries run
+	 * out.
 	 *
 	 * @return array[]
 	 */

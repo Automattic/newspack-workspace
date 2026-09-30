@@ -705,8 +705,8 @@ class Premium_Newsletters {
 	/**
 	 * Whether a subscription event can change what a group's members are entitled to.
 	 *
-	 * Members are skipped only when the status moves between two statuses that both
-	 * grant access, such as Active to Pending cancel. Checking them then would
+	 * Members are skipped only when the status moves between the two statuses that
+	 * always grant access, Active and Pending cancel. Checking them then would
 	 * re-add every premium list a member had left whenever auto-signup is on. Any
 	 * other move may change access: On hold still grants it while a payment retry is
 	 * pending, so On hold to Expired, the last step of a lapse after failed
