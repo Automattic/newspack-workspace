@@ -72,12 +72,21 @@ class Orders extends Woo_Store {
 		Debugger::log( 'Local ID: ' . $local_id );
 
 		// Data from the event.
+		update_post_meta( $local_id, 'user_email', $order->get_email() );
 		update_post_meta( $local_id, 'payment_count', $order->get_payment_count() );
 		update_post_meta( $local_id, 'formatted_total', $order->get_formatted_total() );
 		update_post_meta( $local_id, 'subscription_relationship', $order->get_subscription_relationship() );
 		update_post_meta( $local_id, 'currency', $order->get_currency() );
 		update_post_meta( $local_id, 'total', $order->get_total() );
 		update_post_meta( $local_id, 'payment_method_title', $order->get_payment_method_title() );
+		update_post_meta( $local_id, 'date_created', $order->get_date_created() );
+
+		// Line items, which cross-site one-time access matches on. Orders sent before
+		// events carried them have none until they are backfilled.
+		delete_post_meta( $local_id, 'products' );
+		foreach ( $order->get_products() as $product ) {
+			add_post_meta( $local_id, 'products', (array) $product );
+		}
 
 		Debugger::log( 'Updating post status to ' . $order->get_status_after() );
 		$update_array = [

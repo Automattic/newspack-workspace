@@ -76,6 +76,9 @@ abstract class Woo_Store {
 	 *
 	 * If there's no local post for the given Woo_Item_Changed event, creates one.
 	 *
+	 * An item is identified by its ID together with its site: every site numbers its
+	 * orders and subscriptions independently, so two sites can each have an item #500.
+	 *
 	 * @param Woo_Item_Changed $woo_item The Woo_Item_Changed event.
 	 * @return int The local post ID.
 	 */
@@ -85,8 +88,16 @@ abstract class Woo_Store {
 			[
 				'post_type'      => static::get_post_type_slug(),
 				'post_status'    => 'any',
-				'meta_key'       => 'remote_id',
-				'meta_value'     => $woo_item_id, //phpcs:ignore
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'   => 'remote_id',
+						'value' => $woo_item_id,
+					],
+					[
+						'key'   => 'node_id',
+						'value' => $woo_item->get_node_id(),
+					],
+				],
 				'posts_per_page' => 1,
 				'fields'         => 'ids',
 			]

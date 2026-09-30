@@ -33,4 +33,16 @@ class Order_Changed extends Woo_Item_Changed {
 
 		Orders::persist( $this );
 	}
+
+	/**
+	 * Returns the order's line items.
+	 *
+	 * Each has the product ID (the parent, for a variation), the variation ID, the
+	 * name, and whether it is a subscription product.
+	 *
+	 * @return array
+	 */
+	public function get_products() {
+		return $this->data->products ?? [];
+	}
 }

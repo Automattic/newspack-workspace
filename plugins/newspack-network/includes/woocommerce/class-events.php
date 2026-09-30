@@ -35,7 +35,7 @@ class Events {
 			return;
 		}
 
-		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_order_changed', [ __CLASS__, 'item_changed' ] );
+		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_order_changed', [ __CLASS__, 'order_changed' ] );
 		Data_Events::register_listener( 'woocommerce_subscription_status_changed', 'newspack_node_subscription_changed', [ __CLASS__, 'subscription_changed' ] );
 		Data_Events::register_listener( 'newspack_network_save_product', 'newspack_network_product_updated', [ __CLASS__, 'product_updated' ] );
 	}
@@ -112,6 +112,64 @@ class Events {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Callback for the order Data Events API listener.
+	 *
+	 * @param int       $item_id     The Order ID.
+	 * @param string    $status_from The status before the change.
+	 * @param string    $status_to   The status after the change.
+	 * @param \WC_Order $order       The Order object.
+	 * @return array
+	 */
+	public static function order_changed( $item_id, $status_from, $status_to, $order ) {
+		$result             = self::item_changed( $item_id, $status_from, $status_to, $order );
+		$result['products'] = self::get_order_products( $order );
+		return $result;
+	}
+
+	/**
+	 * An order's line items, so the hub can tell which products a reader bought.
+	 *
+	 * Items whose product no longer exists are left out: whether they were
+	 * subscriptions can't be told, and counting a renewal as a one-time purchase
+	 * would grant access nobody sold.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return array[] Each with id (the parent, for a variation), variation_id, name and subscription.
+	 */
+	public static function get_order_products( $order ) {
+		$products = [];
+		foreach ( $order->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) ) {
+				continue;
+			}
+			$product = $item->get_product();
+			if ( ! $product ) {
+				continue;
+			}
+			$products[] = [
+				'id'           => (int) $item->get_product_id(),
+				'variation_id' => (int) $item->get_variation_id(),
+				'name'         => $item->get_name(),
+				'subscription' => self::is_subscription_product( $product ),
+			];
+		}
+		return $products;
+	}
+
+	/**
+	 * Whether a product is a subscription product, including a variation of one.
+	 *
+	 * @param \WC_Product $product Product.
+	 * @return bool
+	 */
+	private static function is_subscription_product( $product ) {
+		if ( class_exists( '\WC_Subscriptions_Product' ) ) {
+			return \WC_Subscriptions_Product::is_subscription( $product );
+		}
+		return $product->is_type( [ 'subscription', 'variable-subscription', 'subscription_variation' ] );
 	}
 
 	/**

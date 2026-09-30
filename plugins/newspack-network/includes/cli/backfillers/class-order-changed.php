@@ -54,7 +54,7 @@ class Order_Changed extends Abstract_Backfiller {
 
 		foreach ( $orders as $order ) {
 
-			$order_data = Woo_Listeners::item_changed( $order->get_id(), '', $order->get_status(), $order );
+			$order_data = Woo_Listeners::order_changed( $order->get_id(), '', $order->get_status(), $order );
 
 			$timestamp = strtotime( $order->get_date_created() );
 

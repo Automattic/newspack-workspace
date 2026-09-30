@@ -72,6 +72,7 @@ class Subscriptions extends Woo_Store {
 		Debugger::log( 'Local ID: ' . $local_id );
 
 		// Data from the event.
+		update_post_meta( $local_id, 'user_email', $subscription->get_email() );
 		update_post_meta( $local_id, 'payment_count', $subscription->get_payment_count() );
 		update_post_meta( $local_id, 'formatted_total', $subscription->get_formatted_total() );
 		update_post_meta( $local_id, 'currency', $subscription->get_currency() );
