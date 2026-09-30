@@ -24,15 +24,13 @@ describe( 'CustomAccess institutions-only warning', () => {
 	const institutionOnly = [ [ { slug: 'institution', value: [ 7 ] } ] ];
 
 	it( 'warns when institutions are the only paid condition behind a registration wall', () => {
-		render( <CustomAccess customAccess={ withRules( institutionOnly ) } onChange={ jest.fn() } governsSignedOut={ false } isNewsletter /> );
+		render( <CustomAccess customAccess={ withRules( institutionOnly ) } onChange={ jest.fn() } governsSignedOut={ false } /> );
 
 		expect( screen.getByText( WARNING, IN_NOTICE ) ).toBeInTheDocument();
 	} );
 
 	it( 'stays quiet without a registration wall, or when another paid condition lets readers in', () => {
-		const { unmount } = render(
-			<CustomAccess customAccess={ withRules( institutionOnly ) } onChange={ jest.fn() } governsSignedOut isNewsletter />
-		);
+		const { unmount } = render( <CustomAccess customAccess={ withRules( institutionOnly ) } onChange={ jest.fn() } governsSignedOut /> );
 		expect( screen.queryByText( WARNING, IN_NOTICE ) ).not.toBeInTheDocument();
 		unmount();
 
@@ -41,9 +39,14 @@ describe( 'CustomAccess institutions-only warning', () => {
 				customAccess={ withRules( [ ...institutionOnly, [ { slug: 'subscription', value: [ 50 ] } ] ] ) }
 				onChange={ jest.fn() }
 				governsSignedOut={ false }
-				isNewsletter
 			/>
 		);
+		expect( screen.queryByText( WARNING, IN_NOTICE ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'stays quiet on a premium newsletter gate, whose editor has no Registered Access card to point to', () => {
+		render( <CustomAccess customAccess={ withRules( institutionOnly ) } onChange={ jest.fn() } governsSignedOut={ false } isNewsletter /> );
+
 		expect( screen.queryByText( WARNING, IN_NOTICE ) ).not.toBeInTheDocument();
 	} );
 } );

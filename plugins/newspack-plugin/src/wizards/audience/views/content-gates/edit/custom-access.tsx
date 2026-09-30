@@ -69,6 +69,7 @@ export default function CustomAccess( { customAccess, onChange, isNewsletter = f
 	// also become the only way past paid access for signed-in readers. Behind a
 	// registration wall that's rarely what's meant (NPPD-2310).
 	const onlyInstitutionsPass =
+		! isNewsletter &&
 		! governsSignedOut &&
 		customAccess.access_rules.length > 0 &&
 		customAccess.access_rules.every( group => group?.length > 0 && group.every( rule => rule?.slug === 'institution' ) );
@@ -93,7 +94,7 @@ export default function CustomAccess( { customAccess, onChange, isNewsletter = f
 				<CardBody size="small">
 					<Notice status="warning" isDismissible={ false }>
 						{ __(
-							'Signed-in readers who aren’t from a selected institution will be blocked by paid access, even after registering. To let institutions skip registration only, select them under Registered Access and turn paid access off.',
+							'Signed-in readers who aren’t from a selected institution will be blocked by Paid Access, even after registering. To let institutions skip registration only, select them under Registered Access and turn Paid Access off.',
 							'newspack-plugin'
 						) }
 					</Notice>
