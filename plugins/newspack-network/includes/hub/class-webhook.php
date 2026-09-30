@@ -121,6 +121,8 @@ class Webhook {
 			return new WP_REST_Response( array( 'error' => $error ), 500 );
 		}
 
+		self::maybe_log_node_origin( $node );
+
 		$incoming_event_class = 'Newspack_Network\\Incoming_Events\\' . $incoming_events[ $action ];
 
 		// The claim is held while the event is processed. Processing that fails
@@ -170,5 +172,48 @@ class Webhook {
 		}
 
 		return new WP_REST_Response( 'success' );
+	}
+
+	/**
+	 * Logs a line when the sending Node was not created by a current administrator.
+	 *
+	 * Nodes are managed by administrators, so a Node whose author is missing or
+	 * is not one is worth a look. The event is processed either way; the line
+	 * points an administrator at the Node. It goes through newspack_log because
+	 * Debugger::log() writes only when NEWSPACK_NETWORK_DEBUG is defined.
+	 *
+	 * @param Node $node The Node the event came from.
+	 * @return void
+	 */
+	private static function maybe_log_node_origin( $node ) {
+		$author_id = (int) get_post_field( 'post_author', $node->get_id() );
+		if ( $author_id && user_can( $author_id, 'manage_options' ) ) {
+			return;
+		}
+
+		$message = sprintf(
+			'Network node %d (%s) was not created by an administrator; review it under Network > Nodes.',
+			$node->get_id(),
+			$node->get_url()
+		);
+		Debugger::log( $message );
+		if ( ! method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+			return;
+		}
+		// A newspack_log listener that throws must not change how the delivery is
+		// handled: this runs while the delivery's claim is held.
+		try {
+			\Newspack\Logger::newspack_log(
+				'newspack_network_node_origin',
+				$message,
+				[
+					'node_id'  => $node->get_id(),
+					'node_url' => $node->get_url(),
+				],
+				'warning'
+			);
+		} catch ( \Throwable $e ) {
+			Debugger::log( 'Could not log the node origin: ' . $e->getMessage() );
+		}
 	}
 }

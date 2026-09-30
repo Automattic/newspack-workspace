@@ -37,5 +37,8 @@ require_once __DIR__ . '/class-wp-cli-halt.php';
 require_once __DIR__ . '/class-wp-cli.php';
 require_once __DIR__ . '/wp-cli-utils.php';
 
+// Lets tests observe what the plugin reports through newspack_log.
+require_once __DIR__ . '/stubs/class-logger.php';
+
 // Start up the WP testing environment.
 require "{$newspack_network_hub_test_dir}/includes/bootstrap.php";
