@@ -263,6 +263,21 @@ class TestReaderAccessSync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A failed pull is recorded where the node's settings screen shows it, and a later
+	 * successful pull clears it, so a broken connection doesn't fail quietly.
+	 */
+	public function test_failed_pull_is_recorded_until_a_pull_succeeds() {
+		$this->mock_hub( [], null, 404 );
+		Reader_Access_Sync::sync( $this->user_id );
+		$this->assertStringContainsString( '404', Reader_Access_Sync::get_last_error() );
+
+		remove_all_filters( 'pre_http_request' );
+		$this->mock_hub( $this->other_site_with_subscription() );
+		Reader_Access_Sync::sync( $this->user_id );
+		$this->assertSame( '', Reader_Access_Sync::get_last_error() );
+	}
+
+	/**
 	 * A logged-in reader with nothing pulled yet (already logged in before this shipped,
 	 * or whose account postdates their subscription) is pulled on their first gated check.
 	 */

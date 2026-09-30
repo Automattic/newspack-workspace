@@ -322,7 +322,8 @@ class Settings {
 	 */
 	private static function render_debug_tools() {
 		$icon          = '❌';
-		$error_message = Pulling::get_last_error_message();
+		$error_message       = Pulling::get_last_error_message();
+		$reader_access_error = \Newspack_Network\Content_Gate\Reader_Access_Sync::get_last_error();
 		if ( empty( $error_message ) ) {
 			$icon          = '✅';
 			$error_message = __( 'No recent errors.', 'newspack-network' );
@@ -338,6 +339,10 @@ class Settings {
 				<tr>
 					<th scope="row"><?php _e( 'Last Error From Server', 'newspack-network' ); ?></th>
 					<td><?php echo esc_html( $icon ); ?> <?php echo esc_html( $error_message ); ?></td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Last Reader Access Error', 'newspack-network' ); ?></th>
+					<td><?php echo esc_html( $reader_access_error ? '❌ ' . $reader_access_error : '✅ ' . __( 'No recent errors.', 'newspack-network' ) ); ?></td>
 				</tr>
 			</tbody>
 		</table>

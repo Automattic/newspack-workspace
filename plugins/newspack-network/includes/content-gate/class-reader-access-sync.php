@@ -43,6 +43,16 @@ class Reader_Access_Sync {
 	const REFRESH_HOOK = 'newspack_network_refresh_reader_access';
 
 	/**
+	 * Action Scheduler group for background refreshes.
+	 */
+	const REFRESH_GROUP = 'newspack-network';
+
+	/**
+	 * Option holding the last failed pull's error, shown on the node settings screen.
+	 */
+	const LAST_ERROR_OPTION = 'newspack_network_reader_access_last_error';
+
+	/**
 	 * Seconds the hub may take to answer. A pull can hold up a page view, so this stays
 	 * well under the default; the hub answers from its own database.
 	 */
@@ -60,6 +70,15 @@ class Reader_Access_Sync {
 	public static function init() {
 		add_action( 'wp_login', [ __CLASS__, 'refresh_on_next_check' ], 10, 2 );
 		add_action( self::REFRESH_HOOK, [ __CLASS__, 'sync' ] );
+	}
+
+	/**
+	 * The last failed pull's error, or '' if the last pull succeeded.
+	 *
+	 * @return string
+	 */
+	public static function get_last_error() {
+		return (string) get_option( self::LAST_ERROR_OPTION, '' );
 	}
 
 	/**
@@ -160,8 +179,30 @@ class Reader_Access_Sync {
 			return;
 		}
 
-		if ( time() - $synced_at > self::get_refresh_interval() && ! wp_next_scheduled( self::REFRESH_HOOK, [ $user_id ] ) ) {
-			wp_schedule_single_event( time(), self::REFRESH_HOOK, [ $user_id ] );
+		if ( time() - $synced_at > self::get_refresh_interval() ) {
+			self::schedule_refresh( $user_id );
+		}
+	}
+
+	/**
+	 * Refresh a reader's copy in the background, once.
+	 *
+	 * Action Scheduler (bundled with WooCommerce) queues these in its own table; a WP
+	 * cron event per reader would pile up in the autoloaded cron option on a busy site.
+	 *
+	 * @param int $user_id User ID.
+	 * @return void
+	 */
+	private static function schedule_refresh( $user_id ) {
+		$args = [ $user_id ];
+		if ( function_exists( 'as_enqueue_async_action' ) && function_exists( 'as_has_scheduled_action' ) ) {
+			if ( ! as_has_scheduled_action( self::REFRESH_HOOK, $args, self::REFRESH_GROUP ) ) {
+				as_enqueue_async_action( self::REFRESH_HOOK, $args, self::REFRESH_GROUP );
+			}
+			return;
+		}
+		if ( ! wp_next_scheduled( self::REFRESH_HOOK, $args ) ) {
+			wp_schedule_single_event( time(), self::REFRESH_HOOK, $args );
 		}
 	}
 
@@ -206,8 +247,10 @@ class Reader_Access_Sync {
 		$result = self::fetch( $user->user_email );
 		if ( is_wp_error( $result ) ) {
 			Debugger::log( sprintf( 'Reader access: pull for user %d failed: %s', $user->ID, $result->get_error_message() ) );
+			update_option( self::LAST_ERROR_OPTION, sprintf( '%s UTC: %s', gmdate( 'Y-m-d H:i' ), $result->get_error_message() ), false );
 			return $result;
 		}
+		delete_option( self::LAST_ERROR_OPTION );
 
 		self::store( $user->ID, $result );
 		return true;
