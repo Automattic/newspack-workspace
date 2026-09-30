@@ -113,9 +113,9 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	 * The panel loads for exactly the roles the institution route lets read names.
 	 *
 	 * Runs the whole enqueue per built-in role, so it also catches a later guard
-	 * that hides the panel from a role the route admits. Fails when the two gates
-	 * stop admitting the same built-in roles. Skips without a built asset, which
-	 * is the case in CI; the test above covers the capability check there.
+	 * that hides the panel from a role the route admits. Skips without a built
+	 * asset, which is the case in CI; the test above covers the capability check
+	 * there.
 	 */
 	public function test_panel_loads_for_exactly_the_institution_read_tier() {
 		// The enqueue also bails when the built asset is absent, which would make the
