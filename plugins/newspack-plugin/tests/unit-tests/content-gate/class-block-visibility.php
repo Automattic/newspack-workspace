@@ -1192,7 +1192,7 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A block following a gate agrees with the gate's page: an on-campus visitor
+	 * A block set to a gate agrees with the gate's page: an on-campus visitor
 	 * whom registered access counts as registered sees it without an account.
 	 */
 	public function test_gate_mode_registration_institutions_show_the_block_to_a_matching_visitor() {
@@ -1269,14 +1269,16 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	/**
 	 * Registered access on, paid access granted to one institution.
 	 *
-	 * @param int $institution_id Institution ID.
+	 * @param int  $institution_id     Institution ID.
+	 * @param bool $paid_access_active Whether paid access is on. Switching it off in
+	 *                                 the gate editor keeps its rules stored.
 	 * @return array Rules in the shape a gate stores them.
 	 */
-	private function registration_and_institution_rules( $institution_id ) {
+	private function registration_and_institution_rules( $institution_id, $paid_access_active ) {
 		return [
 			'registration'  => [ 'active' => true ],
 			'custom_access' => [
-				'active'       => true,
+				'active'       => $paid_access_active,
 				'access_rules' => [
 					[
 						[
@@ -1290,54 +1292,51 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A block following a gate agrees with the gate's page: an on-campus visitor
-	 * whom paid access counts as paying reads the post without registering, so
-	 * they see the block too.
+	 * Cases for test_paid_institutions_let_a_signed_out_visitor_skip_registration().
+	 *
+	 * @return array[] Access mode, whether paid access is on, visitor IP, whether the visitor sees the block.
 	 */
-	public function test_gate_mode_paid_institutions_show_the_block_to_a_matching_visitor() {
-		$rules   = $this->registration_and_institution_rules( $this->make_campus_institution() );
-		$gate_id = $this->make_gate( false );
-		update_post_meta( $gate_id, 'registration', $rules['registration'] );
-		update_post_meta( $gate_id, 'custom_access', $rules['custom_access'] );
-
-		$block = $this->make_block(
-			'core/group',
-			[
-				'newspackAccessControlMode'    => 'gate',
-				'newspackAccessControlGateIds' => [ $gate_id ],
-			]
-		);
-		$this->assertSame( '<div>members</div>', $this->render_for_signed_out_visitor_at( $block, '10.1.2.3' ) );
+	public function paid_institution_cases() {
+		return [
+			'gate, on campus'                      => [ 'gate', true, '10.1.2.3', true ],
+			'gate, off campus'                     => [ 'gate', true, '192.168.1.1', false ],
+			'gate, paid access off, on campus'     => [ 'gate', false, '10.1.2.3', false ],
+			'block rules, on campus'               => [ 'custom', true, '10.1.2.3', true ],
+			'block rules, off campus'              => [ 'custom', true, '192.168.1.1', false ],
+			'block rules, paid access off, campus' => [ 'custom', false, '10.1.2.3', false ],
+		];
 	}
 
 	/**
-	 * The same gate still walls a signed-out visitor outside the institution.
+	 * A block agrees with the gate's page: a signed-out visitor whom paid access
+	 * lets in reads the post without registering, so they see the block too. Only
+	 * paid access that is on can do that, and a block's own rules answer the same
+	 * way as a gate holding them.
+	 *
+	 * @dataProvider paid_institution_cases
+	 *
+	 * @param string $mode               Access mode, 'gate' or 'custom'.
+	 * @param bool   $paid_access_active Whether paid access is on.
+	 * @param string $ip                 The visitor's IP address.
+	 * @param bool   $sees_block         Whether the visitor sees the block.
 	 */
-	public function test_gate_mode_paid_institutions_hide_the_block_from_a_visitor_off_campus() {
-		$rules   = $this->registration_and_institution_rules( $this->make_campus_institution() );
-		$gate_id = $this->make_gate( false );
-		update_post_meta( $gate_id, 'registration', $rules['registration'] );
-		update_post_meta( $gate_id, 'custom_access', $rules['custom_access'] );
+	public function test_paid_institutions_let_a_signed_out_visitor_skip_registration( $mode, $paid_access_active, $ip, $sees_block ) {
+		$rules = $this->registration_and_institution_rules( $this->make_campus_institution(), $paid_access_active );
+		if ( 'gate' === $mode ) {
+			$gate_id = $this->make_gate( false );
+			update_post_meta( $gate_id, 'registration', $rules['registration'] );
+			update_post_meta( $gate_id, 'custom_access', $rules['custom_access'] );
+			$block = $this->make_block(
+				'core/group',
+				[
+					'newspackAccessControlMode'    => 'gate',
+					'newspackAccessControlGateIds' => [ $gate_id ],
+				]
+			);
+		} else {
+			$block = $this->make_block_with_rules( 'core/group', $rules );
+		}
 
-		$block = $this->make_block(
-			'core/group',
-			[
-				'newspackAccessControlMode'    => 'gate',
-				'newspackAccessControlGateIds' => [ $gate_id ],
-			]
-		);
-		$this->assertSame( '', $this->render_for_signed_out_visitor_at( $block, '192.168.1.1' ) );
-	}
-
-	/**
-	 * A block's own rules answer the way a gate holding the same rules does.
-	 */
-	public function test_custom_mode_paid_institutions_show_the_block_to_a_matching_visitor() {
-		$block = $this->make_block_with_rules(
-			'core/group',
-			$this->registration_and_institution_rules( $this->make_campus_institution() )
-		);
-		$this->assertSame( '<div>members</div>', $this->render_for_signed_out_visitor_at( $block, '10.1.2.3' ) );
-		$this->assertSame( '', $this->render_for_signed_out_visitor_at( $block, '192.168.1.1' ) );
+		$this->assertSame( $sees_block ? '<div>members</div>' : '', $this->render_for_signed_out_visitor_at( $block, $ip ) );
 	}
 }
