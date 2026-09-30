@@ -22,6 +22,12 @@ class Product_Admin {
 	const NETWORK_ID_META_KEY = '_newspack_network_product_id';
 
 	/**
+	 * Product types that can carry a Network ID: subscription products, and the
+	 * simple and variable products the one-time purchase rule sells.
+	 */
+	const TAGGABLE_PRODUCT_TYPES = [ 'subscription', 'variable-subscription', 'simple', 'variable' ];
+
+	/**
 	 * Get the Network ID for a product, falling back to the parent product
 	 * for variations of a variable-subscription.
 	 *
@@ -46,6 +52,16 @@ class Product_Admin {
 	}
 
 	/**
+	 * Whether a product can carry a Network ID.
+	 *
+	 * @param \WC_Product|false|null $product Product.
+	 * @return bool
+	 */
+	public static function is_taggable( $product ) {
+		return $product && $product->is_type( self::TAGGABLE_PRODUCT_TYPES );
+	}
+
+	/**
 	 * Initializer.
 	 */
 	public static function init() {
@@ -62,7 +78,7 @@ class Product_Admin {
 		}
 		global $post;
 		$product = wc_get_product( $post );
-		if ( ! $product || ! $product->is_type( [ 'subscription', 'variable-subscription' ] ) ) {
+		if ( ! self::is_taggable( $product ) ) {
 			return;
 		}
 		add_meta_box(
@@ -85,7 +101,7 @@ class Product_Admin {
 		?>
 		<label for="newspack-network-product-id"><?php esc_html_e( 'Network ID', 'newspack-network' ); ?></label>
 		<input type="text" id="newspack-network-product-id" name="newspack_network_product_id" value="<?php echo esc_attr( $network_id ); ?>" style="width:100%;" />
-		<p class="description"><?php esc_html_e( 'If set, this product will be linked to products with the same Network ID on other sites in the network. Users with an active subscription to any linked product will be granted access across all sites.', 'newspack-network' ); ?></p>
+		<p class="description"><?php esc_html_e( 'If set, this product will be linked to products with the same Network ID on other sites in the network. Users with an active subscription to, or a paid one-time purchase of, any linked product will be granted access across all sites.', 'newspack-network' ); ?></p>
 		<?php
 	}
 
@@ -110,7 +126,7 @@ class Product_Admin {
 		}
 
 		$product = wc_get_product( $post_id );
-		if ( ! $product || ! $product->is_type( [ 'subscription', 'variable-subscription' ] ) ) {
+		if ( ! self::is_taggable( $product ) ) {
 			return;
 		}
 
