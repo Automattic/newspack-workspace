@@ -186,6 +186,17 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A list where no entry has a flag prints nothing, including the space that
+	 * follows a rendered wrapper.
+	 */
+	public function test_display_prints_nothing_when_no_label_renders() {
+		ob_start();
+		Tag_Labels::display( [ [ 'link' => 'https://example.com/tag/breaking/' ], [] ] );
+
+		self::assertSame( '', ob_get_clean() );
+	}
+
+	/**
 	 * The wrapper closes with a `<!-- .tag-labels -->` comment whatever the
 	 * outer element and classes are.
 	 */

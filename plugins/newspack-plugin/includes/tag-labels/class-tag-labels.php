@@ -125,7 +125,8 @@ class Tag_Labels {
 			}
 		}
 
-		// Like the sponsor flag, render nothing rather than an empty wrapper.
+		// Return nothing rather than an empty wrapper: theme CSS changes the category's
+		// layout whenever a `.tag-labels` follows it (`.cat-links:has( + .tag-labels )`).
 		if ( '' === $labels_html ) {
 			return '';
 		}
@@ -155,7 +156,12 @@ class Tag_Labels {
 		// follow a palette they are not meant to follow. Each caller declares its
 		// own styling; see the `.tag-labels` rules in newspack-blocks and both
 		// themes.
-		echo wp_kses_post( self::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), $outer_element ) . ' ' );
+		$html = self::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), $outer_element );
+		if ( '' === $html ) {
+			return;
+		}
+
+		echo wp_kses_post( $html . ' ' );
 	}
 
 	/**

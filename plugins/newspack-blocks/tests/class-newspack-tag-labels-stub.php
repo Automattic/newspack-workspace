@@ -50,7 +50,12 @@ if ( ! class_exists( __NAMESPACE__ . '\Tag_Labels' ) ) {
 				return;
 			}
 
-			echo wp_kses_post( self::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), $outer_element ) . ' ' );
+			$html = self::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), $outer_element );
+			if ( '' === $html ) {
+				return;
+			}
+
+			echo wp_kses_post( $html . ' ' );
 		}
 
 		/**
@@ -82,7 +87,8 @@ if ( ! class_exists( __NAMESPACE__ . '\Tag_Labels' ) ) {
 				}
 			}
 
-			// Like the sponsor flag, render nothing rather than an empty wrapper.
+			// Return nothing rather than an empty wrapper: theme CSS changes the category's
+			// layout whenever a `.tag-labels` follows it (`.cat-links:has( + .tag-labels )`).
 			if ( '' === $labels_html ) {
 				return '';
 			}
