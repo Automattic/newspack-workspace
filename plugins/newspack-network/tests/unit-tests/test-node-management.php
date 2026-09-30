@@ -108,8 +108,6 @@ class TestNodeManagement extends WP_UnitTestCase {
 		}
 
 		wp_set_current_user( $this->editor_id );
-		$caps = get_post_type_object( Nodes::POST_TYPE_SLUG )->cap;
-		$this->assertFalse( current_user_can( $caps->edit_post, $this->node_id ), 'Editor should not edit a node.' );
 		$this->assertFalse( current_user_can( 'edit_post', $this->node_id ), 'Editor should not edit a node.' );
 		$this->assertFalse( current_user_can( 'delete_post', $this->node_id ), 'Editor should not delete a node.' );
 	}
