@@ -52,6 +52,13 @@ class TestHubWebhook extends \WP_UnitTestCase {
 	private $secret_key;
 
 	/**
+	 * The fixture Node's post ID.
+	 *
+	 * @var int
+	 */
+	private $node_id;
+
+	/**
 	 * Create the custom tables once, before the per-test transaction.
 	 *
 	 * Both the used-nonce store and the event log create their table lazily via
@@ -74,15 +81,15 @@ class TestHubWebhook extends \WP_UnitTestCase {
 
 		$this->secret_key = Crypto::generate_secret_key();
 
-		$node_id = self::factory()->post->create(
+		$this->node_id = self::factory()->post->create(
 			[
 				'post_type'   => Nodes::POST_TYPE_SLUG,
 				'post_title'  => 'Sync Node',
 				'post_status' => 'publish',
 			]
 		);
-		update_post_meta( $node_id, 'node-url', self::NODE_URL );
-		update_post_meta( $node_id, 'secret-key', $this->secret_key );
+		update_post_meta( $this->node_id, 'node-url', self::NODE_URL );
+		update_post_meta( $this->node_id, 'secret-key', $this->secret_key );
 	}
 
 	/**
@@ -428,5 +435,76 @@ class TestHubWebhook extends \WP_UnitTestCase {
 		remove_filter( 'query', $break_insert );
 
 		$this->assertNull( $result, 'A claim that could not be recorded reports no state, so the caller retries rather than guesses.' );
+	}
+
+	/**
+	 * Set the fixture Node's author, deliver one event, and collect what was
+	 * reported through newspack_log about the Node's origin.
+	 *
+	 * @param int $author_id The user to record as the Node's author.
+	 * @return array{0: \WP_REST_Response, 1: array} The response and the matching log entries.
+	 */
+	private function deliver_from_node_authored_by( $author_id ) {
+		wp_update_post(
+			[
+				'ID'          => $this->node_id,
+				'post_author' => $author_id,
+			]
+		);
+
+		$logged  = [];
+		$capture = function ( $code, $message, $params ) use ( &$logged ) {
+			if ( 'newspack_network_node_origin' === $code ) {
+				$logged[] = [ $message, $params ];
+			}
+		};
+		add_action( 'newspack_log', $capture, 10, 3 );
+
+		$response = Webhook::handle_webhook( $this->build_request( time(), Crypto::generate_nonce(), $this->probe_payload() ) );
+
+		remove_action( 'newspack_log', $capture, 10 );
+
+		return [ $response, $logged ];
+	}
+
+	/**
+	 * An event from a Node an editor created is processed as before, and one line
+	 * is logged naming the Node.
+	 */
+	public function test_event_from_node_not_created_by_administrator_is_processed_and_logged() {
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+
+		list( $response, $logged ) = $this->deliver_from_node_authored_by( $editor_id );
+
+		$this->assertSame( 200, $response->get_status(), 'The event is processed as before.' );
+		$this->assertSame( 1, $this->event_log_count(), 'The event is persisted as before.' );
+		$this->assertCount( 1, $logged, 'One line is logged for the Node.' );
+		$this->assertStringContainsString( (string) $this->node_id, $logged[0][0] );
+		$this->assertStringContainsString( self::NODE_URL, $logged[0][0] );
+		$this->assertSame( 'warning', $logged[0][1]['type'] );
+	}
+
+	/**
+	 * A Node with no recorded author is logged the same way.
+	 */
+	public function test_event_from_node_without_author_is_processed_and_logged() {
+		list( $response, $logged ) = $this->deliver_from_node_authored_by( 0 );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $this->event_log_count() );
+		$this->assertCount( 1, $logged );
+	}
+
+	/**
+	 * An event from a Node an administrator created logs nothing.
+	 */
+	public function test_event_from_node_created_by_administrator_is_not_logged() {
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+
+		list( $response, $logged ) = $this->deliver_from_node_authored_by( $admin_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $this->event_log_count() );
+		$this->assertCount( 0, $logged );
 	}
 }
