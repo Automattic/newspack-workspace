@@ -716,38 +716,6 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * Malformed entries are skipped, and a well-formed label beside them still
-	 * renders. An empty `link` counts as no link.
-	 */
-	public function test_display_tag_labels_skips_malformed_entries() {
-		ob_start();
-		Newspack_Blocks::display_tag_labels(
-			[
-				[ 'link' => 'https://example.org/tag/no-flag/' ],
-				[],
-				'Opinion',
-				null,
-				42,
-				[
-					'flag' => 'Empty link',
-					'link' => '',
-				],
-				[
-					'flag' => 'Analysis',
-					'link' => 'https://example.org/tag/analysis/',
-				],
-			]
-		);
-		$html = ob_get_clean();
-
-		self::assertStringNotContainsString( 'no-flag', $html, 'An entry without a flag renders nothing.' );
-		self::assertStringContainsString( '<span class="tag-label flag">Empty link</span>', $html, 'An empty link renders an unlinked span.' );
-		self::assertStringContainsString( '<a class="tag-label flag" href="https://example.org/tag/analysis/" rel="tag">Analysis</a>', $html );
-		self::assertSame( 1, substr_count( $html, '<a ' ), 'Only the well-formed linked label renders an anchor.' );
-		self::assertSame( 2, substr_count( $html, 'class="tag-label flag"' ), 'Only the two entries with a flag render.' );
-	}
-
-	/**
 	 * A non-viewable post type explicitly opted in via the
 	 * newspack_blocks_articles_allowed_post_types filter is served by the endpoint,
 	 * without loosening the gate for other non-viewable types.

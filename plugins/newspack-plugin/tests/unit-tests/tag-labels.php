@@ -58,9 +58,9 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 	 * A caller that asks for `cat-links` gets it, in the order given.
 	 *
 	 * The theme's `newspack_generate_tag_labels()` forwards its outer classes
-	 * here with a `span` wrapper, and child themes pass `cat-links` through it on
-	 * purpose. Dropping the class from the defaults must not strip it from
-	 * callers who ask for it.
+	 * here with a `span` wrapper, and a child theme can pass `cat-links` through
+	 * it. Dropping the class from the defaults must not strip it from callers who
+	 * ask for it.
 	 */
 	public function test_generate_html_keeps_caller_supplied_cat_links() {
 		$html = Tag_Labels::generate_html( $this->make_labels(), true, [ 'cat-links', 'tag-labels' ], [ 'tag-label', 'flag' ], 'span' );
@@ -197,12 +197,51 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The wrapper closes with a `<!-- .tag-labels -->` comment whatever the
-	 * outer element and classes are.
+	 * Entries the renderer has no flag to print for.
+	 *
+	 * @return array Test cases.
 	 */
-	public function test_generate_html_ends_with_tag_labels_comment() {
-		$html = Tag_Labels::generate_html( $this->make_labels(), true, [ 'custom-wrapper' ], [ 'tag-label', 'flag' ], 'div' );
+	public function malformed_entry_provider() {
+		return [
+			'link without flag' => [ [ 'link' => 'https://example.com/tag/no-flag/' ] ],
+			'empty array'       => [ [] ],
+			'string'            => [ 'Opinion' ],
+			'null'              => [ null ],
+			'integer'           => [ 42 ],
+		];
+	}
 
-		self::assertStringEndsWith( '</div><!-- .tag-labels -->', $html );
+	/**
+	 * A malformed entry is skipped, and a valid label beside it still renders.
+	 *
+	 * @dataProvider malformed_entry_provider
+	 *
+	 * @param mixed $entry Malformed entry.
+	 */
+	public function test_generate_html_skips_malformed_entry( $entry ) {
+		$labels = [ $entry, $this->make_labels()[0] ];
+
+		self::assertSame(
+			'<span class="tag-labels"><a class="tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a></span><!-- .tag-labels -->',
+			Tag_Labels::generate_html( $labels )
+		);
+	}
+
+	/**
+	 * An empty `link` counts as no link.
+	 */
+	public function test_generate_html_renders_label_with_empty_link_as_span() {
+		$labels = [
+			[
+				'flag' => 'Empty link',
+				'link' => '',
+			],
+			$this->make_labels()[0],
+		];
+
+		self::assertSame(
+			'<span class="tag-labels"><span class="tag-label flag">Empty link</span><a class="tag-label flag" href="https://example.com/tag/breaking/" rel="tag">Breaking</a></span><!-- .tag-labels -->',
+			Tag_Labels::generate_html( $labels )
+		);
 	}
 }
