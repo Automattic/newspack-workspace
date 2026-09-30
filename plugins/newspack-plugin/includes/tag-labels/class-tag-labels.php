@@ -116,8 +116,7 @@ class Tag_Labels {
 
 		$outer_element = in_array( $outer_element, [ 'span', 'div' ], true ) ? $outer_element : 'span';
 
-		$labels_html  = '';
-		$labels_html .= '<' . $outer_element . ' class="' . join( ' ', array_map( 'esc_attr', $outer_classes ) ) . '">';
+		$labels_html = '';
 		foreach ( $labels as $label ) {
 			if ( $links && isset( $label['flag'] ) && ! empty( $label['link'] ) ) {
 				$labels_html .= '<a class="' . join( ' ', array_map( 'esc_attr', $inner_classes ) ) . '" href="' . esc_url( $label['link'] ) . '" rel="tag">' . esc_html( $label['flag'] ) . '</a>';
@@ -125,7 +124,13 @@ class Tag_Labels {
 				$labels_html .= '<span class="' . join( ' ', array_map( 'esc_attr', $inner_classes ) ) . '">' . esc_html( $label['flag'] ) . '</span>';
 			}
 		}
-		$labels_html .= '</' . $outer_element . '><!-- .tag-labels -->';
+
+		// Like the sponsor flag, render nothing rather than an empty wrapper.
+		if ( '' === $labels_html ) {
+			return '';
+		}
+
+		$labels_html = '<' . $outer_element . ' class="' . join( ' ', array_map( 'esc_attr', $outer_classes ) ) . '">' . $labels_html . '</' . $outer_element . '><!-- .tag-labels -->';
 
 		return $labels_html;
 	}

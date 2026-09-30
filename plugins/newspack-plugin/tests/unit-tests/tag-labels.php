@@ -173,6 +173,19 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A list where no entry has a flag renders nothing, not an empty wrapper.
+	 */
+	public function test_generate_html_returns_empty_string_when_no_label_renders() {
+		$labels = [
+			[ 'link' => 'https://example.com/tag/breaking/' ],
+			[],
+		];
+
+		self::assertSame( '', Tag_Labels::generate_html( $labels ) );
+		self::assertSame( '', Tag_Labels::generate_html( $labels, false, [ 'cat-links', 'tag-labels' ], [ 'tag-label' ], 'div' ) );
+	}
+
+	/**
 	 * The wrapper closes with a `<!-- .tag-labels -->` comment whatever the
 	 * outer element and classes are.
 	 */
