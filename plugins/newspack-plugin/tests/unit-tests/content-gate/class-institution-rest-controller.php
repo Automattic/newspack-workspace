@@ -5,6 +5,7 @@
  * @package Newspack\Tests\Content_Gate
  */
 
+use Newspack\Block_Visibility;
 use Newspack\Institution;
 use Newspack\Institution_REST_Controller;
 
@@ -42,6 +43,13 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	 * @var int
 	 */
 	private $author_id;
+
+	/**
+	 * A user holding neither capability, logged in.
+	 *
+	 * @var int
+	 */
+	private $contributor_id;
 
 	/**
 	 * A user holding both.
@@ -88,6 +96,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$this->editor_id      = $this->factory->user->create( [ 'role' => 'editor' ] );
 		$this->subscriber_id  = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$this->author_id      = $this->factory->user->create( [ 'role' => 'author' ] );
+		$this->contributor_id = $this->factory->user->create( [ 'role' => 'contributor' ] );
 		$this->admin_id       = $this->factory->user->create( [ 'role' => 'administrator' ] );
 
 		// A built-in role never isolates RULES_CAPABILITY from READ_CAPABILITY —
@@ -108,6 +117,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		);
 		update_post_meta( $this->institution_id, Institution::META_PREFIX . 'email_domain', 'test-university.example' );
 		update_post_meta( $this->institution_id, Institution::META_PREFIX . 'ip_range', '10.0.0.0/8' );
+		update_post_meta( $this->institution_id, Institution::META_PREFIX . 'reader_data', 'org=test-university' );
 
 		Institution::register_meta();
 		do_action( 'rest_api_init' );
@@ -125,6 +135,36 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$request = new WP_REST_Request( 'GET', $this->route );
 		$request->set_param( 'context', $context );
 		return rest_do_request( $request );
+	}
+
+	/**
+	 * Dispatch the request the block editor's visibility panel sends for its
+	 * institution picker, as the given user.
+	 *
+	 * Mirrors the path in src/content-gate/access-rule-option-sources.ts. The
+	 * panel asks for per_page=-1, which api-fetch's fetch-all middleware turns
+	 * into per_page=100 and walks by page, so that is what reaches the server.
+	 * _fields is applied the way serve_request() would apply it, since
+	 * rest_do_request() skips rest_post_dispatch.
+	 *
+	 * @param int $user_id User to act as.
+	 * @return WP_REST_Response
+	 */
+	private function read_as_block_visibility_panel( $user_id ) {
+		wp_set_current_user( $user_id );
+		$request = new WP_REST_Request( 'GET', $this->route );
+		$request->set_query_params(
+			[
+				'context'  => 'edit',
+				'status'   => 'publish',
+				'orderby'  => 'title',
+				'order'    => 'asc',
+				'per_page' => 100,
+				'page'     => 1,
+				'_fields'  => 'id,title',
+			]
+		);
+		return rest_filter_response_fields( rest_do_request( $request ), rest_get_server(), $request );
 	}
 
 	/**
@@ -497,6 +537,110 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertNotEmpty( $data, 'A caller who owns this route must still see its items at context=edit.' );
 		$this->assertSame( '10.0.0.0/8', $data[0]['meta'][ Institution::META_PREFIX . 'ip_range' ] );
+	}
+
+	/**
+	 * The panel and the read gate name one capability.
+	 *
+	 * The panel is the only non-administrator consumer of this route, so the two
+	 * gates have to agree: a panel shown to a role the route refuses renders an
+	 * empty institution picker with nothing failing, which is how NPPM-3128 was
+	 * found. Both sides reference Block_Visibility::CONFIGURE_CAPABILITY; this
+	 * pins that the route did not go back to a literal of its own.
+	 */
+	public function test_read_capability_is_the_block_visibility_panel_capability() {
+		$this->assertSame( Block_Visibility::CONFIGURE_CAPABILITY, Institution_REST_Controller::READ_CAPABILITY );
+		$this->assertSame( 'edit_others_posts', Institution_REST_Controller::READ_CAPABILITY );
+	}
+
+	/**
+	 * Every role that is shown the panel can fill its institution picker, and
+	 * no role that is refused the panel can read the names.
+	 *
+	 * Asserted per built-in role against the panel's own capability, so a change
+	 * to either gate that leaves them disagreeing turns this red.
+	 */
+	public function test_panel_request_succeeds_for_exactly_the_roles_shown_the_panel() {
+		$users = [
+			'administrator' => $this->admin_id,
+			'editor'        => $this->editor_id,
+			'author'        => $this->author_id,
+			'contributor'   => $this->contributor_id,
+			'subscriber'    => $this->subscriber_id,
+		];
+		foreach ( $users as $role => $user_id ) {
+			$response  = $this->read_as_block_visibility_panel( $user_id );
+			$sees      = 200 === $response->get_status() && in_array( $this->institution_id, wp_list_pluck( (array) $response->get_data(), 'id' ), true );
+			$has_panel = user_can( $user_id, Block_Visibility::CONFIGURE_CAPABILITY );
+
+			$this->assertSame( $has_panel, $sees, "The $role role must read institution names exactly when it is shown the panel." );
+		}
+	}
+
+	/**
+	 * An Editor reads institution names through the panel's request, and gets
+	 * the id and title only.
+	 */
+	public function test_editor_reads_institution_names_through_the_panel_request() {
+		$response = $this->read_as_block_visibility_panel( $this->editor_id );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $data );
+		$this->assertSame( [ 'id', 'title' ], array_keys( $data[0] ) );
+		$this->assertSame( $this->institution_id, $data[0]['id'] );
+		$this->assertSame( 'Test University', $data[0]['title']['raw'] );
+	}
+
+	/**
+	 * An Author or a Contributor cannot read institution names through the
+	 * panel's request.
+	 *
+	 * Edit context is what the panel sends, and the tests above that refuse these
+	 * roles use view context, so this is the one that covers the panel's path.
+	 */
+	public function test_panel_request_is_refused_for_author_and_contributor() {
+		$refused = [
+			'author'      => $this->author_id,
+			'contributor' => $this->contributor_id,
+		];
+		foreach ( $refused as $role => $user_id ) {
+			$response = $this->read_as_block_visibility_panel( $user_id );
+
+			$this->assertStringNotContainsString(
+				'Test University',
+				wp_json_encode( $response->get_data() ),
+				"A refused $role response must not carry institution names."
+			);
+			$this->assertSame( 403, $response->get_status(), "The $role role must be refused." );
+		}
+	}
+
+	/**
+	 * Each stored access-rule field reaches an administrator and nobody below.
+	 *
+	 * Names all three fields, so a field that stops being registered, or starts
+	 * reaching an Editor, fails here by name.
+	 */
+	public function test_each_rule_field_is_administrator_only() {
+		$expected = [
+			Institution::META_PREFIX . 'email_domain' => 'test-university.example',
+			Institution::META_PREFIX . 'ip_range'     => '10.0.0.0/8',
+			Institution::META_PREFIX . 'reader_data'  => 'org=test-university',
+		];
+
+		$admin = $this->read_collection( $this->admin_id, 'edit' );
+		$this->assertSame( 200, $admin->get_status() );
+		foreach ( $expected as $key => $value ) {
+			$this->assertSame( $value, $admin->get_data()[0]['meta'][ $key ], "An administrator reads $key." );
+		}
+
+		$editor = $this->read_collection( $this->editor_id, 'edit' );
+		$this->assertSame( 200, $editor->get_status() );
+		$this->assert_meta_withheld( $editor->get_data()[0]['meta'] );
+		foreach ( $expected as $value ) {
+			$this->assertStringNotContainsString( $value, wp_json_encode( $editor->get_data() ), 'No rule value may reach an Editor.' );
+		}
 	}
 
 	/**

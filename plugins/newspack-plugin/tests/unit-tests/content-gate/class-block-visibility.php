@@ -79,6 +79,50 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The panel loads for exactly the roles the institution route lets read names.
+	 *
+	 * The panel's institution picker is filled from that route, so a role shown the
+	 * panel but refused the route gets an empty picker with nothing failing
+	 * (NPPM-3128). The route side is pinned in Newspack_Test_Institution_REST_Controller;
+	 * this pins the panel side, so a literal put back into the enqueue gate fails here.
+	 */
+	public function test_panel_loads_for_exactly_the_institution_read_tier() {
+		// The enqueue also bails when the built asset is absent, which would make the
+		// negative assertions pass without proving anything.
+		if ( ! file_exists( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-block-visibility.asset.php' ) ) {
+			$this->markTestSkipped( 'dist/content-gate-block-visibility.asset.php is not built; the enqueue gate cannot be exercised.' );
+		}
+
+		// The enqueue bails when no post is in context (Site Editor, widget screens).
+		$GLOBALS['post'] = get_post( $this->factory->post->create() ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$expected = [
+			'administrator' => true,
+			'editor'        => true,
+			'author'        => false,
+			'contributor'   => false,
+		];
+		try {
+			foreach ( $expected as $role => $loads ) {
+				$user_id = $this->factory->user->create( [ 'role' => $role ] );
+				wp_set_current_user( $user_id );
+				wp_dequeue_script( 'newspack-content-gate-block-visibility' );
+
+				Block_Visibility::enqueue_block_editor_assets();
+
+				$this->assertSame( $loads, wp_script_is( 'newspack-content-gate-block-visibility', 'enqueued' ), "Panel for the $role role." );
+				$this->assertSame(
+					user_can( $user_id, \Newspack\Institution_REST_Controller::READ_CAPABILITY ),
+					$loads,
+					"The $role role must be shown the panel exactly when it may read institution names."
+				);
+			}
+		} finally {
+			unset( $GLOBALS['post'] );
+		}
+	}
+
+	/**
 	 * Test that the register_block_type_args filter is registered.
 	 */
 	public function test_register_block_type_args_filter_registered() {
