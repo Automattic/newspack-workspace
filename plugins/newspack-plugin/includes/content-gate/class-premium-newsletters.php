@@ -59,6 +59,7 @@ class Premium_Newsletters {
 	const SOURCE_SUBSCRIPTION_CHANGED = 'subscription_changed';
 	const SOURCE_DONATION_CHANGED     = 'donation_changed';
 	const SOURCE_READER_VERIFIED      = 'reader_verified';
+	const SOURCE_GROUP_MEMBERSHIP     = 'group_membership';
 
 	/**
 	 * User meta key for the renewal-time snapshot of the contact's full ESP list
@@ -86,6 +87,11 @@ class Premium_Newsletters {
 		// Register the scheduled-event callback (works for both WP cron and ActionScheduler).
 		add_action( 'init', [ __CLASS__, 'register_access_check_event' ] );
 		add_action( self::SCHEDULED_HOOK, [ __CLASS__, 'process_access_check_queue' ] );
+
+		// Joining or leaving a group changes a reader's access without any Data Event
+		// naming them, so the membership write itself has to trigger their check.
+		add_action( 'added_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
+		add_action( 'deleted_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
 
 		// Clean up the queue option on plugin deactivation.
 		add_action( 'newspack_deactivation', [ __CLASS__, 'unschedule_access_check_event' ] );
@@ -596,6 +602,25 @@ class Premium_Newsletters {
 			return;
 		}
 
+		self::snapshot_lists_and_enqueue_renewal_check( $user );
+
+		// A group's renewal moves it through On hold and back to Active, which
+		// re-checks every member. Members get the same snapshot as the owner, so
+		// auto-signup can't re-add a premium list a member left on their own.
+		foreach ( self::get_group_member_ids( $data ) as $member_id ) {
+			$member = get_user_by( 'id', $member_id );
+			if ( $member ) {
+				self::snapshot_lists_and_enqueue_renewal_check( $member );
+			}
+		}
+	}
+
+	/**
+	 * Snapshot a reader's current lists and queue their renewal-source access check.
+	 *
+	 * @param \WP_User $user The reader whose access the renewal decides.
+	 */
+	private static function snapshot_lists_and_enqueue_renewal_check( $user ) {
 		// Capture the renewal-time snapshot when auto-signup is enabled. Without
 		// auto-signup the snapshot has no effect (check_access only consults it
 		// inside the auto-signup branch), so skip the ESP fetch in that case.
@@ -616,7 +641,44 @@ class Premium_Newsletters {
 	}
 
 	/**
+	 * Get the members of the group subscription a Data Event concerns.
+	 *
+	 * Subscription events name only the owner, yet a group subscription's status
+	 * decides its members' access too. Without this, members keep premium lists
+	 * after the group lapses and never gain them when it comes back.
+	 *
+	 * @param array $data Data associated with the event.
+	 *
+	 * @return int[] Member user IDs, or an empty array when the event names no group subscription.
+	 */
+	private static function get_group_member_ids( $data ) {
+		if ( empty( $data['subscription_id'] ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return [];
+		}
+		$subscription = wcs_get_subscription( (int) $data['subscription_id'] );
+		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
+			return [];
+		}
+		return array_map( 'intval', Group_Subscription::get_members( $subscription ) );
+	}
+
+	/**
+	 * Queue an access check for a reader who just joined or left a group subscription.
+	 *
+	 * @param int|int[] $meta_ids ID(s) of the affected meta row(s).
+	 * @param int       $user_id  ID of the user whose meta changed.
+	 * @param string    $meta_key Meta key.
+	 */
+	public static function maybe_enqueue_group_membership_check( $meta_ids, $user_id, $meta_key ) {
+		if ( Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY !== $meta_key ) {
+			return;
+		}
+		self::add_user_to_queue( (int) $user_id, self::SOURCE_GROUP_MEMBERSHIP );
+	}
+
+	/**
 	 * Maybe add or remove the user from restricted lists based on their access status.
+	 * When the event names a group subscription, its members are queued too.
 	 *
 	 * @param int    $timestamp Timestamp of the event.
 	 * @param array  $data      Data associated with the event.
@@ -631,6 +693,9 @@ class Premium_Newsletters {
 			return;
 		}
 		self::add_user_to_queue( (int) $data['user_id'], $source );
+		foreach ( self::get_group_member_ids( $data ) as $member_id ) {
+			self::add_user_to_queue( $member_id, $source );
+		}
 	}
 }
 
