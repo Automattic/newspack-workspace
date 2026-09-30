@@ -28,12 +28,34 @@ class Subscription_Changed extends Abstract_Backfiller {
 	/**
 	 * Gets the events to be processed
 	 *
-	 * @return \Newspack_Network\Incoming_Events\Abstract_Incoming_Event[] $events An array of events.
+	 * @return \Generator<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> $events A generator of events.
 	 */
 	public function get_events() {
+		$ids = $this->get_subscription_ids();
+
+		$this->maybe_initialize_progress_bar( 'Processing subscriptions', count( $ids ) );
+
+		foreach ( $this->load_in_batches( $ids, 'wcs_get_subscription' ) as $subscription ) {
+
+			$subscription_data = Woo_Listeners::subscription_changed( $subscription->get_id(), '', $subscription->get_status(), $subscription );
+
+			$timestamp = strtotime( $subscription->get_date_created() );
+
+			yield new \Newspack_Network\Incoming_Events\Subscription_Changed( get_bloginfo( 'url' ), $subscription_data, $timestamp );
+		}
+	}
+
+	/**
+	 * Gets the IDs of the subscriptions to backfill, of any status, started within the start and end dates.
+	 *
+	 * @return int[]
+	 */
+	protected function get_subscription_ids() {
 		$params = [
-			'subscription_status'    => 'any',
-			'subscriptions_per_page' => -1,
+			'type'   => 'shop_subscription',
+			'status' => [ 'any' ],
+			'limit'  => -1,
+			'return' => 'ids',
 		];
 
 		if ( $this->start || $this->end ) {
@@ -56,23 +78,7 @@ class Subscription_Changed extends Abstract_Backfiller {
 			}
 		}
 
-		$subscriptions = wcs_get_subscriptions( $params );
-
-		$this->maybe_initialize_progress_bar( 'Processing subscriptions', count( $subscriptions ) );
-
-		$events = [];
-
-		foreach ( $subscriptions as $subscription ) {
-
-			$subscription_data = Woo_Listeners::subscription_changed( $subscription->get_id(), '', $subscription->get_status(), $subscription );
-
-			$timestamp = strtotime( $subscription->get_date_created() );
-
-			$event = new \Newspack_Network\Incoming_Events\Subscription_Changed( get_bloginfo( 'url' ), $subscription_data, $timestamp );
-
-			$events[] = $event;
-		}
-
-		return $events;
+		// Not wc_get_orders(): without HPOS it ignores meta_query, so the date range would be dropped.
+		return wcs_get_orders_with_meta_query( $params );
 	}
 }

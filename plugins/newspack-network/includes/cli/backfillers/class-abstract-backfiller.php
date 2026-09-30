@@ -17,6 +17,13 @@ use WP_CLI;
 abstract class Abstract_Backfiller {
 
 	/**
+	 * How many items load_in_batches() loads between frees of the object cache's in-memory copy.
+	 *
+	 * @var int
+	 */
+	const BATCH_SIZE = 100;
+
+	/**
 	 * Whether to run the backfiller in live mode.
 	 *
 	 * @var bool
@@ -78,9 +85,56 @@ abstract class Abstract_Backfiller {
 	/**
 	 * Gets the events to be processed
 	 *
-	 * @return \Newspack_Network\Incoming_Events\Abstract_Incoming_Event[] $events An array of events.
+	 * Return a generator to build events one at a time, when holding every event in memory could exhaust it.
+	 *
+	 * @return iterable<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> $events An array or generator of events.
 	 */
 	abstract public function get_events();
+
+	/**
+	 * Loads items one at a time, so a backfill holds one batch in memory rather than every item.
+	 *
+	 * Each loaded item stays in the object cache's in-memory copy for the rest of the run, so that
+	 * copy is freed after every batch.
+	 *
+	 * @param int[]    $ids  IDs of the items to load.
+	 * @param callable $load Loads one item by ID; returns a falsy value when the item no longer exists.
+	 *
+	 * @return \Generator Each item that loaded.
+	 */
+	protected function load_in_batches( $ids, $load ) {
+		foreach ( array_chunk( $ids, static::BATCH_SIZE ) as $batch ) {
+			foreach ( $batch as $id ) {
+				$item = $load( $id );
+				if ( $item ) {
+					yield $item;
+				}
+			}
+			$this->free_runtime_cache();
+		}
+	}
+
+	/**
+	 * Frees this process's in-memory copy of the object cache.
+	 *
+	 * Never falls back to wp_cache_flush(): on a persistent cache that empties the cache for the
+	 * whole site, not just this process. Where the cache can't flush its in-memory copy alone,
+	 * this frees nothing.
+	 */
+	protected function free_runtime_cache() {
+		if ( $this->can_flush_runtime_cache() ) {
+			wp_cache_flush_runtime();
+		}
+	}
+
+	/**
+	 * Whether the object cache can flush its in-memory copy without touching persistent storage.
+	 *
+	 * @return bool
+	 */
+	protected function can_flush_runtime_cache() {
+		return wp_cache_supports( 'flush_runtime' );
+	}
 
 	/**
 	 * Initializes the WP CLI progress bar if in verbose mode
