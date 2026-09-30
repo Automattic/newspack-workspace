@@ -181,12 +181,13 @@ class Webhook {
 	}
 
 	/**
-	 * Logs a line when the sending Node was not created by a current administrator.
+	 * Logs a line when the sending Node's author is not currently an administrator.
 	 *
 	 * Nodes are managed by administrators, so a Node whose author is missing or
 	 * is not one is worth a look. The event is processed either way; the line
-	 * points an administrator at the Node. It goes through newspack_log because
-	 * Debugger::log() writes only when NEWSPACK_NETWORK_DEBUG is defined.
+	 * points an administrator at the Node, at most once a day per Node. It goes
+	 * through newspack_log because Debugger::log() writes only when
+	 * NEWSPACK_NETWORK_DEBUG is defined.
 	 *
 	 * @param Node $node The Node the event came from.
 	 * @return void
@@ -197,8 +198,14 @@ class Webhook {
 			return;
 		}
 
+		$throttle_key = 'newspack_network_node_origin_logged_' . $node->get_id();
+		if ( get_transient( $throttle_key ) ) {
+			return;
+		}
+		set_transient( $throttle_key, 1, DAY_IN_SECONDS );
+
 		$message = sprintf(
-			'Network node %d (%s) was not created by an administrator; review it under Network > Nodes.',
+			'Network node %d (%s) has no author who is currently an administrator; review it under Network > Nodes.',
 			$node->get_id(),
 			$node->get_url()
 		);

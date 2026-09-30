@@ -5,7 +5,8 @@
  * The suite loads this plugin without the Newspack plugin, so code that reports
  * through `\Newspack\Logger::newspack_log()` would otherwise take its fallback
  * path and leave nothing for a test to observe. This stub fires the same
- * `newspack_log` action with the same arguments as the real method. `log()` and
+ * `newspack_log` action with the same code, message and type as the real
+ * method, and passes `$data` through unchanged. `log()` and
  * `error()` are no-ops, which is what the real ones do when NEWSPACK_LOG_LEVEL
  * is not defined, as in this suite.
  *
