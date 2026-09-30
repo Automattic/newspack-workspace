@@ -16,6 +16,53 @@ use WP_REST_Server;
  * Class to handle Woocommerce Generic Woo items store for orders and subscriptions
  */
 abstract class Woo_Store {
+
+	/**
+	 * Prefix of the meta key naming the customer on a copy: one key per email, so a
+	 * reader's copies are found through the indexed meta_key column rather than a scan
+	 * of every copy's email. A copy only carries it once it has been written by the
+	 * per-site lookup below; copies from before may hold another site's data under
+	 * this customer's email, and stay out of reach until an event or a rebuild
+	 * rewrites them.
+	 */
+	const READER_KEY_PREFIX = 'np_reader_';
+
+	/**
+	 * Meta recording which reader key a copy carries, so it can be removed when the
+	 * customer's email changes.
+	 */
+	const READER_KEY_META = 'reader_key';
+
+	/**
+	 * The lookup meta key for a customer email.
+	 *
+	 * @param string $email Email.
+	 * @return string
+	 */
+	public static function get_reader_key( $email ) {
+		return self::READER_KEY_PREFIX . md5( strtolower( trim( (string) $email ) ) );
+	}
+
+	/**
+	 * Point a copy's lookup key at its customer's current email.
+	 *
+	 * @param int    $local_id The copy's post ID.
+	 * @param string $email    Customer email.
+	 * @return void
+	 */
+	protected static function update_reader_key( $local_id, $email ) {
+		$previous = (string) get_post_meta( $local_id, self::READER_KEY_META, true );
+		$key      = $email ? self::get_reader_key( $email ) : '';
+		if ( $previous && $previous !== $key ) {
+			delete_post_meta( $local_id, $previous );
+		}
+		if ( $key ) {
+			update_post_meta( $local_id, $key, 1 );
+			update_post_meta( $local_id, self::READER_KEY_META, $key );
+		} else {
+			delete_post_meta( $local_id, self::READER_KEY_META );
+		}
+	}
 	/**
 	 * Gets the post type slug
 	 *
@@ -76,13 +123,24 @@ abstract class Woo_Store {
 	 *
 	 * If there's no local post for the given Woo_Item_Changed event, creates one.
 	 *
-	 * An item is identified by its ID together with its site: every site numbers its
-	 * orders and subscriptions independently, so two sites can each have an item #500.
-	 *
 	 * @param Woo_Item_Changed $woo_item The Woo_Item_Changed event.
 	 * @return int The local post ID.
 	 */
 	protected static function get_local_id( Woo_Item_Changed $woo_item ) {
+		$local_id = static::find_local_id( $woo_item );
+		return $local_id ? $local_id : self::create_item( $woo_item );
+	}
+
+	/**
+	 * Returns the local post ID for a given Woo_Item_Changed event, if the hub has a copy.
+	 *
+	 * An item is identified by its ID together with its site: every site numbers its
+	 * orders and subscriptions independently, so two sites can each have an item #500.
+	 *
+	 * @param Woo_Item_Changed $woo_item The Woo_Item_Changed event.
+	 * @return int The local post ID, or 0.
+	 */
+	public static function find_local_id( Woo_Item_Changed $woo_item ) {
 		$woo_item_id = $woo_item->get_id();
 		$stored      = get_posts(
 			[
@@ -102,10 +160,7 @@ abstract class Woo_Store {
 				'fields'         => 'ids',
 			]
 		);
-		if ( ! empty( $stored ) ) {
-			return $stored[0];
-		}
-		return self::create_item( $woo_item );
+		return empty( $stored ) ? 0 : (int) $stored[0];
 	}
 
 	/**

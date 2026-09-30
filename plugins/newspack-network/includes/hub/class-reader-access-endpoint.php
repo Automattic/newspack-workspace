@@ -11,8 +11,9 @@ use Newspack_Network\Content_Gate\Reader_Access_Envelope;
 use Newspack_Network\Hub\Database\Orders as Orders_DB;
 use Newspack_Network\Hub\Database\Subscriptions as Subscriptions_DB;
 use Newspack_Network\Incoming_Events\Product_Updated;
+use Newspack_Network\Hub\Stores\Orders;
+use Newspack_Network\Hub\Stores\Subscriptions;
 use Newspack_Network\Utils\Requests;
-use Newspack_Network\Woocommerce_Subscriptions\Group_Members;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -144,7 +145,7 @@ class Reader_Access_Endpoint {
 			}
 		};
 
-		foreach ( self::find_copies( Subscriptions_DB::POST_TYPE_SLUG, self::SUBSCRIPTION_STATUSES, 'user_email', $email ) as $post_id ) {
+		foreach ( self::find_copies( Subscriptions_DB::POST_TYPE_SLUG, Subscriptions_DB::POST_STATUS_PREFIX, self::SUBSCRIPTION_STATUSES, Subscriptions::get_reader_key( $email ) ) as $post_id ) {
 			$site     = self::get_site_url( (int) get_post_meta( $post_id, 'node_id', true ) );
 			$products = [];
 			foreach ( get_post_meta( $post_id, 'products', false ) as $product ) {
@@ -167,7 +168,7 @@ class Reader_Access_Endpoint {
 			);
 		}
 
-		foreach ( self::find_copies( Subscriptions_DB::POST_TYPE_SLUG, self::SUBSCRIPTION_STATUSES, Group_Members::HUB_MEMBER_META_KEY, $email ) as $post_id ) {
+		foreach ( self::find_copies( Subscriptions_DB::POST_TYPE_SLUG, Subscriptions_DB::POST_STATUS_PREFIX, self::SUBSCRIPTION_STATUSES, Subscriptions::get_member_key( $email ) ) as $post_id ) {
 			$site        = self::get_site_url( (int) get_post_meta( $post_id, 'node_id', true ) );
 			$network_ids = [];
 			foreach ( get_post_meta( $post_id, 'products', false ) as $product ) {
@@ -200,7 +201,7 @@ class Reader_Access_Endpoint {
 	 */
 	private static function get_newest_orders_per_network_id( $email ) {
 		$orders = [];
-		foreach ( self::find_copies( Orders_DB::POST_TYPE_SLUG, self::PAID_ORDER_STATUSES, 'user_email', $email ) as $post_id ) {
+		foreach ( self::find_copies( Orders_DB::POST_TYPE_SLUG, Orders_DB::POST_STATUS_PREFIX, self::PAID_ORDER_STATUSES, Orders::get_reader_key( $email ) ) as $post_id ) {
 			$node_id      = (int) get_post_meta( $post_id, 'node_id', true );
 			$site         = self::get_site_url( $node_id );
 			$date_created = self::parse_date( get_post_meta( $post_id, 'date_created', true ) );
@@ -256,18 +257,18 @@ class Reader_Access_Endpoint {
 	}
 
 	/**
-	 * IDs of the hub's copies whose given meta matches the reader's email.
+	 * IDs of the hub's copies carrying a reader's lookup key.
 	 *
 	 * @param string   $post_type Post type of the copies.
-	 * @param string[] $statuses  Statuses to include, without the hub's prefix.
-	 * @param string   $meta_key  Meta holding an email.
-	 * @param string   $email     Reader email.
+	 * @param string   $prefix    The copies' status prefix.
+	 * @param string[] $statuses  Statuses to include, without the prefix.
+	 * @param string   $meta_key  The reader's lookup key (see Woo_Store::READER_KEY_PREFIX).
 	 * @return int[]
 	 */
-	private static function find_copies( $post_type, $statuses, $meta_key, $email ) {
+	private static function find_copies( $post_type, $prefix, $statuses, $meta_key ) {
 		$post_statuses = array_map(
-			function ( $status ) {
-				return Subscriptions_DB::POST_STATUS_PREFIX . $status;
+			function ( $status ) use ( $prefix ) {
+				return $prefix . $status;
 			},
 			$statuses
 		);
@@ -277,8 +278,8 @@ class Reader_Access_Endpoint {
 				'post_status'    => $post_statuses,
 				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
-						'key'   => $meta_key,
-						'value' => $email,
+						'key'     => $meta_key,
+						'compare' => 'EXISTS',
 					],
 				],
 				'posts_per_page' => self::MAX_RECORDS,

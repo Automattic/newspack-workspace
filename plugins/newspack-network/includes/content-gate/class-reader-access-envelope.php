@@ -22,6 +22,13 @@ use WP_Error;
 class Reader_Access_Envelope {
 
 	/**
+	 * Marks a payload as an answer. A node's request is encrypted with the same key
+	 * and names the same reader and request, so without this an attacker could echo
+	 * the request back and have it read as an answer with no sites in it.
+	 */
+	const TYPE = 'reader_access_answer';
+
+	/**
 	 * Encrypt an answer.
 	 *
 	 * @param array  $payload    The answer, including 'email' and 'request_id'.
@@ -29,7 +36,7 @@ class Reader_Access_Envelope {
 	 * @return array|WP_Error Envelope with 'nonce' and 'data'.
 	 */
 	public static function seal( $payload, $secret_key ) {
-		$json = wp_json_encode( $payload );
+		$json = wp_json_encode( array_merge( $payload, [ 'type' => self::TYPE ] ) );
 		if ( false === $json ) {
 			return new WP_Error( 'newspack_network_reader_access_encode', __( 'Could not encode the reader access answer.', 'newspack-network' ) );
 		}
@@ -64,6 +71,9 @@ class Reader_Access_Envelope {
 		$payload = json_decode( $json, true );
 		if ( ! is_array( $payload ) ) {
 			return new WP_Error( 'newspack_network_reader_access_malformed', __( 'The reader access answer was malformed.', 'newspack-network' ) );
+		}
+		if ( self::TYPE !== ( $payload['type'] ?? null ) ) {
+			return new WP_Error( 'newspack_network_reader_access_not_answer', __( 'The reader access answer was not an answer.', 'newspack-network' ) );
 		}
 		$email_matches   = is_string( $payload['email'] ?? null ) && 0 === strcasecmp( $payload['email'], (string) $email );
 		$request_matches = is_string( $payload['request_id'] ?? null ) && hash_equals( (string) $request_id, $payload['request_id'] );

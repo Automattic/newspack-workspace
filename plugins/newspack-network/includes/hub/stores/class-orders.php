@@ -73,6 +73,7 @@ class Orders extends Woo_Store {
 
 		// Data from the event.
 		update_post_meta( $local_id, 'user_email', $order->get_email() );
+		self::update_reader_key( $local_id, $order->get_email() );
 		update_post_meta( $local_id, 'payment_count', $order->get_payment_count() );
 		update_post_meta( $local_id, 'formatted_total', $order->get_formatted_total() );
 		update_post_meta( $local_id, 'subscription_relationship', $order->get_subscription_relationship() );

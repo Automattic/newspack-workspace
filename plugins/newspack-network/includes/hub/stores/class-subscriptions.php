@@ -74,6 +74,7 @@ class Subscriptions extends Woo_Store {
 
 		// Data from the event.
 		update_post_meta( $local_id, 'user_email', $subscription->get_email() );
+		self::update_reader_key( $local_id, $subscription->get_email() );
 		update_post_meta( $local_id, 'payment_count', $subscription->get_payment_count() );
 		update_post_meta( $local_id, 'formatted_total', $subscription->get_formatted_total() );
 		update_post_meta( $local_id, 'currency', $subscription->get_currency() );
@@ -102,19 +103,41 @@ class Subscriptions extends Woo_Store {
 	}
 
 	/**
-	 * Replace the member emails on the hub's copy of a group subscription.
+	 * Prefix of the meta key naming a member on a group subscription's copy, one key
+	 * per email, so a reader's seats are found through an indexed lookup.
+	 */
+	const MEMBER_KEY_PREFIX = 'np_member_';
+
+	/**
+	 * The lookup meta key for a group member's email.
 	 *
-	 * Each email is its own meta row, so a reader's seats can be found by email.
+	 * @param string $email Email.
+	 * @return string
+	 */
+	public static function get_member_key( $email ) {
+		return self::MEMBER_KEY_PREFIX . md5( strtolower( trim( (string) $email ) ) );
+	}
+
+	/**
+	 * Set the member emails on the hub's copy of a group subscription.
+	 *
+	 * Only members who joined or left are written, so a large group that fills one
+	 * seat at a time doesn't rewrite every row on each join.
 	 *
 	 * @param int      $local_id The hub's copy of the subscription.
 	 * @param string[] $emails   Member emails; empty when the group is off.
 	 * @return void
 	 */
 	public static function update_group_members( $local_id, $emails ) {
-		delete_post_meta( $local_id, Group_Members::HUB_MEMBER_META_KEY );
-		$emails = array_unique( array_filter( array_map( 'strtolower', array_map( 'sanitize_email', (array) $emails ) ) ) );
-		foreach ( $emails as $email ) {
+		$current = array_map( 'strtolower', (array) get_post_meta( $local_id, Group_Members::HUB_MEMBER_META_KEY, false ) );
+		$emails  = array_values( array_unique( array_filter( array_map( 'strtolower', array_map( 'sanitize_email', (array) $emails ) ) ) ) );
+		foreach ( array_diff( $current, $emails ) as $email ) {
+			delete_post_meta( $local_id, Group_Members::HUB_MEMBER_META_KEY, $email );
+			delete_post_meta( $local_id, self::get_member_key( $email ) );
+		}
+		foreach ( array_diff( $emails, $current ) as $email ) {
 			add_post_meta( $local_id, Group_Members::HUB_MEMBER_META_KEY, $email );
+			add_post_meta( $local_id, self::get_member_key( $email ), 1 );
 		}
 	}
 }

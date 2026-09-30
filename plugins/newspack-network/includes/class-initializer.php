@@ -61,6 +61,7 @@ class Initializer {
 		Membership_Dedupe::init();
 		CLI\Integrity_Check::init();
 		CLI\Product_Network_Ids::init();
+		CLI\Rebuild_Hub_Copies::init();
 
 		Woocommerce\Events::init();
 		Woocommerce\Product_Admin::init();

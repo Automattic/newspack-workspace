@@ -7,6 +7,7 @@
 
 use Newspack_Network\Content_Gate\Reader_Access_Envelope;
 use Newspack_Network\Crypto;
+use Newspack_Network\Hub\Database\Subscriptions as Subscriptions_DB;
 use Newspack_Network\Hub\Nodes;
 use Newspack_Network\Hub\Reader_Access_Endpoint as Hub_Endpoint;
 use Newspack_Network\Hub\Stores\Orders;
@@ -263,6 +264,73 @@ class TestReaderAccessEndpoints extends WP_UnitTestCase {
 			],
 			$sites[ self::OTHER ]['orders']
 		);
+	}
+
+	/**
+	 * A copy written before copies were kept per site may hold another site's
+	 * subscription under this reader's email, so it isn't answered until an event
+	 * or a rebuild rewrites it.
+	 */
+	public function test_copies_from_before_the_per_site_fix_are_not_answered() {
+		$legacy_copy = self::factory()->post->create(
+			[
+				'post_type'   => Subscriptions_DB::POST_TYPE_SLUG,
+				'post_status' => Subscriptions_DB::POST_STATUS_PREFIX . 'active',
+			]
+		);
+		update_post_meta( $legacy_copy, 'remote_id', 42 );
+		update_post_meta( $legacy_copy, 'node_id', $this->nodes[ self::OTHER ][0] );
+		update_post_meta( $legacy_copy, 'user_email', self::EMAIL );
+		add_post_meta( $legacy_copy, 'products', [ 'id' => 7 ] );
+
+		$this->assertSame( [], Hub_Endpoint::collect( self::EMAIL, $this->nodes[ self::ASKING ][0] ) );
+	}
+
+	/**
+	 * A reader who changed their email is found under the new one only.
+	 */
+	public function test_copy_is_found_under_the_current_email_only() {
+		$this->subscription( self::OTHER, 42, 7 );
+		Subscriptions::persist(
+			new Subscription_Changed(
+				self::OTHER,
+				[
+					'id'           => 42,
+					'email'        => 'renamed@example.test',
+					'status_after' => 'active',
+					'products'     => [],
+				],
+				time()
+			)
+		);
+
+		$this->assertSame( [], Hub_Endpoint::collect( self::EMAIL, $this->nodes[ self::ASKING ][0] ) );
+		$this->assertSame( [ self::OTHER ], array_keys( Hub_Endpoint::collect( 'renamed@example.test', $this->nodes[ self::ASKING ][0] ) ) );
+	}
+
+	/**
+	 * A node's own request is encrypted with the same key and names the same reader
+	 * and request, so it must not pass for the hub's answer if echoed back.
+	 */
+	public function test_request_echoed_back_is_not_an_answer() {
+		$secret = $this->nodes[ self::ASKING ][1];
+		$nonce  = Crypto::generate_nonce();
+		$echo   = [
+			'nonce' => $nonce,
+			'data'  => Crypto::encrypt_message(
+				wp_json_encode(
+					[
+						'site'       => self::ASKING,
+						'email'      => self::EMAIL,
+						'request_id' => 'request-1',
+					]
+				),
+				$secret,
+				$nonce
+			),
+		];
+
+		$this->assertInstanceOf( WP_Error::class, Reader_Access_Envelope::open( $echo, $secret, self::EMAIL, 'request-1' ) );
 	}
 
 	/**
