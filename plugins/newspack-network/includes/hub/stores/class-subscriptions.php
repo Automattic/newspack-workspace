@@ -88,7 +88,7 @@ class Subscriptions extends Woo_Store {
 
 		delete_post_meta( $local_id, 'products' );
 		foreach ( $subscription->get_products() as $product ) {
-			add_post_meta( $local_id, 'products', $product );
+			add_post_meta( $local_id, 'products', (array) $product );
 		}
 
 		Debugger::log( 'Updating post status to ' . $subscription->get_status_after() );

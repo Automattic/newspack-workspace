@@ -21,10 +21,10 @@ class Group_Members_Changed extends Subscription_Changed {
 	 * Keep the hub's current members on its copy of the subscription.
 	 *
 	 * The status this event carries is as of when it was sent, and webhook retries
-	 * can deliver it after a later status change, so it doesn't overwrite a current
-	 * copy's status; status events keep that current. It does write a missing copy,
-	 * and rewrites one from before copies were kept per site, which may hold another
-	 * site's subscription.
+	 * can deliver it after a later status change, so it only writes a copy that is
+	 * missing and never an existing copy's status; status events keep that current.
+	 * The seats of a copy from before copies were kept per site aren't answered until
+	 * a status event or a rebuild rewrites it (see Hub\Reader_Access_Endpoint).
 	 *
 	 * @return void
 	 */
@@ -33,7 +33,7 @@ class Group_Members_Changed extends Subscription_Changed {
 			return;
 		}
 		$local_id = Subscriptions::find_local_id( $this );
-		if ( ! $local_id || ! get_post_meta( $local_id, Subscriptions::READER_KEY_META, true ) ) {
+		if ( ! $local_id ) {
 			$local_id = Subscriptions::persist( $this );
 		}
 		if ( $local_id ) {

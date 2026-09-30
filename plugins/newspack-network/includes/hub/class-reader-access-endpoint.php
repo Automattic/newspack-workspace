@@ -170,6 +170,11 @@ class Reader_Access_Endpoint {
 		}
 
 		foreach ( self::find_copies( Subscriptions_DB::POST_TYPE_SLUG, Subscriptions_DB::POST_STATUS_PREFIX, self::SUBSCRIPTION_STATUSES, Subscriptions::get_member_key( $email ) ) as $post_id ) {
+			// A copy without a reader key predates copies being kept per site and may hold
+			// another site's status and products; its seats wait until it is rewritten.
+			if ( ! get_post_meta( $post_id, Subscriptions::READER_KEY_META, true ) ) {
+				continue;
+			}
 			$site        = self::get_site_url( (int) get_post_meta( $post_id, 'node_id', true ) );
 			$network_ids = [];
 			foreach ( get_post_meta( $post_id, 'products', false ) as $product ) {

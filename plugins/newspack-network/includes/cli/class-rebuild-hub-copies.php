@@ -19,8 +19,8 @@ use WP_CLI;
  * Copies used to be matched on the item's ID alone, so two sites' items with the same
  * ID shared one copy: it kept the first site's customer and took whichever site wrote
  * last. Copies written that way aren't used to answer a node's reader access question
- * until something rewrites them. This rewrites every copy from its site's latest
- * logged event, which puts each collided item back on its own copy.
+ * until something rewrites them. This replays each item's latest logged events from
+ * its own site, which puts each collided item back on its own copy.
  */
 class Rebuild_Hub_Copies {
 
@@ -90,26 +90,31 @@ class Rebuild_Hub_Copies {
 		$counts  = self::replay_latest( $last_id, $apply );
 
 		if ( ! $apply ) {
-			WP_CLI::line( sprintf( 'Would rewrite %d copies; %d events from sites no longer in the network would be skipped.', $counts['replayed'], $counts['skipped'] ) );
-			WP_CLI::line( 'Dry run: pass --apply to rewrite them.' );
+			WP_CLI::line( sprintf( 'Would replay up to %d logged events; %d events from sites no longer in the network would be skipped.', $counts['replayed'], $counts['skipped'] ) );
+			WP_CLI::line( 'Dry run: pass --apply to rewrite the copies.' );
 			return;
 		}
 
 		// Events logged while this ran were processed as they arrived, but the pass may
 		// have replayed an older event for the same item afterwards. Replaying them
-		// again, oldest first, leaves each such item on its newest event.
-		$counts['replayed'] += self::replay_since( $last_id );
+		// again, oldest first, until no new ones arrive leaves each such item on its
+		// newest event.
+		$caught_up = 0;
+		while ( self::get_last_event_id() > $last_id ) {
+			$until      = self::get_last_event_id();
+			$caught_up += self::replay_since( $last_id, $until );
+			$last_id    = $until;
+		}
 
-		WP_CLI::success( sprintf( 'Rewrote %d copies; skipped %d events from sites no longer in the network.', $counts['replayed'], $counts['skipped'] ) );
+		WP_CLI::success( sprintf( 'Replayed %d logged events, and %d more logged while this ran; skipped %d events from sites no longer in the network.', $counts['replayed'], $caught_up, $counts['skipped'] ) );
 	}
 
 	/**
-	 * Replay the newest logged event for each copy, newest first.
+	 * Replay the newest logged event of each kind for each item, newest first.
 	 *
-	 * A group members event writes both a subscription's copy (when that copy predates
-	 * the per-site fix) and its members, so it is replayed if either is still unwritten;
-	 * a newer status event has by then rewritten the copy, and the members event only
-	 * sets members.
+	 * A subscription's status comes from its newest status event and its members from
+	 * its newest members event, whichever is newer: a members event can carry an older
+	 * status, so it never stands in for a status event.
 	 *
 	 * @param int  $last_id Newest event ID when the run started.
 	 * @param bool $apply   Whether to replay, or only count.
@@ -125,7 +130,7 @@ class Rebuild_Hub_Copies {
 			'DESC',
 			$last_id + 1,
 			function ( $row ) use ( &$seen, &$counts, $apply ) {
-				$item_id = (int) ( $row->data->id ?? 0 );
+				$item_id = (int) ( $row->data['id'] ?? 0 );
 				if ( ! $item_id ) {
 					return;
 				}
@@ -134,13 +139,11 @@ class Rebuild_Hub_Copies {
 					++$counts['skipped'];
 					return;
 				}
-				$keys = self::get_keys( $row->action_name, (int) $row->node_id, $item_id );
-				if ( ! array_diff( $keys, array_keys( $seen ) ) ) {
+				$key = self::get_key( $row->action_name, (int) $row->node_id, $item_id );
+				if ( isset( $seen[ $key ] ) ) {
 					return;
 				}
-				foreach ( $keys as $key ) {
-					$seen[ $key ] = true;
-				}
+				$seen[ $key ] = true;
 				if ( ! $apply || self::replay( $row, $site ) ) {
 					++$counts['replayed'];
 				}
@@ -150,17 +153,21 @@ class Rebuild_Hub_Copies {
 	}
 
 	/**
-	 * Replay every event logged after the given ID, oldest first.
+	 * Replay every event logged after one ID, up to another, oldest first.
 	 *
-	 * @param int $last_id Newest event ID when the run started.
+	 * @param int $after Replay events after this ID.
+	 * @param int $until Up to and including this ID.
 	 * @return int Number replayed.
 	 */
-	private static function replay_since( $last_id ) {
+	private static function replay_since( $after, $until ) {
 		$replayed = 0;
 		self::walk(
 			'ASC',
-			$last_id,
-			function ( $row ) use ( &$replayed ) {
+			$after,
+			function ( $row ) use ( &$replayed, $until ) {
+				if ( (int) $row->id > $until ) {
+					return;
+				}
 				$site = self::get_site_url( (int) $row->node_id );
 				if ( $site && self::replay( $row, $site ) ) {
 					++$replayed;
@@ -190,23 +197,15 @@ class Rebuild_Hub_Copies {
 	}
 
 	/**
-	 * The copies an event writes, as keys.
+	 * What an event writes, as a key: one kind of event per site and item.
 	 *
 	 * @param string $action  Action name.
 	 * @param int    $node_id Node ID, or 0 for the hub.
 	 * @param int    $item_id Order or subscription ID on that site.
-	 * @return string[]
+	 * @return string
 	 */
-	private static function get_keys( $action, $node_id, $item_id ) {
-		$item = $node_id . '|' . $item_id;
-		switch ( $action ) {
-			case 'newspack_node_order_changed':
-				return [ 'order|' . $item ];
-			case 'newspack_node_group_members_changed':
-				return [ 'subscription|' . $item, 'members|' . $item ];
-			default:
-				return [ 'subscription|' . $item ];
-		}
+	private static function get_key( $action, $node_id, $item_id ) {
+		return $action . '|' . $node_id . '|' . $item_id;
 	}
 
 	/**
@@ -262,9 +261,10 @@ class Rebuild_Hub_Copies {
 				)
 			);
 			foreach ( $rows as $row ) {
-				$cursor    = (int) $row->id;
-				$row->data = json_decode( $row->data );
-				if ( is_object( $row->data ) && isset( Accepted_Actions::ACTIONS[ $row->action_name ] ) ) {
+				$cursor = (int) $row->id;
+				// Decoded as webhooks decode payloads, so the copies keep the same shape.
+				$row->data = json_decode( $row->data, true );
+				if ( is_array( $row->data ) && isset( Accepted_Actions::ACTIONS[ $row->action_name ] ) ) {
 					$callback( $row );
 				}
 			}

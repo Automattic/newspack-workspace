@@ -7,6 +7,7 @@
 
 use Newspack_Network\Accepted_Actions;
 use Newspack_Network\Hub\Database\Subscriptions as Subscriptions_DB;
+use Newspack_Network\Hub\Reader_Access_Endpoint as Hub_Endpoint;
 use Newspack_Network\Incoming_Events\Group_Members_Changed;
 use Newspack_Network\Incoming_Events\Subscription_Changed;
 use Newspack_Network\Woocommerce_Subscriptions\Group_Members;
@@ -178,10 +179,10 @@ class TestGroupMembers extends WP_UnitTestCase {
 
 	/**
 	 * A copy written before copies were kept per site may hold another site's
-	 * subscription, so a members event rewrites it from its own data before its
-	 * members can be answered.
+	 * subscription. A members event leaves its status alone (the event's own status can
+	 * be older), and its seats aren't answered until a status event rewrites the copy.
 	 */
-	public function test_members_event_rewrites_a_legacy_copy() {
+	public function test_legacy_copy_seats_wait_for_its_status() {
 		$legacy_copy = self::factory()->post->create(
 			[
 				'post_type'   => Subscriptions_DB::POST_TYPE_SLUG,
@@ -191,12 +192,24 @@ class TestGroupMembers extends WP_UnitTestCase {
 		update_post_meta( $legacy_copy, 'remote_id', 900 );
 		update_post_meta( $legacy_copy, 'node_id', 0 );
 		update_post_meta( $legacy_copy, 'user_email', 'owner@example.test' );
-		add_post_meta( $legacy_copy, 'products', [ 'id' => 7 ] );
 
 		$this->event( [ 'a@example.test' ] )->always_process_in_hub();
 
-		$this->assertSame( Subscriptions_DB::POST_STATUS_PREFIX . 'active', get_post_status( $legacy_copy ) );
-		$this->assertSame( [], get_post_meta( $legacy_copy, 'products', false ) );
+		$this->assertSame( Subscriptions_DB::POST_STATUS_PREFIX . 'cancelled', get_post_status( $legacy_copy ) );
+		$this->assertSame( [], Hub_Endpoint::collect( 'a@example.test', 999 ) );
+
+		( new Subscription_Changed(
+			get_bloginfo( 'url' ),
+			[
+				'id'           => 900,
+				'email'        => 'owner@example.test',
+				'status_after' => 'active',
+				'products'     => [],
+			],
+			time()
+		) )->always_process_in_hub();
+
+		$this->assertSame( 'active', Hub_Endpoint::collect( 'a@example.test', 999 )[ get_bloginfo( 'url' ) ]['groups'][0]['status'] );
 	}
 
 	/**

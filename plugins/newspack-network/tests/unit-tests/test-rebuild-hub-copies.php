@@ -11,6 +11,7 @@ use Newspack_Network\Hub\Database\Subscriptions as Subscriptions_DB;
 use Newspack_Network\Hub\Nodes;
 use Newspack_Network\Hub\Reader_Access_Endpoint as Hub_Endpoint;
 use Newspack_Network\Hub\Stores\Event_Log;
+use Newspack_Network\Incoming_Events\Group_Members_Changed;
 use Newspack_Network\Incoming_Events\Subscription_Changed;
 use Newspack_Network\Site_Role;
 
@@ -185,6 +186,53 @@ class TestRebuildHubCopies extends WP_UnitTestCase {
 		$this->assertTrue( $injected );
 		$alice = Hub_Endpoint::collect( 'alice@example.test', $this->node_id )[ get_bloginfo( 'url' ) ]['subscriptions'][500];
 		$this->assertSame( 'on-hold', $alice['status'] );
+	}
+
+	/**
+	 * Replayed events are decoded the way webhooks decode them, so the copies keep the
+	 * array shape the hub's screens read.
+	 */
+	public function test_rebuild_writes_products_as_arrays() {
+		Rebuild_Hub_Copies::rebuild( [], [ 'apply' => true ] );
+
+		$copies = get_posts(
+			[
+				'post_type'   => Subscriptions_DB::POST_TYPE_SLUG,
+				'post_status' => 'any',
+				'fields'      => 'ids',
+			]
+		);
+		foreach ( $copies as $copy ) {
+			foreach ( get_post_meta( $copy, 'products', false ) as $product ) {
+				$this->assertIsArray( $product );
+			}
+		}
+	}
+
+	/**
+	 * A subscription's status comes from its status events. A members event logged
+	 * later can carry an older status (webhooks retry), so it never decides the status.
+	 */
+	public function test_status_comes_from_status_events() {
+		Event_Log::persist(
+			new Group_Members_Changed(
+				self::NODE_URL,
+				[
+					'id'            => 500,
+					'email'         => 'bob@example.test',
+					'status_after'  => 'active',
+					'products'      => [],
+					'group_enabled' => true,
+					'group_members' => [ 'member@example.test' ],
+				],
+				250
+			)
+		);
+
+		Rebuild_Hub_Copies::rebuild( [], [ 'apply' => true ] );
+
+		$bob = Hub_Endpoint::collect( 'bob@example.test', 0 )[ self::NODE_URL ]['subscriptions'][500];
+		$this->assertSame( 'cancelled', $bob['status'] );
 	}
 
 	/**

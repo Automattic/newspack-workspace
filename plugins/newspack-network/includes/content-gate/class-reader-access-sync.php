@@ -92,6 +92,7 @@ class Reader_Access_Sync {
 		 *
 		 * A seat removed from a group, an ended group subscription or a refunded order
 		 * stops granting access once the copy is refreshed, so this bounds how long that takes.
+		 * Refreshes are never closer together than Reader_Access_Sync::RETRY_AFTER.
 		 *
 		 * @param int $interval Seconds. Default 12 hours.
 		 */
