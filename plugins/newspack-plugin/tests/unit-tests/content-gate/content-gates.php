@@ -2410,8 +2410,8 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 
 	/**
 	 * Institutions add a way past the wall and take nothing from readers who
-	 * registered. Walling those readers is what institutions under paid access
-	 * did to a registration wall, and this pins that registered access doesn't.
+	 * registered. Under Paid Access, institutions wall these readers (NPPD-2310);
+	 * this pins that Registered Access doesn't.
 	 */
 	public function test_registration_institutions_never_narrow_access_for_logged_in_readers() {
 		$inst_id = $this->create_ip_institution();

@@ -975,14 +975,14 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		$this->assertWPError( $sanitized_gate );
 		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
 		// The same rule can be empty under Paid access too, so the refusal says which.
-		$this->assertStringContainsString( 'Registered access', $sanitized_gate->get_error_message() );
+		$this->assertStringContainsString( 'Registered Access', $sanitized_gate->get_error_message() );
 	}
 
 	/**
-	 * A save that leaves out `active` keeps the stored value, so a partial save
-	 * to a live wall is held to the same rule as a full one.
+	 * A save that sends rules but leaves out `active` keeps the stored value, so
+	 * it is refused on a live wall just as a full save would be.
 	 */
-	public function test_a_partial_save_is_judged_against_the_stored_registration_wall() {
+	public function test_rules_saved_without_active_are_refused_on_a_stored_live_wall() {
 		$gate_id = Content_Gate::create_gate( [ 'title' => 'Live registration wall' ] );
 		Content_Gate::update_gate_settings(
 			$gate_id,
@@ -1001,9 +1001,9 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Dropping rules no plugin registers anymore can only narrow who skips
-	 * registration, so the set saves empty rather than refusing the way paid
-	 * access must. Refusing would also block switching the gate off.
+	 * A set emptied by dropping rules no plugin registers admits nobody past the
+	 * wall, as those rules already did, so it saves empty rather than refusing
+	 * the way paid access must. Refusing would also block switching the gate off.
 	 */
 	public function test_registration_keeps_an_emptied_rule_set_instead_of_refusing() {
 		$sanitized_gate = Content_Gate_API::sanitize_gate(
@@ -1031,11 +1031,34 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 	 * selection the operator hasn't finished.
 	 */
 	public function test_an_unfinished_registration_selection_saves_while_it_is_not_enforced() {
-		foreach ( [ $this->gate_with_registration_institutions( true, [], 'draft' ), $this->gate_with_registration_institutions( false, [] ) ] as $gate ) {
+		$cases = [
+			'draft gate' => $this->gate_with_registration_institutions( true, [], 'draft' ),
+			'wall off'   => $this->gate_with_registration_institutions( false, [] ),
+		];
+		foreach ( $cases as $case => $gate ) {
 			$sanitized_gate = Content_Gate_API::sanitize_gate( $gate );
-			$this->assertNotWPError( $sanitized_gate );
-			$this->assertSame( [], $sanitized_gate['registration']['access_rules'][0][0]['value'], 'The unfinished selection is kept, not dropped.' );
+			$this->assertNotWPError( $sanitized_gate, $case );
+			$this->assertSame( [], $sanitized_gate['registration']['access_rules'][0][0]['value'], "The unfinished selection is kept, not dropped ($case)." );
 		}
+	}
+
+	/**
+	 * The stored value decides both ways: rules saved without `active` to a live
+	 * gate whose stored wall is off are not refused.
+	 */
+	public function test_rules_saved_without_active_are_accepted_on_a_stored_open_wall() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Open registration wall' ] );
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'status'       => 'publish',
+				'registration' => [ 'active' => false ],
+			]
+		);
+		$partial = $this->gate_with_registration_institutions( true, [] );
+		unset( $partial['status'], $partial['registration']['active'] );
+
+		$this->assertNotWPError( Content_Gate_API::sanitize_gate( $partial, $this->gate_update_request( $gate_id ) ) );
 	}
 
 	/**

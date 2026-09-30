@@ -305,7 +305,7 @@ class Institutions_Migration {
 		// step so the closing success line can't read as "migration done, job done".
 		if ( ! empty( $summary ) ) {
 			WP_CLI::line( '' );
-			WP_CLI::line( 'Next step: institutions grant access only where a content gate selects them. Configure the gates after migrating: select institutions under Registered access to let their visitors skip registration, or under Paid access to let them skip registration and payment.' );
+			WP_CLI::line( 'Next step: institutions grant access only where a content gate selects them. Configure the gates after migrating: select institutions under Registered Access to let their visitors skip registration, or under Paid Access to let them skip registration and payment.' );
 		}
 
 		if ( ! $dry_run ) {

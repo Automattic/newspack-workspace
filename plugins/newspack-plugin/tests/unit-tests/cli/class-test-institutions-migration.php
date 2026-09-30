@@ -459,8 +459,8 @@ class Test_Institutions_Migration extends WP_UnitTestCase {
 		// a gate can select institutions: they grant different things (NPPD-2310).
 		$reminder_lines = array_filter( WP_CLI::$logs, fn( $line ) => str_starts_with( $line, 'Next step:' ) );
 		$this->assertCount( 1, $reminder_lines, 'The run must close by naming the gate-configuration step.' );
-		$this->assertStringContainsString( 'Registered access', reset( $reminder_lines ) );
-		$this->assertStringContainsString( 'Paid access', reset( $reminder_lines ) );
+		$this->assertStringContainsString( 'Registered Access', reset( $reminder_lines ) );
+		$this->assertStringContainsString( 'Paid Access', reset( $reminder_lines ) );
 
 		$this->assertCount( 0, $this->get_all_institutions(), 'The dry-run must still write nothing.' );
 	}

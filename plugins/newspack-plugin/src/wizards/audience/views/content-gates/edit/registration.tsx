@@ -83,7 +83,7 @@ export default function Registration( { registration, onChange, isNewsletter = f
 								description:
 									'institution' === slug
 										? __(
-												'Visitors from the selected institutions can read without registering. If paid access is on, they still need to meet it.',
+												'Visitors from the selected institutions can read without registering. If Paid Access is on, they still need to meet it.',
 												'newspack-plugin'
 										  )
 										: availableAccessRules[ slug ].description,

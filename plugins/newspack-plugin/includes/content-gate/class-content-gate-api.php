@@ -503,7 +503,7 @@ class Content_Gate_API {
 	 * Whether the gate's registration wall is live once the save lands.
 	 *
 	 * A save that omits `active` keeps the stored value, which is read under the
-	 * same guard as the stored status above.
+	 * same guard save_leaves_gate_unpublished() uses for the stored status.
 	 *
 	 * @param array $registration   The registration settings the save carries.
 	 * @param array $sanitized_gate The gate sanitized so far, `status` included.
@@ -636,7 +636,7 @@ class Content_Gate_API {
 						'invalid_registration_access_rule',
 						sprintf(
 							/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
-							__( 'The “%s” access rule needs a signed-in reader, so it can’t let visitors skip registration. Use it under Paid access instead.', 'newspack-plugin' ),
+							__( 'The “%s” access rule needs a signed-in reader, so it can’t let visitors skip registration. Use it under Paid Access instead.', 'newspack-plugin' ),
 							$registered['name'] ?? $rule['slug']
 						),
 						[ 'status' => 400 ]
@@ -648,7 +648,7 @@ class Content_Gate_API {
 						'empty_access_rule_value',
 						sprintf(
 							/* translators: %s: the access rule's name, e.g. "Institutional access". */
-							__( 'Registered access has “%s” turned on with nothing selected, so no visitor can use it to skip registration. Select at least one option, or turn it off.', 'newspack-plugin' ),
+							__( 'Registered Access has “%s” turned on with nothing selected, so no visitor can use it to skip registration. Select at least one option, or turn it off.', 'newspack-plugin' ),
 							$registered['name']
 						),
 						[
