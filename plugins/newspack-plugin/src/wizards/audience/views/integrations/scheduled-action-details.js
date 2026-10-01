@@ -5,7 +5,7 @@ import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { Spinner, Notice } from '@wordpress/components';
-import { Badge } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -26,7 +26,7 @@ function formatArgs( args ) {
 	}
 }
 
-export const LogDetailsModal = ( { integrationId, actionId } ) => {
+export const ScheduledActionDetails = ( { integrationId, actionId } ) => {
 	const [ data, setData ] = useState( null );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ error, setError ] = useState( null );
@@ -65,15 +65,17 @@ export const LogDetailsModal = ( { integrationId, actionId } ) => {
 
 	if ( isLoading ) {
 		return (
-			<div className="newspack-integration-log-details newspack-integration-log-details--loading">
+			<div className="newspack-integration-log-details--loading">
 				<Spinner />
 			</div>
 		);
 	}
 
 	if ( error ) {
+		// Raised by the mount GET, so it can render as the drawer opens:
+		// assertive would cut off the title being announced.
 		return (
-			<Notice status="error" isDismissible={ false }>
+			<Notice status="error" isDismissible={ false } politeness="polite">
 				{ error }
 			</Notice>
 		);
@@ -88,7 +90,7 @@ export const LogDetailsModal = ( { integrationId, actionId } ) => {
 	const formattedArgs = formatArgs( action.args );
 
 	return (
-		<div className="newspack-integration-log-details">
+		<Stack direction="column" gap="xl">
 			<div className="newspack-integration-log-details__header">
 				<h3>{ action.event }</h3>
 				<Badge intent={ status.intent }>{ status.label }</Badge>
@@ -138,6 +140,6 @@ export const LogDetailsModal = ( { integrationId, actionId } ) => {
 					<p>{ __( 'No log entries.', 'newspack-plugin' ) }</p>
 				) }
 			</section>
-		</div>
+		</Stack>
 	);
 };

@@ -6,7 +6,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -19,6 +19,7 @@ import { Button, Spinner } from '@wordpress/components';
 import { DataViews, Router } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
+import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import InstitutionsOnboarding from './onboarding';
 
 const { useHistory } = Router;
@@ -46,10 +47,13 @@ const DEFAULT_VIEW: View = {
 
 export default function Institutions() {
 	const history = useHistory();
-	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData, addNotice, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setData ] = useState< Institution[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	// The last has_institutions value pushed to the store, so a fetch that does
+	// not change it does not clone the whole wizard payload.
+	const lastHasInstitutions = useRef< boolean | undefined >( undefined );
 
 	useEffect( () => {
 		const actions: HeaderAction[] = [];
@@ -80,6 +84,17 @@ export default function Institutions() {
 		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=-1&context=edit&_embed=wp:featuredmedia` } )
 			.then( institutions => {
 				setData( institutions );
+				// Advanced Settings shows the institutional access link text only
+				// once the site has an institution.
+				const hasInstitutions = institutions.length > 0;
+				if ( hasInstitutions !== lastHasInstitutions.current ) {
+					lastHasInstitutions.current = hasInstitutions;
+					updateWizardSettings( {
+						slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+						path: [ 'config', 'has_institutions' ],
+						value: hasInstitutions,
+					} );
+				}
 			} )
 			.catch( () => {
 				addNotice( {
@@ -89,7 +104,7 @@ export default function Institutions() {
 				} );
 			} )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice ] );
+	}, [ addNotice, updateWizardSettings ] );
 
 	useEffect( () => {
 		fetchData();

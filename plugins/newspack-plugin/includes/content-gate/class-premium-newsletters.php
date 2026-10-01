@@ -53,12 +53,16 @@ class Premium_Newsletters {
 	 * Queue-entry source tags. Each access-check queue entry records which event
 	 * enqueued it so that downstream logic (e.g. consulting the renewal snapshot)
 	 * can be scoped to the originating event instead of leaking into unrelated
-	 * flows that happen to dequeue the same user.
+	 * flows that happen to dequeue the same user. A plan-switch entry is
+	 * remove-only: check_access() never adds lists for it, and it never replaces
+	 * another entry for the same user.
 	 */
 	const SOURCE_RENEWAL              = 'renewal';
 	const SOURCE_SUBSCRIPTION_CHANGED = 'subscription_changed';
 	const SOURCE_DONATION_CHANGED     = 'donation_changed';
 	const SOURCE_READER_VERIFIED      = 'reader_verified';
+	const SOURCE_GROUP_MEMBERSHIP     = 'group_membership';
+	const SOURCE_PLAN_SWITCH          = 'plan_switch';
 
 	/**
 	 * User meta key for the renewal-time snapshot of the contact's full ESP list
@@ -86,6 +90,11 @@ class Premium_Newsletters {
 		// Register the scheduled-event callback (works for both WP cron and ActionScheduler).
 		add_action( 'init', [ __CLASS__, 'register_access_check_event' ] );
 		add_action( self::SCHEDULED_HOOK, [ __CLASS__, 'process_access_check_queue' ] );
+
+		// Joining or leaving a group changes a reader's access without any Data Event
+		// naming them, so the membership write itself has to trigger their check.
+		add_action( 'added_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
+		add_action( 'deleted_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
 
 		// Clean up the queue option on plugin deactivation.
 		add_action( 'newspack_deactivation', [ __CLASS__, 'unschedule_access_check_event' ] );
@@ -338,9 +347,10 @@ class Premium_Newsletters {
 		$subscribed_lists = $is_renewal_check
 			? get_user_meta( $user_id, self::SUBSCRIBED_LISTS_META_KEY, true )
 			: '';
-		$auto_signup      = (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
-		$lists_to_add     = [];
-		$lists_to_remove  = [];
+		// A plan-switch check only removes lists; see maybe_enqueue_access_check().
+		$auto_signup     = self::SOURCE_PLAN_SWITCH !== $source && (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		$lists_to_add    = [];
+		$lists_to_remove = [];
 
 		// When a renewal snapshot is present we need to compare each restricted list's
 		// public ID against the snapshot. Build the local→public map once per run so
@@ -453,8 +463,9 @@ class Premium_Newsletters {
 
 		if ( null === $existing_index ) {
 			$queue[] = $new_entry;
-		} elseif ( self::SOURCE_RENEWAL !== $existing_source ) {
-			// Never downgrade an existing renewal entry.
+		} elseif ( self::SOURCE_RENEWAL !== $existing_source && self::SOURCE_PLAN_SWITCH !== $source ) {
+			// Never downgrade an existing renewal entry, and never let a remove-only
+			// plan-switch entry replace a check that can add lists.
 			$queue[ $existing_index ] = $new_entry;
 		}
 
@@ -596,6 +607,25 @@ class Premium_Newsletters {
 			return;
 		}
 
+		self::snapshot_lists_and_enqueue_renewal_check( $user );
+
+		// A group's renewal moves it through On hold and back to Active, which
+		// re-checks every member. Members get the same snapshot as the owner, so
+		// auto-signup can't re-add a premium list a member left on their own.
+		foreach ( self::get_group_member_ids( $data ) as $member_id ) {
+			$member = get_user_by( 'id', $member_id );
+			if ( $member ) {
+				self::snapshot_lists_and_enqueue_renewal_check( $member );
+			}
+		}
+	}
+
+	/**
+	 * Snapshot a reader's current lists and queue their renewal-source access check.
+	 *
+	 * @param \WP_User $user The reader whose access the renewal decides.
+	 */
+	private static function snapshot_lists_and_enqueue_renewal_check( $user ) {
 		// Capture the renewal-time snapshot when auto-signup is enabled. Without
 		// auto-signup the snapshot has no effect (check_access only consults it
 		// inside the auto-signup branch), so skip the ESP fetch in that case.
@@ -616,7 +646,45 @@ class Premium_Newsletters {
 	}
 
 	/**
+	 * Get the members of the group subscription a Data Event concerns.
+	 *
+	 * Subscription events name only the owner, yet a group subscription's status
+	 * decides its members' access too. Without this, members keep premium lists
+	 * after the group lapses and never gain them when it comes back.
+	 *
+	 * @param array $data Data associated with the event.
+	 *
+	 * @return int[] Member user IDs, or an empty array when the event names no group subscription.
+	 */
+	private static function get_group_member_ids( $data ) {
+		if ( empty( $data['subscription_id'] ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return [];
+		}
+		$subscription = wcs_get_subscription( (int) $data['subscription_id'] );
+		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
+			return [];
+		}
+		return array_map( 'intval', Group_Subscription::get_members( $subscription ) );
+	}
+
+	/**
+	 * Queue an access check for a reader who just joined or left a group subscription.
+	 *
+	 * @param int|int[] $meta_ids ID(s) of the affected meta row(s).
+	 * @param int       $user_id  ID of the user whose meta changed.
+	 * @param string    $meta_key Meta key.
+	 */
+	public static function maybe_enqueue_group_membership_check( $meta_ids, $user_id, $meta_key ) {
+		if ( Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY !== $meta_key ) {
+			return;
+		}
+		self::add_user_to_queue( (int) $user_id, self::SOURCE_GROUP_MEMBERSHIP );
+	}
+
+	/**
 	 * Maybe add or remove the user from restricted lists based on their access status.
+	 * When the event names a group subscription and can change its access, the
+	 * members are queued too.
 	 *
 	 * @param int    $timestamp Timestamp of the event.
 	 * @param array  $data      Data associated with the event.
@@ -631,6 +699,46 @@ class Premium_Newsletters {
 			return;
 		}
 		self::add_user_to_queue( (int) $data['user_id'], $source );
+		if ( ! self::event_changes_group_access( $data ) ) {
+			return;
+		}
+		// A plan switch keeps the same status on both sides, so the event can't tell
+		// a seat-count change, which leaves access alone, from a move to other
+		// products. Members get a remove-only check: a downgrade still takes away
+		// lists the new plan doesn't cover, and auto-signup can't re-add lists they
+		// left. The cost is that an upgrade doesn't auto-add newly covered lists for
+		// existing members, though the owner, checked the usual way, gets them.
+		$is_plan_switch = ! empty( $data['status_before'] ) && ( $data['status_after'] ?? '' ) === $data['status_before'];
+		foreach ( self::get_group_member_ids( $data ) as $member_id ) {
+			self::add_user_to_queue( $member_id, $is_plan_switch ? self::SOURCE_PLAN_SWITCH : $source );
+		}
+	}
+
+	/**
+	 * Whether a subscription event can change what a group's members are entitled to.
+	 *
+	 * Members are skipped only when the status moves between the two statuses that
+	 * always grant access, Active and Pending cancel. Checking them then would
+	 * re-add every premium list a member had left whenever auto-signup is on. Any
+	 * other move may change access: On hold still grants it while a payment retry is
+	 * pending, so On hold to Expired, the last step of a lapse after failed
+	 * payments, ends it. A plan switch reports the same status on both sides but
+	 * may change the products, so it counts as a change too.
+	 *
+	 * The status pair can't show payment recovery, so On hold to Active after a
+	 * successful retry still checks members, as it does the owner.
+	 *
+	 * @param array $data Data associated with the event.
+	 *
+	 * @return bool
+	 */
+	private static function event_changes_group_access( $data ) {
+		$status_before = $data['status_before'] ?? '';
+		$status_after  = $data['status_after'] ?? '';
+		if ( $status_before === $status_after ) {
+			return true;
+		}
+		return ! ( WooCommerce_Connection::is_subscription_active( $status_before ) && WooCommerce_Connection::is_subscription_active( $status_after ) );
 	}
 }
 

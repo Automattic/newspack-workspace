@@ -248,6 +248,46 @@ describe( 'Wizard content width', () => {
 	} );
 } );
 
+describe( 'Wizard section tabs', () => {
+	const sections = [
+		{ label: 'List', path: '/', exact: true, render: () => <div>List content</div> },
+		{
+			path: '/items/:itemId/logs/:tab?',
+			isHidden: true,
+			render: () => <div>Logs content</div>,
+			tabbedNavigation: ( { itemId } ) => [
+				{ label: 'First Tab', path: `/items/${ itemId }/logs`, exact: true },
+				{ label: 'Second Tab', path: `/items/${ itemId }/logs/second`, exact: true },
+			],
+		},
+	];
+
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	afterEach( () => {
+		window.location.hash = '';
+	} );
+
+	it( 'shows the tabs a section builds from its route params while it matches', async () => {
+		window.location.hash = '#/items/42/logs/second';
+		render( <Wizard headerText="Test wizard" sections={ sections } /> );
+
+		expect( await screen.findByText( 'Logs content' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'tab', { name: 'First Tab' } ) ).toHaveAttribute( 'href', '#/items/42/logs' );
+		expect( screen.getByRole( 'tab', { name: 'Second Tab' } ) ).toHaveAttribute( 'aria-selected', 'true' );
+	} );
+
+	it( 'leaves the tabs out on a route the section does not match', async () => {
+		window.location.hash = '#/';
+		render( <Wizard headerText="Test wizard" sections={ sections } /> );
+
+		expect( await screen.findByText( 'List content' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'tab' ) ).toBeNull();
+	} );
+} );
+
 describe( 'Wizard section subtitle', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();

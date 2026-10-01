@@ -6,12 +6,17 @@
  * - One prompt per story. The pattern is kept out of the inserter, but Duplicate
  *   and paste still put a second card in the post, so the newcomer is removed as
  *   it lands — whichever position it lands in.
- * - A card detached from the pattern keeps the pattern's structure. Detaching
- *   copies the card's markup into the post, locks and all: the group's own lock
- *   is stripped so the publisher can move and delete their prompt, while its
- *   children stay fixed — core's Unlock modal writes the `lock` attribute, and
- *   re-asserting it makes unlocking ineffective without touching any of the
- *   styling controls.
+ * - A card detached from the pattern is the publisher's to reshape, but only so
+ *   far. Detaching copies the card's markup into the post, locks and all; those
+ *   locks are lifted — the group's own lock and its `templateLock`, and the lock
+ *   the detach copied onto the call to action — so the publisher can move the
+ *   card and swap the CTA for blocks of their own. The generated copy is held in
+ *   place: it is the paragraph the pattern binds its copy to, and it is what
+ *   keeps the card a prompt. Core's lock modal writes the `lock` attribute, so
+ *   the copy's lock is re-asserted however the modal was used. A lock the
+ *   publisher sets on a block of their own stays, with one exception: a full
+ *   lock on their own Donate or Buttons block looks exactly like the one an older
+ *   seed wrote, and is lifted with it.
  */
 
 /**
@@ -25,7 +30,7 @@ import { store as blockEditorStore } from '@wordpress/block-editor';
 /**
  * Internal dependencies.
  */
-import { findPromptCards, isDetachedPromptCard, PATTERN_ID } from './instance';
+import { findPromptCards, isDetachedPromptCard, BOUND_NAME, PATTERN_ID } from './instance';
 import { isEditingPattern, resolveEditedEntity } from './editor-locks';
 
 const NOTICE_ID = 'newspack-contextual-prompt-single';
@@ -33,8 +38,33 @@ const NOTICE_ID = 'newspack-contextual-prompt-single';
 // Mirrors BLOCK_LOCK in class-newspack-popups-contextual-prompt-pattern.php.
 const CHILD_LOCK = { move: true, remove: true };
 
+// The call-to-action blocks an older seed locked, which a detach copied onto the
+// card along with their lock.
+const SEEDED_CTA_BLOCKS = [ 'newspack-blocks/donate', 'core/buttons' ];
+
+/**
+ * Whether a child is the pattern's generated copy: the paragraph the pattern
+ * binds each instance's copy to. A detach drops the override binding and keeps
+ * the block's name, so on a detached card the seeded name is what identifies
+ * it; a copy still carrying its binding is matched by that. Any other name the
+ * publisher gives a block does not match.
+ *
+ * @param {Object} attributes Block attributes.
+ * @return {boolean} Whether the block is the bound copy.
+ */
+const isBoundCopy = attributes => {
+	const metadata = attributes?.metadata;
+	if ( ! metadata ) {
+		return false;
+	}
+	if ( BOUND_NAME === metadata.name ) {
+		return true;
+	}
+	return Object.values( metadata.bindings || {} ).some( binding => 'core/pattern-overrides' === binding?.source );
+};
+
 // The plan's correction lists, as opposed to the cards it hands the next pass.
-const CORRECTIONS = [ 'remove', 'unlockRemovals', 'stripGroupLock', 'pinTemplateLock', 'lockChildren' ];
+const CORRECTIONS = [ 'remove', 'unlockRemovals', 'stripGroupLock', 'stripTemplateLock', 'lockChildren', 'unlockChildren' ];
 
 /**
  * What has to change for the post to carry one prompt in the pattern's shape.
@@ -51,7 +81,7 @@ const CORRECTIONS = [ 'remove', 'unlockRemovals', 'stripGroupLock', 'pinTemplate
  *
  * @param {Object[]} blocks Block tree.
  * @param {string[]} known  Client ids of the cards the previous pass kept.
- * @return {{keep: string[], remove: string[], unlockRemovals: string[], stripGroupLock: string[], pinTemplateLock: string[], lockChildren: string[]}} The corrections, and the cards to know next pass.
+ * @return {{keep: string[], remove: string[], unlockRemovals: string[], stripGroupLock: string[], stripTemplateLock: string[], lockChildren: string[], unlockChildren: string[]}} The corrections, and the cards to know next pass.
  */
 export const planPromptCorrections = ( blocks, known = [] ) => {
 	const cards = findPromptCards( blocks );
@@ -66,8 +96,9 @@ export const planPromptCorrections = ( blocks, known = [] ) => {
 		// which the store honours: removal would silently do nothing.
 		unlockRemovals: surplus.filter( card => card.attributes?.lock?.remove ).map( card => card.clientId ),
 		stripGroupLock: [],
-		pinTemplateLock: [],
+		stripTemplateLock: [],
 		lockChildren: [],
+		unlockChildren: [],
 	};
 
 	// Only the card the post keeps: the rest are on their way out, and an
@@ -77,20 +108,32 @@ export const planPromptCorrections = ( blocks, known = [] ) => {
 		return plan;
 	}
 
-	// Detaching copies the pattern's own lock down with the markup, which would
-	// leave the publisher unable to move or delete the prompt they own.
+	// Detaching copies the pattern's own lock and its templateLock onto the card.
+	// Strip both: the group lock so the publisher can move or delete the prompt,
+	// the templateLock so they can replace its call to action with their own
+	// blocks.
 	if ( undefined !== card.attributes?.lock ) {
 		plan.stripGroupLock.push( card.clientId );
 	}
 
-	if ( 'insert' !== card.attributes?.templateLock ) {
-		plan.pinTemplateLock.push( card.clientId );
+	if ( undefined !== card.attributes?.templateLock ) {
+		plan.stripTemplateLock.push( card.clientId );
 	}
 
+	// The generated copy is the one child held in place: it is what makes the
+	// card a prompt, so it is held move-and-remove locked. Every other child is
+	// the publisher's to arrange. The only lock lifted from one is the full lock
+	// an older seed put on the call to action; a lock the publisher sets on a
+	// block of their own stays, unless it is that same full lock on a Donate or
+	// Buttons block, which cannot be told apart from the seeded one.
 	for ( const child of card.innerBlocks || [] ) {
 		const lock = child.attributes?.lock;
-		if ( true !== lock?.move || true !== lock?.remove ) {
-			plan.lockChildren.push( child.clientId );
+		if ( isBoundCopy( child.attributes ) ) {
+			if ( true !== lock?.move || true !== lock?.remove ) {
+				plan.lockChildren.push( child.clientId );
+			}
+		} else if ( SEEDED_CTA_BLOCKS.includes( child.name ) && true === lock?.move && true === lock?.remove ) {
+			plan.unlockChildren.push( child.clientId );
 		}
 	}
 
@@ -122,13 +165,17 @@ export const createPromptCorrectionApplier =
 			markNextChangeAsNotPersistent();
 			updateBlockAttributes( plan.stripGroupLock, { lock: undefined } );
 		}
-		if ( plan.pinTemplateLock.length ) {
+		if ( plan.stripTemplateLock.length ) {
 			markNextChangeAsNotPersistent();
-			updateBlockAttributes( plan.pinTemplateLock, { templateLock: 'insert' } );
+			updateBlockAttributes( plan.stripTemplateLock, { templateLock: undefined } );
 		}
 		if ( plan.lockChildren.length ) {
 			markNextChangeAsNotPersistent();
 			updateBlockAttributes( plan.lockChildren, { lock: { ...CHILD_LOCK } } );
+		}
+		if ( plan.unlockChildren.length ) {
+			markNextChangeAsNotPersistent();
+			updateBlockAttributes( plan.unlockChildren, { lock: undefined } );
 		}
 		if ( ! plan.remove.length ) {
 			return;

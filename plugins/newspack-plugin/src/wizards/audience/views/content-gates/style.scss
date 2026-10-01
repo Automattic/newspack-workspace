@@ -35,6 +35,17 @@
 			.components-notice {
 				margin: wp-vars.$grid-unit-20 wp-vars.$grid-unit-20 0;
 			}
+			// The wrapper puts each heading out of reach of the Grid's first-heading margin
+			// reset, so it resets the heading itself. A section stacked in another's column
+			// still reads as its own section.
+			&__summary-section {
+				h4 {
+					margin-top: 0;
+				}
+				&:not(:first-child) {
+					margin-top: wp-vars.$grid-unit-30;
+				}
+			}
 			&__settings {
 				grid-template-columns: minmax(0, 1fr);
 				padding: wp-vars.$grid-unit-20;

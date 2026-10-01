@@ -54,7 +54,7 @@ const resolveIcon = icon => {
 	return icon;
 };
 
-const { HashRouter, Redirect, Route, Switch, useLocation } = Router;
+const { HashRouter, Redirect, Route, Switch, matchPath, useLocation } = Router;
 
 /**
  * Interpolate a translated message's named tags, falling back to plain text.
@@ -113,14 +113,31 @@ const WizardHeaderRegion = ( {
 	subTitle,
 	headerSubTitle,
 	actions,
-	tabbedNavigation: sectionsTabbedNavigation,
+	tabbedNavigation: wizardTabbedNavigation,
 	children,
 } ) => {
 	const { pathname } = useLocation();
-	const hidesTabs = activeSection( sections, pathname )?.hideTabbedNavigation;
-	const tabbedNavigation = hidesTabs ? null : sectionsTabbedNavigation;
+
+	// A section can carry its own tabs, built from its route params, in place of
+	// the wizard's. The first match wins, as it does in the wizard's `<Switch>`.
+	let tabbedNavigation = wizardTabbedNavigation;
+	for ( const section of sections ) {
+		const match = matchPath( pathname, { path: section.path, exact: section.exact ?? false } );
+		if ( match ) {
+			if ( typeof section.tabbedNavigation === 'function' ) {
+				tabbedNavigation = (
+					<TabbedNavigation items={ section.tabbedNavigation( match.params ) }>
+						<WizardError />
+					</TabbedNavigation>
+				);
+			}
+			break;
+		}
+	}
+
 	// WizardError normally mounts inside the tab bar, so a route without one renders it itself.
-	if ( hidesTabs && sectionsTabbedNavigation ) {
+	if ( activeSection( sections, pathname )?.hideTabbedNavigation && tabbedNavigation ) {
+		tabbedNavigation = null;
 		children = (
 			<>
 				<WizardError />
@@ -167,6 +184,7 @@ const WizardHeaderRegion = ( {
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.
  * @property {any[]}      sections                  Array of sections. A section's own `subHeaderText` replaces the wizard's while it is active, and `hideTabbedNavigation` hides the tab bar on its route.
+ *                                                  Its optional `tabbedNavigation( params )` returns the tab items shown while its route matches.
  * @property {boolean}    [hasSimpleFooter]         Indicates if a simple footer is used, optional.
  * @property {() => void} [renderAboveSections]     Function to render content above sections, optional.
  * @property {string[]}   [requiredPlugins]         Array of required plugin strings, optional.

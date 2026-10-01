@@ -36,6 +36,15 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	const MIGRATION_PRODUCT_ID = 909001;
 
 	/**
+	 * WCM post statuses the membership fixtures use. Registered per test and
+	 * unregistered again, because the post-status registry is process-global and
+	 * the suite does not reset it.
+	 *
+	 * @var string[]
+	 */
+	private const MEMBERSHIP_STATUSES = [ 'wcm-active', 'wcm-complimentary', 'wcm-free_trial', 'wcm-pending', 'wcm-expired' ];
+
+	/**
 	 * User IDs to clean up.
 	 *
 	 * @var int[]
@@ -74,9 +83,12 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		if ( class_exists( 'WCS_Gifting' ) && property_exists( 'WCS_Gifting', 'recipients' ) ) {
 			WCS_Gifting::$recipients = [];
 		}
-		// The membership fixtures use WCM's custom post status; register it so the
-		// explicit post_status query in the command resolves it like on a live site.
-		register_post_status( 'wcm-active' );
+		// The membership fixtures use WCM's custom post statuses; register them so
+		// the explicit post_status query in the command resolves them like on a
+		// live site.
+		foreach ( self::MEMBERSHIP_STATUSES as $status ) {
+			register_post_status( $status );
+		}
 		wc_create_mock_product(
 			[
 				'id'   => self::MIGRATION_PRODUCT_ID,
@@ -105,6 +117,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		// remove_role() call runs.
 		if ( \get_role( 'newspack_test_guest' ) ) {
 			remove_role( 'newspack_test_guest' );
+		}
+		foreach ( self::MEMBERSHIP_STATUSES as $status ) {
+			\_unregister_post_status( $status );
 		}
 		parent::tear_down();
 	}
@@ -156,15 +171,16 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	/**
 	 * Create an additional active membership on a plan for an existing user.
 	 *
-	 * @param int $plan_id Plan post ID.
-	 * @param int $user_id User ID.
+	 * @param int    $plan_id Plan post ID.
+	 * @param int    $user_id User ID.
+	 * @param string $status  WCM membership post status.
 	 * @return int Membership post ID.
 	 */
-	private function create_membership( int $plan_id, int $user_id ): int {
+	private function create_membership( int $plan_id, int $user_id, string $status = 'wcm-active' ): int {
 		$membership_id = wp_insert_post(
 			[
 				'post_type'   => 'wc_user_membership',
-				'post_status' => 'wcm-active',
+				'post_status' => $status,
 				'post_parent' => $plan_id,
 				'post_author' => $user_id,
 				'post_title'  => 'Membership for user ' . $user_id,
@@ -1560,6 +1576,37 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		file_put_contents( $user_ids_file_path, "\xEF\xBB\xBF101\n102\n" ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
 		$this->assertSame( [ 101, 102 ], Teams_Migration::parse_user_ids( '', $user_ids_file_path ), 'A BOM-led file must parse to its IDs.' );
 		unlink( $user_ids_file_path ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+	}
+
+	/**
+	 * WooCommerce Memberships grants access on every "active access" status,
+	 * not only wcm-active: a complimentary, free-trial or pending-cancellation
+	 * member reads the site today, so a reviewed --user-ids list must reach
+	 * them. The archetypal residual is a comp that outlived its paid
+	 * subscription. An expired member has no access and stays out.
+	 */
+	public function test_user_ids_mode_reaches_every_active_access_membership_status() {
+		$purchase_plan_id        = $this->create_plan( 'purchase' );
+		$member_user_ids_by_status = [];
+		foreach ( [ 'wcm-complimentary', 'wcm-free_trial', 'wcm-pending', 'wcm-expired' ] as $membership_status ) {
+			$member_user_id = $this->create_reader_user();
+			$this->create_membership( $purchase_plan_id, $member_user_id, $membership_status );
+			$member_user_ids_by_status[ $membership_status ] = $member_user_id;
+		}
+
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids' => (string) $purchase_plan_id,
+				'user-ids' => implode( ',', $member_user_ids_by_status ),
+				'live'     => true,
+			]
+		);
+
+		foreach ( [ 'wcm-complimentary', 'wcm-free_trial', 'wcm-pending' ] as $active_access_status ) {
+			$this->assertCount( 1, $this->get_migration_subscription_ids_for_user( $member_user_ids_by_status[ $active_access_status ] ), sprintf( 'A %s member named with --user-ids must get a $0 subscription.', $active_access_status ) );
+		}
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $member_user_ids_by_status['wcm-expired'] ), 'An expired member has no access today and must be untouched.' );
+		$this->assertStringContainsString( (string) $member_user_ids_by_status['wcm-expired'], $output, 'The expired member must be reported as not found among active members.' );
 	}
 }
 

@@ -81,6 +81,7 @@ const CoreCard = ( {
 		disabled && 'newspack-card--core__is-disabled',
 		children && 'newspack-card--core__has-children',
 		noMargin && 'newspack-card--core__no-margin',
+		( noBorder || otherProps.isBorderless ) && 'newspack-card--core__no-border',
 		hasGreyHeader && 'newspack-card--core__has-grey-header'
 	);
 	let sizeProps = isSmall ? 'small' : size;

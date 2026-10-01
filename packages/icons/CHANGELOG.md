@@ -1,3 +1,10 @@
+## newspack-icons [1.1.3](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.1.2...newspack-icons@1.1.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **icons:** accept React 19 and drop React 16.8 as peers ([#1189](https://github.com/Automattic/newspack-workspace/issues/1189)) ([cb647aa](https://github.com/Automattic/newspack-workspace/commit/cb647aaba04c4d767365025346b39da65e0e9340))
+
 ## newspack-icons [1.1.2](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.1.1...newspack-icons@1.1.2) (2026-08-31)
 
 

@@ -7,6 +7,7 @@
  */
 import { __, _x } from '@wordpress/i18n';
 import {
+	TextControl,
 	ToggleControl,
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -30,6 +31,7 @@ import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
 // Truthy check because wp_localize_script() delivers this as '1'/'' rather than a boolean.
 const feedsGovernedByMemberships = !! window.newspackAudienceContentGates?.feeds_governed_by_memberships;
+const institutionalAccessDefaultText = window.newspackAudienceContentGates?.institutional_access_default_text || '';
 
 // Not a stored mode: it stands for `restrict_feeds` being off, so one control covers both settings.
 const FEED_MODE_OFF = 'off';
@@ -170,6 +172,19 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 									newsletter_link_bypass_enabled: value,
 								} )
 							}
+						/>
+					) }
+					{ wizardData?.config?.has_institutions && (
+						<TextControl
+							label={ __( 'Institutional access link text', 'newspack-plugin' ) }
+							help={ __(
+								'Shown to logged-out readers below the gate when an institution with an IP range can unlock it. The link checks whether the reader is on that network. Leave empty to use the default.',
+								'newspack-plugin'
+							) }
+							placeholder={ institutionalAccessDefaultText }
+							maxLength={ 200 }
+							value={ config?.institutional_access_text || '' }
+							onChange={ ( value: string ) => setConfig( { ...config, institutional_access_text: value } ) }
 						/>
 					) }
 					<Stack direction="row" gap="sm" justify="end">
