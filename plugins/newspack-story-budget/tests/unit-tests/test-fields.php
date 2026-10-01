@@ -216,6 +216,7 @@ class TestFields extends WP_UnitTestCase {
 			'a password-protected story'         => [ '[gallery]', 2, [ 'post_password' => 'secret' ] ],
 			'an id of 0 falls back to the story' => [ '[gallery id="0"]', 2 ],
 			'listed ids'                         => [ '[gallery ids="{unattached}"]', 3 ],
+			'a list with no valid ids'           => [ '[gallery ids=","]', 0 ],
 			'excluded ids'                       => [ '[gallery exclude="{attached}"]', 1 ],
 			'an escaped shortcode'               => [ '[[gallery]]', 0 ],
 		];

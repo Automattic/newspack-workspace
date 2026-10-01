@@ -633,7 +633,11 @@ class Fields {
 		];
 		$listed_ids = ! empty( $attrs['ids'] ) ? $attrs['ids'] : ( $attrs['include'] ?? '' );
 		if ( ! empty( $listed_ids ) ) {
-			$query_args['post__in'] = \wp_parse_id_list( $listed_ids );
+			$query_args['post__in'] = array_filter( \wp_parse_id_list( $listed_ids ) );
+			// An empty post__in places no restriction, which would list every image on the site.
+			if ( empty( $query_args['post__in'] ) ) {
+				return 0;
+			}
 		} else {
 			$parent_id                 = (int) ( $attrs['id'] ?? 0 );
 			$query_args['post_parent'] = $parent_id > 0 ? $parent_id : $post_id;
