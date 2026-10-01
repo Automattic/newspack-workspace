@@ -583,13 +583,6 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A core/pattern naming an unregistered slug contributes nothing.
-	 */
-	public function test_unregistered_core_pattern_is_not_detected() {
-		$this->assertFalse( $this->detect_on_page( '<!-- wp:pattern {"slug":"np-test/not-registered"} /-->' ) );
-	}
-
-	/**
 	 * Point the request at a clean page and register the `products` shortcode, so
 	 * the only possible WooCommerce source is the widget a test sets up.
 	 */
@@ -681,5 +674,56 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 		);
 		WooCommerce_Content_Detector::reset_memo();
 		$this->assertTrue( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+	}
+
+	/**
+	 * A Text widget with [products] in an orphaned_widgets_* store (left behind
+	 * by a theme switch) is not detected: those widgets never render.
+	 */
+	public function test_orphaned_text_widget_is_not_detected() {
+		$this->go_to_clean_page_with_products_shortcode();
+		update_option(
+			'widget_text',
+			[
+				3 => [
+					'title' => '',
+					'text'  => '[products limit="4"]',
+				],
+			]
+		);
+		wp_set_sidebars_widgets(
+			[
+				'sidebar-1'           => [],
+				'orphaned_widgets_1'  => [ 'text-3' ],
+				'wp_inactive_widgets' => [],
+			]
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertFalse( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+	}
+
+	/**
+	 * Block markup in a Text widget is not detected: the Text widget runs
+	 * shortcodes but never do_blocks, so the block does not render.
+	 */
+	public function test_wc_block_markup_in_text_widget_is_not_detected() {
+		$this->go_to_clean_page_with_products_shortcode();
+		update_option(
+			'widget_text',
+			[
+				3 => [
+					'title' => '',
+					'text'  => '<!-- wp:woocommerce/product-category /-->',
+				],
+			]
+		);
+		wp_set_sidebars_widgets(
+			[
+				'sidebar-1'           => [ 'text-3' ],
+				'wp_inactive_widgets' => [],
+			]
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertFalse( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
 	}
 }

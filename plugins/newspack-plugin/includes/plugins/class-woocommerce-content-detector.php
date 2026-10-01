@@ -77,9 +77,11 @@ class WooCommerce_Content_Detector {
 	 * `get_queried_object()` and `$_wp_current_template_content`) and memoizes for
 	 * the request. Both are settled at `template_include`, so any caller on
 	 * `wp_enqueue_scripts` or later satisfies that ordering at any priority.
-	 * Two callers do, both at the default priority 10: the Perfmatters strip veto on
-	 * `perfmatters_disable_woocommerce_scripts`, and newspack-theme's stylesheet
-	 * decision on `wp_enqueue_scripts` in `inc/woocommerce.php`. The theme reaches
+	 * Two callers do. The Perfmatters strip veto subscribes at priority 10 to
+	 * `perfmatters_disable_woocommerce_scripts`, which Perfmatters applies during
+	 * `wp_enqueue_scripts` at a priority of its own choosing. newspack-theme's
+	 * stylesheet decision runs on `wp_enqueue_scripts` at priority 10, in
+	 * `inc/woocommerce.php`. The theme reaches
 	 * this through `class_exists()`/`method_exists()`, so renaming either the class
 	 * or this method silently returns it to shipping unstyled embedded content.
 	 *
@@ -200,8 +202,9 @@ class WooCommerce_Content_Detector {
 
 	/**
 	 * Recurse a parsed block tree, resolving template-part, synced-pattern and
-	 * registered-pattern references. The visited set guards reference cycles; $depth bounds runaway
-	 * innerBlocks nesting (which carries no reference identity to track).
+	 * registered-pattern references. The visited set guards reference cycles;
+	 * $depth bounds runaway innerBlocks nesting (which carries no reference
+	 * identity to track).
 	 *
 	 * @param array $blocks  Parsed blocks.
 	 * @param array $visited Reference set ("type:id").
@@ -344,7 +347,8 @@ class WooCommerce_Content_Detector {
 	 * never renders as a block). Each option is read on its own, so a site with
 	 * only one kind of widget is still scanned.
 	 *
-	 * Only widgets assigned to active sidebars count; wp_inactive_widgets are
+	 * Only widgets assigned to active sidebars count; wp_inactive_widgets and the
+	 * orphaned_widgets_* stores (skipped by core's is_active_widget() too) are
 	 * deliberately skipped so an orphaned widget cannot turn the answer true on
 	 * every request. An active one does, and should: it renders WooCommerce markup
 	 * on every page, which without the theme stylesheet would render unstyled.
@@ -365,8 +369,10 @@ class WooCommerce_Content_Detector {
 			return false;
 		}
 		foreach ( $sidebars as $sidebar_id => $widget_ids ) {
-			// Skip the inactive store: orphaned widgets must not veto the strip.
-			if ( 'wp_inactive_widgets' === $sidebar_id || empty( $widget_ids ) || ! is_array( $widget_ids ) ) {
+			// Skip the inactive and orphaned stores: widgets there never render, so
+			// they must not veto the strip.
+			$sidebar_id = (string) $sidebar_id;
+			if ( 'wp_inactive_widgets' === $sidebar_id || str_starts_with( $sidebar_id, 'orphaned_widgets' ) || empty( $widget_ids ) || ! is_array( $widget_ids ) ) {
 				continue;
 			}
 			foreach ( $widget_ids as $widget_id ) {
