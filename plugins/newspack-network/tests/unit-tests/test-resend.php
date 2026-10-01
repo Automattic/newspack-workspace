@@ -6,7 +6,6 @@
  */
 
 use Newspack_Network\Incoming_Events\Reader_Registered;
-use Newspack_Network\Woocommerce\Resend;
 
 /**
  * Re-sending what a site holds for a reader when a sibling site creates their account.

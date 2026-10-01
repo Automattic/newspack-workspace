@@ -16,8 +16,9 @@ use WP_CLI;
  *
  * Each seat's event is stamped with when the member joined, or with the
  * subscription's creation date when no join time was recorded. Running this
- * again sends a seat again only when its status changed. The start and end
- * dates select seats by that time.
+ * again sends a seat again only when its payload changed (status, or a
+ * product's name or slug). The start and end dates select seats by that time.
+ * A date with no time given as the end counts through the end of that day.
  */
 class Group_Seat_Changed extends Abstract_Backfiller {
 
@@ -44,6 +45,10 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 		}
 		$start = $this->start ? strtotime( $this->start ) : false;
 		$end   = $this->end ? strtotime( $this->end ) : false;
+		if ( $end && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $this->end ) ) {
+			// A date alone means the end of that day, so chunked runs don't skip a boundary day.
+			$end += DAY_IN_SECONDS - 1;
+		}
 
 		$seats = [];
 		foreach ( \Newspack\Group_Subscription_Settings::get_group_subscription_ids() as $subscription_id ) {

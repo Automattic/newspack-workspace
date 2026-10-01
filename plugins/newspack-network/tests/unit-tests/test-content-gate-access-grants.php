@@ -206,6 +206,26 @@ class TestContentGateAccessGrants extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A paid order with no recorded date can't be placed in time, so it fails closed for
+	 * finite rules; a lifetime rule has no time to check and still passes.
+	 */
+	public function test_purchase_without_a_date_denies_finite_rules() {
+		$this->grant(
+			'order:86',
+			[
+				'type'         => 'purchase',
+				'id'           => 86,
+				'status'       => 'completed',
+				'purchased_at' => 0,
+				'products'     => [ 30 => [ 'id' => 30 ] ],
+			]
+		);
+		$this->assertFalse( $this->one_time_passes( 30, 'days' ) );
+		$this->assertFalse( $this->one_time_passes( 12, 'months' ) );
+		$this->assertTrue( $this->one_time_passes( 0, 'forever' ) );
+	}
+
+	/**
 	 * A misconfigured duration fails closed.
 	 */
 	public function test_purchase_with_misconfigured_duration_denies_access() {

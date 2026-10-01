@@ -67,7 +67,9 @@ class One_Time_Purchase_Changed extends Abstract_Backfiller {
 			if ( empty( $data ) ) {
 				continue;
 			}
-			$events[] = new \Newspack_Network\Incoming_Events\One_Time_Purchase_Changed( get_bloginfo( 'url' ), $data, (int) $data['purchased_at'] );
+			// An order with no date reports 0, which the hub rejects as an event time, so the event itself is stamped now.
+			$timestamp = $data['purchased_at'] ? (int) $data['purchased_at'] : time();
+			$events[]  = new \Newspack_Network\Incoming_Events\One_Time_Purchase_Changed( get_bloginfo( 'url' ), $data, $timestamp );
 		}
 		return $events;
 	}

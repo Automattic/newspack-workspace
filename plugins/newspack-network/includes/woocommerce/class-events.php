@@ -122,7 +122,11 @@ class Events {
 	 * are the ones that can grant access on another site, and every site would
 	 * otherwise receive every renewal and untagged order in the network. The
 	 * reading site's gate decides how long after the purchase access lasts, so the
-	 * event carries the purchase time and nothing about duration.
+	 * event carries the purchase time and nothing about duration. An order with no
+	 * creation date reports 0, which fails every finite rule instead of looking new.
+	 *
+	 * A variable product's line item is the variation, so the event lists the parent
+	 * as well: other sites only know the parent's Network ID.
 	 *
 	 * @param int       $item_id     The Order ID.
 	 * @param string    $status_from The status before the change.
@@ -140,11 +144,17 @@ class Events {
 			if ( '' === (string) Product_Admin::get_network_id( $product->get_id() ) ) {
 				continue;
 			}
-			$products[ $product->get_id() ] = [
+			$entry                          = [
 				'id'   => $product->get_id(),
 				'name' => $product->get_name(),
 				'slug' => $product->get_slug(),
 			];
+			$products[ $product->get_id() ] = $entry;
+			// The line item of a variable product is the variation, but other sites only know the parent's Network ID.
+			$parent_id = (int) $product->get_parent_id();
+			if ( $parent_id ) {
+				$products[ $parent_id ] = array_merge( $entry, [ 'id' => $parent_id ] );
+			}
 		}
 		if ( empty( $products ) ) {
 			return null;
@@ -155,7 +165,7 @@ class Events {
 			'user_id'      => $order->get_customer_id(),
 			'email'        => $order->get_billing_email(),
 			'status_after' => $status_to,
-			'purchased_at' => $date_created ? $date_created->getTimestamp() : time(),
+			'purchased_at' => $date_created ? $date_created->getTimestamp() : 0,
 			'products'     => $products,
 		];
 	}

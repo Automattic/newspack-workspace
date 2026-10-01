@@ -16,19 +16,21 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 	/**
 	 * A stand-in product; the suite doesn't load WooCommerce.
 	 *
-	 * @param int    $id   Product ID.
-	 * @param string $type Product type.
+	 * @param int    $id        Product ID.
+	 * @param string $type      Product type.
+	 * @param int    $parent_id Parent product ID, for a variation.
 	 * @return object
 	 */
-	private function product( $id, $type = 'simple' ) {
-		return new class( $id, $type ) {
+	private function product( $id, $type = 'simple', $parent_id = 0 ) {
+		return new class( $id, $type, $parent_id ) {
 			/**
 			 * Constructor.
 			 *
-			 * @param int    $id   Product ID.
-			 * @param string $type Product type.
+			 * @param int    $id        Product ID.
+			 * @param string $type      Product type.
+			 * @param int    $parent_id Parent product ID.
 			 */
-			public function __construct( public $id, public $type ) {}
+			public function __construct( public $id, public $type, public $parent_id ) {}
 
 			/**
 			 * Product ID.
@@ -37,6 +39,15 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			 */
 			public function get_id() {
 				return $this->id;
+			}
+
+			/**
+			 * Parent product ID.
+			 *
+			 * @return int
+			 */
+			public function get_parent_id() {
+				return $this->parent_id;
 			}
 
 			/**
@@ -240,5 +251,25 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 		$order = $this->order( 87, [ $this->item( $this->tagged_product( 'premium', 'subscription' ) ), $this->item( $this->tagged_product( '' ) ) ] );
 
 		$this->assertNull( Events::one_time_purchase_changed( 87, 'pending', 'completed', $order ) );
+	}
+
+	/**
+	 * An order line item for a variable product is the variation, but another site's
+	 * synced product list only knows the parent, so the event reports both.
+	 */
+	public function test_variation_purchase_also_reports_its_parent_product() {
+		$parent_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		// The suite has no wc_get_product() to resolve a variation to its parent, so the tag sits on the variation.
+		$variation_id = self::factory()->post->create( [ 'post_type' => 'product_variation' ] );
+		update_post_meta( $variation_id, Product_Admin::NETWORK_ID_META_KEY, 'annual-pass' );
+
+		$variation = $this->product( $variation_id, 'variation', $parent_id );
+		$order     = $this->order( 88, [ $this->item( $variation ) ], 'completed', 1700000000 );
+		$payload   = Events::one_time_purchase_changed( 88, 'processing', 'completed', $order );
+
+		$this->assertArrayHasKey( $variation_id, $payload['products'] );
+		$this->assertArrayHasKey( $parent_id, $payload['products'] );
+		$this->assertSame( $parent_id, $payload['products'][ $parent_id ]['id'] );
+		$this->assertSame( $variation_id, $payload['products'][ $variation_id ]['id'] );
 	}
 }
