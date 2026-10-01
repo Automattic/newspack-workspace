@@ -44,6 +44,19 @@ class Rest_Authenticaton {
 	];
 
 	/**
+	 * Requests whose signature has already been accepted during this PHP request,
+	 * mapped to the endpoint ID it was accepted for.
+	 *
+	 * Core calls a route's permission callback a second time with the same request
+	 * object while building the Allow header. Without this, that call finds the nonce
+	 * already claimed and the route's methods drop out of the header. The request
+	 * itself is unaffected, and a later HTTP request is always a new object.
+	 *
+	 * @var \WeakMap|null
+	 */
+	private static ?\WeakMap $verified_requests = null;
+
+	/**
 	 * Initializes the hook used in the Node to override the authentication to some REST endpoints.
 	 *
 	 * @return void
@@ -62,7 +75,6 @@ class Rest_Authenticaton {
 	public static function generate_signature_headers( $endpoint_id, $secret_key ) {
 		$params    = [
 			'timestamp'   => time(),
-			'salt'        => wp_generate_password( 12, false ),
 			'endpoint_id' => $endpoint_id,
 		];
 		$nonce     = Crypto::generate_nonce();
@@ -79,16 +91,30 @@ class Rest_Authenticaton {
 	/**
 	 * Verifies the signature of a REST request.
 	 *
+	 * Each signature is accepted once: its nonce is recorded in {@see Used_Nonces}
+	 * and a repeat is refused, on top of the 60-second freshness window.
+	 *
 	 * @param WP_REST_Request $request The REST request.
 	 * @param string          $endpoint_id The ID of the endpoint to be accessed.
 	 * @param string          $secret_key The shared secret key.
 	 * @return bool|\WP_Error True if the signature is valid, or a WP_Error if the signature is invalid.
 	 */
 	public static function verify_signature( WP_REST_Request $request, $endpoint_id, $secret_key ) {
+		if ( null === self::$verified_requests ) {
+			self::$verified_requests = new \WeakMap();
+		}
+		if ( ( self::$verified_requests[ $request ] ?? null ) === $endpoint_id ) {
+			return true;
+		}
+
 		$signature = $request->get_header( 'X-NP-Network-Signature' );
 		$nonce     = $request->get_header( 'X-NP-Network-Nonce' );
 
 		$verified = Crypto::decrypt_message( $signature, $secret_key, $nonce );
+
+		if ( false === $verified ) {
+			return new \WP_Error( 'newspack-network-authentication-error', 'Invalid Signature', [ 'status' => 401 ] );
+		}
 
 		if ( is_wp_error( $verified ) ) {
 			return $verified;
@@ -97,16 +123,32 @@ class Rest_Authenticaton {
 		$verified = json_decode( $verified, true );
 
 		if ( ! is_array( $verified ) ) {
-			return new \WP_Error( 'newspack-network-authentication-error', 'Invalid Signature' );
+			return new \WP_Error( 'newspack-network-authentication-error', 'Invalid Signature', [ 'status' => 401 ] );
 		}
 
-		if ( $verified['endpoint_id'] !== $endpoint_id ) {
-			return new \WP_Error( 'newspack-network-authentication-error', 'Signature mismatch' );
+		if ( ( $verified['endpoint_id'] ?? null ) !== $endpoint_id ) {
+			return new \WP_Error( 'newspack-network-authentication-error', 'Signature mismatch', [ 'status' => 401 ] );
 		}
 
-		if ( time() - $verified['timestamp'] > 60 ) {
-			return new \WP_Error( 'newspack-network-authentication-error', 'Signature expired' );
+		if ( ! is_int( $verified['timestamp'] ?? null ) || time() - $verified['timestamp'] > 60 ) {
+			return new \WP_Error( 'newspack-network-authentication-error', 'Signature expired', [ 'status' => 401 ] );
 		}
+
+		// Claimed last, so only a signature that passed every other check uses up
+		// its nonce. Anything but a fresh claim is refused, including a store that
+		// could not record it: accepting then would make the signature reusable.
+		$claim = Used_Nonces::claim( $nonce );
+		if ( null === $claim ) {
+			return new \WP_Error( 'newspack-network-authentication-error', 'Could not record signature', [ 'status' => 500 ] );
+		}
+		if ( Used_Nonces::CLAIMED !== $claim ) {
+			return new \WP_Error( 'newspack-network-authentication-error', 'Signature already used', [ 'status' => 401 ] );
+		}
+		// Nothing follows the claim that could fail, so it is final at once rather
+		// than left pending for a later outcome.
+		Used_Nonces::complete( $nonce );
+
+		self::$verified_requests[ $request ] = $endpoint_id;
 
 		return true;
 	}
