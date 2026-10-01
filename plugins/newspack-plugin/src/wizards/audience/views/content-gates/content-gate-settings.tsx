@@ -57,7 +57,7 @@ export default function ContentGateSettings( {
 		),
 	} );
 
-	const updateStatus = useRef< ( status: GateStatus ) => void >();
+	const updateStatus = useRef< ( status: GateStatus ) => void >( undefined );
 	const handleStatusChange = ( status: GateStatus ) => {
 		if ( isFetching ) {
 			return;

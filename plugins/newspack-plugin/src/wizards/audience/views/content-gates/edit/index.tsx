@@ -303,7 +303,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		}
 	};
 
-	const updateStatus = useRef< ( _status: GateStatus ) => void >();
+	const updateStatus = useRef< ( _status: GateStatus ) => void >( undefined );
 	const handleStatusChange = ( _status: GateStatus ) => {
 		if ( isFetching ) {
 			return;

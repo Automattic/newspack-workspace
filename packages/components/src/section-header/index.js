@@ -73,7 +73,7 @@ const SectionHeader = ( {
 	children = null,
 } ) => {
 	// If id is in the URL as a scrollTo param, scroll to it on render.
-	const ref = useRef();
+	const ref = useRef( undefined );
 	useEffect( () => {
 		const params = new Proxy( new URLSearchParams( window.location.search ), {
 			get: ( searchParams, prop ) => searchParams.get( prop ),

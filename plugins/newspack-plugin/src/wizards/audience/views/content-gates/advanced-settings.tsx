@@ -42,7 +42,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 		}
 	}, [ showModal ] );
 
-	const updateConfig = useRef< ( _config: Partial< AdvancedSettingsConfig > ) => void >();
+	const updateConfig = useRef< ( _config: Partial< AdvancedSettingsConfig > ) => void >( undefined );
 	const handleUpdateConfig = ( _config: Partial< AdvancedSettingsConfig > ) => {
 		if ( isFetching ) {
 			return;
