@@ -190,7 +190,7 @@ class TestFields extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Characterization: image markup saved in the content keeps counting.
+	 * Each <img> tag saved in the content counts once, from block markup or classic HTML.
 	 */
 	public function test_image_count_counts_images_in_content_markup() {
 		$post_id = self::create_post(
