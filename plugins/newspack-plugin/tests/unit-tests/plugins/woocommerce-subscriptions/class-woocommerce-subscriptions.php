@@ -1444,9 +1444,12 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	 * Set up a reader with a pending subscription to a product limited to one
 	 * active subscription, plus the unpaid parent order an admin creates for it.
 	 *
+	 * @param string $order_status        Status of the parent order.
+	 * @param array  $subscription_data   Overrides for the subscription.
+	 *
 	 * @return array{user_id: int, product: WC_Product, order: WC_Order, subscription: WC_Subscription}
 	 */
-	private function create_pending_limited_subscription() {
+	private function create_pending_limited_subscription( $order_status = 'pending', $subscription_data = [] ) {
 		$user_id      = $this->factory->user->create();
 		$product      = wc_create_mock_product(
 			[
@@ -1457,17 +1460,20 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$order        = wc_create_order(
 			[
 				'customer_id' => $user_id,
-				'status'      => 'pending',
+				'status'      => $order_status,
 			]
 		);
 		$subscription = wcs_create_subscription(
-			[
-				'customer_id'   => $user_id,
-				'status'        => 'pending',
-				'parent_id'     => $order->get_id(),
-				'products'      => [ $product->get_id() ],
-				'needs_payment' => true,
-			]
+			array_merge(
+				[
+					'customer_id'   => $user_id,
+					'status'        => 'pending',
+					'parent_id'     => $order->get_id(),
+					'products'      => [ $product->get_id() ],
+					'needs_payment' => true,
+				],
+				$subscription_data
+			)
 		);
 		return compact( 'user_id', 'product', 'order', 'subscription' );
 	}
@@ -1529,6 +1535,39 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$this->assertTrue(
 			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
 			'A pending subscription should count toward the limit when no order is being paid.'
+		);
+	}
+
+	/**
+	 * Retrying a failed parent order is paying for it too.
+	 */
+	public function test_limit_ignores_subscription_on_failed_order_being_paid() {
+		$fixture = $this->create_pending_limited_subscription( 'failed' );
+		$this->set_paying_for_order( $fixture['order'] );
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'The subscription on a failed order being paid should not count toward the limit.'
+		);
+	}
+
+	/**
+	 * Paying an old order does not set aside a subscription that is already paid up,
+	 * or a reader could hold a second active subscription to a limited product.
+	 */
+	public function test_limit_counts_paid_subscription_on_order_being_paid() {
+		$fixture = $this->create_pending_limited_subscription(
+			'failed',
+			[
+				'status'        => 'active',
+				'needs_payment' => false,
+			]
+		);
+		$this->set_paying_for_order( $fixture['order'] );
+
+		$this->assertTrue(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'A subscription that no longer needs payment should still count toward the limit.'
 		);
 	}
 }
