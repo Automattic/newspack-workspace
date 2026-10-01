@@ -17,6 +17,7 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack,
 } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
@@ -153,16 +154,18 @@ const ContentGiftingSettings = () => {
 			<>
 				{ confirmDialog }
 				<EmptyState.Root>
-					<EmptyState.Header
-						icon={ gift }
-						title={ __( 'Get started with content gifting', 'newspack-plugin' ) }
-						description={ __( 'Enable it to let members share gated articles with non-subscribers.', 'newspack-plugin' ) }
-					/>
-					{ giftingErrors.length > 0 && (
-						<Notice status="error" politeness="polite" isDismissible={ false }>
-							{ giftingErrors.join( ', ' ) }
-						</Notice>
-					) }
+					<Stack direction="column" align="center" gap="lg">
+						<EmptyState.Header
+							icon={ gift }
+							title={ __( 'Get started with content gifting', 'newspack-plugin' ) }
+							description={ __( 'Enable it to let members share gated articles with non-subscribers.', 'newspack-plugin' ) }
+						/>
+						{ giftingErrors.length > 0 && (
+							<Notice status="error" politeness="polite" isDismissible={ false }>
+								{ giftingErrors.join( ', ' ) }
+							</Notice>
+						) }
+					</Stack>
 					<EmptyState.Actions>
 						<Button
 							variant="primary"
