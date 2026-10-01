@@ -1,7 +1,7 @@
 /**
- * The "Applies to" select on a saved rule whose scope the site doesn't register.
- * WooCommerce Subscriptions registers "all subscriptions" only while it's active,
- * and the engine keeps a rule's own scope when the rule is saved without it.
+ * The "Applies to" select on a saved rule whose scope the site doesn't register,
+ * such as "all subscriptions" while WooCommerce Subscriptions is inactive. The form
+ * holds and saves that scope, so the select has to show it.
  */
 
 /**
