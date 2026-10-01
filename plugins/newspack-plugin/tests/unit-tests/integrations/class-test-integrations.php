@@ -2011,7 +2011,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		global $wp_rest_server;
 		$wp_rest_server = new \WP_REST_Server();
 		try {
-			add_action( 'rest_api_init', [ new \Newspack\Wizards\Newspack\Integrations_Section(), 'register_rest_routes' ] );
+			new \Newspack\Wizards\Newspack\Integrations_Section( [ 'wizard_slug' => 'newspack-settings' ] );
 			do_action( 'rest_api_init' );
 
 			$route = '/newspack/v1/wizard/newspack-settings/integrations';

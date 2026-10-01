@@ -121,7 +121,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 	public function test_routes_are_registered_behind_the_wizard_permission_check() {
 		global $wp_rest_server;
 		$wp_rest_server = null;
-		add_action( 'rest_api_init', [ new Integrations_Section(), 'register_rest_routes' ] );
+		new Integrations_Section( [ 'wizard_slug' => 'newspack-settings' ] );
 		$server = rest_get_server();
 
 		$routes = $server->get_routes( NEWSPACK_API_NAMESPACE );

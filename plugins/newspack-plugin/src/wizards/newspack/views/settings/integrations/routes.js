@@ -29,3 +29,28 @@ export const getLogsTabs = ( { integrationId } ) => [
 		exact: true,
 	},
 ];
+
+/**
+ * Add the Logs screen to the Settings sections, ahead of the Integrations
+ * section that would otherwise match its route first. It is a section of its
+ * own because it swaps the Settings tabs for the Logs tabs.
+ *
+ * @param {Array} sections Settings sections.
+ * @return {Array} The sections, with the Logs section added when Integrations is there.
+ */
+export const withLogsSection = sections => {
+	const index = sections.findIndex( section => section.path === INTEGRATIONS_PATH );
+	if ( index === -1 ) {
+		return sections;
+	}
+	const logsSection = {
+		...sections[ index ],
+		path: `${ INTEGRATIONS_PATH }/:integrationId/logs/:tab?`,
+		exact: false,
+		activeTabPaths: undefined,
+		isHidden: true,
+		fullWidth: true,
+		tabbedNavigation: getLogsTabs,
+	};
+	return [ ...sections.slice( 0, index ), logsSection, ...sections.slice( index ) ];
+};

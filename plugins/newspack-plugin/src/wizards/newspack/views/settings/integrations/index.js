@@ -15,20 +15,25 @@ import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
 import { LogsView } from './logs-view';
 import { API_BASE as API_PATH } from './constants';
-import { INTEGRATIONS_PATH } from './logs-tabs';
+import { INTEGRATIONS_PATH } from './routes';
 
 const { Route, Switch } = Router;
 
 // Minimum time the Activate action stays busy, even when the request is faster.
 const MIN_ACTIVATION_BUSY_MS = 2000;
 
+// The Logs screen swaps the Settings tabs for its own, which remounts this
+// screen on the way in and out. Starting from the last list keeps the cards and
+// breadcrumbs on screen while it refreshes, instead of a "Loading…" line.
+let lastIntegrations = null;
+
 const Integrations = () => {
-	const [ integrations, setIntegrations ] = useState( {} );
+	const [ integrations, setIntegrations ] = useState( () => lastIntegrations ?? {} );
 	const [ inFlightChanges, setInFlightChanges ] = useState( {} );
 	const [ saving, setSaving ] = useState( {} );
 	const [ toggling, setToggling ] = useState( {} );
 	const [ activating, setActivating ] = useState( {} );
-	const [ loading, setLoading ] = useState( true );
+	const [ loading, setLoading ] = useState( () => ! lastIntegrations );
 
 	const { addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -66,8 +71,14 @@ const Integrations = () => {
 	}, [] );
 
 	useEffect( () => {
-		fetchSettings();
+		fetchSettings( { showLoading: ! lastIntegrations } );
 	}, [ fetchSettings ] );
+
+	useEffect( () => {
+		if ( ! loading ) {
+			lastIntegrations = integrations;
+		}
+	}, [ integrations, loading ] );
 
 	const handleSave = useCallback(
 		( integrationId, changes ) => {

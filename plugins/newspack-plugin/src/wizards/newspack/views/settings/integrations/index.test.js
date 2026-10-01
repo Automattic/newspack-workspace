@@ -382,4 +382,21 @@ describe( 'Integrations routes', () => {
 		renderAt( '/integrations/esp' );
 		expect( await screen.findByText( 'configure esp' ) ).toBeInTheDocument();
 	} );
+
+	// Entering or leaving the Logs screen remounts this one, because the Logs
+	// tabs replace the Settings tabs around it.
+	it( 'shows the last list straight away after a remount, and refreshes it quietly', async () => {
+		const first = renderAt( '/integrations' );
+		await waitFor( () => expect( captured.props.loading ).toBe( false ) );
+		first.unmount();
+		apiFetch.mockClear();
+		loadingStates.length = 0;
+
+		renderAt( '/integrations' );
+
+		expect( loadingStates[ 0 ] ).toBe( false );
+		expect( captured.props.integrations ).toEqual( SETTINGS_MAP );
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		expect( loadingStates ).not.toContain( true );
+	} );
 } );

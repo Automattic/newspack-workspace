@@ -13,7 +13,7 @@ import Router from '../../../../../../packages/components/src/proxied-imports/ro
 import { SyncActivity } from './sync-activity';
 import { ScheduledActions } from './scheduled-actions';
 import { hasSettingsToShow } from './settings-field';
-import { SCHEDULED_ACTIONS_TAB } from './logs-tabs';
+import { INTEGRATIONS_PATH, SCHEDULED_ACTIONS_TAB } from './routes';
 import './style.scss';
 
 const { Redirect } = Router;
@@ -32,11 +32,10 @@ export const LogsView = ( { integrations, match } ) => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	useEffect( () => {
-		setHeaderData( { fullWidth: true } );
 		if ( integration ) {
 			// The name links to the integration's settings page, unless it has none.
 			const integrationCrumb = hasSettingsToShow( integration.settings )
-				? { label: integration.name, url: `#/integrations/${ integrationId }` }
+				? { label: integration.name, url: `#${ INTEGRATIONS_PATH }/${ integrationId }` }
 				: { label: integration.name };
 			setHeaderData( {
 				sectionName: [ integrationCrumb, { label: __( 'Logs', 'newspack-plugin' ) } ],
@@ -49,7 +48,7 @@ export const LogsView = ( { integrations, match } ) => {
 	}
 
 	if ( tab && SCHEDULED_ACTIONS_TAB !== tab ) {
-		return <Redirect to={ `/integrations/${ integrationId }/logs` } />;
+		return <Redirect to={ `${ INTEGRATIONS_PATH }/${ integrationId }/logs` } />;
 	}
 
 	return SCHEDULED_ACTIONS_TAB === tab ? <ScheduledActions integrationId={ integrationId } /> : <SyncActivity integrationId={ integrationId } />;

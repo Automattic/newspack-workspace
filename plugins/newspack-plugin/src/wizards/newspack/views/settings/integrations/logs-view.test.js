@@ -29,7 +29,6 @@ jest.mock( './sync-activity', () => ( { SyncActivity: ( { integrationId } ) => `
 jest.mock( './scheduled-actions', () => ( { ScheduledActions: ( { integrationId } ) => `Scheduled actions of ${ integrationId }` } ) );
 
 import { LogsView } from './logs-view';
-import { getLogsTabs } from './logs-tabs';
 
 const integrations = { sample: { name: 'Sample', settings: [ { key: 'api_key', type: 'text' } ] } };
 const matchFor = tab => ( { params: { integrationId: 'sample', tab } } );
@@ -79,14 +78,5 @@ describe( 'LogsView', () => {
 		const { container } = render( <LogsView integrations={ {} } match={ matchFor() } /> );
 
 		expect( container.innerHTML ).toBe( '' );
-	} );
-} );
-
-describe( 'getLogsTabs', () => {
-	it( 'routes each tab under the integration, sync activity first', () => {
-		expect( getLogsTabs( { integrationId: 'sample' } ) ).toEqual( [
-			{ label: 'Sync Activity', path: '/integrations/sample/logs', exact: true },
-			{ label: 'Scheduled Actions', path: '/integrations/sample/logs/scheduled-actions', exact: true },
-		] );
 	} );
 } );

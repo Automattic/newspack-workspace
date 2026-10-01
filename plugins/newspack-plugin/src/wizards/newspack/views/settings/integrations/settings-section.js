@@ -16,6 +16,7 @@ import WizardSection from '../../../../wizards-section';
 import { EnableModal, getMissingRequiredFields } from './enable-modal';
 import { IntegrationGuide } from './guide';
 import { hasSettingsToShow } from './settings-field';
+import { INTEGRATIONS_PATH } from './routes';
 
 /**
  * Fallback for integrations with no brand mark or icon of their own.
@@ -152,7 +153,7 @@ export const SettingsSection = ( {
 								if ( needsConnection ) {
 									onConfigure = goToSetup;
 								} else if ( hasSettingsToShow( integration.settings ) ) {
-									onConfigure = () => history?.push( `/integrations/${ id }` );
+									onConfigure = () => history?.push( `${ INTEGRATIONS_PATH }/${ id }` );
 								}
 								const hasGuide = Array.isArray( integration.guide ) && integration.guide.length > 0;
 								let enableLabel = __( 'Enable', 'newspack-plugin' );
@@ -203,7 +204,7 @@ export const SettingsSection = ( {
 															: [] ),
 														{
 															title: __( 'Logs', 'newspack-plugin' ),
-															onClick: () => history?.push( `/integrations/${ id }/logs` ),
+															onClick: () => history?.push( `${ INTEGRATIONS_PATH }/${ id }/logs` ),
 														},
 														{
 															title: __( 'Disable', 'newspack-plugin' ),
@@ -223,7 +224,7 @@ export const SettingsSection = ( {
 								onEnable={ settings => onSetupAndEnable( enablingId, settings ).then( () => setEnablingId( null ) ) }
 								onGoToSettings={ () => {
 									setEnablingId( null );
-									history?.push( `/integrations/${ enablingId }` );
+									history?.push( `${ INTEGRATIONS_PATH }/${ enablingId }` );
 								} }
 							/>
 						) }
