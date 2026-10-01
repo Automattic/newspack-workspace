@@ -1485,8 +1485,62 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	 */
 	private function set_paying_for_order( $order ) {
 		global $wp;
-		$_GET['pay_for_order']          = 'true';
+		$_GET['pay_for_order']       = 'true';
 		$wp->query_vars['order-pay'] = $order->get_id();
+	}
+
+	/**
+	 * Simulate the checkout request that follows: WooCommerce Subscriptions has
+	 * stored the order in the session and the URL no longer names it.
+	 *
+	 * Only callable from `@runInSeparateProcess` tests, because defining WC()
+	 * in the main suite process would flip every later `function_exists( 'WC' )` gate.
+	 *
+	 * @param WC_Order $order The order being paid.
+	 */
+	private function set_order_awaiting_payment_in_session( $order ) {
+		if ( ! $this->isInIsolation() ) {
+			$this->fail( 'set_order_awaiting_payment_in_session() may only be called from @runInSeparateProcess tests.' );
+		}
+		if ( ! function_exists( 'WC' ) ) {
+			/**
+			 * Mock WC() exposing only a session.
+			 *
+			 * @return object
+			 */
+			function WC() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global, isolated to a separate test process.
+				global $newspack_test_wc;
+				return $newspack_test_wc;
+			}
+		}
+		$GLOBALS['newspack_test_wc'] = (object) [
+			'session' => new class( $order->get_id() ) {
+				/**
+				 * Session data.
+				 *
+				 * @var array
+				 */
+				private $data;
+
+				/**
+				 * Constructor.
+				 *
+				 * @param int $order_id Order awaiting payment.
+				 */
+				public function __construct( $order_id ) {
+					$this->data = [ 'order_awaiting_payment' => $order_id ];
+				}
+
+				/**
+				 * Get a session value.
+				 *
+				 * @param string $key Key.
+				 */
+				public function get( $key ) {
+					return $this->data[ $key ] ?? null;
+				}
+			},
+		];
 	}
 
 	/**
@@ -1502,6 +1556,22 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$this->assertFalse(
 			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
 			'The subscription being paid for should not count toward the limit.'
+		);
+	}
+
+	/**
+	 * At checkout the order being paid comes from the session, not the URL.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_limit_ignores_pending_subscription_awaiting_payment_in_session() {
+		$fixture = $this->create_pending_limited_subscription();
+		$this->set_order_awaiting_payment_in_session( $fixture['order'] );
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'The subscription on the order in the session should not count toward the limit.'
 		);
 	}
 
