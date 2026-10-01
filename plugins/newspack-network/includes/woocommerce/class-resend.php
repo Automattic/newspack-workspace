@@ -20,6 +20,16 @@ use Newspack_Network\Woocommerce_Subscriptions\Group_Seats;
 class Resend {
 
 	/**
+	 * Paid orders are read in pages of this many.
+	 */
+	const ORDERS_PAGE_SIZE = 50;
+
+	/**
+	 * The order walk stops after this many pages, as the local one-time rule's does.
+	 */
+	const ORDERS_MAX_PAGES = 50;
+
+	/**
 	 * Re-send everything this site holds for an email.
 	 *
 	 * @param string $email Reader email.
@@ -74,19 +84,26 @@ class Resend {
 			}
 		}
 		if ( function_exists( 'wc_get_orders' ) ) {
-			$paid = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
-			$orders = wc_get_orders(
-				[
-					'customer' => [ $user_id, $email ],
-					'status'   => $paid,
-					'limit'    => 200,
-					'type'     => 'shop_order',
-				]
-			);
-			foreach ( $orders as $order ) {
-				$data = Events::one_time_purchase_changed( $order->get_id(), '', $order->get_status(), $order );
-				if ( $data ) {
-					$pairs[] = [ 'newspack_node_one_time_purchase_changed', $data ];
+			$query = [
+				'customer' => [ $user_id, $email ],
+				'status'   => function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : [ 'processing', 'completed' ],
+				'type'     => 'shop_order',
+				'orderby'  => 'date ID',
+				'order'    => 'DESC',
+				'limit'    => self::ORDERS_PAGE_SIZE,
+			];
+			// Paged, so a long order history (renewals count) can't push an old pass past a cap.
+			for ( $page = 1; $page <= self::ORDERS_MAX_PAGES; $page++ ) {
+				$query['page'] = $page;
+				$orders        = wc_get_orders( $query );
+				foreach ( $orders as $order ) {
+					$data = Events::one_time_purchase_changed( $order->get_id(), '', $order->get_status(), $order );
+					if ( $data ) {
+						$pairs[] = [ 'newspack_node_one_time_purchase_changed', $data ];
+					}
+				}
+				if ( count( $orders ) < self::ORDERS_PAGE_SIZE ) {
+					break;
 				}
 			}
 		}

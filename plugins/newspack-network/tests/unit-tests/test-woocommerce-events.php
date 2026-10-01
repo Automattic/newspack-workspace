@@ -75,6 +75,10 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			 * @return bool
 			 */
 			public function is_type( $types ) {
+				// WooCommerce Subscriptions makes a subscription variation answer to 'variation' too.
+				if ( 'subscription_variation' === $this->type && in_array( 'variation', (array) $types, true ) ) {
+					return true;
+				}
 				return in_array( $this->type, (array) $types, true );
 			}
 		};
@@ -241,6 +245,21 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 		$this->assertSame( 'completed', $payload['status_after'] );
 		$this->assertSame( 1700000000, $payload['purchased_at'] );
 		$this->assertSame( [ $pass->id ], array_keys( $payload['products'] ) );
+	}
+
+	/**
+	 * A renewal of a variable subscription is a subscription variation, which
+	 * WooCommerce Subscriptions reports as a 'variation' too. It must never be
+	 * sent as a one-time purchase, even when the parent carries a Network ID.
+	 */
+	public function test_subscription_variation_renewal_is_not_a_purchase() {
+		$parent    = $this->tagged_product( 'premium', 'variable-subscription' );
+		$variation = $this->product( self::factory()->post->create( [ 'post_type' => 'product' ] ), 'subscription_variation', $parent->id );
+		update_post_meta( $variation->id, Product_Admin::NETWORK_ID_META_KEY, 'premium' );
+		$order = $this->order( 88, [ $this->item( $variation ) ] );
+
+		$this->assertTrue( $variation->is_type( 'variation' ), 'The stand-in mirrors the WooCommerce Subscriptions quirk.' );
+		$this->assertNull( Events::one_time_purchase_changed( 88, 'pending', 'completed', $order ) );
 	}
 
 	/**

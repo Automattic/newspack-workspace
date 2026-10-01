@@ -138,7 +138,9 @@ class Events {
 		$products = [];
 		foreach ( $order->get_items() as $item ) {
 			$product = $item->get_product();
-			if ( ! $product || ! $product->is_type( [ 'simple', 'variable', 'variation' ] ) ) {
+			// A subscription variation also answers to 'variation', so a renewal of a tagged
+			// variable subscription would pass the type check below and be sent as a purchase.
+			if ( ! $product || self::is_subscription_product( $product ) || ! $product->is_type( [ 'simple', 'variable', 'variation' ] ) ) {
 				continue;
 			}
 			if ( '' === (string) Product_Admin::get_network_id( $product->get_id() ) ) {
@@ -168,6 +170,19 @@ class Events {
 			'purchased_at' => $date_created ? $date_created->getTimestamp() : 0,
 			'products'     => $products,
 		];
+	}
+
+	/**
+	 * Whether a product is a subscription product, including a variation of one.
+	 *
+	 * @param \WC_Product $product Product.
+	 * @return bool
+	 */
+	private static function is_subscription_product( $product ) {
+		if ( class_exists( '\WC_Subscriptions_Product' ) ) {
+			return \WC_Subscriptions_Product::is_subscription( $product );
+		}
+		return $product->is_type( [ 'subscription', 'variable-subscription', 'subscription_variation' ] );
 	}
 
 	/**
