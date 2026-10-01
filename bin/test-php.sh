@@ -1,13 +1,17 @@
 #!/bin/bash
 
-source /var/scripts/_common.sh
+# Sourced relative to this script rather than by absolute container path, so
+# bin/tests/ can run it on the host. In the container bin/ is mounted at
+# /var/scripts, so this resolves to the same files.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/_common.sh"
 # _common.sh derives NABSPATH from its own location, which in here is /var — not
 # a workspace root. repos.sh's host-only helpers key off NABSPATH being unset in
 # the container to fail visibly rather than probe /var/repos/..., so hand that
 # invariant back: keep the value only if it points at a real workspace.
 [ -f "${NABSPATH:-}/n" ] || unset NABSPATH
-source /var/scripts/repos.sh
-source /var/scripts/resolve-project-path.sh
+source "$SCRIPT_DIR/repos.sh"
+source "$SCRIPT_DIR/resolve-project-path.sh"
 
 find_project() {
     local path=$(resolve_project_path "$1")
@@ -58,5 +62,38 @@ fi
 echo "Running tests for $PROJECT_NAME (test database: $TEST_DB_NAME)"
 cd "$PROJECT_DIR"
 bin/install-wp-tests.sh "$TEST_DB_NAME" root $MYSQL_ROOT_PASSWORD $MYSQL_HOST latest 2> /dev/null
-echo "Running: phpunit ${*:2}"
-XDEBUG_MODE=coverage phpunit "${@:2}"
+
+# `n` sets NEWSPACK_TEST_OUTPUT=compact when it runs under a coding agent. The
+# agent then gets a short summary built from the JUnit log instead of PHPUnit's
+# full output, which goes to logs/test-php/ under the workspace root. The
+# summary always names the project path, test database and test count: a bare
+# PASS would hide a run against the wrong checkout or a filter that matched
+# nothing.
+# PHPUnit's listing and help modes run no tests and write no JUnit log, so their
+# output is the answer and passes through whole. A caller's own --log-junit
+# replaces the report the summary reads, so that run passes through too.
+for arg in "${@:2}"; do
+	case "$arg" in
+		--list-*|--help|-h|--version|--log-junit|--log-junit=*) NEWSPACK_TEST_OUTPUT=full ;;
+	esac
+done
+
+if [ "$NEWSPACK_TEST_OUTPUT" != "compact" ]; then
+	echo "Running: phpunit ${*:2}"
+	XDEBUG_MODE=coverage phpunit "${@:2}"
+	exit $?
+fi
+
+LOG_DIR="${MONOREPO_ROOT:-/newspack-monorepo}/logs/test-php"
+mkdir -p "$LOG_DIR"
+# One directory per run, created atomically: every env mounts the same logs/, and
+# process IDs repeat across containers, so a name built from them can collide.
+RUN_DIR=$(mktemp -d "$LOG_DIR/$PROJECT_NAME-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX") || exit 1
+# mktemp makes it 0700; the host user has to be able to read what a root
+# container wrote.
+chmod 755 "$RUN_DIR"
+LOG_BASE="$RUN_DIR/phpunit"
+XDEBUG_MODE=coverage phpunit --log-junit "$LOG_BASE.xml" "${@:2}" > "$LOG_BASE.log" 2>&1
+STATUS=$?
+php "$SCRIPT_DIR/test-php-summary.php" "$LOG_BASE.xml" "$LOG_BASE.log" "$PROJECT_DIR" "$TEST_DB_NAME" "$STATUS" "${@:2}"
+exit $STATUS
