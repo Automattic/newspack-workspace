@@ -88,9 +88,9 @@ const sectionComponents: Partial< Record< SectionKeys | 'default', ( props: { is
 
 const Integrations = lazy( () => import( /* webpackChunkName: "settings-integrations" */ './integrations' ) );
 // A local boundary keeps the Settings header and tabs on screen while the chunk loads.
-sectionComponents.integrations = props => (
+sectionComponents.integrations = () => (
 	<Suspense fallback={ <Spinner /> }>
-		<Integrations { ...( props as React.ComponentProps< typeof Integrations > ) } />
+		<Integrations />
 	</Suspense>
 );
 
