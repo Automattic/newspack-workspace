@@ -29,7 +29,7 @@ class Product_Admin {
 
 	/**
 	 * Get the Network ID for a product, falling back to the parent product
-	 * for variations of a variable-subscription.
+	 * for a variation: variations themselves can't be tagged.
 	 *
 	 * @param int $product_id The product ID.
 	 * @return string The Network ID, or empty string if not set.

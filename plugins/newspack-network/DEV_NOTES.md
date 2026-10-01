@@ -110,7 +110,7 @@ To roll this out, go in this order:
 1. Update the hub first, then every node. An old hub rejects the new events, and an old node's pull cursor moves past them and never asks again.
 2. Tag one-time products. `wp newspack-network assign-product-network-ids --apply` covers products linked to membership plans. A one-time product used only by gates needs its Network ID set in the product's Newspack Network box, or passed with `--map`.
 3. Only then run the backfills on every site: `wp newspack-network data-backfill newspack_node_group_seat_changed --live` and `wp newspack-network data-backfill newspack_node_one_time_purchase_changed --live`. Both accept `--start` and `--end` (seats by join time, orders by creation date), which helps on large sites, and both are safe to re-run.
-4. A node updated after the backfills ran won't receive those events by re-running them, because the hub drops duplicates. Lower its pull cursor to an Event Log ID from before the update (`wp option update newspack_node_last_processed_action <id>`) and run `wp newspack-network sync-all --yes`.
+4. A node updated after the backfills ran won't receive those events by re-running them, because the hub drops duplicates. Lower its pull cursor to an Event Log ID from before the hub was updated (`wp option update newspack_node_last_processed_action <id>`) and run `wp newspack-network sync-all --yes`. The replay re-applies every pulled event since that ID, not only the new kinds, so an older change from another site can overwrite a newer one made on this node.
 5. `wp newspack-network data-backfill reader_registered --live` now also makes every other site re-send what it holds for each reader it logs, so expect that volume.
 
 ## Stores
