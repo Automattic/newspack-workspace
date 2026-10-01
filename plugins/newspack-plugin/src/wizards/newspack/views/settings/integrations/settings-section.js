@@ -14,6 +14,8 @@ import colors from '../../../../../../packages/colors/colors.module.scss';
 import WizardsTab from '../../../../wizards-tab';
 import WizardSection from '../../../../wizards-section';
 import { EnableModal, getMissingRequiredFields } from './enable-modal';
+import { IntegrationGuide } from './guide';
+import { hasSettingsToShow } from './settings-field';
 
 /**
  * Fallback for integrations with no brand mark or icon of their own.
@@ -52,6 +54,7 @@ export const SettingsSection = ( {
 } ) => {
 	const integrationIds = sortIntegrationIds( integrations );
 	const [ enablingId, setEnablingId ] = useState( null );
+	const [ guideId, setGuideId ] = useState( null );
 
 	return (
 		<WizardsTab
@@ -92,7 +95,7 @@ export const SettingsSection = ( {
 									cardIcon = <IntegrationIcon provider="mailchimp" />;
 								} else if ( BRANDED_INTEGRATION_IDS.includes( id ) ) {
 									cardIcon = <IntegrationIcon provider={ id } />;
-								} else if ( id === 'form-capture' ) {
+								} else if ( id === 'gravity-forms' ) {
 									cardIcon = <IntegrationIcon provider="gravity_forms" />;
 								} else if ( provider && espProviderOrder.includes( provider ) ) {
 									cardIcon = <IntegrationIcon provider={ provider } />;
@@ -145,7 +148,13 @@ export const SettingsSection = ( {
 											window.location.href = setup_url;
 										} );
 								};
-								const goToConfigure = () => history?.push( `/integrations/${ id }` );
+								let onConfigure;
+								if ( needsConnection ) {
+									onConfigure = goToSetup;
+								} else if ( hasSettingsToShow( integration.settings ) ) {
+									onConfigure = () => history?.push( `/integrations/${ id }` );
+								}
+								const hasGuide = Array.isArray( integration.guide ) && integration.guide.length > 0;
 								let enableLabel = __( 'Enable', 'newspack-plugin' );
 								let onEnable = () => {
 									if ( getMissingRequiredFields( integration ).length ) {
@@ -180,10 +189,18 @@ export const SettingsSection = ( {
 										enableLabel={ enableLabel }
 										busy={ isActivating || !! toggling[ id ] }
 										onEnable={ onEnable }
-										onConfigure={ needsConnection ? goToSetup : goToConfigure }
+										onConfigure={ onConfigure }
 										moreControls={
 											isEnabled
 												? [
+														...( hasGuide
+															? [
+																	{
+																		title: __( 'How it works', 'newspack-plugin' ),
+																		onClick: () => setGuideId( id ),
+																	},
+															  ]
+															: [] ),
 														{
 															title: __( 'Logs', 'newspack-plugin' ),
 															onClick: () => history?.push( `/integrations/${ id }/logs` ),
@@ -209,6 +226,9 @@ export const SettingsSection = ( {
 									history?.push( `/integrations/${ enablingId }` );
 								} }
 							/>
+						) }
+						{ guideId && integrations[ guideId ] && (
+							<IntegrationGuide integration={ integrations[ guideId ] } onClose={ () => setGuideId( null ) } />
 						) }
 					</>
 				) }

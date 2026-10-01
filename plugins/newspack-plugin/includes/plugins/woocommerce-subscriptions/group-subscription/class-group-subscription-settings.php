@@ -766,16 +766,17 @@ class Group_Subscription_Settings {
 							'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
 						]
 					);
-					\woocommerce_wp_text_input(
+					// Stored comma-separated, shown one domain per line so a long list stays editable.
+					\woocommerce_wp_textarea_input(
 						[
 							'id'            => self::EMAIL_DOMAINS_META_KEY,
 							'name'          => self::EMAIL_DOMAINS_META_KEY,
 							'label'         => __( 'Auto-join email domains', 'newspack-plugin' ),
 							'desc_tip'      => true,
-							'description'   => __( 'Readers who verify an email address on one of these domains join this group automatically while it has a free seat. Separate domains with commas.', 'newspack-plugin' ),
-							'placeholder'   => 'example.com, example.org',
-							'value'         => $subscription->get_meta( self::EMAIL_DOMAINS_META_KEY, true ),
-							'type'          => 'text',
+							'description'   => __( 'Readers who verify an email address on one of these domains join this group automatically while it has a free seat. Enter one domain per line.', 'newspack-plugin' ),
+							'placeholder'   => "example.com\nexample.org",
+							'value'         => str_replace( ',', "\n", (string) $subscription->get_meta( self::EMAIL_DOMAINS_META_KEY, true ) ),
+							'rows'          => 5,
 							'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
 						]
 					);
@@ -973,7 +974,7 @@ class Group_Subscription_Settings {
 		}
 
 		if ( isset( $_POST[ self::EMAIL_DOMAINS_META_KEY ] ) ) {
-			$email_domains = self::sanitize_email_domains( sanitize_text_field( wp_unslash( $_POST[ self::EMAIL_DOMAINS_META_KEY ] ) ) );
+			$email_domains = self::sanitize_email_domains( sanitize_textarea_field( wp_unslash( $_POST[ self::EMAIL_DOMAINS_META_KEY ] ) ) );
 			if ( $email_domains !== $subscription->get_meta( self::EMAIL_DOMAINS_META_KEY, true ) ) {
 				$subscription->update_meta_data( self::EMAIL_DOMAINS_META_KEY, $email_domains );
 				$subscription->save();

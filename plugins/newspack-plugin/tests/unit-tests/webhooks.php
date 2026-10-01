@@ -391,6 +391,119 @@ class Newspack_Test_Webhooks extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create a published webhook request directly, bypassing dispatch.
+	 *
+	 * @param string $status Request status meta.
+	 * @param string $date   Request GMT date.
+	 *
+	 * @return int Request ID.
+	 */
+	private function create_request( $status, $date ) {
+		// Inserting as 'publish' would otherwise process the request on the spot.
+		$callback = [ Data_Events\Webhooks::class, 'transition_post_status' ];
+		remove_action( 'transition_post_status', $callback, 10 );
+		$request_id = wp_insert_post(
+			[
+				'post_type'     => Data_Events\Webhooks::REQUEST_POST_TYPE,
+				'post_status'   => 'publish',
+				'post_title'    => 'test_action',
+				'post_date'     => $date,
+				'post_date_gmt' => $date,
+			]
+		);
+		add_action( 'transition_post_status', $callback, 10, 3 );
+		update_post_meta( $request_id, 'status', $status );
+		wp_set_object_terms( $request_id, $this->action_endpoint, Data_Events\Webhooks::ENDPOINT_TAXONOMY );
+		return $request_id;
+	}
+
+	/**
+	 * Tests that unfinished requests don't take up the cleanup batch.
+	 */
+	public function test_clear_finished_skips_unfinished_requests() {
+		$old_date = gmdate( 'Y-m-d H:i:s', strtotime( '10 days ago' ) );
+
+		// Oldest rows are finished; newer, more than a full batch, are not.
+		$finished = [];
+		for ( $i = 0; $i < 20; $i++ ) {
+			$finished[] = $this->create_request( 'finished', $old_date );
+		}
+		for ( $i = 0; $i < 110; $i++ ) {
+			$this->create_request( 'killed', $old_date );
+		}
+		$recent_finished = $this->create_request( 'finished', gmdate( 'Y-m-d H:i:s' ) );
+
+		Data_Events\Webhooks::clear_finished();
+
+		foreach ( $finished as $request_id ) {
+			$this->assertNull( get_post( $request_id ), 'Old finished requests are deleted.' );
+		}
+		$this->assertNotNull( get_post( $recent_finished ), 'Recent finished requests are retained.' );
+		$remaining = get_posts(
+			[
+				'post_type'      => Data_Events\Webhooks::REQUEST_POST_TYPE,
+				'post_status'    => 'any',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+			]
+		);
+		$this->assertCount( 111, $remaining, 'Unfinished requests are not deleted.' );
+	}
+
+	/**
+	 * Tests that the cleanup deletes the oldest finished requests first.
+	 */
+	public function test_clear_finished_deletes_oldest_first() {
+		$old_date = gmdate( 'Y-m-d H:i:s', strtotime( '10 days ago' ) );
+		$ids      = [];
+		for ( $i = 0; $i < 101; $i++ ) {
+			$ids[] = $this->create_request( 'finished', $old_date );
+		}
+
+		Data_Events\Webhooks::clear_finished();
+
+		$this->assertNull( get_post( $ids[0] ), 'The oldest request is deleted.' );
+		$this->assertNotNull( get_post( $ids[100] ), 'The newest request is left for the next run.' );
+	}
+
+	/**
+	 * Tests that an event registered under an older schedule is rescheduled.
+	 */
+	public function test_cron_events_are_rescheduled() {
+		$hook = 'newspack_webhooks_cron_clear_finished';
+		wp_clear_scheduled_hook( $hook );
+		wp_schedule_event( time(), 'twicedaily', $hook );
+
+		Data_Events\Webhooks::register_cron_events();
+
+		$this->assertSame( 'hourly', wp_get_scheduled_event( $hook )->schedule );
+		wp_clear_scheduled_hook( $hook );
+	}
+
+	/**
+	 * Tests filtering endpoint requests by status.
+	 */
+	public function test_get_endpoint_requests_by_status() {
+		$date    = gmdate( 'Y-m-d H:i:s' );
+		$pending = [
+			$this->create_request( 'pending', $date ),
+			$this->create_request( 'pending', $date ),
+		];
+		for ( $i = 0; $i < 5; $i++ ) {
+			$this->create_request( 'finished', $date );
+		}
+
+		$requests = Data_Events\Webhooks::get_endpoint_requests( $this->action_endpoint, 1, 'pending' );
+		$this->assertCount( 1, $requests );
+		$this->assertSame( $pending[0], $requests[0]['id'], 'The oldest pending request comes first.' );
+
+		$requests = Data_Events\Webhooks::get_endpoint_requests( $this->action_endpoint, -1, 'pending' );
+		$this->assertSame( $pending, array_column( $requests, 'id' ) );
+
+		$this->assertCount( 7, Data_Events\Webhooks::get_endpoint_requests( $this->action_endpoint ) );
+	}
+
+	/**
 	 * Tests creating and getting system endpoints.
 	 */
 	public function test_system_endpoint() {

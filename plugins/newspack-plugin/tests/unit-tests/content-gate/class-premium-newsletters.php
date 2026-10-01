@@ -12,6 +12,8 @@ use Newspack\Content_Gate;
 use Newspack\Content_Restriction_Control;
 use Newspack\Content_Rules;
 use Newspack\Data_Events;
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Settings;
 use Newspack\Premium_Newsletters;
 use Newspack\Reader_Activation;
 
@@ -1064,5 +1066,470 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			\Newspack_Newsletters_Contacts::$add_and_remove_lists_calls,
 			'Unverified user must not be added to lists even with a matching domain.'
 		);
+	}
+
+	// =========================================================================
+	// Group subscription members
+	// =========================================================================
+
+	/**
+	 * Create an active group subscription covering the given products.
+	 *
+	 * @param int   $owner_id    Owner user ID.
+	 * @param array $product_ids Product IDs the subscription covers.
+	 *
+	 * @return \WC_Subscription
+	 */
+	private function create_group_subscription( int $owner_id, array $product_ids ) {
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => $product_ids,
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		return $subscription;
+	}
+
+	/**
+	 * Create a reader who is eligible to join a group subscription.
+	 *
+	 * @return int User ID.
+	 */
+	private function create_group_member(): int {
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		update_user_meta( $user_id, '_newspack_reader', true );
+		return $user_id;
+	}
+
+	/**
+	 * Return the ESP calls made for one email address.
+	 *
+	 * @param string $email Email address.
+	 *
+	 * @return array[]
+	 */
+	private function get_list_calls_for( string $email ): array {
+		return array_values(
+			array_filter(
+				\Newspack_Newsletters_Contacts::$add_and_remove_lists_calls,
+				function ( $call ) use ( $email ) {
+					return $call['email'] === $email;
+				}
+			)
+		);
+	}
+
+	/**
+	 * Return the queue source recorded for a user, or null when the user isn't queued.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return string|null
+	 */
+	private function get_queued_source( int $user_id ) {
+		foreach ( (array) get_option( Premium_Newsletters::QUEUE_OPTION, [] ) as $entry ) {
+			if ( is_array( $entry ) && (int) ( $entry['user_id'] ?? 0 ) === $user_id ) {
+				return (string) ( $entry['source'] ?? '' );
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Ways a group subscription lapses. On hold still grants access while a payment
+	 * retry is pending, so moving from On hold to Expired or Cancelled ends access
+	 * too. On hold to Expired is how a group lapses after its payment retries run
+	 * out.
+	 *
+	 * @return array[]
+	 */
+	public function data_group_lapse_transitions() {
+		return [
+			'active to expired'    => [ 'active', 'expired' ],
+			'on-hold to expired'   => [ 'on-hold', 'expired' ],
+			'on-hold to cancelled' => [ 'on-hold', 'cancelled' ],
+		];
+	}
+
+	/**
+	 * When a group subscription lapses, its members lose the premium lists it paid for.
+	 *
+	 * @dataProvider data_group_lapse_transitions
+	 *
+	 * @param string $status_before Status before the lapse.
+	 * @param string $status_after  Status after the lapse.
+	 */
+	public function test_lapsed_group_subscription_removes_member_lists( $status_before, $status_after ) {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [ 'newspack-' . $list_post_id ];
+		$subscription->set_status( $status_after );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => $status_before,
+				'status_after'    => $status_after,
+			],
+			null
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $member_email );
+		$this->assertCount( 1, $calls, 'A member of a lapsed group must be removed from its premium lists.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * With auto-signup on, members of a group subscription that comes back to Active
+	 * gain its premium lists.
+	 */
+	public function test_reactivated_group_subscription_adds_member_lists_with_auto_signup() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'on-hold',
+				'status_after'    => 'active',
+			],
+			null
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $member_email );
+		$this->assertCount( 1, $calls, 'With auto-signup on, a member of an active group must be added to its premium lists.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
+		$this->assertEmpty( $calls[0]['lists_to_remove'] );
+	}
+
+	/**
+	 * With auto-signup off, a member check never adds lists, exactly as for any
+	 * other reader: an entitled member who isn't on a premium list stays off it.
+	 */
+	public function test_reactivated_group_subscription_does_not_add_member_lists_without_auto_signup() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'on-hold',
+				'status_after'    => 'active',
+			],
+			null
+		);
+		$this->assertContains( $member_id, $this->get_queued_user_ids(), 'The member must still be checked, so a lapse can remove lists.' );
+		Premium_Newsletters::process_access_check_queue();
+
+		$this->assertEmpty( $this->get_list_calls_for( $member_email ), 'With auto-signup off, a member check must not add lists.' );
+	}
+
+	/**
+	 * A status change that leaves the group's access as it was, like the owner
+	 * cancelling at the end of the term (Active to Pending cancel), doesn't check
+	 * the members. With auto-signup on, that check would re-add premium lists
+	 * members had left.
+	 */
+	public function test_status_change_that_keeps_access_does_not_queue_members() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		// The member left the premium list on their own.
+		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [];
+		$subscription->set_status( 'pending-cancel' );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'pending-cancel',
+			],
+			null
+		);
+
+		$this->assertNotContains( $member_id, $this->get_queued_user_ids(), 'A change that keeps access must not queue members.' );
+		Premium_Newsletters::process_access_check_queue();
+		$this->assertEmpty( $this->get_list_calls_for( $member_email ) );
+	}
+
+	/**
+	 * A plan switch, including a seat-count change, reports the same status before
+	 * and after. Members get a remove-only check, so with auto-signup on, a switch
+	 * doesn't re-add a premium list a member left.
+	 */
+	public function test_plan_switch_does_not_readd_member_who_unsubscribed() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		// The member left the premium list on their own.
+		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [];
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'active',
+			],
+			null
+		);
+
+		$this->assertSame( Premium_Newsletters::SOURCE_PLAN_SWITCH, $this->get_queued_source( $member_id ), 'A plan switch must give members a remove-only check.' );
+		Premium_Newsletters::process_access_check_queue();
+		$this->assertEmpty( $this->get_list_calls_for( $member_email ), 'A plan switch must not re-add a list a member left.' );
+	}
+
+	/**
+	 * A switch to a plan that no longer covers a premium list removes it from the
+	 * members: their check is remove-only, not skipped.
+	 */
+	public function test_plan_switch_removes_member_lists_the_new_plan_does_not_cover() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [ 'newspack-' . $list_post_id ];
+		$subscription->products = [ 200 ];
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'active',
+			],
+			null
+		);
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $member_email );
+		$this->assertCount( 1, $calls, 'A downgrade must remove the list from the member.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * A seat change soon after someone joins doesn't replace the new member's
+	 * pending check, so auto-signup still adds the lists the group covers.
+	 */
+	public function test_plan_switch_keeps_a_pending_join_check() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		// The member joins, then the owner changes the seat count before the queue runs.
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'active',
+			],
+			null
+		);
+
+		$this->assertSame( Premium_Newsletters::SOURCE_GROUP_MEMBERSHIP, $this->get_queued_source( $member_id ), 'A plan switch must not replace a pending join check.' );
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $member_email );
+		$this->assertCount( 1, $calls, 'A new member must still be added to the group\'s premium lists.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * Joining a group queues a check, so the new member gains premium lists when
+	 * auto-signup is on.
+	 */
+	public function test_member_added_to_group_gains_lists_with_auto_signup() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		$this->assertContains( $member_id, $this->get_queued_user_ids(), 'Joining a group must queue an access check for the new member.' );
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $member_email );
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * Leaving a group queues a check, so the former member loses its premium lists.
+	 */
+	public function test_member_removed_from_group_loses_lists() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 0 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [ 'newspack-' . $list_post_id ];
+
+		Group_Subscription::update_members( $subscription, [], [ $member_id ] );
+		$this->assertContains( $member_id, $this->get_queued_user_ids(), 'Leaving a group must queue an access check for the former member.' );
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $member_email );
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * A renewal snapshots each member's lists as it does the owner's, so a member who
+	 * unsubscribed from a premium list isn't re-added by auto-signup when the renewal
+	 * moves the group through On hold and back to Active.
+	 */
+	public function test_renewal_does_not_readd_member_who_unsubscribed() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$member_email = get_userdata( $member_id )->user_email;
+
+		$list_post_id     = $this->factory->post->create( [ 'post_type' => \Newspack\Newsletters\Subscription_Lists::CPT ] );
+		$this->post_ids[] = $list_post_id;
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		// The member left the premium list on their own.
+		\Newspack_Newsletters_Subscription::$contact_lists[ $member_email ] = [];
+
+		$event_data = [
+			'user_id'         => $owner_id,
+			'subscription_id' => $subscription->get_id(),
+		];
+		Premium_Newsletters::set_subscribed_lists( time(), $event_data, null );
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			array_merge(
+				$event_data,
+				[
+					'status_before' => 'active',
+					'status_after'  => 'on-hold',
+				]
+			),
+			null
+		);
+
+		$this->assertSame( Premium_Newsletters::SOURCE_RENEWAL, $this->get_queued_source( $member_id ), 'A renewal must queue members with the renewal source, like the owner.' );
+		$this->assertSame( [], get_user_meta( $member_id, Premium_Newsletters::SUBSCRIBED_LISTS_META_KEY, true ), "A renewal must snapshot the member's lists." );
+
+		Premium_Newsletters::process_access_check_queue();
+
+		$this->assertEmpty( $this->get_list_calls_for( $member_email ), 'A member who unsubscribed must not be re-added on renewal.' );
 	}
 }

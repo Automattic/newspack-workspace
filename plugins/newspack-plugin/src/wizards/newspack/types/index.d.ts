@@ -64,7 +64,7 @@ declare global {
 				};
 			};
 			connections: WizardTab;
-			integrations?: WizardTab;
+			integrations: WizardTab;
 			syndication: WizardTab;
 			'theme-and-brand'?: WizardTab;
 			seo: WizardTab;

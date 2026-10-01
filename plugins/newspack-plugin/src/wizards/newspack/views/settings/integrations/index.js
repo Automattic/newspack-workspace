@@ -15,13 +15,14 @@ import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
 import { LogsView } from './logs-view';
 import { API_BASE as API_PATH } from './constants';
+import { INTEGRATIONS_PATH } from './logs-tabs';
 
 const { Route, Switch } = Router;
 
 // Minimum time the Activate action stays busy, even when the request is faster.
 const MIN_ACTIVATION_BUSY_MS = 2000;
 
-const Integrations = ( { match } ) => {
+const Integrations = () => {
 	const [ integrations, setIntegrations ] = useState( {} );
 	const [ inFlightChanges, setInFlightChanges ] = useState( {} );
 	const [ saving, setSaving ] = useState( {} );
@@ -260,8 +261,11 @@ const Integrations = ( { match } ) => {
 
 	return (
 		<Switch>
-			<Route path={ `${ match.path }/:integrationId/logs` } render={ routeProps => <LogsView { ...routeProps } { ...sharedProps } /> } />
-			<Route path={ `${ match.path }/:integrationId` } render={ routeProps => <ConfigureView { ...routeProps } { ...sharedProps } /> } />
+			<Route
+				path={ `${ INTEGRATIONS_PATH }/:integrationId/logs/:tab?` }
+				render={ routeProps => <LogsView { ...routeProps } { ...sharedProps } /> }
+			/>
+			<Route path={ `${ INTEGRATIONS_PATH }/:integrationId` } render={ routeProps => <ConfigureView { ...routeProps } { ...sharedProps } /> } />
 			<Route render={ routeProps => <SettingsSection { ...routeProps } { ...sharedProps } /> } />
 		</Switch>
 	);

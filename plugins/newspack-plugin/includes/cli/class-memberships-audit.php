@@ -1008,11 +1008,13 @@ class Memberships_Audit {
 	 * Membership statuses that currently grant access, read from WooCommerce
 	 * Memberships itself so a site filtering
 	 * `wc_memberships_active_access_membership_statuses` is audited on its own
-	 * terms. Falls back to the constant when the API is unavailable.
+	 * terms. Falls back to the constant when the API is unavailable. Shared with
+	 * `migrate-manual-members`, so the audit and the migration agree on who is
+	 * a member.
 	 *
 	 * @return string[] `wcm-` prefixed statuses.
 	 */
-	private static function get_active_membership_statuses() {
+	public static function get_active_membership_statuses() {
 		if ( function_exists( 'wc_memberships' ) ) {
 			$memberships = \wc_memberships();
 			$instance    = $memberships && method_exists( $memberships, 'get_user_memberships_instance' )

@@ -1847,8 +1847,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 
 	/**
 	 * Integrations that don't override get_guide() report an empty guide in
-	 * the settings payload, so the configure view renders no "How it works"
-	 * section for them.
+	 * the settings payload, so their card offers no How it works menu item.
 	 */
 	public function test_get_all_integration_settings_defaults_guide_to_empty_array() {
 		$integration = new Sample_Integration( 'no-guide', 'No Guide' );

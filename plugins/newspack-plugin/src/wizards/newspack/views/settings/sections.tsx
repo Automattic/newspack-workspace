@@ -69,6 +69,7 @@ import Collections from './collections';
 import Print from './print';
 import Privacy from './privacy';
 import { rewriteLegacyIntegrationsUrl } from './integrations/legacy-url';
+import { INTEGRATIONS_PATH, getLogsTabs } from './integrations/logs-tabs';
 
 type SectionKeys = keyof typeof settingsTabs;
 
@@ -85,15 +86,13 @@ const sectionComponents: Partial< Record< SectionKeys | 'default', ( props: { is
 	default: () => <h2>🚫 { __( 'Not found' ) }</h2>,
 };
 
-if ( 'integrations' in settingsTabs ) {
-	const Integrations = lazy( () => import( /* webpackChunkName: "settings-integrations" */ './integrations' ) );
-	// A local boundary keeps the Settings header and tabs on screen while the chunk loads.
-	sectionComponents.integrations = props => (
-		<Suspense fallback={ <Spinner /> }>
-			<Integrations { ...( props as React.ComponentProps< typeof Integrations > ) } />
-		</Suspense>
-	);
-}
+const Integrations = lazy( () => import( /* webpackChunkName: "settings-integrations" */ './integrations' ) );
+// A local boundary keeps the Settings header and tabs on screen while the chunk loads.
+sectionComponents.integrations = props => (
+	<Suspense fallback={ <Spinner /> }>
+		<Integrations { ...( props as React.ComponentProps< typeof Integrations > ) } />
+	</Suspense>
+);
 
 /**
  * Load additional brands section if `newspack-multibranded-site` plugin is active.
@@ -114,7 +113,7 @@ const sectionsWithSubScreens: SectionKeys[] = [ 'integrations', 'experimental-to
 
 const settingsSectionKeys = Object.keys( settingsTabs ) as SectionKeys[];
 
-export default settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
+const sections = settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
 	// The keys come from the object itself, so the tab is always there; the
 	// lookup is nullable only because optional entries can be absent.
 	const tab = settingsTabs[ sectionPath ];
@@ -135,3 +134,20 @@ export default settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
 	} );
 	return acc;
 }, [] );
+
+// The Logs screen swaps the Settings tabs for its own, so it needs a section of its
+// own ahead of the Integrations one, which would otherwise match its route first.
+const integrationsIndex = sections.findIndex( section => section.path === INTEGRATIONS_PATH );
+if ( integrationsIndex > -1 ) {
+	const integrationsSection = sections[ integrationsIndex ];
+	sections.splice( integrationsIndex, 0, {
+		...integrationsSection,
+		path: `${ INTEGRATIONS_PATH }/:integrationId/logs/:tab?`,
+		exact: false,
+		isHidden: true,
+		fullWidth: true,
+		tabbedNavigation: getLogsTabs,
+	} );
+}
+
+export default sections;

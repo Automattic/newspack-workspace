@@ -57,7 +57,7 @@ describe( 'Integrations notices', () => {
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
 		render(
 			<MemoryRouter initialEntries={ [ '/integrations' ] }>
-				<Integrations match={ { path: '/integrations' } } />
+				<Integrations />
 			</MemoryRouter>
 		);
 		await waitFor( () => expect( captured.props.loading ).toBe( false ) );
@@ -265,7 +265,7 @@ describe( 'Integrations retry buffer', () => {
 		apiFetch.mockResolvedValue( SETTINGS_MAP );
 		render(
 			<MemoryRouter initialEntries={ [ '/integrations' ] }>
-				<Integrations match={ { path: '/integrations' } } />
+				<Integrations />
 			</MemoryRouter>
 		);
 		await waitFor( () => expect( captured.props.loading ).toBe( false ) );
@@ -363,7 +363,7 @@ describe( 'Integrations routes', () => {
 	const renderAt = path =>
 		render(
 			<MemoryRouter initialEntries={ [ path ] }>
-				<Integrations match={ { path: '/integrations' } } />
+				<Integrations />
 			</MemoryRouter>
 		);
 
