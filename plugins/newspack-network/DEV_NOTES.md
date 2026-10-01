@@ -95,6 +95,16 @@ When they pull events, they get an array of events. Each event has a an action n
 
 The Node instantiates the corresponding `Incoming_Event` for each action and then calls the `process_in_node` method of the event object.
 
+## Reader access across sites
+
+A reader who holds a product on one site passes gates on the others when the products share a Network ID. Three kinds of holding count: a subscription the reader owns, a seat on someone else's group subscription, and a paid one-time order within the gate's duration.
+
+All three travel the same way, as events from the site that owns the data: `newspack_node_subscription_changed`, `newspack_node_group_seat_changed` (one per member, sent when a seat is taken or given up, the group is turned on or off, or the owner's subscription changes status), and `newspack_node_one_time_purchase_changed` (only for orders holding a one-time product with a Network ID). Nodes pull all three. Each site records what it receives on the reader: owned subscriptions in `_newspack_network_subscriptions`, seats and purchases in `_newspack_network_access_grants`, keyed by site and item. `Content_Gate\Access` answers newspack-plugin's `newspack_access_rules_has_active_subscription` and `newspack_access_rules_has_one_time_purchase` filters from those, resolving each product's Network ID through the synced product list. The reading site's gate decides how long a one-time purchase grants access.
+
+A seat fails the strict subscription check on purpose: newspack-plugin's access attribution runs it to tell an owner from a group member.
+
+After updating a network, tag one-time products (`wp newspack-network assign-product-network-ids --apply` covers products linked to membership plans), then run on every site `wp newspack-network data-backfill newspack_node_group_seat_changed --live` and `wp newspack-network data-backfill newspack_node_one_time_purchase_changed --live`. Both accept `--start`/`--end` (seats by join time, orders by creation date), which helps on large sites, and both are safe to re-run.
+
 ## Stores
 
 Stores are simple abstraction layers used by the Hub to persist data on the database. They are used to store and read data.
@@ -169,6 +179,9 @@ Available CLI commands are (add `--help` flag to learn more about each command):
 * `--dry-run` enabled. Will run through process without deleting.
 * `--yes` enabled. Will bypass confirmations.
 
+
+### `wp newspack-network data-backfill newspack_node_group_seat_changed` / `newspack_node_one_time_purchase_changed`
+* Send every current group seat, or every paid order holding a tagged one-time product, as events. `--live` to send; `--start`/`--end` limit seats by join time and orders by creation date. Safe to re-run.
 
 ### `wp newspack-network sync-all`
 * Will pull all events from the Hub
