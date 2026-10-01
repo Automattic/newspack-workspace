@@ -20,13 +20,17 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	/**
 	 * Capability required to read institutions through REST.
 	 *
-	 * Mirrors the capability gating the block editor panel that consumes this
-	 * route, so the gate grants exactly what the only non-administrator consumer
-	 * needs and nothing wider.
+	 * Defined as the block editor visibility panel's own capability rather than a
+	 * literal of its own: the panel is this route's only non-administrator
+	 * consumer, and a panel shown to a role this gate refuses renders an empty
+	 * institution picker with nothing failing. Admits the institution posts
+	 * without their stored rules, which stay behind RULES_CAPABILITY below; every
+	 * other field, excerpt included, is returned. The panel requests only id and
+	 * title.
 	 *
 	 * @var string
 	 */
-	const READ_CAPABILITY = 'edit_others_posts';
+	const READ_CAPABILITY = Block_Visibility::CONFIGURE_CAPABILITY;
 
 	/**
 	 * Capability that admits the stored access-rule fields. It decides two things:
