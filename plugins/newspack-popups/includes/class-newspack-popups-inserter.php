@@ -562,6 +562,8 @@ final class Newspack_Popups_Inserter {
 			|| ! is_singular()
 			// If not in the loop, ignore.
 			|| ! in_the_loop()
+			// If not the main query, ignore.
+			|| ! is_main_query()
 			// Don't inject inline popups on paywalled posts.
 			// It doesn't make sense with a paywall message and also causes an infinite loop.
 			|| self::is_memberships_restricted()
