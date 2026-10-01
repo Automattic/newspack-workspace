@@ -46,10 +46,12 @@ jest.mock( '../../../../packages/components/src', () => {
 	};
 } );
 
+const setHeaderData = jest.fn( () => ( { type: 'NOOP' } ) );
+
 register(
 	createReduxStore( 'test/group-detail', {
 		reducer: ( state = {} ) => state,
-		actions: { setHeaderData: () => ( { type: 'NOOP' } ) },
+		actions: { setHeaderData },
 	} )
 );
 
@@ -93,7 +95,33 @@ const openRowMenu = async index => {
 	return screen.queryAllByRole( 'menuitem' ).map( item => item.textContent );
 };
 
-beforeEach( () => apiFetch.mockReset() );
+beforeEach( () => {
+	apiFetch.mockReset();
+	setHeaderData.mockClear();
+} );
+
+describe( 'the header', () => {
+	// The wizard renders each crumb as its own breadcrumb item, so "Groups" only
+	// links back to the list when it arrives as a crumb of its own rather than
+	// as text inside the group's label.
+	it( 'links back to the group list from its own breadcrumb', async () => {
+		await renderDetail( group() );
+
+		const { sectionName } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		expect( sectionName ).toEqual( [ { label: 'Groups', url: '#/groups' }, { label: 'Team plan (Olive Owner)' } ] );
+	} );
+
+	// ARIA does not let a plain span carry a name, so an aria-label there is
+	// silently dropped; the owner phrasing has to be real, hidden text.
+	it( 'tells screen readers who owns the group', async () => {
+		await renderDetail( group() );
+
+		const { sectionTitle } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		const { container } = render( createElement( sectionTitle ) );
+		expect( container.querySelector( '.screen-reader-text' ).textContent ).toBe( 'Owned by Olive Owner' );
+		expect( container.querySelector( '[aria-hidden="true"]' ).textContent ).toBe( '(Olive Owner)' );
+	} );
+} );
 
 describe( 'the member row actions', () => {
 	it( 'opens a menu offering the actions the endpoint would accept', async () => {

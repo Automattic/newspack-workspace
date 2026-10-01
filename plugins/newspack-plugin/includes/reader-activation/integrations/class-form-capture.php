@@ -361,10 +361,15 @@ class Form_Capture extends Integration {
 				'in_footer' => true,
 			]
 		);
+		// Bracket notation keeps this config clear of the `window.newspack`
+		// keyword Newspack hands Perfmatters to delay (see Perfmatters::
+		// scripts_to_delay()). The capture script itself loads undelayed, so a
+		// delayed config would arrive after the script has read it, and
+		// capture would stay off for the whole page view without an error.
 		\wp_add_inline_script(
 			self::SCRIPT_HANDLE,
 			sprintf(
-				'window.newspack_form_capture = window.newspack_form_capture || {}; window.newspack_form_capture[%s] = %s;',
+				'window["newspack_form_capture"] = window["newspack_form_capture"] || {}; window["newspack_form_capture"][%s] = %s;',
 				\wp_json_encode( static::SCRIPT_CONFIG_KEY ),
 				\wp_json_encode(
 					[

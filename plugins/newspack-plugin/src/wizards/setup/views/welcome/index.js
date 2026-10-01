@@ -160,7 +160,7 @@ const Welcome = ( { buttonAction } ) => {
 	const hasErrors = errors.length > 0;
 	const isInit = installationProgress === 0;
 	const isDone = installationProgress === total && ! hasErrors;
-	const redirectCounterRef = useRef();
+	const redirectCounterRef = useRef( undefined );
 
 	const REDIRECT_COUNTER_DURATION = 5;
 	const [ redirectCounter, setRedirectCounter ] = useState( REDIRECT_COUNTER_DURATION );

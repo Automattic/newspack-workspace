@@ -1,3 +1,36 @@
+## newspack [6.53.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.5...newspack@6.53.6) (2026-10-01)
+
+
+### Bug Fixes
+
+* **content-gate:** check group members' premium newsletter access ([b565c0b](https://github.com/Automattic/newspack-workspace/commit/b565c0b26da58634ff4853ac7915164b540eebde))
+* **content-gate:** check members only when group access changes ([b04658b](https://github.com/Automattic/newspack-workspace/commit/b04658b3581828a6dc053529625603019b0946a9))
+* **content-gate:** check members when a group leaves payment recovery ([7ab63eb](https://github.com/Automattic/newspack-workspace/commit/7ab63eb2f7f548f2230113dff186f017e79cba95))
+* **content-gate:** give members a remove-only check on a plan switch ([3dcec78](https://github.com/Automattic/newspack-workspace/commit/3dcec7821b34d1d5d66a59c6f24df7674ad61a4f))
+* **content-gate:** keep members' unsubscribes across a plan switch ([a3c75a4](https://github.com/Automattic/newspack-workspace/commit/a3c75a4d96f1f53db1bec80e1f947cb6e9cafe83))
+
+## newspack [6.53.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.4...newspack@6.53.5) (2026-09-30)
+
+
+### Bug Fixes
+
+* **reader-activation:** stop Perfmatters from delaying form capture ([#1203](https://github.com/Automattic/newspack-workspace/issues/1203)) ([4ad3262](https://github.com/Automattic/newspack-workspace/commit/4ad3262d1606a9f15deb456ecddeb97637a61d38))
+
+## newspack [6.53.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.3...newspack@6.53.4) (2026-09-30)
+
+
+### Bug Fixes
+
+* **woocommerce:** refuse free products in the Store API (NPPD-2307, [#1205](https://github.com/Automattic/newspack-workspace/issues/1205)) ([03719a3](https://github.com/Automattic/newspack-workspace/commit/03719a304457259169229f9418ecb554fa42e150))
+
+## newspack [6.53.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.2...newspack@6.53.3) (2026-09-29)
+
+
+### Bug Fixes
+
+* **cli:** fit the owner seat on paid per-seat Teams subscriptions ([8bb7c5b](https://github.com/Automattic/newspack-workspace/commit/8bb7c5b1054f5783af179f422e0b3f227ea1e84d))
+* **cli:** handle per-seat pricing in Teams migration (NPPD-2278) ([d9824b6](https://github.com/Automattic/newspack-workspace/commit/d9824b6e29f69b6919d9b648f651657dbdb715a3))
+
 ## newspack [6.53.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.1...newspack@6.53.2) (2026-09-28)
 
 

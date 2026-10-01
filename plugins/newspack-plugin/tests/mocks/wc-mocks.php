@@ -408,9 +408,9 @@ $wc_mock_is_product = false;
  *
  * Every WC_Order_Item_Product construction across the whole suite registers
  * itself in $order_items_database (mirroring WooCommerce, where order item IDs
- * are globally unique), and test fixtures reuse low integer IDs across files —
- * call this from a test class's set_up() before staging order items so a stale
- * item created by an unrelated suite can't resolve.
+ * are globally unique), and test fixtures reuse low integer IDs across files.
+ * Newspack_Request_Memo_Reset already clears the table before each test; call
+ * this only to clear it partway through one.
  */
 function wc_mocks_reset_order_items() {
 	global $order_items_database;
@@ -792,10 +792,16 @@ class WC_Product {
 	/**
 	 * Price reads apply their WooCommerce filters, as WC_Data::get_prop() does
 	 * in `view` context. Without this, code that filters a price and code that
-	 * reads one can disagree with no test able to see it.
+	 * reads one can disagree with no test able to see it. `edit` context returns
+	 * the stored price unfiltered, as WC_Data::get_prop() does.
+	 *
+	 * @param string $context `view` or `edit`.
 	 */
-	public function get_price() {
+	public function get_price( $context = 'view' ) {
 		$price = $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		if ( 'edit' === $context ) {
+			return $price;
+		}
 		return apply_filters( 'woocommerce_product_get_price', $price, $this );
 	}
 	public function set_price( $price ) {
