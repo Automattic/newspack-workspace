@@ -24,18 +24,26 @@ class TestBackfillerBatchedLoading extends \WP_UnitTestCase {
 	private $loaded = [];
 
 	/**
+	 * For each ID, whether the cached sentinel survived from the previous load.
+	 *
+	 * @var bool[]
+	 */
+	private $sentinel_survived = [];
+
+	/**
 	 * Clear captured CLI output and loads.
 	 */
 	public function set_up() {
 		parent::set_up();
 		WP_CLI::reset();
-		$this->loaded = [];
+		$this->loaded            = [];
+		$this->sentinel_survived = [];
 	}
 
 	/**
 	 * A backfiller that exposes load_in_batches() and builds a reader event per loaded item.
 	 *
-	 * @param bool $can_flush_runtime Whether the object cache can flush its in-memory copy; null keeps the real check.
+	 * @param bool|null $can_flush_runtime Whether the object cache can flush its in-memory copy; null keeps the real check.
 	 * @return Abstract_Backfiller
 	 */
 	private function backfiller( $can_flush_runtime = null ) {
@@ -123,7 +131,7 @@ class TestBackfillerBatchedLoading extends \WP_UnitTestCase {
 	 * @return int
 	 */
 	public function load_and_check_sentinel( $id ) {
-		$this->loaded[ $id ] = false !== wp_cache_get( 'sentinel', 'backfill_test' );
+		$this->sentinel_survived[ $id ] = false !== wp_cache_get( 'sentinel', 'backfill_test' );
 		wp_cache_set( 'sentinel', $id, 'backfill_test' );
 		return $id;
 	}
@@ -174,7 +182,7 @@ class TestBackfillerBatchedLoading extends \WP_UnitTestCase {
 				2 => true,
 				3 => false,
 			],
-			$this->loaded,
+			$this->sentinel_survived,
 			'The cache survives within a batch of two and is freed before the next one.'
 		);
 	}
@@ -193,7 +201,7 @@ class TestBackfillerBatchedLoading extends \WP_UnitTestCase {
 				2 => true,
 				3 => true,
 			],
-			$this->loaded
+			$this->sentinel_survived
 		);
 	}
 
