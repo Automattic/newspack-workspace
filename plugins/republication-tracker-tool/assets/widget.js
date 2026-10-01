@@ -141,6 +141,20 @@ function close_modal( $modal, $btn ) {
 	$btn.focus();
 }
 
+// Navigate the page-layout button via its data attribute (replaces inline onclick).
+function page_button_actions(){
+	var $ = jQuery;
+	$( '.republication-tracker-tool-button.page' ).on( 'click', function() {
+		var url = $( this ).attr( 'data-republish-url' );
+		// Navigate only to a root-relative path (leading '/', but not '//', which is
+		// protocol-relative), so the listener stays safe on its own rather than trusting
+		// whatever the attribute holds.
+		if ( url && '/' === url.charAt( 0 ) && '/' !== url.charAt( 1 ) ) {
+			window.location.href = url;
+		}
+	} );
+}
+
 jQuery(document).ready(function(){
 	var $ = jQuery,
 		postId = $( '#republication-tracker-tool-modal' ).attr( 'data-postid' ),
@@ -150,5 +164,6 @@ jQuery(document).ready(function(){
 		$('body').append($('#republication-tracker-tool-modal'));
 
 		modal_actions();
+		page_button_actions();
 
 });
