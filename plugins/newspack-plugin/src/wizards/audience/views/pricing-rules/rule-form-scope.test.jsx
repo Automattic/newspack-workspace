@@ -39,6 +39,8 @@ const SAVED_RULE = {
 	deal_key: '121',
 	strategy_id: 'simple_price',
 	scope_type: 'all_subscriptions',
+	// What the engine sends for a scope it doesn't register: the ID.
+	scope_label: 'all_subscriptions',
 	scope_ids: [],
 	simple: { calc_type: 'fixed_price', value: 4, cycles_limit: 0, label: '' },
 };

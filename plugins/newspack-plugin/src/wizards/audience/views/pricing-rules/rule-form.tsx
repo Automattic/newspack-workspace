@@ -565,8 +565,8 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 	const scopeOptions = vocab.scopes.map( s => ( { label: s.label, value: s.id } ) );
 	if ( rule?.scope_type && ! vocab.scopes.some( s => s.id === rule.scope_type ) ) {
 		scopeOptions.push( {
-			/* translators: %s: ID of a product scope, such as all_subscriptions. */
-			label: sprintf( __( '%s (not available on this site)', 'newspack-plugin' ), rule.scope_type ),
+			/* translators: %s: name or ID of a product scope, such as all_subscriptions. */
+			label: sprintf( __( '%s (not available on this site)', 'newspack-plugin' ), rule.scope_label || rule.scope_type ),
 			value: rule.scope_type,
 		} );
 	}
