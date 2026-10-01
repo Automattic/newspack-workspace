@@ -1,3 +1,29 @@
+## newspack [6.53.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.6...newspack@6.53.7) (2026-10-01)
+
+
+### Bug Fixes
+
+* keep one bad saved ID from breaking the segment product lookup ([2a3e317](https://github.com/Automattic/newspack-workspace/commit/2a3e3173a9b285ce9f7f12d4b9af9b8c7b96741e))
+* keep same-named products apart in the segment picker ([be4da5f](https://github.com/Automattic/newspack-workspace/commit/be4da5fcfdf0ea7d4ee8ac617d6a697b1b108b1e))
+* mark private subscription products in pickers ([946741c](https://github.com/Automattic/newspack-workspace/commit/946741c1e1aafeabf096bd73fb5aedbd3475b95d))
+* mark the variations of a private subscription product ([230a655](https://github.com/Automattic/newspack-workspace/commit/230a6558b3387b3143769b763d15ad5591ad7f5e))
+* name deleted subscriptions in segment summaries again ([4f22268](https://github.com/Automattic/newspack-workspace/commit/4f22268c909973d62fb0f5a42dc6c6c601a7436b))
+* name trashed variations and show status labels in pickers ([809e132](https://github.com/Automattic/newspack-workspace/commit/809e1328b28546da7b8fbda7bfc2b581c7951aea))
+* select private subscription products in gates and segments ([a5e6230](https://github.com/Automattic/newspack-workspace/commit/a5e6230407207118b50b8715f50157dc38d194bb))
+* treat label-only gate options as nothing to offer ([0cec829](https://github.com/Automattic/newspack-workspace/commit/0cec8291cd6672387124bfca4a9ce9aa8ca23ca8))
+* wrap long access rule tokens in the block sidebar ([0b8208d](https://github.com/Automattic/newspack-workspace/commit/0b8208d8deddfaf2e2458fb2cb0b00eda7e73f64))
+
+## newspack [6.53.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.5...newspack@6.53.6) (2026-10-01)
+
+
+### Bug Fixes
+
+* **content-gate:** check group members' premium newsletter access ([b565c0b](https://github.com/Automattic/newspack-workspace/commit/b565c0b26da58634ff4853ac7915164b540eebde))
+* **content-gate:** check members only when group access changes ([b04658b](https://github.com/Automattic/newspack-workspace/commit/b04658b3581828a6dc053529625603019b0946a9))
+* **content-gate:** check members when a group leaves payment recovery ([7ab63eb](https://github.com/Automattic/newspack-workspace/commit/7ab63eb2f7f548f2230113dff186f017e79cba95))
+* **content-gate:** give members a remove-only check on a plan switch ([3dcec78](https://github.com/Automattic/newspack-workspace/commit/3dcec7821b34d1d5d66a59c6f24df7674ad61a4f))
+* **content-gate:** keep members' unsubscribes across a plan switch ([a3c75a4](https://github.com/Automattic/newspack-workspace/commit/a3c75a4d96f1f53db1bec80e1f947cb6e9cafe83))
+
 ## newspack [6.53.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.4...newspack@6.53.5) (2026-09-30)
 
 
