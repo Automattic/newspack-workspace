@@ -206,6 +206,21 @@ class TestBackfillerBatchedLoading extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A run that can't free the cache's in-memory copy says so once, so the operator can split it by date.
+	 */
+	public function test_warns_once_when_cache_cannot_free_in_memory_copy() {
+		iterator_to_array( $this->backfiller( false )->load( [ 1, 2, 3 ], [ $this, 'load_item' ] ) );
+
+		$warnings = array_filter(
+			WP_CLI::$output,
+			function ( $line ) {
+				return 0 === strpos( $line, 'Warning: ' );
+			}
+		);
+		$this->assertCount( 1, $warnings, 'One warning for the run, not one per batch.' );
+	}
+
+	/**
 	 * Processing a generator of events loads each item just before its event is processed.
 	 */
 	public function test_process_events_consumes_generator_one_item_at_a_time() {

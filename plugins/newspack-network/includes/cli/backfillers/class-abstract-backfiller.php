@@ -92,10 +92,11 @@ abstract class Abstract_Backfiller {
 	abstract public function get_events();
 
 	/**
-	 * Loads items one at a time, so a backfill holds one batch in memory rather than every item.
+	 * Loads items one at a time, so a backfill never holds every item in memory at once.
 	 *
 	 * Each loaded item stays in the object cache's in-memory copy for the rest of the run, so that
-	 * copy is freed after every batch.
+	 * copy is freed after every batch where the cache allows it. Where it doesn't, the copy keeps
+	 * growing, and the run warns once so it can be split by date range instead.
 	 *
 	 * @param int[]    $ids  IDs of the items to load.
 	 * @param callable $load Loads one item by ID; returns a falsy value when the item no longer exists.
@@ -103,6 +104,10 @@ abstract class Abstract_Backfiller {
 	 * @return \Generator Each item that loaded.
 	 */
 	protected function load_in_batches( $ids, $load ) {
+		if ( ! $this->can_flush_runtime_cache() ) {
+			WP_CLI::warning( "This site's object cache can't free its in-memory copy during the run, so memory grows with each item. On a large site, split the backfill into date ranges with --start and --end." );
+		}
+
 		foreach ( array_chunk( $ids, static::BATCH_SIZE ) as $batch ) {
 			foreach ( $batch as $id ) {
 				$item = $load( $id );
