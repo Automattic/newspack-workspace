@@ -702,6 +702,20 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A label with no `link` renders as an unlinked span, without an "undefined
+	 * array key" warning on the way (NPPM-3051). PHPUnit converts warnings to
+	 * exceptions here, so the warning itself fails the test.
+	 */
+	public function test_display_tag_labels_renders_flag_only_label_as_span() {
+		ob_start();
+		Newspack_Blocks::display_tag_labels( [ [ 'flag' => 'Opinion' ] ] );
+		$html = ob_get_clean();
+
+		self::assertStringContainsString( '<span class="tag-label flag">Opinion</span>', $html );
+		self::assertStringNotContainsString( '<a ', $html, 'A label without a link must not render an anchor.' );
+	}
+
+	/**
 	 * A non-viewable post type explicitly opted in via the
 	 * newspack_blocks_articles_allowed_post_types filter is served by the endpoint,
 	 * without loosening the gate for other non-viewable types.
