@@ -152,23 +152,23 @@ const ContentGiftingSettings = () => {
 		return (
 			<>
 				{ confirmDialog }
-				{ giftingErrors.length > 0 && (
-					<Notice className="newspack-content-gifting__prerequisites" status="error" politeness="polite" isDismissible={ false }>
-						{ giftingErrors.join( ', ' ) }
-					</Notice>
-				) }
 				<EmptyState.Root>
 					<EmptyState.Header
 						icon={ gift }
 						title={ __( 'Get started with content gifting', 'newspack-plugin' ) }
 						description={ __( 'Enable it to let members share gated articles with non-subscribers.', 'newspack-plugin' ) }
 					/>
+					{ giftingErrors.length > 0 && (
+						<Notice status="error" politeness="polite" isDismissible={ false }>
+							{ giftingErrors.join( ', ' ) }
+						</Notice>
+					) }
 					<EmptyState.Actions>
 						<Button
 							variant="primary"
 							accessibleWhenDisabled
 							loading={ isFetching }
-							disabled={ isFetching }
+							disabled={ isFetching || giftingErrors.length > 0 }
 							onClick={ () => setEnabled( true ) }
 						>
 							{ __( 'Enable', 'newspack-plugin' ) }
