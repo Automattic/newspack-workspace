@@ -78,8 +78,13 @@ function newspack_blocks_get_iframe_html( $mode, $src, $height, $width, $is_full
 	$iframe_id   = 'newspack-iframe-' . wp_generate_password( 12, false );
 	$classes[]   = 'wp-block-newspack-blocks-iframe';
 
+	// Embed only http(s) and relative sources. Any other scheme is treated as no source,
+	// as in the editor preview, which allows the same schemes. Listing https first makes
+	// esc_url_raw() complete a scheme-less source with https:// rather than http://.
+	$src = esc_url_raw( $src, [ 'https', 'http' ] );
+
 	if ( empty( $src ) ) {
-		return;
+		return '';
 	}
 
 	if ( ! empty( $align ) ) {
@@ -104,7 +109,7 @@ function newspack_blocks_get_iframe_html( $mode, $src, $height, $width, $is_full
 				layout = '<?php echo esc_attr( $layout ); ?>'
 				height = '100'
 				width = '100'
-				src = '<?php echo esc_attr( $src ); ?>'
+				src = '<?php echo esc_url( $src ); ?>'
 				style = '<?php echo esc_attr( $style ); ?>'
 				frameborder = '0'
 				allowfullscreen
