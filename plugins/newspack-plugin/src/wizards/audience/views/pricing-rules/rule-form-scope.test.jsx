@@ -76,6 +76,7 @@ describe( 'a saved scope the site does not offer', () => {
 		const appliesTo = screen.getByLabelText( 'Applies to' );
 		await chooseScope( appliesTo, 'all_products' );
 		expect( appliesTo ).toHaveValue( 'all_products' );
+		expect( within( appliesTo ).getByRole( 'option', { name: /not available on this site/ } ) ).toBeEnabled();
 
 		await chooseScope( appliesTo, 'all_subscriptions' );
 		expect( appliesTo ).toHaveValue( 'all_subscriptions' );
