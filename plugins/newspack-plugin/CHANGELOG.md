@@ -1,3 +1,14 @@
+## newspack [6.53.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.5...newspack@6.53.6) (2026-10-01)
+
+
+### Bug Fixes
+
+* **content-gate:** check group members' premium newsletter access ([b565c0b](https://github.com/Automattic/newspack-workspace/commit/b565c0b26da58634ff4853ac7915164b540eebde))
+* **content-gate:** check members only when group access changes ([b04658b](https://github.com/Automattic/newspack-workspace/commit/b04658b3581828a6dc053529625603019b0946a9))
+* **content-gate:** check members when a group leaves payment recovery ([7ab63eb](https://github.com/Automattic/newspack-workspace/commit/7ab63eb2f7f548f2230113dff186f017e79cba95))
+* **content-gate:** give members a remove-only check on a plan switch ([3dcec78](https://github.com/Automattic/newspack-workspace/commit/3dcec7821b34d1d5d66a59c6f24df7674ad61a4f))
+* **content-gate:** keep members' unsubscribes across a plan switch ([a3c75a4](https://github.com/Automattic/newspack-workspace/commit/a3c75a4d96f1f53db1bec80e1f947cb6e9cafe83))
+
 ## newspack [6.53.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.4...newspack@6.53.5) (2026-09-30)
 
 
