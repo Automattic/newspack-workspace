@@ -28,15 +28,28 @@ class Reader_Registered extends Abstract_Backfiller {
 	/**
 	 * Gets the events to be processed
 	 *
-	 * @return \Newspack_Network\Incoming_Events\Abstract_Incoming_Event[] $events An array of events.
+	 * Yields one event at a time rather than returning them all, and loads the users
+	 * behind them in batches. Building the full list up front meant a year's worth of
+	 * registrations on a busy site — tens of thousands of users and an event object
+	 * each — had to fit in memory before the first one could be processed, which on a
+	 * site with a heavy plugin set exhausts the memory limit. The caller only ever
+	 * iterates the result, so yielding costs nothing.
+	 *
+	 * The IDs are collected in one pass and the batches drawn from that list rather
+	 * than from repeated offset queries. An offset walks a result set that processing
+	 * could change underneath it, and every record after the change would be silently
+	 * skipped; a list of IDs captured up front cannot drift.
+	 *
+	 * @return \Generator<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> The events.
 	 */
 	public function get_events() {
 		$roles_to_sync = \Newspack_Network\Utils\Users::get_synced_user_roles();
 		if ( empty( $roles_to_sync ) ) {
 			WP_CLI::error( 'Incompatible Newspack plugin version or no roles to sync.' );
 		}
-		// Get all users registered between specified dates.
-		$users = get_users(
+		// Get the IDs of all users registered between specified dates. IDs only: the
+		// list is held for the whole run, and the user data is loaded a batch at a time.
+		$user_ids = get_users(
 			[
 				'role__in'   => $roles_to_sync,
 				'date_query' => [
@@ -45,7 +58,7 @@ class Reader_Registered extends Abstract_Backfiller {
 					'inclusive' => true,
 				],
 				'orderby'    => 'user_registered',
-				'fields'     => [ 'id', 'user_email', 'user_registered' ],
+				'fields'     => 'ID',
 				'number'     => -1,
 				'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
@@ -57,12 +70,10 @@ class Reader_Registered extends Abstract_Backfiller {
 		);
 
 		WP_CLI::line( '' );
-		WP_CLI::line( sprintf( 'Found %s user(s) eligible for sync.', count( $users ) ) );
+		WP_CLI::line( sprintf( 'Found %s user(s) eligible for sync.', count( $user_ids ) ) );
 		WP_CLI::line( '' );
 
-		$this->maybe_initialize_progress_bar( 'Processing users', count( $users ) );
-
-		$events = [];
+		$this->maybe_initialize_progress_bar( 'Processing users', count( $user_ids ) );
 
 		// Disregard any attached data when checking for duplicates of reader registrations.
 		// Only the email address and the date are relevant in this case.
@@ -76,24 +87,39 @@ class Reader_Registered extends Abstract_Backfiller {
 			}
 		);
 
-		foreach ( $users as $user ) {
-			$registration_method = get_user_meta( $user->ID, \Newspack\Reader_Activation::REGISTRATION_METHOD, true );
-			$user_data = [
-				'user_id'         => $user->ID,
-				'email'           => $user->user_email,
-				'user_registered' => $user->user_registered,
-				'first_name'      => get_user_meta( $user->ID, 'first_name', true ),
-				'last_name'       => get_user_meta( $user->ID, 'last_name', true ),
-				'meta_input'      => [
-					// 'current_page_url' is not saved, can't be backfilled.
-					'registration_method' => empty( $registration_method ) ? 'backfill-script' : $registration_method,
-				],
-			];
+		// Sliced one batch at a time rather than array_chunk()ed up front: chunking
+		// copies the whole ID list into an array of arrays, which is a second full copy
+		// of it held for the length of the run.
+		$total = count( $user_ids );
 
-			$incoming_event = new \Newspack_Network\Incoming_Events\Reader_Registered( get_bloginfo( 'url' ), $user_data, strtotime( $user->user_registered ) );
-			$events[] = $incoming_event;
+		for ( $offset = 0; $offset < $total; $offset += self::BATCH_SIZE ) {
+			$batch = array_slice( $user_ids, $offset, self::BATCH_SIZE );
+
+			$users = get_users(
+				[
+					'include' => $batch,
+					'orderby' => 'include',
+					'fields'  => [ 'id', 'user_email', 'user_registered' ],
+					'number'  => -1,
+				]
+			);
+
+			foreach ( $users as $user ) {
+				$registration_method = get_user_meta( $user->ID, \Newspack\Reader_Activation::REGISTRATION_METHOD, true );
+				$user_data = [
+					'user_id'         => $user->ID,
+					'email'           => $user->user_email,
+					'user_registered' => $user->user_registered,
+					'first_name'      => get_user_meta( $user->ID, 'first_name', true ),
+					'last_name'       => get_user_meta( $user->ID, 'last_name', true ),
+					'meta_input'      => [
+						// 'current_page_url' is not saved, can't be backfilled.
+						'registration_method' => empty( $registration_method ) ? 'backfill-script' : $registration_method,
+					],
+				];
+
+				yield new \Newspack_Network\Incoming_Events\Reader_Registered( get_bloginfo( 'url' ), $user_data, strtotime( $user->user_registered ) );
+			}
 		}
-
-		return $events;
 	}
 }
