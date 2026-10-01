@@ -464,7 +464,9 @@ class Bylines {
 		if ( is_feed() ) {
 			$byline = self::get_post_byline_html( false, false );
 			if ( $byline ) {
-				$display_name = html_entity_decode( wp_strip_all_tags( $byline ) );
+				// Feed templates print the author as-is, and Atom has no CDATA around it, so the
+				// decoded text goes back out escaped.
+				$display_name = esc_html( html_entity_decode( wp_strip_all_tags( $byline ) ) );
 			}
 		}
 		return $display_name;
