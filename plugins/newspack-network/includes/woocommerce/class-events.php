@@ -37,6 +37,7 @@ class Events {
 
 		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_order_changed', [ __CLASS__, 'item_changed' ] );
 		Data_Events::register_listener( 'woocommerce_subscription_status_changed', 'newspack_node_subscription_changed', [ __CLASS__, 'subscription_changed' ] );
+		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_one_time_purchase_changed', [ __CLASS__, 'one_time_purchase_changed' ] );
 		Data_Events::register_listener( 'newspack_network_save_product', 'newspack_network_product_updated', [ __CLASS__, 'product_updated' ] );
 	}
 
@@ -112,6 +113,51 @@ class Events {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Callback for the one-time purchase listener.
+	 *
+	 * Only orders holding a one-time product with a Network ID are reported: those
+	 * are the ones that can grant access on another site, and every site would
+	 * otherwise receive every renewal and untagged order in the network. The
+	 * reading site's gate decides how long after the purchase access lasts, so the
+	 * event carries the purchase time and nothing about duration.
+	 *
+	 * @param int       $item_id     The Order ID.
+	 * @param string    $status_from The status before the change.
+	 * @param string    $status_to   The status after the change.
+	 * @param \WC_Order $order       The Order object.
+	 * @return array|null Null when the order has no such product.
+	 */
+	public static function one_time_purchase_changed( $item_id, $status_from, $status_to, $order ) {
+		$products = [];
+		foreach ( $order->get_items() as $item ) {
+			$product = $item->get_product();
+			if ( ! $product || ! $product->is_type( [ 'simple', 'variable', 'variation' ] ) ) {
+				continue;
+			}
+			if ( '' === (string) Product_Admin::get_network_id( $product->get_id() ) ) {
+				continue;
+			}
+			$products[ $product->get_id() ] = [
+				'id'   => $product->get_id(),
+				'name' => $product->get_name(),
+				'slug' => $product->get_slug(),
+			];
+		}
+		if ( empty( $products ) ) {
+			return null;
+		}
+		$date_created = $order->get_date_created();
+		return [
+			'id'           => $item_id,
+			'user_id'      => $order->get_customer_id(),
+			'email'        => $order->get_billing_email(),
+			'status_after' => $status_to,
+			'purchased_at' => $date_created ? $date_created->getTimestamp() : time(),
+			'products'     => $products,
+		];
 	}
 
 	/**

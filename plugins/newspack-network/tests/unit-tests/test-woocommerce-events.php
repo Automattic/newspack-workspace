@@ -6,6 +6,7 @@
  */
 
 use Newspack_Network\Woocommerce\Events;
+use Newspack_Network\Woocommerce\Product_Admin;
 
 /**
  * What subscription and order events tell the network about their products.
@@ -187,5 +188,57 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			],
 			Events::get_subscription_products( $subscription )
 		);
+	}
+
+	/**
+	 * A product post tagged with a Network ID, as a stand-in product.
+	 *
+	 * @param string $network_id Network ID or ''.
+	 * @param string $type       Product type.
+	 * @return object
+	 */
+	private function tagged_product( $network_id, $type = 'simple' ) {
+		$id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		if ( $network_id ) {
+			update_post_meta( $id, Product_Admin::NETWORK_ID_META_KEY, $network_id );
+		}
+		return $this->product( $id, $type );
+	}
+
+	/**
+	 * An order is reported with only its one-time products that carry a Network ID.
+	 * A subscription product sharing a Network ID must not turn a renewal into a purchase.
+	 */
+	public function test_one_time_purchase_event_lists_tagged_one_time_products() {
+		$pass    = $this->tagged_product( 'annual-pass' );
+		$order   = $this->order(
+			86,
+			[
+				$this->item( $pass ),
+				$this->item( $this->tagged_product( 'premium', 'subscription' ) ),
+				$this->item( $this->tagged_product( '' ) ),
+				$this->item( false ),
+			],
+			'completed',
+			1700000000
+		);
+		$payload = Events::one_time_purchase_changed( 86, 'processing', 'completed', $order );
+
+		$this->assertSame( 'reader@example.test', $payload['email'] );
+		$this->assertSame( 7, $payload['user_id'] );
+		$this->assertSame( 86, $payload['id'] );
+		$this->assertSame( 'completed', $payload['status_after'] );
+		$this->assertSame( 1700000000, $payload['purchased_at'] );
+		$this->assertSame( [ $pass->id ], array_keys( $payload['products'] ) );
+	}
+
+	/**
+	 * An order with no tagged one-time product sends nothing: most orders are
+	 * renewals or untagged, and every site would otherwise receive them all.
+	 */
+	public function test_order_without_tagged_one_time_product_sends_nothing() {
+		$order = $this->order( 87, [ $this->item( $this->tagged_product( 'premium', 'subscription' ) ), $this->item( $this->tagged_product( '' ) ) ] );
+
+		$this->assertNull( Events::one_time_purchase_changed( 87, 'pending', 'completed', $order ) );
 	}
 }
