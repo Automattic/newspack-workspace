@@ -1,9 +1,10 @@
 /**
- * NPPD-1492 — the institutions list keeps the gates screen header in sync by
- * writing `config.has_institutions` into the wizard store after each fetch.
- * This is the half the "no reload" behaviour rests on: the gates config is
- * resolved once per page load, so without this write a publisher who creates
- * their first institution and navigates back sees a stale header.
+ * The institutions list writes `config.has_institutions` into the wizard store after
+ * each fetch. The gates config is resolved once per page load, so without this write
+ * a publisher who creates their first institution would not see Advanced Settings'
+ * institutional access link text until a reload.
+ *
+ * Deleting an institution also drops the fetched option list the gate pickers name institutions from.
  */
 
 /**
@@ -79,7 +80,7 @@ jest.mock( '../consts', () => ( {
 
 jest.mock( './onboarding', () => () => null );
 
-describe( 'Institutions list — gates header sync (NPPD-1492)', () => {
+describe( 'Institutions list — has_institutions store sync', () => {
 	beforeEach( () => {
 		mockUpdateWizardSettings.mockReset();
 		mockApiFetch.mockReset();

@@ -25,6 +25,7 @@ const DEFAULT_STATE = {
 		sectionDescription: '',
 		sectionName: '',
 		sectionTitle: '',
+		subTitle: '',
 	},
 	isLoading: false,
 	isQuietLoading: false,

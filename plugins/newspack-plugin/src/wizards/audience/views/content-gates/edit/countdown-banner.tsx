@@ -33,8 +33,8 @@ import { Grid, SectionHeader, SelectControl, TextControl } from '../../../../../
 interface CountdownBannerProps {
 	countdown: MeteringCountdownConfig;
 	onChange: ( countdown: MeteringCountdownConfig ) => void;
-	/** Whether any gate currently meters, so the banner has something to count down. */
-	hasMetering: boolean;
+	/** Whether an active gate meters, so the banner has something to count down. */
+	hasActiveMetering: boolean;
 	/** The allowance the banner counts down, as currently edited. */
 	meterCount: number;
 	/** The reset period the allowance runs on, as currently edited. */
@@ -95,7 +95,7 @@ const getPreviewHelp = ( audience: 'anonymous' | 'registered', otherAudienceMete
 export default function CountdownBanner( {
 	countdown,
 	onChange,
-	hasMetering,
+	hasActiveMetering,
 	meterCount,
 	meterPeriod,
 	meterAudience,
@@ -115,10 +115,10 @@ export default function CountdownBanner( {
 						title={ __( 'Countdown Banner', 'newspack-plugin' ) }
 						description={ __( 'Tell readers how many free views they have left before a gate applies.', 'newspack-plugin' ) }
 					/>
-					{ isEnabled && ! hasMetering && (
-						<Notice status="warning" isDismissible={ false }>
+					{ isEnabled && ! hasActiveMetering && (
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
 							{ __(
-								'No gate meters yet, so there is nothing to count down and the banner will not appear. Turn on metering for a gate to show it.',
+								'No active gate gives readers free views, so the banner has nothing to count down and will not appear.',
 								'newspack-plugin'
 							) }
 						</Notice>

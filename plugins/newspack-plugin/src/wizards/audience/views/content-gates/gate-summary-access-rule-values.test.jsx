@@ -67,6 +67,24 @@ describe( 'gate summary, institutions on Registered access', () => {
 		expect( screen.getByText( formatAccessRuleOptionLabel( INSTITUTION ), { exact: false } ) ).toBeInTheDocument();
 	} );
 
+	it( 'separates several institutions instead of running their names together', () => {
+		const SECOND = { value: 8, label: 'State Library' };
+		const section = getGateSummarySections(
+			{
+				content_rules: [],
+				registration: { active: true, metering: { enabled: false }, access_rules: [ [ { slug: 'institution', value: [ 7, 8 ] } ] ] },
+				custom_access: { active: false, access_rules: [], metering: { enabled: false } },
+			},
+			false,
+			undefined,
+			{ institution: [ INSTITUTION, SECOND ] }
+		).find( s => 'registration_institutions' === s.key );
+		const { container } = render( <div>{ section.content }</div> );
+
+		expect( container.textContent ).not.toContain( formatAccessRuleOptionLabel( INSTITUTION ) + formatAccessRuleOptionLabel( SECOND ) );
+		expect( screen.getByText( formatAccessRuleOptionLabel( SECOND ), { exact: false } ) ).toBeInTheDocument();
+	} );
+
 	it( 'shares a card column with Registered Access', () => {
 		const columns = groupSummaryColumns( registrationWith( { active: true, access_rules: institutionRules } ) );
 

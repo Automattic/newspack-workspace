@@ -111,6 +111,7 @@ const WizardHeaderRegion = ( {
 	sections,
 	sectionName,
 	subTitle,
+	headerSubTitle,
 	actions,
 	tabbedNavigation: wizardTabbedNavigation,
 	children,
@@ -134,6 +135,17 @@ const WizardHeaderRegion = ( {
 		}
 	}
 
+	// WizardError normally mounts inside the tab bar, so a route without one renders it itself.
+	if ( activeSection( sections, pathname )?.hideTabbedNavigation && tabbedNavigation ) {
+		tabbedNavigation = null;
+		children = (
+			<>
+				<WizardError />
+				{ children }
+			</>
+		);
+	}
+
 	if ( hideHeader ) {
 		// Without the Page shell the tabs still own the content: it renders
 		// inside the active tab's panel.
@@ -154,7 +166,12 @@ const WizardHeaderRegion = ( {
 	const sectionSubTitle = activeSection( sections, pathname )?.subHeaderText;
 
 	return (
-		<Page breadcrumbItems={ breadcrumbItems } subTitle={ sectionSubTitle ?? subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
+		<Page
+			breadcrumbItems={ breadcrumbItems }
+			subTitle={ headerSubTitle || ( sectionSubTitle ?? subTitle ) }
+			actions={ actions }
+			tabbedNavigation={ tabbedNavigation }
+		>
 			{ children }
 		</Page>
 	);
@@ -166,7 +183,7 @@ const WizardHeaderRegion = ( {
  * @property {string}     [subHeaderText]           The sub-header text, optional.
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.
- * @property {any[]}      sections                  Array of sections. A section's own `subHeaderText` replaces the wizard's while it is active.
+ * @property {any[]}      sections                  Array of sections. A section's own `subHeaderText` replaces the wizard's while it is active, and `hideTabbedNavigation` hides the tab bar on its route.
  *                                                  Its optional `tabbedNavigation( params )` returns the tab items shown while its route matches.
  * @property {boolean}    [hasSimpleFooter]         Indicates if a simple footer is used, optional.
  * @property {() => void} [renderAboveSections]     Function to render content above sections, optional.
@@ -215,6 +232,7 @@ const Wizard = (
 		sectionTitle,
 		sectionPrimaryAction,
 		sectionSecondaryAction,
+		subTitle: headerSubTitle,
 	} = headerData;
 
 	const mainActions = actions?.filter( action => action.type === 'primary' || action.type === 'secondary' );
@@ -443,6 +461,7 @@ const Wizard = (
 							sections={ routedSections }
 							sectionName={ sectionName }
 							subTitle={ subHeaderText }
+							headerSubTitle={ headerSubTitle }
 							actions={ headerActions }
 							tabbedNavigation={ tabbedNavigation }
 						>

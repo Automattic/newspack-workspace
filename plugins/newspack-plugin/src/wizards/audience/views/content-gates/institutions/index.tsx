@@ -18,8 +18,8 @@ import { Button, Spinner } from '@wordpress/components';
  */
 import { DataViews, Router } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
-import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
+import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import InstitutionsOnboarding from './onboarding';
 
 const { useHistory } = Router;
@@ -51,8 +51,8 @@ export default function Institutions() {
 	const [ data, setData ] = useState< Institution[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
-	// The last has_institutions value pushed to the gates screen, so a fetch
-	// that does not change it does not clone the whole wizard payload.
+	// The last has_institutions value pushed to the store, so a fetch that does
+	// not change it does not clone the whole wizard payload.
 	const lastHasInstitutions = useRef< boolean | undefined >( undefined );
 
 	useEffect( () => {
@@ -66,6 +66,10 @@ export default function Institutions() {
 		}
 		setHeaderData( {
 			actions,
+			subTitle: __(
+				'Give members of universities, libraries, and other organizations access by email domain, IP range, or reader data.',
+				'newspack-plugin'
+			),
 		} );
 	}, [ setHeaderData, data, isLoading ] );
 
@@ -80,11 +84,8 @@ export default function Institutions() {
 		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=-1&context=edit&_embed=wp:featuredmedia` } )
 			.then( institutions => {
 				setData( institutions );
-				// Keep the gates screen header in sync: it promotes the
-				// Institutions entry point out of the kebab menu when the site
-				// has at least one institution. Only write when the derived
-				// value actually changes, since UPDATE_WIZARD_SETTINGS clones
-				// the whole wizard payload and this runs on every list fetch.
+				// Advanced Settings shows the institutional access link text only
+				// once the site has an institution.
 				const hasInstitutions = institutions.length > 0;
 				if ( hasInstitutions !== lastHasInstitutions.current ) {
 					lastHasInstitutions.current = hasInstitutions;

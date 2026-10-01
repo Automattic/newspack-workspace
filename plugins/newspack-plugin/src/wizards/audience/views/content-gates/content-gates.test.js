@@ -1,8 +1,5 @@
 /**
- * NPPD-1492 — the "Institutions" entry point on the Access Control screen must
- * be plainly visible (header secondary action) when the site has at least one
- * institution, and may stay tucked in the kebab menu only while the publisher
- * is not using institutions.
+ * The Content Gates tab's page header: its actions and subtitle.
  */
 
 /**
@@ -40,7 +37,7 @@ jest.mock( '@wordpress/data', () => ( {
 } ) );
 
 // Passthrough only the components the view actually uses. The real
-// @wordpress/components cannot be loaded in this jsdom env (its data-store
+// component packages cannot be loaded in this jsdom env (their data-store
 // side effects throw at import), so instead of a plain object — where a newly
 // imported component reads back as undefined and fails deep in React with an
 // opaque "Element type is invalid" — wrap the mock in a Proxy that throws for
@@ -57,17 +54,10 @@ const failLoudlyMock = ( moduleName, exports ) =>
 		},
 	} );
 
-jest.mock( '@wordpress/components', () => {
-	const React = require( 'react' );
-	// forwardRef because the component attaches a ref to VStack.
-	const Passthrough = React.forwardRef( ( { children }, ref ) => React.createElement( 'div', { ref }, children ) );
-	return failLoudlyMock( '@wordpress/components', { __experimentalVStack: Passthrough } );
-} );
-
-jest.mock( '../../../../../packages/components/src', () => {
+jest.mock( '@wordpress/ui', () => {
 	const React = require( 'react' );
 	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
-	return failLoudlyMock( 'packages/components/src', { Divider: Passthrough, Grid: Passthrough } );
+	return failLoudlyMock( '@wordpress/ui', { Stack: Passthrough } );
 } );
 
 jest.mock( '../../../../../packages/components/src/wizard/store/utils', () => ( {
@@ -83,7 +73,6 @@ jest.mock( './content-gates-onboarding', () => () => null );
 jest.mock( './content-gates-priority', () => () => null );
 jest.mock( './content-gate-settings', () => () => null );
 jest.mock( './advanced-settings', () => () => null );
-jest.mock( './settings-card', () => () => null );
 
 const gatesOfLength = length =>
 	Array.from( { length }, ( _unused, index ) => ( {
@@ -101,63 +90,33 @@ const lastHeaderData = () => {
 	return calls[ calls.length - 1 ][ 0 ];
 };
 
-const menuLabels = headerData => headerData.sectionMenu.map( item => item.label );
+const moreActionLabels = headerData => headerData.actions.filter( action => action.type === 'more' ).map( action => action.label );
 
-describe( 'Content Gates header — Institutions entry point (NPPD-1492)', () => {
+describe( 'Content Gates page header', () => {
 	beforeEach( () => {
 		mockSetHeaderData.mockReset();
 	} );
 
-	// The full gate-count × institutions matrix: Gate Priority appears only
-	// with more than one gate, and Institutions moves between the kebab menu
-	// and the promoted secondary action depending on whether any exist.
 	it.each( [
-		{
-			name: 'one gate, no institutions',
-			gateCount: 1,
-			hasInstitutions: false,
-			expectedMenu: [ 'Institutions', 'Advanced Settings' ],
-			expectSecondary: false,
-		},
-		{
-			name: 'two gates, no institutions',
-			gateCount: 2,
-			hasInstitutions: false,
-			expectedMenu: [ 'Gate Priority', 'Institutions', 'Advanced Settings' ],
-			expectSecondary: false,
-		},
-		{
-			name: 'one gate, institutions present',
-			gateCount: 1,
-			hasInstitutions: true,
-			expectedMenu: [ 'Advanced Settings' ],
-			expectSecondary: true,
-		},
-		{
-			name: 'two gates, institutions present',
-			gateCount: 2,
-			hasInstitutions: true,
-			expectedMenu: [ 'Gate Priority', 'Advanced Settings' ],
-			expectSecondary: true,
-		},
-	] )( 'builds the header menu for $name', ( { gateCount, hasInstitutions, expectedMenu, expectSecondary } ) => {
-		mockWizardData = { gates: gatesOfLength( gateCount ), config: { has_institutions: hasInstitutions } };
+		{ gateCount: 1, expectedMenu: [ 'Advanced Settings' ] },
+		{ gateCount: 2, expectedMenu: [ 'Gate Priority', 'Advanced Settings' ] },
+	] )( 'lists Gate Priority only with more than one gate ($gateCount)', ( { gateCount, expectedMenu } ) => {
+		mockWizardData = { gates: gatesOfLength( gateCount ), config: {} };
 		render( <ContentGates updateGatesData={ () => {} } /> );
 
 		const headerData = lastHeaderData();
-		// Assert the whole ordered menu, so the chained conditional order is pinned.
-		expect( menuLabels( headerData ) ).toEqual( expectedMenu );
+		expect( moreActionLabels( headerData ) ).toEqual( expectedMenu );
+		expect( headerData.sectionMenu ).toBeUndefined();
+		expect( headerData.sectionTitle ).toBeUndefined();
+	} );
 
-		if ( expectSecondary ) {
-			// Pin the href, not just the label: the promotion changed this
-			// entry from an action callback to an href, and a label-only
-			// assertion would still pass on a dead link.
-			expect( headerData.sectionSecondaryAction ).toEqual( expect.objectContaining( { label: 'Institutions', href: '#/institutions' } ) );
-		} else {
-			expect( headerData.sectionSecondaryAction ).toBeUndefined();
-			// The kebab entry must also still navigate, not just carry a label.
-			const institutionsItem = headerData.sectionMenu.find( item => item.label === 'Institutions' );
-			expect( institutionsItem ).toEqual( expect.objectContaining( { href: '#/institutions' } ) );
-		}
+	it( 'describes the screen in the page subtitle', () => {
+		mockWizardData = { gates: gatesOfLength( 1 ), config: {} };
+		render( <ContentGates updateGatesData={ () => {} } /> );
+
+		const headerData = lastHeaderData();
+		expect( headerData.subTitle ).toEqual( expect.any( String ) );
+		expect( headerData.subTitle ).not.toBe( '' );
+		expect( headerData.sectionDescription ).toBeUndefined();
 	} );
 } );
