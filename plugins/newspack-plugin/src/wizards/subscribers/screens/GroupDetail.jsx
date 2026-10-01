@@ -199,8 +199,8 @@ function GroupDetailView() {
 				{ label: GROUP_LABEL_PLURAL, url: groupsHref },
 				{
 					label: ownerName
-						? /* translators: 1: subscription product name, 2: name of the group owner. */
-						  sprintf( _x( '%1$s (%2$s)', 'group plan and owner', 'newspack-plugin' ), group.plan, ownerName )
+						? /* translators: 1: group name, 2: name of the group owner. */
+						  sprintf( _x( '%1$s (%2$s)', 'group name and owner', 'newspack-plugin' ), group.plan, ownerName )
 						: group.plan,
 				},
 			],
