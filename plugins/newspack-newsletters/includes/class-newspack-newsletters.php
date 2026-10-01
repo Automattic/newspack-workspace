@@ -907,7 +907,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_layouts' ],
-				'permission_callback' => [ __CLASS__, 'api_can_author_posts' ],
+				'permission_callback' => [ __CLASS__, 'api_contributor_permissions_check' ],
 				'args'                => [
 					'defaults_only' => [
 						'type'        => 'boolean',
@@ -946,7 +946,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_set_color_palette' ],
-				'permission_callback' => [ __CLASS__, 'api_can_author_posts' ],
+				'permission_callback' => [ __CLASS__, 'api_contributor_permissions_check' ],
 			]
 		);
 
@@ -956,7 +956,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_get_mjml' ],
-				'permission_callback' => [ __CLASS__, 'api_can_edit_target_post' ],
+				'permission_callback' => [ __CLASS__, 'api_target_post_permissions_check' ],
 				'args'                => [
 					'post_id' => [
 						'required'          => true,
@@ -1264,7 +1264,7 @@ final class Newspack_Newsletters {
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
 	 */
-	public static function api_can_edit_target_post( $request ) {
+	public static function api_target_post_permissions_check( $request ) {
 		$post_id = (int) $request->get_param( 'post_id' );
 		if ( $post_id && current_user_can( 'edit_post', $post_id ) ) {
 			return true;
@@ -1279,17 +1279,22 @@ final class Newspack_Newsletters {
 	}
 
 	/**
-	 * Permission check for non-post authoring reads needed to load the
-	 * editor (e.g. the `layouts` list of saved templates). Any user who can
-	 * author posts may use them. These surface editor-support content; the
-	 * one field that carries send/audience configuration (`campaign_defaults`)
-	 * is stripped from the layouts payload for roles below `edit_others_posts`
-	 * in api_get_layouts(), so this relaxed check does not broaden that surface.
+	 * Permission check for the non-post routes the editor calls on load: the
+	 * `layouts` list of saved templates (GET) and `color-palette` (POST). Any
+	 * user who can author posts (`edit_posts`) passes. It does not authorize
+	 * either route's sensitive part on its own: the one layouts field that
+	 * carries send/audience configuration (`campaign_defaults`) is stripped for
+	 * roles below `edit_others_posts` in api_get_layouts(), and the palette
+	 * write is checked separately in api_set_color_palette()
+	 * (`edit_others_posts`, filterable).
+	 *
+	 * The stricter sibling is api_authoring_permissions_check()
+	 * (`edit_others_posts`).
 	 *
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
 	 */
-	public static function api_can_author_posts( $request ) {
+	public static function api_contributor_permissions_check( $request ) {
 		unset( $request );
 		if ( current_user_can( 'edit_posts' ) ) {
 			return true;
@@ -1306,27 +1311,27 @@ final class Newspack_Newsletters {
 	/**
 	 * Permission check for post-scoped authoring routes.
 	 *
-	 * @deprecated 3.42 Use Newspack_Newsletters::api_can_edit_target_post().
+	 * @deprecated 3.42 Use Newspack_Newsletters::api_target_post_permissions_check().
 	 *
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
 	 */
 	public static function api_edit_post_permissions_check( $request ) {
-		_deprecated_function( __METHOD__, '3.42', 'Newspack_Newsletters::api_can_edit_target_post' );
-		return self::api_can_edit_target_post( $request );
+		_deprecated_function( __METHOD__, '3.42', 'Newspack_Newsletters::api_target_post_permissions_check' );
+		return self::api_target_post_permissions_check( $request );
 	}
 
 	/**
-	 * Permission check for non-post authoring reads needed to load the editor.
+	 * Permission check for the non-post routes the editor calls on load.
 	 *
-	 * @deprecated 3.42 Use Newspack_Newsletters::api_can_author_posts().
+	 * @deprecated 3.42 Use Newspack_Newsletters::api_contributor_permissions_check().
 	 *
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
 	 */
 	public static function api_edit_posts_permissions_check( $request ) {
-		_deprecated_function( __METHOD__, '3.42', 'Newspack_Newsletters::api_can_author_posts' );
-		return self::api_can_author_posts( $request );
+		_deprecated_function( __METHOD__, '3.42', 'Newspack_Newsletters::api_contributor_permissions_check' );
+		return self::api_contributor_permissions_check( $request );
 	}
 
 	/**

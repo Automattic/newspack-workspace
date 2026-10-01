@@ -35,7 +35,7 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 			]
 		);
 		wp_set_current_user( $author );
-		$this->assertTrue( \Newspack_Newsletters::api_can_edit_target_post( $this->mjml_request( $post_id ) ) );
+		$this->assertTrue( \Newspack_Newsletters::api_target_post_permissions_check( $this->mjml_request( $post_id ) ) );
 	}
 
 	/**
@@ -52,7 +52,7 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 			]
 		);
 		wp_set_current_user( $contributor );
-		$result = \Newspack_Newsletters::api_can_edit_target_post( $this->mjml_request( $post_id ) );
+		$result = \Newspack_Newsletters::api_target_post_permissions_check( $this->mjml_request( $post_id ) );
 		$this->assertWPError( $result );
 		$this->assertSame( 403, $result->get_error_data()['status'] );
 	}
@@ -63,7 +63,7 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 	public function test_post_mjml_denies_when_post_id_missing() {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
 		$request = new WP_REST_Request( 'POST', '/newspack-newsletters/v1/post-mjml' );
-		$this->assertWPError( \Newspack_Newsletters::api_can_edit_target_post( $request ) );
+		$this->assertWPError( \Newspack_Newsletters::api_target_post_permissions_check( $request ) );
 	}
 
 	/**
@@ -141,7 +141,7 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 	public function test_layouts_list_allows_contributor() {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
 		$request = new WP_REST_Request( 'GET', '/newspack-newsletters/v1/layouts' );
-		$this->assertTrue( \Newspack_Newsletters::api_can_author_posts( $request ) );
+		$this->assertTrue( \Newspack_Newsletters::api_contributor_permissions_check( $request ) );
 	}
 
 	/**
@@ -150,7 +150,7 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 	public function test_layouts_list_denies_subscriber() {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
 		$request = new WP_REST_Request( 'GET', '/newspack-newsletters/v1/layouts' );
-		$this->assertWPError( \Newspack_Newsletters::api_can_author_posts( $request ) );
+		$this->assertWPError( \Newspack_Newsletters::api_contributor_permissions_check( $request ) );
 	}
 
 	/**
@@ -214,9 +214,9 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The deprecated api_edit_post_permissions_check() alias still answers as
-	 * api_can_edit_target_post() does, for both an allowed and a denied user,
-	 * and reports its deprecation.
+	 * The deprecated api_edit_post_permissions_check() alias still allows the
+	 * post's owner and denies another contributor, as its replacement
+	 * api_target_post_permissions_check() does, and reports its deprecation.
 	 */
 	public function test_deprecated_edit_post_alias_matches_replacement() {
 		$this->setExpectedDeprecated( 'Newspack_Newsletters::api_edit_post_permissions_check' );
@@ -232,29 +232,25 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 		$request = $this->mjml_request( $post_id );
 
 		wp_set_current_user( $owner );
-		$this->assertTrue( \Newspack_Newsletters::api_can_edit_target_post( $request ) );
 		$this->assertTrue( \Newspack_Newsletters::api_edit_post_permissions_check( $request ) );
 
 		wp_set_current_user( $other );
-		$this->assertEquals( \Newspack_Newsletters::api_can_edit_target_post( $request ), \Newspack_Newsletters::api_edit_post_permissions_check( $request ) );
 		$this->assertWPError( \Newspack_Newsletters::api_edit_post_permissions_check( $request ) );
 	}
 
 	/**
-	 * The deprecated api_edit_posts_permissions_check() alias still answers as
-	 * api_can_author_posts() does, for both an allowed and a denied user, and
-	 * reports its deprecation.
+	 * The deprecated api_edit_posts_permissions_check() alias still allows a
+	 * contributor and denies a subscriber, as its replacement
+	 * api_contributor_permissions_check() does, and reports its deprecation.
 	 */
 	public function test_deprecated_edit_posts_alias_matches_replacement() {
 		$this->setExpectedDeprecated( 'Newspack_Newsletters::api_edit_posts_permissions_check' );
 		$request = new WP_REST_Request( 'GET', '/newspack-newsletters/v1/layouts' );
 
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
-		$this->assertTrue( \Newspack_Newsletters::api_can_author_posts( $request ) );
 		$this->assertTrue( \Newspack_Newsletters::api_edit_posts_permissions_check( $request ) );
 
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
-		$this->assertEquals( \Newspack_Newsletters::api_can_author_posts( $request ), \Newspack_Newsletters::api_edit_posts_permissions_check( $request ) );
 		$this->assertWPError( \Newspack_Newsletters::api_edit_posts_permissions_check( $request ) );
 	}
 }
