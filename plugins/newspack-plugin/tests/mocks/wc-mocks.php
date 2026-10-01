@@ -265,9 +265,15 @@ class WC_DateTime extends DateTime {
 class WC_Customer {
 	public $data = [];
 	public function __construct( $user_id ) {
+		// Real WC_Customer is backed by the WP user, and its date_created IS
+		// that user's user_registered. Deriving it here rather than stamping
+		// "now" keeps the two readings of a reader's registration date (the
+		// legacy pipeline reads the customer, the new one reads the user)
+		// from disagreeing by a second at a boundary.
+		$user = get_userdata( $user_id );
 		$this->data = [
 			'user_id'      => $user_id,
-			'date_created' => gmdate( 'Y-m-d H:i:s' ),
+			'date_created' => $user && ! empty( $user->user_registered ) ? $user->user_registered : gmdate( 'Y-m-d H:i:s' ),
 		];
 	}
 	public function get_id() {
@@ -649,6 +655,16 @@ class WC_Product {
 	public function get_description() {
 		return $this->data['description'] ?? '';
 	}
+	/**
+	 * Keyed by attribute slug, as WooCommerce stores it. An "Any <attribute>"
+	 * variation keeps the key with an empty value rather than dropping it.
+	 */
+	public function get_variation_attributes() {
+		return $this->data['variation_attributes'] ?? [];
+	}
+	public function get_category_ids() {
+		return $this->data['category_ids'] ?? [];
+	}
 	public function get_status() {
 		return $this->data['status'] ?? 'publish';
 	}
@@ -698,10 +714,16 @@ class WC_Product {
 	/**
 	 * Price reads apply their WooCommerce filters, as WC_Data::get_prop() does
 	 * in `view` context. Without this, code that filters a price and code that
-	 * reads one can disagree with no test able to see it.
+	 * reads one can disagree with no test able to see it. `edit` context returns
+	 * the stored price unfiltered, as WC_Data::get_prop() does.
+	 *
+	 * @param string $context `view` or `edit`.
 	 */
-	public function get_price() {
+	public function get_price( $context = 'view' ) {
 		$price = $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		if ( 'edit' === $context ) {
+			return $price;
+		}
 		return apply_filters( 'woocommerce_product_get_price', $price, $this );
 	}
 	public function set_price( $price ) {
@@ -904,8 +926,13 @@ class WC_Order {
 	public function get_id() {
 		return $this->data['id'];
 	}
+	public function get_edit_order_url() {
+		return admin_url( 'post.php?post=' . $this->get_id() . '&action=edit' );
+	}
 	public function get_customer_id() {
-		return $this->data['customer_id'];
+		// Real WC returns 0 for a guest order; a fixture built without a
+		// customer must read the same way when another suite's query walks it.
+		return $this->data['customer_id'] ?? 0;
 	}
 	public function get_meta( $field_name ) {
 		return isset( $this->meta[ $field_name ] ) ? $this->meta[ $field_name ] : '';
@@ -1768,10 +1795,13 @@ function wcs_get_subscriptions( $args = [] ) {
 function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args = [] ) {
 	// Minimal mock mirroring the real return shape: subscriptions keyed by their
 	// ID (so array_keys() yields subscription IDs), matched via WC_Subscription's
-	// `products` array (has_product()). `subscription_status`/paging args are
-	// ignored — extend here if a test needs them.
+	// `products` array (has_product()), ordered by ID as the real function's
+	// `ORDER BY order_items.order_id` does. `limit` is honoured because the plan
+	// filter relies on it to bound its scan in SQL; `offset` and
+	// `subscription_status` are ignored — extend here if a test needs them.
 	global $subscriptions_database;
 	$product_ids   = array_map( 'absint', (array) $product_ids );
+	$limit         = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
 	$subscriptions = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
 		if ( ! method_exists( $subscription, 'has_product' ) ) {
@@ -1783,6 +1813,10 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 				break;
 			}
 		}
+	}
+	ksort( $subscriptions );
+	if ( $limit > 0 ) {
+		$subscriptions = array_slice( $subscriptions, 0, $limit, true );
 	}
 	return $subscriptions;
 }
@@ -1889,12 +1923,9 @@ function wc_get_is_paid_statuses() {
 	return [ 'processing', 'completed' ];
 }
 function wc_get_orders( $args ) {
-	global $orders_database;
-	// For simplicity, this mock will only return a single page of results.
-	if ( isset( $args['page'] ) && $args['page'] > 1 ) {
-		return [];
-	}
-	$orders = $orders_database;
+	global $orders_database, $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
+	$wc_mocks_get_orders_calls = (int) $wc_mocks_get_orders_calls + 1;
+	$orders                    = $orders_database;
 	if ( isset( $args['customer_id'] ) ) {
 		// Filter by customer.
 		$orders = array_filter(
@@ -1965,7 +1996,11 @@ function wc_get_orders( $args ) {
 		}
 	);
 	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
-		$orders = array_slice( $orders, 0, (int) $args['limit'] );
+		// Real WC pages with `page` as a 1-based offset into the limited set. A test
+		// can set $wc_mocks_orders_ignore_page to model a store (or a filter on the
+		// query args) that hands back the same rows for every page.
+		$page   = ( empty( $wc_mocks_orders_ignore_page ) && isset( $args['page'] ) ) ? max( 1, (int) $args['page'] ) : 1;
+		$orders = array_slice( $orders, ( $page - 1 ) * (int) $args['limit'], (int) $args['limit'] );
 	}
 	return $orders;
 }

@@ -9,8 +9,6 @@ import { HashRouter } from 'react-router-dom';
  */
 import withWizardScreen from './';
 
-global.newspack_aux_data = { is_debug_mode: false };
-
 describe( 'withWizardScreen', () => {
 	it( 'falls back to a single headerText breadcrumb when no breadcrumbItems are provided', () => {
 		const WrappedComponent = () => <div>Body content</div>;

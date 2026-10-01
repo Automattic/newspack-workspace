@@ -359,8 +359,11 @@ class Group_Subscription_Teams_Invite {
 		// Answered before the reuse lookup below, which would otherwise hand a member
 		// back an invite they have already spent. generate_invite() refuses this case
 		// too, but only on the mint path.
+		// Existing membership is a fact independent of current eligibility, so it's checked
+		// against the raw member list -- not user_is_member(), which is eligibility-filtered and
+		// can only narrow via the newspack_group_subscription_user_is_member filter.
 		$invitee = get_user_by( 'email', $email );
-		if ( $invitee && Group_Subscription::user_is_member( $invitee->ID, $subscription ) ) {
+		if ( $invitee && in_array( (int) $invitee->ID, array_map( 'intval', Group_Subscription::get_members( $subscription ) ), true ) ) {
 			return self::spend_for_existing_member( $subscription, $email, (int) $invitee->ID );
 		}
 

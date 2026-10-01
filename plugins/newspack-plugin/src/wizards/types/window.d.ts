@@ -18,7 +18,6 @@ declare global {
 			};
 			preview_post: string;
 			preview_archive: string;
-			integrations_settings_enabled: boolean;
 			// Optional: only localized when the content-gifting and institutions
 			// features are available, so every read guards with `?.`.
 			available_products?: PurchasableProductOption[];
@@ -89,7 +88,7 @@ declare global {
 			audience_management_url?: string;
 		};
 		newspackAudienceIntegrations: {
-			integrations_settings_enabled: boolean;
+			esp_provider?: string;
 		};
 		newspackAudienceContentGates: {
 			api: string;

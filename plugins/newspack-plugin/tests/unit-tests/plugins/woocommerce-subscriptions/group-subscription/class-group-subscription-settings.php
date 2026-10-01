@@ -904,6 +904,29 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The render loop has no eligibility check left: any member holding group-subscription
+	 * meta renders as a row, regardless of role. An editor is the strongest fixture for
+	 * that, since editors are not eligible group members — if an eligibility gate crept
+	 * back into the render loop, this is the case that would regress, silently dropping
+	 * the row (and its Remove control) and stranding the still-occupied seat.
+	 */
+	public function test_metabox_renders_existing_member_who_became_ineligible() {
+		$owner_id     = self::factory()->user->create();
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ], [], [ 'customer_id' => $owner_id ] );
+		$member_id    = self::factory()->user->create( [ 'role' => 'editor' ] );
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+
+		$markup = $this->render_metabox( $subscription );
+
+		$this->assertStringContainsString(
+			'data-user-id="' . $member_id . '"',
+			$markup,
+			'An existing member who becomes ineligible must still render as a row so the seat can be removed.'
+		);
+	}
+
+	/**
 	 * Saving a changed seat count rescales the subscription. No charge is raised:
 	 * readers buy seats through the switch, and this is the support-side correction.
 	 */

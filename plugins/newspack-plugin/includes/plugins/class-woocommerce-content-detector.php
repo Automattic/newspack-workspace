@@ -3,8 +3,10 @@
  * WooCommerce content detector.
  *
  * Detects whether the current front-end request renders WooCommerce content
- * (blocks or classic shortcodes) so the Perfmatters integration can veto the
- * "Disable WooCommerce Scripts" strip on those requests only. See NPPM-193.
+ * (blocks or classic shortcodes). Two consumers act on the answer: the
+ * Perfmatters integration vetoes its "Disable WooCommerce Scripts" strip on
+ * those requests, and newspack-theme enqueues its WooCommerce stylesheet on
+ * them. See NPPM-193 and NPPM-3004.
  *
  * @package Newspack
  */
@@ -59,9 +61,9 @@ class WooCommerce_Content_Detector {
 	/**
 	 * Whether the current request renders WooCommerce content.
 	 *
-	 * Fail-open: on any error, returns true (assume WooCommerce content present)
-	 * so the Perfmatters strip is vetoed and assets are kept — never strip on
-	 * doubt.
+	 * Fail-open: on any error, returns true (assume WooCommerce content present),
+	 * so the Perfmatters strip is vetoed and the theme stylesheet is enqueued.
+	 * Both consumers err toward keeping assets rather than dropping them.
 	 *
 	 * Scope: this detects WooCommerce content embedded in otherwise-non-WooCommerce
 	 * requests (a block/shortcode on a page, CPT, widget, or FSE template). It does
@@ -73,8 +75,13 @@ class WooCommerce_Content_Detector {
 	 *
 	 * Must be called once the main query and the FSE template are resolved (it reads
 	 * `get_queried_object()` and `$_wp_current_template_content`) and memoizes for
-	 * the request. The sole caller runs on `perfmatters_disable_woocommerce_scripts`
-	 * (wp_enqueue_scripts, priority 99), which satisfies that ordering.
+	 * the request. Both are settled at `template_include`, so any caller on
+	 * `wp_enqueue_scripts` or later satisfies that ordering at any priority.
+	 * Two callers do: the Perfmatters strip veto on
+	 * `perfmatters_disable_woocommerce_scripts` (priority 99), and newspack-theme's
+	 * stylesheet decision in `inc/woocommerce.php` (priority 10). The theme reaches
+	 * this through `class_exists()`/`method_exists()`, so renaming either the class
+	 * or this method silently returns it to shipping unstyled embedded content.
 	 *
 	 * @return bool
 	 */
@@ -95,18 +102,21 @@ class WooCommerce_Content_Detector {
 			// wp_enqueue_scripts that fail-open exists to prevent.
 			self::$memo = true;
 			try {
-				// newspack_log surfaces a *persistent* failure (perf win silently
-				// off site-wide) in Newspack Manager, not just local logs.
+				// newspack_log surfaces a *persistent* failure in Newspack Manager,
+				// not just local logs. The event is named for the detector rather
+				// than for a caller: a failure here reaches whichever consumers are
+				// active, and a Perfmatters-shaped event code sends whoever triages
+				// it to a plugin that may not be installed.
 				Logger::newspack_log(
-					'newspack_perfmatters_wc_detection_error',
-					'WooCommerce content detection failed; keeping WooCommerce assets (fail-open).',
+					'newspack_wc_content_detection_error',
+					'WooCommerce content detection failed; treating the request as carrying WooCommerce content (fail-open).',
 					[ 'error' => $e->getMessage() ],
 					'error'
 				);
 			} catch ( \Throwable $log_error ) {
 				// Last resort if a newspack_log listener throws: the local logger
 				// writes without dispatching an action, so fail-open still holds.
-				Logger::log( 'WooCommerce content detection fail-open log failed: ' . $log_error->getMessage(), 'NEWSPACK-PERFMATTERS', 'error' );
+				Logger::log( 'WooCommerce content detection fail-open log failed: ' . $log_error->getMessage(), 'NEWSPACK-WC-CONTENT-DETECTOR', 'error' );
 			}
 		}
 
@@ -150,8 +160,8 @@ class WooCommerce_Content_Detector {
 
 	/**
 	 * Whether markup contains any known WooCommerce shortcode. Relies on the
-	 * shortcode being registered (WooCommerce registers its shortcodes on `init`,
-	 * before wp_enqueue_scripts priority 99).
+	 * shortcode being registered; WooCommerce registers its shortcodes on `init`,
+	 * which precedes every caller the entry point's ordering rule admits.
 	 *
 	 * @param string $markup Markup/content.
 	 * @return bool
@@ -200,8 +210,9 @@ class WooCommerce_Content_Detector {
 	private static function scan_blocks( $blocks, &$visited, $depth = 0 ) {
 		if ( $depth > 100 ) {
 			// Runaway nesting is unexpected; fail open via the caller's catch
-			// (keep assets + log) rather than silently under-detecting and
-			// letting Perfmatters strip the assets.
+			// (keep assets + log) rather than silently under-detecting, which
+			// would let Perfmatters strip the assets and leave the theme
+			// shipping the content unstyled.
 			throw new \RuntimeException( 'WooCommerce content detection exceeded the maximum block nesting depth.' );
 		}
 		foreach ( $blocks as $block ) {
@@ -290,8 +301,10 @@ class WooCommerce_Content_Detector {
 
 	/**
 	 * Source: active block widgets. Scans only widgets assigned to active
-	 * sidebars; wp_inactive_widgets are deliberately skipped so orphaned widgets
-	 * cannot veto the Perfmatters strip site-wide.
+	 * sidebars; wp_inactive_widgets are deliberately skipped so an orphaned
+	 * widget cannot turn the answer true on every request. An active one does,
+	 * and should: it renders WooCommerce markup on every page, which without the
+	 * theme stylesheet would render unstyled.
 	 *
 	 * @param array $visited Reference set.
 	 * @return bool
@@ -337,7 +350,8 @@ class WooCommerce_Content_Detector {
 			return false;
 		}
 		// WordPress populates this global in locate_block_template() on the
-		// template_include filter — before wp_enqueue_scripts (priority 99) runs.
+		// template_include filter, which precedes every caller the entry point's
+		// ordering rule admits.
 		// Guard the empty/unset case (a classic/hybrid route on a block theme may
 		// leave it empty): treat as a clean miss, not an error.
 		// NOTE: underscore-prefixed core internal; re-verify on WP upgrades.

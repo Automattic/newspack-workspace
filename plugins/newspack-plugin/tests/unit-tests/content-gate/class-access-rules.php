@@ -247,6 +247,68 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Author/Contributor users are eligible group members by default (see
+	 * Group_Subscription::DEFAULT_ELIGIBLE_MEMBER_ROLES) precisely so they have a path
+	 * to content gated behind a group they were added to, even though they are neither
+	 * a reader nor the subscription's WooCommerce customer. A non-eligible role (editor)
+	 * added via the same raw member meta must not gain access, which proves the grant
+	 * is eligibility-scoped rather than a side effect of merely holding the meta.
+	 */
+	public function test_author_group_member_has_access_but_non_eligible_role_does_not() {
+		$author_id = $this->factory->user->create( [ 'role' => 'author' ] );
+		$editor_id = $this->factory->user->create( [ 'role' => 'editor' ] );
+
+		$subscription = $this->create_subscription();
+		$this->enable_group_subscription( $subscription );
+		$this->add_group_member( $author_id, $subscription->get_id() );
+		$this->add_group_member( $editor_id, $subscription->get_id() );
+
+		$this->assertTrue(
+			Access_Rules::has_active_subscription( $author_id, [ self::$product_id ] ),
+			'An Author group member should have access via group subscription, even though they are neither a reader nor the subscription owner.'
+		);
+		$this->assertFalse(
+			Access_Rules::has_active_subscription( $editor_id, [ self::$product_id ] ),
+			'A non-eligible role (editor) must not gain access merely by holding group-member meta -- the grant is eligibility-scoped.'
+		);
+	}
+
+	/**
+	 * Guarantees that revoking eligibility via the `newspack_group_subscription_member_eligible`
+	 * filter removes gated access for a user who already holds group-member meta. The
+	 * predicate that the filter modifies runs in `get_group_subscriptions_for_user()`
+	 * before that method's cache, so a publisher denying an already-added member must see
+	 * the denial take effect on the very next read, not just on future grants.
+	 */
+	public function test_filter_revocation_removes_group_access_for_existing_member() {
+		$author_id = $this->factory->user->create( [ 'role' => 'author' ] );
+
+		$subscription = $this->create_subscription();
+		$this->enable_group_subscription( $subscription );
+		$this->add_group_member( $author_id, $subscription->get_id() );
+
+		$this->assertTrue(
+			Access_Rules::has_active_subscription( $author_id, [ self::$product_id ] ),
+			'Premise: an Author group member has access via group subscription before any filter runs.'
+		);
+
+		$deny = function( $eligible, $user_id ) use ( $author_id ) {
+			if ( (int) $user_id === $author_id ) {
+				return false;
+			}
+			return $eligible;
+		};
+		add_filter( 'newspack_group_subscription_member_eligible', $deny, 10, 2 );
+
+		$this->assertFalse(
+			Access_Rules::has_active_subscription( $author_id, [ self::$product_id ] ),
+			'Revoking eligibility via the filter must remove access for a user who already holds group-member meta.'
+		);
+
+		remove_filter( 'newspack_group_subscription_member_eligible', $deny, 10 );
+	}
+
+	/**
 	 * Test evaluate_rules passes user_id to rule callbacks.
 	 */
 	public function test_evaluate_rules_with_explicit_user_id() {
@@ -955,6 +1017,150 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A draft or pending product stays selectable but is labeled with its status, so a
+	 * publisher can tell it from the products they sell. Its variations carry the parent's
+	 * marker, since they can't be bought while the parent is unavailable. A private product,
+	 * its (still published) variations, and a private variation under a published parent
+	 * are marked as private but not flagged ineligible, so a hidden legacy tier reads apart
+	 * from a current one without the "still grants access" warning.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_marks_unpublished_statuses() {
+		$statuses_by_id = [
+			960 => 'publish',
+			961 => 'private',
+			962 => 'draft',
+			963 => 'pending',
+		];
+		foreach ( $statuses_by_id as $id => $status ) {
+			wc_create_mock_product(
+				[
+					'id'     => $id,
+					'type'   => 'subscription',
+					'name'   => ucfirst( $status ) . ' tier',
+					'status' => $status,
+				]
+			);
+		}
+		wc_create_mock_product(
+			[
+				'id'     => 964,
+				'type'   => 'variable-subscription',
+				'name'   => 'Draft membership',
+				'status' => 'draft',
+			]
+		);
+		$variation_id = $this->create_variation_post( 964, 'Draft membership - Annual' );
+		// A disabled (private) variation under a draft parent: the parent's status wins.
+		$draft_private_variation_id = $this->create_variation_post( 964, 'Draft membership - Monthly', '', 'private' );
+		wc_create_mock_product(
+			[
+				'id'   => 965,
+				'type' => 'variable-subscription',
+				'name' => 'Membership',
+			]
+		);
+		$private_variation_id = $this->create_variation_post( 965, 'Membership - Legacy', '', 'private' );
+		wc_create_mock_product(
+			[
+				'id'     => 966,
+				'type'   => 'variable-subscription',
+				'name'   => 'Legacy membership',
+				'status' => 'private',
+			]
+		);
+		$hidden_tier_id = $this->create_variation_post( 966, 'Legacy membership - Annual' );
+
+		$options = array_column( Access_Rules::get_subscription_products_options(), null, 'value' );
+
+		$this->assertSame(
+			[
+				960                         => 'Publish tier',
+				961                         => 'Private tier [status: Private]',
+				962                         => 'Draft tier [invalid status: Draft]',
+				963                         => 'Pending tier [invalid status: Pending]',
+				964                         => 'Draft membership [invalid status: Draft]',
+				$variation_id               => 'Draft membership - Annual [invalid status: Draft]',
+				$draft_private_variation_id => 'Draft membership - Monthly [invalid status: Draft]',
+				965                         => 'Membership',
+				$private_variation_id       => 'Membership - Legacy [status: Private]',
+				966                         => 'Legacy membership [status: Private]',
+				$hidden_tier_id             => 'Legacy membership - Annual [status: Private]',
+			],
+			array_column( $options, 'label', 'value' )
+		);
+		$this->assertSame( [ 962, 963, 964, $variation_id, $draft_private_variation_id ], array_keys( array_filter( array_column( $options, 'ineligible', 'value' ) ) ), 'Only non-eligible products and their variations are flagged.' );
+	}
+
+	/**
+	 * A gate saved while a product was live keeps naming it after the product is
+	 * scheduled or trashed, since the rule still matches subscriptions to it. The rule's
+	 * options carry those products as label-only entries; the list the picker offers, and
+	 * that the CLI audit mirrors, does not.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_rule_options_name_scheduled_and_trashed_products_without_offering_them() {
+		$statuses_by_id = [
+			970 => 'publish',
+			971 => 'future',
+			972 => 'trash',
+		];
+		foreach ( $statuses_by_id as $id => $status ) {
+			wc_create_mock_product(
+				[
+					'id'     => $id,
+					'type'   => 'subscription',
+					'name'   => ucfirst( $status ) . ' tier',
+					'status' => $status,
+				]
+			);
+		}
+
+		$rule_options = array_column( Access_Rules::get_access_rules()['subscription']['options'], null, 'value' );
+
+		$this->assertSame( [ 970 ], array_column( Access_Rules::get_subscription_products_options(), 'value' ), 'The offered list leaves out scheduled and trashed products.' );
+		$this->assertSame( [ 970, 971, 972 ], array_keys( $rule_options ) );
+		$this->assertArrayNotHasKey( 'selectable', $rule_options[970] );
+		$this->assertSame(
+			[
+				'label'      => 'Future tier [invalid status: Scheduled]',
+				'value'      => 971,
+				'ineligible' => true,
+				'selectable' => false,
+			],
+			$rule_options[971]
+		);
+		$this->assertSame( 'Trash tier [invalid status: Trash]', $rule_options[972]['label'] );
+		$this->assertFalse( $rule_options[972]['selectable'] );
+	}
+
+	/**
+	 * WooCommerce trashes a variable subscription's variations along with it, so a gate
+	 * holding one of those variation IDs can only keep its name if the label-only entries
+	 * read trashed variations too.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_rule_options_name_variations_of_a_trashed_variable_subscription() {
+		wc_create_mock_product(
+			[
+				'id'     => 980,
+				'type'   => 'variable-subscription',
+				'name'   => 'Retired membership',
+				'status' => 'trash',
+			]
+		);
+		$variation_id = $this->create_variation_post( 980, 'Retired membership - Annual', '', 'trash' );
+
+		$rule_options = array_column( Access_Rules::get_access_rules()['subscription']['options'], null, 'value' );
+
+		$this->assertSame( 'Retired membership - Annual [invalid status: Trash]', $rule_options[ $variation_id ]['label'] ?? null );
+		$this->assertFalse( $rule_options[ $variation_id ]['selectable'] );
+	}
+
+	/**
 	 * The options are built once per request. `get_access_rules()` resolves every registered
 	 * rule's options callback on every call, and more than one admin screen localizes it, so
 	 * without the memo a request reaching it twice runs the full-catalog product query and
@@ -1090,6 +1296,151 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 			],
 			$sanitized_rule,
 			'A subscription rule\'s IDs should survive sanitizing whether or not the shop has products.'
+		);
+	}
+
+	/**
+	 * Test that a subscriber loses access when their group also carries an
+	 * institution rule naming nothing.
+	 *
+	 * The one case where reading an unconfigured rule as "matches nobody" takes
+	 * access away from readers who are paying for it. Rules AND within a group, so
+	 * the subscription rule no longer decides on its own. The gate save refuses
+	 * this shape, which leaves rows written before that check — and the block
+	 * attributes and CLI paths that never reach it.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_a_subscriber_is_denied_when_the_group_also_names_no_institution() {
+		$this->create_subscription();
+
+		$subscription_only = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ self::$product_id ],
+				],
+			],
+		];
+		$this->assertTrue(
+			Access_Rules::evaluate_rules( $subscription_only, self::$owner_user_id ),
+			'The subscriber passes a group holding only their subscription rule.'
+		);
+
+		$with_unconfigured_institution = [
+			[
+				[
+					'slug'  => 'subscription',
+					'value' => [ self::$product_id ],
+				],
+				[
+					'slug'  => 'institution',
+					'value' => [],
+				],
+			],
+		];
+		$this->assertFalse(
+			Access_Rules::evaluate_rules( $with_unconfigured_institution, self::$owner_user_id ),
+			'ANDing an institution rule that names nothing withholds access from the same subscriber.'
+		);
+	}
+
+	/**
+	 * Test that a rule the site no longer registers is skipped, not denied.
+	 *
+	 * A slug disappears from the registry whenever the integration that supplied
+	 * it is switched off — `Promoted_Fields::register()` adds one rule per enabled
+	 * field of each active integration. Reading such a rule as a failed condition
+	 * would take a gate the publisher cannot see or edit and have it deny every
+	 * reader, so the group is decided by the rules that are still real.
+	 *
+	 * Asserting the group passes is what separates "skipped" from "denied": a test
+	 * expecting false would be satisfied by either.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_an_unregistered_rule_is_skipped_rather_than_failing_its_group() {
+		$this->create_subscription();
+
+		$this->assertTrue(
+			Access_Rules::evaluate_rules(
+				[
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ self::$product_id ],
+						],
+						[
+							'slug'  => 'field_from_a_disabled_integration',
+							'value' => 'anything',
+						],
+					],
+				],
+				self::$owner_user_id
+			),
+			'The registered rule the reader passes decides the group.'
+		);
+	}
+
+	/**
+	 * Test that a logged-out visitor is judged by the anonymous evaluator.
+	 *
+	 * The two evaluators agree on every registered rule a gate can hold today, so
+	 * what this pins is the three shapes where they part. Two are shapes neither
+	 * the wizard nor the REST sanitizer produces and block attributes are never
+	 * checked for: a group with nothing in it, and a rule carrying no slug. The
+	 * third is a rule from an integration the site has switched off, which reaches
+	 * `evaluate_rule()`'s missing-callback branch — and that branch returns true
+	 * ahead of the anonymous check. In all three `evaluate_rules()` has no
+	 * condition to fail and reads the group as satisfied, which admits every
+	 * visitor. The anonymous evaluator treats all three as unconfigured.
+	 *
+	 * The unregistered case is deliberately asymmetric: skipped for a signed-in
+	 * reader (asserted in
+	 * test_an_unregistered_rule_is_skipped_rather_than_failing_its_group), denying
+	 * for a logged-out one. Pinned here so a later reconciliation of the two is a
+	 * decision rather than a tidy-up.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_evaluate_rules_for_visitor_judges_a_logged_out_visitor_anonymously() {
+		foreach ( [
+			'an empty group'                         => [ [] ],
+			'a rule carrying no slug'                => [ [ [ 'value' => 'orphan' ] ] ],
+			'a rule from a switched-off integration' => [
+				[
+					[
+						'slug'  => 'field_from_a_disabled_integration',
+						'value' => 'anything',
+					],
+				],
+			],
+		] as $description => $rules ) {
+			$this->assertTrue(
+				Access_Rules::evaluate_rules( $rules, 0 ),
+				"The direct evaluator reads {$description} as satisfied, which is what this routing keeps off the gating surfaces."
+			);
+			$this->assertFalse(
+				Access_Rules::evaluate_rules_for_visitor( $rules, 0 ),
+				"A logged-out visitor is denied by {$description}."
+			);
+		}
+
+		$institution_rule = [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [],
+				],
+			],
+		];
+		$this->assertFalse(
+			Access_Rules::evaluate_rules_for_visitor( $institution_rule, 0 ),
+			'An institution rule naming nothing denies a logged-out visitor.'
+		);
+		$this->assertFalse(
+			Access_Rules::evaluate_rules_for_visitor( $institution_rule, self::$owner_user_id ),
+			'And denies a logged-in reader, which is the asymmetry this issue is about.'
 		);
 	}
 }

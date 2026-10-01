@@ -7,19 +7,22 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
+import { select, useDispatch } from '@wordpress/data';
+import { useLayoutEffect, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
 import Wizard from './';
 import { useWizardData } from './store/utils';
+import { WIZARD_STORE_NAMESPACE } from './store';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
-// Both globals are localized onto every real wizard screen. The footer's
-// ExternalLink needs a string href, and the debug Notice reads aux data.
-window.newspack_aux_data = { is_debug_mode: false };
+// Localized onto every real wizard screen; the footer's ExternalLink needs a
+// string href.
 window.newspack_urls = { support: 'https://help.newspack.com/' };
+window.scrollTo = jest.fn();
 
 const SETTINGS = { minimumDonation: '5' };
 
@@ -152,5 +155,168 @@ describe( 'Wizard', () => {
 		expect( await screen.findByText( 'Static section' ) ).toBeInTheDocument();
 		await flushPending();
 		expect( counts.wizard ).toBe( 0 );
+	} );
+} );
+
+const NarrowingSection = () => {
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	useLayoutEffect( () => {
+		setHeaderData( { fullWidth: false } );
+	}, [ setHeaderData ] );
+	return <div>Narrowing section</div>;
+};
+
+const RecoveringSection = () => {
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const [ failed, setFailed ] = useState( true );
+	useLayoutEffect( () => {
+		setHeaderData( { fullWidth: failed ? false : undefined } );
+	}, [ setHeaderData, failed ] );
+	return <button onClick={ () => setFailed( false ) }>Retry</button>;
+};
+
+// Two sections, because that is what mounts ResetHeaderData: a single-section
+// wizard never exercises the reset these overrides have to survive.
+const widthSections = renderSection => [
+	{ label: 'List', path: '/', exact: true, fullWidth: true, render: renderSection },
+	{ label: 'Other', path: '/other', render: () => <div>Other section</div> },
+];
+
+describe( 'Wizard content width', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	it( 'renders full-width when the section declares it and nothing overrides it', async () => {
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<div>List content</div>
+				) ) }
+			/>
+		);
+
+		expect( await screen.findByText( 'List content' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-wizard__content' ) ).toHaveClass( 'newspack-wizard__content--full-width' );
+	} );
+
+	it( 'falls back to the standard width when a section overrides fullWidth before paint', async () => {
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<NarrowingSection />
+				) ) }
+			/>
+		);
+
+		expect( await screen.findByText( 'Narrowing section' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-wizard__content' ) ).not.toHaveClass( 'newspack-wizard__content--full-width' );
+	} );
+
+	it( 'restores the declared width when the section clears its override', async () => {
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<RecoveringSection />
+				) ) }
+			/>
+		);
+
+		const retry = await screen.findByRole( 'button', { name: 'Retry' } );
+		expect( container.querySelector( '.newspack-wizard__content' ) ).not.toHaveClass( 'newspack-wizard__content--full-width' );
+
+		fireEvent.click( retry );
+
+		await waitFor( () => expect( container.querySelector( '.newspack-wizard__content' ) ).toHaveClass( 'newspack-wizard__content--full-width' ) );
+	} );
+
+	it( 'keeps a section header published from a layout effect through the mount reset', async () => {
+		render(
+			<Wizard
+				headerText="Test wizard"
+				sections={ widthSections( () => (
+					<NarrowingSection />
+				) ) }
+			/>
+		);
+
+		expect( await screen.findByText( 'Narrowing section' ) ).toBeInTheDocument();
+		expect( select( WIZARD_STORE_NAMESPACE ).getHeaderData().fullWidth ).toBe( false );
+	} );
+} );
+
+describe( 'Wizard section tabs', () => {
+	const sections = [
+		{ label: 'List', path: '/', exact: true, render: () => <div>List content</div> },
+		{
+			path: '/items/:itemId/logs/:tab?',
+			isHidden: true,
+			render: () => <div>Logs content</div>,
+			tabbedNavigation: ( { itemId } ) => [
+				{ label: 'First Tab', path: `/items/${ itemId }/logs`, exact: true },
+				{ label: 'Second Tab', path: `/items/${ itemId }/logs/second`, exact: true },
+			],
+		},
+	];
+
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	afterEach( () => {
+		window.location.hash = '';
+	} );
+
+	it( 'shows the tabs a section builds from its route params while it matches', async () => {
+		window.location.hash = '#/items/42/logs/second';
+		render( <Wizard headerText="Test wizard" sections={ sections } /> );
+
+		expect( await screen.findByText( 'Logs content' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'tab', { name: 'First Tab' } ) ).toHaveAttribute( 'href', '#/items/42/logs' );
+		expect( screen.getByRole( 'tab', { name: 'Second Tab' } ) ).toHaveAttribute( 'aria-selected', 'true' );
+	} );
+
+	it( 'leaves the tabs out on a route the section does not match', async () => {
+		window.location.hash = '#/';
+		render( <Wizard headerText="Test wizard" sections={ sections } /> );
+
+		expect( await screen.findByText( 'List content' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'tab' ) ).toBeNull();
+	} );
+} );
+
+describe( 'Wizard section subtitle', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( {} );
+	} );
+
+	it( "shows the active section's subHeaderText in the header, falling back to the wizard's", async () => {
+		window.location.hash = '#/list';
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				subHeaderText="Wizard intro"
+				sections={ [
+					{ label: 'List', path: '/list', exact: true, subHeaderText: 'List intro', render: () => <div>List view</div> },
+					{ label: 'Item', path: '/list/:id', isHidden: true, render: () => <div>Item view</div> },
+				] }
+			/>
+		);
+		const subtitle = () => container.querySelector( '.newspack-page__header-subtitle' )?.textContent;
+
+		expect( await screen.findByText( 'List view' ) ).toBeInTheDocument();
+		expect( subtitle() ).toBe( 'List intro' );
+
+		act( () => {
+			window.location.hash = '#/list/esp';
+			window.dispatchEvent( new HashChangeEvent( 'hashchange' ) );
+		} );
+
+		expect( await screen.findByText( 'Item view' ) ).toBeInTheDocument();
+		expect( subtitle() ).toBe( 'Wizard intro' );
 	} );
 } );
