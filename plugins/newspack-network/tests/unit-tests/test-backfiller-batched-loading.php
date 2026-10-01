@@ -212,9 +212,9 @@ class TestBackfillerBatchedLoading extends \WP_UnitTestCase {
 	 */
 	public function data_runs_on_cache_that_cannot_free_in_memory_copy() {
 		return [
-			'more than one batch warns once, not once per batch' => [ [ 1, 2, 3 ], 1 ],
-			'a single batch has nothing to split'                => [ [ 1, 2 ], 0 ],
-			'an empty date range has nothing to split'           => [ [], 0 ],
+			'two batches warn once'                => [ [ 1, 2, 3 ], 1 ],
+			'one batch peaks like a freeing cache' => [ [ 1, 2 ], 0 ],
+			'nothing to backfill'                  => [ [], 0 ],
 		];
 	}
 
@@ -226,7 +226,7 @@ class TestBackfillerBatchedLoading extends \WP_UnitTestCase {
 	 * @param int[] $ids               IDs the run loads.
 	 * @param int   $expected_warnings Warnings the run should print.
 	 */
-	public function test_warns_when_cache_cannot_free_in_memory_copy( $ids, $expected_warnings ) {
+	public function test_warns_once_only_when_a_run_spans_more_than_one_batch( $ids, $expected_warnings ) {
 		iterator_to_array( $this->backfiller( false )->load( $ids, [ $this, 'load_item' ] ) );
 
 		$warnings = array_filter(
