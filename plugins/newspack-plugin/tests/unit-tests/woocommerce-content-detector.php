@@ -24,6 +24,15 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 	private $prior_products_shortcode = null;
 
 	/**
+	 * Block pattern slugs a test registered, unregistered on tearDown. The
+	 * pattern registry is an in-memory singleton, so like the shortcode
+	 * registry it outlives the test's DB transaction.
+	 *
+	 * @var string[]
+	 */
+	private $registered_patterns = [];
+
+	/**
 	 * Reset the detector's per-request memo and snapshot the shortcode registry.
 	 */
 	public function setUp(): void {
@@ -42,7 +51,49 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 			add_shortcode( 'products', $this->prior_products_shortcode );
 		}
 		$this->prior_products_shortcode = null;
+		$registry                       = WP_Block_Patterns_Registry::get_instance();
+		foreach ( $this->registered_patterns as $slug ) {
+			if ( $registry->is_registered( $slug ) ) {
+				$registry->unregister( $slug );
+			}
+		}
+		$this->registered_patterns = [];
 		parent::tearDown();
+	}
+
+	/**
+	 * Register a block pattern for the duration of one test.
+	 *
+	 * @param string $slug    Pattern slug.
+	 * @param string $content Pattern content.
+	 */
+	private function register_test_pattern( $slug, $content ) {
+		register_block_pattern(
+			$slug,
+			[
+				'title'   => $slug,
+				'content' => $content,
+			]
+		);
+		$this->registered_patterns[] = $slug;
+	}
+
+	/**
+	 * Visit a page with the given content and run the detector.
+	 *
+	 * @param string $content Page content.
+	 * @return bool
+	 */
+	private function detect_on_page( $content ) {
+		$page = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => $content,
+			]
+		);
+		$this->go_to( get_permalink( $page ) );
+		WooCommerce_Content_Detector::reset_memo();
+		return WooCommerce_Content_Detector::current_request_has_woocommerce_content();
 	}
 
 	/**
@@ -456,5 +507,179 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 		WooCommerce_Content_Detector::current_request_has_woocommerce_content();
 		$this->assertSame( $after_first, $reads, 'Second call must not re-read options (memoized).' );
 		$this->assertGreaterThan( 0, $after_first, 'Sanity: the widget source ran on the first call.' );
+	}
+
+	/**
+	 * A WooCommerce block inside a registered pattern referenced by core/pattern
+	 * is detected by resolving the slug through the pattern registry.
+	 */
+	public function test_detects_wc_block_in_core_pattern() {
+		$this->register_test_pattern( 'np-test/wc-pattern', '<!-- wp:woocommerce/product-category /-->' );
+		$this->assertTrue( $this->detect_on_page( '<!-- wp:pattern {"slug":"np-test/wc-pattern"} /-->' ) );
+	}
+
+	/**
+	 * A pattern that references another pattern is followed to the inner one.
+	 */
+	public function test_detects_wc_block_in_nested_core_pattern() {
+		$this->register_test_pattern( 'np-test/inner', '<!-- wp:woocommerce/product-category /-->' );
+		$this->register_test_pattern( 'np-test/outer', '<!-- wp:group --><div class="wp-block-group"><!-- wp:pattern {"slug":"np-test/inner"} /--></div><!-- /wp:group -->' );
+		$this->assertTrue( $this->detect_on_page( '<!-- wp:pattern {"slug":"np-test/outer"} /-->' ) );
+	}
+
+	/**
+	 * A pattern inside a template part referenced by the FSE template is detected.
+	 */
+	public function test_detects_wc_block_in_core_pattern_inside_template_part() {
+		switch_theme( 'twentytwentyfour' );
+		if ( ! function_exists( 'wp_is_block_theme' ) || ! wp_is_block_theme() ) {
+			switch_theme( WP_DEFAULT_THEME );
+			$this->markTestSkipped( 'No block theme available in this environment.' );
+		}
+		$this->register_test_pattern( 'np-test/part-pattern', '<!-- wp:woocommerce/product-category /-->' );
+
+		$theme   = get_stylesheet();
+		$slug    = 'np-test-pattern-part';
+		$part_id = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_template_part',
+				'post_status'  => 'publish',
+				'post_name'    => $slug,
+				'post_content' => '<!-- wp:pattern {"slug":"np-test/part-pattern"} /-->',
+				'post_title'   => 'NP Test Pattern Part',
+			]
+		);
+		wp_set_object_terms( $part_id, $theme, 'wp_theme' );
+
+		$clean = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '<p>clean</p>',
+			]
+		);
+		$this->go_to( get_permalink( $clean ) );
+		$GLOBALS['_wp_current_template_content'] = sprintf(
+			'<!-- wp:template-part {"slug":"%s","theme":"%s"} /-->',
+			$slug,
+			$theme
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		$result = WooCommerce_Content_Detector::current_request_has_woocommerce_content();
+
+		unset( $GLOBALS['_wp_current_template_content'] );
+		switch_theme( WP_DEFAULT_THEME );
+
+		$this->assertTrue( $result );
+	}
+
+	/**
+	 * Patterns that reference each other with no WooCommerce content terminate
+	 * (cycle guard) and are not detected.
+	 */
+	public function test_cyclic_core_patterns_terminate() {
+		$this->register_test_pattern( 'np-test/cycle-a', '<!-- wp:pattern {"slug":"np-test/cycle-b"} /-->' );
+		$this->register_test_pattern( 'np-test/cycle-b', '<!-- wp:pattern {"slug":"np-test/cycle-a"} /-->' );
+		$this->assertFalse( $this->detect_on_page( '<!-- wp:pattern {"slug":"np-test/cycle-a"} /-->' ) );
+	}
+
+	/**
+	 * A core/pattern naming an unregistered slug contributes nothing.
+	 */
+	public function test_unregistered_core_pattern_is_not_detected() {
+		$this->assertFalse( $this->detect_on_page( '<!-- wp:pattern {"slug":"np-test/not-registered"} /-->' ) );
+	}
+
+	/**
+	 * Point the request at a clean page and register the `products` shortcode, so
+	 * the only possible WooCommerce source is the widget a test sets up.
+	 */
+	private function go_to_clean_page_with_products_shortcode() {
+		add_shortcode( 'products', '__return_empty_string' );
+		$clean = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '<p>clean</p>',
+			]
+		);
+		$this->go_to( get_permalink( $clean ) );
+	}
+
+	/**
+	 * A WooCommerce shortcode in a classic Text widget in an ACTIVE sidebar is
+	 * detected.
+	 */
+	public function test_detects_wc_shortcode_in_active_text_widget() {
+		$this->go_to_clean_page_with_products_shortcode();
+		update_option(
+			'widget_block',
+			[ 2 => [ 'content' => '<!-- wp:paragraph --><p>nope</p><!-- /wp:paragraph -->' ] ]
+		);
+		update_option(
+			'widget_text',
+			[
+				3 => [
+					'title' => '',
+					'text'  => '[products limit="4"]',
+				],
+			]
+		);
+		wp_set_sidebars_widgets(
+			[
+				'sidebar-1'           => [ 'block-2', 'text-3' ],
+				'wp_inactive_widgets' => [],
+			]
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertTrue( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+	}
+
+	/**
+	 * The same Text widget, present only in wp_inactive_widgets, is not detected.
+	 */
+	public function test_inactive_text_widget_is_not_detected() {
+		$this->go_to_clean_page_with_products_shortcode();
+		update_option(
+			'widget_text',
+			[
+				3 => [
+					'title' => '',
+					'text'  => '[products limit="4"]',
+				],
+			]
+		);
+		wp_set_sidebars_widgets(
+			[
+				'sidebar-1'           => [],
+				'wp_inactive_widgets' => [ 'text-3' ],
+			]
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertFalse( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+	}
+
+	/**
+	 * A site with only classic widgets (no widget_block option at all) still has
+	 * its Text widgets scanned.
+	 */
+	public function test_text_widget_scanned_without_block_widgets() {
+		$this->go_to_clean_page_with_products_shortcode();
+		delete_option( 'widget_block' );
+		update_option(
+			'widget_text',
+			[
+				3 => [
+					'title' => '',
+					'text'  => '[products limit="4"]',
+				],
+			]
+		);
+		wp_set_sidebars_widgets(
+			[
+				'sidebar-1'           => [ 'text-3' ],
+				'wp_inactive_widgets' => [],
+			]
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertTrue( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
 	}
 }

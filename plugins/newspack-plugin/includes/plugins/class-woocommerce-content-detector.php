@@ -77,9 +77,9 @@ class WooCommerce_Content_Detector {
 	 * `get_queried_object()` and `$_wp_current_template_content`) and memoizes for
 	 * the request. Both are settled at `template_include`, so any caller on
 	 * `wp_enqueue_scripts` or later satisfies that ordering at any priority.
-	 * Two callers do: the Perfmatters strip veto on
-	 * `perfmatters_disable_woocommerce_scripts` (priority 99), and newspack-theme's
-	 * stylesheet decision in `inc/woocommerce.php` (priority 10). The theme reaches
+	 * Two callers do, both at the default priority 10: the Perfmatters strip veto on
+	 * `perfmatters_disable_woocommerce_scripts`, and newspack-theme's stylesheet
+	 * decision on `wp_enqueue_scripts` in `inc/woocommerce.php`. The theme reaches
 	 * this through `class_exists()`/`method_exists()`, so renaming either the class
 	 * or this method silently returns it to shipping unstyled embedded content.
 	 *
@@ -93,7 +93,7 @@ class WooCommerce_Content_Detector {
 		try {
 			$visited    = [];
 			self::$memo = self::scan_queried_post( $visited )
-				|| self::scan_active_block_widgets( $visited )
+				|| self::scan_active_widgets( $visited )
 				|| self::scan_fse_template( $visited );
 		} catch ( \Throwable $e ) {
 			// Fail open: keep WooCommerce assets. Set the memo BEFORE the (fallible)
@@ -176,7 +176,8 @@ class WooCommerce_Content_Detector {
 	}
 
 	/**
-	 * Follow core/template-part and core/block references found in markup.
+	 * Follow core/template-part, core/block and core/pattern references found in
+	 * markup.
 	 *
 	 * @param string $markup  Block markup.
 	 * @param array  $visited Reference set.
@@ -184,20 +185,22 @@ class WooCommerce_Content_Detector {
 	 */
 	private static function expand_references( $markup, &$visited ) {
 		$has_part = str_contains( $markup, '<!-- wp:template-part' );
-		// 'wp:block ' (with the trailing space) matches only core/block: block names
-		// are slash-separated namespace/name, so a space after 'wp:block' appears
-		// only when the block name is exactly 'block' (core/block, always serialized
-		// with a ref attr). Avoids parsing markup that has no references.
-		$has_pattern = str_contains( $markup, '<!-- wp:block ' );
-		if ( ( ! $has_part && ! $has_pattern ) || ! function_exists( 'parse_blocks' ) ) {
+		// 'wp:block ' and 'wp:pattern ' (with the trailing space) match only
+		// core/block and core/pattern: block names are slash-separated
+		// namespace/name, so a space after the name appears only when it is exactly
+		// 'block' or 'pattern' (each always serialized with an attribute, ref or
+		// slug). Avoids parsing markup that has no references.
+		$has_synced  = str_contains( $markup, '<!-- wp:block ' );
+		$has_pattern = str_contains( $markup, '<!-- wp:pattern ' );
+		if ( ( ! $has_part && ! $has_synced && ! $has_pattern ) || ! function_exists( 'parse_blocks' ) ) {
 			return false;
 		}
 		return self::scan_blocks( parse_blocks( $markup ), $visited );
 	}
 
 	/**
-	 * Recurse a parsed block tree, resolving template-part and synced-pattern
-	 * references. The visited set guards reference cycles; $depth bounds runaway
+	 * Recurse a parsed block tree, resolving template-part, synced-pattern and
+	 * registered-pattern references. The visited set guards reference cycles; $depth bounds runaway
 	 * innerBlocks nesting (which carries no reference identity to track).
 	 *
 	 * @param array $blocks  Parsed blocks.
@@ -225,6 +228,11 @@ class WooCommerce_Content_Detector {
 				}
 			} elseif ( 'core/template-part' === $name ) {
 				$content = self::resolve_template_part( $block, $visited );
+				if ( null !== $content && self::markup_has_woocommerce( $content, $visited ) ) {
+					return true;
+				}
+			} elseif ( 'core/pattern' === $name ) {
+				$content = self::resolve_registered_pattern( $block, $visited );
 				if ( null !== $content && self::markup_has_woocommerce( $content, $visited ) ) {
 					return true;
 				}
@@ -256,6 +264,36 @@ class WooCommerce_Content_Detector {
 		$visited[ $key ] = true;
 		$post            = get_post( $ref );
 		return ( $post instanceof \WP_Post && 'wp_block' === $post->post_type ) ? $post->post_content : null;
+	}
+
+	/**
+	 * Resolve a core/pattern block to its registered pattern's content, the same
+	 * registry lookup render_block_core_pattern() does. An unregistered slug
+	 * renders nothing there, so it contributes nothing here.
+	 *
+	 * @param array $block   The core/pattern block.
+	 * @param array $visited Reference set.
+	 * @return string|null Content, or null if unresolvable or already visited.
+	 */
+	private static function resolve_registered_pattern( $block, &$visited ) {
+		if ( ! class_exists( 'WP_Block_Patterns_Registry' ) ) {
+			return null;
+		}
+		$slug = isset( $block['attrs']['slug'] ) ? (string) $block['attrs']['slug'] : '';
+		if ( '' === $slug ) {
+			return null;
+		}
+		$key = 'pattern:' . $slug;
+		if ( isset( $visited[ $key ] ) ) {
+			return null;
+		}
+		$visited[ $key ] = true;
+		$registry        = \WP_Block_Patterns_Registry::get_instance();
+		if ( ! $registry->is_registered( $slug ) ) {
+			return null;
+		}
+		$pattern = $registry->get_registered( $slug );
+		return ( is_array( $pattern ) && isset( $pattern['content'] ) && is_string( $pattern['content'] ) ) ? $pattern['content'] : null;
 	}
 
 	/**
@@ -300,22 +338,30 @@ class WooCommerce_Content_Detector {
 	}
 
 	/**
-	 * Source: active block widgets. Scans only widgets assigned to active
-	 * sidebars; wp_inactive_widgets are deliberately skipped so an orphaned
-	 * widget cannot turn the answer true on every request. An active one does,
-	 * and should: it renders WooCommerce markup on every page, which without the
-	 * theme stylesheet would render unstyled.
+	 * Source: active widgets. Scans block widgets (any WooCommerce block or
+	 * shortcode, following references) and classic Text widgets (shortcodes only:
+	 * Text widget content is not run through do_blocks, so block markup in it
+	 * never renders as a block). Each option is read on its own, so a site with
+	 * only one kind of widget is still scanned.
+	 *
+	 * Only widgets assigned to active sidebars count; wp_inactive_widgets are
+	 * deliberately skipped so an orphaned widget cannot turn the answer true on
+	 * every request. An active one does, and should: it renders WooCommerce markup
+	 * on every page, which without the theme stylesheet would render unstyled.
 	 *
 	 * @param array $visited Reference set.
 	 * @return bool
 	 */
-	private static function scan_active_block_widgets( &$visited ) {
+	private static function scan_active_widgets( &$visited ) {
 		$sidebars = wp_get_sidebars_widgets();
 		if ( empty( $sidebars ) || ! is_array( $sidebars ) ) {
 			return false;
 		}
-		$instances = get_option( 'widget_block', [] );
-		if ( empty( $instances ) || ! is_array( $instances ) ) {
+		$block_instances = get_option( 'widget_block', [] );
+		$block_instances = is_array( $block_instances ) ? $block_instances : [];
+		$text_instances  = get_option( 'widget_text', [] );
+		$text_instances  = is_array( $text_instances ) ? $text_instances : [];
+		if ( empty( $block_instances ) && empty( $text_instances ) ) {
 			return false;
 		}
 		foreach ( $sidebars as $sidebar_id => $widget_ids ) {
@@ -324,15 +370,24 @@ class WooCommerce_Content_Detector {
 				continue;
 			}
 			foreach ( $widget_ids as $widget_id ) {
-				if ( ! preg_match( '/^block-(\d+)$/', (string) $widget_id, $matches ) ) {
+				if ( ! preg_match( '/^(block|text)-(\d+)$/', (string) $widget_id, $matches ) ) {
 					continue;
 				}
-				$index = (int) $matches[1];
-				if ( empty( $instances[ $index ]['content'] ) ) {
-					continue;
-				}
-				if ( self::markup_has_woocommerce( $instances[ $index ]['content'], $visited ) ) {
-					return true;
+				$index = (int) $matches[2];
+				if ( 'block' === $matches[1] ) {
+					if ( empty( $block_instances[ $index ]['content'] ) ) {
+						continue;
+					}
+					if ( self::markup_has_woocommerce( $block_instances[ $index ]['content'], $visited ) ) {
+						return true;
+					}
+				} else {
+					if ( empty( $text_instances[ $index ]['text'] ) || ! is_string( $text_instances[ $index ]['text'] ) ) {
+						continue;
+					}
+					if ( self::markup_has_wc_shortcode( $text_instances[ $index ]['text'] ) ) {
+						return true;
+					}
 				}
 			}
 		}
