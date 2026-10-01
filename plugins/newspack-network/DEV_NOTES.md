@@ -103,7 +103,7 @@ All three travel the same way, as events from the site that owns the data: `news
 
 A seat fails the strict subscription check on purpose: newspack-plugin's access attribution runs it to tell an owner from a group member.
 
-Two limits are known. A status change on a very large group sends one event per member at the end of the request, and the seat backfill repairs any that didn't send. Trashing a paid one-time order (as opposed to refunding or cancelling it) sends no event.
+Two limits are known. A status change on a very large group sends one event per member at the end of the request, and the seat backfill repairs any that didn't send. Trashing a paid one-time order (as opposed to refunding or cancelling it) sends no event, and neither does a refund of an order whose product has since been deleted; in both cases other sites keep the grant until the gate's own duration runs out.
 
 To roll this out, go in this order:
 
