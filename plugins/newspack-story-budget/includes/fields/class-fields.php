@@ -613,8 +613,8 @@ class Fields {
 	 * or `include`, otherwise the image attachments of the post named by `id`,
 	 * minus `exclude`. It deliberately differs from the rendered gallery in
 	 * three ways: an `id` that is missing or not a positive integer means the
-	 * story, never post_parent 0; an `ids` or `include` list such as "," that
-	 * holds no valid IDs counts nothing, where core lists images from the whole
+	 * story, never post_parent 0; an `ids` or `include` list of only separators,
+	 * such as ",", counts nothing, where core lists images from the whole
 	 * library; and the count does not depend on whether the current user can
 	 * view the post the gallery reads from (core renders nothing for a
 	 * password-protected or unpublished post the visitor cannot read).
