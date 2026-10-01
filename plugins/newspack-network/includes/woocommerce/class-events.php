@@ -132,18 +132,32 @@ class Events {
 		$result['next_payment_date'] = $item->get_date( 'next_payment_date' );
 		$result['last_payment_date'] = $item->get_date( 'last_order_date_created' );
 		$result['end_date'] = $item->get_date( 'end_date' );
-		$result['products'] = [];
+		$result['products'] = self::get_subscription_products( $item );
 
-		$items = $item->get_items();
-		foreach ( $items as $item ) {
+		return $result;
+	}
+
+	/**
+	 * A subscription's products, keyed by ID.
+	 *
+	 * Line items whose product was deleted are left out rather than failing the event.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @return array[] Each with id, name and slug.
+	 */
+	public static function get_subscription_products( $subscription ) {
+		$products = [];
+		foreach ( $subscription->get_items() as $item ) {
 			$product = $item->get_product();
-			$result['products'][ $product->get_id() ] = [
+			if ( ! $product ) {
+				continue;
+			}
+			$products[ $product->get_id() ] = [
 				'id'   => $product->get_id(),
 				'name' => $product->get_name(),
 				'slug' => $product->get_slug(),
 			];
 		}
-
-		return $result;
+		return $products;
 	}
 }
