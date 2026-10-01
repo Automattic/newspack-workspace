@@ -53,20 +53,22 @@ class Premium_Newsletters {
 	 * Queue-entry source tags. Each access-check queue entry records which event
 	 * enqueued it so that downstream logic (e.g. consulting the renewal snapshot)
 	 * can be scoped to the originating event instead of leaking into unrelated
-	 * flows that happen to dequeue the same user.
+	 * flows that happen to dequeue the same user. A plan-switch entry is
+	 * remove-only: check_access() never adds lists for it, and it never replaces
+	 * another entry for the same user.
 	 */
 	const SOURCE_RENEWAL              = 'renewal';
 	const SOURCE_SUBSCRIPTION_CHANGED = 'subscription_changed';
 	const SOURCE_DONATION_CHANGED     = 'donation_changed';
 	const SOURCE_READER_VERIFIED      = 'reader_verified';
 	const SOURCE_GROUP_MEMBERSHIP     = 'group_membership';
+	const SOURCE_PLAN_SWITCH          = 'plan_switch';
 
 	/**
 	 * User meta key for the renewal-time snapshot of the contact's full ESP list
-	 * membership. Captured by set_subscribed_lists() when a renewal fires, and for
-	 * group members by maybe_enqueue_access_check() when their group switches plans;
-	 * consulted by check_access() to suppress auto-signup of any restricted list the
-	 * contact had unsubscribed from before then. Cleared after a successful access
+	 * membership. Captured by set_subscribed_lists() when a renewal fires; consulted
+	 * by check_access() to suppress auto-signup of any restricted list the contact
+	 * had unsubscribed from before the renewal. Cleared after a successful access
 	 * check. Note: this stores the contact's complete ESP list set, not only the
 	 * restricted lists — the auto-signup branch filters down to restricted lists
 	 * at check time.
@@ -317,8 +319,7 @@ class Premium_Newsletters {
 	 * Check list access for the user.
 	 *
 	 * The renewal snapshot is only consulted when this access check was enqueued
-	 * with the renewal source (source === SOURCE_RENEWAL): by a renewal, or for group
-	 * members, by a plan switch. Other event flows that
+	 * by a renewal event (source === SOURCE_RENEWAL). Other event flows that
 	 * happen to dequeue the same user must not be silently filtered by a snapshot
 	 * that was captured for a different reason.
 	 *
@@ -346,9 +347,10 @@ class Premium_Newsletters {
 		$subscribed_lists = $is_renewal_check
 			? get_user_meta( $user_id, self::SUBSCRIBED_LISTS_META_KEY, true )
 			: '';
-		$auto_signup      = (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
-		$lists_to_add     = [];
-		$lists_to_remove  = [];
+		// A plan-switch check only removes lists; see maybe_enqueue_access_check().
+		$auto_signup     = self::SOURCE_PLAN_SWITCH !== $source && (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		$lists_to_add    = [];
+		$lists_to_remove = [];
 
 		// When a renewal snapshot is present we need to compare each restricted list's
 		// public ID against the snapshot. Build the local→public map once per run so
@@ -461,8 +463,9 @@ class Premium_Newsletters {
 
 		if ( null === $existing_index ) {
 			$queue[] = $new_entry;
-		} elseif ( self::SOURCE_RENEWAL !== $existing_source ) {
-			// Never downgrade an existing renewal entry.
+		} elseif ( self::SOURCE_RENEWAL !== $existing_source && self::SOURCE_PLAN_SWITCH !== $source ) {
+			// Never downgrade an existing renewal entry, and never let a remove-only
+			// plan-switch entry replace a check that can add lists.
 			$queue[ $existing_index ] = $new_entry;
 		}
 
@@ -619,16 +622,10 @@ class Premium_Newsletters {
 
 	/**
 	 * Snapshot a reader's current lists and queue their renewal-source access check.
-	 * Used for renewals, and for group members when their group switches plans.
 	 *
-	 * @param \WP_User $user The reader to check.
+	 * @param \WP_User $user The reader whose access the renewal decides.
 	 */
 	private static function snapshot_lists_and_enqueue_renewal_check( $user ) {
-		// The snapshot costs a remote ESP round-trip, and it only informs a check
-		// that can't run while access control is inactive.
-		if ( ! self::is_access_control_active() ) {
-			return;
-		}
 		// Capture the renewal-time snapshot when auto-signup is enabled. Without
 		// auto-signup the snapshot has no effect (check_access only consults it
 		// inside the auto-signup branch), so skip the ESP fetch in that case.
@@ -705,21 +702,15 @@ class Premium_Newsletters {
 		if ( ! self::event_changes_group_access( $data ) ) {
 			return;
 		}
-		// A plan switch reports the same status on both sides, so it can't show
-		// whether the products that grant access changed; a seat-count change
-		// doesn't change them. Checking members against their lists from before the
-		// switch keeps auto-signup from re-adding lists they left, while a downgrade
-		// still removes lists the new plan doesn't cover.
+		// A plan switch keeps the same status on both sides, so the event can't tell
+		// a seat-count change, which leaves access alone, from a move to other
+		// products. Members get a remove-only check: a downgrade still takes away
+		// lists the new plan doesn't cover, and auto-signup can't re-add lists they
+		// left. The cost is that an upgrade doesn't auto-add newly covered lists for
+		// existing members, though the owner, checked the usual way, gets them.
 		$is_plan_switch = ! empty( $data['status_before'] ) && ( $data['status_after'] ?? '' ) === $data['status_before'];
 		foreach ( self::get_group_member_ids( $data ) as $member_id ) {
-			if ( ! $is_plan_switch ) {
-				self::add_user_to_queue( $member_id, $source );
-				continue;
-			}
-			$member = get_user_by( 'id', $member_id );
-			if ( $member ) {
-				self::snapshot_lists_and_enqueue_renewal_check( $member );
-			}
+			self::add_user_to_queue( $member_id, $is_plan_switch ? self::SOURCE_PLAN_SWITCH : $source );
 		}
 	}
 
@@ -731,8 +722,8 @@ class Premium_Newsletters {
 	 * re-add every premium list a member had left whenever auto-signup is on. Any
 	 * other move may change access: On hold still grants it while a payment retry is
 	 * pending, so On hold to Expired, the last step of a lapse after failed
-	 * payments, ends it. A plan switch reports the same status on both sides, but it
-	 * changes the products, so it counts as a change too.
+	 * payments, ends it. A plan switch reports the same status on both sides but
+	 * may change the products, so it counts as a change too.
 	 *
 	 * The status pair can't show payment recovery, so On hold to Active after a
 	 * successful retry still checks members, as it does the owner.
