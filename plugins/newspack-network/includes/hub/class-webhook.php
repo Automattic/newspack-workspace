@@ -88,6 +88,12 @@ class Webhook {
 			return new WP_REST_Response( array( 'error' => 'INVALID_SIGNATURE' ), 403 );
 		}
 
+		// A delivery the Node could sign shows it holds its key, which also covers
+		// Nodes linked before pairing was recorded or by pasting the key.
+		if ( ! $node->is_paired() ) {
+			$node->mark_paired();
+		}
+
 		$verified_data = json_decode( $verified_data, true );
 
 		if ( empty( $verified_data ) ) {
@@ -120,6 +126,8 @@ class Webhook {
 			$error = Used_Nonces::STATUS_PENDING === $claim ? 'Delivery is already being processed.' : 'Could not record delivery.';
 			return new WP_REST_Response( array( 'error' => $error ), 500 );
 		}
+
+		self::maybe_log_node_origin( $node );
 
 		$incoming_event_class = 'Newspack_Network\\Incoming_Events\\' . $incoming_events[ $action ];
 
@@ -170,5 +178,55 @@ class Webhook {
 		}
 
 		return new WP_REST_Response( 'success' );
+	}
+
+	/**
+	 * Logs a line when the sending Node's author is not currently an administrator.
+	 *
+	 * Nodes are managed by administrators, so a Node whose author is missing or
+	 * is not one is worth a look. The event is processed either way; the line
+	 * points an administrator at the Node, at most once a day per Node. It goes
+	 * through newspack_log because Debugger::log() writes only when
+	 * NEWSPACK_NETWORK_DEBUG is defined.
+	 *
+	 * @param Node $node The Node the event came from.
+	 * @return void
+	 */
+	private static function maybe_log_node_origin( $node ) {
+		$author_id = (int) get_post_field( 'post_author', $node->get_id() );
+		if ( $author_id && user_can( $author_id, 'manage_options' ) ) {
+			return;
+		}
+
+		$throttle_key = 'newspack_network_node_origin_logged_' . $node->get_id();
+		if ( get_transient( $throttle_key ) ) {
+			return;
+		}
+		set_transient( $throttle_key, 1, DAY_IN_SECONDS );
+
+		$message = sprintf(
+			'Network node %d (%s) has no author who is currently an administrator; review it under Network > Nodes.',
+			$node->get_id(),
+			$node->get_url()
+		);
+		Debugger::log( $message );
+		if ( ! method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+			return;
+		}
+		// A newspack_log listener that throws must not change how the delivery is
+		// handled: this runs while the delivery's claim is held.
+		try {
+			\Newspack\Logger::newspack_log(
+				'newspack_network_node_origin',
+				$message,
+				[
+					'node_id'  => $node->get_id(),
+					'node_url' => $node->get_url(),
+				],
+				'warning'
+			);
+		} catch ( \Throwable $e ) {
+			Debugger::log( 'Could not log the node origin: ' . $e->getMessage() );
+		}
 	}
 }

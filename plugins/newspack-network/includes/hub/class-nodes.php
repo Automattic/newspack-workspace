@@ -132,7 +132,31 @@ class Nodes {
 			'items_list_navigation' => __( 'Items list navigation', 'newspack-network' ),
 			'filter_items_list'     => __( 'Filter items list', 'newspack-network' ),
 		);
-		$args   = array(
+		// Managing nodes takes the same capability as the Network menu they sit
+		// under. map_meta_cap is deliberately left off: with it on, core would
+		// register manage_options as this post type's meta capability and resolve
+		// every manage_options check on the site as a post check.
+		$capabilities = array_fill_keys(
+			[
+				'edit_post',
+				'read_post',
+				'delete_post',
+				'read',
+				'edit_posts',
+				'edit_others_posts',
+				'edit_private_posts',
+				'edit_published_posts',
+				'delete_posts',
+				'delete_others_posts',
+				'delete_private_posts',
+				'delete_published_posts',
+				'publish_posts',
+				'read_private_posts',
+				'create_posts',
+			],
+			'manage_options'
+		);
+		$args         = array(
 			'label'                => __( 'Nodes', 'newspack-network' ),
 			'description'          => __( 'Newspack Nodes', 'newspack-network' ),
 			'labels'               => $labels,
@@ -142,7 +166,7 @@ class Nodes {
 			'show_ui'              => true,
 			'show_in_menu'         => Network_Admin::PAGE_SLUG,
 			'can_export'           => false,
-			'capability_type'      => 'page',
+			'capabilities'         => $capabilities,
 			'show_in_rest'         => false,
 			'delete_with_user'     => false,
 			'register_meta_box_cb' => [ __CLASS__, 'add_metabox' ],
@@ -209,9 +233,24 @@ class Nodes {
 		</div>
 
 		<?php if ( $secret_key ) : ?>
-			<div class="misc-pub-section">
-				Secret Key: <code><?php echo esc_html( $secret_key ); ?></code>
-			</div>
+			<?php if ( $node->is_paired() ) : ?>
+				<div class="misc-pub-section">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: the date the node was linked to the Hub */
+							__( 'Linked on %s.', 'newspack-network' ),
+							wp_date( get_option( 'date_format' ), $node->get_paired_at() )
+						)
+					);
+					?>
+				</div>
+			<?php else : ?>
+				<div class="misc-pub-section">
+					Secret Key: <code><?php echo esc_html( $secret_key ); ?></code>
+				</div>
+			<?php endif; ?>
+			<?php // Kept once linked: a node that never received its key, or lost it, is linked again from here. ?>
 			<div class="misc-pub-section">
 				<a
 					target="_blank"
