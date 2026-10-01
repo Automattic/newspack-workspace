@@ -203,14 +203,40 @@ class TestFields extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A classic [gallery] shortcode without ids lists the post's own attachments.
-	 * A REST save has no global post; rendering the shortcode in that state falls
-	 * back to parent 0, which is every unattached image on the site.
+	 * Gallery shortcodes and the image count each adds to a story that has two
+	 * attached images, on a site with three unattached ones. `{attached}` stands
+	 * for the first attached image's ID, `{unattached}` for the unattached IDs.
+	 *
+	 * @return array[]
 	 */
-	public function test_image_count_gallery_shortcode_counts_only_the_story_images() {
-		$post_id = self::create_post( [ 'post_content' => '<p>Photos below.</p>[gallery]' ] );
+	public function gallery_shortcodes() {
+		return [
+			'a bare gallery'                     => [ '[gallery]', 2 ],
+			'a draft story'                      => [ '[gallery]', 2, [ 'post_status' => 'draft' ] ],
+			'a password-protected story'         => [ '[gallery]', 2, [ 'post_password' => 'secret' ] ],
+			'an id of 0 falls back to the story' => [ '[gallery id="0"]', 2 ],
+			'listed ids'                         => [ '[gallery ids="{unattached}"]', 3 ],
+			'excluded ids'                       => [ '[gallery exclude="{attached}"]', 1 ],
+			'an escaped shortcode'               => [ '[[gallery]]', 0 ],
+		];
+	}
+
+	/**
+	 * A classic [gallery] adds the images it lists, whoever is saving. Rendering
+	 * it would not: core hides a gallery from a visitor who cannot read its
+	 * post, and lists every unattached image on the site when it has no post.
+	 *
+	 * @dataProvider gallery_shortcodes
+	 *
+	 * @param string $shortcode  Gallery shortcode, with ID placeholders.
+	 * @param int    $expected   Expected image count.
+	 * @param array  $story_data Post data for the story.
+	 */
+	public function test_image_count_counts_the_images_a_gallery_shortcode_lists( $shortcode, $expected, $story_data = [] ) {
+		$post_id        = self::create_post( $story_data );
+		$attachment_ids = [];
 		foreach ( [ $post_id, $post_id, 0, 0, 0 ] as $parent ) {
-			self::factory()->attachment->create(
+			$attachment_ids[] = self::factory()->attachment->create(
 				[
 					'file'           => 'image.jpg',
 					'post_parent'    => $parent,
@@ -219,27 +245,38 @@ class TestFields extends WP_UnitTestCase {
 				]
 			);
 		}
-		unset( $GLOBALS['post'] );
+		$placeholders = [
+			'{attached}'   => $attachment_ids[0],
+			'{unattached}' => implode( ',', array_slice( $attachment_ids, 2 ) ),
+		];
+		\wp_update_post(
+			[
+				'ID'           => $post_id,
+				'post_content' => '<p>Photos below.</p>' . strtr( $shortcode, $placeholders ),
+			]
+		);
 
-		$this->assertSame( 2, Fields::get_image_count( $post_id ), 'Counts the story\'s attached images, not the site\'s unattached media.' );
+		$this->assertSame( $expected, Fields::get_image_count( $post_id ) );
 	}
 
 	/**
 	 * Refreshing read-only fields on save must not run the front-end content pipeline.
 	 */
 	public function test_read_only_fields_do_not_render_the_content_on_save() {
-		$post_id = self::create_post( [ 'post_content' => '<p>Hello</p>[gallery]' ] );
-		$calls   = 0;
-		$spy     = function ( $content ) use ( &$calls ) {
-			$calls++;
-			return $content;
+		$post_id  = self::create_post( [ 'post_content' => '<p>Hello</p>[gallery]' ] );
+		$rendered = [];
+		$spy      = function ( $value ) use ( &$rendered ) {
+			$rendered[] = \current_filter();
+			return $value;
 		};
 
 		\add_filter( 'the_content', $spy );
+		\add_filter( 'pre_do_shortcode_tag', $spy );
 		Fields::update_read_only_fields( $post_id );
 		\remove_filter( 'the_content', $spy );
+		\remove_filter( 'pre_do_shortcode_tag', $spy );
 
-		$this->assertSame( 0, $calls, 'Saving a story must not render the_content.' );
+		$this->assertSame( [], $rendered, 'Saving a story must not render the content or its shortcodes.' );
 	}
 
 	/**

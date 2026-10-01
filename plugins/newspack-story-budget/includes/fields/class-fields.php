@@ -571,13 +571,12 @@ class Fields {
 	 * Get the image count of the post's content, not including the featured image.
 	 *
 	 * Counts the <img> tags saved in the content (Image, Gallery, Cover and
-	 * Media & Text blocks, classic HTML) plus the images a classic [gallery]
-	 * shortcode lists. It deliberately does not run `the_content`: this runs
-	 * inside the save request, where that pipeline would execute every block,
-	 * shortcode and third-party filter with no global post set. A [gallery]
-	 * without ids rendered in that state falls back to post_parent 0 and loads
-	 * every unattached image on the site, which exhausts PHP memory on large
-	 * media libraries and makes the editor fail to save the post.
+	 * Media & Text blocks, classic HTML) plus the images each classic [gallery]
+	 * shortcode lists. It deliberately renders neither the content nor the
+	 * shortcode: this can run with no global post set (a REST save, the story
+	 * GET), where a rendered [gallery] without ids falls back to post_parent 0
+	 * and loads every unattached image on the site. That exhausts PHP memory on
+	 * large media libraries and makes the editor fail to save the post.
 	 *
 	 * @param int $post_id The post ID.
 	 *
@@ -596,15 +595,54 @@ class Fields {
 
 		if ( \has_shortcode( $content, 'gallery' ) && preg_match_all( '/' . \get_shortcode_regex( [ 'gallery' ] ) . '/s', $content, $matches, PREG_SET_ORDER ) ) {
 			foreach ( $matches as $shortcode ) {
-				// Pin the gallery to this post, as core's get_post_galleries() does, so it never queries parent 0.
-				$attrs = \shortcode_parse_atts( $shortcode[3] );
-				if ( ! is_array( $attrs ) || ! isset( $attrs['id'] ) ) {
-					$shortcode[3] .= ' id="' . (int) $post_id . '"';
+				// An escaped [[gallery]] is literal text, not a gallery.
+				if ( '[' === $shortcode[1] && ']' === $shortcode[6] ) {
+					continue;
 				}
-				$count += substr_count( \do_shortcode_tag( $shortcode ), '<img ' );
+				$attrs  = \shortcode_parse_atts( $shortcode[3] );
+				$count += self::get_gallery_image_count( is_array( $attrs ) ? $attrs : [], (int) $post_id );
 			}
 		}
 		return $count;
+	}
+
+	/**
+	 * Count the images a classic [gallery] shortcode lists, without rendering it.
+	 *
+	 * Lists what core's gallery_shortcode() would: the images named by `ids`
+	 * or `include`, otherwise the image attachments of the post named by `id`,
+	 * minus `exclude`. Two deliberate differences from the rendered gallery: an
+	 * `id` that is missing or not a positive integer means the story, never
+	 * post_parent 0, and the count does not depend on whether the current user
+	 * can view the story (core renders nothing for a password-protected or
+	 * unpublished post the visitor cannot read).
+	 *
+	 * @param array $attrs   The shortcode attributes.
+	 * @param int   $post_id The story's post ID.
+	 *
+	 * @return int The image count.
+	 */
+	private static function get_gallery_image_count( $attrs, $post_id ) {
+		$query_args = [
+			'post_type'      => 'attachment',
+			'post_status'    => 'inherit',
+			'post_mime_type' => 'image',
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Scoped to a listed set of IDs or to one post's attachments, and returns IDs only.
+		];
+		$listed_ids = ! empty( $attrs['ids'] ) ? $attrs['ids'] : ( $attrs['include'] ?? '' );
+		if ( ! empty( $listed_ids ) ) {
+			$query_args['post__in'] = \wp_parse_id_list( $listed_ids );
+		} else {
+			$parent_id                 = (int) ( $attrs['id'] ?? 0 );
+			$query_args['post_parent'] = $parent_id > 0 ? $parent_id : $post_id;
+		}
+		$image_ids = ( new \WP_Query( $query_args ) )->posts;
+		if ( empty( $listed_ids ) && ! empty( $attrs['exclude'] ) ) {
+			$image_ids = array_diff( $image_ids, \wp_parse_id_list( $attrs['exclude'] ) );
+		}
+		return count( $image_ids );
 	}
 
 	/**
