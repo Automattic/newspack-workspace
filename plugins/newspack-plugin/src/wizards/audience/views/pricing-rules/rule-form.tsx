@@ -558,9 +558,10 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 		.join( ' ' );
 
 	// A saved rule can target a scope the site doesn't register, such as all
-	// subscriptions while WooCommerce Subscriptions is inactive, and the engine keeps
-	// it on save. Listing it keeps the select showing what the rule targets instead
-	// of its first option, and lets the publisher pick it again after trying another.
+	// subscriptions while WooCommerce Subscriptions is inactive. The form holds and
+	// saves that scope; listing it keeps the select showing what the rule targets
+	// instead of its first option, and lets the publisher pick it again after trying
+	// another.
 	const scopeOptions = vocab.scopes.map( s => ( { label: s.label, value: s.id } ) );
 	if ( rule?.scope_type && ! vocab.scopes.some( s => s.id === rule.scope_type ) ) {
 		scopeOptions.push( {
