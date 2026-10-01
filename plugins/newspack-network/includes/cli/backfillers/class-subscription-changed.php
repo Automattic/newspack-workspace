@@ -78,7 +78,8 @@ class Subscription_Changed extends Abstract_Backfiller {
 			}
 		}
 
-		// Not wc_get_orders(): without HPOS it ignores meta_query, so the date range would be dropped.
+		// Not wcs_get_subscriptions(), which loads every subscription before returning, and not
+		// wc_get_orders(), which ignores meta_query without HPOS and would drop the date range.
 		return wcs_get_orders_with_meta_query( $params );
 	}
 }
