@@ -206,18 +206,36 @@ class TestBackfillerBatchedLoading extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A run that can't free the cache's in-memory copy says so once, so the operator can split it by date.
+	 * Runs on a cache that can't free its in-memory copy, with the warnings each should print.
+	 *
+	 * @return array
 	 */
-	public function test_warns_once_when_cache_cannot_free_in_memory_copy() {
-		iterator_to_array( $this->backfiller( false )->load( [ 1, 2, 3 ], [ $this, 'load_item' ] ) );
+	public function data_runs_on_cache_that_cannot_free_in_memory_copy() {
+		return [
+			'more than one batch warns once, not once per batch' => [ [ 1, 2, 3 ], 1 ],
+			'a single batch has nothing to split'                => [ [ 1, 2 ], 0 ],
+			'an empty date range has nothing to split'           => [ [], 0 ],
+		];
+	}
+
+	/**
+	 * A run that can't free the cache's in-memory copy says so once, when splitting it by date would help.
+	 *
+	 * @dataProvider data_runs_on_cache_that_cannot_free_in_memory_copy
+	 *
+	 * @param int[] $ids               IDs the run loads.
+	 * @param int   $expected_warnings Warnings the run should print.
+	 */
+	public function test_warns_when_cache_cannot_free_in_memory_copy( $ids, $expected_warnings ) {
+		iterator_to_array( $this->backfiller( false )->load( $ids, [ $this, 'load_item' ] ) );
 
 		$warnings = array_filter(
 			WP_CLI::$output,
 			function ( $line ) {
-				return 0 === strpos( $line, 'Warning: ' );
+				return str_starts_with( $line, 'Warning: ' );
 			}
 		);
-		$this->assertCount( 1, $warnings, 'One warning for the run, not one per batch.' );
+		$this->assertCount( $expected_warnings, $warnings );
 	}
 
 	/**
