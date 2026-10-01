@@ -66,6 +66,17 @@ export const isGateMetered = ( gate: Gate, siteMeter?: SiteMeterConfig ) => {
 };
 
 /**
+ * Whether a gate switches metering on, whether or not it grants any free views.
+ *
+ * Unlike `isGateMetered()`, a 0/0 allowance still counts, so the Metering form stays
+ * reachable to raise it again.
+ *
+ * @param gate The gate.
+ */
+export const switchesMeteringOn = ( gate: Gate ) =>
+	[ gate.registration, gate.custom_access ].some( section => Boolean( section?.active && section.metering?.enabled ) );
+
+/**
  * Whether any of a gate's audience paths keeps its own allowance.
  *
  * Scope is stored per audience path, and adoption stamps only the paths that disagree

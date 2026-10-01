@@ -13,6 +13,7 @@ import {
 	isUnconfiguredAccessRuleValue,
 	isUnconstrainedAccessRuleValue,
 	sharesTheSiteMeter,
+	switchesMeteringOn,
 } from './utils';
 
 /**
@@ -116,6 +117,28 @@ describe( 'isMalformedAccessRuleValue', () => {
 
 	it( 'leaves boolean rules alone, which carry no value to judge', () => {
 		expect( isMalformedAccessRuleValue( { name: 'Has donated', is_boolean: true, has_options: false }, true ) ).toBe( false );
+	} );
+} );
+
+describe( 'switchesMeteringOn', () => {
+	it( 'is true for a 0/0 allowance, which isGateMetered rejects', () => {
+		const gate = buildGate( { registration: { active: true, metering: { enabled: true, count: 0, period: 'month', scope: 'gate' } } } );
+
+		expect( switchesMeteringOn( gate ) ).toBe( true );
+		expect( isGateMetered( gate ) ).toBe( false );
+	} );
+
+	it( 'is false when metering is off or its section is inactive', () => {
+		expect(
+			switchesMeteringOn(
+				buildGate( { registration: { active: true, metering: { enabled: false, count: 3, period: 'month', scope: 'gate' } } } )
+			)
+		).toBe( false );
+		expect(
+			switchesMeteringOn(
+				buildGate( { custom_access: { active: false, metering: { enabled: true, count: 3, period: 'month', scope: 'gate' } } } )
+			)
+		).toBe( false );
 	} );
 } );
 

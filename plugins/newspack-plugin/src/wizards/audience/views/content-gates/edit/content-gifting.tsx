@@ -64,7 +64,11 @@ const ContentGiftingSettings = () => {
 		hideTitle: true,
 	} );
 
-	const handleUpdateConfig = ( newConfig: GateSettings, message: string = __( 'Content gifting settings updated.', 'newspack-plugin' ) ) => {
+	const handleUpdateConfig = (
+		newConfig: GateSettings,
+		message: string = __( 'Content gifting settings updated.', 'newspack-plugin' ),
+		actions: { label: string; onClick: () => void }[] = []
+	) => {
 		isSaving.current = true;
 		resetError();
 		resetNotices();
@@ -86,6 +90,7 @@ const ContentGiftingSettings = () => {
 						message,
 						type: 'success',
 						id: 'content-gifting-config-updated',
+						actions,
 					} );
 				},
 				onFinally: () => {
@@ -98,7 +103,8 @@ const ContentGiftingSettings = () => {
 	const setEnabled = ( enabled: boolean ) =>
 		handleUpdateConfig(
 			{ ...wizardData?.config, content_gifting: { ...wizardData?.config?.content_gifting, enabled } },
-			enabled ? __( 'Content gifting enabled.', 'newspack-plugin' ) : __( 'Content gifting disabled.', 'newspack-plugin' )
+			enabled ? __( 'Content gifting enabled.', 'newspack-plugin' ) : __( 'Content gifting disabled.', 'newspack-plugin' ),
+			enabled ? [] : [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => setEnabled( true ) } ]
 		);
 
 	useEffect( () => {
@@ -181,14 +187,7 @@ const ContentGiftingSettings = () => {
 			{ confirmDialog }
 			{ giftingErrors.length > 0 && <Notice noticeText={ giftingErrors.join( ', ' ) } isError /> }
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
-					title={ __( 'General Settings', 'newspack-plugin' ) }
-					description={ __(
-						'Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe.',
-						'newspack-plugin'
-					) }
-				/>
+				<SectionHeader heading={ 2 } title={ __( 'General Settings', 'newspack-plugin' ) } />
 				<VStack spacing={ 6 }>
 					<RangeControl
 						label={ __( 'Gifting limit', 'newspack-plugin' ) }

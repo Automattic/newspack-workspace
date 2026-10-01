@@ -70,7 +70,7 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 						  )
 						: sprintf(
 								// translators: 1: number of hidden values, 2: access rule name, e.g. "Institutional access".
-								_n( 'Show %1$d more for %2$s', 'Show %1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
+								_n( '%1$d more for %2$s', '%1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
 								hiddenCount,
 								ruleName
 						  )
@@ -328,7 +328,9 @@ export const getGateSummarySections = (
 				column: 'registration',
 				label: __( 'Institutional Access', 'newspack-plugin' ),
 				content: registrationRules.map( ( rule, index ) => (
-					<p key={ `${ index }-${ rule.slug }` }>{ formatAccessRuleValue( rule, optionsBySlug ) }</p>
+					<p key={ `${ index }-${ rule.slug }` }>
+						<AccessRuleValue rule={ rule } optionsBySlug={ optionsBySlug } />
+					</p>
 				) ),
 			} );
 		}
