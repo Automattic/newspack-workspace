@@ -8,6 +8,7 @@
 import { __ } from '@wordpress/i18n';
 import {
 	BaseControl,
+	Notice,
 	RangeControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl,
@@ -22,16 +23,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import {
-	Button,
-	Divider,
-	Grid,
-	Notice,
-	SectionHeader,
-	SelectControl,
-	TextControl,
-	useConfirmDialog,
-} from '../../../../../../packages/components/src';
+import { Button, Divider, Grid, SectionHeader, SelectControl, TextControl, useConfirmDialog } from '../../../../../../packages/components/src';
 import EmptyState from '../../../../../../packages/components/src/empty-state';
 import { gift } from '../../../../../../packages/icons';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
@@ -72,6 +64,7 @@ const ContentGiftingSettings = () => {
 		isSaving.current = true;
 		resetError();
 		resetNotices();
+		// A failure is shown through `errorMessage`, so the rethrown error needs no handling here.
 		wizardApiFetch(
 			{
 				path: '/newspack/v1/wizard/newspack-audience-access-control/content-gifting',
@@ -97,7 +90,7 @@ const ContentGiftingSettings = () => {
 					isSaving.current = false;
 				},
 			}
-		);
+		).catch( () => {} );
 	};
 
 	const setEnabled = ( enabled: boolean ) =>
@@ -159,7 +152,11 @@ const ContentGiftingSettings = () => {
 		return (
 			<>
 				{ confirmDialog }
-				{ giftingErrors.length > 0 && <Notice noticeText={ giftingErrors.join( ', ' ) } isError /> }
+				{ giftingErrors.length > 0 && (
+					<Notice className="newspack-content-gifting__prerequisites" status="error" politeness="polite" isDismissible={ false }>
+						{ giftingErrors.join( ', ' ) }
+					</Notice>
+				) }
 				<EmptyState.Root>
 					<EmptyState.Header
 						icon={ gift }
@@ -185,7 +182,11 @@ const ContentGiftingSettings = () => {
 	return (
 		<div className="newspack-content-gate__edit">
 			{ confirmDialog }
-			{ giftingErrors.length > 0 && <Notice noticeText={ giftingErrors.join( ', ' ) } isError /> }
+			{ giftingErrors.length > 0 && (
+				<Notice className="newspack-content-gifting__prerequisites" status="error" politeness="polite" isDismissible={ false }>
+					{ giftingErrors.join( ', ' ) }
+				</Notice>
+			) }
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader heading={ 2 } title={ __( 'General Settings', 'newspack-plugin' ) } />
 				<VStack spacing={ 6 }>
