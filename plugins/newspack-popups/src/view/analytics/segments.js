@@ -26,6 +26,11 @@
  * gated pageviews understate exactly the audience a publisher is trying to
  * size.
  *
+ * Segments carried in from a newsletter click (see carried-segments.js) count
+ * as matched for a signed-out reader, on both layers: they decide which
+ * prompts that session sees, so leaving them out would credit the win to a
+ * segment whose prompts never showed.
+ *
  * One event per segment rather than one event listing them all, so reach is a
  * plain GA4 report: dimension `segment_id`, metric Total users, every segment
  * ranked. A combined list would need a regex filter per segment to avoid one
@@ -52,6 +57,7 @@
  */
 
 import { getMatchingSegmentIds, getPreviewedPromptId, isSwitchedSession, sendEvent } from '../utils';
+import { getCarriedSegmentIds } from '../utils/carried-segments';
 import { getCriteria } from '../../criteria/utils';
 
 export const EVENT_NAME = 'np_segment_matched';
@@ -178,8 +184,10 @@ const writeState = ( sid, ids, won ) => {
  * Evaluate the reader's segments and report what is new to this session: any
  * segment matched for the first time, and the priority winner if it has not
  * won before.
+ *
+ * @param {Object} ras Reader Activation library object.
  */
-const reportFreshMatches = () => {
+const reportFreshMatches = ras => {
 	const segments = window.newspack_popups_view?.segments;
 	// Check gtag before writing state, so a pageview that could not report
 	// does not silence the next one that can.
@@ -206,7 +214,12 @@ const reportFreshMatches = () => {
 	if ( ! Object.keys( reportableSegments ).length ) {
 		return;
 	}
-	const ids = getMatchingSegmentIds( reportableSegments );
+	// Read for every reader, signed in or not: reading is what clears the
+	// cookie, and prompt display may never run on this page.
+	const carriedIds = getCarriedSegmentIds( Object.keys( reportableSegments ) );
+	const liveIds = getMatchingSegmentIds( reportableSegments );
+	// A signed-in reader's prompts follow their live match alone.
+	const ids = ras?.store?.get( 'reader' )?.authenticated ? liveIds : [ ...new Set( [ ...liveIds, ...carriedIds ] ) ].sort();
 	// The empty match is tracked as a pseudo-ID, so "matched nothing" is
 	// measurable and follows the same once-per-session rule as a real segment.
 	const matched = ids.length ? ids : [ EMPTY_VALUE ];
@@ -256,13 +269,16 @@ const reportFreshMatches = () => {
  * error isolation of its own — an exception here would abort prompt display
  * and every callback queued behind it.
  *
- * Takes no arguments: it is pushed onto `window.newspackRAS` only for timing
- * — segment criteria read from the RAS store, so evaluation needs RAS ready —
- * while its own bookkeeping stays out of the reader data store.
+ * Pushed onto `window.newspackRAS` for timing: segment criteria read from the
+ * RAS store, so evaluation needs RAS ready. Reads the reader's signed-in state
+ * from it and nothing else; its own bookkeeping stays out of the reader data
+ * store.
+ *
+ * @param {Object} ras Reader Activation library object.
  */
-export const reportMatchedSegments = () => {
+export const reportMatchedSegments = ras => {
 	try {
-		reportFreshMatches();
+		reportFreshMatches( ras );
 	} catch ( e ) {
 		// Never let segment reporting take the prompt pipeline down with it.
 	}

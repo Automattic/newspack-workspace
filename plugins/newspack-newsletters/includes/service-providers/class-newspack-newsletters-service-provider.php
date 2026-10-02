@@ -593,6 +593,23 @@ Error message(s) received:
 	}
 
 	/**
+	 * Get the ESP's merge-tag name for a synced contact field, for embedding in
+	 * a merge tag (see Tracking\Utils::get_merge_tag()). Not derivable from the
+	 * field name: ActiveCampaign perstags can be renamed, and Mailchimp assigns
+	 * tags per audience. Providers that can resolve it override this; the rest
+	 * return '' and callers emit nothing.
+	 *
+	 * @param string      $field_name Field name as synced (e.g. 'NP_Account').
+	 * @param string|null $list_id    Audience/list ID, for providers whose
+	 *                                fields are per-list. Null when not applicable.
+	 *
+	 * @return string The ESP's bare tag name, or '' when it can't be resolved.
+	 */
+	public function get_field_merge_tag_name( $field_name, $list_id = null ) {
+		return '';
+	}
+
+	/**
 	 * Get the merge-tag dictionary for this ESP.
 	 *
 	 * Override on each concrete provider to expose its merge-tag autocomplete
