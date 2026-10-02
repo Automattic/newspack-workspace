@@ -110,9 +110,11 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 	 * @return int|null Unix timestamp, or null when neither is recorded.
 	 */
 	private function get_seat_timestamp( $member_id, $subscription_id ) {
-		$joined_at = \Newspack\Group_Subscription::get_member_joined_at( $member_id, $subscription_id );
+		// Read the join time by its key rather than through get_member_joined_at(), which
+		// loads the subscription first and so knows nothing once the subscription is gone.
+		$joined_at = (int) get_user_meta( $member_id, \Newspack\Group_Subscription::get_member_joined_meta_key( $subscription_id ), true );
 		if ( $joined_at ) {
-			return (int) $joined_at;
+			return $joined_at;
 		}
 		$subscription = wcs_get_subscription( $subscription_id );
 		$created      = $subscription ? $subscription->get_date_created() : null;
