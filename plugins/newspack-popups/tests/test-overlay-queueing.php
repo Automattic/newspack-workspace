@@ -177,11 +177,13 @@ class OverlayQueueingTest extends WP_UnitTestCase {
 
 		// Force `popups_for_post()` to return our overlay rather than running
 		// the eligibility query, which depends on a fully bootstrapped request.
+		// self::$popups is keyed by post ID (see popups_for_post()), so seed
+		// it at the post ID that will be current when it's called below.
 		$reflection_class = new ReflectionClass( 'Newspack_Popups_Inserter' );
 		$popups_property  = $reflection_class->getProperty( 'popups' );
 		$popups_property->setAccessible( true );
 		$prior_popups = $popups_property->getValue();
-		$popups_property->setValue( null, [ $overlay_popup ] );
+		$popups_property->setValue( null, [ get_the_ID() ?: 0 => [ $overlay_popup ] ] );
 
 		ob_start();
 		Newspack_Popups_Inserter::insert_popups_after_header();
