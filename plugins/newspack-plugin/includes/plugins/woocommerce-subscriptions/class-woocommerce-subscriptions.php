@@ -1241,6 +1241,10 @@ class WooCommerce_Subscriptions {
 	 * a filter that runs its own subscription lookup has to exclude them itself. Older versions
 	 * ignore the exclusion argument and exempt the order later, in WCS_Limiter::is_product_limited().
 	 *
+	 * @todo Remove once https://github.com/woocommerce/woocommerce-subscriptions/pull/5743 ships: it passes
+	 *       these IDs to the filter as a fourth argument, so the callback can use them instead (keep this
+	 *       as a fallback while older Subscriptions versions are supported).
+	 *
 	 * @param int $product_id The product ID.
 	 *
 	 * @return int[] Subscription IDs.
