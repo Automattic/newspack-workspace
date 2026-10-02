@@ -18,6 +18,16 @@ if ( class_exists( 'Newspack\Group_Subscription' ) ) {
  */
 class Group_Subscription {
 	/**
+	 * The user meta key holding when a member joined a subscription.
+	 *
+	 * @param int $subscription_id Subscription ID.
+	 * @return string
+	 */
+	public static function get_member_joined_meta_key( $subscription_id ) {
+		return '_newspack_group_subscription_joined_' . (int) $subscription_id;
+	}
+
+	/**
 	 * Whether the user can hold a seat.
 	 *
 	 * @param int $user_id User ID.

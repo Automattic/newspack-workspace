@@ -16,11 +16,14 @@ use WP_CLI;
  * deleted is sent as cancelled, so a revocation whose event never arrived is
  * repaired too; a member removed from a group leaves no seat to send.
  *
- * Each seat's event is stamped with when the member joined, or with the
- * subscription's creation date when no join time was recorded. Running this
- * again sends a seat again only when its payload changed (status, or a
- * product's name or slug). The start and end dates select seats by that time.
- * A date with no time given as the end counts through the end of that day.
+ * Each seat's event is stamped with when the member joined, else with the
+ * subscription's creation date, else (the subscription gone too) with the
+ * member's registration date, so the stamp is stable across runs. A seat whose
+ * payload matches one a backfill already sent, stamp included, is a duplicate
+ * and isn't sent again, so a status that returns to an earlier one is carried
+ * by the live event, not by a re-run. The start and end dates select seats by
+ * that stamp. A date with no time given as the end counts through the end of
+ * that day.
  */
 class Group_Seat_Changed extends Abstract_Backfiller {
 
@@ -58,7 +61,10 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 
 		$seats = [];
 		foreach ( $this->get_subscription_ids() as $subscription_id ) {
-			foreach ( Group_Seats::get_member_ids( $subscription_id ) as $member_id ) {
+			$member_ids = Group_Seats::get_member_ids( $subscription_id );
+			// One query for every member's meta, rather than one per member when the join time is read.
+			update_meta_cache( 'user', $member_ids );
+			foreach ( $member_ids as $member_id ) {
 				$timestamp = $this->get_seat_timestamp( (int) $member_id, (int) $subscription_id );
 				if ( null === $timestamp ) {
 					if ( $this->verbose ) {
@@ -89,25 +95,27 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 	}
 
 	/**
-	 * Every subscription that is a group now, plus every one a reader still holds a
-	 * seat on: a group turned off or deleted drops out of newspack-plugin's list while
-	 * its members' seats remain, and those are the seats a missed revocation left behind.
+	 * Every subscription a reader still holds a seat on, from the member meta itself
+	 * rather than newspack-plugin's list of groups: a group turned off or deleted
+	 * drops out of that list while its members' seats remain, and those are the
+	 * seats a missed revocation left behind. A group with no members has no seats
+	 * to send, so the meta is the whole set.
 	 *
 	 * @return int[]
 	 */
 	private function get_subscription_ids() {
 		global $wpdb;
-		$ids = array_map( 'intval', \Newspack\Group_Subscription_Settings::get_group_subscription_ids() );
 		$held = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s", Group_Seats::MEMBER_META_KEY ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		return array_values( array_unique( array_merge( $ids, array_map( 'intval', $held ) ) ) );
+		return array_values( array_unique( array_map( 'intval', $held ) ) );
 	}
 
 	/**
-	 * When a seat began: the member's join time, else the subscription's creation date.
+	 * When a seat began: the member's join time, else the subscription's creation
+	 * date, else (the subscription gone) the member's registration date.
 	 *
 	 * @param int $member_id       Member user ID.
 	 * @param int $subscription_id Subscription ID.
-	 * @return int|null Unix timestamp, or null when neither is recorded.
+	 * @return int|null Unix timestamp, or null when none is recorded.
 	 */
 	private function get_seat_timestamp( $member_id, $subscription_id ) {
 		// Read the join time by its key rather than through get_member_joined_at(), which
@@ -117,7 +125,11 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 			return $joined_at;
 		}
 		$subscription = wcs_get_subscription( $subscription_id );
-		$created      = $subscription ? $subscription->get_date_created() : null;
-		return $created ? $created->getTimestamp() : null;
+		if ( $subscription ) {
+			$created = $subscription->get_date_created();
+			return $created ? $created->getTimestamp() : null;
+		}
+		$member = get_userdata( $member_id );
+		return $member && $member->user_registered ? (int) strtotime( $member->user_registered ) : null;
 	}
 }
