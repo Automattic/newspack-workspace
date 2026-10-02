@@ -42,7 +42,7 @@ module.exports = {
 				// build script is run before semantic-release, so the version in *.css files
 				// have to be updated explicitly
 				files: [ 'newspack-*/sass/theme-description.scss', 'newspack-*/style.css' ],
-				callback: 'npm run release:archive',
+				callback: 'bash ../../.github/scripts/stamp-pot-version.sh newspack-theme/style.css; npm run release:archive',
 			},
 		],
 		...gitCommitStep( [

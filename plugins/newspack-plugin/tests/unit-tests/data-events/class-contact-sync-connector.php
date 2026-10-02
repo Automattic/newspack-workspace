@@ -10,16 +10,14 @@ namespace Newspack\Tests\Data_Events;
 use Newspack\Data_Events;
 use Newspack\Data_Events\Connectors\Contact_Sync_Connector;
 use Newspack\Reader_Activation\Integrations;
-use Newspack\Reader_Activation\Sync\Metadata;
 use Sample_Integration;
 
 /**
  * Tests for Contact_Sync_Connector::register_handlers().
  *
- * Verifies that the deletion handlers are gated by metadata schema version:
- * legacy-mode sites register only the legacy `reader_deleted` handler, while
- * v1+ sites register only the `reader_delete_sync` handler. Today both run on
- * every site, causing double-processing during user deletion.
+ * Deletion routes through one handler on every site: `reader_delete_sync`,
+ * which reaches Contact_Sync::handle_account_deletion() and honors each
+ * integration's own account_deletion_handling setting.
  */
 class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 
@@ -58,7 +56,6 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 		delete_option( Integrations::OPTION_NAME );
 		$this->reset_integrations();
 		Integrations::register_integrations();
-		$this->set_metadata_version( 'legacy' );
 		if ( null !== $this->actions_snapshot ) {
 			$this->restore_data_events_actions( $this->actions_snapshot );
 			$this->actions_snapshot = null;
@@ -88,18 +85,6 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 		$property   = $reflection->getProperty( 'actions' );
 		$property->setAccessible( true );
 		$property->setValue( null, $snapshot );
-	}
-
-	/**
-	 * Set the metadata schema version via reflection.
-	 *
-	 * @param string $version The version to set.
-	 */
-	private function set_metadata_version( $version ) {
-		$reflection = new \ReflectionClass( Metadata::class );
-		$property   = $reflection->getProperty( 'version' );
-		$property->setAccessible( true );
-		$property->setValue( null, $version );
 	}
 
 	/**
@@ -148,26 +133,11 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * In legacy metadata mode, register_handlers() should register the
-	 * `reader_deleted` handler and skip `reader_delete_sync`.
+	 * Only the `reader_delete_sync` handler is registered now, not the
+	 * pre-coexistence `reader_deleted` one — running both caused
+	 * double-processing during user deletion.
 	 */
-	public function test_legacy_mode_registers_reader_deleted_only() {
-		$this->set_metadata_version( 'legacy' );
-		$this->reset_data_events_handlers();
-
-		Contact_Sync_Connector::register_handlers();
-
-		$actions = $this->get_registered_handler_action_names();
-		$this->assertContains( 'reader_deleted', $actions );
-		$this->assertNotContains( 'reader_delete_sync', $actions );
-	}
-
-	/**
-	 * In v1 (non-legacy) metadata mode, register_handlers() should register the
-	 * `reader_delete_sync` handler and skip `reader_deleted`.
-	 */
-	public function test_v1_mode_registers_reader_delete_sync_only() {
-		$this->set_metadata_version( '2' );
+	public function test_registers_reader_delete_sync_only() {
 		$this->reset_data_events_handlers();
 
 		Contact_Sync_Connector::register_handlers();
@@ -178,74 +148,12 @@ class Newspack_Test_Contact_Sync_Connector extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With sync_esp_delete=true, the legacy reader_deleted handler should
-	 * call Newspack_Newsletters_Contacts::delete() on the email.
-	 */
-	public function test_legacy_reader_deleted_with_sync_true_calls_delete() {
-		\Newspack_Newsletters_Contacts::reset_calls();
-		\Newspack\Reader_Activation::update_setting( 'sync_esp_delete', true );
-
-		Contact_Sync_Connector::reader_deleted(
-			time(),
-			[
-				'email'   => 'legacy@example.com',
-				'user_id' => 1,
-			],
-			'client-id'
-		);
-
-		$this->assertCount( 1, \Newspack_Newsletters_Contacts::$delete_calls );
-		$this->assertSame( 'legacy@example.com', \Newspack_Newsletters_Contacts::$delete_calls[0]['email'] );
-	}
-
-	/**
-	 * With sync_esp_delete=false, the legacy reader_deleted handler should
-	 * call Newspack_Newsletters_Contacts::update_lists() (logged into
-	 * $add_and_remove_lists_calls by the mock) instead of delete().
-	 */
-	public function test_legacy_reader_deleted_with_sync_false_calls_update_lists() {
-		\Newspack_Newsletters_Contacts::reset_calls();
-		\Newspack\Reader_Activation::update_setting( 'sync_esp_delete', false );
-
-		Contact_Sync_Connector::reader_deleted(
-			time(),
-			[
-				'email'   => 'legacy2@example.com',
-				'user_id' => 2,
-			],
-			'client-id'
-		);
-
-		$this->assertCount( 0, \Newspack_Newsletters_Contacts::$delete_calls );
-		$this->assertCount( 1, \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls );
-		$this->assertSame( 'legacy2@example.com', \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls[0]['email'] );
-	}
-
-	/**
-	 * When the event payload has no email, the legacy reader_deleted handler
-	 * should return early without calling any ESP mutation methods.
-	 */
-	public function test_legacy_reader_deleted_returns_early_when_email_missing() {
-		\Newspack_Newsletters_Contacts::reset_calls();
-
-		Contact_Sync_Connector::reader_deleted(
-			time(),
-			[ 'user_id' => 3 ],
-			'client-id'
-		);
-
-		$this->assertCount( 0, \Newspack_Newsletters_Contacts::$delete_calls );
-		$this->assertCount( 0, \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls );
-	}
-
-	/**
-	 * End-to-end: in v1 mode, reader_delete_sync should route through the
-	 * Contact_Sync dispatcher and call delete_contact() on a registered
-	 * integration configured to handle deletion via the 'delete' mode.
+	 * End-to-end: reader_delete_sync should route through the Contact_Sync
+	 * dispatcher and call delete_contact() on a registered integration
+	 * configured to handle deletion via the 'delete' mode.
 	 */
 	public function test_reader_delete_sync_routes_to_handle_account_deletion() {
-		// Pre-conditions: v1 mode, one spy integration in 'delete' mode.
-		$this->set_metadata_version( '2' );
+		// Pre-condition: one spy integration in 'delete' mode.
 		$reflection = new \ReflectionClass( \Newspack\Reader_Activation\Integrations::class );
 		$property   = $reflection->getProperty( 'integrations' );
 		$property->setAccessible( true );

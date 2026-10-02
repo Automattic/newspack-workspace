@@ -1,3 +1,17 @@
+## newspack-network [2.22.11](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.10...newspack-network@2.22.11) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.3
+
+## newspack-network [2.22.10](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.9...newspack-network@2.22.10) (2026-09-28)
+
+
+### Bug Fixes
+
+* **network:** describe the images the receiving site actually stores ([#981](https://github.com/Automattic/newspack-workspace/issues/981)) ([055ad63](https://github.com/Automattic/newspack-workspace/commit/055ad63653c0ed8bae773d1fccb36f7006132473))
+
 ## newspack-network [2.22.9](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.8...newspack-network@2.22.9) (2026-09-22)
 
 

@@ -7,8 +7,6 @@
 
 namespace Newspack_Network\Content_Distribution;
 
-use Newspack_Network\Debugger;
-
 /**
  * Blocks class.
  */
@@ -192,12 +190,15 @@ class Blocks {
 			! function_exists( 'block_core_gallery_resolve_dynamic_source' ) ||
 			! function_exists( 'block_core_gallery_dynamic_image_link_attributes' )
 		) {
-			Debugger::log( 'Dynamic gallery found on a WordPress older than 7.1, flattening to an empty gallery.' );
+			Outgoing_Post::log(
+				'Dynamic gallery found on a WordPress older than 7.1, flattening to an empty gallery.',
+				[ 'post_id' => $post_id ]
+			);
 			return self::flatten_gallery( $block, [] );
 		}
 
 		if ( ! $post_id ) {
-			Debugger::log( 'Dynamic gallery: no post ID given, flattening to an empty gallery.' );
+			Outgoing_Post::log( 'Dynamic gallery: no post ID given, flattening to an empty gallery.' );
 			return self::flatten_gallery( $block, [] );
 		}
 
@@ -207,7 +208,10 @@ class Blocks {
 		);
 
 		if ( empty( $attachment_ids ) ) {
-			Debugger::log( sprintf( 'Dynamic gallery on post %d resolved no images.', $post_id ) );
+			// Not an error. Core renders nothing for a gallery whose source resolves to
+			// nothing, and this fires on every distribution of such a post, before the
+			// payload hash has had a chance to skip a no-op update.
+			Outgoing_Post::log( 'Dynamic gallery resolved no images.', [ 'post_id' => $post_id ], 'debug' );
 			return self::flatten_gallery( $block, [] );
 		}
 
@@ -233,10 +237,19 @@ class Blocks {
 		remove_filter( 'jetpack_photon_override_image_downsize', '__return_true' );
 
 		if ( empty( $image_blocks ) ) {
-			Debugger::log( sprintf( 'Dynamic gallery on post %d resolved %d images, none of which produced markup.', $post_id, count( $attachment_ids ) ) );
+			Outgoing_Post::log(
+				'Dynamic gallery resolved images, none of which produced markup.',
+				[
+					'post_id'        => $post_id,
+					'attachment_ids' => $attachment_ids,
+				]
+			);
 		}
 
-		return self::flatten_gallery( $block, $image_blocks );
+		// The images resolved, so the gallery keeps its caption whether or not any
+		// of them produced markup. Core does the same: only an unresolved source
+		// drops the caption.
+		return self::flatten_gallery( $block, $image_blocks, true );
 	}
 
 	/**
@@ -250,10 +263,11 @@ class Blocks {
 	 *
 	 * @param array $block        The original dynamic gallery block.
 	 * @param array $image_blocks The image blocks to nest, possibly empty.
+	 * @param bool  $keep_caption Whether the gallery caption should survive.
 	 *
 	 * @return array The flattened gallery block.
 	 */
-	private static function flatten_gallery( $block, $image_blocks ) {
+	private static function flatten_gallery( $block, $image_blocks, $keep_caption = false ) {
 		$attrs = $block['attrs'];
 		unset( $attrs['dynamicContent'] );
 
@@ -267,8 +281,8 @@ class Blocks {
 
 		// In dynamic mode `save.js` persists at most the gallery caption, so the
 		// block's own inner HTML is that `<figcaption>` or nothing. Core appends it
-		// after the images, and drops it when there are no images to caption.
-		$caption = $image_blocks ? trim( $block['innerHTML'] ?? '' ) : '';
+		// after the images, and drops it only when the source resolved to nothing.
+		$caption = $keep_caption ? trim( $block['innerHTML'] ?? '' ) : '';
 
 		$opening       = sprintf( '<figure %s>', $wrapper );
 		$closing       = $caption . '</figure>';

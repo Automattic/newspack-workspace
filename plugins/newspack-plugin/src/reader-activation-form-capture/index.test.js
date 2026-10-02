@@ -1,5 +1,9 @@
 import { getMatchedForms } from './utils';
 
+const GRAVITY_FORMS_ENTRY = { integration: 'gravity-forms', selectors: [ '.newspack-form-capture' ] };
+const OTHER_FORMS_ENTRY = { integration: 'form-capture', selectors: [ '.newspack-form-capture' ] };
+const BOTH_INTEGRATIONS = { gravity_forms: GRAVITY_FORMS_ENTRY, other_forms: OTHER_FORMS_ENTRY };
+
 /**
  * Harness for the capture client. window.newspackRAS is a plain callback
  * array before RAS loads, so the client's bootstrap can be invoked directly
@@ -9,14 +13,15 @@ import { getMatchedForms } from './utils';
  * forms at bootstrap (later additions go through a debounced
  * MutationObserver rescan these tests don't rely on).
  *
- * @param {string} html      Markup for document.body.
- * @param {Object} rasConfig window.newspack_ras_config value.
+ * @param {string} html          Markup for document.body.
+ * @param {Object} rasConfig     window.newspack_ras_config value.
+ * @param {Object} captureConfig window.newspack_form_capture value: an entry per integration that captures.
  * @return {Object} The fake readerActivation, with a jest.fn() register.
  */
-const loadCaptureClient = ( html, rasConfig = {} ) => {
+const loadCaptureClient = ( html, rasConfig = {}, captureConfig = BOTH_INTEGRATIONS ) => {
 	document.body.innerHTML = html;
 	window.newspackRAS = [];
-	window.newspack_form_capture = { selectors: [ '.newspack-form-capture' ] };
+	window.newspack_form_capture = captureConfig;
 	window.newspack_ras_config = rasConfig;
 	jest.isolateModules( () => require( './index' ) );
 	const readerActivation = {
@@ -304,9 +309,66 @@ describe( 'form-capture client', () => {
 			const form = document.querySelector( 'form' );
 			const payload = await submitViaGform( form );
 			expect( ras.register ).toHaveBeenCalledTimes( 1 );
-			expect( ras.register ).toHaveBeenCalledWith( 'gf-reader@example.com', 'form-capture', expect.any( Object ), expect.any( Object ) );
+			expect( ras.register ).toHaveBeenCalledWith( 'gf-reader@example.com', 'gravity-forms', expect.any( Object ), expect.any( Object ) );
 			// The chain must receive the payload back intact or GF aborts.
 			expect( payload ).toEqual( expect.objectContaining( { form, abort: false } ) );
+		} );
+
+		/**
+		 * Each form belongs to one integration, so a reader is registered once
+		 * and each integration's switch covers its own forms: Gravity Forms
+		 * forms register under the Gravity Forms integration, every other form
+		 * under Form Capture.
+		 */
+		it( 'registers each form under the integration that owns it', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient( `${ GF_FORM }${ FORM }` );
+			await submitViaGform( document.querySelector( '#gform_1' ) );
+			submit( document.querySelector( 'form:not([id])' ) );
+			expect( ras.register ).toHaveBeenCalledTimes( 2 );
+			expect( ras.register ).toHaveBeenNthCalledWith( 1, 'gf-reader@example.com', 'gravity-forms', expect.any( Object ), expect.any( Object ) );
+			expect( ras.register ).toHaveBeenNthCalledWith( 2, 'reader@example.com', 'form-capture', expect.any( Object ), expect.any( Object ) );
+		} );
+
+		it( 'leaves Gravity Forms forms alone while only Form Capture captures, even where its selectors reach them', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient(
+				`${ GF_FORM }${ FORM }`,
+				{},
+				{ other_forms: { ...OTHER_FORMS_ENTRY, selectors: [ '.newspack-form-capture', '#gform_1' ] } }
+			);
+			const gravityForm = document.querySelector( '#gform_1' );
+			await submitViaGform( gravityForm );
+			submit( gravityForm );
+			expect( ras.register ).not.toHaveBeenCalled();
+			// Positive control: the client is live for the forms it owns.
+			submit( document.querySelector( 'form:not([id])' ) );
+			expect( ras.register ).toHaveBeenCalledWith( 'reader@example.com', 'form-capture', expect.any( Object ), expect.any( Object ) );
+		} );
+
+		it( 'lets only the Gravity Forms integration opt a Gravity Forms form in', async () => {
+			const { submitViaGform } = installFakeGform();
+			const UNMARKED_GF_FORM = `<form id="gform_2" data-formid="2" novalidate><input type="email" name="input_2" value="unmarked@example.com"></form>`;
+			const ras = loadCaptureClient(
+				`${ UNMARKED_GF_FORM }${ FORM }`,
+				{},
+				{ ...BOTH_INTEGRATIONS, other_forms: { ...OTHER_FORMS_ENTRY, selectors: [ '.newspack-form-capture', '#gform_2' ] } }
+			);
+			await submitViaGform( document.querySelector( '#gform_2' ) );
+			expect( ras.register ).not.toHaveBeenCalled();
+			// Positive control: the client is live for the forms it owns.
+			submit( document.querySelector( 'form:not([id])' ) );
+			expect( ras.register ).toHaveBeenCalledWith( 'reader@example.com', 'form-capture', expect.any( Object ), expect.any( Object ) );
+		} );
+
+		it( 'leaves other forms alone while only the Gravity Forms integration captures', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient( `${ GF_FORM }${ FORM }`, {}, { gravity_forms: GRAVITY_FORMS_ENTRY } );
+			submit( document.querySelector( 'form:not([id])' ) );
+			expect( ras.register ).not.toHaveBeenCalled();
+			// Positive control: the client is live for the forms it owns.
+			await submitViaGform( document.querySelector( '#gform_1' ) );
+			expect( ras.register ).toHaveBeenCalledWith( 'gf-reader@example.com', 'gravity-forms', expect.any( Object ), expect.any( Object ) );
 		} );
 
 		it( 'ignores submissions from GF forms that are not opted in', async () => {
@@ -382,6 +444,79 @@ describe( 'form-capture client', () => {
 			await flush();
 			await submitViaGform( form );
 			expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'gf-warm-token' );
+		} );
+
+		/**
+		 * GF's AJAX postback replaces the form with markup rendered outside the
+		 * block render filter that adds the marker class: after a validation
+		 * error or a page change, the form on the page carries no marker. The
+		 * id GF stamps on every render stands in for it, so a reader who fails
+		 * validation once, or whose email field sits on a later page, is still
+		 * registered.
+		 */
+		it( 'keeps capturing a matched GF form after an AJAX re-render drops the marker class', async () => {
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient(
+				`<div id="gform_wrapper_7"><form id="gform_7" class="newspack-form-capture" data-formid="7" novalidate><input type="email" name="input_2" value=""></form></div>`
+			);
+			// GF re-renders from GFFormDisplay::get_form(): same id, no marker.
+			const RERENDERED_FORM = `<form id="gform_7" data-formid="7" novalidate><input type="email" name="input_2" value="gf-reader@example.com"></form>`;
+			document.getElementById( 'gform_wrapper_7' ).innerHTML = RERENDERED_FORM;
+			const form = document.querySelector( 'form' );
+			expect( form.classList.contains( 'newspack-form-capture' ) ).toBe( false );
+			await submitViaGform( form );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+			expect( ras.register ).toHaveBeenCalledWith( 'gf-reader@example.com', 'gravity-forms', expect.any( Object ), expect.any( Object ) );
+		} );
+
+		it( 'still ignores a GF form whose id was never matched, before and after a re-render', async () => {
+			const { submitViaGform } = installFakeGform();
+			// The marked form carries a GF id, so the remembered set is populated
+			// while the unmatched form is submitted: an empty set would prove
+			// nothing about over-matching.
+			const MARKED_FORM = `<form id="gform_3" class="newspack-form-capture" data-formid="3" novalidate><input type="email" name="input_2" value="gf-reader@example.com"></form>`;
+			const OTHER_FORM = `<form id="gform_9" data-formid="9" novalidate><input type="email" value="other@example.com"></form>`;
+			const ras = loadCaptureClient( `${ MARKED_FORM }<div id="gform_wrapper_9">${ OTHER_FORM }</div>` );
+			await submitViaGform( document.querySelector( '#gform_9' ) );
+			document.getElementById( 'gform_wrapper_9' ).innerHTML = OTHER_FORM;
+			// The rescan must not re-attach it either: with no listener, a native
+			// submit registers nobody.
+			await new Promise( resolve => setTimeout( resolve, 250 ) );
+			submit( document.querySelector( '#gform_9' ) );
+			await submitViaGform( document.querySelector( '#gform_9' ) );
+			expect( ras.register ).not.toHaveBeenCalled();
+			// Positive control: the adapter is live and the marked form's id is
+			// what the set holds, so a populated set ignored the unrelated GF form.
+			await submitViaGform( document.querySelector( '#gform_3' ) );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 're-attaches a re-rendered GF form on rescan so it warms a fresh captcha token', async () => {
+			// Matching the re-rendered form at submission time is not enough on a
+			// v3 site: without the focusin listener it never warms a token, and a
+			// reader who outlasts the TTL on a later page submits without one.
+			// Distinct id: earlier clients in this file keep observing document.body
+			// and would re-attach a remembered id.
+			window.grecaptcha = {
+				ready: callback => callback(),
+				execute: jest.fn( () => Promise.resolve( 'rerender-token' ) ),
+			};
+			const { submitViaGform } = installFakeGform();
+			const ras = loadCaptureClient(
+				`<div id="gform_wrapper_8"><form id="gform_8" class="newspack-form-capture" data-formid="8" novalidate><input type="email" name="input_2" value=""></form></div>`,
+				V3_CONFIG
+			);
+			const RERENDERED_FORM = `<form id="gform_8" data-formid="8" novalidate><input type="email" name="input_2" value="gf-reader@example.com"></form>`;
+			document.getElementById( 'gform_wrapper_8' ).innerHTML = RERENDERED_FORM;
+			// MutationObserver delivery is a microtask; the rescan is debounced 200ms.
+			await new Promise( resolve => setTimeout( resolve, 250 ) );
+			const form = document.querySelector( 'form' );
+			focusin( form );
+			await flush();
+			expect( window.grecaptcha.execute ).toHaveBeenCalledTimes( 1 );
+			await submitViaGform( form );
+			expect( ras.register ).toHaveBeenCalledTimes( 1 );
+			expect( ras.register.mock.calls[ 0 ][ 3 ].captchaToken ).toBe( 'rerender-token' );
 		} );
 
 		/**

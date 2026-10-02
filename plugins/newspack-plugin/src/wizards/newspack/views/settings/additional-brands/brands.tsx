@@ -7,49 +7,74 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Fragment } from '@wordpress/element';
+import { ExternalLink } from '@wordpress/components';
+import { siteLogo } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import Brand from './brand';
-import { Card, Button, Router } from '../../../../../../packages/components/src';
+import { Card, Button, Notice } from '../../../../../../packages/components/src';
+import EmptyState from '../../../../../../packages/components/src/empty-state';
 import { TAB_PATH } from './constants';
 
-const { NavLink } = Router;
+const LEARN_MORE_URL = 'https://help.newspack.com/federated-sites/multi-branded-site/';
 
 export default function Brands( {
 	brands,
 	isFetching,
+	hasLoaded,
+	loadError,
 	deleteBrand,
 }: {
 	brands: Brand[];
 	isFetching: boolean;
+	hasLoaded: boolean;
+	loadError: string;
 	deleteBrand: ( brand: Brand ) => void;
 } ) {
+	if ( loadError ) {
+		return <Notice isError noticeText={ loadError } />;
+	}
+
+	if ( hasLoaded && ! isFetching && ! brands.length ) {
+		return (
+			<EmptyState.Root>
+				<EmptyState.Header
+					icon={ siteLogo }
+					title={ __( 'Get started with brands', 'newspack-plugin' ) }
+					description={ __( 'Give parts of your site their own name, logo, colors, and menus.', 'newspack-plugin' ) }
+				/>
+				<EmptyState.Actions orientation="column" gap="lg">
+					<Button variant="primary" href={ `#${ TAB_PATH }/new` }>
+						{ __( 'Add Brand', 'newspack-plugin' ) }
+					</Button>
+					<ExternalLink
+						href={ LEARN_MORE_URL }
+						aria-label={
+							/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
+							__( 'Learn more about brands (opens in a new tab)', 'newspack-plugin' )
+						}
+					>
+						{ __( 'Learn more', 'newspack-plugin' ) }
+					</ExternalLink>
+				</EmptyState.Actions>
+			</EmptyState.Root>
+		);
+	}
+
 	return (
 		<Fragment>
 			<Card headerActions noBorder>
-				<h2>
-					{ ! brands.length && ! isFetching
-						? __( 'You have no saved brands.', 'newspack-plugin' )
-						: __( 'Site brands', 'newspack-plugin' ) }
-				</h2>
-				<NavLink to={ `${ TAB_PATH }/new` }>
-					<Button variant="primary" disabled={ isFetching }>
-						{ __( 'Add Brand', 'newspack-plugin' ) }
-					</Button>
-				</NavLink>
+				<h2>{ __( 'Site brands', 'newspack-plugin' ) }</h2>
+				<Button variant="primary" href={ `#${ TAB_PATH }/new` } disabled={ isFetching }>
+					{ __( 'Add Brand', 'newspack-plugin' ) }
+				</Button>
 			</Card>
 			{ brands.length ? (
 				brands.map( brand => <Brand key={ brand.id } brand={ brand } deleteBrand={ deleteBrand } /> )
 			) : (
-				<Fragment>
-					{ isFetching ? (
-						<p>{ __( 'Fetching brands…', 'newspack-plugin' ) }</p>
-					) : (
-						<p>{ __( 'Create brands to enhance your readers experience.', 'newspack-plugin' ) }</p>
-					) }
-				</Fragment>
+				<p>{ __( 'Fetching brands…', 'newspack-plugin' ) }</p>
 			) }
 		</Fragment>
 	);

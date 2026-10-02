@@ -1,3 +1,24 @@
+## newspack-story-budget [1.3.4](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.3...newspack-story-budget@1.3.4) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+
+## newspack-story-budget [1.3.3](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.2...newspack-story-budget@1.3.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **story-budget:** match custom-field search terms literally ([#1134](https://github.com/Automattic/newspack-workspace/issues/1134)) ([e6e0174](https://github.com/Automattic/newspack-workspace/commit/e6e0174057501744ee74eb524e1531a9302b77b2))
+
+## newspack-story-budget [1.3.2](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.1...newspack-story-budget@1.3.2) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
 ## newspack-story-budget [1.3.1](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.0...newspack-story-budget@1.3.1) (2026-09-15)
 
 

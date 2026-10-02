@@ -50,7 +50,6 @@ describe( 'Audience setup: initial list size', () => {
 		global.newspack_aux_data = { is_debug_mode: false };
 		global.newspackAudience = {
 			available_newsletter_lists: [],
-			integrations_settings_enabled: false,
 			can_use_salesforce: false,
 		};
 	} );
