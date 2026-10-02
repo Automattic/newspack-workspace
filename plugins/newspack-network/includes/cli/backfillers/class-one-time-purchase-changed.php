@@ -13,8 +13,9 @@ use WP_CLI;
 /**
  * Sends every order holding a one-time product with a Network ID, whatever its
  * status, for orders placed before purchases were reported or before the product
- * was tagged. Unpaid statuses go too, so a refund or cancellation whose event
- * never arrived is repaired as well as a purchase that never was. Each event is
+ * was tagged. Orders that were paid and since refunded or cancelled go too, so a
+ * revocation whose event never arrived is repaired as well as a purchase that
+ * never was; orders never paid are skipped, since they granted nothing. Each event is
  * stamped with the order's creation time, so a status a backfill has already sent
  * for the order is a duplicate to the hub and isn't sent again; the live event,
  * stamped when it fires, is what carries a status that returns to an earlier one.
@@ -64,6 +65,13 @@ class One_Time_Purchase_Changed extends Abstract_Backfiller {
 		$this->maybe_initialize_progress_bar( 'Processing orders', count( $order_ids ) );
 
 		foreach ( $this->load_in_batches( $order_ids, 'wc_get_order' ) as $order ) {
+			// An order that was never paid granted nothing anywhere, so there is nothing to repair, and a
+			// product that draws failed card tests can hold thousands of them: each one would be an event
+			// every node has to pull before anything newer. An order paid and then refunded or cancelled keeps
+			// its paid date, so those still go.
+			if ( ! $order->get_date_paid() && ! $order->is_paid() ) {
+				continue;
+			}
 			$data = Woo_Listeners::one_time_purchase_changed( $order->get_id(), '', $order->get_status(), $order );
 			if ( empty( $data ) ) {
 				continue;
