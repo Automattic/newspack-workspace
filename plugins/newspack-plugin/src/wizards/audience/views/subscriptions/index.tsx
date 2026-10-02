@@ -91,7 +91,7 @@ function AudienceSubscriptions( _props: Record< string, unknown >, ref: React.Fo
 				fullWidth: registered.fullWidth,
 			};
 		} )
-		.filter( Boolean );
+		.filter( ( section ): section is NonNullable< typeof section > => section !== null );
 
 	// Dropping one unregistered tab is a graceful degrade; ending up with none is
 	// not. Wizard redirects to `sections[ 0 ].path` unconditionally, so an empty
