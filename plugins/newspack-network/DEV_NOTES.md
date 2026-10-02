@@ -190,7 +190,7 @@ Available CLI commands are (add `--help` flag to learn more about each command):
 
 
 ### `wp newspack-network data-backfill newspack_node_group_seat_changed` / `newspack_node_one_time_purchase_changed`
-* Send every seat readers hold (a group turned off or deleted as cancelled), or every order holding a tagged one-time product that was ever paid or refunded (so a missed refund is repaired; never-paid orders are counted as skipped; a status a backfill already sent for the order counts as a duplicate and isn't re-sent), as events. `--live` to send; `--start`/`--end` limit seats by join time and orders by creation date. Safe to re-run.
+* Send every seat readers hold (a group turned off or deleted as cancelled), or every order holding a tagged one-time product that was ever paid or refunded (so a missed refund is repaired; tagged orders never paid, and seats with no usable date, are counted as skipped; a status a backfill already sent counts as a duplicate and isn't re-sent), as events. `--live` to send; `--start`/`--end` limit seats by join time and orders by creation date. Safe to re-run.
 
 ### `wp newspack-network sync-all`
 * Will pull all events from the Hub

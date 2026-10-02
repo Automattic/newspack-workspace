@@ -7,6 +7,7 @@
 
 namespace Newspack_Network\Backfillers;
 
+use Newspack_Network\Data_Backfill;
 use Newspack_Network\Woocommerce_Subscriptions\Group_Seats;
 use WP_CLI;
 
@@ -67,8 +68,9 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 			foreach ( $member_ids as $member_id ) {
 				$timestamp = $this->get_seat_timestamp( (int) $member_id, (int) $subscription_id );
 				if ( null === $timestamp ) {
+					Data_Backfill::increment_results_counter( Group_Seats::ACTION, 'skipped' );
 					if ( $this->verbose ) {
-						WP_CLI::line( sprintf( 'Skipping a seat on subscription #%d: no join time or creation date.', $subscription_id ) );
+						WP_CLI::line( sprintf( 'Skipping a seat on subscription #%d: no usable date.', $subscription_id ) );
 					}
 					continue;
 				}
