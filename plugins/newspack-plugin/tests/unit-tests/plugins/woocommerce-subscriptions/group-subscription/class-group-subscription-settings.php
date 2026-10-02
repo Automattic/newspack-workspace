@@ -728,8 +728,8 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Saving a product whose seat minimum field is blank stores 1 rather than 0. A stored 0
-	 * renders back into a field the browser will not submit.
+	 * Saving a product whose seat minimum field is blank stores 1 rather than 0, so the stored
+	 * value is one the field accepts without relying on the editor to correct it on display.
 	 */
 	public function test_blank_seat_minimum_saves_at_floor() {
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
@@ -773,6 +773,20 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		}
 		$meta_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'min_seats';
 
+		$product_id = self::factory()->post->create();
+		$product    = wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'type' => 'subscription',
+				'meta' => [ $meta_key => 3 ],
+			]
+		);
+		$GLOBALS['post'] = get_post( $product_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		ob_start();
+		\Newspack\WooCommerce_Products::show_custom_product_pricing_options( [] );
+		$product_form    = ob_get_clean();
+		$GLOBALS['post'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
 		$variation = wc_create_mock_product(
 			[
 				'id'   => 9004,
@@ -783,12 +797,19 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		\Newspack\WooCommerce_Products::show_custom_variation_pricing_options( 0, [ $meta_key => [ '3' ] ], (object) [ 'ID' => $variation->get_id() ] );
 		$variation_form = ob_get_clean();
 
+		$_POST = [
+			'product-type' => 'subscription',
+			$meta_key      => '3',
+		];
+		\Newspack\WooCommerce_Products::save_custom_product_options( $product_id );
 		$_POST = [ $meta_key => [ 0 => '3' ] ];
 		\Newspack\WooCommerce_Products::save_custom_variation_options( $variation, 0 );
 		$_POST = [];
 
-		$this->assertStringContainsString( 'name="' . $meta_key . '[0]" value="3"', $variation_form, 'A seat minimum of 3 should show as 3.' );
-		$this->assertSame( 3, $variation->get_meta( $meta_key ), 'A seat minimum of 3 should save as 3.' );
+		$this->assertStringContainsString( 'name="' . $meta_key . '" value="3"', $product_form, 'A product with a seat minimum of 3 should show 3.' );
+		$this->assertStringContainsString( 'name="' . $meta_key . '[0]" value="3"', $variation_form, 'A variation with a seat minimum of 3 should show 3.' );
+		$this->assertSame( 3, $product->get_meta( $meta_key ), 'A product saved with a seat minimum of 3 should store 3.' );
+		$this->assertSame( 3, $variation->get_meta( $meta_key ), 'A variation saved with a seat minimum of 3 should store 3.' );
 	}
 
 	/*

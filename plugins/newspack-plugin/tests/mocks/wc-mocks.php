@@ -2058,8 +2058,8 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	}
 }
 /**
- * Minimal stand-in for WooCommerce's admin field renderer. It prints only the label, `id`,
- * `name` and `value`, and its `value` matches what WooCommerce would show.
+ * Minimal stand-in for WooCommerce's admin field renderer. The input is always `type="text"`
+ * and custom attributes such as `min` are not printed, so a test can't assert on them.
  *
  * Without a `value`, WooCommerce reads the field's meta off the global post, so the product
  * editor shows whatever was last saved. The mock does the same, or a test of what the editor
