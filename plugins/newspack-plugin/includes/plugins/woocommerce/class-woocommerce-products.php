@@ -158,8 +158,8 @@ class WooCommerce_Products {
 	 *
 	 * The browser won't submit the product form while a number field sits below its `min`,
 	 * even when the field is hidden and the publisher can't see or fix it. The group seat
-	 * minimum is hidden that way on every product without group subscriptions. A blank value
-	 * takes the option's default.
+	 * minimum is hidden that way on every product not priced per seat. A blank value takes
+	 * the option's default.
 	 *
 	 * @param mixed $value         The stored or submitted value.
 	 * @param array $option_config The option's config.
