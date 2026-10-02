@@ -119,14 +119,35 @@ class Bylines {
 			'post',
 			self::META_KEY_BYLINE,
 			[
-				'default'       => '',
-				'description'   => 'A custom byline for the post',
-				'show_in_rest'  => true,
-				'single'        => true,
-				'type'          => 'string',
-				'auth_callback' => [ __CLASS__, 'auth_callback' ],
+				'default'           => '',
+				'description'       => 'A custom byline for the post',
+				'show_in_rest'      => [
+					'prepare_callback' => [ __CLASS__, 'sanitize_byline' ],
+				],
+				'single'            => true,
+				'type'              => 'string',
+				'auth_callback'     => [ __CLASS__, 'auth_callback' ],
+				'sanitize_callback' => [ __CLASS__, 'sanitize_byline' ],
 			]
 		);
+	}
+
+	/**
+	 * Limit a byline to the markup allowed in post content.
+	 *
+	 * The byline is rendered as HTML in the editor as well as on the front end, so it
+	 * is limited on save, and again in REST responses and the byline HTML, which covers
+	 * bylines saved before this check existed. Author tokens are plain text to the
+	 * allowlist, so a name inside one is treated like any other text: a bare `&` is
+	 * stored as `&amp;`, and a span that reads as a tag is handled as one. Names from
+	 * the editor arrive already encoded.
+	 *
+	 * @param mixed $byline Byline.
+	 *
+	 * @return string The byline, limited to the post allowlist.
+	 */
+	public static function sanitize_byline( mixed $byline ): string {
+		return is_string( $byline ) ? wp_kses_post( $byline ) : '';
 	}
 
 	/**
@@ -157,7 +178,7 @@ class Bylines {
 			return false;
 		}
 
-		$byline = \get_post_meta( $post_id, self::META_KEY_BYLINE, true );
+		$byline = self::sanitize_byline( \get_post_meta( $post_id, self::META_KEY_BYLINE, true ) );
 		if ( ! $byline ) {
 			return false;
 		}
@@ -443,7 +464,10 @@ class Bylines {
 		if ( is_feed() ) {
 			$byline = self::get_post_byline_html( false, false );
 			if ( $byline ) {
-				$display_name = html_entity_decode( wp_strip_all_tags( $byline ) );
+				// Feed templates print the author as-is: bare in Atom, and inside CDATA in RSS2 and
+				// RDF, where a `]]>` would end the section. So the decoded text is escaped in full:
+				// esc_html() would keep HTML-only entities such as `&nbsp;`, which XML does not define.
+				$display_name = htmlspecialchars( html_entity_decode( wp_strip_all_tags( $byline ), ENT_QUOTES | ENT_HTML5 ), ENT_QUOTES, 'UTF-8' );
 			}
 		}
 		return $display_name;
