@@ -5,6 +5,7 @@ import {
 	findAccessRuleOption,
 	formatAccessRuleOptionLabel,
 	formatMissingAccessRuleOptionLabel,
+	getAccessRuleOptionSuggestions,
 	getAccessRuleOptionTokens,
 	getAccessRuleTokenFieldMessages,
 	getMissingOptionLabel,
@@ -193,6 +194,22 @@ describe( 'hasUnlistedAccessRuleValues', () => {
 		// A deleted product, for instance: not in the option list, still granting.
 		expect( hasUnlistedAccessRuleValues( OPTIONS, [ 188250, 999999 ] ) ).toBe( true );
 		expect( hasUnlistedAccessRuleValues( OPTIONS, 'not-an-array' ) ).toBe( false );
+	} );
+
+	it( 'treats a product with an ineligible status as unlisted, since it still grants access', () => {
+		const options = [ ...OPTIONS, { value: 500000, label: 'Retired [invalid status: Draft]', ineligible: true } ];
+		expect( hasUnlistedAccessRuleValues( options, [ 188250, 500000 ] ) ).toBe( true );
+	} );
+} );
+
+describe( 'getAccessRuleOptionSuggestions', () => {
+	it( 'offers every option except the label-only entries that name stored values', () => {
+		const options = [
+			{ value: 300000, label: 'Monthly' },
+			{ value: 500000, label: 'Retired [invalid status: Draft]', ineligible: true },
+			{ value: 600000, label: 'Gone [invalid status: Trash]', ineligible: true, selectable: false },
+		];
+		expect( getAccessRuleOptionSuggestions( options ) ).toEqual( [ 'Monthly (#300000)', 'Retired [invalid status: Draft] (#500000)' ] );
 	} );
 } );
 
