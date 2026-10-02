@@ -684,6 +684,86 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'show_if_newspack_group_subscription_per_team', $options['newspack_group_subscription_limit']['wrapper_class'] );
 	}
 
+	/**
+	 * The product editor never shows a seat minimum below 1. The field carries `min="1"`, and
+	 * the browser refuses to submit the product form while a field sits below its minimum,
+	 * even when the field is hidden because the product has no group subscription. A stored 0
+	 * would leave the publisher unable to save the product.
+	 */
+	public function test_seat_minimum_below_floor_renders_at_floor() {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+		$meta_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'min_seats';
+
+		$product_id = self::factory()->post->create();
+		update_post_meta( $product_id, $meta_key, 0 );
+		wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'type' => 'subscription',
+				'meta' => [ $meta_key => 0 ],
+			]
+		);
+		$GLOBALS['post'] = get_post( $product_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		ob_start();
+		\Newspack\WooCommerce_Products::show_custom_product_pricing_options( [] );
+		$product_form = ob_get_clean();
+
+		$variation_id = 9001;
+		wc_create_mock_product(
+			[
+				'id'   => $variation_id,
+				'type' => 'subscription_variation',
+				'meta' => [ $meta_key => 0 ],
+			]
+		);
+		ob_start();
+		\Newspack\WooCommerce_Products::show_custom_variation_pricing_options( 2, [ $meta_key => [ '0' ] ], (object) [ 'ID' => $variation_id ] );
+		$variation_form = ob_get_clean();
+		$GLOBALS['post'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$this->assertStringContainsString( 'name="' . $meta_key . '" value="1"', $product_form, 'A product with a stored 0 should show a seat minimum of 1.' );
+		$this->assertStringContainsString( 'name="' . $meta_key . '[2]" value="1"', $variation_form, 'A variation with a stored 0 should show a seat minimum of 1.' );
+	}
+
+	/**
+	 * Saving a product whose seat minimum field is blank, as it is on a product that has never
+	 * had group subscriptions, stores 1 rather than 0. A stored 0 renders back into a field
+	 * the browser will not submit.
+	 */
+	public function test_blank_seat_minimum_saves_at_floor() {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+		$meta_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'min_seats';
+
+		$product   = wc_create_mock_product(
+			[
+				'id'   => 9002,
+				'type' => 'subscription',
+			]
+		);
+		$variation = wc_create_mock_product(
+			[
+				'id'   => 9003,
+				'type' => 'subscription_variation',
+			]
+		);
+
+		$_POST = [
+			'product-type' => 'subscription',
+			$meta_key      => '',
+		];
+		\Newspack\WooCommerce_Products::save_custom_product_options( $product->get_id() );
+		$_POST = [ $meta_key => [ 2 => '' ] ];
+		\Newspack\WooCommerce_Products::save_custom_variation_options( $variation, 2 );
+		$_POST = [];
+
+		$this->assertSame( 1, $product->get_meta( $meta_key ), 'A product saved with a blank seat minimum should store 1.' );
+		$this->assertSame( 1, $variation->get_meta( $meta_key ), 'A variation saved with a blank seat minimum should store 1.' );
+	}
+
 	/*
 	 * --- admin seat override ---
 	 */
