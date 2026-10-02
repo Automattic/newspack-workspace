@@ -149,6 +149,40 @@ class TestGroupSeats extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A status change on the group's subscription reports every seat on it: that is
+	 * the route a lapsed, cancelled or deleted group takes to revoke its members.
+	 */
+	public function test_subscription_status_change_reports_every_seat() {
+		$first  = self::factory()->user->create();
+		$second = self::factory()->user->create();
+		add_user_meta( $first, Group_Seats::MEMBER_META_KEY, 123 );
+		add_user_meta( $second, Group_Seats::MEMBER_META_KEY, 123 );
+		Group_Seats::dispatch_queued();
+		$this->reported = [];
+
+		do_action( 'woocommerce_subscription_status_changed', 123, 'active', 'cancelled', null );
+		Group_Seats::dispatch_queued();
+
+		$this->assertEqualsCanonicalizing( [ [ $first, 123 ], [ $second, 123 ] ], $this->reported );
+	}
+
+	/**
+	 * A role change reports the member's seats, since eligibility follows roles.
+	 */
+	public function test_role_change_reports_the_members_seats() {
+		$member = self::factory()->user->create();
+		add_user_meta( $member, Group_Seats::MEMBER_META_KEY, 123 );
+		add_user_meta( $member, Group_Seats::MEMBER_META_KEY, 456 );
+		Group_Seats::dispatch_queued();
+		$this->reported = [];
+
+		get_userdata( $member )->set_role( 'editor' );
+		Group_Seats::dispatch_queued();
+
+		$this->assertEqualsCanonicalizing( [ [ $member, 123 ], [ $member, 456 ] ], $this->reported );
+	}
+
+	/**
 	 * The payload names the member, carries the subscription's status while the seat
 	 * is active, and reports the seat as cancelled once it isn't.
 	 */

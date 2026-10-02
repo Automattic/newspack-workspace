@@ -37,8 +37,9 @@ class Group_Seats {
 	/**
 	 * User meta newspack-plugin records a member's group subscription IDs in
 	 * (its `Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY`), read here directly
-	 * rather than through that class: the meta and subscription hooks fire whether or
-	 * not newspack-plugin is active, and the meta outlives it.
+	 * rather than through that class: the WooCommerce Subscriptions status hook fires
+	 * whether or not newspack-plugin is active, and calling its `get_members()` from
+	 * there would be a fatal error without it.
 	 */
 	const MEMBER_META_KEY = '_newspack_group_subscription';
 
@@ -66,6 +67,9 @@ class Group_Seats {
 		add_action( 'delete_user_meta', [ __CLASS__, 'queue_from_meta_ids' ], 10, 3 );
 		add_action( 'woocommerce_subscription_status_changed', [ __CLASS__, 'queue_subscription_members' ] );
 		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'queue_from_settings' ], 10, 2 );
+		add_action( 'set_user_role', [ __CLASS__, 'queue_user_seats' ] );
+		add_action( 'add_user_role', [ __CLASS__, 'queue_user_seats' ] );
+		add_action( 'remove_user_role', [ __CLASS__, 'queue_user_seats' ] );
 		add_action( 'shutdown', [ __CLASS__, 'dispatch_queued' ] );
 	}
 
@@ -113,6 +117,20 @@ class Group_Seats {
 				// The hook's user ID is 0 when the deletion matched rows by value alone.
 				self::queue( $meta->user_id, $meta->meta_value );
 			}
+		}
+	}
+
+	/**
+	 * Queue every seat a user holds when their roles change.
+	 *
+	 * Whether a member may hold a seat follows their roles (staff are excluded), so a
+	 * promotion can end a seat with no membership change for the meta hooks to see.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public static function queue_user_seats( $user_id ) {
+		foreach ( get_user_meta( $user_id, self::MEMBER_META_KEY, false ) as $subscription_id ) {
+			self::queue( $user_id, $subscription_id );
 		}
 	}
 
