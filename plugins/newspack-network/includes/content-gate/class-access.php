@@ -12,7 +12,7 @@
 
 namespace Newspack_Network\Content_Gate;
 
-use Newspack_Network\Incoming_Events\Access_Grant_Changed;
+use Newspack_Network\Incoming_Events\Reader_Product_Changed;
 use Newspack_Network\Incoming_Events\Subscription_Changed;
 use Newspack_Network\Incoming_Events\Product_Updated;
 use Newspack_Network\Woocommerce\Product_Admin;
@@ -82,7 +82,7 @@ class Access {
 
 		// Seats on group subscriptions owned by someone else.
 		if ( ! $strict ) {
-			foreach ( self::get_user_grants( $user_id, 'group' ) as $site => $seats ) {
+			foreach ( self::get_user_products( $user_id, 'group' ) as $site => $seats ) {
 				foreach ( $seats as $seat ) {
 					if ( in_array( $seat['status'] ?? '', self::ACTIVE_STATUSES, true ) && self::products_match( $site, $seat['products'] ?? [], $network_ids ) ) {
 						return true;
@@ -121,7 +121,7 @@ class Access {
 		}
 		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : self::PAID_STATUSES;
 
-		foreach ( self::get_user_grants( $user_id, 'purchase' ) as $site => $purchases ) {
+		foreach ( self::get_user_products( $user_id, 'purchase' ) as $site => $purchases ) {
 			foreach ( $purchases as $purchase ) {
 				if ( ! in_array( $purchase['status'] ?? '', $paid_statuses, true ) ) {
 					continue;
@@ -162,18 +162,18 @@ class Access {
 	}
 
 	/**
-	 * The reader's grants of one type, keyed by site.
+	 * The reader's products on other sites, of one type, keyed by site.
 	 *
 	 * @param int    $user_id User ID.
 	 * @param string $type    'group' or 'purchase'.
 	 * @return array Site URL => records.
 	 */
-	private static function get_user_grants( $user_id, $type ) {
+	private static function get_user_products( $user_id, $type ) {
 		$by_site = [];
-		foreach ( Access_Grant_Changed::get_user_grants( $user_id ) as $site => $grants ) {
-			foreach ( (array) $grants as $grant ) {
-				if ( is_array( $grant ) && ( $grant['type'] ?? '' ) === $type ) {
-					$by_site[ $site ][] = $grant;
+		foreach ( Reader_Product_Changed::get_user_products( $user_id ) as $site => $records ) {
+			foreach ( (array) $records as $record ) {
+				if ( is_array( $record ) && ( $record['type'] ?? '' ) === $type ) {
+					$by_site[ $site ][] = $record;
 				}
 			}
 		}

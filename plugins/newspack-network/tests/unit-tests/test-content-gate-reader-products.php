@@ -1,19 +1,19 @@
 <?php
 /**
- * Class TestContentGateAccessGrants
+ * Class TestContentGateReaderProducts
  *
  * @package Newspack_Network
  */
 
 use Newspack_Network\Content_Gate\Access;
-use Newspack_Network\Incoming_Events\Access_Grant_Changed;
+use Newspack_Network\Incoming_Events\Reader_Product_Changed;
 use Newspack_Network\Incoming_Events\Product_Updated;
 use Newspack_Network\Woocommerce\Product_Admin;
 
 /**
  * Access granted by a seat on another site's group subscription or a paid one-time order there.
  */
-class TestContentGateAccessGrants extends WP_UnitTestCase {
+class TestContentGateReaderProducts extends WP_UnitTestCase {
 
 	const SITE = 'https://other.example.test';
 
@@ -70,15 +70,15 @@ class TestContentGateAccessGrants extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Store a grant for the reader.
+	 * Store a product record for the reader.
 	 *
-	 * @param string $key    Grant key.
+	 * @param string $key    Record key.
 	 * @param array  $record Record.
 	 */
-	private function grant( $key, $record ) {
-		$grants                       = Access_Grant_Changed::get_user_grants( $this->user_id );
-		$grants[ self::SITE ][ $key ] = $record;
-		update_user_meta( $this->user_id, Access_Grant_Changed::USER_GRANTS_META_KEY, $grants );
+	private function record( $key, $record ) {
+		$records                       = Reader_Product_Changed::get_user_products( $this->user_id );
+		$records[ self::SITE ][ $key ] = $record;
+		update_user_meta( $this->user_id, Reader_Product_Changed::USER_PRODUCTS_META_KEY, $records );
 	}
 
 	/**
@@ -88,7 +88,7 @@ class TestContentGateAccessGrants extends WP_UnitTestCase {
 	 * @param int    $product_id Product on the other site.
 	 */
 	private function seat( $status, $product_id = 7 ) {
-		$this->grant(
+		$this->record(
 			'group:90',
 			[
 				'type'     => 'group',
@@ -107,7 +107,7 @@ class TestContentGateAccessGrants extends WP_UnitTestCase {
 	 * @param int    $product_id Product on the other site.
 	 */
 	private function purchase( $days_ago, $status = 'completed', $product_id = 30 ) {
-		$this->grant(
+		$this->record(
 			'order:86',
 			[
 				'type'         => 'purchase',
@@ -210,7 +210,7 @@ class TestContentGateAccessGrants extends WP_UnitTestCase {
 	 * finite rules; a lifetime rule has no time to check and still passes.
 	 */
 	public function test_purchase_without_a_date_denies_finite_rules() {
-		$this->grant(
+		$this->record(
 			'order:86',
 			[
 				'type'         => 'purchase',

@@ -1,6 +1,6 @@
 <?php
 /**
- * Newspack Network Access Grant Changed Incoming Event
+ * Newspack Network Reader Product Changed Incoming Event
  *
  * @package Newspack
  */
@@ -16,39 +16,41 @@ use Newspack_Network\Debugger;
  * Recorded per reader, keyed by site and item, in its own user meta so that
  * newspack-plugin's strict subscription check (owned subscriptions only, used by
  * access attribution) and the My Account "Other Subscriptions" tab keep seeing
- * only subscriptions the reader owns.
+ * only subscriptions the reader owns. Named for what it stores, the reader's
+ * products, not for gating: campaign segmentation or anything else that cares
+ * which products a reader holds across the network can read it too.
  */
-abstract class Access_Grant_Changed extends Abstract_Incoming_Event {
+abstract class Reader_Product_Changed extends Abstract_Incoming_Event {
 
-	const USER_GRANTS_META_KEY = '_newspack_network_access_grants';
+	const USER_PRODUCTS_META_KEY = '_newspack_network_reader_products';
 
 	/**
-	 * The key this grant is stored under for its site, e.g. "group:90" or "order:86".
+	 * The key this record is stored under for its site, e.g. "group:90" or "order:86".
 	 *
 	 * @return string
 	 */
-	abstract protected function get_grant_key();
+	abstract protected function get_record_key();
 
 	/**
-	 * The record stored for this grant.
+	 * The record stored for this product.
 	 *
 	 * @return array
 	 */
-	abstract protected function get_grant_record();
+	abstract protected function get_record();
 
 	/**
-	 * The grants a reader holds on other sites.
+	 * The products a reader holds on other sites.
 	 *
 	 * @param int $user_id User ID.
 	 * @return array Site URL => [ key => record ].
 	 */
-	public static function get_user_grants( $user_id ) {
-		$grants = get_user_meta( $user_id, self::USER_GRANTS_META_KEY, true );
-		return is_array( $grants ) ? $grants : [];
+	public static function get_user_products( $user_id ) {
+		$records = get_user_meta( $user_id, self::USER_PRODUCTS_META_KEY, true );
+		return is_array( $records ) ? $records : [];
 	}
 
 	/**
-	 * Record the grant on the hub's own copy of the reader.
+	 * Record the product on the hub's own copy of the reader.
 	 *
 	 * @return void
 	 */
@@ -57,7 +59,7 @@ abstract class Access_Grant_Changed extends Abstract_Incoming_Event {
 	}
 
 	/**
-	 * Record the grant on the node's copy of the reader.
+	 * Record the product on the node's copy of the reader.
 	 *
 	 * @return void
 	 */
@@ -66,7 +68,7 @@ abstract class Access_Grant_Changed extends Abstract_Incoming_Event {
 	}
 
 	/**
-	 * Record the grant on the reader, if they have an account here.
+	 * Record the product on the reader, if they have an account here.
 	 *
 	 * @return void
 	 */
@@ -77,12 +79,12 @@ abstract class Access_Grant_Changed extends Abstract_Incoming_Event {
 		}
 		$user = get_user_by( 'email', $email );
 		if ( ! $user ) {
-			Debugger::log( 'No user for access grant: ' . $email );
+			Debugger::log( 'No user for reader product record: ' . $email );
 			return;
 		}
-		$grants = self::get_user_grants( $user->ID );
-		$grants[ $this->get_site() ][ $this->get_grant_key() ] = $this->get_grant_record();
-		update_user_meta( $user->ID, self::USER_GRANTS_META_KEY, $grants );
+		$records = self::get_user_products( $user->ID );
+		$records[ $this->get_site() ][ $this->get_record_key() ] = $this->get_record();
+		update_user_meta( $user->ID, self::USER_PRODUCTS_META_KEY, $records );
 	}
 
 	/**

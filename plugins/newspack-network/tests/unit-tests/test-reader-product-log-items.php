@@ -1,6 +1,6 @@
 <?php
 /**
- * Class TestAccessGrantLogItems
+ * Class TestReaderProductLogItems
  *
  * @package Newspack_Network
  */
@@ -12,7 +12,7 @@ use Newspack_Network\Hub\Stores\Event_Log_Items\One_Time_Purchase_Changed;
 /**
  * What the hub's Event Log screen says about a seat or purchase event.
  */
-class TestAccessGrantLogItems extends WP_UnitTestCase {
+class TestReaderProductLogItems extends WP_UnitTestCase {
 
 	/**
 	 * An Event Log item of the given class.

@@ -13,14 +13,14 @@ namespace Newspack_Network\Incoming_Events;
  * The reading site's gate decides how long after the purchase access lasts, so
  * the record carries the purchase time and nothing about duration.
  */
-class One_Time_Purchase_Changed extends Access_Grant_Changed {
+class One_Time_Purchase_Changed extends Reader_Product_Changed {
 
 	/**
 	 * Keyed by the order.
 	 *
 	 * @return string
 	 */
-	protected function get_grant_key() {
+	protected function get_record_key() {
 		return 'order:' . $this->get_id();
 	}
 
@@ -29,7 +29,7 @@ class One_Time_Purchase_Changed extends Access_Grant_Changed {
 	 *
 	 * @return array
 	 */
-	protected function get_grant_record() {
+	protected function get_record() {
 		return [
 			'type'         => 'purchase',
 			'id'           => $this->get_id(),

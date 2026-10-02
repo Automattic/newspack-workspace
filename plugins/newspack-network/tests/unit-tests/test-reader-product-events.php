@@ -1,19 +1,19 @@
 <?php
 /**
- * Class TestAccessGrantEvents
+ * Class TestReaderProductEvents
  *
  * @package Newspack_Network
  */
 
 use Newspack_Network\Accepted_Actions;
-use Newspack_Network\Incoming_Events\Access_Grant_Changed;
+use Newspack_Network\Incoming_Events\Reader_Product_Changed;
 use Newspack_Network\Incoming_Events\Group_Seat_Changed;
 use Newspack_Network\Incoming_Events\One_Time_Purchase_Changed;
 
 /**
- * How a site records what a reader holds on other network sites besides their own subscriptions.
+ * How a site records the products a reader holds on other network sites besides their own subscriptions.
  */
-class TestAccessGrantEvents extends WP_UnitTestCase {
+class TestReaderProductEvents extends WP_UnitTestCase {
 
 	/**
 	 * A group seat event.
@@ -74,18 +74,18 @@ class TestAccessGrantEvents extends WP_UnitTestCase {
 	/**
 	 * A seat and a purchase are recorded on the reader, keyed by site and item.
 	 */
-	public function test_events_record_grants_on_the_reader() {
+	public function test_events_record_products_on_the_reader() {
 		$user_id = self::factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
 
 		$this->seat( 'https://a.example.test', 'reader@example.test', 'pending-cancel' )->process_in_node();
 		$this->purchase( 'https://a.example.test', 'reader@example.test' )->process_in_node();
 
-		$grants = Access_Grant_Changed::get_user_grants( $user_id )['https://a.example.test'];
-		$this->assertSame( 'group', $grants['group:90']['type'] );
-		$this->assertSame( 'pending-cancel', $grants['group:90']['status'] );
-		$this->assertSame( [ 7 ], array_keys( $grants['group:90']['products'] ) );
-		$this->assertSame( 'purchase', $grants['order:86']['type'] );
-		$this->assertSame( 1700000000, $grants['order:86']['purchased_at'] );
+		$records = Reader_Product_Changed::get_user_products( $user_id )['https://a.example.test'];
+		$this->assertSame( 'group', $records['group:90']['type'] );
+		$this->assertSame( 'pending-cancel', $records['group:90']['status'] );
+		$this->assertSame( [ 7 ], array_keys( $records['group:90']['products'] ) );
+		$this->assertSame( 'purchase', $records['order:86']['type'] );
+		$this->assertSame( 1700000000, $records['order:86']['purchased_at'] );
 	}
 
 	/**
@@ -97,19 +97,19 @@ class TestAccessGrantEvents extends WP_UnitTestCase {
 		$this->seat( 'https://a.example.test', 'reader@example.test', 'active' )->process_in_node();
 		$this->seat( 'https://a.example.test', 'reader@example.test', 'cancelled' )->process_in_node();
 
-		$this->assertSame( 'cancelled', Access_Grant_Changed::get_user_grants( $user_id )['https://a.example.test']['group:90']['status'] );
+		$this->assertSame( 'cancelled', Reader_Product_Changed::get_user_products( $user_id )['https://a.example.test']['group:90']['status'] );
 	}
 
 	/**
 	 * Every site numbers its own orders and subscriptions, so the same ID on two sites is two records.
 	 */
-	public function test_grants_are_kept_per_site() {
+	public function test_records_are_kept_per_site() {
 		$user_id = self::factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
 
 		$this->purchase( 'https://a.example.test', 'reader@example.test' )->process_in_node();
 		$this->purchase( 'https://b.example.test', 'reader@example.test' )->process_in_node();
 
-		$this->assertSame( [ 'https://a.example.test', 'https://b.example.test' ], array_keys( Access_Grant_Changed::get_user_grants( $user_id ) ) );
+		$this->assertSame( [ 'https://a.example.test', 'https://b.example.test' ], array_keys( Reader_Product_Changed::get_user_products( $user_id ) ) );
 	}
 
 	/**
@@ -118,7 +118,7 @@ class TestAccessGrantEvents extends WP_UnitTestCase {
 	public function test_event_for_unknown_email_writes_nothing() {
 		$this->seat( 'https://a.example.test', 'nobody@example.test' )->process_in_node();
 
-		$this->assertSame( [], get_users( [ 'meta_key' => Access_Grant_Changed::USER_GRANTS_META_KEY ] ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+		$this->assertSame( [], get_users( [ 'meta_key' => Reader_Product_Changed::USER_PRODUCTS_META_KEY ] ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 	}
 
 	/**
