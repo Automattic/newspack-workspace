@@ -7,6 +7,7 @@
 
 use Newspack_Network\Accepted_Actions;
 use Newspack_Network\Incoming_Events\Reader_Product_Changed;
+use Newspack_Network\Utils\Users;
 use Newspack_Network\Incoming_Events\Group_Seat_Changed;
 use Newspack_Network\Incoming_Events\One_Time_Purchase_Changed;
 
@@ -113,12 +114,18 @@ class TestReaderProductEvents extends WP_UnitTestCase {
 	}
 
 	/**
-	 * With no account for the email, the event is dropped, as subscription events are.
+	 * With no account for the email, the event creates the network reader account and
+	 * records the product on it, as membership events do, so an account that never
+	 * propagated or that the registration event hasn't reached yet still gets its access.
 	 */
-	public function test_event_for_unknown_email_writes_nothing() {
-		$this->seat( 'https://a.example.test', 'nobody@example.test' )->process_in_node();
+	public function test_event_for_unknown_email_creates_the_account() {
+		$this->seat( 'https://a.example.test', 'newcomer@example.test' )->process_in_node();
 
-		$this->assertSame( [], get_users( [ 'meta_key' => Reader_Product_Changed::USER_PRODUCTS_META_KEY ] ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+		$user = get_user_by( 'email', 'newcomer@example.test' );
+		$this->assertInstanceOf( WP_User::class, $user );
+		$this->assertContains( NEWSPACK_NETWORK_READER_ROLE, $user->roles );
+		$this->assertSame( 'https://a.example.test', get_user_meta( $user->ID, Users::USER_META_REMOTE_SITE, true ) );
+		$this->assertSame( 'active', Reader_Product_Changed::get_user_products( $user->ID )['https://a.example.test']['group:90']['status'] );
 	}
 
 	/**

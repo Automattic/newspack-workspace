@@ -8,6 +8,8 @@
 namespace Newspack_Network\Incoming_Events;
 
 use Newspack_Network\Debugger;
+use Newspack_Network\User_Update_Watcher;
+use Newspack_Network\Utils\Users;
 
 /**
  * A reader's tie to a product on another site that isn't a subscription they own:
@@ -68,7 +70,12 @@ abstract class Reader_Product_Changed extends Abstract_Incoming_Event {
 	}
 
 	/**
-	 * Record the product on the reader, if they have an account here.
+	 * Record the product on the reader, creating their network reader account here
+	 * first if it doesn't exist, as membership events do.
+	 *
+	 * The account usually arrives through `reader_registered` before this event, but
+	 * not always: that event can be delayed by a webhook retry, and accounts created
+	 * on the origin without a sign-up or checkout never send one.
 	 *
 	 * @return void
 	 */
@@ -77,9 +84,10 @@ abstract class Reader_Product_Changed extends Abstract_Incoming_Event {
 		if ( ! $email || ! $this->get_id() ) {
 			return;
 		}
-		$user = get_user_by( 'email', $email );
-		if ( ! $user ) {
-			Debugger::log( 'No user for reader product record: ' . $email );
+		User_Update_Watcher::$enabled = false;
+		$user = Users::get_or_create_user_by_email( $email, $this->get_site(), $this->data->user_id ?? '' );
+		if ( ! $user instanceof \WP_User ) {
+			Debugger::log( 'Could not find or create a user for reader product record: ' . $email );
 			return;
 		}
 		$records = self::get_user_products( $user->ID );
