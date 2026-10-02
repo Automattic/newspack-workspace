@@ -129,7 +129,9 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 			$created = $subscription->get_date_created();
 			return $created ? $created->getTimestamp() : null;
 		}
-		$member = get_userdata( $member_id );
-		return $member && $member->user_registered ? (int) strtotime( $member->user_registered ) : null;
+		// A zero registration date (an imported user table) parses to a negative time the hub can't store.
+		$member     = get_userdata( $member_id );
+		$registered = $member ? (int) strtotime( (string) $member->user_registered ) : 0;
+		return $registered > 0 ? $registered : null;
 	}
 }
