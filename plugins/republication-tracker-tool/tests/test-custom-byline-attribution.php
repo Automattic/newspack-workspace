@@ -272,4 +272,26 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'Someone Else', $plain_text, 'The Plain Text byline should not use the global post\'s Custom Byline.' );
 		$this->assertSame( $global_post->ID, $post->ID, 'The global post should be restored afterwards.' );
 	}
+
+	/**
+	 * When a later byline filter replaces the Custom Byline, the replacement
+	 * should keep the plugin's own "by" prefix.
+	 */
+	public function test_byline_format_kept_when_later_filter_replaces_custom_byline() {
+		global $post;
+
+		$post = $this->test_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $this->test_post );
+
+		$replace_byline = function () {
+			return 'Replaced Name';
+		};
+		add_filter( 'republication_tracker_tool_byline', $replace_byline, 30 );
+
+		$byline_text = Republication_Tracker_Tool::get_byline_text( 'John Doe' );
+
+		remove_filter( 'republication_tracker_tool_byline', $replace_byline, 30 );
+
+		$this->assertSame( 'by Replaced Name, Test Blog', $byline_text );
+	}
 }

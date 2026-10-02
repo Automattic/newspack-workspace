@@ -53,19 +53,22 @@ add_filter( 'republication_tracker_tool_byline', 'republication_tracker_tool_byl
 /**
  * Filter the Republication Tracker Tool Byline Format
  *
- * Suppresses this plugin's own "by %s" format when a Custom Byline is
- * active, since that text already includes its own leading word (e.g.
- * "By ...").
+ * Suppresses this plugin's own "by %s" format when the byline being wrapped
+ * is the Custom Byline, since that text already includes its own leading
+ * word (e.g. "By ..."). A byline a later filter replaced keeps the format.
  *
  * @param string $format The byline format (should contain a %s placeholder).
+ * @param string $byline The resolved byline the format will wrap.
  * @return string
  */
-function republication_tracker_tool_byline_format_filter_newspack_bylines( $format ) {
-	if ( empty( republication_tracker_tool_get_newspack_custom_byline() ) ) {
+function republication_tracker_tool_byline_format_filter_newspack_bylines( $format, $byline = '' ) {
+	$custom_byline = republication_tracker_tool_get_newspack_custom_byline();
+
+	if ( empty( $custom_byline ) || wp_strip_all_tags( $custom_byline ) !== $byline ) {
 		return $format;
 	}
 
 	return '%s';
 }
 
-add_filter( 'republication_tracker_tool_byline_format', 'republication_tracker_tool_byline_format_filter_newspack_bylines', 20, 1 );
+add_filter( 'republication_tracker_tool_byline_format', 'republication_tracker_tool_byline_format_filter_newspack_bylines', 20, 2 );
