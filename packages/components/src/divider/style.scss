@@ -3,21 +3,23 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-divider {
 	background: transparent;
 	border: 0;
 	display: block;
 	height: 1px;
-	margin-bottom: min(32px, var(--divider-margin-bottom, 64px));
+	margin-bottom: min(#{wp-vars.$grid-unit-40}, var(--divider-margin-bottom, #{wp-vars.$grid-unit-60}));
 	margin-left: 0;
 	margin-right: 0;
-	margin-top: min(32px, var(--divider-margin-top, 64px));
+	margin-top: min(#{wp-vars.$grid-unit-40}, var(--divider-margin-top, #{wp-vars.$grid-unit-60}));
 	padding: 0;
 
-	@media screen and (min-width: 783px) {
-		margin-bottom: var(--divider-margin-bottom, 64px);
-		margin-top: var(--divider-margin-top, 64px);
+	@include wp-mixins.break-medium {
+		margin-bottom: var(--divider-margin-bottom, #{wp-vars.$grid-unit-60});
+		margin-top: var(--divider-margin-top, #{wp-vars.$grid-unit-60});
 	}
 
 	// Alignment

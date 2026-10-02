@@ -83,15 +83,14 @@
 		}
 	}
 
-	.components-modal__content {
-		> * {
-			&:first-child {
-				margin-top: 0;
-			}
+	.components-modal__children-container {
+		> :first-child,
+		> .screen-reader-text:first-child + * {
+			margin-top: 0;
+		}
 
-			&:last-child {
-				margin-bottom: 0;
-			}
+		> :last-child {
+			margin-bottom: 0;
 		}
 	}
 }

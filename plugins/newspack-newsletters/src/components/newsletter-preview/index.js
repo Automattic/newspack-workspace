@@ -112,7 +112,7 @@ const NewsletterPreview = ( { layoutId = null, meta = {}, blocks, ...props } ) =
 
 	// Apply the styles to the iframe editor.
 	const useInlineStyles = () => {
-		const ref = useRef();
+		const ref = useRef( undefined );
 		useEffect( () => {
 			const node = ref.current;
 			if ( ! node ) {

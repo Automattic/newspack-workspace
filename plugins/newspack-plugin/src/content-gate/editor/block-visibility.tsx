@@ -16,7 +16,6 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
-import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 import { useState, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
@@ -25,6 +24,7 @@ import { __ } from '@wordpress/i18n';
  */
 import './block-visibility.scss';
 import {
+	type TokenItem,
 	formatAccessRuleOptionLabel,
 	getAccessRuleOptionSuggestions,
 	hasSelectableAccessRuleOptions,

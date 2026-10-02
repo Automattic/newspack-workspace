@@ -109,6 +109,11 @@ class Initializer {
 		// needing it.
 		WP_CLI::add_command( 'newspack migrate-post-exemptions', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_post_exemptions' ] );
 
+		// Registered outside the Memberships guard for the same reason: it maps WCM's
+		// feed options, which survive deactivation, and a site that has already been
+		// flipped without them is the one serving feeds it never configured.
+		WP_CLI::add_command( 'newspack migrate-feed-settings', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_feed_settings' ] );
+
 		// Only register the Teams for Memberships diagnostics command on sites where the
 		// SkyVerge plugin is active. No reason to surface it in `wp help` otherwise.
 		if ( class_exists( 'WC_Memberships_For_Teams_Loader' ) ) {

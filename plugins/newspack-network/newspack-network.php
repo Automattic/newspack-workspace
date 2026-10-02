@@ -17,12 +17,12 @@
 defined( 'ABSPATH' ) || exit;
 
 // Path to the Newspack Network plugin directory.
-if ( ! defined( 'NEWSPACK_NETWORK_PLUGIN_DIR' ) ) {
+if ( ! defined( 'NEWSPACK_NETWORK_PLUGIN_DIR' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_NETWORK_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 }
 
 // Path to the main Newspack Network plugin file.
-if ( ! defined( 'NEWSPACK_NETWORK_PLUGIN_FILE' ) ) {
+if ( ! defined( 'NEWSPACK_NETWORK_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_NETWORK_PLUGIN_FILE', __FILE__ );
 }
 

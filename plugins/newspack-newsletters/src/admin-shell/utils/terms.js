@@ -1,10 +1,11 @@
 /**
  * Shared term/taxonomy helpers for DataView screens.
  *
- * Reads `_embedded.wp:term`, paginates beyond the 100-item REST cap,
- * and round-trips `FormTokenField` tokens. `resolveTokens` preserves
- * existing selections' IDs across re-renders (see its comment for the
- * residual duplicate-name caveat on hierarchical taxonomies).
+ * Reads the `newspack_newsletters_terms` REST field, paginates beyond
+ * the 100-item REST cap, and round-trips `FormTokenField` tokens.
+ * `resolveTokens` preserves existing selections' IDs across re-renders
+ * (see its comment for the residual duplicate-name caveat on
+ * hierarchical taxonomies).
  */
 
 import apiFetch from '@wordpress/api-fetch';
@@ -40,15 +41,10 @@ export async function fetchAllTerms( basePath, { fields = [ 'id', 'name' ] } = {
 	return all;
 }
 
-// Keyed lookup — group order isn't guaranteed across post types.
+// Keyed by taxonomy slug — see `Rest_Terms_Field` for the payload shape.
 export const termsForTaxonomy = ( item, taxonomy ) => {
-	const groups = item?._embedded?.[ 'wp:term' ] || [];
-	for ( const group of groups ) {
-		if ( Array.isArray( group ) && group.length > 0 && group[ 0 ]?.taxonomy === taxonomy ) {
-			return group;
-		}
-	}
-	return [];
+	const terms = item?.newspack_newsletters_terms?.[ taxonomy ];
+	return Array.isArray( terms ) ? terms : [];
 };
 
 const initialSelectionsForTaxonomy = ( item, taxonomy ) =>
@@ -62,15 +58,13 @@ const selectionsFromIds = ( ids, options ) =>
 		.filter( option => option && option.name )
 		.map( option => ( { id: option.id, name: option.name } ) );
 
-// Resolve a post's stored term IDs into `{ id, name }` selections from
-// both the `wp:term` embed and a fetched options list. Neither source is
-// complete on its own: the embed is absent whenever no term-backed column
-// is visible, and it caps at 100 terms per taxonomy
-// (`WP_REST_Server::embed_links()` raises an embedded collection's
-// `per_page` to the schema maximum, and the terms schema maxes at 100).
-// Both yield the same REST `name` for a given term, so precedence is
-// immaterial today — but it is the embed that wins, being spread last
-// into a `Map` that keeps the last entry per ID.
+// Resolve a post's stored term IDs into `{ id, name }` selections from both
+// the dedicated terms field and a fetched options list. Neither source is
+// complete on its own: the terms field is only requested when a term-backed
+// column is visible, and the options list can lag or fail. Both yield the
+// same REST `name` for a given term, so precedence is immaterial today — but
+// it is the terms field that wins, being spread last into a `Map` that keeps
+// the last entry per ID.
 export const selectionsForTaxonomy = ( item, ids, taxonomy, options ) => {
 	const embedded = initialSelectionsForTaxonomy( item, taxonomy );
 	if ( ! Array.isArray( ids ) ) {
@@ -81,8 +75,8 @@ export const selectionsForTaxonomy = ( item, ids, taxonomy, options ) => {
 };
 
 // IDs the options list cannot account for. Distinct from `unresolvedIds`,
-// which measures against the merged selections: the embed can render a token
-// the options list has never heard of, and that token looks editable while
+// which measures against the merged selections: the terms field can render a
+// token the options list has never heard of, and that token looks editable while
 // being impossible to restore, since the options list is what feeds both the
 // suggestions and `__experimentalValidateInput`. Remove it once and it cannot
 // be typed back. So this, not the merged gap, is what decides editability.

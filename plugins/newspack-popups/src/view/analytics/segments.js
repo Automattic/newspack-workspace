@@ -51,7 +51,7 @@
  * session boundary GA4 reports group by, whatever the storage's own lifetime.
  */
 
-import { getMatchingSegmentIds, getPreviewedPromptId, sendEvent } from '../utils';
+import { getMatchingSegmentIds, getPreviewedPromptId, isSwitchedSession, sendEvent } from '../utils';
 import { getCriteria } from '../../criteria/utils';
 
 export const EVENT_NAME = 'np_segment_matched';
@@ -188,9 +188,11 @@ const reportFreshMatches = () => {
 	}
 	// A site with no segments has no reach to measure: `none` is only
 	// meaningful against segments that exist. Editors previewing prompts or
-	// segments do not count toward reach either.
+	// segments do not count toward reach either, nor does an admin switched
+	// into a reader's account: the live match describes the admin's browser,
+	// while the prompts on the page follow the reader's stored snapshot.
 	const allIds = Object.keys( segments );
-	if ( ! allIds.length || isPreviewRequest() ) {
+	if ( ! allIds.length || isPreviewRequest() || isSwitchedSession() ) {
 		return;
 	}
 	// Withhold segments whose criteria are not all registered on this site —

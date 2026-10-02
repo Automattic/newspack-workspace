@@ -14,7 +14,7 @@ import { speak } from '@wordpress/a11y';
 /**
  * Internal dependencies.
  */
-import { Button, Card, SectionHeader } from '../../../../../../packages/components/src';
+import { Button, Grid, SectionHeader } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
 interface AccessibilityStatementProps {
@@ -149,72 +149,74 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 	const renderAction = () => {
 		if ( localPageData ) {
 			return localPageData.editUrl ? (
-				<Button variant="secondary" isSmall href={ localPageData.editUrl }>
+				<Button variant="secondary" href={ localPageData.editUrl }>
 					{ getButtonText() }
 				</Button>
 			) : null;
 		}
 
 		return (
-			<Button variant="secondary" isSmall onClick={ createPage } disabled={ isFetching || localIsFetching }>
+			<Button variant="secondary" onClick={ createPage } disabled={ isFetching || localIsFetching }>
 				{ getButtonText() }
 			</Button>
 		);
 	};
 
 	const statusInfo = getStatusMessage();
+	const action = renderAction();
 
 	return (
-		<Stack className="newspack-accessibility-statement" direction="column" gap="xl">
-			<Card noBorder headerActions>
-				<SectionHeader
-					title={ __( 'Accessibility Statement Page', 'newspack-plugin' ) }
-					noMargin
-					description={ __(
-						'Edit and publish an accessibility statement page. Once published, a link to this page will display in the footer of your site.',
-						'newspack-plugin'
-					) }
-				/>
-				{ renderAction() }
-			</Card>
+		<Grid columns={ 2 } gutter={ 32 } noMargin>
+			<SectionHeader
+				noMargin
+				heading={ 2 }
+				title={ __( 'Accessibility Statement', 'newspack-plugin' ) }
+				description={ __(
+					'Edit and publish an accessibility statement page. Once published, a link to this page will display in the footer of your site.',
+					'newspack-plugin'
+				) }
+			/>
+			<Stack direction="column" gap="xl">
+				<Notice
+					status={ statusInfo.type }
+					isDismissible={ false }
+					politeness="polite"
+					spokenMessage={ statusInfo.type === 'error' ? statusInfo.message : '' }
+				>
+					{ statusInfo.message }
+				</Notice>
 
-			<Notice
-				status={ statusInfo.type }
-				isDismissible={ false }
-				politeness="polite"
-				spokenMessage={ statusInfo.type === 'error' ? statusInfo.message : '' }
-			>
-				{ statusInfo.message }
-			</Notice>
+				{ action && <Stack direction="row">{ action }</Stack> }
 
-			<Stack className="newspack-accessibility-statement__prose" direction="column" gap="lg">
-				<p>
-					{ __(
-						'An accessibility statement helps your readers understand how your site supports accessibility standards and what to do if they encounter accessibility issues. ',
-						'newspack-plugin'
-					) }
-					<ExternalLink href="https://www.w3.org/WAI/planning/statements/">
-						{ __( 'What makes a good accessibility statement.', 'newspack-plugin' ) }{ ' ' }
-					</ExternalLink>
-				</p>
+				<Stack className="newspack-accessibility-statement__prose" direction="column" gap="lg">
+					<p>
+						{ __(
+							'An accessibility statement helps your readers understand how your site supports accessibility standards and what to do if they encounter accessibility issues. ',
+							'newspack-plugin'
+						) }
+						<ExternalLink href="https://www.w3.org/WAI/planning/statements/">
+							{ __( 'What makes a good accessibility statement.', 'newspack-plugin' ) }{ ' ' }
+						</ExternalLink>
+					</p>
 
-				<p>
-					{ __( 'The page you create here will include a boilerplate accessibility statement. ', 'newspack-plugin' ) }
-					<strong>
-						{ __( 'Please review and make edits to ensure it meets the requirements before publishing. ', 'newspack-plugin' ) }
-					</strong>
-					{ __( 'You can also use the W3C Accessibility Statement Generator to create a custom statement. ', 'newspack-plugin' ) }
-					<ExternalLink href="https://www.w3.org/WAI/planning/statements/generator/#create">
-						{ __( 'Try out the Accessibility Statement Generator.', 'newspack-plugin' ) }{ ' ' }
-					</ExternalLink>
-				</p>
+					<p>
+						{ __( 'The page you create here will include a boilerplate accessibility statement. ', 'newspack-plugin' ) }
+						<strong>
+							{ __( 'Please review and make edits to ensure it meets the requirements before publishing. ', 'newspack-plugin' ) }
+						</strong>
+						{ __( 'You can also use the W3C Accessibility Statement Generator to create a custom statement. ', 'newspack-plugin' ) }
+						<ExternalLink href="https://www.w3.org/WAI/planning/statements/generator/#create">
+							{ __( 'Try out the Accessibility Statement Generator.', 'newspack-plugin' ) }{ ' ' }
+						</ExternalLink>
+					</p>
 
-				<p>
-					<ExternalLink href="https://help.newspack.com/revenue/reader-revenue/how-to-add-an-accessibility-statement/">
-						{ __( 'Learn more about this feature in our documentation.', 'newspack-plugin' ) }{ ' ' }
-					</ExternalLink>
-				</p>
+					<p>
+						<ExternalLink href="https://help.newspack.com/revenue/reader-revenue/how-to-add-an-accessibility-statement/">
+							{ __( 'Learn more about this feature in our documentation.', 'newspack-plugin' ) }{ ' ' }
+						</ExternalLink>
+					</p>
+				</Stack>
 			</Stack>
-		</Stack>
+		</Grid>
 	);
 }

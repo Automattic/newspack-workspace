@@ -24,7 +24,7 @@ import type { Action, Field, View } from '../../../../../../../packages/componen
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
 import { registerTab } from '../registry';
-import { SEARCH_ENDPOINTS } from '../../constants';
+import { allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
 import { useRestrictions } from './use-restrictions';
 import { useNames } from '../../use-names';
 import { excludedLabel, leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
@@ -97,9 +97,17 @@ function SubscriberOnlyProducts() {
 				id: 'availableTo',
 				label: __( 'Available to', 'newspack-plugin' ),
 				enableSorting: false,
+				// The cell's own text is what the list's search matches, so a rule open
+				// to every subscriber stays findable by the name the editor gives it.
+				enableGlobalSearch: true,
 				getValue: ( { item }: { item: Restriction } ) =>
-					( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] || '' ).join( ', ' ),
+					'all' === item.subscription_targeting
+						? allSubscriptionsLabel()
+						: ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] || '' ).join( ', ' ),
 				render: ( { item }: { item: Restriction } ) => {
+					if ( 'all' === item.subscription_targeting ) {
+						return <span>{ allSubscriptionsLabel() }</span>;
+					}
 					const names = ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] ).filter( Boolean );
 					return <span>{ names.length ? names.join( ', ' ) : __( 'No subscriptions', 'newspack-plugin' ) }</span>;
 				},

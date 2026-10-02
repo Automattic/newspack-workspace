@@ -2,7 +2,7 @@
  * Ads list screen — React DataView replacing the classic ads CPT list.
  */
 
-import { Button, __experimentalHStack as HStack, Spinner } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Button } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -10,6 +10,7 @@ import { emailAd } from 'newspack-icons';
 
 import { EmptyState } from 'newspack-components';
 import { getAdminUrl } from '../../admin-globals';
+import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
 import { EMPTY_STATE_CLASS, getEmptyStateHeading } from '../../constants';
@@ -18,7 +19,7 @@ import usePersistedView from '../../hooks/use-persisted-view';
 import isStrictlyEmpty from '../../utils/is-strictly-empty';
 import { fetchAllTerms, idsMissingFromOptions, mergeTerms } from '../../utils/terms';
 import useAdsData from './use-ads-data';
-import { getFields } from './fields';
+import { FIELD_IDS, getFields } from './fields';
 import { getActions } from './actions';
 import { getInitialView } from './initial-filters';
 import AdsQuickEditPanel from './quick-edit-panel';
@@ -32,10 +33,15 @@ const DEFAULT_VIEW = {
 	filters: [],
 	titleField: 'title',
 	fields: [ 'advertiser', 'ad_placement', 'status', 'start_date', 'expiry_date', 'impressions', 'clicks', 'price' ],
-	...getInitialView(),
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
+
+const PERSIST_OPTIONS = {
+	fieldIds: FIELD_IDS,
+	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
+	urlPatch: getInitialView(),
+};
 
 // Suppress the built-in ViewConfig per-page control — the custom
 // `ItemsPerPage` renders in its place inside the View options popover.
@@ -89,9 +95,9 @@ function useFilterTerms() {
 }
 
 export default function AdsListScreen() {
-	const [ view, setView ] = usePersistedView( 'ads-list', DEFAULT_VIEW );
+	const [ view, setView ] = usePersistedView( 'ads-list', DEFAULT_VIEW, PERSIST_OPTIONS );
 	const [ quickEditItem, setQuickEditItem ] = useState( null );
-	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh } = useAdsData( view );
+	const { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, refresh } = useAdsData( view );
 	const [ filterTerms, reloadFilterTerms ] = useFilterTerms();
 
 	const addNewHref = `${ getAdminUrl() }post-new.php?post_type=${ ADS_CPT }`;
@@ -149,11 +155,7 @@ export default function AdsListScreen() {
 	);
 
 	if ( ! hasResolved ) {
-		return (
-			<HStack className="newspack-newsletters-admin__loading" justify="center">
-				<Spinner />
-			</HStack>
-		);
+		return <LoadingState label={ __( 'Fetching ads…', 'newspack-newsletters' ) } />;
 	}
 
 	if ( isStrictEmpty ) {
@@ -193,13 +195,7 @@ export default function AdsListScreen() {
 				getItemId={ item => String( item.id ) }
 				search
 				config={ DATAVIEWS_CONFIG }
-				header={
-					<ItemsPerPage
-						value={ view.perPage }
-						progress={ progress }
-						onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) }
-					/>
-				}
+				header={ <ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } /> }
 			/>
 			{ quickEditItem && (
 				<AdsQuickEditPanel

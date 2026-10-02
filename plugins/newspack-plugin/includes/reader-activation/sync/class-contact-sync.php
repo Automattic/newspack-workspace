@@ -1025,6 +1025,15 @@ class Contact_Sync extends Sync {
 			return;
 		}
 
+		// The registry still returns a card disabled on Audience → Integrations,
+		// and disabling one leaves its pending retries queued. This is what
+		// stops them from pushing.
+		if ( ! Integrations::is_enabled( $integration_id ) ) {
+			static::log( sprintf( 'Integration "%s" disabled on retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is disabled.' );
+			return;
+		}
+
 		if ( ! $integration->is_set_up() ) {
 			static::log( sprintf( 'Integration "%s" no longer set up on retry %d; aborting retry chain.', $integration_id, $retry_count ) );
 			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is no longer set up.' );
@@ -1356,6 +1365,15 @@ class Contact_Sync extends Sync {
 		if ( ! $integration ) {
 			Logger::log( sprintf( 'Integration "%s" not found on deletion retry %d.', $integration_id, $retry_count ), 'NEWSPACK-SYNC', 'error' );
 			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is no longer registered.' );
+			return;
+		}
+
+		// The registry still returns a card disabled on Audience → Integrations,
+		// and disabling one leaves its pending retries queued. This is what
+		// stops them from pushing.
+		if ( ! Integrations::is_enabled( $integration_id ) ) {
+			static::log( sprintf( 'Integration "%s" disabled on deletion retry %d; aborting retry chain.', $integration_id, $retry_count ) );
+			Push_Log::mark_failed( $log_id, 'retry_aborted', 'The integration is disabled.' );
 			return;
 		}
 

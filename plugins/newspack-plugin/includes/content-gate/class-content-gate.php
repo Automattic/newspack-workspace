@@ -295,6 +295,7 @@ class Content_Gate {
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 		include __DIR__ . '/class-email-verification-prompt.php';
+		include __DIR__ . '/class-institutional-access-prompt.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
@@ -1754,7 +1755,8 @@ class Content_Gate {
 		if ( Content_Gifting::should_enqueue_assets() || Metering_Countdown::is_enabled() ) {
 			$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-banner.asset.php';
 
-			// Ensure the content gate metering script is enqueued first.
+			// Order the banner after the meter so the meter has already locked or unlocked
+			// the article by the time the banner reads the view count.
 			if ( is_singular() && self::has_gate() && self::is_post_restricted() && Metering::is_frontend_metering() ) {
 				$asset['dependencies'][] = 'newspack-content-gate-metering';
 			}
@@ -2839,6 +2841,10 @@ class Content_Gate {
 			'metering'             => isset( $registration['metering'] ) && is_array( $registration['metering'] ) ? wp_parse_args( $registration['metering'], $default_metering ) : $default_metering,
 			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
 			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
+			// Conditions that let a visitor count as registered without an account.
+			// Only rules that can judge a signed-out visitor belong here; today that
+			// is `institution`. See Content_Restriction_Control::is_post_restricted().
+			'access_rules'         => Access_Rules::normalize_rules( isset( $registration['access_rules'] ) && is_array( $registration['access_rules'] ) ? $registration['access_rules'] : [] ),
 		];
 	}
 

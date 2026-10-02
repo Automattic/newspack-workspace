@@ -3,13 +3,13 @@
  */
 import { __ } from '@wordpress/i18n';
 import { TextControl } from '@wordpress/components';
-import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 
 /**
  * Internal dependencies
  */
 import { FormTokenField } from '../../../../../../packages/components/src';
 import {
+	type TokenItem,
 	getAccessRuleOptionSuggestions,
 	hasSelectableAccessRuleOptions,
 	getAccessRuleOptionTokens,

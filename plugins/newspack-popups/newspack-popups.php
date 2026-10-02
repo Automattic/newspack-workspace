@@ -15,7 +15,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Define the plugin file path.
-if ( ! defined( 'NEWSPACK_POPUPS_PLUGIN_FILE' ) ) {
+if ( ! defined( 'NEWSPACK_POPUPS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.
 	define( 'NEWSPACK_POPUPS_PLUGIN_FILE', __FILE__ );
 }
 

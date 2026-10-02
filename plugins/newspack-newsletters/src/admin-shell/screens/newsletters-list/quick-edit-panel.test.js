@@ -86,18 +86,18 @@ describe( 'NewslettersQuickEditPanel', () => {
 
 	// The embed caps at 100 terms per taxonomy and is absent entirely when no
 	// taxonomy column is visible, so neither source is complete on its own.
-	// Term 55 is reachable only through the embed here, which renders it but
-	// also holds the field read-only: the options list that feeds the
+	// Term 55 is reachable only through the terms field here, which renders it
+	// but also holds the field read-only: the options list that feeds the
 	// suggestions and the token validator cannot account for it.
-	it( 'merges the embed with the fetched options list, read-only', async () => {
+	it( 'merges the terms field with the fetched options list, read-only', async () => {
 		renderPanel(
 			makeItem( {
 				categories: [ 5, 55 ],
-				_embedded: { 'wp:term': [ [ { id: 55, name: 'Opinion', taxonomy: 'category' } ] ] },
+				newspack_newsletters_terms: { category: [ { id: 55, name: 'Opinion' } ] },
 			} )
 		);
 
-		// The embed renders before the fetch settles; `News` needs the options list.
+		// The terms field renders before the fetch settles; `News` needs the options list.
 		expect( await screen.findByText( 'Opinion' ) ).toBeInTheDocument();
 		await waitFor( () => expect( visibleNotices() ).toContain( CATEGORIES_UNAVAILABLE ) );
 		expect( screen.getByText( 'News' ) ).toBeInTheDocument();

@@ -34,7 +34,16 @@ class Search {
 		/**
 		 * Enables search on custom fields in the WP Admin posts screen.
 		 *
-		 * This can slow down sites with too many posts.
+		 * This can slow down sites with too many posts. It affects only the
+		 * WP Admin posts list; the Story Budget screen's own search always
+		 * covers custom fields.
+		 *
+		 * @constant NEWSPACK_STORY_BUDGET_ENABLE_SEARCH_META
+		 * @type     bool
+		 * @default  Custom fields not searched in the WP Admin posts list
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_STORY_BUDGET_ENABLE_SEARCH_META', true );
 		 */
 		if ( ( ! defined( 'NEWSPACK_STORY_BUDGET_ENABLE_SEARCH_META' ) || ! NEWSPACK_STORY_BUDGET_ENABLE_SEARCH_META ) && $is_wp_admin_search ) {
 			return false;

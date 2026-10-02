@@ -100,7 +100,6 @@ const AudienceContentGates = ( props, ref ) => {
 					render: GuardedInstitutions,
 					exact: true,
 					isHidden: true,
-					backNav: '#/content-gates',
 					fullWidth: true,
 					label: __( 'Institutions', 'newspack-plugin' ),
 					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Institutions', 'newspack-plugin' ) } ],
@@ -110,7 +109,6 @@ const AudienceContentGates = ( props, ref ) => {
 					render: GuardedInstitutionEdit,
 					isHidden: true,
 					exact: true,
-					backNav: '#/institutions',
 					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 				{
@@ -118,7 +116,6 @@ const AudienceContentGates = ( props, ref ) => {
 					render: GuardedInstitutionEdit,
 					isHidden: true,
 					exact: true,
-					backNav: '#/institutions',
 					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 			] }
