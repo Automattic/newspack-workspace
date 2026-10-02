@@ -148,9 +148,9 @@ class TestReaderProductEvents extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A guest order names no reader anywhere, so it creates no account; it still
-	 * records on an account that exists here, since the origin's own one-time rule
-	 * matches a guest order by billing email.
+	 * An order with no customer names no reader to propagate, so it creates no
+	 * account; it still records on an account that exists here, since the origin's
+	 * own one-time rule matches such an order by billing email.
 	 */
 	public function test_guest_purchase_records_only_on_an_existing_account() {
 		$this->purchase( 'https://a.example.test', 'guest@example.test', 'completed', 0 )->process_in_node();
