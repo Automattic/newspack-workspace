@@ -7,13 +7,17 @@
 
 namespace Newspack_Network\Backfillers;
 
-use Newspack_Network\Content_Gate\Access;
 use Newspack_Network\Woocommerce\Events as Woo_Listeners;
 use WP_CLI;
 
 /**
- * Sends every paid order holding a one-time product with a Network ID, for
- * orders placed before purchases were reported or before the product was tagged.
+ * Sends every order holding a one-time product with a Network ID, whatever its
+ * status, for orders placed before purchases were reported or before the product
+ * was tagged. Unpaid statuses go too, so a refund or cancellation whose event
+ * never arrived is repaired as well as a purchase that never was. Each event is
+ * stamped with the order's creation time, so a status the order has already been
+ * sent with is a duplicate to the hub and isn't sent again; the live event, stamped
+ * when it fires, is what carries a status that returns to an earlier one.
  *
  * Orders are read as IDs and loaded one at a time; on a large site, pass --start
  * and --end to backfill in date ranges.
@@ -44,7 +48,8 @@ class One_Time_Purchase_Changed extends Abstract_Backfiller {
 		$params = [
 			'limit'  => -1,
 			'type'   => 'shop_order',
-			'status' => Access::get_paid_statuses(),
+			// Every status but a checkout still in progress: an unpaid order revokes, which is what a missed refund needs.
+			'status' => array_diff( array_keys( wc_get_order_statuses() ), [ 'wc-checkout-draft' ] ),
 			'return' => 'ids',
 		];
 		if ( $this->start && $this->end ) {
