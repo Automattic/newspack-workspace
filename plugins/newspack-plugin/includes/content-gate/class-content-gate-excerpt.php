@@ -153,10 +153,10 @@ class Content_Gate_Excerpt {
 	 * The teaser is rendered HTML, which excerpt_remove_blocks() cannot sort: it
 	 * needs block delimiters to drop captions and the like. So core builds the
 	 * excerpt from the post itself, and it is cut where the teaser ends. Words are
-	 * matched in order against the teaser's; text only the teaser has, a caption,
-	 * is passed over, and the first word the teaser lacks is the gated body. Every
-	 * word returned is the teaser's own, so a mismatch shortens the excerpt and
-	 * never reaches past the free part.
+	 * matched in order against the teaser's. Text only the teaser has, a caption,
+	 * is passed over, and so is text only the post has, such as the punctuation a
+	 * stripped shortcode leaves behind. Every word returned is the teaser's own,
+	 * so the excerpt never reaches past the free part.
 	 *
 	 * Runs core's steps rather than wp_trim_excerpt(), whose 'the_content' pass
 	 * would let the restriction substitution hand back the staged teaser.
@@ -198,13 +198,15 @@ class Content_Gate_Excerpt {
 		$words = [];
 		foreach ( self::split_words( $content ) as $word ) {
 			$normalized = self::normalize_word( $word );
-			while ( $index < $count && self::normalize_word( $free[ $index ] ) !== $normalized ) {
-				++$index;
+			$next       = $index;
+			while ( $next < $count && self::normalize_word( $free[ $next ] ) !== $normalized ) {
+				++$next;
 			}
-			if ( $index >= $count ) {
-				break;
+			if ( $next >= $count ) {
+				continue;
 			}
-			$words[] = $free[ $index++ ];
+			$words[] = $free[ $next ];
+			$index   = $next + 1;
 		}
 
 		$text = implode( ' ', $words );

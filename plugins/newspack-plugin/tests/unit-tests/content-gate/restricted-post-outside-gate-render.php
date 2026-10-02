@@ -334,6 +334,35 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Text only the post has does not end the excerpt early: strip_shortcodes()
+	 * leaves a shortcode's punctuation behind on the post side, while the teaser
+	 * renders the shortcode.
+	 */
+	public function test_excerpt_passes_over_text_only_the_post_has() {
+		add_shortcode(
+			'np_test_year',
+			static function () {
+				return '2026';
+			}
+		);
+		try {
+			$post_id = $this->create_restricted_post(
+				[
+					'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' published in [np_test_year]. More free text.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+				]
+			);
+			$excerpt = get_the_excerpt( $post_id );
+		} finally {
+			remove_shortcode( 'np_test_year' );
+		}
+
+		$this->assertStringContainsString( 'Second free line.', $excerpt );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt );
+	}
+
+	/**
 	 * Homepage Posts builds its excerpt from a listing post's `post_content`, so
 	 * that carries the excerpt's teaser, while the card's content render keeps the
 	 * image.
