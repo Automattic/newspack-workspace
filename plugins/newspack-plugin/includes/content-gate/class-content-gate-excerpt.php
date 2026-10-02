@@ -155,8 +155,8 @@ class Content_Gate_Excerpt {
 	 * excerpt from the post itself, and it is cut where the teaser ends. Words are
 	 * matched in order against the teaser's; text only the teaser has, a caption,
 	 * is passed over, and the first word the teaser lacks is the gated body. Every
-	 * word returned is the teaser's own, so a mismatch shortens the excerpt and
-	 * never reaches past the free part.
+	 * word with letters or digits is the teaser's own, so a mismatch shortens the
+	 * excerpt and never reaches past the free part.
 	 *
 	 * Runs core's steps rather than wp_trim_excerpt(), whose 'the_content' pass
 	 * would let the restriction substitution hand back the staged teaser.
@@ -198,10 +198,15 @@ class Content_Gate_Excerpt {
 		$words = [];
 		foreach ( self::split_words( $content ) as $word ) {
 			$normalized = self::normalize_word( $word );
-			// Punctuation a stripped shortcode leaves behind ("in [year]." becomes
-			// "in .") is the post's alone; any other word the teaser lacks is the
-			// gated body.
 			if ( ! preg_match( '/[\p{L}\p{N}]/u', $normalized ) ) {
+				// Punctuation keeps its place, as in core's own excerpt: the teaser's
+				// copy when it has one next, otherwise the post's, such as the "."
+				// a stripped shortcode ("in [year].") leaves behind.
+				if ( $index < $count && self::normalize_word( $free[ $index ] ) === $normalized ) {
+					$words[] = $free[ $index++ ];
+				} else {
+					$words[] = $word;
+				}
 				continue;
 			}
 			while ( $index < $count && self::normalize_word( $free[ $index ] ) !== $normalized ) {

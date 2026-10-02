@@ -330,15 +330,16 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		foreach ( [ get_the_excerpt( $post_id ), $post_content ] as $text ) {
 			$this->assertStringContainsString( 'Second free line.', $text );
 			$this->assertStringNotContainsString( self::PAID_MARKER, $text );
+			$this->assertMatchesRegularExpression( '/passed (&amp;|&#038;|&) closed\./', $text, 'Punctuation in the free text is kept.' );
 		}
 	}
 
 	/**
-	 * Text only the post has does not end the excerpt early: strip_shortcodes()
-	 * leaves a shortcode's punctuation behind on the post side, while the teaser
-	 * renders the shortcode.
+	 * A stripped shortcode's punctuation does not end the excerpt early, and stays
+	 * in place as in core's excerpt: strip_shortcodes() leaves it on the post
+	 * side, while the teaser renders the shortcode.
 	 */
-	public function test_excerpt_passes_over_text_only_the_post_has() {
+	public function test_shortcode_punctuation_does_not_end_the_excerpt() {
 		add_shortcode(
 			'np_test_year',
 			static function () {
@@ -358,8 +359,7 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 			remove_shortcode( 'np_test_year' );
 		}
 
-		$this->assertStringContainsString( 'Second free line.', $excerpt );
-		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt );
+		$this->assertSame( self::FREE_MARKER . ' published in . More free text. Second free line.', $excerpt, 'Matches core, which leaves a stripped shortcode\'s punctuation in place.' );
 	}
 
 	/**
