@@ -298,7 +298,7 @@ case $1 in
 services:
   env-${env_name}:
     container_name: ${container_name}
-    platform: linux/arm64
+    platform: \${NEWSPACK_DOCKER_PLATFORM:-linux/arm64}
     depends_on:
       - db
     image: newspack-dev:latest
