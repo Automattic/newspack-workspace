@@ -299,7 +299,9 @@ final class Plans_Model {
 					'length'       => (int) $scheme->get_length(),
 					'trial_period' => (string) $scheme->get_trial_period(),
 					'trial_length' => (int) $scheme->get_trial_length(),
-					'sign_up_fee'  => (float) $scheme->get_signup_fee(),
+					// Sign-up fees arrived with Subscriptions 9.0; the standalone All
+					// Products for Subscriptions plugin's plans have none.
+					'sign_up_fee'  => method_exists( $scheme, 'get_signup_fee' ) ? (float) $scheme->get_signup_fee() : 0.0,
 				]
 			);
 		}

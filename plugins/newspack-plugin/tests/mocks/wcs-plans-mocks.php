@@ -50,6 +50,38 @@ if ( ! class_exists( 'WCS_ATT_Scheme' ) ) {
 	}
 }
 
+if ( ! class_exists( 'WCS_ATT_Standalone_Scheme_Mock' ) ) {
+	/**
+	 * A plan as the standalone All Products for Subscriptions plugin builds it:
+	 * the same API minus get_signup_fee(), which arrived with Subscriptions 9.0.
+	 * Registered with a plan's `standalone` flag.
+	 */
+	class WCS_ATT_Standalone_Scheme_Mock {
+		private $scheme;
+		public function __construct( array $data ) {
+			$this->scheme = new WCS_ATT_Scheme( $data );
+		}
+		public function get_key() {
+			return $this->scheme->get_key();
+		}
+		public function get_period() {
+			return $this->scheme->get_period();
+		}
+		public function get_interval() {
+			return $this->scheme->get_interval();
+		}
+		public function get_length() {
+			return $this->scheme->get_length();
+		}
+		public function get_trial_period() {
+			return $this->scheme->get_trial_period();
+		}
+		public function get_trial_length() {
+			return $this->scheme->get_trial_length();
+		}
+	}
+}
+
 if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
 	/**
 	 * Plans live on the parent of a variable product; a variation resolves its
@@ -88,7 +120,8 @@ if ( ! class_exists( 'WCS_ATT_Product_Schemes' ) ) {
 		public static function get_subscription_schemes( $product, $context = 'any' ) {
 			$schemes = [];
 			foreach ( self::$plans[ self::source_id( $product ) ] ?? [] as $key => $data ) {
-				$schemes[ $key ] = new WCS_ATT_Scheme( array_merge( [ 'id' => $key ], $data ) );
+				$data            = array_merge( [ 'id' => $key ], $data );
+				$schemes[ $key ] = empty( $data['standalone'] ) ? new WCS_ATT_Scheme( $data ) : new WCS_ATT_Standalone_Scheme_Mock( $data );
 			}
 			return $schemes;
 		}

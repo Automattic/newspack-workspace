@@ -123,6 +123,27 @@ class Newspack_Test_Subscription_Products_Plans extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Plans from the standalone All Products for Subscriptions plugin have no
+	 * sign-up fee API; reading their options must not fatal.
+	 */
+	public function test_standalone_plugin_plans_have_no_sign_up_fee() {
+		$product = $this->product( [], [ '_wcsatt_schemes_status' => 'override' ] );
+		WCS_ATT_Product_Schemes::mock_register(
+			$product->get_id(),
+			[
+				'1_month' => [
+					'period'     => 'month',
+					'interval'   => 1,
+					'standalone' => true,
+				],
+			]
+		);
+		$options = Subscription_Products::get_purchase_options( $product );
+		$this->assertSame( [ 'one_time', 'plan:1_month' ], wp_list_pluck( $options, 'key' ) );
+		$this->assertSame( 0.0, $options[1]->sign_up_fee );
+	}
+
+	/**
 	 * `_wcsatt_disabled` turns off plans on the product regardless of its scheme configuration.
 	 */
 	public function test_disabled_plans_offer_nothing() {
