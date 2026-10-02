@@ -2160,9 +2160,16 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	/**
 	 * Get the lists a contact is subscribed to.
 	 *
+	 * The lists come from a request of their own after the contact lookup, and
+	 * that request's failure is reported rather than answered with an empty
+	 * array: callers store and sync the result, so a failure that read as "on
+	 * no lists" would blank the reader's selection. A contact that cannot be
+	 * read still answers an empty array, like the other providers, since the
+	 * subscribe paths treat that as a contact on no lists (NPPD-2255).
+	 *
 	 * @param string $email The contact email.
 	 *
-	 * @return string[] Contact subscribed lists IDs.
+	 * @return string[]|WP_Error Contact subscribed lists IDs, or an error when the lists could not be read.
 	 */
 	public function get_contact_lists( $email ) {
 		$contact = $this->get_contact_data( $email );
@@ -2170,8 +2177,14 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return [];
 		}
 		$contact_lists = $this->api_v3_request( 'contacts/' . $contact['id'] . '/contactLists' );
-		if ( is_wp_error( $contact_lists ) || ! isset( $contact_lists['contactLists'] ) ) {
-			return [];
+		if ( is_wp_error( $contact_lists ) ) {
+			return $contact_lists;
+		}
+		if ( ! isset( $contact_lists['contactLists'] ) || ! is_array( $contact_lists['contactLists'] ) ) {
+			return new WP_Error(
+				'newspack_newsletters_active_campaign_contact_lists_malformed',
+				__( 'ActiveCampaign returned a response without the contact\'s lists.', 'newspack-newsletters' )
+			);
 		}
 		$lists = [];
 		foreach ( $contact_lists['contactLists'] as $list ) {
