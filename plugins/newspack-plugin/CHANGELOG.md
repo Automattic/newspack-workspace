@@ -1,3 +1,18 @@
+## newspack [6.53.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.6...newspack@6.53.7) (2026-10-01)
+
+
+### Bug Fixes
+
+* keep one bad saved ID from breaking the segment product lookup ([2a3e317](https://github.com/Automattic/newspack-workspace/commit/2a3e3173a9b285ce9f7f12d4b9af9b8c7b96741e))
+* keep same-named products apart in the segment picker ([be4da5f](https://github.com/Automattic/newspack-workspace/commit/be4da5fcfdf0ea7d4ee8ac617d6a697b1b108b1e))
+* mark private subscription products in pickers ([946741c](https://github.com/Automattic/newspack-workspace/commit/946741c1e1aafeabf096bd73fb5aedbd3475b95d))
+* mark the variations of a private subscription product ([230a655](https://github.com/Automattic/newspack-workspace/commit/230a6558b3387b3143769b763d15ad5591ad7f5e))
+* name deleted subscriptions in segment summaries again ([4f22268](https://github.com/Automattic/newspack-workspace/commit/4f22268c909973d62fb0f5a42dc6c6c601a7436b))
+* name trashed variations and show status labels in pickers ([809e132](https://github.com/Automattic/newspack-workspace/commit/809e1328b28546da7b8fbda7bfc2b581c7951aea))
+* select private subscription products in gates and segments ([a5e6230](https://github.com/Automattic/newspack-workspace/commit/a5e6230407207118b50b8715f50157dc38d194bb))
+* treat label-only gate options as nothing to offer ([0cec829](https://github.com/Automattic/newspack-workspace/commit/0cec8291cd6672387124bfca4a9ce9aa8ca23ca8))
+* wrap long access rule tokens in the block sidebar ([0b8208d](https://github.com/Automattic/newspack-workspace/commit/0b8208d8deddfaf2e2458fb2cb0b00eda7e73f64))
+
 ## newspack [6.53.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.5...newspack@6.53.6) (2026-10-01)
 
 

@@ -47,6 +47,11 @@ const CRITERIA = [
 		name: 'Newsletter',
 	},
 	{
+		id: 'active_subscriptions',
+		category: 'reader_revenue',
+		name: 'Has active subscription(s)',
+	},
+	{
 		id: 'LAST_GIFT_DATE',
 		category: 'integrations',
 		name: 'Last Gift Date',
@@ -89,6 +94,22 @@ describe( 'segmentDescription', () => {
 		// Once the list names resolve, it renders the human-readable label.
 		await waitFor( () => expect( container.textContent ).toContain( 'Not subscribed to:' ) );
 		await waitFor( () => expect( container.textContent ).toContain( 'Weekly Digest' ) );
+	} );
+
+	it( 'names saved subscription products as deleted when none of them exist any more', async () => {
+		// The lookup asks only for the saved IDs, so an empty answer means every one is gone.
+		apiFetch.mockResolvedValue( [] );
+
+		const segment = {
+			configuration: { is_disabled: false },
+			criteria: [ { criteria_id: 'active_subscriptions', value: [ 999 ] } ],
+		};
+
+		const { container } = render( <div>{ segmentDescription( segment ) }</div> );
+
+		await waitFor( () => expect( container.textContent ).toContain( 'Has active subscription(s): Deleted subscription' ) );
+		// Names come from a lookup of the saved IDs, so products the picker no longer lists keep theirs.
+		expect( apiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( 'include' ) } );
 	} );
 
 	it( 'renders a date range criterion instead of "[object Object]"', () => {
