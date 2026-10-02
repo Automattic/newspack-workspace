@@ -85,12 +85,22 @@ class Content_Gate_Excerpt {
 			if ( '' !== trim( (string) $resolved->post_excerpt ) ) {
 				return wp_trim_excerpt( $resolved->post_excerpt, $resolved );
 			}
-			$withheld               = clone $resolved;
-			$withheld->post_content = $teaser;
-			// See the note below on WP_Post::filter(): a clone carrying a display
-			// form is silently re-read from the row, teaser and all.
-			$withheld->filter = 'raw';
-			return wp_trim_excerpt( '', $withheld );
+			$text = self::get_free_excerpt_text( $resolved, $teaser );
+
+			/** This filter is documented in wp-includes/formatting.php */
+			$excerpt_length = (int) apply_filters( 'excerpt_length', (int) _x( '55', 'excerpt_length' ) ); // phpcs:ignore WordPress.WP.I18n.MissingArgDomain
+			/** This filter is documented in wp-includes/formatting.php */
+			$excerpt_more = apply_filters( 'excerpt_more', ' [&hellip;]' );
+			$excerpt      = wp_trim_words( $text, $excerpt_length, $excerpt_more );
+
+			// The overlay layout ends its teaser with an ellipsis; the excerpt ends
+			// with the site's own excerpt_more in its place.
+			if ( self::has_overlay_ellipsis( $teaser ) && ! str_ends_with( $excerpt, $excerpt_more ) ) {
+				$excerpt .= $excerpt_more;
+			}
+
+			/** This filter is documented in wp-includes/formatting.php */
+			return apply_filters( 'wp_trim_excerpt', $excerpt, '' );
 		}
 
 		// Core returns a non-empty $text untouched; the branches below deliberately
@@ -135,6 +145,87 @@ class Content_Gate_Excerpt {
 		// entirely gated gets a blank excerpt, matching what its article page already
 		// shows a non-member.
 		return wp_trim_excerpt( '', $sanitized );
+	}
+
+	/**
+	 * The excerpt text of a withheld post's free part.
+	 *
+	 * The teaser is rendered HTML, which excerpt_remove_blocks() cannot sort: it
+	 * needs block delimiters to drop captions and the like. So core builds the
+	 * excerpt from the post itself, and it is cut where the teaser ends. Words are
+	 * matched in order against the teaser's; text only the teaser has, a caption,
+	 * is passed over, and the first word the teaser lacks is the gated body. Every
+	 * word returned is the teaser's own, so a mismatch shortens the excerpt and
+	 * never reaches past the free part.
+	 *
+	 * Runs core's steps rather than wp_trim_excerpt(), whose 'the_content' pass
+	 * would let the restriction substitution hand back the staged teaser.
+	 *
+	 * @param \WP_Post $post   The withheld post.
+	 * @param string   $teaser Its teaser, from Content_Gate::get_teaser_outside_article().
+	 * @return string Plain text, untrimmed.
+	 */
+	public static function get_free_excerpt_text( $post, $teaser ) {
+		if ( '' === trim( $teaser ) ) {
+			return '';
+		}
+		// From the row: in a loop, Content_Gate::withhold_post_in_loop() has already
+		// replaced this instance's post_content with the excerpt text.
+		$content = Block_Visibility::strip_blocks_hidden_from_public( (string) get_post_field( 'post_content', $post->ID, 'raw' ) );
+		$content = strip_shortcodes( $content );
+		$content = excerpt_remove_blocks( $content );
+		$content = excerpt_remove_footnotes( $content );
+		// The text filters of the teaser's `newspack_gate_content` pass, so both
+		// sides read alike.
+		$content = convert_smilies( capital_P_dangit( wptexturize( $content ) ) );
+
+		$free  = self::split_words( $teaser );
+		$index = 0;
+		$count = count( $free );
+		$words = [];
+		foreach ( self::split_words( $content ) as $word ) {
+			$normalized = self::normalize_word( $word );
+			while ( $index < $count && self::normalize_word( $free[ $index ] ) !== $normalized ) {
+				++$index;
+			}
+			if ( $index >= $count ) {
+				break;
+			}
+			$words[] = $free[ $index++ ];
+		}
+		return implode( ' ', $words );
+	}
+
+	/**
+	 * Whether a teaser ends with the ellipsis the overlay layout appends.
+	 *
+	 * @param string $teaser Teaser HTML.
+	 * @return bool
+	 */
+	public static function has_overlay_ellipsis( $teaser ) {
+		return str_ends_with( rtrim( wp_strip_all_tags( $teaser ) ), '[&hellip;]' );
+	}
+
+	/**
+	 * Split rendered HTML into words, as wp_trim_words() does. Block-level closing
+	 * tags count as breaks, so a caption is not glued to the paragraph after it.
+	 *
+	 * @param string $html Rendered HTML.
+	 * @return string[]
+	 */
+	private static function split_words( $html ) {
+		$html = preg_replace( '#(</(?:p|div|figure|figcaption|li|h[1-6]|blockquote|pre|td|th|summary)>)#i', '$1 ', $html );
+		return preg_split( '/[\n\r\t ]+/', wp_strip_all_tags( $html ), -1, PREG_SPLIT_NO_EMPTY );
+	}
+
+	/**
+	 * A word's comparable form: entities decoded, so `&#8217;` and `’` agree.
+	 *
+	 * @param string $word Word.
+	 * @return string
+	 */
+	private static function normalize_word( $word ) {
+		return html_entity_decode( $word, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
 }
 Content_Gate_Excerpt::init();

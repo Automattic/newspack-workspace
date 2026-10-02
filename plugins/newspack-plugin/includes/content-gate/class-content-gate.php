@@ -1029,7 +1029,13 @@ class Content_Gate {
 		// excerpt from post_content — now the teaser — so the trimming and the
 		// "read more" suffix stay core's to decide; non-empty, it is the author's
 		// own words about a post they chose to gate, and survives.
-		$post->post_content = $teaser;
+		//
+		// The excerpt's text rather than the rendered teaser, which a block building
+		// its own excerpt from post_content, as Homepage Posts does, could not strip
+		// captions and the like from. The content passes above substitute the full
+		// teaser from the staged entry.
+		$post->post_content = '<p>' . Content_Gate_Excerpt::get_free_excerpt_text( $post, $teaser )
+			. ( Content_Gate_Excerpt::has_overlay_ellipsis( $teaser ) ? ' [&hellip;]' : '' ) . '</p>';
 	}
 
 	/**

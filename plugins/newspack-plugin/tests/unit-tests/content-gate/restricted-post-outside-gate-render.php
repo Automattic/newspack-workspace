@@ -279,6 +279,137 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A restricted post opening with a captioned image, as a slideshow does.
+	 *
+	 * @return int
+	 */
+	private function create_restricted_post_with_caption() {
+		return $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:image --><figure class="wp-block-image"><img src="https://example.com/a.jpg" alt=""/><figcaption>CAPTIONTEXT</figcaption></figure><!-- /wp:image -->'
+					. '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+			]
+		);
+	}
+
+	/**
+	 * NPPM-3488: the teaser is rendered, so core's excerpt_remove_blocks() cannot
+	 * drop the blocks it keeps out of an excerpt. Their text must not lead it.
+	 */
+	public function test_auto_excerpt_leaves_out_blocks_core_excludes() {
+		$post_id = $this->create_restricted_post_with_caption();
+
+		$excerpt = get_the_excerpt( $post_id );
+
+		$this->assertStringNotContainsString( 'CAPTIONTEXT', $excerpt );
+		$this->assertStringContainsString( self::FREE_MARKER, $excerpt );
+		$this->assertStringContainsString( 'Second free line.', $excerpt, 'The excerpt keeps the whole free part.' );
+	}
+
+	/**
+	 * Homepage Posts builds its excerpt from a listing post's `post_content`, so
+	 * that carries the excerpt's teaser, while the card's content render keeps the
+	 * image.
+	 */
+	public function test_listing_post_content_leaves_out_blocks_core_excludes() {
+		$post_id = $this->create_restricted_post_with_caption();
+		$this->go_to( home_url( '/' ) );
+
+		$loop = new \WP_Query( [ 'p' => $post_id ] );
+		$loop->the_post();
+		$post_content = $GLOBALS['post']->post_content;
+		$rendered     = apply_filters( 'the_content', get_the_content() );
+		wp_reset_postdata();
+
+		$this->assertStringNotContainsString( 'CAPTIONTEXT', $post_content );
+		$this->assertStringContainsString( self::FREE_MARKER, $post_content );
+		$this->assertStringContainsString( 'CAPTIONTEXT', $rendered, 'The card itself still shows the image.' );
+	}
+
+	/**
+	 * The overlay layout ends its teaser with an ellipsis. An excerpt ends with the
+	 * site's own `excerpt_more` instead, and the page teaser keeps the ellipsis.
+	 */
+	public function test_overlay_excerpt_ends_with_excerpt_more() {
+		update_post_meta( $this->gate_layout_id, 'style', 'overlay' );
+		$post_id = $this->create_restricted_post();
+		$more    = static function () {
+			return ' MORELINK';
+		};
+		add_filter( 'excerpt_more', $more );
+
+		$excerpt = get_the_excerpt( $post_id );
+		remove_filter( 'excerpt_more', $more );
+
+		$this->assertStringEndsWith( ' MORELINK', $excerpt );
+		$this->assertStringNotContainsString( '[&hellip;]', $excerpt );
+		$this->assertStringContainsString( '[&hellip;]', Content_Gate::get_teaser_outside_article( get_post( $post_id ) ) );
+	}
+
+	/**
+	 * In a loop the post's `post_content` already holds the excerpt text. The
+	 * excerpt is built from the post itself, so the ending is not added twice.
+	 */
+	public function test_overlay_excerpt_in_a_loop_ends_once() {
+		update_post_meta( $this->gate_layout_id, 'style', 'overlay' );
+		$post_id = $this->create_restricted_post_with_caption();
+		$more    = static function () {
+			return ' MORELINK';
+		};
+		add_filter( 'excerpt_more', $more );
+		$this->go_to( home_url( '/' ) );
+
+		$loop = new \WP_Query( [ 'p' => $post_id ] );
+		$loop->the_post();
+		$excerpt = get_the_excerpt();
+		wp_reset_postdata();
+		remove_filter( 'excerpt_more', $more );
+
+		$this->assertSame( 1, substr_count( $excerpt, 'MORELINK' ) );
+		$this->assertStringNotContainsString( '[&hellip;]', $excerpt );
+		$this->assertStringNotContainsString( 'CAPTIONTEXT', $excerpt );
+		$this->assertStringContainsString( 'Second free line.', $excerpt );
+	}
+
+	/**
+	 * The inline layout adds no ending to its teaser, and its excerpt gets none
+	 * either while it stays under the excerpt length.
+	 */
+	public function test_inline_excerpt_gets_no_added_ending() {
+		$post_id = $this->create_restricted_post();
+		$more    = static function () {
+			return ' MORELINK';
+		};
+		add_filter( 'excerpt_more', $more );
+
+		$excerpt = get_the_excerpt( $post_id );
+		remove_filter( 'excerpt_more', $more );
+
+		$this->assertStringNotContainsString( 'MORELINK', $excerpt );
+		$this->assertStringEndsWith( 'Second free line.', $excerpt );
+	}
+
+	/**
+	 * Homepage Posts reads the overlay's ellipsis from `post_content`, as it did
+	 * from the rendered teaser.
+	 */
+	public function test_listing_post_content_keeps_the_overlay_ellipsis() {
+		update_post_meta( $this->gate_layout_id, 'style', 'overlay' );
+		$post_id = $this->create_restricted_post_with_caption();
+		$this->go_to( home_url( '/' ) );
+
+		$loop = new \WP_Query( [ 'p' => $post_id ] );
+		$loop->the_post();
+		$post_content = $GLOBALS['post']->post_content;
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( 'Second free line. [&hellip;]', $post_content );
+		$this->assertStringNotContainsString( 'CAPTIONTEXT', $post_content );
+	}
+
+	/**
 	 * The article page is unchanged: the body is replaced by the teaser and the
 	 * gate renders once, not once per pass through the content filters.
 	 */
