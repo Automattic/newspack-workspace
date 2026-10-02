@@ -687,7 +687,7 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	/**
 	 * The product editor never shows a seat minimum below 1. The field carries `min="1"`, and
 	 * the browser refuses to submit the product form while a field sits below its minimum,
-	 * even when the field is hidden because the product has no group subscription. A stored 0
+	 * even when the field is hidden because the product isn't priced per seat. A stored 0
 	 * would leave the publisher unable to save the product.
 	 */
 	public function test_seat_minimum_below_floor_renders_at_floor() {
@@ -728,9 +728,8 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Saving a product whose seat minimum field is blank, as it is on a product that has never
-	 * had group subscriptions, stores 1 rather than 0. A stored 0 renders back into a field
-	 * the browser will not submit.
+	 * Saving a product whose seat minimum field is blank stores 1 rather than 0. A stored 0
+	 * renders back into a field the browser will not submit.
 	 */
 	public function test_blank_seat_minimum_saves_at_floor() {
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
@@ -762,6 +761,34 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 
 		$this->assertSame( 1, $product->get_meta( $meta_key ), 'A product saved with a blank seat minimum should store 1.' );
 		$this->assertSame( 1, $variation->get_meta( $meta_key ), 'A variation saved with a blank seat minimum should store 1.' );
+	}
+
+	/**
+	 * A seat minimum above the floor shows and saves unchanged. The floor exists to keep the
+	 * form submittable; it must never replace a minimum a publisher chose for per-seat pricing.
+	 */
+	public function test_seat_minimum_above_floor_is_kept() {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+		$meta_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'min_seats';
+
+		$variation = wc_create_mock_product(
+			[
+				'id'   => 9004,
+				'type' => 'subscription_variation',
+			]
+		);
+		ob_start();
+		\Newspack\WooCommerce_Products::show_custom_variation_pricing_options( 0, [ $meta_key => [ '3' ] ], (object) [ 'ID' => $variation->get_id() ] );
+		$variation_form = ob_get_clean();
+
+		$_POST = [ $meta_key => [ 0 => '3' ] ];
+		\Newspack\WooCommerce_Products::save_custom_variation_options( $variation, 0 );
+		$_POST = [];
+
+		$this->assertStringContainsString( 'name="' . $meta_key . '[0]" value="3"', $variation_form, 'A seat minimum of 3 should show as 3.' );
+		$this->assertSame( 3, $variation->get_meta( $meta_key ), 'A seat minimum of 3 should save as 3.' );
 	}
 
 	/*
