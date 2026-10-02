@@ -772,13 +772,13 @@ class Newspack_UI {
 			<span class="newspack-ui__badge newspack-ui__badge--success">Badge</span><br>
 			<span class="newspack-ui__badge newspack-ui__badge--error">Badge</span><br>
 			<span class="newspack-ui__badge newspack-ui__badge--warning">Badge</span><br>
+
 			<h3>With a dot</h3>
 			<p>Add <code>newspack-ui__badge--dot</code> for a status dot, and <code>newspack-ui__badge--pulse</code> to animate it.</p>
 			<span class="newspack-ui__badge newspack-ui__badge--success newspack-ui__badge--dot newspack-ui__badge--pulse">Live</span><br>
 			<span class="newspack-ui__badge newspack-ui__badge--dot">Paused</span><br>
 			<span class="newspack-ui__badge newspack-ui__badge--error newspack-ui__badge--dot">Ended</span><br>
-			<span class="newspack-ui__badge newspack-ui__badge--warning newspack-ui__badge--dot">Badge</span><br>
-
+			<span class="newspack-ui__badge newspack-ui__badge--warning newspack-ui__badge--dot">Delayed</span><br>
 
 			<hr>
 
