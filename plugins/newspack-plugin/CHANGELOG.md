@@ -1,3 +1,10 @@
+## newspack [6.53.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.8...newspack@6.53.9) (2026-10-02)
+
+
+### Bug Fixes
+
+* **group-subscriptions:** keep seat minimum from blocking product saves ([e09c1df](https://github.com/Automattic/newspack-workspace/commit/e09c1df37209cb32e6d0aeb959f179a6a401f86d))
+
 ## newspack [6.53.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.7...newspack@6.53.8) (2026-10-02)
 
 
