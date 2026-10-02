@@ -36,12 +36,16 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 	/**
 	 * Gets the events to be processed
 	 *
-	 * @return \Newspack_Network\Incoming_Events\Abstract_Incoming_Event[] $events An array of events.
+	 * Seats are listed first (a member ID, a subscription ID and a time each), then
+	 * each seat's event is built one at a time, so a large group's members and
+	 * their subscription don't all stay in memory for the whole run.
+	 *
+	 * @return \Generator<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> $events A generator of events.
 	 */
 	public function get_events() {
 		if ( ! function_exists( 'wcs_get_subscription' ) || ! class_exists( 'Newspack\Group_Subscription' ) || ! class_exists( 'Newspack\Group_Subscription_Settings' ) ) {
 			WP_CLI::warning( 'Group subscriptions are unavailable (WooCommerce Subscriptions and newspack-plugin are both needed); nothing to send.' );
-			return [];
+			return;
 		}
 		$start = $this->start ? strtotime( $this->start ) : false;
 		$end   = $this->end ? strtotime( $this->end ) : false;
@@ -69,15 +73,17 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 
 		$this->maybe_initialize_progress_bar( 'Processing group seats', count( $seats ) );
 
-		$events = [];
-		foreach ( $seats as list( $member_id, $subscription_id, $timestamp ) ) {
+		$build = function ( $index ) use ( $seats ) {
+			list( $member_id, $subscription_id, $timestamp ) = $seats[ $index ];
 			$data = Group_Seats::get_event_data( $member_id, $subscription_id );
 			if ( empty( $data ) ) {
-				continue;
+				return false;
 			}
-			$events[] = new \Newspack_Network\Incoming_Events\Group_Seat_Changed( get_bloginfo( 'url' ), $data, $timestamp );
+			return new \Newspack_Network\Incoming_Events\Group_Seat_Changed( get_bloginfo( 'url' ), $data, $timestamp );
+		};
+		foreach ( $this->load_in_batches( array_keys( $seats ), $build ) as $event ) {
+			yield $event;
 		}
-		return $events;
 	}
 
 	/**

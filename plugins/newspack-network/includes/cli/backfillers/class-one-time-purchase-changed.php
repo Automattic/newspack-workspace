@@ -33,12 +33,12 @@ class One_Time_Purchase_Changed extends Abstract_Backfiller {
 	/**
 	 * Gets the events to be processed
 	 *
-	 * @return \Newspack_Network\Incoming_Events\Abstract_Incoming_Event[] $events An array of events.
+	 * @return \Generator<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> $events A generator of events.
 	 */
 	public function get_events() {
 		if ( ! function_exists( 'wc_get_orders' ) ) {
 			WP_CLI::warning( 'WooCommerce is unavailable; nothing to send.' );
-			return [];
+			return;
 		}
 		$params = [
 			'limit'  => -1,
@@ -57,20 +57,14 @@ class One_Time_Purchase_Changed extends Abstract_Backfiller {
 
 		$this->maybe_initialize_progress_bar( 'Processing orders', count( $order_ids ) );
 
-		$events = [];
-		foreach ( $order_ids as $order_id ) {
-			$order = wc_get_order( $order_id );
-			if ( ! $order ) {
-				continue;
-			}
-			$data = Woo_Listeners::one_time_purchase_changed( $order_id, '', $order->get_status(), $order );
+		foreach ( $this->load_in_batches( $order_ids, 'wc_get_order' ) as $order ) {
+			$data = Woo_Listeners::one_time_purchase_changed( $order->get_id(), '', $order->get_status(), $order );
 			if ( empty( $data ) ) {
 				continue;
 			}
 			// An order with no date reports 0, which the hub rejects as an event time, so the event itself is stamped now.
 			$timestamp = $data['purchased_at'] ? (int) $data['purchased_at'] : time();
-			$events[]  = new \Newspack_Network\Incoming_Events\One_Time_Purchase_Changed( get_bloginfo( 'url' ), $data, $timestamp );
+			yield new \Newspack_Network\Incoming_Events\One_Time_Purchase_Changed( get_bloginfo( 'url' ), $data, $timestamp );
 		}
-		return $events;
 	}
 }
