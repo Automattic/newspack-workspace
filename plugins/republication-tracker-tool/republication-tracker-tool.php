@@ -403,7 +403,7 @@ final class Republication_Tracker_Tool {
 	 * Get the formatted byline and site name (e.g. "by John Doe, Site Name")
 	 * shared by the HTML and plain text versions of the republishable content.
 	 *
-	 * @param string $author The author name to start from, before filtering.
+	 * @param string|null $author The author name to start from, before filtering.
 	 * @return string The byline text (may contain HTML author links).
 	 */
 	public static function get_byline_text( $author ): string {

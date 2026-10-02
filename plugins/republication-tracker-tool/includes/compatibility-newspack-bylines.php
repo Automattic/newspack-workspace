@@ -55,7 +55,8 @@ add_filter( 'republication_tracker_tool_byline', 'republication_tracker_tool_byl
  *
  * Suppresses this plugin's own "by %s" format when the byline being wrapped
  * is the Custom Byline, since that text already includes its own leading
- * word (e.g. "By ..."). A byline a later filter replaced keeps the format.
+ * word (e.g. "By ..."). A byline changed by a later filter in any way,
+ * including appending, keeps the format.
  *
  * @param string $format The byline format (should contain a %s placeholder).
  * @param string $byline The resolved byline the format will wrap.
