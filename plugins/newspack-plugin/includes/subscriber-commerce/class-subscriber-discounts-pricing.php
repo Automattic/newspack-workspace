@@ -521,11 +521,12 @@ class Subscriber_Discounts_Pricing {
 	/**
 	 * Every cart line's subscription state, as `<id>:<recurring|once>` tokens.
 	 *
-	 * Real cart lines are checked on their own product instance (`data`), so a
-	 * plan applied to one is seen; IDs the
-	 * newspack_subscriber_discounts_cart_product_ids filter adds or substitutes
-	 * are resolved fresh by ID, which is how a legacy subscription type reaches
-	 * this check without ever being a real cart line. Shared by
+	 * The filtered get_cart_product_ids() list decides which products count, so
+	 * the newspack_subscriber_discounts_cart_product_ids filter can still remove
+	 * a line. A real cart line that list keeps is checked on its own product
+	 * instance (`data`), so a plan applied to it is seen; IDs the filter adds or
+	 * substitutes are resolved fresh by ID, which is how a legacy subscription
+	 * type reaches this check without ever being a real cart line. Shared by
 	 * cart_contains_a_subscription() and cart_signature(), so both fall back to a
 	 * fresh verdict the instant a line's subscription state changes mid-request.
 	 *
@@ -537,18 +538,22 @@ class Subscriber_Discounts_Pricing {
 	private static function cart_line_tokens() {
 		$tokens  = [];
 		$covered = [];
-		if ( function_exists( 'WC' ) && WC()->cart ) {
+		$ids     = self::get_cart_product_ids();
+		if ( $ids && function_exists( 'WC' ) && WC()->cart ) {
 			foreach ( WC()->cart->get_cart() as $cart_item ) {
 				$cart_product = $cart_item['data'] ?? null;
-				if ( $cart_product instanceof \WC_Product ) {
-					$tokens[]  = self::cart_line_token( (int) $cart_product->get_id(), $cart_product );
-					$covered[] = (int) $cart_product->get_id();
-					$covered[] = absint( $cart_item['product_id'] ?? 0 );
-					$covered[] = absint( $cart_item['variation_id'] ?? 0 );
+				if ( ! $cart_product instanceof \WC_Product ) {
+					continue;
+				}
+				$line_ids = array_filter( [ (int) $cart_product->get_id(), absint( $cart_item['product_id'] ?? 0 ), absint( $cart_item['variation_id'] ?? 0 ) ] );
+				$kept     = array_intersect( $line_ids, $ids );
+				if ( $kept ) {
+					$tokens[] = self::cart_line_token( (int) $cart_product->get_id(), $cart_product );
+					$covered  = array_merge( $covered, $kept );
 				}
 			}
 		}
-		foreach ( array_diff( self::get_cart_product_ids(), $covered ) as $cart_product_id ) {
+		foreach ( array_diff( $ids, $covered ) as $cart_product_id ) {
 			$cart_product = \wc_get_product( $cart_product_id );
 			if ( $cart_product instanceof \WC_Product ) {
 				$tokens[] = self::cart_line_token( $cart_product_id, $cart_product );

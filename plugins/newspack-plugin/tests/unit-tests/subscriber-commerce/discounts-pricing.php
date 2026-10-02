@@ -585,6 +585,9 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		}
 		require_once dirname( __DIR__, 2 ) . '/mocks/wc-cart-global-mock.php';
 		\WC()->cart = new \WC_Cart( $cart_items );
+		// The stubbed cart is now the source of truth; set_up()'s empty filtered
+		// list would otherwise remove every line in it.
+		remove_all_filters( 'newspack_subscriber_discounts_cart_product_ids' );
 	}
 
 	/**
@@ -659,6 +662,62 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		$this->assertNull(
 			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
 			'The same cart holding the bare one-time instance does not grant the discount.'
+		);
+	}
+
+	/**
+	 * The newspack_subscriber_discounts_cart_product_ids filter decides which
+	 * products count as in the cart, real lines included: a filter that drops a
+	 * line holding a plan takes its all-subscribers discount with it.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_cart_product_ids_filter_can_remove_a_real_cart_line() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-plans-mocks.php';
+		add_filter( 'woocommerce_is_subscription', [ 'WCS_ATT_Product_Schemes', 'filter_is_subscription' ], 10, 3 );
+		global $subscriptions_database, $orders_database, $order_items_database;
+		$subscriptions_database = $subscriptions_database ?? [];
+		$orders_database        = $orders_database ?? [];
+		$order_items_database   = $order_items_database ?? [];
+
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+				'targeting'                => 'all',
+				'product_ids'              => [],
+			]
+		);
+
+		$plan_product = $this->create_product( 50.0, null, 0, 'simple' );
+		\WCS_ATT_Product_Schemes::mock_register(
+			$plan_product->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			]
+		);
+		$options       = \Newspack\Subscription_Products::get_purchase_options( $plan_product );
+		$plan_instance = \Newspack\Subscription_Products::get_option_product( $options[1] );
+
+		$this->stub_wc_cart(
+			[
+				'line' => [
+					'product_id' => $plan_product->get_id(),
+					'data'       => $plan_instance,
+				],
+			]
+		);
+		add_filter( 'newspack_subscriber_discounts_cart_product_ids', '__return_empty_array' );
+		$this->flush_caches();
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'A cart line the filter removes grants no discount.'
 		);
 	}
 
