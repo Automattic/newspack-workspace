@@ -7,15 +7,16 @@
 
 namespace Newspack_Network\Backfillers;
 
+use Newspack_Network\Data_Backfill;
 use Newspack_Network\Woocommerce\Events as Woo_Listeners;
 use WP_CLI;
 
 /**
- * Sends every order holding a one-time product with a Network ID that was ever
- * paid, for orders placed before purchases were reported or before the product
- * was tagged. Orders since refunded or cancelled go too, so a revocation whose
- * event never arrived is repaired as well as a purchase that never was; orders
- * never paid are skipped, since they granted nothing. Each event is
+ * Sends every order that was ever paid and holds a one-time product with a
+ * Network ID, for orders placed before purchases were reported or before the
+ * product was tagged. Orders since refunded or cancelled go too, so a revocation
+ * whose event never arrived is repaired as well as a purchase that never was;
+ * an order never paid granted nothing, so it stays out. Each event is
  * stamped with the order's creation time, so a status a backfill has already sent
  * for the order is a duplicate to the hub and isn't sent again; the live event,
  * stamped when it fires, is what carries a status that returns to an earlier one.
@@ -68,8 +69,13 @@ class One_Time_Purchase_Changed extends Abstract_Backfiller {
 			// An order that was never paid granted nothing anywhere, so there is nothing to repair, and a
 			// product that draws failed card tests can hold thousands of them: each one would be an event
 			// every node has to pull before anything newer. An order paid and then refunded or cancelled keeps
-			// its paid date, so those still go.
-			if ( ! $order->get_date_paid() && ! $order->is_paid() ) {
+			// its paid date, so those still go; a refunded order goes regardless, since a refund implies a
+			// payment and an order moved to Processing by hand never gets a paid date.
+			if ( ! $order->get_date_paid() && ! $order->is_paid() && ! $order->has_status( 'refunded' ) ) {
+				Data_Backfill::increment_results_counter( 'newspack_node_one_time_purchase_changed', 'skipped' );
+				if ( $this->verbose ) {
+					WP_CLI::line( sprintf( 'Skipping order #%d: never paid.', $order->get_id() ) );
+				}
 				continue;
 			}
 			$data = Woo_Listeners::one_time_purchase_changed( $order->get_id(), '', $order->get_status(), $order );
