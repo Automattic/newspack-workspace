@@ -15,13 +15,6 @@ defined( 'ABSPATH' ) || exit;
 class Content_Gate_Excerpt {
 
 	/**
-	 * Excerpt texts built in this request, keyed as in the object cache.
-	 *
-	 * @var array<string, string>
-	 */
-	private static $free_excerpt_texts = [];
-
-	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -181,12 +174,8 @@ class Content_Gate_Excerpt {
 		// whole body, and a listing pays it once per card. The teaser's hash
 		// stands in for the gate layout and settings it was sliced by.
 		$cache_key = md5( wp_json_encode( [ 'excerpt', $post->ID, $post->post_modified_gmt, md5( $teaser ) ] ) );
-		if ( isset( self::$free_excerpt_texts[ $cache_key ] ) ) {
-			return self::$free_excerpt_texts[ $cache_key ];
-		}
-		$cached = wp_cache_get( $cache_key, Content_Gate::WITHHELD_TEASER_CACHE_GROUP );
+		$cached    = wp_cache_get( $cache_key, Content_Gate::WITHHELD_TEASER_CACHE_GROUP );
 		if ( is_string( $cached ) ) {
-			self::$free_excerpt_texts[ $cache_key ] = $cached;
 			return $cached;
 		}
 
@@ -218,8 +207,7 @@ class Content_Gate_Excerpt {
 			$words[] = $free[ $index++ ];
 		}
 
-		$text                                   = implode( ' ', $words );
-		self::$free_excerpt_texts[ $cache_key ] = $text;
+		$text = implode( ' ', $words );
 		wp_cache_set( $cache_key, $text, Content_Gate::WITHHELD_TEASER_CACHE_GROUP, HOUR_IN_SECONDS );
 		return $text;
 	}

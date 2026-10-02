@@ -704,26 +704,32 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Editing the gate layout shortens the free preview at once.
+	 * Editing the gate layout shortens the free preview, and the excerpt cut from
+	 * it, at once.
 	 *
-	 * The teaser is cached across requests, and the layout settings that slice it
-	 * live on the layout post's meta — editing them leaves the article's own
-	 * modified time untouched, so the key has to carry them.
+	 * The teaser and the excerpt are cached across requests, and the layout
+	 * settings that slice them live on the layout post's meta — editing them
+	 * leaves the article's own modified time untouched, so the keys have to
+	 * carry them.
 	 */
 	public function test_a_layout_edit_reshapes_the_teaser_at_once() {
 		update_post_meta( $this->gate_layout_id, 'visible_paragraphs', 2 );
 		$post_id = $this->create_restricted_post();
 
-		$two_paragraphs = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$two_paragraphs         = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$two_paragraphs_excerpt = get_the_excerpt( $post_id );
 
 		update_post_meta( $this->gate_layout_id, 'visible_paragraphs', 1 );
 		$this->reset_restriction_cache();
 		$this->reset_gate_render_state();
 
-		$one_paragraph = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$one_paragraph         = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$one_paragraph_excerpt = get_the_excerpt( $post_id );
 
 		$this->assertStringContainsString( 'Second free line', $two_paragraphs, 'Two paragraphs are free, which is the premise of this test.' );
 		$this->assertStringNotContainsString( 'Second free line', $one_paragraph, 'A shorter preview takes effect without waiting for the cached teaser to expire.' );
+		$this->assertStringContainsString( 'Second free line', $two_paragraphs_excerpt );
+		$this->assertStringNotContainsString( 'Second free line', $one_paragraph_excerpt, 'The excerpt shortens with the teaser rather than serving the cached longer one.' );
 	}
 
 	/**

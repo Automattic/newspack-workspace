@@ -209,7 +209,8 @@ class Content_Gate {
 
 	/**
 	 * Object cache group holding the teasers built by
-	 * {@see self::get_teaser_outside_article()}.
+	 * {@see self::get_teaser_outside_article()}, and the excerpt texts
+	 * {@see Content_Gate_Excerpt::get_free_excerpt_text()} cuts from them.
 	 */
 	const WITHHELD_TEASER_CACHE_GROUP = 'newspack_withheld_teasers';
 
