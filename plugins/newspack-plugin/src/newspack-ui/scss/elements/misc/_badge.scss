@@ -7,7 +7,7 @@
 	font-size: var(--newspack-ui-font-size-xs);
 	font-weight: 600;
 	line-height: var(--newspack-ui-line-height-xs);
-	padding: 2px 6px; // TODO: replace with variables; they only go down to 8px, perhaps they need to be rethought?
+	padding: calc(var(--newspack-ui-spacer-1) / 4) calc(var(--newspack-ui-spacer-1) * 0.75);
 	place-items: center;
 	text-transform: uppercase;
 
