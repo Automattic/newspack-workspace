@@ -170,13 +170,16 @@ function nspc_rescue_changesets() {
 
 	foreach ( $newly_stranded as $changeset_id ) {
 		$missed_gmt = strtotime( get_post_field( 'post_date_gmt', $changeset_id ) . ' GMT' );
-		Logger::log(
+		// newspack_log rather than Logger::log: the latter is a no-op unless NEWSPACK_LOG_LEVEL
+		// is set, and the flag below means this warning only ever gets one chance to be seen.
+		Logger::newspack_log(
+			'newspack_scheduled_post_checker_stranded_changeset',
 			sprintf(
 				'Changeset %d missed its slot %s ago and is outside the rescue window; it will stay unpublished unless someone reopens the Customizer.',
 				$changeset_id,
 				human_time_diff( $missed_gmt )
 			),
-			LOGGER_HEADER,
+			[ 'changeset_id' => $changeset_id ],
 			'warning'
 		);
 		update_post_meta( $changeset_id, '_nspc_logged_stranded', true );

@@ -332,6 +332,38 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A changeset past the window is reported exactly once, whatever the log level —
+	 * the meta flag that suppresses repeats would otherwise swallow it silently.
+	 */
+	public function test_stranded_changeset_is_reported_once() {
+		$stranded_id = $this->create_overdue_future_post(
+			'customize_changeset',
+			[
+				'post_name'    => wp_generate_uuid4(),
+				'post_content' => wp_json_encode( [] ),
+			],
+			4 * DAY_IN_SECONDS
+		);
+
+		$reports = [];
+		$this->add_cleanup_filter(
+			'newspack_log',
+			function ( $code, $message, $params ) use ( &$reports ) {
+				if ( 'newspack_scheduled_post_checker_stranded_changeset' === $code ) {
+					$reports[] = $params['data']['changeset_id'];
+				}
+			},
+			3
+		);
+
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+		\Newspack\Scheduled_Post_Checker\nspc_run_check();
+
+		$this->assertSame( [ $stranded_id ], $reports, 'Reported on the first run only.' );
+		$this->assertSame( 'future', get_post_status( $stranded_id ), 'And it stays scheduled.' );
+	}
+
+	/**
 	 * The age limit is scoped to changesets — the post backlog stays unbounded, which
 	 * is what a global date bound would break.
 	 */
