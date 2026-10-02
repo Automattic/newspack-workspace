@@ -60,11 +60,5 @@ class Reader_Registered extends Abstract_Incoming_Event {
 		} else {
 			$user = User_Utils::get_or_create_user_by_email( $email, $this->get_site(), $this->data->user_id ?? '', (array) $this->data );
 		}
-
-		// This site may hold subscriptions, seats, or purchases for the reader whose
-		// events were dropped elsewhere for lack of an account; send them again.
-		if ( ! $this->is_local() ) {
-			\Newspack_Network\Woocommerce\Resend::for_email( $email );
-		}
 	}
 }
