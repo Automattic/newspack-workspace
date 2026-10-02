@@ -332,8 +332,8 @@ class Scheduled_Post_Checker_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A changeset past the window is reported exactly once, whatever the log level —
-	 * the meta flag that suppresses repeats would otherwise swallow it silently.
+	 * A changeset past the window is reported exactly once, even with NEWSPACK_LOG_LEVEL
+	 * unset: the meta flag stops any repeat, so the first report is the only one.
 	 */
 	public function test_stranded_changeset_is_reported_once() {
 		$stranded_id = $this->create_overdue_future_post(
