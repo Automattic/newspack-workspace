@@ -1,3 +1,10 @@
+## newspack [6.53.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.7...newspack@6.53.8) (2026-10-02)
+
+
+### Bug Fixes
+
+* **subscriptions:** let readers pay pending limited subscriptions ([#1172](https://github.com/Automattic/newspack-workspace/issues/1172)) ([85c4546](https://github.com/Automattic/newspack-workspace/commit/85c454632b20c2adb002e40b691f2dca46c119ce))
+
 ## newspack [6.53.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.6...newspack@6.53.7) (2026-10-01)
 
 
