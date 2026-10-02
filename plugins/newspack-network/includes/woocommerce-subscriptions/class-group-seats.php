@@ -14,8 +14,9 @@ use Newspack_Network\Woocommerce\Events as Woo_Events;
  * Reports each change to a seat on one of this site's group subscriptions, so the
  * member can read on the other network sites as the group's owner can.
  *
- * One event per member, shaped like a subscription event, so a reading site treats
- * the seat as it treats a subscription the reader owns. Membership is user meta on
+ * One event per member, shaped like a subscription event: the seat carries the
+ * subscription's status, so a reading site applies the same status rules, while
+ * keeping seats apart from the subscriptions a reader owns. Membership is user meta on
  * this site and changes through several routes (adding and removing members, leaving
  * a group, deleting a user), so the meta itself is watched. A deleted user is gone by
  * the end of the request, so the member's email is kept when the seat is queued and
@@ -34,7 +35,11 @@ class Group_Seats {
 	const HOOK = 'newspack_network_group_seat_changed';
 
 	/**
-	 * User meta newspack-plugin records a member's group subscription IDs in.
+	 * User meta newspack-plugin records a member's group subscription IDs in
+	 * (its `Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY`), read here directly:
+	 * the meta hooks fire whether or not newspack-plugin is active, and its
+	 * `get_members()` caches per request, so it can predate a change made earlier in
+	 * the same request.
 	 */
 	const MEMBER_META_KEY = '_newspack_group_subscription';
 
@@ -203,9 +208,21 @@ class Group_Seats {
 		// A deleted member has no account left, so the email kept at queue time stands in and the seat is gone.
 		$user         = get_userdata( $user_id );
 		$email        = $user ? $user->user_email : self::get_queued_email( $user_id );
-		$subscription = wcs_get_subscription( $subscription_id );
-		if ( ! $email || ! $subscription ) {
+		if ( ! $email ) {
 			return null;
+		}
+		$subscription = wcs_get_subscription( $subscription_id );
+		if ( ! $subscription ) {
+			// Deleting an owner's account cancels and then force-deletes their subscriptions in the
+			// same request, after the status change queued every seat; by now there is nothing to load,
+			// and the members' seats are gone with it.
+			return [
+				'email'        => $email,
+				'user_id'      => $user_id,
+				'id'           => $subscription_id,
+				'status_after' => 'cancelled',
+				'products'     => [],
+			];
 		}
 		$settings    = \Newspack\Group_Subscription_Settings::get_subscription_settings( $subscription );
 		$seat_active = $user
@@ -239,7 +256,8 @@ class Group_Seats {
 	}
 
 	/**
-	 * IDs of the users holding a seat on a subscription.
+	 * IDs of the users holding a seat on a subscription, from the meta itself
+	 * (see MEMBER_META_KEY for why not newspack-plugin's `get_members()`).
 	 *
 	 * @param int $subscription_id Subscription ID.
 	 * @return int[]
