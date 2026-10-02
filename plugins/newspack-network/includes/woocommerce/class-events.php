@@ -152,7 +152,6 @@ class Events {
 				'slug' => $product->get_slug(),
 			];
 			$products[ $product->get_id() ] = $entry;
-			// The line item of a variable product is the variation, but other sites only know the parent's Network ID.
 			$parent_id = (int) $product->get_parent_id();
 			if ( $parent_id ) {
 				$products[ $parent_id ] = array_merge( $entry, [ 'id' => $parent_id ] );

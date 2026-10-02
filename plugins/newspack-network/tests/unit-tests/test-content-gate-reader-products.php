@@ -270,10 +270,17 @@ class TestContentGateReaderProducts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Both filters are hooked where newspack-plugin evaluates the rules.
+	 * The one-time filter is hooked with every argument newspack-plugin passes it.
 	 */
-	public function test_filters_are_hooked() {
-		$this->assertSame( 10, has_filter( 'newspack_access_rules_has_active_subscription', [ Access::class, 'check_network_subscriptions' ] ) );
-		$this->assertSame( 10, has_filter( 'newspack_access_rules_has_one_time_purchase', [ Access::class, 'check_network_one_time_purchases' ] ) );
+	public function test_one_time_filter_passes_a_stored_purchase() {
+		$this->purchase( 5 );
+		$rule = [
+			'product_ids'    => [ $this->pass_product ],
+			'duration_value' => 30,
+			'duration_unit'  => 'days',
+		];
+
+		$this->assertTrue( apply_filters( 'newspack_access_rules_has_one_time_purchase', false, $this->user_id, $rule ) );
+		$this->assertFalse( apply_filters( 'newspack_access_rules_has_one_time_purchase', false, $this->user_id, array_merge( $rule, [ 'duration_value' => 1 ] ) ) );
 	}
 }

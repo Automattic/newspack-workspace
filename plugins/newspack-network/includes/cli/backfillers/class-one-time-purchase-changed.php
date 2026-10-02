@@ -7,6 +7,7 @@
 
 namespace Newspack_Network\Backfillers;
 
+use Newspack_Network\Content_Gate\Access;
 use Newspack_Network\Woocommerce\Events as Woo_Listeners;
 use WP_CLI;
 
@@ -43,7 +44,7 @@ class One_Time_Purchase_Changed extends Abstract_Backfiller {
 		$params = [
 			'limit'  => -1,
 			'type'   => 'shop_order',
-			'status' => function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : [ 'processing', 'completed' ],
+			'status' => Access::get_paid_statuses(),
 			'return' => 'ids',
 		];
 		if ( $this->start && $this->end ) {
