@@ -9,6 +9,8 @@ namespace Newspack_Network\Incoming_Events;
 
 use Newspack_Network\Hub\Stores\Subscriptions;
 use Newspack_Network\Debugger;
+use Newspack_Network\User_Update_Watcher;
+use Newspack_Network\Utils\Users;
 
 /**
  * Class to handle the Subscription Changed Incoming Event
@@ -69,9 +71,13 @@ class Subscription_Changed extends Woo_Item_Changed {
 
 		Debugger::log( 'Processing subscription_changed with email: ' . $email );
 
-		$existing_user = get_user_by( 'email', $email );
+		// The reader may not have an account here yet (the registration event can arrive later, or never),
+		// so create it rather than lose the subscription: nothing re-sends it once the account exists.
+		User_Update_Watcher::$enabled = false;
+		$existing_user                = Users::get_or_create_user_by_email( $email, $this->get_site(), $this->data->user_id ?? '' );
 
-		if ( ! $existing_user ) {
+		if ( ! $existing_user instanceof \WP_User ) {
+			Debugger::log( 'Could not find or create a user for subscription: ' . $email );
 			return;
 		}
 
