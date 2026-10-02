@@ -69,17 +69,11 @@ class TestGroupSeatBackfiller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A zero registration date, as an imported user table can carry, gives no stamp
-	 * the hub could store, so the seat is skipped rather than sent with a negative time.
+	 * A zero registration date, as an imported user table can carry, parses to a time
+	 * before 1901 that the event log would clamp and mis-date; the seat is skipped instead.
 	 */
 	public function test_seat_with_no_usable_date_is_skipped() {
-		$member = self::factory()->user->create();
-		wp_update_user(
-			[
-				'ID'              => $member,
-				'user_registered' => '0000-00-00 00:00:00',
-			]
-		);
+		$member = self::factory()->user->create( [ 'user_registered' => '0000-00-00 00:00:00' ] );
 		add_user_meta( $member, Group_Seats::MEMBER_META_KEY, 90 );
 
 		$this->assertSame( [], $this->events() );

@@ -129,7 +129,8 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 			$created = $subscription->get_date_created();
 			return $created ? $created->getTimestamp() : null;
 		}
-		// A zero registration date (an imported user table) parses to a negative time the hub can't store.
+		// A zero registration date (an imported user table) parses to a time before 1901; the event log's
+		// int column would silently clamp it, so the seat would be mis-dated on every node. Skip it instead.
 		$member     = get_userdata( $member_id );
 		$registered = $member ? (int) strtotime( (string) $member->user_registered ) : 0;
 		return $registered > 0 ? $registered : null;
