@@ -172,9 +172,9 @@ function nspc_rescue_changesets() {
 			$changeset_id,
 			human_time_diff( $missed_gmt )
 		);
-		// The flag below means each changeset is reported only once, so send it everywhere:
-		// newspack_log reaches Newspack Manager whatever the log level, and Logger::log
-		// leaves a local trail on sites without Manager.
+		// The flag below means each changeset is reported only once, so send it to both
+		// sinks: newspack_log reaches Newspack Manager regardless of NEWSPACK_LOG_LEVEL, and
+		// Logger::log leaves a local trail on sites without Manager when that constant is set.
 		Logger::log( $message, LOGGER_HEADER, 'warning' );
 		Logger::newspack_log(
 			'newspack_scheduled_post_checker_stranded_changeset',
