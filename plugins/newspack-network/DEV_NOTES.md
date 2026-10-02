@@ -95,6 +95,25 @@ When they pull events, they get an array of events. Each event has a an action n
 
 The Node instantiates the corresponding `Incoming_Event` for each action and then calls the `process_in_node` method of the event object.
 
+## Reader access across sites
+
+A reader who holds a product on one site passes gates on the others when the products share a Network ID. Three kinds of holding count: a subscription the reader owns, a seat on someone else's group subscription, and a paid one-time order within the gate's duration.
+
+All three travel the same way, as events from the site that owns the data: `newspack_node_subscription_changed`, `newspack_node_group_seat_changed` (one per member, sent when a seat is taken or given up, the group is turned on or off, the owner's subscription changes status, or the member's roles change), and `newspack_node_one_time_purchase_changed` (only for orders holding a one-time product with a Network ID). Nodes pull all three. Each site records what it receives on the reader: owned subscriptions in `_newspack_network_subscriptions`, seats and purchases in `_newspack_network_reader_products`, keyed by site and item (named for what it stores, so other features can read a reader's network products too). `Content_Gate\Access` answers newspack-plugin's `newspack_access_rules_has_active_subscription` and `newspack_access_rules_has_one_time_purchase` filters from those, resolving each product's Network ID through the synced product list. The reading site's gate decides how long a one-time purchase grants access.
+
+A seat fails the strict subscription check on purpose: newspack-plugin's access attribution runs it to tell an owner from a group member.
+
+A site that receives one of these events for a reader it has no account for creates the network reader account first, as membership events do, but only when the record grants access (an active subscription or seat, a paid order with a customer). A record that only revokes creates nothing, so the cancellations a reader's own deletion sends out don't bring the account back elsewhere. Each new account runs the site's contact sync, so on a network whose sites keep separate ESP audiences, every active holder elsewhere becomes a contact here, through the backfills below and, from then on, as subscriptions renew. That is what the membership sync did before. It starts with the update itself, as subscriptions, new orders and seat changes arrive live; the backfills (including `data-backfill newspack_node_subscription_changed`) add the rest at once, among them the holders of past orders, who never change status and so would never arrive otherwise. Weigh it before step 1 below.
+
+Three limits are known. A status change on a very large group sends one event per member at the end of the request, and the seat backfill repairs any that didn't send, including a group turned off or deleted; a member's removal whose event was lost can't be re-sent, since nothing records the seat any more (re-add and remove the member), and neither can a status a backfill already sent for that seat (toggle the group again). Trashing a paid one-time order (as opposed to refunding or cancelling it) sends no event, and neither does a refund of an order whose product has since been deleted; in both cases other sites keep the grant until the gate's own duration runs out. A paid order with no customer that reaches a site before an account for its billing email exists is not recorded there; the origin itself keeps granting by billing email. Once WooCommerce links the order to the customer (WooCommerce 11 does that the first time the customer verifies their email, a password reset included; otherwise by hand), re-running the purchase backfill sends it again, and it lands.
+
+To roll this out, go in this order:
+
+1. Update the hub first, then every node. An old hub rejects the new events, and an old node's pull cursor moves past them and never asks again.
+2. Tag one-time products. `wp newspack-network assign-product-network-ids --apply` covers products linked to membership plans. A one-time product used only by gates needs its Network ID set in the product's Newspack Network box, or passed with `--map`.
+3. Only then run the backfills on every site: `wp newspack-network data-backfill newspack_node_group_seat_changed --live` and `wp newspack-network data-backfill newspack_node_one_time_purchase_changed --live`. Both accept `--start` and `--end` (seats by join time, else the subscription's creation date, else the member's registration date; orders by creation date), which helps on large sites, and both are safe to re-run; a run meant to repair lost revocations should cover all history, since a seat's fallback stamp can predate its group. Every event they log sits in front of everything newer for every node, which pulls 40 events every two minutes (`NEWSPACK_NETWORK_EVENTS_PULL_LIMIT`, defined on the hub, raises that for every node), so count what a dry run with `--verbose` would send before a live run on a busy network.
+4. A node updated after the backfills ran won't receive those events by re-running them, because the hub drops duplicates. Lower its pull cursor to an Event Log ID from before the hub was updated (`wp option update newspack_node_last_processed_action <id>`) and run `wp newspack-network sync-all --yes`. The replay re-applies every pulled event since that ID, not only the new kinds, so an older change from another site can overwrite a newer one made on this node, and a reader deletion in that window is applied again, which also removes any subscription the reader has since taken out here. Check the window's deletions before rewinding.
+
 ## Stores
 
 Stores are simple abstraction layers used by the Hub to persist data on the database. They are used to store and read data.
@@ -169,6 +188,9 @@ Available CLI commands are (add `--help` flag to learn more about each command):
 * `--dry-run` enabled. Will run through process without deleting.
 * `--yes` enabled. Will bypass confirmations.
 
+
+### `wp newspack-network data-backfill newspack_node_group_seat_changed` / `newspack_node_one_time_purchase_changed`
+* Send every seat readers hold (a group turned off or deleted as cancelled), or every order holding a tagged one-time product that was ever paid or refunded (so a missed refund is repaired; tagged orders never paid, and seats with no usable date, are counted as skipped; a status a backfill already sent counts as a duplicate and isn't re-sent), as events. `--live` to send; `--start`/`--end` limit seats by join time and orders by creation date. Safe to re-run.
 
 ### `wp newspack-network sync-all`
 * Will pull all events from the Hub
