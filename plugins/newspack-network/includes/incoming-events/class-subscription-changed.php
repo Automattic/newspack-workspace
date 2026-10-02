@@ -7,6 +7,7 @@
 
 namespace Newspack_Network\Incoming_Events;
 
+use Newspack_Network\Content_Gate\Access;
 use Newspack_Network\Hub\Stores\Subscriptions;
 use Newspack_Network\Debugger;
 use Newspack_Network\User_Update_Watcher;
@@ -73,8 +74,16 @@ class Subscription_Changed extends Woo_Item_Changed {
 
 		// The reader may not have an account here yet (the registration event can arrive later, or never),
 		// so create it rather than lose the subscription: nothing re-sends it once the account exists.
-		User_Update_Watcher::$enabled = false;
-		$existing_user                = Users::get_or_create_user_by_email( $email, $this->get_site(), $this->data->user_id ?? '' );
+		// Only a subscription that grants access earns an account: deleting a reader cancels their
+		// subscriptions, and that cancellation would otherwise bring the account back on every other site.
+		$existing_user = get_user_by( 'email', $email );
+		if ( ! $existing_user ) {
+			if ( ! in_array( $this->get_status_after(), Access::ACTIVE_STATUSES, true ) ) {
+				return;
+			}
+			User_Update_Watcher::$enabled = false;
+			$existing_user                = Users::get_or_create_user_by_email( $email, $this->get_site(), $this->data->user_id ?? '' );
+		}
 
 		if ( ! $existing_user instanceof \WP_User ) {
 			Debugger::log( 'Could not find or create a user for subscription: ' . $email );

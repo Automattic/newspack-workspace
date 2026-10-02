@@ -16,17 +16,18 @@ class TestSubscriptionChangedAccount extends WP_UnitTestCase {
 	/**
 	 * A subscription event from another site.
 	 *
-	 * @param string $email Subscriber email.
+	 * @param string $email  Subscriber email.
+	 * @param string $status Status after the change.
 	 * @return Subscription_Changed
 	 */
-	private function subscription( $email ) {
+	private function subscription( $email, $status = 'active' ) {
 		return new Subscription_Changed(
 			'https://a.example.test',
 			[
 				'email'        => $email,
 				'user_id'      => 3,
 				'id'           => 42,
-				'status_after' => 'active',
+				'status_after' => $status,
 				'products'     => [
 					7 => [
 						'id'   => 7,
@@ -60,7 +61,7 @@ class TestSubscriptionChangedAccount extends WP_UnitTestCase {
 			[
 				'user_email' => 'regular@example.test',
 				'role'       => 'subscriber',
-			] 
+			]
 		);
 		$before  = count_users()['total_users'];
 
@@ -69,5 +70,15 @@ class TestSubscriptionChangedAccount extends WP_UnitTestCase {
 		$this->assertSame( $before, count_users()['total_users'] );
 		$this->assertContains( 'subscriber', get_userdata( $user_id )->roles );
 		$this->assertSame( 'active', get_user_meta( $user_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true )['https://a.example.test'][42]['status'] );
+	}
+
+	/**
+	 * A subscription that grants nothing creates no account: deleting a reader cancels
+	 * their subscriptions, and that cancellation must not bring them back elsewhere.
+	 */
+	public function test_event_that_grants_nothing_creates_no_account() {
+		$this->subscription( 'gone@example.test', 'cancelled' )->process_in_node();
+
+		$this->assertFalse( get_user_by( 'email', 'gone@example.test' ) );
 	}
 }

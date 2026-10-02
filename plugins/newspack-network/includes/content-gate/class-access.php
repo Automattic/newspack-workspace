@@ -33,6 +33,15 @@ class Access {
 	const PAID_STATUSES = [ 'processing', 'completed' ];
 
 	/**
+	 * Order statuses that count as paid: WooCommerce's own list where it's loaded.
+	 *
+	 * @return string[]
+	 */
+	public static function get_paid_statuses() {
+		return function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : self::PAID_STATUSES;
+	}
+
+	/**
 	 * Initializer.
 	 */
 	public static function init() {
@@ -119,7 +128,7 @@ class Access {
 		if ( empty( $network_ids ) ) {
 			return $has_purchase;
 		}
-		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : self::PAID_STATUSES;
+		$paid_statuses = self::get_paid_statuses();
 
 		foreach ( self::get_user_products( $user_id, 'purchase' ) as $site => $purchases ) {
 			foreach ( $purchases as $purchase ) {

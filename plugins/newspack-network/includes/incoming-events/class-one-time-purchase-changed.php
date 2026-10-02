@@ -7,6 +7,8 @@
 
 namespace Newspack_Network\Incoming_Events;
 
+use Newspack_Network\Content_Gate\Access;
+
 /**
  * A reader's order on another site for a one-time product with a Network ID changed status.
  *
@@ -37,5 +39,14 @@ class One_Time_Purchase_Changed extends Reader_Product_Changed {
 			'purchased_at' => (int) ( $this->data->purchased_at ?? 0 ),
 			'products'     => $this->get_products(),
 		];
+	}
+
+	/**
+	 * A paid order grants; a refunded or cancelled one only revokes.
+	 *
+	 * @return bool
+	 */
+	protected function grants_access() {
+		return in_array( $this->get_status_after(), Access::get_paid_statuses(), true );
 	}
 }

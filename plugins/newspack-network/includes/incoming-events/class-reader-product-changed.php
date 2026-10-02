@@ -7,6 +7,7 @@
 
 namespace Newspack_Network\Incoming_Events;
 
+use Newspack_Network\Content_Gate\Access;
 use Newspack_Network\Debugger;
 use Newspack_Network\User_Update_Watcher;
 use Newspack_Network\Utils\Users;
@@ -41,6 +42,19 @@ abstract class Reader_Product_Changed extends Abstract_Incoming_Event {
 	abstract protected function get_record();
 
 	/**
+	 * Whether this record can grant access on this site.
+	 *
+	 * Decides whether a reader with no account here gets one: a record that grants
+	 * nothing has nothing to revoke, and the cancelled seat a reader's deletion itself
+	 * sends out would otherwise bring their account back on every other site.
+	 *
+	 * @return bool
+	 */
+	protected function grants_access() {
+		return in_array( $this->get_status_after(), Access::ACTIVE_STATUSES, true );
+	}
+
+	/**
 	 * The products a reader holds on other sites.
 	 *
 	 * @param int $user_id User ID.
@@ -71,7 +85,7 @@ abstract class Reader_Product_Changed extends Abstract_Incoming_Event {
 
 	/**
 	 * Record the product on the reader, creating their network reader account here
-	 * first if it doesn't exist, as membership events do.
+	 * first if it doesn't exist and the record grants access, as membership events do.
 	 *
 	 * The account usually arrives through `reader_registered` before this event, but
 	 * not always: that event can be delayed by a webhook retry, and accounts created
@@ -84,8 +98,14 @@ abstract class Reader_Product_Changed extends Abstract_Incoming_Event {
 		if ( ! $email || ! $this->get_id() ) {
 			return;
 		}
-		User_Update_Watcher::$enabled = false;
-		$user = Users::get_or_create_user_by_email( $email, $this->get_site(), $this->data->user_id ?? '' );
+		$user = get_user_by( 'email', $email );
+		if ( ! $user ) {
+			if ( ! $this->grants_access() ) {
+				return;
+			}
+			User_Update_Watcher::$enabled = false;
+			$user                         = Users::get_or_create_user_by_email( $email, $this->get_site(), $this->data->user_id ?? '' );
+		}
 		if ( ! $user instanceof \WP_User ) {
 			Debugger::log( 'Could not find or create a user for reader product record: ' . $email );
 			return;

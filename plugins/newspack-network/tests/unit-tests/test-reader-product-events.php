@@ -47,18 +47,19 @@ class TestReaderProductEvents extends WP_UnitTestCase {
 	/**
 	 * A one-time purchase event.
 	 *
-	 * @param string $site  Site URL.
-	 * @param string $email Customer email.
+	 * @param string $site   Site URL.
+	 * @param string $email  Customer email.
+	 * @param string $status Order status after the change.
 	 * @return One_Time_Purchase_Changed
 	 */
-	private function purchase( $site, $email ) {
+	private function purchase( $site, $email, $status = 'completed' ) {
 		return new One_Time_Purchase_Changed(
 			$site,
 			[
 				'email'        => $email,
 				'user_id'      => 3,
 				'id'           => 86,
-				'status_after' => 'completed',
+				'status_after' => $status,
 				'purchased_at' => 1700000000,
 				'products'     => [
 					30 => [
@@ -129,12 +130,32 @@ class TestReaderProductEvents extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Both actions are accepted and pulled by nodes, like subscription events.
+	 * A record that grants nothing creates no account: the cancelled seat or refunded
+	 * order a reader's own deletion sends out must not bring the reader back elsewhere.
+	 */
+	public function test_event_that_grants_nothing_creates_no_account() {
+		$this->seat( 'https://a.example.test', 'gone@example.test', 'cancelled' )->process_in_node();
+
+		$this->purchase( 'https://a.example.test', 'gone@example.test', 'refunded' )->process_in_node();
+
+		$this->assertFalse( get_user_by( 'email', 'gone@example.test' ) );
+	}
+
+	/**
+	 * Both actions are accepted and pulled by nodes, and each resolves to the three
+	 * classes the hub, the nodes and the backfill load by name from the action map.
 	 */
 	public function test_actions_are_accepted_and_pulled() {
-		$this->assertSame( 'Group_Seat_Changed', Accepted_Actions::ACTIONS['newspack_node_group_seat_changed'] );
-		$this->assertSame( 'One_Time_Purchase_Changed', Accepted_Actions::ACTIONS['newspack_node_one_time_purchase_changed'] );
-		$this->assertContains( 'newspack_node_group_seat_changed', Accepted_Actions::ACTIONS_THAT_NODES_PULL );
-		$this->assertContains( 'newspack_node_one_time_purchase_changed', Accepted_Actions::ACTIONS_THAT_NODES_PULL );
+		$actions = [
+			'newspack_node_group_seat_changed'        => 'Group_Seat_Changed',
+			'newspack_node_one_time_purchase_changed' => 'One_Time_Purchase_Changed',
+		];
+		foreach ( $actions as $action => $class ) {
+			$this->assertSame( $class, Accepted_Actions::ACTIONS[ $action ] );
+			$this->assertContains( $action, Accepted_Actions::ACTIONS_THAT_NODES_PULL );
+			$this->assertTrue( class_exists( 'Newspack_Network\\Incoming_Events\\' . $class ), $class . ' incoming event' );
+			$this->assertTrue( class_exists( 'Newspack_Network\\Hub\\Stores\\Event_Log_Items\\' . $class ), $class . ' event log item' );
+			$this->assertTrue( class_exists( 'Newspack_Network\\Backfillers\\' . $class ), $class . ' backfiller' );
+		}
 	}
 }
