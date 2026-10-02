@@ -53,16 +53,35 @@ class Premium_Newsletters {
 	 * Queue-entry source tags. Each access-check queue entry records which event
 	 * enqueued it so that downstream logic (e.g. consulting the renewal snapshot)
 	 * can be scoped to the originating event instead of leaking into unrelated
-	 * flows that happen to dequeue the same user. A plan-switch entry is
-	 * remove-only: check_access() never adds lists for it, and it never replaces
-	 * another entry for the same user.
+	 * flows that happen to dequeue the same user. Plan-switch and
+	 * one-time-purchase-ended entries are remove-only: check_access() never adds
+	 * lists for them, and they never replace another entry for the same user.
+	 * A one-time purchase that ends can't grant access, so adding lists there
+	 * would only re-add lists the reader had left; maybe_enqueue_access_check()
+	 * covers the plan-switch case.
 	 */
-	const SOURCE_RENEWAL              = 'renewal';
-	const SOURCE_SUBSCRIPTION_CHANGED = 'subscription_changed';
-	const SOURCE_DONATION_CHANGED     = 'donation_changed';
-	const SOURCE_READER_VERIFIED      = 'reader_verified';
-	const SOURCE_GROUP_MEMBERSHIP     = 'group_membership';
-	const SOURCE_PLAN_SWITCH          = 'plan_switch';
+	const SOURCE_RENEWAL                 = 'renewal';
+	const SOURCE_SUBSCRIPTION_CHANGED    = 'subscription_changed';
+	const SOURCE_DONATION_CHANGED        = 'donation_changed';
+	const SOURCE_READER_VERIFIED         = 'reader_verified';
+	const SOURCE_GROUP_MEMBERSHIP        = 'group_membership';
+	const SOURCE_PLAN_SWITCH             = 'plan_switch';
+	const SOURCE_ONE_TIME_PURCHASE       = 'one_time_purchase';
+	const SOURCE_ONE_TIME_PURCHASE_ENDED = 'one_time_purchase_ended';
+
+	/**
+	 * WP option key for the time of the last one-time purchase lapse sweep.
+	 * Stores: int (Unix timestamp).
+	 */
+	const ONE_TIME_PURCHASE_SWEEP_OPTION = 'newspack_premium_newsletters_one_time_purchase_sweep';
+
+	/**
+	 * The lapse sweep reads orders in pages of this many, and gives up after
+	 * this many pages for one duration. Normally a sweep covers one hour of
+	 * orders; the cap only matters after a long cron outage.
+	 */
+	const SWEEP_ORDERS_PAGE_SIZE = 100;
+	const SWEEP_MAX_PAGES        = 50;
 
 	/**
 	 * User meta key for the renewal-time snapshot of the contact's full ESP list
@@ -123,6 +142,7 @@ class Premium_Newsletters {
 		Data_Events::register_handler( [ __CLASS__, 'handle_product_subscription_changed' ], 'product_subscription_changed' );
 		Data_Events::register_handler( [ __CLASS__, 'handle_donation_subscription_changed' ], 'donation_subscription_changed' );
 		Data_Events::register_handler( [ __CLASS__, 'handle_reader_verified' ], 'reader_verified' );
+		Data_Events::register_handler( [ __CLASS__, 'handle_woo_order_updated' ], 'woo_order_updated' );
 	}
 
 	/**
@@ -156,6 +176,233 @@ class Premium_Newsletters {
 	 */
 	public static function handle_reader_verified( $timestamp, $data, $client_id ) {
 		self::maybe_enqueue_access_check( $timestamp, $data, $client_id, self::SOURCE_READER_VERIFIED );
+	}
+
+	/**
+	 * Data Events handler for `woo_order_updated`.
+	 *
+	 * An order for a product a one-time purchase rule names grants access only
+	 * while it counts as paid, so its buyer is checked when it starts or stops
+	 * counting: on payment, and on a later refund or cancellation. The event
+	 * fires once per line item; the queue keeps one entry per reader.
+	 *
+	 * @param int   $timestamp Timestamp of the event.
+	 * @param array $data      Data associated with the event.
+	 * @param int   $client_id ID of the client that triggered the event.
+	 */
+	public static function handle_woo_order_updated( $timestamp, $data, $client_id ) {
+		// Bail before the gate lookup; add_user_to_queue() would refuse the entry anyway.
+		if ( ! self::is_access_control_active() ) {
+			return;
+		}
+		$paid_statuses = self::get_paid_order_statuses();
+		$was_paid      = in_array( $data['status_from'] ?? '', $paid_statuses, true );
+		$is_paid       = in_array( $data['status'] ?? '', $paid_statuses, true );
+		if ( $was_paid === $is_paid ) {
+			return;
+		}
+		if ( ! in_array( (int) ( $data['product_id'] ?? 0 ), self::get_one_time_purchase_event_product_ids(), true ) ) {
+			return;
+		}
+		$source = $is_paid ? self::SOURCE_ONE_TIME_PURCHASE : self::SOURCE_ONE_TIME_PURCHASE_ENDED;
+		foreach ( self::get_order_reader_ids( (int) ( $data['user_id'] ?? 0 ), (string) ( $data['email'] ?? '' ) ) as $user_id ) {
+			self::add_user_to_queue( $user_id, $source );
+		}
+	}
+
+	/**
+	 * Queue a remove-only check for each reader whose one-time purchase access
+	 * ran out since the last sweep.
+	 *
+	 * Runs at the start of every queue run, so a lapse reaches the ESP within
+	 * about an hour. Sweeping by order date, rather than scheduling a check per
+	 * order at purchase time, also covers orders placed before this sweep
+	 * existed. A reader who bought again keeps their lists, because the check
+	 * looks at every qualifying order, not the one that lapsed.
+	 *
+	 * The first sweep only records its time. Lapses from before it, or from while
+	 * access control was inactive, are left to `wp newspack
+	 * verify-premium-newsletters --live`.
+	 *
+	 * @return void
+	 */
+	public static function enqueue_lapsed_one_time_purchases() {
+		if ( ! self::is_access_control_active() || ! function_exists( 'wc_get_orders' ) ) {
+			return;
+		}
+		$now      = time();
+		$last_run = (int) get_option( self::ONE_TIME_PURCHASE_SWEEP_OPTION, 0 );
+		if ( $last_run > 0 && $last_run < $now ) {
+			foreach ( self::get_finite_one_time_purchase_rules() as $value ) {
+				$previous_cutoff = Access_Rules::get_one_time_purchase_cutoff( $value, $last_run );
+				$cutoff          = Access_Rules::get_one_time_purchase_cutoff( $value, $now );
+				// Month arithmetic can step the cutoff back near a month's end; the
+				// orders it skips are swept once it passes them again.
+				if ( $cutoff > $previous_cutoff ) {
+					self::enqueue_readers_with_orders_between( $value['product_ids'], $previous_cutoff + 1, $cutoff );
+				}
+			}
+		}
+		update_option( self::ONE_TIME_PURCHASE_SWEEP_OPTION, $now, false );
+	}
+
+	/**
+	 * Queue a remove-only check for the readers of each paid order created in a
+	 * time range that contains one of the given products.
+	 *
+	 * @param int[] $product_ids Product IDs to look for.
+	 * @param int   $start       Unix timestamp; orders created at or after it count.
+	 * @param int   $end         Unix timestamp; orders created at or before it count.
+	 */
+	private static function enqueue_readers_with_orders_between( $product_ids, $start, $end ) {
+		$query = [
+			'status'       => self::get_paid_order_statuses(),
+			'date_created' => $start . '...' . $end,
+			'orderby'      => 'date ID',
+			'order'        => 'ASC',
+			'limit'        => self::SWEEP_ORDERS_PAGE_SIZE,
+			'return'       => 'objects',
+		];
+		for ( $page = 1; $page <= self::SWEEP_MAX_PAGES; $page++ ) {
+			$query['page'] = $page;
+			$orders        = \wc_get_orders( $query );
+			foreach ( $orders as $order ) {
+				if ( ! Access_Rules::order_has_product( $order, $product_ids ) ) {
+					continue;
+				}
+				foreach ( self::get_order_reader_ids( (int) $order->get_customer_id(), (string) $order->get_billing_email() ) as $user_id ) {
+					self::add_user_to_queue( $user_id, self::SOURCE_ONE_TIME_PURCHASE_ENDED );
+				}
+			}
+			if ( count( $orders ) < self::SWEEP_ORDERS_PAGE_SIZE ) {
+				return;
+			}
+		}
+		Logger::log(
+			sprintf(
+				'One-time purchase lapse sweep stopped after %d orders; run `wp newspack verify-premium-newsletters --live` to check the rest.',
+				self::SWEEP_ORDERS_PAGE_SIZE * self::SWEEP_MAX_PAGES
+			),
+			'PREMIUM-NEWSLETTERS'
+		);
+	}
+
+	/**
+	 * The one-time purchase rules of every premium newsletter gate that grants
+	 * paid access.
+	 *
+	 * @return array[] Sanitized rule values (product_ids, duration_value, duration_unit).
+	 */
+	private static function get_one_time_purchase_rules() {
+		$rules = [];
+		foreach ( self::get_gates() as $gate ) {
+			if ( empty( $gate['custom_access']['active'] ) ) {
+				continue;
+			}
+			foreach ( (array) ( $gate['custom_access']['access_rules'] ?? [] ) as $group ) {
+				foreach ( (array) $group as $rule ) {
+					if ( ! is_array( $rule ) || 'one_time_purchase' !== ( $rule['slug'] ?? '' ) ) {
+						continue;
+					}
+					$value = Access_Rules::sanitize_one_time_purchase_value( $rule['value'] ?? [] );
+					if ( ! empty( $value['product_ids'] ) ) {
+						$rules[] = $value;
+					}
+				}
+			}
+		}
+		return $rules;
+	}
+
+	/**
+	 * The one-time purchase rules that can lapse, merged so each duration is
+	 * swept once.
+	 *
+	 * Lifetime access never lapses, and a misconfigured duration never granted
+	 * anything, so neither is returned.
+	 *
+	 * @return array[] Sanitized rule values, one per duration.
+	 */
+	private static function get_finite_one_time_purchase_rules() {
+		$rules = [];
+		foreach ( self::get_one_time_purchase_rules() as $value ) {
+			if ( ! is_int( Access_Rules::get_one_time_purchase_cutoff( $value ) ) ) {
+				continue;
+			}
+			$duration = $value['duration_value'] . ' ' . $value['duration_unit'];
+			if ( isset( $rules[ $duration ] ) ) {
+				$value['product_ids'] = array_values( array_unique( array_merge( $rules[ $duration ]['product_ids'], $value['product_ids'] ) ) );
+			}
+			$rules[ $duration ] = $value;
+		}
+		return array_values( $rules );
+	}
+
+	/**
+	 * Product IDs that mark a `woo_order_updated` event as one a one-time
+	 * purchase rule cares about.
+	 *
+	 * The event names a line item by its parent product, so a rule naming a
+	 * variation is matched through the variation's parent. That lets a sibling
+	 * variation queue a check too, which is harmless: the check grants nothing
+	 * the rule doesn't.
+	 *
+	 * @return int[]
+	 */
+	private static function get_one_time_purchase_event_product_ids() {
+		$product_ids = [];
+		foreach ( self::get_one_time_purchase_rules() as $value ) {
+			foreach ( $value['product_ids'] as $product_id ) {
+				$product_ids[] = $product_id;
+				$parent_id     = (int) wp_get_post_parent_id( $product_id );
+				if ( $parent_id ) {
+					$product_ids[] = $parent_id;
+				}
+			}
+		}
+		return array_values( array_unique( $product_ids ) );
+	}
+
+	/**
+	 * The readers an order counts toward: its customer, and the account whose
+	 * email matches the billing email. The one-time purchase rule matches orders
+	 * both ways, which is how a guest order grants access to an account.
+	 *
+	 * @param int    $customer_id   Order customer ID; 0 for a guest order.
+	 * @param string $billing_email Order billing email.
+	 *
+	 * @return int[] User IDs.
+	 */
+	private static function get_order_reader_ids( $customer_id, $billing_email ) {
+		$user_ids = $customer_id ? [ $customer_id ] : [];
+		if ( $billing_email ) {
+			$user = get_user_by( 'email', $billing_email );
+			if ( $user ) {
+				$user_ids[] = (int) $user->ID;
+			}
+		}
+		return array_values( array_unique( $user_ids ) );
+	}
+
+	/**
+	 * Order statuses the one-time purchase rule counts as paid.
+	 *
+	 * @return string[]
+	 */
+	private static function get_paid_order_statuses() {
+		return function_exists( 'wc_get_is_paid_statuses' ) ? \wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
+	}
+
+	/**
+	 * Whether a queue entry from this source may only remove lists. See the
+	 * SOURCE_* constants.
+	 *
+	 * @param string $source Queue entry source.
+	 *
+	 * @return bool
+	 */
+	private static function is_remove_only_source( $source ) {
+		return in_array( $source, [ self::SOURCE_PLAN_SWITCH, self::SOURCE_ONE_TIME_PURCHASE_ENDED ], true );
 	}
 
 	/**
@@ -347,8 +594,8 @@ class Premium_Newsletters {
 		$subscribed_lists = $is_renewal_check
 			? get_user_meta( $user_id, self::SUBSCRIBED_LISTS_META_KEY, true )
 			: '';
-		// A plan-switch check only removes lists; see maybe_enqueue_access_check().
-		$auto_signup     = self::SOURCE_PLAN_SWITCH !== $source && (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
+		// A remove-only check never adds lists; see the SOURCE_* constants.
+		$auto_signup     = ! self::is_remove_only_source( $source ) && (bool) get_option( 'newspack_premium_newsletters_auto_signup', 1 );
 		$lists_to_add    = [];
 		$lists_to_remove = [];
 
@@ -463,9 +710,9 @@ class Premium_Newsletters {
 
 		if ( null === $existing_index ) {
 			$queue[] = $new_entry;
-		} elseif ( self::SOURCE_RENEWAL !== $existing_source && self::SOURCE_PLAN_SWITCH !== $source ) {
+		} elseif ( self::SOURCE_RENEWAL !== $existing_source && ! self::is_remove_only_source( $source ) ) {
 			// Never downgrade an existing renewal entry, and never let a remove-only
-			// plan-switch entry replace a check that can add lists.
+			// entry replace a check that can add lists.
 			$queue[ $existing_index ] = $new_entry;
 		}
 
@@ -506,7 +753,8 @@ class Premium_Newsletters {
 		// processes current events instead of replaying a stale backlog. The cost is
 		// that entitlement changes made during the off window are not reconciled: a
 		// reader who cancels while access control is inactive keeps their premium list
-		// membership until their next subscription event. Accepted deliberately —
+		// membership until their next subscription event, and one-time purchases that
+		// lapse in the window are not swept. Accepted deliberately —
 		// acting on hours-old subscription state is the worse failure — but it means
 		// the off window is not free, and a reconciliation sweep on re-enable is the
 		// fix if that ever bites.
@@ -532,9 +780,21 @@ class Premium_Newsletters {
 	 * failure occurs check_access() leaves the renewal snapshot in place so the
 	 * next enqueue for that user still respects it.
 	 *
+	 * The one-time purchase lapse sweep runs first so its checks join this run.
+	 * A sweep that fails keeps its previous time, so the next run retries the
+	 * same orders.
+	 *
 	 * @return void
 	 */
 	public static function process_access_check_queue() {
+		try {
+			self::enqueue_lapsed_one_time_purchases();
+		} catch ( \Throwable $e ) {
+			Logger::log(
+				sprintf( 'One-time purchase lapse sweep failed: %s', $e->getMessage() ),
+				'PREMIUM-NEWSLETTERS'
+			);
+		}
 		$queue = get_option( self::QUEUE_OPTION, [] );
 		if ( empty( $queue ) ) {
 			return;
@@ -583,6 +843,10 @@ class Premium_Newsletters {
 
 		// Delete the queue option.
 		self::clear_queue();
+
+		// Forget the last sweep, so the next one starts from when access control comes
+		// back rather than covering the whole off window; see register_access_check_event().
+		delete_option( self::ONE_TIME_PURCHASE_SWEEP_OPTION );
 	}
 
 	/**

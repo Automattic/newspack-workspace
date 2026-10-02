@@ -1989,6 +1989,17 @@ function wc_get_orders( $args ) {
 			}
 		);
 	}
+	if ( isset( $args['date_created'] ) && is_string( $args['date_created'] ) && str_contains( $args['date_created'], '...' ) ) {
+		// Support the '{timestamp}...{timestamp}' range form. Real WC includes both ends.
+		[ $start, $end ] = array_map( 'intval', explode( '...', $args['date_created'], 2 ) );
+		$orders          = array_filter(
+			$orders,
+			function( $order ) use ( $start, $end ) {
+				$date_created = $order->get_date_created();
+				return $date_created && $date_created->getTimestamp() >= $start && $date_created->getTimestamp() <= $end;
+			}
+		);
+	}
 	usort(
 		$orders,
 		function( $a, $b ) {
