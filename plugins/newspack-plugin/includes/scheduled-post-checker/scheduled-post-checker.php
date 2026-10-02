@@ -70,12 +70,11 @@ function nspc_get_post_types() {
 /**
  * Check to see if any posts have missed schedule, and try sending them live again if so.
  *
- * Customizer changesets are age-limited and queried separately: replaying a long-stranded
- * one unattended feels wrong, so anything past the window is left for this job to ignore.
- * That only stops this job's own replay — WP core still treats an aged-out changeset as
- * active, so a human in the Customizer can build a new save on it, and this checker will
- * then rescue that save too. Filtering in the query (not after) keeps stale changesets
- * from filling the row limit and starving the unbounded post backlog.
+ * Customizer changesets are age-limited and queried separately: a changeset that's days
+ * old can overwrite settings someone has changed since, so anything past the window is
+ * left for this job to ignore. That only stops this job's own replay — WP core still
+ * treats an aged-out changeset as active, so a human in the Customizer can build a new
+ * save on it, and this checker will then rescue that save too.
  */
 function nspc_run_check() {
 	$post_types    = nspc_get_post_types();
@@ -109,10 +108,8 @@ function nspc_run_check() {
 }
 
 /**
- * Rescue Customizer changesets that missed their slot within the rescue window, and log
- * (once each, via a post meta flag) any that missed it but have aged out of that window —
- * those are otherwise indistinguishable from a successful publish, which is exactly the
- * silence this checker exists to fix.
+ * Rescue Customizer changesets that missed their slot within the rescue window, and report
+ * (once each, via a post meta flag) any that have aged out of it.
  */
 function nspc_rescue_changesets() {
 	// Both queries below bound on post_date_gmt (unlike the content-types query,
