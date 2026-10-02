@@ -103,9 +103,9 @@ All three travel the same way, as events from the site that owns the data: `news
 
 A seat fails the strict subscription check on purpose: newspack-plugin's access attribution runs it to tell an owner from a group member.
 
-A site that receives one of these events for a reader it has no account for creates the network reader account first, as membership events do, but only when the record grants access (an active subscription or seat, a paid order with a customer). A record that only revokes creates nothing, so the cancellations a reader's own deletion sends out don't bring the account back elsewhere. Each new account runs the site's contact sync, so on a network whose sites keep separate ESP audiences, every active holder elsewhere becomes a contact here, through the backfills below and, from then on, as subscriptions renew. That is what the membership sync did before; know it before running the backfills, which is where the choice lies.
+A site that receives one of these events for a reader it has no account for creates the network reader account first, as membership events do, but only when the record grants access (an active subscription or seat, a paid order with a customer). A record that only revokes creates nothing, so the cancellations a reader's own deletion sends out don't bring the account back elsewhere. Each new account runs the site's contact sync, so on a network whose sites keep separate ESP audiences, every active holder elsewhere becomes a contact here, through the backfills below and, from then on, as subscriptions renew. That is what the membership sync did before. It starts with the update itself, as live events arrive; the backfills only bring forward at once what renewals and new seats bring over time. Weigh it before step 1 below.
 
-Three limits are known. A status change on a very large group sends one event per member at the end of the request, and the seat backfill repairs any that didn't send. Trashing a paid one-time order (as opposed to refunding or cancelling it) sends no event, and neither does a refund of an order whose product has since been deleted; in both cases other sites keep the grant until the gate's own duration runs out. A paid order with no customer that reaches a site before an account for its billing email exists is not recorded there, and nothing re-sends it once the account exists; the origin itself keeps granting by billing email.
+Three limits are known. A status change on a very large group sends one event per member at the end of the request, and the seat backfill repairs any that didn't send. Trashing a paid one-time order (as opposed to refunding or cancelling it) sends no event, and neither does a refund of an order whose product has since been deleted; in both cases other sites keep the grant until the gate's own duration runs out. A paid order with no customer that reaches a site before an account for its billing email exists is not recorded there; the origin itself keeps granting by billing email. Once WooCommerce links the order to the customer (WooCommerce 11 does that on its own email verification or a password reset; before that, by hand), re-running the purchase backfill sends it again, and it lands.
 
 To roll this out, go in this order:
 
@@ -190,7 +190,7 @@ Available CLI commands are (add `--help` flag to learn more about each command):
 
 
 ### `wp newspack-network data-backfill newspack_node_group_seat_changed` / `newspack_node_one_time_purchase_changed`
-* Send every current group seat, or every paid order holding a tagged one-time product, as events. `--live` to send; `--start`/`--end` limit seats by join time and orders by creation date. Safe to re-run.
+* Send every current group seat, or every order holding a tagged one-time product (whatever its status, so a missed refund is repaired too; a status the order was already sent with counts as a duplicate and isn't re-sent), as events. `--live` to send; `--start`/`--end` limit seats by join time and orders by creation date. Safe to re-run.
 
 ### `wp newspack-network sync-all`
 * Will pull all events from the Hub
