@@ -8,6 +8,10 @@
 use Newspack\My_Account_UI_V1_Passwords;
 use Newspack\Reader_Activation;
 
+// filter_input( INPUT_POST, ... ) is empty under PHPUnit, so route it through $_POST;
+// otherwise validate_password_reset() bails on the `action` check and every test passes vacuously.
+require_once dirname( __DIR__, 3 ) . '/mocks/filter-input-mock.php';
+
 // Only loaded on `init` when WooCommerce is active, which it isn't in the test env.
 require_once dirname( __DIR__, 4 ) . '/includes/plugins/woocommerce/my-account/class-my-account-ui-v1-passwords.php';
 
