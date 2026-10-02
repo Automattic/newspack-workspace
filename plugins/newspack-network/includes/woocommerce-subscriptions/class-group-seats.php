@@ -36,10 +36,9 @@ class Group_Seats {
 
 	/**
 	 * User meta newspack-plugin records a member's group subscription IDs in
-	 * (its `Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY`), read here directly:
-	 * the meta hooks fire whether or not newspack-plugin is active, and its
-	 * `get_members()` caches per request, so it can predate a change made earlier in
-	 * the same request.
+	 * (its `Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY`), read here directly
+	 * rather than through that class: the meta and subscription hooks fire whether or
+	 * not newspack-plugin is active, and the meta outlives it.
 	 */
 	const MEMBER_META_KEY = '_newspack_group_subscription';
 
