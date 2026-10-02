@@ -24,11 +24,6 @@ class API {
 	protected static $instance = null;
 
 	/**
-	 * API base URL.
-	 */
-	const API_BASE_URL = 'https://nextdoor.com';
-
-	/**
 	 * Main API Instance.
 	 *
 	 * @return API - Main instance.
@@ -43,13 +38,16 @@ class API {
 	/**
 	 * Make API request.
 	 *
-	 * @param string $endpoint API endpoint.
-	 * @param array  $args Request arguments.
-	 * @param string $method HTTP method.
+	 * @param string      $endpoint API endpoint.
+	 * @param array       $args     Request arguments.
+	 * @param string      $method   HTTP method.
+	 * @param string|null $country  ISO 3166-1 alpha-2 country code overriding the
+	 *                              saved publisher region. Used during onboarding
+	 *                              before the country is persisted to settings.
 	 * @return array|WP_Error
 	 */
-	private function make_request( $endpoint, $args = [], $method = 'GET' ) {
-		$url = trailingslashit( self::API_BASE_URL ) . $endpoint;
+	private function make_request( $endpoint, $args = [], $method = 'GET', $country = null ) {
+		$url = trailingslashit( Nextdoor::get_api_base_url( $country ) ) . ltrim( $endpoint, '/' );
 
 		$default_args = [
 			'method'  => $method,
@@ -128,7 +126,8 @@ class API {
 					'Authorization' => 'Basic ' . base64_encode( $settings['client_id'] . ':' . $settings['client_secret'] ),
 				],
 			],
-			'PUT'
+			'PUT',
+			$country
 		);
 	}
 
