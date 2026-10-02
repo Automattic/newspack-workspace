@@ -42,11 +42,13 @@ class One_Time_Purchase_Changed extends Reader_Product_Changed {
 	}
 
 	/**
-	 * A paid order grants; a refunded or cancelled one only revokes.
+	 * A paid order grants; a refunded or cancelled one only revokes. A guest order
+	 * (no customer) still records on an account that exists here, but creates none:
+	 * nobody registered anywhere, so there is no reader to propagate.
 	 *
 	 * @return bool
 	 */
 	protected function grants_access() {
-		return in_array( $this->get_status_after(), Access::get_paid_statuses(), true );
+		return ! empty( $this->data->user_id ) && in_array( $this->get_status_after(), Access::get_paid_statuses(), true );
 	}
 }

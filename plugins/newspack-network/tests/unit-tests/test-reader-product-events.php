@@ -47,17 +47,18 @@ class TestReaderProductEvents extends WP_UnitTestCase {
 	/**
 	 * A one-time purchase event.
 	 *
-	 * @param string $site   Site URL.
-	 * @param string $email  Customer email.
-	 * @param string $status Order status after the change.
+	 * @param string $site    Site URL.
+	 * @param string $email   Customer email.
+	 * @param string $status  Order status after the change.
+	 * @param int    $user_id Customer ID on the origin site; 0 for a guest order.
 	 * @return One_Time_Purchase_Changed
 	 */
-	private function purchase( $site, $email, $status = 'completed' ) {
+	private function purchase( $site, $email, $status = 'completed', $user_id = 3 ) {
 		return new One_Time_Purchase_Changed(
 			$site,
 			[
 				'email'        => $email,
-				'user_id'      => 3,
+				'user_id'      => $user_id,
 				'id'           => 86,
 				'status_after' => $status,
 				'purchased_at' => 1700000000,
@@ -130,15 +131,34 @@ class TestReaderProductEvents extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A record that grants nothing creates no account: the cancelled seat or refunded
-	 * order a reader's own deletion sends out must not bring the reader back elsewhere.
+	 * A record that grants nothing creates no account: the cancelled seat a reader's
+	 * own deletion sends out must not bring the reader back elsewhere, and a refund
+	 * for someone with no account here has nothing to revoke. A paid order does
+	 * create the account, as a seat does.
 	 */
-	public function test_event_that_grants_nothing_creates_no_account() {
+	public function test_only_a_record_that_grants_creates_the_account() {
 		$this->seat( 'https://a.example.test', 'gone@example.test', 'cancelled' )->process_in_node();
-
 		$this->purchase( 'https://a.example.test', 'gone@example.test', 'refunded' )->process_in_node();
-
 		$this->assertFalse( get_user_by( 'email', 'gone@example.test' ) );
+
+		$this->purchase( 'https://a.example.test', 'buyer@example.test', 'completed' )->process_in_node();
+		$buyer = get_user_by( 'email', 'buyer@example.test' );
+		$this->assertInstanceOf( WP_User::class, $buyer );
+		$this->assertSame( 'completed', Reader_Product_Changed::get_user_products( $buyer->ID )['https://a.example.test']['order:86']['status'] );
+	}
+
+	/**
+	 * A guest order names no reader anywhere, so it creates no account; it still
+	 * records on an account that exists here, since the origin's own one-time rule
+	 * matches a guest order by billing email.
+	 */
+	public function test_guest_purchase_records_only_on_an_existing_account() {
+		$this->purchase( 'https://a.example.test', 'guest@example.test', 'completed', 0 )->process_in_node();
+		$this->assertFalse( get_user_by( 'email', 'guest@example.test' ) );
+
+		$user_id = self::factory()->user->create( [ 'user_email' => 'guest@example.test' ] );
+		$this->purchase( 'https://a.example.test', 'guest@example.test', 'completed', 0 )->process_in_node();
+		$this->assertSame( 'completed', Reader_Product_Changed::get_user_products( $user_id )['https://a.example.test']['order:86']['status'] );
 	}
 
 	/**
