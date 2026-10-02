@@ -48,7 +48,7 @@
 	&--dot {
 		align-items: center;
 		display: inline-flex;
-		gap: calc(var(--newspack-ui-spacer-1) / 2);
+		gap: calc(var(--newspack-ui-spacer-1) * 0.75);
 
 		&::before {
 			background: var(--newspack-ui-badge-dot-color, var(--newspack-ui-color-neutral-60));
