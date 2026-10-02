@@ -21,7 +21,10 @@ use Newspack_Network\Utils\Users;
  * access attribution) and the My Account "Other Subscriptions" tab keep seeing
  * only subscriptions the reader owns. Named for what it stores, the reader's
  * products, not for gating: campaign segmentation or anything else that cares
- * which products a reader holds across the network can read it too.
+ * which products a reader holds across the network can read it too. A record
+ * carries whatever status the origin last reported, refunds and cancellations
+ * included; only an active seat or a paid order means the reader holds the
+ * product (see `Content_Gate\Access`).
  */
 abstract class Reader_Product_Changed extends Abstract_Incoming_Event {
 
