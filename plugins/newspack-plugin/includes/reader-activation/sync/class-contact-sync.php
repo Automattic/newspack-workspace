@@ -1025,7 +1025,7 @@ class Contact_Sync extends Sync {
 			return;
 		}
 
-		// The registry still returns a card disabled on Audience → Integrations,
+		// The registry still returns a card disabled on Settings → Integrations,
 		// and disabling one leaves its pending retries queued. This is what
 		// stops them from pushing.
 		if ( ! Integrations::is_enabled( $integration_id ) ) {
@@ -1368,7 +1368,7 @@ class Contact_Sync extends Sync {
 			return;
 		}
 
-		// The registry still returns a card disabled on Audience → Integrations,
+		// The registry still returns a card disabled on Settings → Integrations,
 		// and disabling one leaves its pending retries queued. This is what
 		// stops them from pushing.
 		if ( ! Integrations::is_enabled( $integration_id ) ) {

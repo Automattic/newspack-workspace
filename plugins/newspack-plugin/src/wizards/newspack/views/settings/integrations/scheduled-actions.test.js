@@ -32,7 +32,7 @@ jest.mock( '@wordpress/dataviews', () => {
 } );
 
 // Captured rather than rendered: the real DataViews cannot load in this jsdom env.
-jest.mock( '../../../../../packages/components/src', () => {
+jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
 		DataViews: props => {
@@ -58,7 +58,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 	};
 } );
 
-jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
+jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 
@@ -81,7 +81,7 @@ describe( 'ScheduledActions', () => {
 		render( <ScheduledActions integrationId="sample" /> );
 
 		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
-		expect( mockApiFetch.mock.calls[ 0 ][ 0 ].path ).toContain( '/settings/sample/logs?' );
+		expect( mockApiFetch.mock.calls[ 0 ][ 0 ].path ).toContain( '/integrations/sample/logs?' );
 		expect( mockDataViewsProps.current.data ).toEqual( items );
 	} );
 

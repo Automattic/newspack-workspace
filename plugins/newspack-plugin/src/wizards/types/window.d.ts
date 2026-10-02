@@ -87,9 +87,6 @@ declare global {
 			audience_management_enabled?: string;
 			audience_management_url?: string;
 		};
-		newspackAudienceIntegrations: {
-			esp_provider?: string;
-		};
 		newspackAudienceContentGates: {
 			api: string;
 			available_access_rules: AccessRules;

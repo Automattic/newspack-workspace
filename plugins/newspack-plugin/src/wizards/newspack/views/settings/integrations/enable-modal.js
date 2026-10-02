@@ -9,7 +9,7 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
 /**
  * Internal dependencies
  */
-import { Button, Modal, Notice } from '../../../../../packages/components/src';
+import { Button, Modal, Notice } from '../../../../../../packages/components/src';
 import { hasSelectableOption, isEmptyValue, SettingsField } from './settings-field';
 import './enable-modal.scss';
 

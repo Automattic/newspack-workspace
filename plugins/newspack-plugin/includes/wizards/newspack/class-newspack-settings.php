@@ -76,6 +76,10 @@ class Newspack_Settings extends Wizard {
 					'customEvents' => $this->sections['custom-events']->get_data(),
 				],
 			],
+			'integrations'    => [
+				'label'          => __( 'Integrations', 'newspack-plugin' ),
+				'activeTabPaths' => [ '/integrations/*' ],
+			],
 			'social'          => [
 				'label'    => __( 'Social', 'newspack-plugin' ),
 				'nextdoor' => [

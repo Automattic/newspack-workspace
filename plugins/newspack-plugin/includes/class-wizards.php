@@ -49,6 +49,7 @@ class Wizards {
 				[
 					'sections' => [
 						'custom-events'    => 'Newspack\Wizards\Newspack\Custom_Events_Section',
+						'integrations'     => 'Newspack\Wizards\Newspack\Integrations_Section',
 						'social-pixels'    => 'Newspack\Wizards\Newspack\Pixels_Section',
 						'recirculation'    => 'Newspack\Wizards\Newspack\Recirculation_Section',
 						'syndication'      => 'Newspack\Wizards\Newspack\Syndication_Section',
@@ -73,7 +74,6 @@ class Wizards {
 			'audience-campaigns'      => new Audience_Campaigns(),
 			'audience-content-gates'  => new Audience_Content_Gates(),
 			'audience-donations'      => new Audience_Donations(),
-			'audience-integrations'   => new Audience_Integrations(),
 			'newspack-subscribers'    => new Subscribers_Wizard(),
 			'listings'                => new Listings_Wizard(),
 			'network'                 => new Network_Wizard(),

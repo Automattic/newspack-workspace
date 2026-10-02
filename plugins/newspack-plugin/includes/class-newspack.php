@@ -187,6 +187,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-newspack-settings.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-custom-events-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-emails-section.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-integrations-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-email-preview.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-syndication-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-seo-section.php';
@@ -214,7 +215,6 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-promo-url-config.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-subscription-products.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-pricing-rules.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/audience/class-audience-integrations.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-subscribers-wizard.php';
 
 		// Network Wizard.

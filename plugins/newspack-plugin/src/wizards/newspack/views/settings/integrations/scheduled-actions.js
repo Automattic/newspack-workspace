@@ -13,8 +13,8 @@ import { DataViews as WPDataViews } from '@wordpress/dataviews';
 /**
  * Internal dependencies
  */
-import { DataViews, Drawer, StatusIndicator } from '../../../../../packages/components/src';
-import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { DataViews, Drawer, StatusIndicator } from '../../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
 import { ScheduledActionDetails } from './scheduled-action-details';
 import { useRunAction } from './use-run-action';

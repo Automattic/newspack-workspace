@@ -247,7 +247,7 @@ class Test_Gravity_Forms_Capture extends WP_UnitTestCase {
 		// wp_localize_script() casts scalars to strings, so the editor reads
 		// truthiness ("" or "1") rather than a boolean.
 		$this->assertStringContainsString( '"active":""', $data );
-		$this->assertStringContainsString( 'page=newspack-audience-integrations', $data );
+		$this->assertStringContainsString( 'page=newspack-settings#/integrations', $data );
 
 		wp_dequeue_script( Gravity_Forms::EDITOR_SCRIPT_HANDLE );
 		wp_deregister_script( Gravity_Forms::EDITOR_SCRIPT_HANDLE );

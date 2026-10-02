@@ -266,7 +266,7 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Disabling the card on Audience → Integrations must also stop the retries
+	 * Disabling the card on Settings → Integrations must also stop the retries
 	 * queued while it was enabled. The card stays registered with outbound
 	 * sync on, so neither of the guards above notices.
 	 */

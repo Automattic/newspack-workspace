@@ -33,7 +33,7 @@ jest.mock( '@wordpress/dataviews', () => {
 } );
 
 // Captured rather than rendered: the real DataViews cannot load in this jsdom env.
-jest.mock( '../../../../../packages/components/src', () => {
+jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
 		DataViews: props => {
@@ -59,7 +59,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 	};
 } );
 
-jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
+jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 
@@ -103,7 +103,7 @@ describe( 'SyncActivity', () => {
 	it( 'opens on all activity, newest first', async () => {
 		await renderLoaded();
 
-		expect( lastPath() ).toContain( '/settings/sample/push-log?' );
+		expect( lastPath() ).toContain( '/integrations/sample/push-log?' );
 		expect( lastPath() ).toContain( 'page=1' );
 		expect( lastPath() ).toContain( 'order=DESC' );
 		expect( lastPath() ).not.toContain( 'needs_attention' );
@@ -188,7 +188,7 @@ describe( 'SyncActivity', () => {
 			await runRetry.callback( [ retryingItem ] );
 		} );
 
-		expect( mockApiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( '/settings/sample/logs/9001/run' ), method: 'POST' } );
+		expect( mockApiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( '/integrations/sample/logs/9001/run' ), method: 'POST' } );
 		// The action finishing does not mean the push worked, so the notice
 		// points at the entry instead of calling it a success.
 		expect( mockAddNotice ).toHaveBeenCalledWith(

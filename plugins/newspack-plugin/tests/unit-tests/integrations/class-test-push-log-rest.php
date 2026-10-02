@@ -7,26 +7,24 @@
 
 namespace Newspack\Tests\Unit\Integrations;
 
-use Newspack\Audience_Integrations;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Push_Log;
+use Newspack\Wizards\Newspack\Integrations_Section;
 
 require_once __DIR__ . '/class-sample-integration.php';
 
 /**
  * Push log REST test case.
  *
- * The wizard's constructor registers nothing unless the Integrations screen
- * is enabled, so the callbacks are called directly, as the other wizard
- * tests do.
+ * The callbacks are called directly, as the other wizard tests do.
  *
  * @group integrations
  * @group push-log
  */
 class Test_Push_Log_Rest extends \WP_UnitTestCase {
 
-	const ROUTE_BASE = '/newspack/v1/wizard/newspack-audience-integrations/settings';
+	const ROUTE_BASE = '/newspack/v1/wizard/newspack-settings/integrations';
 
 	/**
 	 * Set up the test environment before each test.
@@ -123,7 +121,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 	public function test_routes_are_registered_behind_the_wizard_permission_check() {
 		global $wp_rest_server;
 		$wp_rest_server = null;
-		add_action( 'rest_api_init', [ new Audience_Integrations(), 'register_api_endpoints' ] );
+		new Integrations_Section( [ 'wizard_slug' => 'newspack-settings' ] );
 		$server = rest_get_server();
 
 		$routes = $server->get_routes( NEWSPACK_API_NAMESPACE );
@@ -146,7 +144,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 	 * An integration that is not registered has no log to read.
 	 */
 	public function test_an_unknown_integration_is_a_404() {
-		$wizard = new Audience_Integrations();
+		$wizard = new Integrations_Section();
 
 		$list = $wizard->api_get_push_log( $this->list_request( [ 'integration_id' => 'missing' ] ) );
 		$this->assertWPError( $list );
@@ -170,7 +168,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 			]
 		);
 
-		$data = ( new Audience_Integrations() )->api_get_push_log( $this->list_request( [ 'status' => 'success' ] ) )->get_data();
+		$data = ( new Integrations_Section() )->api_get_push_log( $this->list_request( [ 'status' => 'success' ] ) )->get_data();
 
 		$this->assertSame( 1, $data['total'] );
 		$this->assertSame( 1, $data['page'] );
@@ -198,7 +196,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		};
 		add_filter( 'query', $break_reads );
 
-		$response = ( new Audience_Integrations() )->api_get_push_log( $this->list_request() );
+		$response = ( new Integrations_Section() )->api_get_push_log( $this->list_request() );
 
 		remove_filter( 'query', $break_reads );
 
@@ -221,7 +219,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		$request = new \WP_REST_Request( 'GET' );
 		$request->set_param( 'integration_id', 'sample' );
 		$request->set_param( 'id', $row_id );
-		$response = ( new Audience_Integrations() )->api_get_push_log_entry( $request );
+		$response = ( new Integrations_Section() )->api_get_push_log_entry( $request );
 
 		remove_filter( 'query', $break_reads );
 
@@ -243,7 +241,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		$action_id = \as_schedule_single_action( $run_at, Contact_Sync::RETRY_HOOK, [ [ 'log_id' => $row_id ] ], Integrations::get_action_group( 'sample' ) );
 		Push_Log::mark_retrying( $row_id, $action_id );
 
-		$wizard = new Audience_Integrations();
+		$wizard = new Integrations_Section();
 		$item   = $wizard->api_get_push_log( $this->list_request() )->get_data()['items'][0];
 
 		$this->assertSame(
@@ -277,7 +275,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		Push_Log::mark_retrying( $row_id, $action_id );
 		\ActionScheduler_Store::instance()->log_execution( $action_id );
 
-		$item = ( new Audience_Integrations() )->api_get_push_log( $this->list_request() )->get_data()['items'][0];
+		$item = ( new Integrations_Section() )->api_get_push_log( $this->list_request() )->get_data()['items'][0];
 
 		$this->assertFalse( $item['retry']['is_pending'] );
 		$this->assertTrue( $item['retry']['is_running'] );
@@ -302,7 +300,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		$request = new \WP_REST_Request( 'GET' );
 		$request->set_param( 'integration_id', 'sample' );
 		$request->set_param( 'id', $latest );
-		$data = ( new Audience_Integrations() )->api_get_push_log_entry( $request )->get_data();
+		$data = ( new Integrations_Section() )->api_get_push_log_entry( $request )->get_data();
 
 		$this->assertSame( $latest, $data['entry']['id'] );
 		$this->assertArrayNotHasKey( 'payload', $data['entry'] );
@@ -313,7 +311,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		$this->assertSame( '180', $data['fields'][0]['after'] );
 
 		$request->set_param( 'id', $first );
-		$this->assertNull( ( new Audience_Integrations() )->api_get_push_log_entry( $request )->get_data()['compared_to'] );
+		$this->assertNull( ( new Integrations_Section() )->api_get_push_log_entry( $request )->get_data()['compared_to'] );
 	}
 
 	/**
@@ -325,7 +323,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		$request = new \WP_REST_Request( 'GET' );
 		$request->set_param( 'integration_id', 'sample' );
 		$request->set_param( 'id', $row_id );
-		$response = ( new Audience_Integrations() )->api_get_push_log_entry( $request );
+		$response = ( new Integrations_Section() )->api_get_push_log_entry( $request );
 
 		$this->assertWPError( $response );
 		$this->assertSame( 'newspack_push_log_entry_not_found', $response->get_error_code() );
@@ -381,7 +379,7 @@ class Test_Push_Log_Rest extends \WP_UnitTestCase {
 		) {
 			$request->set_param( $name, $value );
 		}
-		$wizard = new Audience_Integrations();
+		$wizard = new Integrations_Section();
 		$events = array_column( $wizard->api_get_integration_logs( $request )->get_data()['items'], 'event', 'id' );
 
 		$this->assertSame( 'Contact Sync Retry 2 of 5', $events[ $with_ceiling ] );

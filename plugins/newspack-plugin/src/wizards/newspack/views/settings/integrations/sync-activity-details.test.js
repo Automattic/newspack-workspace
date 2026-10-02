@@ -66,7 +66,7 @@ describe( 'SyncActivityDetails', () => {
 	it( 'lists what changed since the previous push, and the rest on request', async () => {
 		await renderDetails( { entry: entry(), compared_to: { id: 41, updated_at: '2026-09-03 10:42:00' }, fields } );
 
-		expect( mockApiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( '/settings/sample/push-log/57' ) } );
+		expect( mockApiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( '/integrations/sample/push-log/57' ) } );
 		expect( screen.getByRole( 'heading', { name: /^Changed since / } ) ).toBeTruthy();
 		// The table is named by the heading over it, so it is not announced as
 		// an unlabelled table among the others in the dialog.

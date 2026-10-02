@@ -1,100 +1,90 @@
 <?php
 /**
- * Audience Integrations Wizard
+ * Newspack's Integrations Section.
  *
  * @package Newspack
  */
 
-namespace Newspack;
+namespace Newspack\Wizards\Newspack;
 
-use Newspack\Reader_Activation;
+use Newspack\Action_Scheduler;
+use Newspack\Logger;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Push_Log;
+use Newspack\Wizards\Wizard_Section;
 use WP_Error, WP_REST_Request, WP_REST_Response, WP_REST_Server;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Audience Integrations Wizard.
+ * Integrations Section Class.
  */
-class Audience_Integrations extends Wizard {
+class Integrations_Section extends Wizard_Section {
+
 	/**
-	 * Admin page slug.
+	 * Containing wizard slug.
 	 *
 	 * @var string
 	 */
-	protected $slug = 'newspack-audience-integrations';
+	protected $wizard_slug = 'newspack-settings';
 
 	/**
-	 * Parent slug.
+	 * Admin page slug the screen lived on before it moved into Settings.
 	 *
 	 * @var string
 	 */
-	protected $parent_slug = 'newspack-audience';
+	private const LEGACY_PAGE_SLUG = 'newspack-audience-integrations';
 
 	/**
-	 * Constructor.
-	 */
-	public function __construct() {
-		parent::__construct();
-		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
-	}
-
-	/**
-	 * Get the name for this wizard.
+	 * Query arg that marks a request redirected from the legacy page.
 	 *
-	 * @return string The wizard name.
+	 * @var string
 	 */
-	public function get_name() {
-		return esc_html__( 'Audience Management / Integrations', 'newspack-plugin' );
+	private const LEGACY_QUERY_ARG = 'legacy-integrations';
+
+	/**
+	 * Initialize.
+	 *
+	 * @param array $args Section arguments.
+	 */
+	public function __construct( $args = [] ) {
+		parent::__construct( $args );
+		add_action( 'admin_menu', [ __CLASS__, 'redirect_legacy_page' ], 1 );
 	}
 
 	/**
-	 * Add Integrations page.
+	 * Admin URL of the Integrations screen.
+	 *
+	 * @return string
 	 */
-	public function add_page() {
-		add_submenu_page(
-			$this->parent_slug,
-			$this->get_name(),
-			esc_html__( 'Integrations', 'newspack-plugin' ),
-			$this->capability,
-			$this->slug,
-			[ $this, 'render_wizard' ]
-		);
+	public static function get_url(): string {
+		return admin_url( 'admin.php?page=newspack-settings#/integrations' );
 	}
 
 	/**
-	 * Enqueue scripts and styles.
+	 * Send links to the old Audience > Integrations page to the Settings tab.
+	 *
+	 * The Salesforce OAuth flow in newspack-manager still returns to the old page with
+	 * a `#/settings/salesforce` fragment. The server never sees the fragment, and
+	 * a Location header that carries its own would replace it, so the redirect
+	 * leaves the fragment off and the Settings screen maps the old route onto
+	 * the new one.
 	 */
-	public function enqueue_scripts_and_styles() {
-		if ( ! $this->is_wizard_page() ) {
+	public static function redirect_legacy_page(): void {
+		if ( self::LEGACY_PAGE_SLUG !== filter_input( INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS ) ) {
 			return;
 		}
-
-		parent::enqueue_scripts_and_styles();
-
-		wp_enqueue_script( 'newspack-wizards' );
-
-		$localized_data = [];
-
-		if ( class_exists( 'Newspack_Newsletters' ) ) {
-			$localized_data['esp_provider'] = \Newspack_Newsletters::service_provider();
-		}
-
-		\wp_localize_script(
-			'newspack-wizards',
-			'newspackAudienceIntegrations',
-			$localized_data
-		);
+		wp_safe_redirect( admin_url( 'admin.php?page=newspack-settings&' . self::LEGACY_QUERY_ARG . '=1' ) );
+		exit;
 	}
 
 	/**
 	 * Register the endpoints needed for the wizard screens.
 	 */
-	public function register_api_endpoints() {
+	public function register_rest_routes(): void {
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/settings',
+			'/wizard/' . $this->wizard_slug . '/integrations',
 			[
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => [ $this, 'api_get_integration_settings' ],
@@ -104,7 +94,7 @@ class Audience_Integrations extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)',
+			'/wizard/' . $this->wizard_slug . '/integrations/(?P<integration_id>[a-zA-Z0-9_-]+)',
 			[
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_integration_settings' ],
@@ -114,7 +104,7 @@ class Audience_Integrations extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)/enabled',
+			'/wizard/' . $this->wizard_slug . '/integrations/(?P<integration_id>[a-zA-Z0-9_-]+)/enabled',
 			[
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_integration_enabled' ],
@@ -130,7 +120,7 @@ class Audience_Integrations extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)/logs',
+			'/wizard/' . $this->wizard_slug . '/integrations/(?P<integration_id>[a-zA-Z0-9_-]+)/logs',
 			[
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => [ $this, 'api_get_integration_logs' ],
@@ -175,7 +165,7 @@ class Audience_Integrations extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)/logs/(?P<action_id>[0-9]+)',
+			'/wizard/' . $this->wizard_slug . '/integrations/(?P<integration_id>[a-zA-Z0-9_-]+)/logs/(?P<action_id>[0-9]+)',
 			[
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => [ $this, 'api_get_integration_log_detail' ],
@@ -195,7 +185,7 @@ class Audience_Integrations extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)/logs/(?P<action_id>[0-9]+)/run',
+			'/wizard/' . $this->wizard_slug . '/integrations/(?P<integration_id>[a-zA-Z0-9_-]+)/logs/(?P<action_id>[0-9]+)/run',
 			[
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => [ $this, 'api_run_integration_action' ],
@@ -215,7 +205,7 @@ class Audience_Integrations extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)/push-log',
+			'/wizard/' . $this->wizard_slug . '/integrations/(?P<integration_id>[a-zA-Z0-9_-]+)/push-log',
 			[
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => [ $this, 'api_get_push_log' ],
@@ -264,7 +254,7 @@ class Audience_Integrations extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)/push-log/(?P<id>[0-9]+)',
+			'/wizard/' . $this->wizard_slug . '/integrations/(?P<integration_id>[a-zA-Z0-9_-]+)/push-log/(?P<id>[0-9]+)',
 			[
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => [ $this, 'api_get_push_log_entry' ],
@@ -288,7 +278,7 @@ class Audience_Integrations extends Wizard {
 	 *
 	 * @return WP_REST_Response
 	 */
-	public function api_get_integration_settings() {
+	public function api_get_integration_settings(): WP_REST_Response {
 		return rest_ensure_response( Integrations::get_all_integration_settings() );
 	}
 
@@ -298,7 +288,7 @@ class Audience_Integrations extends Wizard {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function api_update_integration_settings( WP_REST_Request $request ) {
+	public function api_update_integration_settings( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$integration_id = $request->get_param( 'integration_id' );
 		$settings       = $request->get_param( 'settings' );
 
@@ -328,7 +318,7 @@ class Audience_Integrations extends Wizard {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function api_update_integration_enabled( WP_REST_Request $request ) {
+	public function api_update_integration_enabled( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$integration_id = $request->get_param( 'integration_id' );
 		$enabled        = $request->get_param( 'enabled' );
 
@@ -371,7 +361,7 @@ class Audience_Integrations extends Wizard {
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function api_get_integration_logs( WP_REST_Request $request ) {
+	public function api_get_integration_logs( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$integration_id = $request->get_param( 'integration_id' );
 		$integration    = Integrations::get_integration( $integration_id );
 

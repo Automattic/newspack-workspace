@@ -9,7 +9,7 @@
 import { __ } from '@wordpress/i18n';
 import { dateI18n, getSettings } from '@wordpress/date';
 
-export const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/settings';
+export const API_BASE = '/newspack/v1/wizard/newspack-settings/integrations';
 
 // A cancelled job is a deliberate stop, not a failure, so it must not share
 // `failed`'s treatment in either the column or the detail modal's badge. The
@@ -20,7 +20,7 @@ export const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/sett
 // A finished action only says the job ran: a retry can run to the end while
 // the push inside it fails again. So `complete` sits on a neutral badge, and
 // the push log's own status is what says whether the sync worked.
-/** @type {Record< string, { label: string, status: import('../../../../../packages/components/src/status-indicator').StatusName, intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
+/** @type {Record< string, { label: string, status: import('../../../../../../packages/components/src/status-indicator').StatusName, intent: import('../../../../../../packages/components/src/types').BadgeIntent } >} */
 export const STATUS_MAP = {
 	complete: { label: __( 'Complete', 'newspack-plugin' ), status: 'done', intent: 'draft' },
 	failed: { label: __( 'Failed', 'newspack-plugin' ), status: 'error', intent: 'high' },
@@ -31,7 +31,7 @@ export const STATUS_MAP = {
 
 // The push log's statuses describe the sync itself, so `success` keeps the
 // badge the scheduled actions list gave up.
-/** @type {Record< string, { label: string, status: import('../../../../../packages/components/src/status-indicator').StatusName, intent: import('../../../../../packages/components/src/types').BadgeIntent } >} */
+/** @type {Record< string, { label: string, status: import('../../../../../../packages/components/src/status-indicator').StatusName, intent: import('../../../../../../packages/components/src/types').BadgeIntent } >} */
 export const PUSH_LOG_STATUS_MAP = {
 	success: { label: __( 'Synced', 'newspack-plugin' ), status: 'done', intent: 'stable' },
 	retrying: { label: __( 'Retrying', 'newspack-plugin' ), status: 'progress', intent: 'informational' },

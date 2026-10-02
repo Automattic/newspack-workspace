@@ -4,34 +4,36 @@
 import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useDispatch } from '@wordpress/data';
-import { forwardRef, useState, useEffect, useCallback } from '@wordpress/element';
+import { useState, useEffect, useCallback } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
-import { Wizard, withWizard } from '../../../../../packages/components/src';
-import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { Router } from '../../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
-import { LogsView, getLogsTabs } from './logs-view';
+import { LogsView } from './logs-view';
+import { API_BASE as API_PATH } from './constants';
+import { INTEGRATIONS_PATH } from './routes';
 
-const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
+const { Route, Switch } = Router;
 
 // Minimum time the Activate action stays busy, even when the request is faster.
 const MIN_ACTIVATION_BUSY_MS = 2000;
 
-const INTEGRATIONS_BREADCRUMBS = [
-	{ label: __( 'Audience Management', 'newspack-plugin' ) },
-	{ label: __( 'Integrations', 'newspack-plugin' ), url: '#/settings' },
-];
+// The Logs screen swaps the Settings tabs for its own, which remounts this
+// screen on the way in and out. Starting from the last list keeps the cards and
+// breadcrumbs on screen while it refreshes, instead of a "Loading…" line.
+let lastIntegrations = null;
 
-const AudienceIntegrations = ( props, ref ) => {
-	const [ integrations, setIntegrations ] = useState( {} );
+const Integrations = () => {
+	const [ integrations, setIntegrations ] = useState( () => lastIntegrations ?? {} );
 	const [ inFlightChanges, setInFlightChanges ] = useState( {} );
 	const [ saving, setSaving ] = useState( {} );
 	const [ toggling, setToggling ] = useState( {} );
 	const [ activating, setActivating ] = useState( {} );
-	const [ loading, setLoading ] = useState( true );
+	const [ loading, setLoading ] = useState( () => ! lastIntegrations );
 
 	const { addNotice, removeNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -69,8 +71,14 @@ const AudienceIntegrations = ( props, ref ) => {
 	}, [] );
 
 	useEffect( () => {
-		fetchSettings();
+		fetchSettings( { showLoading: ! lastIntegrations } );
 	}, [ fetchSettings ] );
+
+	useEffect( () => {
+		if ( ! loading ) {
+			lastIntegrations = integrations;
+		}
+	}, [ integrations, loading ] );
 
 	const handleSave = useCallback(
 		( integrationId, changes ) => {
@@ -263,41 +271,15 @@ const AudienceIntegrations = ( props, ref ) => {
 	};
 
 	return (
-		<Wizard
-			headerText={ __( 'Audience Management / Integrations', 'newspack-plugin' ) }
-			sections={ [
-				{
-					path: '/settings',
-					exact: true,
-					render: SettingsSection,
-					props: sharedProps,
-					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
-					subHeaderText: __(
-						'Manage how Newspack syncs reader data with your tools. Connect an integration to start syncing reader activity across your stack.',
-						'newspack-plugin'
-					),
-				},
-				{
-					path: '/settings/:integrationId/logs/:tab?',
-					render: LogsView,
-					props: sharedProps,
-					isHidden: true,
-					fullWidth: true,
-					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
-					tabbedNavigation: getLogsTabs,
-				},
-				{
-					path: '/settings/:integrationId',
-					render: ConfigureView,
-					props: sharedProps,
-					backNav: '#/settings',
-					isHidden: true,
-					breadcrumbs: INTEGRATIONS_BREADCRUMBS,
-				},
-			] }
-			ref={ ref }
-		/>
+		<Switch>
+			<Route
+				path={ `${ INTEGRATIONS_PATH }/:integrationId/logs/:tab?` }
+				render={ routeProps => <LogsView { ...routeProps } { ...sharedProps } /> }
+			/>
+			<Route path={ `${ INTEGRATIONS_PATH }/:integrationId` } render={ routeProps => <ConfigureView { ...routeProps } { ...sharedProps } /> } />
+			<Route render={ routeProps => <SettingsSection { ...routeProps } { ...sharedProps } /> } />
+		</Switch>
 	);
 };
 
-export default withWizard( forwardRef( AudienceIntegrations ) );
+export default Integrations;

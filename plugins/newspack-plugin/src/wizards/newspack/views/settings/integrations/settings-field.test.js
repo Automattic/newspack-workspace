@@ -10,7 +10,7 @@ import { hasSelectableOption, isEmptyValue, SettingsField, settingsFieldRenders 
 
 // The select comes from @wordpress/components, which renders for real here so the
 // tests see core's own empty-list and label wiring rather than a stand-in for it.
-jest.mock( '../../../../../packages/components/src', () => ( {
+jest.mock( '../../../../../../packages/components/src', () => ( {
 	Button: ( { children } ) => children,
 	Grid: ( { children } ) => children,
 	TextControl: ( { label, value } ) => <input aria-label={ label } value={ value } readOnly />,

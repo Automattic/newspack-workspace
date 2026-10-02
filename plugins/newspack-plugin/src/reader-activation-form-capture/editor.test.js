@@ -33,7 +33,7 @@ jest.mock( '@wordpress/components', () => ( {
 	Notice: ( { children } ) => <div role="alert">{ children }</div>,
 } ) );
 
-const INTEGRATIONS_URL = '/wp-admin/admin.php?page=newspack-audience-integrations';
+const INTEGRATIONS_URL = '/wp-admin/admin.php?page=newspack-settings#/integrations';
 
 describe( 'form-capture editor extension', () => {
 	beforeEach( () => {

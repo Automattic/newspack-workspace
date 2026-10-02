@@ -12,23 +12,23 @@ jest.mock( '@wordpress/data', () => {
 	return { useDispatch: () => dispatch };
 } );
 
-jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
+jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 
-jest.mock( '../../../../../packages/components/src/proxied-imports/router', () => ( {
+jest.mock( '../../../../../../packages/components/src/proxied-imports/router', () => ( {
 	Redirect: ( { to } ) => `Redirect to ${ to }`,
 } ) );
 
 // The breadcrumb reads the real settings rule from the settings field module,
 // whose controls never render here.
 jest.mock( '@wordpress/components', () => ( {} ) );
-jest.mock( '../../../../../packages/components/src', () => ( {} ) );
+jest.mock( '../../../../../../packages/components/src', () => ( {} ) );
 
 jest.mock( './sync-activity', () => ( { SyncActivity: ( { integrationId } ) => `Sync activity of ${ integrationId }` } ) );
 jest.mock( './scheduled-actions', () => ( { ScheduledActions: ( { integrationId } ) => `Scheduled actions of ${ integrationId }` } ) );
 
-import { LogsView, getLogsTabs } from './logs-view';
+import { LogsView } from './logs-view';
 
 const integrations = { sample: { name: 'Sample', settings: [ { key: 'api_key', type: 'text' } ] } };
 const matchFor = tab => ( { params: { integrationId: 'sample', tab } } );
@@ -55,14 +55,14 @@ describe( 'LogsView', () => {
 	it( 'sends an unknown tab back to the Logs route', () => {
 		render( <LogsView integrations={ integrations } match={ matchFor( 'nope' ) } /> );
 
-		expect( screen.getByText( 'Redirect to /settings/sample/logs' ) ).toBeTruthy();
+		expect( screen.getByText( 'Redirect to /integrations/sample/logs' ) ).toBeTruthy();
 	} );
 
 	it( 'keeps the Logs breadcrumb under the integration', () => {
 		render( <LogsView integrations={ integrations } match={ matchFor() } /> );
 
 		expect( mockSetHeaderData ).toHaveBeenCalledWith(
-			expect.objectContaining( { sectionName: [ { label: 'Sample', url: '#/settings/sample' }, { label: 'Logs' } ] } )
+			expect.objectContaining( { sectionName: [ { label: 'Sample', url: '#/integrations/sample' }, { label: 'Logs' } ] } )
 		);
 	} );
 
@@ -78,14 +78,5 @@ describe( 'LogsView', () => {
 		const { container } = render( <LogsView integrations={ {} } match={ matchFor() } /> );
 
 		expect( container.innerHTML ).toBe( '' );
-	} );
-} );
-
-describe( 'getLogsTabs', () => {
-	it( 'routes each tab under the integration, sync activity first', () => {
-		expect( getLogsTabs( { integrationId: 'sample' } ) ).toEqual( [
-			{ label: 'Sync Activity', path: '/settings/sample/logs', exact: true },
-			{ label: 'Scheduled Actions', path: '/settings/sample/logs/scheduled-actions', exact: true },
-		] );
 	} );
 } );

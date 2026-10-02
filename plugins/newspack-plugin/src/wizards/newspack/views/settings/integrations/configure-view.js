@@ -10,10 +10,11 @@ import { Badge, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
-import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import WizardsTab from '../../../wizards-tab';
+import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import WizardsTab from '../../../../wizards-tab';
 import { SettingsField, settingsFieldRenders, toBool } from './settings-field';
+import { INTEGRATIONS_PATH } from './routes';
 
 import './configure-view.scss';
 
@@ -343,6 +344,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 		setHeaderData( {
 			sectionName: integration.name,
 			sectionTitle: integration.name,
+			backNav: `#${ INTEGRATIONS_PATH }`,
 			sectionDescription: integration.description,
 		} );
 	}, [ integration?.id, integration?.name, integration?.description, setHeaderData ] );

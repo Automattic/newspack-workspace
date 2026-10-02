@@ -235,7 +235,7 @@ class Gravity_Forms extends Form_Capture {
 			'newspack_form_capture_editor',
 			[
 				'active'           => Reader_Activation::is_enabled() && $this->supports_frontend_registration(),
-				'integrations_url' => \admin_url( 'admin.php?page=newspack-audience-integrations' ),
+				'integrations_url' => \Newspack\Wizards\Newspack\Integrations_Section::get_url(),
 			]
 		);
 	}

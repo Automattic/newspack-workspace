@@ -18,7 +18,7 @@ jest.mock( '@wordpress/data', () => {
 	return { useDispatch: () => dispatch };
 } );
 
-jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
+jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
 } ) );
 
@@ -52,7 +52,7 @@ describe( 'useRunAction', () => {
 	it( 'runs the action through the integration it belongs to', async () => {
 		await runToCompletion( { status: 'complete', message: '' } );
 
-		expect( mockApiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( '/settings/sample/logs/9001/run' ), method: 'POST' } );
+		expect( mockApiFetch ).toHaveBeenCalledWith( { path: expect.stringContaining( '/integrations/sample/logs/9001/run' ), method: 'POST' } );
 	} );
 
 	it( 'replaces the running notice rather than stacking one on top of it', async () => {

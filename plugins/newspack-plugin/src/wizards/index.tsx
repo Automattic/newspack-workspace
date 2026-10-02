@@ -61,10 +61,6 @@ const components: Record< string, any > = {
 		label: __( 'Pricing Rules', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/pricing-rules' ) ),
 	},
-	'newspack-audience-integrations': {
-		label: __( 'Audience Integrations', 'newspack-plugin' ),
-		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/integrations' ) ),
-	},
 	'newspack-premium-newsletters': {
 		label: __( 'Premium newsletters', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "newsletters-wizards" */ './newsletters/views/premium-newsletters' ) ),

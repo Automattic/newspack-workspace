@@ -9,7 +9,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { API_BASE } from './constants';
 
 const DEFAULT_COMPLETE_NOTICE = { message: __( 'Action completed.', 'newspack-plugin' ), type: 'success' };
