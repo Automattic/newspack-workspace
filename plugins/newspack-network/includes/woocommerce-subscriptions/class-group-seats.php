@@ -279,7 +279,7 @@ class Group_Seats {
 	 * @param int $subscription_id Subscription ID.
 	 * @return int[]
 	 */
-	private static function get_member_ids( $subscription_id ) {
+	public static function get_member_ids( $subscription_id ) {
 		return array_map(
 			'intval',
 			get_users(

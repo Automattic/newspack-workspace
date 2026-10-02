@@ -11,8 +11,10 @@ use Newspack_Network\Woocommerce_Subscriptions\Group_Seats;
 use WP_CLI;
 
 /**
- * Sends every current seat on this site's group subscriptions, for seats taken
- * before seat changes were reported.
+ * Sends every seat recorded on this site's readers, for seats taken before seat
+ * changes were reported. A seat on a group that has since been turned off or
+ * deleted is sent as cancelled, so a revocation whose event never arrived is
+ * repaired too; a member removed from a group leaves no seat to send.
  *
  * Each seat's event is stamped with when the member joined, or with the
  * subscription's creation date when no join time was recorded. Running this
@@ -55,8 +57,8 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 		}
 
 		$seats = [];
-		foreach ( \Newspack\Group_Subscription_Settings::get_group_subscription_ids() as $subscription_id ) {
-			foreach ( \Newspack\Group_Subscription::get_members( $subscription_id ) as $member_id ) {
+		foreach ( $this->get_subscription_ids() as $subscription_id ) {
+			foreach ( Group_Seats::get_member_ids( $subscription_id ) as $member_id ) {
 				$timestamp = $this->get_seat_timestamp( (int) $member_id, (int) $subscription_id );
 				if ( null === $timestamp ) {
 					if ( $this->verbose ) {
@@ -84,6 +86,20 @@ class Group_Seat_Changed extends Abstract_Backfiller {
 		foreach ( $this->load_in_batches( array_keys( $seats ), $build ) as $event ) {
 			yield $event;
 		}
+	}
+
+	/**
+	 * Every subscription that is a group now, plus every one a reader still holds a
+	 * seat on: a group turned off or deleted drops out of newspack-plugin's list while
+	 * its members' seats remain, and those are the seats a missed revocation left behind.
+	 *
+	 * @return int[]
+	 */
+	private function get_subscription_ids() {
+		global $wpdb;
+		$ids = array_map( 'intval', \Newspack\Group_Subscription_Settings::get_group_subscription_ids() );
+		$held = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s", Group_Seats::MEMBER_META_KEY ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return array_values( array_unique( array_merge( $ids, array_map( 'intval', $held ) ) ) );
 	}
 
 	/**
