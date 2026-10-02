@@ -406,7 +406,7 @@ final class Republication_Tracker_Tool {
 	 * @param string $author The author name to start from, before filtering.
 	 * @return string The byline text (may contain HTML author links).
 	 */
-	public static function get_byline_text( $author ) {
+	public static function get_byline_text( $author ): string {
 		/**
 		 * Allow filtering of the byline that is output in the share dialog and the copyable plaintext.
 		 *
@@ -422,7 +422,7 @@ final class Republication_Tracker_Tool {
 		/**
 		 * Allow filtering of the byline format (e.g. "by %s") output in the share
 		 * dialog and the copyable plaintext. Should contain a %s (or %1$s)
-		 * placeholder for the byline itself. Substituted with str_replace(), not
+		 * placeholder for the byline itself. Substituted with strtr(), not
 		 * sprintf(), so a malformed value degrades instead of fataling.
 		 *
 		 * @param string $format The byline format. Defaults to "by %s".
@@ -435,10 +435,15 @@ final class Republication_Tracker_Tool {
 			$byline
 		);
 
+		$placeholders = array(
+			'%1$s' => $byline,
+			'%s'   => $byline,
+		);
+
 		return sprintf(
 			// translators: %1$s is the formatted byline (e.g. "by John Doe"), %2$s is the site name.
 			__( '%1$s, %2$s', 'republication-tracker-tool' ),
-			wp_kses_post( str_replace( array( '%1$s', '%s' ), $byline, $byline_format ) ),
+			wp_kses_post( strtr( $byline_format, $placeholders ) ),
 			wp_kses_post( get_bloginfo( 'name' ) )
 		);
 	}

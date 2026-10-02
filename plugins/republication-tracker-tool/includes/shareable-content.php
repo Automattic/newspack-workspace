@@ -26,13 +26,13 @@ $content = Republication_Tracker_Tool_Content::get_republishable_content( $post-
 
 $content_footer = Republication_Tracker_Tool::create_content_footer( $post );
 
+$byline_text = Republication_Tracker_Tool::get_byline_text( get_the_author() );
+
 /**
  * The article title, byline, source site, and date
  *
  * @var HTML $article_info The article title, etc.
  */
-$byline_text = Republication_Tracker_Tool::get_byline_text( get_the_author() );
-
 // Not translatable — layout markup only.
 $article_info = sprintf(
 	'<h1>%1$s</h1><p class="byline">%2$s <br />%3$s</p>',
