@@ -464,9 +464,11 @@ class Bylines {
 		if ( is_feed() ) {
 			$byline = self::get_post_byline_html( false, false );
 			if ( $byline ) {
-				// Feed templates print the author as-is, and Atom has no CDATA around it, so the
-				// decoded text goes back out escaped.
-				$display_name = esc_html( html_entity_decode( wp_strip_all_tags( $byline ) ) );
+				// Feed templates print the author as-is: bare in Atom, and inside CDATA in RSS2 and
+				// RDF, where a `]]>` would end the section. Every `&` left after decoding is literal,
+				// so all of them are escaped; esc_html() would keep HTML-only entities such as
+				// `&nbsp;`, which XML does not define.
+				$display_name = htmlspecialchars( html_entity_decode( wp_strip_all_tags( $byline ) ), ENT_QUOTES, 'UTF-8' );
 			}
 		}
 		return $display_name;
