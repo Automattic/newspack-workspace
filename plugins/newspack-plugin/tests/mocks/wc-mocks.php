@@ -786,6 +786,25 @@ class WC_Product {
 	public function get_children() {
 		return $this->data['children'] ?? [];
 	}
+	/**
+	 * Real WooCommerce lists only purchasable, visible variations, each as an array
+	 * carrying its `variation_id`; every mock child counts as available.
+	 */
+	public function get_available_variations() {
+		return array_map(
+			function ( $id ) {
+				return [ 'variation_id' => $id ];
+			},
+			$this->get_children()
+		);
+	}
+	/**
+	 * The product's data, current meta included, so a subclass constructed by ID
+	 * can re-hydrate from the mock products database.
+	 */
+	public function get_mock_data() {
+		return array_merge( $this->data, [ 'meta' => $this->meta ] );
+	}
 	public function get_regular_price() {
 		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
 	}
@@ -859,6 +878,10 @@ class WC_Cart {
 	public function get_cart_item( $key ) {
 		return $this->cart_contents[ $key ] ?? [];
 	}
+	public function remove_cart_item( $key ) {
+		unset( $this->cart_contents[ $key ] );
+		return true;
+	}
 }
 
 if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
@@ -896,6 +919,21 @@ function wc_create_mock_product( $data = [] ) {
 	$product = new WC_Product( $data );
 	$products_database[ $product->get_id() ] = $product;
 	return $product;
+}
+
+if ( ! class_exists( 'WC_Product_Variation' ) ) {
+	/**
+	 * `new WC_Product_Variation( $id )` loads the variation by ID, as the real
+	 * constructor does, which is how Subscriptions_Tiers rebuilds a variable
+	 * subscription's variations.
+	 */
+	class WC_Product_Variation extends WC_Product {
+		public function __construct( $id = 0 ) {
+			global $products_database;
+			$existing = $products_database[ $id ] ?? null;
+			parent::__construct( $existing ? $existing->get_mock_data() : [ 'id' => $id ] );
+		}
+	}
 }
 
 /**
@@ -1679,9 +1717,18 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 			$id = is_object( $product ) ? $product->get_id() : (int) $product;
 			return $wcs_grouped_parents[ $id ] ?? [];
 		}
+		/**
+		 * Real WCS passes its type check through `woocommerce_is_subscription`, which is
+		 * the seam subscription plans use to mark a cart item with a chosen plan. The mock
+		 * applies it too, or no test could see a plan purchase.
+		 *
+		 * @param mixed $product Product.
+		 */
 		public static function is_subscription( $product ) {
-			return is_object( $product ) && method_exists( $product, 'get_type' )
+			$is_subscription = is_object( $product ) && method_exists( $product, 'get_type' )
 				&& in_array( $product->get_type(), [ 'subscription', 'variable-subscription', 'subscription_variation' ], true );
+			$product_id      = is_object( $product ) && method_exists( $product, 'get_id' ) ? $product->get_id() : 0;
+			return apply_filters( 'woocommerce_is_subscription', $is_subscription, $product_id, $product );
 		}
 		public static function get_period( $product ) {
 			$period = is_object( $product ) && method_exists( $product, 'get_meta' ) ? $product->get_meta( '_subscription_period' ) : '';
@@ -1690,6 +1737,30 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 		public static function get_interval( $product ) {
 			$interval = is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_period_interval' ) : 0;
 			return $interval > 0 ? $interval : 1;
+		}
+		/**
+		 * Number of billing periods before the subscription ends, 0 for never-ending.
+		 *
+		 * @param mixed $product Product.
+		 */
+		public static function get_length( $product ) {
+			return is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_length' ) : 0;
+		}
+		/**
+		 * Length of the free trial, in trial periods.
+		 *
+		 * @param mixed $product Product.
+		 */
+		public static function get_trial_length( $product ) {
+			return is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_trial_length' ) : 0;
+		}
+		/**
+		 * The free trial's period (day/week/month/year).
+		 *
+		 * @param mixed $product Product.
+		 */
+		public static function get_trial_period( $product ) {
+			return is_object( $product ) && method_exists( $product, 'get_meta' ) ? (string) $product->get_meta( '_subscription_trial_period' ) : '';
 		}
 		/**
 		 * Mirror of WCS's expiration-date resolver: `_subscription_length`

@@ -71,6 +71,14 @@ class Product_Purchase_Restriction {
 	const MAX_HIDDEN_PRODUCTS = 500;
 
 	/**
+	 * Guards filter_force_subscription() against re-entry: reading a product's
+	 * options consults the same filter.
+	 *
+	 * @var bool
+	 */
+	private static bool $forcing = false;
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -86,6 +94,24 @@ class Product_Purchase_Restriction {
 		add_filter( 'render_block', [ __CLASS__, 'filter_add_to_cart_block' ], 10, 3 );
 		// Optional, off by default: keep restricted products out of product lists.
 		add_action( 'pre_get_posts', [ __CLASS__, 'filter_product_query' ] );
+		// A product sold both on plans and one-time stays subscribable for readers
+		// outside an "all subscribers" rule, but only as a subscription.
+		add_filter( 'wcsatt_force_subscription', [ __CLASS__, 'filter_force_subscription' ], 10, 2 );
+		add_action( 'woocommerce_check_cart_items', [ __CLASS__, 'enforce_one_time_restriction_in_cart' ] );
+		// A request that posts no plan puts a forced product's default plan in the
+		// cart, so the forcing above would turn a one-time button into a subscription.
+		// Both filters, because they cover different entry points: the validation
+		// filter runs in WooCommerce's request handlers but not inside
+		// WC_Cart::add_to_cart(), which the modal checkout calls directly; the cart
+		// item data filter runs inside add_to_cart(), at 9 so it answers before
+		// WooCommerce Subscriptions reads the posted plan at 10. The validation
+		// filter takes all six arguments: a cart WooCommerce Subscriptions rebuilds
+		// from an order passes the plan it restores in the sixth.
+		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'validate_add_to_cart' ], 10, 6 );
+		add_filter( 'woocommerce_add_cart_item_data', [ __CLASS__, 'refuse_plan_less_cart_item' ], 9, 3 );
+		// A catalog button posts no plan, so for a reader the refusal above applies
+		// to, it links to the product page, where the form posts the plan.
+		add_filter( 'newspack_subscription_products_prompt_plan_selection', [ __CLASS__, 'filter_prompt_plan_selection' ], 10, 2 );
 	}
 
 	/**
@@ -190,19 +216,20 @@ class Product_Purchase_Restriction {
 	 * @return array[] The restrictions.
 	 */
 	public static function get_restricting_rules( $product ) {
-		if ( null === self::$rules ) {
-			self::$rules = Subscriber_Only_Products::get_active_rules();
-		}
-		$matching_rules = Product_Targeting::get_matching_rules( self::$rules, $product );
+		$matching_rules = self::get_matching_rules( $product );
 
-		// A rule open to every subscriber leaves the subscriptions themselves on
-		// sale, whatever its targeting reaches. Otherwise "all subscribers" plus
-		// "all products" is a store nobody can enter: the only way to satisfy the
-		// rule is to hold a subscription, and the rule refuses the sale of one.
-		// A rule that names its subscriptions is not exempted — naming a
-		// subscription and restricting it is two deliberate choices, where this is
-		// the incidental sweep of a mode that names nothing.
-		if ( WooCommerce_Subscriptions::is_subscription_product( $product ) ) {
+		// A rule open to every subscriber leaves the subscription itself on sale,
+		// whatever its targeting reaches. Otherwise "all subscribers" plus "all
+		// products" is a store nobody can enter: the only way to satisfy the rule
+		// is to hold a subscription, and the rule refuses the sale of one. This
+		// exempts the subscription, not necessarily the product's one-time price:
+		// for a product sold both ways, filter_force_subscription() withdraws the
+		// one-time option from readers the rule would have refused, so the
+		// exemption here can't be used to buy it once. A rule that names its
+		// subscriptions is not exempted — naming a subscription and restricting it
+		// is two deliberate choices, where this is the incidental sweep of a mode
+		// that names nothing.
+		if ( Subscription_Products::offers_subscription( $product ) ) {
 			$matching_rules = array_values(
 				array_filter(
 					$matching_rules,
@@ -214,6 +241,234 @@ class Product_Purchase_Restriction {
 		}
 
 		return $matching_rules;
+	}
+
+	/**
+	 * Active restrictions whose targeting reaches the product, before any exemption.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 * @return array[]
+	 */
+	private static function get_matching_rules( $product ) {
+		if ( null === self::$rules ) {
+			self::$rules = Subscriber_Only_Products::get_active_rules();
+		}
+		return Product_Targeting::get_matching_rules( self::$rules, $product );
+	}
+
+	/**
+	 * Sell a product only as a subscription to a reader an "all subscribers" rule
+	 * would refuse, so the rule's exemption for subscriptions never covers its
+	 * one-time option.
+	 *
+	 * @param bool        $forced  Whether the product is already subscription-only.
+	 * @param \WC_Product $product The product.
+	 * @return bool
+	 */
+	public static function filter_force_subscription( $forced, $product ) {
+		if ( $forced || self::$forcing || Subscription_Products::is_reading_configuration() || ! $product instanceof \WC_Product ) {
+			return $forced;
+		}
+		self::$forcing = true;
+		try {
+			return self::is_one_time_restricted( $product, get_current_user_id() );
+		} finally {
+			self::$forcing = false;
+		}
+	}
+
+	/**
+	 * Whether a reader may not buy this product one-time: it sells as a subscription,
+	 * an "all subscribers" rule covers it, and the reader satisfies none of those rules.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 * @param int         $user_id The user ID (0 for anonymous readers).
+	 * @return bool
+	 */
+	public static function is_one_time_restricted( \WC_Product $product, int $user_id ): bool {
+		if ( ! Subscriber_Commerce::is_enforcement_active() ) {
+			return false;
+		}
+		// The cached rule match first: it settles the answer for every product no
+		// "all subscribers" rule covers, without looking up the product's plans.
+		$rules = array_filter( self::get_matching_rules( $product ), [ Subscriber_Commerce::class, 'covers_all_subscriptions' ] );
+		if ( empty( $rules ) || ! Subscription_Products::offers_subscription( $product ) ) {
+			return false;
+		}
+		if ( user_can( $user_id, 'manage_woocommerce' ) ) {
+			return false;
+		}
+		foreach ( $rules as $rule ) {
+			if ( Subscriber_Eligibility::user_matches_rule( $user_id, $rule ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Send a reader who may not buy a product one-time to its product page to
+	 * subscribe, when the product is sold both ways. A catalog button posts only
+	 * the product ID, which validate_add_to_cart() refuses for that reader.
+	 *
+	 * @param bool        $prompt  Whether the button already links to the product page.
+	 * @param \WC_Product $product The product.
+	 * @return bool
+	 */
+	public static function filter_prompt_plan_selection( $prompt, $product ) {
+		if ( $prompt || ! $product instanceof \WC_Product ) {
+			return (bool) $prompt;
+		}
+		return self::is_one_time_restricted( $product, get_current_user_id() ) && Subscription_Products::is_sold_both_ways( $product );
+	}
+
+	/**
+	 * Refuse a plan-less add-to-cart of a product sold both ways, for a reader who
+	 * may not buy it one-time. The product is forced onto its plans for that reader,
+	 * so WooCommerce would fill the missing choice with its default plan: a button
+	 * built for the one-time price (a Checkout Button posts none) would start a
+	 * subscription. Only a request that names a plan gets through, or a cart
+	 * WooCommerce Subscriptions rebuilds from an order (a failed first payment, a
+	 * renewal, a resubscribe), which carries the plan the item was bought on.
+	 *
+	 * @param bool  $passed         Whether the add-to-cart is valid so far.
+	 * @param int   $product_id     Product ID.
+	 * @param int   $quantity       Quantity.
+	 * @param int   $variation_id   Variation ID, if any.
+	 * @param array $variations     Variation attributes, if any.
+	 * @param array $cart_item_data Cart item data, set when the cart is rebuilt from an order.
+	 * @return bool
+	 */
+	public static function validate_add_to_cart( $passed, $product_id, $quantity = 1, $variation_id = 0, $variations = [], $cart_item_data = [] ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed
+		if ( ! $passed || self::has_restored_plan( $cart_item_data ) ) {
+			return $passed;
+		}
+		$product = self::get_plan_less_refusal( (int) $product_id, (int) $variation_id );
+		if ( ! $product ) {
+			return $passed;
+		}
+		self::log_plan_less_refusal( $product, $cart_item_data );
+		wc_add_notice( self::get_restricted_message( $product ), 'error' );
+		return false;
+	}
+
+	/**
+	 * The same refusal, for a WC_Cart::add_to_cart() call that never runs the
+	 * validation filter. Throwing is how a plugin aborts the add there: the cart
+	 * catches it, shows the message as an error notice and returns false.
+	 *
+	 * @param array $cart_item_data Cart item data.
+	 * @param int   $product_id     Product ID.
+	 * @param int   $variation_id   Variation ID, if any.
+	 *
+	 * @throws \Exception When the add would start a plan the reader never chose.
+	 *
+	 * @return array Cart item data, unchanged.
+	 */
+	public static function refuse_plan_less_cart_item( $cart_item_data, $product_id, $variation_id = 0 ) {
+		// The Store API applies this filter outside the cart's try/catch, where a
+		// throw is a 500 rather than a notice. A plan-less Store API add from a
+		// restricted reader lands on the product's default plan instead, a
+		// subscription the rule allows: WooCommerce Subscriptions fills in that plan
+		// before any validation runs.
+		if ( function_exists( 'WC' ) && WC() && method_exists( WC(), 'is_store_api_request' ) && WC()->is_store_api_request() ) {
+			return $cart_item_data;
+		}
+		if ( self::has_restored_plan( $cart_item_data ) ) {
+			return $cart_item_data;
+		}
+		$product = self::get_plan_less_refusal( (int) $product_id, (int) $variation_id );
+		if ( $product ) {
+			self::log_plan_less_refusal( $product, $cart_item_data );
+			throw new \Exception( self::get_restricted_message( $product ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- WooCommerce shows it as a notice, which carries the message's links.
+		}
+		return $cart_item_data;
+	}
+
+	/**
+	 * Whether cart item data carries a plan: a cart WooCommerce Subscriptions
+	 * rebuilds from an order (a renewal, resubscribe or payment retry) puts back the
+	 * plan the item was bought on. A plan-less Store API add carries one too, the
+	 * product's default plan, which WooCommerce Subscriptions fills in before
+	 * validation, so the add lands on that plan.
+	 *
+	 * @param mixed $cart_item_data Cart item data.
+	 */
+	private static function has_restored_plan( $cart_item_data ): bool {
+		return is_array( $cart_item_data ) && ! empty( $cart_item_data['wcsatt_data']['active_subscription_scheme'] );
+	}
+
+	/**
+	 * Log a plan-less refusal, so a payment flow that is refused shows up in the
+	 * logs rather than only in a reader's notice.
+	 *
+	 * @param \WC_Product $product        The refused product.
+	 * @param mixed       $cart_item_data Cart item data the add carried.
+	 */
+	private static function log_plan_less_refusal( \WC_Product $product, $cart_item_data ): void {
+		$restored = is_array( $cart_item_data ) && isset( $cart_item_data['wcsatt_data'] );
+		$message  = sprintf(
+			'Refused a plan-less add-to-cart for user %d of product %d (%s)',
+			get_current_user_id(),
+			$product->get_id(),
+			$restored ? 'restored cart item data' : 'no restored cart item data'
+		);
+		Logger::log( $message, 'NEWSPACK-SUBSCRIBER-COMMERCE' );
+		// A cart rebuilt from an order that restored no plan is a payment flow that
+		// failed, so it is reported whatever the site's log level.
+		if ( $restored ) {
+			Logger::newspack_log( 'newspack_subscriber_commerce_plan_less_refusal', $message, [ 'product_id' => $product->get_id() ], 'error' );
+		}
+	}
+
+	/**
+	 * The product a plan-less add-to-cart must be refused for, or null to allow it.
+	 *
+	 * @param int $product_id   Product ID.
+	 * @param int $variation_id Variation ID, or 0.
+	 * @return \WC_Product|null
+	 */
+	private static function get_plan_less_refusal( int $product_id, int $variation_id ): ?\WC_Product {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return null;
+		}
+		$product = \wc_get_product( $variation_id ? $variation_id : $product_id );
+		if ( ! $product instanceof \WC_Product || ! self::is_one_time_restricted( $product, get_current_user_id() ) ) {
+			return null;
+		}
+		// Only a product sold one-time can have a button showing its one-time price;
+		// one sold only on plans (or a legacy subscription) is a subscription whatever
+		// the form posts.
+		if ( ! Subscription_Products::is_sold_both_ways( $product ) ) {
+			return null;
+		}
+		return null === Subscription_Products::get_posted_plan_option( $product ) ? $product : null;
+	}
+
+	/**
+	 * Remove a one-time purchase of a restricted product that reached the cart anyway:
+	 * a cart saved before the rule existed, or a request that posted the one-time choice.
+	 *
+	 * @param \WC_Cart|null $cart Cart; defaults to the session cart.
+	 */
+	public static function enforce_one_time_restriction_in_cart( $cart = null ) {
+		if ( null === $cart && function_exists( 'WC' ) && WC() ) {
+			$cart = WC()->cart;
+		}
+		if ( ! $cart ) {
+			return;
+		}
+		$user_id = get_current_user_id();
+		foreach ( $cart->get_cart() as $key => $item ) {
+			$product = $item['data'] ?? null;
+			if ( ! $product instanceof \WC_Product || Subscription_Products::is_purchased_as_subscription( $product ) ) {
+				continue;
+			}
+			if ( self::is_one_time_restricted( $product, $user_id ) ) {
+				$cart->remove_cart_item( $key );
+				wc_add_notice( self::get_restricted_message( $product ), 'error' );
+			}
+		}
 	}
 
 	/**

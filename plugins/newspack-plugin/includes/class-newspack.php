@@ -261,6 +261,10 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/wc-memberships/class-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/subscription-products/class-purchase-option.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/subscription-products/class-legacy-model.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/subscription-products/class-plans-model.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/class-subscription-products.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce-subscriptions/class-subscription-policy-resolver.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/class-dynamic-pricing-bridges.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/class-available-deals-bridge.php';
