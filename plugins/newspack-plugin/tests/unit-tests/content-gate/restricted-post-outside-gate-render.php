@@ -309,6 +309,31 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The teaser renders some words differently from the post (footnote markers,
+	 * curly quotes, entities). The excerpt still runs to the end of the free part.
+	 */
+	public function test_excerpt_keeps_footnoted_and_punctuated_free_text() {
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' the reader\'s "budget"<sup data-fn="fn1" class="fn"><a href="#fn1" id="fn1-link">1</a></sup> passed &amp; closed.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+			]
+		);
+		$this->go_to( home_url( '/' ) );
+
+		$loop = new \WP_Query( [ 'p' => $post_id ] );
+		$loop->the_post();
+		$post_content = $GLOBALS['post']->post_content;
+		wp_reset_postdata();
+
+		foreach ( [ get_the_excerpt( $post_id ), $post_content ] as $text ) {
+			$this->assertStringContainsString( 'Second free line.', $text );
+			$this->assertStringNotContainsString( self::PAID_MARKER, $text );
+		}
+	}
+
+	/**
 	 * Homepage Posts builds its excerpt from a listing post's `post_content`, so
 	 * that carries the excerpt's teaser, while the card's content render keeps the
 	 * image.

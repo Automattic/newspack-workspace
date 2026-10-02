@@ -1025,15 +1025,12 @@ class Content_Gate {
 			];
 		}
 
-		// post_excerpt is deliberately left alone. Empty, it makes core build the
-		// excerpt from post_content — now the teaser — so the trimming and the
-		// "read more" suffix stay core's to decide; non-empty, it is the author's
-		// own words about a post they chose to gate, and survives.
-		//
-		// The excerpt's text rather than the rendered teaser, which a block building
-		// its own excerpt from post_content, as Homepage Posts does, could not strip
-		// captions and the like from. The content passes above substitute the full
-		// teaser from the staged entry.
+		// A hand-written excerpt (post_excerpt) is left alone: it is the author's
+		// own words about a post they chose to gate. An auto-generated one stops
+		// where the free part ends, so post_content carries the free part as
+		// excerpt text, captions and the like already removed, for a block that
+		// builds its own excerpt from it, as Homepage Posts does. The content passes
+		// above substitute the full teaser from the staged entry.
 		$post->post_content = '<p>' . Content_Gate_Excerpt::get_free_excerpt_text( $post, $teaser )
 			. ( Content_Gate_Excerpt::has_overlay_ellipsis( $teaser ) ? ' [&hellip;]' : '' ) . '</p>';
 	}

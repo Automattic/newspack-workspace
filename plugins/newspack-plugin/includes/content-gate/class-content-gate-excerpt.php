@@ -15,6 +15,13 @@ defined( 'ABSPATH' ) || exit;
 class Content_Gate_Excerpt {
 
 	/**
+	 * Excerpt texts built in this request, keyed as in the object cache.
+	 *
+	 * @var array<string, string>
+	 */
+	private static $free_excerpt_texts = [];
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -165,21 +172,38 @@ class Content_Gate_Excerpt {
 	 * @param string   $teaser Its teaser, from Content_Gate::get_teaser_outside_article().
 	 * @return string Plain text, untrimmed.
 	 */
-	public static function get_free_excerpt_text( $post, $teaser ) {
+	public static function get_free_excerpt_text( \WP_Post $post, string $teaser ): string {
 		if ( '' === trim( $teaser ) ) {
 			return '';
 		}
+
+		// Cached beside the teaser and for the same reason: this renders the
+		// whole body, and a listing pays it once per card. The teaser's hash
+		// stands in for the gate layout and settings it was sliced by.
+		$cache_key = md5( wp_json_encode( [ 'excerpt', $post->ID, $post->post_modified_gmt, md5( $teaser ) ] ) );
+		if ( isset( self::$free_excerpt_texts[ $cache_key ] ) ) {
+			return self::$free_excerpt_texts[ $cache_key ];
+		}
+		$cached = wp_cache_get( $cache_key, Content_Gate::WITHHELD_TEASER_CACHE_GROUP );
+		if ( is_string( $cached ) ) {
+			self::$free_excerpt_texts[ $cache_key ] = $cached;
+			return $cached;
+		}
+
 		// From the row: in a loop, Content_Gate::withhold_post_in_loop() has already
 		// replaced this instance's post_content with the excerpt text.
 		$content = Block_Visibility::strip_blocks_hidden_from_public( (string) get_post_field( 'post_content', $post->ID, 'raw' ) );
 		$content = strip_shortcodes( $content );
+		// Can run inside `the_post` for a withheld post, so a block added to
+		// `excerpt_allowed_blocks` must not build an excerpt itself; core's own
+		// docs for that filter set the same rule, for the same infinite loop.
 		$content = excerpt_remove_blocks( $content );
 		$content = excerpt_remove_footnotes( $content );
 		// The text filters of the teaser's `newspack_gate_content` pass, so both
 		// sides read alike.
 		$content = convert_smilies( capital_P_dangit( wptexturize( $content ) ) );
 
-		$free  = self::split_words( $teaser );
+		$free  = self::split_words( excerpt_remove_footnotes( $teaser ) );
 		$index = 0;
 		$count = count( $free );
 		$words = [];
@@ -193,7 +217,11 @@ class Content_Gate_Excerpt {
 			}
 			$words[] = $free[ $index++ ];
 		}
-		return implode( ' ', $words );
+
+		$text                                   = implode( ' ', $words );
+		self::$free_excerpt_texts[ $cache_key ] = $text;
+		wp_cache_set( $cache_key, $text, Content_Gate::WITHHELD_TEASER_CACHE_GROUP, HOUR_IN_SECONDS );
+		return $text;
 	}
 
 	/**
@@ -202,7 +230,7 @@ class Content_Gate_Excerpt {
 	 * @param string $teaser Teaser HTML.
 	 * @return bool
 	 */
-	public static function has_overlay_ellipsis( $teaser ) {
+	public static function has_overlay_ellipsis( string $teaser ): bool {
 		return str_ends_with( rtrim( wp_strip_all_tags( $teaser ) ), '[&hellip;]' );
 	}
 
@@ -213,7 +241,7 @@ class Content_Gate_Excerpt {
 	 * @param string $html Rendered HTML.
 	 * @return string[]
 	 */
-	private static function split_words( $html ) {
+	private static function split_words( string $html ): array {
 		$html = preg_replace( '#(</(?:p|div|figure|figcaption|li|h[1-6]|blockquote|pre|td|th|summary)>)#i', '$1 ', $html );
 		return preg_split( '/[\n\r\t ]+/', wp_strip_all_tags( $html ), -1, PREG_SPLIT_NO_EMPTY );
 	}
@@ -224,7 +252,7 @@ class Content_Gate_Excerpt {
 	 * @param string $word Word.
 	 * @return string
 	 */
-	private static function normalize_word( $word ) {
+	private static function normalize_word( string $word ): string {
 		return html_entity_decode( $word, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
 }
