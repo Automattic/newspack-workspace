@@ -2058,19 +2058,40 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	}
 }
 /**
- * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
- * callback render end to end; assertions belong on the surrounding markup, not on this field.
+ * Minimal stand-in for WooCommerce's admin field renderer. The input is always `type="text"`
+ * and custom attributes such as `min` are not printed, so a test can't assert on them.
+ *
+ * Without a `value`, WooCommerce reads the field's meta off the global post, so the product
+ * editor shows whatever was last saved. The mock does the same, or a test of what the editor
+ * shows would see an empty field where production shows the stored value.
  *
  * @param array $field The field definition.
  */
 function woocommerce_wp_text_input( $field ) {
+	global $post;
+	$value = $field['value'] ?? ( $post ? get_post_meta( $post->ID, $field['id'] ?? '', true ) : '' );
 	printf(
 		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><input type="text" id="%2$s" name="%4$s" value="%5$s" /></p>',
 		esc_attr( $field['wrapper_class'] ?? '' ),
 		esc_attr( $field['id'] ?? '' ),
 		esc_html( $field['label'] ?? '' ),
 		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
-		esc_attr( $field['value'] ?? '' )
+		esc_attr( $value )
+	);
+}
+/**
+ * Minimal stand-in for WooCommerce's admin select renderer, so a callback that renders a select
+ * beside text fields can run end to end. The options themselves are not rendered.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_select( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><select id="%2$s" name="%4$s"></select></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) )
 	);
 }
 /**
