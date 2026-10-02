@@ -134,12 +134,12 @@ class Test_Byline_Markup extends WP_UnitTestCase {
 	 * Feeds get the byline as escaped text, since some feed templates print the author unwrapped.
 	 */
 	public function test_feed_author_is_escaped_text() {
-		update_post_meta( $this->post_id, Bylines::META_KEY_BYLINE, 'By Staff &lt;b&gt;bold&lt;/b&gt; &amp; Co&amp;nbsp;Ltd' );
+		update_post_meta( $this->post_id, Bylines::META_KEY_BYLINE, 'By Staff &lt;b&gt;bold&lt;/b&gt; &amp; O&apos;Brien&amp;nbsp;Ltd' );
 		$this->go_to( get_feed_link() );
 		$GLOBALS['post'] = get_post( $this->post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		$author = Bylines::replace_feed_author( 'Display Name' );
 		$this->assertStringNotContainsString( '<b>', $author );
-		$this->assertSame( 'By Staff &lt;b&gt;bold&lt;/b&gt; &amp; Co&amp;nbsp;Ltd', $author );
+		$this->assertSame( 'By Staff &lt;b&gt;bold&lt;/b&gt; &amp; O&#039;Brien&amp;nbsp;Ltd', $author );
 		// Atom prints the author with no CDATA, so it has to parse as XML text on its own.
 		$this->assertNotFalse( simplexml_load_string( '<name>' . $author . '</name>' ) );
 	}
