@@ -248,4 +248,28 @@ class CustomBylineAttributionTest extends WP_UnitTestCase {
 		// Once each in the modal's visible article info, the HTML tab and the Plain Text tab.
 		$this->assertSame( 3, substr_count( $output, 'by CAP Guest Author, Test Blog' ), 'Both the HTML and Plain Text tabs should prefix the CAP byline with "by".' );
 	}
+
+	/**
+	 * On the standalone /republish/ page the global post is the main query's
+	 * post, not the one being republished. The Plain Text byline should still
+	 * come from the republished post.
+	 */
+	public function test_plain_text_byline_uses_republished_post_not_global_post() {
+		global $post;
+
+		update_post_meta( $this->test_post->ID, '_newspack_byline_active', false );
+
+		$global_post = $this->factory->post->create_and_get( array( 'post_status' => 'publish' ) );
+		update_post_meta( $global_post->ID, '_newspack_byline_active', true );
+		update_post_meta( $global_post->ID, '_newspack_byline', 'By Someone Else' );
+
+		$post = $global_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $global_post );
+
+		$plain_text = Republication_Tracker_Tool_Content::get_republishable_plain_text_content( $this->test_post );
+
+		$this->assertStringContainsString( 'by John Doe, Test Blog', $plain_text, 'The Plain Text byline should credit the republished post\'s author.' );
+		$this->assertStringNotContainsString( 'Someone Else', $plain_text, 'The Plain Text byline should not use the global post\'s Custom Byline.' );
+		$this->assertSame( $global_post->ID, $post->ID, 'The global post should be restored afterwards.' );
+	}
 }

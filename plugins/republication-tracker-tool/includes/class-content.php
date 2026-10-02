@@ -142,8 +142,21 @@ class Republication_Tracker_Tool_Content {
 
 		// Get article metadata.
 		$article_title = get_the_title( $post_object );
-		$author_byline = Republication_Tracker_Tool::get_byline_text( get_the_author_meta( 'display_name', $post_object->post_author ) );
 		$article_date  = gmdate( 'F j, Y', strtotime( $post_object->post_date ) );
+
+		// The byline filters (Custom Byline, CAP) read the global post, which on
+		// the standalone /republish/ page is the main query's post, not this one.
+		global $post;
+		$original_post = $post;
+		$post          = $post_object; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $post );
+
+		$author_byline = Republication_Tracker_Tool::get_byline_text( get_the_author_meta( 'display_name', $post_object->post_author ) );
+
+		$post = $original_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		if ( $original_post instanceof WP_Post ) {
+			setup_postdata( $original_post );
+		}
 
 		// Add the article title.
 		if ( ! empty( $article_title ) ) {
