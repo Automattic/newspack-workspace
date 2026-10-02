@@ -78,7 +78,7 @@ class TestGroupSeatBackfiller extends WP_UnitTestCase {
 			[
 				'ID'              => $member,
 				'user_registered' => '0000-00-00 00:00:00',
-			] 
+			]
 		);
 		add_user_meta( $member, Group_Seats::MEMBER_META_KEY, 90 );
 
