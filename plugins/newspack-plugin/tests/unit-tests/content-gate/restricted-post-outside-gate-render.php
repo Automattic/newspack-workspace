@@ -363,6 +363,24 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A free part ending in text only the teaser has, a caption above the more
+	 * tag, does not let the gated body's ordinary words pick that text back up.
+	 */
+	public function test_excerpt_ends_at_the_free_text_before_a_trailing_caption() {
+		update_post_meta( $this->gate_layout_id, 'use_more_tag', true );
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:image --><figure class="wp-block-image"><img src="https://example.test/a.jpg" alt=""/><figcaption>The mayor speaks to the press at city hall.</figcaption></figure><!-- /wp:image -->'
+					. '<!-- wp:more --><!--more--><!-- /wp:more -->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' says the council will publish the budget at the hall.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$this->assertSame( self::FREE_MARKER . ' opening line.', get_the_excerpt( $post_id ) );
+	}
+
+	/**
 	 * Homepage Posts builds its excerpt from a listing post's `post_content`, so
 	 * that carries the excerpt's teaser, while the card's content render keeps the
 	 * image.
