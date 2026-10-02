@@ -1605,6 +1605,32 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * When Subscriptions passes the subscriptions being paid for, those are the ones set aside.
+	 */
+	public function test_limit_ignores_subscriptions_passed_by_subscriptions() {
+		$fixture = $this->create_pending_limited_subscription();
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'], [ $fixture['subscription']->get_id() ] ),
+			'A subscription Subscriptions passes as being paid for should not count toward the limit.'
+		);
+	}
+
+	/**
+	 * A list from Subscriptions is used as given, even an empty one: the fallback lookup
+	 * is only for versions that don't pass the list at all.
+	 */
+	public function test_limit_prefers_empty_list_passed_by_subscriptions_over_fallback() {
+		$fixture = $this->create_pending_limited_subscription();
+		$this->set_paying_for_order( $fixture['order'] );
+
+		$this->assertTrue(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'], [] ),
+			'An empty list from Subscriptions should not fall back to the mirrored lookup.'
+		);
+	}
+
+	/**
 	 * Retrying a failed parent order is paying for it too.
 	 */
 	public function test_limit_ignores_subscription_on_failed_order_being_paid() {

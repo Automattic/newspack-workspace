@@ -37,7 +37,7 @@ class WooCommerce_Subscriptions {
 	public static function init() {
 		add_action( 'plugins_loaded', [ __CLASS__, 'woocommerce_subscriptions_integration_init' ] );
 		add_action( 'admin_init', [ __CLASS__, 'maybe_enable_legacy_product_types' ] );
-		add_filter( 'woocommerce_subscriptions_product_limited_for_user', [ __CLASS__, 'maybe_limit_subscription_product_for_user' ], 10, 3 );
+		add_filter( 'woocommerce_subscriptions_product_limited_for_user', [ __CLASS__, 'maybe_limit_subscription_product_for_user' ], 10, 4 );
 		add_filter( 'woocommerce_subscriptions_product_trial_length', [ __CLASS__, 'limit_free_trials_to_one_per_user' ], 10, 2 );
 		add_filter( 'wcs_get_users_subscriptions', [ __CLASS__, 'filter_subscriptions_for_account_page' ], 10, 1 );
 		add_filter( 'woocommerce_subscriptions_can_item_be_switched', [ __CLASS__, 'allow_migrated_subscription_switch' ], 10, 3 );
@@ -1207,20 +1207,26 @@ class WooCommerce_Subscriptions {
 	 * subscription per user, treat on-hold, pending, and pending-cancel statuses as active.
 	 *
 	 * Subscriptions the reader is paying for right now don't count, or a reader could never
-	 * pay for a pending subscription an admin created for them.
+	 * pay for a pending subscription an admin created for them. Subscriptions versions that pass
+	 * those IDs to the filter have them used as given; older ones fall back to working them out here.
 	 *
-	 * @param bool           $is_limited_for_user Whether the subscription product is limited for user.
-	 * @param int|WC_Product $product A WC_Product object or the ID of a product.
-	 * @param int            $user_id The user ID.
+	 * @param bool           $is_limited_for_user       Whether the subscription product is limited for user.
+	 * @param int|WC_Product $product                   A WC_Product object or the ID of a product.
+	 * @param int            $user_id                   The user ID.
+	 * @param int[]|null     $excluded_subscription_ids Subscriptions being paid for, when Subscriptions passes them.
 	 */
-	public static function maybe_limit_subscription_product_for_user( $is_limited_for_user, $product, $user_id ) {
+	public static function maybe_limit_subscription_product_for_user( $is_limited_for_user, $product, $user_id, $excluded_subscription_ids = null ) {
 		$product_limitation = \wcs_get_product_limitation( $product );
 		if ( ! $is_limited_for_user && 'active' === $product_limitation ) {
+			$excluded_subscription_ids = is_array( $excluded_subscription_ids )
+				? array_map( 'intval', $excluded_subscription_ids )
+				: self::get_subscription_ids_awaiting_payment( $product->get_id() );
+
 			$is_limited_for_user = \wcs_user_has_subscription(
 				$user_id,
 				$product->get_id(),
 				[ 'active', 'on-hold', 'pending', 'pending-cancel' ],
-				self::get_subscription_ids_awaiting_payment( $product->get_id() )
+				$excluded_subscription_ids
 			);
 		}
 
@@ -1236,14 +1242,12 @@ class WooCommerce_Subscriptions {
 	 * Get the IDs of the subscriptions to a product that the current request is paying for.
 	 *
 	 * Mirrors WCS_Limiter::get_subscriptions_awaiting_payment_for_product(), which is protected.
-	 * WooCommerce Subscriptions 9 excludes these subscriptions inside wcs_is_product_limited_for_user()
-	 * but doesn't pass them to the `woocommerce_subscriptions_product_limited_for_user` filter, so
-	 * a filter that runs its own subscription lookup has to exclude them itself. Older versions
-	 * ignore the exclusion argument and exempt the order later, in WCS_Limiter::is_product_limited().
+	 * Only used when Subscriptions doesn't pass these IDs to the
+	 * `woocommerce_subscriptions_product_limited_for_user` filter itself, which it starts doing with
+	 * https://github.com/woocommerce/woocommerce-subscriptions/pull/5743. Versions before 9.x ignore the
+	 * exclusion and exempt the order later, in WCS_Limiter::is_product_limited().
 	 *
-	 * @todo Remove once https://github.com/woocommerce/woocommerce-subscriptions/pull/5743 ships: it passes
-	 *       these IDs to the filter as a fourth argument, so the callback can use them instead (keep this
-	 *       as a fallback while older Subscriptions versions are supported).
+	 * @todo Remove once the minimum supported Subscriptions version passes the IDs to the filter.
 	 *
 	 * @param int $product_id The product ID.
 	 *
