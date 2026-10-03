@@ -2057,15 +2057,16 @@ function wc_get_orders( $args ) {
 			}
 		);
 	}
+	// Real WC sorts by creation date, newest first unless `order` says ASC, and
+	// callers that page add ID as a tie-breaker; both directions apply to both keys.
+	$descending = 'ASC' !== strtoupper( (string) ( $args['order'] ?? '' ) );
 	usort(
 		$orders,
-		function( $a, $b ) {
-			return $b->get_date_paid()->getTimestamp() <=> $a->get_date_paid()->getTimestamp();
+		function( $a, $b ) use ( $descending ) {
+			$comparison = [ $a->get_date_created()->getTimestamp(), $a->get_id() ] <=> [ $b->get_date_created()->getTimestamp(), $b->get_id() ];
+			return $descending ? -$comparison : $comparison;
 		}
 	);
-	if ( 'ASC' === strtoupper( (string) ( $args['order'] ?? '' ) ) ) {
-		$orders = array_reverse( $orders );
-	}
 	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
 		// Real WC pages with `page` as a 1-based offset into the limited set. A test
 		// can set $wc_mocks_orders_ignore_page to model a store (or a filter on the

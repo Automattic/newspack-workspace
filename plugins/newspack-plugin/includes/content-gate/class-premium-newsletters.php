@@ -199,7 +199,7 @@ class Premium_Newsletters {
 	 * @param int   $client_id ID of the client that triggered the event.
 	 */
 	public static function handle_woo_order_updated( $timestamp, $data, $client_id ) {
-		// Bail before the gate lookup; add_user_to_queue() would refuse the entry anyway.
+		// Bail before the gate lookup; add_users_to_queue() would refuse the entry anyway.
 		if ( ! self::is_access_control_active() ) {
 			return;
 		}
@@ -228,11 +228,12 @@ class Premium_Newsletters {
 	 * Queue a remove-only check for each reader whose one-time purchase access
 	 * ran out since the last sweep.
 	 *
-	 * Runs at the start of every queue run, so a lapse reaches the ESP within
-	 * about an hour. The sweep keeps no state per order: it walks paid orders by
-	 * creation date, so it reaches an order whenever it was placed. A reader who
-	 * bought again keeps their lists, because the check looks at all of their
-	 * qualifying orders, not only the one that lapsed.
+	 * Runs at the start of every scheduled queue run, so a lapse reaches the ESP
+	 * within about an hour. The sweep keeps no state per order: it walks paid
+	 * orders by creation date, so an order placed before the sweep existed is
+	 * still checked when its access ends. A reader who bought again keeps their
+	 * lists, because the check looks at all of their qualifying orders, not only
+	 * the one that lapsed.
 	 *
 	 * The first sweep for a duration starts from that moment, so access that had
 	 * already lapsed is not reconciled here. The position survives access control
@@ -316,7 +317,9 @@ class Premium_Newsletters {
 			'PREMIUM-NEWSLETTERS'
 		);
 		// Orders created in the same second as the last one read may be on the next
-		// page, so the next run starts from that second again.
+		// page, so the next run starts from that second again. max() keeps the sweep
+		// moving when one second holds more orders than a run reads: it skips that
+		// second's remaining orders rather than re-reading the same ones forever.
 		return max( $start, $last_created - 1 );
 	}
 
@@ -701,13 +704,7 @@ class Premium_Newsletters {
 	}
 
 	/**
-	 * Add the user to the access-check queue, tagged with the source event.
-	 *
-	 * Entries are deduplicated by user_id. When an entry already exists for the
-	 * user, a renewal-source enqueue overrides any non-renewal source, but a
-	 * non-renewal source never downgrades an existing renewal entry. This keeps
-	 * the renewal-snapshot semantics intact when multiple events fire for the
-	 * same user within a single cron window.
+	 * Single-user form of add_users_to_queue().
 	 *
 	 * @param int    $user_id The ID of the user to schedule the access check for.
 	 * @param string $source  Source event tag (one of the SOURCE_* constants, or
@@ -721,7 +718,15 @@ class Premium_Newsletters {
 
 	/**
 	 * Add users to the access-check queue in one write, each entry tagged with
-	 * the same source. Deduplication follows add_user_to_queue().
+	 * the same source event.
+	 *
+	 * Entries are deduplicated by user_id. When an entry already exists for the
+	 * user, a renewal-source enqueue overrides any non-renewal source, but a
+	 * non-renewal source never downgrades an existing renewal entry. This keeps
+	 * the renewal-snapshot semantics intact when multiple events fire for the
+	 * same user within a single cron window. A remove-only source never replaces
+	 * an existing entry either, so it can't cancel a pending check that would add
+	 * lists.
 	 *
 	 * @param int[]  $user_ids The IDs of the users to schedule the access check for.
 	 * @param string $source   Source event tag (one of the SOURCE_* constants, or
@@ -732,7 +737,7 @@ class Premium_Newsletters {
 	private static function add_users_to_queue( array $user_ids, string $source = '' ): void {
 		// Guarded at the chokepoint rather than per handler: the renewal handler
 		// reaches this directly rather than through maybe_enqueue_access_check(), and
-		// a fifth entry point would otherwise have to remember on its own. Nothing
+		// any new entry point would otherwise have to remember on its own. Nothing
 		// accumulates while access control is inactive, so re-enabling processes current
 		// events rather than a backlog of stale ones.
 		if ( ! self::is_access_control_active() ) {
@@ -812,9 +817,10 @@ class Premium_Newsletters {
 		// membership until their next subscription event. Accepted deliberately —
 		// acting on hours-old subscription state is the worse failure — but it means
 		// the off window is not free, and a reconciliation sweep on re-enable is the
-		// fix if that ever bites. One-time purchases are the exception: lapses come
-		// from order dates rather than stored events, so the lapse sweep keeps its
-		// position and catches up on the off window once it comes back.
+		// fix if that ever bites. One-time purchase lapses are the exception: they
+		// come from order dates rather than stored events, so the lapse sweep keeps
+		// its position and catches up once access control comes back. One-time
+		// purchases and refunds made during the window are not reconciled.
 		if ( ! self::is_access_control_active() ) {
 			if ( wp_next_scheduled( self::SCHEDULED_HOOK ) || ! empty( get_option( self::QUEUE_OPTION, [] ) ) ) {
 				self::unschedule_access_check_event();
@@ -822,26 +828,23 @@ class Premium_Newsletters {
 			return;
 		}
 		if ( ! wp_next_scheduled( self::SCHEDULED_HOOK ) ) {
-			self::process_access_check_queue();
+			// The lapse sweep waits for the event scheduled here, which is due at once:
+			// after a long off window its catch-up is too much work for a page load.
+			self::process_queued_checks();
 			wp_schedule_event( time(), 'hourly', self::SCHEDULED_HOOK );
 		}
 	}
 
 	/**
-	 * Process all pending access checks from the queue.
+	 * Run the one-time purchase lapse sweep, then process all pending access
+	 * checks from the queue.
 	 *
-	 * Registered as the callback for the SCHEDULED_HOOK cron event. Each entry is
-	 * processed in its own try/catch so a single bad entry (e.g. a deleted list
-	 * post referenced from the restriction rules) cannot abort the rest of the
-	 * batch. The queue is cleared after the loop completes; if a transient ESP
-	 * failure occurs check_access() leaves the renewal snapshot in place so the
-	 * next enqueue for that user still respects it.
-	 *
-	 * The one-time purchase lapse sweep runs first so its checks join this run.
-	 * A sweep that fails keeps its previous position, so the next run retries the
-	 * same orders. The failure goes to the persistent Newspack log as well, since
-	 * a sweep that keeps failing is otherwise invisible: readers whose access
-	 * ended stay on premium lists, and nothing else reports it.
+	 * Registered as the callback for the SCHEDULED_HOOK cron event. The sweep
+	 * runs first so its checks join this run. A sweep that fails keeps its
+	 * previous position, so the next run retries the same orders, and the queued
+	 * checks run regardless. The failure goes to the persistent Newspack log as
+	 * well, since a sweep that keeps failing is otherwise invisible: readers whose
+	 * access ended stay on premium lists, and nothing else reports it.
 	 *
 	 * @return void
 	 */
@@ -851,8 +854,32 @@ class Premium_Newsletters {
 		} catch ( \Throwable $e ) {
 			$message = sprintf( 'One-time purchase lapse sweep failed: %s', $e->getMessage() );
 			Logger::log( $message, 'PREMIUM-NEWSLETTERS' );
-			Logger::newspack_log( 'newspack_premium_newsletters_sweep', $message, [ 'file' => 'newspack_premium_newsletters' ], 'error' );
+			// An empty email keeps the log from naming whoever's request ran the sweep.
+			Logger::newspack_log(
+				'newspack_premium_newsletters_sweep',
+				$message,
+				[
+					'file'       => 'newspack_premium_newsletters',
+					'user_email' => '',
+				],
+				'error'
+			);
 		}
+		self::process_queued_checks();
+	}
+
+	/**
+	 * Process all pending access checks from the queue.
+	 *
+	 * Each entry is processed in its own try/catch so a single bad entry (e.g. a
+	 * deleted list post referenced from the restriction rules) cannot abort the
+	 * rest of the batch. The queue is cleared after the loop completes; if a
+	 * transient ESP failure occurs check_access() leaves the renewal snapshot in
+	 * place so the next enqueue for that user still respects it.
+	 *
+	 * @return void
+	 */
+	private static function process_queued_checks() {
 		$queue = get_option( self::QUEUE_OPTION, [] );
 		if ( empty( $queue ) ) {
 			return;
@@ -958,7 +985,7 @@ class Premium_Newsletters {
 
 		// Always enqueue the renewal-source check so the snapshot governs THIS
 		// access check (and only this one). If product_subscription_changed also
-		// fires for the same user, the dedup logic in add_user_to_queue() keeps
+		// fires for the same user, the dedup logic in add_users_to_queue() keeps
 		// the renewal source.
 		self::add_user_to_queue( (int) $user->ID, self::SOURCE_RENEWAL );
 	}

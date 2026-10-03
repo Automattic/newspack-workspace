@@ -121,9 +121,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		wp_cache_delete( 'alloptions', 'options' );
 		delete_option( Premium_Newsletters::QUEUE_OPTION );
 		delete_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION );
-		$sweep_page_size = new \ReflectionProperty( Premium_Newsletters::class, 'sweep_page_size' );
-		$sweep_page_size->setAccessible( true );
-		$sweep_page_size->setValue( null, 100 );
+		$this->set_sweep_page_size( null );
 		parent::tear_down();
 	}
 
@@ -1669,6 +1667,17 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Set how many orders the lapse sweep reads per page.
+	 *
+	 * @param int|null $page_size Orders per page; null restores the class default.
+	 */
+	private function set_sweep_page_size( ?int $page_size ): void {
+		$sweep_page_size = new \ReflectionProperty( Premium_Newsletters::class, 'sweep_page_size' );
+		$sweep_page_size->setAccessible( true );
+		$sweep_page_size->setValue( null, $page_size ?? $sweep_page_size->getDefaultValue() );
+	}
+
+	/**
 	 * Paying for a product a premium newsletter gate's one-time purchase rule
 	 * names adds the buyer to the gated lists.
 	 */
@@ -1921,30 +1930,31 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A sweep that reaches its page cap picks up from the last order it read on
-	 * the next run, so lapses beyond one run's worth of orders are still checked.
+	 * A sweep that reaches its page cap picks up on the next run from the second
+	 * of the last order it read, so an order created in that same second after
+	 * the cap is still checked.
 	 */
-	public function test_capped_sweep_resumes_where_it_stopped() {
-		$sweep_page_size = new \ReflectionProperty( Premium_Newsletters::class, 'sweep_page_size' );
-		$sweep_page_size->setAccessible( true );
-		$sweep_page_size->setValue( null, 1 );
+	public function test_capped_sweep_resumes_from_the_second_it_stopped_in() {
+		$this->set_sweep_page_size( 1 );
 
 		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $this->create_premium_list() ] );
 		$last_position = strtotime( '-30 days -2 hours' );
 		$this->set_sweep_position( $last_position );
 
-		// Other buyers' orders fill every page the first run reads.
+		// Other buyers' orders fill every page the first run reads. The last of them
+		// shares its creation second with the reader's order, which comes after it.
+		$cap_second = $last_position + Premium_Newsletters::SWEEP_MAX_PAGES * MINUTE_IN_SECONDS;
 		for ( $i = 1; $i <= Premium_Newsletters::SWEEP_MAX_PAGES; $i++ ) {
 			$this->create_order( 0, 'completed', $last_position + $i * MINUTE_IN_SECONDS, [ 'billing_email' => "other-buyer-$i@example.test" ] );
 		}
-		$this->create_order( $user_id, 'completed', $last_position + ( Premium_Newsletters::SWEEP_MAX_PAGES + 1 ) * MINUTE_IN_SECONDS );
+		$this->create_order( $user_id, 'completed', $cap_second );
 
 		Premium_Newsletters::enqueue_lapsed_one_time_purchases();
 		$this->assertNotContains( $user_id, $this->get_queued_user_ids(), 'The first run stops at its cap before this order.' );
 
 		Premium_Newsletters::enqueue_lapsed_one_time_purchases();
-		$this->assertContains( $user_id, $this->get_queued_user_ids(), 'The next run must pick up where the first stopped.' );
+		$this->assertContains( $user_id, $this->get_queued_user_ids(), 'The next run must pick up within the second the first stopped in.' );
 	}
 
 	/**
@@ -2042,13 +2052,79 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
 		$this->create_order( $user_id, 'completed', strtotime( '-30 days -2 days' ) );
 		$this->set_sweep_position( strtotime( '-30 days -3 days' ) );
+		Premium_Newsletters::register_access_check_event();
 
-		Premium_Newsletters::unschedule_access_check_event();
+		// Access control stands down, and a sweep attempted meanwhile does nothing.
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		Premium_Newsletters::register_access_check_event();
+		Premium_Newsletters::enqueue_lapsed_one_time_purchases();
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
 		Premium_Newsletters::process_access_check_queue();
 
 		$calls = $this->get_list_calls_for( $email );
 		$this->assertCount( 1, $calls );
 		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
+	}
+
+	/**
+	 * Re-arming the hourly event runs on `init`, so in a page load. The lapse
+	 * sweep waits for the scheduled run instead, since after an off window its
+	 * catch-up can cover days of orders.
+	 */
+	public function test_rearming_the_event_leaves_the_sweep_to_cron() {
+		global $wc_mocks_get_orders_calls;
+		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $this->create_premium_list() ] );
+		$this->set_sweep_position( strtotime( '-30 days -3 days' ) );
+		wp_clear_scheduled_hook( Premium_Newsletters::SCHEDULED_HOOK );
+		$wc_mocks_get_orders_calls = 0;
+
+		Premium_Newsletters::register_access_check_event();
+
+		$this->assertNotFalse( wp_next_scheduled( Premium_Newsletters::SCHEDULED_HOOK ) );
+		$this->assertSame( 0, (int) $wc_mocks_get_orders_calls, 'Re-arming must not walk orders.' );
+	}
+
+	/**
+	 * A sweep that throws must not hold up the checks already queued, and keeps
+	 * its position so the next run retries the same orders.
+	 */
+	public function test_failing_sweep_still_runs_queued_checks() {
+		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$email        = get_userdata( $user_id )->user_email;
+		$list_post_id = $this->create_premium_list();
+		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $list_post_id ] );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
+		$last_position = strtotime( '-30 days -1 hour' );
+		$this->set_sweep_position( $last_position );
+
+		// An order in the sweep's window whose line items can't be read.
+		$lapsed_at = gmdate( 'Y-m-d H:i:s', strtotime( '-30 days -30 minutes' ) );
+		new class(
+			[
+				'status'       => 'completed',
+				'date_created' => $lapsed_at,
+				'date_paid'    => $lapsed_at,
+			]
+		) extends \WC_Order {
+			/**
+			 * Fail the way an unreadable order would.
+			 *
+			 * @throws \RuntimeException Always.
+			 */
+			public function get_items() {
+				throw new \RuntimeException( 'Unreadable order.' );
+			}
+		};
+		Premium_Newsletters::maybe_enqueue_access_check( time(), [ 'user_id' => $user_id ], null );
+
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $email );
+		$this->assertCount( 1, $calls, 'The queued check must still run.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
+		$positions = get_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION );
+		$this->assertSame( $last_position, $positions['30 days'] ?? null, 'A failed sweep must keep its position.' );
 	}
 
 	/**
