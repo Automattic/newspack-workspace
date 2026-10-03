@@ -50,16 +50,6 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
-		self::load_fixtures();
-	}
-
-	/**
-	 * Load the mocks and flags every case needs.
-	 *
-	 * A separate-process case has to call this itself: PHPUnit runs only the test
-	 * method in the child process, not set_up_before_class().
-	 */
-	private static function load_fixtures() {
 		// Gating is flag-gated, and these tests exercise enforcement. Defined here
 		// rather than relied on from another class: constants are process-wide, so
 		// without this the group passes only when an alphabetically-earlier class
@@ -131,6 +121,9 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		wp_cache_delete( 'alloptions', 'options' );
 		delete_option( Premium_Newsletters::QUEUE_OPTION );
 		delete_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION );
+		$sweep_page_size = new \ReflectionProperty( Premium_Newsletters::class, 'sweep_page_size' );
+		$sweep_page_size->setAccessible( true );
+		$sweep_page_size->setValue( null, 100 );
 		parent::tear_down();
 	}
 
@@ -1666,6 +1659,16 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Record that the lapse sweep for the 30-day rule has checked orders created
+	 * up to the given time.
+	 *
+	 * @param int $created Order creation time, as a Unix timestamp.
+	 */
+	private function set_sweep_position( int $created ): void {
+		update_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION, [ '30 days' => $created ], false );
+	}
+
+	/**
 	 * Paying for a product a premium newsletter gate's one-time purchase rule
 	 * names adds the buyer to the gated lists.
 	 */
@@ -1709,32 +1712,54 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A gate can name a variation while the order event carries only the parent
-	 * product's ID, so buying the variation has to queue a check all the same.
+	 * Variations of a product whose gate names one of them.
+	 *
+	 * @return array[]
 	 */
-	public function test_purchase_of_gated_variation_queues_check() {
-		$user_id          = $this->factory->user->create( [ 'role' => 'subscriber' ] );
-		$parent_id        = $this->factory->post->create( [ 'post_type' => 'product' ] );
-		$variation_id     = $this->factory->post->create(
+	public function data_variation_purchases() {
+		return [
+			'the gated variation'    => [ true ],
+			'an ungated sibling one' => [ false ],
+		];
+	}
+
+	/**
+	 * A gate can name one variation while the order event carries only the parent
+	 * product's ID. Buying that variation queues a check; buying a sibling doesn't,
+	 * since its check could re-add lists the reader had left.
+	 *
+	 * @dataProvider data_variation_purchases
+	 *
+	 * @param bool $buys_gated_variation Whether the order is for the variation the gate names.
+	 */
+	public function test_variation_purchase_queues_check_only_for_the_gated_variation( $buys_gated_variation ) {
+		$user_id              = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$parent_id            = $this->factory->post->create( [ 'post_type' => 'product' ] );
+		$gated_variation_id   = $this->factory->post->create(
 			[
 				'post_type'   => 'product_variation',
 				'post_parent' => $parent_id,
 			]
 		);
-		$this->post_ids[] = $parent_id;
-		$this->post_ids[] = $variation_id;
-		$this->create_one_time_purchase_gate( $this->thirty_day_rule( [ $variation_id ] ), [ $this->create_premium_list() ] );
+		$sibling_variation_id = $this->factory->post->create(
+			[
+				'post_type'   => 'product_variation',
+				'post_parent' => $parent_id,
+			]
+		);
+		array_push( $this->post_ids, $parent_id, $gated_variation_id, $sibling_variation_id );
+		$this->create_one_time_purchase_gate( $this->thirty_day_rule( [ $gated_variation_id ] ), [ $this->create_premium_list() ] );
 
 		$variation_item = new \WC_Order_Item_Product(
 			[
 				'product_id'   => $parent_id,
-				'variation_id' => $variation_id,
+				'variation_id' => $buys_gated_variation ? $gated_variation_id : $sibling_variation_id,
 			]
 		);
 		$order          = $this->create_order( $user_id, 'pending', time(), [ 'items' => [ $variation_item ] ] );
 		$this->change_order_status( $order, 'processing' );
 
-		$this->assertContains( $user_id, $this->get_queued_user_ids() );
+		$this->assertSame( $buys_gated_variation, in_array( $user_id, $this->get_queued_user_ids(), true ) );
 	}
 
 	/**
@@ -1756,7 +1781,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 *
 	 * @return array[]
 	 */
-	public function data_order_transitions_that_keep_access() {
+	public function data_order_transitions_that_leave_paid_status_unchanged() {
 		return [
 			'pending to failed'       => [ 'pending', 'failed' ],
 			'pending to on-hold'      => [ 'pending', 'on-hold' ],
@@ -1768,12 +1793,12 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 * Only a move into or out of a paid status changes what the order grants, so
 	 * other transitions queue nothing.
 	 *
-	 * @dataProvider data_order_transitions_that_keep_access
+	 * @dataProvider data_order_transitions_that_leave_paid_status_unchanged
 	 *
 	 * @param string $status_from Status before the transition.
 	 * @param string $status_to   Status after the transition.
 	 */
-	public function test_order_transition_that_keeps_access_does_not_queue_check( $status_from, $status_to ) {
+	public function test_order_transition_that_leaves_paid_status_unchanged_does_not_queue_check( $status_from, $status_to ) {
 		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $this->create_premium_list() ] );
 
@@ -1819,7 +1844,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 		// Bought 30 days and 30 minutes ago, so access ran out since the last run an hour ago.
 		$this->create_order( $user_id, 'completed', strtotime( '-30 days -30 minutes' ) );
-		update_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION, time() - HOUR_IN_SECONDS );
+		$this->set_sweep_position( strtotime( '-30 days -1 hour' ) );
 
 		Premium_Newsletters::process_access_check_queue();
 
@@ -1829,10 +1854,10 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With no earlier run to measure from, the first run records its time and
-	 * checks no purchase, rather than re-checking every purchase ever made.
+	 * The first sweep for a duration starts from that moment: it records its
+	 * position and checks no earlier purchase.
 	 */
-	public function test_first_sweep_records_its_time_without_checking_earlier_lapses() {
+	public function test_first_sweep_records_its_position_without_checking_earlier_lapses() {
 		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$email        = get_userdata( $user_id )->user_email;
 		$list_post_id = $this->create_premium_list();
@@ -1844,7 +1869,82 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		Premium_Newsletters::process_access_check_queue();
 
 		$this->assertEmpty( $this->get_list_calls_for( $email ) );
-		$this->assertGreaterThanOrEqual( $run_started, (int) get_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION ) );
+		$positions = get_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION );
+		$this->assertGreaterThanOrEqual( strtotime( '-30 days', $run_started ), $positions['30 days'] ?? 0 );
+	}
+
+	/**
+	 * The rule grants only to orders created after the cutoff, so an order created
+	 * one second after the last position is the first one the next sweep owes a
+	 * check.
+	 */
+	public function test_sweep_reaches_an_order_created_one_second_after_its_last_position() {
+		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$email        = get_userdata( $user_id )->user_email;
+		$list_post_id = $this->create_premium_list();
+		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $list_post_id ] );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
+		$last_position = strtotime( '-30 days -1 hour' );
+		$this->create_order( $user_id, 'completed', $last_position + 1 );
+		$this->set_sweep_position( $last_position );
+
+		Premium_Newsletters::enqueue_lapsed_one_time_purchases();
+
+		$this->assertContains( $user_id, $this->get_queued_user_ids() );
+	}
+
+	/**
+	 * Default order queries return refunds too, and a line-item refund carries
+	 * the gated product with no customer. The sweep has to step over it and reach
+	 * the lapsed orders after it.
+	 */
+	public function test_sweep_steps_over_refunds_of_gated_purchases() {
+		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$email        = get_userdata( $user_id )->user_email;
+		$list_post_id = $this->create_premium_list();
+		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $list_post_id ] );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
+		new \WC_Order_Refund(
+			[
+				'date_created' => gmdate( 'Y-m-d H:i:s', strtotime( '-30 days -40 minutes' ) ),
+				'items'        => [ new \WC_Order_Item_Product( [ 'product_id' => self::ONE_TIME_PRODUCT_ID ] ) ],
+			]
+		);
+		$this->create_order( $user_id, 'completed', strtotime( '-30 days -20 minutes' ) );
+		$this->set_sweep_position( strtotime( '-30 days -1 hour' ) );
+
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $email );
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
+	}
+
+	/**
+	 * A sweep that reaches its page cap picks up from the last order it read on
+	 * the next run, so lapses beyond one run's worth of orders are still checked.
+	 */
+	public function test_capped_sweep_resumes_where_it_stopped() {
+		$sweep_page_size = new \ReflectionProperty( Premium_Newsletters::class, 'sweep_page_size' );
+		$sweep_page_size->setAccessible( true );
+		$sweep_page_size->setValue( null, 1 );
+
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $this->create_premium_list() ] );
+		$last_position = strtotime( '-30 days -2 hours' );
+		$this->set_sweep_position( $last_position );
+
+		// Other buyers' orders fill every page the first run reads.
+		for ( $i = 1; $i <= Premium_Newsletters::SWEEP_MAX_PAGES; $i++ ) {
+			$this->create_order( 0, 'completed', $last_position + $i * MINUTE_IN_SECONDS, [ 'billing_email' => "other-buyer-$i@example.test" ] );
+		}
+		$this->create_order( $user_id, 'completed', $last_position + ( Premium_Newsletters::SWEEP_MAX_PAGES + 1 ) * MINUTE_IN_SECONDS );
+
+		Premium_Newsletters::enqueue_lapsed_one_time_purchases();
+		$this->assertNotContains( $user_id, $this->get_queued_user_ids(), 'The first run stops at its cap before this order.' );
+
+		Premium_Newsletters::enqueue_lapsed_one_time_purchases();
+		$this->assertContains( $user_id, $this->get_queued_user_ids(), 'The next run must pick up where the first stopped.' );
 	}
 
 	/**
@@ -1859,7 +1959,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
 		$this->create_order( $user_id, 'completed', strtotime( '-30 days -30 minutes' ) );
 		$this->create_order( $user_id, 'completed', strtotime( '-5 days' ) );
-		update_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION, time() - HOUR_IN_SECONDS );
+		$this->set_sweep_position( strtotime( '-30 days -1 hour' ) );
 
 		Premium_Newsletters::enqueue_lapsed_one_time_purchases();
 		$this->assertSame( Premium_Newsletters::SOURCE_ONE_TIME_PURCHASE_ENDED, $this->get_queued_source( $user_id ), 'The lapse of the first purchase must still queue a check.' );
@@ -1893,7 +1993,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		// Subscribed to the one-time list; left the subscription list on their own.
 		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $one_time_list_id ];
 		$this->create_order( $user_id, 'completed', strtotime( '-30 days -30 minutes' ) );
-		update_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION, time() - HOUR_IN_SECONDS );
+		$this->set_sweep_position( strtotime( '-30 days -1 hour' ) );
 
 		Premium_Newsletters::process_access_check_queue();
 
@@ -1904,15 +2004,51 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Standing the queue down forgets the last run, so turning access control back
-	 * on doesn't sweep every lapse from the time it was off in one run.
+	 * A reader who pays again in the same hour an older purchase lapses keeps the
+	 * check the payment queued, so the lapse can't stop them gaining the lists.
 	 */
-	public function test_unschedule_forgets_last_sweep() {
-		update_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION, time() - DAY_IN_SECONDS );
+	public function test_lapse_does_not_replace_a_pending_purchase_check() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$email        = get_userdata( $user_id )->user_email;
+		$list_post_id = $this->create_premium_list();
+		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $list_post_id ] );
+		$this->create_order( $user_id, 'completed', strtotime( '-30 days -30 minutes' ) );
+		$this->set_sweep_position( strtotime( '-30 days -1 hour' ) );
+
+		$order = $this->create_order( $user_id, 'pending', time() );
+		$this->change_order_status( $order, 'processing' );
+		Premium_Newsletters::enqueue_lapsed_one_time_purchases();
+
+		$this->assertSame( Premium_Newsletters::SOURCE_ONE_TIME_PURCHASE, $this->get_queued_source( $user_id ) );
+
+		Premium_Newsletters::process_access_check_queue();
+
+		$calls = $this->get_list_calls_for( $email );
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * Lapses come from order dates, not stored events, so the sweep keeps its
+	 * position while access control stands down and catches up when it returns.
+	 */
+	public function test_sweep_catches_up_on_lapses_from_while_access_control_was_off() {
+		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$email        = get_userdata( $user_id )->user_email;
+		$list_post_id = $this->create_premium_list();
+		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $list_post_id ] );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $email ] = [ 'newspack-' . $list_post_id ];
+		$this->create_order( $user_id, 'completed', strtotime( '-30 days -2 days' ) );
+		$this->set_sweep_position( strtotime( '-30 days -3 days' ) );
 
 		Premium_Newsletters::unschedule_access_check_event();
+		Premium_Newsletters::process_access_check_queue();
 
-		$this->assertFalse( get_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION, false ) );
+		$calls = $this->get_list_calls_for( $email );
+		$this->assertCount( 1, $calls );
+		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
 	}
 
 	/**
@@ -1926,7 +2062,6 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 * @preserveGlobalState disabled
 	 */
 	public function test_one_time_purchases_queue_nothing_while_memberships_is_active() {
-		self::load_fixtures();
 		require dirname( __DIR__, 2 ) . '/mocks/wc-memberships-active-mock.php';
 		global $wc_mocks_get_orders_calls;
 
@@ -1938,7 +2073,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$this->assertEmpty( get_option( Premium_Newsletters::QUEUE_OPTION, [] ), 'A purchase must not queue a check while Memberships is active.' );
 
 		$this->create_order( $user_id, 'completed', strtotime( '-30 days -30 minutes' ) );
-		update_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION, time() - HOUR_IN_SECONDS );
+		$this->set_sweep_position( strtotime( '-30 days -1 hour' ) );
 		$wc_mocks_get_orders_calls = 0;
 
 		Premium_Newsletters::enqueue_lapsed_one_time_purchases();

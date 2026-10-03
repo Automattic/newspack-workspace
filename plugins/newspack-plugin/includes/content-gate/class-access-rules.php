@@ -1151,6 +1151,8 @@ class Access_Rules {
 	 * Shared by the rule, its listing, and the premium newsletter lapse sweep so
 	 * they cannot drift.
 	 *
+	 * @internal Public for Premium_Newsletters; not an API for other plugins.
+	 *
 	 * @param array    $value Sanitized rule value.
 	 * @param int|null $now   Unix timestamp to measure back from; null for now.
 	 * @return int|null|false Unix timestamp; null for lifetime access (no cutoff);
@@ -1301,8 +1303,8 @@ class Access_Rules {
 	 * Whether an order has a line item for one of the given products, matching
 	 * on the variation ID as well as the parent product ID.
 	 *
-	 * Public so the premium newsletter lapse sweep matches orders the way the
-	 * rule does.
+	 * @internal Public so Premium_Newsletters matches orders the way the rule
+	 *           does; not an API for other plugins.
 	 *
 	 * @param \WC_Order $order       Order.
 	 * @param int[]     $product_ids Product IDs to look for.
