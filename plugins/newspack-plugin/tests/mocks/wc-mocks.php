@@ -2057,13 +2057,18 @@ function wc_get_orders( $args ) {
 			}
 		);
 	}
-	// Real WC sorts by creation date, newest first unless `order` says ASC, and
-	// callers that page add ID as a tie-breaker; both directions apply to both keys.
+	// Real WC sorts by creation date, newest first unless `order` says ASC. The ID
+	// tie-breaker stands in for `'orderby' => 'date ID'`; with `date` alone real WC
+	// leaves orders created in the same second in no fixed order.
 	$descending = 'ASC' !== strtoupper( (string) ( $args['order'] ?? '' ) );
+	$sort_key   = function( $order ) {
+		$date_created = $order->get_date_created();
+		return [ $date_created ? $date_created->getTimestamp() : 0, $order->get_id() ];
+	};
 	usort(
 		$orders,
-		function( $a, $b ) use ( $descending ) {
-			$comparison = [ $a->get_date_created()->getTimestamp(), $a->get_id() ] <=> [ $b->get_date_created()->getTimestamp(), $b->get_id() ];
+		function( $a, $b ) use ( $descending, $sort_key ) {
+			$comparison = $sort_key( $a ) <=> $sort_key( $b );
 			return $descending ? -$comparison : $comparison;
 		}
 	);

@@ -1958,6 +1958,25 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * When a single second holds more orders than one run reads, the sweep moves
+	 * past that second rather than re-reading the same orders on every run.
+	 */
+	public function test_capped_sweep_moves_on_when_one_second_fills_a_run() {
+		$this->set_sweep_page_size( 1 );
+		$this->create_one_time_purchase_gate( $this->thirty_day_rule(), [ $this->create_premium_list() ] );
+		$last_position = strtotime( '-30 days -2 hours' );
+		$this->set_sweep_position( $last_position );
+		for ( $i = 0; $i <= Premium_Newsletters::SWEEP_MAX_PAGES; $i++ ) {
+			$this->create_order( 0, 'completed', $last_position + 1, [ 'billing_email' => "bulk-buyer-$i@example.test" ] );
+		}
+
+		Premium_Newsletters::enqueue_lapsed_one_time_purchases();
+
+		$positions = get_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION );
+		$this->assertGreaterThan( $last_position, $positions['30 days'] ?? 0 );
+	}
+
+	/**
 	 * A reader who bought again before the first purchase ran out keeps the lists
 	 * when the first purchase lapses.
 	 */
@@ -2086,10 +2105,11 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A sweep that throws must not hold up the checks already queued, and keeps
-	 * its position so the next run retries the same orders.
+	 * Checks already queued run before the sweep starts, so a sweep that dies,
+	 * even on a fatal error no catch can stop, can't hold them up. A sweep that
+	 * fails keeps its position so the next run retries the same orders.
 	 */
-	public function test_failing_sweep_still_runs_queued_checks() {
+	public function test_queued_checks_run_before_a_failing_sweep() {
 		$user_id      = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$email        = get_userdata( $user_id )->user_email;
 		$list_post_id = $this->create_premium_list();
@@ -2098,9 +2118,10 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$last_position = strtotime( '-30 days -1 hour' );
 		$this->set_sweep_position( $last_position );
 
-		// An order in the sweep's window whose line items can't be read.
-		$lapsed_at = gmdate( 'Y-m-d H:i:s', strtotime( '-30 days -30 minutes' ) );
-		new class(
+		// An order in the sweep's window whose line items can't be read. It records
+		// how many ESP calls had happened by the time the sweep reached it.
+		$lapsed_at        = gmdate( 'Y-m-d H:i:s', strtotime( '-30 days -30 minutes' ) );
+		$unreadable_order = new class(
 			[
 				'status'       => 'completed',
 				'date_created' => $lapsed_at,
@@ -2108,11 +2129,19 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 			]
 		) extends \WC_Order {
 			/**
+			 * ESP calls made before the sweep read this order.
+			 *
+			 * @var int|null
+			 */
+			public static $esp_calls_before_sweep = null;
+
+			/**
 			 * Fail the way an unreadable order would.
 			 *
 			 * @throws \RuntimeException Always.
 			 */
 			public function get_items() {
+				self::$esp_calls_before_sweep = count( \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls );
 				throw new \RuntimeException( 'Unreadable order.' );
 			}
 		};
@@ -2120,8 +2149,9 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 		Premium_Newsletters::process_access_check_queue();
 
+		$this->assertSame( 1, $unreadable_order::$esp_calls_before_sweep, 'The queued check must run before the sweep starts.' );
 		$calls = $this->get_list_calls_for( $email );
-		$this->assertCount( 1, $calls, 'The queued check must still run.' );
+		$this->assertCount( 1, $calls );
 		$this->assertContains( 'newspack-' . $list_post_id, $calls[0]['lists_to_remove'] );
 		$positions = get_option( Premium_Newsletters::ONE_TIME_PURCHASE_SWEEP_OPTION );
 		$this->assertSame( $last_position, $positions['30 days'] ?? null, 'A failed sweep must keep its position.' );

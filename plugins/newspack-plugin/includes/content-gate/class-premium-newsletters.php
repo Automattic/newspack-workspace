@@ -228,7 +228,7 @@ class Premium_Newsletters {
 	 * Queue a remove-only check for each reader whose one-time purchase access
 	 * ran out since the last sweep.
 	 *
-	 * Runs at the start of every scheduled queue run, so a lapse reaches the ESP
+	 * Runs as part of every scheduled queue run, so a lapse reaches the ESP
 	 * within about an hour. The sweep keeps no state per order: it walks paid
 	 * orders by creation date, so an order placed before the sweep existed is
 	 * still checked when its access ends. A reader who bought again keeps their
@@ -241,7 +241,7 @@ class Premium_Newsletters {
 	 *
 	 * @return void
 	 */
-	public static function enqueue_lapsed_one_time_purchases() {
+	public static function enqueue_lapsed_one_time_purchases(): void {
 		if ( ! self::is_access_control_active() || ! function_exists( 'wc_get_orders' ) ) {
 			return;
 		}
@@ -836,19 +836,21 @@ class Premium_Newsletters {
 	}
 
 	/**
-	 * Run the one-time purchase lapse sweep, then process all pending access
-	 * checks from the queue.
+	 * Process all pending access checks, then run the one-time purchase lapse
+	 * sweep and process the checks it queued.
 	 *
-	 * Registered as the callback for the SCHEDULED_HOOK cron event. The sweep
-	 * runs first so its checks join this run. A sweep that fails keeps its
-	 * previous position, so the next run retries the same orders, and the queued
-	 * checks run regardless. The failure goes to the persistent Newspack log as
+	 * Registered as the callback for the SCHEDULED_HOOK cron event. Checks
+	 * already queued run before the sweep, so a sweep that dies, even on a fatal
+	 * error no catch can stop, delays only lapses rather than every reader's
+	 * check. A sweep that fails keeps its previous position, so the next run
+	 * retries the same orders. The failure goes to the persistent Newspack log as
 	 * well, since a sweep that keeps failing is otherwise invisible: readers whose
 	 * access ended stay on premium lists, and nothing else reports it.
 	 *
 	 * @return void
 	 */
 	public static function process_access_check_queue() {
+		self::process_queued_checks();
 		try {
 			self::enqueue_lapsed_one_time_purchases();
 		} catch ( \Throwable $e ) {
@@ -879,7 +881,7 @@ class Premium_Newsletters {
 	 *
 	 * @return void
 	 */
-	private static function process_queued_checks() {
+	private static function process_queued_checks(): void {
 		$queue = get_option( self::QUEUE_OPTION, [] );
 		if ( empty( $queue ) ) {
 			return;
