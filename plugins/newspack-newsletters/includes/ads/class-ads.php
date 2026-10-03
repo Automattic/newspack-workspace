@@ -97,8 +97,8 @@ final class Ads {
 	 *
 	 * The post type is in REST for the block editor and the ads list, but an ad's
 	 * price, campaign dates and delivery counts are for the people managing it, and
-	 * nothing reads them from a logged-out request. Guarding the route rather than
-	 * each meta key keeps fields added later behind the same check. The match is on
+	 * nothing reads them from a logged-out request. Refusing the whole response rather
+	 * than each meta key keeps fields added later behind the same check. The match is on
 	 * the controller the request was dispatched to, not the route text, because
 	 * core matches routes case-insensitively.
 	 *

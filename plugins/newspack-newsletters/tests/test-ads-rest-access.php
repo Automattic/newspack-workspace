@@ -51,6 +51,7 @@ class Ads_REST_Access_Test extends WP_UnitTestCase {
 		return [
 			'/wp/v2/' . Ads::CPT,
 			'/wp/v2/' . Ads::CPT . '/' . $this->ad_id,
+			// Core matches routes case-insensitively, so this row is what holds the guard to the dispatched controller rather than the route text.
 			'/wp/v2/' . strtoupper( Ads::CPT ) . '/' . $this->ad_id,
 		];
 	}
