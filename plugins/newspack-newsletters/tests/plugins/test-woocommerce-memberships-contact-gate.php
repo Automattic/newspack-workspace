@@ -38,7 +38,6 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 	 */
 	private static function clear_user_in_scope() {
 		$scope = new ReflectionProperty( Woocommerce_Memberships::class, 'user_id_in_scope' );
-		$scope->setAccessible( true );
 		$scope->setValue( null, null );
 	}
 
@@ -113,8 +112,8 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * No provider is configured in this suite, so a request that reached the
-	 * write path would come back as an error.
+	 * A request that reached the write path would come back as an error here,
+	 * with no provider or with no list left for it.
 	 */
 	public function test_a_request_with_no_open_list_answers_as_a_subscribe() {
 		wp_set_current_user( $this->member_id );
