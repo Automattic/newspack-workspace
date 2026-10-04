@@ -623,25 +623,36 @@ function process_form() {
 		}
 	}
 
-	$result = \Newspack_Newsletters_Contacts::subscribe(
-		[
-			'name'     => $name ?? null,
-			'email'    => $email,
-			'metadata' => $metadata,
-		],
-		$lists,
-		true, // Async.
-		'User subscribed via Newsletters Subscription block'
-	);
+	$contact = [
+		'name'     => $name ?? null,
+		'email'    => $email,
+		'metadata' => $metadata,
+	];
 
-	/**
-	 * Fires after subscribing a user to a list.
-	 *
-	 * @param string              $email  Email address of the reader.
-	 * @param bool|array|WP_Error $result Contact data if it was added, True if it async subscription strategy was used or error otherwise.
-	 * @param array               $metadata Some metadata about the subscription. Always contains `current_page_url`, `newspack_popup_id` and `newsletters_subscription_method` keys.
-	 */
-	\do_action( 'newspack_newsletters_subscribe_form_processed', $email, $result, $metadata );
+	// When the address may join none of the requested lists, answer as if it had
+	// subscribed and write nothing. Since this filter is what removes lists a
+	// membership plan restricts, an error would tell the visitor whether the
+	// address holds that plan. The write path applies the same filter again.
+	$provider_name = $provider ? $provider->service : '';
+	if ( empty( \apply_filters( 'newspack_newsletters_contact_lists', $lists, $contact, $provider_name ) ) ) {
+		$result = true;
+	} else {
+		$result = \Newspack_Newsletters_Contacts::subscribe(
+			$contact,
+			$lists,
+			true, // Async.
+			'User subscribed via Newsletters Subscription block'
+		);
+
+		/**
+		 * Fires after subscribing a user to a list.
+		 *
+		 * @param string              $email  Email address of the reader.
+		 * @param bool|array|WP_Error $result Contact data if it was added, True if it async subscription strategy was used or error otherwise.
+		 * @param array               $metadata Some metadata about the subscription. Always contains `current_page_url`, `newspack_popup_id` and `newsletters_subscription_method` keys.
+		 */
+		\do_action( 'newspack_newsletters_subscribe_form_processed', $email, $result, $metadata );
+	}
 
 	// The async subscription strategy returns true.
 	if ( true === $result ) {
