@@ -629,29 +629,34 @@ function process_form() {
 		'metadata' => $metadata,
 	];
 
-	// When the address may join none of the requested lists, answer as if it had
-	// subscribed and write nothing. Since this filter is what removes lists a
-	// membership plan restricts, an error would tell the visitor whether the
-	// address holds that plan. The write path applies the same filter again.
+	// The write path leaves out lists this address may not join. When none would
+	// remain, write nothing and answer as a subscribe does, so that decision is
+	// not reported back as an error. A request with a list left in still reaches
+	// the email provider and can still fail there.
 	$provider_name = $provider ? $provider->service : '';
-	if ( empty( \apply_filters( 'newspack_newsletters_contact_lists', $lists, $contact, $provider_name ) ) ) {
-		$result = true;
-	} else {
+	$has_open_list = ! empty( \apply_filters( 'newspack_newsletters_contact_lists', $lists, $contact, $provider_name ) );
+	if ( $has_open_list ) {
 		$result = \Newspack_Newsletters_Contacts::subscribe(
 			$contact,
 			$lists,
 			true, // Async.
 			'User subscribed via Newsletters Subscription block'
 		);
+	} else {
+		$result = new \WP_Error( 'newspack_newsletters_no_open_lists', 'None of the requested lists is open to this address.' );
+	}
 
-		/**
-		 * Fires after subscribing a user to a list.
-		 *
-		 * @param string              $email  Email address of the reader.
-		 * @param bool|array|WP_Error $result Contact data if it was added, True if it async subscription strategy was used or error otherwise.
-		 * @param array               $metadata Some metadata about the subscription. Always contains `current_page_url`, `newspack_popup_id` and `newsletters_subscription_method` keys.
-		 */
-		\do_action( 'newspack_newsletters_subscribe_form_processed', $email, $result, $metadata );
+	/**
+	 * Fires after subscribing a user to a list.
+	 *
+	 * @param string              $email  Email address of the reader.
+	 * @param bool|array|WP_Error $result Contact data if it was added, True if it async subscription strategy was used or error otherwise.
+	 * @param array               $metadata Some metadata about the subscription. Always contains `current_page_url`, `newspack_popup_id` and `newsletters_subscription_method` keys.
+	 */
+	\do_action( 'newspack_newsletters_subscribe_form_processed', $email, $result, $metadata );
+
+	if ( ! $has_open_list ) {
+		$result = true;
 	}
 
 	// The async subscription strategy returns true.

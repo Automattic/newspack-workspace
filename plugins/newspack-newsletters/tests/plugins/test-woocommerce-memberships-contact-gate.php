@@ -10,36 +10,9 @@ use Newspack\Newsletters\Subscription_List;
 use Newspack\Newsletters\Subscription_Lists;
 use function Newspack_Newsletters\Blocks\Subscribe\process_form;
 
-// The gate runs only when these exist. Nothing else in the suite defines them,
-// and a list counts as restricted only when a test names it below, so other
-// tests see every valid list as open.
-if ( ! class_exists( 'WC_Memberships_Loader' ) ) {
-	class WC_Memberships_Loader {} // phpcs:ignore Generic.Classes.OpeningBraceSameLine
-}
-if ( ! function_exists( 'wc_memberships_is_post_content_restricted' ) ) {
-	function wc_memberships_is_post_content_restricted( $post_id ) {
-		return isset( WCM_Gate_Fixture::$restricted[ $post_id ] );
-	}
-}
-if ( ! function_exists( 'wc_memberships_user_can' ) ) {
-	function wc_memberships_user_can( $user_id, $action, $target ) {
-		$post_id = $target['post'] ?? 0;
-		return $user_id && in_array( (int) $user_id, WCM_Gate_Fixture::$restricted[ $post_id ] ?? [], true );
-	}
-}
-
-class WCM_Gate_Fixture {
-	/**
-	 * Restricted list post ID => user IDs allowed to view it.
-	 *
-	 * @var array<int,int[]>
-	 */
-	public static $restricted = [];
-}
-
 /**
- * The membership gate checks the contact being written, and the subscribe form
- * does not reveal what it decided.
+ * The membership gate on newsletter lists checks the contact being written, and
+ * the subscribe form does not answer with an error when it leaves no list in.
  *
  * @group subscribe-block
  */
@@ -55,7 +28,7 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 		$this->non_member_id = self::factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
 		$this->open_list       = $this->create_list( 'Open' );
 		$this->restricted_list = $this->create_list( 'Members only' );
-		WCM_Gate_Fixture::$restricted = [ $this->restricted_list => [ $this->member_id ] ];
+		WC_Memberships_Gate_Fixture::$restricted = [ $this->restricted_list => [ $this->member_id ] ];
 		self::clear_user_in_scope();
 	}
 
@@ -70,7 +43,7 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
-		WCM_Gate_Fixture::$restricted = [];
+		WC_Memberships_Gate_Fixture::$restricted = [];
 		self::clear_user_in_scope();
 		wp_set_current_user( 0 );
 		unset( $_REQUEST[ \Newspack_Newsletters\Blocks\Subscribe\FORM_ACTION ], $_REQUEST['npe'], $_REQUEST['lists'] );
@@ -106,12 +79,12 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 		return apply_filters( 'newspack_newsletters_contact_lists', [ $this->public_id( $this->open_list ), $this->public_id( $this->restricted_list ) ], $contact, 'mailchimp' );
 	}
 
-	public function test_a_member_session_cannot_pass_the_gate_for_another_address() {
+	public function test_the_gate_checks_the_contact_not_the_session() {
 		wp_set_current_user( $this->member_id );
 		$this->assertSame( [ $this->public_id( $this->open_list ) ], $this->gate( [ 'email' => 'reader@example.test' ] ) );
 	}
 
-	public function test_an_entitled_address_passes_without_a_session() {
+	public function test_an_entitled_contact_passes_without_a_session() {
 		$this->assertSame(
 			[ $this->public_id( $this->open_list ), $this->public_id( $this->restricted_list ) ],
 			$this->gate( [ 'email' => 'member@example.test' ] )
@@ -122,6 +95,15 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 		$this->assertSame( [ $this->public_id( $this->open_list ) ], $this->gate( [ 'email' => 'nobody@example.test' ] ) );
 	}
 
+	public function test_a_contact_without_a_valid_email_is_gated_whatever_the_session() {
+		wp_set_current_user( $this->member_id );
+		$this->assertSame( [ $this->public_id( $this->open_list ) ], $this->gate( [ 'email' => '' ] ) );
+	}
+
+	/**
+	 * The lists offered on screen take no contact, so they keep following the
+	 * session; this guards them from the contact handling above.
+	 */
 	public function test_lists_offered_on_screen_still_follow_the_session() {
 		wp_set_current_user( $this->member_id );
 		$this->assertSame(
@@ -131,19 +113,19 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An error here would tell a member whether another address holds the plan.
+	 * No provider is configured in this suite, so a request that reached the
+	 * write path would come back as an error.
 	 */
-	public function test_a_request_left_with_no_list_answers_as_a_subscribe_and_writes_nothing() {
+	public function test_a_request_with_no_open_list_answers_as_a_subscribe() {
 		wp_set_current_user( $this->member_id );
 		$_REQUEST[ \Newspack_Newsletters\Blocks\Subscribe\FORM_ACTION ] = '1';
 		$_REQUEST['npe']   = 'reader@example.test';
 		$_REQUEST['lists'] = [ $this->public_id( $this->restricted_list ) ];
-		$writes = 0;
-		$count  = function () use ( &$writes ) {
-			++$writes;
+		$processed = [];
+		$record    = function ( $email, $result ) use ( &$processed ) {
+			$processed[] = $result;
 		};
-		add_action( 'newspack_newsletters_upsert', $count );
-		add_action( 'newspack_newsletters_subscribe_form_processed', $count );
+		add_action( 'newspack_newsletters_subscribe_form_processed', $record, 10, 2 );
 		$original_accept        = $_SERVER['HTTP_ACCEPT'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- restored below.
 		$_SERVER['HTTP_ACCEPT'] = 'application/json';
 		add_filter( 'wp_doing_ajax', '__return_true' );
@@ -157,8 +139,7 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 			$output = ob_get_clean();
 			remove_filter( 'wp_die_ajax_handler', [ $this, 'get_wp_die_handler' ] );
 			remove_filter( 'wp_doing_ajax', '__return_true' );
-			remove_action( 'newspack_newsletters_upsert', $count );
-			remove_action( 'newspack_newsletters_subscribe_form_processed', $count );
+			remove_action( 'newspack_newsletters_subscribe_form_processed', $record, 10 );
 			if ( null === $original_accept ) {
 				unset( $_SERVER['HTTP_ACCEPT'] );
 			} else {
@@ -168,6 +149,7 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 		$response = json_decode( $output, true );
 		$this->assertSame( 1, $response['newspack_newsletters_subscribed'] ?? null, $output );
 		$this->assertArrayNotHasKey( 'message', $response );
-		$this->assertSame( 0, $writes );
+		$this->assertCount( 1, $processed, 'prompt analytics still hear about the submission' );
+		$this->assertSame( 'newspack_newsletters_no_open_lists', $processed[0]->get_error_code() );
 	}
 }

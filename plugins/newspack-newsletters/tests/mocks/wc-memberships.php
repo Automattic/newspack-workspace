@@ -142,3 +142,26 @@ function wc_memberships() {
 		}
 	};
 }
+
+// The membership gate on newsletter lists runs only when these exist. A list
+// counts as restricted only when a test names it in the fixture, so every other
+// test sees each valid list as open.
+class WC_Memberships_Loader {}
+
+class WC_Memberships_Gate_Fixture {
+	/**
+	 * Restricted list post ID => user IDs allowed to view it.
+	 *
+	 * @var array<int,int[]>
+	 */
+	public static $restricted = [];
+}
+
+function wc_memberships_is_post_content_restricted( $post_id ) {
+	return isset( WC_Memberships_Gate_Fixture::$restricted[ $post_id ] );
+}
+
+function wc_memberships_user_can( $user_id, $action, $target ) {
+	$post_id = $target['post'] ?? 0;
+	return $user_id && in_array( (int) $user_id, WC_Memberships_Gate_Fixture::$restricted[ $post_id ] ?? [], true );
+}

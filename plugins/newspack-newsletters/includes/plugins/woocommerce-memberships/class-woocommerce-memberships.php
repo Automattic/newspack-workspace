@@ -92,19 +92,23 @@ class Woocommerce_Memberships {
 	 * @param array        $lists         The List IDs.
 	 * @param string|array $email_address The email address of the user to check against, or the
 	 *                                    contact array `newspack_newsletters_contact_lists` passes.
-	 *                                    Optional; without it the current user is checked.
+	 *                                    Optional. A string that is not a valid address falls back
+	 *                                    to the current user; a contact without one is treated as
+	 *                                    having no membership.
 	 * @return array
 	 */
 	public static function filter_lists( $lists, $email_address = '' ) {
 		if ( ! self::is_enabled() || ! is_array( $lists ) || empty( $lists ) ) {
 			return $lists;
 		}
-		if ( is_array( $email_address ) ) {
+		// A contact is being written, so whoever is logged in is never the one to check.
+		$is_contact = is_array( $email_address );
+		if ( $is_contact ) {
 			$email_address = isset( $email_address['email'] ) && is_string( $email_address['email'] ) ? $email_address['email'] : '';
 		}
 		$lists = array_filter(
 			$lists,
-			function ( $list ) use ( $email_address ) {
+			function ( $list ) use ( $email_address, $is_contact ) {
 				$list_object = Subscription_List::from_public_id( $list );
 				if ( ! $list_object ) {
 					return false;
@@ -123,7 +127,7 @@ class Woocommerce_Memberships {
 						$user    = get_user_by( 'email', $email_address );
 						$user_id = $user ? $user->ID : 0;
 					} else {
-						$user_id = get_current_user_id();
+						$user_id = $is_contact ? 0 : get_current_user_id();
 					}
 				}
 
