@@ -9,7 +9,7 @@
 /**
  * External dependencies
  */
-import { render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -19,16 +19,21 @@ import Institutions from './index';
 // mock-prefixed so Jest's hoisted jest.mock factories may close over them.
 const mockUpdateWizardSettings = jest.fn();
 const mockApiFetch = jest.fn();
+const mockInvalidate = jest.fn();
+const mockDataViewsProps = { current: null };
 
 jest.mock( '@wordpress/api-fetch', () => ( { __esModule: true, default: ( ...args ) => mockApiFetch( ...args ) } ) );
 
-jest.mock( '@wordpress/data', () => ( {
-	useDispatch: () => ( {
+// One object for the life of the suite: the list's fetch callback closes over these, and
+// a fresh object per render would re-run the fetch effect on every render.
+jest.mock( '@wordpress/data', () => {
+	const dispatch = {
 		setHeaderData: jest.fn(),
 		addNotice: jest.fn(),
 		updateWizardSettings: ( ...args ) => mockUpdateWizardSettings( ...args ),
-	} ),
-} ) );
+	};
+	return { useDispatch: () => dispatch };
+} );
 
 // The real @wordpress/components and @wordpress/dataviews cannot load in this
 // jsdom env (data-store side effects throw at import); the store-sync contract
@@ -36,7 +41,9 @@ jest.mock( '@wordpress/data', () => ( {
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
 	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
-	return { Button: Passthrough, Spinner: Passthrough };
+	// A real button, so the delete confirmation's click handler can be exercised.
+	const Button = ( { children, onClick, disabled } ) => React.createElement( 'button', { onClick, disabled }, children );
+	return { Button, Spinner: Passthrough };
 } );
 
 jest.mock( '@wordpress/dataviews', () => ( {
@@ -47,10 +54,20 @@ jest.mock( '@wordpress/dataviews', () => ( {
 jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
-		DataViews: () => React.createElement( 'div', null, 'DataViews' ),
+		// Captured rather than rendered: the row actions are declared here and rendered
+		// by the real DataViews, which cannot load in this jsdom env.
+		DataViews: props => {
+			mockDataViewsProps.current = props;
+			return React.createElement( 'div', null, 'DataViews' );
+		},
 		Router: { useHistory: () => ( { push: jest.fn() } ) },
 	};
 } );
+
+jest.mock( '../../../../../content-gate/access-rule-option-sources', () => ( {
+	INSTITUTION_RULE_SLUG: 'institution',
+	invalidateAccessRuleOptions: ( ...args ) => mockInvalidate( ...args ),
+} ) );
 
 jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( {
 	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
@@ -86,5 +103,27 @@ describe( 'Institutions list — gates header sync (NPPD-1492)', () => {
 		// exactly one write happens; the per-instance ref guards later fetches
 		// that leave the derived boolean unchanged.
 		expect( mockUpdateWizardSettings ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'Institutions list — fetched option list invalidation', () => {
+	// The gate pickers and summaries name institutions from a list fetched once per app
+	// lifetime, so a deletion here has to drop it, or a deleted institution stays named
+	// and selectable wherever a gate is inspected.
+	it( 'drops the cached list when an institution is deleted', async () => {
+		mockInvalidate.mockClear();
+		mockApiFetch.mockResolvedValue( [ { id: 1, title: { raw: 'City Library' }, meta: {} } ] );
+
+		render( <Institutions /> );
+		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
+
+		const { RenderModal } = mockDataViewsProps.current.actions.find( action => action.isDestructive );
+		render( <RenderModal items={ [ { id: 1 } ] } closeModal={ () => {} } /> );
+
+		await act( async () => {
+			fireEvent.click( screen.getByText( 'Delete' ) );
+		} );
+
+		expect( mockInvalidate ).toHaveBeenCalledWith( 'institution' );
 	} );
 } );

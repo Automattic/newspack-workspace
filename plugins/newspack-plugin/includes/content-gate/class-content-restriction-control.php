@@ -55,12 +55,65 @@ class Content_Restriction_Control {
 	const IS_EXEMPT_META_KEY = 'newspack_content_restriction_is_exempt';
 
 	/**
+	 * Post meta key WooCommerce Memberships uses to force a post public.
+	 *
+	 * @var string
+	 */
+	const WC_FORCE_PUBLIC_META_KEY = '_wc_memberships_force_public';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'init', [ __CLASS__, 'register_meta_guards' ] );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
+		add_filter( 'newspack_post_has_restrictions', [ __CLASS__, 'post_has_restrictions' ], 10, 2 );
+		// Priority 20 so the fallback wins over the meta key's registered default.
+		add_filter( 'default_post_metadata', [ __CLASS__, 'filter_default_exemption_meta' ], 20, 4 );
+	}
+
+	/**
+	 * Whether the post is covered by content gating rules, regardless of the
+	 * current user's own access. The user-agnostic counterpart of
+	 * is_post_restricted(), consumed e.g. by integrations that must advertise
+	 * a post as gated (Google Extended Access' isAccessibleForFree schema).
+	 *
+	 * @param bool $has_restrictions Whether the post has restrictions.
+	 * @param int  $post_id          Post ID.
+	 *
+	 * @return bool
+	 */
+	public static function post_has_restrictions( $has_restrictions, $post_id = null ) {
+		// Don't apply our restriction strategy if Woo Memberships is active.
+		if ( Memberships::is_active() ) {
+			return $has_restrictions;
+		}
+
+		// Gating stands down rather than half-working ({@see Content_Gate::is_gating_active()}),
+		// so a post is not advertised as gated while Access Control enforces nothing. Mirrors
+		// the same stand-down in is_post_restricted().
+		if ( ! Content_Gate::is_gating_active() ) {
+			return $has_restrictions;
+		}
+
+		$post_id = $post_id ? $post_id : get_the_ID();
+
+		// An exempt post is never gated, regardless of an incoming value.
+		if ( $post_id && get_post_meta( $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
+			return false;
+		}
+
+		// Pass through a restriction another callback already determined.
+		if ( $has_restrictions ) {
+			return $has_restrictions;
+		}
+
+		if ( ! $post_id ) {
+			return false;
+		}
+
+		return ! empty( self::get_post_gates( $post_id ) );
 	}
 
 	/**
@@ -132,6 +185,11 @@ class Content_Restriction_Control {
 
 	/**
 	 * Get post gates.
+	 *
+	 * Returns the matching gates in Content_Gate::get_gates() priority order. Callers
+	 * rely on this order to find the gate that decides access (is_post_restricted(),
+	 * Site Kit attribution, the email verification prompt), so a change here that
+	 * reorders the list changes who gets in.
 	 *
 	 * @param int $post_id Optional post ID.
 	 *
@@ -297,12 +355,23 @@ class Content_Restriction_Control {
 	 * tree is walked at most once per term, even across many rules and posts (e.g.
 	 * the Premium Newsletters cron loop).
 	 *
+	 * Public because the gate migration has to decide coverage the same way this
+	 * evaluator decides access: a second expansion kept in step by hand would let the
+	 * two disagree about what a rule gates, and the migration would then merge, or
+	 * refuse to merge, on a reading the site never applies.
+	 *
+	 * The memo is request-scoped and nothing invalidates it on a term edit, which is
+	 * right for a web request and wrong for a process that outlives one. A caller that
+	 * changes the term hierarchy mid-run — an importer, a taxonomy remap — calls
+	 * {@see flush_term_descendants_memo()} before expanding again, or it will decide
+	 * access from the tree as it stood before its own edits.
+	 *
 	 * @param array        $term_ids Term IDs from a content rule's value (may be stored as strings).
 	 * @param \WP_Taxonomy $taxonomy Taxonomy object the term IDs belong to.
 	 *
 	 * @return int[] De-duplicated term IDs including descendants.
 	 */
-	private static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
+	public static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
 		$term_ids = array_map( 'intval', $term_ids );
 		if ( ! $taxonomy->hierarchical ) {
 			return $term_ids;
@@ -320,7 +389,29 @@ class Content_Restriction_Control {
 	}
 
 	/**
+	 * Discard the request-scoped descendant memo.
+	 *
+	 * {@see expand_hierarchical_terms()} is public, so the memo is reachable from
+	 * outside this class and has to be discardable from there too. In a web request
+	 * the term hierarchy does not change under the memo and this is never needed;
+	 * a long-lived CLI process that edits terms, and the test suite, are the callers.
+	 *
+	 * @return void
+	 */
+	public static function flush_term_descendants_memo() {
+		self::$term_descendants_map = [];
+	}
+
+	/**
 	 * Whether the post is restricted for the current user.
+	 *
+	 * Gates compose first-match: of the gates whose content rules match the post,
+	 * the one with the highest priority (lowest number, see Content_Gate::get_gates())
+	 * decides alone. A reader it admits is admitted, and a reader it refuses is
+	 * refused and shown its layout; no lower gate is consulted either way, unless
+	 * the gate has no layout to show that reader and is passed over. That lets
+	 * a publisher open a free section inside a paid one by ranking a registration
+	 * wall on the free section above the paywall on its parent (NPPD-2289).
 	 *
 	 * @param bool     $is_post_restricted Whether the post is restricted for the current or given user.
 	 * @param int      $post_id            Post ID.
@@ -376,10 +467,13 @@ class Content_Restriction_Control {
 		}
 
 		// Return if the post gate has already been determined.
-		if ( ! empty( self::$post_gate_id_map[ $post_id . '_' . $user_id ] ) ) {
+		$memo_key = self::get_gate_memo_key( $post_id, $user_id );
+		if ( ! empty( self::$post_gate_id_map[ $memo_key ] ) ) {
 			return true;
 		}
 
+		// get_post_gates() keeps the priority order from get_gates(). A gate that refuses
+		// the reader with no layout to show them is passed over, so the next gate decides.
 		foreach ( $post_gates as $gate ) {
 			$gate_layout_id = null;
 			$is_restricted  = false;
@@ -393,17 +487,38 @@ class Content_Restriction_Control {
 				if ( $user_id === 0 ) {
 					// Anonymous visitors can still pass via the gate's custom_access rules if they
 					// match a populated rule with `supports_anonymous` (currently only `institution`).
-					// An unpopulated rule (e.g., institution rule with no institutions selected) must
-					// not grant access — Access_Rules treats an empty value as "no constraint" and
-					// returns true, which would silently bypass registration here.
+					// A visitor who counts as paying doesn't need to register first, so this skips
+					// both walls. A rule left with no value names no condition, so it cannot be
+					// what lets a visitor past the registration wall.
+					//
+					// Inside a listing teaser this bypass yields nothing:
+					// evaluate_anonymous_rules() declines there, because its one rule
+					// answers from the current request and a listing is built once for
+					// everyone. {@see Content_Gate::is_withheld_outside_article()}.
 					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
 						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
-					$is_restricted  = ! $anonymous_bypass_passed;
-					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+					if ( $anonymous_bypass_passed ) {
+						$is_restricted = false;
+					} elseif ( Access_Rules::evaluate_anonymous_rules( $gate['registration']['access_rules'] ?? [] ) ) {
+						// Registered access's own rules let the visitor count as registered, which
+						// is all they skip: paid access still applies, and the paid check above
+						// has already refused them (NPPD-2310).
+						$is_restricted = ! empty( $gate['custom_access']['active'] ) && ! empty( $gate['custom_access']['access_rules'] );
+						if ( $is_restricted ) {
+							$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
+						}
+					} else {
+						$is_restricted  = true;
+						$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+					}
 				} elseif ( ! empty( $gate['registration']['require_verification'] ) ) {
-					// Check if email verification is required.
+					// Check if email verification is required. A hypothetical evaluation
+					// asking what this reader would see if they verified has to be answered
+					// here too, or a gate that both walls registration behind verification
+					// and grants by email domain reports itself still restricting for a
+					// reader whose one act of verifying would satisfy both.
 					$user = get_user_by( 'id', $user_id );
-					if ( ! $user || ! \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true ) ) {
+					if ( ! $user || ( ! \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true ) && ! Access_Rules::is_verification_assumed_for( $user->ID ) ) ) {
 						$is_restricted  = true;
 						$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
 					}
@@ -414,15 +529,18 @@ class Content_Restriction_Control {
 			if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
 				$access_rules = $gate['custom_access']['access_rules'] ?? [];
 				$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
-				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id, $rule_context ) ) {
+				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules_for_visitor( $access_rules, $user_id, $rule_context ) ) {
 					$is_restricted  = true;
 					$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
 				}
 			}
 
-			if ( $is_restricted && $gate_layout_id ) {
-				self::$post_gate_id_map[ $post_id . '_' . $user_id ] = $gate['id'];
-				self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ] = $gate_layout_id;
+			if ( ! $is_restricted ) {
+				return false;
+			}
+			if ( $gate_layout_id ) {
+				self::$post_gate_id_map[ $memo_key ]        = $gate['id'];
+				self::$post_gate_layout_id_map[ $memo_key ] = $gate_layout_id;
 				return true;
 			}
 		}
@@ -451,9 +569,9 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return false;
 		}
-		$user_id = get_current_user_id();
-		if ( ! empty( self::$post_gate_id_map[ $post_id . '_' . $user_id ] ) ) {
-			return self::$post_gate_id_map[ $post_id . '_' . $user_id ];
+		$memo_key = self::get_gate_memo_key( $post_id, get_current_user_id() );
+		if ( ! empty( self::$post_gate_id_map[ $memo_key ] ) ) {
+			return self::$post_gate_id_map[ $memo_key ];
 		}
 		return false;
 	}
@@ -466,11 +584,16 @@ class Content_Restriction_Control {
 	 * queue workers, REST callbacks iterating over readers) write to their
 	 * own cache slot and do not surface here.
 	 *
-	 * @param int $post_id Post ID. If not given, uses the current post ID.
+	 * @param int      $post_id Post ID. If not given, uses the current post ID.
+	 * @param int|null $user_id Reader to look the entry up for. Defaults to the
+	 *                          current user. Pass 0 to read the anonymous entry,
+	 *                          which is what a surface serving one copy of its
+	 *                          markup to every reader needs
+	 *                          ({@see Content_Gate::is_withheld_outside_article()}).
 	 *
 	 * @return int|false
 	 */
-	public static function get_gate_layout_id( $post_id = null ) {
+	public static function get_gate_layout_id( $post_id = null, $user_id = null ) {
 		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
 			return false;
 		}
@@ -480,11 +603,59 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return false;
 		}
-		$user_id = get_current_user_id();
-		if ( ! empty( self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ] ) ) {
-			return self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ];
+		$memo_key = self::get_gate_memo_key( $post_id, $user_id ?? get_current_user_id() );
+		if ( ! empty( self::$post_gate_layout_id_map[ $memo_key ] ) ) {
+			return self::$post_gate_layout_id_map[ $memo_key ];
 		}
 		return false;
+	}
+
+	/**
+	 * Key the resolved gate and layout are memoised under.
+	 *
+	 * A listing teaser and an article page both ask as user 0 and do not get the
+	 * same answer: a listing declines the anonymous bypass, so a gate that lets an
+	 * on-campus visitor through on the article page still restricts in a listing.
+	 * The narrower verdict therefore needs a narrower key, or the first surface to
+	 * ask answers for the second — and the reader entitled to the post meets the
+	 * gate on the article page for the rest of the request.
+	 *
+	 * @param int $post_id Post ID.
+	 * @param int $user_id Reader the verdict was reached for.
+	 *
+	 * @return string
+	 */
+	private static function get_gate_memo_key( $post_id, $user_id ) {
+		return $post_id . '_' . $user_id . ( Content_Gate::is_listing_context() ? '_listing' : '' );
+	}
+
+	/**
+	 * Run a callback without this request's resolved gate, then put it back.
+	 *
+	 * `is_post_restricted()` memoises which gate denied a post for a user, and
+	 * short-circuits to `true` on a second call once that entry exists. A caller
+	 * asking a hypothetical question — "would this post still be restricted if
+	 * something about the reader changed?" — therefore has to start from an
+	 * unresolved state, and must not leave the hypothetical's answer behind as the
+	 * request's real gate: `Content_Gate::get_gate_post_id()` and
+	 * `get_gate_layout_id()` read those maps to decide what renders.
+	 *
+	 * @param callable $callback Callback to run.
+	 *
+	 * @return mixed The callback's return value.
+	 */
+	public static function with_gate_resolution_isolated( $callback ) {
+		$gate_ids   = self::$post_gate_id_map;
+		$layout_ids = self::$post_gate_layout_id_map;
+
+		self::$post_gate_id_map        = [];
+		self::$post_gate_layout_id_map = [];
+		try {
+			return $callback();
+		} finally {
+			self::$post_gate_id_map        = $gate_ids;
+			self::$post_gate_layout_id_map = $layout_ids;
+		}
 	}
 
 	/**
@@ -500,6 +671,98 @@ class Content_Restriction_Control {
 	 */
 	public static function current_user_can_edit_exemption() {
 		return current_user_can( 'edit_others_posts' );
+	}
+
+	/**
+	 * Treat a post WooCommerce Memberships forced public as exempt from access control,
+	 * when no exemption of our own is recorded for it.
+	 *
+	 * Keeps posts a publisher exempted under Memberships readable once a migrated
+	 * site's gates start enforcing. An exemption recorded here wins for as long as it
+	 * is recorded, including a falsy one -- which is why this answers the default
+	 * rather than the read: the default is only consulted when no row exists.
+	 *
+	 * Answers keyed reads only, so a whole-object meta read will not carry the key.
+	 *
+	 * @param mixed  $value    Default value to return.
+	 * @param int    $post_id  Post ID.
+	 * @param string $meta_key Meta key being read.
+	 * @param bool   $single   Whether a single value was requested.
+	 *
+	 * @return mixed
+	 */
+	public static function filter_default_exemption_meta( $value, $post_id, $meta_key, $single ) {
+		if ( self::IS_EXEMPT_META_KEY !== $meta_key || ! Content_Gate::is_newspack_feature_enabled() ) {
+			return $value;
+		}
+
+		// Matches core's own default-metadata guard.
+		if ( wp_installing() ) {
+			return $value;
+		}
+
+		// Memberships stores 'yes' or 'no', and 'no' is a truthy string.
+		if ( 'yes' !== get_post_meta( $post_id, self::WC_FORCE_PUBLIC_META_KEY, true ) ) {
+			return $value;
+		}
+
+		// Only where the exemption is registered, so an inferred one always has a
+		// toggle to see it and the save guards behind it.
+		if ( ! registered_meta_key_exists( 'post', self::IS_EXEMPT_META_KEY, get_post_type( $post_id ) ) ) {
+			return $value;
+		}
+
+		/**
+		 * Filters whether a Memberships force-public flag stands in for a missing
+		 * exemption. Turning it off re-gates every post whose exemption was only
+		 * inferred, so record those exemptions first.
+		 *
+		 * @param bool $respect Whether to honor the Memberships flag. Default true.
+		 * @param int  $post_id Post ID.
+		 */
+		if ( ! apply_filters( 'newspack_content_gate_respect_memberships_force_public', true, $post_id ) ) {
+			return $value;
+		}
+
+		return $single ? true : [ true ];
+	}
+
+	/**
+	 * Drop an exemption the editor is only echoing back at us.
+	 *
+	 * The block editor reads every meta value from REST and returns the whole set
+	 * whenever any one of them is edited, so without this a value this class
+	 * synthesized would be saved as a real row by nothing more than opening a post
+	 * and saving it. That row would then outlive the Memberships flag it came from
+	 * and ignore the opt-out filter, quietly making the exemption permanent.
+	 *
+	 * An explicit falsy value is left alone: that one is a decision, and recording
+	 * it is what makes turning the toggle off stick. A post being created has no
+	 * ID yet and nothing to inherit from, so it is skipped.
+	 *
+	 * @param stdClass|WP_Error $prepared_post Prepared post object (returned unchanged).
+	 * @param WP_REST_Request   $request       Incoming request.
+	 * @return stdClass|WP_Error
+	 */
+	public static function strip_inherited_exempt_meta( $prepared_post, $request ) {
+		$meta = $request['meta'];
+		if ( ! is_array( $meta ) || empty( $meta[ self::IS_EXEMPT_META_KEY ] ) ) {
+			return $prepared_post;
+		}
+
+		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		if ( ! $post_id || metadata_exists( 'post', $post_id, self::IS_EXEMPT_META_KEY ) ) {
+			return $prepared_post;
+		}
+
+		// Ask the fallback itself, so the two can't drift apart.
+		if ( true !== self::filter_default_exemption_meta( false, $post_id, self::IS_EXEMPT_META_KEY, true ) ) {
+			return $prepared_post;
+		}
+
+		unset( $meta[ self::IS_EXEMPT_META_KEY ] );
+		$request['meta'] = $meta;
+		return $prepared_post;
 	}
 
 	/**
@@ -527,16 +790,18 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Register the REST guard that strips the exemption meta from unauthorized
-	 * saves. Registered unconditionally — independent of whether the meta itself
-	 * is registered — so its lifetime never depends on when the content-gate
-	 * feature flag resolves. It is a harmless no-op when the key is absent from
-	 * the request.
+	 * Register the REST guards that keep the exemption meta out of saves that
+	 * should not carry it: one for a user who cannot toggle it, one for a value
+	 * this class inferred rather than a person choosing it. Registered
+	 * unconditionally — independent of whether the meta itself is registered —
+	 * so their lifetime never depends on when the content-gate feature flag
+	 * resolves. Both are harmless no-ops when the key is absent from the request.
 	 */
 	public static function register_meta_guards() {
 		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
 		foreach ( $post_types as $post_type ) {
 			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_unauthorized_exempt_meta' ], 10, 2 );
+			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_inherited_exempt_meta' ], 10, 2 );
 		}
 	}
 

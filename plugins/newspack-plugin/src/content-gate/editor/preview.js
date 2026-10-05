@@ -22,6 +22,15 @@ import WebPreview from '../../../packages/components/src/web-preview';
  * newspack-popups prompt preview: the reader's unsaved meta rides along in the
  * URL (autosaves don't persist meta), and in-iframe article links are rewritten
  * to keep the preview active as the reader navigates.
+ *
+ * That rewriting happens in the previewed document — see
+ * propagateGatePreviewParams() in src/content-gate/preview-links.js — not from
+ * out here. This component used to reach into the preview iframe, guarded by a
+ * try/catch for genuinely cross-origin setups. WordPress 7.1 turned that guard
+ * into a silent failure: it serves the block editor with
+ * `Document-Isolation-Policy`, which severs access to the frame even when it is
+ * same-origin, so the rewrite stopped happening and only a console warning
+ * marked it.
  */
 export default function GatePreview() {
 	const { postId, meta, isSavingPost } = useSelect( select => {
@@ -39,7 +48,7 @@ export default function GatePreview() {
 		return null;
 	}
 
-	const { preview_post: previewPost, frontend_url: frontendUrl, query_param: queryParam, preview_query_keys: previewQueryKeys } = preview;
+	const { preview_post: previewPost, query_param: queryParam, preview_query_keys: previewQueryKeys } = preview;
 
 	// Map edited meta onto the abbreviated query keys the server understands.
 	const abbreviatedKeys = {};
@@ -52,23 +61,6 @@ export default function GatePreview() {
 	const query = {
 		[ queryParam ]: postId,
 		...abbreviatedKeys,
-	};
-
-	const onWebPreviewLoad = iframeEl => {
-		if ( ! iframeEl ) {
-			return;
-		}
-		// Same-origin access can throw a DOMException on a cross-origin iframe
-		// (mapped domains, scheme mismatch). Link-rewriting is a nicety; never let
-		// it break opening the preview.
-		try {
-			[ ...iframeEl.contentWindow.document.querySelectorAll( 'a[href^="' + frontendUrl + '"]' ) ].forEach( anchor => {
-				anchor.setAttribute( 'href', addQueryArgs( anchor.getAttribute( 'href' ), query ) );
-			} );
-		} catch ( e ) {
-			// eslint-disable-next-line no-console
-			console.warn( 'Gate preview: could not rewrite in-iframe links (cross-origin).', e );
-		}
 	};
 
 	// Open the preview after the autosave settles. On a failed autosave, still
@@ -85,7 +77,6 @@ export default function GatePreview() {
 	return (
 		<WebPreview
 			url={ addQueryArgs( previewPost, query ) }
-			onLoad={ onWebPreviewLoad }
 			renderButton={ ( { showPreview } ) => (
 				<Button variant="primary" isBusy={ isSavingPost } disabled={ isSavingPost } onClick={ () => previewAfterAutosave( showPreview ) }>
 					{ __( 'Preview', 'newspack-plugin' ) }

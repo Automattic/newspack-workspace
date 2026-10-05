@@ -10,6 +10,7 @@ namespace Newspack_Network\Content_Distribution;
 use Newspack_Network\Content_Distribution as Content_Distribution_Class;
 use Newspack_Network\Debugger;
 use Newspack_Network\User_Update_Watcher;
+use Newspack_Network\Utils\Network;
 use Newspack_Network\Utils\Users as User_Utils;
 use WP_Error;
 use WP_Post;
@@ -461,13 +462,16 @@ class Incoming_Post {
 			}
 		}
 
-		if ( ! function_exists( 'media_sideload_image' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/media.php';
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-			require_once ABSPATH . 'wp-admin/includes/image.php';
+		// The thumbnail URL comes from the peer's payload and is fetched server-side.
+		// Network::is_safe_sideload_url() is the authoritative gate and its docblock carries
+		// the reasoning; this pre-check exists so a refusal gets a message naming the post,
+		// and sideload_peer_image() refuses again on its own regardless.
+		if ( ! Network::is_safe_sideload_url( $thumbnail_url ) ) {
+			self::log( 'Featured image URL is not a valid external URL, skipping sideload for post ' . $this->ID );
+			return;
 		}
 
-		$attachment_id = media_sideload_image( $thumbnail_url, $this->ID, '', 'id' );
+		$attachment_id = Network::sideload_peer_image( $thumbnail_url, $this->ID, '', 'id' );
 		if ( is_wp_error( $attachment_id ) ) {
 			self::log( 'Failed to upload featured image for post ' . $this->ID . ' with message: ' . $attachment_id->get_error_message() );
 
@@ -773,17 +777,60 @@ class Incoming_Post {
 			 */
 			do_action( 'newspack_network_incoming_post_before_save', $post_data, $this->post, $this->get_original_site_url() );
 
-			// Remove filters that may alter content updates.
+			// Remove filters that may alter content updates. Captured and restored
+			// below: the removal is global, so leaving it in place would silently
+			// disable kses for every later post save in the same request.
+			// Copy the callbacks array, not the WP_Hook object: remove_all_filters()
+			// empties that same object, so holding the object would restore nothing.
+			$content_save_pre_filters = isset( $GLOBALS['wp_filter']['content_save_pre'] )
+				? $GLOBALS['wp_filter']['content_save_pre']->callbacks
+				: null;
 			remove_all_filters( 'content_save_pre' );
 
 			// wp_insert_post()/wp_update_post() expect slashed data and unslash it
 			// internally. Serialized block markup carries literal backslashes in
 			// attribute JSON escapes (backslash-u003c for `<` etc.), which an
 			// unslashed insert would strip, corrupting block attributes.
-			if ( $this->ID ) {
-				$post_id = wp_update_post( wp_slash( $postarr ), true );
-			} else {
-				$post_id = wp_insert_post( wp_slash( $postarr ), true );
+			try {
+				if ( $this->ID ) {
+					$post_id = wp_update_post( wp_slash( $postarr ), true );
+				} else {
+					$post_id = wp_insert_post( wp_slash( $postarr ), true );
+				}
+			} finally {
+				// A throwing callback on wp_insert_post_data or save_post would
+				// otherwise leave content unfiltered for the rest of the request,
+				// for every later save, not just this one. One deliberate effect:
+				// the attachment insert in upload_thumbnail() below now runs with
+				// the filters back, so its EXIF-derived post_content is cleaned the
+				// way a normal media upload would be.
+				if ( is_array( $content_save_pre_filters ) ) {
+					foreach ( $content_save_pre_filters as $priority => $callbacks ) {
+						foreach ( $callbacks as $callback ) {
+							// Restores the snapshot exactly, including a callback registered
+							// at more than one priority. A has_filter() guard was tried here
+							// and reverted: has_filter() reports only the first priority a
+							// callback sits at, so the second registration was silently
+							// dropped. It also could not do what it was meant to — the hook
+							// is already empty by this point, so a filter removed deliberately
+							// inside the try is indistinguishable from the ones removed above.
+							//
+							// Known limit: the snapshot belongs to whoever was current when
+							// it was taken. If a callback inside the try switched the current
+							// user to one holding unfiltered_html, core's kses_init on
+							// set_current_user drops kses, and this puts it back — leaving
+							// that user over-filtered for the rest of the request. It does not
+							// self-heal, because kses_init only removes filters, so a later
+							// switch back to the same user changes nothing. Left as is:
+							// nothing in this plugin switches users during a save, and
+							// over-filtering is the safe direction. Reconciling would mean
+							// re-running kses_init and wp_custom_css_kses_init after the
+							// restore, which would also discard any unrelated
+							// content_save_pre callback another plugin added inside the try.
+							add_filter( 'content_save_pre', $callback['function'], $priority, $callback['accepted_args'] );
+						}
+					}
+				}
 			}
 
 			if ( is_wp_error( $post_id ) ) {

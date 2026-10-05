@@ -3,11 +3,14 @@
 import {
 	debug,
 	closeOverlay,
+	getAbOverride,
 	getBestPrioritySegment,
+	getBestPrioritySegmentFromSnapshot,
 	getIntersectionObserver,
 	getRawId,
 	getOverride,
 	handleSeen,
+	isSwitchedSession,
 	shouldPromptBeDisplayed,
 	syncMatchedSegments,
 } from './utils';
@@ -22,7 +25,11 @@ export const handleSegmentation = prompts => {
 			return;
 		}
 		const segments = newspack_popups_view?.segments || {};
-		const matchingSegment = getBestPrioritySegment( segments );
+		// An admin switched into the reader's account sees the reader's stored
+		// segment; a match computed here would come from the admin's browser.
+		const resolveMatchingSegment = () =>
+			isSwitchedSession() ? getBestPrioritySegmentFromSnapshot( ras, segments ) : getBestPrioritySegment( segments );
+		const matchingSegment = resolveMatchingSegment();
 		debug( 'matchingSegment', matchingSegment );
 
 		// Register segments and set match via RAS if available.
@@ -40,7 +47,11 @@ export const handleSegmentation = prompts => {
 		prompts.forEach( prompt => {
 			const promptId = prompt.getAttribute( 'id' );
 			const isOverlay = prompt.classList.contains( 'newspack-lightbox' );
-			const override = getOverride( getRawId( promptId ), isOverlay, overlayDisplayed );
+			// A/B variant selection composes with the standard override: a test
+			// variant the reader is not assigned to is suppressed before it can
+			// claim the single-overlay slot; the assigned variant goes through
+			// the normal frequency/segmentation checks.
+			const override = getOverride( getRawId( promptId ), isOverlay, overlayDisplayed ) ?? getAbOverride( prompt );
 
 			// Attach event listeners to overlay close buttons.
 			const closeButtons = [ ...prompt.querySelectorAll( '.newspack-lightbox__close, button.newspack-lightbox-overlay' ) ];
@@ -65,7 +76,7 @@ export const handleSegmentation = prompts => {
 				const unhide = () => {
 					// Conditions may have changed since the prompt was delayed.
 					// Verify whether the prompt can still be displayed.
-					const updatedMatchingSegment = getBestPrioritySegment( segments );
+					const updatedMatchingSegment = resolveMatchingSegment();
 					if ( ras?.segments ) {
 						ras.segments.setMatch( updatedMatchingSegment );
 					}

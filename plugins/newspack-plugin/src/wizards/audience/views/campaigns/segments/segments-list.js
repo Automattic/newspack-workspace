@@ -99,8 +99,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 				id: segment.id,
 				title: segment.name,
 				description: segmentDescription( segment ),
-				badgeLevel: segment.is_criteria_duplicated ? 'warning' : 'default',
-				badgeText: segment.is_criteria_duplicated ? __( 'Duplicate', 'newspack-plugin' ) : undefined,
+				badge: segment.is_criteria_duplicated ? { label: __( 'Duplicate', 'newspack-plugin' ), intent: 'medium' } : undefined,
 				toggleChecked: ! segment.configuration.is_disabled,
 				onToggleChange: () => toggleSegmentStatus( segment ),
 				actions: [

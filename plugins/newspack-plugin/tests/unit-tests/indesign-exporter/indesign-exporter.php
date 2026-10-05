@@ -8,6 +8,11 @@
 use Newspack\Optional_Modules\InDesign_Export\InDesign_Converter;
 use Newspack\Optional_Modules\InDesign_Exporter;
 
+// The byline tests set $GLOBALS['_test_cap_coauthors'], which only takes effect
+// through the get_coauthors() mock. Required here so this file does not depend
+// on a sibling test file loading the mock first.
+require_once __DIR__ . '/../../mocks/co-authors-plus-mocks.php';
+
 /**
  * Tests the InDesign Exporter functionality.
  */
@@ -21,37 +26,13 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	private const TEST_POST_TYPES = [ 'product', 'hidden_cpt', 'partner_rss_feed', 'newspack_nl_list', 'newspack_collection', 'event', 'flyer', 'reviewcpt' ];
 
 	/**
-	 * The ambient User-Agent, captured so platform-resolution tests can restore it.
-	 *
-	 * @var string|null
-	 */
-	private $original_user_agent;
-
-	/**
-	 * Capture request state that individual tests may mutate.
-	 */
-	public function set_up() {
-		parent::set_up();
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-		$this->original_user_agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
-	}
-
-	/**
-	 * Set the request User-Agent for the current test. Wraps the write so the VIP
-	 * cache-constraint sniff — not meaningful for a unit test — is silenced once.
-	 *
-	 * @param string $user_agent User-Agent string to set.
-	 */
-	private function set_request_user_agent( $user_agent ) {
-		$_SERVER['HTTP_USER_AGENT'] = $user_agent; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-	}
-
-	/**
-	 * Reset options, post-type registrations, and request state after every test,
-	 * regardless of whether the test's own assertions passed. Keeping cleanup here
-	 * (rather than inline at the end of each test) makes failures self-contained.
+	 * Reset options and post-type registrations after every test, regardless of
+	 * whether the test's own assertions passed. Keeping cleanup here (rather than
+	 * inline at the end of each test) makes failures self-contained.
 	 */
 	public function tear_down() {
+		unset( $GLOBALS['_test_cap_coauthors'] );
+
 		delete_option( InDesign_Exporter::PLATFORM_OPTION );
 		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
 		delete_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION );
@@ -70,12 +51,6 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		remove_filter( 'handle_bulk_actions-edit-reviewcpt', [ InDesign_Exporter::class, 'handle_bulk_action' ], 100 );
 		remove_filter( 'post_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
 		remove_filter( 'page_row_actions', [ InDesign_Exporter::class, 'add_row_action' ], 10 );
-
-		if ( null === $this->original_user_agent ) {
-			unset( $_SERVER['HTTP_USER_AGENT'] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-		} else {
-			$_SERVER['HTTP_USER_AGENT'] = $this->original_user_agent; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-		}
 
 		parent::tear_down();
 	}
@@ -99,73 +74,61 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that the Mac platform option emits the <ASCII-MAC> header.
+	 * Content shapes whose conversion has historically produced a line ending
+	 * that disagreed with the declared header.
 	 *
-	 * InDesign on macOS requires the file to begin with <ASCII-MAC> for the
-	 * tagged text to be interpreted as markup rather than literal content.
+	 * @return array<string, array{0: string}>
 	 */
-	public function test_convert_post_mac_platform() {
-		$post_id = $this->factory->post->create(
-			[
-				'post_title'   => 'Test Post',
-				'post_content' => '<p>This is a test post.</p>',
-			]
-		);
-
-		$converter = new InDesign_Converter();
-		$content   = $converter->convert_post( $post_id, [ 'platform' => 'mac' ] );
-		$this->assertStringContainsString( '<ASCII-MAC>', $content );
-		$this->assertStringNotContainsString( '<ASCII-WIN>', $content );
+	public function line_ending_content_provider() {
+		return [
+			// Block content: the shape that broke under <ASCII-MAC> (NPPM-3098).
+			'block paragraphs'   => [ "<!-- wp:paragraph -->\n<p>First para.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Second para.</p>\n<!-- /wp:paragraph -->" ],
+			// Classic content: the shape that broke under <ASCII-WIN> (NPPM-2813).
+			// Newline-separated <p> tags left a bare CR ahead of each CRLF.
+			'classic paragraphs' => [ "<p>Classic one.</p>\n<p>Classic two.</p>\n<p>Classic three.</p>" ],
+			'mixed line endings' => [ "<p>CRLF source.</p>\r\n<p>LF source.</p>\n<p>CR source.</p>\r<p>Last.</p>" ],
+			'blank line runs'    => [ "<p>Before.</p>\n\n\n<p>After.</p>" ],
+			// Every line CR-terminated: the shape of imported legacy-Mac copy.
+			'legacy mac endings' => [ "<p>One.</p>\r<p>Two.</p>\r<p>Three.</p>\r" ],
+			'heading and list'   => [ "<h2>A subhead</h2>\n<ul><li>One</li>\n<li>Two</li></ul>\n<p>Body.</p>" ],
+			'group block'        => [ "<!-- wp:group -->\n<div class=\"wp-block-group\"><!-- wp:paragraph -->\n<p>Inside.</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:group -->" ],
+			'blockquote'         => [ "<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\"><p>Quoted.</p><cite>Someone</cite></blockquote>\n<!-- /wp:quote -->" ],
+		];
 	}
 
 	/**
-	 * Test that the Win platform option emits the <ASCII-WIN> header.
+	 * Test that every export is terminated uniformly with CRLF, matching the
+	 * <ASCII-WIN> header it declares.
+	 *
+	 * The tagged-text start tag describes the file, not the machine running
+	 * InDesign: <ASCII-WIN> promises CRLF, <ASCII-MAC> promises bare CR. When
+	 * any stretch of the file disagrees with the header, InDesign stops treating
+	 * the following <pstyle:...> as paragraph-initial and places it as literal
+	 * text. Both reported forms of this bug came from the same cause — a file
+	 * whose line endings varied with the shape of the post content, so classic
+	 * copy needed one header (NPPM-2813) and block copy the other (NPPM-3098).
+	 *
+	 * @dataProvider line_ending_content_provider
+	 *
+	 * @param string $post_content Post content to convert.
 	 */
-	public function test_convert_post_win_platform() {
+	public function test_convert_post_line_endings_are_uniformly_crlf( $post_content ) {
 		$post_id = $this->factory->post->create(
 			[
 				'post_title'   => 'Test Post',
-				'post_content' => '<p>This is a test post.</p>',
+				'post_content' => $post_content,
 			]
 		);
 
 		$converter = new InDesign_Converter();
-		$content   = $converter->convert_post( $post_id, [ 'platform' => 'win' ] );
+		$content   = $converter->convert_post( $post_id );
+
 		$this->assertStringContainsString( '<ASCII-WIN>', $content );
-		$this->assertStringNotContainsString( '<ASCII-MAC>', $content );
-	}
 
-	/**
-	 * Test that the platform setting defaults to 'auto' when unset.
-	 */
-	public function test_platform_setting_default() {
-		delete_option( InDesign_Exporter::PLATFORM_OPTION );
-		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
-	}
-
-	/**
-	 * Test that the platform setting returns the stored value when valid.
-	 */
-	public function test_platform_setting_valid_values() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'mac' );
-		$this->assertSame( 'mac', InDesign_Exporter::get_platform_setting() );
-
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
-		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
-
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
-		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
-	}
-
-	/**
-	 * Test that the platform setting sanitizes invalid stored values.
-	 */
-	public function test_platform_setting_rejects_invalid_value() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'linux' );
-		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
-
-		update_option( InDesign_Exporter::PLATFORM_OPTION, '' );
-		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+		$crlf = substr_count( $content, "\r\n" );
+		$this->assertGreaterThan( 0, $crlf, 'Expected at least one line terminator.' );
+		$this->assertSame( $crlf, substr_count( $content, "\r" ), 'Found a bare CR: part of the file is Mac-terminated.' );
+		$this->assertSame( $crlf, substr_count( $content, "\n" ), 'Found a bare LF: part of the file is Unix-terminated.' );
 	}
 
 	/**
@@ -313,39 +276,6 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$this->assertNotContains( 'flyer', $slugs );
 
 		remove_filter( 'newspack_indesign_export_excluded_post_types', $callback );
-	}
-
-	/**
-	 * Test User-Agent → platform mapping for representative strings.
-	 */
-	public function test_sniff_user_agent_platform() {
-		// macOS Safari / Chrome.
-		$this->assertSame(
-			'mac',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15' )
-		);
-		// iPad.
-		$this->assertSame(
-			'mac',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15' )
-		);
-		// iPhone.
-		$this->assertSame(
-			'mac',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15' )
-		);
-		// Windows Chrome.
-		$this->assertSame(
-			'win',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' )
-		);
-		// Linux (treated as Windows-compatible by InDesign Tagged Text — there is no Linux variant).
-		$this->assertSame(
-			'win',
-			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' )
-		);
-		// Empty.
-		$this->assertSame( 'win', InDesign_Exporter::sniff_user_agent_platform( '' ) );
 	}
 
 	/**
@@ -552,6 +482,9 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 	/**
 	 * Test converting HTML entities.
+	 *
+	 * The bracket entities resolve to escaped literals rather than bare brackets,
+	 * which Tagged Text would read as tag delimiters.
 	 */
 	public function test_convert_html_entities() {
 		$post_id = $this->factory->post->create(
@@ -563,7 +496,7 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 		$converter = new InDesign_Converter();
 		$content = $converter->convert_post( $post_id );
-		$this->assertStringContainsString( '<pstyle:text>This is a test post with  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
+		$this->assertStringContainsString( '<pstyle:text>This is a test post with  , &, \\<, \\> and <CharStyle:bullet>n<CharStyle:>.', $content );
 	}
 
 	/**
@@ -949,15 +882,19 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 		$converter = new InDesign_Converter();
 		$content = $converter->convert_post( $post_id );
-		$this->assertStringContainsString( '<pstyle:PhotoCaption>Image Caption with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
-		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, <, > and <CharStyle:bullet>n<CharStyle:>.', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Image Caption with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, \\<, \\> and <CharStyle:bullet>n<CharStyle:>.', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit with <0x00E1> <0x00E9> <0x00ED> <0x00F3> <0x00FA> <0x00F1> <0x00E7> <0x00F0> <0x00F0>  , &, \\<, \\> and <CharStyle:bullet>n<CharStyle:>.', $content );
 	}
 
 	/**
-	 * Test that photo captions are dropped when include_captions is false, while
-	 * photo credits — a separate attribution field — are still exported.
+	 * Test that photo captions and credits are dropped when include_captions is
+	 * false.
+	 *
+	 * One toggle covers the whole photo-information section: captions and
+	 * credits are appended together, and excluding them means neither is wanted
+	 * in the layout (NPPM-3098).
 	 */
-	public function test_convert_post_excludes_captions_when_disabled() {
+	public function test_convert_post_excludes_captions_and_credits_when_disabled() {
 		$image_id = $this->factory->attachment->create();
 		wp_update_post(
 			[
@@ -979,7 +916,8 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( '<pstyle:PhotoCaption>', $content );
 		$this->assertStringNotContainsString( 'Image Caption', $content );
-		$this->assertStringContainsString( '<pstyle:PhotoCredit>Image Credit', $content );
+		$this->assertStringNotContainsString( '<pstyle:PhotoCredit>', $content );
+		$this->assertStringNotContainsString( 'Image Credit', $content );
 	}
 
 	/**
@@ -1091,76 +1029,6 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that an explicit platform setting wins over the request User-Agent.
-	 */
-	public function test_resolve_platform_setting_overrides_user_agent() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'mac' );
-		$this->set_request_user_agent( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' );
-		$this->assertSame( 'mac', InDesign_Exporter::resolve_platform() );
-
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
-		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' );
-		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
-	}
-
-	/**
-	 * Test that the 'auto' setting resolves the platform from the User-Agent.
-	 */
-	public function test_resolve_platform_auto_sniffs_user_agent() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
-
-		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' );
-		$this->assertSame( 'mac', InDesign_Exporter::resolve_platform() );
-
-		$this->set_request_user_agent( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' );
-		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
-	}
-
-	/**
-	 * Test that the platform filter can override the resolved value, and that a
-	 * non-'mac' return normalizes to 'win' instead of leaking an invalid platform.
-	 */
-	public function test_resolve_platform_filter_overrides_and_normalizes() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
-
-		$to_mac = static function () {
-			return 'mac';
-		};
-		add_filter( 'newspack_indesign_export_platform', $to_mac );
-		$this->assertSame( 'mac', InDesign_Exporter::resolve_platform() );
-		remove_filter( 'newspack_indesign_export_platform', $to_mac );
-
-		$to_auto = static function () {
-			return 'auto';
-		};
-		add_filter( 'newspack_indesign_export_platform', $to_auto );
-		$this->assertSame( 'win', InDesign_Exporter::resolve_platform() );
-		remove_filter( 'newspack_indesign_export_platform', $to_auto );
-	}
-
-	/**
-	 * Test that the platform filter receives the resolved platform, the stored
-	 * setting, and the sanitized User-Agent.
-	 */
-	public function test_resolve_platform_filter_receives_context() {
-		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
-		$this->set_request_user_agent( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)' );
-
-		$captured = [];
-		$callback = static function ( $platform, $setting, $user_agent ) use ( &$captured ) {
-			$captured = compact( 'platform', 'setting', 'user_agent' );
-			return $platform;
-		};
-		add_filter( 'newspack_indesign_export_platform', $callback, 10, 3 );
-		InDesign_Exporter::resolve_platform();
-		remove_filter( 'newspack_indesign_export_platform', $callback, 10 );
-
-		$this->assertSame( 'mac', $captured['platform'] );
-		$this->assertSame( 'auto', $captured['setting'] );
-		$this->assertStringContainsString( 'Macintosh', $captured['user_agent'] );
-	}
-
-	/**
 	 * Test that a supported-post-types filter returning a non-array value does not
 	 * break get_supported_post_types() (defensive (array) cast).
 	 */
@@ -1209,5 +1077,499 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$without   = $converter->convert_post( $without_image, [ 'include_captions' => false ] );
 
 		$this->assertSame( $without, $with );
+	}
+
+	/**
+	 * Test that angle brackets written as entities in the body survive as escaped
+	 * literals.
+	 *
+	 * Tagged Text reserves < and > as tag delimiters, so a literal one has to be
+	 * backslash-escaped. An article about HTML that mentions "<div>" would
+	 * otherwise reach InDesign as an unknown tag.
+	 */
+	public function test_escapes_angle_brackets_in_body_content() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Use &lt;div&gt; tags for layout.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:text>Use \\<div\\> tags for layout.', $content );
+		$this->assertStringNotContainsString( '<div>', $content );
+	}
+
+	/**
+	 * Test that angle brackets inside a block are escaped rather than swallowed.
+	 *
+	 * Block inner HTML is converted before the body-wide HTML-to-tag pass, so an
+	 * unescaped "<div>" here was consumed by the unsupported-tag removal and the
+	 * text vanished from the export entirely.
+	 */
+	public function test_escapes_angle_brackets_in_block_content() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:paragraph --><p>Use &lt;div&gt; tags for layout.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:text>Use \\<div\\> tags for layout.', $content );
+		$this->assertStringNotContainsString( '<div>', $content );
+	}
+
+	/**
+	 * Test that bare angle brackets in body copy pass through unescaped.
+	 *
+	 * Escaping applies to entity-encoded brackets: get_transformed_text() runs
+	 * over content already carrying the converter's own tags, so a bare bracket
+	 * cannot be escaped without breaking them. Stored bare brackets are rare —
+	 * the editor saves a literal < as &lt; (though not >), and kses rewrites a
+	 * loose "< " to "&lt; " for authors without unfiltered_html — so this pins
+	 * the floor: raw brackets survive as-is.
+	 */
+	public function test_bare_angle_brackets_in_body_content_pass_through() {
+		// Admins bypass kses, so the brackets reach the database bare.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>The rule is a < b and c > d.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:text>The rule is a < b and c > d.', $content );
+	}
+
+	/**
+	 * Test that angle brackets in the post title are escaped.
+	 *
+	 * Titles are stored unencoded, so a headline comparison arrives as a raw
+	 * bracket rather than an entity.
+	 */
+	public function test_escapes_angle_brackets_in_title() {
+		// Editors and admins hold unfiltered_html, so their titles reach the
+		// database with the brackets intact rather than kses-stripped.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Why 3 < 4 and 5 > 4',
+				'post_content' => '<p>Body copy.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:24head>Why 3 \\< 4 and 5 \\> 4', $content );
+	}
+
+	/**
+	 * Test that angle brackets in the subtitle and byline are escaped.
+	 */
+	public function test_escapes_angle_brackets_in_subtitle_and_byline() {
+		// get_coauthors() is mocked for the whole suite, so the byline is sourced
+		// from here rather than from the post author. Cleared in tear_down().
+		$GLOBALS['_test_cap_coauthors'] = [ (object) [ 'display_name' => 'Ada <Lovelace>' ] ];
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Body copy.</p>',
+			]
+		);
+		update_post_meta( $post_id, 'newspack_post_subtitle', 'Revenue > costs' );
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:12sub>Revenue \\> costs', $content );
+		$this->assertStringContainsString( '<pstyle:byline>By Ada \\<Lovelace\\>', $content );
+	}
+
+	/**
+	 * Test that bracket entities in photo captions and credits are escaped.
+	 *
+	 * Captions are rich text, and the editor stores a literal bracket typed by
+	 * an author as an entity; credits are plain text, and bare brackets there
+	 * are encoded before the same escape.
+	 */
+	public function test_escapes_angle_brackets_in_caption_and_credit() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Caption with &lt;angle&gt; brackets',
+			]
+		);
+		update_post_meta( $image_id, '_media_credit', 'Credit &lt;tag&gt;' );
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Caption with \\<angle\\> brackets', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCredit>Credit \\<tag\\>', $content );
+	}
+
+	/**
+	 * Test that a literal backslash in content is escaped.
+	 *
+	 * A bare backslash is the Tagged Text escape character, so InDesign would
+	 * otherwise absorb the character that follows it.
+	 */
+	public function test_escapes_backslash_in_content() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				// wp_insert_post() unslashes what it is given, so slash the fixture
+				// to store the single literal backslash written here.
+				'post_content' => wp_slash( '<p>Open C:\Users to continue.</p>' ),
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		// Two literal backslashes: the escaped form of the one above.
+		$this->assertStringContainsString( 'Open C:\\\\Users to continue.', $content );
+	}
+
+	/**
+	 * Test that escaping leaves the converter's own tags alone.
+	 *
+	 * Escaping is a content-text concern; the paragraph, heading, typeface and
+	 * code-point tags the converter emits must stay readable as markup.
+	 */
+	public function test_does_not_escape_converter_tags() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<h2>Sub &lt;head&gt;</h2><p>Some <strong>bold</strong> text and an em—dash.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:h2>Sub \\<head\\>', $content );
+		$this->assertStringContainsString( '<cTypeface:Bold>bold<cTypeface:>', $content );
+		$this->assertStringContainsString( 'em<0x2014>dash', $content );
+		$this->assertStringNotContainsString( '\\<pstyle:', $content );
+		$this->assertStringNotContainsString( '\\<cTypeface:', $content );
+		$this->assertStringNotContainsString( '\\<0x2014', $content );
+		$this->assertStringNotContainsString( '\\<ASCII-WIN\\>', $content );
+	}
+
+	/**
+	 * Test that markup in a rich-text caption converts instead of escaping.
+	 *
+	 * Captions are rich text — the caption toolbar offers links, bold, and
+	 * italics, stored as inline HTML in the figcaption. Escaping those tags
+	 * would place them in InDesign as literal printed text; converting them
+	 * the way body content is converted keeps the caption readable and keeps
+	 * italics as a character style.
+	 */
+	public function test_converts_rich_caption_markup_instead_of_escaping_it() {
+		$image_id = $this->factory->attachment->create();
+		$post_id  = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><figure class="wp-block-image"><img src="http://localhost/wp-content/uploads/2025/01/image.jpg" /><figcaption class="wp-element-caption">Photo by <a href="https://example.com">Jane Doe</a> for <em>The Record</em>.</figcaption></figure><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Photo by Jane Doe for <cTypeface:Italic>The Record<cTypeface:>.', $content );
+		$this->assertStringNotContainsString( '\\<a', $content );
+		$this->assertStringNotContainsString( '\\<em\\>', $content );
+	}
+
+	/**
+	 * Test that the uppercase bracket entities are escaped too.
+	 *
+	 * &LT; and &GT; are valid HTML5 spellings of the same brackets, and
+	 * html_entity_decode() resolves them just like the lowercase forms.
+	 */
+	public function test_escapes_uppercase_angle_bracket_entities() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Use &LT;div&GT; tags for layout.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:text>Use \\<div\\> tags for layout.', $content );
+		$this->assertStringNotContainsString( '<div>', $content );
+	}
+
+	/**
+	 * Test that &Lt;/&Gt; stay out of the bracket escaping.
+	 *
+	 * Unlike &LT;/&GT;, the mixed-case forms are different characters entirely
+	 * (much-less-than and much-greater-than). Whether they decode depends on
+	 * the PHP version's HTML5 entity table — 8.4 resolves them to the
+	 * characters, 8.3 leaves the entity text — but neither may come out as a
+	 * bracket, escaped or bare.
+	 */
+	public function test_preserves_much_less_than_entities() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Bounds &Lt;x&Gt; hold.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertThat(
+			$content,
+			$this->logicalOr(
+				$this->stringContains( 'Bounds <0x226A>x<0x226B> hold.' ),
+				$this->stringContains( 'Bounds &Lt;x&Gt; hold.' )
+			)
+		);
+		$this->assertStringNotContainsString( '\\<x', $content );
+	}
+
+	/**
+	 * Test that a backslash written as an entity is escaped.
+	 *
+	 * &#92; and &#x5C; decode to a bare backslash — the Tagged Text escape
+	 * character — so leaving one unescaped makes InDesign absorb whatever
+	 * character follows it. (The named form &bsol; behaves the same on PHP
+	 * versions whose entity table includes it.)
+	 */
+	public function test_escapes_entity_encoded_backslashes() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Open C:&#92;Users or &#x5C; alone.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( 'Open C:\\\\Users or \\\\ alone.', $content );
+	}
+
+	/**
+	 * Test that an entity backslash next to a bracket entity stays escaped text.
+	 *
+	 * The pair &#92;&lt; must come out as an escaped backslash followed by an
+	 * escaped bracket; an unescaped backslash here would turn the bracket that
+	 * follows into a live tag opener.
+	 */
+	public function test_escapes_entity_backslash_composed_with_bracket_entity() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>See &#92;&lt;dir&gt; for details.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( 'See \\\\\<dir\\> for details.', $content );
+	}
+
+	/**
+	 * Test that a literal backslash in plain-text fields is escaped.
+	 *
+	 * Titles and credits route through get_transformed_plain_text(); the
+	 * backslash escape must reach them the same way it reaches body content.
+	 */
+	public function test_escapes_backslash_in_plain_text_fields() {
+		$image_id = $this->factory->attachment->create();
+		// update_post_meta() unslashes its input, so slash the fixture to store
+		// the single literal backslash written here.
+		update_post_meta( $image_id, '_media_credit', wp_slash( 'AP\\Photo' ) );
+
+		$post_id = $this->factory->post->create(
+			[
+				// wp_insert_post() unslashes too; same treatment for the title.
+				'post_title'   => wp_slash( 'Backslash \\ in title' ),
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:24head>Backslash \\\\ in title', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCredit>AP\\\\Photo', $content );
+	}
+
+	/**
+	 * Test that nested caption formatting converts cleanly.
+	 *
+	 * Bold inside a link: the link reduces to its text while the bold carries
+	 * through as a character style.
+	 */
+	public function test_converts_nested_caption_formatting() {
+		$image_id = $this->factory->attachment->create();
+		$post_id  = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:image {"id":' . $image_id . '} --><figure class="wp-block-image"><img src="http://localhost/wp-content/uploads/2025/01/image.jpg" /><figcaption class="wp-element-caption">By <a href="https://example.com"><strong>Jane Doe</strong></a> for The Record.</figcaption></figure><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>By <cTypeface:Bold>Jane Doe<cTypeface:> for The Record.', $content );
+	}
+
+	/**
+	 * Test that the Mac platform emits the Mac format: header and CR endings.
+	 *
+	 * Some InDesign installs only recognize the Mac form of Tagged Text — a
+	 * Windows header is placed as literal text, tags and all (NPPM-3098). The
+	 * format is a pair: <ASCII-MAC> declares bare-CR terminators, so no LF may
+	 * appear anywhere in the file, captions included.
+	 */
+	public function test_convert_post_mac_platform_emits_mac_format() {
+		$image_id = $this->factory->attachment->create();
+		wp_update_post(
+			[
+				'ID'           => $image_id,
+				'post_excerpt' => 'Mac caption',
+			]
+		);
+
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => "<!-- wp:paragraph -->\n<p>First para.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:image {\"id\":" . $image_id . '} --><!-- /wp:image -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'mac' ] );
+
+		$this->assertStringContainsString( '<ASCII-MAC>', $content );
+		$this->assertStringNotContainsString( '<ASCII-WIN>', $content );
+		$this->assertStringContainsString( '<pstyle:PhotoCaption>Mac caption', $content );
+		$this->assertGreaterThan( 0, substr_count( $content, "\r" ), 'Expected CR terminators.' );
+		$this->assertSame( 0, substr_count( $content, "\n" ), 'Found an LF: Mac exports are CR-terminated only.' );
+	}
+
+	/**
+	 * Test that every content shape is uniformly CR-terminated on Mac.
+	 *
+	 * The counterpart of the CRLF test above: whatever line endings the source
+	 * content carries, the Mac format may contain no LF byte at all.
+	 *
+	 * @dataProvider line_ending_content_provider
+	 *
+	 * @param string $post_content Post content to convert.
+	 */
+	public function test_convert_post_line_endings_are_uniformly_cr_on_mac( $post_content ) {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => $post_content,
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'mac' ] );
+
+		$this->assertStringContainsString( '<ASCII-MAC>', $content );
+		$this->assertGreaterThan( 0, substr_count( $content, "\r" ), 'Expected at least one line terminator.' );
+		$this->assertSame( 0, substr_count( $content, "\n" ), 'Found an LF: part of the file is not Mac-terminated.' );
+	}
+
+	/**
+	 * Test that an unknown platform value falls back to the Windows format.
+	 *
+	 * Covers rows stored by the setting's earlier releases, whose 'auto' value
+	 * no longer names a format.
+	 */
+	public function test_convert_post_unknown_platform_falls_back_to_win() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>Body copy.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'auto' ] );
+
+		$this->assertStringContainsString( '<ASCII-WIN>', $content );
+		$this->assertStringNotContainsString( '<ASCII-MAC>', $content );
+		$crlf = substr_count( $content, "\r\n" );
+		$this->assertSame( $crlf, substr_count( $content, "\r" ) );
+		$this->assertSame( $crlf, substr_count( $content, "\n" ) );
+	}
+
+	/**
+	 * Test that the platform setting defaults to Windows and constrains values
+	 * to formats the converter can emit.
+	 */
+	public function test_platform_setting_defaults_and_sanitizes() {
+		delete_option( 'newspack_indesign_export_platform' );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+
+		update_option( 'newspack_indesign_export_platform', 'mac' );
+		$this->assertSame( 'mac', InDesign_Exporter::get_platform_setting() );
+
+		update_option( 'newspack_indesign_export_platform', 'win' );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+
+		// Legacy value from the removed User-Agent mode, and junk.
+		update_option( 'newspack_indesign_export_platform', 'auto' );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+
+		update_option( 'newspack_indesign_export_platform', [ 'mac' ] );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+	}
+
+	/**
+	 * Test that dollar-digit text in a quote block survives conversion.
+	 *
+	 * The quote conversion is applied as a replacement over the post body, and
+	 * a replacement string containing $1 would otherwise be read as a regex
+	 * backreference, duplicating part of the quote into itself.
+	 */
+	public function test_quote_with_dollar_digit_text_converts_literally() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<!-- wp:quote --><blockquote class="wp-block-quote"><p>We raised $1 million last year.</p></blockquote><!-- /wp:quote -->',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pstyle:blockquote>We raised $1 million last year.', $content );
 	}
 }

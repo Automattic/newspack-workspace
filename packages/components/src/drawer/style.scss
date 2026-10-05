@@ -1,0 +1,205 @@
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+$drawer-size-small: 280px;
+$drawer-size-medium: 350px;
+$drawer-size-large: 480px;
+$drawer-size-x-large: 640px;
+
+.newspack-drawer,
+.newspack-drawer *,
+.newspack-drawer *::before,
+.newspack-drawer *::after {
+	box-sizing: border-box;
+}
+
+.newspack-drawer {
+	display: flex;
+	flex-direction: column;
+}
+
+.components-modal__screen-overlay.newspack-drawer__overlay {
+	align-items: stretch;
+	justify-content: flex-end;
+	padding: 0;
+}
+
+.components-modal__frame.newspack-drawer {
+	animation: 0.2s ease-out newspack-drawer-slide-in;
+	border-radius: wp-vars.$radius-large 0 0 wp-vars.$radius-large;
+	height: 100%;
+	margin: 0;
+	max-height: none;
+	min-width: 0;
+	overflow: hidden;
+	width: 100%;
+
+	&.is-exiting {
+		animation: 0.2s ease-in forwards newspack-drawer-slide-out;
+	}
+
+	.components-modal__content {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
+	}
+
+	.components-modal__children-container {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	&.newspack-drawer--size-small { max-width: $drawer-size-small; }
+	&.newspack-drawer--size-medium { max-width: $drawer-size-medium; }
+	&.newspack-drawer--size-large { max-width: $drawer-size-large; }
+	&.newspack-drawer--size-x-large { max-width: $drawer-size-x-large; }
+	&.newspack-drawer--size-full {
+		border-radius: 0;
+		max-width: 100vw;
+	}
+
+	@media (max-width: $drawer-size-x-large) {
+		&.newspack-drawer--size-x-large {
+			border-radius: 0;
+		}
+	}
+
+	@media (max-width: wp-breakpoints.$break-small) {
+		&.newspack-drawer--size-small,
+		&.newspack-drawer--size-medium,
+		&.newspack-drawer--size-large,
+		&.newspack-drawer--size-x-large,
+		&.newspack-drawer--size-full {
+			border-radius: 0;
+			max-width: 100vw;
+		}
+	}
+}
+
+.newspack-drawer__header {
+	align-items: center;
+	display: flex;
+	flex: 0 0 auto;
+	gap: wp-vars.$grid-unit-10;
+	padding: wp-vars.$grid-unit-30 wp-vars.$grid-unit-30 wp-vars.$grid-unit-20;
+}
+
+.newspack-drawer__icon {
+	fill: currentcolor;
+	flex: none;
+}
+
+.newspack-drawer__title {
+	flex: 1;
+	font-size: inherit;
+	font-weight: wp-vars.$font-weight-medium;
+	margin: 0;
+	min-width: 0;
+}
+
+.newspack-drawer__dismiss {
+	flex: none;
+	margin-left: auto;
+}
+
+.newspack-drawer__body {
+	flex: 1 1 auto;
+	overflow-y: auto;
+
+	> * {
+		flex: none;
+	}
+}
+
+.newspack-drawer__content {
+	padding: var(--newspack-drawer-content-padding, #{wp-vars.$grid-unit-30});
+
+	> * {
+		margin-bottom: 0;
+		margin-top: 0;
+	}
+}
+
+.newspack-drawer__divider {
+	border: 0;
+	border-top: wp-vars.$border-width solid wp-colors.$gray-300;
+	margin: 0;
+}
+
+.newspack-drawer__header + .newspack-drawer__body .newspack-drawer__content:first-child {
+	padding-top: 0;
+}
+
+.newspack-drawer__body:has(+ .newspack-drawer__footer) .newspack-drawer__content:last-child {
+	padding-bottom: 0;
+}
+
+.newspack-drawer__footer {
+	background: wp-colors.$white;
+	display: flex;
+	flex: 0 0 auto;
+	gap: wp-vars.$grid-unit-10;
+	padding: wp-vars.$grid-unit-20 wp-vars.$grid-unit-30 wp-vars.$grid-unit-30;
+
+	> .components-button {
+		flex: 1;
+		justify-content: center;
+	}
+
+	&:has(> :nth-child(3)) {
+		flex-direction: column;
+
+		> .components-button {
+			flex: 0 0 auto;
+		}
+	}
+}
+
+@keyframes newspack-drawer-slide-in {
+	from {
+		transform: translateX(100%);
+	}
+
+	to {
+		transform: translateX(0);
+	}
+}
+
+@keyframes newspack-drawer-slide-out {
+	from {
+		transform: translateX(0);
+	}
+
+	to {
+		transform: translateX(100%);
+	}
+}
+
+@keyframes newspack-drawer-overlay-fade-out {
+	from {
+		opacity: 1;
+	}
+
+	to {
+		opacity: 0;
+	}
+}
+
+.newspack-drawer__overlay.is-exiting {
+	animation: 0.2s ease-in forwards newspack-drawer-overlay-fade-out;
+}
+
+.components-modal__frame.newspack-drawer .components-popover__content {
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.components-modal__frame.newspack-drawer,
+	.components-modal__frame.newspack-drawer.is-exiting,
+	.newspack-drawer__overlay.is-exiting {
+		animation: none;
+	}
+}

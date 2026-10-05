@@ -91,6 +91,41 @@ class Subscribers_Wizard extends Wizard {
 	private $raw_status_ids_cache = [];
 
 	/**
+	 * Per-request memo of newsletter list public ID → display title, built once
+	 * from the site's own subscription lists. Null once resolved means the site
+	 * has no list registry to read. See get_newsletter_list_titles().
+	 *
+	 * @var array<string,string>|null
+	 */
+	private ?array $newsletter_list_titles_cache = null;
+
+	/**
+	 * Whether the newsletter-list registry has been resolved this request. Kept
+	 * apart from the memo itself because a null memo is a resolved state — the
+	 * registry is unreadable — and not an unfilled one.
+	 *
+	 * @var bool
+	 */
+	private bool $newsletter_list_titles_resolved = false;
+
+	/**
+	 * User meta key holding a reader's tags: short, admin-applied labels
+	 * ("vip", "met-in-person"). Stored on the user as an array of strings.
+	 *
+	 * This is site-local data. The connected ESP also carries per-contact tags,
+	 * but reading those is a per-reader API call — on a 50-row page that is a
+	 * rate-limit and latency problem that needs a batching/caching layer of its
+	 * own, so the column is deliberately fed from local data only.
+	 *
+	 * Read-only for now: nothing in the plugin writes this key, and it is not
+	 * registered with register_meta(), so the column reads empty on every site
+	 * until a later slice lands the write path. Whatever does that will need an
+	 * auth_callback and a sanitize_callback — reader-writable tags would let a
+	 * reader label themselves.
+	 */
+	const READER_TAGS_META = 'newspack_reader_tags';
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $args Optional arguments.
@@ -189,6 +224,34 @@ class Subscribers_Wizard extends Wizard {
 
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/groups/(?P<id>\d+)',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_group' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/plans',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_plans' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/subscribers',
 			[
 				'methods'             => \WP_REST_Server::READABLE,
@@ -213,6 +276,7 @@ class Subscribers_Wizard extends Wizard {
 					'search'   => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
 					],
 					'orderby'  => [
 						'type'              => 'string',
@@ -238,6 +302,13 @@ class Subscribers_Wizard extends Wizard {
 					'plan'     => [
 						'type'              => 'array',
 						'items'             => [ 'type' => 'string' ],
+						// Each name costs an unindexed post_title lookup plus a
+						// subscription scan, so the list is bounded. No real filter
+						// selects more plans than a site sells. /plans deliberately
+						// returns every name uncapped — the two are not a matched
+						// pair, and a site selling more than this many plans would
+						// offer options that a full selection cannot submit.
+						'maxItems'          => 100,
 						'sanitize_callback' => 'rest_sanitize_request_arg',
 						'validate_callback' => 'rest_validate_request_arg',
 					],
@@ -266,6 +337,58 @@ class Subscribers_Wizard extends Wizard {
 				],
 			]
 		);
+
+		// On-hold recovery (NPPD-1753). Both act on one individual
+		// subscription; group money actions deliberately live with the group
+		// surface instead.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/subscriptions/(?P<id>\d+)/reactivate',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_reactivate_subscription' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id'   => [
+						'type'              => 'integer',
+						'required'          => true,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'mode' => [
+						'type'              => 'string',
+						'required'          => true,
+						'enum'              => [ 'free', 'charge' ],
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/subscriptions/(?P<id>\d+)/payment-link',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_send_payment_link' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
+
+		// The payment-action routes (change payment method, refund/cancel, plan
+		// change, default card) live in their own class; they share this wizard's
+		// permission check so the whole surface has one capability gate.
+		Subscribers_Payments::register_routes( [ $this, 'api_permissions_check' ] );
 	}
 
 	/**
@@ -338,6 +461,164 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * GET the plan names the subscriber list can be filtered by.
+	 *
+	 * The subscriber list is server-paginated, so it can't derive its plan filter
+	 * from the rows it happens to be showing the way the group list does — a plan
+	 * nobody on page 1 holds would simply not be offered. This endpoint supplies
+	 * the whole set instead.
+	 *
+	 * Names, not IDs: the `plan` filter on /subscribers matches display names,
+	 * because a group's plan is its configured group name while an individual plan
+	 * is its product's name. The two are only comparable as strings. Names are
+	 * deduplicated, so two groups sharing a name are one option matching the
+	 * members of both.
+	 *
+	 * The contract every option has to meet — pinned by a round-trip test — is that
+	 * filtering on it returns the readers whose Subscription column shows it. It is
+	 * what excludes a group's own product from the options (see is_group_product())
+	 * and a variable subscription's parent (see subscription_product_names()).
+	 *
+	 * Scope: the plans the site currently offers, plus every configured group name.
+	 * A reader can still hold a plan that isn't listed — one whose product has since
+	 * been unpublished or deleted — because the alternative, deriving the list from
+	 * the subscriptions themselves, means scanning every subscription on the site
+	 * on each load of the list. Tracked as a follow-up rather than solved here.
+	 * Donation products are deliberately not excluded: a recurring donation is a
+	 * subscription and shows in the list's Subscription column, so filtering it out
+	 * here would leave a visible plan unfilterable.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function api_get_plans(): \WP_REST_Response {
+		$this->reset_request_caches();
+		$names = [];
+
+		foreach ( $this->get_group_subscriptions() as $group ) {
+			$names[] = (string) $group['settings']['name'];
+		}
+		foreach ( $this->subscription_product_names() as $product_name ) {
+			$names[] = $product_name;
+		}
+
+		$names = array_values( array_unique( array_filter( array_map( 'trim', $names ) ) ) );
+		// Natural, case-insensitive so the dropdown reads the way a person would
+		// sort it ("Tier 2" before "Tier 10").
+		sort( $names, SORT_NATURAL | SORT_FLAG_CASE );
+
+		return rest_ensure_response(
+			[
+				'items' => $names,
+				'total' => count( $names ),
+				'pages' => 1,
+			]
+		);
+	}
+
+	/**
+	 * The names of the site's published, non-group subscription products, variations
+	 * included.
+	 *
+	 * Variations are listed alongside their parent because a subscription bought on
+	 * a variation resolves to that variation (see individual_plan_name(), via
+	 * wcs_get_canonical_product_id) and so displays the variation's name — listing
+	 * only the parent would leave that plan visible in the list but unfilterable.
+	 *
+	 * Restricted to published products to match the filter's other half:
+	 * product_ids_for_names() resolves a name back to `publish` products only, so an
+	 * unpublished product's name would be an option that matches nobody.
+	 *
+	 * Group products are dropped: see is_group_product().
+	 *
+	 * @return string[] Product names, in no particular order and possibly duplicated.
+	 */
+	private function subscription_product_names(): array {
+		if ( ! function_exists( 'wc_get_products' ) ) {
+			return [];
+		}
+		$names    = [];
+		$products = \wc_get_products(
+			[
+				'type'   => [ 'subscription', 'variable-subscription' ],
+				'status' => 'publish',
+				// Unbounded, as everywhere else this plugin enumerates subscription
+				// products (Access_Rules::get_subscription_products_options,
+				// Subscriptions_Tiers::get_tier_eligible_products): a site sells a
+				// handful of plans, and a cap here would silently hide one.
+				'limit'  => -1,
+			]
+		);
+		foreach ( $products as $product ) {
+			// A variable subscription's own name is never what a row displays:
+			// individual_plan_name() resolves through wcs_get_canonical_product_id() to
+			// the variation, so a subscription on "Digital - Annual" shows that, not
+			// "Digital". Offering the parent name would match those subscriptions
+			// (WooCommerce's product filter matches a variation line item's parent
+			// _product_id) and return rows whose Subscription column shows something
+			// else — the round-trip this endpoint promises. Only its variations are
+			// listed, below.
+			if ( ! $product->is_type( 'variable-subscription' ) && ! $this->is_group_product( $product ) ) {
+				$names[] = (string) $product->get_name();
+			}
+			if ( ! $product->is_type( 'variable-subscription' ) ) {
+				continue;
+			}
+			// One product load per variation. The bound is the site's whole
+			// subscription catalogue — every variation of every variable
+			// subscription — resolved on each render of the Subscribers tab. That is
+			// a handful of loads on a real Newspack catalogue; a site with hundreds
+			// of variations would want these batched, but capping instead would
+			// silently drop plans from the dropdown, which is the failure this
+			// endpoint exists to avoid.
+			foreach ( $product->get_children() as $variation_id ) {
+				$variation = \wc_get_product( $variation_id );
+				if ( ! $variation || $this->is_group_product( $variation ) ) {
+					continue;
+				}
+				// get_children() returns private variations as well as published ones,
+				// and unchecking "Enabled" on a variation is how a publisher retires a
+				// tier while existing subscribers keep it. product_ids_for_names()
+				// resolves names against published products only, so listing a retired
+				// variation here would offer the admin a plan they can see in the rows
+				// below and then tell them nobody holds it.
+				if ( 'publish' !== $variation->get_status() ) {
+					continue;
+				}
+				$names[] = (string) $variation->get_name();
+			}
+		}
+		return $names;
+	}
+
+	/**
+	 * Whether a product is sold as a group subscription.
+	 *
+	 * Such a product must not become a filter option. Every member of a group
+	 * displays the group's own name in the Subscription column, so filtering on the
+	 * product behind it would return only the owners — the customers of record on
+	 * those subscriptions — while every other member of every group on that product
+	 * stayed hidden, and not one returned row would show the name that was filtered
+	 * on. The group names themselves are listed instead, which is what members see.
+	 *
+	 * Read from the product's own settings, which is where group enablement lives:
+	 * a variation carries its own setting and does not inherit the parent's (see
+	 * Group_Subscription_Settings::get_group_subscription_ids), so parents and
+	 * variations are both checked individually. A product that isn't itself a group
+	 * product stays listed even if one subscription on it was flagged as a group by
+	 * hand, since the product is still sold — and displayed — as an individual plan.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 *
+	 * @return bool
+	 */
+	private function is_group_product( \WC_Product $product ): bool {
+		if ( ! class_exists( '\Newspack\Group_Subscription_Settings' ) ) {
+			return false;
+		}
+		return ! empty( Group_Subscription_Settings::get_product_settings( $product )['enabled'] );
+	}
+
+	/**
 	 * Every group-enabled subscription on the site, each paired with its resolved
 	 * settings, keyed by subscription ID. Memoized for the request.
 	 *
@@ -397,17 +678,24 @@ class Subscribers_Wizard extends Wizard {
 				// see the group list's `editUrl` for the subscription itself.
 				'editUrl' => (string) get_edit_user_link( $owner_id ),
 			] : null,
+			// The group's own name: its custom name when set, else the product name,
+			// else the group label.
 			'plan'        => (string) $settings['name'],
+			// The product alone, which `plan` hides once the group is renamed.
+			'product'     => $this->individual_plan_name( $subscription ),
 			'status'      => self::map_subscription_status( $subscription->get_status() ),
 			// The configured limit is owner-inclusive (0 = unlimited); the member
 			// count is likewise owner-inclusive, so "members / seatLimit" reads true.
 			'seatLimit'   => (int) $settings['limit'],
 			'members'     => Group_Subscription::get_member_count( $subscription ),
 			'createdAt'   => $created_at,
-			// Interim click-through target: the WooCommerce subscription edit
-			// screen (HPOS-safe), until the in-wizard group detail lands (PR 4).
+			// The WooCommerce subscription edit screen (HPOS-safe), linked from the
+			// group's "View subscription" drawer.
 			'editUrl'     => $this->subscription_edit_url( $subscription ),
-			// Seat requests are surfaced in a later slice (NPPD-1753 PR 7).
+			// Always null: nothing on the site records a seat-increase request yet,
+			// so there is nothing to report. The field stays in the response because
+			// the group list already renders a badge from it, and it will populate
+			// as soon as such requests are stored.
 			'seatRequest' => null,
 		];
 	}
@@ -425,6 +713,197 @@ class Subscribers_Wizard extends Wizard {
 	 */
 	private function subscription_edit_url( $subscription ) {
 		return method_exists( $subscription, 'get_edit_order_url' ) ? (string) $subscription->get_edit_order_url() : '';
+	}
+
+	/**
+	 * GET one group subscription, hydrated for the in-wizard group detail screen.
+	 *
+	 * The payload is the collection endpoint's group shape (so both screens read
+	 * one contract) plus the detail-only parts a list has no room for: the people
+	 * with their roles, the outstanding invitations, the shareable link's state,
+	 * the committed-seat floor, and the billing shape the "View subscription"
+	 * drawer renders.
+	 *
+	 * Related objects are embedded rather than returned as IDs for the client to
+	 * resolve: the collection endpoint already embeds a full `owner` object, and
+	 * ids-only would force the screen into an N+1 (nothing in the collection
+	 * carries a member's join date or the group's billing).
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_get_group( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$this->reset_request_caches();
+
+		$subscription = function_exists( 'wcs_get_subscription' ) ? \wcs_get_subscription( (int) $request->get_param( 'id' ) ) : false;
+		$settings     = $subscription && class_exists( '\Newspack\Group_Subscription_Settings' )
+			? Group_Subscription_Settings::get_subscription_settings( $subscription )
+			: [];
+		// A subscription that isn't group-enabled is not a group. 404 rather than a
+		// half-populated payload the detail screen would render as an empty group.
+		if ( ! $subscription || empty( $settings['enabled'] ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_group_not_found',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'That %s could not be found.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				),
+				[ 'status' => 404 ]
+			);
+		}
+
+		return rest_ensure_response(
+			array_merge(
+				$this->prepare_group( $subscription, $settings ),
+				[
+					'memberList'    => $this->prepare_group_members( $subscription ),
+					'invites'       => $this->prepare_group_invites( $subscription ),
+					'inviteLink'    => $this->prepare_group_invite_link( $subscription ),
+					// The floor the seat limit can't be set below. Resolved server-side
+					// by the same helper the write endpoint validates against, so the
+					// form and the rule that rejects it can't disagree.
+					'seatsReserved' => Group_Subscription_API::reserved_seats( $subscription ),
+					'billing'       => $this->subscription_billing( $subscription ),
+					// Whether this caller may use the screen's write buttons. Reading the
+					// screen needs `manage_options` ($capability); every write on it goes
+					// to the group-subscription API, which admits an admin on
+					// `manage_woocommerce` alone -- permission_callback(),
+					// role_permission_callback() and admin_permission_callback() all
+					// reduce to that capability for someone who is not a manager of the
+					// group. The two are independent, so a role holding one and not the
+					// other is possible, and without this the buttons would render live
+					// and fail with a 403 on click.
+					'canManage'     => current_user_can( 'manage_woocommerce' ),
+				]
+			)
+		);
+	}
+
+	/**
+	 * The group's people, ordered owner → managers → members.
+	 *
+	 * The ordering is resolved here rather than client-side so the table's default
+	 * sort and the role model have one authority. The owner sorts first because
+	 * ownership implies management; promoted managers follow; plain members last.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 *
+	 * @return array<int,array> The ordered member entries.
+	 */
+	private function prepare_group_members( $subscription ): array {
+		$owner_id = (int) $subscription->get_user_id();
+		$managers = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
+
+		$entries = [];
+		foreach ( Group_Subscription::get_all_members( $subscription ) as $user_id ) {
+			$user_id = (int) $user_id;
+			$user    = get_userdata( $user_id );
+			if ( ! $user ) {
+				continue;
+			}
+			if ( $user_id === $owner_id ) {
+				$role = 'owner';
+			} elseif ( in_array( $user_id, $managers, true ) ) {
+				$role = 'manager';
+			} else {
+				$role = 'member';
+			}
+			$joined_at = Group_Subscription::get_member_joined_at( $user_id, $subscription );
+			$entries[] = [
+				'id'       => $user_id,
+				'name'     => $user->display_name,
+				'email'    => $user->user_email,
+				'role'     => $role,
+				// The owner holds no membership record, so they have no join date.
+				'joinedAt' => $joined_at ? gmdate( 'Y-m-d', $joined_at ) : null,
+				// A person's name links to the person, matching the lists.
+				'editUrl'  => (string) get_edit_user_link( $user_id ),
+			];
+		}
+
+		$rank_of = [
+			'owner'   => 0,
+			'manager' => 1,
+			'member'  => 2,
+		];
+		// PHP 8's sort is stable, so people of the same role keep the order the
+		// membership query returned them in.
+		usort(
+			$entries,
+			function ( $a, $b ) use ( $rank_of ) {
+				return $rank_of[ $a['role'] ] <=> $rank_of[ $b['role'] ];
+			}
+		);
+		return $entries;
+	}
+
+	/**
+	 * The group's outstanding email invitations.
+	 *
+	 * Expired invitations are included, flagged rather than dropped: an admin needs
+	 * to see a lapsed invite in order to resend or cancel it. The shareable link is
+	 * never an invitation row — it is a single persistent entry, reported separately
+	 * by prepare_group_invite_link().
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 *
+	 * @return array<int,array> The invitation entries.
+	 */
+	private function prepare_group_invites( $subscription ): array {
+		$expiration_window = Group_Subscription_Invite::get_expiration_time();
+		$invites           = [];
+		foreach ( Group_Subscription_Invite::get_invites( $subscription ) as $invite ) {
+			$email      = (string) ( $invite['email'] ?? '' );
+			$expiration = isset( $invite['expiration'] ) ? (int) $invite['expiration'] : 0;
+			$invites[]  = [
+				// The invitation's own key is deliberately NOT emitted: with the email
+				// (in this same row) it is exactly the pair Group_Subscription_Invite::
+				// get_invite_url() builds a working accept URL from, and is_valid_invite()
+				// checks nothing else — so leaking it here would let anyone who captured
+				// this admin response consume the invitation without inbox access. The
+				// client keys resend/cancel by email, so the row is identified by email,
+				// which is unique per group (generate_invite() replaces any prior invite
+				// for the same address).
+				'id'        => $email,
+				'email'     => $email,
+				'status'    => $expiration && $expiration >= time() ? 'pending' : 'expired',
+				// Only the expiry is stored, and it is always exactly one window
+				// after the invitation was sent, so the sent date is derived rather
+				// than persisted twice and left to drift.
+				'sentAt'    => $expiration ? gmdate( 'Y-m-d', $expiration - $expiration_window ) : null,
+				'expiresAt' => $expiration ? gmdate( 'Y-m-d', $expiration ) : null,
+			];
+		}
+		return $invites;
+	}
+
+	/**
+	 * The state of the group's shareable invite link.
+	 *
+	 * A group has one link, held by the subscription rather than by whoever minted
+	 * it, so this reports the same link the mint and delete buttons act on and the
+	 * same one the owner sees in My Account. Nothing about the caller changes what
+	 * is read: a caller who may not write still sees the link the group has, and
+	 * `canManage` is what tells the client to disable the buttons.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 *
+	 * @return array{active:bool,url:string}
+	 */
+	private function prepare_group_invite_link( $subscription ): array {
+		$entry = Group_Subscription_Invite::get_link_invite( $subscription );
+		if ( ! $entry || empty( $entry['key'] ) ) {
+			return [
+				'active' => false,
+				'url'    => '',
+			];
+		}
+		return [
+			'active' => true,
+			'url'    => Group_Subscription_Invite::get_link_invite_url( $subscription->get_id(), $entry['key'] ),
+		];
 	}
 
 	/**
@@ -484,9 +963,18 @@ class Subscribers_Wizard extends Wizard {
 
 		$user_query = new \WP_User_Query( $query_args );
 		$total      = (int) $user_query->get_total();
+		$users      = $user_query->get_results();
+
+		// Prime the whole page's user meta in one query, so the per-row reads
+		// during hydration (tags, newsletter subscriptions, last-active) are cache
+		// hits instead of a query each. WP_User_Query already does this for
+		// `fields => all`, and cache_users() no-ops when the users are cached —
+		// calling it here makes the batching a property of this endpoint rather
+		// than of a WP_User_Query internal that could change under us.
+		cache_users( wp_list_pluck( $users, 'ID' ) );
 
 		$items = [];
-		foreach ( $user_query->get_results() as $user ) {
+		foreach ( $users as $user ) {
 			$items[] = $this->prepare_subscriber( $user );
 		}
 
@@ -546,15 +1034,443 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * POST one on-hold subscription back to active (NPPD-1753 on-hold recovery).
+	 *
+	 * Two modes, chosen by the admin in the reactivate flow:
+	 *
+	 * - `free`: no payment. WCS's own on-hold → active transition recalculates
+	 *   the next payment date when the stored one is in the past, so billing
+	 *   resumes on the regular schedule without charging anything now.
+	 * - `charge`: process a renewal against the saved payment method — see
+	 *   process_renewal_charge() for how the charge is dispatched and how its
+	 *   outcome is decided.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_reactivate_subscription( $request ) {
+		$this->reset_request_caches();
+
+		$subscription = $this->resolve_on_hold_subscription( (int) $request->get_param( 'id' ) );
+		if ( \is_wp_error( $subscription ) ) {
+			return $subscription;
+		}
+
+		$admin_login = wp_get_current_user()->user_login;
+
+		if ( 'charge' === $request->get_param( 'mode' ) ) {
+			return $this->process_renewal_charge( $subscription, $admin_login );
+		}
+
+		// Real WCS throws when the transition is not allowed — e.g. the
+		// subscription's product no longer exists. That is a business-rule
+		// refusal, not a server fault: surface it as a conflict, with the
+		// likely causes named, since WCS's own message names none. One known
+		// divergence: WCS lets an admin override the unavailable-product
+		// refusal only inside wp-admin (`is_admin()`), which a REST request is
+		// not — so the native subscription screen may still allow what this
+		// endpoint refuses; the message points there.
+		try {
+			$subscription->update_status( 'active' );
+		} catch ( \Exception $e ) {
+			return new \WP_Error(
+				'newspack_subscribers_reactivate_failed',
+				sprintf(
+					/* translators: %s: the refusal reported by WooCommerce. */
+					__( '%s The subscription\'s product may no longer be purchasable, or its term may have ended. Reactivating from the WooCommerce subscription screen may still be possible.', 'newspack-plugin' ),
+					$e->getMessage()
+				),
+				[ 'status' => 409 ]
+			);
+		}
+
+		// After the transition, so a refused reactivation never leaves a note
+		// claiming one happened — the note is the audit trail.
+		/* translators: %s: the acting admin's login. */
+		$subscription->add_order_note( sprintf( __( 'Reactivated without payment by %s from the Subscribers admin.', 'newspack-plugin' ), $admin_login ) );
+
+		return rest_ensure_response( $this->reactivation_payload( $subscription ) );
+	}
+
+	/**
+	 * Charge a renewal for an on-hold subscription against its saved payment
+	 * method, and decide the outcome honestly.
+	 *
+	 * Dispatch: the gateway leg of WCS's renewal chain
+	 * (WC_Subscriptions_Payment_Gateways::gateway_scheduled_subscription_payment),
+	 * called directly rather than via the `woocommerce_scheduled_subscription_payment`
+	 * action. The umbrella action is how WCS's retry system recognises a
+	 * *scheduled* attempt (WCS_Retry_Manager checks `doing_action()` on it), so
+	 * firing it here would enroll every admin click in the automatic retry
+	 * ladder — whose final rule on Newspack sites expires the subscription. The
+	 * direct call charges the same order through the same gateway hook without
+	 * impersonating the billing schedule.
+	 *
+	 * Outcome: a gateway charge is not always synchronous — Stripe can leave the
+	 * money in flight, either awaiting asynchronous capture or manual review, or
+	 * awaiting the customer's SCA authentication. So the outcome is read from
+	 * state, three ways: the subscription reactivated (success); the renewal
+	 * order settled, or still carries a transaction id, while the subscription
+	 * is not active yet (payment in flight — reported as pending, NOT as a
+	 * failure, so nobody retries a live charge); otherwise a failure.
+	 *
+	 * One in-flight state is deliberately not detected: a mandated debit the
+	 * gateway has scheduled for later leaves the order pending with nothing
+	 * recorded on it, so it is indistinguishable from an ordinary decline and
+	 * reports as one. The refusal copy names that possibility rather than
+	 * pretending to rule it out.
+	 *
+	 * Concurrency: a short-lived per-subscription transient lock guards the
+	 * dispatch. It is best-effort — the check-then-set is not atomic and the
+	 * TTL bounds a stuck request rather than the charge — but it closes the
+	 * re-click and two-admins window from a full gateway round-trip to
+	 * milliseconds, and neither WCS nor the gateways deduplicate renewal
+	 * attempts on their own.
+	 *
+	 * @param \WC_Subscription $subscription The on-hold subscription.
+	 * @param string           $admin_login  The acting admin's login, for the audit note.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private function process_renewal_charge( $subscription, $admin_login ) {
+		if ( ! $this->can_charge( $subscription ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_cannot_charge',
+				__( 'This subscription has no payment method on file that can be charged. Send a payment link instead.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		$lock_key = $this->charge_lock_key( $subscription->get_id() );
+		if ( false !== get_transient( $lock_key ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_charge_in_progress',
+				__( 'A charge for this subscription is already being processed. Refresh the profile to see the outcome.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+		set_transient( $lock_key, 1, MINUTE_IN_SECONDS );
+
+		try {
+			$renewal_order = $this->latest_or_new_renewal_order( $subscription );
+			if ( \is_wp_error( $renewal_order ) ) {
+				return $renewal_order;
+			}
+
+			/* translators: %s: the acting admin's login. */
+			$subscription->add_order_note( sprintf( __( 'Renewal payment initiated by %s from the Subscribers admin.', 'newspack-plugin' ), $admin_login ) );
+
+			// The gateway leg of the renewal chain (see the method docblock for
+			// why it is called directly). WCS throws when it cannot resolve the
+			// subscription, and a gateway is free to throw out of its own hook;
+			// letting either escape would return a fatal on a click that may
+			// already have moved money, so the outcome read below runs either
+			// way and reports what the state actually says.
+			if ( class_exists( 'WC_Subscriptions_Payment_Gateways' ) ) {
+				try {
+					\WC_Subscriptions_Payment_Gateways::gateway_scheduled_subscription_payment( $subscription->get_id() );
+				} catch ( \Throwable $e ) {
+					$renewal_order->add_order_note(
+						sprintf(
+							/* translators: %s: the error the gateway or WooCommerce Subscriptions raised. */
+							__( 'The renewal charge raised an error: %s', 'newspack-plugin' ),
+							$e->getMessage()
+						)
+					);
+				}
+			} else {
+				do_action( 'woocommerce_scheduled_subscription_payment', $subscription->get_id() );
+			}
+
+			$subscription  = function_exists( 'wcs_get_subscription' ) ? \wcs_get_subscription( $subscription->get_id() ) : $subscription;
+			$renewal_order = function_exists( 'wc_get_order' ) ? \wc_get_order( $renewal_order->get_id() ) : $renewal_order;
+
+			if ( $subscription && 'active' === $subscription->get_status() ) {
+				return rest_ensure_response( $this->reactivation_payload( $subscription ) );
+			}
+
+			// The subscription did not reactivate, but the charge is not dead
+			// either. Two states say so, and saying "declined" for either is
+			// what gets a live charge retried: the order stopped needing
+			// payment (asynchronous capture, manual review, a webhook-confirmed
+			// gateway), or it still needs payment while carrying a transaction
+			// id — the gateway took the attempt and is waiting on the customer,
+			// which is where Stripe leaves an SCA charge pending authentication.
+			if ( $subscription && $renewal_order
+				&& ( ! $renewal_order->needs_payment() || '' !== (string) $renewal_order->get_transaction_id() ) ) {
+				return rest_ensure_response(
+					array_merge(
+						$this->reactivation_payload( $subscription ),
+						[ 'pendingConfirmation' => true ]
+					)
+				);
+			}
+
+			return new \WP_Error(
+				'newspack_subscribers_charge_failed',
+				__( 'The payment did not complete. The card may have been declined, or the charge may be waiting for the subscriber to authenticate it — check the renewal order\'s notes before retrying or sending a payment link.', 'newspack-plugin' ),
+				[ 'status' => 402 ]
+			);
+		} finally {
+			delete_transient( $lock_key );
+		}
+	}
+
+	/**
+	 * POST a payment link to the subscription's customer.
+	 *
+	 * The link is the unpaid renewal order's checkout payment URL — the same
+	 * order the failed renewal left behind, so paying it resumes the existing
+	 * billing history rather than starting a parallel one. The customer gets it
+	 * by email (WooCommerce's customer invoice email, which carries the pay
+	 * link), and the URL is returned so the admin can hand it over directly.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function api_send_payment_link( $request ) {
+		$this->reset_request_caches();
+
+		$subscription = $this->resolve_on_hold_subscription( (int) $request->get_param( 'id' ) );
+		if ( \is_wp_error( $subscription ) ) {
+			return $subscription;
+		}
+
+		// While a charge is mid-flight the renewal order still needs payment,
+		// so without this check the customer would be emailed a pay link for
+		// the very order the gateway is charging — and paying it is a second
+		// real payment. This route takes the same lock rather than only reading
+		// it: latest_or_new_renewal_order() can CREATE an order, so two
+		// overlapping link requests would otherwise leave the subscriber two
+		// payable invoices for one period.
+		$lock_key = $this->charge_lock_key( $subscription->get_id() );
+		if ( false !== get_transient( $lock_key ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_charge_in_progress',
+				__( 'A charge for this subscription is being processed. Wait for it to finish before sending a payment link.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+		set_transient( $lock_key, 1, MINUTE_IN_SECONDS );
+
+		try {
+			$renewal_order = $this->latest_or_new_renewal_order( $subscription );
+			if ( \is_wp_error( $renewal_order ) ) {
+				return $renewal_order;
+			}
+
+			// `emailSent` is honest to what can be known here: the invoice email
+			// no-ops without a recipient, so an order with no billing email means no
+			// email went out — and the client falls back to showing the URL itself.
+			$email_sent = false;
+			if ( function_exists( 'WC' ) && \WC()->mailer() && '' !== (string) $renewal_order->get_billing_email() ) {
+				// The same envelope WC core's own "Email invoice" order action uses,
+				// so email-logging integrations see this send too.
+				do_action( 'woocommerce_before_resend_order_emails', $renewal_order, 'customer_invoice' );
+				\WC()->mailer()->customer_invoice( $renewal_order );
+				do_action( 'woocommerce_after_resend_order_emails', $renewal_order, 'customer_invoice' );
+				$email_sent = true;
+				/* translators: %s: the acting admin's login. */
+				$subscription->add_order_note( sprintf( __( 'Payment link emailed to the customer by %s from the Subscribers admin.', 'newspack-plugin' ), wp_get_current_user()->user_login ) );
+			}
+
+			return rest_ensure_response(
+				[
+					'paymentUrl' => $renewal_order->get_checkout_payment_url(),
+					'emailSent'  => $email_sent,
+				]
+			);
+		} finally {
+			delete_transient( $lock_key );
+		}
+	}
+
+	/**
+	 * The per-subscription lock both recovery routes hold.
+	 *
+	 * Shared so the charge route and the payment-link route cannot drift onto
+	 * different keys: the link route's whole protection is that it observes the
+	 * charge route's lock.
+	 *
+	 * @param int $subscription_id The subscription ID.
+	 *
+	 * @return string
+	 */
+	private function charge_lock_key( $subscription_id ) {
+		return 'newspack_subscribers_charge_' . (int) $subscription_id;
+	}
+
+	/**
+	 * Resolve an id to an individual on-hold subscription, or the error that
+	 * explains why the write cannot proceed.
+	 *
+	 * A group-enabled subscription reports not-found: its money actions belong
+	 * to the group surface, and this route not acknowledging it keeps the two
+	 * surfaces from drifting into two ways of charging the same group.
+	 *
+	 * @param int $subscription_id The subscription ID.
+	 *
+	 * @return \WC_Subscription|\WP_Error
+	 */
+	private function resolve_on_hold_subscription( $subscription_id ) {
+		$subscription = function_exists( 'wcs_get_subscription' ) ? \wcs_get_subscription( $subscription_id ) : false;
+		$settings     = $subscription && class_exists( '\Newspack\Group_Subscription_Settings' )
+			? Group_Subscription_Settings::get_subscription_settings( $subscription )
+			: [];
+		if ( ! $subscription || ! empty( $settings['enabled'] ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_subscription_not_found',
+				__( 'That subscription could not be found.', 'newspack-plugin' ),
+				[ 'status' => 404 ]
+			);
+		}
+		// On-hold only, and raw status rather than the mapped vocabulary: the
+		// mapped "on-hold" bucket also absorbs unknown WCS statuses, which are
+		// exactly the ones a recovery write should not touch blind.
+		if ( 'on-hold' !== $subscription->get_status() ) {
+			return new \WP_Error(
+				'newspack_subscribers_not_on_hold',
+				__( 'This subscription is not on hold, so it cannot be reactivated.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+		return $subscription;
+	}
+
+	/**
+	 * Whether a renewal charge could even be attempted: an automatic payment
+	 * method is on file, its gateway is actually registered (a stored gateway id
+	 * whose plugin was deactivated would fire a charge into a void), there is an
+	 * amount to charge, and the gateway lets WCS trigger the charge (rather than
+	 * scheduling payments itself, in which case an admin-triggered charge would
+	 * double-bill).
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return bool
+	 */
+	private function can_charge( $subscription ) {
+		return ! $subscription->is_manual()
+			&& '' !== (string) $subscription->get_payment_method()
+			&& (float) $subscription->get_total() > 0
+			&& ! $subscription->payment_method_supports( 'gateway_scheduled_payments' )
+			&& function_exists( 'wc_get_payment_gateway_by_order' )
+			&& (bool) \wc_get_payment_gateway_by_order( $subscription );
+	}
+
+	/**
+	 * The renewal order recovery acts on, creating one when the latest is settled.
+	 *
+	 * Selection matches the code that will actually charge:
+	 * WC_Subscriptions_Payment_Gateways::gateway_scheduled_subscription_payment()
+	 * acts on `get_last_order( 'all', 'renewal' )` — the newest renewal order,
+	 * paid or not — and skips it when it no longer needs payment. Selecting any
+	 * *other* order here (say, an older unpaid one behind a newer settled one)
+	 * would name and email one order while the gateway charges, or skips,
+	 * another. So: reuse the latest renewal order when it still needs payment —
+	 * the common failed-renewal case — otherwise create a fresh one, which then
+	 * IS the latest, keeping the named order and the charged order the same
+	 * object.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return \WC_Order|\WP_Error
+	 */
+	private function latest_or_new_renewal_order( $subscription ) {
+		$latest_renewal = $subscription->get_last_order( 'all', [ 'renewal' ] );
+
+		// A transaction recorded on a renewal that has not settled means the
+		// gateway accepted an attempt that is still in flight, and charging or
+		// invoicing underneath it is how a subscriber gets billed twice. Two
+		// shapes carry it, and they must be judged before the reuse branch
+		// below, because one of them still needs payment: an order parked
+		// on-hold (asynchronous capture, manual review), and an order left
+		// needing payment while the gateway settles a charge it has already
+		// named.
+		//
+		// The transaction id is the discriminator, so this only catches an
+		// attempt the gateway got far enough to name. An attempt can be
+		// genuinely unresolved and carry none: WC Stripe takes the id from the
+		// charge object, and an off-session renewal refused with
+		// `authentication_required` produces no charge at all, leaving the
+		// order with only `_stripe_intent_id`. Nothing is billed twice there,
+		// because WC Stripe reuses one PaymentIntent per order — but that
+		// protection belongs to the gateway, not to this guard, and a gateway
+		// that mints a fresh intent per attempt would not have it.
+		//
+		// Offline gateways (BACS, cheque) also park orders on-hold and record
+		// no transaction, and an ordinary decline leaves a `failed` order with
+		// none either — for both the remedy is another attempt, so neither may
+		// dead-end here. Settled orders (completed, processing, cancelled,
+		// refunded) never block: an admin-suspended subscription whose last
+		// renewal succeeded still deserves a fresh charge.
+		if ( is_object( $latest_renewal ) && '' !== (string) $latest_renewal->get_transaction_id()
+			&& ( $latest_renewal->has_status( [ 'on-hold' ] ) || $latest_renewal->needs_payment() ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_payment_unresolved',
+				__( 'A payment for this subscription is still awaiting confirmation. Wait for it to resolve before charging again or sending a payment link.', 'newspack-plugin' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		if ( is_object( $latest_renewal ) && $latest_renewal->needs_payment() ) {
+			return $latest_renewal;
+		}
+
+		$renewal_order = function_exists( 'wcs_create_renewal_order' ) ? \wcs_create_renewal_order( $subscription ) : false;
+		if ( ! $renewal_order || \is_wp_error( $renewal_order ) ) {
+			return new \WP_Error(
+				'newspack_subscribers_renewal_order_failed',
+				__( 'A renewal order could not be created for this subscription.', 'newspack-plugin' ),
+				[ 'status' => 500 ]
+			);
+		}
+		if ( $subscription->is_manual() ) {
+			// Parity with WCS's process_renewal() for manual subscriptions, so
+			// integrations listening for manual renewal orders see this one too.
+			do_action( 'woocommerce_generated_manual_renewal_order', $renewal_order->get_id(), $subscription );
+			$renewal_order->add_order_note( __( 'Manual renewal order awaiting customer payment.', 'newspack-plugin' ) );
+		} elseif ( function_exists( 'wc_get_payment_gateway_by_order' ) ) {
+			// Carry the subscription's gateway onto the fresh order so the charge
+			// path knows what to trigger — same as WCS's process_renewal().
+			$gateway = \wc_get_payment_gateway_by_order( $subscription );
+			if ( $gateway ) {
+				$renewal_order->set_payment_method( $gateway );
+				$renewal_order->save();
+			}
+		}
+		return $renewal_order;
+	}
+
+	/**
+	 * What the reactivate flow needs to confirm the outcome: the mapped status
+	 * plus the next billing date WCS recalculated.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return array
+	 */
+	private function reactivation_payload( $subscription ) {
+		return [
+			'status'          => self::map_subscription_status( $subscription->get_status() ),
+			'nextBillingDate' => $this->subscription_date( $subscription, 'next_payment' ),
+		];
+	}
+
+	/**
 	 * Clear the per-request memoized caches at the start of each endpoint.
 	 *
 	 * Every callback resolves group data fresh; the memos exist only to avoid
 	 * re-resolving within a single request, so each entry point starts clean.
 	 */
 	private function reset_request_caches() {
-		$this->group_subscriptions_cache = null;
-		$this->group_membership_index    = null;
-		$this->raw_status_ids_cache      = [];
+		$this->group_subscriptions_cache       = null;
+		$this->group_membership_index          = null;
+		$this->raw_status_ids_cache            = [];
+		$this->newsletter_list_titles_cache    = null;
+		$this->newsletter_list_titles_resolved = false;
 	}
 
 	/**
@@ -595,23 +1511,24 @@ class Subscribers_Wizard extends Wizard {
 		$registered = $user->user_registered ? strtotime( $user->user_registered . ' UTC' ) : false;
 
 		return [
-			'id'            => $user_id,
-			'name'          => $user->display_name,
-			'email'         => $user->user_email,
+			'id'             => $user_id,
+			'name'           => $user->display_name,
+			'email'          => $user->user_email,
 			// The native user-edit screen (self edits resolve to profile.php). The
 			// in-wizard profile does not yet cover editing the WordPress user, so the
 			// profile keeps this as a header action rather than stranding the admin.
-			'editUrl'       => get_edit_user_link( $user_id ),
-			'status'        => $this->reduced_status( $subscriptions, $groups ),
-			'memberSince'   => $this->local_date( $registered ),
-			'lastPayment'   => $this->last_payment_date( $user_id ),
-			// Wired to reader activity in a later slice; the column is hidden by default.
-			'lastSeen'      => null,
-			'subscriptions' => $subscriptions,
-			'groups'        => $groups,
-			// Tags and newsletters are populated in a later slice (NPPD-1753 PR 7).
-			'tags'          => [],
-			'newsletters'   => [],
+			'editUrl'        => get_edit_user_link( $user_id ),
+			'status'         => $this->reduced_status( $subscriptions, $groups ),
+			'memberSince'    => $this->local_date( $registered ),
+			'lastPayment'    => $this->last_payment_date( $user_id ),
+			'lastSeen'       => $this->last_seen_date( $user_id ),
+			'subscriptions'  => $subscriptions,
+			'groups'         => $groups,
+			'tags'           => $this->reader_tags( $user_id ),
+			'newsletters'    => $this->reader_newsletters( $user_id ),
+			// The saved-card list is profile-only: a list row never renders it, and
+			// resolving tokens per row would cost a query on every row of every page.
+			'paymentMethods' => $detailed ? Subscribers_Payments::payment_methods_for_user( $user_id ) : [],
 		];
 	}
 
@@ -645,7 +1562,25 @@ class Subscribers_Wizard extends Wizard {
 				'status'  => self::map_subscription_status( $subscription->get_status() ),
 				'editUrl' => $this->subscription_edit_url( $subscription ),
 			];
-			$out[] = $detailed ? array_merge( $entry, $this->subscription_billing( $subscription ) ) : $entry;
+			$out[] = $detailed
+				? array_merge(
+					$entry,
+					$this->subscription_billing( $subscription ),
+					Subscribers_Payments::subscription_payment_fields( $subscription ),
+					[
+						// Whether a renewal charge could even be attempted, so
+						// the reactivate flow can hide "Charge now" when there
+						// is nothing on file to charge.
+						'canCharge'     => $this->can_charge( $subscription ),
+						// Whether the reactivate action applies at all. Gated on
+						// the RAW status, matching the write endpoint's rule: the
+						// mapped "on-hold" bucket also absorbs unknown WCS
+						// statuses, and offering an action the server will refuse
+						// with a 409 is worse than not offering it.
+						'canReactivate' => 'on-hold' === $subscription->get_status(),
+					]
+				)
+				: $entry;
 		}
 		return $out;
 	}
@@ -734,7 +1669,8 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Resolve the display name of an individual subscription's plan (its product name).
+	 * Resolve a subscription's product name: an individual plan's display name, or
+	 * the product behind a group.
 	 *
 	 * @param \WC_Subscription $subscription The subscription.
 	 *
@@ -966,6 +1902,173 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * When a reader was last seen, from the site's own record of their activity.
+	 *
+	 * Reads the `last_active` reader-data item, which reader activation stamps on
+	 * every page view (most-recent-wins) and which the ESP sync already publishes
+	 * as `Last_Active`. Reporting the same value here means this column and the
+	 * publisher's ESP tell one story about the same reader, and it tracks reading
+	 * rather than signing in — a reader on a long-lived auth cookie who visits
+	 * daily is last seen today, and logging out doesn't erase the record.
+	 *
+	 * The value is client-asserted: `last_active` is not among
+	 * Reader_Data::get_read_only_keys(), so the browser writes it and a determined
+	 * reader could set it themselves. That is fine for an informational column,
+	 * but nothing that grants access may be decided on it.
+	 *
+	 * Formatted through local_date() like every other date this wizard emits. The
+	 * ESP sync publishes the same instant in UTC, but that value is read by a
+	 * machine, whereas this one sits in a table beside localized subscription
+	 * dates: on a negative-offset site an evening visit formatted in UTC lands on
+	 * tomorrow's date, which reads as plainly wrong next to them. Going through
+	 * local_date() also drops a falsy timestamp rather than rendering it as
+	 * 1970-01-01, which matters because the value is client-writable.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return string|null 'YYYY-MM-DD', or null when the site has no usable record of them.
+	 */
+	private function last_seen_date( int $user_id ): ?string {
+		$last_active = Reader_Data::get_data( $user_id, 'last_active' );
+		if ( empty( $last_active ) || ! is_numeric( $last_active ) ) {
+			return null;
+		}
+		// Reader-data timestamps are JavaScript milliseconds; intdiv() keeps the
+		// conversion integral, since local_date() takes an int timestamp.
+		$timestamp = intdiv( (int) $last_active, 1000 );
+		$now       = time();
+		// The browser writes this value from its own clock, and the client store
+		// keeps whichever of the stored and the local value is larger, so a device
+		// running ahead writes a timestamp the site can never lower again. A small
+		// overshoot is ordinary clock skew and reads as now. Further ahead than a
+		// day describes the device's clock rather than the reader, so the record is
+		// dropped: an unknown last-seen is a smaller lie than one that dates a
+		// dormant reader to today and keeps doing so.
+		if ( $timestamp > $now + DAY_IN_SECONDS ) {
+			return null;
+		}
+		return $this->local_date( min( $timestamp, $now ) );
+	}
+
+	/**
+	 * A reader's tags — the short labels an admin applies to them, stored locally
+	 * on the user. See READER_TAGS_META on why the ESP's tags are not read here.
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return string[]
+	 */
+	private function reader_tags( int $user_id ): array {
+		$tags = get_user_meta( $user_id, self::READER_TAGS_META, true );
+		// A JSON-encoded list is accepted alongside a stored array, so a value
+		// written through a JSON-shaped path (WP-CLI, the REST meta API) reads back
+		// as tags rather than as one tag named `["vip"]`.
+		if ( is_string( $tags ) && '' !== $tags ) {
+			$decoded = json_decode( $tags, true );
+			$tags    = is_array( $decoded ) ? $decoded : [ $tags ];
+		}
+		if ( ! is_array( $tags ) ) {
+			return [];
+		}
+		$tags = array_map( 'sanitize_text_field', array_filter( $tags, 'is_scalar' ) );
+		// Empty entries go, and only those: array_filter()'s default callback tests
+		// truthiness, which would also drop a tag literally named "0".
+		return array_values( array_unique( array_diff( $tags, [ '' ] ) ) );
+	}
+
+	/**
+	 * The newsletters a reader is subscribed to, each as its list ID and the title
+	 * the site shows for it.
+	 *
+	 * The subscription itself is read from the reader's own record — the
+	 * `newsletter_subscribed_lists` reader-data item, which the newsletter data
+	 * events keep in step with the ESP — and the list IDs it holds are resolved
+	 * against the site's own list definitions. No ESP call is made; see
+	 * READER_TAGS_META for why.
+	 *
+	 * A list the site holds no definition for reports a null title rather than a
+	 * synthesized one, and always keeps its ID. Unresolved is a routine state, not
+	 * a rarity: the stored set is `get_contact_combined_lists()`, which merges the
+	 * ESP's own list IDs with the site's local public IDs, so a Mailchimp or
+	 * ActiveCampaign site regularly holds IDs it has no local record of. Sending
+	 * the ID rather than a sentence keeps it machine-readable, since a filter
+	 * matches on a list ID and not on prose, and leaves the wording to the client,
+	 * next to the column heading it sits under.
+	 *
+	 * Resolution needs a registry at all: when the site has none, nothing is
+	 * reported rather than every list being called unknown; see
+	 * get_newsletter_list_titles().
+	 *
+	 * @param int $user_id The reader user ID.
+	 *
+	 * @return array<array{id:string,title:?string}>
+	 */
+	private function reader_newsletters( int $user_id ): array {
+		$raw      = Reader_Data::get_data( $user_id, 'newsletter_subscribed_lists' );
+		$list_ids = is_string( $raw ) ? json_decode( $raw, true ) : $raw;
+		if ( ! is_array( $list_ids ) ) {
+			return [];
+		}
+		$titles = $this->get_newsletter_list_titles();
+		if ( null === $titles ) {
+			// No registry to resolve against — on a site that has since deactivated
+			// the Newsletters plugin, the stored subscriptions are still there. The
+			// site cannot say those lists are unknown, only that it cannot look them
+			// up, which is what the column's empty state already means.
+			return [];
+		}
+		$lists = [];
+		// Deduplicated by list ID, before resolution: two lists can carry the same
+		// title, and collapsing on the title would drop one of the subscriptions.
+		$list_ids = array_unique( array_map( 'strval', array_filter( $list_ids, 'is_scalar' ) ) );
+		foreach ( $list_ids as $list_id ) {
+			if ( '' === $list_id ) {
+				continue;
+			}
+			$lists[] = [
+				'id'    => $list_id,
+				'title' => $titles[ $list_id ] ?? null,
+			];
+		}
+		return $lists;
+	}
+
+	/**
+	 * Map of newsletter list public ID → display title, from the site's own
+	 * subscription lists. Memoized for the request.
+	 *
+	 * The site's lists are few and shared by every row, while resolving a list
+	 * on demand costs a query — so the map is built once per request and read
+	 * per row, the same shape the group-membership index uses.
+	 *
+	 * A site running without the Newsletters plugin has no registry at all, which
+	 * is reported as null and is a different thing from a registry that exists and
+	 * holds no lists: the first cannot resolve any ID, the second resolves them
+	 * all to "not one of ours".
+	 *
+	 * @return array<string,string>|null The map, or null when there is no registry to read.
+	 */
+	private function get_newsletter_list_titles(): ?array {
+		if ( $this->newsletter_list_titles_resolved ) {
+			return $this->newsletter_list_titles_cache;
+		}
+		$this->newsletter_list_titles_resolved = true;
+		if ( ! class_exists( '\Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( '\Newspack\Newsletters\Subscription_Lists', 'get_all' ) ) {
+			return null;
+		}
+		$titles = [];
+		foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
+			$public_id = (string) $list->get_public_id();
+			$title     = (string) $list->get_title();
+			if ( '' !== $public_id && '' !== $title ) {
+				$titles[ $public_id ] = $title;
+			}
+		}
+		$this->newsletter_list_titles_cache = $titles;
+		return $titles;
+	}
+
+	/**
 	 * Resolve the `include` user-ID set for the active subscription-status / plan
 	 * filters, or null when neither is present.
 	 *
@@ -1109,39 +2212,74 @@ class Subscribers_Wizard extends Wizard {
 	 * Customer IDs holding a subscription (individual or group) on any of the
 	 * named plans.
 	 *
+	 * A cancelled plan qualifies its holder only when nothing live remains, because
+	 * that is what the Subscription column shows: visiblePlanEntries() in
+	 * SubscriberList.jsx hides a cancelled plan for anyone still holding a live one.
+	 * Without the reduction a reader who cancelled one plan and bought another comes
+	 * back under the cancelled plan's filter displaying only the plan they moved to,
+	 * which is the round trip api_get_plans() exists to guarantee.
+	 * customer_ids_for_statuses() applies the same rule on the status axis.
+	 *
 	 * @param string[] $plan_names Plan display names.
 	 *
 	 * @return int[]
 	 */
-	private function customer_ids_for_plans( array $plan_names ) {
-		$ids = [];
+	private function customer_ids_for_plans( array $plan_names ): array {
+		$ids           = [];
+		$cancelled_ids = [];
 
-		// Group plans, matched by the group's configured name.
+		// Group plans, matched by the group's configured name. Trimmed on both sides
+		// because api_get_plans() offers the trimmed name: a buyer who typed
+		// "Acme Team " would otherwise get an option matching nobody. Members inherit
+		// their group's status, so a cancelled group is cancelled for every one of them.
 		foreach ( $this->get_group_subscriptions() as $group ) {
-			if ( in_array( (string) $group['settings']['name'], $plan_names, true ) ) {
-				$ids = array_merge( $ids, array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) ) );
+			if ( ! in_array( trim( (string) $group['settings']['name'] ), $plan_names, true ) ) {
+				continue;
+			}
+			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
+			if ( 'cancelled' === self::map_subscription_status( $group['subscription']->get_status() ) ) {
+				$cancelled_ids = array_merge( $cancelled_ids, $members );
+			} else {
+				$ids = array_merge( $ids, $members );
 			}
 		}
 
 		// Individual plans, matched by product name → subscriptions for that product.
+		//
+		// The product → subscription-ID lookup is a single uncached join across the
+		// order-item tables, so it runs once per product and is bounded in SQL.
+		// wcs_get_subscriptions() is not a way to page it: handed a product_id but no
+		// customer_id or order_id it runs this same lookup unbounded on every call
+		// (WC_Subscription_Query_Controller::should_filter_query_results), so paging
+		// through it repeats the expensive half rather than splitting it.
+		//
+		// The cap is shared out per product instead of consumed in order, so one plan
+		// with more holders than the whole budget cannot leave the other plans in the
+		// same multi-select matching nobody. Equal shares keep the total at or under
+		// the cap however many plans are ticked.
 		$product_ids = $this->product_ids_for_names( $plan_names );
 		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscriptions_for_product' ) && function_exists( 'wcs_get_subscription' ) ) {
-			$subscription_ids = [];
+			$per_product = max( 1, intdiv( self::FILTER_INCLUDE_CAP, count( $product_ids ) ) );
 			foreach ( $product_ids as $product_id ) {
-				foreach ( array_keys( \wcs_get_subscriptions_for_product( $product_id ) ) as $subscription_id ) {
-					$subscription_ids[] = (int) $subscription_id;
+				foreach ( \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'limit' => $per_product ] ) as $subscription_id ) {
+					$subscription = \wcs_get_subscription( $subscription_id );
+					if ( ! $subscription ) {
+						continue;
+					}
+					$customer_id = (int) $subscription->get_customer_id();
+					if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
+						$cancelled_ids[] = $customer_id;
+					} else {
+						$ids[] = $customer_id;
+					}
 				}
 			}
-			// Bound the number of subscription objects hydrated, mirroring the
-			// status path's cap so a plan on a very popular product can't load an
-			// unbounded set into memory.
-			$subscription_ids = array_slice( array_unique( $subscription_ids ), 0, self::FILTER_INCLUDE_CAP );
-			foreach ( $subscription_ids as $subscription_id ) {
-				$subscription = \wcs_get_subscription( $subscription_id );
-				if ( $subscription ) {
-					$ids[] = (int) $subscription->get_customer_id();
-				}
-			}
+		}
+
+		// The live set is the one customer_ids_for_raw_statuses() memoizes for the
+		// status filter, so this costs no extra scan when both filters are active.
+		if ( ! empty( $cancelled_ids ) ) {
+			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
 		}
 
 		return array_values( array_unique( array_filter( $ids ) ) );
@@ -1177,7 +2315,31 @@ class Subscribers_Wizard extends Wizard {
 				$ids[] = (int) $post_id;
 			}
 		}
-		return array_values( array_unique( $ids ) );
+		$ids = array_values( array_unique( $ids ) );
+
+		// api_get_plans() excludes group products from the options (see
+		// is_group_product()), so resolving one here would make the two halves
+		// disagree. They collide by default rather than rarely: an unnamed group falls
+		// back to its product's name
+		// (Group_Subscription_Settings::get_subscription_settings()), so a product
+		// "Team Plan" with one unnamed group and one renamed group would match the
+		// renamed group's owner when filtering on "Team Plan".
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return $ids;
+		}
+		return array_values(
+			array_filter(
+				$ids,
+				function ( $product_id ) {
+					// Only a confirmed group product is dropped. A product WooCommerce
+					// cannot hydrate is kept: the name matched a real published product
+					// post, and dropping what cannot be classified would silently narrow
+					// the filter instead of widening it.
+					$product = \wc_get_product( $product_id );
+					return ! $product || ! $this->is_group_product( $product );
+				}
+			)
+		);
 	}
 
 	/**
@@ -1261,29 +2423,41 @@ class Subscribers_Wizard extends Wizard {
 			true
 		);
 
-		// Mirror the publisher's configurable group/team label so the wizard stays
-		// consistent with the Audience → Setup "Group labels" override.
-		$group_label_singular = class_exists( '\Newspack\Group_Subscription' )
-			? Group_Subscription::get_label( 'singular' )
-			: __( 'Group', 'newspack-plugin' );
-		$group_label_plural = class_exists( '\Newspack\Group_Subscription' )
-			? Group_Subscription::get_label( 'plural' )
-			: __( 'Groups', 'newspack-plugin' );
+		// Ship the raw overrides, blank when unset, so the client can tell a custom noun
+		// from the default, plus the default nouns and the phrase that wraps them
+		// translated here: this bundle's JS strings are not localized, so anything the
+		// client composes itself would read in English beside a translated heading.
+		$group_label_singular = Group_Subscription::get_label_override( 'singular' );
+		$group_label_plural   = Group_Subscription::get_label_override( 'plural' );
 
 		wp_add_inline_script(
 			'newspack-subscribers',
 			'window.newspackSubscribers = ' . wp_json_encode(
 				[
-					'groupLabel'       => $group_label_singular,
-					'groupLabelPlural' => $group_label_plural,
+					'groupLabel'              => $group_label_singular,
+					'groupLabelPlural'        => $group_label_plural,
+					'groupLabelDefault'       => Group_Subscription::get_default_label( 'singular' ),
+					'groupLabelDefaultPlural' => Group_Subscription::get_default_label( 'plural' ),
+					'groupPhrases'            => [
+						/* translators: 1: number of groups. 2: the group label, e.g. "Groups". Word order only; the noun already carries number. */
+						'count'      => __( '%1$s %2$s', 'newspack-plugin' ),
+						/* translators: %s: the group label, e.g. "Group". */
+						'role'       => __( '%s role', 'newspack-plugin' ),
+						/* translators: %s: the group label, e.g. "Group". */
+						'name'       => __( '%s name', 'newspack-plugin' ),
+						/* translators: 1: the group label, e.g. "Groups". 2: the error message. */
+						'loadFailed' => __( 'Could not load %1$s: %2$s', 'newspack-plugin' ),
+						/* translators: 1: the group label, e.g. "Group". 2: the group name. */
+						'view'       => __( 'View %1$s: %2$s', 'newspack-plugin' ),
+					],
 					// Drives the column layout synchronously; the avatar URLs
 					// themselves come from the /avatars REST endpoint.
-					'showAvatars'      => (bool) get_option( 'show_avatars', true ),
+					'showAvatars'             => (bool) get_option( 'show_avatars', true ),
 					// The /avatars endpoint truncates anything past this cap rather
 					// than erroring, so the client must batch to the same number. It
 					// is published here so there is one authority instead of two
 					// constants that can drift apart silently.
-					'avatarBatchCap'   => self::AVATAR_BATCH_CAP,
+					'avatarBatchCap'          => self::AVATAR_BATCH_CAP,
 				]
 			) . ';',
 			'before'

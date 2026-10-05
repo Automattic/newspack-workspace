@@ -83,13 +83,12 @@ class Audience_Wizard extends Wizard {
 		parent::enqueue_scripts_and_styles();
 		$salesforce_settings = Salesforce::get_salesforce_settings();
 		$data = [
-			'has_memberships'               => Memberships::is_active(),
-			'reader_activation_url'         => admin_url( 'admin.php?page=newspack-audience#/' ),
-			'esp_metadata_fields'           => Reader_Activation\Sync\Metadata::get_default_fields(),
-			'can_use_salesforce'            => ! empty( $salesforce_settings['client_id'] ),
-			'salesforce_redirect_url'       => Salesforce::get_redirect_url(),
-			'available_products'            => Content_Gate::get_purchasable_product_options(),
-			'integrations_settings_enabled' => Audience_Integrations::is_enabled(),
+			'has_memberships'         => Memberships::is_active(),
+			'reader_activation_url'   => admin_url( 'admin.php?page=newspack-audience#/' ),
+			'esp_metadata_fields'     => Reader_Activation\Sync\Metadata::get_default_fields(),
+			'can_use_salesforce'      => ! empty( $salesforce_settings['client_id'] ),
+			'salesforce_redirect_url' => Salesforce::get_redirect_url(),
+			'available_products'      => Content_Gate::get_purchasable_product_options(),
 		];
 
 		if ( method_exists( 'Newspack\Newsletters\Subscription_Lists', 'get_add_new_url' ) ) {
@@ -1096,8 +1095,9 @@ class Audience_Wizard extends Wizard {
 	}
 
 	/**
-	 * Get the publisher-configurable group subscription labels. Empty values fall back
-	 * to the defaults baked into Group_Subscription::get_label().
+	 * Get the publisher-configurable group subscription labels. The override and the
+	 * default travel separately so the client can tell a custom noun from the default;
+	 * both come from Group_Subscription, which owns the option keys and the defaults.
 	 *
 	 * @return WP_REST_Response|WP_Error
 	 */
@@ -1108,10 +1108,10 @@ class Audience_Wizard extends Wizard {
 		}
 		return rest_ensure_response(
 			[
-				'label_singular'         => (string) get_option( 'newspack_group_subscription_label_singular', '' ),
-				'label_plural'           => (string) get_option( 'newspack_group_subscription_label_plural', '' ),
-				'label_singular_default' => __( 'Group', 'newspack-plugin' ),
-				'label_plural_default'   => __( 'Groups', 'newspack-plugin' ),
+				'label_singular'         => Group_Subscription::get_label_override( 'singular' ),
+				'label_plural'           => Group_Subscription::get_label_override( 'plural' ),
+				'label_singular_default' => Group_Subscription::get_default_label( 'singular' ),
+				'label_plural_default'   => Group_Subscription::get_default_label( 'plural' ),
 			]
 		);
 	}
@@ -1129,15 +1129,19 @@ class Audience_Wizard extends Wizard {
 			return $disabled;
 		}
 		$params = $request->get_params();
-		foreach ( [ 'label_singular', 'label_plural' ] as $field ) {
+		foreach ( [
+			'label_singular' => 'singular',
+			'label_plural'   => 'plural',
+		] as $field => $variant ) {
 			if ( ! array_key_exists( $field, $params ) ) {
 				continue;
 			}
-			$value = trim( (string) $params[ $field ] );
+			$option_key = Group_Subscription::get_label_option_key( $variant );
+			$value      = trim( (string) $params[ $field ] );
 			if ( '' === $value ) {
-				delete_option( 'newspack_group_subscription_' . $field );
+				delete_option( $option_key );
 			} else {
-				update_option( 'newspack_group_subscription_' . $field, $value );
+				update_option( $option_key, $value );
 			}
 		}
 		return $this->api_get_group_labels();

@@ -87,18 +87,34 @@ class Audience_Campaigns extends Wizard {
 			'newspack-wizards',
 			'newspackAudienceCampaigns',
 			[
-				'api'                => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-				'preview_post'       => $preview_post,
-				'preview_archive'    => $preview_archive,
-				'frontend_url'       => get_site_url(),
-				'custom_placements'  => $custom_placements,
-				'overlay_placements' => $overlay_placements,
-				'overlay_sizes'      => $overlay_sizes,
-				'preview_query_keys' => $preview_query_keys,
-				'experimental'       => Reader_Activation::is_enabled(),
-				'criteria'           => $criteria,
+				'api'                        => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+				'preview_post'               => $preview_post,
+				'preview_archive'            => $preview_archive,
+				'frontend_url'               => get_site_url(),
+				'custom_placements'          => $custom_placements,
+				'overlay_placements'         => $overlay_placements,
+				'overlay_sizes'              => $overlay_sizes,
+				'preview_query_keys'         => $preview_query_keys,
+				'experimental'               => Reader_Activation::is_enabled(),
+				'criteria'                   => $criteria,
+				'contextual_prompts_enabled' => self::is_contextual_prompts_enabled(),
 			]
 		);
+	}
+
+	/**
+	 * Whether the Contextual Prompts feature is enabled.
+	 *
+	 * Defers to the newspack-popups provider (the canonical constant check lives
+	 * on \Newspack_Popups::is_contextual_prompts_enabled()), so an older popups
+	 * that lacks the helper or the CP REST routes never exposes the tab.
+	 *
+	 * @return bool
+	 */
+	private static function is_contextual_prompts_enabled() {
+		return class_exists( 'Newspack_Popups' )
+			&& method_exists( 'Newspack_Popups', 'is_contextual_prompts_enabled' )
+			&& \Newspack_Popups::is_contextual_prompts_enabled();
 	}
 
 	/**
@@ -453,8 +469,15 @@ class Audience_Campaigns extends Wizard {
 				'callback'            => [ $this, 'api_get_subscription_products' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
-					's' => [
+					's'       => [
 						'sanitize_callback' => 'sanitize_text_field',
+					],
+					// Deliberately untyped items: saved segments can hold a stray empty value,
+					// and one bad entry must not fail the lookup for the rest. The callback
+					// keeps only positive integers.
+					'include' => [
+						'type'    => 'array',
+						'default' => [],
 					],
 				],
 			]
@@ -917,14 +940,21 @@ class Audience_Campaigns extends Wizard {
 	/**
 	 * Get non-donation subscription products.
 	 *
+	 * Without `include`, lists the products a segment can be pointed at: published and
+	 * private. With `include`, looks up those saved IDs whatever their status, so a segment
+	 * keeps naming a product after it's drafted, scheduled or trashed. In both, any status
+	 * but published carries a marker in the name. Segment matching compares product IDs
+	 * only, so the status doesn't change who matches.
+	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
 	 */
 	public function api_get_subscription_products( $request ) {
-		$args = [
+		$include = array_values( array_filter( array_map( 'absint', (array) $request->get_param( 'include' ) ) ) );
+		$args    = [
 			'post_type'      => 'product',
 			'posts_per_page' => 100,
-			'post_status'    => 'publish',
+			'post_status'    => WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES,
 			'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 				[
 					'taxonomy' => 'product_type',
@@ -933,6 +963,11 @@ class Audience_Campaigns extends Wizard {
 				],
 			],
 		];
+		if ( ! empty( $include ) ) {
+			$args['post__in']       = $include;
+			$args['posts_per_page'] = count( $include );
+			$args['post_status']    = [ 'publish', 'private', 'draft', 'pending', 'future', 'trash' ];
+		}
 
 		$posts = array_values(
 			array_filter(
@@ -948,7 +983,7 @@ class Audience_Campaigns extends Wizard {
 				function( $post ) {
 					return [
 						'id'    => $post->ID,
-						'title' => $post->post_title,
+						'title' => WooCommerce_Products::get_product_label_with_status( $post->post_title, $post->post_status ),
 					];
 				},
 				$posts

@@ -1,11 +1,3 @@
-/**
- * Subscription Products page styles.
- *
- * Deliberately minimal — the page inherits the wizard chrome, DataViews layout, and
- * Badge styling from the shared component library. These rules only cover the
- * bundled-plan/unlocks chips, the create/edit form, and a few muted states.
- */
-
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
 .newspack-subscription-products {
@@ -64,13 +56,13 @@
 		gap: 4px;
 	}
 
-	// Each chip links to the rule's edit view — the Badge stays the visual; the
-	// only link affordance is an underline on the label on hover/focus.
 	&__policy-chip {
+		display: inline-flex;
+		align-items: center;
 		text-decoration: none;
 
-		&:hover .newspack-badge,
-		&:focus-visible .newspack-badge {
+		&:hover .newspack-subscription-products__policy-chip-badge,
+		&:focus-visible .newspack-subscription-products__policy-chip-badge {
 			text-decoration: underline;
 		}
 	}

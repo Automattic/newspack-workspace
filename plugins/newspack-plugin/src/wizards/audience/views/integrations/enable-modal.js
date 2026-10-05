@@ -10,10 +10,8 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
  * Internal dependencies
  */
 import { Button, Modal, Notice } from '../../../../../packages/components/src';
-import { SettingsField } from './settings-field';
+import { hasSelectableOption, isEmptyValue, SettingsField } from './settings-field';
 import './enable-modal.scss';
-
-const isEmptyValue = value => value === undefined || value === null || value === '';
 
 // Server-managed field types (see Integration::MANAGED_FIELD_TYPES) can't be
 // collected here: the settings endpoint refuses client writes for them.
@@ -48,9 +46,7 @@ export const EnableModal = ( { integration, onClose, onEnable, onGoToSettings } 
 	const hasEmptyField = missingFields.some( field => isEmptyValue( getValue( field ) ) );
 	// A required select with no selectable (non-empty) options can never be
 	// satisfied from here — offer the settings view instead of a dead control.
-	const hasUnsatisfiableField = missingFields.some(
-		field => 'select' === field.type && ! ( field.options || [] ).some( option => ! isEmptyValue( option.value ) )
-	);
+	const hasUnsatisfiableField = missingFields.some( field => 'select' === field.type && ! hasSelectableOption( field ) );
 
 	const handleEnable = () => {
 		setEnabling( true );

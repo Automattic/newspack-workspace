@@ -7,12 +7,18 @@
 @use "sass:math";
 
 @function to-rgb($color) {
-	@return color.channel($color, "red", $space: rgb) + ", " + color.channel($color, "green", $space: rgb) + ", " + color.channel($color, "blue", $space: rgb);
+	@return color.channel($color, "red", $space: rgb) + ", " + color.channel($color, "green", $space: rgb) + ", " +
+		color.channel($color, "blue", $space: rgb);
 }
 
 @function to-rgba($color) {
 	$alpha: math.div(math.round(color.channel($color, "alpha") * 100), 100);
-	@return rgba(color.channel($color, "red", $space: rgb), color.channel($color, "green", $space: rgb), color.channel($color, "blue", $space: rgb), $alpha);
+	@return rgba(
+		color.channel($color, "red", $space: rgb),
+		color.channel($color, "green", $space: rgb),
+		color.channel($color, "blue", $space: rgb),
+		$alpha
+	);
 }
 
 // Primary: Hex
@@ -75,7 +81,7 @@ $secondary-1000--rgb: to-rgb($secondary-1000);
 $tertiary-000: #fff4f6;
 $tertiary-050: #fee8ed;
 $tertiary-100: #fedbe3;
-$tertiary-200: #fcded8;
+$tertiary-200: #fdced8;
 $tertiary-300: #fdbfcd;
 $tertiary-400: #fcaec0;
 $tertiary-500: #fc9bb3;
@@ -161,13 +167,13 @@ $neutral-1000--rgb: to-rgb($neutral-1000);
 $overlay-000: #0000000d;
 $overlay-050: #0000001a;
 $overlay-100: #00000026;
-$overlay-200: #00000033;
+$overlay-200: #0003;
 $overlay-300: #0000004d;
-$overlay-400: #00000066;
+$overlay-400: #0006;
 $overlay-500: #00000080;
-$overlay-600: #00000099;
+$overlay-600: #0009;
 $overlay-700: #000000b3;
-$overlay-800: #000000cc;
+$overlay-800: #000c;
 $overlay-900: #000000e6;
 $overlay-1000: #000000f2;
 

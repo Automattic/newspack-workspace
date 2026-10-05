@@ -109,21 +109,22 @@ class Test_Advanced_Settings extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With no stored mode, the feed restriction mode defaults to "exclude" to
-	 * match WooCommerce Memberships (restricted items dropped from feeds).
+	 * With no stored mode, the feed restriction mode defaults to "truncate":
+	 * restricted items stay in the feed with the gate teaser rather than being
+	 * dropped.
 	 */
-	public function test_feed_restriction_mode_defaults_to_exclude() {
+	public function test_feed_restriction_mode_defaults_to_truncate() {
 		$settings = Content_Gate_Advanced_Settings::get_settings();
-		$this->assertSame( 'exclude', $settings['feed_restriction_mode'] );
+		$this->assertSame( 'truncate', $settings['feed_restriction_mode'] );
 	}
 
 	/**
-	 * An unknown or corrupt stored mode is normalized back to the exclude default
+	 * An unknown or corrupt stored mode is normalized back to the truncate default
 	 * rather than silently disabling feed restriction.
 	 */
-	public function test_invalid_feed_restriction_mode_falls_back_to_exclude() {
+	public function test_invalid_feed_restriction_mode_falls_back_to_truncate() {
 		$updated = Content_Gate_Advanced_Settings::update_settings( [ 'feed_restriction_mode' => 'nonsense' ] );
-		$this->assertSame( 'exclude', $updated['feed_restriction_mode'] );
+		$this->assertSame( 'truncate', $updated['feed_restriction_mode'] );
 	}
 
 	/**

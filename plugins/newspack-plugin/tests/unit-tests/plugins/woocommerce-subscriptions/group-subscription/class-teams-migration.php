@@ -17,6 +17,8 @@ use Newspack\CLI\Teams_Migration;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 
+require_once dirname( __DIR__, 4 ) . '/mocks/newsletters-mocks.php';
+
 /**
  * Test the migration data-layer helpers and the manager backfill.
  *
@@ -39,7 +41,19 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	private $team_ids = [];
 
 	/**
+	 * Invitation post IDs to clean up.
+	 *
+	 * @var int[]
+	 */
+	private $invitation_ids = [];
+
+	/**
 	 * Include the WC mocks.
+	 *
+	 * The `wcmti-` invitation statuses are deliberately left unregistered so the fixtures
+	 * reproduce the Teams-deactivated case the reader's PHP-side pending filter guards
+	 * (see get_pending_team_invitation_emails()'s docblock): the status clause is dropped
+	 * and every status returns, and wp_insert_post stores the unregistered status verbatim.
 	 */
 	public static function set_up_before_class() {
 		parent::set_up_before_class();
@@ -73,22 +87,28 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		foreach ( $this->team_ids as $team_id ) {
 			wp_delete_post( $team_id, true );
 		}
-		$this->user_ids = [];
-		$this->team_ids = [];
+		foreach ( $this->invitation_ids as $invitation_id ) {
+			wp_delete_post( $invitation_id, true );
+		}
+		$this->user_ids       = [];
+		$this->team_ids       = [];
+		$this->invitation_ids = [];
 		parent::tear_down();
 	}
 
 	/**
 	 * Create a reader user (a valid group member).
 	 *
+	 * @param string|null $email Account email; a unique lowercase one is generated when null.
+	 *                           Pass an explicit address to pin case-sensitive behaviour.
 	 * @return int User ID.
 	 */
-	private function create_reader(): int {
+	private function create_reader( ?string $email = null ): int {
 		$user_id = wp_insert_user(
 			[
 				'user_login' => 'user-' . wp_generate_password( 6, false ),
 				'user_pass'  => wp_generate_password(),
-				'user_email' => 'user-' . wp_generate_password( 6, false ) . '@test.com',
+				'user_email' => $email ?? 'user-' . wp_generate_password( 6, false ) . '@test.com',
 				'role'       => 'subscriber',
 			]
 		);
@@ -113,6 +133,26 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 			]
 		);
 		$this->assertNotWPError( $user_id, 'Fixture editor creation should succeed.' );
+		$this->user_ids[] = $user_id;
+		return $user_id;
+	}
+
+	/**
+	 * Create an author (a non-reader who is nonetheless an eligible group member —
+	 * Group_Subscription::is_eligible_member() includes authors/contributors by default).
+	 *
+	 * @return int User ID.
+	 */
+	private function create_author(): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'author-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'author-' . wp_generate_password( 6, false ) . '@test.com',
+				'role'       => 'author',
+			]
+		);
+		$this->assertNotWPError( $user_id, 'Fixture author creation should succeed.' );
 		$this->user_ids[] = $user_id;
 		return $user_id;
 	}
@@ -237,15 +277,57 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The add_group_member() helper skips editors/admins — they are not readers and
+	 * The product command must set the same owner-inclusive limit migrate-teams does:
+	 * a product's "Maximum member count" gains a seat for the owner unless the global
+	 * "Owners must be members" setting already reserves one. 0 (unlimited) is untouched.
+	 */
+	public function test_map_product_max_members_to_group_limit_accounts_for_owner_seat() {
+		// Default (option unset) behaves as "no": WC Teams does not count the owner, so
+		// Access Control adds a seat — a "5 members" product becomes a 6-seat group.
+		delete_option( 'wc_memberships_for_teams_owners_must_take_seat' );
+		$this->assertSame( 6, Teams_Migration::map_product_max_members_to_group_limit( 5 ), 'Owner uncounted by default → 5-member product needs 6 group seats.' );
+
+		// Explicit "no" matches the default.
+		update_option( 'wc_memberships_for_teams_owners_must_take_seat', 'no' );
+		$this->assertSame( 6, Teams_Migration::map_product_max_members_to_group_limit( 5 ) );
+
+		// "yes": the owner already occupies one of the product's seats, so no seat is added.
+		update_option( 'wc_memberships_for_teams_owners_must_take_seat', 'yes' );
+		$this->assertSame( 5, Teams_Migration::map_product_max_members_to_group_limit( 5 ) );
+
+		// 0 = unlimited passes through unchanged, regardless of the setting.
+		$this->assertSame( 0, Teams_Migration::map_product_max_members_to_group_limit( 0 ) );
+		update_option( 'wc_memberships_for_teams_owners_must_take_seat', 'no' );
+		$this->assertSame( 0, Teams_Migration::map_product_max_members_to_group_limit( 0 ) );
+
+		delete_option( 'wc_memberships_for_teams_owners_must_take_seat' );
+	}
+
+	/**
+	 * The add_group_member() helper adds an eligible author — previously skipped
+	 * as a non-reader, now eligible via Group_Subscription::is_eligible_member(),
+	 * which includes authors/contributors by default alongside readers.
+	 */
+	public function test_add_group_member_adds_author() {
+		$owner        = $this->create_reader();
+		$author       = $this->create_author();
+		$subscription = $this->create_group_subscription( $owner );
+
+		$this->assertSame( 'added', Teams_Migration::add_group_member( $subscription, $author ), 'An eligible author should be added.' );
+		$this->assertTrue( (bool) Group_Subscription::user_is_member( $author, $subscription ), 'The author should now hold group membership.' );
+	}
+
+	/**
+	 * The add_group_member() helper skips editors/admins — they are not eligible
+	 * group members (Group_Subscription::is_eligible_member() excludes them) and
 	 * already have full access, so they should not be recorded as group members.
 	 */
-	public function test_add_group_member_skips_non_readers() {
+	public function test_add_group_member_reports_not_eligible_for_editor() {
 		$owner        = $this->create_reader();
 		$editor       = $this->create_editor();
 		$subscription = $this->create_group_subscription( $owner );
 
-		$this->assertSame( 'not_reader', Teams_Migration::add_group_member( $subscription, $editor ), 'A non-reader (editor) should be skipped.' );
+		$this->assertSame( 'not_eligible', Teams_Migration::add_group_member( $subscription, $editor ), 'A non-eligible user (editor) should be skipped.' );
 		$this->assertFalse( (bool) Group_Subscription::user_is_member( $editor, $subscription ), 'The editor should not become a group member.' );
 	}
 
@@ -273,6 +355,31 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$managers = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
 		$this->assertContains( $manager_member, $managers, 'The promoted member should now be a manager.' );
 		$this->assertNotContains( $plain_member, $managers, 'The plain member should not be a manager.' );
+	}
+
+	/**
+	 * A dry-run's projected manager-promotion count must match what the live path would
+	 * actually promote. The live path (promote_managers_from_team_roles()) gates only on
+	 * team-role and group membership — and add_group_member() grants membership to any
+	 * Group_Subscription::is_eligible_member() user, which includes authors/contributors
+	 * by default. count_dry_run_manager_promotions() used the narrower
+	 * Reader_Activation::is_user_reader() as its own membership stand-in (no member meta
+	 * exists yet mid dry-run), so it under-counted an author-role manager the live path
+	 * would promote.
+	 */
+	public function test_dry_run_manager_promotion_count_includes_eligible_author_manager() {
+		$owner        = $this->create_reader();
+		$author       = $this->create_author();
+		$subscription = $this->create_group_subscription( $owner );
+		$team_id      = $this->create_team( $owner, [ $author ], $subscription->get_id() );
+		$this->set_team_role( $author, $team_id, 'manager' );
+
+		$count_dry_run_manager_promotions_method = new \ReflectionMethod( Teams_Migration::class, 'count_dry_run_manager_promotions' );
+		$count_dry_run_manager_promotions_method->setAccessible( true );
+
+		$count = $count_dry_run_manager_promotions_method->invoke( null, $subscription, $team_id, [ $author ], $owner );
+
+		$this->assertSame( 1, $count, 'An eligible author manager should be counted among projected promotions, matching the live path.' );
 	}
 
 	/**
@@ -488,6 +595,106 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertTrue( $result['resolved'], 'The active group subscription should resolve.' );
 		$this->assertSame( $active_group->get_id(), $result['subscription_id'], 'The active group subscription should be selected over the cancelled/non-group ones.' );
 		$this->assertSame( [ $member ], $result['promoted'], 'The manager-role member should be promoted into the resolved group.' );
+	}
+
+	/**
+	 * Create a WooCommerce Teams invitation post (a `wc_team_invitation` whose title
+	 * holds the invitee email and whose parent is the team), mirroring how the Teams
+	 * plugin stores pending invites.
+	 *
+	 * @param int    $team_id The team post ID.
+	 * @param string $email   The invitee email (stored as the post title).
+	 * @param string $status  The invitation post status (defaults to pending).
+	 * @return int Invitation post ID.
+	 */
+	private function create_team_invitation( int $team_id, string $email, string $status = 'wcmti-pending' ): int {
+		$invitation_id = wp_insert_post(
+			[
+				'post_type'   => 'wc_team_invitation',
+				'post_status' => $status,
+				'post_title'  => $email,
+				'post_parent' => $team_id,
+			]
+		);
+		$this->assertNotWPError( $invitation_id, 'Fixture invitation creation should succeed.' );
+		$this->assertGreaterThan( 0, $invitation_id, 'Fixture invitation should receive a post ID.' );
+		$this->invitation_ids[] = $invitation_id;
+		return $invitation_id;
+	}
+
+	/**
+	 * The pending-invitation reader returns only the emails of pending invitations for
+	 * the given team: accepted/cancelled invites, malformed titles, other teams'
+	 * invites, and duplicate addresses are all excluded/deduped.
+	 */
+	public function test_get_pending_team_invitation_emails_returns_pending_valid_emails_only() {
+		$owner   = $this->create_reader();
+		$team_id = $this->create_team( $owner, [], null );
+
+		$pending_one = 'pending-one@test.com';
+		$pending_two = 'pending-two@test.com';
+		$this->create_team_invitation( $team_id, $pending_one );
+		$this->create_team_invitation( $team_id, $pending_two );
+		// A second pending invitation for the same address is deduped, not returned twice.
+		$this->create_team_invitation( $team_id, $pending_one );
+		// A case variant of the same mailbox is deduped too (matching is case-insensitive,
+		// though the address that survives keeps the casing it was stored with).
+		$this->create_team_invitation( $team_id, 'Pending-One@TEST.com' );
+		// Non-pending invitations are not carried over.
+		$this->create_team_invitation( $team_id, 'accepted@test.com', 'wcmti-accepted' );
+		$this->create_team_invitation( $team_id, 'cancelled@test.com', 'wcmti-cancelled' );
+		// A malformed title is dropped rather than handed to generate_invite().
+		$this->create_team_invitation( $team_id, 'not-an-email' );
+		// A pending invitation on another team must not leak in.
+		$other_team = $this->create_team( $owner, [], null );
+		$this->create_team_invitation( $other_team, 'other-team@test.com' );
+
+		$emails = Teams_Migration::get_pending_team_invitation_emails( $team_id );
+
+		sort( $emails );
+		$this->assertSame( [ $pending_one, $pending_two ], $emails, 'Only pending, valid, same-team invitation emails should be returned, deduped.' );
+	}
+
+	/**
+	 * The bulk pre-pass reader must return exactly what the per-team reader returns
+	 * for each team — one query instead of one per team is a shape change, not a
+	 * behaviour change — and it counts the pending invitations it drops for holding
+	 * a non-email title, the one case the re-invite list cannot show.
+	 */
+	public function test_bulk_invitation_reader_matches_per_team_reader_and_counts_drops() {
+		$owner  = $this->create_reader();
+		$team_a = $this->create_team( $owner, [], null );
+		$team_b = $this->create_team( $owner, [], null );
+		$team_c = $this->create_team( $owner, [], null ); // No invitations at all.
+
+		$this->create_team_invitation( $team_a, 'bulk-a-one@test.com' );
+		$this->create_team_invitation( $team_a, 'Bulk-A-One@TEST.com' ); // Case-variant dupe — deduped, not dropped.
+		$this->create_team_invitation( $team_a, 'not-an-email' ); // Dropped and counted.
+		$this->create_team_invitation( $team_a, 'accepted@test.com', 'wcmti-accepted' ); // Not pending — excluded, not a drop.
+		$this->create_team_invitation( $team_b, 'bulk-b-one@test.com' );
+		$this->create_team_invitation( $team_b, 'also not an email' ); // Dropped and counted.
+
+		// Order matters for the chunked call below: the data-bearing team B goes
+		// LAST so it lands in the true final chunk — an off-by-one that drops the
+		// last chunk then fails instead of hiding behind the empty team C.
+		$dropped = 0;
+		$bulk    = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_c, $team_b ], $dropped );
+
+		$this->assertSame( Teams_Migration::get_pending_team_invitation_emails( $team_a ), $bulk[ $team_a ], 'Bulk and per-team readers must agree on team A.' );
+		$this->assertSame( Teams_Migration::get_pending_team_invitation_emails( $team_b ), $bulk[ $team_b ], 'Bulk and per-team readers must agree on team B.' );
+		$this->assertArrayNotHasKey( $team_c, $bulk, 'A team with no pending invitations is omitted from the bulk result.' );
+		$this->assertSame( 2, $dropped, 'Each pending invitation with a non-email title is counted exactly once.' );
+
+		// Chunking only bounds the per-query load; it must not change the result.
+		// chunk_size 1 with team B last puts the invitations AND the drop in the
+		// true final chunk, so an implementation that kept only earlier chunks,
+		// dropped the last chunk to an off-by-one, or reset the by-reference drop
+		// tally between round trips fails these assertions instead of hiding
+		// behind an empty trailing team.
+		$chunked_dropped = 0;
+		$chunked         = Teams_Migration::get_pending_team_invitation_emails_for_teams( [ $team_a, $team_c, $team_b ], $chunked_dropped, 1 );
+		$this->assertSame( $bulk, $chunked, 'A chunked read must return exactly what the one-shot read returns, including trailing chunks.' );
+		$this->assertSame( $dropped, $chunked_dropped, 'The drop tally must accumulate across chunks.' );
 	}
 
 	/**

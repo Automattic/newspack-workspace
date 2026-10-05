@@ -3,7 +3,7 @@
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 import { applyFilters, addFilter } from '@wordpress/hooks';
 import { useEffect, useState, Fragment } from '@wordpress/element';
@@ -116,20 +116,25 @@ export const getCardClassName = ( status, forceDisabled = false ) => {
 	return 'newspack-card__is-supported';
 };
 
+const ensureTermArray = terms => ( Array.isArray( terms ) ? terms.filter( Boolean ) : [] );
+
 export const promptDescription = prompt => {
 	const { categories, tags, campaign_groups: campaigns, status } = prompt;
 	const descriptionMessages = [];
-	if ( campaigns.length > 0 ) {
-		const campaignsList = campaigns.map( ( { name } ) => name ).join( ', ' );
+	const validCampaigns = ensureTermArray( campaigns );
+	const validCategories = ensureTermArray( categories );
+	const validTags = ensureTermArray( tags );
+	if ( validCampaigns.length > 0 ) {
+		const campaignsList = validCampaigns.map( ( { name } ) => name ).join( ', ' );
 		descriptionMessages.push(
-			( campaigns.length === 1 ? __( 'Campaign: ', 'newspack-plugin' ) : __( 'Campaigns: ', 'newspack-plugin' ) ) + campaignsList
+			( validCampaigns.length === 1 ? __( 'Campaign: ', 'newspack-plugin' ) : __( 'Campaigns: ', 'newspack-plugin' ) ) + campaignsList
 		);
 	}
-	if ( categories.length > 0 ) {
-		descriptionMessages.push( __( 'Categories: ', 'newspack-plugin' ) + categories.map( category => category.name ).join( ', ' ) );
+	if ( validCategories.length > 0 ) {
+		descriptionMessages.push( __( 'Categories: ', 'newspack-plugin' ) + validCategories.map( category => category.name ).join( ', ' ) );
 	}
-	if ( tags.length > 0 ) {
-		descriptionMessages.push( __( 'Tags: ', 'newspack-plugin' ) + tags.map( tag => tag.name ).join( ', ' ) );
+	if ( validTags.length > 0 ) {
+		descriptionMessages.push( __( 'Tags: ', 'newspack-plugin' ) + validTags.map( tag => tag.name ).join( ', ' ) );
 	}
 	if ( 'pending' === status ) {
 		descriptionMessages.push( __( 'Pending review', 'newspack-plugin' ) );
@@ -139,6 +144,64 @@ export const promptDescription = prompt => {
 	}
 	descriptionMessages.push( __( 'Frequency: ', 'newspack-plugin' ) + frequencyForPopup( prompt ) );
 	return descriptionMessages.length ? descriptionMessages.join( ' | ' ) : null;
+};
+
+/**
+ * Render one end of a date-range criterion for the segment summary.
+ *
+ * @param {*} bound `{ type: 'absolute', date }` or `{ type: 'relative', days }`.
+ * @return {?string} A human-readable bound, or null when it isn't one.
+ */
+const dateBoundLabel = bound => {
+	if ( ! bound || 'object' !== typeof bound ) {
+		return null;
+	}
+	if ( 'absolute' === bound.type ) {
+		return bound.date || null;
+	}
+	if ( 'relative' === bound.type && Number.isInteger( bound.days ) ) {
+		if ( 0 === bound.days ) {
+			return __( 'today', 'newspack-plugin' );
+		}
+		const magnitude = Math.abs( bound.days );
+		return bound.days < 0
+			? /* translators: %d: number of days before today. */
+			  sprintf( _n( '%d day ago', '%d days ago', magnitude, 'newspack-plugin' ), magnitude )
+			: /* translators: %d: number of days after today. */
+			  sprintf( _n( '%d day from now', '%d days from now', magnitude, 'newspack-plugin' ), magnitude );
+	}
+	return null;
+};
+
+/**
+ * Render a date-range criterion value.
+ *
+ * Each bound is itself an object, so the generic `key: value` pass in
+ * segmentDescription() would stringify it as "[object Object]".
+ *
+ * @param {*} value The criterion value.
+ * @return {?string} A human-readable range, or null when the value isn't one.
+ */
+const dateRangeLabel = value => {
+	const isBound = bound => bound && 'object' === typeof bound && ( 'absolute' === bound.type || 'relative' === bound.type );
+	if ( ! isBound( value.start ) && ! isBound( value.end ) ) {
+		return null;
+	}
+	const from = dateBoundLabel( value.start );
+	const to = dateBoundLabel( value.end );
+	if ( from && to ) {
+		/* translators: 1: start of a date range, 2: end of a date range. */
+		return sprintf( __( '%1$s to %2$s', 'newspack-plugin' ), from, to );
+	}
+	if ( from ) {
+		/* translators: %s: start of an open-ended date range. */
+		return sprintf( __( 'from %s', 'newspack-plugin' ), from );
+	}
+	if ( to ) {
+		/* translators: %s: end of an open-ended date range. */
+		return sprintf( __( 'until %s', 'newspack-plugin' ), to );
+	}
+	return null;
 };
 
 export const segmentDescription = segment => {
@@ -163,13 +226,18 @@ export const segmentDescription = segment => {
 				if ( Array.isArray( value ) ) {
 					value = value.join( ', ' );
 				} else if ( typeof value === 'object' ) {
-					const values = [];
-					for ( const key in value ) {
-						if ( value[ key ] ) {
-							values.push( `${ key }: ${ value[ key ] }` );
+					const dateRange = dateRangeLabel( value );
+					if ( null !== dateRange ) {
+						value = dateRange;
+					} else {
+						const values = [];
+						for ( const key in value ) {
+							if ( value[ key ] ) {
+								values.push( `${ key }: ${ value[ key ] }` );
+							}
 						}
+						value = values.join( ', ' );
 					}
-					value = values.join( ', ' );
 				}
 				const message = applyFilters(
 					'newspack.wizards.campaigns.segmentDescription.criteriaMessage',
@@ -259,16 +327,18 @@ const getItems = memoize( async path => {
 			label: item.title || item.name,
 		} ) );
 	} catch ( e ) {
-		return [];
+		return null;
 	}
 } );
 
 const ItemNames = ( { label, ids, path, deletedItemLabel } ) => {
-	const [ items, setItems ] = useState( [] );
+	// `null` until the lookup resolves, and after a failed one. An empty list is a real
+	// answer: none of the saved items exist any more, so each reads as deleted.
+	const [ items, setItems ] = useState( null );
 	useEffect( () => {
 		getItems( path ).then( setItems );
 	}, [ ids ] );
-	if ( ! items.length ) {
+	if ( ! items ) {
 		return null;
 	}
 	const labels = ids.map( id => {
@@ -318,7 +388,7 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 						: __( 'Does not have active subscription(s):', 'newspack-plugin' )
 				}
 				ids={ item.value }
-				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
+				path={ addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: item.value } ) }
 				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }
 			/>
 		);
@@ -377,9 +447,9 @@ export const warningForPopup = ( prompts, prompt ) => {
 	const warningMessages = [];
 
 	if ( 'publish' === prompt.status && ( isAboveHeader( prompt ) || isOverlay( prompt ) || isCustomPlacement( prompt ) ) ) {
-		const promptCategories = prompt.categories;
+		const promptCategories = ensureTermArray( prompt.categories );
 		const conflictingPrompts = prompts.filter( conflict => {
-			const conflictCategories = conflict.categories;
+			const conflictCategories = ensureTermArray( conflict.categories );
 
 			// There's a conflict if both campaigns have zero categories, or if they share at least one category.
 			const hasConflictingCategory =

@@ -57,7 +57,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * Constructor.
 	 */
 	public function __construct() {
-		if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) {
+		if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Presence check for another Newspack plugin, not a configurable constant.
 			return;
 		}
 
@@ -365,7 +365,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function delete_gate( $request ) {
-		$id   = $request->get_param( 'id' );
+		$id   = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -388,7 +388,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function api_duplicate_gate( $request ) {
-		$id   = $request->get_param( 'id' );
+		$id   = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );
@@ -416,7 +416,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function update_gate( $request ) {
-		$id   = $request->get_param( 'id' );
+		$id   = Content_Gate_API::get_route_gate_id( $request );
 		$gate = get_post( $id );
 		if ( ! $gate ) {
 			return new \WP_Error( 'invalid_gate_id', __( 'Invalid gate ID.', 'newspack-plugin' ), [ 'status' => 400 ] );

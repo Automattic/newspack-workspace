@@ -76,15 +76,16 @@ class Block_Processor {
 	/**
 	 * Process an outgoing block.
 	 *
-	 * @param array $block The block to process.
+	 * @param array $block   The block to process.
+	 * @param int   $post_id The ID of the post being distributed.
 	 *
 	 * @return array The processed block.
 	 */
-	public function process_outgoing_block( $block ) {
+	public function process_outgoing_block( $block, $post_id = 0 ) {
 		if ( ! is_callable( $this->outgoing_callback ) ) {
 			return $block;
 		}
-		return call_user_func( $this->outgoing_callback, $block );
+		return call_user_func( $this->outgoing_callback, $block, $post_id );
 	}
 
 	/**

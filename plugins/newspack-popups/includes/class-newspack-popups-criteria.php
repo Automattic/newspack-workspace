@@ -32,6 +32,33 @@ final class Newspack_Popups_Criteria {
 	];
 
 	/**
+	 * Matching functions this build can resolve, mirroring the keys exported by
+	 * `src/criteria/matching-functions.js`.
+	 *
+	 * Published so a registering plugin can ask before emitting one. The client
+	 * fails closed on a name it can't resolve, but that guard only exists in
+	 * builds that ship it — a plugin emitting a newer matching function to an
+	 * older newspack-popups needs to know *not to* rather than rely on it.
+	 *
+	 * @var string[]
+	 */
+	const SUPPORTED_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in', 'date_range' ];
+
+	/**
+	 * Whether this build can resolve the given matching function.
+	 *
+	 * Callers must treat the method itself as the capability probe — an older
+	 * newspack-popups has no such method, so `method_exists()` returning false
+	 * means "assume unsupported".
+	 *
+	 * @param string $matching_function The matching function name.
+	 * @return bool
+	 */
+	public static function supports_matching_function( $matching_function ) {
+		return in_array( $matching_function, self::SUPPORTED_MATCHING_FUNCTIONS, true );
+	}
+
+	/**
 	 * Initialize the hooks.
 	 */
 	public static function init() {

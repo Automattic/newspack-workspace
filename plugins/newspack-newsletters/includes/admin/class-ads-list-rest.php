@@ -22,9 +22,18 @@ use WP_REST_Request;
  */
 class Ads_List_REST {
 	use Rest_Status_Field;
+	use Rest_Terms_Field;
 	use Status_Filter_Builder;
 
 	const STATUS_QUERY_PARAM = 'newspack_newsletters_ad_status';
+
+	/**
+	 * Taxonomies behind the Advertiser, Ad placement and Categories
+	 * columns. Quick Edit has no other source for the names, so the list
+	 * asks for this field whether or not those columns are visible —
+	 * otherwise a hidden column would leave its picker empty.
+	 */
+	const LIST_TAXONOMIES = [ 'newspack_nl_advertiser', 'newspack_nl_ad_placement', 'category' ];
 
 	/**
 	 * Boot hooks.
@@ -199,8 +208,8 @@ class Ads_List_REST {
 					$bucket_clauses[]  = "{$wpdb->posts}.post_status = 'trash'";
 					break;
 				case 'draft':
-					$post_status_set    = array_merge( $post_status_set, [ 'draft', 'pending', 'auto-draft' ] );
-					$bucket_clauses[]   = "{$wpdb->posts}.post_status IN ( 'draft', 'pending', 'auto-draft' )";
+					$post_status_set    = array_merge( $post_status_set, [ 'draft', 'pending' ] );
+					$bucket_clauses[]   = "{$wpdb->posts}.post_status IN ( 'draft', 'pending' )";
 					break;
 				case 'expired':
 					$post_status_set    = array_merge( $post_status_set, [ 'publish', 'private' ] );
@@ -335,6 +344,12 @@ class Ads_List_REST {
 					'type' => [ 'integer', 'null' ],
 				],
 			]
+		);
+
+		self::register_terms_field(
+			Ads::CPT,
+			'newspack_newsletters_terms',
+			self::LIST_TAXONOMIES
 		);
 	}
 

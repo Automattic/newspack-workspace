@@ -25,7 +25,8 @@ namespace Newspack\CLI;
 
 use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
-use Newspack\Reader_Activation;
+use Newspack\Group_Subscription_Invite;
+use Newspack\Group_Subscription_Settings;
 use Newspack\WooCommerce_Connection;
 use WP_CLI;
 
@@ -71,11 +72,28 @@ class Teams_Migration {
 	/**
 	 * Subscription meta key stamping the source team a group subscription was migrated
 	 * from. migrate-teams keys reuse on this marker so one owner's several teams each
-	 * migrate to their own group subscription instead of merging into one.
+	 * migrate to their own group subscription instead of merging into one. Aliases the
+	 * data-layer constant, which the runtime join-team handler reads from the other end.
 	 *
 	 * @var string
 	 */
-	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
+	const MIGRATED_TEAM_ID_META_KEY = Group_Subscription::MIGRATED_TEAM_ID_META_KEY;
+
+	/**
+	 * Value-requiring flags of migrate-manual-members, for the raw-argv bare-flag
+	 * guard. See get_valueless_value_flags().
+	 *
+	 * @var string[]
+	 */
+	const MANUAL_MEMBERS_VALUE_FLAGS = [
+		'--product-id',
+		'--plan-ids',
+		'--access-product-ids',
+		'--user-ids',
+		'--user-ids-file',
+		'--skip-domains',
+		'--group-owner-id',
+	];
 
 	/**
 	 * The "nothing to reuse" group-subscription resolution, and so the shape every
@@ -132,12 +150,17 @@ class Teams_Migration {
 	 * migrated group to update, since creating one would hand the owner permanent
 	 * free access and remove their reason to fix their payment method.
 	 *
+	 * Pending team invitations are not re-sent. Their existing `join-team` links keep
+	 * working: once WooCommerce Teams is deactivated the plugin answers that route and
+	 * maps each link onto this migration's group subscription. The run lists the
+	 * pending invitees so the scale is on the record.
+	 *
 	 * Dry-run by default; pass --live to write.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [--product-id=<id>]
-	 * : Product to assign to newly-created subscriptions. Accepts a product ID or a variation ID — pass the variation when a publisher sells seat tiers as variations of one variable subscription product. Must be published and accepted by a published gate's "Active subscription" rule. Also re-aligns any re-used $0 subscription onto this product; a re-used subscription the team pays for keeps its own product, price, taxes and billing schedule. Required unless --skip-unlinked is passed.
+	 * : Product to assign to newly-created subscriptions. Accepts a product ID or a variation ID — pass the variation when a publisher sells seat tiers as variations of one variable subscription product. Must be published and accepted by a published gate's "Active subscription" rule. Also re-aligns any re-used $0 subscription onto this product; a re-used subscription the team pays for keeps its own product, price, taxes and billing schedule. When the product is priced per seat, each subscription built from it gets the team's seats as its quantity (owner included), or enough seats for everyone the group holds when the team is unlimited or already holds more people than its seats. Required unless --skip-unlinked is passed.
 	 *
 	 * [--live]
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
@@ -161,10 +184,10 @@ class Teams_Migration {
 	 * @return void
 	 */
 	public function migrate_teams( $args, $assoc_args ) {
-		$product_id    = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
-		$dry_run       = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
-		$skip_unlinked = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
-		$only_unlinked = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
+		$product_id          = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
+		$dry_run             = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
+		$skip_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
+		$only_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
 
 		// Pre-flight checks.
 		if ( ! $product_id && ! $skip_unlinked ) {
@@ -178,6 +201,11 @@ class Teams_Migration {
 		$migration_product = $product_id ? \wc_get_product( $product_id ) : null;
 		$billing_period    = 'month';
 		$billing_interval  = 1;
+
+		// Read the mode off the product rather than asking is_per_seat(): the migrated
+		// subscription enables the group itself, so it resolves as per-seat even when
+		// the product does not.
+		$migration_is_per_seat = $migration_product && Group_Subscription_Settings::PRICING_MODE_PER_SEAT === Group_Subscription_Settings::get_product_settings( $migration_product )['pricing_mode'];
 
 		// Derived independently of --product-id: the paid-team guard below needs it
 		// in --skip-unlinked runs, which take no --product-id and process only
@@ -272,9 +300,22 @@ class Teams_Migration {
 		WP_CLI::line( sprintf( 'Found %d active team membership(s). Starting migration…', $total ) );
 		WP_CLI::line( '' );
 
-		$summary  = [];
-		$skipped  = [];
-		$progress = \WP_CLI\Utils\make_progress_bar( 'Migrating teams', $total );
+		// Read every team's pending invitations up front, before the loop's skip
+		// branches, so a team the flags skip still has its invitees reported (below).
+		// One bulk query rather than one per team, so a several-hundred-team site
+		// doesn't sit silent here before the progress bar.
+		WP_CLI::line( 'Reading pending team invitations… (nothing has been written yet; interrupting here is safe)' );
+		$invitation_drop_count = 0;
+		$pending_invitations   = self::get_pending_team_invitation_emails_for_teams( $teams, $invitation_drop_count );
+		if ( $invitation_drop_count ) {
+			WP_CLI::warning( sprintf( '%d pending team invitation(s) hold a stored address that is not a valid email. They cannot be listed by this command; find them by looking for wc_team_invitation posts whose title is not an email address.', $invitation_drop_count ) );
+		}
+
+		$summary               = [];
+		$skipped               = [];
+		$invitation_rows       = []; // Pending-invitation rows: team → invitee email.
+		$invitation_teams_seen = []; // Teams whose invitees already have rows, so the skipped-team pass doesn't double-report.
+		$progress              = \WP_CLI\Utils\make_progress_bar( 'Migrating teams', $total );
 
 		foreach ( $teams as $team_id ) {
 			$team = \get_post( $team_id );
@@ -515,10 +556,11 @@ class Teams_Migration {
 
 			// Enable the group and set its name up front. The seat limit is deferred
 			// until after members are added (below) so update_members()' limit gate
-			// can't reject existing team members mid-migration — a new subscription
-			// starts with no limit meta (unlimited), so the adds are never gated. A
-			// reused subscription that already carries a limit is still gated by it
-			// during adds; any rejected member is surfaced in the errors below.
+			// can't reject existing team members mid-migration — a new flat-priced
+			// subscription starts with no limit meta (unlimited), so the adds are never
+			// gated, and a per-seat one is sized before the adds (below). A reused
+			// subscription that already carries a limit is still gated by it during
+			// adds; any rejected member is surfaced in the errors below.
 			if ( ! $dry_run ) {
 				$subscription->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
 				$subscription->update_meta_data( '_newspack_group_subscription_name', $team->post_title );
@@ -540,6 +582,39 @@ class Teams_Migration {
 				self::replace_subscription_product( $subscription, $migration_product, $billing_period, $billing_interval, $start_date, $end_date, $errors, $team_id );
 			}
 
+			// A per-seat group's capacity is its seat line's quantity, and the limit meta
+			// written after the adds is ignored for it, so the line has to fit everyone
+			// before the adds are gated on it. A kept line is what the customer bought
+			// in Teams, whose per-member quantity leaves out an owner who takes no seat:
+			// it is only ever raised, and its totals are held, so what the customer pays
+			// does not change until their next seat change prices every seat.
+			$rebuilds_line = $created_new || ( ! $reuse_keeps_terms && $migration_product );
+			$is_per_seat   = $rebuilds_line
+				? $migration_is_per_seat
+				: Group_Subscription_Settings::PRICING_MODE_PER_SEAT === Group_Subscription_Settings::get_subscription_settings( $subscription )['pricing_mode'];
+			if ( $is_per_seat ) {
+				$people      = array_merge( [ $owner_id, $sub_owner_id ], $member_ids );
+				$invitations = count( $pending_invitations[ $team_id ] ?? [] );
+				if ( $subscription ) {
+					$people       = array_merge( $people, Group_Subscription::get_members( $subscription ) );
+					$invitations += count( Group_Subscription_Invite::get_invites( $subscription, false ) );
+				}
+				$seats = self::map_team_to_seat_quantity( $group_limit, $people, $invitations );
+				if ( $group_limit > 0 && $seats > $group_limit ) {
+					WP_CLI::warning( sprintf( 'Team %d: holds %d people (owner and pending invitees included) but has %d seats (owner included) — sizing its per-seat group to %d so no one loses access.', $team_id, $seats, $group_limit, $seats ) );
+				}
+				$seat_item  = $subscription ? Group_Subscription_Settings::get_seat_line_item( $subscription ) : null;
+				$seats_held = ( $seat_item && ! $rebuilds_line ) ? (int) $seat_item->get_quantity() : 0;
+				if ( $seat_item && $seats > $seats_held && ! $dry_run ) {
+					$seat_item->set_quantity( $seats );
+					$seat_item->save();
+					if ( ! $rebuilds_line ) {
+						WP_CLI::line( sprintf( 'Team %d: raised subscription %d from %d to %d seats to fit the team; its recurring total is unchanged.', $team_id, $subscription_id, $seats_held, $seats ) );
+					}
+				}
+				$group_limit = max( $seats, $seats_held );
+			}
+
 			// Add team members as group members. If the team owner differs from the
 			// subscription owner, add them as a group member too so they retain access.
 			$users_to_add = $member_ids;
@@ -547,14 +622,14 @@ class Teams_Migration {
 				$users_to_add[] = $owner_id;
 			}
 
-			$non_reader_skips = 0;
+			$not_eligible_skips = 0;
 			foreach ( $users_to_add as $member_id ) {
 				if ( ! $member_id || $member_id === $sub_owner_id ) {
 					continue;
 				}
 				if ( $dry_run ) {
-					// A member would be added if they are a reader and not already a member.
-					if ( Reader_Activation::is_user_reader( $member_id ) && ! Group_Subscription::user_is_member( $member_id, $subscription ) ) {
+					// A member would be added if they are eligible and not already a member.
+					if ( Group_Subscription::is_eligible_member( $member_id ) && ! Group_Subscription::user_is_member( $member_id, $subscription ) ) {
 						++$members_added;
 					}
 					continue;
@@ -564,12 +639,12 @@ class Teams_Migration {
 					$errors[] = sprintf( 'add member %d: %s', $member_id, $status->get_error_message() );
 				} elseif ( 'added' === $status ) {
 					++$members_added;
-				} elseif ( 'not_reader' === $status ) {
-					++$non_reader_skips;
+				} elseif ( 'not_eligible' === $status ) {
+					++$not_eligible_skips;
 				}
 			}
-			if ( $non_reader_skips ) {
-				WP_CLI::warning( sprintf( 'Team %d: %d team member(s) skipped — not readers (e.g. administrators/editors), who already have full access.', $team_id, $non_reader_skips ) );
+			if ( $not_eligible_skips ) {
+				WP_CLI::warning( sprintf( 'Team %d: %d team member(s) skipped — not eligible group members (e.g. administrators/editors), who already have full access.', $team_id, $not_eligible_skips ) );
 			}
 
 			// Set the seat limit now that members are in, using the owner-inclusive
@@ -593,6 +668,19 @@ class Teams_Migration {
 			} else {
 				$manager_result    = self::promote_managers_from_team_roles( $subscription, $team_id, $member_ids, false );
 				$managers_promoted = count( $manager_result['promoted'] );
+			}
+
+			// Record the team's pending (unaccepted) invitations for the re-invite list.
+			// The migration itself writes nothing for them: the link handler resolves
+			// each invitee's original email at click time, against the invitation rows
+			// this run leaves in place.
+			$invitation_teams_seen[ $team_id ] = true;
+			foreach ( $pending_invitations[ $team_id ] ?? [] as $invitee_email ) {
+				$invitation_rows[] = [
+					'team_id' => $team_id,
+					'sub'     => $subscription_id,
+					'invitee' => $invitee_email,
+				];
 			}
 
 			$verb = $created_new ? 'new' : 'existing';
@@ -661,9 +749,57 @@ class Teams_Migration {
 			\WP_CLI\Utils\format_items( 'table', $skipped, [ 'team_id', 'owner', 'seat_limit', 'created', 'expires' ] );
 		}
 
+		// Invitees of teams the run never reached — skipped by --skip-unlinked or
+		// --only-unlinked, or errored out for having no subscription to migrate into.
+		// They are listed too, so "the pending invitees are always listed" holds for
+		// every team rather than only the processed ones. The em dash in their `sub`
+		// column is what tells an operator their links resolve to nothing: with no group
+		// subscription to map onto, the handler can only show the invalid-link notice.
+		foreach ( $pending_invitations as $team_id => $team_emails ) {
+			if ( isset( $invitation_teams_seen[ $team_id ] ) ) {
+				continue;
+			}
+			foreach ( $team_emails as $invitee_email ) {
+				$invitation_rows[] = [
+					'team_id' => $team_id,
+					'sub'     => '—',
+					'invitee' => $invitee_email,
+				];
+			}
+		}
+
+		// Pending-invitation audit list. Emitted whenever any team carried pending
+		// invitations, so the operator sees the scale of what is riding on the link
+		// handler — and has the addresses to hand if a publisher would rather contact
+		// them directly than wait for each reader to return to their original email.
+		if ( ! empty( $invitation_rows ) ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( sprintf( '=== PENDING TEAM INVITATIONS — %d total ===', count( $invitation_rows ) ) );
+			WP_CLI::line( 'These invitees keep their original invitation link: it resolves to a group subscription invite once WooCommerce Teams is deactivated. Nothing is emailed by this command.' );
+			WP_CLI::line( '' );
+			\WP_CLI\Utils\format_items( 'table', $invitation_rows, [ 'team_id', 'sub', 'invitee' ] );
+		}
+
 		$new_count = count( array_filter( $summary, fn( $r ) => $r['created_new'] ) );
 		WP_CLI::line( '' );
 		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d skipped, %d had error(s).', count( $summary ), count( $summary ) - $new_count, $new_count, count( $skipped ), count( $errored_rows ) ) );
+		if ( ! empty( $invitation_rows ) ) {
+			// Split the claim: an invitee whose team has no group subscription — skipped
+			// by the flags, or errored before one was resolved — reaches the invalid-link
+			// notice, not an invite. Reporting the two together would tell an operator it
+			// is safe to deactivate Teams without contacting anyone on the list.
+			$unresolved = count( array_filter( $invitation_rows, fn( $row ) => '—' === $row['sub'] ) );
+			WP_CLI::success(
+				sprintf(
+					'Pending invitations: %d listed, %d whose existing links resolve after the flip. None were emailed.',
+					count( $invitation_rows ),
+					count( $invitation_rows ) - $unresolved
+				)
+			);
+			if ( $unresolved ) {
+				WP_CLI::warning( sprintf( '%d of them belong to teams with no group subscription (an em dash in the sub column). Those links resolve to nothing — contact those invitees directly, or re-run so their team migrates.', $unresolved ) );
+			}
+		}
 	}
 
 	/**
@@ -671,10 +807,16 @@ class Teams_Migration {
 	 *
 	 * Updates all published subscription products that have the "Team membership"
 	 * option enabled, setting their group subscription `enabled` meta to `yes` and
-	 * their `limit` meta to match the product's "Maximum member count". For variable
-	 * subscriptions, both the parent product and each subscription variation are
+	 * their `limit` meta to the owner-inclusive group limit — the product's "Maximum
+	 * member count", plus one for the owner's seat unless the "Owners must be members"
+	 * setting already reserves one (see map_product_max_members_to_group_limit()). For
+	 * variable subscriptions, both the parent product and each subscription variation are
 	 * updated so the setting is available at whichever level WooCommerce Subscriptions
 	 * resolves the product ID.
+	 *
+	 * A product sold with Teams' per-member pricing is switched to per-seat group
+	 * pricing, and its minimum and maximum member counts become its minimum and maximum
+	 * seats, with the same owner-seat adjustment (see map_product_member_counts_to_seats()).
 	 *
 	 * Dry-run by default; pass --live to write.
 	 *
@@ -742,6 +884,12 @@ class Teams_Migration {
 			}
 
 			$max_members = (int) $product->get_meta( '_wc_memberships_for_teams_max_member_count', true );
+			// Match migrate-teams: the group limit counts the owner, so add their seat
+			// unless "Owners must be members" already reserves one on the product.
+			$limit = self::map_product_max_members_to_group_limit( $max_members );
+
+			// Teams keeps the pricing mode on the parent product only.
+			$per_member = 'per_member' === $product->get_meta( '_wc_memberships_for_teams_pricing', true );
 
 			// Collect the IDs to update: always the parent; plus any
 			// subscription_variation children for variable subscriptions.
@@ -762,18 +910,31 @@ class Teams_Migration {
 						continue;
 					}
 					$p->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
-					$p->update_meta_data( '_newspack_group_subscription_limit', $max_members );
+					$p->update_meta_data( '_newspack_group_subscription_limit', $limit );
+					if ( $per_member ) {
+						// Teams reads the member counts off each product, variations included,
+						// so each one maps its own.
+						$seats = self::map_product_member_counts_to_seats(
+							(int) $p->get_meta( '_wc_memberships_for_teams_min_member_count', true ),
+							(int) $p->get_meta( '_wc_memberships_for_teams_max_member_count', true )
+						);
+						$p->update_meta_data( '_newspack_group_subscription_pricing_mode', Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+						$p->update_meta_data( '_newspack_group_subscription_min_seats', $seats['min'] );
+						$p->update_meta_data( '_newspack_group_subscription_max_seats', $seats['max'] );
+					}
 					$p->save();
 				}
 			}
 
 			$variation_count = count( $ids_to_update ) - 1;
-			WP_CLI::success( sprintf( 'Product %d ("%s"): %s enabled=yes, limit=%s%s.', $product_id, $product->get_name(), $dry_run ? 'would set' : 'set', 0 === $max_members ? 'Unlimited' : $max_members, $variation_count > 0 ? sprintf( ' (+ %d variation(s))', $variation_count ) : '' ) );
+			$pricing = $per_member ? 'per seat' : 'per group';
+			WP_CLI::success( sprintf( 'Product %d ("%s"): %s enabled=yes, pricing=%s, limit=%s%s.', $product_id, $product->get_name(), $dry_run ? 'would set' : 'set', $pricing, 0 === $limit ? 'Unlimited' : $limit, $variation_count > 0 ? sprintf( ' (+ %d variation(s))', $variation_count ) : '' ) );
 
 			$summary[] = [
 				'product_id'   => $product_id,
 				'product_name' => $product->get_name(),
-				'limit'        => 0 === $max_members ? 'Unlimited' : $max_members,
+				'pricing'      => $pricing,
+				'limit'        => 0 === $limit ? 'Unlimited' : $limit,
 				'variations'   => $variation_count,
 			];
 
@@ -794,12 +955,13 @@ class Teams_Migration {
 				fn( $row ) => [
 					'Product'    => $row['product_id'],
 					'Name'       => $row['product_name'],
+					'Pricing'    => $row['pricing'],
 					'Limit'      => $row['limit'],
 					'Variations' => $row['variations'],
 				],
 				$summary
 			),
-			[ 'Product', 'Name', 'Limit', 'Variations' ]
+			[ 'Product', 'Name', 'Pricing', 'Limit', 'Variations' ]
 		);
 
 		WP_CLI::line( '' );
@@ -811,8 +973,11 @@ class Teams_Migration {
 	 * subscription backs.
 	 *
 	 * By default, iterates through membership plans with manual-only access and
-	 * creates free WooCommerce Subscriptions for active members who do not have
-	 * the `edit_others_posts` capability (i.e. are not administrators/editors).
+	 * creates free WooCommerce Subscriptions for active members, skipping only
+	 * staff who bypass the content gate outright -- users with a privileged
+	 * capability like `edit_others_posts` (i.e. administrators/editors).
+	 * `Group_Subscription::is_eligible_member()` does not gate this path;
+	 * eligibility only applies to group mode, below.
 	 *
 	 * Plans with purchase/signup access can only be targeted with a member
 	 * selection flag — --only-without-live-subscription and/or
@@ -837,8 +1002,11 @@ class Teams_Migration {
 	 * skipped. Dry-run by default; pass --live to write.
 	 *
 	 * Under --as-group, members are added through the group data layer, which adds
-	 * readers only — a member on a non-reader role is skipped (reported inline),
-	 * whereas individual mode gives every member their own subscription.
+	 * any user eligible per `Group_Subscription::is_eligible_member()` -- readers
+	 * plus Author/Contributor by default, filterable via
+	 * `newspack_group_subscription_member_eligible` -- and skips (and tallies,
+	 * reported inline) the rest, whereas individual mode gives every processed
+	 * member their own subscription.
 	 *
 	 * ## OPTIONS
 	 *
@@ -917,7 +1085,7 @@ class Teams_Migration {
 			WP_CLI::error( 'WooCommerce Subscriptions is not active. Aborting.' );
 		}
 
-		// Without WooCommerce Memberships the wcm-active post status is
+		// Without WooCommerce Memberships the wcm-* post statuses are
 		// unregistered, so the member queries return zero rows and the run would
 		// masquerade as a clean no-op.
 		if ( ! class_exists( 'WC_Memberships_User_Membership' ) ) {
@@ -1093,6 +1261,8 @@ class Teams_Migration {
 		WP_CLI::line( '' );
 
 		$summary                            = [];
+		$as_group_not_eligible_users        = [];
+		$as_group_errors                    = 0;
 		$skipped_live_subscription_user_ids = [];
 		$granted_user_ids                   = [];
 		$matched_user_ids                   = [];
@@ -1113,7 +1283,12 @@ class Teams_Migration {
 			$memberships = \get_posts(
 				[
 					'post_type'      => 'wc_user_membership',
-					'post_status'    => 'wcm-active',
+					// Every status WooCommerce Memberships grants access on, not only
+					// wcm-active: a complimentary, free-trial or pending-cancellation
+					// member reads the site today and is exactly who a residual sweep
+					// or a reviewed --user-ids list has to reach. Read from WCM itself
+					// so a site that filters the list is migrated on its own terms.
+					'post_status'    => Memberships_Audit::get_active_membership_statuses(),
 					'post_parent'    => $plan_id,
 					'posts_per_page' => -1,
 					'fields'         => 'ids',
@@ -1160,15 +1335,33 @@ class Teams_Migration {
 					$matched_user_ids[ $user_id ] = true;
 				}
 
-				// Skip users with edit_others_posts (admins/editors).
-				if ( \user_can( $user_id, 'edit_others_posts' ) ) {
-					WP_CLI::line( sprintf( '  Membership %d (user %d): skipped — user has edit_others_posts.', $membership_id, $user_id ) );
-					continue;
-				}
-
 				$user = \get_userdata( $user_id );
 				if ( ! $user ) {
 					WP_CLI::warning( sprintf( '  Membership %d: user %d not found — skipping.', $membership_id, $user_id ) );
+					continue;
+				}
+
+				// Individual mode: staff who already bypass the content gate via
+				// edit_others_posts don't need a comped $0 subscription -- they can
+				// already read everything without one. This is distinct from group
+				// eligibility below: it is about whether the user *needs* a grant,
+				// not whether they qualify as a group member.
+				if ( ! $as_group && \user_can( $user_id, 'edit_others_posts' ) ) {
+					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — user has edit_others_posts.', $membership_id, $user_id, $user->user_email ) );
+					continue;
+				}
+
+				// Group mode: skip users who are not eligible group members. This is
+				// the same definition migrate_teams()/add_group_member() enforce via
+				// Group_Subscription::is_eligible_member() -- an admin/editor is
+				// skipped here exactly as there, and a reader who happens to hold a
+				// custom role granting edit_others_posts is still added (that role
+				// doesn't affect group eligibility). Tracked per user, like
+				// $granted_user_ids below, so a user skipped across several
+				// in-scope plans is still counted once.
+				if ( $as_group && ! Group_Subscription::is_eligible_member( $user ) ) {
+					WP_CLI::line( sprintf( '  Membership %d → user %d (%s): skipped — not an eligible group member.', $membership_id, $user_id, $user->user_email ) );
+					$as_group_not_eligible_users[ $user_id ] = true;
 					continue;
 				}
 
@@ -1227,14 +1420,18 @@ class Teams_Migration {
 					}
 				}
 
-				// Group mode: add the user as a group member.
+				// Group mode: add the user as a group member. Eligibility was already
+				// confirmed by the group-scoped pre-filter above, so every user
+				// reaching this point is guaranteed group-eligible.
 				if ( $as_group ) {
 					if ( $dry_run ) {
+						// Project the same outcome a live run would produce.
 						$granted_user_ids[ $user_id ] = true;
 						WP_CLI::line( sprintf( '  [DRY RUN] Would add user %d (%s) as group member.', $user_id, $user->user_email ) );
 					} else {
-						// Created here, on the first qualifying member, so a plan with no
-						// qualifying members creates nothing.
+						// Created here, on the first member reaching this point, so a
+						// plan whose every member was filtered out by the shared
+						// pre-filter above creates nothing.
 						if ( null === $group_subscription ) {
 							$group_subscription = self::create_group_subscription( $product_id, $product, $plan->post_title, $group_owner_id );
 							if ( \is_wp_error( $group_subscription ) ) {
@@ -1245,12 +1442,22 @@ class Teams_Migration {
 							WP_CLI::success( sprintf( '  Created group subscription %d for plan "%s".', $group_subscription->get_id(), $plan->post_title ) );
 						}
 						$status = self::add_group_member( $group_subscription, $user_id );
-						$note   = \is_wp_error( $status ) ? ' (error: ' . $status->get_error_message() . ')' : ( 'added' === $status ? '' : ' (' . $status . ' — skipped)' );
+						if ( \is_wp_error( $status ) ) {
+							++$as_group_errors;
+							WP_CLI::warning( sprintf( '  Membership %d → user %d (%s): error — %s.', $membership_id, $user_id, $user->user_email, $status->get_error_message() ) );
+							continue;
+						}
+						// Eligibility was already confirmed above, so $status here is
+						// only ever 'added' or 'already'.
 						if ( 'added' === $status ) {
 							$granted_user_ids[ $user_id ] = true;
+							WP_CLI::line( sprintf( '  Membership %d → user %d (%s) added as group member.', $membership_id, $user_id, $user->user_email ) );
+						} else {
+							WP_CLI::line( sprintf( '  Membership %d → user %d (%s): skipped (%s).', $membership_id, $user_id, $user->user_email, $status ) );
+							continue;
 						}
-						WP_CLI::line( sprintf( '  Membership %d → user %d (%s) added as group member%s.', $membership_id, $user_id, $user->user_email, $note ) );
 					}
+					// Only genuinely-added (or, in a dry-run, would-be-added) members reach here.
 					$summary[] = [
 						'membership_id' => $membership_id,
 						'user_id'       => $user_id,
@@ -1337,6 +1544,18 @@ class Teams_Migration {
 				WP_CLI::line( sprintf( 'All %d requested user id(s) were found among active members of the processed plan(s).', count( $target_user_ids ) ) );
 			}
 			WP_CLI::line( '' );
+		}
+
+		if ( $as_group && ! empty( $as_group_not_eligible_users ) ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d member(s) skipped — not eligible group members (e.g. administrators/editors).',
+					count( $as_group_not_eligible_users )
+				)
+			);
+		}
+		if ( $as_group && $as_group_errors > 0 ) {
+			WP_CLI::warning( sprintf( '%d error(s).', $as_group_errors ) );
 		}
 
 		if ( empty( $summary ) ) {
@@ -1628,22 +1847,22 @@ class Teams_Migration {
 	 * Add a user as a group member via the Group_Subscription data layer.
 	 *
 	 * Routing through update_members() (rather than a raw user-meta write) records
-	 * the joined-at timestamp and auto-enables the group. Readers only — the data
-	 * layer skips administrators/editors and non-readers, who already have access.
+	 * the joined-at timestamp and auto-enables the group. Eligible members only — the
+	 * data layer skips administrators/editors, who already have full access.
 	 * Exposed for testing.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
 	 * @param int              $user_id      The user to add.
 	 *
-	 * @return string|\WP_Error 'added', 'already', 'not_reader', or a WP_Error (e.g. member limit reached).
+	 * @return string|\WP_Error 'added', 'already', 'not_eligible', or a WP_Error (e.g. member limit reached).
 	 */
 	public static function add_group_member( $subscription, $user_id ) {
 		$user_id = absint( $user_id );
 		if ( ! $user_id ) {
 			return new \WP_Error( 'newspack_migrate_add_member', 'Invalid user ID.' );
 		}
-		if ( ! Reader_Activation::is_user_reader( $user_id ) ) {
-			return 'not_reader';
+		if ( ! Group_Subscription::is_eligible_member( $user_id ) ) {
+			return 'not_eligible';
 		}
 		if ( Group_Subscription::user_is_member( $user_id, $subscription ) ) {
 			return 'already';
@@ -1656,11 +1875,164 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Read the emails of a team's pending (unaccepted) WooCommerce Teams invitations.
+	 *
+	 * Invitations are stored as `wc_team_invitation` posts parented to the team, with the
+	 * invitee email in the post title and a `wcmti-pending` status while unaccepted. Read
+	 * directly (rather than through the Teams API) so the migration does not depend on the
+	 * Teams plugin being active. Malformed addresses are dropped and case variants of one
+	 * mailbox dedupe to a single entry (first one wins) — matching the case-insensitive
+	 * already-invited gate the invite layer applies. The address itself is returned in its
+	 * original casing: it is what gets stored on the invite and emailed, and what an
+	 * account is created under when the invitee is new to the site. Exposed for testing.
+	 *
+	 * The `post_status` query filter only narrows the result when the status is
+	 * registered: WooCommerce Teams registers `wcmti-pending` on `init`, so during a
+	 * migration (Teams still active) the database returns pending invitations directly.
+	 * This must not depend on Teams being active, though — once Teams is deactivated the
+	 * status is unregistered and WP_Query silently drops the status clause, returning
+	 * every status. So the pending filter is re-applied in PHP on each post's actual
+	 * status as the guarantee that holds either way.
+	 *
+	 * @param int $team_id The team post ID.
+	 *
+	 * @return string[] Sanitised pending invitee emails in their original casing, deduped case-insensitively.
+	 */
+	public static function get_pending_team_invitation_emails( $team_id ) {
+		$invitations = \get_posts(
+			[
+				'post_type'              => 'wc_team_invitation',
+				'post_status'            => 'wcmti-pending',
+				'post_parent'            => absint( $team_id ),
+				'posts_per_page'         => -1,
+				'orderby'                => 'ID',
+				'order'                  => 'ASC',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			]
+		);
+
+		return self::extract_pending_invitation_emails( $invitations );
+	}
+
+	/**
+	 * Read the pending invitation emails of many teams in a single query.
+	 *
+	 * Bulk twin of get_pending_team_invitation_emails(), used by the migrate-teams
+	 * pre-pass: chunked `post_parent__in` round trips bucketed by team in PHP, where
+	 * the per-team helper would front-load one query per team into the silent stretch
+	 * before the progress bar appears. Both share extract_pending_invitation_emails(),
+	 * so their filtering guarantees cannot drift; the per-team helper reads one team,
+	 * and is what the suite holds this one against.
+	 *
+	 * @param int[] $team_ids   Team post IDs.
+	 * @param int   $dropped    Out-param: incremented once per pending invitation dropped
+	 *                          because its stored address is not a valid email, so the
+	 *                          caller can warn instead of losing those invitees silently.
+	 * @param int   $chunk_size Teams per query. The status clause only narrows the query
+	 *                          while WooCommerce Teams (which registers `wcmti-pending`)
+	 *                          is active; on the post-migration configuration this command
+	 *                          supports, WP_Query drops the unregistered status entirely
+	 *                          and each round trip returns the chunk's full invitation
+	 *                          history — accepted and cancelled included, the bulk of the
+	 *                          table. Chunking bounds that peak while keeping the query
+	 *                          count low; the PHP re-filter does the narrowing either way.
+	 *
+	 * @return array<int, string[]> Team ID => pending invitee emails, in their original
+	 *                              casing and deduped case-insensitively per team. Teams
+	 *                              with no pending invitations are omitted.
+	 */
+	public static function get_pending_team_invitation_emails_for_teams( $team_ids, &$dropped = 0, $chunk_size = 100 ) {
+		$team_ids = array_values( array_filter( array_map( 'absint', (array) $team_ids ) ) );
+		if ( empty( $team_ids ) ) {
+			return [];
+		}
+
+		$result = [];
+		foreach ( array_chunk( $team_ids, max( 1, (int) $chunk_size ) ) as $chunk ) {
+			$invitations = \get_posts(
+				[
+					'post_type'              => 'wc_team_invitation',
+					'post_status'            => 'wcmti-pending',
+					'post_parent__in'        => $chunk,
+					'posts_per_page'         => -1,
+					'orderby'                => 'ID',
+					'order'                  => 'ASC',
+					'no_found_rows'          => true,
+					// Without this, get_posts() stores every fetched post in the
+					// long-lived posts object cache (cache_results defaults true),
+					// so the peak would grow monotonically across chunks and the
+					// chunking would bound nothing.
+					'cache_results'          => false,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+				]
+			);
+
+			// Bucket and reduce inside the chunk loop, so each chunk's post objects
+			// are released before the next chunk loads.
+			$by_team = [];
+			foreach ( $invitations as $invitation ) {
+				$by_team[ (int) $invitation->post_parent ][] = $invitation;
+			}
+			foreach ( $by_team as $team_id => $team_invitations ) {
+				$emails = self::extract_pending_invitation_emails( $team_invitations, $dropped );
+				if ( ! empty( $emails ) ) {
+					$result[ $team_id ] = $emails;
+				}
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Filter one team's invitation posts down to pending, valid, deduped invitee emails.
+	 *
+	 * The shared reduction behind the single-team and bulk readers: re-applies the
+	 * pending-status filter in PHP (the query-level clause silently vanishes when the
+	 * Teams plugin — which registers the status — is inactive), drops titles that are
+	 * not valid emails, and dedupes case variants of one mailbox (first one wins,
+	 * keeping its original casing).
+	 *
+	 * @param \WP_Post[] $invitations One team's `wc_team_invitation` posts, in ID order.
+	 * @param int        $dropped     Out-param: incremented once per pending invitation
+	 *                                whose title is_email() rejects. Those invitees can
+	 *                                appear in no table or count, so the caller should
+	 *                                surface the tally rather than lose them silently.
+	 *
+	 * @return string[] Pending invitee emails in their original casing, deduped case-insensitively.
+	 */
+	private static function extract_pending_invitation_emails( $invitations, &$dropped = 0 ) {
+		$emails = [];
+		$seen   = [];
+		foreach ( $invitations as $invitation ) {
+			if ( 'wcmti-pending' !== $invitation->post_status ) {
+				continue;
+			}
+			$email = \is_email( $invitation->post_title );
+			if ( ! $email ) {
+				++$dropped;
+				continue;
+			}
+			$key = strtolower( $email );
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$emails[]     = $email;
+		}
+
+		return $emails;
+	}
+
+	/**
 	 * Count the managers migrate-teams would promote in a dry-run.
 	 *
 	 * During a dry-run no members are added, so membership can't be read from the
 	 * data layer. A candidate would be promoted if their Teams role is `manager`,
-	 * they are a reader (so they would be added as a member), and they are not the
+	 * they are an eligible group member (so they would be added), and they are not the
 	 * owner or an existing manager.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
@@ -1678,7 +2050,7 @@ class Teams_Migration {
 				continue;
 			}
 			$role = \get_user_meta( $user_id, sprintf( self::TEAM_ROLE_META_KEY_TEMPLATE, $team_id ), true );
-			if ( 'manager' === $role && Reader_Activation::is_user_reader( $user_id ) ) {
+			if ( 'manager' === $role && Group_Subscription::is_eligible_member( $user_id ) ) {
 				++$count;
 			}
 		}
@@ -2462,8 +2834,7 @@ class Teams_Migration {
 	}
 
 	/**
-	 * Value-requiring migrate-manual-members flags found bare (no `=value`) on
-	 * the raw command line.
+	 * Value-requiring flags found bare (no `=value`) on the raw command line.
 	 *
 	 * WP-CLI validates flags against the command synopsis before invoking the
 	 * command: a bare `--user-ids` draws only a warning, then the flag is
@@ -2474,23 +2845,20 @@ class Teams_Migration {
 	 * worst case). Reading the raw argv is the only place the mistake is still
 	 * visible.
 	 *
-	 * @param string[]|null $argv Raw argument vector; defaults to $_SERVER['argv'].
+	 * Shared with the read-only audit commands, which have the same exposure:
+	 * pass the flags of the command being run, so a sibling command's flag name
+	 * is never reported against an invocation that does not accept it.
+	 *
+	 * @param string[]|null $argv        Raw argument vector; defaults to $_SERVER['argv'].
+	 * @param string[]|null $value_flags Value-requiring flags to look for, each with its leading dashes; defaults to migrate-manual-members'.
 	 *
 	 * @return string[] The value-requiring flags present without a value.
 	 */
-	public static function get_valueless_value_flags( $argv = null ) {
+	public static function get_valueless_value_flags( $argv = null, $value_flags = null ) {
 		if ( null === $argv ) {
 			$argv = isset( $_SERVER['argv'] ) ? (array) $_SERVER['argv'] : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		}
-		$value_flags = [
-			'--product-id',
-			'--plan-ids',
-			'--access-product-ids',
-			'--user-ids',
-			'--user-ids-file',
-			'--skip-domains',
-			'--group-owner-id',
-		];
+		$value_flags = null === $value_flags ? self::MANUAL_MEMBERS_VALUE_FLAGS : $value_flags;
 		$bare_flags  = [];
 		foreach ( $argv as $token ) {
 			if ( in_array( $token, $value_flags, true ) ) {
@@ -2737,6 +3105,75 @@ class Teams_Migration {
 			return 0;
 		}
 		return max( $seat_count + ( $owner_is_team_member ? 0 : 1 ), 2 );
+	}
+
+	/**
+	 * Map a team to the seat count of a per-seat group subscription.
+	 *
+	 * A per-seat group has no "unlimited", and its seat count is its capacity. So it
+	 * takes the team's owner-inclusive seat limit, but never fewer seats than the
+	 * people it has to hold, each counted once, plus each pending invitee, whose link
+	 * is redeemed against a free seat. An unlimited team therefore gets exactly that
+	 * many.
+	 *
+	 * @param int   $group_limit              The owner-inclusive group limit (0 = unlimited).
+	 * @param int[] $people_ids               Everyone the group holds: owners, members, existing group members.
+	 * @param int   $pending_invitation_count Invitations still waiting to be accepted.
+	 *
+	 * @return int The seat count, owner included.
+	 */
+	public static function map_team_to_seat_quantity( $group_limit, $people_ids, $pending_invitation_count ) {
+		$people = array_unique( array_filter( array_map( 'intval', (array) $people_ids ) ) );
+		return max( (int) $group_limit, count( $people ) + (int) $pending_invitation_count );
+	}
+
+	/**
+	 * Map a team product's "Maximum member count" to the owner-inclusive group limit.
+	 *
+	 * Access Control always counts the team owner as a group member, but WC Teams only
+	 * reserves a seat for the owner when the global "Owners must be members" setting is on
+	 * (or the buyer opts in per order via the `team_owner_takes_seat` order-item flag). So
+	 * unless the owner already occupies one of the product's seats, the group needs one more
+	 * seat than the product's member count — the same adjustment migrate-teams makes per team.
+	 *
+	 * A product carries no order, so per-order opt-ins are invisible here: on a site whose
+	 * global setting is off, a buyer who opts their owner into a seat yields a group limit one
+	 * larger than they strictly need. Over-provisioning by one seat is harmless; under-
+	 * provisioning (the bug this fixes) locks a paying member out of a seat.
+	 *
+	 * Note the mapping inherits map_team_seats_to_group_limit()'s 2-seat floor, so a
+	 * 1-member product never maps below a limit of 2 — including on an "Owners must be
+	 * members" site, where the owner occupies the single seat and the group strictly needs
+	 * only 1. That is one seat in the same safe over-provision direction as above.
+	 *
+	 * @param int $max_members The product's _wc_memberships_for_teams_max_member_count (0 = unlimited).
+	 *
+	 * @return int The owner-inclusive group limit (0 = unlimited).
+	 */
+	public static function map_product_max_members_to_group_limit( $max_members ) {
+		$owner_takes_seat = 'yes' === \get_option( 'wc_memberships_for_teams_owners_must_take_seat', 'no' );
+		return self::map_team_seats_to_group_limit( $max_members, $owner_takes_seat );
+	}
+
+	/**
+	 * Map a per-member team product's member counts to per-seat group seat bounds.
+	 *
+	 * Per-seat groups count the owner as one of the seats bought. Teams only does when
+	 * "Owners must be members" is on, so otherwise each bound gains the owner's seat,
+	 * as map_product_max_members_to_group_limit() does for the flat limit. Teams sells
+	 * at least one seat even with no minimum set, and an unset maximum is unbounded.
+	 *
+	 * @param int $min_members The product's _wc_memberships_for_teams_min_member_count (0 = unset).
+	 * @param int $max_members The product's _wc_memberships_for_teams_max_member_count (0 = unset).
+	 *
+	 * @return array{min:int,max:int} Owner-inclusive minimum and maximum seats (max 0 = unbounded).
+	 */
+	public static function map_product_member_counts_to_seats( $min_members, $max_members ) {
+		$owner_seat = 'yes' === \get_option( 'wc_memberships_for_teams_owners_must_take_seat', 'no' ) ? 0 : 1;
+		return [
+			'min' => max( 1, (int) $min_members ) + $owner_seat,
+			'max' => (int) $max_members > 0 ? (int) $max_members + $owner_seat : 0,
+		];
 	}
 
 	/**

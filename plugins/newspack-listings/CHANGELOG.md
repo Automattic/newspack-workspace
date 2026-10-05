@@ -1,3 +1,82 @@
+## newspack-listings [3.7.8](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.7...newspack-listings@3.7.8) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+
+## newspack-listings [3.7.7](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.6...newspack-listings@3.7.7) (2026-09-28)
+
+
+### Bug Fixes
+
+* **content-gate:** withhold restricted bodies outside the article (NPPD-2172, [#913](https://github.com/Automattic/newspack-workspace/issues/913)) ([56a4761](https://github.com/Automattic/newspack-workspace/commit/56a4761ec9a8e9c8edcaf186baee3c77bae3ab18))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
+## newspack-listings [3.7.6](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.5...newspack-listings@3.7.6) (2026-09-14)
+
+
+### Bug Fixes
+
+* **listings:** pin expiration dates to site midnight ([#865](https://github.com/Automattic/newspack-workspace/issues/865)) ([292405b](https://github.com/Automattic/newspack-workspace/commit/292405bbc8d0a012d12e393e6ac8f556c290a7c9))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
+## newspack-listings [3.7.5](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.4...newspack-listings@3.7.5) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.7.0
+
+## newspack-listings [3.7.4](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.3...newspack-listings@3.7.4) (2026-08-20)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.3
+
+## newspack-listings [3.7.3](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.2...newspack-listings@3.7.3) (2026-08-19)
+
+
+### Bug Fixes
+
+* **listings:** resolve event dates in the site timezone (NPPM-3125) ([#863](https://github.com/Automattic/newspack-workspace/issues/863)) ([194963e](https://github.com/Automattic/newspack-workspace/commit/194963ef3bec7fe21e366829c221970dcb1650ec))
+
+## newspack-listings [3.7.2](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.1...newspack-listings@3.7.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* **content-gate:** keep withheld blocks out of generated excerpts ([#832](https://github.com/Automattic/newspack-workspace/issues/832)) ([86eecfe](https://github.com/Automattic/newspack-workspace/commit/86eecfeef6eb07440afc8d5ffa239907cceb45a3))
+
+## newspack-listings [3.7.1](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.0...newspack-listings@3.7.1) (2026-08-17)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.2
+
+# newspack-listings [3.7.0](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.6.5...newspack-listings@3.7.0) (2026-08-17)
+
+
+### Features
+
+* **performance:** defer reader-facing JS assets (NPPM-3037) ([#722](https://github.com/Automattic/newspack-workspace/issues/722)) ([2855574](https://github.com/Automattic/newspack-workspace/commit/2855574099c4f416a984cda8565b269e5a9f0fb0))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.6.1
+* **newspack-scripts:** upgraded to 5.11.0
+
 ## newspack-listings [3.6.5](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.6.4...newspack-listings@3.6.5) (2026-08-03)
 
 

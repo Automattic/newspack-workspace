@@ -7,7 +7,6 @@
 @use "../../../packages/colors/colors.module" as colors;
 
 #newspack-handoff-banner {
-	clear: both;
 	display: block;
 	position: relative;
 	z-index: 1000;
@@ -43,5 +42,36 @@
 		display: flex;
 		flex-shrink: 0;
 		gap: wp-vars.$grid-unit-10;
+	}
+}
+
+$banner-height: var(--newspack-handoff-banner-height, 0px);
+
+.newspack-handoff-banner-visible body.post-php,
+.newspack-handoff-banner-visible body.post-new-php {
+	#wpcontent {
+		min-height: 100vh;
+	}
+
+	#newspack-handoff-banner {
+		position: sticky;
+		top: 0;
+	}
+
+	.interface-interface-skeleton {
+		top: $banner-height;
+	}
+}
+
+.newspack-handoff-banner-visible body.site-editor-php {
+	.edit-site {
+		height: calc(100vh - #{$banner-height});
+		min-height: calc(100vh - #{$banner-height});
+		top: $banner-height;
+	}
+
+	.edit-site-layout.is-full-canvas .edit-site-layout__sidebar-region {
+		height: calc(100vh - #{$banner-height});
+		top: $banner-height;
 	}
 }

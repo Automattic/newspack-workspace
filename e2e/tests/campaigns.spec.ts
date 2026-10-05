@@ -11,12 +11,12 @@ test("Create and view a prompt",  {
   await goToAdminMenu("Audience", "Campaigns", page);
 
   await expect(page.getByRole("heading", { name: "Everyone" })).toBeVisible();
-  await page.getByRole("button", { name: "Add New Campaign" }).click();
+  await page.getByRole("button", { name: "Add Campaign" }).click();
   await page.getByPlaceholder("Campaign Name").fill("Basic");
   await page.getByRole("button", { name: "Add" }).click();
   await page.waitForURL("**/campaigns/**");
 
-  await page.getByRole("button", { name: "Add New Prompt" }).click();
+  await page.getByRole("button", { name: "Add Prompt" }).click();
   await page.getByRole("link", { name: "Center Overlay Fixed at the" }).click();
   await page.waitForURL(/post_type=newspack_popups_cpt/);
 

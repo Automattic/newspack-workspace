@@ -79,21 +79,26 @@ function ConfirmDialog(
 
 	const handleOnCancel = useCallback( () => {
 		setShowDialog( false );
+		const hadPendingNavigation = !! pendingNavigation.current;
 		pendingNavigation.current = null;
 		// A POP may have moved the URL to the target before it was blocked; put
 		// it back so the address bar matches the page the user chose to stay on.
-		bypassBlock.current = true;
-		try {
-			history.replace( history.location );
-		} finally {
-			bypassBlock.current = false;
+		// Only when this instance blocked it: v5 keeps one prompt slot, so an
+		// unprompted replace is caught by whichever dialog did install a blocker.
+		if ( hadPendingNavigation && history ) {
+			bypassBlock.current = true;
+			try {
+				history.replace( history.location );
+			} finally {
+				bypassBlock.current = false;
+			}
 		}
 		onCancel();
 	}, [ onCancel, history ] );
 
 	// Block navigation when there are unsaved changes.
 	useEffect( () => {
-		if ( ! when ) {
+		if ( ! when || ! history ) {
 			return;
 		}
 		const unblock = history.block( ( location: string, action: string ) => {
@@ -124,10 +129,19 @@ function ConfirmDialog(
 		return unblock;
 	}, [ when, history ] );
 
-	// Show the dialog imperatively without blocking navigation.
+	// During render: a commit later the dialog would still hold focus while the
+	// caller unmounted. The blocker above raises it without touching `isOpen`.
+	const [ wasOpen, setWasOpen ] = useState( isOpen );
+	if ( wasOpen !== isOpen ) {
+		setWasOpen( isOpen );
+		setShowDialog( isOpen );
+	}
+
+	// A withdrawn prompt releases what the blocker held, as confirm and cancel do.
+	// After the commit, so a discarded render cannot drop a live one.
 	useEffect( () => {
-		if ( isOpen ) {
-			setShowDialog( true );
+		if ( ! isOpen ) {
+			pendingNavigation.current = null;
 		}
 	}, [ isOpen ] );
 

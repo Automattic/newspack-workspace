@@ -316,12 +316,7 @@ final class Newspack_Popups_Model {
 	 *                    the post is not a prompt, or the id does not resolve to a post.
 	 */
 	public static function retrieve_preview_popup( $post_id ) {
-		// Previews render unsaved prompt content, so restrict them to users who can manage
-		// prompts and to the prompts CPT, mirroring the plugin's other preview entry points.
-		if ( ! Newspack_Popups::is_user_admin() ) {
-			return null;
-		}
-		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT !== get_post_type( $post_id ) ) {
+		if ( ! Newspack_Popups::can_preview_popup( $post_id ) ) {
 			return null;
 		}
 		// The editor's autosave only holds the freshest content while there are
@@ -736,6 +731,13 @@ final class Newspack_Popups_Model {
 
 		if ( $duplicate_of ) {
 			$popup['duplicate_of'] = $duplicate_of;
+		}
+
+		$ab_fields = Newspack_Popups_AB_Tests::get_popup_ab_fields( $id, true );
+
+		if ( $ab_fields ) {
+			$popup['ab_test_id'] = $ab_fields['test_id'];
+			$popup['ab_variant'] = $ab_fields['variant'];
 		}
 
 		if ( self::is_inline( $popup ) ) {
@@ -1196,6 +1198,10 @@ final class Newspack_Popups_Model {
 				<?php if ( ! empty( $utm_suppression ) ) : ?>
 					data-suppression="<?php echo esc_attr( $utm_suppression ); ?>"
 				<?php endif; ?>
+				<?php if ( ! empty( $popup['ab_test_id'] ) ) : ?>
+					data-ab-test-id="<?php echo esc_attr( $popup['ab_test_id'] ); ?>"
+					data-ab-variant="<?php echo esc_attr( $popup['ab_variant'] ); ?>"
+				<?php endif; ?>
 			>
 				<?php echo do_shortcode( $body ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>
@@ -1356,6 +1362,10 @@ final class Newspack_Popups_Model {
 			data-frequency="<?php echo esc_attr( $frequency_config ); ?>"
 			<?php if ( ! empty( $utm_suppression ) ) : ?>
 				data-suppression="<?php echo esc_attr( $utm_suppression ); ?>"
+			<?php endif; ?>
+			<?php if ( ! empty( $popup['ab_test_id'] ) ) : ?>
+				data-ab-test-id="<?php echo esc_attr( $popup['ab_test_id'] ); ?>"
+				data-ab-variant="<?php echo esc_attr( $popup['ab_variant'] ); ?>"
 			<?php endif; ?>
 
 			<?php if ( $is_scroll_triggered ) : ?>

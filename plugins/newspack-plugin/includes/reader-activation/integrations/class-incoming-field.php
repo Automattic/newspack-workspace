@@ -40,11 +40,21 @@ class Incoming_Field {
 	protected $value_type = 'string';
 
 	/**
-	 * Matching function: 'default', 'list__in', 'list__not_in', 'range'.
+	 * Matching function: 'default', 'list__in', 'list__not_in', 'range', 'date_range'.
 	 *
 	 * @var string
 	 */
 	protected $matching_function = 'default';
+
+	/**
+	 * Source date format for `date` / `datetime` fields, as a PHP date format
+	 * string (e.g. `m/d/Y`). Empty means the provider already sends ISO 8601 /
+	 * `Y-m-d`, which is what ActiveCampaign does; Mailchimp renders each merge
+	 * field per its own `date_format` option and must declare it.
+	 *
+	 * @var string
+	 */
+	protected $date_format = '';
 
 	/**
 	 * Options for selection UI.
@@ -164,11 +174,31 @@ class Incoming_Field {
 	/**
 	 * Set the matching function.
 	 *
-	 * @param string $matching_function One of 'default', 'list__in', 'list__not_in', 'range'.
+	 * @param string $matching_function One of 'default', 'list__in', 'list__not_in', 'range', 'date_range'.
 	 * @return self
 	 */
 	public function set_matching_function( $matching_function ) {
 		$this->matching_function = $matching_function;
+		return $this;
+	}
+
+	/**
+	 * Get the source date format.
+	 *
+	 * @return string
+	 */
+	public function get_date_format() {
+		return $this->date_format;
+	}
+
+	/**
+	 * Set the source date format.
+	 *
+	 * @param string $date_format A PHP date format string, or '' for ISO 8601 / Y-m-d.
+	 * @return self
+	 */
+	public function set_date_format( $date_format ) {
+		$this->date_format = $date_format;
 		return $this;
 	}
 
@@ -179,6 +209,30 @@ class Incoming_Field {
 	 */
 	public function get_options() {
 		return $this->options;
+	}
+
+	/**
+	 * Whether the field's value is one or more entries from its option list,
+	 * rather than free text.
+	 *
+	 * The value type decides it, so a dropdown whose choices the provider has not
+	 * configured yet still takes option values. A populated option list stands in
+	 * for the declaration where there is none: `Esp::configure_incoming_field()`
+	 * lets a provider send `options` without a `value_type`, and reading those
+	 * fields as free text would send a list of option values down the plain-string
+	 * branch.
+	 *
+	 * Widening this narrows what a rule may store. A `select` field whose option
+	 * fetch came back empty now takes option values, so a free-text value stored
+	 * for it before is rejected on save and labelled "grants no access" in both
+	 * pickers. That direction is deliberate — the alternative saves a value that
+	 * evaluates as malformed — but such a value needs re-picking by hand; there is
+	 * no migration for it.
+	 *
+	 * @return bool
+	 */
+	public function takes_option_values() {
+		return in_array( $this->value_type, [ 'select', 'multiselect' ], true ) || ! empty( $this->options );
 	}
 
 	/**

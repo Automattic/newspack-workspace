@@ -1,6 +1,7 @@
 // Font and typographic variables
 
 :root {
+	// Header and Body changes must be mirrored in newspack_font_family_stacks(), inc/typography.php.
 	--newspack-theme-font-body: georgia, garamond, "Times New Roman", serif;
 	--newspack-theme-font-heading:
 		-apple-system,

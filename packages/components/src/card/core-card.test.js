@@ -1,7 +1,7 @@
 /**
  * External dependencies.
  */
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies.
@@ -35,8 +35,54 @@ describe( 'CoreCard', () => {
 		expect( getHeader( container ).tagName ).not.toBe( 'BUTTON' );
 	} );
 
+	it( 'names the actions menu "More actions" by default', () => {
+		render( <CoreCard header="Settings" actions={ [ { label: 'Delete', action: () => {} } ] } /> );
+		expect( screen.getByRole( 'button', { name: 'More actions' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'names the actions menu with actionsLabel when supplied', () => {
+		render( <CoreCard header="Settings" actions={ [ { label: 'Delete', action: () => {} } ] } actionsLabel="Settings actions" /> );
+		expect( screen.getByRole( 'button', { name: 'Settings actions' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'gives a menu item its ariaLabel as the accessible name', async () => {
+		render( <CoreCard header="Settings" actions={ [ { label: 'Delete', ariaLabel: 'Delete: Settings', action: () => {} } ] } /> );
+		fireEvent.click( screen.getByRole( 'button', { name: 'More actions' } ) );
+		expect( await screen.findByRole( 'menuitem', { name: 'Delete: Settings' } ) ).toBeInTheDocument();
+	} );
+
 	it( 'renders the header as a non-button when it is also draggable', () => {
 		const { container } = render( <CoreCard header="Settings" isDraggable onHeaderClick={ () => {} } /> );
 		expect( getHeader( container ).tagName ).not.toBe( 'BUTTON' );
+	} );
+
+	it( 'gives the body large padding when size is large', () => {
+		const { container } = render( <CoreCard size="large" /> );
+		expect( container.querySelector( '.newspack-card--core__is-large' ) ).not.toBeNull();
+	} );
+
+	it( 'lets isSmall win over a large size', () => {
+		const { container } = render( <CoreCard size="large" isSmall /> );
+		expect( container.querySelector( '.newspack-card--core__is-large' ) ).toBeNull();
+		expect( container.querySelector( '.newspack-card--core__is-small' ) ).not.toBeNull();
+	} );
+
+	it( 'marks the card vertical only when isVertical is passed', () => {
+		const { container: plain } = render( <CoreCard header="Settings" /> );
+		expect( plain.querySelector( '.newspack-card--core__is-vertical' ) ).toBeNull();
+
+		const { container: vertical } = render( <CoreCard header="Settings" isVertical /> );
+		expect( vertical.querySelector( '.newspack-card--core__is-vertical' ) ).not.toBeNull();
+	} );
+
+	it( 'marks the card borderless only when noBorder or isBorderless is passed', () => {
+		const { container: plain } = render( <CoreCard header="Settings" /> );
+		expect( plain.querySelector( '.newspack-card--core__no-border' ) ).toBeNull();
+
+		const { container: borderless } = render( <CoreCard header="Settings" noBorder /> );
+		expect( borderless.querySelector( '.newspack-card--core__no-border' ) ).not.toBeNull();
+
+		const { container: coreBorderless } = render( <CoreCard header="Settings" isBorderless /> );
+		expect( coreBorderless.querySelector( '.newspack-card--core__no-border' ) ).not.toBeNull();
 	} );
 } );

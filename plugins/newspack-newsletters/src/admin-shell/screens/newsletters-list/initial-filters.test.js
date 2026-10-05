@@ -10,8 +10,8 @@ describe( 'getInitialFilters', () => {
 		expect( getInitialFilters( '?post_status=trash' ) ).toEqual( [ { field: 'status', operator: 'isAny', value: [ 'trash' ] } ] );
 	} );
 
-	it( 'maps post_status=draft, pending, and auto-draft to the combined draft filter', () => {
-		const expected = [ { field: 'status', operator: 'isAny', value: [ 'draft,pending,auto-draft' ] } ];
+	it( 'maps post_status=draft, pending, and legacy auto-draft to the draft,pending filter', () => {
+		const expected = [ { field: 'status', operator: 'isAny', value: [ 'draft,pending' ] } ];
 		expect( getInitialFilters( '?post_status=draft' ) ).toEqual( expected );
 		expect( getInitialFilters( '?post_status=pending' ) ).toEqual( expected );
 		expect( getInitialFilters( '?post_status=auto-draft' ) ).toEqual( expected );

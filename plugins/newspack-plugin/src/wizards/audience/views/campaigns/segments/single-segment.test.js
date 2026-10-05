@@ -37,6 +37,13 @@ const criteria = [
 		placeholder: 'google.com, facebook.com',
 		matching_attribute: 'referrer',
 	},
+	{
+		id: 'LAST_GIFT_DATE',
+		category: 'integrations',
+		matching_function: 'date_range',
+		name: 'ActiveCampaign: Last Gift Date',
+		matching_attribute: 'LAST_GIFT_DATE',
+	},
 ];
 
 const SEGMENTS = [
@@ -140,5 +147,424 @@ describe( 'segment criteria input selection', () => {
 		expect( isMultiSelectCriteria( { matching_function: 'list__not_in', options: [ {} ] } ) ).toBe( true );
 		expect( isMultiSelectCriteria( { matching_function: 'default', options: [ {} ] } ) ).toBe( false );
 		expect( isMultiSelectCriteria( { matching_function: 'list__in', options: [] } ) ).toBe( false );
+	} );
+} );
+
+describe( 'Date range criteria input', () => {
+	const mockProps = {
+		segmentId: 'new',
+		setSegments: jest.fn(),
+		wizardApiFetch: () => Promise.resolve( [] ),
+	};
+
+	beforeEach( () => {
+		window.newspackAudienceCampaigns = { criteria };
+		render(
+			<MemoryRouter>
+				<SingleSegment { ...mockProps } />
+			</MemoryRouter>
+		);
+	} );
+
+	// The From/To rows only exist under the Custom preset; everything below that
+	// exercises them opens with this.
+	const selectCustom = () => fireEvent.change( screen.getByTestId( 'date-range-preset' ), { target: { value: 'custom' } } );
+
+	it( 'opens on a single preset selector, with no bound rows', () => {
+		expect( screen.getByTestId( 'date-range-preset' ) ).toHaveValue( '' );
+		expect( screen.queryByLabelText( 'From' ) ).not.toBeInTheDocument();
+		expect( screen.queryByLabelText( 'To' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'offers Any, the rolling windows, and Custom', () => {
+		const options = [ ...screen.getByTestId( 'date-range-preset' ).options ].map( o => [ o.value, o.textContent ] );
+		expect( options ).toEqual( [
+			[ '', 'Any' ],
+			[ '7', 'Last 7 days' ],
+			[ '30', 'Last 30 days' ],
+			[ '365', 'Last 365 days' ],
+			[ 'custom', 'Custom' ],
+		] );
+	} );
+
+	it( 'keeps the bound rows hidden when a rolling window is chosen', () => {
+		fireEvent.change( screen.getByTestId( 'date-range-preset' ), { target: { value: '30' } } );
+		expect( screen.getByTestId( 'date-range-preset' ) ).toHaveValue( '30' );
+		expect( screen.queryByLabelText( 'From' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'stores a rolling window as a trailing relative range', () => {
+		fireEvent.change( screen.getByTestId( 'date-range-preset' ), { target: { value: '7' } } );
+		// Switching to Custom must reveal the same range the preset stood for,
+		// rather than resetting it.
+		selectCustom();
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 7 );
+		expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'past' );
+		expect( screen.getByTestId( 'date-range-end-value' ) ).toHaveValue( 0 );
+	} );
+
+	it( 'stays on Custom once chosen, even while the range is still empty', () => {
+		selectCustom();
+		// An empty range looks exactly like "Any"; the deliberate choice has to win.
+		expect( screen.getByTestId( 'date-range-preset' ) ).toHaveValue( 'custom' );
+		expect( screen.getByLabelText( 'From' ) ).toBeInTheDocument();
+	} );
+
+	it( 'stays on Custom when a hand-built range happens to match a preset', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		fireEvent.change( screen.getByTestId( 'date-range-start-value' ), { target: { value: '30' } } );
+		fireEvent.change( screen.getByLabelText( 'To' ), { target: { value: 'past' } } );
+		expect( screen.getByTestId( 'date-range-preset' ) ).toHaveValue( 'custom' );
+	} );
+
+	it( 'renders a bound selector for each end of the range', () => {
+		selectCustom();
+		expect( screen.getByLabelText( 'From' ) ).toBeInTheDocument();
+		expect( screen.getByLabelText( 'To' ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows no value input until a bound type is chosen', () => {
+		selectCustom();
+		expect( screen.queryByTestId( 'date-range-start-value' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'seeds a value when a bound type is chosen, so no half-filled bound exists', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		const input = screen.getByTestId( 'date-range-start-value' );
+		expect( input ).toHaveValue( 0 );
+	} );
+
+	it( 'stores a relative bound as signed days', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		fireEvent.change( screen.getByTestId( 'date-range-start-value' ), { target: { value: '30' } } );
+		// Re-read: a past bound of 30 days renders back as "Days ago" with 30.
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 30 );
+	} );
+
+	it( 'reads scientific notation as its numeric value', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		// A number input accepts '1e2'; parseInt() would read it as 1 and store
+		// a window a hundred times narrower than the publisher typed.
+		fireEvent.change( screen.getByTestId( 'date-range-start-value' ), { target: { value: '1e2' } } );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 100 );
+	} );
+
+	it( 'clears a bound back to Any', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: '' } } );
+		expect( screen.queryByTestId( 'date-range-start-value' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps the selector on "Days from now" after choosing it', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'future' } } );
+		// A zero-magnitude relative bound is ambiguous; the selector must not snap back to "Days ago".
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'future' );
+	} );
+
+	it( 'stores a positive offset when a magnitude is typed under "Days from now"', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'future' } } );
+		fireEvent.change( screen.getByTestId( 'date-range-start-value' ), { target: { value: '7' } } );
+		// A negated offset would re-derive as "Days ago" once the magnitude is non-zero.
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'future' );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 7 );
+	} );
+
+	it( 'switches from "Days from now" back to "Days ago" and stays there', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'future' } } );
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' );
+	} );
+
+	it( 'seeds today when "Date" is chosen, so no half-filled bound exists', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'absolute' } } );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).not.toHaveValue( '' );
+	} );
+
+	it( 'leaves a cleared date empty instead of re-seeding today', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'absolute' } } );
+		const input = screen.getByTestId( 'date-range-start-value' );
+		fireEvent.change( input, { target: { value: '2020-01-01' } } );
+		expect( input ).toHaveValue( '2020-01-01' );
+		// A date input reports '' both when cleared and transiently while it is being
+		// retyped. Substituting today() there would silently move a saved window.
+		fireEvent.change( input, { target: { value: '' } } );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( '' );
+	} );
+
+	it( 'gives each value input an accessible name composed with its row', () => {
+		selectCustom();
+		// The only visible text sits on the sibling select, so the hidden input
+		// label composes with the row label — two bare "Days" spin buttons (one
+		// per bound row) would otherwise be indistinguishable to a screen reader.
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		expect( screen.getByLabelText( 'From days' ) ).toBeInTheDocument();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'absolute' } } );
+		expect( screen.getByLabelText( 'From date' ) ).toBeInTheDocument();
+		fireEvent.change( screen.getByLabelText( 'To' ), { target: { value: 'future' } } );
+		expect( screen.getByLabelText( 'To days' ) ).toBeInTheDocument();
+	} );
+
+	it( 'names the preset selector after the criterion, not a generic "Date range"', () => {
+		// Several date criteria can render on one screen; a criterion-specific
+		// name is the only thing distinguishing their preset selectors.
+		expect( screen.getByLabelText( 'ActiveCampaign: Last Gift Date' ) ).toBe( screen.getByTestId( 'date-range-preset' ) );
+	} );
+
+	it( 'caps the day magnitude so typos stay inside four-digit years', () => {
+		selectCustom();
+		fireEvent.change( screen.getByLabelText( 'From' ), { target: { value: 'past' } } );
+		// Import and REST bypass the input, so the matcher still fails closed on
+		// larger offsets — the cap turns a wild typo into browser validation.
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveAttribute( 'max', '100000' );
+	} );
+} );
+
+// Shared scaffold for the existing-segment suites below: registers a beforeEach
+// that builds a segment holding the given criteria, wires the fetch mock and
+// renders the editor, and returns the mock for save assertions. The segment is
+// rebuilt per test because the editor updates criterion objects in place — a
+// shared fixture would leak one test's edits into the next.
+const mountExistingSegment = ( makeSegmentCriteria, criteriaRegistry = criteria ) => {
+	let existingSegment;
+	const wizardApiFetch = jest.fn( ( { method } = {} ) => Promise.resolve( 'POST' === method ? existingSegment : [ existingSegment ] ) );
+	beforeEach( () => {
+		window.newspackAudienceCampaigns = { criteria: criteriaRegistry };
+		existingSegment = { ...SEGMENTS[ 0 ], criteria: makeSegmentCriteria() };
+		wizardApiFetch.mockClear();
+		render(
+			<MemoryRouter>
+				<SingleSegment segmentId={ SEGMENTS[ 0 ].id } setSegments={ jest.fn() } wizardApiFetch={ wizardApiFetch } />
+			</MemoryRouter>
+		);
+	} );
+	return wizardApiFetch;
+};
+
+describe( 'Date range criteria input for an existing segment with a loaded "Days from now" end bound', () => {
+	// Regression coverage for editing (not just loading) a bound that arrived from
+	// storage: backspacing the value to empty makes the bound ambiguous (days: 0),
+	// and chosenType must already hold the loaded direction so the selector doesn't
+	// flip to the opposite direction.
+	const wizardApiFetch = mountExistingSegment( () => [ { criteria_id: 'LAST_GIFT_DATE', value: { end: { type: 'relative', days: 7 } } } ] );
+
+	it( 'keeps "Days from now" once the loaded value is cleared, and stores a positive offset when retyped', async () => {
+		await waitFor( () => expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' ) );
+
+		fireEvent.change( screen.getByTestId( 'date-range-end-value' ), { target: { value: '' } } );
+		// The regression: without the fix this selector flips to "Days ago".
+		expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' );
+
+		fireEvent.change( screen.getByTestId( 'date-range-end-value' ), { target: { value: '14' } } );
+		expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' );
+
+		fireEvent.click( screen.getByText( 'Save' ) );
+
+		expect( wizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				method: 'POST',
+				data: expect.objectContaining( {
+					criteria: [ { criteria_id: 'LAST_GIFT_DATE', value: { end: { type: 'relative', days: 14 } } } ],
+				} ),
+			} )
+		);
+	} );
+} );
+
+describe( 'Date range criteria input for an existing segment with a loaded absolute bound', () => {
+	// Clearing the date means "unbounded" — but a date input also reports ''
+	// transiently while being retyped, so the input has to stay open and empty
+	// while the *emitted* bound disappears. A saved { type: 'absolute', date: '' }
+	// is a bound the matcher can only reject: the segment would silently match
+	// nobody while looking configured in the admin.
+	const wizardApiFetch = mountExistingSegment( () => [
+		{
+			criteria_id: 'LAST_GIFT_DATE',
+			value: { start: { type: 'absolute', date: '2026-01-01' }, end: { type: 'relative', days: 7 } },
+		},
+		{ criteria_id: 'newsletter', value: 'subscribers' },
+	] );
+
+	it( 'keeps a cleared date input open for retyping but saves the range without the bound', async () => {
+		await waitFor( () => expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'absolute' ) );
+
+		fireEvent.change( screen.getByTestId( 'date-range-start-value' ), { target: { value: '' } } );
+		// The row stays put so the publisher can retype…
+		expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'absolute' );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( '' );
+
+		fireEvent.click( screen.getByText( 'Save' ) );
+		// …but the emitted bound is gone: only the usable end bound is saved.
+		expect( wizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				method: 'POST',
+				data: expect.objectContaining( {
+					criteria: [
+						{ criteria_id: 'LAST_GIFT_DATE', value: { end: { type: 'relative', days: 7 } } },
+						{ criteria_id: 'newsletter', value: 'subscribers' },
+					],
+				} ),
+			} )
+		);
+	} );
+
+	it( 'drops the criterion entirely once the other bound is removed too', async () => {
+		await waitFor( () => expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'absolute' ) );
+
+		fireEvent.change( screen.getByTestId( 'date-range-start-value' ), { target: { value: '' } } );
+		fireEvent.change( screen.getByLabelText( 'To' ), { target: { value: '' } } );
+		fireEvent.click( screen.getByText( 'Save' ) );
+
+		expect( wizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				method: 'POST',
+				data: expect.objectContaining( {
+					criteria: [ { criteria_id: 'newsletter', value: 'subscribers' } ],
+				} ),
+			} )
+		);
+	} );
+} );
+
+describe( 'Date range criteria input clearing a relative bound', () => {
+	// Clearing the day magnitude mirrors clearing a date: the bound is dropped
+	// rather than saved as { days: 0 } — a zero-day bound would quietly move
+	// the window's edge to today — while the row stays open for retyping.
+	const wizardApiFetch = mountExistingSegment( () => [
+		{ criteria_id: 'LAST_GIFT_DATE', value: { end: { type: 'relative', days: 7 } } },
+		{ criteria_id: 'newsletter', value: 'subscribers' },
+	] );
+
+	it( 'keeps a cleared magnitude open for retyping but saves the range without the bound', async () => {
+		await waitFor( () => expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' ) );
+
+		fireEvent.change( screen.getByTestId( 'date-range-end-value' ), { target: { value: '' } } );
+		// The row stays put so the publisher can retype…
+		expect( screen.getByLabelText( 'To' ) ).toHaveValue( 'future' );
+		expect( screen.getByTestId( 'date-range-end-value' ) ).toHaveValue( null );
+
+		fireEvent.click( screen.getByText( 'Save' ) );
+		// …but the emitted bound is gone rather than saved as a zero-day bound.
+		expect( wizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				method: 'POST',
+				data: expect.objectContaining( {
+					criteria: [ { criteria_id: 'newsletter', value: 'subscribers' } ],
+				} ),
+			} )
+		);
+	} );
+} );
+
+describe( 'Date range value rendered after the operator moved back to Text', () => {
+	// Switching a field off Date range in Connections (or a newspack-popups too
+	// old to run date_range) re-registers the criterion with the default
+	// operator while segments still hold { start, end } values. The text input
+	// must not render the object — it would show "[object Object]", and one
+	// keystroke would save that literal over the range.
+	const textOperatorCriteria = criteria.map( c => ( 'LAST_GIFT_DATE' === c.id ? { ...c, matching_function: 'default' } : c ) );
+	mountExistingSegment(
+		() => [
+			{
+				criteria_id: 'LAST_GIFT_DATE',
+				value: { start: { type: 'relative', days: -30 }, end: { type: 'relative', days: 0 } },
+			},
+		],
+		textOperatorCriteria
+	);
+
+	it( 'renders an empty text input instead of the object', async () => {
+		await waitFor( () => expect( screen.getByPlaceholderText( 'Untitled Segment' ) ).toHaveValue( 'Subscribers' ) );
+		expect( screen.getByTestId( 'newspack-criteria-LAST_GIFT_DATE' ) ).toHaveValue( '' );
+	} );
+} );
+
+describe( 'Date range criteria input for a criterion still holding a Text-operator value', () => {
+	// Switching a field from Text to Date range in Connections leaves existing
+	// segments holding a plain string criterion value. An object update merged
+	// into that string would spread it into character-indexed keys
+	// ({ 0: '0', 1: '3', …, start, end }) and save the garbage unvalidated.
+	const wizardApiFetch = mountExistingSegment( () => [ { criteria_id: 'LAST_GIFT_DATE', value: '03/04/2026' } ] );
+
+	it( 'replaces the stored string instead of spreading it into index keys', async () => {
+		await waitFor( () => expect( screen.getByPlaceholderText( 'Untitled Segment' ) ).toHaveValue( 'Subscribers' ) );
+
+		fireEvent.change( screen.getByTestId( 'date-range-preset' ), { target: { value: '30' } } );
+		fireEvent.click( screen.getByText( 'Save' ) );
+
+		expect( wizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				method: 'POST',
+				data: expect.objectContaining( {
+					criteria: [
+						{
+							criteria_id: 'LAST_GIFT_DATE',
+							value: { start: { type: 'relative', days: -30 }, end: { type: 'relative', days: 0 } },
+						},
+					],
+				} ),
+			} )
+		);
+	} );
+} );
+
+describe( 'Date range criteria input for an existing segment with an ambiguous bound', () => {
+	// The stored bound is ambiguous (days: 0) and only arrives after the async
+	// fetch resolves, which is exactly the scenario the regression hit: the
+	// control first mounts with no bound at all, then re-renders once the real,
+	// ambiguous bound loads.
+	mountExistingSegment( () => [ { criteria_id: 'LAST_GIFT_DATE', value: { start: { type: 'relative', days: 0 } } } ] );
+
+	it( 'renders the derived direction and value once the stored bound loads, instead of Any', async () => {
+		await waitFor( () => expect( screen.getByLabelText( 'From' ) ).toHaveValue( 'past' ) );
+		expect( screen.getByTestId( 'date-range-start-value' ) ).toHaveValue( 0 );
+	} );
+} );
+
+describe( 'Date range criteria input for an existing segment stored as a rolling window', () => {
+	// A range saved as a preset has to come back as that preset rather than as
+	// Custom — the two produce identical values, so only the shape distinguishes them.
+	// A second criterion so the segment stays saveable once the date range is
+	// dropped — a segment with no criteria at all can't be saved.
+	const wizardApiFetch = mountExistingSegment( () => [
+		{
+			criteria_id: 'LAST_GIFT_DATE',
+			value: { start: { type: 'relative', days: -30 }, end: { type: 'relative', days: 0 } },
+		},
+		{ criteria_id: 'newsletter', value: 'subscribers' },
+	] );
+
+	it( 'shows the matching preset rather than Custom, with no bound rows', async () => {
+		await waitFor( () => expect( screen.getByTestId( 'date-range-preset' ) ).toHaveValue( '30' ) );
+		expect( screen.queryByLabelText( 'From' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'drops the criterion entirely when switched back to Any', async () => {
+		await waitFor( () => expect( screen.getByTestId( 'date-range-preset' ) ).toHaveValue( '30' ) );
+
+		fireEvent.change( screen.getByTestId( 'date-range-preset' ), { target: { value: '' } } );
+		fireEvent.click( screen.getByText( 'Save' ) );
+
+		// An empty `{}` would survive as a criterion and reach the matcher as "no
+		// bounds to check", which matches every reader that has a date at all.
+		expect( wizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				method: 'POST',
+				data: expect.objectContaining( {
+					criteria: [ { criteria_id: 'newsletter', value: 'subscribers' } ],
+				} ),
+			} )
+		);
 	} );
 } );

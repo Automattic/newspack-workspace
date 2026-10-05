@@ -6,7 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { BaseControl, Button, DatePicker, PanelRow, RangeControl, ToggleControl } from '@wordpress/components';
 import { compose } from '@wordpress/compose';
 import { withDispatch, withSelect } from '@wordpress/data';
-import { dateI18n } from '@wordpress/date';
+import { dateI18n, getDate } from '@wordpress/date';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import { useEffect, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
@@ -125,13 +125,20 @@ const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, 
 					<PanelRow>
 						<BaseControl id="newspack-listings__featured-listing-expiration" label={ __( 'Expiration Date', 'newspack-listings' ) }>
 							<DatePicker
-								currentDate={ newspack_listings_featured_expires ? new Date( newspack_listings_featured_expires ) : null }
+								currentDate={ newspack_listings_featured_expires || null }
 								onMonthPreviewed={ () => {} }
 								onChange={ value => {
-									// Convert value to midnight in the local timezone.
-									const date = new Date( value );
-									const midnight = new Date( date.getFullYear(), date.getMonth(), date.getDate() );
-									updateMetaValue( 'newspack_listings_featured_expires', dateI18n( 'Y-m-d\\TH:i:s', midnight ) );
+									// Pin midnight in the site timezone, not the browser's. The stored
+									// value is a naive, offset-less datetime, and
+									// Featured::unset_featured_status parses it as site-local when deciding
+									// whether the listing has expired, so attaching an offset here (via
+									// toISOString or similar) would change its meaning rather than clarify
+									// it. Taking the calendar date from the browser lands on the wrong day
+									// for a distant editor, expiring the listing a day early or late.
+									updateMetaValue(
+										'newspack_listings_featured_expires',
+										value ? `${ dateI18n( 'Y-m-d', getDate( value ) ) }T00:00:00` : ''
+									);
 								} }
 							/>
 							{ newspack_listings_featured_expires && (
