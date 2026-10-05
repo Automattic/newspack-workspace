@@ -45,7 +45,6 @@ The root file's `fix:js` remedy does not apply here: this plugin has no `fix:js`
 Of the standard build/lint/test script set, this plugin has only `build`, `lint:js`, `test` and `typescript:check` (it also carries `start`, `cm`, `i18n`, `readme` and the release scripts). Compared with the fully-tooled plugins here it is missing `watch`, `lint`, `clean`, `fix:js`, `format:js`, `lint:php`, `fix:php`, `lint:scss`, `format:scss` and the `*:staged` variants. `super-cool-ad-inserter` is the only other plugin missing `lint:php`. Consequences:
 
 - `n watch` **fails** from this directory (`bin/watch-repo.sh` ends in `npm run watch`). Rebuild with `n build republication-tracker-tool`.
-- `n test-js` runs the Jest tests under `src/` (jsdom, via `newspack-scripts test`). Keep JS tests there even when the code under test lives in `assets/`: `src/` is what CI lints, and `.distignore` keeps it out of the released ZIP, while a test file under `assets/` would ship.
 - To auto-fix JS, run `pnpm exec eslint --fix <path>` from the workspace root. It clears the formatting errors but not the structural ones (`no-undef` on `jQuery`/`$`, `no-var`, `no-unused-vars`), which need hand edits.
 
 ## Linting quirks
@@ -55,6 +54,7 @@ Of the standard build/lint/test script set, this plugin has only `build`, `lint:
 
 ## Testing quirks
 
+- JS tests run with `n test-js` (Jest under jsdom, via `newspack-scripts test`), which collects every `*.test.js` in the plugin outside `node_modules`, `dist/` and `vendor/`. Keep them in `src/` even when the code under test lives in `assets/`: `src/` is what CI lints, and `.distignore` keeps it out of the released ZIP, while a test under `assets/` would ship.
 - PHP tests run with `n test-php`, but `tests/bootstrap.php` hard-requires the plugin's own `vendor/autoload.php` and exits 1 if absent. Run `n composer install` from this directory first on a fresh checkout.
 - **The block test registers from `src/blocks/republish-button` while production registers from `dist/blocks/republish-button`.** Tests are green on an unbuilt checkout and on a stale `dist/`, so they can never catch a missing or outdated build.
 - `$modal_rendered` leaks across tests. The two classes that render it (`test-widget.php`, `test-republish-button-block.php`) reset it in `tear_down()`; a new test that renders the widget or block without that reset sees empty modal markup.

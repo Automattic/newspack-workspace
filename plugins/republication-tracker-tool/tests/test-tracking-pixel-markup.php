@@ -14,7 +14,7 @@ class TrackingPixelMarkupTest extends WP_UnitTestCase {
 	 * (`trackingAnchor` in assets/clipboard-utils.js) and wraps it so the block
 	 * editor keeps the scripts. If the pixel markup stops starting this way, the
 	 * button falls back to a plain-text copy without any error, and block-editor
-	 * pastes lose the Parse.ly tracking again. Change the two together.
+	 * pastes drop the tracking scripts. Change the two together.
 	 */
 	public function test_tracking_pixel_markup_starts_with_the_copy_button_anchor() {
 		$post_id = self::factory()->post->create();
