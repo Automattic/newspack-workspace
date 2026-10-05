@@ -1,8 +1,18 @@
 /**
- * The handler cancels any unmodified click that lands on or inside an anchor,
- * and leaves modified clicks alone so open-in-new-tab still works. These cases
- * exercise that predicate against plain DOM. Whether it covers every anchor in
- * a preview depends on where the blocks attach it, which is not decided here.
+ * The handler cancels plain clicks on links inside the preview wrapper, and
+ * leaves Cmd/Ctrl-clicks alone so open-in-new-tab still works. These cases
+ * exercise that predicate against plain DOM and a React portal. Whether it
+ * covers every anchor in a preview depends on where the blocks attach it,
+ * which is not decided here.
+ */
+/**
+ * External dependencies
+ */
+import { createEvent, fireEvent, render } from '@testing-library/react';
+import { createPortal } from 'react-dom';
+
+/**
+ * Internal dependencies
  */
 import { preventPreviewNavigation } from './inert-preview';
 
@@ -30,20 +40,38 @@ describe( 'preventPreviewNavigation', () => {
 		expect( event.defaultPrevented ).toBe( true );
 	} );
 
-	it( 'leaves a modified click alone so open-in-new-tab still works', () => {
-		[ 'ctrlKey', 'metaKey', 'shiftKey', 'altKey' ].forEach( modifier => {
-			const container = document.createElement( 'div' );
-			container.innerHTML = '<a href="https://example.test/">Headline</a>';
-			document.body.appendChild( container );
-			container.addEventListener( 'click', preventPreviewNavigation, true );
-			const event = new MouseEvent( 'click', {
-				bubbles: true,
-				cancelable: true,
-				[ modifier ]: true,
-			} );
-			container.querySelector( 'a' ).dispatchEvent( event );
-			expect( event.defaultPrevented ).toBe( false );
+	const dispatchModifiedClick = modifier => {
+		const container = document.createElement( 'div' );
+		container.innerHTML = '<a href="https://example.test/">Headline</a>';
+		document.body.appendChild( container );
+		container.addEventListener( 'click', preventPreviewNavigation, true );
+		const event = new MouseEvent( 'click', {
+			bubbles: true,
+			cancelable: true,
+			[ modifier ]: true,
 		} );
+		container.querySelector( 'a' ).dispatchEvent( event );
+		return event;
+	};
+
+	it.each( [ 'ctrlKey', 'metaKey' ] )( 'leaves a %s click alone so open-in-new-tab still works', modifier => {
+		expect( dispatchModifiedClick( modifier ).defaultPrevented ).toBe( false );
+	} );
+
+	it.each( [ 'shiftKey', 'altKey' ] )( 'cancels a %s click, which would open a window or download the link', modifier => {
+		expect( dispatchModifiedClick( modifier ).defaultPrevented ).toBe( true );
+	} );
+
+	it( 'leaves a link portaled out of the preview alone', () => {
+		const portalTarget = document.createElement( 'div' );
+		document.body.appendChild( portalTarget );
+		render(
+			<div onClickCapture={ preventPreviewNavigation }>{ createPortal( <a href="https://example.test/">Linked text</a>, portalTarget ) }</div>
+		);
+		const anchor = portalTarget.querySelector( 'a' );
+		const event = createEvent.click( anchor );
+		fireEvent( anchor, event );
+		expect( event.defaultPrevented ).toBe( false );
 	} );
 
 	it( 'ignores a target that cannot be asked for an ancestor anchor', () => {
