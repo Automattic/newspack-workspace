@@ -1597,7 +1597,13 @@ class WC_Subscription {
 		$this->data['total'] = $total;
 		return $total;
 	}
+	/**
+	 * Records the status at each save on `saved_statuses`. The real save() is
+	 * what persists a status change and fires the status hooks, so tests can
+	 * assert a change was saved, not just set.
+	 */
 	public function save() {
+		$this->data['saved_statuses'][] = $this->data['status'] ?? '';
 		return true;
 	}
 }

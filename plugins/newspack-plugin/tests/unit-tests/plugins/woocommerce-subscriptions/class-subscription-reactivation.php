@@ -156,6 +156,7 @@ class Newspack_Test_Subscription_Reactivation extends WP_UnitTestCase {
 		Subscription_Reactivation::reactivate( $subscription );
 
 		$this->assertSame( 'active', $subscription->get_status() );
+		$this->assertSame( [ 'active' ], $subscription->data['saved_statuses'] ?? [] );
 		$this->assertSame( 0, $subscription->get_date( 'end' ) );
 		$this->assertSame( 0, $subscription->get_date( 'cancelled' ) );
 		$this->assertSame( '2026-01-01 00:00:00', $subscription->get_date( 'start' ) );
