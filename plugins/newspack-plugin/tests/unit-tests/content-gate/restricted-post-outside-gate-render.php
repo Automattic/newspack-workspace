@@ -363,8 +363,8 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A free part ending in text only the teaser has, a caption above the more
-	 * tag, does not let the gated body's ordinary words pick that text back up.
+	 * A free part ending in a caption above the more tag does not let a gated
+	 * body that opens with the caption's own words into the excerpt.
 	 */
 	public function test_excerpt_ends_at_the_free_text_before_a_trailing_caption() {
 		update_post_meta( $this->gate_layout_id, 'use_more_tag', true );
@@ -373,7 +373,58 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
 					. '<!-- wp:image --><figure class="wp-block-image"><img src="https://example.test/a.jpg" alt=""/><figcaption>The mayor speaks to the press at city hall.</figcaption></figure><!-- /wp:image -->'
 					. '<!-- wp:more --><!--more--><!-- /wp:more -->'
-					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' says the council will publish the budget at the hall.</p><!-- /wp:paragraph -->',
+					. '<!-- wp:paragraph --><p>The mayor speaks to the press at city hall, where ' . self::PAID_MARKER . ' begins.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$this->assertSame( self::FREE_MARKER . ' opening line.', get_the_excerpt( $post_id ) );
+	}
+
+	/**
+	 * A teaser that ends inside a container block takes the container's free
+	 * inner blocks and stops where the teaser does.
+	 */
+	public function test_excerpt_stops_inside_a_container_block() {
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:group --><div class="wp-block-group">'
+					. '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:image --><figure class="wp-block-image"><img src="https://example.test/a.jpg" alt=""/><figcaption>CAPTIONTEXT</figcaption></figure><!-- /wp:image -->'
+					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->'
+					. '</div><!-- /wp:group -->',
+			]
+		);
+
+		$this->assertSame( self::FREE_MARKER . ' opening line. Second free line.', get_the_excerpt( $post_id ) );
+	}
+
+	/**
+	 * A block the teaser ends inside and that cannot be entered, such as Custom
+	 * HTML holding several paragraphs, is left out rather than shown whole.
+	 */
+	public function test_excerpt_leaves_out_a_block_the_teaser_cuts_through() {
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:html --><p>HTMLFREE line.</p><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:html -->',
+			]
+		);
+
+		$this->assertSame( self::FREE_MARKER . ' opening line.', get_the_excerpt( $post_id ) );
+	}
+
+	/**
+	 * A classic post has no blocks to cut at, so its paragraphs stand in for
+	 * them, and a [caption] in the free part stays out as core leaves it out.
+	 * The caption renders a paragraph of its own, so it is one of the two the
+	 * gate shows.
+	 */
+	public function test_classic_post_excerpt_leaves_out_captions() {
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '[caption id="" align="alignnone" width="300"]<img src="https://example.test/a.jpg" width="300" height="200" /> CAPTIONTEXT[/caption]'
+					. "\n\n" . self::FREE_MARKER . " opening line.\n\n" . self::PAID_MARKER . ' is behind the gate.',
 			]
 		);
 
