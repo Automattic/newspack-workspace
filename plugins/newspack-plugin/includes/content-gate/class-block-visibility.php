@@ -484,7 +484,8 @@ class Block_Visibility {
 	private static $rules_match_cache = [];
 
 	/**
-	 * Key suffix separating a listing teaser's evaluations from the rest.
+	 * Key suffix separating a listing teaser's evaluations, and its stripped
+	 * content, from the rest.
 	 *
 	 * Both run as user 0 and would otherwise share an entry, but they do not
 	 * answer alike: a listing denies the anonymous bypass, so the same rules can

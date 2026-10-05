@@ -137,8 +137,9 @@ class Content_Gate {
 	 *
 	 * - {@see Block_Visibility::filter_render_block()} evaluates a block's
 	 *   visibility as user 0 and skips the admin bypass.
-	 * - {@see Block_Visibility::evaluation_cache_suffix()} keeps those evaluations
-	 *   out of the entries the article page cached under the same user 0.
+	 * - {@see Block_Visibility::evaluation_cache_suffix()} keeps those evaluations,
+	 *   and the stripped-content memo, out of the entries the article page cached
+	 *   under the same user 0.
 	 * - {@see Access_Rules::evaluate_anonymous_rules()} declines the anonymous
 	 *   bypass, which the `institution` rule grants on an IP match.
 	 * - {@see Content_Restriction_Control::get_gate_memo_key()} keeps the resolved

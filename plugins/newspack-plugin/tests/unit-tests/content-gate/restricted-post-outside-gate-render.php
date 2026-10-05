@@ -860,6 +860,7 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 			remove_filter( 'render_block_core/group', $empty_marked_group, 10 );
 		}
 
+		$this->assertStringContainsString( self::FREE_MARKER, $excerpt, 'The cut starts at the opening paragraph, which is the premise of this test.' );
 		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt );
 	}
 
