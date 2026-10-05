@@ -113,7 +113,8 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 
 	/**
 	 * A request that reached the write path would come back as an error here,
-	 * with no provider or with no list left for it.
+	 * with no provider or with no list left for it, unless async subscriptions
+	 * are on.
 	 */
 	public function test_a_request_with_no_open_list_answers_as_a_subscribe() {
 		wp_set_current_user( $this->member_id );
