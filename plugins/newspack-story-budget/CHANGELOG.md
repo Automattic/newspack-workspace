@@ -1,3 +1,10 @@
+## newspack-story-budget [1.3.5](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.4...newspack-story-budget@1.3.5) (2026-10-05)
+
+
+### Bug Fixes
+
+* **story-budget:** count images without rendering content on save ([#1223](https://github.com/Automattic/newspack-workspace/issues/1223)) ([98f5c07](https://github.com/Automattic/newspack-workspace/commit/98f5c07efd8e09241994f7046622953eb1c0e269))
+
 ## newspack-story-budget [1.3.4](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.3...newspack-story-budget@1.3.4) (2026-09-28)
 
 

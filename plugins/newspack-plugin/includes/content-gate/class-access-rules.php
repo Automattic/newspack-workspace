@@ -1148,18 +1148,22 @@ class Access_Rules {
 	 * except on month-end anchors, where this one is both deny-biased and closer
 	 * to what "N months from purchase" means on a calendar.
 	 *
-	 * Shared by the rule and its listing so the two cannot drift.
+	 * Shared by the rule, its listing, and the premium newsletter lapse sweep so
+	 * they cannot drift.
 	 *
-	 * @param array $value Sanitized rule value.
+	 * @internal Public for Premium_Newsletters; not an API for other plugins.
+	 *
+	 * @param array    $value Sanitized rule value.
+	 * @param int|null $now   Unix timestamp to measure back from; null for now.
 	 * @return int|null|false Unix timestamp; null for lifetime access (no cutoff);
 	 *                        false for a misconfigured duration, which grants nothing.
 	 */
-	private static function get_one_time_purchase_cutoff( $value ) {
+	public static function get_one_time_purchase_cutoff( $value, $now = null ) {
 		if ( 'forever' === $value['duration_unit'] ) {
 			return null;
 		}
 		if ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
-			return strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
+			return strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ), $now ?? time() );
 		}
 		return false;
 	}
@@ -1299,11 +1303,14 @@ class Access_Rules {
 	 * Whether an order has a line item for one of the given products, matching
 	 * on the variation ID as well as the parent product ID.
 	 *
+	 * @internal Public so Premium_Newsletters matches orders the way the rule
+	 *           does; not an API for other plugins.
+	 *
 	 * @param \WC_Order $order       Order.
 	 * @param int[]     $product_ids Product IDs to look for.
 	 * @return bool
 	 */
-	private static function order_has_product( $order, $product_ids ) {
+	public static function order_has_product( $order, $product_ids ) {
 		foreach ( $order->get_items() as $item ) {
 			$item_product_id   = method_exists( $item, 'get_product_id' ) ? (int) $item->get_product_id() : 0;
 			$item_variation_id = method_exists( $item, 'get_variation_id' ) ? (int) $item->get_variation_id() : 0;
