@@ -85,10 +85,10 @@ class Edit extends Component< HomepageArticlesProps > {
 		);
 
 		const postTitle = this.titleForPost( post );
-		// Newspack_Blocks::get_post_link() returns false for a post type that is not
-		// public and carries no external URL, so the front end renders the title and
-		// thumbnail unlinked in that case (templates/article.php). Mirror it here
-		// rather than emitting an anchor with no destination.
+		// post_link is empty when the post has no public URL, and the front end
+		// renders the title and thumbnail unlinked in that case
+		// (templates/article.php). Mirror it here rather than emitting an anchor
+		// with no destination.
 		const featuredImage = post.newspack_featured_image_src ? (
 			<Fragment>
 				{ imageShape === 'landscape' && <img src={ post.newspack_featured_image_src.landscape } alt="" /> }
