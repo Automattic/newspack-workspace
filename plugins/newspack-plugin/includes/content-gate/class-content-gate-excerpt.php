@@ -162,8 +162,12 @@ class Content_Gate_Excerpt {
 	 * needs block delimiters to drop captions and the like. So the free part is
 	 * found in the post's own blocks, and core's excerpt steps run over those.
 	 *
-	 * Runs core's steps rather than wp_trim_excerpt(), whose 'the_content' pass
-	 * would let the restriction substitution hand back the staged teaser.
+	 * This repeats what core does to excerpts instead of calling
+	 * wp_trim_excerpt(). wp_trim_excerpt() runs the text through 'the_content',
+	 * where the gate would swap the teaser back in. The cost is that plugins hooked to
+	 * 'the_content' don't change a gated excerpt. Turning the gate off for that
+	 * call would include those plugins, but any of those plugins that loads this
+	 * post's content while it runs would get the paid text.
 	 *
 	 * @param \WP_Post $post   The withheld post.
 	 * @param string   $teaser Its teaser, from Content_Gate::get_teaser_outside_article().
