@@ -154,6 +154,30 @@ class WooCommerce_Products {
 	}
 
 	/**
+	 * Get a number option's value, never below the minimum its field declares.
+	 *
+	 * The browser won't submit the product form while a number field sits below its `min`,
+	 * even when the field is hidden and the publisher can't see or fix it. The group seat
+	 * minimum is hidden that way on every product not priced per seat. A blank value takes
+	 * the option's default.
+	 *
+	 * @param mixed $value         The stored or submitted value.
+	 * @param array $option_config The option's config.
+	 *
+	 * @return int The value, no lower than the field's minimum.
+	 */
+	private static function get_number_option_value( $value, $option_config ) {
+		if ( null === $value || '' === $value ) {
+			$value = $option_config['default'] ?? 0;
+		}
+		$value = intval( $value );
+		if ( isset( $option_config['custom_attributes']['min'] ) ) {
+			$value = max( intval( $option_config['custom_attributes']['min'] ), $value );
+		}
+		return $value;
+	}
+
+	/**
 	 * Get config for a custom product option.
 	 *
 	 * @param string $option_name The name of the option.
@@ -282,6 +306,9 @@ class WooCommerce_Products {
 				continue;
 			}
 			$option_type = $option_config['type'];
+			if ( $option_type === 'number' ) {
+				$option_config['value'] = self::get_number_option_value( $product->get_meta( $option_config['id'] ), $option_config );
+			}
 			if ( $option_type === 'select' && isset( $option_config['options'] ) ) {
 				\woocommerce_wp_select( $option_config );
 			}
@@ -315,6 +342,9 @@ class WooCommerce_Products {
 			$option_config['value'] = isset( $variation_data[ $option_id ][0] ) ? $variation_data[ $option_id ][0] : null;
 			$option_config['id']    = $option_id . '_' . $loop;
 			$option_config['name']  = $option_id . '[' . $loop . ']';
+			if ( $option_type === 'number' ) {
+				$option_config['value'] = self::get_number_option_value( $option_config['value'], $option_config );
+			}
 
 			// Add form-row class for variations.
 			$option_config['wrapper_class'] = isset( $option_config['wrapper_class'] ) ? $option_config['wrapper_class'] . ' form-row' : 'form-row';
@@ -364,7 +394,7 @@ class WooCommerce_Products {
 			if ( $value_type === 'boolean' ) {
 				$option_value = isset( $_POST[ $meta_key ] ) ? \wc_bool_to_string( true ) : \wc_bool_to_string( false ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			} elseif ( $value_type === 'number' ) {
-				$option_value = isset( $_POST[ $meta_key ] ) ? intval( $_POST[ $meta_key ] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$option_value = self::get_number_option_value( isset( $_POST[ $meta_key ] ) ? sanitize_text_field( wp_unslash( $_POST[ $meta_key ] ) ) : null, $option_config ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			} else {
 				$option_value = isset( $_POST[ $meta_key ] ) ? sanitize_text_field( $_POST[ $meta_key ] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			}
@@ -402,7 +432,7 @@ class WooCommerce_Products {
 			if ( $value_type === 'boolean' ) {
 				$option_value = isset( $_POST[ $meta_key ][ $i ] ) && ( $_POST[ $meta_key ][ $i ] === 'yes' || $_POST[ $meta_key ][ $i ] === 'on' ) ? \wc_bool_to_string( true ) : \wc_bool_to_string( false ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			} elseif ( $value_type === 'number' ) {
-				$option_value = isset( $_POST[ $meta_key ][ $i ] ) ? intval( $_POST[ $meta_key ][ $i ] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$option_value = self::get_number_option_value( isset( $_POST[ $meta_key ][ $i ] ) ? sanitize_text_field( wp_unslash( $_POST[ $meta_key ][ $i ] ) ) : null, $option_config ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			} else {
 				$option_value = isset( $_POST[ $meta_key ][ $i ] ) ? sanitize_text_field( $_POST[ $meta_key ][ $i ] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			}
