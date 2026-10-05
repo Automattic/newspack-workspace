@@ -43,6 +43,13 @@ import { postsBlockSelector, postsBlockDispatch, shouldReflow } from '../homepag
 // Max number of slides that can be shown at once.
 const MAX_NUMBER_OF_SLIDES = 6;
 
+const SlideThumbnail = ( { post, imageFit } ) =>
+	post.newspack_featured_image_src ? (
+		<img className={ `image-fit-${ imageFit }` } src={ post.newspack_featured_image_src.large } alt="" />
+	) : (
+		<div className="wp-block-newspack-blocks-carousel__placeholder" />
+	);
+
 class Edit extends Component {
 	constructor( props ) {
 		super( props );
@@ -381,21 +388,15 @@ class Edit extends Component {
 									>
 										{ getPostStatusLabel( post ) }
 										<figure className="post-thumbnail">
-											{ /* get_post_link() returns false when a post type is not public and has
-											     no external URL. Coerce to undefined so React omits the attribute
-											     instead of warning; carousel/view.php leaves this anchor unguarded
-											     on the front end too, so the preview matches it. */ }
-											<a href={ post.post_link || undefined } rel="bookmark">
-												{ post.newspack_featured_image_src ? (
-													<img
-														className={ `image-fit-${ imageFit }` }
-														src={ post.newspack_featured_image_src.large }
-														alt=""
-													/>
-												) : (
-													<div className="wp-block-newspack-blocks-carousel__placeholder" />
-												) }
-											</a>
+											{ /* post_link is empty when the post has no public URL, and
+											     carousel/view.php renders the thumbnail unlinked in that case. */ }
+											{ post.post_link ? (
+												<a href={ post.post_link } rel="bookmark">
+													<SlideThumbnail post={ post } imageFit={ imageFit } />
+												</a>
+											) : (
+												<SlideThumbnail post={ post } imageFit={ imageFit } />
+											) }
 										</figure>
 										{ ( post.newspack_post_sponsors ||
 											showCategory ||
