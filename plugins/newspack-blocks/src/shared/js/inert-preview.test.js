@@ -1,9 +1,8 @@
 /**
  * The handler cancels plain clicks on links inside the preview wrapper, and
  * leaves Cmd/Ctrl-clicks alone so open-in-new-tab still works. These cases
- * exercise that predicate against plain DOM and a React portal. Whether it
- * covers every anchor in a preview depends on where the blocks attach it,
- * which is not decided here.
+ * exercise that predicate against plain DOM and through React's
+ * onClickCapture, the way the blocks attach it.
  */
 /**
  * External dependencies
@@ -62,16 +61,22 @@ describe( 'preventPreviewNavigation', () => {
 		expect( dispatchModifiedClick( modifier ).defaultPrevented ).toBe( true );
 	} );
 
-	it( 'leaves a link portaled out of the preview alone', () => {
+	it( 'cancels a link inside the preview and leaves one portaled out of it alone', () => {
 		const portalTarget = document.createElement( 'div' );
 		document.body.appendChild( portalTarget );
-		render(
-			<div onClickCapture={ preventPreviewNavigation }>{ createPortal( <a href="https://example.test/">Linked text</a>, portalTarget ) }</div>
+		const { getByText } = render(
+			<div onClickCapture={ preventPreviewNavigation }>
+				<a href="https://example.test/in">In preview</a>
+				{ createPortal( <a href="https://example.test/out">In popover</a>, portalTarget ) }
+			</div>
 		);
-		const anchor = portalTarget.querySelector( 'a' );
-		const event = createEvent.click( anchor );
-		fireEvent( anchor, event );
-		expect( event.defaultPrevented ).toBe( false );
+		const clickThrough = anchor => {
+			const event = createEvent.click( anchor );
+			fireEvent( anchor, event );
+			return event;
+		};
+		expect( clickThrough( getByText( 'In preview' ) ).defaultPrevented ).toBe( true );
+		expect( clickThrough( getByText( 'In popover' ) ).defaultPrevented ).toBe( false );
 	} );
 
 	it( 'ignores a target that cannot be asked for an ancestor anchor', () => {
