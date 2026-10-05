@@ -25,9 +25,10 @@ window.ClipboardUtils = {
 	},
 
 	/**
-	 * Start of the handout's tracking code. The footer puts the attribution
-	 * first and the tracking last, beginning with this pixel, and the footer
-	 * ends the handout.
+	 * Start of the handout's tracking code: the pixel from
+	 * create_tracking_pixel_markup(), which tests/test-tracking-pixel-markup.php
+	 * pins to this exact opening. The footer puts the attribution first and the
+	 * tracking last, so everything from the last match onward counts as tracking.
 	 */
 	trackingAnchor: '<img id="republication-tracker-tool-source"',
 
@@ -35,8 +36,9 @@ window.ClipboardUtils = {
 	 * Wrap the handout's tracking code in a Custom HTML block.
 	 *
 	 * The block editor strips scripts from pasted HTML, but keeps pasted
-	 * block markup as it is. Only the tracking is wrapped, so the story
-	 * still pastes as ordinary editable content.
+	 * block markup as it is. Any block markup in a paste sends the whole paste
+	 * through the block parser, though, so the story lands in one Classic block
+	 * that Convert to blocks turns into ordinary blocks.
 	 *
 	 * @param {string} text - Handout as shown in the modal
 	 * @returns {string|null} - Wrapped handout, or null when no tracking is found
@@ -55,7 +57,8 @@ window.ClipboardUtils = {
 	 * Editors that read HTML get the wrapped tracking. The plain text stays
 	 * exactly as shown, because a classic editor's Code tab reads it, and
 	 * block markup there would stop WordPress adding paragraph tags.
-	 * Browsers without ClipboardItem get the plain text alone, as before.
+	 * Browsers without ClipboardItem, or that refuse the HTML copy, get the
+	 * plain text alone.
 	 *
 	 * @param {string} text - Handout as shown in the modal
 	 * @returns {Promise<boolean>} - Promise resolving to success status
@@ -77,6 +80,7 @@ window.ClipboardUtils = {
 			]);
 			return true;
 		} catch (err) {
+			console.warn('Failed to copy HTML, copying plain text instead:', err);
 			return this.copyText(text);
 		}
 	},

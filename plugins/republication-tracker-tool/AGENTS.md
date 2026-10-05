@@ -42,10 +42,10 @@ The root file's `fix:js` remedy does not apply here: this plugin has no `fix:js`
 
 ## Missing scripts
 
-Of the standard build/lint/test script set, this plugin has only `build`, `lint:js` and `typescript:check` (it also carries `start`, `cm`, `i18n`, `readme` and the release scripts). Compared with the fully-tooled plugins here it is missing `watch`, `test`, `lint`, `clean`, `fix:js`, `format:js`, `lint:php`, `fix:php`, `lint:scss`, `format:scss` and the `*:staged` variants. `super-cool-ad-inserter` is the only other plugin missing `lint:php`. Consequences:
+Of the standard build/lint/test script set, this plugin has only `build`, `lint:js`, `test` and `typescript:check` (it also carries `start`, `cm`, `i18n`, `readme` and the release scripts). Compared with the fully-tooled plugins here it is missing `watch`, `lint`, `clean`, `fix:js`, `format:js`, `lint:php`, `fix:php`, `lint:scss`, `format:scss` and the `*:staged` variants. `super-cool-ad-inserter` is the only other plugin missing `lint:php`. Consequences:
 
 - `n watch` **fails** from this directory (`bin/watch-repo.sh` ends in `npm run watch`). Rebuild with `n build republication-tracker-tool`.
-- `n test-js` **reports success while running nothing**, because pnpm special-cases a missing `test` script and exits 0. There are no JS tests here.
+- `n test-js` runs the Jest tests under `src/` (jsdom, via `newspack-scripts test`). Keep JS tests there even when the code under test lives in `assets/`: `src/` is what CI lints, and `.distignore` keeps it out of the released ZIP, while a test file under `assets/` would ship.
 - To auto-fix JS, run `pnpm exec eslint --fix <path>` from the workspace root. It clears the formatting errors but not the structural ones (`no-undef` on `jQuery`/`$`, `no-var`, `no-unused-vars`), which need hand edits.
 
 ## Linting quirks
