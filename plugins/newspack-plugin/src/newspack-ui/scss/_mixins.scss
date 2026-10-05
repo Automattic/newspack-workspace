@@ -1,17 +1,18 @@
+@use "../../../packages/colors/colors.module" as colors;
 @use "variables/breakpoints";
 
 @mixin newspack-ui-elevation( $size: 1 ) {
 	@if $size == 1 {
-		box-shadow: 0 1px 10px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 1px 10px colors.$overlay-050;
 	}
 	@else if $size == 2 {
-		box-shadow: 0 2px 20px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 2px 20px colors.$overlay-100;
 	}
 	@else if $size == 3 {
-		box-shadow: 0 3px 30px rgba(0, 0, 0, 0.2);
+		box-shadow: 0 3px 30px colors.$overlay-200;
 	}
 	@else if $size == 4 {
-		box-shadow: 0 0 20px rgba(0, 0, 0, 0.1), 0 25px 30px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 0 20px colors.$overlay-050, 0 25px 30px colors.$overlay-100;
 	}
 }
 
