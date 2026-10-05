@@ -1535,6 +1535,12 @@ class WC_Subscription {
 	public function get_requires_manual_renewal() {
 		return ! empty( $this->data['requires_manual_renewal'] );
 	}
+	public function get_cancelled_email_sent() {
+		return $this->data['cancelled_email_sent'] ?? '';
+	}
+	public function set_cancelled_email_sent( $value ) {
+		$this->data['cancelled_email_sent'] = $value;
+	}
 	public function __call( $name, $arguments ) {
 		// Address getters: get_billing_first_name(), get_shipping_city(), etc.
 		// resolve to flat data keys ('billing_first_name'), matching how the

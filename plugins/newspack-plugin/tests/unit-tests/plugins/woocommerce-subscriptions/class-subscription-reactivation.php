@@ -163,6 +163,22 @@ class Newspack_Test_Subscription_Reactivation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Subscriptions sends the admin's "Cancelled Subscription" email once per
+	 * subscription, so a reactivated one has to be eligible again in case it's
+	 * cancelled a second time.
+	 *
+	 * @dataProvider ended_statuses
+	 * @param string $status Subscription status.
+	 */
+	public function test_reactivate_resets_cancelled_email_flag( $status ) {
+		$subscription = $this->subscription( $status, true, [ 'cancelled_email_sent' => 'true' ] );
+
+		Subscription_Reactivation::reactivate( $subscription );
+
+		$this->assertSame( 'false', $subscription->get_cancelled_email_sent() );
+	}
+
+	/**
 	 * The status change is flagged as the admin's, so the note WCS adds for it
 	 * names the admin who ran the action.
 	 *

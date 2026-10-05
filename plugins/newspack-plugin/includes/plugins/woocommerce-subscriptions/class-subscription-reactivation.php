@@ -42,7 +42,8 @@ class Subscription_Reactivation {
 	 *
 	 * Reads the stored renewal setting rather than is_manual(), which is also true on
 	 * a staging clone or while the gateway is unavailable. Either would offer the
-	 * action on a subscription that charges again once the gateway returns.
+	 * action on a subscription that starts charging again once it stops being
+	 * treated as manual.
 	 *
 	 * @param mixed $subscription The object to check.
 	 * @return bool
@@ -73,7 +74,7 @@ class Subscription_Reactivation {
 	 * WooCommerce runs order actions after the subscription's status and schedule
 	 * boxes save, so the form's old status and end date can't overwrite this.
 	 *
-	 * @param \WC_Subscription $subscription The subscription being edited.
+	 * @param \WC_Order $subscription The order or subscription being edited.
 	 */
 	public static function reactivate( $subscription ) {
 		// The dropdown hides the action, but the form can still submit it.
@@ -81,9 +82,13 @@ class Subscription_Reactivation {
 			return;
 		}
 
-		// Subscriptions restores dates on reactivation only from Pending cancellation.
+		// A later direct cancellation would keep an old cancelled date, and the ESP
+		// sync reports the end date.
 		$subscription->delete_date( 'end' );
 		$subscription->delete_date( 'cancelled' );
+
+		// Subscriptions sends the admin's cancellation email once per subscription.
+		$subscription->set_cancelled_email_sent( 'false' );
 
 		// update_status() refuses Active from an ended status, where set_status() doesn't
 		// check. Flagging the change as manual credits the admin in the note it adds.
