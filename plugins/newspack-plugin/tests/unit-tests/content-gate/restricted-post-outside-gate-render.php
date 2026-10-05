@@ -797,17 +797,20 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The excerpt, like the teaser, is cut for the anonymous reader. A block
-	 * hidden from members renders empty for a member, and an excerpt cut on
-	 * their request must not keep the paid text inside it for everyone else.
+	 * The excerpt, like the teaser, is cut for the anonymous reader. For a member,
+	 * a block hidden from members renders empty, so the group around it reads as
+	 * free text alone and would be kept whole, paid text and all, in an excerpt
+	 * cached for everyone.
 	 */
 	public function test_excerpt_cut_by_a_member_keeps_paid_text_out() {
 		$post_id       = $this->create_restricted_post(
 			[
 				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
-					. '<!-- wp:group {"newspackAccessControlMode":"gate","newspackAccessControlGateIds":[' . $this->gate_id . '],"newspackAccessControlVisibility":"hidden"} --><div class="wp-block-group">'
+					. '<!-- wp:group --><div class="wp-block-group">'
 					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:group {"newspackAccessControlMode":"gate","newspackAccessControlGateIds":[' . $this->gate_id . '],"newspackAccessControlVisibility":"hidden"} --><div class="wp-block-group">'
 					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->'
+					. '</div><!-- /wp:group -->'
 					. '</div><!-- /wp:group -->'
 					. '<!-- wp:paragraph --><p>Closing paid line.</p><!-- /wp:paragraph -->',
 			]
@@ -829,6 +832,35 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpts['anonymous'] );
 		$this->assertStringContainsString( 'Second free line.', $excerpts['anonymous'] );
+	}
+
+	/**
+	 * A container a render filter empties is entered rather than kept whole: core's
+	 * excerpt never renders the container itself, only its inner blocks, so the
+	 * filter that emptied it would not apply there.
+	 */
+	public function test_excerpt_enters_a_container_that_renders_empty() {
+		$empty_marked_group = static function ( $content, $block ) {
+			return str_contains( $block['attrs']['className'] ?? '', 'np-test-emptied' ) ? '' : $content;
+		};
+		add_filter( 'render_block_core/group', $empty_marked_group, 10, 2 );
+		try {
+			$post_id = $this->create_restricted_post(
+				[
+					'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:group {"className":"np-test-emptied"} --><div class="wp-block-group np-test-emptied">'
+						. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->'
+						. '</div><!-- /wp:group -->'
+						. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>Closing paid line.</p><!-- /wp:paragraph -->',
+				]
+			);
+			$excerpt = get_the_excerpt( $post_id );
+		} finally {
+			remove_filter( 'render_block_core/group', $empty_marked_group, 10 );
+		}
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt );
 	}
 
 	/**
@@ -1279,6 +1311,7 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertSame( '<p>' . self::FREE_MARKER . ' opening line. Second free line.</p>', $post_content );
 		$this->assertLessThan( 5, $loops, 'The excerpt build is asked for once more and ends there, rather than rendering the block until the cap.' );
 	}
+
 	/**
 	 * A feed's excerpt is the feed subsystem's to decide, not this path's.
 	 *

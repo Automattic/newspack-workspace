@@ -60,10 +60,11 @@ class Content_Gate_Excerpt {
 		}
 
 		// A post the gate withholds outside its own article page gets its excerpt
-		// cut from the post's free blocks, ending where the teaser ends. The staged substitution cannot
-		// serve this on its own: it is written when `the_post` fires, and an
-		// excerpt is not always built inside a loop — core's Latest Posts block
-		// walks get_posts() results and asks for each excerpt by post object.
+		// cut from the post's free blocks, ending where the teaser ends. The
+		// staged substitution cannot serve this on its own: it is written when
+		// `the_post` fires, and an excerpt is not always built inside a loop —
+		// core's Latest Posts block walks get_posts() results and asks for each
+		// excerpt by post object.
 		// Two surfaces own their own restriction and must not be answered over.
 		// REST is Content_Gate::filter_rest_response()'s, which evaluates
 		// entitlement per requester and leaves an editor's context=edit payload

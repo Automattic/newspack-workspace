@@ -1199,7 +1199,7 @@ class Content_Gate {
 	 * @param callable $build Callback producing the teaser, or the excerpt cut from it.
 	 * @return mixed The callback's return value.
 	 */
-	public static function in_listing_context( $build ) {
+	public static function in_listing_context( callable $build ): mixed {
 		$was_listing_context      = self::$is_listing_context;
 		self::$is_listing_context = true;
 		try {

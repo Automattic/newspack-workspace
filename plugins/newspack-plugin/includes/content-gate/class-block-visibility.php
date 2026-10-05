@@ -284,8 +284,9 @@ class Block_Visibility {
 		// first pass -- and each call is a full parse_blocks() plus recursive walk plus
 		// serialize_blocks(). The three call sites cannot coordinate, so memoize here
 		// instead. Keyed on the content because the decision is evaluated against the
-		// anonymous reader either way, and pure within a request.
-		$key = md5( $content );
+		// anonymous reader either way, and pure within a request — apart from the
+		// listing context, which answers that reader more strictly.
+		$key = md5( $content ) . self::evaluation_cache_suffix();
 		if ( ! isset( self::$strip_cache[ $key ] ) ) {
 			self::$strip_cache[ $key ] = serialize_blocks( self::strip_hidden( parse_blocks( $content ) ) );
 		}
@@ -496,7 +497,8 @@ class Block_Visibility {
 	}
 
 	/**
-	 * Per-request cache of stripped content, keyed by md5 of the input.
+	 * Per-request cache of stripped content, keyed by md5 of the input and the
+	 * listing context.
 	 *
 	 * @var string[]
 	 */
