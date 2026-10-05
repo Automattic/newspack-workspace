@@ -356,7 +356,7 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	 * draw. The teasers those listings stage last for the whole request, so the
 	 * feed's own pass over the same posts must not be answered from them.
 	 */
-	public function test_a_listing_rendered_during_a_feed_request_leaves_feed_items_whole() {
+	public function test_a_listing_rendered_during_a_feed_request_leaves_feed_items_to_the_feed_subsystem() {
 		$post_id = $this->create_restricted_post();
 		$this->go_to( home_url( '/?feed=rss2' ) );
 
