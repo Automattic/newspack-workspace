@@ -58,5 +58,5 @@ fi
 echo "Running tests for $PROJECT_NAME (test database: $TEST_DB_NAME)"
 cd "$PROJECT_DIR"
 bin/install-wp-tests.sh "$TEST_DB_NAME" root $MYSQL_ROOT_PASSWORD $MYSQL_HOST latest 2> /dev/null
-echo "Running: phpunit ${@:2}"
+echo "Running: phpunit ${*:2}"
 XDEBUG_MODE=coverage phpunit "${@:2}"

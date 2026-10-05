@@ -173,6 +173,27 @@ final class Newspack_Popups_API {
 					],
 				]
 			);
+			register_rest_route(
+				'newspack-popups/v1',
+				'/contextual-prompt/control-preview',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ __CLASS__, 'api_get_control_preview' ],
+					'permission_callback' => [ $this, 'permission_callback' ],
+					'args'                => [
+						'interval' => [
+							'type'              => 'integer',
+							'required'          => false,
+							'sanitize_callback' => 'absint',
+						],
+						'offset'   => [
+							'type'              => 'integer',
+							'required'          => false,
+							'sanitize_callback' => 'absint',
+						],
+					],
+				]
+			);
 		}
 	}
 
@@ -257,6 +278,42 @@ final class Newspack_Popups_API {
 		}
 
 		return rest_ensure_response( self::contextual_prompt_status() );
+	}
+
+	/**
+	 * Stories that will show the control copy at an interval (the saved one
+	 * unless the request passes another, so the settings form can preview an
+	 * unsaved value). Administrator-only.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_get_control_preview( $request ) {
+		$enabled = self::require_contextual_prompts_enabled();
+		if ( is_wp_error( $enabled ) ) {
+			return $enabled;
+		}
+		$interval = (int) $request->get_param( 'interval' );
+		$interval = $interval
+			? max( Newspack_Popups_Settings::CONTROL_INTERVAL_MIN, min( Newspack_Popups_Settings::CONTROL_INTERVAL_MAX, $interval ) )
+			: Newspack_Popups_Settings::get_control_interval();
+		$limit    = 10;
+		$offset   = (int) $request->get_param( 'offset' );
+		$preview  = Newspack_Popups_Contextual_Prompt_Render::get_control_preview( $interval, $limit, $offset );
+		return rest_ensure_response(
+			[
+				'interval'   => $interval,
+				'limit'      => $limit,
+				'offset'     => $offset,
+				'total'      => $preview['total'],
+				'capped'     => $preview['capped'],
+				// The scan ceiling, so the UI can name the "newest N stories" cap from
+				// the server instead of hardcoding it and stranding a wrong number in
+				// translations when the constant changes.
+				'scan_limit' => Newspack_Popups_Contextual_Prompt_Render::CANDIDATES_SCAN_LIMIT,
+				'posts'      => $preview['posts'],
+			]
+		);
 	}
 
 	/**

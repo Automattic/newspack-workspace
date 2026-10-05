@@ -126,6 +126,23 @@ class Newspack_Test_CSV_Export_Handlers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Run ajax_refresh_meta_keys() and return the decoded JSON response.
+	 *
+	 * @return array|null
+	 */
+	private function run_ajax_refresh_meta_keys() {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		ob_start();
+		try {
+			CSV_Exports::ajax_refresh_meta_keys();
+		} catch ( WPDieException $e ) {
+			// wp_send_json_*() ends with wp_die(); the payload is already echoed.
+			unset( $e );
+		}
+		return json_decode( ob_get_clean(), true );
+	}
+
+	/**
 	 * Log in as an administrator who can run the subscriptions export.
 	 *
 	 * @return int User ID.
@@ -285,6 +302,43 @@ class Newspack_Test_CSV_Export_Handlers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Refreshing hands back every user meta key the site stores, so it is
+	 * gated exactly as the users export it feeds is.
+	 */
+	public function test_refresh_meta_keys_is_refused_to_a_user_who_cannot_export_users() {
+		$subscriber = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $subscriber );
+		$_POST    = [ 'security' => wp_create_nonce( CSV_Exports::AJAX_NONCE_ACTION ) ];
+		$_REQUEST = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+		$response = $this->run_ajax_refresh_meta_keys();
+
+		$this->assertFalse( $response['success'] );
+		$this->assertStringContainsString( 'permission', $response['data']['message'] );
+	}
+
+	/**
+	 * The users export requires WooCommerce, and refreshing its key list
+	 * carries that requirement rather than reading the table without it.
+	 */
+	public function test_refresh_meta_keys_requires_woocommerce() {
+		if ( class_exists( 'WooCommerce' ) ) {
+			// Another suite (tests/unit-tests/my-account.php) eval()s a
+			// WooCommerce shim, which can't be undone for the rest of the
+			// process. Skip rather than depend on file ordering.
+			$this->markTestSkipped( 'A WooCommerce class shim is already defined in this process.' );
+		}
+		$this->login_as_export_capable_admin();
+		$_POST    = [ 'security' => wp_create_nonce( CSV_Exports::AJAX_NONCE_ACTION ) ];
+		$_REQUEST = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+		$response = $this->run_ajax_refresh_meta_keys();
+
+		$this->assertFalse( $response['success'] );
+		$this->assertStringContainsString( 'permission', $response['data']['message'] );
+	}
+
+	/**
 	 * The filename is minted by the server on step 1 and only echoed back by
 	 * later steps. A step-2 request carrying another type's filename must not
 	 * adopt it — the run restarts under a filename of its own type instead.
@@ -359,5 +413,13 @@ class Newspack_Test_CSV_Export_Handlers extends WP_UnitTestCase {
 			get_transient( 'newspack_export_total_' . md5( $filename ) ),
 			'The finished run must not leave its pinned total behind.'
 		);
+
+		// WooCommerce writes the headers row only on the page that reports
+		// 100%, which a short run never reaches — and the download refuses a
+		// file whose header row is missing. Without one written here, the
+		// partial CSV this notice warns about could not be downloaded at all.
+		$exporter = CSV_Exports::get_exporter( 'subscriptions' );
+		$exporter->set_filename( $filename );
+		$this->assertFileExists( $exporter->get_headers_row_file_path_public() );
 	}
 }

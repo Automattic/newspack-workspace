@@ -16,7 +16,6 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
-import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 import { useState, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 
@@ -25,7 +24,10 @@ import { __ } from '@wordpress/i18n';
  */
 import './block-visibility.scss';
 import {
+	type TokenItem,
 	formatAccessRuleOptionLabel,
+	getAccessRuleOptionSuggestions,
+	hasSelectableAccessRuleOptions,
 	getAccessRuleOptionTokens,
 	MAX_OPTION_SUGGESTIONS,
 	getAccessRuleTokenFieldMessages,
@@ -223,7 +225,7 @@ export const AccessRuleValueControl = ( {
 		control = <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
 	} else if ( isOptionBackedAccessRule( slug, staticOptions, config.has_options ) ) {
 		const selected = Array.isArray( value ) ? value : [];
-		const hasOptions = options.length > 0;
+		const hasOptions = hasSelectableAccessRuleOptions( options );
 		// Both the caution and the inert state come from the shared module, so this picker
 		// and the Audience wizard's reach the same verdict on one stored value.
 		const valueNotice = getAccessRuleValueNotice( config, value, hasOptions );
@@ -234,7 +236,7 @@ export const AccessRuleValueControl = ( {
 						label={ config.name }
 						disabled={ isAccessRulePickerInert( config, value, hasOptions ) }
 						value={ getAccessRuleOptionTokens( options, selected, getMissingOptionLabel( slug ) ) }
-						suggestions={ options.map( formatAccessRuleOptionLabel ) }
+						suggestions={ getAccessRuleOptionSuggestions( options ) }
 						maxSuggestions={ MAX_OPTION_SUGGESTIONS }
 						onChange={ ( tokens: ( string | TokenItem )[] ) =>
 							onChange( resolveAccessRuleOptionTokens( tokens, options, { slug, stored: selected } ) )
@@ -249,7 +251,7 @@ export const AccessRuleValueControl = ( {
 				</AccessRuleValueNotice>
 				{ /* A different state from the ones above, and it can stand alongside a
 				     value the picker holds tokens for: these are stored IDs no option
-				     describes. */ }
+				     describes, or that it marks as ineligible. */ }
 				<UnlistedValuesNotice slug={ slug } options={ options } value={ selected } />
 			</>
 		);

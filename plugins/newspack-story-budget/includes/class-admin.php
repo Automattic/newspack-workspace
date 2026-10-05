@@ -76,6 +76,19 @@ class Admin {
 				'apiNamespace'       => API::NAMESPACE,
 				'siteUrl'            => get_site_url(),
 				'refreshCache'       => isset( $_GET['page'] ) && 'newspack-story-budget' === $_GET['page'], // phpcs:ignore WordPress.Security.NonceVerification.Recommended,
+				/**
+				 * Makes the Story Budget screen fetch the full story list on
+				 * every load, skipping the client-side cache and its
+				 * incremental refresh. Useful when the cache is suspected of
+				 * serving stale stories; costs a full fetch each time.
+				 *
+				 * @constant NEWSPACK_STORY_BUDGET_ALWAYS_FETCH_STORIES
+				 * @type     bool
+				 * @default  Cached stories refreshed incrementally
+				 * @status   draft
+				 *
+				 * @example define( 'NEWSPACK_STORY_BUDGET_ALWAYS_FETCH_STORIES', true );
+				 */
 				'alwaysFetchStories' => defined( 'NEWSPACK_STORY_BUDGET_ALWAYS_FETCH_STORIES' ) && NEWSPACK_STORY_BUDGET_ALWAYS_FETCH_STORIES,
 			]
 		);

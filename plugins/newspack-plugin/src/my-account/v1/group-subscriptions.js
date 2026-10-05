@@ -186,7 +186,7 @@ domReady( function () {
 				afterInviteLink( true );
 				if ( await copyToClipboard( data.url ) ) {
 					const message = isRegenerate
-						? newspackMyAccountV1?.labels?.invite_link_regenerated || 'New invite link copied. The old one no longer works.'
+						? newspackMyAccountV1?.labels?.invite_link_regenerated || 'New invite link copied. Any older link no longer works.'
 						: newspackMyAccountV1?.labels?.invite_link_copied || 'Invite link copied.';
 					showSnackbar( message );
 				} else {
@@ -256,7 +256,7 @@ domReady( function () {
 		} );
 	} );
 
-	// Rename group: the pencil button in the header opens a modal; saving POSTs the new name and
+	// Rename group: the "Rename" action in the header (More menu at large viewports, plain button at small ones) opens a modal; saving POSTs the new name and
 	// updates the header (and any other) group-name element in place.
 	const renameModal = document.getElementById( 'newspack-my-account__group_subscription--rename' );
 	const renameForm = renameModal?.querySelector( '.newspack-my-account__group--rename-form' );

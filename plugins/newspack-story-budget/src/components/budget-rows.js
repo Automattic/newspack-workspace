@@ -30,9 +30,10 @@ const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 
 	const { updateBudget, saveActiveBudgetOrder } = useDispatch( storeNamespace );
 
-	const { budgets } = useSelect(
+	const { budgets, canManageBudgets } = useSelect(
 		select => ( {
 			budgets: select( storeNamespace ).getBudgets(),
+			canManageBudgets: select( storeNamespace ).canManageBudgets(),
 		} ),
 		[ budgetStatus ]
 	);
@@ -154,29 +155,34 @@ const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 	/**
 	 * Budget actions.
 	 */
-	const getBudgetControls = budget => [
-		{
-			title: __( 'View Stories', 'newspack-story-budget' ),
-			onClick: () => {
-				const url = new URL( window.location.href );
-				url.hash = '#/stories';
-				url.searchParams.set( 'budget_id', budget.id );
+	const getBudgetControls = budget => {
+		const controls = [
+			{
+				title: __( 'View Stories', 'newspack-story-budget' ),
+				onClick: () => {
+					const url = new URL( window.location.href );
+					url.hash = '#/stories';
+					url.searchParams.set( 'budget_id', budget.id );
 
-				window.location.assign( url.toString() );
+					window.location.assign( url.toString() );
+				},
 			},
-		},
-		{
-			title: budget.archived ? __( 'Unarchive', 'newspack-story-budget' ) : __( 'Archive', 'newspack-story-budget' ),
-			onClick: async () => {
-				await onUpdateBudget( budget.id, {
-					...budget,
-					archived: ! budget.archived,
-					order: 0,
-				} );
-			},
-			label: budget.archived ? 'budget-unarchive' : 'budget-archive',
-		},
-	];
+		];
+		if ( canManageBudgets ) {
+			controls.push( {
+				title: budget.archived ? __( 'Unarchive', 'newspack-story-budget' ) : __( 'Archive', 'newspack-story-budget' ),
+				onClick: async () => {
+					await onUpdateBudget( budget.id, {
+						...budget,
+						archived: ! budget.archived,
+						order: 0,
+					} );
+				},
+				label: budget.archived ? 'budget-unarchive' : 'budget-archive',
+			} );
+		}
+		return controls;
+	};
 
 	return (
 		<>

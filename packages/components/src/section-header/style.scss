@@ -9,7 +9,7 @@
 
 .newspack-section-header {
 	flex: 1;
-	margin: 64px 0 32px;
+	margin: wp-vars.$grid-unit-60 0 wp-vars.$grid-unit-40;
 
 	&__container {
 		position: relative;
@@ -17,7 +17,7 @@
 			text-wrap: balance;
 		}
 		&:not(:first-child) {
-			margin-top: 48px;
+			margin-top: wp-vars.$grid-unit-60;
 		}
 		&:has(> .newspack-section-header--no-margin) {
 			margin-top: 0;
@@ -34,7 +34,7 @@
 				flex-direction: row;
 			}
 		}
-		&.newspack-section-header--has-back-nav {
+		&.newspack-section-header--has-back-nav:not(.newspack-section-header--full-width-text) {
 			@include wp-mixins.break-wide {
 				.newspack-section-header__title-container,
 				p {

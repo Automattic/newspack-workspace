@@ -1,3 +1,17 @@
+## republication-tracker-tool [2.9.3](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.2...republication-tracker-tool@2.9.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **republication:** republish only public posts ([#1068](https://github.com/Automattic/newspack-workspace/issues/1068)) ([1aeee39](https://github.com/Automattic/newspack-workspace/commit/1aeee39e093e23144ab3ee28b2ef99bf680d33d8))
+
+## republication-tracker-tool [2.9.2](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.1...republication-tracker-tool@2.9.2) (2026-09-14)
+
+
+### Performance Improvements
+
+* **rtt:** skip the referrer title fetch when there is no referrer (NPPM-2981) ([#988](https://github.com/Automattic/newspack-workspace/issues/988)) ([3199175](https://github.com/Automattic/newspack-workspace/commit/3199175906bfc7f108e2e12697ab5e652c5f9cba))
+
 ## republication-tracker-tool [2.9.1](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.0...republication-tracker-tool@2.9.1) (2026-08-18)
 
 

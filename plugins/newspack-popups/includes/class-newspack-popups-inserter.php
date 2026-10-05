@@ -1005,7 +1005,7 @@ final class Newspack_Popups_Inserter {
 		 *
 		 * @example define( 'NEWSPACK_POPUPS_DEBUG', true );
 		 */
-		return ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || ( defined( 'NEWSPACK_LOG_LEVEL' ) && 1 < NEWSPACK_LOG_LEVEL ) || ( defined( 'NEWSPACK_POPUPS_DEBUG' ) && NEWSPACK_POPUPS_DEBUG );
+		return ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || ( defined( 'NEWSPACK_LOG_LEVEL' ) && 1 < NEWSPACK_LOG_LEVEL ) || ( defined( 'NEWSPACK_POPUPS_DEBUG' ) && NEWSPACK_POPUPS_DEBUG ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/class-logger.php.
 	}
 
 	/**
@@ -1145,7 +1145,7 @@ final class Newspack_Popups_Inserter {
 			$ab_tests = Newspack_Popups_AB_Tests::get_tests_config();
 			if ( ! empty( $ab_tests ) ) {
 				$script_data['ab_tests']   = $ab_tests;
-				$script_data['cid_cookie'] = defined( 'NEWSPACK_CLIENT_ID_COOKIE_NAME' ) ? NEWSPACK_CLIENT_ID_COOKIE_NAME : 'newspack-cid';
+				$script_data['cid_cookie'] = defined( 'NEWSPACK_CLIENT_ID_COOKIE_NAME' ) ? NEWSPACK_CLIENT_ID_COOKIE_NAME : 'newspack-cid'; // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal constant owned by newspack-plugin, not publisher-configurable.
 				$ab_buckets                = Newspack_Popups_AB_Tests::get_logged_in_buckets( $ab_tests );
 				if ( ! empty( $ab_buckets ) ) {
 					$script_data['ab_buckets'] = $ab_buckets;

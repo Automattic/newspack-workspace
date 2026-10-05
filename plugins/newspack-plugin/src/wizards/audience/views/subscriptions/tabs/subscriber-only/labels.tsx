@@ -14,10 +14,8 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies.
  */
+import { MAX_NAMED_ITEMS } from '../../constants';
 import type { Restriction } from './types';
-
-/** How many product names a row shows before collapsing the rest into "+N more". */
-export const MAX_NAMED_PRODUCTS = 2;
 
 /**
  * The names a row leads with, and how many are left over.
@@ -28,8 +26,8 @@ export const MAX_NAMED_PRODUCTS = 2;
 export function leadingProductNames( restriction: Restriction, nameOf: ( id: number ) => string | undefined ) {
 	const names = ( restriction.product_ids || [] ).map( nameOf ).filter( Boolean ) as string[];
 	return {
-		shown: names.slice( 0, MAX_NAMED_PRODUCTS ),
-		remaining: Math.max( 0, names.length - MAX_NAMED_PRODUCTS ),
+		shown: names.slice( 0, MAX_NAMED_ITEMS ),
+		remaining: Math.max( 0, names.length - MAX_NAMED_ITEMS ),
 	};
 }
 

@@ -46,7 +46,13 @@ class Subscriber_Discounts_Display {
 		if ( ! Subscriber_Commerce::is_enforcement_active() ) {
 			return;
 		}
-		add_filter( 'woocommerce_sale_flash', [ __CLASS__, 'filter_sale_flash' ], 10, 3 );
+		add_filter( 'woocommerce_sale_flash', [ __CLASS__, 'filter_sale_flash' ], PHP_INT_MAX, 3 );
+
+		// The classic templates and the Product Sale Badge block are separate
+		// render paths, so both are hooked.
+		add_filter( 'woocommerce_sale_badge_text', [ __CLASS__, 'filter_sale_badge_text' ], PHP_INT_MAX, 2 );
+		add_filter( 'render_block_woocommerce/product-sale-badge', [ __CLASS__, 'filter_sale_badge_block' ], PHP_INT_MAX, 3 );
+
 		add_action( 'woocommerce_single_product_summary', [ __CLASS__, 'render_product_summary_note' ], 11 );
 		add_filter( 'woocommerce_get_item_data', [ __CLASS__, 'filter_cart_item_data' ], 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', [ __CLASS__, 'stamp_order_line_item' ], 10, 3 );
@@ -78,20 +84,152 @@ class Subscriber_Discounts_Display {
 	 * of ours alongside the native `onsale` one so it inherits the theme's badge
 	 * styling.
 	 *
-	 * @param string      $html    Badge markup.
-	 * @param \WP_Post    $post    Product post.
-	 * @param \WC_Product $product Product.
-	 * @return string
+	 * Registered at PHP_INT_MAX because a subscriber discount is not a sale, so
+	 * a site hiding promotional badges should not hide this one. The ceiling is
+	 * not absolute — a site registering at PHP_INT_MAX after `wp_loaded`
+	 * priority 15 still runs later.
+	 *
+	 * @param string|false $html    Badge markup, or false where an earlier callback suppressed it.
+	 * @param \WP_Post     $post    Product post.
+	 * @param \WC_Product  $product Product.
+	 * @return string|false
 	 */
 	public static function filter_sale_flash( $html, $post, $product ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed
 		if ( ! self::product_is_discounted( $product ) ) {
 			return $html;
 		}
-		return sprintf(
+		$badge = sprintf(
 			'<span class="onsale %s">%s</span>',
 			esc_attr( self::CSS_CLASS_PREFIX . '-badge' ),
-			esc_html__( 'Subscriber discount', 'newspack-plugin' )
+			esc_html( self::badge_label() )
 		);
+		return self::filter_badge( $badge, $product, $html );
+	}
+
+	/**
+	 * Relabel the badge WooCommerce's Product Sale Badge block renders.
+	 *
+	 * The block builds its own markup and never applies `woocommerce_sale_flash`,
+	 * so without this a Product Collection shop calls a subscriber discount
+	 * "Sale" while the classic templates call it what it is. An All Products
+	 * shop is not reached either way: it renders its cards in the browser from
+	 * the Store API, where no PHP filter runs.
+	 *
+	 * @param string      $text    Badge text.
+	 * @param \WC_Product $product Product being badged.
+	 * @return string
+	 */
+	public static function filter_sale_badge_text( $text, $product = null ) {
+		return self::product_is_discounted( $product ) ? self::badge_label() : $text;
+	}
+
+	/**
+	 * Put the block badge through the same filter as the classic one, and give it
+	 * the feature's class and wording.
+	 *
+	 * Without this a site that suppressed the badge would have it gone from a
+	 * classic shop and still showing on a block shop. The reverse does not hold:
+	 * a site that empties this block's content keeps its suppression, because
+	 * empty content is also how WooCommerce renders "not on sale" and the two
+	 * cannot be told apart here.
+	 *
+	 * @param string    $block_content Rendered block, empty when the block rendered nothing.
+	 * @param array     $parsed_block  Parsed block.
+	 * @param \WP_Block $block         Block instance.
+	 * @return string
+	 */
+	public static function filter_sale_badge_block( $block_content, $parsed_block, $block ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed
+		if ( '' === trim( (string) $block_content ) ) {
+			return $block_content;
+		}
+		$product = wc_get_product( $block->context['postId'] ?? 0 );
+		if ( ! self::product_is_discounted( $product ) ) {
+			return $block_content;
+		}
+
+		return (string) self::filter_badge( self::relabel_block_badge( $block_content ), $product, $block_content );
+	}
+
+	/**
+	 * Mark up the block badge as this feature's.
+	 *
+	 * The class goes on the badge itself rather than the block wrapper around it,
+	 * so it names the same kind of element the classic path marks and a
+	 * publisher's one rule reaches both.
+	 *
+	 * Both of the badge's spans are relabelled. The visible one is usually ours
+	 * already, from `woocommerce_sale_badge_text`; the screen-reader one is
+	 * hardcoded beyond that filter's reach, and rewriting only the other would
+	 * leave the two audiences told different things.
+	 *
+	 * @param string $block_content Rendered block.
+	 * @return string
+	 */
+	private static function relabel_block_badge( $block_content ) {
+		$processor = new \WP_HTML_Tag_Processor( $block_content );
+		if ( ! $processor->next_tag( [ 'class_name' => 'wc-block-components-product-sale-badge' ] ) ) {
+			return $block_content;
+		}
+		$processor->add_class( self::CSS_CLASS_PREFIX . '-badge' );
+
+		while ( $processor->next_tag( 'span' ) ) {
+			if ( ! $processor->has_class( 'wc-block-components-product-sale-badge__text' ) && ! $processor->has_class( 'screen-reader-text' ) ) {
+				continue;
+			}
+			// A span is not one of the elements whose own text the processor can
+			// set, so the write lands on the text node after it. A span holding
+			// markup rather than plain text lands on a tag instead and is left
+			// alone.
+			if ( $processor->next_token() && '#text' === $processor->get_token_type() ) {
+				$processor->set_modifiable_text( self::badge_label() );
+			}
+		}
+
+		return $processor->get_updated_html();
+	}
+
+	/**
+	 * The badge's wording, shared by both render paths so a block shop and a
+	 * classic one cannot say different things about the same discount.
+	 *
+	 * @return string
+	 */
+	private static function badge_label() {
+		return __( 'Subscriber discount', 'newspack-plugin' );
+	}
+
+	/**
+	 * Hand the assembled badge to the site before it renders.
+	 *
+	 * @param string       $badge   Badge markup.
+	 * @param \WC_Product  $product Product being badged.
+	 * @param string|false $html    What the sale-badge chain had produced.
+	 * @return string|false
+	 */
+	private static function filter_badge( $badge, $product, $html ) {
+		/**
+		 * Filters the subscriber discount badge.
+		 *
+		 * The badge ignores `woocommerce_sale_flash` by design, so this is where
+		 * a site suppresses or rewords it. Return an empty string or false to
+		 * remove it. The return value reaches the page unescaped, as WooCommerce's
+		 * own badge does, and `$label` is passed raw for a callback building its
+		 * own markup around it.
+		 *
+		 * Both markup arguments differ by render path, so a callback that rebuilds
+		 * the badge should build from `$badge` rather than assume a shape. On the
+		 * classic templates `$badge` is a single `onsale` span and `$html` is what
+		 * the sale-flash chain produced, which is false where the site suppressed
+		 * it. On the Product Sale Badge block both are the block's own nested
+		 * markup, already carrying this label, and returning a bare span there
+		 * drops the block's layout classes.
+		 *
+		 * @param string       $badge   Badge markup.
+		 * @param string       $label   Badge label, unescaped.
+		 * @param \WC_Product  $product Product being badged.
+		 * @param string|false $html    Markup this badge was built from.
+		 */
+		return apply_filters( 'newspack_subscriber_discounts_badge', $badge, self::badge_label(), $product, $html );
 	}
 
 	/**

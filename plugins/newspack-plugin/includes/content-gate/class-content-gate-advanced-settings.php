@@ -125,21 +125,27 @@ class Content_Gate_Advanced_Settings {
 	 * sites that have never opened Access Control and have no UI to turn it off
 	 * (the wizard only registers behind the NEWSPACK_CONTENT_GATES constant).
 	 *
-	 * Not memoized: the gate lookup itself is cached by Content_Gate::get_gates(),
-	 * so a second memo here would only add a value that can go stale against the
-	 * cache it was derived from.
+	 * The gates half of this (and the `newspack_content_gate_has_restriction_source`
+	 * filter) lives in {@see Content_Gate::has_first_party_restriction_source()},
+	 * shared with the REST path (`Content_Gate::filter_rest_response()`), which
+	 * needs the identical "could a first-party gate restrict this" answer but
+	 * combines it with Memberships differently — see that REST method's own
+	 * docblock for why Memberships isn't a restriction source there.
 	 *
 	 * @return bool
 	 */
 	private static function has_restriction_source(): bool {
-		// Same arguments as Content_Restriction_Control::get_post_gates(), so
-		// the two share one cached query. Gates only count while gating is active —
-		// otherwise a site with inert gates pays the feed overfetch to evaluate
-		// restriction checks that are all guaranteed no-ops. Memberships is independent
-		// of Audience Management and keeps enforcing either way.
+		// Memberships is independent of Audience Management and keeps
+		// enforcing either way, so it isn't gated behind
+		// Content_Gate::is_gating_active() the way the first-party half is.
+		//
+		// The filter is applied here, to the combined answer, rather than being
+		// taken from Content_Gate::has_first_party_restriction_source(): that
+		// one filters the first-party half alone, and OR-ing Memberships in
+		// after it would leave a callback returning false with no effect on a
+		// Memberships site.
 		$has_restriction_source = Memberships::is_active()
-			|| ( Content_Gate::is_gating_active()
-				&& ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', false ) ) );
+			|| Content_Gate::detect_first_party_restriction_source();
 
 		/**
 		 * Filters whether anything on this site can restrict a post.
@@ -149,7 +155,7 @@ class Content_Gate_Advanced_Settings {
 		 * restricting posts without publishing a gate or activating Memberships —
 		 * must return true here, or its restricted posts ship in full in the feed.
 		 *
-		 * @param bool $has_restriction_source Whether a first-party restriction source was detected.
+		 * @param bool $has_restriction_source Whether a restriction source was detected.
 		 */
 		return (bool) apply_filters( 'newspack_content_gate_has_restriction_source', $has_restriction_source );
 	}
@@ -241,6 +247,7 @@ class Content_Gate_Advanced_Settings {
 			'restrict_feeds'                 => (int) get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
 			'feed_restriction_mode'          => self::sanitize_feed_mode( get_option( self::OPTION_PREFIX . 'feed_restriction_mode', self::FEED_MODE_TRUNCATE ) ),
 			'newsletter_link_bypass_enabled' => (int) get_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', 0 ),
+			'institutional_access_text'      => (string) get_option( self::OPTION_PREFIX . 'institutional_access_text', '' ),
 		];
 
 		self::$settings = $settings;
@@ -317,6 +324,14 @@ class Content_Gate_Advanced_Settings {
 		if ( isset( $settings['newsletter_link_bypass_enabled'] ) ) {
 			update_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', boolval( $settings['newsletter_link_bypass_enabled'] ) ? 1 : 0, false );
 		}
+		if ( isset( $settings['institutional_access_text'] ) ) {
+			$institutional_access_text = sanitize_text_field( $settings['institutional_access_text'] );
+			// The text is part of the gate HTML served from the page cache.
+			if ( (string) get_option( self::OPTION_PREFIX . 'institutional_access_text', '' ) !== $institutional_access_text ) {
+				update_option( self::OPTION_PREFIX . 'institutional_access_text', $institutional_access_text, false );
+				flush_page_cache();
+			}
+		}
 		self::reset_cache();
 		return self::get_settings();
 	}
@@ -326,6 +341,22 @@ class Content_Gate_Advanced_Settings {
 	 */
 	public static function reset_cache() {
 		self::$settings = null;
+	}
+
+	/**
+	 * The site-wide feed restriction mode, before any per-request override.
+	 *
+	 * Collapses the master `restrict_feeds` toggle and the stored mode into one
+	 * value. Deliberately skips `newspack_content_gate_feed_restriction_mode`,
+	 * whose callbacks answer for one feed request rather than for the site — so
+	 * a caller offering an "inherit the site-wide setting" choice can name what
+	 * inherit resolves to.
+	 *
+	 * @return string FEED_MODE_OFF or a storable mode.
+	 */
+	public static function get_site_feed_restriction_mode(): string {
+		$settings = self::get_settings();
+		return empty( $settings['restrict_feeds'] ) ? self::FEED_MODE_OFF : $settings['feed_restriction_mode'];
 	}
 
 	/**
@@ -364,8 +395,7 @@ class Content_Gate_Advanced_Settings {
 		if ( Memberships::is_active() ) {
 			return self::FEED_MODE_OFF;
 		}
-		$settings = self::get_settings();
-		$mode     = empty( $settings['restrict_feeds'] ) ? self::FEED_MODE_OFF : $settings['feed_restriction_mode'];
+		$mode = self::get_site_feed_restriction_mode();
 
 		/**
 		 * Filters the effective feed restriction mode.
@@ -642,12 +672,11 @@ class Content_Gate_Advanced_Settings {
 	}
 
 	/**
-	 * Replace a feed string (content or excerpt) with the gate teaser when the
-	 * current post is restricted and the feed mode is not "off".
+	 * Replace a feed string (content or excerpt) with the restricted post's
+	 * syndication summary when the feed mode is not "off".
 	 *
-	 * Uses the gate's excerpt settings (<!--more--> tag or paragraph count) to
-	 * match what logged-out visitors see on the front-end. The inline gate HTML
-	 * is intentionally omitted — feeds should not contain login prompts. In
+	 * The summary comes from {@see Content_Gate::get_withheld_summary()}. The inline
+	 * gate HTML is intentionally omitted — feeds should not contain login prompts. In
 	 * "exclude" mode restricted posts are already gone from the loop; truncation
 	 * remains a backstop so a restricted body can never leak in full.
 	 *
@@ -666,7 +695,15 @@ class Content_Gate_Advanced_Settings {
 		if ( ! Content_Gate::is_post_restricted( $post->ID ) ) {
 			return $feed_string;
 		}
-		return Content_Gate::get_restricted_post_excerpt_for_gate( $post, Content_Gate::get_gate_layout_id( $post->ID ) );
+		// Core already withholds a password-protected post's excerpt and body, and
+		// feeds are read without the password. Keep that, as the REST path does.
+		if ( post_password_required( $post ) ) {
+			return $feed_string;
+		}
+		// Both feed strings are CDATA-wrapped. Core escapes "]]>" before the
+		// the_content_feed filters run, so this late replacement has to redo it,
+		// or one excerpt containing it breaks the whole feed document.
+		return str_replace( ']]>', ']]&gt;', Content_Gate::get_withheld_summary( $post ) );
 	}
 }
 Content_Gate_Advanced_Settings::init();

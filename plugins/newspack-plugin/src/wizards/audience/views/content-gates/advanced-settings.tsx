@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { SelectControl, ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { SelectControl, TextControl, ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { useEffect, useRef, useState } from '@wordpress/element';
@@ -25,6 +25,7 @@ import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
 // Truthy check because wp_localize_script() delivers this as '1'/'' rather than a boolean.
 const feedsGovernedByMemberships = !! window.newspackAudienceContentGates?.feeds_governed_by_memberships;
+const institutionalAccessDefaultText = window.newspackAudienceContentGates?.institutional_access_default_text || '';
 
 const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; showModal: boolean } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
@@ -41,7 +42,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 		}
 	}, [ showModal ] );
 
-	const updateConfig = useRef< ( _config: Partial< AdvancedSettingsConfig > ) => void >();
+	const updateConfig = useRef< ( _config: Partial< AdvancedSettingsConfig > ) => void >( undefined );
 	const handleUpdateConfig = ( _config: Partial< AdvancedSettingsConfig > ) => {
 		if ( isFetching ) {
 			return;
@@ -136,6 +137,19 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 									newsletter_link_bypass_enabled: value,
 								} )
 							}
+						/>
+					) }
+					{ wizardData?.config?.has_institutions && (
+						<TextControl
+							label={ __( 'Institutional access link text', 'newspack-plugin' ) }
+							help={ __(
+								'Shown to logged-out readers below the gate when an institution with an IP range can unlock it. The link checks whether the reader is on that network. Leave empty to use the default.',
+								'newspack-plugin'
+							) }
+							placeholder={ institutionalAccessDefaultText }
+							maxLength={ 200 }
+							value={ config?.institutional_access_text || '' }
+							onChange={ ( value: string ) => setConfig( { ...config, institutional_access_text: value } ) }
 						/>
 					) }
 					<HStack justify="end">

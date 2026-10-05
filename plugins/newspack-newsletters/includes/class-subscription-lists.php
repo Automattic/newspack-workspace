@@ -1078,7 +1078,7 @@ class Subscription_Lists {
 			}
 		}
 
-		add_option( $migrated_option_name, true );
+		update_option( $migrated_option_name, true );
 		// Workaround the options bug on persistent cache.
 		wp_cache_delete( 'notoptions', 'options' );
 		wp_cache_delete( 'alloptions', 'options' );

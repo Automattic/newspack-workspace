@@ -326,14 +326,18 @@ class Audience_Subscriptions extends Wizard {
 	 */
 	private static function get_product_data( $product ) {
 		return [
-			'id'            => (int) $product->get_id(),
-			'name'          => $product->get_name(),
-			'parent_id'     => (int) $product->get_parent_id(),
-			'type_label'    => $product->get_parent_id() ? __( 'Variation', 'newspack-plugin' ) : __( 'Product', 'newspack-plugin' ),
-			'price'         => (string) $product->get_price(),
-			'regular_price' => (string) $product->get_regular_price(),
-			'sale_price'    => (string) $product->get_sale_price(),
-			'is_on_sale'    => (bool) $product->is_on_sale(),
+			'id'              => (int) $product->get_id(),
+			'name'            => $product->get_name(),
+			'parent_id'       => (int) $product->get_parent_id(),
+			'type_label'      => $product->get_parent_id() ? __( 'Variation', 'newspack-plugin' ) : __( 'Product', 'newspack-plugin' ),
+			'price'           => (string) $product->get_price(),
+			'regular_price'   => (string) $product->get_regular_price(),
+			'sale_price'      => (string) $product->get_sale_price(),
+			'is_on_sale'      => (bool) $product->is_on_sale(),
+			// A rule open to every subscriber never discounts a subscription, so the
+			// editor's price preview has to know which of the products it lists are
+			// ones. `type_label` is display copy and cannot answer that.
+			'is_subscription' => WooCommerce_Subscriptions::is_subscription_product( $product ),
 		];
 	}
 
@@ -389,7 +393,13 @@ class Audience_Subscriptions extends Wizard {
 			}
 			// Broader status filter when hydrating saved tokens, so the editor keeps
 			// showing products whose status changed since the rule was saved.
-			$args['post_status']    = [ 'publish', 'draft', 'pending', 'private', 'future' ];
+			// `trash` is included because a trashed product can still have active
+			// subscribers, which makes it a real audience the rule must keep
+			// naming — an id that resolves to nothing renders as a bare number.
+			// A trashed product stays undiscoverable regardless: `post__in` bounds
+			// the result to ids the caller already named, so this widens what a
+			// caller can resolve and never what it can find.
+			$args['post_status']    = [ 'publish', 'draft', 'pending', 'private', 'future', 'trash' ];
 			$args['post__in']       = $ids;
 			$args['posts_per_page'] = min( count( $ids ), 100 );
 			$args['orderby']        = 'post__in';

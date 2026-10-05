@@ -18,7 +18,10 @@ defined( 'ABSPATH' ) || exit;
  * Every rule carries the base fields:
  *
  *   id                       Unique rule ID (string).
- *   subscription_product_ids Subscription products whose subscribers the rule applies to.
+ *   subscription_targeting   'subscriptions' | 'all' — whether the rule names its
+ *                            subscriptions or reaches every active subscriber.
+ *   subscription_product_ids Subscription products whose subscribers the rule applies to
+ *                            ('subscriptions' targeting).
  *   targeting                'products' | 'category' | 'all' (see Product_Targeting).
  *   product_ids              Targeted product IDs ('products' targeting).
  *   category_ids             Targeted product category IDs ('category' targeting).
@@ -29,6 +32,16 @@ defined( 'ABSPATH' ) || exit;
  * Features extend this shape with their own fields.
  */
 class Subscriber_Commerce {
+
+	/**
+	 * Audience mode: the rule reaches subscribers of the subscriptions it names.
+	 */
+	const SUBSCRIPTION_TARGETING_SPECIFIC = 'subscriptions';
+
+	/**
+	 * Audience mode: the rule reaches every reader holding an active subscription.
+	 */
+	const SUBSCRIPTION_TARGETING_ALL = 'all';
 
 	/**
 	 * Whether subscriber-commerce rules can be configured.
@@ -98,6 +111,14 @@ class Subscriber_Commerce {
 			$targeting = Product_Targeting::TARGETING_PRODUCTS;
 		}
 
+		// Absent or unrecognized reads as the narrow mode. A rule stored before
+		// this field existed named its subscriptions, and garbage must never be
+		// what widens a rule to every subscriber.
+		$subscription_targeting = $rule['subscription_targeting'] ?? self::SUBSCRIPTION_TARGETING_SPECIFIC;
+		if ( ! in_array( $subscription_targeting, [ self::SUBSCRIPTION_TARGETING_SPECIFIC, self::SUBSCRIPTION_TARGETING_ALL ], true ) ) {
+			$subscription_targeting = self::SUBSCRIPTION_TARGETING_SPECIFIC;
+		}
+
 		$sanitize_ids = function ( $ids ) {
 			return array_values( array_unique( array_filter( array_map( 'absint', (array) $ids ) ) ) );
 		};
@@ -121,7 +142,11 @@ class Subscriber_Commerce {
 
 		return [
 			'id'                       => $id ? $id : self::generate_rule_id(),
-			'subscription_product_ids' => $sanitize_ids( $rule['subscription_product_ids'] ?? [] ),
+			'subscription_targeting'   => $subscription_targeting,
+			// Under 'all' the ids say nothing about who the rule reaches, so they are
+			// dropped rather than carried: a rule switched back to named subscriptions
+			// must not silently resume matching on a list nobody has seen since.
+			'subscription_product_ids' => self::SUBSCRIPTION_TARGETING_ALL === $subscription_targeting ? [] : $sanitize_ids( $rule['subscription_product_ids'] ?? [] ),
 			'targeting'                => $targeting,
 			'product_ids'              => $sanitize_ids( $rule['product_ids'] ?? [] ),
 			'category_ids'             => $sanitize_ids( $rule['category_ids'] ?? [] ),
@@ -129,6 +154,37 @@ class Subscriber_Commerce {
 			'active'                   => ! empty( $rule['active'] ),
 			'created_at'               => $created_at ? $created_at : gmdate( 'Y-m-d' ),
 		];
+	}
+
+	/**
+	 * Whether a rule reaches every active subscriber rather than the
+	 * subscriptions it names.
+	 *
+	 * @param array $rule The rule.
+	 *
+	 * @return bool
+	 */
+	public static function covers_all_subscriptions( array $rule ): bool {
+		return self::SUBSCRIPTION_TARGETING_ALL === ( $rule['subscription_targeting'] ?? self::SUBSCRIPTION_TARGETING_SPECIFIC );
+	}
+
+	/**
+	 * Whether a rule names an audience at all.
+	 *
+	 * A rule under the default mode naming no subscription names no way in, so
+	 * purchase restrictions skip it rather than making its products unbuyable.
+	 *
+	 * This asks the question of a rule already stored. Discounts reject the same
+	 * shape at the door instead, and deliberately do not call this: validation runs
+	 * on the raw REST payload and re-sanitizes the ids, so a list of `['abc']`
+	 * is refused there, where the `! empty()` below would wave it through.
+	 *
+	 * @param array $rule The rule.
+	 *
+	 * @return bool
+	 */
+	public static function has_audience( array $rule ): bool {
+		return self::covers_all_subscriptions( $rule ) || ! empty( $rule['subscription_product_ids'] );
 	}
 
 	/**

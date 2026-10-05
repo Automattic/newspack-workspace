@@ -56,14 +56,7 @@ export default function Institutions() {
 	const lastHasInstitutions = useRef< boolean | undefined >( undefined );
 
 	useEffect( () => {
-		const actions: HeaderAction[] = [
-			{
-				type: 'secondary',
-				label: __( 'Back to Access Control', 'newspack-plugin' ),
-				icon: 'chevronLeft',
-				href: '#/content-gates',
-			},
-		];
+		const actions: HeaderAction[] = [];
 		if ( data.length !== 0 ) {
 			actions.push( {
 				type: 'primary',

@@ -152,9 +152,11 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a target block with active rules passes through unchanged when is_admin() is true.
+	 * An admin-screen render shows a restricted block to someone who can author.
 	 */
 	public function test_target_block_with_rules_passes_through_in_admin() {
+		$editor_id = $this->factory->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $editor_id );
 		set_current_screen( 'dashboard' );
 		$block  = $this->make_block(
 			'core/group',
@@ -167,6 +169,76 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		$result = Block_Visibility::filter_render_block( '<div>admin view</div>', $block );
 		$this->assertSame( '<div>admin view</div>', $result );
 		unset( $GLOBALS['current_screen'] );
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The authoring bypass is for people who author. An admin-context request from
+	 * a reader who cannot edit anything -- admin-ajax serving the front end -- is
+	 * gated like any other read.
+	 *
+	 * This stands in for the REST half of the same condition, which shares the
+	 * capability test: REST_REQUEST is a constant core defines per request, so an
+	 * in-process test cannot set it for one case without setting it for the rest
+	 * of the suite.
+	 */
+	public function test_admin_context_does_not_bypass_for_a_reader() {
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		set_current_screen( 'dashboard' );
+
+		$rules  = [ 'registration' => [ 'active' => true ] ];
+		$block  = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		$result = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		unset( $GLOBALS['current_screen'] );
+
+		$this->assertSame( '', $result, 'An anonymous admin-context render must not bypass access control.' );
+	}
+
+	/**
+	 * The bypass asks about the post in hand, not about authoring in general. A
+	 * Contributor can edit_posts site-wide, so a site-wide test would hand them
+	 * every restricted block on every post, including ones they cannot open.
+	 */
+	public function test_admin_context_does_not_bypass_for_a_post_the_author_cannot_edit() {
+		$contributor_id = $this->factory->user->create( [ 'role' => 'contributor' ] );
+		$someone_else   = $this->factory->user->create( [ 'role' => 'author' ] );
+		$post_id        = $this->factory->post->create(
+			[
+				'post_author' => $someone_else,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_current_user( $contributor_id );
+		Block_Visibility::reset_cache_for_tests();
+		set_current_screen( 'dashboard' );
+		$GLOBALS['post'] = get_post( $post_id );
+
+		$this->assertTrue( current_user_can( 'edit_posts' ), 'A Contributor can author, which is the premise of this test.' );
+		$this->assertFalse( current_user_can( 'edit_post', $post_id ), 'But not this post.' );
+
+		// A rule the Contributor does not satisfy, so only the bypass could show
+		// them the block.
+		$rules  = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'test_rule',
+							'value' => $this->test_user_id,
+						],
+					],
+				],
+			],
+		];
+		$block  = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		$result = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		unset( $GLOBALS['current_screen'], $GLOBALS['post'] );
+
+		$this->assertSame( '', $result, 'The bypass does not extend to a post the requester cannot edit.' );
 	}
 
 	/**
@@ -345,6 +417,61 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		$block  = $this->make_block_with_rules( 'core/group', $rules, 'hidden' );
 		$result = Block_Visibility::filter_render_block( '<div>non-member content</div>', $block );
 		$this->assertSame( '<div>non-member content</div>', $result );
+	}
+
+	/**
+	 * A block hidden behind an institution rule naming nothing renders for
+	 * everyone.
+	 *
+	 * The one direction in this change that opens content rather than closing it.
+	 * "Hidden" shows the block to whoever fails the rules, and a rule naming no
+	 * institution is now failed by every reader, so a block the publisher kept away
+	 * from the public starts rendering — to signed-in readers and, through the
+	 * excerpt path, into homepage and listing markup cached without a per-reader
+	 * key. Block attributes never pass the gate save's refusal, so nothing upstream
+	 * catches this shape.
+	 */
+	public function test_hidden_mode_publishes_a_block_whose_rule_matches_nobody() {
+		$rules = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [],
+						],
+					],
+				],
+			],
+		];
+		$block = $this->make_block_with_rules( 'core/group', $rules, 'hidden' );
+
+		foreach ( [
+			'a logged-out visitor' => 0,
+			'a signed-in reader'   => $this->test_user_id,
+		] as $description => $user_id ) {
+			Block_Visibility::reset_cache_for_tests();
+			$this->assertFalse(
+				Block_Visibility::is_hidden_for_user( $block, $user_id ),
+				"The block is withheld from {$description} no longer."
+			);
+		}
+
+		$markup = '<!-- wp:group ' . wp_json_encode(
+			[
+				'newspackAccessControlMode'       => 'custom',
+				'newspackAccessControlRules'      => $rules,
+				'newspackAccessControlVisibility' => 'hidden',
+			]
+		) . ' --><div class="wp-block-group"><!-- wp:paragraph --><p>WITHHELD</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+
+		Block_Visibility::reset_cache_for_tests();
+		$this->assertStringContainsString(
+			'WITHHELD',
+			Block_Visibility::strip_blocks_hidden_from_public( $markup ),
+			'And survives the excerpt path, whose output is cached without a per-reader key.'
+		);
 	}
 
 	/**
@@ -1062,5 +1189,154 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 			$fetches,
 			'The same gate set in a different order must reuse the cached result.'
 		);
+	}
+
+	/**
+	 * A block set to a gate agrees with the gate's page: an on-campus visitor
+	 * whom registered access counts as registered sees it without an account.
+	 */
+	public function test_gate_mode_registration_institutions_show_the_block_to_a_matching_visitor() {
+		$institution_id = $this->make_campus_institution();
+		$gate_id        = $this->make_gate( false );
+		update_post_meta(
+			$gate_id,
+			'registration',
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [ $institution_id ],
+						],
+					],
+				],
+			]
+		);
+		$block = $this->make_block(
+			'core/group',
+			[
+				'newspackAccessControlMode'    => 'gate',
+				'newspackAccessControlGateIds' => [ $gate_id ],
+			]
+		);
+		$this->assertSame( '<div>members</div>', $this->render_for_signed_out_visitor_at( $block, '10.1.2.3' ) );
+	}
+
+	/**
+	 * Create an institution whose IP range is 10.0.0.0/8.
+	 *
+	 * @return int Institution ID.
+	 */
+	private function make_campus_institution() {
+		$institution_id = \Newspack\Institution::create( 'Example University', '', [ 'ip_range' => '10.0.0.0/8' ] );
+		\Newspack\Institution::invalidate_cache();
+		return $institution_id;
+	}
+
+	/**
+	 * Render a block for a signed-out visitor at an address, carrying the
+	 * institutional-access cookie that lets their IP be checked.
+	 *
+	 * Later suites read the visitor's address, so it is put back as found even
+	 * when the render throws.
+	 *
+	 * @param array  $block Parsed block.
+	 * @param string $ip    The visitor's IP address.
+	 * @return string Rendered block content.
+	 */
+	private function render_for_signed_out_visitor_at( $block, $ip ) {
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
+		$_SERVER['REMOTE_ADDR'] = $ip;
+		$_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] = '1';
+
+		wp_set_current_user( 0 );
+		Block_Visibility::reset_cache_for_tests();
+		try {
+			return Block_Visibility::filter_render_block( '<div>members</div>', $block );
+		} finally {
+			unset( $_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] );
+			if ( null === $original_remote_addr ) {
+				unset( $_SERVER['REMOTE_ADDR'] );
+			} else {
+				$_SERVER['REMOTE_ADDR'] = $original_remote_addr;
+			}
+		}
+		// phpcs:enable
+	}
+
+	/**
+	 * Registered access on, paid access granted to one institution.
+	 *
+	 * @param int  $institution_id     Institution ID.
+	 * @param bool $paid_access_active Whether paid access is on. Switching it off in
+	 *                                 the gate editor keeps its rules stored.
+	 * @return array Rules in the shape a gate stores them.
+	 */
+	private function registration_and_institution_rules( $institution_id, $paid_access_active ) {
+		return [
+			'registration'  => [ 'active' => true ],
+			'custom_access' => [
+				'active'       => $paid_access_active,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => [ $institution_id ],
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * Cases for test_paid_institutions_let_a_signed_out_visitor_skip_registration().
+	 *
+	 * @return array[] Access mode, whether paid access is on, visitor IP, whether the visitor sees the block.
+	 */
+	public function paid_institution_cases() {
+		return [
+			'gate, on campus'                      => [ 'gate', true, '10.1.2.3', true ],
+			'gate, off campus'                     => [ 'gate', true, '192.168.1.1', false ],
+			'gate, paid access off, on campus'     => [ 'gate', false, '10.1.2.3', false ],
+			'block rules, on campus'               => [ 'custom', true, '10.1.2.3', true ],
+			'block rules, off campus'              => [ 'custom', true, '192.168.1.1', false ],
+			'block rules, paid access off, campus' => [ 'custom', false, '10.1.2.3', false ],
+		];
+	}
+
+	/**
+	 * A block agrees with the gate's page: a signed-out visitor whom paid access
+	 * lets in reads the post without registering, so they see the block too. Only
+	 * paid access that is on can do that, and a block's own rules answer the same
+	 * way as a gate holding them.
+	 *
+	 * @dataProvider paid_institution_cases
+	 *
+	 * @param string $mode               Access mode, 'gate' or 'custom'.
+	 * @param bool   $paid_access_active Whether paid access is on.
+	 * @param string $ip                 The visitor's IP address.
+	 * @param bool   $sees_block         Whether the visitor sees the block.
+	 */
+	public function test_paid_institutions_let_a_signed_out_visitor_skip_registration( $mode, $paid_access_active, $ip, $sees_block ) {
+		$rules = $this->registration_and_institution_rules( $this->make_campus_institution(), $paid_access_active );
+		if ( 'gate' === $mode ) {
+			$gate_id = $this->make_gate( false );
+			update_post_meta( $gate_id, 'registration', $rules['registration'] );
+			update_post_meta( $gate_id, 'custom_access', $rules['custom_access'] );
+			$block = $this->make_block(
+				'core/group',
+				[
+					'newspackAccessControlMode'    => 'gate',
+					'newspackAccessControlGateIds' => [ $gate_id ],
+				]
+			);
+		} else {
+			$block = $this->make_block_with_rules( 'core/group', $rules );
+		}
+
+		$this->assertSame( $sees_block ? '<div>members</div>' : '', $this->render_for_signed_out_visitor_at( $block, $ip ) );
 	}
 }

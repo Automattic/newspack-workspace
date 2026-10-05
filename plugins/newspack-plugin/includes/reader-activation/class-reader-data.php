@@ -119,9 +119,11 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Add config to the data script.
+	 * The browser store's configuration.
+	 *
+	 * @return array
 	 */
-	public static function config_script() {
+	public static function get_config(): array {
 		/**
 		 * Filters the localStorage store item prefix.
 		 *
@@ -132,19 +134,24 @@ final class Reader_Data {
 			sprintf( 'np_reader_%d_', \get_current_blog_id() )
 		);
 
+		$is_switched_session = self::is_switched_session();
+
 		/**
 		 * Allows for "temporary" reader data for things like previews.
-		 * If true, the store will use sessionStorage instead of localStorage.
+		 * If true, the store will use sessionStorage instead of localStorage and
+		 * skip hydration, which is why a switched session has its own flag: it
+		 * must still hydrate the reader's stored data.
 		 */
 		$is_temporary = apply_filters( 'newspack_reader_data_store_is_temp_session', false );
 
 		$config = [
-			'store_prefix'    => $store_prefix,
-			'is_temporary'    => $is_temporary,
-			'reader_activity' => self::$reader_activity,
-			'read_only_keys'  => self::get_read_only_keys(),
-			'api_url'         => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader-data' ),
-			'session_url'     => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader/session' ),
+			'store_prefix'        => $store_prefix,
+			'is_temporary'        => (bool) $is_temporary,
+			'is_switched_session' => $is_switched_session,
+			'reader_activity'     => self::$reader_activity,
+			'read_only_keys'      => self::get_read_only_keys(),
+			'api_url'             => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader-data' ),
+			'session_url'         => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader/session' ),
 		];
 
 		if ( \is_user_logged_in() ) {
@@ -152,7 +159,14 @@ final class Reader_Data {
 			$config['items'] = self::get_data( \get_current_user_id() );
 		}
 
-		wp_localize_script( Reader_Activation::SCRIPT_HANDLE, 'newspack_reader_data', $config );
+		return $config;
+	}
+
+	/**
+	 * Add config to the data script.
+	 */
+	public static function config_script() {
+		wp_localize_script( Reader_Activation::SCRIPT_HANDLE, 'newspack_reader_data', self::get_config() );
 	}
 
 	/**
@@ -193,10 +207,34 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Whether the current user can access the API.
+	 * Whether an admin is browsing as this reader through the User Switching
+	 * plugin. Such a session reads the reader's stored data but must never write
+	 * it: the browser it runs in carries the admin's own history and device, so
+	 * anything it computes describes the admin, not the reader.
+	 *
+	 * @return bool
 	 */
-	public static function permission_callback() {
-		return \is_user_logged_in();
+	public static function is_switched_session(): bool {
+		return function_exists( 'current_user_switched' ) && (bool) \current_user_switched();
+	}
+
+	/**
+	 * Whether the current user can write reader data through the API.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public static function permission_callback(): bool|\WP_Error {
+		if ( ! \is_user_logged_in() ) {
+			return false;
+		}
+		if ( self::is_switched_session() ) {
+			return new \WP_Error(
+				'newspack_reader_data_switched_session',
+				__( 'Reader data cannot be changed while switched into this account.', 'newspack-plugin' ),
+				[ 'status' => 403 ]
+			);
+		}
+		return true;
 	}
 
 	/**
@@ -258,6 +296,33 @@ final class Reader_Data {
 		// Client-asserted JSON: drop non-scalar members (e.g. a nested array in a
 		// malformed `[[1,2],3]` payload) before stringifying, so a bad payload can't
 		// raise an "Array to string conversion" warning or yield "Array" entries.
+		return array_values( array_map( 'strval', array_filter( $ids, 'is_scalar' ) ) );
+	}
+
+	/**
+	 * The reader's stored newsletter list IDs (as strings), or null when unknown.
+	 *
+	 * Null means the selection cannot be trusted: nothing was ever stored, or the
+	 * stored value is not a plain JSON list. A list that lost its shape (a JSON
+	 * object left by an earlier writer) may also have dropped later changes, so a
+	 * consumer that publishes the selection, like the Newsletter Selection ESP
+	 * field, must treat it as unknown rather than as a partial answer. The
+	 * newsletter data event handler repairs such a value on the next change.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return string[]|null List IDs (possibly empty), or null when unknown.
+	 */
+	public static function get_newsletter_subscribed_lists( int $user_id ): ?array {
+		$raw = self::get_data( $user_id, 'newsletter_subscribed_lists' );
+		if ( false === $raw ) {
+			return null;
+		}
+		$ids = is_string( $raw ) ? json_decode( $raw, true ) : $raw;
+		// array_is_list() is PHP 8.1+ and the plugin's floor is 8.0.
+		if ( ! is_array( $ids ) || $ids !== array_values( $ids ) ) {
+			return null;
+		}
 		return array_values( array_map( 'strval', array_filter( $ids, 'is_scalar' ) ) );
 	}
 
@@ -530,7 +595,25 @@ final class Reader_Data {
 	}
 
 	/**
-	 * Set the user as a newsletter subscriber.
+	 * Keep the reader's newsletter lists in step with the newsletter data events.
+	 *
+	 * `lists` (newsletter_subscribed) and `lists_added` (newsletter_updated)
+	 * both mean "now on these lists": subscribe() is additive at the ESP and
+	 * fires for contacts that already exist, so neither replaces the stored
+	 * set. The result is always re-indexed, because array_diff() keeps keys and
+	 * a keyed array encodes as a JSON object that get_newsletter_subscribed_lists()
+	 * does not accept as a list. A value an earlier removal left in that shape
+	 * (`{"1":"list-2"}`) still carries the IDs as its values, so it is decoded
+	 * as an array and repaired here rather than reset.
+	 *
+	 * A removal-only event for a reader with no known stored set records
+	 * nothing. "No longer on X" says nothing about the other lists, while a
+	 * stored empty list means "on no lists", which the Newsletter Selection
+	 * field publishes as a blank value over whatever the ESP holds. A reader on
+	 * a list at the ESP with nothing stored here (an account that predates the
+	 * item, or a subscription made at the ESP) reaches this path when they
+	 * leave that list. The selection stays unknown until a login or a subscribe
+	 * event establishes it.
 	 *
 	 * @param int   $timestamp Timestamp.
 	 * @param array $data      Data.
@@ -539,34 +622,22 @@ final class Reader_Data {
 		if ( ! isset( $data['user_id'] ) ) {
 			return;
 		}
-		if ( ! empty( $data['lists'] ) ) {
-			self::update_item( $data['user_id'], 'is_newsletter_subscriber', true );
-			self::update_item( $data['user_id'], 'newsletter_subscribed_lists', wp_json_encode( $data['lists'] ) );
+		// Payload entries are held to the same shape as the stored value: a
+		// nested array would reach array_diff() and raise a notice.
+		$as_list = static fn( $lists ) => is_array( $lists ) ? array_filter( $lists, 'is_scalar' ) : [];
+		$added   = array_merge( $as_list( $data['lists'] ?? null ), $as_list( $data['lists_added'] ?? null ) );
+		$removed = $as_list( $data['lists_removed'] ?? null );
+		if ( empty( $added ) && empty( $removed ) ) {
+			return;
 		}
-		if ( ! empty( $data['lists_added'] ) ) {
-			$newsletter_subscribed_lists = self::get_data( $data['user_id'], 'newsletter_subscribed_lists' );
-			if ( ! empty( $newsletter_subscribed_lists ) && gettype( $newsletter_subscribed_lists ) === 'string' ) {
-				$newsletter_subscribed_lists = json_decode( $newsletter_subscribed_lists );
-			}
-			if ( ! empty( $newsletter_subscribed_lists ) && is_array( $newsletter_subscribed_lists ) ) {
-				$newsletter_subscribed_lists = array_merge( $newsletter_subscribed_lists, $data['lists_added'] );
-			} else {
-				$newsletter_subscribed_lists = $data['lists_added'];
-			}
-			self::update_item( $data['user_id'], 'is_newsletter_subscriber', true );
-			self::update_item( $data['user_id'], 'newsletter_subscribed_lists', wp_json_encode( $newsletter_subscribed_lists ) );
+		$stored = self::get_data( $data['user_id'], 'newsletter_subscribed_lists' );
+		$stored = is_string( $stored ) ? json_decode( $stored, true ) : $stored;
+		if ( empty( $added ) && ! is_array( $stored ) ) {
+			return;
 		}
-		if ( ! empty( $data['lists_removed'] ) ) {
-			$newsletter_subscribed_lists = self::get_data( $data['user_id'], 'newsletter_subscribed_lists' );
-			if ( ! empty( $newsletter_subscribed_lists ) && gettype( $newsletter_subscribed_lists ) === 'string' ) {
-				$newsletter_subscribed_lists = json_decode( $newsletter_subscribed_lists );
-			}
-			if ( ! empty( $newsletter_subscribed_lists ) && is_array( $newsletter_subscribed_lists ) ) {
-				$newsletter_subscribed_lists = array_diff( $newsletter_subscribed_lists, $data['lists_removed'] );
-			}
-			self::update_item( $data['user_id'], 'is_newsletter_subscriber', ! empty( $newsletter_subscribed_lists ) );
-			self::update_item( $data['user_id'], 'newsletter_subscribed_lists', wp_json_encode( $newsletter_subscribed_lists ) );
-		}
+		$lists = array_values( array_unique( array_merge( array_diff( $as_list( $stored ), $removed ), $added ) ) );
+		self::update_item( $data['user_id'], 'is_newsletter_subscriber', ! empty( $lists ) );
+		self::update_item( $data['user_id'], 'newsletter_subscribed_lists', wp_json_encode( $lists ) );
 	}
 
 	/**
@@ -649,10 +720,24 @@ final class Reader_Data {
 			return;
 		}
 		$subscribed_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $data['email'] );
-		if ( ! is_wp_error( $subscribed_lists ) && is_array( $subscribed_lists ) ) {
-			self::update_item( $data['user_id'], 'is_newsletter_subscriber', ! empty( $subscribed_lists ) );
-			self::update_item( $data['user_id'], 'newsletter_subscribed_lists', wp_json_encode( $subscribed_lists ) );
+		if ( is_wp_error( $subscribed_lists ) || ! is_array( $subscribed_lists ) ) {
+			return;
 		}
+		// The providers answer [] for a failed contact lookup as well as for a
+		// contact on no lists. Only trust an empty read when the contact itself
+		// is readable; otherwise a transient ESP error would store "unsubscribed
+		// from everything" and the next sync would push that to the ESP. The
+		// second lookup only happens for readers on no lists. A contact that
+		// does not exist is treated like one that could not be read, so a reader
+		// deleted at the ESP keeps their stored lists: the conservative side,
+		// since a blank pushed by mistake cannot be recovered. Known gap:
+		// ActiveCampaign fetches the lists in a second request and answers []
+		// when that one fails, which this check cannot tell from a real empty.
+		if ( empty( $subscribed_lists ) && is_wp_error( \Newspack_Newsletters_Subscription::get_contact_data( $data['email'] ) ) ) {
+			return;
+		}
+		self::update_item( $data['user_id'], 'is_newsletter_subscriber', ! empty( $subscribed_lists ) );
+		self::update_item( $data['user_id'], 'newsletter_subscribed_lists', wp_json_encode( $subscribed_lists ) );
 	}
 
 	/**

@@ -99,6 +99,10 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			return '';
 		}
 
+		if ( ! Republication_Tracker_Tool::is_post_republishable( $post ) ) {
+			return '';
+		}
+
 		// Guard: check allowed post types.
 		$allowed_post_types = (array) apply_filters( 'republication_tracker_tool_post_types', [ 'post' ] );
 		if ( ! in_array( get_post_type( $post ), $allowed_post_types, true ) ) {

@@ -23,6 +23,13 @@
 	}
 }
 
+// Tag labels take the type treatment but not the leading square: that `::before`
+// marks a row of plain-text links, and the labels are chips it would sit apart from.
+.tag-labels {
+	color: #666;
+	font-size: var(--newspack-theme-font-size-sm);
+}
+
 // Mobile CTA
 .button.mb-cta {
 	border-radius: 0;
@@ -34,7 +41,8 @@ div.wpnbha .article-section-title {
 	margin-bottom: 1em;
 }
 
-.cat-links {
+.cat-links,
+.tag-labels {
 	font-family: var(--newspack-theme-font-heading);
 	font-size: var(--newspack-theme-font-size-sm);
 }
@@ -74,7 +82,8 @@ div.wpnbha .article-section-title {
 }
 
 .single {
-	.cat-links {
+	.cat-links,
+	.tag-labels {
 		font-size: var(--newspack-theme-font-size-base);
 	}
 
@@ -444,7 +453,8 @@ div.wpnbha .article-section-title {
 .single .sponsor-label {
 	font-size: var(--newspack-theme-font-size-sm);
 
-	+ .cat-links {
+	+ .cat-links,
+	+ .tag-labels {
 		font-size: 0.9rem;
 	}
 }

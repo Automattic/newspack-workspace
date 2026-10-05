@@ -188,7 +188,7 @@ const WizardsToggleHeaderCard = < T extends Record< string, any > >( {
 
 	return renderCard( () => (
 		<Fragment>
-			<Grid noMargin rowGap={ 16 } columns={ 1 }>
+			<Grid rowGap={ 16 } columns={ 1 }>
 				{ renderProp( { settingsUpdates, setSettingsUpdates, isFetching } ) }
 			</Grid>
 		</Fragment>

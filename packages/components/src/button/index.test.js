@@ -5,6 +5,11 @@ import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, useHistory } from 'react-router-dom';
 
 /**
+ * WordPress dependencies.
+ */
+import { createRef } from '@wordpress/element';
+
+/**
  * Internal dependencies.
  */
 import Button from './';
@@ -19,6 +24,16 @@ const clickButton = async () => {
 		screen.getByRole( 'button', { name: 'Save' } ).click();
 	} );
 };
+
+// React formats its warnings with `%s` placeholders and passes the values as
+// further arguments, so assert against the whole call rather than one argument.
+const messagesFrom = spy => spy.mock.calls.flat().join( ' ' );
+
+// A failing assertion skips any `mockRestore()` left after it, which would leave
+// the console swallowed for every later test in the file.
+afterEach( () => {
+	jest.restoreAllMocks();
+} );
 
 describe( 'Button href with onClick', () => {
 	it( 'awaits the onClick, then pushes the route', async () => {
@@ -113,7 +128,6 @@ describe( 'Button href with onClick outside a router', () => {
 			expect( window.location.href ).toBe( '' );
 		} );
 		expect( warn ).toHaveBeenCalledWith( expect.stringContaining( 'javascript:' ) );
-		warn.mockRestore();
 	} );
 } );
 
@@ -121,23 +135,56 @@ describe( 'Button with a javascript: href alone', () => {
 	const link = () => screen.getByText( 'Save' ).closest( 'a' );
 
 	it( 'renders no link', () => {
-		const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		// Silenced only; the assertion below is about the markup, not the warning.
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		render( <Button href="JavaScript:alert(1)">Save</Button> );
 
 		expect( link() ).toBeNull();
-		warn.mockRestore();
 	} );
 
 	it( 'sees through interleaved control characters', () => {
-		const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		render( <Button href={ 'java\nscript:alert(1)' }>Save</Button> );
 
 		expect( link() ).toBeNull();
-		warn.mockRestore();
 	} );
 
 	it( 'leaves an ordinary href alone', () => {
 		render( <Button href="/wp-admin/admin.php?page=next">Save</Button> );
 		expect( link() ).toHaveAttribute( 'href', '/wp-admin/admin.php?page=next' );
+	} );
+} );
+
+describe( 'Button loading prop', () => {
+	const button = () => screen.getByRole( 'button', { name: 'Save' } );
+
+	it( 'renders the core busy state without putting `loading` on the DOM node', () => {
+		const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		const { rerender } = render( <Button>Save</Button> );
+
+		expect( button() ).not.toHaveClass( 'is-busy' );
+
+		rerender( <Button loading>Save</Button> );
+
+		expect( button() ).toHaveClass( 'is-busy' );
+		// React drops an unknown boolean-valued attribute instead of writing it, so
+		// the warning rather than the absent attribute is what a revert trips. It is
+		// also deduped per property name for the life of the module registry, which
+		// is why this names the message instead of asserting no errors at all.
+		expect( messagesFrom( error ) ).not.toContain( 'non-boolean attribute' );
+	} );
+} );
+
+// core's Button wraps itself in a Tooltip when it is given a `label`, and the
+// Tooltip needs a ref on its child. Two call sites do that with this Button:
+// the experimental-tools back button and the audience segment-group heading.
+describe( 'Button ref', () => {
+	it( 'forwards the ref to the rendered button', () => {
+		const error = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		const ref = createRef();
+		render( <Button ref={ ref }>Save</Button> );
+
+		expect( ref.current ).toBe( screen.getByRole( 'button', { name: 'Save' } ) );
+		expect( messagesFrom( error ) ).not.toContain( 'Function components cannot be given refs' );
 	} );
 } );

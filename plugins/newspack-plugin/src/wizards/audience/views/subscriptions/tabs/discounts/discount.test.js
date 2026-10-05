@@ -5,7 +5,7 @@
 /**
  * Internal dependencies.
  */
-import { discountLabel, formatCurrency, isValidRule, subscriberPrice, subscriptionsLabel, targetingLabel } from './discount';
+import { discountLabel, formatCurrency, isValidRule, subscriberPrice, subscriptionsSummary, targetingLabel } from './discount';
 
 const GBP = {
 	code: 'GBP',
@@ -38,7 +38,24 @@ describe( 'subscriberPrice', () => {
 		expect( subscriberPrice( 1450, { discount_type: 'fixed', amount: 151 } ) ).toBe( 1299 );
 	} );
 
-	it( 'rounds half down to the currency precision', () => {
+	// The publisher tunes the amount against this preview and then the storefront
+	// charges the server's number, so a cent of disagreement is a cent the reader
+	// sees change at checkout. Both halves of each pair are verified against
+	// Subscriber_Discounts::discounted_price().
+	it( 'rounds a half-cent away from zero, as the server does', () => {
+		expect( subscriberPrice( 0.25, { discount_type: 'percent', amount: 50 } ) ).toBe( 0.13 );
+		expect( subscriberPrice( 0.75, { discount_type: 'percent', amount: 50 } ) ).toBe( 0.38 );
+	} );
+
+	// 0.18 - 0.015 is 0.16499999999999998 in binary floating point. PHP's round()
+	// pre-rounds to 15 significant digits and so sees 0.165; without the same
+	// pre-rounding the preview reads the stored error and lands a cent low.
+	it( 'corrects the float error the server corrects', () => {
+		expect( subscriberPrice( 0.18, { discount_type: 'fixed', amount: 0.015 } ) ).toBe( 0.17 );
+		expect( subscriberPrice( 0.24, { discount_type: 'fixed', amount: 0.015 } ) ).toBe( 0.23 );
+	} );
+
+	it( 'rounds to the currency precision', () => {
 		expect( subscriberPrice( 9.99, { discount_type: 'percent', amount: 10 } ) ).toBe( 8.99 );
 	} );
 
@@ -59,24 +76,46 @@ describe( 'discountLabel', () => {
 	} );
 } );
 
-describe( 'subscriptionsLabel', () => {
+describe( 'subscriptionsSummary', () => {
 	const options = [
 		{ id: 10, name: 'Digital Monthly' },
 		{ id: 11, name: 'Print &amp; Digital' },
 	];
 
 	it( 'names the subscriptions, decoded, in rule order', () => {
-		expect( subscriptionsLabel( [ 10 ], options ) ).toBe( 'Digital Monthly' );
-		expect( subscriptionsLabel( [ 11, 10 ], options ) ).toBe( 'Print & Digital, Digital Monthly' );
+		expect( subscriptionsSummary( [ 10 ], options ) ).toEqual( { named: 'Digital Monthly', more: '' } );
+		expect( subscriptionsSummary( [ 11, 10 ], options ) ).toEqual( { named: 'Print & Digital, Digital Monthly', more: '' } );
 	} );
 
 	it( 'falls back to a count when no name is known', () => {
-		expect( subscriptionsLabel( [ 99 ], options ) ).toBe( '1 subscription' );
-		expect( subscriptionsLabel( [ 98, 99 ], [] ) ).toBe( '2 subscriptions' );
+		expect( subscriptionsSummary( [ 99 ], options ) ).toEqual( { named: '1 subscription', more: '' } );
+		expect( subscriptionsSummary( [ 98, 99 ], [] ) ).toEqual( { named: '2 subscriptions', more: '' } );
 	} );
 
 	it( 'counts the ids it cannot name alongside the ones it can', () => {
-		expect( subscriptionsLabel( [ 10, 98, 99 ], options ) ).toBe( 'Digital Monthly + 2 more' );
+		expect( subscriptionsSummary( [ 10, 98, 99 ], options ) ).toEqual( { named: 'Digital Monthly', more: '+2 more' } );
+	} );
+
+	it( 'names at most two subscriptions, however many the rule covers', () => {
+		const many = Array.from( { length: 49 }, ( _, index ) => ( { id: index + 1, name: `Subscription ${ index + 1 }` } ) );
+		expect(
+			subscriptionsSummary(
+				many.map( option => option.id ),
+				many
+			)
+		).toEqual( { named: 'Subscription 1, Subscription 2', more: '+47 more' } );
+	} );
+
+	// The count is rendered in its own element, so it has to be one number
+	// covering both causes rather than the sum of two separate claims.
+	it( 'reports one count for the names it withheld and the ids it could not resolve, never two', () => {
+		const known = [
+			{ id: 1, name: 'Digital Monthly' },
+			{ id: 2, name: 'Digital Annual' },
+			{ id: 3, name: 'Print Weekend' },
+			{ id: 4, name: 'Print Daily' },
+		];
+		expect( subscriptionsSummary( [ 1, 2, 3, 4, 98, 99 ], known ) ).toEqual( { named: 'Digital Monthly, Digital Annual', more: '+4 more' } );
 	} );
 } );
 
@@ -119,7 +158,13 @@ describe( 'isValidRule', () => {
 		expect( isValidRule( { ...valid, targeting: 'category' } ) ).toBe( false );
 	} );
 
+	// Each half of a rule has a mode that carries its own scope, so an empty
+	// selection under either one is a complete rule rather than a missing answer.
 	it( 'accepts an all-products rule with no selection', () => {
 		expect( isValidRule( { ...valid, targeting: 'all', product_ids: [] } ) ).toBe( true );
+	} );
+
+	it( 'accepts an all-subscriptions rule with no subscription selected', () => {
+		expect( isValidRule( { ...valid, subscription_targeting: 'all', subscription_product_ids: [] } ) ).toBe( true );
 	} );
 } );

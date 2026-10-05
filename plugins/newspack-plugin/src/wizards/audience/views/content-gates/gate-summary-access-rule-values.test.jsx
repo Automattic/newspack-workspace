@@ -17,6 +17,8 @@ window.newspackAudienceContentGates = {
 			name: 'One-time purchase',
 			options: [ ANNUAL_188250, ANNUAL_205482, { value: 42, label: 'Founder&#8217;s Club' } ],
 		},
+		institution: { name: 'Institutional access', has_options: true, requires_value: true, options: [] },
+		email_domain: { name: 'Whitelisted email domain', has_options: false, empty_grants_access: true, requires_value: true },
 	},
 	available_content_rules: {},
 };
@@ -24,7 +26,7 @@ window.newspackAudienceContentGates = {
 /**
  * Internal dependencies
  */
-const { getGateSummarySections } = require( './gate-summary' );
+const { getGateSummarySections, groupSummaryColumns } = require( './gate-summary' );
 const { formatAccessRuleOptionLabel } = require( '../../../../content-gate/access-rule-options' );
 
 const gateWith = ( ...rules ) => ( {
@@ -37,6 +39,53 @@ const renderPaidAccess = ( gate, optionsBySlug ) => {
 	const section = getGateSummarySections( gate, false, undefined, optionsBySlug ).find( s => 'custom_access' === s.key );
 	render( <div>{ section.content }</div> );
 };
+
+describe( 'gate summary, institutions on Registered access', () => {
+	const INSTITUTION = { value: 7, label: 'Example University' };
+	const registrationWith = ( registration, isNewsletter = false ) =>
+		getGateSummarySections(
+			{
+				content_rules: [],
+				registration: { metering: { enabled: false }, ...registration },
+				custom_access: { active: false, access_rules: [], metering: { enabled: false } },
+			},
+			isNewsletter,
+			undefined,
+			{ institution: [ INSTITUTION ] }
+		);
+	const institutionRules = [ [ { slug: 'institution', value: [ 7 ] } ] ];
+
+	it( 'lists them in a section stacked under Registered Access', () => {
+		const sections = registrationWith( { active: true, access_rules: institutionRules } );
+		const keys = sections.map( s => s.key );
+		const section = sections.find( s => 'registration_institutions' === s.key );
+
+		expect( keys.indexOf( 'registration_institutions' ) ).toBe( keys.indexOf( 'registration' ) + 1 );
+		expect( section.label ).toBe( 'Institutional Access' );
+		expect( section.column ).toBe( 'registration' );
+		render( <div>{ section.content }</div> );
+		expect( screen.getByText( formatAccessRuleOptionLabel( INSTITUTION ), { exact: false } ) ).toBeInTheDocument();
+	} );
+
+	it( 'shares a card column with Registered Access', () => {
+		const columns = groupSummaryColumns( registrationWith( { active: true, access_rules: institutionRules } ) );
+
+		expect( columns.map( column => column.map( section => section.key ) ) ).toEqual( [
+			[ 'content_rules' ],
+			[ 'registration', 'registration_institutions' ],
+			[ 'custom_access' ],
+		] );
+	} );
+
+	it( 'leaves the section out while registered access is off or names no institution', () => {
+		expect( registrationWith( { active: false, access_rules: institutionRules } ).map( s => s.key ) ).not.toContain(
+			'registration_institutions'
+		);
+		expect( registrationWith( { active: true, access_rules: [] } ).map( s => s.key ) ).not.toContain( 'registration_institutions' );
+		// A registration object built without the key.
+		expect( registrationWith( { active: true } ).map( s => s.key ) ).not.toContain( 'registration_institutions' );
+	} );
+} );
 
 describe( 'gate summary, Paid access', () => {
 	it( 'identifies same-named products by ID on every rule, including one-time purchase', () => {
@@ -84,5 +133,16 @@ describe( 'gate summary, Paid access', () => {
 		);
 
 		expect( screen.getByText( '(product not listed) (#999999) (forever)' ) ).toBeInTheDocument();
+	} );
+
+	it( 'says which way an unconfigured rule fails, per rule', () => {
+		// A rule with no value renders as a blank condition, and the summary is the
+		// only place a publisher sees the whole gate at once. The two rules that can
+		// be left empty do opposite things, so one wording for both would be wrong
+		// half the time.
+		renderPaidAccess( gateWith( { slug: 'institution', value: [] }, { slug: 'email_domain', value: '' } ) );
+
+		expect( screen.getByText( 'Not set (matches no reader)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Not set (grants access to everyone)' ) ).toBeInTheDocument();
 	} );
 } );

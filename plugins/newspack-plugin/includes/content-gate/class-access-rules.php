@@ -36,6 +36,15 @@ class Access_Rules {
 	private static $subscription_products_options = null;
 
 	/**
+	 * Request-scoped memo for the label-only subscription product options.
+	 *
+	 * Same reasoning as {@see self::$subscription_products_options}.
+	 *
+	 * @var array|null
+	 */
+	private static $unselectable_subscription_products_options = null;
+
+	/**
 	 * Request-scoped memo for the one-time purchase product options.
 	 *
 	 * Same reasoning as {@see self::$subscription_products_options}, over a shop's whole
@@ -61,6 +70,22 @@ class Access_Rules {
 	 * @var array
 	 */
 	private static $one_time_purchase_memo = [];
+
+	/**
+	 * Request-scoped memo of one-time purchase order listings, keyed by user ID,
+	 * rule value, and limit. Flushed together with $one_time_purchase_memo.
+	 *
+	 * @var array<string,int[]>
+	 */
+	private static $one_time_purchase_orders_memo = [];
+
+	/**
+	 * Reader ID the email-domain rule should treat as verified for the duration of a
+	 * hypothetical evaluation. Zero outside one. See with_assumed_verification().
+	 *
+	 * @var int
+	 */
+	private static $assumed_verified_user_id = 0;
 
 	/**
 	 * Context for the evaluation currently in progress, set by evaluate_rules()
@@ -107,9 +132,20 @@ class Access_Rules {
 	 *     @type bool     $empty_grants_access
 	 *                                        Optional. Whether the rule's callback reads an empty
 	 *                                        value as "no constraint", so leaving it empty grants
-	 *                                        access to every reader. Defaults to false. A rule
-	 *                                        that declares it is refused a save while the gate is
-	 *                                        active and its value is empty.
+	 *                                        access to every reader. Defaults to false. Decides
+	 *                                        which way the editor and the save error describe an
+	 *                                        empty value, never whether it is allowed.
+	 *     @type bool     $requires_value     Optional. Whether an empty value leaves the rule
+	 *                                        unconfigured rather than expressing a usable
+	 *                                        condition. Defaults to false. A rule that declares
+	 *                                        it is refused a save while the gate is active and
+	 *                                        its value is empty. Independent of which way the
+	 *                                        rule then evaluates: `institution` denies every
+	 *                                        reader and the two free-text rules grant every
+	 *                                        reader, and neither is what the operator meant.
+	 *                                        `subscription` must not declare it — naming no
+	 *                                        product means "any active subscription", which is a
+	 *                                        condition publishers configure deliberately.
 	 *     @type bool     $supports_anonymous Whether the rule's callback can evaluate access for
 	 *                                        a logged-out visitor (`user_id = 0`). Defaults to
 	 *                                        false — `evaluate_rule` short-circuits to false for
@@ -153,11 +189,14 @@ class Access_Rules {
 				'options'             => [],
 				'has_options'         => $has_options,
 				'is_boolean'          => false,
-				// It is a property of the rule's callback, not of the value's shape:
-				// `institution` returns true when it names none, and so do the two
-				// free-text rules when left blank, while `subscription` naming no
-				// product still requires *an* active subscription.
+				// Both are properties of the rule's callback rather than of the
+				// value's shape, and they are not the same question: the two
+				// free-text rules grant every reader when left blank and
+				// `institution` denies every reader, yet all three are unconfigured.
+				// `subscription` naming no product is neither — it still requires
+				// *an* active subscription.
 				'empty_grants_access' => false,
+				'requires_value'      => false,
 			]
 		);
 		self::$rules[ $rule['id'] ] = $rule;
@@ -205,7 +244,7 @@ class Access_Rules {
 			'subscription'      => [
 				'name'        => __( 'Active subscription', 'newspack-plugin' ),
 				'description' => __( 'Requires an active subscription to selected products.', 'newspack-plugin' ),
-				'options'     => [ __CLASS__, 'get_subscription_products_options' ],
+				'options'     => [ __CLASS__, 'get_subscription_products_rule_options' ],
 				'callback'    => [ __CLASS__, 'has_active_subscription' ],
 			],
 			'one_time_purchase' => [
@@ -226,20 +265,22 @@ class Access_Rules {
 				'placeholder'         => __( 'example.com,another.com', 'newspack-plugin' ),
 				'callback'            => [ __CLASS__, 'is_email_domain_whitelisted' ],
 				'empty_grants_access' => true,
+				'requires_value'      => true,
 			],
 			'reader_data'       => [
 				'name'                => __( 'Reader data', 'newspack-plugin' ),
 				'description'         => __( 'Set custom conditions based on reader data key/value pairs.', 'newspack-plugin' ),
 				'callback'            => [ __CLASS__, 'has_reader_data' ],
 				'empty_grants_access' => true,
+				'requires_value'      => true,
 			],
 			'institution'       => [
-				'name'                => __( 'Institutional access', 'newspack-plugin' ),
-				'description'         => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
-				'options'             => [ Institution::class, 'get_options' ],
-				'callback'            => [ Institution::class, 'evaluate' ],
-				'supports_anonymous'  => true,
-				'empty_grants_access' => true,
+				'name'               => __( 'Institutional access', 'newspack-plugin' ),
+				'description'        => __( 'Grant access to readers from selected institutions.', 'newspack-plugin' ),
+				'options'            => [ Institution::class, 'get_options' ],
+				'callback'           => [ Institution::class, 'evaluate' ],
+				'supports_anonymous' => true,
+				'requires_value'     => true,
 			],
 		];
 
@@ -405,6 +446,15 @@ class Access_Rules {
 	 * @return bool True if a populated, anonymous-capable rule grants access.
 	 */
 	public static function evaluate_anonymous_rules( $access_rules ) {
+		// A listing teaser is built once and served to every reader for an hour, so
+		// a grant that reads the current request belongs to the visitor who warmed
+		// the cache, and would be spent on everyone served after them. The one
+		// anonymous-capable rule (`institution`) matches on IP once the visitor
+		// carries the institutional-access cookie. The article page still honours
+		// it.
+		if ( Content_Gate::is_listing_context() ) {
+			return false;
+		}
 		if ( empty( $access_rules ) ) {
 			return false;
 		}
@@ -437,6 +487,44 @@ class Access_Rules {
 			return false;
 		}
 		return self::evaluate_rules( $eligible_groups, 0 );
+	}
+
+	/**
+	 * Evaluate a gate's access rules for whoever is asking.
+	 *
+	 * The two evaluators are not interchangeable. For a registered rule they now
+	 * agree: `evaluate_rule()` denies user 0 before reading the value unless the
+	 * rule is `supports_anonymous`, and the only such rule — `institution` — denies
+	 * on an empty value. What still differs is a rule the site does not register:
+	 * `evaluate_rule()` returns true for a missing callback, and does so ahead of
+	 * the anonymous check, so `evaluate_rules( …, 0 )` admits a logged-out visitor
+	 * to a group whose only rule came from a switched-off integration. The same
+	 * goes for the shapes neither the wizard nor the REST sanitizer produces and
+	 * block attributes are never checked for — an empty group, a rule carrying no
+	 * slug — which have no condition to fail and so read as satisfied.
+	 * `evaluate_anonymous_rules()` drops all of those groups first.
+	 *
+	 * That leaves one deliberate asymmetry: an unregistered rule is skipped for a
+	 * signed-in reader (a gate the publisher cannot see or edit must not deny
+	 * everyone) and denies a logged-out visitor (an unevaluated condition must not
+	 * stand in for registration). Both directions are chosen; neither is a bug to
+	 * reconcile.
+	 *
+	 * Every surface gating content for both audiences goes through here, so one
+	 * gate cannot answer differently depending on which surface asked.
+	 *
+	 * @param array $access_rules The gate's access rules.
+	 * @param int   $user_id      Reader to evaluate for; 0 for a logged-out visitor.
+	 * @param array $context      Optional. Evaluation context, applied only to the
+	 *                            logged-in path — the anonymous one reaches no rule
+	 *                            that reads it.
+	 *
+	 * @return bool Whether the visitor passes the rules.
+	 */
+	public static function evaluate_rules_for_visitor( $access_rules, $user_id, $context = [] ) {
+		return $user_id
+			? self::evaluate_rules( $access_rules, $user_id, $context )
+			: self::evaluate_anonymous_rules( $access_rules );
 	}
 
 	/**
@@ -558,11 +646,16 @@ class Access_Rules {
 	 * as `post_status IN ( 'publish', 'private' )`, so draft is not a state its own admin
 	 * produces for a variation, and nothing can have been bought in it.
 	 *
+	 * Draft and pending products keep granting access, but their labels carry a status
+	 * marker ("[invalid status: Draft]") so a publisher can tell them from the products
+	 * they currently sell. Private products and variations are marked too ("[status:
+	 * Private]"), so a hidden legacy tier reads apart from a current one of the same name.
+	 *
 	 * The result is memoized per request. The list itself is still unbounded and is
 	 * serialized into every editor payload; NPPD-2132 replaces it with a searchable
 	 * picker, which is what removes that cost rather than deferring it.
 	 *
-	 * @return array Array of [ 'label' => string, 'value' => int ].
+	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible'? => true ].
 	 */
 	public static function get_subscription_products_options() {
 		if ( null !== self::$subscription_products_options ) {
@@ -577,21 +670,106 @@ class Access_Rules {
 				'limit' => -1,
 			]
 		);
-		$variations_by_parent = self::get_subscription_variation_posts( $products );
+		self::$subscription_products_options = self::build_subscription_product_options( $products );
+		return self::$subscription_products_options;
+	}
+
+	/**
+	 * Get subscriptions a stored rule may still name but the picker must not offer:
+	 * scheduled (`future`) and trashed products, which `wc_get_products()` leaves out by
+	 * default and so `get_subscription_products_options()` never lists.
+	 *
+	 * A gate saved while such a product was live still holds its ID, and the rule still
+	 * matches subscriptions to it. Without these entries the picker could only render that
+	 * ID as "not listed"; with them it keeps the product's name, marked with its status.
+	 * They are flagged `selectable => false`, so the picker names them but never suggests
+	 * them.
+	 *
+	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible' => true, 'selectable' => false ].
+	 */
+	public static function get_unselectable_subscription_products_options() {
+		if ( null !== self::$unselectable_subscription_products_options ) {
+			return self::$unselectable_subscription_products_options;
+		}
+		if ( ! function_exists( 'wc_get_products' ) ) {
+			return [];
+		}
+		$products = \wc_get_products(
+			[
+				'type'   => [ 'subscription', 'variable-subscription' ],
+				'status' => [ 'future', 'trash' ],
+				'limit'  => -1,
+			]
+		);
+		self::$unselectable_subscription_products_options = array_map(
+			function ( $option ) {
+				$option['selectable'] = false;
+				return $option;
+			},
+			// WooCommerce trashes a variable product's variations along with it, so a trashed
+			// parent's saved variation IDs can only be named by reading trashed variations.
+			self::build_subscription_product_options( $products, [ 'publish', 'private', 'trash' ] )
+		);
+		return self::$unselectable_subscription_products_options;
+	}
+
+	/**
+	 * The "Active subscription" rule's options: every product the picker offers, followed by
+	 * the label-only entries that name stored products it no longer offers.
+	 *
+	 * @return array Array of options; see `get_subscription_products_options()` and
+	 *               `get_unselectable_subscription_products_options()`.
+	 */
+	public static function get_subscription_products_rule_options() {
+		return array_merge( self::get_subscription_products_options(), self::get_unselectable_subscription_products_options() );
+	}
+
+	/**
+	 * Build picker options for subscription products and their variations.
+	 *
+	 * A product whose status is outside `WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES`
+	 * gets a status marker in its label and an `ineligible` flag, and so do its variations,
+	 * since a variation can't be bought while its parent is unavailable. The flag is what
+	 * the picker reads to warn that the entry still grants access. A private product's
+	 * variations take its private marker the same way: WooCommerce leaves them published
+	 * when the parent goes private, so without it a hidden tier would read like a current
+	 * one of the same name. Under a published parent, a variation is labeled by its own
+	 * status.
+	 *
+	 * @param \WC_Product[] $products           The subscription products.
+	 * @param string[]      $variation_statuses Variation statuses to read. See `get_subscription_variation_posts()`.
+	 *
+	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible'? => true ].
+	 */
+	private static function build_subscription_product_options( $products, $variation_statuses = [ 'publish', 'private' ] ) {
+		$variations_by_parent = self::get_subscription_variation_posts( $products, $variation_statuses );
 		$options              = [];
 		foreach ( $products as $product ) {
-			$options[] = [
-				'label' => $product->get_name(),
-				'value' => $product->get_id(),
+			$status     = $product->get_status();
+			$ineligible = ! in_array( $status, WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES, true );
+			$entries    = [
+				[
+					'label'  => $product->get_name(),
+					'value'  => $product->get_id(),
+					'status' => $status,
+				],
 			];
 			foreach ( $variations_by_parent[ $product->get_id() ] ?? [] as $variation ) {
-				$options[] = [
-					'label' => self::get_variation_option_label( $product->get_name(), $variation ),
-					'value' => $variation->ID,
+				$entries[] = [
+					'label'  => self::get_variation_option_label( $product->get_name(), $variation ),
+					'value'  => $variation->ID,
+					'status' => 'publish' === $status ? $variation->post_status : $status,
 				];
 			}
+			foreach ( $entries as $entry ) {
+				$entry['label'] = WooCommerce_Products::get_product_label_with_status( $entry['label'], $entry['status'] );
+				unset( $entry['status'] );
+				if ( $ineligible ) {
+					$entry['ineligible'] = true;
+				}
+				$options[] = $entry;
+			}
 		}
-		self::$subscription_products_options = $options;
 		return $options;
 	}
 
@@ -605,8 +783,9 @@ class Access_Rules {
 	 * @return void
 	 */
 	public static function flush_product_options_memos() {
-		self::$subscription_products_options      = null;
-		self::$one_time_purchase_products_options = null;
+		self::$subscription_products_options              = null;
+		self::$unselectable_subscription_products_options = null;
+		self::$one_time_purchase_products_options         = null;
 	}
 
 	/**
@@ -622,13 +801,16 @@ class Access_Rules {
 	 * Publish and private is the whole set WooCommerce itself reads a variable product's
 	 * children as, so it is every variation that can exist for a publisher to have sold.
 	 * Private earns its place: a reader can hold an active subscription to a tier the
-	 * publisher has since hidden, and the rule still has to be able to name it.
+	 * publisher has since hidden, and the rule still has to be able to name it. The one
+	 * exception is a trashed parent, whose variations WooCommerce trashes with it; the
+	 * label-only entries pass `trash` to name those.
 	 *
 	 * @param \WC_Product[] $products The subscription products to collect variations for.
+	 * @param string[]      $statuses Variation post statuses to read.
 	 *
 	 * @return array<int, \WP_Post[]> Variation posts keyed by parent product ID.
 	 */
-	private static function get_subscription_variation_posts( $products ) {
+	private static function get_subscription_variation_posts( $products, $statuses = [ 'publish', 'private' ] ) {
 		$parent_ids = [];
 		foreach ( $products as $product ) {
 			if ( $product->is_type( 'variable-subscription' ) ) {
@@ -642,13 +824,13 @@ class Access_Rules {
 			[
 				'post_type'              => 'product_variation',
 				'post_parent__in'        => $parent_ids,
-				'post_status'            => [ 'publish', 'private' ],
+				'post_status'            => $statuses,
 				'posts_per_page'         => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Variations of the subscription products already fetched; config-scale.
 				'orderby'                => [
 					'menu_order' => 'ASC',
 					'ID'         => 'ASC',
 				],
-				// Only the title, excerpt, ID and parent are read.
+				// Only the title, excerpt, ID, parent and status are read.
 				'update_post_meta_cache' => false,
 				'update_post_term_cache' => false,
 			]
@@ -736,46 +918,7 @@ class Access_Rules {
 			return false;
 		}
 
-		$has_subscription = false;
-
-		// Whether on-hold subscriptions in payment recovery (failed-payment retry
-		// window) still grant access. Controlled per-gate by the custom_access
-		// `payment_recovery_grace` setting; defaults to ON so gates saved before
-		// the setting existed — and evaluations outside a gate context — keep
-		// paying readers' access while their payment is being retried.
-		$payment_recovery_grace = (bool) self::get_evaluation_context( 'payment_recovery_grace', true );
-
-		// Check user's own subscriptions.
-		if ( ! empty( WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, $product_ids, $payment_recovery_grace ) ) ) {
-			$has_subscription = true;
-		}
-
-		// Check group subscriptions the user is a member of.
-		if ( ! $strict && ! $has_subscription && function_exists( 'wcs_get_subscription' ) ) {
-			$group_subscriptions = Group_Subscription::get_group_subscriptions_for_user( $user_id );
-			foreach ( $group_subscriptions as $subscription ) {
-				if ( ! $subscription ) {
-					continue;
-				}
-				$grants_access = $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
-					|| ( $payment_recovery_grace && WooCommerce_Connection::is_subscription_in_payment_recovery( $subscription ) );
-				if ( ! $grants_access ) {
-					continue;
-				}
-				// If no product filter, any active group subscription grants access.
-				if ( empty( $product_ids ) ) {
-					$has_subscription = true;
-					break;
-				}
-				// Check if the subscription has any of the required products.
-				foreach ( $product_ids as $product_id ) {
-					if ( $subscription->has_product( $product_id ) ) {
-						$has_subscription = true;
-						break 2;
-					}
-				}
-			}
-		}
+		$has_subscription = ! empty( self::get_active_subscription_ids( $user_id, $product_ids, $strict, 1 ) );
 
 		/**
 		 * Filters whether a user has an active subscription for the given products.
@@ -786,6 +929,73 @@ class Access_Rules {
 		 * @param bool  $strict           If true, only consider active subscriptions owned by $user_id (ignore group subscription memberships).
 		 */
 		return apply_filters( 'newspack_access_rules_has_active_subscription', $has_subscription, $user_id, $product_ids, $strict );
+	}
+
+	/**
+	 * The listing behind has_active_subscription(). Keeping the rule and the
+	 * report on one code path is what stops them disagreeing about statuses,
+	 * payment-recovery grace, or gifting.
+	 *
+	 * A malformed $product_ids fails closed here as it does in the rule. The
+	 * `newspack_access_rules_has_active_subscription` filter is not run, so
+	 * access granted by a third party (e.g. a Newspack Network sibling site)
+	 * has no ID in this list even though the rule passes.
+	 *
+	 * @param int   $user_id     User ID.
+	 * @param mixed $product_ids Required product IDs; empty means any subscription qualifies.
+	 * @param bool  $strict      If true, ignore group subscription memberships.
+	 * @param int   $max_matches Stop after this many IDs; 0 for all.
+	 * @return int[] Subscription IDs.
+	 */
+	public static function get_active_subscription_ids( $user_id, $product_ids, $strict = false, $max_matches = 0 ) {
+		if ( self::is_malformed_options_backed_value( $product_ids ) ) {
+			return [];
+		}
+		$product_ids = is_array( $product_ids ) ? $product_ids : [];
+
+		// Whether on-hold subscriptions in payment recovery (failed-payment retry
+		// window) still grant access. Controlled per-gate by the custom_access
+		// `payment_recovery_grace` setting; defaults to ON so gates saved before
+		// the setting existed — and evaluations outside a gate context — keep
+		// paying readers' access while their payment is being retried.
+		$payment_recovery_grace = (bool) self::get_evaluation_context( 'payment_recovery_grace', true );
+
+		$ids = array_map( 'intval', WooCommerce_Connection::get_active_subscriptions_for_user( $user_id, $product_ids, $payment_recovery_grace ) );
+		if ( $max_matches > 0 && count( $ids ) >= $max_matches ) {
+			return array_slice( array_values( array_unique( $ids ) ), 0, $max_matches );
+		}
+
+		// Group subscriptions the user is a member of.
+		if ( ! $strict && function_exists( 'wcs_get_subscription' ) ) {
+			foreach ( Group_Subscription::get_group_subscriptions_for_user( $user_id ) as $subscription ) {
+				if ( ! $subscription ) {
+					continue;
+				}
+				$grants_access = $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
+					|| ( $payment_recovery_grace && WooCommerce_Connection::is_subscription_in_payment_recovery( $subscription ) );
+				if ( ! $grants_access ) {
+					continue;
+				}
+				// If no product filter, any active group subscription grants access.
+				$has_product = empty( $product_ids );
+				foreach ( $product_ids as $product_id ) {
+					if ( $subscription->has_product( $product_id ) ) {
+						$has_product = true;
+						break;
+					}
+				}
+				if ( ! $has_product ) {
+					continue;
+				}
+				$ids[] = (int) $subscription->get_id();
+				if ( $max_matches > 0 && count( array_unique( $ids ) ) >= $max_matches ) {
+					break;
+				}
+			}
+		}
+
+		$ids = array_values( array_unique( $ids ) );
+		return $max_matches > 0 ? array_slice( $ids, 0, $max_matches ) : $ids;
 	}
 
 	/**
@@ -851,7 +1061,8 @@ class Access_Rules {
 	 * Primarily for tests; in production the memo is per-request by nature.
 	 */
 	public static function flush_one_time_purchase_memo() {
-		self::$one_time_purchase_memo = [];
+		self::$one_time_purchase_memo        = [];
+		self::$one_time_purchase_orders_memo = [];
 	}
 
 	/**
@@ -884,6 +1095,7 @@ class Access_Rules {
 				$user     = \get_userdata( $user_id );
 				$email    = $user ? $user->user_email : '';
 				$customer = array_values( array_filter( [ $user_id, $email ] ) );
+				$cutoff   = self::get_one_time_purchase_cutoff( $value );
 				if ( empty( $customer ) ) {
 					// Fail closed with no identity to match a purchase against. Both
 					// paths need this guard, for different reasons. The finite path:
@@ -895,7 +1107,7 @@ class Access_Rules {
 					// identity check, so a third-party filter can answer truthy for
 					// nobody in particular. Neither branch is redundant.
 					$has_purchase = false;
-				} elseif ( 'forever' === $value['duration_unit'] ) {
+				} elseif ( null === $cutoff ) {
 					// Lifetime access: any paid order ever. wc_customer_bought_product()
 					// is exhaustive across the customer's order history (matching both
 					// user ID and billing email, so guest orders count), runs SQL-side,
@@ -906,21 +1118,10 @@ class Access_Rules {
 							break;
 						}
 					}
-				} elseif ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
-					// One cutoff shared by every order, rather than a per-order expiry
-					// of purchase + N. Month arithmetic follows strtotime()'s rollover
-					// semantics, and rolling backwards from now is the conservative
-					// direction: "-1 month" from Mar 1 lands on Feb 1, so a Jan 31
-					// purchase stops granting once the calendar month is up, whereas
-					// "+1 month" from Jan 31 rolls forward through Feb 31 to Mar 3 and
-					// would grant three extra days. The two readings agree except on
-					// month-end anchors, where this one is both deny-biased and closer
-					// to what "N months from purchase" means on a calendar.
-					$cutoff       = strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
+				} elseif ( false !== $cutoff ) {
 					$has_purchase = self::customer_bought_product_after( $customer, $value['product_ids'], $cutoff );
 				}
-				// Any other duration configuration (missing/unrecognized unit, zero
-				// finite duration) is misconfigured and fails closed.
+				// A false cutoff is a misconfigured duration and fails closed.
 				self::$one_time_purchase_memo[ $memo_key ] = $has_purchase;
 			}
 		}
@@ -936,44 +1137,205 @@ class Access_Rules {
 	}
 
 	/**
+	 * The point in time a one-time purchase rule's orders must postdate.
+	 *
+	 * One cutoff shared by every order, rather than a per-order expiry of
+	 * purchase + N. Month arithmetic follows strtotime()'s rollover semantics,
+	 * and rolling backwards from now is the conservative direction: "-1 month"
+	 * from Mar 1 lands on Feb 1, so a Jan 31 purchase stops granting once the
+	 * calendar month is up, whereas "+1 month" from Jan 31 rolls forward through
+	 * Feb 31 to Mar 3 and would grant three extra days. The two readings agree
+	 * except on month-end anchors, where this one is both deny-biased and closer
+	 * to what "N months from purchase" means on a calendar.
+	 *
+	 * Shared by the rule and its listing so the two cannot drift.
+	 *
+	 * @param array $value Sanitized rule value.
+	 * @return int|null|false Unix timestamp; null for lifetime access (no cutoff);
+	 *                        false for a misconfigured duration, which grants nothing.
+	 */
+	private static function get_one_time_purchase_cutoff( $value ) {
+		if ( 'forever' === $value['duration_unit'] ) {
+			return null;
+		}
+		if ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
+			return strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
+		}
+		return false;
+	}
+
+	/**
+	 * Paid orders that satisfy a one-time purchase rule for the user; the
+	 * listing behind has_one_time_purchase().
+	 *
+	 * The rule answers a lifetime duration through wc_customer_bought_product(),
+	 * which is SQL-side and cached; this has to walk the order store to name the
+	 * orders, so a lifetime rule walks the whole history. Callers pass a $limit
+	 * for that reason, and the result is memoized for the request.
+	 *
+	 * The `newspack_access_rules_has_one_time_purchase` filter is not run, so
+	 * access granted by a third party has no order here.
+	 *
+	 * @param int   $user_id User ID.
+	 * @param array $args    Rule value, as accepted by has_one_time_purchase().
+	 * @param int   $limit   Stop after this many orders; 0 for all.
+	 * @return int[] Order IDs, newest first.
+	 */
+	public static function get_one_time_purchase_order_ids( $user_id, $args, $limit = 0 ) {
+		$value = self::sanitize_one_time_purchase_value( $args );
+		if ( empty( $value['product_ids'] ) || ! function_exists( 'wc_get_orders' ) ) {
+			return [];
+		}
+		$memo_key = $user_id . ':' . md5( wp_json_encode( $value ) ) . ':' . (int) $limit;
+		if ( isset( self::$one_time_purchase_orders_memo[ $memo_key ] ) ) {
+			return self::$one_time_purchase_orders_memo[ $memo_key ];
+		}
+		$user      = \get_userdata( $user_id );
+		$email     = $user ? $user->user_email : '';
+		$customer  = array_values( array_filter( [ $user_id, $email ] ) );
+		$cutoff    = self::get_one_time_purchase_cutoff( $value );
+		$order_ids = [];
+		if ( ! empty( $customer ) && false !== $cutoff ) {
+			$order_ids = array_map(
+				function ( $order ) {
+					return (int) $order->get_id();
+				},
+				self::get_paid_orders_with_products( $customer, $value['product_ids'], $cutoff, (int) $limit )
+			);
+		}
+		self::$one_time_purchase_orders_memo[ $memo_key ] = $order_ids;
+		return $order_ids;
+	}
+
+	/**
 	 * Whether the user has a paid order containing one of the given products,
 	 * created after the given cutoff timestamp.
 	 *
-	 * The query is bounded by customer, paid statuses, and the date window, so it
-	 * stays cheap on front-end requests even without a persistent cache. The
-	 * `customer` parameter matches the user ID or the billing email, so guest
-	 * orders count — mirroring wc_customer_bought_product() on the lifetime path.
-	 *
-	 * @param array $customer    Non-empty list of user IDs and/or billing emails to
-	 *                           match. Callers must reject an empty list: both
-	 *                           WooCommerce order stores drop an empty `customer`
-	 *                           constraint and return every customer's orders.
+	 * @param array $customer    Non-empty list of user IDs and/or billing emails to match.
 	 * @param int[] $product_ids Product IDs to look for.
 	 * @param int   $cutoff      Unix timestamp orders must be created after.
 	 *
 	 * @return bool
 	 */
 	private static function customer_bought_product_after( $customer, $product_ids, $cutoff ) {
+		return ! empty( self::get_paid_orders_with_products( $customer, $product_ids, $cutoff, 1 ) );
+	}
+
+	/**
+	 * Orders are fetched in pages of this many. Tests shrink it to exercise the walk.
+	 *
+	 * @var int
+	 */
+	private static $paid_orders_page_size = 50;
+
+	/**
+	 * The walk gives up after this many pages even if the store keeps answering.
+	 * A filter on `woocommerce_order_query_args` that pins `limit` or ignores
+	 * `page` would otherwise hand back the same rows forever, and this runs on
+	 * front-end requests through has_one_time_purchase(). Fifty pages of fifty
+	 * covers 2,500 paid orders for one customer before the walk returns what it
+	 * has collected.
+	 *
+	 * @var int
+	 */
+	const PAID_ORDERS_MAX_PAGES = 50;
+
+	/**
+	 * The customer's paid orders containing one of the given products, newest
+	 * first, optionally limited to orders created after a cutoff timestamp.
+	 *
+	 * A null $cutoff walks the whole history and is only appropriate for a
+	 * bounded, admin-side caller. The `customer` parameter matches the user ID
+	 * or the billing email, so guest orders count, mirroring
+	 * wc_customer_bought_product() on the lifetime path. `date ID` is the sort
+	 * key because `date` alone is not unique: same-second orders (imports, batch
+	 * renewals) could straddle a page boundary and be skipped or repeated.
+	 *
+	 * @param array    $customer    Non-empty list of user IDs and/or billing emails to
+	 *                              match. Callers must reject an empty list: both
+	 *                              WooCommerce order stores drop an empty `customer`
+	 *                              constraint and return every customer's orders.
+	 * @param int[]    $product_ids Product IDs to look for.
+	 * @param int|null $cutoff      Unix timestamp orders must be created after, or
+	 *                              null for the customer's whole order history.
+	 * @param int      $max_matches Stop after this many matching orders; 0 for all.
+	 *
+	 * @return \WC_Order[] Matching orders, newest first.
+	 */
+	private static function get_paid_orders_with_products( $customer, $product_ids, $cutoff, $max_matches = 0 ) {
 		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? \wc_get_is_paid_statuses() : [ 'processing', 'completed' ];
-		$orders        = \wc_get_orders(
-			[
-				'customer'     => $customer,
-				'status'       => $paid_statuses,
-				'date_created' => '>' . $cutoff,
-				'limit'        => -1,
-				'return'       => 'objects',
-			]
-		);
-		foreach ( $orders as $order ) {
-			foreach ( $order->get_items() as $item ) {
-				$item_product_id   = method_exists( $item, 'get_product_id' ) ? (int) $item->get_product_id() : 0;
-				$item_variation_id = method_exists( $item, 'get_variation_id' ) ? (int) $item->get_variation_id() : 0;
-				if ( in_array( $item_product_id, $product_ids, true ) || ( $item_variation_id && in_array( $item_variation_id, $product_ids, true ) ) ) {
-					return true;
+		$page_size     = max( 1, (int) self::$paid_orders_page_size );
+		$query         = [
+			'customer' => $customer,
+			'status'   => $paid_statuses,
+			'orderby'  => 'date ID',
+			'order'    => 'DESC',
+			'limit'    => $page_size,
+			'return'   => 'objects',
+		];
+		if ( null !== $cutoff ) {
+			$query['date_created'] = '>' . $cutoff;
+		}
+		$matches = [];
+		for ( $page = 1; $page <= self::PAID_ORDERS_MAX_PAGES; $page++ ) {
+			$query['page'] = $page;
+			$orders        = \wc_get_orders( $query );
+			foreach ( $orders as $order ) {
+				if ( self::order_has_product( $order, $product_ids ) ) {
+					$matches[] = $order;
+					if ( $max_matches > 0 && count( $matches ) >= $max_matches ) {
+						return $matches;
+					}
 				}
+			}
+			if ( count( $orders ) < $page_size ) {
+				break;
+			}
+		}
+		return $matches;
+	}
+
+	/**
+	 * Whether an order has a line item for one of the given products, matching
+	 * on the variation ID as well as the parent product ID.
+	 *
+	 * @param \WC_Order $order       Order.
+	 * @param int[]     $product_ids Product IDs to look for.
+	 * @return bool
+	 */
+	private static function order_has_product( $order, $product_ids ) {
+		foreach ( $order->get_items() as $item ) {
+			$item_product_id   = method_exists( $item, 'get_product_id' ) ? (int) $item->get_product_id() : 0;
+			$item_variation_id = method_exists( $item, 'get_variation_id' ) ? (int) $item->get_variation_id() : 0;
+			if ( in_array( $item_product_id, $product_ids, true ) || ( $item_variation_id && in_array( $item_variation_id, $product_ids, true ) ) ) {
+				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether an email address sits on one of the given domains.
+	 *
+	 * This is the domain comparison alone. It says nothing about whether the reader has
+	 * verified the address, which {@see self::is_email_domain_whitelisted()} requires
+	 * before granting access — so a caller that needs the match itself, rather than the
+	 * access decision built on it, uses this directly.
+	 *
+	 * @param string $email   Email address.
+	 * @param string $domains Comma- or newline-delimited list of domains.
+	 * @return bool
+	 */
+	public static function email_matches_domains( $email, $domains ) {
+		if ( empty( $email ) || empty( $domains ) ) {
+			return false;
+		}
+		$domains      = str_replace( PHP_EOL, ',', $domains );
+		$domains      = explode( ',', $domains );
+		$domains      = array_map( 'trim', $domains );
+		$domains      = array_map( 'strtolower', $domains );
+		$email_domain = strtolower( substr( $email, strrpos( $email, '@' ) + 1 ) );
+		return in_array( $email_domain, $domains, true );
 	}
 
 	/**
@@ -988,11 +1350,7 @@ class Access_Rules {
 		if ( empty( $domains ) ) {
 			return true;
 		}
-		$domains = str_replace( PHP_EOL, ',', $domains );
-		$domains = explode( ',', $domains );
-		$domains = array_map( 'trim', $domains );
-		$domains = array_map( 'strtolower', $domains );
-		$user    = \get_userdata( $user_id );
+		$user = \get_userdata( $user_id );
 		if ( ! $user ) {
 			return false;
 		}
@@ -1000,11 +1358,83 @@ class Access_Rules {
 		if ( ! $email ) {
 			return false;
 		}
-		if ( Reader_Activation::is_reader_verified( $user ) === false ) {
+		if ( ! self::is_verification_satisfied( $user ) ) {
 			return false;
 		}
-		$email_domain = strtolower( substr( $email, strrpos( $email, '@' ) + 1 ) );
-		return in_array( $email_domain, $domains, true );
+		return self::email_matches_domains( $email, $domains );
+	}
+
+	/**
+	 * Whether the reader satisfies the email-domain rule's verification requirement.
+	 *
+	 * Normally that means the reader has verified their address. During a hypothetical
+	 * evaluation opened by {@see self::with_assumed_verification()} it is also satisfied
+	 * for the one reader that evaluation is about, so a caller can ask "would this gate
+	 * grant access if this reader verified?" without relaxing the rule for a real
+	 * access decision.
+	 *
+	 * @param \WP_User $user The user being evaluated.
+	 * @return bool
+	 */
+	private static function is_verification_satisfied( $user ) {
+		if ( self::is_verification_assumed_for( $user->ID ) ) {
+			return true;
+		}
+		return false !== Reader_Activation::is_reader_verified( $user );
+	}
+
+	/**
+	 * Whether a hypothetical evaluation is currently treating this reader as verified.
+	 *
+	 * For the other places a gate decides access on verification. Those read the stored
+	 * state directly, and a hypothetical that only reached the email-domain rule would
+	 * answer "still restricted" for a gate whose registration wall the same act of
+	 * verifying would also satisfy — suppressing the prompt on exactly the
+	 * configuration it is for.
+	 *
+	 * @param int $user_id The reader being evaluated.
+	 *
+	 * @return bool
+	 */
+	public static function is_verification_assumed_for( $user_id ) {
+		return (bool) self::$assumed_verified_user_id && (int) $user_id === self::$assumed_verified_user_id;
+	}
+
+	/**
+	 * Run a callback with one reader treated as verified by the email-domain rule.
+	 *
+	 * The return value is a hypothetical, never an access decision. Nothing about the
+	 * reader's stored verification state changes, and the flag is cleared before the
+	 * call returns.
+	 *
+	 * Two constraints on callers, because the flag is process-wide for the callback's
+	 * duration and the callback runs rule callbacks that third parties can register:
+	 * nothing computed inside may be cached anywhere that outlives the call, and no
+	 * value returned from it may be used to grant access. Either one turns a
+	 * hypothetical into a real answer — which is the hole the email-domain rule's
+	 * verification requirement exists to close.
+	 *
+	 * The first constraint is enforced for the one memo the replay is known to reach:
+	 * `Institution`'s per-request matching cache is cleared on the way out, so a name
+	 * map computed under the assumption is recomputed for real by whatever reads it
+	 * next (GA4 access labels, ESP contact metadata). A callback that memoises
+	 * elsewhere is still the caller's responsibility, and can tell it is inside a
+	 * hypothetical via {@see self::is_verification_assumed_for()}.
+	 *
+	 * @param int      $user_id  The reader to treat as verified.
+	 * @param callable $callback Callback to run.
+	 *
+	 * @return mixed The callback's return value.
+	 */
+	public static function with_assumed_verification( $user_id, $callback ) {
+		$previous                       = self::$assumed_verified_user_id;
+		self::$assumed_verified_user_id = (int) $user_id;
+		try {
+			return $callback();
+		} finally {
+			self::$assumed_verified_user_id = $previous;
+			Institution::reset_matching_cache();
+		}
 	}
 
 	/**

@@ -68,6 +68,15 @@
 		<include-pattern>*/plugins/newspack-newsletters/*</include-pattern>
 	</rule>
 
+	<!-- ConstantDocblock exists to keep the constants catalog complete, so its
+	     scope tracks what the catalog actually reads. bin/constants-scanner.php
+	     skips tests/, where a defined() guard is a suite toggling a flag rather
+	     than production code consuming one; a docblock there would document
+	     nothing the catalog could pick up. -->
+	<rule ref="phpcsSniffs.Constants.ConstantDocblock">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+
 	<!-- newspack-theme has classic-theme conventions that pre-date the
 	     stricter commenting/indent sniffs WordPress-Extra enables; preserve
 	     the prior per-theme exclusions rather than reformat the theme. -->
@@ -95,6 +104,13 @@
 		<exclude-pattern>*/phpcsSniffs/*</exclude-pattern>
 	</rule>
 	<rule ref="WordPress.Files.FileName.InvalidClassFileName">
+		<exclude-pattern>*/phpcsSniffs/*</exclude-pattern>
+	</rule>
+
+	<!-- Same conflict, on the other side of the API: PHPCS exposes its own
+	     helpers as camelCase properties (Tokens::$emptyTokens), which a sniff
+	     has to name exactly to use them. -->
+	<rule ref="WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase">
 		<exclude-pattern>*/phpcsSniffs/*</exclude-pattern>
 	</rule>
 
