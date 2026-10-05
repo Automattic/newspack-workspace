@@ -4,9 +4,9 @@
  * Attached with onClickCapture to the preview wrapper so no link in the
  * preview — JSX-authored, server-built, or filter-injected — navigates the
  * editor away from the post being edited, while links keep their real
- * destinations. Cmd/Ctrl-click still opens a link in a new tab; other
- * modifiers are cancelled too, since Shift-click also extends the editor's
- * block selection.
+ * destinations. Cmd/Ctrl-click still opens a link in a new tab. Shift- and
+ * Alt-clicks are cancelled like plain clicks, since the browser would otherwise
+ * open a new window or download the linked page mid-edit.
  *
  * Only links inside the wrapper's own DOM are cancelled. React delivers events
  * from portals to their React ancestors, so a popover opened from inside the
