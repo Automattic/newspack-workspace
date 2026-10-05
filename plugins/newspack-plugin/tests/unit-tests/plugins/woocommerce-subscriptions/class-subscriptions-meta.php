@@ -55,4 +55,32 @@ class Newspack_Test_Subscriptions_Meta extends WP_UnitTestCase {
 			'Cancellation reason meta should be set to expired when subscription is expired from active status.'
 		);
 	}
+
+	/**
+	 * Ended statuses and the reason each one records.
+	 *
+	 * @return array
+	 */
+	public function ended_statuses() {
+		return [
+			'cancelled' => [ 'cancelled', Subscriptions_Meta::CANCELLATION_REASON_ADMIN_CANCELLED ],
+			'expired'   => [ 'expired', Subscriptions_Meta::CANCELLATION_REASON_EXPIRED ],
+		];
+	}
+
+	/**
+	 * A reactivated subscription stops carrying the reason it ended, so the ESP
+	 * sync stops reporting one.
+	 *
+	 * @dataProvider ended_statuses
+	 * @param string $from_status The ended status.
+	 * @param string $reason      The reason recorded when it ended.
+	 */
+	public function test_reactivation_clears_cancellation_reason( $from_status, $reason ) {
+		$subscription = wcs_create_subscription( [ 'meta' => [ Subscriptions_Meta::CANCELLATION_REASON_META_KEY => $reason ] ] );
+
+		Subscriptions_Meta::maybe_record_cancelled_subscription_meta( $subscription, 'active', $from_status );
+
+		$this->assertSame( '', $subscription->get_meta( Subscriptions_Meta::CANCELLATION_REASON_META_KEY ) );
+	}
 }
