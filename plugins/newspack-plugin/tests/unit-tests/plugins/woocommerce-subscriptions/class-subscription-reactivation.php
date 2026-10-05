@@ -29,6 +29,17 @@ class Newspack_Test_Subscription_Reactivation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Empty the same globals afterward, so the next test class doesn't start
+	 * with this class's subscriptions in the store.
+	 */
+	public function tear_down() {
+		global $subscriptions_database, $wcs_mock_made_active_user_ids;
+		$subscriptions_database        = [];
+		$wcs_mock_made_active_user_ids = [];
+		parent::tear_down();
+	}
+
+	/**
 	 * Create a subscription in the mock store.
 	 *
 	 * @param string $status         Subscription status.
