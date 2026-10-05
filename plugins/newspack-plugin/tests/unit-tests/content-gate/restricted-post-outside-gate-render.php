@@ -361,8 +361,9 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->go_to( home_url( '/?feed=rss2' ) );
 
 		$GLOBALS['wp_query']->is_feed = false;
-		$this->render_in_secondary_loop( $post_id );
+		$listing                      = $this->render_in_secondary_loop( $post_id );
 		$GLOBALS['wp_query']->is_feed = true;
+		$this->assertStringNotContainsString( self::PAID_MARKER, $listing, 'The listing withholds the body, which is the premise of this test.' );
 
 		$rendered = $this->render_in_secondary_loop( $post_id );
 
