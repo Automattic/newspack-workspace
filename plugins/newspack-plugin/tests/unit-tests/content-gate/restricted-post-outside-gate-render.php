@@ -381,6 +381,28 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An overlay post whose free part holds no excerpt text gets no excerpt, as
+	 * core gives none, rather than the ending on its own.
+	 */
+	public function test_overlay_excerpt_without_free_text_is_empty() {
+		update_post_meta( $this->gate_layout_id, 'style', 'overlay' );
+		update_post_meta( $this->gate_layout_id, 'visible_paragraphs', 1 );
+		// A classic [caption] renders a paragraph of its own, so it is the one
+		// paragraph the gate shows.
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '[caption id="" align="alignnone" width="300"]<img src="https://example.test/a.jpg" width="300" height="200" /> CAPTIONTEXT[/caption]'
+					. "\n\n" . self::PAID_MARKER . ' is behind the gate.',
+			]
+		);
+
+		$teaser = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$this->assertStringContainsString( 'CAPTIONTEXT', $teaser, 'The caption is the whole free part, which is the premise of this test.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $teaser, 'The caption is the whole free part, which is the premise of this test.' );
+		$this->assertSame( '', get_the_excerpt( $post_id ) );
+	}
+
+	/**
 	 * A teaser that ends inside a container block takes the container's free
 	 * inner blocks and stops where the teaser does.
 	 */
@@ -772,6 +794,41 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered['anonymous'] );
 		$this->assertSame( $rendered['subscriber'], $rendered['editor'], 'A listing render is the same string for every reader.' );
 		$this->assertSame( $rendered['subscriber'], $rendered['anonymous'], 'A listing render is the same string for every reader.' );
+	}
+
+	/**
+	 * The excerpt, like the teaser, is cut for the anonymous reader. A block
+	 * hidden from members renders empty for a member, and an excerpt cut on
+	 * their request must not keep the paid text inside it for everyone else.
+	 */
+	public function test_excerpt_cut_by_a_member_keeps_paid_text_out() {
+		$post_id       = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:group {"newspackAccessControlMode":"gate","newspackAccessControlGateIds":[' . $this->gate_id . '],"newspackAccessControlVisibility":"hidden"} --><div class="wp-block-group">'
+					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->'
+					. '</div><!-- /wp:group -->'
+					. '<!-- wp:paragraph --><p>Closing paid line.</p><!-- /wp:paragraph -->',
+			]
+		);
+		$subscriber_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+
+		$excerpts = [];
+		foreach ( [
+			'subscriber' => $subscriber_id,
+			'anonymous'  => 0,
+		] as $reader => $user_id ) {
+			wp_set_current_user( $user_id );
+			$this->reset_restriction_cache();
+			$this->reset_gate_render_state();
+			\Newspack\Block_Visibility::reset_cache_for_tests();
+			$excerpts[ $reader ] = get_the_excerpt( $post_id );
+		}
+		wp_set_current_user( 0 );
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpts['anonymous'] );
+		$this->assertStringContainsString( 'Second free line.', $excerpts['anonymous'] );
 	}
 
 	/**
@@ -1174,6 +1231,54 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertStringContainsString( self::FREE_MARKER, $rendered );
 	}
 
+	/**
+	 * The same looping block inside the free part is rendered again when the
+	 * excerpt is cut, and the `the_post` it fires asks for that excerpt while it
+	 * is still being built. That asks once and ends; it does not render again.
+	 */
+	public function test_a_block_looping_over_the_post_does_not_re_enter_the_excerpt_build() {
+		$post_id = null;
+		$loops   = 0;
+		register_block_type(
+			'newspack-test/looping-block',
+			[
+				'render_callback' => function () use ( &$post_id, &$loops ) {
+					// A cap, not a guard: see the teaser test above.
+					if ( ++$loops > 5 ) {
+						return '';
+					}
+					$loop = new \WP_Query( [ 'post__in' => [ $post_id ] ] );
+					while ( $loop->have_posts() ) {
+						$loop->the_post();
+					}
+					wp_reset_postdata();
+					return '';
+				},
+			]
+		);
+
+		try {
+			$post_id = $this->create_restricted_post(
+				[
+					'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:newspack-test/looping-block /-->'
+						. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+				]
+			);
+			$this->go_to( home_url( '/' ) );
+
+			$loop = new \WP_Query( [ 'post__in' => [ $post_id ] ] );
+			$loop->the_post();
+			$post_content = get_post()->post_content;
+			wp_reset_postdata();
+		} finally {
+			unregister_block_type( 'newspack-test/looping-block' );
+		}
+
+		$this->assertSame( '<p>' . self::FREE_MARKER . ' opening line. Second free line.</p>', $post_content );
+		$this->assertLessThan( 5, $loops, 'The excerpt build is asked for once more and ends there, rather than rendering the block until the cap.' );
+	}
 	/**
 	 * A feed's excerpt is the feed subsystem's to decide, not this path's.
 	 *

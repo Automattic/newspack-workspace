@@ -129,7 +129,7 @@ class Content_Gate {
 	private static array $withheld_instances = [];
 
 	/**
-	 * Whether a listing teaser is being built right now.
+	 * Whether a listing teaser, or the excerpt cut from it, is being built right now.
 	 *
 	 * The teaser is cached with no reader dimension and served to everyone for an
 	 * hour, so every question asked while it is being built has to answer to the
@@ -1032,8 +1032,9 @@ class Content_Gate {
 		// excerpt text, captions and the like already removed, for a block that
 		// builds its own excerpt from it, as Homepage Posts does. The content passes
 		// above substitute the full teaser from the staged entry.
-		$post->post_content = '<p>' . Content_Gate_Excerpt::get_free_excerpt_text( $post, $teaser )
-			. ( Content_Gate_Excerpt::has_overlay_ellipsis( $teaser ) ? ' [&hellip;]' : '' ) . '</p>';
+		$text               = Content_Gate_Excerpt::get_free_excerpt_text( $post, $teaser );
+		$post->post_content = '<p>' . $text
+			. ( '' !== $text && Content_Gate_Excerpt::has_overlay_ellipsis( $teaser ) ? ' [&hellip;]' : '' ) . '</p>';
 	}
 
 	/**
@@ -1195,10 +1196,10 @@ class Content_Gate {
 	 * nests, and a block inside a teaser that lists another withheld post builds
 	 * that post's teaser from inside this one.
 	 *
-	 * @param callable $build Callback producing the teaser.
+	 * @param callable $build Callback producing the teaser, or the excerpt cut from it.
 	 * @return mixed The callback's return value.
 	 */
-	private static function in_listing_context( $build ) {
+	public static function in_listing_context( $build ) {
 		$was_listing_context      = self::$is_listing_context;
 		self::$is_listing_context = true;
 		try {

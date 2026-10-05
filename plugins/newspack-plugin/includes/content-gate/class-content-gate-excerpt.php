@@ -19,7 +19,7 @@ class Content_Gate_Excerpt {
 	 *
 	 * @var true[]
 	 */
-	private static $building = [];
+	private static array $building = [];
 
 	/**
 	 * Initialize hooks.
@@ -60,7 +60,7 @@ class Content_Gate_Excerpt {
 		}
 
 		// A post the gate withholds outside its own article page gets its excerpt
-		// built from the teaser, not from the body. The staged substitution cannot
+		// cut from the post's free blocks, ending where the teaser ends. The staged substitution cannot
 		// serve this on its own: it is written when `the_post` fires, and an
 		// excerpt is not always built inside a loop — core's Latest Posts block
 		// walks get_posts() results and asks for each excerpt by post object.
@@ -102,7 +102,7 @@ class Content_Gate_Excerpt {
 
 			// The overlay layout ends its teaser with an ellipsis; the excerpt ends
 			// with the site's own excerpt_more in its place.
-			if ( self::has_overlay_ellipsis( $teaser ) && ! str_ends_with( $excerpt, $excerpt_more ) ) {
+			if ( '' !== $excerpt && self::has_overlay_ellipsis( $teaser ) && ! str_ends_with( $excerpt, $excerpt_more ) ) {
 				$excerpt .= $excerpt_more;
 			}
 
@@ -189,7 +189,14 @@ class Content_Gate_Excerpt {
 		}
 		self::$building[ $post->ID ] = true;
 		try {
-			$text = self::build_free_excerpt_text( $post, $teaser );
+			// Cut for the anonymous reader the teaser was built for: the result is
+			// cached for every reader, and a block hidden from the current one
+			// renders empty and would be kept whole, paid text and all.
+			$text = Content_Gate::in_listing_context(
+				function () use ( $post, $teaser ) {
+					return self::build_free_excerpt_text( $post, $teaser );
+				}
+			);
 		} finally {
 			unset( self::$building[ $post->ID ] );
 		}
@@ -206,8 +213,8 @@ class Content_Gate_Excerpt {
 	 * @return string
 	 */
 	private static function build_free_excerpt_text( \WP_Post $post, string $teaser ): string {
-		// From the row: in a loop, Content_Gate::withhold_post_in_loop() has already
-		// replaced this instance's post_content with the excerpt text.
+		// From the row: in a loop, Content_Gate::withhold_post_in_loop() may already
+		// have replaced this instance's post_content with the excerpt text.
 		$content = Block_Visibility::strip_blocks_hidden_from_public( (string) get_post_field( 'post_content', $post->ID, 'raw' ) );
 		$content = self::get_free_markup( $content, $teaser );
 		$content = strip_shortcodes( $content );
@@ -282,13 +289,15 @@ class Content_Gate_Excerpt {
 			// The text steps of the teaser's `newspack_gate_content` pass, called
 			// directly: callbacks on that filter expect a whole body, not one block.
 			$text = self::comparable_text( convert_smilies( do_shortcode( capital_P_dangit( wptexturize( render_block( $block ) ) ) ) ) );
-			if ( str_starts_with( $target, $seen . $text ) ) {
+			// A container that renders no text is entered rather than kept whole:
+			// a render filter can empty it while its inner blocks still hold text.
+			if ( ( '' !== $text || empty( $block['innerBlocks'] ) ) && str_starts_with( $target, $seen . $text ) ) {
 				$seen .= $text;
 				$kept .= $markup;
 				continue;
 			}
-			if ( ! empty( $block['innerBlocks'] ) ) {
-				self::take_free_blocks( $block['innerBlocks'], $target, $seen, $kept );
+			if ( ! empty( $block['innerBlocks'] ) && ! self::take_free_blocks( $block['innerBlocks'], $target, $seen, $kept ) ) {
+				continue;
 			}
 			return true;
 		}
