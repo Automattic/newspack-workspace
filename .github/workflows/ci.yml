@@ -624,9 +624,8 @@ jobs:
           "$SHELLCHECK" --version | sed -n '2p'
 
           # Every tracked *.sh, plus tracked extensionless files whose shebang
-          # names a shell: `n`, bin/newspack-manage-host and the per-package
-          # .hooks/pre-push scripts all carry no extension. The interpreter is
-          # matched by name rather than by a trailing "sh", so a shebang like
+          # names a shell: `n` and bin/newspack-manage-host carry no extension.
+          # The interpreter is matched by name rather than by a trailing "sh", so a shebang like
           # `#!/usr/bin/env fish` is not swept in. zsh is deliberately absent:
           # shellcheck refuses to parse it (SC1071) and reports that refusal at
           # error severity, so including it would fail the gate on a file no

@@ -11,8 +11,7 @@
 # severity at `style` for editors; the -S here is what narrows the hook.
 #
 # Scope is *.sh. CI additionally sweeps tracked extensionless files whose shebang
-# names a shell (`n`, bin/newspack-manage-host, the .hooks/pre-push scripts),
-# which lint-staged cannot glob without matching every file in the repo.
+# names a shell (`n`, bin/newspack-manage-host), which lint-staged cannot glob without matching every file in the repo.
 #
 # Unlike the ESLint, Stylelint and PHPCS helpers, a missing tool here is a SKIP
 # rather than a hard failure. Those three come from `pnpm install`, so their
