@@ -90,7 +90,7 @@ const NewspackSubtitlePanel = () => {
 		subtitleRef.current = subtitle;
 	}, [ subtitle ] );
 	// Mount effect: poll for canvas, then create element.
-	const timeoutRef = useRef();
+	const timeoutRef = useRef( undefined );
 	useEffect( () => {
 		let retryCount = 0;
 		const maxRetries = 50; // 5 seconds at 100ms intervals.

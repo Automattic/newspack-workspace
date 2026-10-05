@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.34.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.1...newspack-blocks@4.34.2) (2026-09-29)
+
+
+### Bug Fixes
+
+* **modal-checkout:** promotional links wait for reader activation ([#1076](https://github.com/Automattic/newspack-workspace/issues/1076)) ([522ae9a](https://github.com/Automattic/newspack-workspace/commit/522ae9aeb3235a91972f3835a4c21aff6acc5543))
+
 ## @automattic/newspack-blocks [4.34.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.0...newspack-blocks@4.34.1) (2026-09-28)
 
 

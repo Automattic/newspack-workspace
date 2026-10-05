@@ -408,9 +408,9 @@ $wc_mock_is_product = false;
  *
  * Every WC_Order_Item_Product construction across the whole suite registers
  * itself in $order_items_database (mirroring WooCommerce, where order item IDs
- * are globally unique), and test fixtures reuse low integer IDs across files —
- * call this from a test class's set_up() before staging order items so a stale
- * item created by an unrelated suite can't resolve.
+ * are globally unique), and test fixtures reuse low integer IDs across files.
+ * Newspack_Request_Memo_Reset already clears the table before each test; call
+ * this only to clear it partway through one.
  */
 function wc_mocks_reset_order_items() {
 	global $order_items_database;
@@ -792,10 +792,16 @@ class WC_Product {
 	/**
 	 * Price reads apply their WooCommerce filters, as WC_Data::get_prop() does
 	 * in `view` context. Without this, code that filters a price and code that
-	 * reads one can disagree with no test able to see it.
+	 * reads one can disagree with no test able to see it. `edit` context returns
+	 * the stored price unfiltered, as WC_Data::get_prop() does.
+	 *
+	 * @param string $context `view` or `edit`.
 	 */
-	public function get_price() {
+	public function get_price( $context = 'view' ) {
 		$price = $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		if ( 'edit' === $context ) {
+			return $price;
+		}
 		return apply_filters( 'woocommerce_product_get_price', $price, $this );
 	}
 	public function set_price( $price ) {
@@ -2031,7 +2037,7 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
-	// Minimal mock: implements the `customer_id` and `subscription_status` filters
+	// Minimal mock: implements the `customer_id`, `order_id` and `subscription_status` filters
 	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
 	// passes. `subscription_status` accepts a single status or an array; 'any' (or
 	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
@@ -2047,6 +2053,7 @@ function wcs_get_subscriptions( $args = [] ) {
 	global $wcs_mock_query_log;
 	$wcs_mock_query_log[] = $args;
 	$customer_id = $args['customer_id'] ?? null;
+	$order_id    = isset( $args['order_id'] ) ? (int) $args['order_id'] : null;
 	$statuses    = $args['subscription_status'] ?? 'any';
 	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
 	// Stageable: set $wcs_mock_ignore_offset to reproduce a query that never advances —
@@ -2062,6 +2069,10 @@ function wcs_get_subscriptions( $args = [] ) {
 	$matches = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
 		if ( null !== $customer_id && $subscription->get_customer_id() !== $customer_id ) {
+			continue;
+		}
+		// Real WCS matches `order_id` against the subscription's parent order.
+		if ( null !== $order_id && (int) $subscription->get_parent_id() !== $order_id ) {
 			continue;
 		}
 		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
@@ -2112,11 +2123,15 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
  * @param int             $user_id    User ID.
  * @param int|string      $product_id Optional product the subscription must hold.
  * @param string|string[] $status     Optional status or statuses; 'any' matches all.
+ * @param int[]           $excluded_subscription_ids Optional subscriptions to ignore, as WCS 9+ accepts.
  *
  * @return bool
  */
-function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
+function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any', $excluded_subscription_ids = [] ) {
 	foreach ( wcs_get_users_subscriptions( (int) $user_id ) as $subscription ) {
+		if ( in_array( $subscription->get_id(), $excluded_subscription_ids, true ) ) {
+			continue;
+		}
 		if ( $product_id && ! $subscription->has_product( (int) $product_id ) ) {
 			continue;
 		}
@@ -2337,19 +2352,40 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	}
 }
 /**
- * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
- * callback render end to end; assertions belong on the surrounding markup, not on this field.
+ * Minimal stand-in for WooCommerce's admin field renderer. The input is always `type="text"`
+ * and custom attributes such as `min` are not printed, so a test can't assert on them.
+ *
+ * Without a `value`, WooCommerce reads the field's meta off the global post, so the product
+ * editor shows whatever was last saved. The mock does the same, or a test of what the editor
+ * shows would see an empty field where production shows the stored value.
  *
  * @param array $field The field definition.
  */
 function woocommerce_wp_text_input( $field ) {
+	global $post;
+	$value = $field['value'] ?? ( $post ? get_post_meta( $post->ID, $field['id'] ?? '', true ) : '' );
 	printf(
 		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><input type="text" id="%2$s" name="%4$s" value="%5$s" /></p>',
 		esc_attr( $field['wrapper_class'] ?? '' ),
 		esc_attr( $field['id'] ?? '' ),
 		esc_html( $field['label'] ?? '' ),
 		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
-		esc_attr( $field['value'] ?? '' )
+		esc_attr( $value )
+	);
+}
+/**
+ * Minimal stand-in for WooCommerce's admin select renderer, so a callback that renders a select
+ * beside text fields can run end to end. The options themselves are not rendered.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_select( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><select id="%2$s" name="%4$s"></select></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) )
 	);
 }
 /**

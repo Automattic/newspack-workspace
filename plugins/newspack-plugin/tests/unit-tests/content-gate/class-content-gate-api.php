@@ -892,4 +892,185 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		$this->assertWPError( $refused );
 		$this->assertStringContainsString( 'active again', $refused->get_error_message() );
 	}
+
+	/**
+	 * Registered access with institutions, as the gate editor sends it.
+	 *
+	 * @param bool   $active Whether registered access is on.
+	 * @param array  $value  The institution rule's value.
+	 * @param string $status The gate status the save leaves.
+	 *
+	 * @return array
+	 */
+	private function gate_with_registration_institutions( $active, $value, $status = 'publish' ) {
+		return [
+			'status'       => $status,
+			'registration' => [
+				'active'       => $active,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'institution',
+							'value' => $value,
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * The registration wall's institutions survive sanitization, so the editor
+	 * can save them.
+	 */
+	public function test_registration_access_rules_are_saved() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate( $this->gate_with_registration_institutions( true, [ '12' ] ) );
+
+		$this->assertNotWPError( $sanitized_gate );
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			],
+			$sanitized_gate['registration']['access_rules']
+		);
+	}
+
+	/**
+	 * A rule that needs a signed-in reader can't let a visitor skip signing in.
+	 * Saved there, it would never match anyone the wall is shown to.
+	 */
+	public function test_registration_refuses_a_rule_that_needs_a_signed_in_reader() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'registration' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'email_domain',
+								'value' => 'example.test',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertWPError( $sanitized_gate );
+		$this->assertSame( 'invalid_registration_access_rule', $sanitized_gate->get_error_code() );
+	}
+
+	/**
+	 * Turning institutions on and selecting none would leave the wall exactly as
+	 * it was while the editor showed the setting on.
+	 */
+	public function test_a_live_registration_wall_refuses_institutions_with_nothing_selected() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate( $this->gate_with_registration_institutions( true, [] ) );
+
+		$this->assertWPError( $sanitized_gate );
+		$this->assertSame( 'empty_access_rule_value', $sanitized_gate->get_error_code() );
+		// The same rule can be empty under Paid Access too, so the refusal says which.
+		$this->assertStringContainsString( 'Registered Access', $sanitized_gate->get_error_message() );
+	}
+
+	/**
+	 * Stored registration states for a live gate, and whether an unfinished
+	 * selection saved to it without `active` is refused.
+	 *
+	 * @return array[]
+	 */
+	public function data_stored_registration_wall() {
+		return [
+			'stored wall on'  => [ true, true ],
+			'stored wall off' => [ false, false ],
+		];
+	}
+
+	/**
+	 * A save that sends an unfinished selection but leaves out `active` keeps the
+	 * stored value, so the stored wall decides whether it is refused, just as a
+	 * full save would be.
+	 *
+	 * @dataProvider data_stored_registration_wall
+	 *
+	 * @param bool $stored_active Whether the stored registration wall is on.
+	 * @param bool $is_refused    Whether the save is expected to be refused.
+	 */
+	public function test_an_unfinished_selection_saved_without_active_follows_the_stored_wall( $stored_active, $is_refused ) {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Registration wall' ] );
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'status'       => 'publish',
+				'registration' => [ 'active' => $stored_active ],
+			]
+		);
+		$partial = $this->gate_with_registration_institutions( true, [] );
+		unset( $partial['status'], $partial['registration']['active'] );
+
+		$sanitized_gate = Content_Gate_API::sanitize_gate( $partial, $this->gate_update_request( $gate_id ) );
+
+		$this->assertSame( $is_refused ? 'empty_access_rule_value' : null, is_wp_error( $sanitized_gate ) ? $sanitized_gate->get_error_code() : null );
+	}
+
+	/**
+	 * A set emptied by dropping rules no plugin registers admits nobody past the
+	 * wall, as those rules already did, so it saves empty rather than refusing
+	 * the way paid access must. Refusing would also block switching the gate off.
+	 */
+	public function test_registration_keeps_an_emptied_rule_set_instead_of_refusing() {
+		$sanitized_gate = Content_Gate_API::sanitize_gate(
+			[
+				'registration' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'rule_from_a_deactivated_plugin',
+								'value' => [ 1 ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertNotWPError( $sanitized_gate );
+		$this->assertSame( [], $sanitized_gate['registration']['access_rules'] );
+	}
+
+	/**
+	 * A gate that isn't live, or whose registration wall is off, can hold a
+	 * selection the operator hasn't finished.
+	 */
+	public function test_an_unfinished_registration_selection_saves_while_it_is_not_enforced() {
+		$cases = [
+			'draft gate' => $this->gate_with_registration_institutions( true, [], 'draft' ),
+			'wall off'   => $this->gate_with_registration_institutions( false, [] ),
+		];
+		foreach ( $cases as $case => $gate ) {
+			$sanitized_gate = Content_Gate_API::sanitize_gate( $gate );
+			$this->assertNotWPError( $sanitized_gate, $case );
+			$this->assertSame( [], $sanitized_gate['registration']['access_rules'][0][0]['value'], "The unfinished selection is kept, not dropped ($case)." );
+		}
+	}
+
+
+	/**
+	 * Sanitization runs before the route's permission check, so only a caller
+	 * who could save the gate hears why it was refused. The refused rules are
+	 * dropped rather than saved.
+	 */
+	public function test_a_registration_refusal_is_withheld_from_a_caller_who_could_not_save_the_gate() {
+		wp_set_current_user( 0 );
+		$sanitized_gate = Content_Gate_API::sanitize_gate( $this->gate_with_registration_institutions( true, [] ) );
+
+		$this->assertNotWPError( $sanitized_gate );
+		$this->assertArrayNotHasKey( 'access_rules', $sanitized_gate['registration'] );
+	}
 }

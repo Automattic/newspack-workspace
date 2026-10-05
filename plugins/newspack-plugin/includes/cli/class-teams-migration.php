@@ -25,6 +25,8 @@ namespace Newspack\CLI;
 
 use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Invite;
+use Newspack\Group_Subscription_Settings;
 use Newspack\WooCommerce_Connection;
 use WP_CLI;
 
@@ -158,7 +160,7 @@ class Teams_Migration {
 	 * ## OPTIONS
 	 *
 	 * [--product-id=<id>]
-	 * : Product to assign to newly-created subscriptions. Accepts a product ID or a variation ID — pass the variation when a publisher sells seat tiers as variations of one variable subscription product. Must be published and accepted by a published gate's "Active subscription" rule. Also re-aligns any re-used $0 subscription onto this product; a re-used subscription the team pays for keeps its own product, price, taxes and billing schedule. Required unless --skip-unlinked is passed.
+	 * : Product to assign to newly-created subscriptions. Accepts a product ID or a variation ID — pass the variation when a publisher sells seat tiers as variations of one variable subscription product. Must be published and accepted by a published gate's "Active subscription" rule. Also re-aligns any re-used $0 subscription onto this product; a re-used subscription the team pays for keeps its own product, price, taxes and billing schedule. When the product is priced per seat, each subscription built from it gets the team's seats as its quantity (owner included), or enough seats for everyone the group holds when the team is unlimited or already holds more people than its seats. Required unless --skip-unlinked is passed.
 	 *
 	 * [--live]
 	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
@@ -199,6 +201,11 @@ class Teams_Migration {
 		$migration_product = $product_id ? \wc_get_product( $product_id ) : null;
 		$billing_period    = 'month';
 		$billing_interval  = 1;
+
+		// Read the mode off the product rather than asking is_per_seat(): the migrated
+		// subscription enables the group itself, so it resolves as per-seat even when
+		// the product does not.
+		$migration_is_per_seat = $migration_product && Group_Subscription_Settings::PRICING_MODE_PER_SEAT === Group_Subscription_Settings::get_product_settings( $migration_product )['pricing_mode'];
 
 		// Derived independently of --product-id: the paid-team guard below needs it
 		// in --skip-unlinked runs, which take no --product-id and process only
@@ -549,10 +556,11 @@ class Teams_Migration {
 
 			// Enable the group and set its name up front. The seat limit is deferred
 			// until after members are added (below) so update_members()' limit gate
-			// can't reject existing team members mid-migration — a new subscription
-			// starts with no limit meta (unlimited), so the adds are never gated. A
-			// reused subscription that already carries a limit is still gated by it
-			// during adds; any rejected member is surfaced in the errors below.
+			// can't reject existing team members mid-migration — a new flat-priced
+			// subscription starts with no limit meta (unlimited), so the adds are never
+			// gated, and a per-seat one is sized before the adds (below). A reused
+			// subscription that already carries a limit is still gated by it during
+			// adds; any rejected member is surfaced in the errors below.
 			if ( ! $dry_run ) {
 				$subscription->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
 				$subscription->update_meta_data( '_newspack_group_subscription_name', $team->post_title );
@@ -572,6 +580,39 @@ class Teams_Migration {
 			// out past the cancellation the reader asked for (see $reuse_keeps_terms).
 			if ( ! $created_new && ! $reuse_keeps_terms && $migration_product && ! $dry_run ) {
 				self::replace_subscription_product( $subscription, $migration_product, $billing_period, $billing_interval, $start_date, $end_date, $errors, $team_id );
+			}
+
+			// A per-seat group's capacity is its seat line's quantity, and the limit meta
+			// written after the adds is ignored for it, so the line has to fit everyone
+			// before the adds are gated on it. A kept line is what the customer bought
+			// in Teams, whose per-member quantity leaves out an owner who takes no seat:
+			// it is only ever raised, and its totals are held, so what the customer pays
+			// does not change until their next seat change prices every seat.
+			$rebuilds_line = $created_new || ( ! $reuse_keeps_terms && $migration_product );
+			$is_per_seat   = $rebuilds_line
+				? $migration_is_per_seat
+				: Group_Subscription_Settings::PRICING_MODE_PER_SEAT === Group_Subscription_Settings::get_subscription_settings( $subscription )['pricing_mode'];
+			if ( $is_per_seat ) {
+				$people      = array_merge( [ $owner_id, $sub_owner_id ], $member_ids );
+				$invitations = count( $pending_invitations[ $team_id ] ?? [] );
+				if ( $subscription ) {
+					$people       = array_merge( $people, Group_Subscription::get_members( $subscription ) );
+					$invitations += count( Group_Subscription_Invite::get_invites( $subscription, false ) );
+				}
+				$seats = self::map_team_to_seat_quantity( $group_limit, $people, $invitations );
+				if ( $group_limit > 0 && $seats > $group_limit ) {
+					WP_CLI::warning( sprintf( 'Team %d: holds %d people (owner and pending invitees included) but has %d seats (owner included) — sizing its per-seat group to %d so no one loses access.', $team_id, $seats, $group_limit, $seats ) );
+				}
+				$seat_item  = $subscription ? Group_Subscription_Settings::get_seat_line_item( $subscription ) : null;
+				$seats_held = ( $seat_item && ! $rebuilds_line ) ? (int) $seat_item->get_quantity() : 0;
+				if ( $seat_item && $seats > $seats_held && ! $dry_run ) {
+					$seat_item->set_quantity( $seats );
+					$seat_item->save();
+					if ( ! $rebuilds_line ) {
+						WP_CLI::line( sprintf( 'Team %d: raised subscription %d from %d to %d seats to fit the team; its recurring total is unchanged.', $team_id, $subscription_id, $seats_held, $seats ) );
+					}
+				}
+				$group_limit = max( $seats, $seats_held );
 			}
 
 			// Add team members as group members. If the team owner differs from the
@@ -773,6 +814,10 @@ class Teams_Migration {
 	 * updated so the setting is available at whichever level WooCommerce Subscriptions
 	 * resolves the product ID.
 	 *
+	 * A product sold with Teams' per-member pricing is switched to per-seat group
+	 * pricing, and its minimum and maximum member counts become its minimum and maximum
+	 * seats, with the same owner-seat adjustment (see map_product_member_counts_to_seats()).
+	 *
 	 * Dry-run by default; pass --live to write.
 	 *
 	 * ## OPTIONS
@@ -843,6 +888,9 @@ class Teams_Migration {
 			// unless "Owners must be members" already reserves one on the product.
 			$limit = self::map_product_max_members_to_group_limit( $max_members );
 
+			// Teams keeps the pricing mode on the parent product only.
+			$per_member = 'per_member' === $product->get_meta( '_wc_memberships_for_teams_pricing', true );
+
 			// Collect the IDs to update: always the parent; plus any
 			// subscription_variation children for variable subscriptions.
 			$ids_to_update = [ $product_id ];
@@ -863,16 +911,29 @@ class Teams_Migration {
 					}
 					$p->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
 					$p->update_meta_data( '_newspack_group_subscription_limit', $limit );
+					if ( $per_member ) {
+						// Teams reads the member counts off each product, variations included,
+						// so each one maps its own.
+						$seats = self::map_product_member_counts_to_seats(
+							(int) $p->get_meta( '_wc_memberships_for_teams_min_member_count', true ),
+							(int) $p->get_meta( '_wc_memberships_for_teams_max_member_count', true )
+						);
+						$p->update_meta_data( '_newspack_group_subscription_pricing_mode', Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+						$p->update_meta_data( '_newspack_group_subscription_min_seats', $seats['min'] );
+						$p->update_meta_data( '_newspack_group_subscription_max_seats', $seats['max'] );
+					}
 					$p->save();
 				}
 			}
 
 			$variation_count = count( $ids_to_update ) - 1;
-			WP_CLI::success( sprintf( 'Product %d ("%s"): %s enabled=yes, limit=%s%s.', $product_id, $product->get_name(), $dry_run ? 'would set' : 'set', 0 === $limit ? 'Unlimited' : $limit, $variation_count > 0 ? sprintf( ' (+ %d variation(s))', $variation_count ) : '' ) );
+			$pricing = $per_member ? 'per seat' : 'per group';
+			WP_CLI::success( sprintf( 'Product %d ("%s"): %s enabled=yes, pricing=%s, limit=%s%s.', $product_id, $product->get_name(), $dry_run ? 'would set' : 'set', $pricing, 0 === $limit ? 'Unlimited' : $limit, $variation_count > 0 ? sprintf( ' (+ %d variation(s))', $variation_count ) : '' ) );
 
 			$summary[] = [
 				'product_id'   => $product_id,
 				'product_name' => $product->get_name(),
+				'pricing'      => $pricing,
 				'limit'        => 0 === $limit ? 'Unlimited' : $limit,
 				'variations'   => $variation_count,
 			];
@@ -894,12 +955,13 @@ class Teams_Migration {
 				fn( $row ) => [
 					'Product'    => $row['product_id'],
 					'Name'       => $row['product_name'],
+					'Pricing'    => $row['pricing'],
 					'Limit'      => $row['limit'],
 					'Variations' => $row['variations'],
 				],
 				$summary
 			),
-			[ 'Product', 'Name', 'Limit', 'Variations' ]
+			[ 'Product', 'Name', 'Pricing', 'Limit', 'Variations' ]
 		);
 
 		WP_CLI::line( '' );
@@ -3046,6 +3108,26 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Map a team to the seat count of a per-seat group subscription.
+	 *
+	 * A per-seat group has no "unlimited", and its seat count is its capacity. So it
+	 * takes the team's owner-inclusive seat limit, but never fewer seats than the
+	 * people it has to hold, each counted once, plus each pending invitee, whose link
+	 * is redeemed against a free seat. An unlimited team therefore gets exactly that
+	 * many.
+	 *
+	 * @param int   $group_limit              The owner-inclusive group limit (0 = unlimited).
+	 * @param int[] $people_ids               Everyone the group holds: owners, members, existing group members.
+	 * @param int   $pending_invitation_count Invitations still waiting to be accepted.
+	 *
+	 * @return int The seat count, owner included.
+	 */
+	public static function map_team_to_seat_quantity( $group_limit, $people_ids, $pending_invitation_count ) {
+		$people = array_unique( array_filter( array_map( 'intval', (array) $people_ids ) ) );
+		return max( (int) $group_limit, count( $people ) + (int) $pending_invitation_count );
+	}
+
+	/**
 	 * Map a team product's "Maximum member count" to the owner-inclusive group limit.
 	 *
 	 * Access Control always counts the team owner as a group member, but WC Teams only
@@ -3071,6 +3153,27 @@ class Teams_Migration {
 	public static function map_product_max_members_to_group_limit( $max_members ) {
 		$owner_takes_seat = 'yes' === \get_option( 'wc_memberships_for_teams_owners_must_take_seat', 'no' );
 		return self::map_team_seats_to_group_limit( $max_members, $owner_takes_seat );
+	}
+
+	/**
+	 * Map a per-member team product's member counts to per-seat group seat bounds.
+	 *
+	 * Per-seat groups count the owner as one of the seats bought. Teams only does when
+	 * "Owners must be members" is on, so otherwise each bound gains the owner's seat,
+	 * as map_product_max_members_to_group_limit() does for the flat limit. Teams sells
+	 * at least one seat even with no minimum set, and an unset maximum is unbounded.
+	 *
+	 * @param int $min_members The product's _wc_memberships_for_teams_min_member_count (0 = unset).
+	 * @param int $max_members The product's _wc_memberships_for_teams_max_member_count (0 = unset).
+	 *
+	 * @return array{min:int,max:int} Owner-inclusive minimum and maximum seats (max 0 = unbounded).
+	 */
+	public static function map_product_member_counts_to_seats( $min_members, $max_members ) {
+		$owner_seat = 'yes' === \get_option( 'wc_memberships_for_teams_owners_must_take_seat', 'no' ) ? 0 : 1;
+		return [
+			'min' => max( 1, (int) $min_members ) + $owner_seat,
+			'max' => (int) $max_members > 0 ? (int) $max_members + $owner_seat : 0,
+		];
 	}
 
 	/**
