@@ -442,6 +442,35 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The editor sponsor payload never carries an unsafe URL scheme.
+	 *
+	 * The preview renders sponsor_url as the href on the sponsor logo and byline,
+	 * choosing a link or plain text by whether the value is truthy, so an unsafe
+	 * scheme has to arrive as an empty string rather than reach the href.
+	 */
+	public function test_editor_sponsor_payload_strips_unsafe_sponsor_url() {
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		\Newspack_Sponsors\Sponsors_Stub::$stub_sponsors = [
+			[
+				'sponsor_flag'   => 'Sponsored',
+				'sponsor_name'   => 'Example Sponsor',
+				'sponsor_url'    => 'javascript:alert(1)',
+				'sponsor_byline' => 'Sponsored by',
+				'sponsor_id'     => 1001,
+				'sponsor_scope'  => 'native',
+			],
+		];
+		try {
+			$sponsor_info = Newspack_Blocks_API::newspack_blocks_sponsor_info( [ 'id' => $post_id ] );
+		} finally {
+			\Newspack_Sponsors\Sponsors_Stub::$stub_sponsors = null;
+		}
+
+		self::assertSame( '', $sponsor_info[0]['sponsor_url'], 'An unsafe sponsor URL arrives empty, so the preview renders the sponsor unlinked.' );
+	}
+
+	/**
 	 * The editor posts payload carries real author-archive links.
 	 *
 	 * Navigation is prevented at the preview container (see
