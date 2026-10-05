@@ -156,7 +156,7 @@ class Newspack_Test_Subscription_Reactivation extends WP_UnitTestCase {
 		Subscription_Reactivation::reactivate( $subscription );
 
 		$this->assertSame( 'active', $subscription->get_status() );
-		$this->assertSame( [ 'active' ], $subscription->data['saved_statuses'] ?? [] );
+		$this->assertSame( [ 'active' ], array_column( $subscription->data['saves'] ?? [], 'status' ) );
 		$this->assertSame( 0, $subscription->get_date( 'end' ) );
 		$this->assertSame( 0, $subscription->get_date( 'cancelled' ) );
 		$this->assertSame( '2026-01-01 00:00:00', $subscription->get_date( 'start' ) );
@@ -175,7 +175,7 @@ class Newspack_Test_Subscription_Reactivation extends WP_UnitTestCase {
 
 		Subscription_Reactivation::reactivate( $subscription );
 
-		$this->assertSame( 'false', $subscription->get_cancelled_email_sent() );
+		$this->assertSame( [ 'false' ], array_column( $subscription->data['saves'] ?? [], 'cancelled_email_sent' ) );
 	}
 
 	/**

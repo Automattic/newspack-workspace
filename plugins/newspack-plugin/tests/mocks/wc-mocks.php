@@ -1604,12 +1604,15 @@ class WC_Subscription {
 		return $total;
 	}
 	/**
-	 * Records the status at each save on `saved_statuses`. The real save() is
-	 * what persists a status change and fires the status hooks, so tests can
-	 * assert a change was saved, not just set.
+	 * Records the status and cancelled-email flag at each save on `saves`. The
+	 * real save() is what persists changes and fires the status hooks, so tests
+	 * can assert a change was saved, not just set.
 	 */
 	public function save() {
-		$this->data['saved_statuses'][] = $this->data['status'] ?? '';
+		$this->data['saves'][] = [
+			'status'               => $this->data['status'] ?? '',
+			'cancelled_email_sent' => $this->data['cancelled_email_sent'] ?? '',
+		];
 		return true;
 	}
 }
