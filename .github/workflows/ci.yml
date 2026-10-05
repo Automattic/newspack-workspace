@@ -625,12 +625,12 @@ jobs:
 
           # Every tracked *.sh, plus tracked extensionless files whose shebang
           # names a shell: `n` and bin/newspack-manage-host carry no extension.
-          # The interpreter is matched by name rather than by a trailing "sh", so a shebang like
-          # `#!/usr/bin/env fish` is not swept in. zsh is deliberately absent:
-          # shellcheck refuses to parse it (SC1071) and reports that refusal at
-          # error severity, so including it would fail the gate on a file no
-          # directive can rescue. NUL-delimited throughout so a path containing
-          # whitespace cannot split into two arguments.
+          # The interpreter is matched by name rather than by a trailing "sh",
+          # so a shebang like `#!/usr/bin/env fish` is not swept in. zsh is
+          # deliberately absent: shellcheck refuses to parse it (SC1071) and
+          # reports that refusal at error severity, so including it would fail
+          # the gate on a file no directive can rescue. NUL-delimited throughout
+          # so a path containing whitespace cannot split into two arguments.
           git ls-files -z '*.sh' | sort -zu > shell-globbed.txt
           git ls-files -z | while IFS= read -r -d '' f; do
             case "${f##*/}" in *.*) continue ;; esac
