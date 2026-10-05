@@ -1281,7 +1281,22 @@ class WC_Subscription {
 	public function get_status() {
 		return $this->data['status'];
 	}
-	public function set_status( $status ) {
+	/**
+	 * Stand-in for WC_Subscription::set_status(). Unlike update_status(), the
+	 * real method skips the can_be_updated_to() check. The transition and its
+	 * note are recorded on `status_sets` so tests can assert on them.
+	 *
+	 * @param string $status        New status.
+	 * @param string $note          Optional transition note.
+	 * @param bool   $manual_update Whether an admin made the change.
+	 */
+	public function set_status( $status, $note = '', $manual_update = false ) {
+		$this->data['status_sets'][] = [
+			'from'   => $this->data['status'] ?? '',
+			'to'     => $status,
+			'note'   => $note,
+			'manual' => $manual_update,
+		];
 		$this->data['status'] = $status;
 	}
 	public function get_created_via() {
@@ -1429,6 +1444,9 @@ class WC_Subscription {
 			$this->data['dates'][ $type ] = $date;
 		}
 	}
+	public function delete_date( $type ) {
+		unset( $this->data['dates'][ $type ], $this->data['times'][ $type ] );
+	}
 	public function get_formatted_billing_full_name() {
 		$first = $this->data['billing_first_name'] ?? '';
 		$last  = $this->data['billing_last_name'] ?? '';
@@ -1509,6 +1527,20 @@ class WC_Subscription {
 		// Real WC_Subscription keys this 'requires_manual_renewal'; fixtures also stage the shorter 'is_manual'.
 		return ! empty( $this->data['requires_manual_renewal'] ) || ! empty( $this->data['is_manual'] );
 	}
+	/**
+	 * Unlike is_manual(), reads only the stored property. Fixtures staging
+	 * `is_manual` alone model a subscription that is manual only for now, such
+	 * as one whose gateway is unavailable.
+	 */
+	public function get_requires_manual_renewal() {
+		return ! empty( $this->data['requires_manual_renewal'] );
+	}
+	public function get_cancelled_email_sent() {
+		return $this->data['cancelled_email_sent'] ?? '';
+	}
+	public function set_cancelled_email_sent( $value ) {
+		$this->data['cancelled_email_sent'] = $value;
+	}
 	public function __call( $name, $arguments ) {
 		// Address getters: get_billing_first_name(), get_shipping_city(), etc.
 		// resolve to flat data keys ('billing_first_name'), matching how the
@@ -1571,7 +1603,16 @@ class WC_Subscription {
 		$this->data['total'] = $total;
 		return $total;
 	}
+	/**
+	 * Records the status and cancelled-email flag at each save on `saves`. The
+	 * real save() is what persists changes and fires the status hooks, so tests
+	 * can assert a change was saved, not just set.
+	 */
 	public function save() {
+		$this->data['saves'][] = [
+			'status'               => $this->data['status'] ?? '',
+			'cancelled_email_sent' => $this->data['cancelled_email_sent'] ?? '',
+		];
 		return true;
 	}
 }
@@ -2113,6 +2154,17 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 		$subscriptions = array_slice( $subscriptions, 0, $limit, true );
 	}
 	return $subscriptions;
+}
+/**
+ * Records each user ID passed, in the order received, on the
+ * $wcs_mock_made_active_user_ids global. The real function restores the
+ * subscriber role that cancelling a subscription can take away.
+ *
+ * @param int $user_id User ID.
+ */
+function wcs_make_user_active( $user_id ) {
+	global $wcs_mock_made_active_user_ids;
+	$wcs_mock_made_active_user_ids[] = $user_id;
 }
 /**
  * Whether a user holds a subscription, optionally to a given product and in a

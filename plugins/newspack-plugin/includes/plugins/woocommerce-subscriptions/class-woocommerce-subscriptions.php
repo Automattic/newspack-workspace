@@ -957,6 +957,7 @@ class WooCommerce_Subscriptions {
 		include_once __DIR__ . '/class-subscriptions-tiers.php';
 		include_once __DIR__ . '/class-card-expiry-warning.php';
 		include_once __DIR__ . '/class-zero-total-renewals.php';
+		include_once __DIR__ . '/class-subscription-reactivation.php';
 
 		On_Hold_Duration::init();
 		Renewal::init();
@@ -964,6 +965,7 @@ class WooCommerce_Subscriptions {
 		Subscriptions_Confirmation::init();
 		Card_Expiry_Warning::init();
 		Zero_Total_Renewals::init();
+		Subscription_Reactivation::init();
 	}
 
 	/**
