@@ -85,6 +85,9 @@ describe( 'ClipboardUtils.copyHandoutFromElement', () => {
 		[ 'ClipboardItem is unavailable', HANDOUT, () => delete global.ClipboardItem ],
 		[ 'the clipboard has no write()', HANDOUT, () => delete clipboard.write ],
 		[ 'the handout has no tracking pixel', STORY.replace( PIXEL, '' ) + ATTRIBUTION, () => {} ],
+		// A paste keeps a lone pixel without the wrapper, which would only cost
+		// the story its ordinary blocks.
+		[ 'the tracking is the pixel alone', STORY + ATTRIBUTION + PIXEL + '\n', () => {} ],
 	] )( 'copies the plain text alone when %s', async ( _label, handout, arrange ) => {
 		arrange();
 

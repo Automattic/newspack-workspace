@@ -38,14 +38,19 @@ window.ClipboardUtils = {
 	 * The block editor strips scripts from pasted HTML, but keeps pasted
 	 * block markup as it is. Any block markup in a paste sends the whole paste
 	 * through the block parser, though, so the story lands in one Classic block
-	 * that Convert to blocks turns into ordinary blocks.
+	 * that Convert to blocks turns into ordinary blocks. A pixel with nothing
+	 * after it survives an ordinary paste, so it isn't worth that cost.
 	 *
 	 * @param {string} text - Handout as shown in the modal
-	 * @returns {string|null} - Wrapped handout, or null when no tracking is found
+	 * @returns {string|null} - Wrapped handout, or null when there is no tracking beyond the pixel
 	 */
 	wrapTracking(text) {
 		const start = text.lastIndexOf(this.trackingAnchor);
 		if (start === -1) {
+			return null;
+		}
+		const pixelEnd = text.indexOf('>', start);
+		if (pixelEnd === -1 || !text.slice(pixelEnd + 1).trim()) {
 			return null;
 		}
 		return text.slice(0, start) + '\n<!-- wp:html -->\n' + text.slice(start) + '\n<!-- /wp:html -->\n';
@@ -54,9 +59,11 @@ window.ClipboardUtils = {
 	/**
 	 * Copy a republish handout as HTML and as plain text.
 	 *
-	 * Editors that read HTML get the wrapped tracking. The plain text stays
-	 * exactly as shown, because a classic editor's Code tab reads it, and
-	 * block markup there would stop WordPress adding paragraph tags.
+	 * Editors that read HTML get the wrapped tracking: the block editor keeps
+	 * it, while visual editors outside WordPress may drop the scripts. The
+	 * plain text stays exactly as shown, because a classic editor's Code tab
+	 * reads it, and block markup there would stop WordPress adding paragraph
+	 * tags.
 	 * Browsers without ClipboardItem, or that refuse the HTML copy, get the
 	 * plain text alone.
 	 *
