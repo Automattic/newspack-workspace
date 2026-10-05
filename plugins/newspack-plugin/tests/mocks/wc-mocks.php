@@ -1054,6 +1054,9 @@ class WC_Order {
 	public function get_status() {
 		return $this->data['status'];
 	}
+	public function get_type() {
+		return 'shop_order';
+	}
 	public function get_coupon_codes() {
 		return $this->data['coupon_codes'] ?? [];
 	}
@@ -1145,6 +1148,46 @@ class WC_Order {
 	}
 	public function set_transaction_id( $transaction_id ) {
 		$this->data['transaction_id'] = (string) $transaction_id;
+	}
+}
+
+/**
+ * Real WC_Order_Refund extends WC_Abstract_Order, not WC_Order, so it has no
+ * customer or billing getters. Its status is always 'completed', a line-item
+ * refund copies the refunded items with their product IDs, and order queries
+ * return refunds unless they ask for 'shop_order' only.
+ */
+class WC_Order_Refund {
+	public $data = [];
+	public function __construct( $data ) {
+		global $orders_database;
+		$data['id']        = count( $orders_database ) + 1;
+		$this->data        = $data;
+		$orders_database[] = $this;
+	}
+	public function get_id() {
+		return $this->data['id'];
+	}
+	public function get_type() {
+		return 'shop_order_refund';
+	}
+	public function get_status() {
+		return 'completed';
+	}
+	public function has_status( $statuses ) {
+		return in_array( 'completed', (array) $statuses, true );
+	}
+	public function get_items() {
+		return $this->data['items'] ?? [];
+	}
+	public function get_date_created() {
+		return new WC_DateTime( $this->data['date_created'] );
+	}
+	public function get_date_paid() {
+		return $this->get_date_created();
+	}
+	public function get_meta( $field_name ) {
+		return '';
 	}
 }
 
@@ -2272,12 +2315,23 @@ function wc_get_orders( $args ) {
 	global $orders_database, $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
 	$wc_mocks_get_orders_calls = (int) $wc_mocks_get_orders_calls + 1;
 	$orders                    = $orders_database;
+	if ( isset( $args['type'] ) ) {
+		// Real WC defaults to every order type, refunds included; a caller has to ask
+		// for 'shop_order' to leave them out.
+		$types  = (array) $args['type'];
+		$orders = array_filter(
+			$orders,
+			function( $order ) use ( $types ) {
+				return in_array( method_exists( $order, 'get_type' ) ? $order->get_type() : 'shop_order', $types, true );
+			}
+		);
+	}
 	if ( isset( $args['customer_id'] ) ) {
-		// Filter by customer.
+		// Filter by customer. A refund has no customer, so it never matches.
 		$orders = array_filter(
 			$orders,
 			function( $order ) use ( $args ) {
-				return $order->get_customer_id() === $args['customer_id'];
+				return method_exists( $order, 'get_customer_id' ) && $order->get_customer_id() === $args['customer_id'];
 			}
 		);
 	}
@@ -2296,6 +2350,9 @@ function wc_get_orders( $args ) {
 		$orders          = array_filter(
 			$orders,
 			function( $order ) use ( $customer_values ) {
+				if ( ! method_exists( $order, 'get_customer_id' ) ) {
+					return false;
+				}
 				foreach ( $customer_values as $customer_value ) {
 					if ( is_numeric( $customer_value ) && $order->get_customer_id() === (int) $customer_value ) {
 						return true;
@@ -2335,10 +2392,30 @@ function wc_get_orders( $args ) {
 			}
 		);
 	}
+	if ( isset( $args['date_created'] ) && is_string( $args['date_created'] ) && str_contains( $args['date_created'], '...' ) ) {
+		// Support the '{timestamp}...{timestamp}' range form. Real WC includes both ends.
+		[ $start, $end ] = array_map( 'intval', explode( '...', $args['date_created'], 2 ) );
+		$orders          = array_filter(
+			$orders,
+			function( $order ) use ( $start, $end ) {
+				$date_created = $order->get_date_created();
+				return $date_created && $date_created->getTimestamp() >= $start && $date_created->getTimestamp() <= $end;
+			}
+		);
+	}
+	// Real WC sorts by creation date, newest first unless `order` says ASC. The ID
+	// tie-breaker stands in for `'orderby' => 'date ID'`; with `date` alone real WC
+	// leaves orders created in the same second in no fixed order.
+	$descending = 'ASC' !== strtoupper( (string) ( $args['order'] ?? '' ) );
+	$sort_key   = function( $order ) {
+		$date_created = $order->get_date_created();
+		return [ $date_created ? $date_created->getTimestamp() : 0, $order->get_id() ];
+	};
 	usort(
 		$orders,
-		function( $a, $b ) {
-			return $b->get_date_paid()->getTimestamp() <=> $a->get_date_paid()->getTimestamp();
+		function( $a, $b ) use ( $descending, $sort_key ) {
+			$comparison = $sort_key( $a ) <=> $sort_key( $b );
+			return $descending ? -$comparison : $comparison;
 		}
 	);
 	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
@@ -2363,6 +2440,9 @@ function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 		// Real WC matches the customer user ID OR the billing email, so guest
 		// orders count toward the buyer's history. The email comparison runs in
 		// SQL under a case-insensitive collation.
+		if ( ! method_exists( $order, 'get_customer_id' ) ) {
+			continue; // A refund belongs to no customer.
+		}
 		$matches_user  = $user_id && $order->get_customer_id() === $user_id;
 		$matches_email = $customer_email && 0 === strcasecmp( (string) $order->get_billing_email(), (string) $customer_email );
 		if ( ! $matches_user && ! $matches_email ) {
