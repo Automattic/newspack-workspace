@@ -630,9 +630,7 @@ function process_form() {
 	];
 
 	// The write path leaves out lists this address may not join. When none would
-	// remain, make no subscribe call to the email provider and answer as a
-	// subscribe does, so that decision is not reported back as an error. A request
-	// with a list left in still reaches the email provider and can still fail there.
+	// remain, make no subscribe call and send the usual success response.
 	$provider_name = $provider ? $provider->service : '';
 	$has_open_list = ! empty( \apply_filters( 'newspack_newsletters_contact_lists', $lists, $contact, $provider_name ) );
 	if ( $has_open_list ) {

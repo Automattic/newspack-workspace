@@ -59,9 +59,9 @@ class Woocommerce_Memberships {
 	 * Initialize the hooks after all plugins are loaded
 	 */
 	public static function init_hooks() {
-		// Two arguments, so the gate sees the contact being written rather than whoever
-		// is logged in. The priority stays at the default: the membership sync CLI
-		// removes this callback by name at that priority.
+		// Two arguments, so the gate sees the contact being written. The priority
+		// stays at the default: the membership sync CLI removes this callback by
+		// name at that priority.
 		add_filter( 'newspack_newsletters_contact_lists', [ __CLASS__, 'filter_lists' ], 10, 2 );
 		add_filter( 'newspack_newsletters_subscription_block_available_lists', [ __CLASS__, 'filter_lists' ] );
 		add_filter( 'newspack_newsletters_manage_newsletters_available_lists', [ __CLASS__, 'filter_lists_objects' ] );

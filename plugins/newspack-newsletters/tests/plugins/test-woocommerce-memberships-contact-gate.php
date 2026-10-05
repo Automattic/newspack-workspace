@@ -12,7 +12,7 @@ use function Newspack_Newsletters\Blocks\Subscribe\process_form;
 
 /**
  * The membership gate on newsletter lists checks the contact being written, and
- * the subscribe form does not answer with an error when it leaves no list in.
+ * the subscribe form subscribes an address to nothing when no list is open to it.
  *
  * @group subscribe-block
  */
@@ -78,12 +78,12 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 		return apply_filters( 'newspack_newsletters_contact_lists', [ $this->public_id( $this->open_list ), $this->public_id( $this->restricted_list ) ], $contact, 'mailchimp' );
 	}
 
-	public function test_the_gate_checks_the_contact_not_the_session() {
+	public function test_the_gate_checks_the_contact_being_written() {
 		wp_set_current_user( $this->member_id );
 		$this->assertSame( [ $this->public_id( $this->open_list ) ], $this->gate( [ 'email' => 'reader@example.test' ] ) );
 	}
 
-	public function test_an_entitled_contact_passes_without_a_session() {
+	public function test_an_entitled_contact_passes() {
 		$this->assertSame(
 			[ $this->public_id( $this->open_list ), $this->public_id( $this->restricted_list ) ],
 			$this->gate( [ 'email' => 'member@example.test' ] )
@@ -94,7 +94,7 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 		$this->assertSame( [ $this->public_id( $this->open_list ) ], $this->gate( [ 'email' => 'nobody@example.test' ] ) );
 	}
 
-	public function test_a_contact_without_a_valid_email_is_gated_whatever_the_session() {
+	public function test_a_contact_without_a_valid_email_holds_no_membership() {
 		wp_set_current_user( $this->member_id );
 		$this->assertSame( [ $this->public_id( $this->open_list ) ], $this->gate( [ 'email' => '' ] ) );
 	}
@@ -116,7 +116,7 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 	 * with no provider or with no list left for it, unless async subscriptions
 	 * are on.
 	 */
-	public function test_a_request_with_no_open_list_answers_as_a_subscribe() {
+	public function test_a_request_with_no_open_list_gets_the_usual_response() {
 		wp_set_current_user( $this->member_id );
 		$_REQUEST[ \Newspack_Newsletters\Blocks\Subscribe\FORM_ACTION ] = '1';
 		$_REQUEST['npe']   = 'reader@example.test';
