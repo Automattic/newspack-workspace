@@ -89,11 +89,14 @@ describe( 'ClipboardUtils.copyHandoutFromElement', () => {
 		// the story its ordinary blocks.
 		[ 'the tracking is the pixel alone', STORY + ATTRIBUTION + PIXEL + '\n', () => {} ],
 	] )( 'copies the plain text alone when %s', async ( _label, handout, arrange ) => {
+		const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		arrange();
 
 		await expect( ClipboardUtils.copyHandoutFromElement( textarea( handout ) ) ).resolves.toBe( true );
 
 		expect( clipboard.writeText ).toHaveBeenCalledWith( handout );
+		// A warning would mean the HTML write was tried and failed, not skipped.
+		expect( warn ).not.toHaveBeenCalled();
 	} );
 
 	it( 'copies the plain text alone, and logs why, when the browser refuses the HTML copy', async () => {
