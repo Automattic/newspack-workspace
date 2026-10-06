@@ -416,8 +416,8 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 	/**
 	 * Load More offers a next page exactly while posts remain: every request in the
-	 * chain returns posts, and together they return every matching post, whether or
-	 * not "Allow duplicate content" is on.
+	 * chain returns posts, and together they return every matching post exactly once,
+	 * whether or not "Allow duplicate content" is on.
 	 *
 	 * @dataProvider deduplicate_settings
 	 *
@@ -465,7 +465,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $params );
 		}
 
-		self::assertEqualsCanonicalizing( $post_ids, $seen_ids, 'Following the next URLs reaches the final page of posts.' );
+		self::assertEqualsCanonicalizing( $post_ids, $seen_ids, 'Following the next URLs returns every post exactly once.' );
 	}
 
 	/**
