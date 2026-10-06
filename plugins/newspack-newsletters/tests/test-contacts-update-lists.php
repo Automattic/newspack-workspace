@@ -164,6 +164,62 @@ class Contacts_Update_Lists_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A removal still goes through when the filter drops every addition beside it.
+	 */
+	public function test_removal_is_written_when_the_addition_beside_it_is_dropped() {
+		$this->current_lists = [ 'open-list' ];
+		$this->add_list_filter(
+			function ( $lists ) {
+				return array_values( array_diff( $lists, [ 'restricted-list' ] ) );
+			}
+		);
+
+		$result = Newspack_Newsletters_Contacts::update_lists( self::EMAIL, [ 'restricted-list' ] );
+
+		$this->assertTrue( $result );
+		$this->assertCount( 1, $this->writes );
+		$this->assertSame( [], $this->writes[0]['add'] );
+		$this->assertSame( [ 'open-list' ], $this->writes[0]['remove'] );
+	}
+
+	/**
+	 * A numeric list ID is kept when the filter returns it as a string, as
+	 * callbacks reading the selection from a request do.
+	 */
+	public function test_numeric_list_id_is_kept_when_returned_as_a_string() {
+		$this->create_remote_list( '1234' );
+		Newspack_Newsletters_Subscription::reset_lists_config_cache();
+		$this->add_list_filter(
+			function () {
+				return [ '1234' ];
+			}
+		);
+
+		Newspack_Newsletters_Contacts::update_lists( self::EMAIL, [ '1234', 'restricted-list' ] );
+
+		$this->assertCount( 1, $this->writes );
+		$this->assertEquals( [ '1234' ], $this->writes[0]['add'] );
+	}
+
+	/**
+	 * The helper callers use to report additions returns what update_lists()
+	 * writes, so a report never names a list the filter dropped.
+	 */
+	public function test_filter_lists_to_add_returns_what_is_written() {
+		$this->add_list_filter(
+			function ( $lists ) {
+				return array_values( array_diff( $lists, [ 'restricted-list' ] ) );
+			}
+		);
+
+		$reported = Newspack_Newsletters_Contacts::filter_lists_to_add( [ 'open-list', 'restricted-list' ], self::EMAIL );
+		Newspack_Newsletters_Contacts::update_lists( self::EMAIL, [ 'open-list', 'restricted-list' ] );
+
+		$this->assertSame( [ 'open-list' ], array_values( $reported ) );
+		$this->assertSame( $this->writes[0]['add'], array_values( $reported ) );
+	}
+
+	/**
 	 * Register a `newspack_newsletters_contact_lists` callback that records its
 	 * arguments before delegating to $callback. WP_UnitTestCase restores hooks
 	 * on tear down, so the callback does not outlive the test.
@@ -252,8 +308,6 @@ class Contacts_Update_Lists_Test extends WP_UnitTestCase {
 	 * @return ReflectionProperty
 	 */
 	private function provider_property() {
-		$property = new ReflectionProperty( Newspack_Newsletters::class, 'provider' );
-		$property->setAccessible( true );
-		return $property;
+		return new ReflectionProperty( Newspack_Newsletters::class, 'provider' );
 	}
 }
