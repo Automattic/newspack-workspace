@@ -918,6 +918,21 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A group with no owner has no owner's seat to hand over, so a new owner from
+	 * outside it still needs a free seat.
+	 */
+	public function test_change_owner_of_an_ownerless_group_needs_a_free_seat() {
+		$outsider_id = $this->create_reader();
+		$group       = $this->create_group( 0, 2 );
+		$this->add_member( $this->create_reader(), $group );
+		$this->add_member( $this->create_reader(), $group );
+		wp_set_current_user( $this->create_store_admin() );
+
+		$this->assertSame( 409, rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $outsider_id ) )->get_status() );
+		$this->assertSame( 0, (int) $group->get_user_id() );
+	}
+
+	/**
 	 * A renewal order still awaiting payment is checked out by its customer, so it
 	 * moves to the new owner; a paid one stays with whoever paid it.
 	 */

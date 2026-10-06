@@ -5,7 +5,8 @@
  * confirms. The previous owner stays in the group as a plain member, so nobody
  * loses access, and picking a reader from outside the group then needs a free
  * seat. An owner who can't be a member (staff) leaves the group instead, and
- * takes no seat (`ownerStaysAsMember`).
+ * their seat passes to the new owner (`ownerStaysAsMember`). A group with no
+ * owner has no seat to pass on, so an outsider needs a free one there too.
  *
  * The screen offers this only for a group with no payment method renewing it
  * (`ownerChangeable`): the owner holds billing. The server enforces every rule
@@ -31,6 +32,40 @@ import { GROUP_LABEL } from '../labels';
 // The shortest term /search-users answers (Group_Subscription_API::SEARCH_USERS_MIN_LENGTH).
 const MIN_SEARCH_LENGTH = 2;
 
+/**
+ * The confirmation sentence, by what happens to the current owner.
+ *
+ * @param {Object}  args            Arguments.
+ * @param {string}  args.ownerName  The current owner's name; empty when the group has none.
+ * @param {boolean} args.ownerStays Whether the current owner stays as a member.
+ * @param {string}  args.groupLabel Lowercase singular group label.
+ * @return {string} A template for createInterpolateElement(), with <new/> and <previous/> tokens.
+ */
+const confirmText = ( { ownerName, ownerStays, groupLabel } ) => {
+	if ( ! ownerName ) {
+		/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+		return sprintf( __( '<new/> becomes the owner of this %s. Billing details move to the new owner.', 'newspack-plugin' ), groupLabel );
+	}
+	if ( ownerStays ) {
+		return sprintf(
+			/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+			__(
+				'<new/> becomes the owner of this %s. <previous/> becomes a regular member and keeps access. Billing details move to the new owner.',
+				'newspack-plugin'
+			),
+			groupLabel
+		);
+	}
+	return sprintf(
+		/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+		__(
+			"<new/> becomes the owner of this %s. <previous/> can't be a member, so they leave it. Billing details move to the new owner.",
+			'newspack-plugin'
+		),
+		groupLabel
+	);
+};
+
 export default function ChangeOwnerFlow( { group, actions, onClose, onDone } ) {
 	// The picked option itself, not its value: a reader found by search drops out of
 	// the options as soon as the search changes, and must stay picked.
@@ -44,7 +79,10 @@ export default function ChangeOwnerFlow( { group, actions, onClose, onDone } ) {
 
 	const groupLabel = GROUP_LABEL.toLowerCase();
 	const ownerStays = false !== group.ownerStaysAsMember;
-	const canTakeOutsider = ! ownerStays || seatsRemaining( group ) > 0;
+	// Mirrors the server: only a previous owner who leaves frees a seat, and a
+	// group with no owner ID has none to free.
+	const ownerSeatFree = !! group.ownerId && ! ownerStays;
+	const canTakeOutsider = ownerSeatFree || seatsRemaining( group ) > 0;
 	// A pending invitation already holds a seat, so its invitee can take over a
 	// full group: the server leaves that invitation out of the seat check.
 	const invitedEmails = useMemo(
@@ -110,7 +148,7 @@ export default function ChangeOwnerFlow( { group, actions, onClose, onDone } ) {
 		const listed = [ ...members, ...readers ];
 		return chosen && ! listed.some( option => option.value === chosen.value ) ? [ ...listed, chosen ] : listed;
 	}, [ members, readers, chosen ] );
-	const ownerName = group.owner?.name || __( 'The current owner', 'newspack-plugin' );
+	const ownerName = group.owner?.name;
 
 	if ( confirming && chosen ) {
 		const changeOwner = async () => {
@@ -128,23 +166,7 @@ export default function ChangeOwnerFlow( { group, actions, onClose, onDone } ) {
 				onConfirm={ changeOwner }
 			>
 				{ createInterpolateElement(
-					ownerStays
-						? sprintf(
-								/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
-								__(
-									'<new/> becomes the owner of this %s. <previous/> becomes a regular member and keeps access. Billing details move to the new owner.',
-									'newspack-plugin'
-								),
-								groupLabel
-						  )
-						: sprintf(
-								/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
-								__(
-									"<new/> becomes the owner of this %s. <previous/> can't be a member, so they leave it. Billing details move to the new owner.",
-									'newspack-plugin'
-								),
-								groupLabel
-						  ),
+					confirmText( { ownerName, ownerStays, groupLabel } ),
 					// Names are React tokens, never part of the format string: a "<" in a
 					// display name would otherwise be parsed as markup.
 					{ new: <strong>{ chosen.name }</strong>, previous: <strong>{ ownerName }</strong> }
@@ -172,7 +194,7 @@ export default function ChangeOwnerFlow( { group, actions, onClose, onDone } ) {
 						: sprintf(
 								/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
 								__(
-									'This %s has no free seat for the current owner, so only a current member or someone with a pending invitation can take over. Raise the seat limit to choose someone else.',
+									'This %s is full, so only a current member or someone with a pending invitation can take over. Raise the seat limit to choose someone else.',
 									'newspack-plugin'
 								),
 								groupLabel

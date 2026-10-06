@@ -513,11 +513,11 @@ class Group_Subscription {
 	 *
 	 * The previous owner becomes a plain member, so they keep the group's access,
 	 * unless they could not be a member at all (staff, typically): they leave the
-	 * group instead, and take no seat. A new owner who was a member leaves the
-	 * member list, because ownership is what includes them now. Picking a reader
-	 * from outside the group needs a free seat when the previous owner joins as a
-	 * member; an invitation already held by the new owner is fulfilled by the
-	 * change, so it neither counts against that seat nor survives it.
+	 * group instead, and their seat passes to the new owner. A new owner who was a
+	 * member leaves the member list, because ownership is what includes them now.
+	 * Picking a reader from outside the group otherwise needs a free seat, also in
+	 * a group with no owner; an invitation already held by the new owner is
+	 * fulfilled by the change, so it neither counts against that seat nor survives it.
 	 *
 	 * The customer and billing details move to the new owner, on the subscription
 	 * and on any renewal order still awaiting payment, so the new owner can pay
@@ -573,8 +573,12 @@ class Group_Subscription {
 			fn( $invite ) => strtolower( (string) ( $invite['email'] ?? '' ) ) === $new_owner_email
 		);
 		$previous_joins  = $previous_owner && self::is_eligible_member( $previous_owner );
+		// The owner's seat passes to the new owner only when a previous owner leaves
+		// it: one who can't be a member, or whose account is gone. A group with no
+		// owner at all has no such seat, so an outsider still needs a free one.
+		$owner_seat_free = $previous_owner_id && ! $previous_joins;
 		$capacity        = self::get_member_capacity( $subscription );
-		if ( $previous_joins && ! $was_member && ! $has_invite && null !== $capacity && Group_Subscription_API::reserved_seats( $subscription ) >= $capacity ) {
+		if ( ! $owner_seat_free && ! $was_member && ! $has_invite && null !== $capacity && Group_Subscription_API::reserved_seats( $subscription ) >= $capacity ) {
 			return new \WP_Error(
 				'newspack_group_subscription_change_owner',
 				sprintf(
