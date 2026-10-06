@@ -17,6 +17,15 @@ use Newspack_Network\Site_Role;
  */
 class Network {
 	/**
+	 * Whether the redirect guard refused a hop since safe_peer_remote_get() last reset it.
+	 * WP_Http turns the guard's exception into a generic WP_Error, so this is how the
+	 * request learns the refusal was the guard's and logs it.
+	 *
+	 * @var bool
+	 */
+	private static $redirect_refused = false;
+
+	/**
 	 * Get all networked URLs - excluding url of the site where the function is called.
 	 *
 	 * Note that all urls have been run through untrailingslashit.
@@ -107,11 +116,13 @@ class Network {
 		// throws on an unsafe target. Requests only propagates it — WP_Http::request()
 		// is what catches it and hands the caller a WP_Error, which is where the
 		// no-fatal behaviour actually comes from.
-		add_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+		$added_guard = self::add_redirect_guard();
 		try {
 			return media_sideload_image( $url, $post_id, $desc, $return );
 		} finally {
-			remove_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+			if ( $added_guard ) {
+				self::remove_redirect_guard();
+			}
 		}
 	}
 
@@ -130,29 +141,80 @@ class Network {
 	 */
 	public static function safe_peer_remote_get( $url, array $args = [] ): array|\WP_Error {
 		if ( ! self::is_safe_sideload_url( $url ) ) {
-			// Callers turn this error into empty data, so without a record a Node that
-			// resolves privately just shows blank site info. Debugger::log() is silent
-			// unless NEWSPACK_NETWORK_DEBUG is defined; newspack_log reaches production.
-			if ( method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
-				\Newspack\Logger::newspack_log(
-					'newspack_network_peer_request',
-					'Refused a request to a peer: the URL is not http(s) on an allowed port, resolves to a private or reserved address, or its lookup failed.',
-					[
-						'host' => is_string( $url ) ? wp_parse_url( $url, PHP_URL_HOST ) : null,
-						'port' => is_string( $url ) ? wp_parse_url( $url, PHP_URL_PORT ) : null,
-					],
-					'error'
-				);
-			}
+			self::log_peer_refusal( $url, 'Refused a request to a peer: the URL is not http(s) on an allowed port, resolves to a private or reserved address, or its lookup failed.' );
 			return new \WP_Error( 'newspack_network_unsafe_peer_url', __( 'Refused a request to a URL that is not a public http(s) address on an allowed port.', 'newspack-network' ) );
 		}
 
-		add_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+		self::$redirect_refused = false;
+		$added_guard            = self::add_redirect_guard();
 		try {
-			return wp_safe_remote_get( $url, $args );
+			$response = wp_safe_remote_get( $url, $args );
 		} finally {
-			remove_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+			if ( $added_guard ) {
+				self::remove_redirect_guard();
+			}
 		}
+		if ( is_wp_error( $response ) && self::$redirect_refused ) {
+			self::log_peer_refusal( $url, 'Refused a request to a peer: it redirected to a URL that is not http(s) on an allowed port, resolves to a private or reserved address, or whose lookup failed.' );
+		}
+		return $response;
+	}
+
+	/**
+	 * Record a refused peer request.
+	 *
+	 * Callers turn the refusal into empty data, so without a record a Node that resolves
+	 * privately just shows blank site info. Debugger::log() is silent unless
+	 * NEWSPACK_NETWORK_DEBUG is defined; newspack_log reaches production.
+	 *
+	 * @param mixed  $url     The peer URL that was requested.
+	 * @param string $message Why it was refused.
+	 */
+	private static function log_peer_refusal( $url, string $message ): void {
+		if ( ! method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+			return;
+		}
+		$host = is_string( $url ) ? wp_parse_url( $url, PHP_URL_HOST ) : null;
+		$port = is_string( $url ) ? wp_parse_url( $url, PHP_URL_PORT ) : null;
+		if ( null === $port && is_string( $url ) ) {
+			// A URL with no explicit port uses its scheme's default.
+			$port = [
+				'http'  => 80,
+				'https' => 443,
+			][ strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ) ] ?? null;
+		}
+		\Newspack\Logger::newspack_log(
+			'newspack_network_peer_request',
+			$message,
+			[
+				'host' => $host,
+				'port' => $port,
+			],
+			'error'
+		);
+	}
+
+	/**
+	 * Register the redirect guard, unless it is already registered.
+	 *
+	 * WordPress keeps one registration per callback and priority, so a request started while
+	 * another holds the guard must leave it in place for the outer request's remaining hops.
+	 *
+	 * @return bool Whether this call registered it, and so must remove it.
+	 */
+	private static function add_redirect_guard(): bool {
+		if ( false !== has_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ) ) { // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+			return false;
+		}
+		add_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+		return true;
+	}
+
+	/**
+	 * Remove the redirect guard registered by add_redirect_guard().
+	 */
+	private static function remove_redirect_guard(): void {
+		remove_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
 	}
 
 	/**
@@ -176,6 +238,7 @@ class Network {
 	 */
 	public static function assert_safe_redirect( $location ): void {
 		if ( is_string( $location ) && ! self::is_safe_sideload_url( $location ) ) {
+			self::$redirect_refused = true;
 			// The namespaced Requests exception only exists on WordPress 6.2+, but this guard
 			// protects older versions too, where the class is Requests_Exception. Throw whichever
 			// the running core provides so WP_Http catches it and returns a WP_Error, rather than

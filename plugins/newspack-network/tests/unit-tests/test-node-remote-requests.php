@@ -137,6 +137,23 @@ class TestNodeRemoteRequests extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A request made while the guard is already registered leaves it registered, so a
+	 * request nested inside another cannot strip the outer request's guard.
+	 */
+	public function test_request_leaves_a_guard_it_did_not_register() {
+		add_action( 'requests-requests.before_redirect', [ Network::class, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+		$this->make_node( 'http://93.184.216.34' )->get_site_info();
+		$registered = has_action(
+			'requests-requests.before_redirect', // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+			[ Network::class, 'assert_safe_redirect' ]
+		);
+		remove_action( 'requests-requests.before_redirect', [ Network::class, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+
+		$this->assertCount( 1, $this->requests );
+		$this->assertNotFalse( $registered );
+	}
+
+	/**
 	 * A public node URL is still requested, with core's unsafe-URL checks on.
 	 */
 	public function test_site_info_requests_public_node_url() {
