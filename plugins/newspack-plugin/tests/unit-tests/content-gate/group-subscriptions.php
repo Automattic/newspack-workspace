@@ -2937,4 +2937,124 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 			remove_filter( 'newspack_group_subscription_invite_expiration_time', $callback );
 		}
 	}
+
+	/**
+	 * Fire the action WooCommerce Subscriptions runs after creating a subscription
+	 * at checkout (classic, modal and block checkout all go through it).
+	 *
+	 * @param array $billing Billing fields to stage on the new subscription.
+	 * @param array $meta    Subscription meta to stage, e.g. an existing name.
+	 * @return \WC_Subscription
+	 */
+	private function checkout_group_subscription( $billing, $meta = [] ) {
+		$subscription = wcs_create_subscription(
+			array_merge(
+				[
+					'customer_id'    => $this->create_reader_user(),
+					'status'         => 'active',
+					'billing_period' => 'month',
+					'meta'           => array_merge(
+						[ Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled' => 'yes' ],
+						$meta
+					),
+				],
+				$billing
+			)
+		);
+		do_action( 'woocommerce_checkout_subscription_created', $subscription, null, null );
+		return $subscription;
+	}
+
+	/**
+	 * Off by default: a site that hasn't opted in keeps the product-name default,
+	 * even when the buyer gave a company.
+	 */
+	public function test_checkout_does_not_name_group_unless_site_opts_in() {
+		$subscription = $this->checkout_group_subscription( [ 'billing_company' => 'Acme Newsroom' ] );
+		$this->assertSame( '', $subscription->get_meta( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name' ) );
+	}
+
+	/**
+	 * Once opted in, a group bought at checkout is named after the billing company,
+	 * or after the buyer when there is no company, so two buyers of the same plan
+	 * get distinct names.
+	 */
+	public function test_checkout_names_new_group_after_billing_company_or_buyer() {
+		add_filter( 'newspack_group_subscription_name_from_billing', '__return_true' );
+
+		$with_company = $this->checkout_group_subscription(
+			[
+				'billing_company'    => '  Acme Newsroom ',
+				'billing_first_name' => 'Ada',
+				'billing_last_name'  => 'Lovelace',
+			]
+		);
+		$this->assertSame( 'Acme Newsroom', Group_Subscription_Settings::get_subscription_settings( $with_company )['name'] );
+
+		$buyer_only = [
+			'billing_first_name' => 'Ada',
+			'billing_last_name'  => 'Lovelace',
+		];
+		$this->assertSame( "Ada Lovelace's Group", Group_Subscription_Settings::get_subscription_settings( $this->checkout_group_subscription( $buyer_only ) )['name'] );
+
+		update_option( Group_Subscription::get_label_option_key( 'singular' ), 'Team' );
+		try {
+			$this->assertSame( "Ada Lovelace's Team", Group_Subscription_Settings::get_subscription_settings( $this->checkout_group_subscription( $buyer_only ) )['name'] );
+		} finally {
+			delete_option( Group_Subscription::get_label_option_key( 'singular' ) );
+		}
+	}
+
+	/**
+	 * Even when opted in, nothing is written when there is nothing to name the group
+	 * after, when the subscription is not a group, or when the group already has a name.
+	 */
+	public function test_checkout_leaves_group_name_alone_when_it_should() {
+		add_filter( 'newspack_group_subscription_name_from_billing', '__return_true' );
+		$name_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name';
+
+		$anonymous = $this->checkout_group_subscription( [] );
+		$this->assertSame( '', $anonymous->get_meta( $name_key ), 'No billing name: the product-name fallback stands.' );
+
+		$named = $this->checkout_group_subscription( [ 'billing_company' => 'Acme Newsroom' ], [ $name_key => 'Chosen at checkout' ] );
+		$this->assertSame( 'Chosen at checkout', $named->get_meta( $name_key ) );
+
+		$regular = wcs_create_subscription(
+			[
+				'customer_id'     => $this->create_reader_user(),
+				'status'          => 'active',
+				'billing_period'  => 'month',
+				'billing_company' => 'Acme Newsroom',
+			]
+		);
+		do_action( 'woocommerce_checkout_subscription_created', $regular, null, null );
+		$this->assertSame( '', $regular->get_meta( $name_key ), 'A non-group subscription gets no group name.' );
+	}
+
+	/**
+	 * The derived name can be replaced, or suppressed with an empty string, and is
+	 * cleaned and cut to the length the rename field allows, like a typed rename.
+	 */
+	public function test_checkout_group_name_is_filterable_and_length_capped() {
+		add_filter( 'newspack_group_subscription_name_from_billing', '__return_true' );
+		$name_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name';
+
+		$long = $this->checkout_group_subscription( [ 'billing_company' => str_repeat( 'é', 150 ) ] );
+		$this->assertSame( Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH, mb_strlen( $long->get_meta( $name_key ) ) );
+
+		add_filter(
+			'newspack_group_subscription_default_name',
+			function ( $name, $subscription ) {
+				if ( 'suppress' === $subscription->get_billing_company() ) {
+					return '';
+				}
+				return 'markup' === $subscription->get_billing_company() ? '<b>Acme</b>' : 'Filtered: ' . $name;
+			},
+			10,
+			2
+		);
+		$this->assertSame( 'Filtered: Acme', $this->checkout_group_subscription( [ 'billing_company' => 'Acme' ] )->get_meta( $name_key ) );
+		$this->assertSame( '', $this->checkout_group_subscription( [ 'billing_company' => 'suppress' ] )->get_meta( $name_key ) );
+		$this->assertSame( 'Acme', $this->checkout_group_subscription( [ 'billing_company' => 'markup' ] )->get_meta( $name_key ) );
+	}
 }
