@@ -153,7 +153,7 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 
 	/**
 	 * Accounts that can edit others' posts keep the core behavior for their own
- * address.
+	 * address.
 	 */
 	public function test_staff_can_change_own_email() {
 		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
