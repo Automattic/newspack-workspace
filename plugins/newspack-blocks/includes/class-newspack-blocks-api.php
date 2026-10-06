@@ -389,7 +389,7 @@ class Newspack_Blocks_API {
 				'newspack_sponsors_show_categories' => Newspack_Blocks::newspack_display_sponsors_and_categories( $sponsors ),
 				'newspack_tag_labels'               => self::newspack_blocks_get_tag_labels( $data ),
 				'newspack_post_avatars'             => \newspack_blocks_format_avatars( $author_info ),
-				'newspack_post_byline'              => \newspack_blocks_format_byline( $author_info ),
+				'newspack_post_byline'              => wp_kses_post( \newspack_blocks_format_byline( $author_info ) ),
 				'post_status'                       => $post->post_status,
 				'post_type'                         => $post->post_type,
 				'post_link'                         => sanitize_url( (string) Newspack_Blocks::get_post_link( $post->ID ) ),

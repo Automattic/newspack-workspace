@@ -574,6 +574,45 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The editor byline never carries an unsafe URL scheme from a byline filter.
+	 *
+	 * newspack_blocks_post_byline output reaches the payload as markup the
+	 * preview renders, and a modified click on one of its links reaches the
+	 * browser, so the payload applies the same wp_kses_post() the front end does.
+	 */
+	public function test_editor_byline_strips_unsafe_schemes_from_filtered_byline() {
+		$author_id        = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'user_nicename' => 'kai-fixture',
+			]
+		);
+		$authored_post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$append_unsafe_link = function ( $byline ) {
+			return $byline . ' <a href="javascript:alert(1)">Filtered link</a>';
+		};
+		add_filter( 'newspack_blocks_post_byline', $append_unsafe_link );
+		try {
+			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+			$request->set_param( 'postsToShow', 10 );
+			$posts = rest_do_request( $request )->get_data();
+		} finally {
+			remove_filter( 'newspack_blocks_post_byline', $append_unsafe_link );
+		}
+
+		$byline = array_column( $posts, null, 'id' )[ $authored_post_id ]['newspack_post_byline'];
+		self::assertStringNotContainsString( 'javascript:', $byline, 'The editor byline does not carry a javascript: URL for the preview to render as an href.' );
+		self::assertStringContainsString( get_author_posts_url( $author_id, 'kai-fixture' ), $byline, 'Safe author links survive.' );
+	}
+
+	/**
 	 * The front-end byline formatter keeps live author-archive links.
 	 *
 	 * newspack_blocks_format_byline() is shared by the front end and the editor
