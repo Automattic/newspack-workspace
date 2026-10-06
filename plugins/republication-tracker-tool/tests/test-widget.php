@@ -25,10 +25,18 @@ class WidgetTest extends WP_UnitTestCase {
 	private $test_post;
 
 	/**
+	 * Server state at set-up, restored in tear_down.
+	 *
+	 * @var array
+	 */
+	private $saved_server;
+
+	/**
 	 * Set up test environment.
 	 */
 	public function set_up() {
 		parent::set_up();
+		$this->saved_server = $_SERVER;
 
 		$this->widget = new Republication_Tracker_Tool_Widget();
 
@@ -47,6 +55,7 @@ class WidgetTest extends WP_UnitTestCase {
 	public function tear_down() {
 		wp_delete_post( $this->test_post->ID, true );
 		Republication_Tracker_Tool::$modal_rendered = false;
+		$_SERVER = $this->saved_server;
 		parent::tear_down();
 	}
 
@@ -166,10 +175,10 @@ class WidgetTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The page layout carries its destination in a data attribute that widget.js reads,
-	 * as the copy button does.
+	 * The page layout carries its destination in a data attribute that widget.js reads on
+	 * click.
 	 */
-	public function test_page_layout_button_uses_data_attribute_not_inline_handler() {
+	public function test_page_layout_button_uses_data_attribute() {
 		global $post, $wp_query;
 		$post                        = $this->test_post;
 		$wp_query->is_single         = true;
@@ -200,8 +209,7 @@ class WidgetTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A request path containing an apostrophe comes back encoded in the button's data
-	 * attribute.
+	 * The request path is escaped into the button's data attribute.
 	 */
 	public function test_page_layout_button_encodes_request_path_in_attribute() {
 		global $post, $wp_query;
@@ -217,7 +225,6 @@ class WidgetTest extends WP_UnitTestCase {
 			'after_title'   => '</h2>',
 		);
 
-		$saved_server           = $_SERVER;
 		$_SERVER['REQUEST_URI'] = '/2026/09/sample-story/?ref=o\'brien';
 
 		ob_start();
@@ -231,11 +238,10 @@ class WidgetTest extends WP_UnitTestCase {
 		);
 		$output = ob_get_clean();
 
-		$_SERVER = $saved_server;
 
 		// The path comes back encoded in the data attribute...
 		$this->assertMatchesRegularExpression( '/data-republish-url="[^"]*o&#039;brien[^"]*"/', $output );
-		// ...and the markup carries no navigation script of its own.
+		// ...and the markup does not set window.location.href itself.
 		$this->assertStringNotContainsString( 'window.location.href', $output );
 	}
 }
