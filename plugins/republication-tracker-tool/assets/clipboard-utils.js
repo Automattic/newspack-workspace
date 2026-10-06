@@ -62,12 +62,14 @@ window.ClipboardUtils = {
 	 * Editors that read HTML get the wrapped tracking: the block editor keeps
 	 * it, visual editors outside WordPress may drop the scripts, and a classic
 	 * editor's Visual tab loses the story's paragraphs. Safari strips comments
-	 * and scripts from the HTML on its way to the clipboard, so from Safari
-	 * those editors get the pixel alone. The plain text stays exactly as
-	 * shown, because a classic editor's Code tab reads it, and block markup
-	 * there would stop WordPress adding paragraph tags.
+	 * and scripts from the HTML on its way to the clipboard (seen in Safari
+	 * 27), so from Safari the wrapper and the tracking scripts never arrive.
+	 * The plain text stays exactly as shown, because a classic editor's Code
+	 * tab reads it, and block markup there would stop WordPress adding
+	 * paragraph tags.
 	 * The plain text goes alone when the handout has no tracking beyond the
-	 * pixel, or when the browser lacks ClipboardItem or refuses the HTML copy.
+	 * pixel, or when the browser lacks ClipboardItem or clipboard.write, or
+	 * refuses the HTML copy.
 	 *
 	 * @param {string} text - Handout as shown in the Republish textarea
 	 * @returns {Promise<boolean>} - Promise resolving to success status
