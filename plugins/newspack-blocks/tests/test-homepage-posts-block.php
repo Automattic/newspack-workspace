@@ -415,6 +415,79 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Load More reaches every matching post, including the final partial page,
+	 * whether or not "Allow duplicate content" is on.
+	 *
+	 * @dataProvider deduplicate_settings
+	 *
+	 * @param bool $deduplicate The block's deduplicate attribute.
+	 */
+	public function test_articles_endpoint_next_url_reaches_last_page( $deduplicate ) {
+		$category_id = self::factory()->category->create();
+		$post_ids    = [];
+		for ( $i = 0; $i < 7; $i++ ) {
+			// Distinct dates keep the date ordering, and so each page's contents, deterministic.
+			$post_ids[] = self::factory()->post->create(
+				[
+					'post_status'   => 'publish',
+					'post_category' => [ $category_id ],
+					'post_date'     => gmdate( 'Y-m-d H:i:s', strtotime( '2026-01-01' ) + $i * HOUR_IN_SECONDS ),
+				]
+			);
+		}
+		wp_set_current_user( 0 );
+
+		// The first request carries no page param, so it must be served as page 1 and
+		// stand in for the block's server render; every later request follows a next URL.
+		$seen_ids = $this->follow_articles_next_urls(
+			[
+				'postsToShow' => 3,
+				'moreButton'  => 1,
+				'categories'  => [ $category_id ],
+				'deduplicate' => $deduplicate ? 1 : 0,
+			]
+		);
+
+		self::assertCount( 7, $seen_ids, 'Following the next URLs returns every post exactly once.' );
+		self::assertEqualsCanonicalizing( $post_ids, $seen_ids, 'Following the next URLs reaches the final page of posts.' );
+	}
+
+	/**
+	 * Values of the block's deduplicate attribute.
+	 *
+	 * @return array[]
+	 */
+	public function deduplicate_settings() {
+		return [
+			'allow duplicate content off' => [ true ],
+			'allow duplicate content on'  => [ false ],
+		];
+	}
+
+	/**
+	 * Request articles the way the block's Load More script does: follow each
+	 * response's next URL, appending the IDs of every post rendered so far.
+	 *
+	 * @param array $params Query params for the first request.
+	 * @return int[] Post IDs in the order they were returned.
+	 */
+	private function follow_articles_next_urls( $params ) {
+		$seen_ids = [];
+		// Bounded so a next URL that never empties fails the test instead of hanging it.
+		for ( $i = 0; $i < 10; $i++ ) {
+			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+			$request->set_query_params( array_merge( $params, [ 'exclude_ids' => implode( ',', $seen_ids ) ] ) );
+			$data     = rest_do_request( $request )->get_data();
+			$seen_ids = array_merge( $seen_ids, $data['ids'] );
+			if ( empty( $data['ids'] ) || empty( $data['next'] ) ) {
+				break;
+			}
+			wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $params );
+		}
+		return $seen_ids;
+	}
+
+	/**
 	 * The editor posts endpoint must not expose live author-archive links.
 	 *
 	 * The editor canvas renders newspack_post_byline and newspack_post_avatars
