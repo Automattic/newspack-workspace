@@ -69,6 +69,7 @@ class WooCommerce_My_Account {
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_magic_link_request' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'redirect_to_account_details' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'edit_account_prevent_email_update' ] );
+			\add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'rest_prevent_email_update' ], 10, 3 );
 			\add_action( 'woocommerce_save_account_details', [ __CLASS__, 'handle_email_change_request' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_cancel_email_change' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_verify_email_change' ] );
@@ -891,6 +892,52 @@ class WooCommerce_My_Account {
 			return;
 		}
 		$_POST['account_email'] = \wp_get_current_user()->user_email;
+	}
+
+	/**
+	 * Prevent updating email via the core REST users endpoint.
+	 *
+	 * Core lets any user change their own address through `wp/v2/users/me`,
+	 * applied at once with no confirmation. Readers must go through the My
+	 * Account flow instead, which applies a new address only after it is
+	 * verified: content gate rules and reader verification trust the account
+	 * address, so an unverified change would let a reader claim a mailbox they
+	 * do not control. Users who can edit other users keep the core behavior.
+	 *
+	 * This runs before the endpoint callback rather than on `rest_pre_insert_user`
+	 * because the users controller's update ignores an error from that filter.
+	 *
+	 * @param \WP_REST_Response|\WP_HTTP_Response|\WP_Error|mixed $response Result to send to the client.
+	 * @param array                                               $handler  Route handler used for the request.
+	 * @param \WP_REST_Request                                    $request  Request used to generate the response.
+	 *
+	 * @return \WP_REST_Response|\WP_HTTP_Response|\WP_Error|mixed The response, or an error if the email would change.
+	 */
+	public static function rest_prevent_email_update( $response, $handler, $request ) {
+		if ( \is_wp_error( $response ) || ! isset( $request['email'] ) ) {
+			return $response;
+		}
+		$callback = $handler['callback'] ?? null;
+		if (
+			! is_array( $callback )
+			|| ! ( $callback[0] instanceof \WP_REST_Users_Controller )
+			|| ! in_array( $callback[1], [ 'update_item', 'update_current_item' ], true )
+		) {
+			return $response;
+		}
+		if ( \current_user_can( 'edit_users' ) ) {
+			return $response;
+		}
+		$user_id = 'update_current_item' === $callback[1] ? \get_current_user_id() : (int) $request['id'];
+		$user    = \get_userdata( $user_id );
+		if ( $user && $user->user_email === $request['email'] ) {
+			return $response;
+		}
+		return new \WP_Error(
+			'newspack_rest_email_update_not_allowed',
+			__( 'Your email address can only be changed from your account page.', 'newspack-plugin' ),
+			[ 'status' => 403 ]
+		);
 	}
 
 	/**
