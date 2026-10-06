@@ -220,6 +220,87 @@ class Contacts_Update_Lists_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Saving the My Account form reports only the additions that were made, so
+	 * the confirmation never names a list the filter dropped.
+	 *
+	 * The save runs the real handler against this suite's provider double. The
+	 * request, the signed-in user and the redirect are set up here and undone in
+	 * `finally`, and the redirect is caught before the handler's `exit`.
+	 *
+	 * @throws Exception Anything the handler throws other than the redirect.
+	 */
+	public function test_my_account_save_reports_only_lists_added() {
+		if ( class_exists( 'Newspack\My_Account' ) || function_exists( 'wc_add_notice' ) || class_exists( 'Newspack\Newspack_UI' ) ) {
+			$this->markTestSkipped( 'Another plugin is loaded that would scope the save to a real account page or store its notice.' );
+		}
+		$this->create_remote_list( 'other-list' );
+		Newspack_Newsletters_Subscription::reset_lists_config_cache();
+		$this->current_lists = [ 'open-list' ];
+		$this->add_list_filter(
+			function ( $lists ) {
+				return array_values( array_diff( $lists, [ 'restricted-list' ] ) );
+			}
+		);
+
+		$user_id = self::factory()->user->create( [ 'user_email' => self::EMAIL ] );
+		update_user_meta( $user_id, Newspack_Newsletters_Subscription::EMAIL_VERIFIED_META, [ self::EMAIL ] );
+
+		$saved_post    = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$saved_request = $_REQUEST; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$saved_referer = $_SERVER['HTTP_REFERER'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Saved to restore verbatim.
+		$interrupt     = new class() extends Exception {
+			/**
+			 * The location the handler redirected to.
+			 *
+			 * @var string
+			 */
+			public $location = '';
+		};
+		$on_redirect   = function ( $location ) use ( $interrupt ) {
+			$interrupt->location = $location;
+			throw $interrupt;
+		};
+		$caught        = null;
+
+		try {
+			wp_set_current_user( $user_id );
+			$_POST = [
+				Newspack_Newsletters_Subscription::SUBSCRIPTION_UPDATE => wp_create_nonce( Newspack_Newsletters_Subscription::SUBSCRIPTION_UPDATE ),
+				'lists' => [ 'open-list', 'other-list', 'restricted-list' ],
+			];
+			$_REQUEST                = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Test request setup.
+			$_SERVER['HTTP_REFERER'] = home_url( '/my-account/newsletters/' );
+			add_filter( 'wp_redirect', $on_redirect );
+
+			try {
+				Newspack_Newsletters_Subscription::process_subscription_update();
+			} catch ( Exception $e ) {
+				if ( $e !== $interrupt ) {
+					throw $e;
+				}
+				$caught = $e;
+			}
+		} finally {
+			remove_filter( 'wp_redirect', $on_redirect );
+			$_POST    = $saved_post;
+			$_REQUEST = $saved_request;
+			if ( null === $saved_referer ) {
+				unset( $_SERVER['HTTP_REFERER'] );
+			} else {
+				$_SERVER['HTTP_REFERER'] = $saved_referer;
+			}
+			wp_set_current_user( 0 );
+		}
+
+		$this->assertNotNull( $caught, 'The save should redirect after adding a list.' );
+		$this->assertCount( 1, $this->writes );
+		$this->assertSame( [ 'other-list' ], $this->writes[0]['add'] );
+		$query = [];
+		wp_parse_str( (string) wp_parse_url( $caught->location, PHP_URL_QUERY ), $query );
+		$this->assertSame( 'other-list', $query[ Newspack_Newsletters_Subscription::SUBSCRIPTION_UPDATE . '_subscribed' ] ?? null );
+	}
+
+	/**
 	 * Register a `newspack_newsletters_contact_lists` callback that records its
 	 * arguments before delegating to $callback. WP_UnitTestCase restores hooks
 	 * on tear down, so the callback does not outlive the test.
