@@ -101,7 +101,9 @@ class Woocommerce_Memberships {
 		if ( ! self::is_enabled() || ! is_array( $lists ) || empty( $lists ) ) {
 			return $lists;
 		}
-		// A contact is being written, so whoever is logged in is never the one to check.
+		// A contact is being written, so whoever is logged in is never the one to check,
+		// and neither is a member a membership activation left in scope earlier in the
+		// request.
 		$is_contact = is_array( $email_address );
 		if ( $is_contact ) {
 			$email_address = isset( $email_address['email'] ) && is_string( $email_address['email'] ) ? $email_address['email'] : '';
@@ -120,7 +122,7 @@ class Woocommerce_Memberships {
 					return true;
 				}
 
-				$user_id = self::$user_id_in_scope;
+				$user_id = $is_contact ? 0 : self::$user_id_in_scope;
 				if ( ! $user_id ) {
 					if ( is_email( $email_address ) ) {
 						// An address with no account holds no membership.

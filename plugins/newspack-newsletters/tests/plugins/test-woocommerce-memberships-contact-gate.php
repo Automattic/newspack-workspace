@@ -83,6 +83,12 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 		$this->assertSame( [ $this->public_id( $this->open_list ) ], $this->gate( [ 'email' => 'reader@example.test' ] ) );
 	}
 
+	public function test_a_member_left_in_scope_does_not_decide_a_later_contact() {
+		$scope = new ReflectionProperty( Woocommerce_Memberships::class, 'user_id_in_scope' );
+		$scope->setValue( null, $this->member_id );
+		$this->assertSame( [ $this->public_id( $this->open_list ) ], $this->gate( [ 'email' => 'reader@example.test' ] ) );
+	}
+
 	public function test_an_entitled_contact_passes() {
 		$this->assertSame(
 			[ $this->public_id( $this->open_list ), $this->public_id( $this->restricted_list ) ],
