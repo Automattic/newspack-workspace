@@ -183,7 +183,18 @@ class Newspack_Blocks_API {
 	 */
 	public static function newspack_blocks_get_tag_labels( $object_info ) {
 		$tag_labels = Newspack_Blocks::get_tag_labels( $object_info['id'] );
-		return ! empty( $tag_labels ) ? array_values( $tag_labels ) : false;
+		if ( empty( $tag_labels ) ) {
+			return false;
+		}
+		return array_map(
+			function ( $label ) {
+				if ( isset( $label['link'] ) ) {
+					$label['link'] = sanitize_url( (string) $label['link'] );
+				}
+				return $label;
+			},
+			array_values( $tag_labels )
+		);
 	}
 
 	/**

@@ -685,6 +685,36 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The newspack_tag_labels REST field never carries an unsafe URL scheme.
+	 *
+	 * Tag-label links come from get_term_link(), which a term_link filter can
+	 * change. The editor renders them as hrefs and a modified click follows
+	 * them, so the payload applies the protocol allowlist the front end gets
+	 * from esc_url().
+	 */
+	public function test_tag_labels_rest_field_strips_unsafe_link_schemes() {
+		if ( ! property_exists( '\Newspack\Tag_Labels', 'stub_labels' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Tag_Labels present; stub-based contract test skipped.' );
+		}
+		$post_id = self::factory()->post->create();
+
+		\Newspack\Tag_Labels::$stub_labels = [
+			[
+				'flag' => 'Breaking',
+				'link' => 'javascript:alert(1)',
+			],
+		];
+		try {
+			$result = Newspack_Blocks_API::newspack_blocks_get_tag_labels( [ 'id' => $post_id ] );
+		} finally {
+			\Newspack\Tag_Labels::$stub_labels = null;
+		}
+
+		self::assertSame( '', $result[0]['link'], 'An unsafe tag-label link arrives empty.' );
+		self::assertSame( 'Breaking', $result[0]['flag'], 'The label itself is unchanged.' );
+	}
+
+	/**
 	 * The newspack_tag_labels REST field returns false when there are no labels.
 	 */
 	public function test_tag_labels_rest_field_empty_returns_false() {
