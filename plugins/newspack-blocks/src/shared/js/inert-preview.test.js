@@ -8,7 +8,11 @@
  * External dependencies
  */
 import { createEvent, fireEvent, render } from '@testing-library/react';
-import { createPortal } from 'react-dom';
+
+/**
+ * WordPress dependencies
+ */
+import { createPortal } from '@wordpress/element';
 
 /**
  * Internal dependencies
