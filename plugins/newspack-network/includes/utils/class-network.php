@@ -17,13 +17,14 @@ use Newspack_Network\Site_Role;
  */
 class Network {
 	/**
-	 * Whether the redirect guard refused a hop since safe_peer_remote_get() last reset it.
-	 * WP_Http turns the guard's exception into a generic WP_Error, so this is how the
-	 * request learns the refusal was the guard's and logs it.
+	 * Whether the plugin's redirect guard refused a hop during the current
+	 * safe_peer_remote_get() call. WP_Http reports the guard's exception as an
+	 * `http_request_failed` WP_Error that keeps only its message, so the flag is what ties
+	 * the error to the guard.
 	 *
 	 * @var bool
 	 */
-	private static $redirect_refused = false;
+	private static bool $redirect_refused = false;
 
 	/**
 	 * Get all networked URLs - excluding url of the site where the function is called.
@@ -145,16 +146,27 @@ class Network {
 			return new \WP_Error( 'newspack_network_unsafe_peer_url', __( 'Refused a request to a URL that is not a public http(s) address on an allowed port.', 'newspack-network' ) );
 		}
 
+		// Saved and restored so a peer request nested inside this one cannot change what
+		// this one reports.
+		$outer_refused          = self::$redirect_refused;
 		self::$redirect_refused = false;
 		$added_guard            = self::add_redirect_guard();
 		try {
 			$response = wp_safe_remote_get( $url, $args );
+			$refused  = self::$redirect_refused;
 		} finally {
+			self::$redirect_refused = $outer_refused;
 			if ( $added_guard ) {
 				self::remove_redirect_guard();
 			}
 		}
-		if ( is_wp_error( $response ) && self::$redirect_refused ) {
+		// Core checks each hop before the plugin's guard does and refuses most unsafe ones
+		// itself, leaving only its message on the error. The URL has already passed the
+		// check above, so that message means a hop was refused, or the host now resolves
+		// somewhere it did not a moment ago, which is a refusal too.
+		// phpcs:ignore WordPress.WP.I18n.MissingArgDomain -- core's own string, matched in core's domain.
+		$core_refused = is_wp_error( $response ) && __( 'A valid URL was not provided.' ) === $response->get_error_message();
+		if ( is_wp_error( $response ) && ( $refused || $core_refused ) ) {
 			self::log_peer_refusal( $url, 'Refused a request to a peer: it redirected to a URL that is not http(s) on an allowed port, resolves to a private or reserved address, or whose lookup failed.' );
 		}
 		return $response;
