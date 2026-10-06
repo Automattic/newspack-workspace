@@ -249,6 +249,10 @@ class Comment_Restriction {
 	 * controller passes that function's errors through and REST reads the status
 	 * from an array the submission path above cannot use.
 	 *
+	 * Comment type needs no check here: the controller accepts only `comment` and
+	 * `note`, and a note needs edit_post on its post, which already exempts the
+	 * author from this restriction.
+	 *
 	 * @param array|\WP_Error  $prepared_comment Prepared comment.
 	 * @param \WP_REST_Request $request          Request.
 	 *
@@ -257,9 +261,6 @@ class Comment_Restriction {
 	public static function refuse_rest_comment( $prepared_comment, $request ) {
 		// The same filter runs when a comment is updated; only creation is restricted.
 		if ( is_wp_error( $prepared_comment ) || ! empty( $request['id'] ) ) {
-			return $prepared_comment;
-		}
-		if ( ! self::is_reader_comment_type( (string) ( $request['type'] ?? '' ) ) ) {
 			return $prepared_comment;
 		}
 		if ( ! self::is_restricted_for_user( get_current_user_id() ) ) {

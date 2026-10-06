@@ -6,7 +6,16 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { SelectControl, TextControl, ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import {
+	Notice,
+	SelectControl,
+	TextControl,
+	ToggleControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack,
+} from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { useEffect, useRef, useState } from '@wordpress/element';
@@ -14,7 +23,7 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Button, Modal, Notice } from '../../../../../packages/components/src';
+import { Button, Modal } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
@@ -124,13 +133,12 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<VStack>
 					{ governedByMemberships && (
-						<Notice
-							isWarning
-							noticeText={ __(
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
+							{ __(
 								'WooCommerce Memberships is active on this site, so the feed and commenting settings have no effect yet. What is saved here applies once Memberships is deactivated.',
 								'newspack-plugin'
 							) }
-						/>
+						</Notice>
 					) }
 					<VStack>
 						<ToggleControl
