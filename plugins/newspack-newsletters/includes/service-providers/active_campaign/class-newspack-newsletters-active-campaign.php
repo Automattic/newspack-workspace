@@ -42,9 +42,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 
 	/**
 	 * Maximum number of recipients for a test email. ActiveCampaign sends a
-	 * test to a single address per request, so each recipient is one API
-	 * call; the cap keeps the loop inside the request timeout. Matches the
-	 * limit ActiveCampaign's own UI applies to test sends.
+	 * test to a single address per request, so each recipient is one API call.
+	 * The cap bounds how many calls one send can make, and matches the limit
+	 * ActiveCampaign documents for its own test sends:
+	 * https://help.activecampaign.com/hc/en-us/articles/115001551270-How-to-test-your-campaigns
 	 *
 	 * @var int
 	 */
@@ -57,6 +58,19 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * @var int
 	 */
 	const TEST_SEND_INTERVAL = 250000;
+
+	/**
+	 * Timeout, in seconds, for each test email request. Lower than
+	 * DEFAULT_REQUEST_TIMEOUT because a test send makes up to
+	 * MAX_TEST_RECIPIENTS calls in one request, after the cleanup, sync,
+	 * create and list calls test() already makes. At the default timeout an
+	 * unresponsive ActiveCampaign could hold the loop past the PHP or proxy
+	 * limit, which costs the publisher the result message for the tests that
+	 * did go out.
+	 *
+	 * @var int
+	 */
+	const TEST_SEND_REQUEST_TIMEOUT = 15;
 
 	/**
 	 * Dispatch states for a stored campaign, returned by
@@ -1479,8 +1493,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * Send a campaign message as a test to each recipient.
 	 *
 	 * ActiveCampaign's test send takes a single address, so each recipient is
-	 * its own request, paced to stay under the API rate limit. A failure for
-	 * one recipient doesn't stop the others.
+	 * its own request, paced to stay under the API rate limit. A rejected
+	 * recipient doesn't stop the others, but a timeout does: ActiveCampaign can
+	 * stop answering calls that reference a given campaign, and every call here
+	 * references the same one, so the remaining recipients would time out too.
+	 * Stopping leaves time to return the result for the tests already sent.
 	 *
 	 * @param int      $campaign_id Campaign ID.
 	 * @param int      $message_id  Campaign message ID.
@@ -1488,9 +1505,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * @return array|WP_Error Result with a message, or error if no test was sent.
 	 */
 	public function send_test_emails( $campaign_id, $message_id, $emails ) {
-		$sent    = [];
-		$failed  = [];
-		$results = [];
+		$emails        = array_values( $emails );
+		$sent          = [];
+		$failed        = [];
+		$results       = [];
+		$not_attempted = [];
 		foreach ( $emails as $index => $email ) {
 			if ( $index > 0 ) {
 				usleep( self::TEST_SEND_INTERVAL );
@@ -1499,17 +1518,26 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				'campaign_send',
 				'GET',
 				[
-					'query' => [
+					'query'   => [
 						'type'       => 'html',
 						'action'     => 'test',
 						'campaignid' => $campaign_id,
 						'messageid'  => $message_id,
-						'email'      => $email,
+						// add_query_arg() encodes only the values already in the
+						// URL, so an address reaches ActiveCampaign exactly as
+						// written. Encode it here, or the "+" of a plus-address
+						// arrives as a space.
+						'email'      => rawurlencode( $email ),
 					],
+					'timeout' => self::TEST_SEND_REQUEST_TIMEOUT,
 				]
 			);
 			if ( is_wp_error( $test_result ) ) {
 				$failed[] = sprintf( '%s (%s)', $email, $test_result->get_error_message() );
+				if ( 'newspack_newsletters_active_campaign_timeout' === $test_result->get_error_code() ) {
+					$not_attempted = array_slice( $emails, $index + 1 );
+					break;
+				}
 				continue;
 			}
 			$sent[]    = $email;
@@ -1517,14 +1545,19 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 
 		if ( empty( $sent ) ) {
-			return new WP_Error(
-				'newspack_newsletters_active_campaign_test',
-				sprintf(
-					// translators: %s are the failed emails, each with the reason.
-					__( 'Sending test campaign failed: %s', 'newspack-newsletters' ),
-					implode( ', ', $failed )
-				)
+			$error_message = sprintf(
+				// translators: %s are the failed emails, each with the reason.
+				__( 'Sending test campaign failed: %s', 'newspack-newsletters' ),
+				implode( ', ', $failed )
 			);
+			if ( ! empty( $not_attempted ) ) {
+				$error_message .= ' ' . sprintf(
+					// translators: %s are comma-separated emails.
+					__( 'Not sent to: %s.', 'newspack-newsletters' ),
+					implode( ', ', $not_attempted )
+				);
+			}
+			return new WP_Error( 'newspack_newsletters_active_campaign_test', $error_message );
 		}
 
 		$message = sprintf(
@@ -1537,6 +1570,13 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				// translators: %s are the failed emails, each with the reason.
 				__( 'Sending failed for: %s', 'newspack-newsletters' ),
 				implode( ', ', $failed )
+			);
+		}
+		if ( ! empty( $not_attempted ) ) {
+			$message .= ' ' . sprintf(
+				// translators: %s are comma-separated emails.
+				__( 'Not sent to: %s. Try these again.', 'newspack-newsletters' ),
+				implode( ', ', $not_attempted )
 			);
 		}
 		return [
