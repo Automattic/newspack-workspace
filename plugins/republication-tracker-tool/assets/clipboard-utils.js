@@ -41,8 +41,8 @@ window.ClipboardUtils = {
 	 * that Convert to blocks turns into ordinary blocks. A pixel with nothing
 	 * after it survives an ordinary paste, so it isn't worth that cost.
 	 *
-	 * @param {string} text - Handout as shown in the modal
-	 * @returns {string|null} - Wrapped handout, or null when there is no tracking beyond the pixel
+	 * @param {string} text - Handout as shown in the Republish textarea
+	 * @returns {string|null} - Wrapped handout, or null when there is no pixel or nothing after it
 	 */
 	wrapTracking(text) {
 		const start = text.lastIndexOf(this.trackingAnchor);
@@ -60,14 +60,14 @@ window.ClipboardUtils = {
 	 * Copy a republish handout as HTML and as plain text.
 	 *
 	 * Editors that read HTML get the wrapped tracking: the block editor keeps
-	 * it, while visual editors outside WordPress may drop the scripts. The
-	 * plain text stays exactly as shown, because a classic editor's Code tab
-	 * reads it, and block markup there would stop WordPress adding paragraph
-	 * tags.
-	 * Browsers without ClipboardItem, or that refuse the HTML copy, get the
-	 * plain text alone.
+	 * it, visual editors outside WordPress may drop the scripts, and a classic
+	 * editor's Visual tab loses the story's paragraphs. The plain text stays
+	 * exactly as shown, because a classic editor's Code tab reads it, and
+	 * block markup there would stop WordPress adding paragraph tags.
+	 * The plain text goes alone when the handout has no tracking beyond the
+	 * pixel, or when the browser lacks ClipboardItem or refuses the HTML copy.
 	 *
-	 * @param {string} text - Handout as shown in the modal
+	 * @param {string} text - Handout as shown in the Republish textarea
 	 * @returns {Promise<boolean>} - Promise resolving to success status
 	 */
 	async copyHandout(text) {

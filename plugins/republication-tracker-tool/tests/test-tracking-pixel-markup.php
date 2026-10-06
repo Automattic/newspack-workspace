@@ -6,7 +6,7 @@
  */
 
 /**
- * The pixel markup the Republish modal's Copy button looks for.
+ * The pixel markup the Republish Copy button looks for.
  */
 class TrackingPixelMarkupTest extends WP_UnitTestCase {
 	/**

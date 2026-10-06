@@ -1,5 +1,5 @@
 /**
- * What the Republish modal's Copy button puts on the clipboard.
+ * What the Republish Copy button puts on the clipboard.
  *
  * The block editor strips pasted scripts but keeps pasted block markup, so the
  * HTML copy wraps the tracking in a Custom HTML block. The plain-text copy
