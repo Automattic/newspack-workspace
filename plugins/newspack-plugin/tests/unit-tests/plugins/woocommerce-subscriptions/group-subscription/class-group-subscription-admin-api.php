@@ -787,4 +787,304 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 			'The revoked link must stop working, not merely disappear from the screen.'
 		);
 	}
+
+	/*
+	 * ---------------------------------------------------------------------
+	 * Change owner: an admin hands the group to another reader.
+	 * ---------------------------------------------------------------------
+	 */
+
+	/**
+	 * Build a change-owner request.
+	 *
+	 * @param int $subscription_id Subscription ID.
+	 * @param int $user_id         The new owner.
+	 *
+	 * @return WP_REST_Request
+	 */
+	private function owner_request( int $subscription_id, int $user_id ): WP_REST_Request {
+		$request = new WP_REST_Request( 'POST', '/newspack-group-subscription/v1/owner' );
+		$request->set_param( 'subscription_id', $subscription_id );
+		$request->set_param( 'user_id', $user_id );
+		return $request;
+	}
+
+	/**
+	 * Handing a group to one of its members swaps the two people's places: the
+	 * previous owner joins as a plain member and keeps access, the new owner
+	 * leaves the member list, and other managers are untouched. The seat count
+	 * does not move, so this works in a full group.
+	 */
+	public function test_change_owner_to_a_member_swaps_owner_and_member() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = $this->create_reader();
+		$manager_id        = $this->create_reader();
+		$group             = $this->create_group( $previous_owner_id, 3 );
+		$this->add_member( $new_owner_id, $group );
+		$this->add_manager( $manager_id, $group );
+		wp_set_current_user( $this->create_store_admin() );
+
+		$response = rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $new_owner_id ) );
+
+		$this->assertSame( 200, $response->get_status(), 'A full group can still change owner to one of its members.' );
+		$this->assertSame( $new_owner_id, (int) $group->get_user_id() );
+		$this->assertEqualsCanonicalizing( [ $previous_owner_id, $manager_id ], array_map( 'intval', Group_Subscription::get_members( $group ) ) );
+		$this->assertEqualsCanonicalizing( [ $new_owner_id, $manager_id ], Group_Subscription::get_managers( $group ), 'The previous owner must become a plain member, not a manager.' );
+		$this->assertNotEmpty( Group_Subscription::get_member_joined_at( $previous_owner_id, $group ), 'The previous owner needs a join date like any member.' );
+		$this->assertSame( 3, Group_Subscription::get_member_count( $group ) );
+	}
+
+	/**
+	 * Picking a reader from outside the group needs a free seat, because the
+	 * previous owner joins as a member.
+	 */
+	public function test_change_owner_to_an_outsider_needs_a_free_seat() {
+		$previous_owner_id = $this->create_reader();
+		$outsider_id       = $this->create_reader();
+		$group             = $this->create_group( $previous_owner_id, 2 );
+		$this->add_member( $this->create_reader(), $group );
+		wp_set_current_user( $this->create_store_admin() );
+
+		$refused = rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $outsider_id ) );
+		$this->assertSame( 409, $refused->get_status(), 'A full group must refuse an owner from outside it.' );
+		$this->assertSame( $previous_owner_id, (int) $group->get_user_id(), 'A refused change must write nothing.' );
+		$this->assertNotContains( $previous_owner_id, array_map( 'intval', Group_Subscription::get_members( $group ) ) );
+
+		Group_Subscription_Settings::update_subscription_settings( $group, [ 'limit' => 3 ] );
+		$response = rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $outsider_id ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $outsider_id, (int) $group->get_user_id() );
+		$this->assertContains( $previous_owner_id, array_map( 'intval', Group_Subscription::get_members( $group ) ) );
+	}
+
+	/**
+	 * Billing belongs to the owner. A group that renews automatically from a card
+	 * on file would go on charging the previous owner's card for someone else's
+	 * group, so it cannot change owner here. A manual-renewal group, which only
+	 * records its gateway, can.
+	 */
+	public function test_change_owner_refused_while_a_payment_method_renews_the_group() {
+		$previous_owner_id = $this->create_reader();
+		$member_id         = $this->create_reader();
+		$group             = $this->create_group( $previous_owner_id );
+		$this->add_member( $member_id, $group );
+		$group->data['payment_method'] = 'stripe';
+		wp_set_current_user( $this->create_store_admin() );
+
+		$this->assertSame( 409, rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $member_id ) )->get_status() );
+		$this->assertSame( $previous_owner_id, (int) $group->get_user_id() );
+
+		$group->data['requires_manual_renewal'] = true;
+		$this->assertSame( 200, rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $member_id ) )->get_status() );
+		$this->assertSame( $member_id, (int) $group->get_user_id() );
+		$this->assertSame( '', $group->get_payment_method(), 'The previous owner\'s gateway must not stay where the new owner could turn auto-renewal back on.' );
+	}
+
+	/**
+	 * A pending invitation to the new owner is fulfilled by the change: it does not
+	 * hold a seat against them, and it does not survive to make them a member too.
+	 */
+	public function test_change_owner_fulfils_the_new_owners_pending_invitation() {
+		$previous_owner_id = $this->create_reader();
+		$invitee_id        = $this->create_reader();
+		$group             = $this->create_group( $previous_owner_id, 2 );
+		Group_Subscription_Invite::generate_invite( $group, get_userdata( $invitee_id )->user_email, false );
+		$this->assertCount( 1, Group_Subscription_Invite::get_invites( $group, false ) );
+		wp_set_current_user( $this->create_store_admin() );
+
+		$response = rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $invitee_id ) );
+
+		$this->assertSame( 200, $response->get_status(), 'The invitation already holds the seat the previous owner moves into.' );
+		$this->assertSame( $invitee_id, (int) $group->get_user_id() );
+		$this->assertCount( 0, Group_Subscription_Invite::get_invites( $group, false ) );
+	}
+
+	/**
+	 * A previous owner who can't be a member (staff) leaves the group rather than
+	 * taking a seat they would get no access from, so a full group still changes
+	 * hands to someone outside it.
+	 */
+	public function test_change_owner_lets_a_staff_previous_owner_leave_the_group() {
+		$staff_owner_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		$outsider_id    = $this->create_reader();
+		$group          = $this->create_group( $staff_owner_id, 2 );
+		$this->add_member( $this->create_reader(), $group );
+		wp_set_current_user( $this->create_store_admin() );
+
+		$this->assertSame( 200, rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $outsider_id ) )->get_status() );
+		$this->assertSame( $outsider_id, (int) $group->get_user_id() );
+		$this->assertNotContains( $staff_owner_id, array_map( 'intval', Group_Subscription::get_members( $group ) ) );
+	}
+
+	/**
+	 * A renewal order still awaiting payment is checked out by its customer, so it
+	 * moves to the new owner; a paid one stays with whoever paid it.
+	 */
+	public function test_change_owner_moves_unpaid_renewal_orders_only() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = $this->create_reader();
+		$group             = $this->create_group( $previous_owner_id );
+		$this->add_member( $new_owner_id, $group );
+		$unpaid_renewal = new WC_Order(
+			[
+				'status'      => 'pending',
+				'total'       => '120.00',
+				'customer_id' => $previous_owner_id,
+			]
+		);
+		$paid_renewal   = new WC_Order(
+			[
+				'status'      => 'completed',
+				'total'       => '120.00',
+				'customer_id' => $previous_owner_id,
+			]
+		);
+		$group->data['related_orders'] = [ 'renewal' => [ $unpaid_renewal, $paid_renewal ] ];
+		wp_set_current_user( $this->create_store_admin() );
+
+		$this->assertSame( 200, rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $new_owner_id ) )->get_status() );
+
+		$this->assertSame( $new_owner_id, (int) $unpaid_renewal->get_customer_id() );
+		$this->assertSame( get_userdata( $new_owner_id )->user_email, $unpaid_renewal->get_billing_email() );
+		$this->assertSame( $previous_owner_id, (int) $paid_renewal->get_customer_id() );
+	}
+
+	/**
+	 * Subscription-derived ESP fields change for both people, and no subscription
+	 * status hook fires to sync them, so both contacts are queued for a sync.
+	 */
+	public function test_change_owner_queues_an_esp_sync_for_both_people() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = $this->create_reader();
+		$group             = $this->create_group( $previous_owner_id );
+		$this->add_member( $new_owner_id, $group );
+		wp_set_current_user( $this->create_store_admin() );
+
+		rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $new_owner_id ) );
+
+		$context = sprintf( 'Group subscription %d changed owner.', $group->get_id() );
+		$this->assertNotFalse( wp_next_scheduled( 'newspack_scheduled_esp_sync', [ $previous_owner_id, $context ] ) );
+		$this->assertNotFalse( wp_next_scheduled( 'newspack_scheduled_esp_sync', [ $new_owner_id, $context ] ) );
+	}
+
+	/**
+	 * Only a store admin may hand a group over. The owner cannot give it away and
+	 * a manager cannot take it: ownership carries billing.
+	 */
+	public function test_change_owner_is_admin_only() {
+		$owner_id   = $this->create_reader();
+		$manager_id = $this->create_reader();
+		$group      = $this->create_group( $owner_id );
+		$this->add_manager( $manager_id, $group );
+
+		foreach ( [ $owner_id, $manager_id ] as $actor_id ) {
+			wp_set_current_user( $actor_id );
+			$this->assertSame( 403, rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $manager_id ) )->get_status() );
+		}
+		$this->assertSame( $owner_id, (int) $group->get_user_id() );
+	}
+
+	/**
+	 * The new owner must be someone who could be a member: staff are not.
+	 */
+	public function test_change_owner_refuses_an_ineligible_user() {
+		$owner_id  = $this->create_reader();
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		$group     = $this->create_group( $owner_id );
+		wp_set_current_user( $this->create_store_admin() );
+
+		$this->assertSame( 400, rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $editor_id ) )->get_status() );
+		$this->assertSame( $owner_id, (int) $group->get_user_id() );
+	}
+
+	/**
+	 * Invite links the previous owner minted keep working. A current link belongs
+	 * to the subscription already; a legacy per-manager link only validates while
+	 * its creator manages the group, so it moves to the new owner.
+	 */
+	public function test_change_owner_keeps_the_previous_owners_invite_links_working() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = $this->create_reader();
+		$group             = $this->create_group( $previous_owner_id );
+		$this->add_member( $new_owner_id, $group );
+		$group->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				$previous_owner_id => [
+					'key'        => 'legacy-key-of-the-previous-owner',
+					'created_at' => time(),
+				],
+			]
+		);
+		wp_set_current_user( $this->create_store_admin() );
+
+		$this->assertSame( 200, rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $new_owner_id ) )->get_status() );
+
+		$this->assertTrue(
+			Group_Subscription_Invite::validate_link_invite( $group, 'legacy-key-of-the-previous-owner' ),
+			'A legacy link minted by the previous owner must survive them stepping down.'
+		);
+		$this->assertSame( $new_owner_id, Group_Subscription_Invite::get_link_invite( $group )['created_by'] );
+	}
+
+	/**
+	 * When the new owner already holds a legacy link of their own, the previous
+	 * owner's link moves to the subscription-wide slot, and both keep working.
+	 */
+	public function test_change_owner_keeps_both_legacy_links_when_the_new_owner_has_one() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = $this->create_reader();
+		$group             = $this->create_group( $previous_owner_id );
+		$this->add_manager( $new_owner_id, $group );
+		$group->update_meta_data(
+			Group_Subscription_Invite::LINK_META,
+			[
+				$previous_owner_id => [
+					'key'        => 'legacy-key-of-the-previous-owner',
+					'created_at' => time(),
+				],
+				$new_owner_id      => [
+					'key'        => 'legacy-key-of-the-new-owner',
+					'created_at' => time(),
+				],
+			]
+		);
+		wp_set_current_user( $this->create_store_admin() );
+
+		$this->assertSame( 200, rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $new_owner_id ) )->get_status() );
+
+		$this->assertTrue( Group_Subscription_Invite::validate_link_invite( $group, 'legacy-key-of-the-previous-owner' ) );
+		$this->assertTrue( Group_Subscription_Invite::validate_link_invite( $group, 'legacy-key-of-the-new-owner' ) );
+	}
+
+	/**
+	 * Renewal invoices go to the subscription's billing contact, so the new owner's
+	 * billing details replace the previous owner's. Without a saved address the
+	 * account email and name stand in, and none of the previous owner's address
+	 * is left behind.
+	 */
+	public function test_change_owner_moves_billing_details_to_the_new_owner() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = self::factory()->user->create(
+			[
+				'role'       => 'subscriber',
+				'user_email' => 'new-owner@example.test',
+				'first_name' => 'Nora',
+				'last_name'  => 'Owner',
+			]
+		);
+		update_user_meta( $new_owner_id, '_newspack_reader', true );
+		$group = $this->create_group( $previous_owner_id );
+		$this->add_member( $new_owner_id, $group );
+		$group->data['billing_email']     = 'previous-owner@example.test';
+		$group->data['billing_address_1'] = '1 Previous Street';
+		wp_set_current_user( $this->create_store_admin() );
+
+		rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $new_owner_id ) );
+
+		$this->assertSame( 'new-owner@example.test', $group->get_billing_email() );
+		$this->assertSame( 'Nora', $group->get_billing_first_name() );
+		$this->assertSame( '', $group->get_billing_address_1() );
+	}
 }

@@ -90,8 +90,8 @@ export function useGroup( id ) {
  * Every one of these targets the `newspack-group-subscription/v1` API that already
  * backs the reader-facing My Account group page, so the member, invite and
  * invite-link rules live in exactly one place and cannot drift between the two
- * surfaces. `/manager` and `/seat-limit` are the two additions: they have no My
- * Account equivalent, and they sit on the same API for the same reason.
+ * surfaces. `/manager`, `/seat-limit` and `/owner` are the additions: they have no
+ * My Account equivalent, and they sit on the same API for the same reason.
  *
  * @param {number|string} id The group subscription ID.
  * @return {Object} The write calls, each returning a promise.
@@ -114,6 +114,14 @@ export function useGroupActions( id ) {
 		disableInviteLink: useCallback( () => post( '/invite-link', {}, 'DELETE' ), [ post ] ),
 		setManagerRole: useCallback( ( userId, role ) => post( '/manager', { user_id: userId, role } ), [ post ] ),
 		setSeatLimit: useCallback( limit => post( '/seat-limit', { limit } ), [ post ] ),
+		changeOwner: useCallback( userId => post( '/owner', { user_id: userId } ), [ post ] ),
+		/**
+		 * Find readers outside the group by name or email.
+		 *
+		 * @param {string} search The search term; the endpoint answers nothing below two characters.
+		 * @return {Promise<Array<{id: number, text: string, name: string}>>} Matches: `email (#id)` text plus the display name.
+		 */
+		searchReaders: useCallback( search => post( '/search-users', { search } ), [ post ] ),
 		/**
 		 * Resolve an email address to an existing reader account.
 		 *
