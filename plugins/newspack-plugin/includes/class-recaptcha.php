@@ -273,6 +273,12 @@ final class Recaptcha {
 				$settings['credentials'][ $current_version ]['site_secret'] = $legacy_secret;
 			}
 
+			if ( empty( $legacy_key ) || empty( $legacy_secret ) ) {
+				// No legacy settings found. Nothing to migrate. Return the current settings.
+				// Do not delete cache as it could hurt performance.
+				return $settings;
+			}
+
 			// Avoid notoptions cache issue.
 			wp_cache_delete( 'notoptions', 'options' );
 			wp_cache_delete( 'alloptions', 'options' );
