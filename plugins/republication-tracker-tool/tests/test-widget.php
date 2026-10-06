@@ -167,9 +167,7 @@ class WidgetTest extends WP_UnitTestCase {
 
 	/**
 	 * The page layout carries its destination in a data attribute that widget.js reads,
-	 * not in an inline handler. esc_url() escapes for an HTML attribute, not for the
-	 * JavaScript string literal an onclick would place the request path into, so the
-	 * attribute form is the one that stays correct for any request path.
+	 * as the copy button does.
 	 */
 	public function test_page_layout_button_uses_data_attribute_not_inline_handler() {
 		global $post, $wp_query;
@@ -192,7 +190,7 @@ class WidgetTest extends WP_UnitTestCase {
 				'layout' => 'page',
 				'title'  => 'Republish This Story',
 				'text'   => 'Test widget text',
-			) 
+			)
 		);
 		$output = ob_get_clean();
 
@@ -202,12 +200,10 @@ class WidgetTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A metacharacter in the request path is delivered as the data attribute's value and
-	 * never reaches an inline navigation handler. The input is an apostrophe, an ordinary
-	 * character in real request paths; esc_url() renders it as the entity &#039; inside the
-	 * attribute, where it is data rather than part of a JavaScript string.
+	 * A request path containing an apostrophe comes back encoded in the button's data
+	 * attribute.
 	 */
-	public function test_page_layout_button_encodes_request_path_metacharacters() {
+	public function test_page_layout_button_encodes_request_path_in_attribute() {
 		global $post, $wp_query;
 		$post                        = $this->test_post;
 		$wp_query->is_single         = true;
@@ -221,7 +217,7 @@ class WidgetTest extends WP_UnitTestCase {
 			'after_title'   => '</h2>',
 		);
 
-		$original_request_uri   = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : null;
+		$saved_server           = $_SERVER;
 		$_SERVER['REQUEST_URI'] = '/2026/09/sample-story/?ref=o\'brien';
 
 		ob_start();
@@ -231,19 +227,15 @@ class WidgetTest extends WP_UnitTestCase {
 				'layout' => 'page',
 				'title'  => 'Republish This Story',
 				'text'   => 'Test widget text',
-			) 
+			)
 		);
 		$output = ob_get_clean();
 
-		if ( null === $original_request_uri ) {
-			unset( $_SERVER['REQUEST_URI'] );
-		} else {
-			$_SERVER['REQUEST_URI'] = $original_request_uri;
-		}
+		$_SERVER = $saved_server;
 
-		// The metacharacter-bearing path is carried, encoded, as the data attribute's value...
+		// The path comes back encoded in the data attribute...
 		$this->assertMatchesRegularExpression( '/data-republish-url="[^"]*o&#039;brien[^"]*"/', $output );
-		// ...and the request path never lands in an inline navigation handler.
+		// ...and the markup carries no navigation script of its own.
 		$this->assertStringNotContainsString( 'window.location.href', $output );
 	}
 }

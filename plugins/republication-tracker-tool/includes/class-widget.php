@@ -94,9 +94,7 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 		}
 
 		if ( ! empty( $instance['layout'] ) && 'page' === $instance['layout'] ) {
-			// Carry the destination in a data attribute rather than an inline handler:
-			// esc_url() escapes for an HTML attribute, not for the JavaScript string
-			// literal an onclick would place it in. widget.js reads this and navigates.
+			// widget.js reads this attribute and navigates, as it does for the copy button.
 			printf(
 				'<p><button name="%1$s" id="cc-btn" class="republication-tracker-tool-button page" data-republish-url="%2$s" role="link">%1$s</button></p>',
 				esc_html__( 'Republish This Story', 'republication-tracker-tool' ),
