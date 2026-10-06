@@ -515,10 +515,10 @@ class TestHubWebhook extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Repeated deliveries from the same Node log one line a day, and every
-	 * delivery is still processed.
+	 * A later delivery from the same Node that day is processed but not logged
+	 * again.
 	 */
-	public function test_node_origin_is_logged_once_a_day() {
+	public function test_node_origin_is_not_logged_again_the_same_day() {
 		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
 
 		list( $response, $logged ) = $this->deliver_from_node_authored_by( $editor_id, 2 );
