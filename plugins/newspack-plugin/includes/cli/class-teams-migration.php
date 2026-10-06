@@ -80,6 +80,14 @@ class Teams_Migration {
 	const MIGRATED_TEAM_ID_META_KEY = Group_Subscription::MIGRATED_TEAM_ID_META_KEY;
 
 	/**
+	 * Sub column of a migrate-teams summary row for a team skipped because it had
+	 * nothing to reuse and no access to carry over.
+	 *
+	 * @var string
+	 */
+	const SKIPPED_ENDED_TEAM = 'SKIPPED';
+
+	/**
 	 * Value-requiring flags of migrate-manual-members, for the raw-argv bare-flag
 	 * guard. See get_valueless_value_flags().
 	 *
@@ -120,7 +128,8 @@ class Teams_Migration {
 	 * was previously migrated to (stamped with MIGRATED_TEAM_ID_META_KEY), falling
 	 * back to an unmarked group subscription owned by the team owner for groups from
 	 * migrator runs predating per-team marking. If none is found, creates a new $0
-	 * subscription on the given product.
+	 * subscription on the given product, provided someone in the team still has
+	 * access through it (see below).
 	 *
 	 * The command is idempotent — re-running it updates existing group
 	 * subscriptions in place rather than creating duplicates. Reuse keys on the
@@ -150,6 +159,19 @@ class Teams_Migration {
 	 * migrated group to update, since creating one would hand the owner permanent
 	 * free access and remove their reason to fix their payment method.
 	 *
+	 * A team with nothing to reuse in which nobody has access today is skipped and
+	 * reported as SKIPPED, not as an error. That is the usual state of a team whose
+	 * subscription was cancelled or expired, since Teams ends its members'
+	 * memberships with it. Creating a $0 group for it would re-add every lapsed
+	 * member and hand them free access they no longer have. "Has access" means a
+	 * WooCommerce Memberships user membership linked to the team (Teams stamps each
+	 * seat's membership with `_team_id`) in a status that grants access today. A
+	 * team never linked to a subscription is judged by its own end date instead:
+	 * Teams ends such a team on that date, its members' memberships can lag behind
+	 * it, and it may hold only pending invitees so far. The check is per team: a team that passes it re-adds
+	 * all of its members, as before. Pass --include-ended-teams to create a group
+	 * for every team with nothing to reuse.
+	 *
 	 * Pending team invitations are not re-sent. Their existing `join-team` links keep
 	 * working: once WooCommerce Teams is deactivated the plugin answers that route and
 	 * maps each link onto this migration's group subscription. The run lists the
@@ -171,6 +193,9 @@ class Teams_Migration {
 	 * [--only-unlinked]
 	 * : Only process teams that have no linked subscription. Use to safely re-run the command for previously skipped teams.
 	 *
+	 * [--include-ended-teams]
+	 * : With --product-id, create a subscription for every team that has nothing to reuse, including teams in which nobody has access today. Without it those teams are skipped and marked SKIPPED in the summary.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp newspack migrate-teams --product-id=519858
@@ -188,6 +213,7 @@ class Teams_Migration {
 		$dry_run             = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
 		$skip_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
 		$only_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
+		$include_ended_teams = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'include-ended-teams', false );
 
 		// Pre-flight checks.
 		if ( ! $product_id && ! $skip_unlinked ) {
@@ -310,6 +336,10 @@ class Teams_Migration {
 		if ( $invitation_drop_count ) {
 			WP_CLI::warning( sprintf( '%d pending team invitation(s) hold a stored address that is not a valid email. They cannot be listed by this command; find them by looking for wc_team_invitation posts whose title is not an email address.', $invitation_drop_count ) );
 		}
+
+		// One query for the whole run rather than one per team. Only the create
+		// branch reads it, and only when it can create.
+		$team_ids_with_access = ( $migration_product && ! $include_ended_teams ) ? self::get_team_ids_with_member_access() : [];
 
 		$summary               = [];
 		$skipped               = [];
@@ -490,6 +520,27 @@ class Teams_Migration {
 				$errors[] = 'no reusable subscription and no --product-id supplied to create one';
 				WP_CLI::warning( sprintf( 'Team %d: linked subscription is inactive/missing and no --product-id was supplied to create a replacement — skipping. Re-run with --product-id to migrate these teams.', $team_id ) );
 				$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $group_limit, false, $errors );
+				continue;
+			}
+
+			// Nothing to reuse and nobody in the team has access through it, so there
+			// is no access to carry over. Creating a $0 group here would re-add every
+			// lapsed member and give them free access they no longer have. Reported
+			// as SKIPPED rather than as an error: it is the expected outcome for a
+			// team whose subscription ended. A team never linked to a subscription is
+			// judged by its own term instead (see the command docblock), so one
+			// holding only pending invitees still gets a group for their join-team
+			// links to resolve to.
+			$team_has_access = $raw_sub_id
+				? isset( $team_ids_with_access[ $team_id ] )
+				: ( '' === $end_date || strtotime( $end_date . ' UTC' ) > time() );
+			if ( ! $subscription && ! $include_ended_teams && ! $team_has_access ) {
+				$summary[] = self::summary_row( $team_id, self::SKIPPED_ENDED_TEAM, 0, 0, $group_limit, false, [] );
+				$skip_reason = $raw_sub_id
+					? 'nobody in the team has access today'
+					: sprintf( 'the team, never linked to a subscription, ended on %s', $end_date );
+				WP_CLI::line( sprintf( 'Team %d: nothing to reuse, and %s — skipping. Pass --include-ended-teams to create one anyway.', $team_id, $skip_reason ) );
+				\WP_CLI\Utils\wp_clear_object_cache();
 				continue;
 			}
 
@@ -750,9 +801,10 @@ class Teams_Migration {
 		}
 
 		// Invitees of teams the run never reached — skipped by --skip-unlinked or
-		// --only-unlinked, or errored out for having no subscription to migrate into.
-		// They are listed too, so "the pending invitees are always listed" holds for
-		// every team rather than only the processed ones. The em dash in their `sub`
+		// --only-unlinked, skipped with no access to carry over, or errored out for
+		// having no subscription to migrate into. They are listed too, so "the
+		// pending invitees are always listed" holds for every team rather than only
+		// the processed ones. The em dash in their `sub`
 		// column is what tells an operator their links resolve to nothing: with no group
 		// subscription to map onto, the handler can only show the invalid-link notice.
 		foreach ( $pending_invitations as $team_id => $team_emails ) {
@@ -780,14 +832,19 @@ class Teams_Migration {
 			\WP_CLI\Utils\format_items( 'table', $invitation_rows, [ 'team_id', 'sub', 'invitee' ] );
 		}
 
-		$new_count = count( array_filter( $summary, fn( $r ) => $r['created_new'] ) );
+		$new_count   = count( array_filter( $summary, fn( $r ) => $r['created_new'] ) );
+		$ended_count = count( array_filter( $summary, fn( $r ) => self::SKIPPED_ENDED_TEAM === $r['subscription_id'] ) );
 		WP_CLI::line( '' );
-		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d skipped, %d had error(s).', count( $summary ), count( $summary ) - $new_count, $new_count, count( $skipped ), count( $errored_rows ) ) );
+		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d skipped (no linked subscription), %d skipped with no access to carry over, %d had error(s).', count( $summary ), count( $summary ) - $new_count - $ended_count, $new_count, count( $skipped ), $ended_count, count( $errored_rows ) ) );
+		if ( $ended_count ) {
+			WP_CLI::line( 'No subscription was created for the teams marked SKIPPED above. Pass --include-ended-teams to create one for each.' );
+		}
 		if ( ! empty( $invitation_rows ) ) {
 			// Split the claim: an invitee whose team has no group subscription — skipped
-			// by the flags, or errored before one was resolved — reaches the invalid-link
-			// notice, not an invite. Reporting the two together would tell an operator it
-			// is safe to deactivate Teams without contacting anyone on the list.
+			// by the flags or for having no access to carry over, or errored before one was
+			// resolved — reaches the invalid-link notice, not an invite. Reporting the
+			// two together would tell an operator it is safe to deactivate Teams
+			// without contacting anyone on the list.
 			$unresolved = count( array_filter( $invitation_rows, fn( $row ) => '—' === $row['sub'] ) );
 			WP_CLI::success(
 				sprintf(
@@ -797,9 +854,34 @@ class Teams_Migration {
 				)
 			);
 			if ( $unresolved ) {
-				WP_CLI::warning( sprintf( '%d of them belong to teams with no group subscription (an em dash in the sub column). Those links resolve to nothing — contact those invitees directly, or re-run so their team migrates.', $unresolved ) );
+				WP_CLI::warning( sprintf( '%d of them belong to teams with no group subscription (an em dash in the sub column). Those links resolve to nothing — contact those invitees directly, or re-run so their team migrates (a team marked SKIPPED needs --include-ended-teams).', $unresolved ) );
 			}
 		}
+	}
+
+	/**
+	 * Teams in which at least one person still has access through the team: a
+	 * WooCommerce Memberships user membership that Teams linked to the team
+	 * (`_team_id`) is in a status that grants access today. Statuses come from
+	 * Memberships_Audit::get_active_membership_statuses(), as migrate-manual-members
+	 * reads them.
+	 *
+	 * @return array<int, true> Team IDs as keys, for isset() lookups.
+	 */
+	public static function get_team_ids_with_member_access(): array {
+		global $wpdb;
+		$statuses = Memberships_Audit::get_active_membership_statuses();
+		$team_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- One read for the whole CLI run.
+			$wpdb->prepare(
+				"SELECT DISTINCT pm.meta_value FROM {$wpdb->postmeta} pm
+				INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+				WHERE pm.meta_key = '_team_id'
+				AND p.post_type = 'wc_user_membership'
+				AND p.post_status IN ( " . implode( ', ', array_fill( 0, count( $statuses ), '%s' ) ) . ' )',
+				$statuses
+			)
+		);
+		return array_fill_keys( array_map( 'intval', $team_ids ), true );
 	}
 
 	/**
