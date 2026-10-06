@@ -103,6 +103,8 @@ export default function ChangeOwnerFlow( { group, actions, onClose, onDone } ) {
 		if ( ! canSearch || search.trim().length < MIN_SEARCH_LENGTH ) {
 			setReaders( [] );
 			setSearchError( '' );
+			// A request cancelled by this change never clears its own loading state.
+			setSearching( false );
 			return;
 		}
 		let cancelled = false;
