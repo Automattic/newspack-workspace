@@ -337,7 +337,7 @@ class Newspack_Newsletters_Contacts {
 		$lists_to_add    = array_diff( $lists_to_add, $current_lists );
 		$lists_to_remove = array_intersect( $current_lists, $lists_to_remove );
 
-		// Removals are not filtered: leaving a list is always allowed.
+		// Only additions are narrowed; leaving a list is always allowed.
 		$lists_to_add = self::filter_lists_to_add( $lists_to_add, $email );
 
 		if ( empty( $lists_to_add ) && empty( $lists_to_remove ) ) {
@@ -353,13 +353,13 @@ class Newspack_Newsletters_Contacts {
 	 * Additions go through the same filter as a new contact's lists, so
 	 * integrations that limit who may join a list apply to updates too. The
 	 * result is intersected so a callback can only drop a selection, never add
-	 * one the reader did not choose. Callers that report what was added use this
-	 * too, so the report matches what was written.
+	 * one the reader did not choose. Callers that report what was added use the
+	 * same narrowing.
 	 *
-	 * @param string[] $lists_to_add List IDs to add.
-	 * @param string   $email        Contact email address.
+	 * @param (int|string)[] $lists_to_add List IDs to add.
+	 * @param string         $email        Contact email address.
 	 *
-	 * @return string[] The list IDs that remain.
+	 * @return (int|string)[] The list IDs that remain.
 	 */
 	public static function filter_lists_to_add( $lists_to_add, $email ) {
 		$provider = Newspack_Newsletters::get_service_provider();

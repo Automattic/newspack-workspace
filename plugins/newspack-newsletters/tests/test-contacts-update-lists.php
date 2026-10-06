@@ -247,6 +247,7 @@ class Contacts_Update_Lists_Test extends WP_UnitTestCase {
 
 		$saved_post    = $_POST; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		$saved_request = $_REQUEST; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$saved_user    = get_current_user_id();
 		$saved_referer = $_SERVER['HTTP_REFERER'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Saved to restore verbatim.
 		$interrupt     = new class() extends Exception {
 			/**
@@ -289,7 +290,7 @@ class Contacts_Update_Lists_Test extends WP_UnitTestCase {
 			} else {
 				$_SERVER['HTTP_REFERER'] = $saved_referer;
 			}
-			wp_set_current_user( 0 );
+			wp_set_current_user( $saved_user );
 		}
 
 		$this->assertNotNull( $caught, 'The save should redirect after adding a list.' );
