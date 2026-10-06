@@ -448,7 +448,6 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			]
 		);
 
-		self::assertCount( 7, $seen_ids, 'Following the next URLs returns every post exactly once.' );
 		self::assertEqualsCanonicalizing( $post_ids, $seen_ids, 'Following the next URLs reaches the final page of posts.' );
 	}
 
@@ -477,9 +476,11 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		for ( $i = 0; $i < 10; $i++ ) {
 			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
 			$request->set_query_params( array_merge( $params, [ 'exclude_ids' => implode( ',', $seen_ids ) ] ) );
-			$data     = rest_do_request( $request )->get_data();
+			$data = rest_do_request( $request )->get_data();
+			// A next URL that leads to no posts would leave readers a Load More click that does nothing.
+			self::assertNotEmpty( $data['ids'], 'Every request in the Load More chain returns posts.' );
 			$seen_ids = array_merge( $seen_ids, $data['ids'] );
-			if ( empty( $data['ids'] ) || empty( $data['next'] ) ) {
+			if ( empty( $data['next'] ) ) {
 				break;
 			}
 			wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $params );
