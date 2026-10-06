@@ -357,6 +357,23 @@ class Newspack_Test_Gate_Access_Reader_Data extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A reader who already holds the maximum number of reader data keys still gets
+	 * the item. Without it they would match every "cannot access" segment, paying
+	 * or not.
+	 */
+	public function test_item_is_stored_for_a_reader_at_the_key_cap() {
+		$owner_id = $this->create_reader();
+		$this->create_subscription( $owner_id );
+		for ( $i = count( Reader_Data::get_data( $owner_id ) ); $i < Reader_Data::MAX_ITEMS; $i++ ) {
+			Reader_Data::update_item( $owner_id, "filler_$i", '1' );
+		}
+
+		$this->view_page_as( $owner_id );
+
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $owner_id ) );
+	}
+
+	/**
 	 * The item is server-owned: a reader must not be able to write their way into
 	 * or out of a gate-access segment.
 	 */

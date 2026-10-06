@@ -38,6 +38,12 @@ final class Gate_Access_Reader_Data {
 	const GATES_VERSION_OPTION = 'newspack_accessible_gates_version';
 
 	/**
+	 * Reader data attribute nothing writes. The criteria read it while Access
+	 * Control is off, so they match no reader rather than being skipped.
+	 */
+	const INACTIVE_ATTRIBUTE = 'accessible_gates_unavailable';
+
+	/**
 	 * Rule types that grant access by holding a product.
 	 */
 	const PRODUCT_RULES = [ 'subscription', 'one_time_purchase' ];
@@ -47,6 +53,7 @@ final class Gate_Access_Reader_Data {
 	 */
 	public static function init() {
 		add_filter( 'newspack_reader_data_read_only_keys', [ __CLASS__, 'register_read_only_key' ] );
+		add_filter( 'newspack_reader_data_max_items', [ __CLASS__, 'exempt_from_item_cap' ], 10, 3 );
 		add_filter( 'newspack_popups_default_criteria', [ __CLASS__, 'register_criteria' ] );
 		add_action( 'init', [ __CLASS__, 'register_data_event_handlers' ] );
 
@@ -91,11 +98,30 @@ final class Gate_Access_Reader_Data {
 	}
 
 	/**
+	 * Keep the item storable for a reader at the reader data key cap. A missing
+	 * item matches every "cannot access" segment, so a refused write would show
+	 * a paying reader the offers meant for non-payers. The cap bounds keys the
+	 * browser adds; this is one server-owned key.
+	 *
+	 * @param int    $max_items Maximum number of items.
+	 * @param int    $user_id   User ID.
+	 * @param string $key       Key being written.
+	 *
+	 * @return int
+	 */
+	public static function exempt_from_item_cap( $max_items, $user_id, $key ) {
+		return self::STORE_KEY === $key ? PHP_INT_MAX : $max_items;
+	}
+
+	/**
 	 * Register the Data Event handlers that keep the item current.
 	 */
 	public static function register_data_event_handlers(): void {
 		Data_Events::register_handler( [ __CLASS__, 'handle_user_event' ], 'reader_logged_in' );
 		Data_Events::register_handler( [ __CLASS__, 'handle_product_subscription_changed' ], 'product_subscription_changed' );
+		// A gate can name a recurring-donation product, and those changes travel on
+		// their own event with the same payload keys.
+		Data_Events::register_handler( [ __CLASS__, 'handle_product_subscription_changed' ], 'donation_subscription_changed' );
 		Data_Events::register_handler( [ __CLASS__, 'handle_woo_order_updated' ], 'woo_order_updated' );
 	}
 
@@ -219,9 +245,10 @@ final class Gate_Access_Reader_Data {
 	 * on a known answer. An unchanged list is not rewritten, which keeps
 	 * `newspack_reader_data_updated` listeners quiet.
 	 *
-	 * The stamp is written even when the item write is refused (a reader at the
-	 * reader data key cap). Staleness is read from the stamp alone, so that
-	 * reader is not recomputed on every page view.
+	 * The stamp records the gate version read before the gates were evaluated, so
+	 * a gate edited mid-computation leaves the list stale rather than current. It
+	 * is written only once the item is stored, so a refused write is retried on
+	 * the next page view.
 	 *
 	 * @param int $user_id User ID.
 	 */
@@ -229,19 +256,20 @@ final class Gate_Access_Reader_Data {
 		if ( $user_id <= 0 || ! self::is_enabled() ) {
 			return;
 		}
+		$version = self::get_gates_version();
 		// The memo lives as long as the process, and an Action Scheduler run handles
 		// several Data Events in one: a purchase made after an earlier event in the
 		// same run would otherwise read that event's answer.
 		Access_Rules::flush_one_time_purchase_memo();
 		$value = wp_json_encode( self::get_accessible_gate_ids( $user_id ) );
-		if ( Reader_Data::get_data( $user_id, self::STORE_KEY ) !== $value ) {
-			Reader_Data::update_item( $user_id, self::STORE_KEY, $value );
+		if ( Reader_Data::get_data( $user_id, self::STORE_KEY ) !== $value && \is_wp_error( Reader_Data::update_item( $user_id, self::STORE_KEY, $value ) ) ) {
+			return;
 		}
 		update_user_meta(
 			$user_id,
 			self::STAMP_META_KEY,
 			[
-				'version'  => self::get_gates_version(),
+				'version'  => $version,
 				'computed' => time(),
 			]
 		);
@@ -372,6 +400,9 @@ final class Gate_Access_Reader_Data {
 	/**
 	 * Register the "Can access" and "Cannot access" Campaigns criteria.
 	 *
+	 * With Access Control off both fail closed: `list__in` against an attribute no
+	 * reader has never matches.
+	 *
 	 * Options are computed in admin only: the segments editor is their sole
 	 * consumer, and a list criterion with options renders there as a checkbox list.
 	 * Values are strings because the editor compares checkbox values strictly; the
@@ -382,26 +413,29 @@ final class Gate_Access_Reader_Data {
 	 * @return array
 	 */
 	public static function register_criteria( array $criteria ): array {
-		if ( ! self::is_enabled() ) {
-			return $criteria;
-		}
+		$is_enabled = self::is_enabled();
+		// Campaigns skips a criterion it does not know, so unregistering these with
+		// Access Control off would let a "cannot access" segment match every reader.
+		// They stay registered and read an attribute nothing writes, so neither
+		// matches anyone until Access Control is back on.
+		$attribute = $is_enabled ? self::STORE_KEY : self::INACTIVE_ATTRIBUTE;
 		// Admin-ajax and heartbeat requests are admin too, but never render the editor.
-		$options = is_admin() && ! wp_doing_ajax() ? self::get_gate_options() : [];
+		$options = $is_enabled && is_admin() && ! wp_doing_ajax() ? self::get_gate_options() : [];
 
 		$criteria['can_access_gates']    = [
 			'name'               => __( 'Can access content gate(s)', 'newspack-plugin' ),
 			'description'        => __( 'If the reader has paid access to any of the selected content gates, through a subscription they own, a group subscription they belong to, or a purchase.', 'newspack-plugin' ),
 			'category'           => 'reader_revenue',
 			'matching_function'  => 'list__in',
-			'matching_attribute' => self::STORE_KEY,
+			'matching_attribute' => $attribute,
 			'options'            => $options,
 		];
 		$criteria['cannot_access_gates'] = [
 			'name'               => __( 'Cannot access content gate(s)', 'newspack-plugin' ),
 			'description'        => __( 'If the reader has paid access to none of the selected content gates.', 'newspack-plugin' ),
 			'category'           => 'reader_revenue',
-			'matching_function'  => 'list__not_in',
-			'matching_attribute' => self::STORE_KEY,
+			'matching_function'  => $is_enabled ? 'list__not_in' : 'list__in',
+			'matching_attribute' => $attribute,
 			'options'            => $options,
 		];
 		return $criteria;
