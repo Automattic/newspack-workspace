@@ -442,6 +442,26 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A settings save announces which settings changed, so other plugins (Newspack
+	 * Network reports members when a group is turned on or off) can react; a save
+	 * that changes nothing announces nothing.
+	 */
+	public function test_settings_update_announces_changed_keys() {
+		$sub       = $this->create_group_subscription( $this->create_reader_user() );
+		$announced = [];
+		$listener  = function ( $subscription, $changed_keys ) use ( &$announced ) {
+			$announced[] = [ $subscription->get_id(), $changed_keys ];
+		};
+		add_action( 'newspack_group_subscription_settings_updated', $listener, 10, 2 );
+
+		Group_Subscription_Settings::update_subscription_settings( $sub, [ 'enabled' => true ] );
+		Group_Subscription_Settings::update_subscription_settings( $sub, [ 'enabled' => false ] );
+
+		remove_action( 'newspack_group_subscription_settings_updated', $listener, 10 );
+		$this->assertSame( [ [ $sub->get_id(), [ 'enabled' ] ] ], $announced );
+	}
+
+	/**
 	 * The limit is projected from the IDs that would genuinely become members, not from the raw
 	 * batch: an ID the add would skip anyway (an existing member, a non-reader) takes no seat, so
 	 * counting it would reject an add that in fact fits.
