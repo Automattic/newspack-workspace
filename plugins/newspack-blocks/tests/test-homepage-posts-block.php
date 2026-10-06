@@ -415,6 +415,72 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Load More offers a next page exactly while posts remain: every request in the
+	 * chain returns posts, and together they return every matching post exactly once,
+	 * whether or not "Allow duplicate content" is on.
+	 *
+	 * @dataProvider deduplicate_settings
+	 *
+	 * @param bool $deduplicate The block's deduplicate attribute.
+	 */
+	public function test_articles_endpoint_offers_next_url_exactly_while_posts_remain( $deduplicate ) {
+		$category_id = self::factory()->category->create();
+		$post_ids    = [];
+		for ( $i = 0; $i < 7; $i++ ) {
+			// Distinct dates keep the date ordering, and so each page's contents, deterministic.
+			$post_ids[] = self::factory()->post->create(
+				[
+					'post_status'   => 'publish',
+					'post_category' => [ $category_id ],
+					'post_date'     => gmdate( 'Y-m-d H:i:s', strtotime( '2026-01-01' ) + $i * HOUR_IN_SECONDS ),
+				]
+			);
+		}
+		wp_set_current_user( 0 );
+
+		// Follow the chain the way the block's Load More script does: each request is the
+		// previous response's next URL plus the IDs of every post shown so far. The first
+		// request carries no page param, so it must be served as page 1 and stands in for
+		// the block's server render.
+		$params   = [
+			'postsToShow' => 3,
+			'moreButton'  => 1,
+			'categories'  => [ $category_id ],
+			'deduplicate' => $deduplicate ? 1 : 0,
+		];
+		$seen_ids = [];
+		// Bounded so a next URL that never empties fails the test instead of hanging it.
+		for ( $i = 0; $i < 10; $i++ ) {
+			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+			$request->set_query_params( array_merge( $params, [ 'exclude_ids' => implode( ',', $seen_ids ) ] ) );
+			$response = rest_do_request( $request );
+			self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+			$data = $response->get_data();
+			// A next URL that leads to no posts would leave readers a Load More click that does nothing.
+			self::assertNotEmpty( $data['ids'], 'Every request in the Load More chain returns posts.' );
+			$seen_ids = array_merge( $seen_ids, $data['ids'] );
+			if ( empty( $data['next'] ) ) {
+				break;
+			}
+			wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $params );
+		}
+
+		self::assertEqualsCanonicalizing( $post_ids, $seen_ids, 'Following the next URLs returns every post exactly once.' );
+	}
+
+	/**
+	 * Values of the block's deduplicate attribute.
+	 *
+	 * @return array[]
+	 */
+	public function deduplicate_settings() {
+		return [
+			'allow duplicate content off' => [ true ],
+			'allow duplicate content on'  => [ false ],
+		];
+	}
+
+	/**
 	 * The editor posts endpoint must not expose live author-archive links.
 	 *
 	 * The editor canvas renders newspack_post_byline and newspack_post_avatars
@@ -829,5 +895,73 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertStringContainsString( 'PUBLICMARK', $excerpt, 'Public block content must remain in excerpt.' );
 
 		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * The subtitle allowlist keeps the inline formatting an editor may write.
+	 */
+	public function test_sanitize_post_subtitle_keeps_allowed_markup() {
+		self::assertSame(
+			'A <em>real</em> <strong>subtitle</strong>',
+			Newspack_Blocks::sanitize_post_subtitle( 'A <em>real</em> <strong>subtitle</strong>' ),
+			'Allowed inline tags survive sanitization.'
+		);
+		self::assertSame(
+			'<a href="https://example.com" target="_blank" rel="noopener">Link</a>',
+			Newspack_Blocks::sanitize_post_subtitle( '<a href="https://example.com" target="_blank" rel="noopener">Link</a>' ),
+			'A link keeps href, target and rel.'
+		);
+	}
+
+	/**
+	 * Markup outside the allowlist is removed rather than escaped, so nothing reaches
+	 * the editor component that assigns this value as HTML.
+	 */
+	public function test_sanitize_post_subtitle_removes_disallowed_markup() {
+		$sanitized = Newspack_Blocks::sanitize_post_subtitle( '<img src=x onerror="STEAL()">' );
+
+		self::assertStringNotContainsString( '<img', $sanitized, 'A disallowed element is removed.' );
+		self::assertStringNotContainsString( 'STEAL', $sanitized, 'Its handler goes with it.' );
+		self::assertStringNotContainsString(
+			'onmouseover',
+			Newspack_Blocks::sanitize_post_subtitle( '<em onmouseover="STEAL()">hover</em>' ),
+			'An event handler on an allowed element is stripped.'
+		);
+	}
+
+	/**
+	 * The editor endpoint returns the whole registered-meta bag, and the Homepage Posts
+	 * editor component assigns the subtitle as HTML. A value stored while the theme had
+	 * no sanitize_callback is still raw in the database, so the endpoint filters it.
+	 */
+	public function test_editor_posts_endpoint_sanitizes_post_subtitle() {
+		// Registered without a sanitize_callback on purpose: this is the pre-fix theme,
+		// and therefore the state of every subtitle stored before the fix ships.
+		register_post_meta(
+			'post',
+			'newspack_post_subtitle',
+			[
+				'show_in_rest' => true,
+				'single'       => true,
+				'type'         => 'string',
+			]
+		);
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, 'newspack_post_subtitle', '<em>Kept</em><img src=x onerror="STEAL()">' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $post_id, $posts_by_id, 'The endpoint returns the carrier post.' );
+
+		$subtitle = $posts_by_id[ $post_id ]['meta']['newspack_post_subtitle'];
+		self::assertStringNotContainsString( 'onerror', $subtitle, 'The payload does not reach the editor.' );
+		self::assertStringNotContainsString( '<img', $subtitle, 'The disallowed element does not reach the editor.' );
+		self::assertStringContainsString( '<em>Kept</em>', $subtitle, 'Allowed formatting still reaches the editor.' );
+
+		unregister_post_meta( 'post', 'newspack_post_subtitle' );
 	}
 }

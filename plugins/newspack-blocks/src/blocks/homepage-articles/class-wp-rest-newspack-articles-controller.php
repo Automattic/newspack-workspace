@@ -116,7 +116,7 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function get_items( $request ) {
-		$page        = (int) $request->get_param( 'page' ) ?? 1;
+		$page        = max( 1, (int) $request->get_param( 'page' ) );
 		$exclude_ids = $request->get_param( 'exclude_ids' ) ?? [];
 		$next_page   = $page + 1;
 		$attributes  = wp_parse_args(
@@ -181,8 +181,9 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 
 		Newspack_Blocks::remove_excerpt_filter();
 
-		// Provide next URL if there are more pages.
-		$show_next_button = ! empty( $exclude_ids ) ? $article_query->max_num_pages > 1 : $article_query->max_num_pages > $next_page;
+		// Provide next URL if posts remain after this response. With exclude_ids the query holds only
+		// unseen posts, so a second page means more remain; otherwise this response is page $page.
+		$show_next_button = ! empty( $exclude_ids ) ? $article_query->max_num_pages > 1 : $article_query->max_num_pages > $page;
 		if ( $show_next_button ) {
 			$next_url = add_query_arg(
 				array_merge(

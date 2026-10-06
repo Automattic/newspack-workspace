@@ -19,6 +19,12 @@ function newspack_blocks_render_block_carousel( $attributes ) {
 		return;
 	}
 
+	// Skip the query when a revision or autosave is being prepared for the REST
+	// API: the output is never shown, and the query is costly on large sites.
+	if ( Newspack_Blocks::is_rest_revision_or_autosave_render() ) {
+		return '';
+	}
+
 	static $newspack_blocks_carousel_id = 0;
 	global $newspack_blocks_post_id;
 

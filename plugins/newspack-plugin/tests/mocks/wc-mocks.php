@@ -265,9 +265,15 @@ class WC_DateTime extends DateTime {
 class WC_Customer {
 	public $data = [];
 	public function __construct( $user_id ) {
+		// Real WC_Customer is backed by the WP user, and its date_created IS
+		// that user's user_registered. Deriving it here rather than stamping
+		// "now" keeps the two readings of a reader's registration date (the
+		// legacy pipeline reads the customer, the new one reads the user)
+		// from disagreeing by a second at a boundary.
+		$user = get_userdata( $user_id );
 		$this->data = [
 			'user_id'      => $user_id,
-			'date_created' => gmdate( 'Y-m-d H:i:s' ),
+			'date_created' => $user && ! empty( $user->user_registered ) ? $user->user_registered : gmdate( 'Y-m-d H:i:s' ),
 		];
 	}
 	public function get_id() {
@@ -649,6 +655,16 @@ class WC_Product {
 	public function get_description() {
 		return $this->data['description'] ?? '';
 	}
+	/**
+	 * Keyed by attribute slug, as WooCommerce stores it. An "Any <attribute>"
+	 * variation keeps the key with an empty value rather than dropping it.
+	 */
+	public function get_variation_attributes() {
+		return $this->data['variation_attributes'] ?? [];
+	}
+	public function get_category_ids() {
+		return $this->data['category_ids'] ?? [];
+	}
 	public function get_status() {
 		return $this->data['status'] ?? 'publish';
 	}
@@ -698,10 +714,16 @@ class WC_Product {
 	/**
 	 * Price reads apply their WooCommerce filters, as WC_Data::get_prop() does
 	 * in `view` context. Without this, code that filters a price and code that
-	 * reads one can disagree with no test able to see it.
+	 * reads one can disagree with no test able to see it. `edit` context returns
+	 * the stored price unfiltered, as WC_Data::get_prop() does.
+	 *
+	 * @param string $context `view` or `edit`.
 	 */
-	public function get_price() {
+	public function get_price( $context = 'view' ) {
 		$price = $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		if ( 'edit' === $context ) {
+			return $price;
+		}
 		return apply_filters( 'woocommerce_product_get_price', $price, $this );
 	}
 	public function set_price( $price ) {
@@ -904,8 +926,13 @@ class WC_Order {
 	public function get_id() {
 		return $this->data['id'];
 	}
+	public function get_edit_order_url() {
+		return admin_url( 'post.php?post=' . $this->get_id() . '&action=edit' );
+	}
 	public function get_customer_id() {
-		return $this->data['customer_id'];
+		// Real WC returns 0 for a guest order; a fixture built without a
+		// customer must read the same way when another suite's query walks it.
+		return $this->data['customer_id'] ?? 0;
 	}
 	public function get_meta( $field_name ) {
 		return isset( $this->meta[ $field_name ] ) ? $this->meta[ $field_name ] : '';
@@ -948,6 +975,9 @@ class WC_Order {
 	}
 	public function get_status() {
 		return $this->data['status'];
+	}
+	public function get_type() {
+		return 'shop_order';
 	}
 	public function get_coupon_codes() {
 		return $this->data['coupon_codes'] ?? [];
@@ -1005,6 +1035,46 @@ class WC_Order {
 	}
 	public function get_view_order_url() {
 		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
+	}
+}
+
+/**
+ * Real WC_Order_Refund extends WC_Abstract_Order, not WC_Order, so it has no
+ * customer or billing getters. Its status is always 'completed', a line-item
+ * refund copies the refunded items with their product IDs, and order queries
+ * return refunds unless they ask for 'shop_order' only.
+ */
+class WC_Order_Refund {
+	public $data = [];
+	public function __construct( $data ) {
+		global $orders_database;
+		$data['id']        = count( $orders_database ) + 1;
+		$this->data        = $data;
+		$orders_database[] = $this;
+	}
+	public function get_id() {
+		return $this->data['id'];
+	}
+	public function get_type() {
+		return 'shop_order_refund';
+	}
+	public function get_status() {
+		return 'completed';
+	}
+	public function has_status( $statuses ) {
+		return in_array( 'completed', (array) $statuses, true );
+	}
+	public function get_items() {
+		return $this->data['items'] ?? [];
+	}
+	public function get_date_created() {
+		return new WC_DateTime( $this->data['date_created'] );
+	}
+	public function get_date_paid() {
+		return $this->get_date_created();
+	}
+	public function get_meta( $field_name ) {
+		return '';
 	}
 }
 
@@ -1716,7 +1786,7 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
-	// Minimal mock: implements the `customer_id` and `subscription_status` filters
+	// Minimal mock: implements the `customer_id`, `order_id` and `subscription_status` filters
 	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
 	// passes. `subscription_status` accepts a single status or an array; 'any' (or
 	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
@@ -1732,6 +1802,7 @@ function wcs_get_subscriptions( $args = [] ) {
 	global $wcs_mock_query_log;
 	$wcs_mock_query_log[] = $args;
 	$customer_id = $args['customer_id'] ?? null;
+	$order_id    = isset( $args['order_id'] ) ? (int) $args['order_id'] : null;
 	$statuses    = $args['subscription_status'] ?? 'any';
 	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
 	// Stageable: set $wcs_mock_ignore_offset to reproduce a query that never advances —
@@ -1749,6 +1820,10 @@ function wcs_get_subscriptions( $args = [] ) {
 		if ( null !== $customer_id && $subscription->get_customer_id() !== $customer_id ) {
 			continue;
 		}
+		// Real WCS matches `order_id` against the subscription's parent order.
+		if ( null !== $order_id && (int) $subscription->get_parent_id() !== $order_id ) {
+			continue;
+		}
 		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
 			continue;
 		}
@@ -1763,10 +1838,13 @@ function wcs_get_subscriptions( $args = [] ) {
 function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args = [] ) {
 	// Minimal mock mirroring the real return shape: subscriptions keyed by their
 	// ID (so array_keys() yields subscription IDs), matched via WC_Subscription's
-	// `products` array (has_product()). `subscription_status`/paging args are
-	// ignored — extend here if a test needs them.
+	// `products` array (has_product()), ordered by ID as the real function's
+	// `ORDER BY order_items.order_id` does. `limit` is honoured because the plan
+	// filter relies on it to bound its scan in SQL; `offset` and
+	// `subscription_status` are ignored — extend here if a test needs them.
 	global $subscriptions_database;
 	$product_ids   = array_map( 'absint', (array) $product_ids );
+	$limit         = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
 	$subscriptions = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
 		if ( ! method_exists( $subscription, 'has_product' ) ) {
@@ -1779,6 +1857,10 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 			}
 		}
 	}
+	ksort( $subscriptions );
+	if ( $limit > 0 ) {
+		$subscriptions = array_slice( $subscriptions, 0, $limit, true );
+	}
 	return $subscriptions;
 }
 /**
@@ -1790,11 +1872,15 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
  * @param int             $user_id    User ID.
  * @param int|string      $product_id Optional product the subscription must hold.
  * @param string|string[] $status     Optional status or statuses; 'any' matches all.
+ * @param int[]           $excluded_subscription_ids Optional subscriptions to ignore, as WCS 9+ accepts.
  *
  * @return bool
  */
-function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
+function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any', $excluded_subscription_ids = [] ) {
 	foreach ( wcs_get_users_subscriptions( (int) $user_id ) as $subscription ) {
+		if ( in_array( $subscription->get_id(), $excluded_subscription_ids, true ) ) {
+			continue;
+		}
 		if ( $product_id && ! $subscription->has_product( (int) $product_id ) ) {
 			continue;
 		}
@@ -1880,18 +1966,26 @@ function wc_get_is_paid_statuses() {
 	return [ 'processing', 'completed' ];
 }
 function wc_get_orders( $args ) {
-	global $orders_database;
-	// For simplicity, this mock will only return a single page of results.
-	if ( isset( $args['page'] ) && $args['page'] > 1 ) {
-		return [];
+	global $orders_database, $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
+	$wc_mocks_get_orders_calls = (int) $wc_mocks_get_orders_calls + 1;
+	$orders                    = $orders_database;
+	if ( isset( $args['type'] ) ) {
+		// Real WC defaults to every order type, refunds included; a caller has to ask
+		// for 'shop_order' to leave them out.
+		$types  = (array) $args['type'];
+		$orders = array_filter(
+			$orders,
+			function( $order ) use ( $types ) {
+				return in_array( method_exists( $order, 'get_type' ) ? $order->get_type() : 'shop_order', $types, true );
+			}
+		);
 	}
-	$orders = $orders_database;
 	if ( isset( $args['customer_id'] ) ) {
-		// Filter by customer.
+		// Filter by customer. A refund has no customer, so it never matches.
 		$orders = array_filter(
 			$orders,
 			function( $order ) use ( $args ) {
-				return $order->get_customer_id() === $args['customer_id'];
+				return method_exists( $order, 'get_customer_id' ) && $order->get_customer_id() === $args['customer_id'];
 			}
 		);
 	}
@@ -1910,6 +2004,9 @@ function wc_get_orders( $args ) {
 		$orders          = array_filter(
 			$orders,
 			function( $order ) use ( $customer_values ) {
+				if ( ! method_exists( $order, 'get_customer_id' ) ) {
+					return false;
+				}
 				foreach ( $customer_values as $customer_value ) {
 					if ( is_numeric( $customer_value ) && $order->get_customer_id() === (int) $customer_value ) {
 						return true;
@@ -1949,14 +2046,38 @@ function wc_get_orders( $args ) {
 			}
 		);
 	}
+	if ( isset( $args['date_created'] ) && is_string( $args['date_created'] ) && str_contains( $args['date_created'], '...' ) ) {
+		// Support the '{timestamp}...{timestamp}' range form. Real WC includes both ends.
+		[ $start, $end ] = array_map( 'intval', explode( '...', $args['date_created'], 2 ) );
+		$orders          = array_filter(
+			$orders,
+			function( $order ) use ( $start, $end ) {
+				$date_created = $order->get_date_created();
+				return $date_created && $date_created->getTimestamp() >= $start && $date_created->getTimestamp() <= $end;
+			}
+		);
+	}
+	// Real WC sorts by creation date, newest first unless `order` says ASC. The ID
+	// tie-breaker stands in for `'orderby' => 'date ID'`; with `date` alone real WC
+	// leaves orders created in the same second in no fixed order.
+	$descending = 'ASC' !== strtoupper( (string) ( $args['order'] ?? '' ) );
+	$sort_key   = function( $order ) {
+		$date_created = $order->get_date_created();
+		return [ $date_created ? $date_created->getTimestamp() : 0, $order->get_id() ];
+	};
 	usort(
 		$orders,
-		function( $a, $b ) {
-			return $b->get_date_paid()->getTimestamp() <=> $a->get_date_paid()->getTimestamp();
+		function( $a, $b ) use ( $descending, $sort_key ) {
+			$comparison = $sort_key( $a ) <=> $sort_key( $b );
+			return $descending ? -$comparison : $comparison;
 		}
 	);
 	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
-		$orders = array_slice( $orders, 0, (int) $args['limit'] );
+		// Real WC pages with `page` as a 1-based offset into the limited set. A test
+		// can set $wc_mocks_orders_ignore_page to model a store (or a filter on the
+		// query args) that hands back the same rows for every page.
+		$page   = ( empty( $wc_mocks_orders_ignore_page ) && isset( $args['page'] ) ) ? max( 1, (int) $args['page'] ) : 1;
+		$orders = array_slice( $orders, ( $page - 1 ) * (int) $args['limit'], (int) $args['limit'] );
 	}
 	return $orders;
 }
@@ -1973,6 +2094,9 @@ function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 		// Real WC matches the customer user ID OR the billing email, so guest
 		// orders count toward the buyer's history. The email comparison runs in
 		// SQL under a case-insensitive collation.
+		if ( ! method_exists( $order, 'get_customer_id' ) ) {
+			continue; // A refund belongs to no customer.
+		}
 		$matches_user  = $user_id && $order->get_customer_id() === $user_id;
 		$matches_email = $customer_email && 0 === strcasecmp( (string) $order->get_billing_email(), (string) $customer_email );
 		if ( ! $matches_user && ! $matches_email ) {
@@ -2014,19 +2138,40 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	}
 }
 /**
- * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
- * callback render end to end; assertions belong on the surrounding markup, not on this field.
+ * Minimal stand-in for WooCommerce's admin field renderer. The input is always `type="text"`
+ * and custom attributes such as `min` are not printed, so a test can't assert on them.
+ *
+ * Without a `value`, WooCommerce reads the field's meta off the global post, so the product
+ * editor shows whatever was last saved. The mock does the same, or a test of what the editor
+ * shows would see an empty field where production shows the stored value.
  *
  * @param array $field The field definition.
  */
 function woocommerce_wp_text_input( $field ) {
+	global $post;
+	$value = $field['value'] ?? ( $post ? get_post_meta( $post->ID, $field['id'] ?? '', true ) : '' );
 	printf(
 		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><input type="text" id="%2$s" name="%4$s" value="%5$s" /></p>',
 		esc_attr( $field['wrapper_class'] ?? '' ),
 		esc_attr( $field['id'] ?? '' ),
 		esc_html( $field['label'] ?? '' ),
 		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
-		esc_attr( $field['value'] ?? '' )
+		esc_attr( $value )
+	);
+}
+/**
+ * Minimal stand-in for WooCommerce's admin select renderer, so a callback that renders a select
+ * beside text fields can run end to end. The options themselves are not rendered.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_select( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><select id="%2$s" name="%4$s"></select></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) )
 	);
 }
 /**
