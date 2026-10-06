@@ -940,16 +940,16 @@ final class GAM_Model {
 		$targeting['reader_status'] = []; // Empty value indicates that the current user is not logged in or is not a reader-type user.
 		if ( \is_user_logged_in() && method_exists( 'Newspack\Reader_Activation', 'is_user_reader' ) && \Newspack\Reader_Activation::is_user_reader( \wp_get_current_user() ) ) {
 			$targeting['reader_status'][] = 'logged_in'; // The currently logged-in user is a reader.
-			if ( method_exists( 'Newspack\Reader_Data', 'get_data' ) ) {
+			if ( method_exists( 'Newspack\Reader_Data', 'get_bool' ) ) {
 				$reader_data = \Newspack\Reader_Data::get_data( get_current_user_id() );
 
 				// If the reader is signed up for any newsletters.
-				if ( ! empty( $reader_data['is_newsletter_subscriber'] ) ) {
+				if ( \Newspack\Reader_Data::get_bool( get_current_user_id(), 'is_newsletter_subscriber' ) ) {
 					$targeting['reader_status'][] = 'newsletter_subscriber';
 				}
 
 				// If reader has donated.
-				if ( ! empty( $reader_data['is_donor'] ) ) {
+				if ( \Newspack\Reader_Data::get_bool( get_current_user_id(), 'is_donor' ) ) {
 					$targeting['reader_status'][] = 'donor';
 				}
 
