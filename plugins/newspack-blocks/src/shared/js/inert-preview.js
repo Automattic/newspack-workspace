@@ -13,8 +13,7 @@
  * preview (the section header's link popover) would otherwise lose its links.
  *
  * A target that cannot be asked for an ancestor anchor is ignored rather than
- * throwing: an exception raised here runs in the capture phase and would stop
- * every later click in the preview from being handled at all.
+ * throwing, which would surface as an uncaught error on an ordinary click.
  *
  * @param {MouseEvent | import('react').MouseEvent} event Click event from the capture phase.
  */

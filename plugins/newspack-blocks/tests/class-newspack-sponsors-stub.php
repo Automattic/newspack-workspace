@@ -1,11 +1,11 @@
 <?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
 /**
- * Test stub for the \Newspack_Sponsors functions newspack-blocks calls.
+ * Test stub for the \Newspack_Sponsors functions newspack-blocks uses to fetch sponsors.
  *
  * The newspack-blocks test suite runs without newspack-sponsors loaded, so
  * Newspack_Blocks::get_all_sponsors() would return false before reaching the
  * sponsor payload. This stub lets a test supply sponsors; left unset, it
- * returns false exactly as the absent plugin does, so no other test changes.
+ * returns false as the absent plugin does.
  *
  * @package Newspack_Blocks
  */
