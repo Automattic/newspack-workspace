@@ -306,12 +306,12 @@ class GoogleSiteKit {
 		$is_logged_in = 0 < $current_user->ID;
 		$params['is_reader'] = $is_logged_in && Reader_Activation::is_user_reader( $current_user ) ? 'yes' : 'no';
 
-		$reader_data = method_exists( 'Newspack\Reader_Data', 'get_data' ) ? Reader_Data::get_data( $current_user->ID ) : [];
+		$reader_data = Reader_Data::get_data( $current_user->ID );
 
 		// If the reader is signed up for any newsletters.
-		$params['is_newsletter_subscriber'] = empty( $reader_data['is_newsletter_subscriber'] ) ? 'no' : 'yes';
+		$params['is_newsletter_subscriber'] = Reader_Data::get_bool( $current_user->ID, 'is_newsletter_subscriber' ) ? 'yes' : 'no';
 		// If reader has donated.
-		$params['is_donor'] = empty( $reader_data['is_donor'] ) ? 'no' : 'yes';
+		$params['is_donor'] = Reader_Data::get_bool( $current_user->ID, 'is_donor' ) ? 'yes' : 'no';
 		// If reader has any currently active non-donation subscriptions.
 		$params['is_subscriber'] = empty( $reader_data['active_subscriptions'] ) ? 'no' : 'yes';
 
