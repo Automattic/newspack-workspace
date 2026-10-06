@@ -517,8 +517,18 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 		);
 		$forever = $this->get_rule_value( [ 'duration_unit' => 'forever' ] );
 
+		// Answer as WooCommerce before 10.8 does: the account email looked up
+		// from the user ID matches the guest order.
+		$pre_10_8_lookup = function ( $result, $customer_email, $user_id ) use ( $purchaser_email ) {
+			$user = get_userdata( $user_id );
+			return $user && $user->user_email === $purchaser_email ? true : $result;
+		};
+		add_filter( 'woocommerce_pre_customer_bought_product', $pre_10_8_lookup, 10, 3 );
+		$guest_order_grants = Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $forever );
+		remove_filter( 'woocommerce_pre_customer_bought_product', $pre_10_8_lookup, 10 );
+
 		$this->assertFalse(
-			Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $forever ),
+			$guest_order_grants,
 			'A guest order under the reader email should not grant lifetime access.'
 		);
 

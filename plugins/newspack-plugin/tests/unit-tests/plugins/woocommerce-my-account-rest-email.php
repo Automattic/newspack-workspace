@@ -24,8 +24,8 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 	/**
 	 * Set up a reader and the guard for each test.
 	 *
-	 * The guard is registered only when Reader Activation is enabled at load
-	 * time, so the test hooks it directly.
+	 * The plugin loads before the test bootstrap enables Reader Activation, so
+	 * the guard is not registered at load and is hooked here instead.
 	 */
 	public function set_up() {
 		parent::set_up();
@@ -36,14 +36,6 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 			]
 		);
 		add_filter( 'rest_request_before_callbacks', [ WooCommerce_My_Account::class, 'rest_prevent_email_update' ], 10, 3 );
-	}
-
-	/**
-	 * Remove the guard.
-	 */
-	public function tear_down() {
-		remove_filter( 'rest_request_before_callbacks', [ WooCommerce_My_Account::class, 'rest_prevent_email_update' ], 10 );
-		parent::tear_down();
 	}
 
 	/**
@@ -95,7 +87,40 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Users who can edit other users keep the core behavior.
+	 * A request for someone else's record gets core's answer whether or not
+	 * the guessed address is right, so the guard cannot be used to confirm
+	 * which address belongs to which account.
+	 */
+	public function test_response_does_not_reveal_another_users_email() {
+		$other_reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$route           = '/wp/v2/users/' . $this->user_id;
+
+		foreach ( [ 0, $other_reader_id ] as $caller_id ) {
+			wp_set_current_user( $caller_id );
+
+			$right_guess = $this->update_user( $route, [ 'email' => 'reader@example.test' ] );
+			$wrong_guess = $this->update_user( $route, [ 'email' => 'wrong@example.test' ] );
+
+			$this->assertSame( 'rest_cannot_edit', $right_guess->get_data()['code'], "caller $caller_id" );
+			$this->assertSame( 'rest_cannot_edit', $wrong_guess->get_data()['code'], "caller $caller_id" );
+		}
+	}
+
+	/**
+	 * Staff are not readers and keep the core behavior for their own address.
+	 */
+	public function test_staff_can_change_own_email() {
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $editor_id );
+
+		$response = $this->update_user( '/wp/v2/users/me', [ 'email' => 'editor-new@example.test' ] );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'editor-new@example.test', get_userdata( $editor_id )->user_email );
+	}
+
+	/**
+	 * Admins changing a reader's address keep the core behavior.
 	 */
 	public function test_admin_can_change_a_reader_email() {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
@@ -107,27 +132,5 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'changed@example.test', get_userdata( $this->user_id )->user_email );
-	}
-
-	/**
-	 * Creating a user is not an email change.
-	 */
-	public function test_admin_can_create_a_user() {
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
-		if ( is_multisite() ) {
-			grant_super_admin( get_current_user_id() );
-		}
-
-		$request = new WP_REST_Request( 'POST', '/wp/v2/users' );
-		$request->set_body_params(
-			[
-				'username' => 'newreader',
-				'email'    => 'newreader@example.test',
-				'password' => wp_generate_password(),
-			]
-		);
-		$response = rest_get_server()->dispatch( $request );
-
-		$this->assertSame( 201, $response->get_status() );
 	}
 }

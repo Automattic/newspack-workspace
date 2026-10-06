@@ -902,7 +902,12 @@ class WooCommerce_My_Account {
 	 * Account flow instead, which applies a new address only after it is
 	 * verified: content gate rules and reader verification trust the account
 	 * address, so an unverified change would let a reader claim a mailbox they
-	 * do not control. Users who can edit other users keep the core behavior.
+	 * do not control.
+	 *
+	 * Only a reader editing their own record is refused. Every other request is
+	 * left to core: this runs before the route's permission check, so answering
+	 * for another user's record would tell any caller whether a guessed address
+	 * belongs to that user. Staff are not readers and keep the core behavior.
 	 *
 	 * This runs before the endpoint callback rather than on `rest_pre_insert_user`
 	 * because the users controller's update ignores an error from that filter.
@@ -925,17 +930,18 @@ class WooCommerce_My_Account {
 		) {
 			return $response;
 		}
-		if ( \current_user_can( 'edit_users' ) ) {
+		$current_user_id = \get_current_user_id();
+		$user_id         = 'update_current_item' === $callback[1] ? $current_user_id : (int) $request['id'];
+		if ( ! $current_user_id || $user_id !== $current_user_id ) {
 			return $response;
 		}
-		$user_id = 'update_current_item' === $callback[1] ? \get_current_user_id() : (int) $request['id'];
-		$user    = \get_userdata( $user_id );
-		if ( $user && $user->user_email === $request['email'] ) {
+		$user = \get_userdata( $user_id );
+		if ( ! $user || ! Reader_Activation::is_user_reader( $user ) || $user->user_email === $request['email'] ) {
 			return $response;
 		}
 		return new \WP_Error(
 			'newspack_rest_email_update_not_allowed',
-			__( 'Your email address can only be changed from your account page.', 'newspack-plugin' ),
+			__( 'Your email address cannot be changed here.', 'newspack-plugin' ),
 			[ 'status' => 403 ]
 		);
 	}
