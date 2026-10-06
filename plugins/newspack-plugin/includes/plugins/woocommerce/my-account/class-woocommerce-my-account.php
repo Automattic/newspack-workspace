@@ -904,10 +904,12 @@ class WooCommerce_My_Account {
 	 * address, so an unverified change would let a reader claim a mailbox they
 	 * do not control.
 	 *
-	 * Only a reader editing their own record is refused. Every other request is
+	 * Only a user editing their own record is refused. Every other request is
 	 * left to core: this runs before the route's permission check, so answering
 	 * for another user's record would tell any caller whether a guessed address
-	 * belongs to that user. Staff are not readers and keep the core behavior.
+	 * belongs to that user. Editors and above keep the core behavior; any other
+	 * account, reader or not, can satisfy an email domain rule, which treats
+	 * non-readers as verified.
 	 *
 	 * This runs before the endpoint callback rather than on `rest_pre_insert_user`
 	 * because the users controller's update ignores an error from that filter.
@@ -935,8 +937,11 @@ class WooCommerce_My_Account {
 		if ( ! $current_user_id || $user_id !== $current_user_id ) {
 			return $response;
 		}
+		if ( \current_user_can( 'edit_others_posts' ) ) {
+			return $response;
+		}
 		$user = \get_userdata( $user_id );
-		if ( ! $user || ! Reader_Activation::is_user_reader( $user ) || $user->user_email === $request['email'] ) {
+		if ( ! $user || $user->user_email === $request['email'] ) {
 			return $response;
 		}
 		return new \WP_Error(

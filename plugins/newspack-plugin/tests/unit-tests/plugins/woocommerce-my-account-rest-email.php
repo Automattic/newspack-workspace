@@ -68,6 +68,49 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Accounts below editor are refused too: the email domain rule treats a
+	 * non-reader as verified, so an author's unverified address would count.
+	 */
+	public function test_author_cannot_change_own_email() {
+		$author_id = self::factory()->user->create(
+			[
+				'role'       => 'author',
+				'user_email' => 'author@example.test',
+			]
+		);
+		wp_set_current_user( $author_id );
+
+		$response = $this->update_user( '/wp/v2/users/me', [ 'email' => 'author-new@example.test' ] );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'author@example.test', get_userdata( $author_id )->user_email );
+	}
+
+	/**
+	 * A batched update goes through the same guard.
+	 */
+	public function test_reader_cannot_change_own_email_in_a_batch() {
+		wp_set_current_user( $this->user_id );
+
+		$request = new WP_REST_Request( 'POST', '/batch/v1' );
+		$request->set_body_params(
+			[
+				'requests' => [
+					[
+						'method' => 'PUT',
+						'path'   => '/wp/v2/users/' . $this->user_id,
+						'body'   => [ 'email' => 'someone@example.test' ],
+					],
+				],
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_data()['responses'][0]['status'] );
+		$this->assertSame( 'reader@example.test', get_userdata( $this->user_id )->user_email );
+	}
+
+	/**
 	 * Sending the current address back, as a client saving the whole profile
 	 * does, is not a change and is allowed along with the other fields.
 	 */
@@ -107,7 +150,7 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Staff are not readers and keep the core behavior for their own address.
+	 * Editors and above keep the core behavior for their own address.
 	 */
 	public function test_staff_can_change_own_email() {
 		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
