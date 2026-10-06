@@ -1087,6 +1087,15 @@ class WC_Order {
 		$this->save_calls++;
 		return true;
 	}
+	/**
+	 * Counts calls like save(), for code that persists meta alone.
+	 *
+	 * @var int
+	 */
+	public $save_meta_data_calls = 0;
+	public function save_meta_data() {
+		$this->save_meta_data_calls++;
+	}
 	public function get_billing_email() {
 		return $this->data['billing_email'] ?? '';
 	}
@@ -1657,6 +1666,15 @@ class WC_Subscription {
 			'cancelled_email_sent' => $this->data['cancelled_email_sent'] ?? '',
 		];
 		return true;
+	}
+	/**
+	 * Counts calls, matching WC_Order's above.
+	 *
+	 * @var int
+	 */
+	public $save_meta_data_calls = 0;
+	public function save_meta_data() {
+		$this->save_meta_data_calls++;
 	}
 }
 

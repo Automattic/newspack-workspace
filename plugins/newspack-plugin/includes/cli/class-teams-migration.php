@@ -270,6 +270,8 @@ class Teams_Migration {
 					)
 				);
 			}
+
+			self::maybe_flag_complimentary_product( $migration_product, $dry_run );
 		}
 
 		if ( $dry_run ) {
@@ -1256,6 +1258,9 @@ class Teams_Migration {
 			// plan/member counts.
 			WP_CLI::line( sprintf( 'Reviewed list: %d user id(s).', count( $target_user_ids ) ) );
 		}
+
+		// After the last check that can abort the run: flagging takes the product off sale.
+		self::maybe_flag_complimentary_product( $product, $dry_run );
 
 		WP_CLI::line( sprintf( 'Processing %d plan(s): %s', count( $plan_ids ), implode( ', ', $plan_ids ) ) );
 		WP_CLI::line( '' );
@@ -2342,6 +2347,40 @@ class Teams_Migration {
 	private static function format_subscription_total( $subscription ) {
 		$decimals = function_exists( 'wc_get_price_decimals' ) ? \wc_get_price_decimals() : 2;
 		return trim( sprintf( '%s %s', \number_format( (float) $subscription->get_total(), $decimals ), $subscription->get_currency() ) );
+	}
+
+	/**
+	 * Flag the migration product as complimentary access when it qualifies.
+	 *
+	 * Comps are often migrated onto the reader's former paid product, and some $0
+	 * products are sold on purpose. Neither may be flagged: the flag takes a product off
+	 * sale. So only a $0 product nobody bought is flagged, by the test pre-marking uses.
+	 *
+	 * @param \WC_Product $product Migration product.
+	 * @param bool        $dry_run Whether this is a dry run.
+	 */
+	private static function maybe_flag_complimentary_product( $product, $dry_run ) {
+		if ( ! \Newspack\WooCommerce_Subscriptions::is_active() ) {
+			return;
+		}
+		if ( \Newspack\Complimentary_Access::is_complimentary_product( $product ) ) {
+			WP_CLI::line( sprintf( 'Product %d is flagged as complimentary access.', $product->get_id() ) );
+			return;
+		}
+		if ( $product->is_type( 'variable-subscription' ) ) {
+			WP_CLI::line( sprintf( 'Product %d is not flagged as complimentary access: the flag goes on a variation. Flag the comp variation in the product editor.', $product->get_id() ) );
+			return;
+		}
+		if ( ! \Newspack\Complimentary_Access::qualifies_for_flag( $product, false ) ) {
+			WP_CLI::line( sprintf( 'Product %d is not flagged as complimentary access: it costs money, or readers have bought it.', $product->get_id() ) );
+			return;
+		}
+		if ( $dry_run ) {
+			WP_CLI::line( sprintf( 'Would flag product %d as complimentary access.', $product->get_id() ) );
+			return;
+		}
+		\Newspack\Complimentary_Access::flag_product( $product );
+		WP_CLI::line( sprintf( 'Flagged product %d as complimentary access.', $product->get_id() ) );
 	}
 
 	/**

@@ -42,6 +42,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-verify.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-convert-subscription-variation.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-complimentary-access-cli.php';
 	}
 
 	/**
@@ -102,6 +103,7 @@ class Initializer {
 		WP_CLI::add_command( 'newspack ga4-dimensions', 'Newspack\CLI\GA4_Dimensions' );
 		WP_CLI::add_command( 'newspack export-subscriptions', [ 'Newspack\CLI\Export', 'export_subscriptions' ] );
 		WP_CLI::add_command( 'newspack export-users', [ 'Newspack\CLI\Export', 'export_users' ] );
+		WP_CLI::add_command( 'newspack complimentary-access pre-mark', [ 'Newspack\CLI\Complimentary_Access_CLI', 'pre_mark' ] );
 
 		// Registered whether or not WooCommerce Memberships is active, unlike the
 		// migrate-* commands below: it reads `_wc_memberships_force_public`, ordinary
