@@ -64,12 +64,18 @@ class Account_Subscription_Lists_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Remove the filters and the submitted form.
+	 * Remove the filters, the submitted form and the provider.
+	 *
+	 * The provider instance is memoized in a static the database rollback does not
+	 * reach, so it is cleared here or later tests see Mailchimp with no option set.
 	 */
 	public function tear_down() {
 		remove_filter( 'newspack_newsletters_is_email_verified', '__return_true' );
 		remove_action( 'newspack_newsletters_pre_add_contact', [ $this, 'capture_lists' ] );
 		unset( $_POST['lists'], $_POST[ Newspack_Newsletters_Subscription::SUBSCRIPTION_UPDATE ] );
+		delete_option( 'newspack_newsletters_service_provider' );
+		delete_option( 'newspack_mailchimp_api_key' );
+		Newspack_Newsletters::memoize_service_provider();
 		parent::tear_down();
 	}
 
