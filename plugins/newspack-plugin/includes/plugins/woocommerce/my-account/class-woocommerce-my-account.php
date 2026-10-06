@@ -898,18 +898,18 @@ class WooCommerce_My_Account {
 	 * Prevent updating email via the core REST users endpoint.
 	 *
 	 * Core lets any user change their own address through `wp/v2/users/me`,
-	 * applied at once with no confirmation. Readers must go through the My
-	 * Account flow instead, which applies a new address only after it is
-	 * verified: content gate rules and reader verification trust the account
-	 * address, so an unverified change would let a reader claim a mailbox they
-	 * do not control.
+	 * applied at once with no confirmation. Content gate rules and reader
+	 * verification trust the account address, so an unverified change would let
+	 * an account claim a mailbox it does not control. Accounts that cannot edit
+	 * others' posts change their address through a flow that verifies it
+	 * instead: My Account, or the profile screen in the dashboard. That covers
+	 * non-readers too, since the email domain rule treats them as verified.
+	 * Editors, shop managers and administrators keep the core behavior.
 	 *
-	 * Only a user editing their own record is refused. Every other request is
-	 * left to core: this runs before the route's permission check, so answering
-	 * for another user's record would tell any caller whether a guessed address
-	 * belongs to that user. Editors and above keep the core behavior; any other
-	 * account, reader or not, can satisfy an email domain rule, which treats
-	 * non-readers as verified.
+	 * The guard acts only on the caller's own record and leaves every other
+	 * request to core: it runs before the route's permission check, so
+	 * answering for another user's record would tell any caller whether a
+	 * guessed address belongs to that user.
 	 *
 	 * This runs before the endpoint callback rather than on `rest_pre_insert_user`
 	 * because the users controller's update ignores an error from that filter.

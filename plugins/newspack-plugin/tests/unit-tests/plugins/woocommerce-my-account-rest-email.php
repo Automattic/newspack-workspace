@@ -1,6 +1,7 @@
 <?php
 /**
- * Tests that the core REST users endpoint cannot change a reader's email.
+ * Tests that the core REST users endpoint cannot change the email of an
+ * account below editor.
  *
  * @package Newspack\Tests
  */
@@ -10,7 +11,8 @@ use Newspack\WooCommerce_My_Account;
 require_once __DIR__ . '/../../mocks/wc-mocks.php';
 
 /**
- * A reader's address changes only through the verified My Account flow.
+ * Accounts below editor change their address only through a flow that
+ * verifies it.
  */
 class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 
@@ -82,7 +84,7 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 
 		$response = $this->update_user( '/wp/v2/users/me', [ 'email' => 'author-new@example.test' ] );
 
-		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'newspack_rest_email_update_not_allowed', $response->get_data()['code'] );
 		$this->assertSame( 'author@example.test', get_userdata( $author_id )->user_email );
 	}
 
@@ -106,7 +108,7 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 		);
 		$response = rest_get_server()->dispatch( $request );
 
-		$this->assertSame( 403, $response->get_data()['responses'][0]['status'] );
+		$this->assertSame( 'newspack_rest_email_update_not_allowed', $response->get_data()['responses'][0]['body']['code'] );
 		$this->assertSame( 'reader@example.test', get_userdata( $this->user_id )->user_email );
 	}
 
@@ -150,7 +152,8 @@ class Newspack_Test_WooCommerce_My_Account_REST_Email extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Editors and above keep the core behavior for their own address.
+	 * Accounts that can edit others' posts keep the core behavior for their own
+ * address.
 	 */
 	public function test_staff_can_change_own_email() {
 		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
