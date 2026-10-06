@@ -8,6 +8,8 @@
 use Newspack_Network\Woocommerce\Events;
 use Newspack_Network\Woocommerce\Product_Admin;
 
+require_once dirname( __DIR__ ) . '/mocks/wc-order-functions.php';
+
 /**
  * What subscription and order events tell the network about their products.
  */
@@ -203,6 +205,51 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			public function get_date_created() {
 				return new DateTime( '@' . $this->created );
 			}
+
+			/**
+			 * The customer account, as WooCommerce resolves it.
+			 *
+			 * @return WP_User|false
+			 */
+			public function get_user() {
+				return $this->customer_id ? get_userdata( $this->customer_id ) : false;
+			}
+
+			/**
+			 * Formatted total.
+			 *
+			 * @return string
+			 */
+			public function get_formatted_order_total() {
+				return '$10.00';
+			}
+
+			/**
+			 * Currency.
+			 *
+			 * @return string
+			 */
+			public function get_currency() {
+				return 'USD';
+			}
+
+			/**
+			 * Total.
+			 *
+			 * @return string
+			 */
+			public function get_total() {
+				return '10';
+			}
+
+			/**
+			 * Payment method title.
+			 *
+			 * @return string
+			 */
+			public function get_payment_method_title() {
+				return 'Card';
+			}
 		};
 	}
 
@@ -338,5 +385,20 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 		$refund = Events::one_time_purchase_changed( 87, 'completed', 'refunded', $this->order( 87, [ $this->item( $product ) ], 'refunded', 0, 0 ) );
 		$this->assertSame( 'refunded', $refund['status_after'] );
 		$this->assertSame( 'reader@example.test', $refund['email'] );
+	}
+
+	/**
+	 * Subscription and order events name the reader by account email too: the other
+	 * sites find or create the reader by it, so the stand-in's billing address of
+	 * reader@example.test never reaches them for a logged-in customer, and a guest
+	 * order falls back to it.
+	 */
+	public function test_order_and_subscription_events_name_the_customer_by_account_email() {
+		$event = Events::item_changed( 42, 'pending', 'active', $this->order( 42, [], 'active' ) );
+		$this->assertSame( 'customer@example.test', $event['email'] );
+		$this->assertSame( $this->customer_id, $event['user_id'] );
+
+		$guest = Events::item_changed( 43, 'pending', 'completed', $this->order( 43, [], 'completed', 0, 0 ) );
+		$this->assertSame( 'reader@example.test', $guest['email'] );
 	}
 }
