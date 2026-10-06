@@ -415,14 +415,15 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * Load More reaches every matching post, including the final partial page,
-	 * whether or not "Allow duplicate content" is on.
+	 * Load More offers a next page exactly while posts remain: every request in the
+	 * chain returns posts, and together they return every matching post, whether or
+	 * not "Allow duplicate content" is on.
 	 *
 	 * @dataProvider deduplicate_settings
 	 *
 	 * @param bool $deduplicate The block's deduplicate attribute.
 	 */
-	public function test_articles_endpoint_next_url_reaches_last_page( $deduplicate ) {
+	public function test_articles_endpoint_offers_next_url_exactly_while_posts_remain( $deduplicate ) {
 		$category_id = self::factory()->category->create();
 		$post_ids    = [];
 		for ( $i = 0; $i < 7; $i++ ) {
@@ -437,16 +438,32 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		}
 		wp_set_current_user( 0 );
 
-		// The first request carries no page param, so it must be served as page 1 and
-		// stand in for the block's server render; every later request follows a next URL.
-		$seen_ids = $this->follow_articles_next_urls(
-			[
-				'postsToShow' => 3,
-				'moreButton'  => 1,
-				'categories'  => [ $category_id ],
-				'deduplicate' => $deduplicate ? 1 : 0,
-			]
-		);
+		// Follow the chain the way the block's Load More script does: each request is the
+		// previous response's next URL plus the IDs of every post shown so far. The first
+		// request carries no page param, so it must be served as page 1 and stands in for
+		// the block's server render.
+		$params   = [
+			'postsToShow' => 3,
+			'moreButton'  => 1,
+			'categories'  => [ $category_id ],
+			'deduplicate' => $deduplicate ? 1 : 0,
+		];
+		$seen_ids = [];
+		// Bounded so a next URL that never empties fails the test instead of hanging it.
+		for ( $i = 0; $i < 10; $i++ ) {
+			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+			$request->set_query_params( array_merge( $params, [ 'exclude_ids' => implode( ',', $seen_ids ) ] ) );
+			$response = rest_do_request( $request );
+			self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+			$data = $response->get_data();
+			// A next URL that leads to no posts would leave readers a Load More click that does nothing.
+			self::assertNotEmpty( $data['ids'], 'Every request in the Load More chain returns posts.' );
+			$seen_ids = array_merge( $seen_ids, $data['ids'] );
+			if ( empty( $data['next'] ) ) {
+				break;
+			}
+			wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $params );
+		}
 
 		self::assertEqualsCanonicalizing( $post_ids, $seen_ids, 'Following the next URLs reaches the final page of posts.' );
 	}
@@ -461,31 +478,6 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			'allow duplicate content off' => [ true ],
 			'allow duplicate content on'  => [ false ],
 		];
-	}
-
-	/**
-	 * Request articles the way the block's Load More script does: follow each
-	 * response's next URL, appending the IDs of every post rendered so far.
-	 *
-	 * @param array $params Query params for the first request.
-	 * @return int[] Post IDs in the order they were returned.
-	 */
-	private function follow_articles_next_urls( $params ) {
-		$seen_ids = [];
-		// Bounded so a next URL that never empties fails the test instead of hanging it.
-		for ( $i = 0; $i < 10; $i++ ) {
-			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
-			$request->set_query_params( array_merge( $params, [ 'exclude_ids' => implode( ',', $seen_ids ) ] ) );
-			$data = rest_do_request( $request )->get_data();
-			// A next URL that leads to no posts would leave readers a Load More click that does nothing.
-			self::assertNotEmpty( $data['ids'], 'Every request in the Load More chain returns posts.' );
-			$seen_ids = array_merge( $seen_ids, $data['ids'] );
-			if ( empty( $data['next'] ) ) {
-				break;
-			}
-			wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $params );
-		}
-		return $seen_ids;
 	}
 
 	/**
