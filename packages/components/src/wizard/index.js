@@ -30,8 +30,9 @@ import Router from '../proxied-imports/router';
 import { WIZARD_STORE_NAMESPACE } from './store';
 import WizardSnackbar from './components/WizardSnackbar';
 import WizardError from './components/WizardError';
-import '../with-wizard-screen/style.scss';
+import '../with-wizard/style.scss';
 import './loading.scss';
+import '../with-wizard-screen/style.scss';
 
 /**
  * Renders a view's page-level banner outside the padded content column, so it sits
