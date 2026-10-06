@@ -310,7 +310,8 @@ class Newspack_Newsletters_Contacts {
 	 * Update a contact lists subscription.
 	 *
 	 * This method will remove the contact from all subscription lists and add
-	 * them to the specified lists.
+	 * them to the specified lists. Lists to add are first narrowed by the
+	 * `newspack_newsletters_contact_lists` filter; lists to remove are not.
 	 *
 	 * @param string   $email Contact email address.
 	 * @param string[] $lists Array of list IDs to subscribe the contact to.
@@ -335,6 +336,17 @@ class Newspack_Newsletters_Contacts {
 		$current_lists   = Newspack_Newsletters_Subscription::get_contact_lists( $email );
 		$lists_to_add    = array_diff( $lists_to_add, $current_lists );
 		$lists_to_remove = array_intersect( $current_lists, $lists_to_remove );
+
+		// Additions go through the same list filter as a new contact's lists, so
+		// integrations that limit who may join a list apply here too. The result is
+		// intersected so a callback can only drop a selection, never add one the
+		// reader did not choose. Removals are not filtered: leaving a list is always
+		// allowed.
+		if ( ! empty( $lists_to_add ) ) {
+			/** This filter is documented in includes/class-newspack-newsletters-contacts.php */
+			$allowed_lists = apply_filters( 'newspack_newsletters_contact_lists', array_values( $lists_to_add ), [ 'email' => $email ], $provider->service );
+			$lists_to_add  = array_intersect( $lists_to_add, (array) $allowed_lists );
+		}
 
 		if ( empty( $lists_to_add ) && empty( $lists_to_remove ) ) {
 			return false;
