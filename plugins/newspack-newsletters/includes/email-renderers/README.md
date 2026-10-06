@@ -65,7 +65,7 @@ Constants: `ENGINE_WC`, `ENGINE_MJML`, `RENDERER_META`.
 ### `Editor_Bootstrap` — `class-editor-bootstrap.php`
 Boots the package and wires it to the newsletters CPT. `init()` is idempotent and bails when the package is absent. It:
 
-1. Boots the package container (unconditionally — see below).
+1. Boots the package container (unconditionally — see below), first replacing the package's logger with `Editor_Logger` (`class-editor-logger.php`). The default logger writes every level to `debug.log` whenever `WP_DEBUG_LOG` is on, including four info lines on every request; `Editor_Logger` keeps warnings and errors and drops notice, info and debug.
 2. Opts the CPT into the editor **only when `Feature_Flag::is_enabled()`** (via `add_post_type()`), and — again only when the flag is on — re-asserts Newspack's canonical CPT args at `init:11` (`reassert_cpt_when_enabled()`), since the package re-registers opted-in post types with email defaults at `init:10`. With the flag off the package registers nothing at `init:10`, so the re-assertion is skipped rather than run as duplicate work every request.
 3. Registers the wrapping block template (`templates/newspack-newsletter.html`).
 4. Wires per-newsletter theme.json via `woocommerce_email_editor_theme_json` → `Theme_Json_Builder::build()`.
