@@ -17,10 +17,10 @@ use Newspack_Network\Site_Role;
  */
 class Network {
 	/**
-	 * Whether the plugin's redirect guard refused a hop during the current
-	 * safe_peer_remote_get() call. WP_Http reports the guard's exception as an
-	 * `http_request_failed` WP_Error that keeps only its message, so the flag is what ties
-	 * the error to the guard.
+	 * Whether the plugin's redirect guard refused a hop. Set by the guard;
+	 * safe_peer_remote_get() resets it and reads it after its request. WP_Http reports the
+	 * guard's exception as an `http_request_failed` WP_Error that keeps only its message,
+	 * so the flag is what ties the error to the guard.
 	 *
 	 * @var bool
 	 */
@@ -146,8 +146,8 @@ class Network {
 			return new \WP_Error( 'newspack_network_unsafe_peer_url', __( 'Refused a request to a URL that is not a public http(s) address on an allowed port.', 'newspack-network' ) );
 		}
 
-		// Saved and restored so a peer request nested inside this one cannot change what
-		// this one reports.
+		// Saved and restored so a safe_peer_remote_get() nested inside this one cannot
+		// change what this one reports.
 		$outer_refused          = self::$redirect_refused;
 		self::$redirect_refused = false;
 		$added_guard            = self::add_redirect_guard();
@@ -162,12 +162,12 @@ class Network {
 		}
 		// Core checks each hop before the plugin's guard does and refuses most unsafe ones
 		// itself, leaving only its message on the error. The URL has already passed the
-		// check above, so that message means a hop was refused, or the host now resolves
-		// somewhere it did not a moment ago, which is a refusal too.
+		// check above, so that message means a hop was refused, or a second lookup of the
+		// host failed or gave a different answer, which is a refusal too.
 		// phpcs:ignore WordPress.WP.I18n.MissingArgDomain -- core's own string, matched in core's domain.
 		$core_refused = is_wp_error( $response ) && __( 'A valid URL was not provided.' ) === $response->get_error_message();
 		if ( is_wp_error( $response ) && ( $refused || $core_refused ) ) {
-			self::log_peer_refusal( $url, 'Refused a request to a peer: it redirected to a URL that is not http(s) on an allowed port, resolves to a private or reserved address, or whose lookup failed.' );
+			self::log_peer_refusal( $url, 'Refused a request to a peer: it, or a URL it redirected to, is not http(s) on an allowed port, resolves to a private or reserved address, or its lookup failed.' );
 		}
 		return $response;
 	}
