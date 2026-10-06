@@ -1,3 +1,10 @@
+## newspack [6.53.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.10...newspack@6.53.11) (2026-10-06)
+
+
+### Bug Fixes
+
+* **recaptcha:** skip options cache flush when nothing to migrate ([#1248](https://github.com/Automattic/newspack-workspace/issues/1248)) ([2eeb1b7](https://github.com/Automattic/newspack-workspace/commit/2eeb1b7c5635efda91ad8541ca11fb11c09436ee))
+
 ## newspack [6.53.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.9...newspack@6.53.10) (2026-10-05)
 
 
