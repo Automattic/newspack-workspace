@@ -13,6 +13,8 @@ import { Button, Modal, Notice, Page, PluginInstaller } from '../';
 import Router from '../proxied-imports/router';
 import Footer from '../footer';
 import './style.scss';
+import '../wizard/loading.scss';
+import '../with-wizard-screen/style.scss';
 
 const { Redirect, Route } = Router;
 

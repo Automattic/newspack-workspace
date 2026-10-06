@@ -190,5 +190,3 @@ const registerStore = () => {
 };
 
 registerStore();
-
-export default registerStore;

@@ -197,14 +197,14 @@ import { Button, Card, SectionHeader } from '../../../../../packages/components/
 import { Button, Card, SectionHeader } from 'newspack-components';
 ```
 
-The package declares `sideEffects`, so a bundler that tree-shakes (webpack in production) keeps only the components you name, plus their stylesheets. The barrel still brings `src/style.scss`, which sets `--wp-admin-theme-color` on `:root`. For a bundle that must not touch global styles, such as one enqueued in the block editor or on the front end, import the component from its own subpath instead:
+**In a bundle that loads in the block editor or on the front end, import each component from its own subpath**, because importing from the barrel always brings its stylesheet, which sets `--wp-admin-theme-color` on `:root`:
 
 ```jsx
-// ✅ CORRECT – no global stylesheet
+// ✅ CORRECT – editor or front-end bundle
 import Drawer from 'newspack-components/drawer';
 ```
 
-The older `newspack-components/dist/esm/<component>` paths keep working.
+A subpath keeps that rule out only for components that don't import the barrel internally. Drawer, Button, Card, Modal, Notice and SectionHeader are clean. ActionCard, GlobalNotices, Handoff, ImageUpload, PluginToggle, the settings components, WebPreview, Wizard, withWizard, withWizardScreen and the other components that import their siblings from `'../'` still bring it in, so check the built CSS before using one of those outside wp-admin. The older `newspack-components/dist/esm/<component>` paths keep working.
 
 **Import individual components** – Import only what you need; do not import the whole namespace. List named imports **alphabetically** (e.g. from `@wordpress/components` or `newspack-components`):
 

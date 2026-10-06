@@ -10,7 +10,6 @@
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
 const { resolveSourceFile } = require( 'newspack-scripts/config/resolveSource' );
 const path = require( 'path' );
-const webpack = require( 'webpack' );
 
 /**
  * Internal variables
@@ -56,16 +55,5 @@ webpackConfig.module.rules = webpackConfig.module.rules.map( rule => {
 	}
 	return rule;
 } );
-
-// `newspack-components`' barrel re-exports `Wizard` from a module whose top-level
-// `registerStore('newspack/wizards')` collides with newspack-plugin's wizards bundle in
-// bundled mode. Newsletters doesn't use Wizard — stub the module so the side effect drops.
-webpackConfig.plugins = webpackConfig.plugins || [];
-webpackConfig.plugins.push(
-	new webpack.NormalModuleReplacementPlugin(
-		/[\\/]newspack-components[\\/]dist[\\/]esm[\\/]wizard[\\/]index\.js$/,
-		path.resolve( __dirname, 'webpack-shims/newspack-components-wizard.js' )
-	)
-);
 
 module.exports = webpackConfig;

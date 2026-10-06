@@ -15,6 +15,7 @@
 @import "@wordpress/theme/prebuilt/css/design-tokens.css";
 
 /* stylelint-disable plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the wpds brand tokens. */
+body.newspack-wizard-page,
 body:has(.newspack-page) {
 	--wpds-color-background-interactive-brand-strong: #{np-colors.$primary-600};
 	--wpds-color-background-interactive-brand-strong-active: #{np-colors.$primary-800};

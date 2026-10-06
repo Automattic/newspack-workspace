@@ -65,7 +65,8 @@
 		"*.scss",
 		"./src/**",
 		"./dist/*/index.js",
-		"./dist/*/wizard/store/index.js"
+		"./dist/*/wizard/store/index.js",
+		"./shared/js/public-path.js"
 	],
 	"publishConfig": {
 		"access": "public"
