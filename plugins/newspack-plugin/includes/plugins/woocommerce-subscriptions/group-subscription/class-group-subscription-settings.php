@@ -50,6 +50,12 @@ class Group_Subscription_Settings {
 	const EMAIL_DOMAINS_META_KEY = self::GROUP_SUBSCRIPTION_META_PREFIX . 'email_domains';
 
 	/**
+	 * Option behind the Advanced Settings toggle that names a group bought at checkout
+	 * after the buyer's billing details. Off unless the publisher turns it on.
+	 */
+	const NAME_FROM_BILLING_OPTION = 'newspack_group_subscription_name_from_billing';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -454,10 +460,10 @@ class Group_Subscription_Settings {
 		 * named after the buyer's billing details. Off by default, so groups show the
 		 * product name.
 		 *
-		 * @param bool             $enabled      Whether to name the group. Default false.
+		 * @param bool             $enabled      Whether to name the group. Defaults to the Advanced Settings toggle.
 		 * @param \WC_Subscription $subscription The subscription created at checkout.
 		 */
-		if ( ! \apply_filters( 'newspack_group_subscription_name_from_billing', false, $subscription ) ) {
+		if ( ! \apply_filters( 'newspack_group_subscription_name_from_billing', (bool) \get_option( self::NAME_FROM_BILLING_OPTION, false ), $subscription ) ) {
 			return;
 		}
 		if ( ! self::get_subscription_settings( $subscription )['enabled'] ) {

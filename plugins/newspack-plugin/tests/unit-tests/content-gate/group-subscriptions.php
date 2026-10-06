@@ -2966,12 +2966,39 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Off by default: a site that hasn't opted in keeps the product-name default,
-	 * even when the buyer gave a company.
+	 * Off by default: a site that hasn't opted in keeps the product-name default, even
+	 * when the buyer gave a company. Turning on the Advanced Settings toggle opts in.
 	 */
-	public function test_checkout_does_not_name_group_unless_site_opts_in() {
-		$subscription = $this->checkout_group_subscription( [ 'billing_company' => 'Acme Newsroom' ] );
-		$this->assertSame( '', $subscription->get_meta( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name' ) );
+	public function test_checkout_names_group_only_once_site_opts_in() {
+		$name_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name';
+
+		$before = $this->checkout_group_subscription( [ 'billing_company' => 'Acme Newsroom' ] );
+		$this->assertSame( '', $before->get_meta( $name_key ) );
+
+		update_option( Group_Subscription_Settings::NAME_FROM_BILLING_OPTION, true );
+		$after = $this->checkout_group_subscription( [ 'billing_company' => 'Acme Newsroom' ] );
+		$this->assertSame( 'Acme Newsroom', $after->get_meta( $name_key ) );
+	}
+
+	/**
+	 * The Advanced Settings screen saves the toggle through the group settings route.
+	 * A save that leaves the field out, like a label-only edit, keeps the stored value,
+	 * and a string "false" arrives as false rather than as a truthy string.
+	 */
+	public function test_group_settings_route_saves_name_from_billing_toggle() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		do_action( 'rest_api_init' );
+		$route = '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience/group-labels';
+		$save  = function ( $params ) use ( $route ) {
+			$request = new \WP_REST_Request( 'POST', $route );
+			$request->set_body_params( $params );
+			return rest_do_request( $request )->get_data();
+		};
+
+		$this->assertFalse( rest_do_request( new \WP_REST_Request( 'GET', $route ) )->get_data()['name_from_billing'] );
+		$this->assertTrue( $save( [ 'name_from_billing' => 'true' ] )['name_from_billing'] );
+		$this->assertTrue( $save( [ 'label_singular' => 'Team' ] )['name_from_billing'] );
+		$this->assertFalse( $save( [ 'name_from_billing' => 'false' ] )['name_from_billing'] );
 	}
 
 	/**
