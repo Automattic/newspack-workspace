@@ -10,7 +10,6 @@ namespace Newspack\CLI;
 use WP_CLI;
 use Newspack\Complimentary_Access;
 use Newspack\Content_Gate;
-use Newspack\WooCommerce_Store_API_Free_Products;
 use Newspack\WooCommerce_Subscriptions;
 
 defined( 'ABSPATH' ) || exit;
@@ -59,7 +58,7 @@ class Complimentary_Access_CLI {
 				continue;
 			}
 			if ( ! Complimentary_Access::qualifies_for_flag( $product ) ) {
-				if ( WooCommerce_Store_API_Free_Products::is_free( $product ) && 'none' === Complimentary_Access::get_subscription_holders( $product->get_id() ) ) {
+				if ( Complimentary_Access::is_free_product( $product ) && 'none' === Complimentary_Access::get_subscription_holders( $product->get_id() ) ) {
 					WP_CLI::line( sprintf( 'Needs review, $0 with no subscriptions: %s', $label ) );
 				}
 				continue;

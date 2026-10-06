@@ -183,17 +183,19 @@ class Newspack_Test_Complimentary_Access extends WP_UnitTestCase {
 		};
 		add_filter( 'pre_as_enqueue_async_action', $capture, 10, 3 );
 
-		Complimentary_Access::handle_flag_added( 1, $product_id, Complimentary_Access::META_KEY, 'no' );
-		$this->assertSame( [], $queued_batches );
+		try {
+			Complimentary_Access::handle_flag_added( 1, $product_id, Complimentary_Access::META_KEY, 'no' );
+			$this->assertSame( [], $queued_batches );
 
-		Complimentary_Access::handle_flag_added( 1, $product_id, Complimentary_Access::META_KEY, 'yes' );
-		$this->assertCount( 1, $queued_batches );
+			Complimentary_Access::handle_flag_added( 1, $product_id, Complimentary_Access::META_KEY, 'yes' );
+			$this->assertCount( 1, $queued_batches );
 
-		Complimentary_Access::handle_product_deletion( $product_id );
-		Complimentary_Access::handle_flag_changed( [ 1 ], $product_id, Complimentary_Access::META_KEY );
-		$this->assertCount( 1, $queued_batches );
-
-		remove_filter( 'pre_as_enqueue_async_action', $capture, 10 );
+			Complimentary_Access::handle_product_deletion( $product_id );
+			Complimentary_Access::handle_flag_changed( [ 1 ], $product_id, Complimentary_Access::META_KEY );
+			$this->assertCount( 1, $queued_batches );
+		} finally {
+			remove_filter( 'pre_as_enqueue_async_action', $capture, 10 );
+		}
 	}
 
 	/**

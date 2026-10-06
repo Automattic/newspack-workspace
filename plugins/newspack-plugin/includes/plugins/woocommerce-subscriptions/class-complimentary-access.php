@@ -380,12 +380,25 @@ class Complimentary_Access {
 		if ( ! $product instanceof \WC_Product || ! $product->is_type( self::PRODUCT_TYPES ) ) {
 			return false;
 		}
-		// The regular price too: a paid product on a $0 sale would stay flagged after the sale.
-		if ( ! WooCommerce_Store_API_Free_Products::is_free( $product ) || 0 < (float) $product->get_regular_price( 'edit' ) ) {
+		if ( ! self::is_free_product( $product ) ) {
 			return false;
 		}
 		$holders = self::get_subscription_holders( $product->get_id() );
 		return 'purchased' !== $holders && ( ! $require_grants || 'granted' === $holders );
+	}
+
+	/**
+	 * Whether a product costs nothing, on sale or not.
+	 *
+	 * The regular price counts too: a paid product on a $0 sale is not a comp product,
+	 * and flagging it would keep it off sale after the sale ends.
+	 *
+	 * @param \WC_Product $product Product.
+	 *
+	 * @return bool
+	 */
+	public static function is_free_product( $product ): bool {
+		return WooCommerce_Store_API_Free_Products::is_free( $product ) && 0 >= (float) $product->get_regular_price( 'edit' );
 	}
 
 	/**
