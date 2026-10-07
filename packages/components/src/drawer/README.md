@@ -236,7 +236,7 @@ separator.
 
 A pinned container for `Drawer.Action` elements. Whatever the number of
 actions, they sit in one row aligned to the end, each at its natural width. The
-row wraps only when the labels don't fit, so no action is ever clipped.
+row wraps when the actions don't fit side by side.
 
 Convention, not enforced: pass the primary action last, so it sits at the end
 of the row.
