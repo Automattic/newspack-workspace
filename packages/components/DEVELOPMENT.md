@@ -73,7 +73,7 @@ Follow this step-by-step process when selecting a component:
 
 ## Design & layout at a glance
 
-When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48) with **48px** between sections, and use **`Stack`** from `@wordpress/ui` for rows and columns of items; use **Grid** for real multi-column layouts. Structure content as **SectionHeader → Card → ActionCard → controls**, with **Divider** between sections. Settings tabs put Save in the page header (see [Layout](#layout-when-to-use-stack-or-grid)); setup flows and wizard steps keep primary actions in **`.newspack-buttons-card`**. Use the same **breakpoints** (e.g. 744px, 1054px) as existing components. Full detail: [Spacing scale](#spacing-scale-design-system), [Layout (Stack / Grid)](#layout-when-to-use-stack-or-grid), [Responsive breakpoints](#responsive-breakpoints), [Visual hierarchy patterns](#visual-hierarchy-patterns), [Component states](#component-states). For code examples by context and wizard patterns, see [Usage](#usage).
+When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48) with **48px** between sections, and use **`Stack`** from `@wordpress/ui` for rows and columns of items; use **Grid** for real multi-column layouts. Structure content as **SectionHeader → Card → ActionCard → controls**, with **Divider** between sections. Settings and edit screens lay each section out as a **two-column section** (title on the left, fields on the right). Settings tabs put Save in the page header (see [Layout](#layout-when-to-use-stack-or-grid)); setup flows and wizard steps keep primary actions in **`.newspack-buttons-card`**. Use the same **breakpoints** (e.g. 744px, 1054px) as existing components. Full detail: [Spacing scale](#spacing-scale-design-system), [Layout (Stack / Grid)](#layout-when-to-use-stack-or-grid), [Responsive breakpoints](#responsive-breakpoints), [Visual hierarchy patterns](#visual-hierarchy-patterns), [Component states](#component-states). For code examples by context and wizard patterns, see [Usage](#usage).
 
 ## Available Components
 
@@ -655,7 +655,21 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 - **`Stack`** from `@wordpress/ui` – A few related items in a row (e.g. label + control), or a single column of items, lists of settings, or stacked sections. Use `gap` for the spacing instead of margins on the children. A column needs `direction="column"`; without it, `Stack` lays out as a row.
 - **Grid (Newspack)** – A set of items in columns (e.g. multiple cards or form groups). Default 32px gap; use `columns` and gutter modifiers. Use when the layout is genuinely a grid of items (multiple columns). There are many existing examples where Grid is used as a single row. That is fine to leave, but new code uses `Stack` for it.
 
-**Settings tabs** follow one layout: each section is a `Grid columns={ 2 } gutter={ 32 } noMargin` with a `SectionHeader noMargin` on the left and the fields on the right in `<Stack direction="column" gap="xl">`, separated by `<Divider alignment="full-width" variant="tertiary" />`. Fields drop their own bottom margin so the gap is the only spacing: Newspack `TextControl` takes `withMargin={ false }` plus `__nextHasNoMarginBottom` and `__next40pxDefaultSize`; core `ToggleControl` and `CheckboxControl` take `__nextHasNoMarginBottom`. Save sits in the page header, published with `setHeaderData( { actions } )` from the wizard store and disabled until something changes. The header keeps whichever callback it was handed, so read the latest handler from a ref; passing the save function directly saves stale state. Pair it with `useUnsavedChangesDialog`. See `plugins/newspack-plugin/src/wizards/newspack/views/settings/seo/index.tsx`.
+**Two-column sections** are the standard layout for a section of a settings or edit screen: what the section is on the left, its fields on the right. Settings tabs use it, and so do the Access Control editors (gates, metering, content gifting, institutions), the integration and experimental tool configure views, and the pricing rule and product forms. Use it for any new screen made of named groups of settings:
+
+```jsx
+<Grid columns={ 2 } gutter={ 32 } noMargin>
+	<SectionHeader heading={ 2 } noMargin title={ … } description={ … } />
+	<Stack direction="column" gap="xl">
+		{ /* fields */ }
+	</Stack>
+</Grid>
+<Divider alignment="full-width" variant="tertiary" />
+```
+
+The `Grid` collapses to one column below 744px, so the header sits above its fields on narrow screens. Some existing editors still lay out the right column with `VStack spacing={ 6 }`; new and reworked sections use `Stack`. A grid of cards that each open their own screen is a different pattern and has no `SectionHeader` column.
+
+**Settings tabs** are built from two-column sections. Fields drop their own bottom margin so the gap is the only spacing: Newspack `TextControl` takes `withMargin={ false }` plus `__nextHasNoMarginBottom` and `__next40pxDefaultSize`; core `ToggleControl` and `CheckboxControl` take `__nextHasNoMarginBottom`. Save sits in the page header, published with `setHeaderData( { actions } )` from the wizard store and disabled until something changes. The header keeps whichever callback it was handed, so read the latest handler from a ref; passing the save function directly saves stale state. Pair it with `useUnsavedChangesDialog`. See `plugins/newspack-plugin/src/wizards/newspack/views/settings/seo/index.tsx`.
 
 Prefer these patterns (and the spacing scale above) over one-off margins so layout stays consistent with Card, ActionCard, and SectionHeader.
 
