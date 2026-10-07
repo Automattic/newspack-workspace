@@ -33,10 +33,10 @@ jest.mock( '@wordpress/components', () => ( {
 	PanelBody: ( { children } ) => <section>{ children }</section>,
 	Button: ( { children, onClick } ) => <button onClick={ onClick }>{ children }</button>,
 	__experimentalVStack: ( { children } ) => <div>{ children }</div>,
-	TextControl: ( { label, value, onChange } ) => (
+	TextControl: ( { label, value, onChange, onBlur } ) => (
 		<label htmlFor="prompt-button-link">
 			{ label }
-			<input id="prompt-button-link" value={ value } onChange={ event => onChange( event.target.value ) } />
+			<input id="prompt-button-link" value={ value } onChange={ event => onChange( event.target.value ) } onBlur={ onBlur } />
 		</label>
 	),
 } ) );
@@ -130,6 +130,37 @@ describe( 'withPromptButtonLink', () => {
 		fireEvent.change( input, { target: { value: '' } } );
 		expect( setAttributes ).toHaveBeenLastCalledWith( { url: undefined } );
 	} );
+
+	// An on-page link opening in a new tab would load the page again, and the
+	// toolbar can't turn the setting off: it rejects the link before saving.
+	it( 'turns off "open in new tab" when the link becomes an on-page link', () => {
+		const setAttributes = jest.fn();
+		render( <Edit { ...props( { setAttributes, attributes: { url: 'https://donations.example.test/', linkTarget: '_blank' } } ) } /> );
+
+		fireEvent.change( screen.getByLabelText( 'Button link' ), { target: { value: '#donate?amount=10' } } );
+		expect( setAttributes.mock.calls.at( -1 )[ 0 ] ).toStrictEqual( { url: '#donate?amount=10', linkTarget: undefined } );
+	} );
+
+	// The toolbar adds the scheme to a bare domain; without it the link would
+	// save as a path under the story.
+	it( 'adds https:// to a bare domain when the field loses focus', () => {
+		const setAttributes = jest.fn();
+		render( <Edit { ...props( { setAttributes, attributes: { url: 'donations.example.test/give' } } ) } /> );
+
+		fireEvent.blur( screen.getByLabelText( 'Button link' ) );
+		expect( setAttributes ).toHaveBeenLastCalledWith( { url: 'https://donations.example.test/give' } );
+	} );
+
+	it.each( [ '#donate?amount=10&frequency=one_time', '/donate/', 'https://donations.example.test/give' ] )(
+		'leaves %s as typed when the field loses focus',
+		url => {
+			const setAttributes = jest.fn();
+			render( <Edit { ...props( { setAttributes, attributes: { url } } ) } /> );
+
+			fireEvent.blur( screen.getByLabelText( 'Button link' ) );
+			expect( setAttributes ).not.toHaveBeenCalled();
+		}
+	);
 
 	// Remounting the button's own editor on selection would drop the cursor out
 	// of its text while the publisher types.

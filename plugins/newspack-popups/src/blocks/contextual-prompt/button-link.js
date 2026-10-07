@@ -18,6 +18,7 @@ import { createHigherOrderComponent } from '@wordpress/compose';
 import { useSelect } from '@wordpress/data';
 import { InspectorControls, store as blockEditorStore } from '@wordpress/block-editor';
 import { PanelBody, TextControl } from '@wordpress/components';
+import { prependHTTPS } from '@wordpress/url';
 
 /**
  * Internal dependencies.
@@ -67,7 +68,19 @@ const PromptButtonLink = ( { clientId, url, setAttributes } ) => {
 					label={ __( 'Button link', 'newspack-popups' ) }
 					help={ __( 'Also accepts on-page links that the toolbar rejects, such as #donate?amount=10.', 'newspack-popups' ) }
 					value={ url || '' }
-					onChange={ value => setAttributes( { url: value || undefined } ) }
+					// An on-page link opening in a new tab would load the page again, and
+					// the toolbar can't turn that setting off once it rejects the link.
+					onChange={ value =>
+						setAttributes( value.startsWith( '#' ) ? { url: value, linkTarget: undefined } : { url: value || undefined } )
+					}
+					// Match the toolbar, which adds the scheme to a bare domain; without it
+					// the link saves as a path under the story.
+					onBlur={ () => {
+						const normalized = url ? prependHTTPS( url ) : url;
+						if ( normalized !== url ) {
+							setAttributes( { url: normalized } );
+						}
+					} }
 				/>
 			</PanelBody>
 		</InspectorControls>
