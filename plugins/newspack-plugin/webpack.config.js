@@ -48,7 +48,7 @@ const entry = {
 	'content-gate-countdown-block': resolveSource( 'src', 'blocks', 'content-gate', 'countdown', 'view' ),
 	'overlay-menu-block': resolveSource( 'src', 'blocks', 'overlay-menu', 'view' ),
 	'overlay-search-block': resolveSource( 'src', 'blocks', 'overlay-search', 'view' ),
-	'comments-panel-block': path.join( __dirname, 'src', 'blocks', 'comments-panel', 'view.js' ),
+	'comments-panel-block': resolveSource( 'src', 'blocks', 'comments-panel', 'view' ),
 	'content-gate-countdown-box-block': resolveSource( 'src', 'blocks', 'content-gate', 'countdown-box', 'index' ),
 	'contribution-meter-block': resolveSource( 'src', 'blocks', 'contribution-meter', 'index' ),
 	'avatar-block': resolveSource( 'src', 'blocks', 'avatar', 'index' ),

@@ -215,7 +215,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 	// ─── Comment behaviors: inline pagination and form submission ────────────────
 
 	// Swaps the .wp-block-comments element inside the panel with the one in the
-	// fetched document, updates the URL, scrolls, and re-creates the focus trap.
+	// fetched document, updates the URL, and scrolls.
 	const swapCommentsBlock = ( doc, finalUrl ) => {
 		const commentsBlock = panel.querySelector( '.wp-block-comments' );
 		if ( ! commentsBlock ) {
@@ -241,13 +241,6 @@ const createCommentsPanel = ( panel, triggers ) => {
 			panel.scrollTop = 0;
 		}
 
-		// Re-create the focus trap now the DOM changed (only if open).
-		if ( isOpen ) {
-			if ( focusTrapCleanup ) {
-				focusTrapCleanup();
-			}
-			focusTrapCleanup = trapFocus();
-		}
 		return true;
 	};
 
