@@ -320,6 +320,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 			wrapper.className = 'newspack-ui';
 			noticeEl = document.createElement( 'p' );
 			noticeEl.className = 'newspack-ui__notice newspack-ui__notice--error';
+			noticeEl.setAttribute( 'role', 'alert' );
 			wrapper.appendChild( noticeEl );
 			form.prepend( wrapper );
 		}
