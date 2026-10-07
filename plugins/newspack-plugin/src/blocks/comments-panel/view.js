@@ -245,11 +245,19 @@ const createCommentsPanel = ( panel, triggers ) => {
 		}
 		commentsBlock.replaceWith( newBlock );
 
-		const newComment = previousCommentIds
-			? Array.from( newBlock.querySelectorAll( '[id^="comment-"]' ) ).find(
-					el => /^comment-\d+$/.test( el.id ) && ! previousCommentIds.has( el.id )
-			  )
-			: null;
+		// Take the highest unseen ID: comment IDs only increase, and when the redirect
+		// lands on a different comments page every comment on it is unseen.
+		let newComment = null;
+		if ( previousCommentIds ) {
+			const commentNumber = el => parseInt( el.id.replace( 'comment-', '' ), 10 );
+			Array.from( newBlock.querySelectorAll( '[id^="comment-"]' ) )
+				.filter( el => /^comment-\d+$/.test( el.id ) && ! previousCommentIds.has( el.id ) )
+				.forEach( el => {
+					if ( ! newComment || commentNumber( el ) > commentNumber( newComment ) ) {
+						newComment = el;
+					}
+				} );
+		}
 
 		const url = new URL( finalUrl );
 		if ( newComment ) {
