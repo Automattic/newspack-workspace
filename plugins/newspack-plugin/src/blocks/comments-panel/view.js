@@ -364,6 +364,12 @@ const createCommentsPanel = ( panel, triggers ) => {
 							isSubmitting = false;
 							return;
 						}
+						// Core only redirects once the comment is saved; if the destination has
+						// no comments to swap in (e.g. a filtered thank-you page), go there.
+						if ( response.ok && response.redirected ) {
+							window.location.href = response.url;
+							return;
+						}
 						showError( doc.querySelector( '.wp-die-message' )?.textContent.trim() );
 					} )
 					.catch( () => showError() );
