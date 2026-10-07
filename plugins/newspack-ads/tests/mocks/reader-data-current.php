@@ -41,6 +41,16 @@ class Reader_Data {
 	public static $bool_values = [];
 
 	/**
+	 * Get reader data.
+	 *
+	 * @param int $user_id User ID.
+	 * @return array
+	 */
+	public static function get_data( $user_id ) {
+		return [ 'active_subscriptions' => self::$active_subscriptions ];
+	}
+
+	/**
 	 * Get a reader boolean.
 	 *
 	 * @param int    $user_id User ID.
