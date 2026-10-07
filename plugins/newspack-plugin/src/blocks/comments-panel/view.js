@@ -390,10 +390,11 @@ const createCommentsPanel = ( panel, triggers ) => {
 		submitCommentForm( form );
 	} );
 
-	// Auto-open on comment pagination (?cpage / /comment-page-N/) or a #comment-N hash.
+	// Auto-open on comment pagination (?cpage / /comment-page-N) or a comment link
+	// (#comment-N, or core's #comments / #respond from comment-count links).
 	const isCommentPagination =
-		new URLSearchParams( window.location.search ).has( 'cpage' ) || /\/comment-page-\d+\//i.test( window.location.pathname );
-	const commentHash = /^#comment-\d+$/.test( window.location.hash ) ? window.location.hash : null;
+		new URLSearchParams( window.location.search ).has( 'cpage' ) || /\/comment-page-\d+(\/|$)/i.test( window.location.pathname );
+	const commentHash = /^#(comment-\d+|comments|respond)$/.test( window.location.hash ) ? window.location.hash : null;
 
 	if ( isCommentPagination || commentHash ) {
 		openPanel();
