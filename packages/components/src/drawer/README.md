@@ -235,10 +235,11 @@ separator.
 ## `Drawer.Footer`
 
 A pinned container for `Drawer.Action` elements. Whatever the number of
-actions, they sit in one row aligned to the end, each at its natural width.
+actions, they sit in one row aligned to the end, each at its natural width. The
+row wraps only when the labels don't fit, so no action is ever clipped.
 
-Convention, not enforced: pass the primary action last, so it sits on the
-right.
+Convention, not enforced: pass the primary action last, so it sits at the end
+of the row.
 
 Takes `className` and `children`.
 

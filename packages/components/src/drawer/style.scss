@@ -141,6 +141,7 @@ $drawer-size-x-large: 640px;
 	background: wp-colors.$white;
 	display: flex;
 	flex: 0 0 auto;
+	flex-wrap: wrap;
 	gap: wp-vars.$grid-unit-10;
 	justify-content: flex-end;
 	padding: wp-vars.$grid-unit-20 wp-vars.$grid-unit-30 wp-vars.$grid-unit-30;
