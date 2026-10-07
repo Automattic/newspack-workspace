@@ -186,36 +186,6 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Active reader subscriptions are included in GAM targeting.
-	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
-	 */
-	public function test_ad_targeting_for_active_subscription() {
-		require __DIR__ . '/mocks/reader-data-current.php';
-
-		\Newspack\Reader_Data::$active_subscriptions = [ 'product-1' ];
-		$targeting                                   = $this->get_reader_ad_targeting();
-
-		self::assertSame( [ 'logged_in', 'subscriber' ], $targeting['reader_status'] );
-	}
-
-	/**
-	 * Readers with only cancelled subscriptions are not targeted as subscribers.
-	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
-	 */
-	public function test_ad_targeting_for_cancelled_subscription() {
-		require __DIR__ . '/mocks/reader-data-current.php';
-
-		\Newspack\Reader_Data::$active_subscriptions = [];
-		$targeting                                   = $this->get_reader_ad_targeting();
-
-		self::assertSame( [ 'logged_in' ], $targeting['reader_status'] );
-	}
-
-	/**
 	 * A newspack-plugin without get_active_subscriptions() still gets the
 	 * newsletter and donor statuses. A separate process, because the stand-in
 	 * Reader_Data class can be declared only once per process.
@@ -234,17 +204,6 @@ class ModelTest extends WP_UnitTestCase {
 		];
 
 		self::assertSame( [ 'logged_in', 'newsletter_subscriber', 'donor' ], GAM_Model::get_ad_targeting( [] )['reader_status'] );
-	}
-
-	/**
-	 * Get targeting for a logged-in reader.
-	 *
-	 * @return array
-	 */
-	private function get_reader_ad_targeting() {
-		wp_set_current_user( self::factory()->user->create() );
-
-		return GAM_Model::get_ad_targeting( [] );
 	}
 
 	/**
@@ -272,6 +231,29 @@ class ModelTest extends WP_UnitTestCase {
 			$targeting = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
 			self::assertNotContains( 'newsletter_subscriber', $targeting['reader_status'] );
 			self::assertContains( 'donor', $targeting['reader_status'] );
+		} finally {
+			Reader_Data::$data = [];
+			wp_set_current_user( 0 );
+		}
+	}
+
+	/**
+	 * A reader whose only subscription is cancelled has the stored list "[]",
+	 * and is no longer targeted as a subscriber.
+	 */
+	public function test_former_subscriber_is_not_targeted_as_subscriber() {
+		require_once __DIR__ . '/mocks/reader-data.php';
+
+		wp_set_current_user( self::factory()->user->create() );
+
+		try {
+			Reader_Data::$data = [ 'active_subscriptions' => '[123]' ];
+			$targeting         = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertContains( 'subscriber', $targeting['reader_status'] );
+
+			Reader_Data::$data = [ 'active_subscriptions' => '[]' ];
+			$targeting         = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertNotContains( 'subscriber', $targeting['reader_status'] );
 		} finally {
 			Reader_Data::$data = [];
 			wp_set_current_user( 0 );
