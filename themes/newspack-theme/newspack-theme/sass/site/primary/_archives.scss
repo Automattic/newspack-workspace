@@ -146,10 +146,14 @@
 		}
 	}
 
-	// Excludes `.newspack-tag-labels` because the outer class list is caller-supplied:
+	// Excludes tag labels because the outer class list is caller-supplied:
 	// `newspack_generate_tag_labels()` takes it as a parameter, so a child theme
-	// can carry both classes on one element and would lose its labels here.
-	.cat-links:not(.sponsor-label):not(.newspack-tag-labels) {
+	// can carry `cat-links` and a tag-label class on one element and would lose
+	// its labels here. Both names are listed because a child theme may pass the
+	// legacy one; a tag cannot reach this `:not()`, which tests the `.cat-links`
+	// element itself rather than the article that carries `tag-{slug}`.
+	// stylelint-disable-next-line selector-disallowed-list
+	.cat-links:not(.sponsor-label):not(.newspack-tag-labels):not(.tag-labels) {
 		display: none;
 	}
 
