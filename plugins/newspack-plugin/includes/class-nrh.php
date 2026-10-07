@@ -11,6 +11,9 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Handles RevEngine functionality.
+ *
+ * `NRH` and the `nrh` slug come from RevEngine's former name, News Revenue Hub.
+ * Sites store the slug and the `newspack_nrh_config` option, so neither can be renamed.
  */
 class NRH {
 	/**

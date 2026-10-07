@@ -777,6 +777,8 @@ class Donations {
 
 	/**
 	 * Is RevEngine the donation platform?
+	 *
+	 * RevEngine's slug is `nrh`, from its former name News Revenue Hub.
 	 */
 	public static function is_platform_nrh() {
 		return 'nrh' === self::get_platform_slug();
