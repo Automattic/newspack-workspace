@@ -144,6 +144,13 @@
 	z-index: 99997;
 }
 
+@media (prefers-reduced-motion: reduce) {
+	.comments-panel__panel,
+	.comments-panel__scrim {
+		transition: none;
+	}
+}
+
 // Lock document scrolling while the comments panel is open.
 body.comments-panel-open {
 	overflow: hidden !important;

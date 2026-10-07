@@ -18,6 +18,8 @@ const SLIDE_FALLBACK_MS = 600;
 // Slide duration (250ms in style.scss) plus a short buffer before scrolling to a linked comment.
 const SCROLL_TO_COMMENT_DELAY_MS = 400;
 
+const getScrollBehavior = () => ( window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches ? 'auto' : 'smooth' );
+
 // Focusable element selector.
 const FOCUSABLE_SELECTOR =
 	'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), ' +
@@ -257,7 +259,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 
 		if ( newComment ) {
 			focusWithin( newComment );
-			setTimeout( () => newComment.scrollIntoView( { behavior: 'smooth', block: 'start' } ), 100 );
+			setTimeout( () => newComment.scrollIntoView( { behavior: getScrollBehavior(), block: 'start' } ), 100 );
 		} else {
 			focusWithin( newBlock.querySelector( '.wp-block-comments-title' ) || newBlock );
 			panel.scrollTop = 0;
@@ -402,7 +404,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 			setTimeout( () => {
 				const target = document.querySelector( commentHash );
 				if ( target ) {
-					target.scrollIntoView( { behavior: 'smooth', block: 'start' } );
+					target.scrollIntoView( { behavior: getScrollBehavior(), block: 'start' } );
 				}
 			}, SCROLL_TO_COMMENT_DELAY_MS );
 		}
