@@ -1396,7 +1396,7 @@ class Newspack_Blocks {
 				$allowed_tags = '';
 
 				// Jetpack's paywall only applies to the_content, which this excerpt skips, so ensure
-				// gated posts get the text above the Paywall block or nothing. Line Access Control,
+				// gated posts get the text above the Paywall block or nothing. Like Access Control,
 				// this applies to every reader, not just those without access, so the block's render
 				// cache stays safe to share.
 				if (
