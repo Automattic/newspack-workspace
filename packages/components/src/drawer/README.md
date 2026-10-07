@@ -148,8 +148,8 @@ unsaved-changes confirmation always applies.
 
 ## `Drawer.Content`
 
-The body. Repeatable: each `Drawer.Content` is a section, rendered as a VStack
-with a 16px gap by default; `gap` changes it. Children space through the gap
+The body. Repeatable: each `Drawer.Content` is a section, rendered as a column
+`Stack` from `@wordpress/ui` with a 16px gap by default; `gap` changes it. Children space through the gap
 alone; their own top and bottom margins are reset.
 
 Anything can go in a section: an element, a control, a nested stack, or plain
@@ -165,8 +165,8 @@ with markup in your own element and hand the section that instead.
 |------|------|---------|-------------|
 | `children` | `React.ReactNode` | — | Section content. |
 | `className` | `string` | — | Additional CSS class. |
-| `gap` | `number` | `4` | Space between the section's children, on the 4px scale, as VStack's `spacing`. `4` is 16px. |
-| `padding` | `number` | `6` | On the 4px scale, as VStack's `spacing`. `6` is 24px; `0` is a flush section that brings its own padding. |
+| `gap` | `'xs'` \| `'sm'` \| `'md'` \| `'lg'` \| `'xl'` \| `'2xl'` \| `'3xl'` | `'lg'` | Space between the section's children, as a `Stack` gap token. `'lg'` is 16px. |
+| `padding` | `number` | `6` | On the 4px scale. `6` is 24px; `0` is a flush section that brings its own padding. |
 
 Consecutive sections share one scroll container, so they scroll together between
 the pinned header and footer. Sections are not self-separating: put a
