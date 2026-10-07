@@ -8,7 +8,8 @@
 use Newspack_Ads\Providers\GAM_Model;
 use Newspack\Reader_Data;
 
-require_once __DIR__ . '/mocks/reader-data.php';
+require_once __DIR__ . '/mocks/class-reader-activation.php';
+require_once __DIR__ . '/mocks/class-reader-data.php';
 
 /**
  * Test ads model functionality.
