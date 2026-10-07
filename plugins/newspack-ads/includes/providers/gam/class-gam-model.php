@@ -959,7 +959,7 @@ final class GAM_Model {
 					$targeting['reader_status'][] = 'newsletter_subscriber';
 				}
 
-				// If reader has donated.
+				// If the reader is a donor. Cancelling a recurring donation makes them a former donor instead.
 				if ( $has_flag( 'is_donor' ) ) {
 					$targeting['reader_status'][] = 'donor';
 				}
