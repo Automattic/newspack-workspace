@@ -51,8 +51,7 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 	 * or "Label" puts `tag-labels` or `tag-label` on the whole article. The
 	 * `newspack-` names cannot collide, because a tag-derived class always
 	 * starts with `tag-`. The legacy names stay on the markup so existing
-	 * custom CSS keeps matching. That no stylesheet selects them is enforced by
-	 * the stylelint rule in newspack-blocks and both themes, for SCSS only.
+	 * custom CSS keeps matching.
 	 */
 	public function test_labels_carry_namespaced_and_legacy_classes() {
 		ob_start();
