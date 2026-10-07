@@ -54,6 +54,8 @@ You only need to run this the first time you set up your env.
 
 The default builds using PHP 8.3. You can also call `./build-image-82.sh` to build an image with PHP 8.2. It's a good idea to have both.
 
+The image is built for Apple Silicon (`linux/arm64`) by default. On an Intel Mac or an x86 Linux machine, add `NEWSPACK_DOCKER_PLATFORM=linux/amd64` to your `.env` file before building.
+
 ### Launch the container and install WordPress
 
 Now we are going to use the `n` script. (Tip: Create an alias in your `.bashrc` so you can call it from anywhere)

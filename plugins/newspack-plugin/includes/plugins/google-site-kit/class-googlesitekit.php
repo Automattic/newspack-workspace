@@ -370,11 +370,10 @@ class GoogleSiteKit {
 			return $labels;
 		}
 		// Attribution follows group-member eligibility, not reader status: a
-		// non-reader author/contributor who is an eligible group member (by
+		// non-reader who is an eligible group member (any non-staff user by
 		// default, or via the newspack_group_subscription_member_eligible
 		// filter) still gets real gated access and should be attributed for
-		// it. Admins/editors remain non-eligible by default, so they are
-		// still excluded here.
+		// it. Staff are not eligible by default, so they are excluded here.
 		if ( ! Group_Subscription::is_eligible_member( $user ) ) {
 			return $labels;
 		}

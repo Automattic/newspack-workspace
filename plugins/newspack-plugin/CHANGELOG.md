@@ -1,3 +1,49 @@
+## newspack [6.53.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.10...newspack@6.53.11) (2026-10-06)
+
+
+### Bug Fixes
+
+* **recaptcha:** skip options cache flush when nothing to migrate ([#1248](https://github.com/Automattic/newspack-workspace/issues/1248)) ([2eeb1b7](https://github.com/Automattic/newspack-workspace/commit/2eeb1b7c5635efda91ad8541ca11fb11c09436ee))
+
+## newspack [6.53.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.9...newspack@6.53.10) (2026-10-05)
+
+
+### Bug Fixes
+
+* **content-gate:** leave one-time lapse catch-up to the cron run ([11a3dd8](https://github.com/Automattic/newspack-workspace/commit/11a3dd87dcb225d7060b7927ea524357f8ee327a))
+* **content-gate:** run queued access checks before the lapse sweep ([c0cadb2](https://github.com/Automattic/newspack-workspace/commit/c0cadb268e02cdeb069a4d3108aa0afa3b175537))
+* **content-gate:** skip refunds and resume capped one-time lapse sweeps ([28d78f5](https://github.com/Automattic/newspack-workspace/commit/28d78f5ef26948adb2cbe1d2b77ec15a5636ad3b))
+* **content-gate:** sync premium newsletter lists for one-time purchases ([d237864](https://github.com/Automattic/newspack-workspace/commit/d237864732206187dd46077359a3660dc663b9f5))
+
+## newspack [6.53.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.8...newspack@6.53.9) (2026-10-02)
+
+
+### Bug Fixes
+
+* **group-subscriptions:** keep seat minimum from blocking product saves ([e09c1df](https://github.com/Automattic/newspack-workspace/commit/e09c1df37209cb32e6d0aeb959f179a6a401f86d))
+
+## newspack [6.53.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.7...newspack@6.53.8) (2026-10-02)
+
+
+### Bug Fixes
+
+* **subscriptions:** let readers pay pending limited subscriptions ([#1172](https://github.com/Automattic/newspack-workspace/issues/1172)) ([85c4546](https://github.com/Automattic/newspack-workspace/commit/85c454632b20c2adb002e40b691f2dca46c119ce))
+
+## newspack [6.53.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.6...newspack@6.53.7) (2026-10-01)
+
+
+### Bug Fixes
+
+* keep one bad saved ID from breaking the segment product lookup ([2a3e317](https://github.com/Automattic/newspack-workspace/commit/2a3e3173a9b285ce9f7f12d4b9af9b8c7b96741e))
+* keep same-named products apart in the segment picker ([be4da5f](https://github.com/Automattic/newspack-workspace/commit/be4da5fcfdf0ea7d4ee8ac617d6a697b1b108b1e))
+* mark private subscription products in pickers ([946741c](https://github.com/Automattic/newspack-workspace/commit/946741c1e1aafeabf096bd73fb5aedbd3475b95d))
+* mark the variations of a private subscription product ([230a655](https://github.com/Automattic/newspack-workspace/commit/230a6558b3387b3143769b763d15ad5591ad7f5e))
+* name deleted subscriptions in segment summaries again ([4f22268](https://github.com/Automattic/newspack-workspace/commit/4f22268c909973d62fb0f5a42dc6c6c601a7436b))
+* name trashed variations and show status labels in pickers ([809e132](https://github.com/Automattic/newspack-workspace/commit/809e1328b28546da7b8fbda7bfc2b581c7951aea))
+* select private subscription products in gates and segments ([a5e6230](https://github.com/Automattic/newspack-workspace/commit/a5e6230407207118b50b8715f50157dc38d194bb))
+* treat label-only gate options as nothing to offer ([0cec829](https://github.com/Automattic/newspack-workspace/commit/0cec8291cd6672387124bfca4a9ce9aa8ca23ca8))
+* wrap long access rule tokens in the block sidebar ([0b8208d](https://github.com/Automattic/newspack-workspace/commit/0b8208d8deddfaf2e2458fb2cb0b00eda7e73f64))
+
 ## newspack [6.53.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.5...newspack@6.53.6) (2026-10-01)
 
 

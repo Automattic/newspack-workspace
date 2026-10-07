@@ -127,7 +127,7 @@ class Donations {
 	 * @return bool True if available, false if not.
 	 */
 	public static function can_use_name_your_price() {
-		// If the donation platform is NRH, the Donate block should behave as if Name Your Price is available.
+		// If the donation platform is RevEngine, the Donate block should behave as if Name Your Price is available.
 		if ( self::is_platform_nrh() ) {
 			return true;
 		}
@@ -776,7 +776,9 @@ class Donations {
 	}
 
 	/**
-	 * Is NRH the donation platform?
+	 * Is RevEngine the donation platform?
+	 *
+	 * RevEngine's slug is `nrh`, from its former name News Revenue Hub.
 	 */
 	public static function is_platform_nrh() {
 		return 'nrh' === self::get_platform_slug();
@@ -801,7 +803,7 @@ class Donations {
 	 * to manage donor status (e.g., via the donation_new data event).
 	 *
 	 * Platforms with server-side tracking can enforce is_donor as read-only
-	 * at the public API boundary. Platforms without it (NRH, other) need
+	 * at the public API boundary. Platforms without it (RevEngine, other) need
 	 * client-side write access for post-transaction landing page flows.
 	 *
 	 * @return bool

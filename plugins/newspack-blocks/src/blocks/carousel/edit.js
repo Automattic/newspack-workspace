@@ -1,4 +1,4 @@
-/* eslint-disable jsx-a11y/anchor-is-valid, jsx-a11y/anchor-has-content, jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus */
+/* eslint-disable jsx-a11y/anchor-has-content, jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus */
 
 /**
  * External dependencies
@@ -36,11 +36,19 @@ import QueryControls from '../../components/query-controls';
 import { PostTypesPanel, PostStatusesPanel } from '../../components/editor-panels';
 import createSwiper from './create-swiper';
 import { getBylineHTML, formatSponsorLogos, formatSponsorByline, getPostStatusLabel } from '../../shared/js/utils';
+import { preventPreviewNavigation } from '../../shared/js/inert-preview';
 // Use same posts store as Homepage Posts block.
 import { postsBlockSelector, postsBlockDispatch, shouldReflow } from '../homepage-articles/utils';
 
 // Max number of slides that can be shown at once.
 const MAX_NUMBER_OF_SLIDES = 6;
+
+const SlideThumbnail = ( { post, imageFit } ) =>
+	post.newspack_featured_image_src ? (
+		<img className={ `image-fit-${ imageFit }` } src={ post.newspack_featured_image_src.large } alt="" />
+	) : (
+		<div className="wp-block-newspack-blocks-carousel__placeholder" />
+	);
 
 class Edit extends Component {
 	constructor( props ) {
@@ -355,7 +363,7 @@ class Edit extends Component {
 					<PostTypesPanel attributes={ attributes } setAttributes={ setAttributes } />
 					<PostStatusesPanel attributes={ attributes } setAttributes={ setAttributes } />
 				</InspectorControls>
-				<div { ...blockProps } className={ classes }>
+				<div { ...blockProps } className={ classes } onClickCapture={ preventPreviewNavigation }>
 					{ hasNoPosts && (
 						<Placeholder className="component-placeholder__align-center">
 							<div style={ { margin: 'auto' } }>{ __( 'Sorry, no posts were found.' ) }</div>
@@ -380,17 +388,15 @@ class Edit extends Component {
 									>
 										{ getPostStatusLabel( post ) }
 										<figure className="post-thumbnail">
-											<a href="#" rel="bookmark">
-												{ post.newspack_featured_image_src ? (
-													<img
-														className={ `image-fit-${ imageFit }` }
-														src={ post.newspack_featured_image_src.large }
-														alt=""
-													/>
-												) : (
-													<div className="wp-block-newspack-blocks-carousel__placeholder" />
-												) }
-											</a>
+											{ /* post_link is empty when the post has no public URL, and
+											     carousel/view.php renders the thumbnail unlinked in that case. */ }
+											{ post.post_link ? (
+												<a href={ post.post_link } rel="bookmark">
+													<SlideThumbnail post={ post } imageFit={ imageFit } />
+												</a>
+											) : (
+												<SlideThumbnail post={ post } imageFit={ imageFit } />
+											) }
 										</figure>
 										{ ( post.newspack_post_sponsors ||
 											showCategory ||
@@ -416,7 +422,7 @@ class Edit extends Component {
 													<div className="tag-labels">
 														{ post.newspack_tag_labels.map( ( newspack_tag_label, index ) => {
 															return newspack_tag_label.link ? (
-																<a key={ index } href="#" className="tag-label flag">
+																<a key={ index } href={ newspack_tag_label.link } className="tag-label flag">
 																	{ newspack_tag_label.flag }
 																</a>
 															) : (
@@ -429,7 +435,11 @@ class Edit extends Component {
 												) }
 												{ showTitle && (
 													<h3 className="entry-title">
-														<a href="#">{ decodeEntities( post.title.rendered.trim() ) }</a>
+														{ post.post_link ? (
+															<a href={ post.post_link }>{ decodeEntities( post.title.rendered.trim() ) }</a>
+														) : (
+															decodeEntities( post.title.rendered.trim() )
+														) }
 													</h3>
 												) }
 												<div className="entry-meta">

@@ -28,12 +28,33 @@ class Order_Changed extends Abstract_Backfiller {
 	/**
 	 * Gets the events to be processed
 	 *
-	 * @return \Newspack_Network\Incoming_Events\Abstract_Incoming_Event[] $events An array of events.
+	 * @return \Generator<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> $events A generator of events.
 	 */
 	public function get_events() {
+		$ids = $this->get_order_ids();
+
+		$this->maybe_initialize_progress_bar( 'Processing orders', count( $ids ) );
+
+		foreach ( $this->load_in_batches( $ids, 'wc_get_order' ) as $order ) {
+
+			$order_data = Woo_Listeners::item_changed( $order->get_id(), '', $order->get_status(), $order );
+
+			$timestamp = strtotime( $order->get_date_created() );
+
+			yield new \Newspack_Network\Incoming_Events\Order_Changed( get_bloginfo( 'url' ), $order_data, $timestamp );
+		}
+	}
+
+	/**
+	 * Gets the IDs of the orders to backfill, created within the start and end dates.
+	 *
+	 * @return int[]
+	 */
+	protected function get_order_ids() {
 		$params = [
-			'limit' => -1,
-			'type'  => 'shop_order',
+			'limit'  => -1,
+			'type'   => 'shop_order',
+			'return' => 'ids',
 		];
 
 		if ( $this->start || $this->end ) {
@@ -46,23 +67,6 @@ class Order_Changed extends Abstract_Backfiller {
 			}
 		}
 
-		$orders = wc_get_orders( $params );
-
-		$this->maybe_initialize_progress_bar( 'Processing orders', count( $orders ) );
-
-		$events = [];
-
-		foreach ( $orders as $order ) {
-
-			$order_data = Woo_Listeners::item_changed( $order->get_id(), '', $order->get_status(), $order );
-
-			$timestamp = strtotime( $order->get_date_created() );
-
-			$event = new \Newspack_Network\Incoming_Events\Order_Changed( get_bloginfo( 'url' ), $order_data, $timestamp );
-
-			$events[] = $event;
-		}
-
-		return $events;
+		return wc_get_orders( $params );
 	}
 }

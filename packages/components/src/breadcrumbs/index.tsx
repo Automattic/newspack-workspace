@@ -85,7 +85,7 @@ const Breadcrumbs = ( { items = [] }: { items?: BreadcrumbItem[] } ) => {
 
 	return (
 		<nav aria-label={ __( 'Breadcrumbs', 'newspack-plugin' ) }>
-			<Stack render={ <ul /> } direction="row" align="center" className="newspack-breadcrumbs__list">
+			<Stack render={ <ul /> } direction="row" align="center" wrap="wrap" className="newspack-breadcrumbs__list">
 				{ preceding.map( ( item, index ) => (
 					<li key={ item.url || index }>
 						{ item.url ? (

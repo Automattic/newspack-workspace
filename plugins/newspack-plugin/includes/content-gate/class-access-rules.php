@@ -36,6 +36,15 @@ class Access_Rules {
 	private static $subscription_products_options = null;
 
 	/**
+	 * Request-scoped memo for the label-only subscription product options.
+	 *
+	 * Same reasoning as {@see self::$subscription_products_options}.
+	 *
+	 * @var array|null
+	 */
+	private static $unselectable_subscription_products_options = null;
+
+	/**
 	 * Request-scoped memo for the one-time purchase product options.
 	 *
 	 * Same reasoning as {@see self::$subscription_products_options}, over a shop's whole
@@ -235,7 +244,7 @@ class Access_Rules {
 			'subscription'      => [
 				'name'        => __( 'Active subscription', 'newspack-plugin' ),
 				'description' => __( 'Requires an active subscription to selected products.', 'newspack-plugin' ),
-				'options'     => [ __CLASS__, 'get_subscription_products_options' ],
+				'options'     => [ __CLASS__, 'get_subscription_products_rule_options' ],
 				'callback'    => [ __CLASS__, 'has_active_subscription' ],
 			],
 			'one_time_purchase' => [
@@ -637,11 +646,16 @@ class Access_Rules {
 	 * as `post_status IN ( 'publish', 'private' )`, so draft is not a state its own admin
 	 * produces for a variation, and nothing can have been bought in it.
 	 *
+	 * Draft and pending products keep granting access, but their labels carry a status
+	 * marker ("[invalid status: Draft]") so a publisher can tell them from the products
+	 * they currently sell. Private products and variations are marked too ("[status:
+	 * Private]"), so a hidden legacy tier reads apart from a current one of the same name.
+	 *
 	 * The result is memoized per request. The list itself is still unbounded and is
 	 * serialized into every editor payload; NPPD-2132 replaces it with a searchable
 	 * picker, which is what removes that cost rather than deferring it.
 	 *
-	 * @return array Array of [ 'label' => string, 'value' => int ].
+	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible'? => true ].
 	 */
 	public static function get_subscription_products_options() {
 		if ( null !== self::$subscription_products_options ) {
@@ -656,21 +670,106 @@ class Access_Rules {
 				'limit' => -1,
 			]
 		);
-		$variations_by_parent = self::get_subscription_variation_posts( $products );
+		self::$subscription_products_options = self::build_subscription_product_options( $products );
+		return self::$subscription_products_options;
+	}
+
+	/**
+	 * Get subscriptions a stored rule may still name but the picker must not offer:
+	 * scheduled (`future`) and trashed products, which `wc_get_products()` leaves out by
+	 * default and so `get_subscription_products_options()` never lists.
+	 *
+	 * A gate saved while such a product was live still holds its ID, and the rule still
+	 * matches subscriptions to it. Without these entries the picker could only render that
+	 * ID as "not listed"; with them it keeps the product's name, marked with its status.
+	 * They are flagged `selectable => false`, so the picker names them but never suggests
+	 * them.
+	 *
+	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible' => true, 'selectable' => false ].
+	 */
+	public static function get_unselectable_subscription_products_options() {
+		if ( null !== self::$unselectable_subscription_products_options ) {
+			return self::$unselectable_subscription_products_options;
+		}
+		if ( ! function_exists( 'wc_get_products' ) ) {
+			return [];
+		}
+		$products = \wc_get_products(
+			[
+				'type'   => [ 'subscription', 'variable-subscription' ],
+				'status' => [ 'future', 'trash' ],
+				'limit'  => -1,
+			]
+		);
+		self::$unselectable_subscription_products_options = array_map(
+			function ( $option ) {
+				$option['selectable'] = false;
+				return $option;
+			},
+			// WooCommerce trashes a variable product's variations along with it, so a trashed
+			// parent's saved variation IDs can only be named by reading trashed variations.
+			self::build_subscription_product_options( $products, [ 'publish', 'private', 'trash' ] )
+		);
+		return self::$unselectable_subscription_products_options;
+	}
+
+	/**
+	 * The "Active subscription" rule's options: every product the picker offers, followed by
+	 * the label-only entries that name stored products it no longer offers.
+	 *
+	 * @return array Array of options; see `get_subscription_products_options()` and
+	 *               `get_unselectable_subscription_products_options()`.
+	 */
+	public static function get_subscription_products_rule_options() {
+		return array_merge( self::get_subscription_products_options(), self::get_unselectable_subscription_products_options() );
+	}
+
+	/**
+	 * Build picker options for subscription products and their variations.
+	 *
+	 * A product whose status is outside `WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES`
+	 * gets a status marker in its label and an `ineligible` flag, and so do its variations,
+	 * since a variation can't be bought while its parent is unavailable. The flag is what
+	 * the picker reads to warn that the entry still grants access. A private product's
+	 * variations take its private marker the same way: WooCommerce leaves them published
+	 * when the parent goes private, so without it a hidden tier would read like a current
+	 * one of the same name. Under a published parent, a variation is labeled by its own
+	 * status.
+	 *
+	 * @param \WC_Product[] $products           The subscription products.
+	 * @param string[]      $variation_statuses Variation statuses to read. See `get_subscription_variation_posts()`.
+	 *
+	 * @return array Array of [ 'label' => string, 'value' => int, 'ineligible'? => true ].
+	 */
+	private static function build_subscription_product_options( $products, $variation_statuses = [ 'publish', 'private' ] ) {
+		$variations_by_parent = self::get_subscription_variation_posts( $products, $variation_statuses );
 		$options              = [];
 		foreach ( $products as $product ) {
-			$options[] = [
-				'label' => $product->get_name(),
-				'value' => $product->get_id(),
+			$status     = $product->get_status();
+			$ineligible = ! in_array( $status, WooCommerce_Products::ELIGIBLE_PRODUCT_STATUSES, true );
+			$entries    = [
+				[
+					'label'  => $product->get_name(),
+					'value'  => $product->get_id(),
+					'status' => $status,
+				],
 			];
 			foreach ( $variations_by_parent[ $product->get_id() ] ?? [] as $variation ) {
-				$options[] = [
-					'label' => self::get_variation_option_label( $product->get_name(), $variation ),
-					'value' => $variation->ID,
+				$entries[] = [
+					'label'  => self::get_variation_option_label( $product->get_name(), $variation ),
+					'value'  => $variation->ID,
+					'status' => 'publish' === $status ? $variation->post_status : $status,
 				];
 			}
+			foreach ( $entries as $entry ) {
+				$entry['label'] = WooCommerce_Products::get_product_label_with_status( $entry['label'], $entry['status'] );
+				unset( $entry['status'] );
+				if ( $ineligible ) {
+					$entry['ineligible'] = true;
+				}
+				$options[] = $entry;
+			}
 		}
-		self::$subscription_products_options = $options;
 		return $options;
 	}
 
@@ -684,8 +783,9 @@ class Access_Rules {
 	 * @return void
 	 */
 	public static function flush_product_options_memos() {
-		self::$subscription_products_options      = null;
-		self::$one_time_purchase_products_options = null;
+		self::$subscription_products_options              = null;
+		self::$unselectable_subscription_products_options = null;
+		self::$one_time_purchase_products_options         = null;
 	}
 
 	/**
@@ -701,13 +801,16 @@ class Access_Rules {
 	 * Publish and private is the whole set WooCommerce itself reads a variable product's
 	 * children as, so it is every variation that can exist for a publisher to have sold.
 	 * Private earns its place: a reader can hold an active subscription to a tier the
-	 * publisher has since hidden, and the rule still has to be able to name it.
+	 * publisher has since hidden, and the rule still has to be able to name it. The one
+	 * exception is a trashed parent, whose variations WooCommerce trashes with it; the
+	 * label-only entries pass `trash` to name those.
 	 *
 	 * @param \WC_Product[] $products The subscription products to collect variations for.
+	 * @param string[]      $statuses Variation post statuses to read.
 	 *
 	 * @return array<int, \WP_Post[]> Variation posts keyed by parent product ID.
 	 */
-	private static function get_subscription_variation_posts( $products ) {
+	private static function get_subscription_variation_posts( $products, $statuses = [ 'publish', 'private' ] ) {
 		$parent_ids = [];
 		foreach ( $products as $product ) {
 			if ( $product->is_type( 'variable-subscription' ) ) {
@@ -721,13 +824,13 @@ class Access_Rules {
 			[
 				'post_type'              => 'product_variation',
 				'post_parent__in'        => $parent_ids,
-				'post_status'            => [ 'publish', 'private' ],
+				'post_status'            => $statuses,
 				'posts_per_page'         => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Variations of the subscription products already fetched; config-scale.
 				'orderby'                => [
 					'menu_order' => 'ASC',
 					'ID'         => 'ASC',
 				],
-				// Only the title, excerpt, ID and parent are read.
+				// Only the title, excerpt, ID, parent and status are read.
 				'update_post_meta_cache' => false,
 				'update_post_term_cache' => false,
 			]
@@ -1045,18 +1148,22 @@ class Access_Rules {
 	 * except on month-end anchors, where this one is both deny-biased and closer
 	 * to what "N months from purchase" means on a calendar.
 	 *
-	 * Shared by the rule and its listing so the two cannot drift.
+	 * Shared by the rule, its listing, and the premium newsletter lapse sweep so
+	 * they cannot drift.
 	 *
-	 * @param array $value Sanitized rule value.
+	 * @internal Public for Premium_Newsletters; not an API for other plugins.
+	 *
+	 * @param array    $value Sanitized rule value.
+	 * @param int|null $now   Unix timestamp to measure back from; null for now.
 	 * @return int|null|false Unix timestamp; null for lifetime access (no cutoff);
 	 *                        false for a misconfigured duration, which grants nothing.
 	 */
-	private static function get_one_time_purchase_cutoff( $value ) {
+	public static function get_one_time_purchase_cutoff( $value, $now = null ) {
 		if ( 'forever' === $value['duration_unit'] ) {
 			return null;
 		}
 		if ( in_array( $value['duration_unit'], [ 'days', 'months' ], true ) && $value['duration_value'] > 0 ) {
-			return strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ) );
+			return strtotime( sprintf( '-%d %s', $value['duration_value'], $value['duration_unit'] ), $now ?? time() );
 		}
 		return false;
 	}
@@ -1196,11 +1303,14 @@ class Access_Rules {
 	 * Whether an order has a line item for one of the given products, matching
 	 * on the variation ID as well as the parent product ID.
 	 *
+	 * @internal Public so Premium_Newsletters matches orders the way the rule
+	 *           does; not an API for other plugins.
+	 *
 	 * @param \WC_Order $order       Order.
 	 * @param int[]     $product_ids Product IDs to look for.
 	 * @return bool
 	 */
-	private static function order_has_product( $order, $product_ids ) {
+	public static function order_has_product( $order, $product_ids ) {
 		foreach ( $order->get_items() as $item ) {
 			$item_product_id   = method_exists( $item, 'get_product_id' ) ? (int) $item->get_product_id() : 0;
 			$item_variation_id = method_exists( $item, 'get_variation_id' ) ? (int) $item->get_variation_id() : 0;
