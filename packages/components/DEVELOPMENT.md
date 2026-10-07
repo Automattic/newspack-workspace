@@ -73,7 +73,7 @@ Follow this step-by-step process when selecting a component:
 
 ## Design & layout at a glance
 
-When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48) with **48px** between sections, and use **`Stack`** from `@wordpress/ui` for rows and columns of items; use **Grid** for real multi-column layouts. Structure content as **SectionHeader → Card → ActionCard → controls**, with **Divider** between sections. Settings and edit screens lay each section out as a **two-column section** (title on the left, fields on the right). Settings tabs put Save in the page header (see [Layout](#layout-when-to-use-stack-or-grid)); setup flows and wizard steps keep primary actions in **`.newspack-buttons-card`**. Use the same **breakpoints** (e.g. 744px, 1054px) as existing components. Full detail: [Spacing scale](#spacing-scale-design-system), [Layout (Stack / Grid)](#layout-when-to-use-stack-or-grid), [Responsive breakpoints](#responsive-breakpoints), [Visual hierarchy patterns](#visual-hierarchy-patterns), [Component states](#component-states). For code examples by context and wizard patterns, see [Usage](#usage).
+When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48) with **48px** between sections, and use **`Stack`** from `@wordpress/ui` for rows and columns of items; use **Grid** for real multi-column layouts. Structure content as **SectionHeader → Card → ActionCard → controls**, with **Divider** between sections. Settings and edit screens lay each section out as a [two-column section](#layout-when-to-use-stack-or-grid) (title on the left, fields on the right). Settings tabs put Save in the page header (see [Layout](#layout-when-to-use-stack-or-grid)); setup flows and wizard steps keep primary actions in **`.newspack-buttons-card`**. Use the same **breakpoints** (e.g. 744px, 1054px) as existing components. Full detail: [Spacing scale](#spacing-scale-design-system), [Layout (Stack / Grid)](#layout-when-to-use-stack-or-grid), [Responsive breakpoints](#responsive-breakpoints), [Visual hierarchy patterns](#visual-hierarchy-patterns), [Component states](#component-states). For code examples by context and wizard patterns, see [Usage](#usage).
 
 ## Available Components
 
@@ -658,18 +658,20 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 **Two-column sections** are the standard layout for a section of a settings or edit screen: what the section is on the left, its fields on the right. Settings tabs use it, and so do the Access Control editors (gates, metering, content gifting, institutions), the integration and experimental tool configure views, and the pricing rule and product forms. Use it for any new screen made of named groups of settings:
 
 ```jsx
-<Grid columns={ 2 } gutter={ 32 } noMargin>
-	<SectionHeader heading={ 2 } noMargin title={ … } description={ … } />
-	<Stack direction="column" gap="xl">
-		{ /* fields */ }
-	</Stack>
-</Grid>
-<Divider alignment="full-width" variant="tertiary" />
+<>
+	<Grid columns={ 2 } gutter={ 32 } noMargin>
+		<SectionHeader heading={ 2 } noMargin title={ … } description={ … } />
+		<Stack direction="column" gap="xl">
+			{ /* fields */ }
+		</Stack>
+	</Grid>
+	<Divider alignment="full-width" variant="tertiary" />
+</>
 ```
 
-The `Grid` collapses to one column below 744px, so the header sits above its fields on narrow screens. Some existing editors still lay out the right column with `VStack spacing={ 6 }`; new and reworked sections use `Stack`. A grid of cards that each open their own screen is a different pattern and has no `SectionHeader` column.
+The `Grid` collapses to one column below 744px, so the header sits above its fields on narrow screens. Fields drop their own bottom margin so the gap is the only spacing: Newspack `TextControl` takes `withMargin={ false }` plus `__nextHasNoMarginBottom` and `__next40pxDefaultSize`; core `ToggleControl` and `CheckboxControl` take `__nextHasNoMarginBottom`. Content that needs the full width (logs, card pickers, tables) stacks its `SectionHeader` above it instead. Some existing editors predate this: their right column is a `VStack` (`spacing={ 4 }` or `{ 6 }`) and their `SectionHeader` has no `noMargin`. New and reworked sections follow the example. A grid of cards that each open their own screen is a different pattern and has no `SectionHeader` column.
 
-**Settings tabs** are built from two-column sections. Fields drop their own bottom margin so the gap is the only spacing: Newspack `TextControl` takes `withMargin={ false }` plus `__nextHasNoMarginBottom` and `__next40pxDefaultSize`; core `ToggleControl` and `CheckboxControl` take `__nextHasNoMarginBottom`. Save sits in the page header, published with `setHeaderData( { actions } )` from the wizard store and disabled until something changes. The header keeps whichever callback it was handed, so read the latest handler from a ref; passing the save function directly saves stale state. Pair it with `useUnsavedChangesDialog`. See `plugins/newspack-plugin/src/wizards/newspack/views/settings/seo/index.tsx`.
+**Settings tabs** are built from two-column sections. Save sits in the page header, published with `setHeaderData( { actions } )` from the wizard store and disabled until something changes. The header keeps whichever callback it was handed, so read the latest handler from a ref; passing the save function directly saves stale state. Pair it with `useUnsavedChangesDialog`. See `plugins/newspack-plugin/src/wizards/newspack/views/settings/seo/index.tsx`.
 
 Prefer these patterns (and the spacing scale above) over one-off margins so layout stays consistent with Card, ActionCard, and SectionHeader.
 
