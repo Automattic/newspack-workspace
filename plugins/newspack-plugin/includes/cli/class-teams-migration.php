@@ -815,9 +815,12 @@ class Teams_Migration {
 			\WP_CLI\Utils\format_items( 'table', $invitation_rows, [ 'team_id', 'sub', 'invitee' ] );
 		}
 
-		$new_count = count( array_filter( $summary, fn( $r ) => $r['created_new'] ) );
+		// A team that never reached a subscription carries 'ERROR' in place of its
+		// ID; counting it as "used existing" or "new" would read as migrated.
+		$migrated_rows = array_filter( $summary, fn( $r ) => 'ERROR' !== $r['subscription_id'] );
+		$new_count     = count( array_filter( $migrated_rows, fn( $r ) => $r['created_new'] ) );
 		WP_CLI::line( '' );
-		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d skipped, %d had error(s).', count( $summary ), count( $summary ) - $new_count, $new_count, count( $skipped ), count( $errored_rows ) ) );
+		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d not migrated, %d skipped, %d had error(s).', count( $summary ), count( $migrated_rows ) - $new_count, $new_count, count( $summary ) - count( $migrated_rows ), count( $skipped ), count( $errored_rows ) ) );
 		if ( $ungated_free_skips ) {
 			// --product-id is the other fix, but it also mints a new subscription for
 			// every team whose linked subscription is no longer active, which a run
