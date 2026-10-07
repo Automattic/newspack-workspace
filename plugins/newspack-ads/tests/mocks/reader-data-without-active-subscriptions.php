@@ -1,14 +1,15 @@
-<?php
+<?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Generic.Files.OneObjectStructurePerFile.MultipleFound
 /**
- * Reader-data API fixture for older Newspack versions.
+ * Reader data stand-ins with get_bool() but not get_active_subscriptions(),
+ * for GAM targeting tests that run in their own process.
  *
- * @package Newspack\Tests
+ * @package Newspack_Ads\Tests
  */
 
 namespace Newspack;
 
 /**
- * Reader activation fixture.
+ * Reader activation stand-in that treats any user as a reader.
  */
 class Reader_Activation {
 	/**
@@ -23,28 +24,18 @@ class Reader_Activation {
 }
 
 /**
- * Reader data fixture without active subscription support.
+ * Reader data stand-in without get_active_subscriptions().
  */
 class Reader_Data {
 	/**
-	 * Reader boolean values.
+	 * Boolean values by user ID and key.
 	 *
 	 * @var array
 	 */
 	public static $bool_values = [];
 
 	/**
-	 * Get reader data.
-	 *
-	 * @param int $user_id User ID.
-	 * @return array
-	 */
-	public static function get_data( $user_id ) {
-		return [];
-	}
-
-	/**
-	 * Get a reader boolean.
+	 * Whether a reader data boolean is true.
 	 *
 	 * @param int    $user_id User ID.
 	 * @param string $key     Data key.

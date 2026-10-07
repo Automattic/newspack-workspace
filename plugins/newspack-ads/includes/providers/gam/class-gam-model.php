@@ -940,8 +940,8 @@ final class GAM_Model {
 		$targeting['reader_status'] = []; // Empty value indicates that the current user is not logged in or is not a reader-type user.
 		if ( \is_user_logged_in() && method_exists( 'Newspack\Reader_Activation', 'is_user_reader' ) && \Newspack\Reader_Activation::is_user_reader( \wp_get_current_user() ) ) {
 			$targeting['reader_status'][] = 'logged_in'; // The currently logged-in user is a reader.
-			// Newspack versions with get_active_subscriptions() also have get_bool().
-			if ( method_exists( 'Newspack\Reader_Data', 'get_active_subscriptions' ) ) {
+			// Each check guards on the method it calls, so an older newspack-plugin keeps the statuses it supports.
+			if ( method_exists( 'Newspack\Reader_Data', 'get_bool' ) ) {
 				// If the reader is signed up for any newsletters.
 				if ( \Newspack\Reader_Data::get_bool( get_current_user_id(), 'is_newsletter_subscriber' ) ) {
 					$targeting['reader_status'][] = 'newsletter_subscriber';
@@ -951,11 +951,11 @@ final class GAM_Model {
 				if ( \Newspack\Reader_Data::get_bool( get_current_user_id(), 'is_donor' ) ) {
 					$targeting['reader_status'][] = 'donor';
 				}
+			}
 
-				// If reader has any currently active non-donation subscriptions.
-				if ( ! empty( \Newspack\Reader_Data::get_active_subscriptions( get_current_user_id() ) ) ) {
-					$targeting['reader_status'][] = 'subscriber';
-				}
+			// If reader has any currently active non-donation subscriptions.
+			if ( method_exists( 'Newspack\Reader_Data', 'get_active_subscriptions' ) && ! empty( \Newspack\Reader_Data::get_active_subscriptions( get_current_user_id() ) ) ) {
+				$targeting['reader_status'][] = 'subscriber';
 			}
 		}
 

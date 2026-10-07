@@ -216,17 +216,24 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Older reader-data APIs without active-subscription support do not cause errors.
+	 * A newspack-plugin without get_active_subscriptions() still gets the
+	 * newsletter and donor statuses. A separate process, because the stand-in
+	 * Reader_Data class can be declared only once per process.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_ad_targeting_without_active_subscription_api() {
-		require __DIR__ . '/mocks/reader-data-legacy.php';
+	public function test_older_newspack_plugin_keeps_newsletter_and_donor_statuses() {
+		require __DIR__ . '/mocks/reader-data-without-active-subscriptions.php';
 
-		$targeting = $this->get_reader_ad_targeting();
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		\Newspack\Reader_Data::$bool_values[ $user_id ] = [
+			'is_newsletter_subscriber' => true,
+			'is_donor'                 => true,
+		];
 
-		self::assertSame( [ 'logged_in' ], $targeting['reader_status'] );
+		self::assertSame( [ 'logged_in', 'newsletter_subscriber', 'donor' ], GAM_Model::get_ad_targeting( [] )['reader_status'] );
 	}
 
 	/**
