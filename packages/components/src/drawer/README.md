@@ -234,18 +234,11 @@ separator.
 
 ## `Drawer.Footer`
 
-A pinned container for `Drawer.Action` elements. The layout is pure CSS on the
-child count.
+A pinned container for `Drawer.Action` elements. Whatever the number of
+actions, they sit in one row aligned to the end, each at its natural width.
 
-| Children | Layout |
-|---|---|
-| 1 | Row, the button fills it |
-| 2 | Row, split 50/50 |
-| 3 or more | Column, full-width buttons |
-
-Convention, not enforced: with two actions pass the secondary first, so the
-primary sits on the right; with three pass primary, secondary, tertiary
-top-down.
+Convention, not enforced: pass the primary action last, so it sits on the
+right.
 
 Takes `className` and `children`.
 

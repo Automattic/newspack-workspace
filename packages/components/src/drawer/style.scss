@@ -142,20 +142,8 @@ $drawer-size-x-large: 640px;
 	display: flex;
 	flex: 0 0 auto;
 	gap: wp-vars.$grid-unit-10;
+	justify-content: flex-end;
 	padding: wp-vars.$grid-unit-20 wp-vars.$grid-unit-30 wp-vars.$grid-unit-30;
-
-	> .components-button {
-		flex: 1;
-		justify-content: center;
-	}
-
-	&:has(> :nth-child(3)) {
-		flex-direction: column;
-
-		> .components-button {
-			flex: 0 0 auto;
-		}
-	}
 }
 
 @keyframes newspack-drawer-slide-in {
