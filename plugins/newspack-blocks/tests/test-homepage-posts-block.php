@@ -834,14 +834,16 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	/**
 	 * Access levels and content shapes for the Jetpack paywall excerpt test.
 	 *
-	 * @return array[] Access level, whether the post has a Paywall block, and whether
-	 *                 the text above and below that point should reach the excerpt.
+	 * @return array[] Whether Jetpack's paywall is active, the access level, whether the
+	 *                 post has a Paywall block, and whether the text above and below
+	 *                 that point should reach the excerpt.
 	 */
 	public function jetpack_paywall_excerpt_cases() {
 		return [
-			'gated post with a Paywall block'    => [ 'subscribers', true, true, false ],
-			'gated post without a Paywall block' => [ 'subscribers', false, false, false ],
-			'ungated post with a Paywall block'  => [ '', true, true, true ],
+			'gated post with a Paywall block'      => [ true, 'subscribers', true, true, false ],
+			'gated post without a Paywall block'   => [ true, 'subscribers', false, false, false ],
+			'ungated post with a Paywall block'    => [ true, '', true, true, true ],
+			'gated post while paywall is inactive' => [ false, 'subscribers', true, true, true ],
 		];
 	}
 
@@ -851,12 +853,13 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 *
 	 * @dataProvider jetpack_paywall_excerpt_cases
 	 *
+	 * @param bool   $paywall_active    Whether Jetpack's paywall is hooked on the_content.
 	 * @param string $access_level      Value of Jetpack's access-level post meta.
 	 * @param bool   $has_paywall_block Whether the content includes a Paywall block.
 	 * @param bool   $shows_teaser      Whether the text above the Paywall block appears.
 	 * @param bool   $shows_paywalled   Whether the text below the Paywall block appears.
 	 */
-	public function test_excerpt_of_jetpack_gated_post_stops_at_paywall_block( $access_level, $has_paywall_block, $shows_teaser, $shows_paywalled ) {
+	public function test_excerpt_of_jetpack_gated_post_stops_at_paywall_block( $paywall_active, $access_level, $has_paywall_block, $shows_teaser, $shows_paywalled ) {
 		$content = '<!-- wp:paragraph --><p>TEASERMARK</p><!-- /wp:paragraph -->'
 			. ( $has_paywall_block ? '<!-- wp:jetpack/paywall /-->' : '' )
 			. '<!-- wp:paragraph --><p>PAYWALLEDMARK</p><!-- /wp:paragraph -->';
@@ -872,14 +875,16 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		}
 
 		$jetpack_paywall_callback = 'Automattic\Jetpack\Extensions\Subscriptions\add_paywall';
-		add_filter( 'the_content', $jetpack_paywall_callback, 8 );
+		if ( $paywall_active ) {
+			add_filter( 'the_content', $jetpack_paywall_callback, 8 );
+		}
 		try {
 			$GLOBALS['post'] = get_post( $post_id );
 			setup_postdata( $GLOBALS['post'] );
 			Newspack_Blocks::filter_excerpt( [ 'excerptLength' => 999, 'showExcerpt' => true ] );
 			$excerpt = get_the_excerpt( $post_id );
 		} finally {
-			// Always unhook so the stub's gate can't reach later tests.
+			// Unhook so later tests don't see Jetpack's paywall as active.
 			Newspack_Blocks::remove_excerpt_filter();
 			remove_filter( 'the_content', $jetpack_paywall_callback, 8 );
 			unset( $GLOBALS['post'] );

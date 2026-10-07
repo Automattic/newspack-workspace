@@ -39,7 +39,7 @@ namespace {
 			 */
 			public static function get_post_access_level( $post_id ) {
 				$level = get_post_meta( $post_id, '_jetpack_newsletter_access', true );
-				return ( is_string( $level ) && '' !== $level ) ? $level : 'everybody';
+				return ( ! empty( $level ) && is_string( $level ) ) ? $level : 'everybody';
 			}
 		}
 	}
