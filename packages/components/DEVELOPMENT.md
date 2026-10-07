@@ -81,10 +81,10 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48) wit
 
 These come from the WordPress design system rather than this package. Import them from `@wordpress/ui` directly; they are not re-exported from `newspack-components`, and should not be.
 
-- **`Stack`** – Flex row or column. Replaces `__experimentalHStack` / `__experimentalVStack`. `gap` takes a token (`xs`, `sm` 8px, `md` 12px, `lg` 16px, `xl` 24px, `2xl` 32px, `3xl`), not a number, so `VStack spacing={ 6 }` becomes `gap="xl"`. It lays out as a row unless you pass `direction="column"`, and it sets nothing you don't pass: a bare `HStack` or `Flex` gives an 8px gap, centered items and `space-between`, and a bare `VStack` an 8px gap, so carry those over (`gap="sm" align="center" justify="space-between"`, or `gap="sm"`).
+- **`Stack`** – Flex row or column. Replaces `__experimentalHStack` / `__experimentalVStack`. `gap` takes a token (`xs`, `sm` 8px, `md` 12px, `lg` 16px, `xl` 24px, `2xl` 32px, `3xl`), not a number, so `VStack spacing={ 6 }` becomes `gap="xl"`. It lays out as a row unless you pass `direction="column"`, and it sets nothing you don't pass: a bare `HStack` or `Flex` gives an 8px gap, centered items and `space-between`, and a bare `VStack` an 8px gap, so carry those over (`gap="sm" align="center" justify="space-between"`, or `gap="sm"`). Children of an `HStack` or a row `Flex` also lose `min-width: 0`, so a child that truncates text may need it back.
 - **`Card`** – Surface with `Card.Root`, `Card.Header`, `Card.Title`, `Card.Content` and `Card.FullBleed`. Use it for new cards rather than the Newspack `Card`.
 - **`Badge`** – Single attention marker or chip. Text is `children`; `intent` is `high`, `medium`, `low`, `stable`, `informational`, `draft` or `none`, chosen by the state behind the label rather than the label itself.
-- **`Text`**, **`Link`**, **`Popover`**, **`Collapsible`**, **`Tabs`**, **`VisuallyHidden`** – Use these where a Newspack component does not already wrap them. `Popover`, `Collapsible` and `Tabs` are sets of parts rather than single components (`Popover.Root`, `.Trigger`, `.Portal`, `.Positioner`, `.Popup`), and every popup needs a non-empty `Popover.Title`, visually hidden if need be; development builds throw without one. `InfoButton` is the worked example.
+- **`Text`**, **`Link`**, **`Popover`**, **`Collapsible`**, **`Tabs`**, **`VisuallyHidden`** – Use these where a Newspack component does not already wrap them. `Popover`, `Collapsible` and `Tabs` are sets of parts rather than single components (`Popover.Root`, `.Trigger`, `.Popup`, `.Title`; `Portal` and `Positioner` go in the popup's `portal` and `positioner` props rather than wrapping it), and every popup needs a non-empty `Popover.Title`, visually hidden if need be; development builds throw without one. `InfoButton` is the worked example.
 
 Their class names are hashed CSS modules, so never target them from our stylesheets. Where a wrapper needs to style one, give it one of our own classes.
 
@@ -147,7 +147,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
   - Used in newer wizards like Audience Management
   - Passes props: `renderPrimaryButton`, plus all original component props
 - **`Wizard`** - Main wizard container with tabbed navigation and data fetching
-- **`WizardBanner`** - Slot that renders above the wizard's content, for a screen-wide message
+- **`WizardBanner`** - Fill whose children render above the wizard's sections, for a screen-wide message
 
 ### Plugin Management Components
 
