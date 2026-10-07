@@ -86,9 +86,20 @@ function SidebarHeader() {
 		null,
 		rows.map( ( row, index ) => {
 			const bootBack = row.querySelector( `.components-button:not(.${ OWN })` );
-			const bootTitle = row.querySelector( '.boot-navigation-screen__title' );
+			const title = row.querySelector( '.boot-navigation-screen__title' )?.textContent;
 			const props = bootBack
-				? { onClick: () => bootBack.click(), children: bootTitle?.textContent || bootBack.getAttribute( 'aria-label' ) }
+				? {
+						onClick: () => bootBack.click(),
+						children: title || bootBack.getAttribute( 'aria-label' ),
+						// Keeps the visible name, and says the button goes back a level.
+						...( title && {
+							'aria-label': window.wp.i18n.sprintf(
+								/* translators: %s: Name of the current sidebar section. */
+								window.wp.i18n.__( '%s: go back', 'newspack-plugin' ),
+								title
+							),
+						} ),
+				  }
 				: {
 						href: window.wp.data.select( 'wordpress/boot' ).getDashboardLink(),
 						children: 'Newspack',

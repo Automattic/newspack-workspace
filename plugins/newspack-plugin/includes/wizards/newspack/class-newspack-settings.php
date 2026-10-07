@@ -40,7 +40,7 @@ class Newspack_Settings extends Wizard {
 	 *
 	 * @var array|null
 	 */
-	private $local_data = null;
+	private ?array $local_data = null;
 
 	/**
 	 * Get Settings local data

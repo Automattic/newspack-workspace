@@ -344,9 +344,10 @@ final class Admin_App {
 		wp_enqueue_style( 'newspack-admin-app', Newspack::plugin_url() . '/includes/admin-app/style.css', [ 'newspack-admin-app-prerequisites', 'wp-components' ], self::file_version( 'style.css' ) );
 
 		global $hook_suffix;
-		$admin_title = sprintf( /* translators: Admin screen title. 1: Admin screen name, 2: Network or site name. */ __( '%1$s &lsaquo; %2$s &#8212; WordPress' ), self::route_title(), get_bloginfo( 'name' ) );
+		$route_title = self::route_title();
+		$admin_title = sprintf( /* translators: Admin screen title. 1: Admin screen name, 2: Network or site name. */ __( '%1$s &lsaquo; %2$s &#8212; WordPress' ), $route_title, get_bloginfo( 'name' ) );
 		/** This filter is documented in wp-admin/admin-header.php */
-		$admin_title = apply_filters( 'admin_title', $admin_title, self::route_title() );
+		$admin_title = apply_filters( 'admin_title', $admin_title, $route_title );
 		?>
 		<!DOCTYPE html>
 		<html class="wp-toolbar" <?php language_attributes(); ?>>
