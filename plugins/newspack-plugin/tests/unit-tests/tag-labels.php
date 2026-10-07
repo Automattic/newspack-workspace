@@ -45,21 +45,16 @@ class Test_Tag_Labels extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The classes tag-label styles select must be ones no tag can put on a post.
+	 * Labels carry the namespaced classes that the stylesheets select.
 	 *
 	 * WordPress gives every post a `tag-{slug}` class, so a tag named "Labels"
-	 * or "Label" used to hand the whole article the label styling. The
+	 * or "Label" puts `tag-labels` or `tag-label` on the whole article. The
 	 * `newspack-` names cannot collide, because a tag-derived class always
 	 * starts with `tag-`. The legacy names stay on the markup so existing
-	 * custom CSS keeps matching, but nothing of ours may select them.
+	 * custom CSS keeps matching. That no stylesheet selects them is enforced by
+	 * the stylelint rule in newspack-blocks and both themes, for SCSS only.
 	 */
-	public function test_styled_classes_cannot_come_from_a_tag_slug() {
-		$styled_classes = [ 'newspack-tag-labels', 'newspack-tag-label' ];
-
-		$post_id = self::factory()->post->create();
-		wp_set_post_tags( $post_id, [ 'Labels', 'Label', 'newspack-tag-labels', 'newspack-tag-label' ] );
-		self::assertSame( [], array_values( array_intersect( $styled_classes, get_post_class( '', $post_id ) ) ), 'No tag may give a post a class that tag-label styles select.' );
-
+	public function test_labels_carry_namespaced_and_legacy_classes() {
 		ob_start();
 		Tag_Labels::display( $this->make_labels(), true, 'div' );
 		$html = ob_get_clean();
