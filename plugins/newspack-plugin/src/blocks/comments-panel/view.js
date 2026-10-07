@@ -426,6 +426,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 			setTimeout( () => {
 				const target = document.querySelector( commentHash );
 				if ( target ) {
+					focusWithin( target );
 					target.scrollIntoView( { behavior: getScrollBehavior(), block: 'start' } );
 				}
 			}, SCROLL_TO_COMMENT_DELAY_MS );
