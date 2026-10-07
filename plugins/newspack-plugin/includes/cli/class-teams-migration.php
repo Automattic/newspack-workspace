@@ -216,6 +216,11 @@ class Teams_Migration {
 		// the migration-product block would leave that guard dead in the one mode
 		// where every team it protects is in scope.
 		$access_product_ids = self::get_gate_access_product_ids();
+		// A gate that accepts any active subscription grants every migrated group
+		// access whatever its products, so no product check below applies.
+		if ( self::gates_accept_any_subscription() ) {
+			$access_product_ids = [];
+		}
 		if ( $product_id && ! $migration_product ) {
 			WP_CLI::error( sprintf( 'Product ID %d not found. Aborting.', $product_id ) );
 		}
@@ -544,7 +549,7 @@ class Teams_Migration {
 				$own_product_ids = self::subscription_product_ids( $subscription );
 				$own_list        = ! empty( $own_product_ids ) ? implode( ', ', $own_product_ids ) : 'none';
 				$accepted_list   = implode( ', ', $access_product_ids );
-				if ( $reuse_keeps_terms ) {
+				if ( $reused_is_paid ) {
 					$errors[] = sprintf( 'subscription %d is paid and holds product(s) %s, which no published gate accepts (accepted: %s) — migrating it would either grant no access or rewrite what the publisher charges', $subscription->get_id(), $own_list, $accepted_list );
 					WP_CLI::warning(
 						sprintf(
@@ -817,7 +822,7 @@ class Teams_Migration {
 			// --product-id is the other fix, but it also mints a new subscription for
 			// every team whose linked subscription is no longer active, which a run
 			// without it may have avoided on purpose — so it is named second.
-			WP_CLI::warning( sprintf( '%d team(s) were not migrated because their $0 subscription holds no product a published gate accepts. Repair each as its warning above says, then re-run. Passing --product-id re-aligns them instead, but also creates a subscription for every team whose linked subscription is no longer active.', $ungated_free_skips ) );
+			WP_CLI::warning( sprintf( '%d team(s) were not migrated because their $0 subscription holds no product a published gate accepts. Repair each as its warning above says, then re-run. Passing --product-id re-aligns those not pending cancellation instead, but also creates a subscription for every team whose linked subscription is no longer active.', $ungated_free_skips ) );
 		}
 		if ( ! empty( $invitation_rows ) ) {
 			// Split the claim: an invitee whose team has no group subscription — skipped
@@ -2842,8 +2847,33 @@ class Teams_Migration {
 	 * @return int[]
 	 */
 	private static function get_gate_access_product_ids() {
+		return self::read_gate_subscription_rules()['product_ids'];
+	}
+
+	/**
+	 * Whether a published, active gate has a subscription rule naming no products,
+	 * which Access_Rules reads as "any active subscription". get_gate_access_product_ids()
+	 * cannot express that rule, since an empty list there means "no gate lists products".
+	 *
+	 * @return bool
+	 */
+	private static function gates_accept_any_subscription() {
+		return self::read_gate_subscription_rules()['accepts_any'];
+	}
+
+	/**
+	 * The `subscription` access rules across published gates whose custom access
+	 * is switched on: the products they name, and whether any names none.
+	 *
+	 * @return array{product_ids: int[], accepts_any: bool}
+	 */
+	private static function read_gate_subscription_rules() {
+		$rules = [
+			'product_ids' => [],
+			'accepts_any' => false,
+		];
 		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
-			return [];
+			return $rules;
 		}
 		$product_ids = [];
 		foreach ( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) as $gate ) {
@@ -2862,11 +2892,16 @@ class Teams_Migration {
 					if ( ! isset( $rule['slug'] ) || 'subscription' !== $rule['slug'] ) {
 						continue;
 					}
-					$product_ids = array_merge( $product_ids, array_map( 'absint', (array) ( $rule['value'] ?? [] ) ) );
+					$rule_product_ids = array_filter( array_map( 'absint', (array) ( $rule['value'] ?? [] ) ) );
+					if ( empty( $rule_product_ids ) ) {
+						$rules['accepts_any'] = true;
+					}
+					$product_ids = array_merge( $product_ids, $rule_product_ids );
 				}
 			}
 		}
-		return array_values( array_unique( array_filter( $product_ids ) ) );
+		$rules['product_ids'] = array_values( array_unique( $product_ids ) );
+		return $rules;
 	}
 
 	/**

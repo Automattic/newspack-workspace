@@ -1638,4 +1638,36 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertStringContainsString( '2 had error(s).', $output );
 		$this->assertStringContainsString( '2 team(s) were not migrated because their $0 subscription holds no product a published gate accepts', $output, 'The run should close with a count of the skipped $0 teams and how to fix them.' );
 	}
+	/**
+	 * A gate whose subscription rule names no products accepts any active
+	 * subscription, so a $0 team with no line items migrates even when another
+	 * gate lists products.
+	 */
+	public function test_migrate_teams_migrates_a_free_subscription_when_a_gate_accepts_any() {
+		require_once dirname( __DIR__, 4 ) . '/mocks/wp-cli-mocks.php';
+		WP_CLI::reset();
+		$this->create_gate_requiring_subscription_to( [ 700 ] );
+		$this->create_gate_requiring_subscription_to( [] );
+		$owner        = $this->create_reader();
+		$member       = $this->create_reader();
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$team_id      = $this->create_team( $owner, [ $member ], $subscription->get_id() );
+
+		( new Teams_Migration() )->migrate_teams(
+			[],
+			[
+				'skip-unlinked' => true,
+				'live'          => true,
+			]
+		);
+
+		$this->assertContains( sprintf( 'Success: Team %d: Migrated team membership to existing subscription %d, added 1 group member(s), promoted 0 manager(s).', $team_id, $subscription->get_id() ), WP_CLI::$output );
+		$this->assertTrue( (bool) Group_Subscription::user_is_member( $member, $subscription ) );
+	}
 }
