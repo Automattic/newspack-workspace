@@ -501,6 +501,25 @@ class Newspack_Test_Access_Rules_One_Time_Purchase extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The lifetime lookup passes a null email, not ''. WooCommerce caches an ''
+	 * lookup by the customer's order count, which an order status change leaves
+	 * as it is, so a cancelled or refunded purchase would keep granting access.
+	 */
+	public function test_lifetime_lookup_uses_the_cache_that_order_writes_clear() {
+		$this->create_one_time_order();
+		$emails_passed = [];
+		$record_email  = function ( $result, $customer_email ) use ( &$emails_passed ) {
+			$emails_passed[] = $customer_email;
+			return $result;
+		};
+		add_filter( 'woocommerce_pre_customer_bought_product', $record_email, 10, 2 );
+		Access_Rules::has_one_time_purchase( self::$purchaser_user_id, $this->get_rule_value( [ 'duration_unit' => 'forever' ] ) );
+		remove_filter( 'woocommerce_pre_customer_bought_product', $record_email, 10 );
+
+		$this->assertSame( [ null ], $emails_passed );
+	}
+
+	/**
 	 * On a WooCommerce older than 10.8, wc_customer_bought_product() also matches
 	 * the account email, so the lifetime check walks the order store by customer
 	 * ID instead. Purchases still grant access; guest orders still do not.

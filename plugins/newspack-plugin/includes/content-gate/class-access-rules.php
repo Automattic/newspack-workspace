@@ -1118,9 +1118,12 @@ class Access_Rules {
 					// Lifetime access: any paid order ever. wc_customer_bought_product()
 					// is exhaustive across the customer's order history, runs SQL-side,
 					// and is cached by WooCommerce with invalidation on order writes.
-					// The empty email keeps the match on the customer ID.
+					// A null email keeps the match on the customer ID. It must not be
+					// '': WooCommerce caches that call by the customer's order count,
+					// which a status change leaves as it is, so a cancelled or refunded
+					// order would keep granting access.
 					foreach ( $value['product_ids'] as $product_id ) {
-						if ( \wc_customer_bought_product( '', $user_id, $product_id ) ) {
+						if ( \wc_customer_bought_product( null, $user_id, $product_id ) ) {
 							$has_purchase = true;
 							break;
 						}
