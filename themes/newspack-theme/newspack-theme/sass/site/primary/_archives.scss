@@ -146,10 +146,10 @@
 		}
 	}
 
-	// Excludes `.tag-labels` because the outer class list is caller-supplied:
+	// Excludes `.newspack-tag-labels` because the outer class list is caller-supplied:
 	// `newspack_generate_tag_labels()` takes it as a parameter, so a child theme
 	// can carry both classes on one element and would lose its labels here.
-	.cat-links:not(.sponsor-label):not(.tag-labels) {
+	.cat-links:not(.sponsor-label):not(.newspack-tag-labels) {
 		display: none;
 	}
 

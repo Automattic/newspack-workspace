@@ -9,7 +9,7 @@
 .discussion-meta-info,
 .entry-meta,
 .cat-links,
-.tag-labels,
+.newspack-tag-labels,
 .entry-footer,
 .author-bio .author-link,
 .author-meta,
@@ -64,7 +64,7 @@ h6 {
 
 /* stylelint-disable selector-type-no-unknown  */
 amp-script .cat-links,
-amp-script .tag-labels {
+amp-script .newspack-tag-labels {
 	font-family: var(--newspack-theme-font-heading);
 }
 /* stylelint-enable */
@@ -76,7 +76,7 @@ amp-script .tag-labels {
 .wp-block-query-pagination,
 .comments-title,
 .cat-links,
-.tag-labels,
+.newspack-tag-labels,
 .comment-author .fn,
 .no-comments,
 .site-title,

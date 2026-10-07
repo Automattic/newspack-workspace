@@ -749,9 +749,9 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		);
 		$html = ob_get_clean();
 
-		self::assertStringContainsString( '<div class="tag-labels">', $html, 'Wrapper is a div carrying exactly the tag-labels class.' );
+		self::assertStringContainsString( '<div class="newspack-tag-labels tag-labels">', $html, 'Wrapper is a div carrying exactly the tag-labels classes.' );
 		self::assertStringNotContainsString( 'cat-links', $html, 'Wrapper must not carry cat-links (NPPM-3049).' );
-		self::assertStringContainsString( 'class="tag-label flag"', $html, 'Inner labels keep the tag-label flag classes.' );
+		self::assertStringContainsString( 'class="newspack-tag-label tag-label flag"', $html, 'Inner labels keep the tag-label flag classes.' );
 	}
 
 	/**
