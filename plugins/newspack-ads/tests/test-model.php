@@ -6,6 +6,9 @@
  */
 
 use Newspack_Ads\Providers\GAM_Model;
+use Newspack\Reader_Data;
+
+require_once __DIR__ . '/mocks/reader-data.php';
 
 /**
  * Test ads model functionality.
@@ -185,6 +188,7 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+<<<<<<< HEAD
 	 * Active reader subscriptions are included in GAM targeting.
 	 *
 	 * @runInSeparateProcess
@@ -237,6 +241,34 @@ class ModelTest extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create() );
 
 		return GAM_Model::get_ad_targeting( [] );
+=======
+	 * Reader status targeting respects JSON-encoded boolean values.
+	 */
+	public function test_ad_targeting_reader_status_booleans() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		try {
+			Reader_Data::$data = [
+				'is_newsletter_subscriber' => 'true',
+				'is_donor'                 => 'false',
+			];
+			$targeting = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertContains( 'newsletter_subscriber', $targeting['reader_status'] );
+			self::assertNotContains( 'donor', $targeting['reader_status'] );
+
+			Reader_Data::$data = [
+				'is_newsletter_subscriber' => 'false',
+				'is_donor'                 => 'true',
+			];
+			$targeting = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertNotContains( 'newsletter_subscriber', $targeting['reader_status'] );
+			self::assertContains( 'donor', $targeting['reader_status'] );
+		} finally {
+			Reader_Data::$data = [];
+			wp_set_current_user( 0 );
+		}
+>>>>>>> origin/fix/reader-data-boolean-reads
 	}
 
 	/**
