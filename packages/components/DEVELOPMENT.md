@@ -569,7 +569,7 @@ When Newspack components don't provide what you need, use these WordPress compon
 ### Feedback and overlays
 
 - **`Spinner`** – Loading spinner
-- **`Notice`** – Inline notice (success/error/warning); prefer this over the Newspack `Notice`, which is being retired
+- **`Notice`** – Inline notice (success/error/warning); prefer this over the Newspack `Notice`, which is being retired, and over `@wordpress/ui`'s `Notice`, which we have not adopted
 - **`Placeholder`** – Empty state in blocks
 - **`Modal`** – Modal dialog
 - **`Popover`** – Popover (e.g. webhooks endpoint actions, corrections modal); prefer `Popover` from `@wordpress/ui` in new code, which is a set of parts rather than a drop-in
