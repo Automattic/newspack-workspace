@@ -36,5 +36,5 @@
 .newspack-breadcrumbs__list h1.newspack-breadcrumbs__current {
 	overflow-wrap: break-word;
 	padding: 0;
-	line-height: var(--wpds-typography-line-height-md, 24px);
+	line-height: var(--wpds-typography-line-height-md, #{wp-vars.$grid-unit-30});
 }
