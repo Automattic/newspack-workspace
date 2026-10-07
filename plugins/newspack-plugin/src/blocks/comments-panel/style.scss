@@ -5,6 +5,11 @@
 	.comments-panel__editor-panel-hidden {
 		display: none;
 	}
+
+	// The icon SVG ships with fill="none", so it needs a fill outside the Newspack theme.
+	.comments-panel__trigger svg {
+		fill: currentcolor;
+	}
 }
 
 // ─── Panel & panel contents ───────────────────────────────────────────────────
