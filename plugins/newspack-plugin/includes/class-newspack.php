@@ -226,6 +226,7 @@ final class Newspack {
 
 		/* Unified Wizards */
 		include_once NEWSPACK_ABSPATH . 'includes/class-wizards.php';
+		include_once NEWSPACK_ABSPATH . 'includes/admin-app/class-admin-app.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/class-handoff-banner.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-donations.php';

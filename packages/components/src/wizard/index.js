@@ -172,6 +172,7 @@ const WizardHeaderRegion = ( {
  * @property {() => void} [renderAboveSections]     Function to render content above sections, optional.
  * @property {string[]}   [requiredPlugins]         Array of required plugin strings, optional.
  * @property {boolean}    [isInitialFetchTriggered] Indicates if the initial fetch should be triggered, optional.
+ * @property {boolean}    [hideTabs]                Hides the section tabs, for hosts that navigate sections themselves.
  */
 
 /**
@@ -195,6 +196,7 @@ const Wizard = (
 		requiredPlugins = [],
 		isInitialFetchTriggered = true,
 		hideHeader = false,
+		hideTabs = false,
 	},
 	ref
 ) => {
@@ -287,7 +289,7 @@ const Wizard = (
 	// the PluginInstaller. Use it for routing so the installer actually mounts and runs.
 	const routedSections = pluginRequirementsSatisfied ? sections : displayedSections;
 
-	const tabbedNavigation = displayedSections.length > 1 && (
+	const tabbedNavigation = ! hideTabs && displayedSections.length > 1 && (
 		<TabbedNavigation items={ displayedSections }>
 			<WizardError />
 		</TabbedNavigation>
@@ -320,6 +322,7 @@ const Wizard = (
 			{ sections.length > 1 && <ResetHeaderData /> }
 
 			<div className="newspack-wizard__main">
+				{ hideTabs && <WizardError /> }
 				{ inertGatingNotice }
 				<WizardBannerSlot bubblesVirtually />
 				<Switch>

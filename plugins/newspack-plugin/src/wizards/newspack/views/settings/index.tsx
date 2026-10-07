@@ -27,6 +27,7 @@ function Settings() {
 				headerText={ __( 'Newspack / Settings', 'newspack' ) }
 				sections={ sections }
 				isInitialFetchTriggered={ false }
+				hideTabs={ !! window.newspackAdminApp }
 			/>
 		</Fragment>
 	);

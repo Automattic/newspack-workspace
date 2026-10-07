@@ -11,12 +11,14 @@ import { __ } from '@wordpress/i18n';
 import { createRoot, lazy, Suspense } from '@wordpress/element';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalVStack as VStack } from '@wordpress/components';
+import { chevronLeft, chevronRight, dashboard, settings } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import * as Components from '../../packages/components/src';
 import '../shared/js/public-path';
+import colors from '../../packages/colors/colors.module.scss';
 
 const pageParam = new URLSearchParams( window.location.search ).get( 'page' ) ?? '';
 const rootElement = document.getElementById( pageParam );
@@ -91,7 +93,16 @@ const AdminPages = () => {
 	);
 };
 
-if ( rootElement && pageParam in components ) {
+if ( document.getElementById( 'newspack-admin-app' ) ) {
+	// The new admin frame mounts these views itself, one per route.
+	window.newspackAdminApp = {
+		components,
+		primaryColor: colors[ 'primary-600' ],
+		icons: { dashboard, settings },
+		backIcons: { chevronLeft, chevronRight },
+		Footer: Components.Footer,
+	};
+} else if ( rootElement && pageParam in components ) {
 	createRoot( rootElement ).render( <AdminPages /> );
 } else {
 	// eslint-disable-next-line no-console
