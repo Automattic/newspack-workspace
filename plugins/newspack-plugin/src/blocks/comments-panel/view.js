@@ -309,45 +309,55 @@ const createCommentsPanel = ( panel, triggers ) => {
 		noticeEl.textContent = message;
 	};
 
+	let isSubmitting = false;
+
 	const submitCommentForm = form => {
 		const commentsBlock = panel.querySelector( '.wp-block-comments' );
 		if ( ! commentsBlock ) {
 			return;
 		}
+		isSubmitting = true;
 		const previousCommentIds = getCommentIds();
 		setLoading( commentsBlock, true );
+
+		const showError = message => {
+			isSubmitting = false;
+			setLoading( commentsBlock, false );
+			showCommentFormError( form, message || panel.dataset.errorMessage );
+		};
+
 		fetch( form.action, {
 			method: 'POST',
 			body: new FormData( form ),
 			redirect: 'follow',
-		} )
-			.then( response => {
+		} ).then(
+			response => {
 				if ( response.status === 429 ) {
-					setLoading( commentsBlock, false );
-					showCommentFormError( form, panel.dataset.rateLimitMessage );
-					return null;
-				}
-				if ( ! response.ok ) {
-					throw new Error( response.statusText );
-				}
-				const finalUrl = response.url;
-				return response.text().then( html => ( { html, finalUrl } ) );
-			} )
-			.then( result => {
-				if ( ! result ) {
+					showError( panel.dataset.rateLimitMessage );
 					return;
 				}
-				const { html, finalUrl } = result;
-				const doc = new DOMParser().parseFromString( html, 'text/html' );
-				if ( ! swapCommentsBlock( doc, finalUrl, previousCommentIds ) ) {
-					// WordPress's comment form has <input name="submit"> which shadows
-					// the native form.submit(); call the prototype method directly.
-					HTMLFormElement.prototype.submit.call( form );
-				}
-			} )
-			.catch( () => {
+				// The server has handled the comment from here on, so never re-submit it:
+				// that would post it twice or replay the same error. Validation and
+				// duplicate errors come back as a wp_die() page, so surface its message.
+				return response
+					.text()
+					.then( html => {
+						const doc = new DOMParser().parseFromString( html, 'text/html' );
+						if ( response.ok && swapCommentsBlock( doc, response.url, previousCommentIds ) ) {
+							isSubmitting = false;
+							return;
+						}
+						showError( doc.querySelector( '.wp-die-message' )?.textContent.trim() );
+					} )
+					.catch( () => showError() );
+			},
+			() => {
+				// The request never got a response, so fall back to a regular submission.
+				// WordPress's comment form has <input name="submit"> which shadows the
+				// native form.submit(); call the prototype method directly.
 				HTMLFormElement.prototype.submit.call( form );
-			} );
+			}
+		);
 	};
 
 	// Intercept pagination clicks (same-origin) and load inline.
@@ -373,6 +383,10 @@ const createCommentsPanel = ( panel, triggers ) => {
 			return;
 		}
 		event.preventDefault();
+		// Enter in a field can submit again while the first request is pending.
+		if ( isSubmitting ) {
+			return;
+		}
 		submitCommentForm( form );
 	} );
 

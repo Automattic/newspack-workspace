@@ -69,6 +69,7 @@ final class Comments_Panel_Content_Block {
 			'class'                   => $panel_class,
 			'data-overlay-color'      => $overlay_color,
 			'data-rate-limit-message' => __( 'You are posting comments too quickly. Please wait a moment before trying again.', 'newspack-plugin' ),
+			'data-error-message'      => __( 'Your comment could not be posted. Please try again.', 'newspack-plugin' ),
 			'aria-hidden'             => 'true',
 			'inert'                   => 'true',
 			'role'                    => 'dialog',
