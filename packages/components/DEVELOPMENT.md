@@ -22,7 +22,7 @@ Comprehensive developer guidelines for working with the Newspack Components pack
 
 This package provides custom React components designed specifically for Newspack backend/admin interfaces (wizards, settings pages, etc.). These components are built on top of WordPress components and provide Newspack-specific functionality, styling, and patterns.
 
-**In short:** For backend/admin screens use `@wordpress/ui` for primitives (`Stack`, `Card`, `Badge`, `Text`), Newspack components for Newspack patterns (SectionHeader, ActionCard, EmptyState, etc.), and `@wordpress/components` for what neither covers, and follow the spacing scale and hierarchy patterns so UIs stay consistent. For block editor UI use WordPress components (and `AutocompleteTokenField` only when you need autocomplete). For reader-facing UI use Newspack UI or theme components, not this package.
+**In short:** For backend/admin screens use `@wordpress/ui` for primitives (`Stack`, `Card`, `Badge`, `Text`), Newspack components for Newspack patterns (SectionHeader, ActionCard, EmptyState, etc.), and `@wordpress/components` for what neither covers. Follow the spacing scale and hierarchy patterns so UIs stay consistent. For block editor UI use WordPress components (and `AutocompleteTokenField` only when you need autocomplete). For reader-facing UI use Newspack UI or theme components, not this package.
 
 **Design-wise:** Backend UIs should feel consistent with the WordPress admin, with clear visual hierarchy (section → card → controls) and predictable spacing. Use the same components and spacing scale across wizards so design and code stay aligned; when introducing a new pattern or layout, align with design (and designer review) before implementing.
 
@@ -33,7 +33,7 @@ This package provides custom React components designed specifically for Newspack
 **Backend/Admin UI (Wizards, Settings Pages):**
 - ✅ **Use `@wordpress/ui` for primitives** - Layout, surfaces, badges and text come from the WordPress design system: `Stack`, `Card`, `Badge`, `Text`, `Link`, `Popover`, `VisuallyHidden`
 - ✅ **Use Newspack components for Newspack patterns** - Check if a Newspack component exists for your use case; most new ones are built on `@wordpress/ui`
-- ⚠️ **Fallback to WordPress components** - If neither covers it, use `@wordpress/components` (form controls, core `Notice`, `Modal`, `DropdownMenu`)
+- ⚠️ **Fallback to WordPress components** - If neither covers it, use `@wordpress/components` (form controls, core `Notice`, `DropdownMenu`)
 - Examples: Dashboard, Settings, Audience Management, Setup Wizard
 
 **Gutenberg Blocks:**
@@ -50,7 +50,7 @@ This package provides custom React components designed specifically for Newspack
 Follow this step-by-step process when selecting a component:
 
 1. **Check Newspack components first**
-   - Review the [Available Components](#available-components) list below
+   - Review the [Available Components](#available-components) list below, skipping entries marked legacy or deprecated
    - Check `packages/components/src/` directory for component implementations
    - Newspack components are optimized for backend/admin workflows
 
@@ -73,7 +73,7 @@ Follow this step-by-step process when selecting a component:
 
 ## Design & layout at a glance
 
-When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48) with **48px** between sections, and use **`Stack`** from `@wordpress/ui` for rows and columns of items; use **Grid** for real multi-column layouts. Structure content as **SectionHeader → Card → ActionCard → controls**, with **Divider** between sections and primary actions in **`.newspack-buttons-card`**. Use the same **breakpoints** (e.g. 744px, 1054px) as existing components. Full detail: [Spacing scale](#spacing-scale-design-system), [Layout (Stack / Grid)](#layout-when-to-use-stack-or-grid), [Responsive breakpoints](#responsive-breakpoints), [Visual hierarchy patterns](#visual-hierarchy-patterns), [Component states](#component-states). For code examples by context and wizard patterns, see [Usage](#usage).
+When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48) with **48px** between sections, and use **`Stack`** from `@wordpress/ui` for rows and columns of items; use **Grid** for real multi-column layouts. Structure content as **SectionHeader → Card → ActionCard → controls**, with **Divider** between sections. Settings tabs put Save in the page header (see [Layout](#layout-when-to-use-stack-or-grid)); setup flows and wizard steps keep primary actions in **`.newspack-buttons-card`**. Use the same **breakpoints** (e.g. 744px, 1054px) as existing components. Full detail: [Spacing scale](#spacing-scale-design-system), [Layout (Stack / Grid)](#layout-when-to-use-stack-or-grid), [Responsive breakpoints](#responsive-breakpoints), [Visual hierarchy patterns](#visual-hierarchy-patterns), [Component states](#component-states). For code examples by context and wizard patterns, see [Usage](#usage).
 
 ## Available Components
 
@@ -81,16 +81,16 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48) wit
 
 These come from the WordPress design system rather than this package. Import them from `@wordpress/ui` directly; they are not re-exported from `newspack-components`, and should not be.
 
-- **`Stack`** – Flex row or column. Replaces `__experimentalHStack` / `__experimentalVStack`. `gap` takes a token (`xs`, `sm` 8px, `md` 12px, `lg` 16px, `xl` 24px, `2xl` 32px, `3xl`), not a number, so `VStack spacing={ 6 }` becomes `gap="xl"`. It lays out as a row unless you pass `direction="column"`.
+- **`Stack`** – Flex row or column. Replaces `__experimentalHStack` / `__experimentalVStack`. `gap` takes a token (`xs`, `sm` 8px, `md` 12px, `lg` 16px, `xl` 24px, `2xl` 32px, `3xl`), not a number, so `VStack spacing={ 6 }` becomes `gap="xl"`. It lays out as a row unless you pass `direction="column"`, and it sets nothing you don't pass: a bare `HStack` or `Flex` gives an 8px gap, centered items and `space-between`, and a bare `VStack` an 8px gap, so carry those over (`gap="sm" align="center" justify="space-between"`, or `gap="sm"`).
 - **`Card`** – Surface with `Card.Root`, `Card.Header`, `Card.Title`, `Card.Content` and `Card.FullBleed`. Use it for new cards rather than the Newspack `Card`.
 - **`Badge`** – Single attention marker or chip. Text is `children`; `intent` is `high`, `medium`, `low`, `stable`, `informational`, `draft` or `none`, chosen by the state behind the label rather than the label itself.
-- **`Text`**, **`Link`**, **`Popover`**, **`Collapsible`**, **`Tabs`**, **`VisuallyHidden`** – Use these where a Newspack component does not already wrap them.
+- **`Text`**, **`Link`**, **`Popover`**, **`Collapsible`**, **`Tabs`**, **`VisuallyHidden`** – Use these where a Newspack component does not already wrap them. `Popover`, `Collapsible` and `Tabs` are sets of parts rather than single components (`Popover.Root`, `.Trigger`, `.Portal`, `.Positioner`, `.Popup`), and every popup needs a non-empty `Popover.Title`, visually hidden if need be; development builds throw without one. `InfoButton` is the worked example.
 
 Their class names are hashed CSS modules, so never target them from our stylesheets. Where a wrapper needs to style one, give it one of our own classes.
 
 ### Layout Components
 
-- **`Page`** – Admin page shell: header with breadcrumbs, badges, actions and an optional tab bar. `Wizard` and `withWizardScreen` render it for you; the last breadcrumb is the page's only `h1`.
+- **`Page`** – Admin page shell: header with breadcrumbs, badges, actions and an optional tab bar. `Wizard` and `withWizardScreen` render it for you unless `hideHeader` is set, but neither passes `badges`, so a header with badges uses `Page` directly. The last breadcrumb is the page's only `h1`.
 - **`Breadcrumbs`** – The trail `Page` renders; the last item is the current page and is not a link.
 - **`Card`** – Legacy container for a logical block of content (class component). Prefer `Card` from `@wordpress/ui` in new code. Default vertical margin is 32px so cards stack with consistent rhythm. Use `noBorder` when cards sit inside another card (e.g. ActionCard children).
 - **`Divider`** – Use between logical sections (e.g. between ActionCards) to separate content without another card. Margins are 32px (48px at larger breakpoints) so spacing stays consistent with the rest of the layout.
@@ -113,7 +113,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 - **`ImageUpload`** - Image upload and selection component
 - **`RadioControl`** - Radio button group control
 - **`PageControl`** - Picks one page through an autocomplete search
-- **`SelectControl`** - Deprecated; use core `SelectControl`, or `__experimentalToggleGroupControl` for two or three options
+- **`SelectControl`** - Deprecated; use core `SelectControl`, or `__experimentalToggleGroupControl` for grouped or button-style choices
 - **`TextControl`** - Text input with Newspack styling and required field support
 
 ### Content Components
@@ -147,6 +147,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
   - Used in newer wizards like Audience Management
   - Passes props: `renderPrimaryButton`, plus all original component props
 - **`Wizard`** - Main wizard container with tabbed navigation and data fetching
+- **`WizardBanner`** - Slot that renders above the wizard's content, for a screen-wide message
 
 ### Plugin Management Components
 
@@ -161,9 +162,9 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 - **`GlobalNotices`** - Global notice system component
 - **`InfoButton`** - Reveals supplementary context from a `description` prop, on `@wordpress/ui` `Popover` so it also opens on touch. Use it rather than a `Tooltip` for descriptions. Anything a reader needs in order to use a control belongs in visible help text instead
 - **`Modal`** - Modal dialog component
-- **`IntegrationIcon`** - Logo for a third-party integration
+- **`IntegrationIcon`** - Logo for a third-party integration, picked by `provider`. It is `aria-hidden` and renders nothing for an unknown provider, so keep the provider's name in visible text beside it
 - **`NewspackIcon`** - Newspack icon wrapper component
-- **`Popover`** - Legacy popover wrapper (class component); use `Popover` from `@wordpress/ui` in new code
+- **`Popover`** - Legacy popover wrapper (class component); use `Popover` from `@wordpress/ui` in new code (see [From @wordpress/ui](#from-wordpressui) for its parts)
 - **`WebPreview`** - Web preview iframe component
 
 ### Settings Components
@@ -175,7 +176,7 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 
 - **`hooks`** - Custom React hooks (e.g., `useObjectState`, `usePrompt`, `useOnClickOutside`)
 - **`useConfirmDialog`** - Hook form of `ConfirmDialog`: returns `{ confirmDialog, requestConfirm, cancelConfirm }`
-- **`useUnsavedChangesDialog`** - Asks before the user leaves a screen with unsaved changes, by link or by closing the tab
+- **`useUnsavedChangesDialog`** - Asks before the user leaves a screen with unsaved changes, by link or by closing the tab. Render the `confirmDialog` it returns, or links do nothing while it is active; one active instance per screen
 - **`Router`** - Proxied React Router import (use instead of direct `react-router-dom` import)
   - Note: This package currently uses [React Router v5](https://v5.reactrouter.com/). Please refer to v5 documentation for API details.
 - **`utils`** - Utility functions (e.g., `confirmAction`, color utilities)
@@ -276,7 +277,7 @@ This section shows how to use components **by context** (backend, blocks, fronte
 
 ### Backend/Admin UI
 
-**Rule:** Use Newspack components as the primary choice, falling back to WordPress components when needed.
+**Rule:** Use `@wordpress/ui` primitives and Newspack components, falling back to WordPress components when needed. The examples below show existing screens, several on the legacy Newspack `Card`; new code uses `Card` from `@wordpress/ui`, imported as `Card as UICard` in a file that still needs ours.
 
 **Common import pattern:**
 ```jsx
@@ -571,7 +572,7 @@ When Newspack components don't provide what you need, use these WordPress compon
 - **`Notice`** – Inline notice (success/error/warning); prefer this over the Newspack `Notice`, which is being retired
 - **`Placeholder`** – Empty state in blocks
 - **`Modal`** – Modal dialog
-- **`Popover`** – Popover (e.g. webhooks endpoint actions, corrections modal); prefer `Popover` from `@wordpress/ui` in new code
+- **`Popover`** – Popover (e.g. webhooks endpoint actions, corrections modal); prefer `Popover` from `@wordpress/ui` in new code, which is a set of parts rather than a drop-in
 - **`Tooltip`** – Tooltip for a short label on hover (e.g. site statuses). It opens on hover and keyboard focus but never on touch, so use `InfoButton` for descriptions
 
 ### Block editor UI
@@ -654,7 +655,7 @@ Spacing is based on an **8px unit**. Use these values so new styles match existi
 - **`Stack`** from `@wordpress/ui` – A few related items in a row (e.g. label + control), or a single column of items, lists of settings, or stacked sections. Use `gap` for the spacing instead of margins on the children. A column needs `direction="column"`; without it, `Stack` lays out as a row.
 - **Grid (Newspack)** – A set of items in columns (e.g. multiple cards or form groups). Default 32px gap; use `columns` and gutter modifiers. Use when the layout is genuinely a grid of items (multiple columns). There are many existing examples where Grid is used as a single row. That is fine to leave, but new code uses `Stack` for it.
 
-**Settings tabs** follow one layout: each section is a `Grid columns={ 2 } gutter={ 32 } noMargin` with a `SectionHeader noMargin` on the left and the fields on the right in `<Stack direction="column" gap="xl">`, separated by a full-width tertiary `Divider`. Fields drop their own bottom margin so the gap is the only spacing: Newspack `TextControl` takes `withMargin={ false }` plus `__nextHasNoMarginBottom` and `__next40pxDefaultSize`; core `ToggleControl` and `CheckboxControl` take `__nextHasNoMarginBottom`. Save sits in the page header and stays disabled until something changes.
+**Settings tabs** follow one layout: each section is a `Grid columns={ 2 } gutter={ 32 } noMargin` with a `SectionHeader noMargin` on the left and the fields on the right in `<Stack direction="column" gap="xl">`, separated by `<Divider alignment="full-width" variant="tertiary" />`. Fields drop their own bottom margin so the gap is the only spacing: Newspack `TextControl` takes `withMargin={ false }` plus `__nextHasNoMarginBottom` and `__next40pxDefaultSize`; core `ToggleControl` and `CheckboxControl` take `__nextHasNoMarginBottom`. Save sits in the page header, published with `setHeaderData( { actions } )` from the wizard store and disabled until something changes. The header keeps whichever callback it was handed, so read the latest handler from a ref; passing the save function directly saves stale state. Pair it with `useUnsavedChangesDialog`. See `plugins/newspack-plugin/src/wizards/newspack/views/settings/seo/index.tsx`.
 
 Prefer these patterns (and the spacing scale above) over one-off margins so layout stays consistent with Card, ActionCard, and SectionHeader.
 
@@ -679,14 +680,14 @@ Prefer these values over new breakpoints so behaviour stays consistent with Card
 
 Common composition patterns keep screens predictable. Use these as a reference when building new wizards or settings:
 
-**Settings screen (Wizard-based):**
+**Setup screen (Wizard-based):**
 ```
 Wizard
   GlobalNotices
   SectionHeader          ← 48px top margin
   Card                   ← 32px margin
     ActionCard            ← 24px padding, optional toggle
-      Grid or Stack       ← 32px gap
+      Grid or Stack       ← 32px gap (Grid default; Stack gap="2xl")
         TextControl / SelectControl / etc.
     Divider              ← 32px / 48px margin
     ActionCard
