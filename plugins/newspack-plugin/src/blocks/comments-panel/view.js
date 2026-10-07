@@ -214,9 +214,25 @@ const createCommentsPanel = ( panel, triggers ) => {
 
 	// ─── Comment behaviors: inline pagination and form submission ────────────────
 
+	const getCommentIds = () => new Set( Array.from( panel.querySelectorAll( '[id^="comment-"]' ), el => el.id ) );
+
+	// The swap removes whatever had focus, so move it to the new comment or the
+	// comments heading to keep keyboard and screen reader users inside the panel.
+	const focusWithin = el => {
+		if ( ! isOpen || ! el ) {
+			return;
+		}
+		if ( ! el.hasAttribute( 'tabindex' ) ) {
+			el.setAttribute( 'tabindex', '-1' );
+		}
+		el.focus( { preventScroll: true } );
+	};
+
 	// Swaps the .wp-block-comments element inside the panel with the one in the
-	// fetched document, updates the URL, and scrolls.
-	const swapCommentsBlock = ( doc, finalUrl ) => {
+	// fetched document, updates the URL, and moves scroll and focus. Pass the
+	// comment IDs present before a submission to land on the newly posted comment;
+	// the redirect's #comment-N can't be used because Response.url drops fragments.
+	const swapCommentsBlock = ( doc, finalUrl, previousCommentIds = null ) => {
 		const commentsBlock = panel.querySelector( '.wp-block-comments' );
 		if ( ! commentsBlock ) {
 			return false;
@@ -227,17 +243,23 @@ const createCommentsPanel = ( panel, triggers ) => {
 		}
 		commentsBlock.replaceWith( newBlock );
 
-		history.replaceState( null, doc.title, finalUrl );
+		const newComment = previousCommentIds
+			? Array.from( newBlock.querySelectorAll( '[id^="comment-"]' ) ).find(
+					el => /^comment-\d+$/.test( el.id ) && ! previousCommentIds.has( el.id )
+			  )
+			: null;
 
-		const hash = new URL( finalUrl ).hash;
-		if ( hash ) {
-			setTimeout( () => {
-				const target = panel.querySelector( hash );
-				if ( target ) {
-					target.scrollIntoView( { behavior: 'smooth', block: 'start' } );
-				}
-			}, 100 );
+		const url = new URL( finalUrl );
+		if ( newComment ) {
+			url.hash = newComment.id;
+		}
+		history.replaceState( null, doc.title, url.href );
+
+		if ( newComment ) {
+			focusWithin( newComment );
+			setTimeout( () => newComment.scrollIntoView( { behavior: 'smooth', block: 'start' } ), 100 );
 		} else {
+			focusWithin( newBlock.querySelector( '.wp-block-comments-title' ) || newBlock );
 			panel.scrollTop = 0;
 		}
 
@@ -292,6 +314,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 		if ( ! commentsBlock ) {
 			return;
 		}
+		const previousCommentIds = getCommentIds();
 		setLoading( commentsBlock, true );
 		fetch( form.action, {
 			method: 'POST',
@@ -316,7 +339,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 				}
 				const { html, finalUrl } = result;
 				const doc = new DOMParser().parseFromString( html, 'text/html' );
-				if ( ! swapCommentsBlock( doc, finalUrl ) ) {
+				if ( ! swapCommentsBlock( doc, finalUrl, previousCommentIds ) ) {
 					// WordPress's comment form has <input name="submit"> which shadows
 					// the native form.submit(); call the prototype method directly.
 					HTMLFormElement.prototype.submit.call( form );
