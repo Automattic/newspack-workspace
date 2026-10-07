@@ -185,6 +185,61 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Active reader subscriptions are included in GAM targeting.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ad_targeting_for_active_subscription() {
+		require __DIR__ . '/mocks/reader-data-current.php';
+
+		\Newspack\Reader_Data::$active_subscriptions = [ 'product-1' ];
+		$targeting                                   = $this->get_reader_ad_targeting();
+
+		self::assertSame( [ 'logged_in', 'subscriber' ], $targeting['reader_status'] );
+	}
+
+	/**
+	 * Readers with only cancelled subscriptions are not targeted as subscribers.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ad_targeting_for_cancelled_subscription() {
+		require __DIR__ . '/mocks/reader-data-current.php';
+
+		\Newspack\Reader_Data::$active_subscriptions = [];
+		$targeting                                   = $this->get_reader_ad_targeting();
+
+		self::assertSame( [ 'logged_in' ], $targeting['reader_status'] );
+	}
+
+	/**
+	 * Older reader-data APIs without active-subscription support do not cause errors.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ad_targeting_without_active_subscription_api() {
+		require __DIR__ . '/mocks/reader-data-legacy.php';
+
+		$targeting = $this->get_reader_ad_targeting();
+
+		self::assertSame( [ 'logged_in' ], $targeting['reader_status'] );
+	}
+
+	/**
+	 * Get targeting for a logged-in reader.
+	 *
+	 * @return array
+	 */
+	private function get_reader_ad_targeting() {
+		wp_set_current_user( self::factory()->user->create() );
+
+		return GAM_Model::get_ad_targeting( [] );
+	}
+
+	/**
 	 * Test sanitization functions.
 	 */
 	public function test_sanitization() {
