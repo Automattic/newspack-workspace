@@ -261,8 +261,15 @@ const createCommentsPanel = ( panel, triggers ) => {
 			focusWithin( newComment );
 			setTimeout( () => newComment.scrollIntoView( { behavior: getScrollBehavior(), block: 'start' } ), 100 );
 		} else {
-			focusWithin( newBlock.querySelector( '.wp-block-comments-title' ) || newBlock );
-			panel.scrollTop = 0;
+			// Scroll to the heading rather than the panel top: the comment form sits
+			// above it and would otherwise hide where focus went.
+			const heading = newBlock.querySelector( '.wp-block-comments-title' );
+			focusWithin( heading || newBlock );
+			if ( heading ) {
+				heading.scrollIntoView( { block: 'start' } );
+			} else {
+				panel.scrollTop = 0;
+			}
 		}
 
 		return true;
