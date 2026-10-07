@@ -588,10 +588,10 @@ class Group_Subscription_API {
 		}
 		// The candidate query is intentionally NOT role-restricted. Group_Subscription::is_eligible_member()
 		// -- which runs the newspack_group_subscription_member_eligible filter -- is the sole authority on
-		// who is an eligible group member, so a publisher can opt a custom-role user in (or a normally
-		// eligible role-holder out) via that filter. A role__in allowlist here would silently exclude an
-		// opted-in user (and could never exclude an opted-out one) before the predicate ever runs, so
-		// results are post-filtered against is_eligible_member() below instead.
+		// who is an eligible group member: any role can be eligible, and a publisher can opt a staff user
+		// in (or an otherwise eligible user out) via that filter. A role__in allowlist here would silently
+		// exclude eligible users before the predicate ever runs, so results are post-filtered against
+		// is_eligible_member() below instead.
 		$exclude   = Group_Subscription::get_members( $subscription );
 		$exclude[] = $subscription->get_user_id();
 		// Each query is capped at SEARCH_USERS_LIMIT candidates ('number' below); results are

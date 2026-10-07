@@ -580,6 +580,14 @@ class Group_Subscription_Settings {
 			if ( in_array( 'enabled', $changed_keys, true ) ) {
 				self::clear_group_subscription_ids_cache();
 			}
+
+			/**
+			 * Fires after a group subscription's settings are saved with at least one change.
+			 *
+			 * @param \WC_Subscription $subscription The group subscription.
+			 * @param string[]         $changed_keys The settings that changed.
+			 */
+			do_action( 'newspack_group_subscription_settings_updated', $subscription, $changed_keys );
 		}
 	}
 
