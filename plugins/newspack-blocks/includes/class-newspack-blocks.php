@@ -1394,6 +1394,19 @@ class Newspack_Blocks {
 				// If we don't, built an excerpt but allow no tags.
 				$excerpt      = $post->post_content;
 				$allowed_tags = '';
+
+				// Jetpack's paywall only applies to the_content, which this excerpt skips, so ensure
+				// gated posts get the text above the Paywall block or nothing. Line Access Control,
+				// this applies to every reader, not just those without access, so the block's render
+				// cache stays safe to share.
+				if (
+					has_filter( 'the_content', 'Automattic\Jetpack\Extensions\Subscriptions\add_paywall' )
+					&& class_exists( 'Jetpack_Memberships' )
+					&& 'everybody' !== \Jetpack_Memberships::get_post_access_level( $post->ID )
+				) {
+					$paywall_block = '<!-- wp:jetpack/paywall /-->';
+					$excerpt       = false !== strpos( $excerpt, $paywall_block ) ? strstr( $excerpt, $paywall_block, true ) : '';
+				}
 			}
 
 			// Recreate logic from wp_trim_excerpt (https://developer.wordpress.org/reference/functions/wp_trim_excerpt/).
