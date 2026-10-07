@@ -25,7 +25,7 @@ const ReaderRevenue = ( { className } ) => {
 			{ 'nrh' === wizardData.platform_data?.platform && (
 				<p>
 					{ __(
-						'To edit settings for News Revenue Hub, visit the Reader Revenue section from the Newspack dashboard.',
+						'To edit settings for RevEngine, visit the Reader Revenue section from the Newspack dashboard.',
 						'newspack-plugin'
 					) }
 				</p>

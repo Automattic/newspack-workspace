@@ -1,6 +1,6 @@
 <?php
 /**
- * Newspack News Revenue Hub feature management.
+ * Newspack RevEngine feature management.
  *
  * @package Newspack
  */
@@ -10,11 +10,11 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Handles News Revenue Hub functionality.
+ * Handles RevEngine functionality.
  */
 class NRH {
 	/**
-	 * Allowed config keys for NRH settings.
+	 * Allowed config keys for RevEngine settings.
 	 *
 	 * @var array
 	 */
@@ -34,7 +34,7 @@ class NRH {
 	}
 
 	/**
-	 * Get all News Revenue Hub settings.
+	 * Get all RevEngine settings.
 	 *
 	 * @return array Array of settings.
 	 */
@@ -57,7 +57,7 @@ class NRH {
 	}
 
 	/**
-	 * Get a specific News Revenue Hub setting by key name.
+	 * Get a specific RevEngine setting by key name.
 	 * Validates given key against valid keys.
 	 *
 	 * @param string $key Key of setting to get.
@@ -74,7 +74,7 @@ class NRH {
 	}
 
 	/**
-	 * Update News Revenue Hub settings.
+	 * Update RevEngine settings.
 	 * Validates given data against valid keys.
 	 *
 	 * @param array $data Array of settings to update.
@@ -117,7 +117,7 @@ class NRH {
 	}
 
 	/**
-	 * Redirect to the NRH checkout page when the donation form is submitted if possible.
+	 * Redirect to the RevEngine checkout page when the donation form is submitted if possible.
 	 *
 	 * @param string $checkout_url URL of checkout page.
 	 * @param float  $donation_value Amount of donation.
@@ -125,7 +125,7 @@ class NRH {
 	 * @return string Modified $checkout_url.
 	 */
 	public static function redirect_to_nrh_checkout( $checkout_url, $donation_value, $donation_frequency ) {
-		// Mapping of Newspack -> NRH donation frequencies.
+		// Mapping of Newspack -> RevEngine donation frequencies.
 		$donation_frequencies = [
 			'month' => 'monthly',
 			'year'  => 'yearly',
@@ -190,7 +190,7 @@ class NRH {
 	}
 
 	/**
-	 * Add the potential NRH checkout URLs as allowed redirect targets.
+	 * Add the potential RevEngine checkout URLs as allowed redirect targets.
 	 *
 	 * @param array $hosts Array of allowed hosts.
 	 * @return array Modified $hosts.
@@ -213,7 +213,7 @@ class NRH {
 	}
 
 	/**
-	 * Get NRH config.
+	 * Get RevEngine config.
 	 */
 	public static function get_nrh_config() {
 		return get_option( NEWSPACK_NRH_CONFIG, [] );
