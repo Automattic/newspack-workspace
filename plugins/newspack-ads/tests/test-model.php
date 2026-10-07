@@ -191,7 +191,7 @@ class ModelTest extends WP_UnitTestCase {
 	/**
 	 * Reader status targeting respects JSON-encoded boolean values.
 	 */
-	public function test_ad_targeting_reader_status_booleans() {
+	public function test_reader_status_targets_only_flags_stored_as_true() {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
 
