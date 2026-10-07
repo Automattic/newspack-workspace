@@ -165,7 +165,7 @@ with markup in your own element and hand the section that instead.
 |------|------|---------|-------------|
 | `children` | `React.ReactNode` | — | Section content. |
 | `className` | `string` | — | Additional CSS class. |
-| `gap` | `'xs'` \| `'sm'` \| `'md'` \| `'lg'` \| `'xl'` \| `'2xl'` \| `'3xl'` | `'lg'` | Space between the section's children, as a `Stack` gap token. `'lg'` is 16px. |
+| `gap` | `string` | `'lg'` | Space between the section's children, as a `Stack` gap token from `@wordpress/ui`. `'lg'` is 16px. |
 | `padding` | `number` | `6` | On the 4px scale. `6` is 24px; `0` is a flush section that brings its own padding. |
 
 Consecutive sections share one scroll container, so they scroll together between
