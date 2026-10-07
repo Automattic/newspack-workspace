@@ -8,7 +8,7 @@
 	"textdomain": "newspack-plugin",
 	"parent": [ "newspack/comments-panel" ],
 	"attributes": {
-		"triggerText": { "type": "string", "default": "Comments" },
+		"triggerText": { "type": "string", "default": "" },
 		"lock": { "type": "object", "default": { "move": true, "remove": true } }
 	},
 	"supports": {
