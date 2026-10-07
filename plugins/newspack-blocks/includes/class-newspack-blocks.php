@@ -275,7 +275,7 @@ class Newspack_Blocks {
 	 * @return bool True if available, false if not.
 	 */
 	public static function can_use_name_your_price() {
-		// If the donation platform is NRH, the Donate block should behave as if Name Your Price is available.
+		// If the donation platform is RevEngine, the Donate block should behave as if Name Your Price is available.
 		if ( method_exists( 'Newspack\Donations', 'is_platform_nrh' ) && \Newspack\Donations::is_platform_nrh() ) {
 			return true;
 		}

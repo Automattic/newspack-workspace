@@ -52,13 +52,15 @@ if ( ! $autoloader_loaded ) {
 /**
  * Load test stubs for dependencies not available in the isolated test environment.
  *
- * After the autoloader deliberately: each stub guards on class_exists(), which can
- * only find a real implementation once autoloading is available. Loaded earlier, the
- * stub always wins and the guard -- plus the markTestSkipped that depends on it -- is
- * unreachable.
+ * After the autoloader deliberately: each class stub guards on class_exists(), which
+ * can only find a real implementation once autoloading is available. Loaded earlier,
+ * the stub always wins and the guard -- plus the markTestSkipped that depends on it --
+ * is unreachable. The sponsors stub defines namespaced functions, which nothing can
+ * autoload ahead of it, so it needs no guard.
  */
 require_once __DIR__ . '/class-newspack-tag-labels-stub.php';
 require_once __DIR__ . '/class-newspack-block-visibility-stub.php';
+require_once __DIR__ . '/class-newspack-sponsors-stub.php';
 require_once __DIR__ . '/class-wc-order-stub.php';
 
 // Start up the WP testing environment.
