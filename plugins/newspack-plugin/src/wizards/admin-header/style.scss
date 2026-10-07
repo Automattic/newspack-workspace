@@ -1,10 +1,14 @@
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 
 .newspack-wizards-admin-header {
-	margin-left: -10px;
+	margin-left: -20px;
+
+	@media screen and (max-width: wp-breakpoints.$break-medium) {
+		margin-left: -10px;
+	}
 
 	@include wp-mixins.break-medium {
-		margin-left: -20px;
 		position: sticky;
 		top: var(--wp-admin--admin-bar--height);
 		z-index: 3;
