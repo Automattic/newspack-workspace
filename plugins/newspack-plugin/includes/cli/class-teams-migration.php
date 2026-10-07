@@ -644,7 +644,7 @@ class Teams_Migration {
 				}
 			}
 			if ( $not_eligible_skips ) {
-				WP_CLI::warning( sprintf( 'Team %d: %d team member(s) skipped — not eligible group members (e.g. administrators/editors), who already have full access.', $team_id, $not_eligible_skips ) );
+				WP_CLI::warning( sprintf( 'Team %d: %d team member(s) skipped — not eligible group members (staff, or excluded by the newspack_group_subscription_member_eligible filter).', $team_id, $not_eligible_skips ) );
 			}
 
 			// Set the seat limit now that members are in, using the owner-inclusive
@@ -1002,8 +1002,8 @@ class Teams_Migration {
 	 * skipped. Dry-run by default; pass --live to write.
 	 *
 	 * Under --as-group, members are added through the group data layer, which adds
-	 * any user eligible per `Group_Subscription::is_eligible_member()` -- readers
-	 * plus Author/Contributor by default, filterable via
+	 * any user eligible per `Group_Subscription::is_eligible_member()` -- any
+	 * non-staff user by default, filterable via
 	 * `newspack_group_subscription_member_eligible` -- and skips (and tallies,
 	 * reported inline) the rest, whereas individual mode gives every processed
 	 * member their own subscription.
@@ -1353,10 +1353,9 @@ class Teams_Migration {
 
 				// Group mode: skip users who are not eligible group members. This is
 				// the same definition migrate_teams()/add_group_member() enforce via
-				// Group_Subscription::is_eligible_member() -- an admin/editor is
-				// skipped here exactly as there, and a reader who happens to hold a
-				// custom role granting edit_others_posts is still added (that role
-				// doesn't affect group eligibility). Tracked per user, like
+				// Group_Subscription::is_eligible_member() -- staff are skipped
+				// here exactly as there, and a reader who happens to hold a custom
+				// role granting edit_others_posts is still added. Tracked per user, like
 				// $granted_user_ids below, so a user skipped across several
 				// in-scope plans is still counted once.
 				if ( $as_group && ! Group_Subscription::is_eligible_member( $user ) ) {
@@ -1549,7 +1548,7 @@ class Teams_Migration {
 		if ( $as_group && ! empty( $as_group_not_eligible_users ) ) {
 			WP_CLI::warning(
 				sprintf(
-					'%d member(s) skipped — not eligible group members (e.g. administrators/editors).',
+					'%d member(s) skipped — not eligible group members (staff, or excluded by the newspack_group_subscription_member_eligible filter).',
 					count( $as_group_not_eligible_users )
 				)
 			);
@@ -1848,7 +1847,7 @@ class Teams_Migration {
 	 *
 	 * Routing through update_members() (rather than a raw user-meta write) records
 	 * the joined-at timestamp and auto-enables the group. Eligible members only — the
-	 * data layer skips administrators/editors, who already have full access.
+	 * data layer skips staff (users who can edit others' posts).
 	 * Exposed for testing.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
