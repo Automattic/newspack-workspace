@@ -595,6 +595,33 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A plain button pointed at an on-page action renders with its link exactly
+	 * as stored, so the click stays on the page. The card is still stamped, so
+	 * the `clicked` event still reports the story, placement and CTA type.
+	 */
+	public function test_same_page_button_link_renders_unchanged() {
+		$this->set_platform( false );
+		$on_page = '#donate?amount=10&frequency=one_time';
+		$group   = parse_blocks( get_post( Newspack_Popups_Contextual_Prompt_Pattern::get_pattern_id() )->post_content )[0];
+		$cta     = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
+
+		$group['innerBlocks'][ $cta['index'] ] = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( $on_page, 'Give' );
+
+		$post_id  = self::factory()->post->create(
+			[
+				'post_status'  => 'publish',
+				'post_content' => serialize_block( $group ),
+			]
+		);
+		$rendered = html_entity_decode( $this->render_in_loop( $post_id ) );
+		preg_match_all( '/href="([^"]*)"/', $rendered, $matches );
+
+		$this->assertSame( [ $on_page ], $matches[1], 'The on-page link is not rewritten.' );
+		$this->assertStringContainsString( 'data-newspack-cp-post-id="' . $post_id . '"', $rendered );
+		$this->assertStringContainsString( 'data-newspack-cp-cta="button"', $rendered );
+	}
+
+	/**
 	 * Turn the control test on.
 	 *
 	 * @param string $body     Control copy.

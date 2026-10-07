@@ -1922,6 +1922,23 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A same-page link never loads a page, so the args would go unread, and
+	 * add_query_arg() puts them before the `#`, which turns the click into a
+	 * reload. On-page donation modals open from links shaped like
+	 * `#donate?amount=10`. A link to a page that carries a fragment still loads
+	 * that page, so it stays tagged.
+	 */
+	public function test_same_page_links_are_not_taggable() {
+		$method = new ReflectionMethod( 'Newspack_Popups_Contextual_Prompt_Render', 'is_taggable_destination' );
+		$method->setAccessible( true );
+
+		$this->assertFalse( $method->invoke( null, '#donate?amount=10&frequency=one_time' ), 'A same-page link with a query in its fragment is left alone.' );
+		$this->assertFalse( $method->invoke( null, '#donate' ), 'A plain same-page link is left alone.' );
+		$this->assertFalse( $method->invoke( null, '  #donate?amount=10' ), 'Leading whitespace does not hide a same-page link.' );
+		$this->assertTrue( $method->invoke( null, '/donate/#form' ), 'A link to a page with a fragment loads that page, so it is tagged.' );
+	}
+
+	/**
 	 * A Group whose class merely starts with the marker — the publisher's own
 	 * `newspack-contextual-prompt-custom` — is not a prompt card, so the preview
 	 * that lists the stories the control will swap must not include it. The

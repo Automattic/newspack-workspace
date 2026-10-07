@@ -1315,7 +1315,8 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	/**
 	 * Whether a destination is one of ours to tag. The attribution args are read
 	 * back on this site, so they are noise on another publisher's processor and
-	 * damage to a `mailto:` or `tel:` address. A relative href is this site.
+	 * damage to a `mailto:` or `tel:` address. A relative href is this site; a
+	 * same-page `#` link is left alone.
 	 *
 	 * @param string|null $href The destination.
 	 * @return bool
@@ -1323,6 +1324,13 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	private static function is_taggable_destination( $href ) {
 		$href = trim( (string) $href );
 		if ( '' === $href ) {
+			return false;
+		}
+		// A same-page link (`#donate?amount=10`) never loads a page, so nothing
+		// here would read the args, and add_query_arg() would put them before the
+		// `#`, which turns the click into a reload. On-page donation modals open
+		// from links of exactly this shape.
+		if ( '#' === $href[0] ) {
 			return false;
 		}
 		$scheme = wp_parse_url( $href, PHP_URL_SCHEME );
