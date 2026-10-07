@@ -23,12 +23,7 @@ const ReaderRevenue = ( { className } ) => {
 		<div className={ classnames( className, { 'newspack-is-dimmed': isEmpty( wizardData ) } ) }>
 			<Platform />
 			{ 'nrh' === wizardData.platform_data?.platform && (
-				<p>
-					{ __(
-						'To edit settings for News Revenue Hub, visit the Reader Revenue section from the Newspack dashboard.',
-						'newspack-plugin'
-					) }
-				</p>
+				<p>{ __( 'To edit settings for RevEngine, visit the Reader Revenue section from the Newspack dashboard.', 'newspack-plugin' ) }</p>
 			) }
 			{ 'other' === wizardData.platform_data?.platform && <p>{ __( 'Use a third-party reader revenue platform.', 'newspack-plugin' ) }</p> }
 			{ 'wc' === wizardData.platform_data?.platform && (

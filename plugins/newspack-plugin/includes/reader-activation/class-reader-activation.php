@@ -770,7 +770,7 @@ final class Reader_Activation {
 
 	/**
 	 * Get an array of required plugins for satisfying Reader Revenue prerequisites.
-	 * WooCommerce and Woo Subscriptions are required for Newspack, but not for NRH.
+	 * WooCommerce and Woo Subscriptions are required for Newspack, but not for RevEngine.
 	 */
 	public static function get_reader_revenue_required_plugins() {
 		$required_plugins = [

@@ -124,7 +124,7 @@ class Audience_Wizard extends Wizard {
 		// the tab is actually opened.
 		//
 		// `isNewspackPlatform` reflects whether Newspack is the reader-revenue
-		// platform (WooCommerce orders drive the commerce emails; RevEngine/NRH
+		// platform (WooCommerce orders drive the commerce emails; RevEngine
 		// redirects checkout off-site and sends its own receipts; "Other" sends
 		// nothing through Newspack). It drives the chip bar + the email-list
 		// scoping; auth/account emails still surface on any platform with RA on.
@@ -796,7 +796,7 @@ class Audience_Wizard extends Wizard {
 			Donations::set_platform_slug( $params['platform'] );
 		}
 
-		// Update NRH settings.
+		// Update RevEngine settings.
 		if ( Donations::is_platform_nrh() ) {
 			NRH::update_settings( $params );
 		}
