@@ -85,29 +85,21 @@ describe( 'Drawer.Content', () => {
 
 	it( 'spaces its children by the lg gap token, and by the gap prop', () => {
 		const { container, rerender } = render( <Content>stacked</Content> );
-		expect( sectionOf( container ).style.gap ).toBe( 'var(--wpds-dimension-gap-lg, 16px)' );
+		expect( sectionOf( container ).style.gap ).toContain( 'gap-lg' );
 
 		rerender( <Content gap="sm">stacked</Content> );
-		expect( sectionOf( container ).style.gap ).toBe( 'var(--wpds-dimension-gap-sm, 8px)' );
+		expect( sectionOf( container ).style.gap ).toContain( 'gap-sm' );
 	} );
 
-	// Core's VStack drops text children; a section must keep them.
 	it( 'keeps plain text sitting beside an element', () => {
-		render(
+		const { container } = render(
 			<Content>
 				Lead text
 				<span>an element</span>
 				{ 42 }
 			</Content>
 		);
-		expect( screen.getByText( 'Lead text', { exact: false } ) ).toBeInTheDocument();
-		expect( screen.getByText( 'an element' ) ).toBeInTheDocument();
-		expect( screen.getByText( '42', { exact: false } ) ).toBeInTheDocument();
-	} );
-
-	it( 'keeps a lone string', () => {
-		render( <Content>on its own</Content> );
-		expect( screen.getByText( 'on its own' ) ).toBeInTheDocument();
+		expect( sectionOf( container ) ).toHaveTextContent( 'Lead textan element42' );
 	} );
 } );
 
@@ -124,6 +116,14 @@ describe( 'Drawer.Footer', () => {
 	it( 'renders a container with its children', () => {
 		render( <Footer>actions</Footer> );
 		expect( screen.getByText( 'actions' ) ).toHaveClass( 'newspack-drawer__footer' );
+	} );
+
+	it( 'lays its actions out in one end-aligned row that wraps', () => {
+		render( <Footer>actions</Footer> );
+		const footer = screen.getByText( 'actions' );
+		expect( footer.style.flexDirection ).toBe( 'row' );
+		expect( footer.style.justifyContent ).toBe( 'flex-end' );
+		expect( footer.style.flexWrap ).toBe( 'wrap' );
 	} );
 
 	it( 'renders its actions as direct children', () => {

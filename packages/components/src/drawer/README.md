@@ -148,9 +148,9 @@ unsaved-changes confirmation always applies.
 
 ## `Drawer.Content`
 
-The body. Repeatable: each `Drawer.Content` is a section, rendered as a column
-`Stack` from `@wordpress/ui` with a 16px gap by default; `gap` changes it. Children space through the gap
-alone; their own top and bottom margins are reset.
+The body. Repeatable: each `Drawer.Content` is a section that stacks its
+children in a column, 16px apart by default; `gap` changes it. Children space
+through the gap alone; their own top and bottom margins are reset.
 
 Anything can go in a section: an element, a control, a nested stack, or plain
 text. Each child becomes a row separated by the gap, and a run of plain text and
