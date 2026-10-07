@@ -58,6 +58,7 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			wp_delete_user( $user_id );
 		}
 		$this->user_ids = [];
+		remove_role( 'test_custom_reader' );
 		parent::tear_down();
 	}
 
@@ -697,28 +698,34 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Readers, authors and contributors are eligible group members by default;
-	 * administrators and editors are not (they bypass the content gate already).
+	 * Any user without `edit_others_posts` is an eligible group member, whatever their role,
+	 * so a reader on a custom role the gate restricts can reach content through a group.
+	 * Staff hold the capability and bypass the gate already.
 	 */
 	public function test_is_eligible_member_defaults() {
+		add_role( 'test_custom_reader', 'Custom reader', [ 'read_custom_content' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+		$custom_role_id = $this->create_role_user( 'test_custom_reader' );
+		$no_role_id     = $this->create_role_user( '' );
+
+		$this->assertTrue( Group_Subscription::is_eligible_member( $custom_role_id ), 'A user whose only role is a custom role is eligible.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $no_role_id ), 'A user with no role is eligible.' );
 		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_reader_user() ), 'Readers are eligible.' );
-		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'author' ) ), 'Authors are eligible by default.' );
-		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible by default.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible members.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible members.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible.' );
 	}
 
 	/**
-	 * A user holding a privileged role (Editor or Administrator) alongside Author must not
-	 * gain default eligibility from the Author/Contributor fallback -- that fallback exists
-	 * for plain content-creator roles, not for staff who happen to also hold one.
+	 * A staff user stays ineligible when they also hold a non-staff role.
 	 */
 	public function test_is_eligible_member_excludes_privileged_multi_role_users() {
-		$editor_author_id = $this->create_multi_role_user( [ 'editor', 'author' ] );
-		$admin_author_id  = $this->create_multi_role_user( [ 'administrator', 'author' ] );
+		$editor_author_id      = $this->create_multi_role_user( [ 'editor', 'author' ] );
+		$admin_author_id       = $this->create_multi_role_user( [ 'administrator', 'author' ] );
+		$contributor_editor_id = $this->create_multi_role_user( [ 'contributor', 'editor' ] );
 
-		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author must not gain eligibility from the Author role.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author must not gain eligibility from the Author role.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author is not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author is not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $contributor_editor_id ), 'Contributor+Editor is not eligible.' );
 	}
 
 	/**
