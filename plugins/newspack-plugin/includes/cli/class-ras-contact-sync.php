@@ -865,8 +865,8 @@ class RAS_Contact_Sync {
 	 * `--skip-lists` or `--fields`. The retry path rebuilds the full contact and
 	 * upserts it with the master list, skipping the existence check, which would
 	 * undo the intent of any other run. Re-run the affected `--offset` window instead;
-	 * such a run that tallies errors says so in a warning, since this command exits 0
-	 * either way.
+	 * a non-dry run of that kind that tallies errors says so in a warning, since this
+	 * command exits 0 either way.
 	 *
 	 * Without `--create-missing`, a `--dry-run` still performs the existence read at
 	 * each integration (that is what previewing the skips means); it only skips the
@@ -1180,10 +1180,9 @@ class RAS_Contact_Sync {
 			);
 		}
 
-		// An update-only run promises "never create". An integration that cannot
-		// check for an existing contact would upsert as usual and the run would
-		// read as clean, so refuse before any batch rather than create the
-		// contacts the default exists to protect.
+		// An integration that cannot check for an existing contact gets no push
+		// on an update-only run, so every reader would come back as an error
+		// there. Refuse before any batch instead, naming the ways out.
 		if ( $options['existing_only'] ) {
 			$unsupported = [];
 			foreach ( self::push_integrations_in_scope( $integration_id ) as $id => $integration ) {
@@ -1196,7 +1195,7 @@ class RAS_Contact_Sync {
 					'newspack_esp_sync_existing_only_unsupported',
 					sprintf(
 						// Translators: %s is a comma-separated list of integration ids.
-						__( 'Integration(s) "%s" cannot check whether a contact already exists, so this run, which only updates existing contacts, would create contacts there. Pass --create-missing to let the run create contacts, or scope it with `wp newspack integrations backfill --integration=<id>` to an integration that can check.', 'newspack-plugin' ),
+						__( 'Integration(s) "%s" cannot check whether a contact already exists, so this run, which only updates existing contacts, cannot update contacts there. Pass --create-missing to let the run create contacts, or scope it with `wp newspack integrations backfill --integration=<id>` to an integration that can check.', 'newspack-plugin' ),
 						implode( ', ', $unsupported )
 					)
 				);
