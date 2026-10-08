@@ -239,10 +239,12 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
-	 * Whether the sync options leave the pushed contact whole: no list-less,
-	 * field-scoped or update-only push. `integration_id` is not checked on
-	 * purpose, since a push to one integration still sends the full contact
-	 * and keeps its retries.
+	 * Whether the sync options are the defaults every real-time sync uses: no
+	 * list-less, field-scoped or update-only push. Only such a push may be
+	 * queued inside a data event (the queue drops options), retried (the retry
+	 * rebuilds the full contact and upserts it without the existence check) or
+	 * previewed without the scoped dry-run log. `integration_id` stays out: the
+	 * queue gate checks it separately, and a retry targets the same integration.
 	 *
 	 * @param array $options Sync options.
 	 *

@@ -256,8 +256,8 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 
 	/**
 	 * An update-only run cannot do its job at an integration that cannot check
-	 * for an existing contact, so the run refuses to start rather than creating
-	 * contacts there while reporting a clean run.
+	 * for an existing contact, so the run refuses to start rather than tallying
+	 * every reader there as an error.
 	 */
 	public function test_update_only_preflight_rejects_a_push_integration_without_a_lookup() {
 		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
