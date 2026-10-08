@@ -69,7 +69,7 @@ const PromptButtonLink = ( { clientId, url, rel, setAttributes } ) => {
 					label={ __( 'Button link', 'newspack-popups' ) }
 					help={ sprintf(
 						/* translators: %s: an example on-page link. */
-						__( 'Also accepts on-page links that the toolbar rejects, such as %s.', 'newspack-popups' ),
+						__( 'Also accepts on-page links that the toolbar rejects, such as %s', 'newspack-popups' ),
 						'#donate?amount=10'
 					) }
 					value={ url || '' }

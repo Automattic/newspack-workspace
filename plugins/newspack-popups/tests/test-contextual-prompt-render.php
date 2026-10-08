@@ -1873,7 +1873,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * address at worst. A same-page link is left alone too: tagging it would turn
 	 * a click meant to open an on-page modal into a reload.
 	 */
-	public function test_only_same_site_button_destinations_are_tagged() {
+	public function test_only_same_site_page_destinations_are_tagged() {
 		$this->set_platform( false );
 		$landing = $this->set_donor_landing_page();
 		$group   = $this->stored_group();
@@ -1913,7 +1913,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * untouched, while a link to a page that carries a fragment loads that page,
 	 * so it is tagged.
 	 */
-	public function test_taggable_destination_matches_www_and_scheme_variants() {
+	public function test_taggable_destination_matches_www_scheme_and_same_page_variants() {
 		$method = new ReflectionMethod( 'Newspack_Popups_Contextual_Prompt_Render', 'is_taggable_destination' );
 		$method->setAccessible( true );
 		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );

@@ -1329,9 +1329,9 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		// A same-page link (`#donate?amount=10`) is meant to act on the page it
 		// is on, and on-page donation modals open from links of exactly this
 		// shape. add_query_arg() would put the args before the `#`, which turns
-		// the click into a reload. Leaving it alone has one cost: a same-story
-		// anchor that leads to a donate form outside the card no longer hands
-		// that form the prompt's attribution, which it read from the reload.
+		// the click into a reload. The cost: a same-story anchor that leads to a
+		// donate form outside the card doesn't pass that form the prompt's
+		// attribution, because that form only reads it from a page load's query.
 		if ( str_starts_with( $href, '#' ) ) {
 			return false;
 		}

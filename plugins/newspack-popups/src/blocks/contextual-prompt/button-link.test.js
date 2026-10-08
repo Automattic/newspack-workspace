@@ -43,8 +43,7 @@ jest.mock( '@wordpress/components', () => ( {
 
 const { isInsidePromptCard, withPromptButtonLink } = require( './button-link' );
 
-const MARKER = 'newspack-contextual-prompt';
-const card = ( className = MARKER ) => ( { name: 'core/group', attributes: { className } } );
+const card = { name: 'core/group', attributes: { className: 'newspack-contextual-prompt' } };
 const plainGroup = { name: 'core/group', attributes: {} };
 const buttons = { name: 'core/buttons', attributes: {} };
 
@@ -52,8 +51,8 @@ describe( 'isInsidePromptCard', () => {
 	// How a card is recognised is isDetachedPromptCard's job, covered in
 	// instance.test.js; these cases cover the walk up the parents.
 	it.each( [
-		[ 'a card around the buttons', true, [ card(), buttons ] ],
-		[ 'a card further up', true, [ plainGroup, card(), buttons ] ],
+		[ 'a card around the buttons', true, [ card, buttons ] ],
+		[ 'a card further up', true, [ plainGroup, card, buttons ] ],
 		[ 'no card', false, [ plainGroup, buttons ] ],
 		[ 'no parents', false, [] ],
 	] )( 'is %s → %s', ( label, expected, parents ) => {
@@ -95,7 +94,7 @@ describe( 'withPromptButtonLink', () => {
 	beforeEach( () => {
 		mounts = 0;
 		useSelect.mockReset();
-		mockParents( [ card(), buttons ] );
+		mockParents( [ card, buttons ] );
 	} );
 
 	it( 'shows the field, holding the current link, for a selected button inside a card', () => {
