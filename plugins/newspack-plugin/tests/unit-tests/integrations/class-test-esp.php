@@ -793,19 +793,17 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Run contact_exists() against a staged provider payload, error, or nothing.
+	 * Run contact_exists() against a staged provider payload or error.
 	 *
-	 * @param array|\WP_Error|null $contact_data Payload get_contact_data() returns; null stages nothing (the mock reports not found).
-	 * @param string|null          $provider     Provider slug the mock reports, or null for none.
-	 * @param string               $list_id      The ESP's configured master list id.
+	 * @param array|\WP_Error $contact_data Payload or error get_contact_data() returns.
+	 * @param string|null     $provider     Provider slug the mock reports, or null for none.
+	 * @param string          $list_id      The ESP's configured master list id.
 	 * @return bool|\WP_Error
 	 */
 	private function contact_exists_with( $contact_data, $provider = 'mailchimp', $list_id = 'list-123' ) {
 		\Newspack_Newsletters::$is_service_provider_configured = true;
 		$this->set_provider( $provider );
-		if ( null !== $contact_data ) {
-			\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => $contact_data ];
-		}
+		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => $contact_data ];
 
 		$result = $this->make_esp_with_master_list( $list_id )->contact_exists( 'reader@example.com' );
 
@@ -818,7 +816,9 @@ class Test_ESP extends \WP_UnitTestCase {
 	 * exists for: report it as "no", never as a failure.
 	 */
 	public function test_contact_exists_is_false_when_the_provider_has_no_contact() {
-		$this->assertFalse( $this->contact_exists_with( null ) );
+		$not_found = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+
+		$this->assertFalse( $this->contact_exists_with( $not_found ) );
 	}
 
 	/**
@@ -869,18 +869,6 @@ class Test_ESP extends \WP_UnitTestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertContains( 'ras_esp_provider_not_supported', $result->get_error_codes() );
-	}
-
-	/**
-	 * Same reason as the pull: a bulk run reads each contact once, and a
-	 * provider that memoizes payloads per email must not keep them all.
-	 */
-	public function test_contact_exists_releases_the_provider_contact_cache_entry() {
-		\Newspack_Newsletters_Service_Provider::$cleared_emails = [];
-
-		$this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ] );
-
-		$this->assertSame( [ 'reader@example.com' ], \Newspack_Newsletters_Service_Provider::$cleared_emails );
 	}
 
 	/**

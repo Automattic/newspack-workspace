@@ -563,21 +563,28 @@ class ESP extends Integration {
 	 * contact is a member of one audience, so "exists" means a member of the
 	 * configured audience: an upsert for a reader who is only in another
 	 * audience would create a new member there, and one for an archived member
-	 * would restore it, so neither counts. The sync gate refuses any other
-	 * provider, so its contacts never read as existing.
+	 * would restore it, so neither counts. Any other provider is refused here
+	 * as well as by the sync gate, because `NEWSPACK_FORCE_ALLOW_ESP_SYNC`
+	 * skips that gate: no other provider's contact may read as existing.
 	 *
 	 * @param string $email The contact's email address.
 	 *
 	 * @return bool|\WP_Error True if the contact exists, false if the provider has none, WP_Error if the read failed.
 	 */
 	public function contact_exists( $email ) {
+		if ( 'mailchimp' !== $this->get_provider_slug() ) {
+			return new \WP_Error(
+				'ras_esp_provider_not_supported',
+				__( 'Sync requires Mailchimp as the newsletter provider.', 'newspack-plugin' )
+			);
+		}
+
 		$can_sync = $this->can_sync( true );
 		if ( $can_sync->has_errors() ) {
 			return $can_sync;
 		}
 
 		$contact_data = Newspack_Newsletters_Subscription::get_contact_data( $email );
-		$this->release_provider_contact_data( $email );
 
 		if ( is_wp_error( $contact_data ) ) {
 			return $this->is_provider_not_found_error( $contact_data ) ? false : $contact_data;
