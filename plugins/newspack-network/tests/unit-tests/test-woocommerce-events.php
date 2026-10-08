@@ -8,10 +8,28 @@
 use Newspack_Network\Woocommerce\Events;
 use Newspack_Network\Woocommerce\Product_Admin;
 
+require_once dirname( __DIR__ ) . '/mocks/wc-order-functions.php';
+
 /**
  * What subscription and order events tell the network about their products.
  */
 class TestWoocommerceEvents extends WP_UnitTestCase {
+
+	/**
+	 * The customer account behind the stand-in orders.
+	 *
+	 * @var int
+	 */
+	private $customer_id;
+
+	/**
+	 * Orders belong to a real account unless a test says otherwise: a paid order
+	 * without one isn't sent.
+	 */
+	public function set_up() {
+		parent::set_up();
+		$this->customer_id = self::factory()->user->create( [ 'user_email' => 'customer@example.test' ] );
+	}
 
 	/**
 	 * A stand-in product; the suite doesn't load WooCommerce.
@@ -113,23 +131,26 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 	/**
 	 * A stand-in order or subscription.
 	 *
-	 * @param int    $id      ID.
-	 * @param array  $items   Line items.
-	 * @param string $status  Status.
-	 * @param int    $created Creation time.
+	 * @param int      $id          ID.
+	 * @param array    $items       Line items.
+	 * @param string   $status      Status.
+	 * @param int      $created     Creation time.
+	 * @param int|null $customer_id Customer ID; 0 for a guest order, null for the test's customer.
 	 * @return object
 	 */
-	private function order( $id, $items, $status = 'completed', $created = 0 ) {
-		return new class( $id, $items, $status, $created ) {
+	private function order( $id, $items, $status = 'completed', $created = 0, $customer_id = null ) {
+		$customer_id = null === $customer_id ? $this->customer_id : $customer_id;
+		return new class( $id, $items, $status, $created, $customer_id ) {
 			/**
 			 * Constructor.
 			 *
-			 * @param int    $id      ID.
-			 * @param array  $items   Line items.
-			 * @param string $status  Status.
-			 * @param int    $created Creation time.
+			 * @param int    $id          ID.
+			 * @param array  $items       Line items.
+			 * @param string $status      Status.
+			 * @param int    $created     Creation time.
+			 * @param int    $customer_id Customer ID; 0 for a guest order.
 			 */
-			public function __construct( public $id, public $items, public $status, public $created ) {}
+			public function __construct( public $id, public $items, public $status, public $created, public $customer_id ) {}
 
 			/**
 			 * ID.
@@ -164,7 +185,7 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			 * @return int
 			 */
 			public function get_customer_id() {
-				return 7;
+				return $this->customer_id;
 			}
 
 			/**
@@ -183,6 +204,51 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			 */
 			public function get_date_created() {
 				return new DateTime( '@' . $this->created );
+			}
+
+			/**
+			 * The customer account, as WooCommerce resolves it.
+			 *
+			 * @return WP_User|false
+			 */
+			public function get_user() {
+				return $this->customer_id ? get_userdata( $this->customer_id ) : false;
+			}
+
+			/**
+			 * Formatted total.
+			 *
+			 * @return string
+			 */
+			public function get_formatted_order_total() {
+				return '$10.00';
+			}
+
+			/**
+			 * Currency.
+			 *
+			 * @return string
+			 */
+			public function get_currency() {
+				return 'USD';
+			}
+
+			/**
+			 * Total.
+			 *
+			 * @return string
+			 */
+			public function get_total() {
+				return '10';
+			}
+
+			/**
+			 * Payment method title.
+			 *
+			 * @return string
+			 */
+			public function get_payment_method_title() {
+				return 'Card';
 			}
 		};
 	}
@@ -239,8 +305,8 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 		);
 		$payload = Events::one_time_purchase_changed( 86, 'processing', 'completed', $order );
 
-		$this->assertSame( 'reader@example.test', $payload['email'] );
-		$this->assertSame( 7, $payload['user_id'] );
+		$this->assertSame( 'customer@example.test', $payload['email'] );
+		$this->assertSame( $this->customer_id, $payload['user_id'] );
 		$this->assertSame( 86, $payload['id'] );
 		$this->assertSame( 'completed', $payload['status_after'] );
 		$this->assertSame( 1700000000, $payload['purchased_at'] );
@@ -290,5 +356,49 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 		$this->assertArrayHasKey( $parent_id, $payload['products'] );
 		$this->assertSame( $parent_id, $payload['products'][ $parent_id ]['id'] );
 		$this->assertSame( $variation_id, $payload['products'][ $variation_id ]['id'] );
+	}
+
+	/**
+	 * The event names the reader by their account email, which is what the other sites
+	 * match and create accounts by, so the stand-in's billing address of
+	 * reader@example.test never reaches them for a logged-in customer.
+	 */
+	public function test_purchase_event_names_the_customer_by_account_email() {
+		$customer = self::factory()->user->create( [ 'user_email' => 'account@example.test' ] );
+		$order    = $this->order( 86, [ $this->item( $this->tagged_product( 'annual-pass' ) ) ], 'completed', 0, $customer );
+
+		$this->assertSame( 'account@example.test', Events::one_time_purchase_changed( 86, '', 'completed', $order )['email'] );
+	}
+
+	/**
+	 * A paid order with no customer account grants nothing on the selling site, so it
+	 * isn't sent to the others; the same goes for a customer since deleted. Its unpaid
+	 * statuses still go out, under the billing email, to revoke a record an earlier
+	 * build may have written.
+	 */
+	public function test_order_without_a_customer_account_is_sent_only_to_revoke() {
+		$product = $this->tagged_product( 'annual-pass' );
+
+		$this->assertNull( Events::one_time_purchase_changed( 87, 'pending', 'completed', $this->order( 87, [ $this->item( $product ) ], 'completed', 0, 0 ) ) );
+		$this->assertNull( Events::one_time_purchase_changed( 88, 'pending', 'completed', $this->order( 88, [ $this->item( $product ) ], 'completed', 0, 999999 ) ) );
+
+		$refund = Events::one_time_purchase_changed( 87, 'completed', 'refunded', $this->order( 87, [ $this->item( $product ) ], 'refunded', 0, 0 ) );
+		$this->assertSame( 'refunded', $refund['status_after'] );
+		$this->assertSame( 'reader@example.test', $refund['email'] );
+	}
+
+	/**
+	 * Subscription and order events name the reader by account email too: the other
+	 * sites find or create the reader by it, so the stand-in's billing address of
+	 * reader@example.test never reaches them for a logged-in customer, and a guest
+	 * order falls back to it.
+	 */
+	public function test_order_and_subscription_events_name_the_customer_by_account_email() {
+		$event = Events::item_changed( 42, 'pending', 'active', $this->order( 42, [], 'active' ) );
+		$this->assertSame( 'customer@example.test', $event['email'] );
+		$this->assertSame( $this->customer_id, $event['user_id'] );
+
+		$guest = Events::item_changed( 43, 'pending', 'completed', $this->order( 43, [], 'completed', 0, 0 ) );
+		$this->assertSame( 'reader@example.test', $guest['email'] );
 	}
 }
