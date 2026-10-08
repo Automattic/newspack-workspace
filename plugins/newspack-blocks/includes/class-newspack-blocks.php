@@ -1401,7 +1401,7 @@ class Newspack_Blocks {
 				// cache stays safe to share.
 				if (
 					has_filter( 'the_content', 'Automattic\Jetpack\Extensions\Subscriptions\add_paywall' )
-					&& class_exists( 'Jetpack_Memberships' )
+					&& method_exists( 'Jetpack_Memberships', 'get_post_access_level' )
 					&& 'everybody' !== \Jetpack_Memberships::get_post_access_level( $post->ID )
 				) {
 					$paywall_block = '<!-- wp:jetpack/paywall /-->';
