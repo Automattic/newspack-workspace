@@ -1,29 +1,21 @@
-<?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Generic.Files.OneObjectStructurePerFile.MultipleFound
+<?php
 /**
- * Compatible reader data mocks for GAM targeting tests.
+ * Stand-in for newspack-plugin's Reader_Data, which the suite doesn't load.
+ *
+ * Tests set the stored values, JSON-encoded as the real class stores them, in
+ * `Reader_Data::$data`.
  *
  * @package Newspack_Ads\Tests
  */
 
 namespace Newspack;
 
-/**
- * Reader activation mock that treats the current user as a reader.
- */
-class Reader_Activation {
-	/**
-	 * Determine whether a user is a reader.
-	 *
-	 * @param \WP_User $user User.
-	 * @return bool
-	 */
-	public static function is_user_reader( $user ) {
-		return true;
-	}
+if ( class_exists( 'Newspack\Reader_Data' ) ) {
+	return;
 }
 
 /**
- * Reader data mock exposing the API used by GAM targeting.
+ * Stand-in for Newspack\Reader_Data exposing the API GAM targeting uses.
  */
 class Reader_Data {
 	/**

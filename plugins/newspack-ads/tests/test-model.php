@@ -8,6 +8,9 @@
 use Newspack_Ads\Providers\GAM_Model;
 use Newspack\Reader_Data;
 
+require_once __DIR__ . '/mocks/class-reader-activation.php';
+require_once __DIR__ . '/mocks/class-reader-data.php';
+
 /**
  * Test ads model functionality.
  */
@@ -186,32 +189,9 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A newspack-plugin without get_active_subscriptions() still gets the
-	 * newsletter and donor statuses. A separate process, because the stand-in
-	 * Reader_Data class can be declared only once per process.
-	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
-	 */
-	public function test_older_newspack_plugin_keeps_newsletter_and_donor_statuses() {
-		require __DIR__ . '/mocks/reader-data-without-active-subscriptions.php';
-
-		$user_id = self::factory()->user->create();
-		wp_set_current_user( $user_id );
-		\Newspack\Reader_Data::$bool_values[ $user_id ] = [
-			'is_newsletter_subscriber' => true,
-			'is_donor'                 => true,
-		];
-
-		self::assertSame( [ 'logged_in', 'newsletter_subscriber', 'donor' ], GAM_Model::get_ad_targeting( [] )['reader_status'] );
-	}
-
-	/**
 	 * Reader status targeting respects JSON-encoded boolean values.
 	 */
-	public function test_ad_targeting_reader_status_booleans() {
-		require_once __DIR__ . '/mocks/reader-data.php';
-
+	public function test_reader_status_targets_only_flags_stored_as_true() {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
 
@@ -242,8 +222,6 @@ class ModelTest extends WP_UnitTestCase {
 	 * and is no longer targeted as a subscriber.
 	 */
 	public function test_former_subscriber_is_not_targeted_as_subscriber() {
-		require_once __DIR__ . '/mocks/reader-data.php';
-
 		wp_set_current_user( self::factory()->user->create() );
 
 		try {

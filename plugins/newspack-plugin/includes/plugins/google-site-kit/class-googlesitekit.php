@@ -308,7 +308,7 @@ class GoogleSiteKit {
 
 		// If the reader is signed up for any newsletters.
 		$params['is_newsletter_subscriber'] = Reader_Data::get_bool( $current_user->ID, 'is_newsletter_subscriber' ) ? 'yes' : 'no';
-		// If reader has donated.
+		// If the reader is a donor. Cancelling a recurring donation makes them a former donor instead.
 		$params['is_donor'] = Reader_Data::get_bool( $current_user->ID, 'is_donor' ) ? 'yes' : 'no';
 		// If reader has any currently active non-donation subscriptions.
 		$params['is_subscriber'] = empty( Reader_Data::get_active_subscriptions( $current_user->ID ) ) ? 'no' : 'yes';
