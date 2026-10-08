@@ -1,3 +1,10 @@
+## newspack-newsletters [3.41.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.4...newspack-newsletters@3.41.5) (2026-10-06)
+
+
+### Bug Fixes
+
+* **newsletters:** send AC test emails to multiple recipients (NPPM-3417) ([#1118](https://github.com/Automattic/newspack-workspace/issues/1118)) ([eaf5bd5](https://github.com/Automattic/newspack-workspace/commit/eaf5bd58b186a6c58be862fbac926f9780f5b64a))
+
 ## newspack-newsletters [3.41.4](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.3...newspack-newsletters@3.41.4) (2026-09-28)
 
 

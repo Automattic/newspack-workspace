@@ -14,6 +14,7 @@
  */
 
 use Newspack\CLI\Teams_Migration;
+use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 
@@ -46,6 +47,13 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 	 * @var int[]
 	 */
 	private $invitation_ids = [];
+
+	/**
+	 * Gate post IDs to clean up.
+	 *
+	 * @var int[]
+	 */
+	private $gate_ids = [];
 
 	/**
 	 * Include the WC mocks.
@@ -87,12 +95,13 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		foreach ( $this->team_ids as $team_id ) {
 			wp_delete_post( $team_id, true );
 		}
-		foreach ( $this->invitation_ids as $invitation_id ) {
-			wp_delete_post( $invitation_id, true );
+		foreach ( [ ...$this->invitation_ids, ...$this->gate_ids ] as $post_id ) {
+			wp_delete_post( $post_id, true );
 		}
 		$this->user_ids       = [];
 		$this->team_ids       = [];
 		$this->invitation_ids = [];
+		$this->gate_ids       = [];
 		parent::tear_down();
 	}
 
@@ -1517,5 +1526,148 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertSame( 500, $item->get_product_id(), 'A non-variation product links by product ID.' );
 		$this->assertSame( 0, $item->get_variation_id(), 'A non-variation product has no variation ID.' );
 		$this->assertNotFalse( $item->get_product(), 'The line item must resolve to a product.' );
+	}
+
+	/**
+	 * Publish a gate whose "Active subscription" rule accepts the given products.
+	 *
+	 * @param int[] $product_ids Products the gate accepts.
+	 * @return int Gate post ID.
+	 */
+	private function create_gate_requiring_subscription_to( array $product_ids ): int {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Paywall' ] );
+		$this->assertNotWPError( $gate_id, 'Fixture gate creation should succeed.' );
+		$this->gate_ids[] = $gate_id;
+		wp_update_post(
+			[
+				'ID'          => $gate_id,
+				'post_status' => 'publish',
+			]
+		);
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => $product_ids,
+						],
+					],
+				],
+			]
+		);
+		return $gate_id;
+	}
+
+	/**
+	 * Run modes migrate-teams must agree on.
+	 *
+	 * @return array
+	 */
+	public function run_mode_provider() {
+		return [
+			'dry run' => [ false ],
+			'live'    => [ true ],
+		];
+	}
+
+	/**
+	 * A team on an active $0 subscription whose line items no gate accepts is
+	 * skipped and reported as an error, not migrated: its members would join a
+	 * group that grants them nothing. A $0 team whose subscription does hold an
+	 * accepted product migrates in the same run, and the dry run predicts the
+	 * live outcome.
+	 *
+	 * @dataProvider run_mode_provider
+	 *
+	 * @param bool $live Whether to pass --live.
+	 */
+	public function test_migrate_teams_skips_a_free_subscription_no_gate_accepts( bool $live ) {
+		require_once dirname( __DIR__, 4 ) . '/mocks/wp-cli-mocks.php';
+		WP_CLI::reset();
+		$gated_product_id   = 700;
+		$ungated_product_id = 701;
+		$this->create_gate_requiring_subscription_to( [ $gated_product_id ] );
+
+		$teams = [];
+		foreach ( [
+			'no line items'   => [],
+			'ungated product' => [ $ungated_product_id ],
+			'gated product'   => [ $gated_product_id ],
+		] as $label => $products ) {
+			$owner          = $this->create_reader();
+			$member         = $this->create_reader();
+			$subscription   = wcs_create_subscription(
+				[
+					'customer_id'    => $owner,
+					'status'         => 'active',
+					'billing_period' => 'month',
+				]
+			);
+			foreach ( $products as $product_id ) {
+				$subscription->add_product( wc_create_mock_product( [ 'id' => $product_id ] ) );
+			}
+			$teams[ $label ] = [
+				'team_id'      => $this->create_team( $owner, [ $member ], $subscription->get_id() ),
+				'member'       => $member,
+				'subscription' => $subscription,
+			];
+		}
+
+		( new Teams_Migration() )->migrate_teams(
+			[],
+			array_filter(
+				[
+					'skip-unlinked' => true,
+					'live'          => $live,
+				] 
+			) 
+		);
+		$output = implode( "\n", WP_CLI::$output );
+
+		foreach ( [ 'no line items', 'ungated product' ] as $label ) {
+			$team_id = $teams[ $label ]['team_id'];
+			$this->assertStringNotContainsString( sprintf( 'Team %d: Migrated team membership', $team_id ), $output, "A team whose subscription holds {$label} must not be reported as migrated." );
+			$this->assertStringContainsString( sprintf( 'Team %d (sub ERROR): subscription %d is $0', $team_id, $teams[ $label ]['subscription']->get_id() ), $output, "A team whose subscription holds {$label} should be listed under errors." );
+			$this->assertFalse( (bool) Group_Subscription::user_is_member( $teams[ $label ]['member'], $teams[ $label ]['subscription'] ), "No member should be added to a group whose subscription holds {$label}." );
+		}
+		$gated_team_id = $teams['gated product']['team_id'];
+		$this->assertStringContainsString( sprintf( 'Success: Team %d: Migrated team membership to existing subscription %d, added 1 group member(s)', $gated_team_id, $teams['gated product']['subscription']->get_id() ), $output, 'A $0 team on an accepted product should still migrate.' );
+		$this->assertStringContainsString( '3 team(s) processed: 1 used existing subscriptions, 0 had new subscriptions created, 2 not migrated, 0 skipped, 2 had error(s).', $output, 'Skipped teams should count as not migrated, not as using an existing subscription.' );
+		$this->assertStringContainsString( '2 team(s) were not migrated because their $0 subscription holds no product a published gate accepts', $output, 'The run should close with a count of the skipped $0 teams and how to fix them.' );
+	}
+	/**
+	 * A gate whose subscription rule names no products accepts any active
+	 * subscription, so a $0 team with no line items migrates even when another
+	 * gate lists products.
+	 */
+	public function test_migrate_teams_migrates_a_free_subscription_when_a_gate_accepts_any() {
+		require_once dirname( __DIR__, 4 ) . '/mocks/wp-cli-mocks.php';
+		WP_CLI::reset();
+		$this->create_gate_requiring_subscription_to( [ 700 ] );
+		$this->create_gate_requiring_subscription_to( [] );
+		$owner        = $this->create_reader();
+		$member       = $this->create_reader();
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$team_id      = $this->create_team( $owner, [ $member ], $subscription->get_id() );
+
+		( new Teams_Migration() )->migrate_teams(
+			[],
+			[
+				'skip-unlinked' => true,
+				'live'          => true,
+			]
+		);
+
+		$this->assertContains( sprintf( 'Success: Team %d: Migrated team membership to existing subscription %d, added 1 group member(s), promoted 0 manager(s).', $team_id, $subscription->get_id() ), WP_CLI::$output );
+		$this->assertTrue( (bool) Group_Subscription::user_is_member( $member, $subscription ) );
 	}
 }
