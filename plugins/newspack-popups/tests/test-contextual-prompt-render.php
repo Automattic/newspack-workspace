@@ -28,10 +28,11 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 
 	/**
 	 * Destinations the attribution args must not be appended to: another site,
-	 * and a scheme that isn't the web.
+	 * a scheme that isn't the web, and a same-page link.
 	 */
 	const EXTERNAL_URL = 'https://donations.example.test/give/';
 	const MAILTO_URL   = 'mailto:news@example.test';
+	const ON_PAGE_URL  = '#donate?amount=10&frequency=one_time';
 
 	/**
 	 * The copy an instance carries as its own pattern override, so "the site-wide
@@ -1869,7 +1870,8 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 	 * Attribution query args belong on the site's own destinations. A publisher
 	 * who points the CTA at an external processor or a mailto: address gets that
 	 * link back untouched — the args would be noise there at best, and a mangled
-	 * address at worst.
+	 * address at worst. A same-page link is left alone too: tagging it would turn
+	 * a click meant to open an on-page modal into a reload.
 	 */
 	public function test_only_same_site_button_destinations_are_tagged() {
 		$this->set_platform( false );
@@ -1877,7 +1879,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$group   = $this->stored_group();
 		$cta     = Newspack_Popups_Contextual_Prompt_Render::find_cta( $group );
 		$buttons = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( $landing, 'Donate' );
-		foreach ( [ self::EXTERNAL_URL, self::MAILTO_URL ] as $href ) {
+		foreach ( [ self::EXTERNAL_URL, self::MAILTO_URL, self::ON_PAGE_URL ] as $href ) {
 			$elsewhere = Newspack_Popups_Contextual_Prompt_Pattern::build_buttons_child( $href, 'Elsewhere' );
 			$buttons   = Newspack_Popups_Contextual_Prompt_Render::append_child( $buttons, $elsewhere['innerBlocks'][0] );
 		}
@@ -1896,17 +1898,20 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		preg_match_all( '/href="([^"]*)"/', $rendered, $matches );
 		$hrefs = $matches[1];
 
-		$this->assertCount( 3, $hrefs );
+		$this->assertCount( 4, $hrefs );
 		$this->assertStringContainsString( 'contextual_prompt_post_id=', $hrefs[0], 'The donor landing page is this site, so it is tagged.' );
 		$this->assertSame( self::EXTERNAL_URL, $hrefs[1] );
 		$this->assertSame( self::MAILTO_URL, $hrefs[2] );
+		$this->assertSame( self::ON_PAGE_URL, $hrefs[3], 'A same-page link renders exactly as stored.' );
 	}
 
 	/**
 	 * The site's own address reached through a `www.` the home URL omits is still
 	 * this site: a publisher who typed `https://www.example.org/donate` on a site
 	 * whose home URL is `https://example.org` gets the button tagged. A genuinely
-	 * external host, and non-web schemes, still pass through untouched.
+	 * external host, non-web schemes and same-page `#` links still pass through
+	 * untouched, while a link to a page that carries a fragment loads that page,
+	 * so it is tagged.
 	 */
 	public function test_taggable_destination_matches_www_and_scheme_variants() {
 		$method = new ReflectionMethod( 'Newspack_Popups_Contextual_Prompt_Render', 'is_taggable_destination' );
@@ -1919,20 +1924,7 @@ class ContextualPromptRenderTest extends WP_UnitTestCase {
 		$this->assertFalse( $method->invoke( null, self::EXTERNAL_URL ), 'A genuinely external host is left alone.' );
 		$this->assertFalse( $method->invoke( null, self::MAILTO_URL ), 'mailto: is left alone.' );
 		$this->assertFalse( $method->invoke( null, 'tel:+15551234' ), 'tel: is left alone.' );
-	}
-
-	/**
-	 * A same-page link never loads a page, so the args would go unread, and
-	 * add_query_arg() puts them before the `#`, which turns the click into a
-	 * reload. On-page donation modals open from links shaped like
-	 * `#donate?amount=10`. A link to a page that carries a fragment still loads
-	 * that page, so it stays tagged.
-	 */
-	public function test_same_page_links_are_not_taggable() {
-		$method = new ReflectionMethod( 'Newspack_Popups_Contextual_Prompt_Render', 'is_taggable_destination' );
-		$method->setAccessible( true );
-
-		$this->assertFalse( $method->invoke( null, '#donate?amount=10&frequency=one_time' ), 'A same-page link with a query in its fragment is left alone.' );
+		$this->assertFalse( $method->invoke( null, self::ON_PAGE_URL ), 'A same-page link with a query in its fragment is left alone.' );
 		$this->assertFalse( $method->invoke( null, '#donate' ), 'A plain same-page link is left alone.' );
 		$this->assertFalse( $method->invoke( null, '  #donate?amount=10' ), 'Leading whitespace does not hide a same-page link.' );
 		$this->assertTrue( $method->invoke( null, '/donate/#form' ), 'A link to a page with a fragment loads that page, so it is tagged.' );
