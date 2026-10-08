@@ -66,7 +66,7 @@ class User_Updated extends Abstract_Incoming_Event {
 		// The display name and email address are further gated on the target's own role:
 		// they only apply to an account the sync itself is allowed to resolve into (a synced
 		// reader, or one with no role at all), never to a role set outside the network. The
-		// user URL and watched meta (bio, social links, etc.) are unaffected by this gate —
+		// user URL and watched meta (bio, social links, etc.) are unaffected by this gate—
 		// that sync also covers staff bylines, which legitimately hold a role outside the
 		// synced set.
 		if ( isset( $data->prop ) ) {

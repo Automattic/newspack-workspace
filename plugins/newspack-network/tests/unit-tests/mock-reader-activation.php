@@ -5,7 +5,7 @@
  *
  * PHPUnit discovers and requires every test file once per process, so this
  * class, once defined, is available to every test that runs afterward in the
- * same run — not just the test file that needs it. It implements every
+ * same run—not just the test file that needs it. It implements every
  * member newspack-network itself calls (grep 'Reader_Activation::' under
  * includes/), so a later test exercising one of those other call sites finds
  * a working stand-in instead of a fatal missing-method error.

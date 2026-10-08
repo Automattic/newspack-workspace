@@ -116,9 +116,10 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 
 	/**
 	 * A user_updated event also applies watched profile fields to an account
-	 * with no role of its own, same as the synced-reader case below—the
-	 * PR description's "holds no role, or whose role(s) are all synced
-	 * reader roles" claim covers both, so both need a test.
+	 * with no role of its own, same as the synced-reader case below—
+	 * is_syncable_account() treats both states as safe to sync, and the
+	 * roleless case above only exercises reader_registered's role-add path,
+	 * not this one.
 	 */
 	public function test_user_updated_updates_profile_fields_of_existing_roleless_account() {
 		$user_id = $this->factory->user->create(
