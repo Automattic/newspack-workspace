@@ -1,3 +1,20 @@
+## newspack [6.53.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.10...newspack@6.53.11) (2026-10-06)
+
+
+### Bug Fixes
+
+* **recaptcha:** skip options cache flush when nothing to migrate ([#1248](https://github.com/Automattic/newspack-workspace/issues/1248)) ([2eeb1b7](https://github.com/Automattic/newspack-workspace/commit/2eeb1b7c5635efda91ad8541ca11fb11c09436ee))
+
+## newspack [6.53.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.9...newspack@6.53.10) (2026-10-05)
+
+
+### Bug Fixes
+
+* **content-gate:** leave one-time lapse catch-up to the cron run ([11a3dd8](https://github.com/Automattic/newspack-workspace/commit/11a3dd87dcb225d7060b7927ea524357f8ee327a))
+* **content-gate:** run queued access checks before the lapse sweep ([c0cadb2](https://github.com/Automattic/newspack-workspace/commit/c0cadb268e02cdeb069a4d3108aa0afa3b175537))
+* **content-gate:** skip refunds and resume capped one-time lapse sweeps ([28d78f5](https://github.com/Automattic/newspack-workspace/commit/28d78f5ef26948adb2cbe1d2b77ec15a5636ad3b))
+* **content-gate:** sync premium newsletter lists for one-time purchases ([d237864](https://github.com/Automattic/newspack-workspace/commit/d237864732206187dd46077359a3660dc663b9f5))
+
 ## newspack [6.53.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.8...newspack@6.53.9) (2026-10-02)
 
 

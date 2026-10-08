@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.34.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.2...newspack-blocks@4.34.3) (2026-10-06)
+
+
+### Bug Fixes
+
+* **blocks:** let Load More reach the last page (NPPM-3337) ([#1241](https://github.com/Automattic/newspack-workspace/issues/1241)) ([183d05d](https://github.com/Automattic/newspack-workspace/commit/183d05d99fd695e68c8b118fe963ad3b3c67f2db))
+
 ## @automattic/newspack-blocks [4.34.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.1...newspack-blocks@4.34.2) (2026-09-29)
 
 

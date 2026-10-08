@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.53.9\n"
+"Project-Id-Version: Newspack 6.53.11\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-01T18:20:38+00:00\n"
+"POT-Creation-Date: 2026-10-06T18:06:54+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -988,21 +988,21 @@ msgid "Updated"
 msgstr ""
 
 #. translators: 1: Privacy Policy URL, 2: Terms of Service URL.
-#: includes/class-recaptcha.php:389
+#: includes/class-recaptcha.php:395
 #, php-format
 msgid "This site is protected by reCAPTCHA and the Google <a href=\"%1$s\" rel=\"noopener noreferrer\" target=\"_blank\">Privacy Policy</a> and <a href=\"%2$s\" rel=\"external\" target=\"_blank\">Terms of Service</a> apply."
 msgstr ""
 
-#: includes/class-recaptcha.php:407
+#: includes/class-recaptcha.php:413
 msgid "Could not complete this request. Please try again later."
 msgstr ""
 
-#: includes/class-recaptcha.php:407
+#: includes/class-recaptcha.php:413
 msgid "Please complete the challenge to continue."
 msgstr ""
 
 #. Translators: error message for reCaptcha.
-#: includes/class-recaptcha.php:465
+#: includes/class-recaptcha.php:471
 #, php-format
 msgid "Error: %s"
 msgstr ""
@@ -2383,102 +2383,102 @@ msgstr ""
 msgid "Invalid content rule value."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1597
+#: includes/content-gate/class-content-gate.php:1606
 msgid "Sorry, comments are closed for this post."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1700
+#: includes/content-gate/class-content-gate.php:1709
 #: includes/plugins/wc-memberships/class-memberships.php:149
 #: dist/audience-wizards.de5120899d94c44d6595.js:243
 #: src/wizards/audience/views/setup/content-gating.js:73
 msgid "Content Gate"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1702
+#: includes/content-gate/class-content-gate.php:1711
 msgid "Content Gate published."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1703
+#: includes/content-gate/class-content-gate.php:1712
 msgid "Content Gate reverted to draft."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1704
+#: includes/content-gate/class-content-gate.php:1713
 msgid "Content Gate updated."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1705
+#: includes/content-gate/class-content-gate.php:1714
 msgid "New Content Gate"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1706
+#: includes/content-gate/class-content-gate.php:1715
 msgid "Edit Content Gate"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1707
+#: includes/content-gate/class-content-gate.php:1716
 msgid "View Content Gate"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1717
-#: includes/content-gate/class-content-gate.php:2454
-#: includes/content-gate/class-content-gate.php:2590
+#: includes/content-gate/class-content-gate.php:1726
+#: includes/content-gate/class-content-gate.php:2463
+#: includes/content-gate/class-content-gate.php:2599
 msgid "Content Gate Layout"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2155
+#: includes/content-gate/class-content-gate.php:2164
 msgid "Untitled Content Gate"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2228
-#: includes/content-gate/class-content-gate.php:2594
+#: includes/content-gate/class-content-gate.php:2237
+#: includes/content-gate/class-content-gate.php:2603
 msgid "Registration Access Layout"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2229
-#: includes/content-gate/class-content-gate.php:2597
+#: includes/content-gate/class-content-gate.php:2238
+#: includes/content-gate/class-content-gate.php:2606
 msgid "Paid Access Layout"
 msgstr ""
 
 #. translators: %s: title of the gate being duplicated.
-#: includes/content-gate/class-content-gate.php:2258
+#: includes/content-gate/class-content-gate.php:2267
 #, php-format
 msgid "%s copy"
 msgstr ""
 
 #. translators: 1: title of the gate being duplicated. 2: number of this copy.
-#: includes/content-gate/class-content-gate.php:2264
+#: includes/content-gate/class-content-gate.php:2273
 #, php-format
 msgid "%1$s copy %2$d"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2324
-#: includes/content-gate/class-content-gate.php:2586
-#: includes/content-gate/class-content-gate.php:2942
-#: includes/content-gate/class-content-gate.php:2969
-#: includes/content-gate/class-content-gate.php:3022
+#: includes/content-gate/class-content-gate.php:2333
+#: includes/content-gate/class-content-gate.php:2595
+#: includes/content-gate/class-content-gate.php:2951
+#: includes/content-gate/class-content-gate.php:2978
+#: includes/content-gate/class-content-gate.php:3031
 msgid "Gate not found."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2327
+#: includes/content-gate/class-content-gate.php:2336
 msgid "This gate cannot be duplicated."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2531
+#: includes/content-gate/class-content-gate.php:2540
 msgid "This article is only available to members."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2576
+#: includes/content-gate/class-content-gate.php:2585
 msgid "Gate ID is required."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2581
+#: includes/content-gate/class-content-gate.php:2590
 msgid "Gate mode is required."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2599
+#: includes/content-gate/class-content-gate.php:2608
 msgid "Invalid gate mode."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:2995
+#: includes/content-gate/class-content-gate.php:3004
 msgid "Invalid gate setting key."
 msgstr ""
 
