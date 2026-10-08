@@ -234,6 +234,67 @@ class Newspack_Test_Membership_Segments_Migration extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A gate with several rules in one group grants access only to readers who
+	 * hold all of them. The notes judge each plan product by whether it passes a
+	 * group on its own, and report a group that admits readers without any plan
+	 * product.
+	 */
+	public function test_notes_judge_multi_rule_groups_by_what_passes_alone() {
+		$either_gate_id = $this->create_paid_gate( 'Digital or bundle', [ 101 ] );
+		update_post_meta(
+			$either_gate_id,
+			'custom_access',
+			[
+				'active'       => true,
+				'access_rules' => [
+					[ self::subscription_rule( 101 ) ],
+					[ self::subscription_rule( 555 ), self::subscription_rule( 556 ) ],
+				],
+			]
+		);
+		$together_gate_id = $this->create_paid_gate( 'Digital plus print', [ 101 ] );
+		update_post_meta(
+			$together_gate_id,
+			'custom_access',
+			[
+				'active'       => true,
+				'access_rules' => [ [ self::subscription_rule( 101 ), self::subscription_rule( 557 ) ] ],
+			]
+		);
+		$plan_id = $this->create_plan( 'Members', 'purchase', [ 101 ] );
+		$this->add_segment(
+			12,
+			[
+				[
+					'criteria_id' => 'not_active_memberships',
+					'value'       => [ $plan_id ],
+				],
+			]
+		);
+
+		$this->run_command();
+
+		$this->assertSame(
+			sprintf( 'gate %d also accepts product(s) 555, 556; gate %d requires plan product(s) 101 together with other products', $either_gate_id, $together_gate_id ),
+			WP_CLI::$tables[0]['items'][0]['notes']
+		);
+	}
+
+	/**
+	 * A subscription rule for one product.
+	 *
+	 * @param int $product_id Product ID.
+	 *
+	 * @return array
+	 */
+	private static function subscription_rule( $product_id ) {
+		return [
+			'slug'  => 'subscription',
+			'value' => [ $product_id ],
+		];
+	}
+
+	/**
 	 * A segment that already uses the target criterion would need the two lists
 	 * combined, and folding them into one list turns an AND into an OR. It is left
 	 * for a person.

@@ -15,8 +15,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * Access here means holding a product a gate's rules require: a subscription
  * the reader owns, a seat in someone else's group subscription, or a one-time
- * purchase. `active_subscriptions` sees only the first, and
- * `active_memberships` stops changing once WooCommerce Memberships is off.
+ * purchase. `active_subscriptions` sees only the first, and the membership
+ * criteria are unregistered once WooCommerce Memberships is off.
  *
  * Each reader's list carries a stamp: the gate configuration it was computed
  * against and when. A page view recomputes a list that is missing, was
@@ -385,7 +385,9 @@ final class Gate_Access_Reader_Data {
 
 	/**
 	 * Backfill the item before the session hydration response reads it, the path
-	 * a reader on a cached page takes.
+	 * a reader on a cached page takes. The hydration endpoint carries no CSRF
+	 * nonce; this takes nothing from the request and recomputes from server state
+	 * alone, so a forged request can only make the item correct.
 	 *
 	 * @param array $data    Hydration response data.
 	 * @param int   $user_id The authenticated user's ID.
@@ -405,6 +407,7 @@ final class Gate_Access_Reader_Data {
 	 *
 	 * Options are computed in admin only: the segments editor is their sole
 	 * consumer, and a list criterion with options renders there as a checkbox list.
+	 * The editor gets the criteria only when there is a paid gate to offer.
 	 * Values are strings because the editor compares checkbox values strictly; the
 	 * front-end list matchers compare loosely against the stored integer IDs.
 	 *
@@ -420,7 +423,15 @@ final class Gate_Access_Reader_Data {
 		// matches anyone until Access Control is back on.
 		$attribute = $is_enabled ? self::STORE_KEY : self::INACTIVE_ATTRIBUTE;
 		// Admin-ajax and heartbeat requests are admin too, but never render the editor.
-		$options = $is_enabled && is_admin() && ! wp_doing_ajax() ? self::get_gate_options() : [];
+		$is_editor = is_admin() && ! wp_doing_ajax();
+		$options   = $is_enabled && $is_editor ? self::get_gate_options() : [];
+		// The editor renders a list criterion with no options as a free-text field
+		// that can never match, so with no paid gate to pick the criteria stay out of
+		// it, unless a saved segment already uses one: that segment would otherwise
+		// carry a condition the editor neither shows nor lets anyone remove.
+		if ( $is_editor && empty( $options ) && ! self::is_used_by_a_segment() ) {
+			return $criteria;
+		}
 
 		$criteria['can_access_gates']    = [
 			'name'               => __( 'Can access content gate(s)', 'newspack-plugin' ),
@@ -439,6 +450,25 @@ final class Gate_Access_Reader_Data {
 			'options'            => $options,
 		];
 		return $criteria;
+	}
+
+	/**
+	 * Whether any saved segment uses one of the gate-access criteria.
+	 *
+	 * @return bool
+	 */
+	private static function is_used_by_a_segment(): bool {
+		if ( ! class_exists( '\Newspack_Segments_Model' ) ) {
+			return false;
+		}
+		foreach ( \Newspack_Segments_Model::get_segments() as $segment ) {
+			foreach ( $segment['criteria'] ?? [] as $criterion ) {
+				if ( in_array( $criterion['criteria_id'] ?? '', [ 'can_access_gates', 'cannot_access_gates' ], true ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

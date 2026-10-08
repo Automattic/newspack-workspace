@@ -30,17 +30,22 @@ class Membership_Segments_Migration {
 	 * Rewrite segments that target "Has / Does not have active membership" onto
 	 * "Can / Cannot access content gate".
 	 *
-	 * The membership criteria read `active_memberships`, which only Memberships
-	 * events write, so once Memberships is deactivated those segments stop
-	 * changing. The gate-access criteria read a list that Access Control keeps
+	 * The membership criteria exist only while Memberships is active. Once it is
+	 * deactivated they are unregistered, Campaigns skips them, and a segment
+	 * built on them drops that condition: a "non-members" segment then matches
+	 * members too. The gate-access criteria read a list that Access Control keeps
 	 * current, and that counts group-subscription members.
+	 *
+	 * Run it while Memberships is still active. A criterion this command cannot
+	 * map can then still be edited in the segment editor, which no longer shows
+	 * membership criteria once Memberships is off.
 	 *
 	 * Each plan maps to the paid gates whose product rules require one of the
 	 * plan's products, which is how `migrate-membership-gates` carried the plan
 	 * across. Where the rewritten segment can match different readers than the
-	 * plans did (a gate accepting other products, a gate requiring several
-	 * products together, a plan product no gate requires), the notes column says
-	 * so. A plan with no gate equivalent leaves its segment criterion
+	 * plans did (a gate admitting holders of other products, a plan product that
+	 * passes only together with others, a plan product no gate requires), the
+	 * notes column says so. A plan with no gate equivalent leaves its segment criterion
 	 * untouched and is reported:
 	 *
 	 * - a plan granted by free signup or manual assignment, not by a product;
@@ -75,11 +80,10 @@ class Membership_Segments_Migration {
 		if ( ! class_exists( '\Newspack_Segments_Model' ) ) {
 			WP_CLI::error( 'Newspack Campaigns is not active, so there are no segments to migrate.' );
 		}
-		// The target criteria are registered only with Access Control on. A segment
-		// rewritten onto an unregistered criterion loses that condition and matches
-		// every reader.
+		// With Access Control off the target criteria match no reader, so a
+		// rewritten segment would stop showing its prompts to anyone.
 		if ( ! Gate_Access_Reader_Data::is_enabled() ) {
-			WP_CLI::error( 'Access Control is not enabled (NEWSPACK_CONTENT_GATES), so the gate-access criteria do not exist yet.' );
+			WP_CLI::error( 'Access Control is not enabled (NEWSPACK_CONTENT_GATES). Rewritten segments would match no reader until it is, so enable it first.' );
 		}
 		$live = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
 
@@ -156,7 +160,7 @@ class Membership_Segments_Migration {
 
 		$skipped = count( array_filter( $rows, fn( $row ) => str_starts_with( $row['result'], 'skipped' ) ) );
 		if ( $skipped ) {
-			WP_CLI::warning( sprintf( '%d criteria were left on membership plans. Edit those segments by hand.', $skipped ) );
+			WP_CLI::warning( sprintf( '%d criteria were left on membership plans. Edit those segments by hand while WooCommerce Memberships is active; the segment editor does not show membership criteria without it.', $skipped ) );
 		}
 		if ( $live ) {
 			WP_CLI::success( sprintf( 'Rewrote %d segment(s).', $rewritten ) );
@@ -178,11 +182,10 @@ class Membership_Segments_Migration {
 			$product_ids = [];
 			foreach ( Gate_Access_Reader_Data::get_product_rule_groups( $gate ) as $group ) {
 				foreach ( $group as $rule ) {
-					$value       = $rule['value'] ?? [];
-					$product_ids = array_merge( $product_ids, (array) ( 'one_time_purchase' === $rule['slug'] ? ( $value['product_ids'] ?? [] ) : $value ) );
+					$product_ids = array_merge( $product_ids, self::get_rule_product_ids( $rule ) );
 				}
 			}
-			$gate_products[ (int) $gate['id'] ] = array_values( array_unique( array_map( 'intval', $product_ids ) ) );
+			$gate_products[ (int) $gate['id'] ] = array_values( array_unique( $product_ids ) );
 		}
 		return $gate_products;
 	}
@@ -191,9 +194,10 @@ class Membership_Segments_Migration {
 	 * Name where the rewritten segment can match different readers than the plans
 	 * did, so the operator can judge each case:
 	 *
-	 * - a mapped gate also accepts products outside the plans (the segment widens);
-	 * - a mapped gate requires several products together (it narrows);
-	 * - a plan product that no mapped gate requires (its holders change sides).
+	 * - a mapped gate admits readers who hold no plan product (the segment widens);
+	 * - a plan product passes a mapped gate only together with other products
+	 *   (it narrows);
+	 * - a plan product no mapped gate requires (its holders change sides).
 	 *
 	 * @param int[]             $gate_ids      Mapped gate IDs.
 	 * @param int[]             $plan_ids      The criterion's plan IDs.
@@ -206,24 +210,63 @@ class Membership_Segments_Migration {
 		foreach ( $plan_ids as $plan_id ) {
 			$plan_products = array_merge( $plan_products, array_map( 'intval', (array) get_post_meta( $plan_id, '_product_ids', true ) ) );
 		}
+		$plan_products  = array_values( array_unique( array_filter( $plan_products ) ) );
 		$notes          = [];
 		$gated_products = [];
 		foreach ( $gate_ids as $gate_id ) {
 			$gated_products = array_merge( $gated_products, $gate_products[ $gate_id ] ?? [] );
-			$extra          = array_diff( $gate_products[ $gate_id ] ?? [], $plan_products );
+			$gate           = \Newspack\Content_Gate::get_gate( $gate_id );
+			$groups         = is_array( $gate ) ? Gate_Access_Reader_Data::get_product_rule_groups( $gate ) : [];
+
+			// A group admits readers with no plan product when each of its rules
+			// accepts some product outside the plans.
+			$extra = [];
+			foreach ( $groups as $group ) {
+				$outside = array_map( fn( $rule ) => array_diff( self::get_rule_product_ids( $rule ), $plan_products ), $group );
+				if ( ! in_array( [], $outside, true ) ) {
+					$extra = array_merge( $extra, ...$outside );
+				}
+			}
+			$extra = array_values( array_unique( $extra ) );
 			if ( $extra ) {
 				$notes[] = sprintf( 'gate %d also accepts product(s) %s', $gate_id, implode( ', ', $extra ) );
 			}
-			$gate = \Newspack\Content_Gate::get_gate( $gate_id );
-			if ( is_array( $gate ) && array_filter( Gate_Access_Reader_Data::get_product_rule_groups( $gate ), fn( $group ) => count( $group ) > 1 ) ) {
-				$notes[] = sprintf( 'gate %d requires several products together', $gate_id );
+
+			// A plan product grants the gate alone when some group's every rule accepts it.
+			$needs_more = [];
+			foreach ( array_intersect( $plan_products, $gate_products[ $gate_id ] ?? [] ) as $product_id ) {
+				$passes_alone = false;
+				foreach ( $groups as $group ) {
+					if ( ! array_filter( $group, fn( $rule ) => ! in_array( $product_id, self::get_rule_product_ids( $rule ), true ) ) ) {
+						$passes_alone = true;
+						break;
+					}
+				}
+				if ( ! $passes_alone ) {
+					$needs_more[] = $product_id;
+				}
+			}
+			if ( $needs_more ) {
+				$notes[] = sprintf( 'gate %d requires plan product(s) %s together with other products', $gate_id, implode( ', ', $needs_more ) );
 			}
 		}
-		$uncovered = array_diff( array_filter( $plan_products ), $gated_products );
+		$uncovered = array_diff( $plan_products, $gated_products );
 		if ( $uncovered ) {
-			$notes[] = sprintf( 'no mapped gate requires plan product(s) %s', implode( ', ', array_unique( $uncovered ) ) );
+			$notes[] = sprintf( 'no mapped gate requires plan product(s) %s', implode( ', ', $uncovered ) );
 		}
 		return implode( '; ', $notes );
+	}
+
+	/**
+	 * Products a product rule accepts.
+	 *
+	 * @param array $rule A subscription or one-time purchase rule.
+	 *
+	 * @return int[]
+	 */
+	private static function get_rule_product_ids( array $rule ): array {
+		$value = $rule['value'] ?? [];
+		return array_map( 'intval', (array) ( 'one_time_purchase' === ( $rule['slug'] ?? '' ) ? ( $value['product_ids'] ?? [] ) : $value ) );
 	}
 
 	/**

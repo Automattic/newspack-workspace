@@ -12,6 +12,8 @@ use Newspack\Group_Subscription_Settings;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Data;
 
+require_once dirname( __DIR__, 2 ) . '/mocks/newspack-segments-model-mock.php';
+
 /**
  * The item lists the paid gates a reader can pass, however they hold the product.
  *
@@ -282,9 +284,10 @@ class Newspack_Test_Gate_Access_Reader_Data extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A one-time purchase grants access while its order counts as paid. The buyer
-	 * is recomputed when an order starts or stops counting, not on every status
-	 * move, since the event fires once per line item.
+	 * An order that starts or stops counting as paid can change access (a
+	 * one-time purchase grants it only while paid), so the buyer is recomputed
+	 * then, and not on a move between two paid statuses: the event fires once per
+	 * line item.
 	 */
 	public function test_order_paid_status_crossing_refreshes_the_buyer() {
 		$buyer_id = $this->create_reader();
@@ -371,6 +374,55 @@ class Newspack_Test_Gate_Access_Reader_Data extends WP_UnitTestCase {
 		$this->view_page_as( $owner_id );
 
 		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $owner_id ) );
+	}
+
+	/**
+	 * A refused write leaves the reader unstamped, so the next page view tries
+	 * again. Stamped with no item, they would match every "cannot access" segment
+	 * until the list aged out.
+	 */
+	public function test_refused_write_is_retried_on_next_page_view() {
+		$owner_id = $this->create_reader();
+		$this->create_subscription( $owner_id );
+		add_filter( 'newspack_reader_data_max_items', '__return_zero', 11 );
+
+		$this->view_page_as( $owner_id );
+		$this->assertFalse( $this->stored_gates( $owner_id ) );
+
+		remove_filter( 'newspack_reader_data_max_items', '__return_zero', 11 );
+		$this->view_page_as( $owner_id );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $owner_id ) );
+	}
+
+	/**
+	 * The segment editor renders a list criterion with no options as a free-text
+	 * field that can never match. With no paid gate to pick, the criteria stay
+	 * out of the editor, unless a saved segment uses one: the publisher has to be
+	 * able to see and remove that condition. The front end keeps them either way.
+	 */
+	public function test_criteria_stay_out_of_the_editor_without_paid_gates_unless_used() {
+		wp_delete_post( $this->gate_id, true );
+		Newspack_Segments_Model::$segments = [];
+
+		$front_end_criteria = Gate_Access_Reader_Data::register_criteria( [] );
+		set_current_screen( 'dashboard' );
+		$editor_criteria_unused = Gate_Access_Reader_Data::register_criteria( [] );
+		Newspack_Segments_Model::$segments[1] = [
+			'id'       => 1,
+			'criteria' => [
+				[
+					'criteria_id' => 'cannot_access_gates',
+					'value'       => [ (string) $this->gate_id ],
+				],
+			],
+		];
+		$editor_criteria_used = Gate_Access_Reader_Data::register_criteria( [] );
+		set_current_screen( 'front' );
+		Newspack_Segments_Model::$segments = [];
+
+		$this->assertArrayHasKey( 'cannot_access_gates', $front_end_criteria );
+		$this->assertSame( [], $editor_criteria_unused );
+		$this->assertArrayHasKey( 'cannot_access_gates', $editor_criteria_used );
 	}
 
 	/**
