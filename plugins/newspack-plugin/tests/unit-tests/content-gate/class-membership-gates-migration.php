@@ -1606,7 +1606,7 @@ HTML;
 		$gate_post      = $this->create_gate_post( $layout_content );
 
 		$this->assertSame(
-			sprintf( 'gate post %d; checked synced pattern %d and synced pattern %d, which WordPress does not render', $gate_post->ID, $prose_pattern, $draft_pattern ),
+			sprintf( 'gate post %d; checked synced patterns %d and %d; WordPress does not render %d', $gate_post->ID, $prose_pattern, $draft_pattern, $draft_pattern ),
 			$this->invoke_private_static( 'describe_paid_layout_sources', [ $gate_post, $layout_content ] )
 		);
 		$this->assertSame(
@@ -1658,7 +1658,7 @@ HTML;
 		$issues = $this->invoke_private_static( 'verify_migrated_gate', [ $gate_id, true ] );
 		$this->assertCount( 1, $issues );
 		$this->assertStringContainsString( 'no checkout button and no link', $issues[0] );
-		$this->assertStringContainsString( sprintf( 'synced pattern %d', $prose_pattern ), $issues[0], 'The issue names the pattern it checked.' );
+		$this->assertStringContainsString( sprintf( 'checked synced pattern %d', $prose_pattern ), $issues[0], 'The issue names the pattern it checked.' );
 	}
 
 	/**

@@ -1032,7 +1032,7 @@ class Membership_Gates_Migration {
 				$issues[]           = sprintf(
 					'its paid access layout (post %d%s) has no checkout button and no link, so the reader is stopped with no way to buy',
 					$custom_access['gate_layout_id'],
-					'' === $patterns_inspected ? '' : '; checked ' . $patterns_inspected
+					'' === $patterns_inspected ? '' : '; ' . $patterns_inspected
 				);
 			}
 		}
@@ -1088,7 +1088,7 @@ class Membership_Gates_Migration {
 	 * Each pattern is read as saved. Pattern overrides are not applied: an override
 	 * that sets a button's link per placement is not counted, and one that blanks a
 	 * saved link does not stop that link counting. Matching overrides to the blocks
-	 * they bind is more than a pre-flight heuristic needs.
+	 * they bind is more than this heuristic needs.
 	 *
 	 * @param string $content Layout block markup.
 	 *
@@ -1098,10 +1098,8 @@ class Membership_Gates_Migration {
 		if ( self::markup_offers_a_purchase( $content ) ) {
 			return true;
 		}
-		$reached = [];
-		self::collect_reached_patterns( \parse_blocks( $content ), $reached );
-		foreach ( array_keys( array_filter( $reached ) ) as $ref ) {
-			if ( self::markup_offers_a_purchase( \get_post( $ref )->post_content ) ) {
+		foreach ( array_filter( self::reached_patterns( $content ) ) as $pattern ) {
+			if ( self::markup_offers_a_purchase( $pattern->post_content ) ) {
 				return true;
 			}
 		}
@@ -1118,13 +1116,12 @@ class Membership_Gates_Migration {
 	 * @return string Empty when there is neither a gate post nor a pattern to name.
 	 */
 	private static function describe_paid_layout_sources( ?\WP_Post $gate_post, string $paid_layout ): string {
-		$patterns = self::describe_patterns_inspected( $paid_layout );
 		return implode(
 			'; ',
 			array_filter(
 				[
 					$gate_post ? sprintf( 'gate post %d', $gate_post->ID ) : '',
-					'' === $patterns ? '' : 'checked ' . $patterns,
+					self::describe_patterns_inspected( $paid_layout ),
 				]
 			)
 		);
@@ -1143,38 +1140,65 @@ class Membership_Gates_Migration {
 	 * @return string Empty when the layout references no pattern.
 	 */
 	private static function describe_patterns_inspected( string $content ): string {
+		$reached = self::reached_patterns( $content );
+		if ( empty( $reached ) ) {
+			return '';
+		}
+		$description = sprintf(
+			'checked synced pattern%s %s',
+			count( $reached ) > 1 ? 's' : '',
+			self::join_ids( array_keys( $reached ) )
+		);
+		$not_rendered = array_keys( array_filter( $reached, fn( ?\WP_Post $pattern ): bool => null === $pattern ) );
+		if ( ! empty( $not_rendered ) ) {
+			$description .= sprintf( '; WordPress does not render %s', self::join_ids( $not_rendered ) );
+		}
+		return $description;
+	}
+
+	/**
+	 * Join IDs for a message: "4", "4 and 7", "4, 7 and 9".
+	 *
+	 * @param int[] $ids IDs, at least one.
+	 *
+	 * @return string
+	 */
+	private static function join_ids( array $ids ): string {
+		$last = array_pop( $ids );
+		return empty( $ids ) ? (string) $last : implode( ', ', $ids ) . ' and ' . $last;
+	}
+
+	/**
+	 * Every synced pattern a layout reaches, following chains, in the order reached.
+	 *
+	 * @param string $content Layout block markup.
+	 *
+	 * @return array<int,\WP_Post|null> The pattern keyed by ID, or null where WordPress
+	 *                                   renders nothing for the reference.
+	 */
+	private static function reached_patterns( string $content ): array {
 		$reached = [];
 		self::collect_reached_patterns( \parse_blocks( $content ), $reached );
-		return implode(
-			' and ',
-			array_map(
-				fn( int $ref, bool $renders ): string => $renders
-					? sprintf( 'synced pattern %d', $ref )
-					: sprintf( 'synced pattern %d, which WordPress does not render', $ref ),
-				array_keys( $reached ),
-				$reached
-			)
-		);
+		return $reached;
 	}
 
 	/**
 	 * Accumulate every synced pattern a block tree reaches, following chains.
 	 *
-	 * @param array           $blocks  Parsed blocks to search.
-	 * @param array<int,bool> $reached Whether WordPress renders each pattern reached, keyed
-	 *                                 by ID, filled by reference. Doubles as the visited set.
+	 * @param array                     $blocks  Parsed blocks to search.
+	 * @param array<int,\WP_Post|null> $reached See reached_patterns(), filled by reference.
+	 *                                           Doubles as the visited set.
 	 *
 	 * @return void
 	 */
 	private static function collect_reached_patterns( array $blocks, array &$reached ): void {
 		foreach ( self::find_pattern_refs( $blocks ) as $ref ) {
-			if ( isset( $reached[ $ref ] ) ) {
+			if ( array_key_exists( $ref, $reached ) ) {
 				continue;
 			}
-			$pattern         = self::resolve_pattern_reference( $ref );
-			$reached[ $ref ] = null !== $pattern;
-			if ( $pattern ) {
-				self::collect_reached_patterns( \parse_blocks( $pattern->post_content ), $reached );
+			$reached[ $ref ] = self::resolve_pattern_reference( $ref );
+			if ( $reached[ $ref ] ) {
+				self::collect_reached_patterns( \parse_blocks( $reached[ $ref ]->post_content ), $reached );
 			}
 		}
 	}
