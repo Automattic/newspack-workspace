@@ -196,9 +196,9 @@ class Contact_Sync extends Sync {
 	 * @param array  $existing_contact Optional. Existing contact data to merge with. Defaults to null.
 	 * @param array  $options          Optional. Sync options threaded to the integration push:
 	 *                                 `skip_lists` (bool), `fields` (string[]|null) and `existing_only`
-	 *                                 (bool). A call that sets any of them always takes the direct push
-	 *                                 path, even inside a data event. `integration_id` (string|null)
-	 *                                 restricts the push fan-out to a single active integration.
+	 *                                 (bool); `integration_id` (string|null) restricts the push fan-out
+	 *                                 to a single active integration. A call that sets any of them
+	 *                                 always takes the direct push path, even inside a data event.
 	 *
 	 * @return true|\WP_Error True if succeeded or WP_Error.
 	 */
@@ -239,7 +239,10 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
-	 * Whether the given sync options are the default (no CLI scoping).
+	 * Whether the sync options leave the pushed contact whole: no list-less,
+	 * field-scoped or update-only push. `integration_id` is not checked on
+	 * purpose, since a push to one integration still sends the full contact
+	 * and keeps its retries.
 	 *
 	 * @param array $options Sync options.
 	 *
