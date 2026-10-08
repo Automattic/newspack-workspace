@@ -42,6 +42,7 @@ class Test_Legacy_Basic_Newsletter_Selection extends WP_UnitTestCase {
 		update_option( Metadata::SCHEMA_ORIGIN_OPTION, 'v1' );
 		// The field guard reads the push-enabled integrations' selections, so a
 		// set-up ESP makes Metadata::update_fields() below take effect.
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp = Integrations::get_integration( 'esp' );
 		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
 		Integrations::enable( 'esp' );

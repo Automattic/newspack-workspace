@@ -37,6 +37,7 @@ class Events {
 
 		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_order_changed', [ __CLASS__, 'item_changed' ] );
 		Data_Events::register_listener( 'woocommerce_subscription_status_changed', 'newspack_node_subscription_changed', [ __CLASS__, 'subscription_changed' ] );
+		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_one_time_purchase_changed', [ __CLASS__, 'one_time_purchase_changed' ] );
 		Data_Events::register_listener( 'newspack_network_save_product', 'newspack_network_product_updated', [ __CLASS__, 'product_updated' ] );
 	}
 
@@ -115,6 +116,75 @@ class Events {
 	}
 
 	/**
+	 * Callback for the one-time purchase listener.
+	 *
+	 * Only orders holding a one-time product with a Network ID are reported: those
+	 * are the ones that can grant access on another site, and every site would
+	 * otherwise receive every renewal and untagged order in the network. The
+	 * reading site's gate decides how long after the purchase access lasts, so the
+	 * event carries the purchase time and nothing about duration. An order with no
+	 * creation date reports 0, which fails every finite rule instead of looking new.
+	 *
+	 * A variable product's line item is the variation, so the event lists the parent
+	 * as well: other sites only know the parent's Network ID.
+	 *
+	 * @param int       $item_id     The Order ID.
+	 * @param string    $status_from The status before the change.
+	 * @param string    $status_to   The status after the change.
+	 * @param \WC_Order $order       The Order object.
+	 * @return array|null Null when the order has no such product.
+	 */
+	public static function one_time_purchase_changed( $item_id, $status_from, $status_to, $order ) {
+		$products = [];
+		foreach ( $order->get_items() as $item ) {
+			$product = $item->get_product();
+			// A subscription variation also answers to 'variation', so a renewal of a tagged
+			// variable subscription would pass the type check below and be sent as a purchase.
+			if ( ! $product || self::is_subscription_product( $product ) || ! $product->is_type( [ 'simple', 'variable', 'variation' ] ) ) {
+				continue;
+			}
+			if ( '' === (string) Product_Admin::get_network_id( $product->get_id() ) ) {
+				continue;
+			}
+			$entry                          = [
+				'id'   => $product->get_id(),
+				'name' => $product->get_name(),
+				'slug' => $product->get_slug(),
+			];
+			$products[ $product->get_id() ] = $entry;
+			$parent_id = (int) $product->get_parent_id();
+			if ( $parent_id ) {
+				$products[ $parent_id ] = array_merge( $entry, [ 'id' => $parent_id ] );
+			}
+		}
+		if ( empty( $products ) ) {
+			return null;
+		}
+		$date_created = $order->get_date_created();
+		return [
+			'id'           => $item_id,
+			'user_id'      => $order->get_customer_id(),
+			'email'        => $order->get_billing_email(),
+			'status_after' => $status_to,
+			'purchased_at' => $date_created ? $date_created->getTimestamp() : 0,
+			'products'     => $products,
+		];
+	}
+
+	/**
+	 * Whether a product is a subscription product, including a variation of one.
+	 *
+	 * @param \WC_Product $product Product.
+	 * @return bool
+	 */
+	private static function is_subscription_product( $product ) {
+		if ( class_exists( '\WC_Subscriptions_Product' ) ) {
+			return \WC_Subscriptions_Product::is_subscription( $product );
+		}
+		return $product->is_type( [ 'subscription', 'variable-subscription', 'subscription_variation' ] );
+	}
+
+	/**
 	 * Callback for the Data Events API listeners
 	 *
 	 * @param int    $item_id     The Subscription ID.
@@ -132,18 +202,32 @@ class Events {
 		$result['next_payment_date'] = $item->get_date( 'next_payment_date' );
 		$result['last_payment_date'] = $item->get_date( 'last_order_date_created' );
 		$result['end_date'] = $item->get_date( 'end_date' );
-		$result['products'] = [];
+		$result['products'] = self::get_subscription_products( $item );
 
-		$items = $item->get_items();
-		foreach ( $items as $item ) {
+		return $result;
+	}
+
+	/**
+	 * A subscription's products, keyed by ID.
+	 *
+	 * Line items whose product was deleted are left out rather than failing the event.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @return array[] Each with id, name and slug.
+	 */
+	public static function get_subscription_products( $subscription ) {
+		$products = [];
+		foreach ( $subscription->get_items() as $item ) {
 			$product = $item->get_product();
-			$result['products'][ $product->get_id() ] = [
+			if ( ! $product ) {
+				continue;
+			}
+			$products[ $product->get_id() ] = [
 				'id'   => $product->get_id(),
 				'name' => $product->get_name(),
 				'slug' => $product->get_slug(),
 			];
 		}
-
-		return $result;
+		return $products;
 	}
 }

@@ -74,6 +74,7 @@ class Test_Contact_Sync_Queued_Metadata extends WP_UnitTestCase {
 			]
 		);
 
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp = Integrations::get_integration( 'esp' );
 		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
 		Integrations::enable( 'esp' );

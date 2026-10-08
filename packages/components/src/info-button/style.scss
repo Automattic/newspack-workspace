@@ -39,7 +39,7 @@
 .newspack-info-button__popup {
 	background-color: wp-colors.$gray-900;
 	border-radius: var(--wpds-border-radius-md, #{wp-vars.$radius-medium});
-	box-shadow: var(--wpds-elevation-sm, #{wp-vars.$elevation-small});
+	box-shadow: wp-vars.$elevation-small;
 	color: wp-colors.$white;
 	outline: 0;
 	padding: var(--wpds-dimension-padding-xs, #{wp-vars.$grid-unit-05}) var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10});

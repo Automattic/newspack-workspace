@@ -3,6 +3,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-grid {
 	display: grid;
@@ -41,9 +42,9 @@
 		grid-gap: 32px;
 	}
 
-	// Gutter 64
-	&__gutter-64 {
-		grid-gap: 64px;
+	// Gutter 48
+	&__gutter-48 {
+		grid-gap: wp-vars.$grid-unit-60;
 	}
 
 	// Row Gap 0
@@ -143,16 +144,6 @@
 		&__columns-12 {
 			grid-template-columns: repeat(12, 1fr);
 		}
-
-		// Gutter 48
-		&__gutter-48 {
-			grid-gap: 48px;
-		}
-
-		// Gutter 64
-		&__gutter-64 {
-			grid-gap: 64px;
-		}
 	}
 
 	// Children
@@ -193,9 +184,6 @@
 		}
 		&.newspack-grid__gutter-32 > * {
 			padding: 32px;
-		}
-		&.newspack-grid__gutter-64 > * {
-			padding: 64px;
 		}
 	}
 

@@ -58,6 +58,7 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			wp_delete_user( $user_id );
 		}
 		$this->user_ids = [];
+		remove_role( 'test_custom_reader' );
 		parent::tear_down();
 	}
 
@@ -442,6 +443,26 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A settings save announces which settings changed, so other plugins (Newspack
+	 * Network reports members when a group is turned on or off) can react; a save
+	 * that changes nothing announces nothing.
+	 */
+	public function test_settings_update_announces_changed_keys() {
+		$sub       = $this->create_group_subscription( $this->create_reader_user() );
+		$announced = [];
+		$listener  = function ( $subscription, $changed_keys ) use ( &$announced ) {
+			$announced[] = [ $subscription->get_id(), $changed_keys ];
+		};
+		add_action( 'newspack_group_subscription_settings_updated', $listener, 10, 2 );
+
+		Group_Subscription_Settings::update_subscription_settings( $sub, [ 'enabled' => true ] );
+		Group_Subscription_Settings::update_subscription_settings( $sub, [ 'enabled' => false ] );
+
+		remove_action( 'newspack_group_subscription_settings_updated', $listener, 10 );
+		$this->assertSame( [ [ $sub->get_id(), [ 'enabled' ] ] ], $announced );
+	}
+
+	/**
 	 * The limit is projected from the IDs that would genuinely become members, not from the raw
 	 * batch: an ID the add would skip anyway (an existing member, a non-reader) takes no seat, so
 	 * counting it would reject an add that in fact fits.
@@ -697,28 +718,34 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Readers, authors and contributors are eligible group members by default;
-	 * administrators and editors are not (they bypass the content gate already).
+	 * Any user without `edit_others_posts` is an eligible group member, whatever their role,
+	 * so a reader on a custom role the gate restricts can reach content through a group.
+	 * Staff hold the capability and bypass the gate already.
 	 */
 	public function test_is_eligible_member_defaults() {
+		add_role( 'test_custom_reader', 'Custom reader', [ 'read_custom_content' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+		$custom_role_id = $this->create_role_user( 'test_custom_reader' );
+		$no_role_id     = $this->create_role_user( '' );
+
+		$this->assertTrue( Group_Subscription::is_eligible_member( $custom_role_id ), 'A user whose only role is a custom role is eligible.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $no_role_id ), 'A user with no role is eligible.' );
 		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_reader_user() ), 'Readers are eligible.' );
-		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'author' ) ), 'Authors are eligible by default.' );
-		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible by default.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible members.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible members.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible.' );
 	}
 
 	/**
-	 * A user holding a privileged role (Editor or Administrator) alongside Author must not
-	 * gain default eligibility from the Author/Contributor fallback -- that fallback exists
-	 * for plain content-creator roles, not for staff who happen to also hold one.
+	 * A staff user stays ineligible when they also hold a non-staff role.
 	 */
 	public function test_is_eligible_member_excludes_privileged_multi_role_users() {
-		$editor_author_id = $this->create_multi_role_user( [ 'editor', 'author' ] );
-		$admin_author_id  = $this->create_multi_role_user( [ 'administrator', 'author' ] );
+		$editor_author_id      = $this->create_multi_role_user( [ 'editor', 'author' ] );
+		$admin_author_id       = $this->create_multi_role_user( [ 'administrator', 'author' ] );
+		$contributor_editor_id = $this->create_multi_role_user( [ 'contributor', 'editor' ] );
 
-		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author must not gain eligibility from the Author role.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author must not gain eligibility from the Author role.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author is not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author is not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $contributor_editor_id ), 'Contributor+Editor is not eligible.' );
 	}
 
 	/**
@@ -787,6 +814,79 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		$this->assertEmpty(
 			Group_Subscription::get_group_names_for_user( $admin_id ),
 			'A non-eligible user holding only member meta (not ownership) must not see the group.'
+		);
+	}
+
+	/**
+	 * Create a reader on the given email domain and track it for cleanup.
+	 *
+	 * @param string $domain Email domain.
+	 * @return int User ID.
+	 */
+	private function create_reader_on_domain( string $domain ): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'staff-' . wp_generate_password( 6, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'staff-' . wp_generate_password( 6, false ) . '@' . $domain,
+				'role'       => 'subscriber',
+			]
+		);
+		$this->assertNotWPError( $user_id );
+		update_user_meta( $user_id, '_newspack_reader', true );
+		$this->user_ids[] = $user_id;
+		return $user_id;
+	}
+
+	/**
+	 * Verifying an address joins the reader to every active group listing its domain,
+	 * and to no other group. Before verification the domain match alone does nothing.
+	 */
+	public function test_verifying_an_email_joins_groups_listing_its_domain() {
+		$matching  = $this->create_group_subscription( $this->create_reader_user() );
+		$unrelated = $this->create_group_subscription( $this->create_reader_user() );
+		$cancelled = $this->create_group_subscription( $this->create_reader_user() );
+		$matching->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'other.test,example.test' );
+		$unrelated->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'unrelated.test' );
+		$cancelled->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'example.test' );
+		$cancelled->update_status( 'cancelled' );
+
+		$reader_id = $this->create_reader_on_domain( 'EXAMPLE.test' );
+		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $matching ), 'An unverified reader must not join.' );
+
+		global $wcs_mock_query_log;
+		$wcs_mock_query_log = [];
+		Newspack\Reader_Activation::set_reader_verified( $reader_id );
+
+		// The mock ignores meta_query, so pin that production only loads groups with a domain list.
+		$this->assertSame( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, end( $wcs_mock_query_log )['meta_query'][0]['key'] );
+		$this->assertTrue( Group_Subscription::user_is_member( $reader_id, $matching ), 'A verified reader joins the group listing their domain.' );
+		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $unrelated ), 'A group listing other domains is untouched.' );
+		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $cancelled ), 'An inactive group takes no auto-joins.' );
+	}
+
+	/**
+	 * A full group keeps its limit: the verified reader is left out rather than
+	 * pushing the group over.
+	 */
+	public function test_verifying_an_email_does_not_join_a_full_group() {
+		$group = $this->create_group_subscription( $this->create_reader_user(), 2 );
+		$group->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'example.test' );
+		$this->add_member( $this->create_reader_user(), $group );
+
+		$reader_id = $this->create_reader_on_domain( 'example.test' );
+		Newspack\Reader_Activation::set_reader_verified( $reader_id );
+
+		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $group ) );
+	}
+
+	/**
+	 * The admin field accepts loose input and stores one canonical list.
+	 */
+	public function test_sanitize_email_domains() {
+		$this->assertSame(
+			'example.test,example.org',
+			Group_Subscription_Settings::sanitize_email_domains( " @Example.test,  example.org\nexample.test, " )
 		);
 	}
 }

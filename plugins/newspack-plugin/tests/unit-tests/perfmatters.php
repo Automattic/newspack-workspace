@@ -214,6 +214,25 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Perfmatters "Delay JavaScript" executes scripts on first user interaction,
+	 * and the IP-access landing page auto-redirects with no interaction — a
+	 * delayed gtag never runs there, so no pageview or event is ever sent. The
+	 * delay is vetoed on that request; everywhere else the configured value
+	 * passes through.
+	 */
+	public function test_delay_js_vetoed_on_ip_access_landing_page() {
+		$this->assertTrue( Perfmatters::should_delay_js( true ), 'The configured value passes through on a regular request.' );
+
+		// The landing page is identified by its query var alone — no path involved.
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '1' );
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', 'test-university' );
+		$this->assertFalse( Perfmatters::should_delay_js( true ), 'JS delay is vetoed on the landing page request.' );
+
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT, '' );
+		set_query_var( \Newspack\Content_Gate\IP_Access_Rule::ENDPOINT . '-slug', '' );
+	}
+
+	/**
 	 * A saved option that already carries the manually-applied workaround entry
 	 * doesn't end up with duplicates after the defaults merge.
 	 */
@@ -253,23 +272,7 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 	 * @dataProvider jetpack_share_stylesheet_tags
 	 */
 	public function test_jetpack_share_stylesheets_match_an_exclusion_entry( $tag, $label ) {
-		$exclusions = Perfmatters::add_rucss_excluded_stylesheets( [] );
-
-		$this->assertNotEmpty( $exclusions, 'The defaults must supply exclusion entries.' );
-
-		foreach ( $exclusions as $entry ) {
-			if ( '' !== $entry && false !== stripos( $tag, $entry ) ) {
-				return;
-			}
-		}
-
-		$this->fail(
-			sprintf(
-				'No RUCSS exclusion entry matches %s, so Perfmatters will delay it until the reader interacts with the page. Tag: %s',
-				$label,
-				$tag
-			)
-		);
+		$this->assert_tag_matches_an_exclusion_entry( $tag, $label );
 	}
 
 	/**
@@ -307,5 +310,47 @@ class Newspack_Test_Perfmatters extends WP_UnitTestCase {
 				"Jetpack's share button CSS served from the Jetpack CDN",
 			],
 		];
+	}
+
+	/**
+	 * The sticky footer ad needs this stylesheet from the first paint. Withheld,
+	 * the slot sits unstyled at the bottom of the page, where GPT's lazy loading
+	 * holds the fetched ad until it scrolls into view. The stylesheet then arrives
+	 * on the reader's first interaction and hides the slot until an ad renders in
+	 * it, which never happens. The URL keeps the `includes/../dist/` shape the
+	 * plugin emits; the host and version are invented.
+	 */
+	public function test_newspack_ads_stylesheet_matches_an_exclusion_entry() {
+		$this->assert_tag_matches_an_exclusion_entry(
+			"<link rel='stylesheet' id='newspack-ads-frontend-css' href='https://example.test/wp-content/plugins/newspack-ads/includes/../dist/frontend.css?ver=3.15.1' media='all' />",
+			"Newspack Ads' front-end CSS"
+		);
+	}
+
+	/**
+	 * Fails unless an entry in Newspack's RUCSS exclusions matches the tag the way
+	 * Perfmatters matches it (see test_jetpack_share_stylesheets_match_an_exclusion_entry).
+	 *
+	 * @param string $tag   Full stylesheet link tag as WordPress would emit it.
+	 * @param string $label Human-readable description used in the failure message.
+	 */
+	private function assert_tag_matches_an_exclusion_entry( $tag, $label ) {
+		$exclusions = Perfmatters::add_rucss_excluded_stylesheets( [] );
+
+		$this->assertNotEmpty( $exclusions, 'The defaults must supply exclusion entries.' );
+
+		foreach ( $exclusions as $entry ) {
+			if ( '' !== $entry && false !== stripos( $tag, $entry ) ) {
+				return;
+			}
+		}
+
+		$this->fail(
+			sprintf(
+				'No RUCSS exclusion entry matches %s, so Perfmatters will delay it until the reader interacts with the page. Tag: %s',
+				$label,
+				$tag
+			)
+		);
 	}
 }

@@ -247,3 +247,76 @@ describe( 'Wizard content width', () => {
 		expect( select( WIZARD_STORE_NAMESPACE ).getHeaderData().fullWidth ).toBe( false );
 	} );
 } );
+
+describe( 'Wizard section tabs', () => {
+	const sections = [
+		{ label: 'List', path: '/', exact: true, render: () => <div>List content</div> },
+		{
+			path: '/items/:itemId/logs/:tab?',
+			isHidden: true,
+			render: () => <div>Logs content</div>,
+			tabbedNavigation: ( { itemId } ) => [
+				{ label: 'First Tab', path: `/items/${ itemId }/logs`, exact: true },
+				{ label: 'Second Tab', path: `/items/${ itemId }/logs/second`, exact: true },
+			],
+		},
+	];
+
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	afterEach( () => {
+		window.location.hash = '';
+	} );
+
+	it( 'shows the tabs a section builds from its route params while it matches', async () => {
+		window.location.hash = '#/items/42/logs/second';
+		render( <Wizard headerText="Test wizard" sections={ sections } /> );
+
+		expect( await screen.findByText( 'Logs content' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'tab', { name: 'First Tab' } ) ).toHaveAttribute( 'href', '#/items/42/logs' );
+		expect( screen.getByRole( 'tab', { name: 'Second Tab' } ) ).toHaveAttribute( 'aria-selected', 'true' );
+	} );
+
+	it( 'leaves the tabs out on a route the section does not match', async () => {
+		window.location.hash = '#/';
+		render( <Wizard headerText="Test wizard" sections={ sections } /> );
+
+		expect( await screen.findByText( 'List content' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'tab' ) ).toBeNull();
+	} );
+} );
+
+describe( 'Wizard section subtitle', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( {} );
+	} );
+
+	it( "shows the active section's subHeaderText in the header, falling back to the wizard's", async () => {
+		window.location.hash = '#/list';
+		const { container } = render(
+			<Wizard
+				headerText="Test wizard"
+				subHeaderText="Wizard intro"
+				sections={ [
+					{ label: 'List', path: '/list', exact: true, subHeaderText: 'List intro', render: () => <div>List view</div> },
+					{ label: 'Item', path: '/list/:id', isHidden: true, render: () => <div>Item view</div> },
+				] }
+			/>
+		);
+		const subtitle = () => container.querySelector( '.newspack-page__header-subtitle' )?.textContent;
+
+		expect( await screen.findByText( 'List view' ) ).toBeInTheDocument();
+		expect( subtitle() ).toBe( 'List intro' );
+
+		act( () => {
+			window.location.hash = '#/list/esp';
+			window.dispatchEvent( new HashChangeEvent( 'hashchange' ) );
+		} );
+
+		expect( await screen.findByText( 'Item view' ) ).toBeInTheDocument();
+		expect( subtitle() ).toBe( 'Wizard intro' );
+	} );
+} );

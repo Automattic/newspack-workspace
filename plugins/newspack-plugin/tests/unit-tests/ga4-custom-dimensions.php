@@ -333,7 +333,7 @@ class Newspack_Test_GA4_Custom_Dimensions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The donation parameters are not WooCommerce's to gate: a publisher on NRH
+	 * The donation parameters are not WooCommerce's to gate: a publisher on RevEngine
 	 * emits them from the Donate block and Reader Data with none installed. No
 	 * filters here, so this runs the automatic detection.
 	 */

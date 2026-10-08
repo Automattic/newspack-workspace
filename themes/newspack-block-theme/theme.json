@@ -71,22 +71,22 @@
 				{
 					"name": "Elevation 1",
 					"slug": "elevation-1",
-					"shadow": "0 1px 10px #00000007"
+					"shadow": "0 1px 10px #0000001a"
 				},
 				{
 					"name": "Elevation 2",
 					"slug": "elevation-2",
-					"shadow": "0 2px 20px #00000014"
+					"shadow": "0 2px 20px #00000026"
 				},
 				{
 					"name": "Elevation 3",
 					"slug": "elevation-3",
-					"shadow": "0 3px 30px #00000021"
+					"shadow": "0 3px 30px #00000033"
 				},
 				{
 					"name": "Elevation 4",
 					"slug": "elevation-4",
-					"shadow": "0 0 20px #00000010, 0 25px 30px #00000015"
+					"shadow": "0 0 20px #0000001a, 0 25px 30px #00000026"
 				},
 				{
 					"name": "inset 1",

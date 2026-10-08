@@ -39,6 +39,10 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 
 		global $post;
 
+		if ( ! Republication_Tracker_Tool::is_post_republishable( $post ) ) {
+			return;
+		}
+
 		$license_key = get_option( 'republication_tracker_tool_license', REPUBLICATION_TRACKER_TOOL_DEFAULT_LICENSE );
 
 		$using_license = isset( REPUBLICATION_TRACKER_TOOL_LICENSES[ $license_key ] );

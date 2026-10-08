@@ -10,6 +10,19 @@
  */
 class Newspack_Blocks_API {
 	/**
+	 * Most block queries one batch request may carry. Bounds the work a single request can
+	 * ask for; the editor splits a larger page into consecutive batches.
+	 */
+	const POSTS_BATCH_MAX_QUERIES = 50;
+
+	/**
+	 * Most posts one batch request may be asked to exclude up front. The editor's list is the
+	 * specific posts its blocks pin plus the post being edited, so this is far above what a page
+	 * produces; it bounds what a caller can make every query in the batch carry.
+	 */
+	const POSTS_BATCH_MAX_EXCLUDE = 1000;
+
+	/**
 	 * Get thumbnail featured image source for the rest field.
 	 *
 	 * @param array $object_info The object info.
@@ -102,7 +115,12 @@ class Newspack_Blocks_API {
 			return '';
 		}
 
-		$linked_category = '<a href="#">' . $category->name . '</a>';
+		$category_link = get_category_link( $category->term_id );
+		// newspack_blocks_format_categories() links the name only when the term
+		// resolves to a URL; match it so the preview and the front end agree.
+		$linked_category = $category_link
+			? '<a href="' . esc_url( $category_link ) . '">' . $category->name . '</a>'
+			: $category->name;
 
 		return apply_filters( 'newspack_blocks_categories', $linked_category );
 	}
@@ -139,7 +157,7 @@ class Newspack_Blocks_API {
 				$sponsor_info_item = [
 					'flag'          => $sponsor['sponsor_flag'],
 					'sponsor_name'  => $sponsor['sponsor_name'],
-					'sponsor_url'   => $sponsor['sponsor_url'],
+					'sponsor_url'   => sanitize_url( (string) $sponsor['sponsor_url'] ),
 					'byline_prefix' => $sponsor['sponsor_byline'],
 					'id'            => $sponsor['sponsor_id'],
 					'scope'         => $sponsor['sponsor_scope'],
@@ -165,7 +183,18 @@ class Newspack_Blocks_API {
 	 */
 	public static function newspack_blocks_get_tag_labels( $object_info ) {
 		$tag_labels = Newspack_Blocks::get_tag_labels( $object_info['id'] );
-		return ! empty( $tag_labels ) ? array_values( $tag_labels ) : false;
+		if ( empty( $tag_labels ) ) {
+			return false;
+		}
+		return array_map(
+			function ( $label ) {
+				if ( isset( $label['link'] ) ) {
+					$label['link'] = sanitize_url( (string) $label['link'] );
+				}
+				return $label;
+			},
+			array_values( $tag_labels )
+		);
 	}
 
 	/**
@@ -177,29 +206,6 @@ class Newspack_Blocks_API {
 	public static function newspack_blocks_has_custom_excerpt( $object_info ) {
 		$post_has_custom_excerpt = has_excerpt( $object_info['id'] );
 		return $post_has_custom_excerpt;
-	}
-
-	/**
-	 * Point every anchor in a rendered payload fragment at '#'.
-	 *
-	 * The editor canvas renders the byline and avatar fields verbatim, so a
-	 * live URL navigates the canvas iframe away from the post being edited.
-	 * Runs on the finished markup — after the newspack_blocks_post_byline
-	 * filter — so links injected by filters (e.g. custom bylines) are covered
-	 * too, matching the category-link convention used elsewhere in this
-	 * payload. Only real anchor href attributes are rewritten: "href=" text
-	 * inside another attribute's value (avatar proxy URLs), xlink:href sprite
-	 * references, and plain text all pass through untouched.
-	 *
-	 * @param string $html Rendered markup destined for the editor payload.
-	 * @return string Markup with every anchor href pointing at '#'.
-	 */
-	private static function neutralize_editor_links( $html ) {
-		$processor = new \WP_HTML_Tag_Processor( (string) $html );
-		while ( $processor->next_tag( 'A' ) ) {
-			$processor->set_attribute( 'href', '#' );
-		}
-		return $processor->get_updated_html();
 	}
 
 	/**
@@ -228,6 +234,87 @@ class Newspack_Blocks_API {
 	public static function video_playlist_endpoint( $request ) {
 		$args = $request->get_params();
 		return new \WP_REST_Response( newspack_blocks_get_video_playlist( $args ), 200 );
+	}
+
+	/**
+	 * Posts batch endpoint.
+	 *
+	 * Answers every Homepage Posts block on a page in one request. Deduplication makes each
+	 * block depend on the posts every block above it shows, so the editor used to wait for one
+	 * request before sending the next; on a page with dozens of blocks the per-request startup
+	 * cost added up to most of the load time. Each query still goes through the single-block
+	 * route, so its argument schema, defaults, and permission check apply unchanged.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response List of { clientId, posts } or { clientId, error }, in request order.
+	 */
+	public static function posts_batch_endpoint( $request ) {
+		$exclude = array_map( 'intval', (array) $request->get_param( 'exclude' ) );
+		$results = [];
+		// Each query must start from the state a standalone request would, because two pieces of
+		// per-request state outlive one: the global post, which posts_endpoint() leaves on the last
+		// post it formatted, and the deduplication list, which a Homepage Posts or Carousel block
+		// embedded in a formatted post writes its rendered IDs into while `the_content` runs. Left
+		// in place, that list lands in the next query's post__not_in and silently drops posts.
+		$original_post = $GLOBALS['post'] ?? null;
+
+		foreach ( $request->get_param( 'queries' ) as $query ) {
+			$client_id   = $query['clientId'];
+			$deduplicate = ! empty( $query['deduplicate'] );
+			$params      = (array) ( $query['postsQuery'] ?? [] );
+			if ( $deduplicate ) {
+				$params['exclude'] = $exclude; // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude
+			}
+
+			$single = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+			$single->set_query_params( $params );
+
+			try {
+				$response = rest_do_request( $single );
+			} catch ( \Throwable $e ) {
+				self::reset_batch_query_state( $original_post );
+				// A throw skips the excerpt filter posts_endpoint() would have removed itself.
+				Newspack_Blocks::remove_excerpt_filter();
+				// One bad query must not cost the rest of the page its posts. The message itself
+				// can carry a query or a path, so the block gets a generic one.
+				error_log( 'Newspack Blocks batch query failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				$results[] = [
+					'clientId' => $client_id,
+					'error'    => __( 'The posts for this block could not be loaded.', 'newspack-blocks' ),
+				];
+				continue;
+			}
+			self::reset_batch_query_state( $original_post );
+
+			if ( $response->is_error() ) {
+				$results[] = [
+					'clientId' => $client_id,
+					'error'    => $response->as_error()->get_error_message(),
+				];
+				continue;
+			}
+
+			$posts = $response->get_data();
+			if ( $deduplicate ) {
+				$exclude = array_merge( $exclude, array_map( 'intval', wp_list_pluck( $posts, 'id' ) ) );
+			}
+			$results[] = [
+				'clientId' => $client_id,
+				'posts'    => $posts,
+			];
+		}
+
+		return new \WP_REST_Response( $results );
+	}
+
+	/**
+	 * Return the state a batched query leaves behind to what a standalone request starts from.
+	 *
+	 * @param WP_Post|null $original_post The global post as the batch request found it.
+	 */
+	private static function reset_batch_query_state( $original_post ) {
+		$GLOBALS['post'] = $original_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		Newspack_Blocks::reset_deduplication();
 	}
 
 	/**
@@ -312,11 +399,11 @@ class Newspack_Blocks_API {
 				'newspack_sponsors_show_author'     => Newspack_Blocks::newspack_display_sponsors_and_authors( $sponsors ),
 				'newspack_sponsors_show_categories' => Newspack_Blocks::newspack_display_sponsors_and_categories( $sponsors ),
 				'newspack_tag_labels'               => self::newspack_blocks_get_tag_labels( $data ),
-				'newspack_post_avatars'             => self::neutralize_editor_links( \newspack_blocks_format_avatars( $author_info ) ),
-				'newspack_post_byline'              => self::neutralize_editor_links( \newspack_blocks_format_byline( $author_info ) ),
+				'newspack_post_avatars'             => \newspack_blocks_format_avatars( $author_info ),
+				'newspack_post_byline'              => wp_kses_post( \newspack_blocks_format_byline( $author_info ) ),
 				'post_status'                       => $post->post_status,
 				'post_type'                         => $post->post_type,
-				'post_link'                         => Newspack_Blocks::get_post_link( $post->ID ),
+				'post_link'                         => sanitize_url( (string) Newspack_Blocks::get_post_link( $post->ID ) ),
 			];
 
 			// Support Newspack Listings hide author/publish date options.

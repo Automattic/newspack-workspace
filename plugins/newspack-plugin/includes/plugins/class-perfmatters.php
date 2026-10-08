@@ -146,6 +146,7 @@ class Perfmatters {
 	 */
 	private static function unused_css_excluded_stylesheets() {
 		return [
+			'plugins/newspack-ads', // Newspack Ads; the sticky footer ad never renders if this loads late.
 			'plugins/newspack-blocks', // Newspack Blocks.
 			'plugins/newspack-newsletters', // Newspack Newsletters.
 			'plugins/newspack-plugin', // Newspack main plugin.
@@ -450,6 +451,16 @@ class Perfmatters {
 	public static function should_delay_js( $delay_js ) {
 		// Don't delay JS on lite site requests.
 		if ( Lite_Site::is_lite_site_request() ) {
+			return false;
+		}
+		// The IP-access landing page auto-redirects with no user interaction, so
+		// delayed analytics would never execute and the visit would go unrecorded.
+		// Like the lite-site veto above, this holds even under
+		// NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS: it is a functional requirement of
+		// the page, not a configuration default.
+		// No autoload: the class self-initializes on load, and it is only ever
+		// loaded deliberately, when content gates are enabled.
+		if ( class_exists( 'Newspack\Content_Gate\IP_Access_Rule', false ) && Content_Gate\IP_Access_Rule::is_landing_page_request() ) {
 			return false;
 		}
 		return $delay_js;

@@ -292,9 +292,12 @@ class Content_Gate {
 		include __DIR__ . '/class-newsletters-access.php';
 		include __DIR__ . '/class-user-gate-access.php';
 		include __DIR__ . '/class-premium-newsletters.php';
+		include __DIR__ . '/class-gate-access-reader-data.php';
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 		include __DIR__ . '/class-email-verification-prompt.php';
+		include __DIR__ . '/class-institutional-access-prompt.php';
+		include __DIR__ . '/class-comment-restriction.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
@@ -1247,7 +1250,7 @@ class Content_Gate {
 	/**
 	 * The staged pieces a 'the_content' pass over a restricted post is answered
 	 * from — the teaser to substitute, and the gate that pass owes — or null when
-	 * nothing is staged for the post.
+	 * nothing is staged for the post or the request is a feed.
 	 *
 	 * One post can be both the article being read and a card in a listing on that
 	 * same page, and the two are not answered alike. The article's entry holds a
@@ -1271,6 +1274,15 @@ class Content_Gate {
 	 * @return array{teaser: string, gate: string}|null
 	 */
 	private static function get_staged_restriction_for_render( $post_id ) {
+		// Feeds answer to Content_Gate_Advanced_Settings, as in restrict_post().
+		// Asked again here because staging can happen inside a feed request with
+		// the feed flag off: newspack-manager's Pugpig homepage feed renders the
+		// front page to learn which posts to list, and the teasers its listings
+		// stage would otherwise replace those posts' feed items.
+		if ( is_feed() ) {
+			return null;
+		}
+
 		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
 			return null;
 		}
@@ -2840,6 +2852,10 @@ class Content_Gate {
 			'metering'             => isset( $registration['metering'] ) && is_array( $registration['metering'] ) ? wp_parse_args( $registration['metering'], $default_metering ) : $default_metering,
 			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
 			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
+			// Conditions that let a visitor count as registered without an account.
+			// Only rules that can judge a signed-out visitor belong here; today that
+			// is `institution`. See Content_Restriction_Control::is_post_restricted().
+			'access_rules'         => Access_Rules::normalize_rules( isset( $registration['access_rules'] ) && is_array( $registration['access_rules'] ) ? $registration['access_rules'] : [] ),
 		];
 	}
 
@@ -3186,10 +3202,15 @@ class Content_Gate {
 		);
 		$gates = array_map( [ __CLASS__, 'get_gate' ], wp_list_pluck( $posts, 'ID' ) );
 		if ( $post_type === self::GATE_CPT ) {
+			// The first gate matching a post decides access to it, so the order has
+			// to be total. Equal priorities (a partial priority save, a direct meta
+			// write) fall back to the older gate, matching where new gates go: after
+			// every existing one. Left to the query's own order, a tie would go to
+			// the newest gate.
 			usort(
 				$gates,
 				function( $a, $b ) {
-					return $a['priority'] <=> $b['priority'];
+					return [ $a['priority'], $a['id'] ] <=> [ $b['priority'], $b['id'] ];
 				}
 			);
 		}

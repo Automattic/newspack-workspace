@@ -25,7 +25,7 @@ const JEST_CONFIG = {
 	// PHP vendor trees; <rootDir> anchors keep plugin src/shared/ tests running.
 	testPathIgnorePatterns: [ '/node_modules/', '<rootDir>/dist/', '<rootDir>/shared/', '/vendor/' ],
 	transform: {
-		'^.+\\.(j|t)sx?$': path.resolve( __dirname, 'utils/babelJestTransformer.js' ),
+		'^.+\\.(m?j|t)sx?$': path.resolve( __dirname, 'utils/babelJestTransformer.js' ),
 	},
 	transformIgnorePatterns: [
 		// Ignore all node_modules except for newspack-scripts, @wordpress/* packages, and

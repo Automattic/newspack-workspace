@@ -36,6 +36,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-institutions-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/trait-one-time-purchase-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-gates-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-segments-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-memberships-audit.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-discounts-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
@@ -113,6 +114,10 @@ class Initializer {
 		// feed options, which survive deactivation, and a site that has already been
 		// flipped without them is the one serving feeds it never configured.
 		WP_CLI::add_command( 'newspack migrate-feed-settings', [ 'Newspack\CLI\Membership_Gates_Migration', 'migrate_feed_settings' ] );
+
+		// Outside the Memberships guard too: plans and segments both survive
+		// deactivation, and segments on the membership criteria stop changing then.
+		WP_CLI::add_command( 'newspack migrate-membership-segments', [ 'Newspack\CLI\Membership_Segments_Migration', 'migrate_membership_segments' ] );
 
 		// Only register the Teams for Memberships diagnostics command on sites where the
 		// SkyVerge plugin is active. No reason to surface it in `wp help` otherwise.

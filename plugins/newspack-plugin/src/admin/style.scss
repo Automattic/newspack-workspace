@@ -260,7 +260,7 @@ h1 {
 }
 
 .newspack-wizard__section {
-	margin-block-end: 4rem;
+	margin-block-end: wp-vars.$grid-unit-60;
 
 	&:last-child {
 		margin-block-end: 0;

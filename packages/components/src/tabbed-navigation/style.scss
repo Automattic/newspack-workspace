@@ -21,6 +21,11 @@
 	/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the indicator token. */
 	--wpds-color-stroke-interactive-neutral-strong: #{np-colors.$primary-600};
 
+	[role="tablist"] {
+		max-width: 100%;
+		overflow-x: auto;
+	}
+
 	a[role="tab"] {
 		text-decoration: none;
 
@@ -54,7 +59,6 @@
 
 		&[data-disabled],
 		&[aria-disabled="true"] {
-			/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
 			color: var( --wpds-color-foreground-interactive-neutral-disabled, #{wp-colors.$gray-600} );
 			pointer-events: none;
 		}

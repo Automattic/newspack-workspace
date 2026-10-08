@@ -268,6 +268,22 @@ abstract class Integration {
 	}
 
 	/**
+	 * How-to steps the Integrations UI shows as a guide, one step per page,
+	 * from the How it works item in the integration card's menu.
+	 *
+	 * Child classes override this when the way in is a workflow elsewhere in
+	 * the admin, such as a setting on a block, so the admin has to say where
+	 * to look. Each step carries a `title` and a `description`, and can carry
+	 * a `link` to documentation, with a `label` and a `url`. The default is no
+	 * guide.
+	 *
+	 * @return array List of associative arrays with keys `title`, `description`, and an optional `link`.
+	 */
+	public function get_guide(): array {
+		return [];
+	}
+
+	/**
 	 * Whether this integration supports frontend reader registration.
 	 *
 	 * Integrations that return true will have their key output to the page
