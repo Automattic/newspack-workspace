@@ -190,6 +190,10 @@ type AdvancedSettingsConfig = {
 	feed_restriction_mode: FeedRestrictionMode;
 	newsletter_link_bypass_enabled: boolean;
 	institutional_access_text: string;
+	// 0 leaves commenting to the site's Discussion Settings.
+	comment_restriction_gate_id: number;
+	comment_restriction_message: string;
+	comment_restriction_purchase_url: string;
 };
 
 type GateSettings = {
