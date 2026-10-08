@@ -347,8 +347,8 @@ class Contact_Sync extends Sync {
 	 * Push contact data to all active integrations.
 	 *
 	 * Failed integrations are scheduled for retry via ActionScheduler
-	 * with exponential backoff — unless `$options` carries CLI field/list scoping,
-	 * in which case retries are suppressed (see below).
+	 * with exponential backoff — unless `$options` carries CLI scoping (update-only,
+	 * list-less or field-scoped), in which case retries are suppressed (see below).
 	 *
 	 * @param array  $contact          The contact data to sync.
 	 * @param string $context          The context of the sync.
@@ -414,9 +414,9 @@ class Contact_Sync extends Sync {
 			// On an update-only run (`existing_only`, the CLI backfill default),
 			// ask the integration before pushing: the push is an upsert at every
 			// provider, so this is the one place "update, never create" can be
-			// enforced. An integration that
-			// cannot answer gets no push at all: the unknown must resolve to
-			// "do not create", or the run would create contacts and read as clean.
+			// enforced. An integration that cannot answer gets no push at all:
+			// the unknown must resolve to "do not create", or the run would
+			// create contacts and read as clean.
 			if ( ! empty( $options['existing_only'] ) && ! $integration->supports_contact_lookup() ) {
 				$errors[] = sprintf( '[%s] %s', $integration_id, __( 'cannot check whether the contact exists, so the update-only run withheld the push.', 'newspack-plugin' ) );
 				static::log( sprintf( 'Withheld integration "%s" sync of %s: it cannot check for an existing contact (update-only run).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );

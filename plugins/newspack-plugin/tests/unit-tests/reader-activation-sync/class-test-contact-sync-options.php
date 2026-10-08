@@ -1,10 +1,11 @@
 <?php // phpcs:disable Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing
 /**
- * Tests the field-scoped, list-less CLI sync options (NPPD-1883).
+ * Tests the sync options the backfill CLI passes (NPPD-1883, NPPD-2258).
  *
- * Covers the two orthogonal `wp newspack esp sync` flags:
- *   --skip-lists : upsert with $lists === false (create, don't subscribe).
- *   --fields=... : compute + push only the requested metadata fields.
+ * Covers three options:
+ *   skip_lists    : upsert with $lists === false (create, don't subscribe).
+ *   fields        : compute + push only the requested metadata fields.
+ *   existing_only : update only the contacts an integration already has.
  *
  * @package Newspack\Tests
  */
@@ -521,8 +522,8 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The flag's whole point: a reader the ESP does not have is left alone,
-	 * and the outcome is a skip — not a failure the alerting would count.
+	 * The point of an update-only push: a reader the ESP does not have is left
+	 * alone, and the outcome is a skip — not a failure the alerting would count.
 	 */
 	public function test_existing_only_skips_a_reader_the_esp_does_not_have() {
 		// No staged contact data: the subscription mock reports the contact as not found.
@@ -603,8 +604,9 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An integration without an existence check keeps the base default and
-	 * pushes as before; the reader was updated somewhere, so the sync succeeds.
+	 * The ESP skips a reader it does not have while a peer that can check and
+	 * holds the contact pushes; the reader was updated somewhere, so the sync
+	 * succeeds.
 	 */
 	public function test_existing_only_reports_success_when_another_integration_pushed() {
 		Failing_Sample_Integration::reset();
@@ -621,8 +623,8 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The flag promises "update, never create". An integration that cannot say
-	 * whether it holds the contact must not push under it; failing closed here
+	 * An update-only push promises "update, never create". An integration that
+	 * cannot say whether it holds the contact must not push; failing closed here
 	 * is what keeps a programmatic caller from creating the contacts the CLI
 	 * pre-flight refuses to.
 	 */

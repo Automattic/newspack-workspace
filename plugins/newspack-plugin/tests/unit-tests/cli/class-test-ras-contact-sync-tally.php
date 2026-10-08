@@ -276,8 +276,8 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A dry-run push never reaches a provider, so it must not accrue the
-	 * pacing that exists to space out real external requests — previewing
+	 * A dry-run push that may create contacts never reaches a provider, so it
+	 * must not accrue the pacing that exists to space out real external requests — previewing
 	 * 100k readers should not cost ~17 minutes of sleep (NPPD-2076 review).
 	 */
 	public function test_dry_run_push_does_not_accrue_pacing() {

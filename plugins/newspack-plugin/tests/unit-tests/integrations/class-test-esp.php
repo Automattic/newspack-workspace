@@ -835,7 +835,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	/**
 	 * A Mailchimp contact is a member of one audience. A reader who exists only
 	 * in another audience has no member in the configured one, and an upsert
-	 * would create it — exactly what the flag promises not to do.
+	 * would create it — exactly what an update-only push promises not to do.
 	 */
 	public function test_contact_exists_on_mailchimp_requires_the_configured_audience() {
 		$this->assertTrue( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ], 'mailchimp' ) );
@@ -845,7 +845,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	/**
 	 * An archived member is a record Mailchimp keeps for a subscriber the
 	 * publisher removed; the upsert would restore it, which is a create in every
-	 * way the flag cares about.
+	 * way an update-only push cares about.
 	 */
 	public function test_contact_exists_on_mailchimp_treats_an_archived_member_as_missing() {
 		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'archived' ] ] ], 'mailchimp' ) );

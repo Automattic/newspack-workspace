@@ -410,7 +410,7 @@ wp newspack integrations backfill --direction=both --integration=esp --create-mi
   rejections, so its error tally previews what a real run would report.
 - Pull failures are **not** retried via ActionScheduler (a bulk run against a
   flaky API would flood the queue): errors are tallied and logged, and the
-  affected `--offset` window can be re-run. Push retry semantics are unchanged.
+  affected `--offset` window can be re-run.
 - Readers the provider has no contact for (`ras_contact_not_found`) are tallied
   as skipped, not as errors: a pull cannot create the missing contact, so
   re-running could never clear them and a partially-synced site would never
@@ -438,8 +438,9 @@ wp newspack integrations backfill --direction=both --integration=esp --create-mi
 - `wp newspack esp sync` remains as a backward-compatible alias frozen to the
   push direction and its historical flag surface, plus `--create-missing`:
   like `backfill`, it only updates existing contacts unless that flag is
-  passed. It still exits 0 even when errors are tallied; a pre-flight failure
-  exits 1 on both commands.
+  passed. It still exits 0 even when errors are tallied, and warns on STDERR
+  when a run leaves failed pushes unretried; a pre-flight failure exits 1 on
+  both commands.
 
 See `wp help newspack integrations backfill` for the full option reference.
 
