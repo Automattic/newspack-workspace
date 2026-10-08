@@ -73,7 +73,8 @@ abstract class Integration {
 	 * WP_Error code pull_contact_data() should return when the provider has no
 	 * contact for the reader. Not a failure: no re-run can make an absent
 	 * contact appear, so batch drivers count these readers as skipped rather
-	 * than errored.
+	 * than errored. The sync framework returns the same code for an update-only
+	 * push that every integration declined, for the same reason.
 	 *
 	 * @var string
 	 */

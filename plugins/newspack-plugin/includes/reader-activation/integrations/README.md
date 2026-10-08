@@ -439,8 +439,8 @@ wp newspack integrations backfill --direction=both --integration=esp --create-mi
   push direction and its historical flag surface, plus `--create-missing`:
   like `backfill`, it only updates existing contacts unless that flag is
   passed. It still exits 0 even when errors are tallied, and warns on STDERR
-  when a run leaves failed pushes unretried; a pre-flight failure exits 1 on
-  both commands.
+  when a run that schedules no retries (any but a plain `--create-missing` run)
+  tallies errors; a pre-flight failure exits 1 on both commands.
 
 See `wp help newspack integrations backfill` for the full option reference.
 

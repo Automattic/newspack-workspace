@@ -1736,7 +1736,10 @@ class Contact_Sync extends Sync {
 	 *                                        (string|null) restricts the push fan-out to a
 	 *                                        single active integration.
 	 *
-	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise.
+	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise. Under
+	 *                        `existing_only`, a reader every integration declined comes back
+	 *                        with `Integration::CONTACT_NOT_FOUND_ERROR_CODE`, which callers can
+	 *                        treat as a skip.
 	 */
 	public static function sync_contact( $user_id_or_order, $context = '', $is_dry_run = false, $options = [] ) {
 		// A dry run that only builds payloads never leaves the process, so it
