@@ -49,8 +49,7 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		self::$admin_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
 
 		// The mock order and subscription stores are process globals; without a
-		// reset, this file's guest order (matched by email) would leak into every
-		// later test that seeds a reader with the same address.
+		// reset, this file's orders would leak into every later test.
 		global $orders_database, $subscriptions_database, $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
 		$orders_database             = [];
 		$subscriptions_database      = [];
@@ -435,8 +434,8 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 			'duration_unit'  => 'days',
 		];
 
-		// A guest checkout under the reader's email counts as theirs, as it does
-		// for the rule itself.
+		// A guest checkout under the reader's email is not theirs: the rule
+		// matches orders by customer ID only.
 		$guest = \wc_create_order(
 			[
 				'customer_id'   => 0,
@@ -451,9 +450,9 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		$links  = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
 		$joined = implode( '', $links );
 
-		$this->assertCount( 2, $links );
+		$this->assertCount( 1, $links );
 		$this->assertStringContainsString( '#' . $recent->get_id() . '</a>', $joined );
-		$this->assertStringContainsString( '#' . $guest->get_id() . '</a>', $joined, 'A guest order under the reader\'s billing email is listed.' );
+		$this->assertStringNotContainsString( '#' . $guest->get_id() . '<', $joined, 'A guest order under the reader\'s billing email is not listed.' );
 		$this->assertStringContainsString( 'href="' . esc_url( $recent->get_edit_order_url() ) . '"', $joined, 'The label must link to the order edit screen.' );
 		$this->assertStringNotContainsString( '#' . $stale->get_id() . '<', $joined );
 		$this->assertStringNotContainsString( '#' . $refund->get_id() . '<', $joined );
@@ -461,7 +460,7 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		// Lifetime access has no window, so the older order counts too.
 		$value['duration_unit'] = 'forever';
 		$links                  = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', $value, self::$user_id );
-		$this->assertCount( 3, $links, 'A forever rule lists every paid order for the product.' );
+		$this->assertCount( 2, $links, 'A forever rule lists every paid order the reader placed for the product.' );
 	}
 
 	/**
