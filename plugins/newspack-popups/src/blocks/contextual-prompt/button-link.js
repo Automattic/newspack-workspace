@@ -12,7 +12,7 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
 import { useSelect } from '@wordpress/data';
@@ -41,10 +41,11 @@ export const isInsidePromptCard = parents => parents.some( ( { name, attributes 
  * @param {Object}   props               Component props.
  * @param {string}   props.clientId      The button's client id.
  * @param {string}   props.url           The button's current link.
+ * @param {string}   props.rel           The button's current link relation.
  * @param {Function} props.setAttributes The button's attribute setter.
  * @return {Element|null} The field, or nothing outside a card.
  */
-const PromptButtonLink = ( { clientId, url, setAttributes } ) => {
+const PromptButtonLink = ( { clientId, url, rel, setAttributes } ) => {
 	const insideCard = useSelect(
 		select => {
 			const { getBlockParents, getBlockName, getBlockAttributes } = select( blockEditorStore );
@@ -66,12 +67,21 @@ const PromptButtonLink = ( { clientId, url, setAttributes } ) => {
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 					label={ __( 'Button link', 'newspack-popups' ) }
-					help={ __( 'Also accepts on-page links that the toolbar rejects, such as #donate?amount=10.', 'newspack-popups' ) }
+					help={ sprintf(
+						/* translators: %s: an example on-page link. */
+						__( 'Also accepts on-page links that the toolbar rejects, such as %s.', 'newspack-popups' ),
+						'#donate?amount=10'
+					) }
 					value={ url || '' }
 					// An on-page link opening in a new tab would load the page again, and
 					// the toolbar can't turn that setting off once it rejects the link.
+					// Drop `noopener` with it, as core's own new-tab toggle does.
 					onChange={ value =>
-						setAttributes( value.startsWith( '#' ) ? { url: value, linkTarget: undefined } : { url: value || undefined } )
+						setAttributes(
+							value.trim().startsWith( '#' )
+								? { url: value, linkTarget: undefined, rel: rel?.replace( /\bnoopener\s*/g, '' ).trim() || undefined }
+								: { url: value || undefined }
+						)
 					}
 					// Match the toolbar, which adds the scheme to a bare domain; without it
 					// the link saves as a path under the story.
@@ -96,7 +106,12 @@ export const withPromptButtonLink = createHigherOrderComponent(
 		<>
 			<BlockEdit { ...props } />
 			{ 'core/button' === props.name && props.isSelected && 'button' !== props.attributes?.tagName && (
-				<PromptButtonLink clientId={ props.clientId } url={ props.attributes?.url } setAttributes={ props.setAttributes } />
+				<PromptButtonLink
+					clientId={ props.clientId }
+					url={ props.attributes?.url }
+					rel={ props.attributes?.rel }
+					setAttributes={ props.setAttributes }
+				/>
 			) }
 		</>
 	),

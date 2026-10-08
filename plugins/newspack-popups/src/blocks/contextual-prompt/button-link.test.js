@@ -49,15 +49,14 @@ const plainGroup = { name: 'core/group', attributes: {} };
 const buttons = { name: 'core/buttons', attributes: {} };
 
 describe( 'isInsidePromptCard', () => {
+	// How a card is recognised is isDetachedPromptCard's job, covered in
+	// instance.test.js; these cases cover the walk up the parents.
 	it.each( [
-		[ 'a card around the buttons', [ card(), buttons ], true ],
-		[ 'a card among other classes', [ card( `is-style-boxed ${ MARKER }` ), buttons ], true ],
-		[ 'a card further up', [ plainGroup, card(), buttons ], true ],
-		[ 'a look-alike class', [ card( `${ MARKER }-custom` ), buttons ], false ],
-		[ 'the marker on a non-group', [ { name: 'core/column', attributes: { className: MARKER } }, buttons ], false ],
-		[ 'no card', [ plainGroup, buttons ], false ],
-		[ 'no parents', [], false ],
-	] )( 'is %s → %s', ( label, parents, expected ) => {
+		[ 'a card around the buttons', true, [ card(), buttons ] ],
+		[ 'a card further up', true, [ plainGroup, card(), buttons ] ],
+		[ 'no card', false, [ plainGroup, buttons ] ],
+		[ 'no parents', false, [] ],
+	] )( 'is %s → %s', ( label, expected, parents ) => {
 		expect( isInsidePromptCard( parents ) ).toBe( expected );
 	} );
 } );
@@ -135,10 +134,27 @@ describe( 'withPromptButtonLink', () => {
 	// toolbar can't turn the setting off: it rejects the link before saving.
 	it( 'turns off "open in new tab" when the link becomes an on-page link', () => {
 		const setAttributes = jest.fn();
-		render( <Edit { ...props( { setAttributes, attributes: { url: 'https://donations.example.test/', linkTarget: '_blank' } } ) } /> );
+		render(
+			<Edit
+				{ ...props( {
+					setAttributes,
+					attributes: { url: 'https://donations.example.test/', linkTarget: '_blank', rel: 'noreferrer noopener' },
+				} ) }
+			/>
+		);
 
 		fireEvent.change( screen.getByLabelText( 'Button link' ), { target: { value: '#donate?amount=10' } } );
-		expect( setAttributes.mock.calls.at( -1 )[ 0 ] ).toStrictEqual( { url: '#donate?amount=10', linkTarget: undefined } );
+		expect( setAttributes.mock.calls.at( -1 )[ 0 ] ).toStrictEqual( { url: '#donate?amount=10', linkTarget: undefined, rel: 'noreferrer' } );
+	} );
+
+	// Blur trims the stored link, so a pasted leading space would otherwise
+	// leave a `#` link opening in a new tab.
+	it( 'treats a link with a leading space as an on-page link', () => {
+		const setAttributes = jest.fn();
+		render( <Edit { ...props( { setAttributes, attributes: { url: 'https://donations.example.test/', linkTarget: '_blank' } } ) } /> );
+
+		fireEvent.change( screen.getByLabelText( 'Button link' ), { target: { value: ' #donate' } } );
+		expect( setAttributes.mock.calls.at( -1 )[ 0 ] ).toStrictEqual( { url: ' #donate', linkTarget: undefined, rel: undefined } );
 	} );
 
 	// The toolbar adds the scheme to a bare domain; without it the link would
