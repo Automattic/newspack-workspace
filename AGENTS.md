@@ -110,7 +110,7 @@ n sites-add|sites-list|sites-drop <name>   # Extra sites at <name>.test, sharing
 
 Run any command with `--help` for its full options.
 
-**Of the build/test family, only `build`, `ci-build` and `watch` take a project name.** `test-php`, `test-js` and `composer` resolve the project from your cwd, so `cd` into it first. Passing a name does not error usefully: `n composer <project> install` makes the name a bogus composer subcommand, `n test-php <project>` forwards it to PHPUnit as a positional path (`Cannot open file "..."`), and `n test-js <project>` silently ignores it. (`bin/composer.sh`'s own usage example is stale on this point.) `n npm` resolves from cwd the same way. Other commands such as `env` and `worktree` do take names.
+**Of the build/test family, only `build`, `ci-build`, `watch` and `test-js` take a project name.** `test-php` and `composer` resolve the project from your cwd, so `cd` into it first. Passing a name does not error usefully: `n composer <project> install` makes the name a bogus composer subcommand, and `n test-php <project>` forwards it to PHPUnit as a positional path (`Cannot open file "..."`). (`bin/composer.sh`'s own usage example is stale on this point.) `n npm` resolves from cwd the same way. Other commands such as `env` and `worktree` do take names.
 
 **First-time setup**
 
