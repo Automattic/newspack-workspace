@@ -54,7 +54,7 @@ class Reader_Registered extends Abstract_Incoming_Event {
 		// An account that already holds any role is left exactly as it is: this
 		// event is the only signal that the two emails match, and that alone
 		// isn't enough to change what the account can already do here. This is
-		// narrower than Users::is_syncable_account() on purpose — a roleless
+		// narrower than Users::is_syncable_account() on purpose—a roleless
 		// account is the only case that needs a role *added*; one that already
 		// holds a synced role needs no action, so reusing that check here would
 		// just re-run add_role() on every such account on every event.

@@ -7,6 +7,7 @@
 
 use Newspack_Network\Incoming_Events\Reader_Registered;
 use Newspack_Network\Incoming_Events\User_Updated;
+use Newspack_Network\User_Update_Watcher;
 
 require_once __DIR__ . '/mock-reader-activation.php';
 
@@ -18,6 +19,29 @@ require_once __DIR__ . '/mock-reader-activation.php';
  * @group incoming-user-sync
  */
 class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
+
+	/**
+	 * Whether the user update watcher was enabled before the test.
+	 *
+	 * @var bool
+	 */
+	private $original_watcher_enabled;
+
+	/**
+	 * Save the process-scoped watcher flag the handlers under test disable.
+	 */
+	public function set_up() {
+		parent::set_up();
+		$this->original_watcher_enabled = User_Update_Watcher::$enabled;
+	}
+
+	/**
+	 * Restore the watcher flag so later tests in this process see it as they left it.
+	 */
+	public function tear_down() {
+		User_Update_Watcher::$enabled = $this->original_watcher_enabled;
+		parent::tear_down();
+	}
 
 	/**
 	 * A role held on this site, outside the synced set, must not be touched
@@ -40,7 +64,7 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 
 	/**
 	 * An existing account with no role of its own still picks up the synced
-	 * reader role, same as before the fix — this is the ordinary case the
+	 * reader role, same as before the fix—this is the ordinary case the
 	 * handler exists for.
 	 */
 	public function test_reader_registered_adds_synced_role_to_existing_roleless_account() {
@@ -91,8 +115,41 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A user_updated event also applies watched profile fields to an account
+	 * with no role of its own, same as the synced-reader case below—the
+	 * PR description's "holds no role, or whose role(s) are all synced
+	 * reader roles" claim covers both, so both need a test.
+	 */
+	public function test_user_updated_updates_profile_fields_of_existing_roleless_account() {
+		$user_id = $this->factory->user->create(
+			[
+				'role'         => '',
+				'user_email'   => 'noaccount@example.test',
+				'display_name' => 'Old Name',
+			]
+		);
+
+		$event = new User_Updated(
+			'https://node.example.test',
+			[
+				'email' => 'noaccount@example.test',
+				'prop'  => [
+					'display_name' => 'New Name',
+					'user_email'   => 'noaccount-new@example.test',
+				],
+			],
+			time()
+		);
+		$event->maybe_update_user();
+
+		$user = get_user_by( 'id', $user_id );
+		$this->assertSame( 'noaccount-new@example.test', $user->user_email );
+		$this->assertSame( 'New Name', $user->display_name );
+	}
+
+	/**
 	 * A user_updated event still applies watched profile fields to an
-	 * account already holding a synced reader role — the ordinary case the
+	 * account already holding a synced reader role—the ordinary case the
 	 * handler exists for.
 	 */
 	public function test_user_updated_updates_profile_fields_of_existing_synced_reader_account() {
@@ -160,7 +217,7 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 	/**
 	 * The user URL is watched alongside the display name and email
 	 * (User_Update_Watcher::$user_props), but the role boundary applies only
-	 * to the latter two — a non-synced account's website still syncs, the
+	 * to the latter two—a non-synced account's website still syncs, the
 	 * same as before the fix.
 	 */
 	public function test_user_updated_still_updates_user_url_of_existing_non_synced_account() {
@@ -188,7 +245,7 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 
 	/**
 	 * Watched meta (author bio, social links, etc.) still syncs to a
-	 * non-synced account — the role boundary above applies only to the
+	 * non-synced account—the role boundary above applies only to the
 	 * display name and email address, not to this existing bio-sync use.
 	 */
 	public function test_user_updated_still_updates_watched_meta_of_existing_non_synced_account() {

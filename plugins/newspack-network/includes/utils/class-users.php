@@ -194,7 +194,7 @@ class Users {
 	 * network's incoming user-sync events.
 	 *
 	 * True for an account with no role at all, or whose roles are all synced
-	 * reader roles. False once the account also holds any other role — a
+	 * reader roles. False once the account also holds any other role—a
 	 * reader role added alongside it (e.g. by a prior registration event)
 	 * does not make the account syncable, since it still holds the other
 	 * role too.
