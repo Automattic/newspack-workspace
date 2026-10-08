@@ -366,7 +366,7 @@ class My_Account_UI_V1 {
 		if ( is_string( $active_subscriptions ) ) {
 			$active_subscriptions = json_decode( $active_subscriptions );
 		}
-		$active_donations         = boolval( Reader_Data::get_data( $user->ID, 'is_donor' ) );
+		$active_donations         = Reader_Data::get_bool( $user->ID, 'is_donor' );
 		$newsletter_subscriptions = Reader_Data::get_data( $user->ID, 'newsletter_subscribed_lists' );
 		if ( is_string( $newsletter_subscriptions ) ) {
 			$newsletter_subscriptions = json_decode( $newsletter_subscriptions );
