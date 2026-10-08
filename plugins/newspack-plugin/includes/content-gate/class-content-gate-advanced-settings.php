@@ -244,10 +244,14 @@ class Content_Gate_Advanced_Settings {
 		// whose TS types declare these as boolean) don't misinterpret a stringy
 		// '0' returned by get_option() as truthy.
 		$settings = [
-			'restrict_feeds'                 => (int) get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
-			'feed_restriction_mode'          => self::sanitize_feed_mode( get_option( self::OPTION_PREFIX . 'feed_restriction_mode', self::FEED_MODE_TRUNCATE ) ),
-			'newsletter_link_bypass_enabled' => (int) get_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', 0 ),
-			'institutional_access_text'      => (string) get_option( self::OPTION_PREFIX . 'institutional_access_text', '' ),
+			'restrict_feeds'                   => (int) get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
+			'feed_restriction_mode'            => self::sanitize_feed_mode( get_option( self::OPTION_PREFIX . 'feed_restriction_mode', self::FEED_MODE_TRUNCATE ) ),
+			'newsletter_link_bypass_enabled'   => (int) get_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', 0 ),
+			'institutional_access_text'        => (string) get_option( self::OPTION_PREFIX . 'institutional_access_text', '' ),
+			// 0 leaves commenting to the site's Discussion Settings. See Comment_Restriction.
+			'comment_restriction_gate_id'      => (int) get_option( self::OPTION_PREFIX . 'comment_restriction_gate_id', 0 ),
+			'comment_restriction_message'      => (string) get_option( self::OPTION_PREFIX . 'comment_restriction_message', '' ),
+			'comment_restriction_purchase_url' => (string) get_option( self::OPTION_PREFIX . 'comment_restriction_purchase_url', '' ),
 		];
 
 		self::$settings = $settings;
@@ -331,6 +335,28 @@ class Content_Gate_Advanced_Settings {
 				update_option( self::OPTION_PREFIX . 'institutional_access_text', $institutional_access_text, false );
 				flush_page_cache();
 			}
+		}
+		$comment_restriction = [
+			'comment_restriction_gate_id'      => fn( $value ) => max( 0, (int) $value ),
+			'comment_restriction_message'      => 'sanitize_text_field',
+			'comment_restriction_purchase_url' => 'esc_url_raw',
+		];
+		$stored_settings             = self::get_settings();
+		$comment_restriction_changed = false;
+		foreach ( $comment_restriction as $key => $sanitize ) {
+			if ( ! isset( $settings[ $key ] ) ) {
+				continue;
+			}
+			$value = $sanitize( $settings[ $key ] );
+			// Against the read-back value, defaults applied, so saving an unchanged form writes nothing.
+			if ( $stored_settings[ $key ] !== $value ) {
+				update_option( self::OPTION_PREFIX . $key, $value, false );
+				$comment_restriction_changed = true;
+			}
+		}
+		// The comment form is part of the article HTML served from the page cache.
+		if ( $comment_restriction_changed ) {
+			flush_page_cache();
 		}
 		self::reset_cache();
 		return self::get_settings();
