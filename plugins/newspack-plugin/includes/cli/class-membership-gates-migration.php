@@ -1174,7 +1174,7 @@ class Membership_Gates_Migration {
 	 * @param string $content Layout block markup.
 	 *
 	 * @return array<int,\WP_Post|null> The pattern keyed by ID, or null where WordPress
-	 *                                   renders nothing for the reference.
+	 *                                  renders nothing for the reference.
 	 */
 	private static function reached_patterns( string $content ): array {
 		$reached = [];
@@ -1185,9 +1185,9 @@ class Membership_Gates_Migration {
 	/**
 	 * Accumulate every synced pattern a block tree reaches, following chains.
 	 *
-	 * @param array                     $blocks  Parsed blocks to search.
+	 * @param array                    $blocks  Parsed blocks to search.
 	 * @param array<int,\WP_Post|null> $reached See reached_patterns(), filled by reference.
-	 *                                           Doubles as the visited set.
+	 *                                          Doubles as the visited set.
 	 *
 	 * @return void
 	 */
