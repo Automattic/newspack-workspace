@@ -1326,11 +1326,13 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		if ( '' === $href ) {
 			return false;
 		}
-		// A same-page link (`#donate?amount=10`) never loads a page, so nothing
-		// here would read the args, and add_query_arg() would put them before the
-		// `#`, which turns the click into a reload. On-page donation modals open
-		// from links of exactly this shape.
-		if ( '#' === $href[0] ) {
+		// A same-page link (`#donate?amount=10`) is meant to act on the page it
+		// is on, and on-page donation modals open from links of exactly this
+		// shape. add_query_arg() would put the args before the `#`, which turns
+		// the click into a reload. Leaving it alone has one cost: a same-story
+		// anchor that leads to a donate form outside the card no longer hands
+		// that form the prompt's attribution, which it read from the reload.
+		if ( str_starts_with( $href, '#' ) ) {
 			return false;
 		}
 		$scheme = wp_parse_url( $href, PHP_URL_SCHEME );
