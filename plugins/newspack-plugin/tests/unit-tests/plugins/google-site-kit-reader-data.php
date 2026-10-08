@@ -9,9 +9,10 @@ use Newspack\GoogleSiteKit;
 use Newspack\Reader_Data;
 
 /**
- * The `is_donor` and `is_newsletter_subscriber` parameters follow the reader's
- * current state, so a reader who stops donating or leaves every newsletter is
- * reported as "no" from then on.
+ * The `is_donor`, `is_newsletter_subscriber`, and `is_subscriber` parameters
+ * follow the reader's current state, so a reader who stops donating, leaves
+ * every newsletter, or loses their last subscription is reported as "no" from
+ * then on.
  *
  * @group GoogleSiteKit_Reader_Data
  */
@@ -75,5 +76,26 @@ class Newspack_Test_GoogleSiteKit_Reader_Data extends WP_UnitTestCase {
 			]
 		);
 		$this->assertSame( 'no', GoogleSiteKit::get_custom_event_parameters()['is_newsletter_subscriber'] );
+	}
+
+	/**
+	 * A reader whose only subscription is cancelled is no longer reported as a
+	 * subscriber.
+	 */
+	public function test_former_subscriber_is_not_reported_as_subscriber() {
+		$this->assertSame( 'no', GoogleSiteKit::get_custom_event_parameters()['is_subscriber'], 'A reader who never subscribed should not be reported as a subscriber.' );
+
+		$subscription = [
+			'user_id'         => $this->reader_id,
+			'subscription_id' => 1,
+			'product_ids'     => [ 123 ],
+			'status_after'    => 'active',
+		];
+		Reader_Data::update_active_subscriptions( time(), $subscription );
+		$this->assertSame( 'yes', GoogleSiteKit::get_custom_event_parameters()['is_subscriber'] );
+
+		$subscription['status_after'] = 'cancelled';
+		Reader_Data::update_active_subscriptions( time(), $subscription );
+		$this->assertSame( 'no', GoogleSiteKit::get_custom_event_parameters()['is_subscriber'] );
 	}
 }

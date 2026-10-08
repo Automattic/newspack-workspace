@@ -344,6 +344,20 @@ final class Reader_Data {
 	}
 
 	/**
+	 * The product IDs of the reader's active non-donation subscriptions, or [].
+	 *
+	 * The list is stored JSON-encoded, so once the reader's last subscription
+	 * ends, get_data() returns the string "[]", which PHP treats as non-empty.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return array Product IDs. Empty when the reader has none, or the item was never set.
+	 */
+	public static function get_active_subscriptions( int $user_id ): array {
+		return self::decode_item_list( self::get_data( $user_id, 'active_subscriptions' ) );
+	}
+
+	/**
 	 * Decode a stored list-type reader data item (active_memberships,
 	 * active_subscriptions) into an array of IDs.
 	 *

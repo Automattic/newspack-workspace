@@ -964,8 +964,14 @@ final class GAM_Model {
 					$targeting['reader_status'][] = 'donor';
 				}
 
-				// If reader has any currently active non-donation subscriptions.
-				if ( ! empty( $reader_data['active_subscriptions'] ) ) {
+				// If reader has any currently active non-donation subscriptions. The list is stored
+				// JSON-encoded, so an emptied one is the truthy string "[]" until get_active_subscriptions()
+				// decodes it. A Newspack plugin that predates that method keeps the previous read, which
+				// still counts a former subscriber, rather than dropping the status for current ones.
+				$has_active_subscriptions = method_exists( 'Newspack\Reader_Data', 'get_active_subscriptions' )
+					? ! empty( \Newspack\Reader_Data::get_active_subscriptions( $user_id ) )
+					: ! empty( $reader_data['active_subscriptions'] );
+				if ( $has_active_subscriptions ) {
 					$targeting['reader_status'][] = 'subscriber';
 				}
 			}

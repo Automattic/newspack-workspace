@@ -218,6 +218,27 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A reader whose only subscription is cancelled has the stored list "[]",
+	 * and is no longer targeted as a subscriber.
+	 */
+	public function test_former_subscriber_is_not_targeted_as_subscriber() {
+		wp_set_current_user( self::factory()->user->create() );
+
+		try {
+			Reader_Data::$data = [ 'active_subscriptions' => '[123]' ];
+			$targeting         = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertContains( 'subscriber', $targeting['reader_status'] );
+
+			Reader_Data::$data = [ 'active_subscriptions' => '[]' ];
+			$targeting         = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertNotContains( 'subscriber', $targeting['reader_status'] );
+		} finally {
+			Reader_Data::$data = [];
+			wp_set_current_user( 0 );
+		}
+	}
+
+	/**
 	 * Test sanitization functions.
 	 */
 	public function test_sanitization() {
