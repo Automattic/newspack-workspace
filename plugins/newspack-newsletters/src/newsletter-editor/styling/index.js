@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
+import { BLOCK_PREVIEW_IFRAME_SELECTOR } from '../../utils/consts';
 import './style.scss';
 
 const fontOptgroups = [
@@ -125,7 +126,7 @@ export const useCustomFontsInIframe = () => {
 	useEffect( () => {
 		const node = ref.current;
 		const updateIframe = () => {
-			const iframe = node.querySelector( 'iframe[title="Editor canvas"]' );
+			const iframe = node.querySelector( BLOCK_PREVIEW_IFRAME_SELECTOR );
 			if ( iframe ) {
 				const updateStyleProperties = () => {
 					const element = iframe.contentDocument?.documentElement;
@@ -215,7 +216,7 @@ export const ApplyStyling = withSelect( customStylesSelector )( ( { fontBody, fo
 	}, [ backgroundColor, textColor ] );
 	// Walks all canvas iframes (including the nested posts-inserter BlockPreview) so fonts and bg/text colour apply inside each.
 	useEffect( () => {
-		const selector = 'iframe[name="editor-canvas"], iframe[title="Editor canvas"]';
+		const selector = `${ EDITOR_CANVAS_SELECTOR }, ${ BLOCK_PREVIEW_IFRAME_SELECTOR }`;
 		const seenIframes = new WeakSet();
 		const seenDocs = new WeakSet();
 		const observers = [];
