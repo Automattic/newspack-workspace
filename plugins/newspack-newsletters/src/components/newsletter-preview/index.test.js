@@ -2,7 +2,7 @@
  * The preview stays hidden until it finds BlockPreview's iframe and its assets
  * load, with an 8 second fallback. Core translates that iframe's title, so
  * finding it by title left previews on non-English admins behind a spinner
- * (NPPM-3482). These tests render the iframe with a translated title and expect
+ * (NPPM-3482). This test renders the iframe with a translated title and expects
  * the preview to reveal on load, not on the fallback.
  *
  * `BlockPreview` is stubbed with core's wrapper markup: the real one needs a
@@ -51,7 +51,8 @@ describe( 'NewsletterPreview', () => {
 	it( 'reveals the preview when the iframe title is translated', async () => {
 		const { container, queryByTestId } = render( <NewsletterPreview layoutId={ 1 } blocks={ blocks } /> );
 
-		await waitFor( () => expect( getPreview( container ) ).toHaveClass( 'is-ready' ) );
+		// Well under the 8 second fallback, so only the on-load reveal can pass.
+		await waitFor( () => expect( getPreview( container ) ).toHaveClass( 'is-ready' ), { timeout: 1000 } );
 		expect( queryByTestId( 'spinner' ) ).toBeNull();
 	} );
 } );
