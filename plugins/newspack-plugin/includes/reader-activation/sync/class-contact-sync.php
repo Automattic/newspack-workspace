@@ -213,10 +213,11 @@ class Contact_Sync extends Sync {
 		}
 
 		// If we're running in a data event, queue the sync to run on shutdown.
-		// The queue keeps only the contact, so a call with sync options pushes
-		// now instead: a queued update-only push would create the contact, and
-		// a queued scoped one would resend the master list and the name.
-		if ( Data_Events::current_event() && self::options_are_default( $options ) ) {
+		// The queue keeps only the contact, so a call with any sync option
+		// pushes now instead: a queued update-only push would create the
+		// contact, and a queued scoped one would resend the master list and the
+		// name, or reach every integration instead of the one it named.
+		if ( Data_Events::current_event() && self::options_are_default( $options ) && empty( $options['integration_id'] ) ) {
 			if ( ! isset( self::$queued_syncs[ $contact['email'] ] ) ) {
 				self::$queued_syncs[ $contact['email'] ] = [
 					'contexts'     => [],
