@@ -10,6 +10,7 @@
  */
 
 use Newspack\Content_Gate;
+use Newspack\Data_Events;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\Reader_Activation\Integration;
@@ -531,6 +532,35 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code(), 'A skipped reader reports the canonical not-found code so the CLI tallies it as skipped.' );
 		$this->assertSame( 0, $failed, 'A deliberate skip is not a sync failure.' );
+	}
+
+	/**
+	 * The data-event queue keeps only the contact and pushes it later as a
+	 * plain upsert, so an update-only sync made inside an event must not be
+	 * queued, or the shutdown push would create the contact.
+	 */
+	public function test_existing_only_inside_a_data_event_is_not_queued() {
+		$current_event = new \ReflectionProperty( Data_Events::class, 'current_event' );
+		$current_event->setAccessible( true );
+		$queued_syncs = new \ReflectionProperty( Contact_Sync::class, 'queued_syncs' );
+		$queued_syncs->setAccessible( true );
+		$contact = [
+			'email'    => 'reader@example.com',
+			'metadata' => [ 'NP_Content Access' => 'Yes' ],
+		];
+
+		$current_event->setValue( null, 'reader_logged_in' );
+		try {
+			$result = Contact_Sync::sync( $contact, 'ctx', null, [ 'existing_only' => true ] );
+			$queued = $queued_syncs->getValue();
+		} finally {
+			$current_event->setValue( null, null );
+			$queued_syncs->setValue( null, [] );
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'The update-only check ran now, inside the event.' );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code() );
+		$this->assertArrayNotHasKey( 'reader@example.com', $queued, 'Nothing is left for the shutdown push to create.' );
 	}
 
 	public function test_existing_only_updates_a_reader_the_esp_has() {

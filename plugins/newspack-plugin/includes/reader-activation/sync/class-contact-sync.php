@@ -196,11 +196,9 @@ class Contact_Sync extends Sync {
 	 * @param array  $existing_contact Optional. Existing contact data to merge with. Defaults to null.
 	 * @param array  $options          Optional. Sync options threaded to the integration push:
 	 *                                 `skip_lists` (bool), `fields` (string[]|null) and `existing_only`
-	 *                                 (bool). These apply
-	 *                                 only to the direct push path below — not the queued Data Events
-	 *                                 branch, which never runs under WP-CLI. `integration_id`
-	 *                                 (string|null) restricts the push fan-out to a single active
-	 *                                 integration.
+	 *                                 (bool). A call that sets any of them always takes the direct push
+	 *                                 path, even inside a data event. `integration_id` (string|null)
+	 *                                 restricts the push fan-out to a single active integration.
 	 *
 	 * @return true|\WP_Error True if succeeded or WP_Error.
 	 */
@@ -215,7 +213,10 @@ class Contact_Sync extends Sync {
 		}
 
 		// If we're running in a data event, queue the sync to run on shutdown.
-		if ( Data_Events::current_event() ) {
+		// The queue keeps only the contact, so a call with sync options pushes
+		// now instead: a queued update-only push would create the contact, and
+		// a queued scoped one would resend the master list and the name.
+		if ( Data_Events::current_event() && self::options_are_default( $options ) ) {
 			if ( ! isset( self::$queued_syncs[ $contact['email'] ] ) ) {
 				self::$queued_syncs[ $contact['email'] ] = [
 					'contexts'     => [],
