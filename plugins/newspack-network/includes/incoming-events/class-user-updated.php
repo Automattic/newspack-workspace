@@ -62,7 +62,13 @@ class User_Updated extends Abstract_Incoming_Event {
 		// applied. The incoming payload is signed by the sending site but not otherwise
 		// validated, so an arbitrary key (e.g. user_pass, role, wp_capabilities,
 		// _application_passwords) must never reach wp_update_user() / update_user_meta().
-		if ( isset( $data->prop ) ) {
+		//
+		// The display name and email address are further gated on the target's own role:
+		// they only apply to an account the sync itself is allowed to resolve into (a synced
+		// reader, or one with no role at all), never to a role set outside the network. Watched
+		// meta (bio, social links, etc.) is unaffected by this gate — that sync also covers
+		// staff bylines, which legitimately hold a role outside the synced set.
+		if ( isset( $data->prop ) && User_Utils::is_syncable_account( $existing_user ) ) {
 			$incoming_props = (array) $data->prop;
 			$update_array   = [
 				'ID' => $existing_user->ID,

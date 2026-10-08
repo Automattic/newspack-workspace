@@ -190,6 +190,24 @@ class Users {
 	}
 
 	/**
+	 * Whether an existing account's profile fields may be touched by the
+	 * network's incoming user-sync events.
+	 *
+	 * True for an account with a synced reader role, or with no role at all.
+	 * False for any other role, so a site's own staff accounts are never
+	 * resolved into by a sync event matched to them by email alone.
+	 *
+	 * @param \WP_User $user The existing account to check.
+	 * @return bool
+	 */
+	public static function is_syncable_account( $user ) {
+		if ( empty( $user->roles ) ) {
+			return true;
+		}
+		return (bool) array_intersect( (array) $user->roles, self::get_synced_user_roles() );
+	}
+
+	/**
 	 * Get synchronized users count.
 	 */
 	public static function get_synchronized_users_count() {
