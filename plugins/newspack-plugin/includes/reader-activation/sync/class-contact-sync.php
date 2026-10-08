@@ -544,7 +544,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * @return true|\WP_Error
 	 */
-	private static function resolve_push_result( string $email, array $errors, array $skipped, int $pushed ): true|\WP_Error {
+	private static function resolve_push_result( string $email, array $errors, array $skipped, int $pushed ): bool|\WP_Error {
 		if ( ! empty( $errors ) ) {
 			return new \WP_Error( 'newspack_esp_sync_failed', implode( '; ', $errors ) );
 		}
