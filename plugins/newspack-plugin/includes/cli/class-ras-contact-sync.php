@@ -77,7 +77,7 @@ class RAS_Contact_Sync {
 	 * @param true|\WP_Error $result               The value returned by Contact_Sync::sync_contact().
 	 * @param bool           $reached_integrations Whether the contact generated provider traffic.
 	 */
-	protected static function record_result( $result, $reached_integrations = true ) {
+	protected static function record_result( $result, bool $reached_integrations = true ) {
 		if ( $reached_integrations ) {
 			static::$unpaused_contacts++;
 		}

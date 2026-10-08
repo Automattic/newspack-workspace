@@ -517,7 +517,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * @return bool|\WP_Error
 	 */
-	private static function check_existing_contact( $integration, $email ): bool|\WP_Error {
+	private static function check_existing_contact( Integration $integration, string $email ): bool|\WP_Error {
 		$exists = $integration->contact_exists( $email );
 		if ( \is_bool( $exists ) || \is_wp_error( $exists ) ) {
 			return $exists;
@@ -544,7 +544,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * @return true|\WP_Error
 	 */
-	private static function resolve_push_result( $email, $errors, $skipped, $pushed ): bool|\WP_Error {
+	private static function resolve_push_result( string $email, array $errors, array $skipped, int $pushed ): true|\WP_Error {
 		if ( ! empty( $errors ) ) {
 			return new \WP_Error( 'newspack_esp_sync_failed', implode( '; ', $errors ) );
 		}

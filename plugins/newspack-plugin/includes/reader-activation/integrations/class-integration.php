@@ -680,7 +680,7 @@ abstract class Integration {
 	 *
 	 * @return bool|\WP_Error True if the push would update a live record, false if it would create or restore one, WP_Error if the lookup failed or is unsupported.
 	 */
-	public function contact_exists( $email ) {
+	public function contact_exists( string $email ) {
 		return new \WP_Error(
 			'newspack_integration_contact_lookup_unsupported',
 			sprintf(
