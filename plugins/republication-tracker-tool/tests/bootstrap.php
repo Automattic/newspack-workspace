@@ -21,6 +21,10 @@ if ( ! $_tests_dir ) {
 // Give access to tests_add_filter() function.
 require_once $_tests_dir . '/includes/functions.php';
 
+// Loaded here, not per-test, since compatibility-co-authors-plus.php gates
+// its own registration on function_exists( 'coauthors' ) at plugin-load time.
+require_once __DIR__ . '/mocks/coauthors-plus-mock.php';
+
 /**
  * Manually load the plugin being tested.
  */
