@@ -860,15 +860,39 @@ class Test_ESP extends \WP_UnitTestCase {
 
 	/**
 	 * The integration syncs only to Mailchimp. Another provider's contact must
-	 * not read as existing, or an update-only push would upsert there.
+	 * not read as existing, or an update-only push would upsert there, even
+	 * when `NEWSPACK_FORCE_ALLOW_ESP_SYNC` waves every sync gate through.
 	 */
 	public function test_contact_exists_off_mailchimp_is_an_error_not_an_answer() {
-		$member = [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ];
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$this->set_provider( 'active_campaign' );
+		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ] ];
+		$force_allowed_esp = new class() extends ESP {
+			/**
+			 * Pass every sync gate, as the force constant does.
+			 *
+			 * @param bool $return_errors Whether to return a WP_Error.
+			 * @return bool|\WP_Error
+			 */
+			public function can_sync( $return_errors = false ) {
+				return $return_errors ? new \WP_Error() : true;
+			}
 
-		$result = $this->contact_exists_with( $member, 'active_campaign' );
+			/**
+			 * The audience the staged member belongs to.
+			 *
+			 * @return string
+			 */
+			public function get_master_list_id() {
+				return 'list-123';
+			}
+		};
+
+		$result = $force_allowed_esp->contact_exists( 'reader@example.com' );
+		\Newspack_Newsletters_Subscription::reset_calls();
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertContains( 'ras_esp_provider_not_supported', $result->get_error_codes() );
+		$this->assertSame( 'ras_esp_provider_not_supported', $result->get_error_code() );
 	}
 
 	/**

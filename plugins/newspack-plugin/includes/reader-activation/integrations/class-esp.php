@@ -568,9 +568,12 @@ class ESP extends Integration {
 	 *
 	 * @param string $email The contact's email address.
 	 *
-	 * @return bool|\WP_Error True if the contact exists, false if the provider has none, WP_Error if the read failed.
+	 * @return bool|\WP_Error True if the configured audience has a live member, false if it has
+	 *                       none (no contact, a member of another audience only, or an
+	 *                       archived member), WP_Error if the provider is not Mailchimp, the
+	 *                       integration cannot sync, or the read failed.
 	 */
-	public function contact_exists( $email ) {
+	public function contact_exists( string $email ) {
 		if ( 'mailchimp' !== $this->get_provider_slug() ) {
 			return new \WP_Error(
 				'ras_esp_provider_not_supported',
@@ -618,22 +621,6 @@ class ESP extends Integration {
 	}
 
 	/**
-	 * Release the provider's per-request memo of a contact's raw payload.
-	 *
-	 * ActiveCampaign memoizes each contact read for the life of the request. A
-	 * bulk run reads each contact once, so the entry is dead weight the batch
-	 * loops' object-cache flush cannot reach.
-	 *
-	 * @param string $email The contact's email address.
-	 */
-	private function release_provider_contact_data( $email ): void {
-		$provider = \Newspack_Newsletters::get_service_provider();
-		if ( $provider && method_exists( $provider, 'clear_contact_data' ) ) {
-			$provider->clear_contact_data( $email );
-		}
-	}
-
-	/**
 	 * Pull contact data from the ESP for a given user.
 	 *
 	 * @param int $user_id WordPress user ID.
@@ -652,7 +639,15 @@ class ESP extends Integration {
 		}
 
 		$contact_data = Newspack_Newsletters_Subscription::get_contact_data( $user->user_email, true );
-		$this->release_provider_contact_data( $user->user_email );
+
+		// The provider may memoize each contact's raw API payload for the life of
+		// the request (ActiveCampaign does); a bulk pull reads each contact once,
+		// so release the entry as soon as it is consumed — the batch loops'
+		// object-cache flush cannot reach provider-internal caches.
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( $provider && method_exists( $provider, 'clear_contact_data' ) ) {
+			$provider->clear_contact_data( $user->user_email );
+		}
 
 		if ( is_wp_error( $contact_data ) ) {
 			// Normalize the providers' not-found errors onto the framework's
