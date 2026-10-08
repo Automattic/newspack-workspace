@@ -35,7 +35,7 @@ if ( ! function_exists( 'newspack_generate_tag_labels' ) ) :
 	 *
 	 * @return string       Tag labels as HTML.
 	 */
-	function newspack_generate_tag_labels( $labels = null, $links = true, $outer_classes = array( 'tag-labels' ), $inner_classes = array( 'tag-label', 'flag' ) ) {
+	function newspack_generate_tag_labels( $labels = null, $links = true, $outer_classes = array( 'newspack-tag-labels', 'tag-labels' ), $inner_classes = array( 'newspack-tag-label', 'tag-label', 'flag' ) ) {
 		if ( class_exists( '\Newspack\Tag_Labels' ) && method_exists( '\Newspack\Tag_Labels', 'generate_html' ) ) {
 			return \Newspack\Tag_Labels::generate_html( $labels, $links, $outer_classes, $inner_classes, 'span' );
 		}
@@ -143,12 +143,12 @@ function newspack_tag_labels_styles() {
 	$flag_color_contrast = newspack_get_color_contrast( $flag_color );
 	?>
 	<style>
-		<?php // Match `.tag-label.flag` so this ties the base stylesheet rule (specificity 0,3,0) and wins on source order in single/archive contexts. ?>
-		.tag-labels .tag-label.flag,
-		amp-script .tag-labels .tag-label.flag,
-		.wpnbha .tag-labels a.flag,
-		.wpnbpc .tag-labels a.flag,
-		.featured-image-behind .tag-labels a.flag {
+		<?php // Match `.newspack-tag-label.flag` so this ties the base stylesheet rule (specificity 0,3,0) and wins on source order in single/archive contexts. ?>
+		.newspack-tag-labels .newspack-tag-label.flag,
+		amp-script .newspack-tag-labels .newspack-tag-label.flag,
+		.wpnbha .newspack-tag-labels a.flag,
+		.wpnbpc .newspack-tag-labels a.flag,
+		.featured-image-behind .newspack-tag-labels a.flag {
 			background: <?php echo esc_attr( $flag_color ); ?>;
 			color: <?php echo esc_attr( $flag_color_contrast ); ?>;
 		}
@@ -169,7 +169,7 @@ function newspack_tag_labels_styles_editor() {
 	$flag_color_contrast = newspack_get_color_contrast( $flag_color );
 
 	$tag_labels_customizations = '
-		.editor-styles-wrapper .tag-labels .flag  {
+		.editor-styles-wrapper .newspack-tag-labels .flag  {
 			background: ' . esc_attr( $flag_color ) . ';
 			color: ' . esc_attr( $flag_color_contrast ) . ';
 		}

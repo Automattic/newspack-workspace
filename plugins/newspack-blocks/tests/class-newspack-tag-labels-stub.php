@@ -50,7 +50,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Tag_Labels' ) ) {
 				return;
 			}
 
-			echo wp_kses_post( self::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), $outer_element ) . ' ' );
+			echo wp_kses_post( self::generate_html( $labels, $links, array( 'newspack-tag-labels', 'tag-labels' ), array( 'newspack-tag-label', 'tag-label', 'flag' ), $outer_element ) . ' ' );
 		}
 
 		/**
@@ -66,7 +66,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Tag_Labels' ) ) {
 		 *
 		 * @return string Tag labels as HTML.
 		 */
-		public static function generate_html( $labels = null, $links = true, $outer_classes = array( 'tag-labels' ), $inner_classes = array( 'tag-label', 'flag' ), $outer_element = 'span' ) {
+		public static function generate_html( $labels = null, $links = true, $outer_classes = array( 'newspack-tag-labels', 'tag-labels' ), $inner_classes = array( 'newspack-tag-label', 'tag-label', 'flag' ), $outer_element = 'span' ) {
 			if ( empty( $labels ) ) {
 				return '';
 			}
@@ -82,7 +82,7 @@ if ( ! class_exists( __NAMESPACE__ . '\Tag_Labels' ) ) {
 					$labels_html .= '<span class="' . join( ' ', array_map( 'esc_attr', $inner_classes ) ) . '">' . esc_html( $label['flag'] ) . '</span>';
 				}
 			}
-			$labels_html .= '</' . $outer_element . '><!-- .tag-labels -->';
+			$labels_html .= '</' . $outer_element . '><!-- .newspack-tag-labels -->';
 
 			return $labels_html;
 		}

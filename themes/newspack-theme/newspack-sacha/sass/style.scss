@@ -66,7 +66,7 @@
 #secondary .widgettitle,
 .article-section-title,
 .cat-links,
-.tag-labels {
+.newspack-tag-labels {
 	color: var(--newspack-theme-color-primary-against-white);
 	margin-bottom: structure.$size__spacing-unit;
 	text-align: center;
@@ -75,7 +75,7 @@
 .accent-header,
 div.wpnbha .article-section-title,
 .cat-links,
-.tag-labels {
+.newspack-tag-labels {
 	font-size: var(--newspack-theme-font-size-xs);
 }
 
@@ -125,7 +125,7 @@ div.wpnbha .article-section-title,
 }
 
 .cat-links,
-.tag-labels {
+.newspack-tag-labels {
 	font-size: var(--newspack-theme-font-size-sm);
 
 	a {
@@ -137,7 +137,7 @@ div.wpnbha .article-section-title,
 .search,
 .archive {
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		text-align: left;
 	}
 }
@@ -319,7 +319,7 @@ cite {
 .wpnbha,
 .wp-block-newspack-blocks-carousel {
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		text-align: left;
 	}
 }
@@ -333,7 +333,7 @@ cite {
 		}
 
 		.cat-links,
-		.tag-labels {
+		.newspack-tag-labels {
 			color: var(--newspack-theme-color-primary-against-white);
 		}
 	}

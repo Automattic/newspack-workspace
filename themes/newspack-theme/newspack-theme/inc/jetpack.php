@@ -41,11 +41,12 @@ function newspack_jetpack_setup() {
 			'post-details'    => array(
 				'stylesheet' => 'newspack-style',
 				'date'       => '.posted-on',
-				// Excludes `.tag-labels` because the outer class list is caller-supplied:
+				// Excludes tag labels because the outer class list is caller-supplied:
 				// `newspack_generate_tag_labels()` takes it as a parameter, so a child
-				// theme can carry both classes, and infinite scroll would otherwise
-				// read its tag labels as the post's categories.
-				'categories' => '.cat-links:not(.sponsor-label):not(.tag-labels)',
+				// theme can carry `cat-links` and a tag-label class, and Content Options
+				// would otherwise read its tag labels as the post's categories. Both
+				// names are listed because a child theme may pass the legacy one.
+				'categories' => '.cat-links:not(.sponsor-label):not(.newspack-tag-labels):not(.tag-labels)',
 				'tags'       => '.tags-links',
 				'author'     => '.byline:not(.sponsor-byline), .author-avatar',
 			),

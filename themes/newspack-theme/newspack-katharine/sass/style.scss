@@ -41,7 +41,7 @@
 
 // Tag labels take the colour but not the leading rule: that `::before` heads a row
 // of plain-text links, and the labels are chips it would sit detached from.
-.tag-labels {
+.newspack-tag-labels {
 	color: var(--newspack-theme-color-primary-against-white);
 }
 
@@ -95,7 +95,7 @@
 	.accent-header,
 	.article-section-title,
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		color: inherit;
 	}
 
@@ -112,7 +112,7 @@
 .wp-block-columns .wp-block-column > .accent-header,
 div.wpnbha .article-section-title,
 .cat-links,
-.tag-labels,
+.newspack-tag-labels,
 .archive .page-title {
 	margin: 0 0 #{1.5 * structure.$size__spacing-unit};
 }
@@ -124,7 +124,7 @@ div.wpnbha.is-grid .article-section-title {
 .accent-header,
 div.wpnbha .article-section-title,
 .cat-links,
-.tag-labels {
+.newspack-tag-labels {
 	font-size: var(--newspack-theme-font-size-xs);
 }
 
@@ -132,7 +132,7 @@ div.wpnbha .article-section-title,
 .search,
 .archive {
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		margin-bottom: #{0.5 * structure.$size__spacing-unit};
 
 		&::before {
@@ -428,14 +428,14 @@ figcaption,
 }
 
 .wpnbha .cat-links,
-.wpnbha .tag-labels {
+.wpnbha .newspack-tag-labels {
 	&::before {
 		display: none;
 	}
 }
 
 // Only the category takes the block's link color. A label's own color comes
-// from the customizer rule printed in `wp_head`, and naming `.tag-labels` here
+// from the customizer rule printed in `wp_head`, and naming `.newspack-tag-labels` here
 // would put these `:hover` and `:visited` arms level with it, leaving the
 // chip's color to be decided by which stylesheet loads last.
 .wpnbha .cat-links {

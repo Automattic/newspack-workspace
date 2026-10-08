@@ -271,7 +271,7 @@
 		.cat-links,
 		.cat-links a,
 		.cat-links a:visited,
-		.tag-labels,
+		.newspack-tag-labels,
 		figcaption {
 			color: inherit;
 		}
@@ -431,7 +431,7 @@
 		.cat-links,
 		.entry-meta,
 		.entry-sponsors,
-		.tag-labels {
+		.newspack-tag-labels {
 			justify-content: center;
 		}
 
@@ -447,7 +447,7 @@
 		.entry-meta,
 		.entry-sponsors,
 		.sponsor-logos,
-		.tag-labels {
+		.newspack-tag-labels {
 			justify-content: flex-end;
 			text-align: right;
 		}
@@ -466,12 +466,12 @@
 	}
 
 	/* Article meta */
-	// `.tag-labels` shares this rule rather than repeating it, so an edit to one
-	// cannot silently diverge from the other. The wrapper carries only
-	// `tag-labels`, which is what keeps a publisher's per-section `.cat-links a`
+	// `.newspack-tag-labels` shares this rule rather than repeating it, so an
+	// edit to one cannot silently diverge from the other. The wrapper never carries
+	// `cat-links`, which is what keeps a publisher's per-section `.cat-links a`
 	// rule from reaching a tag label; sharing layout here does not give that back.
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		display: flex;
 		flex-wrap: wrap;
 		font-size: variables.$font__size-xxs;
@@ -525,7 +525,7 @@
 			.entry-meta,
 			.entry-sponsors,
 			.sponsor-logos,
-			.tag-labels {
+			.newspack-tag-labels {
 				justify-content: flex-start;
 			}
 		}
@@ -535,7 +535,7 @@
 			.entry-meta,
 			.entry-sponsors,
 			.sponsor-logos,
-			.tag-labels {
+			.newspack-tag-labels {
 				justify-content: flex-end;
 			}
 		}
