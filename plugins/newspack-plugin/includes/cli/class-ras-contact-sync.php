@@ -857,7 +857,7 @@ class RAS_Contact_Sync {
 	 * : Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Restricts both what is computed and what is pushed to just these fields; all other metadata — and the reader's name — is left untouched. Every requested field must be enabled as an outgoing field on each active integration. The `newspack_esp_sync_contact` filter still runs, but any metadata it adds outside `--fields` is dropped.
 	 *
 	 * [--create-missing]
-	 * : Also create a contact for each reader an integration has no contact for. Without this flag the sync only updates the contacts an integration already has: it checks for each reader's contact first (one extra provider read per reader, two on ActiveCampaign, whose upsert reads the contact again) and skips a reader with none (tallied as skipped). On Mailchimp, "existing" means a current member of the configured audience, and archived members do not count; on Constant Contact, deleted contacts do not count. A read that fails for any other reason withholds the push and is tallied as an error. Only integrations that implement `contact_exists()` can check — the built-in ESP integration does — so without this flag the run refuses to start if an integration taking part cannot; pass this flag, or scope the run with `wp newspack integrations backfill --integration=<id>` to one that can.
+	 * : Also create a contact for each reader an integration has no contact for. Without this flag the sync only updates the contacts an integration already has: it checks for each reader's contact first (one extra provider read per reader) and skips a reader with none (tallied as skipped). For the built-in Mailchimp integration (`esp`), "existing" means a current member of the configured audience; archived members do not count. A read that fails for any other reason withholds the push and is tallied as an error. Only integrations that implement `contact_exists()` can check — the built-in Mailchimp integration does — so without this flag the run refuses to start if an integration taking part cannot; pass this flag, or scope the run with `wp newspack integrations backfill --integration=<id>` to one that can.
 	 *
 	 * ## NOTES
 	 *
@@ -950,7 +950,7 @@ class RAS_Contact_Sync {
 	 * : (push only) Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Each field must be enabled as an outgoing field on every integration taking part in the run (just the `--integration` target when scoped).
 	 *
 	 * [--create-missing]
-	 * : (push leg) Also create a contact for each reader an integration has no contact for. Without this flag the push only updates the contacts an integration already has: it checks for each reader's contact first (one extra provider read per reader, two on ActiveCampaign, whose upsert reads the contact again) and skips a reader with none (tallied as skipped). On Mailchimp, "existing" means a current member of the configured audience, and archived members do not count; on Constant Contact, deleted contacts do not count. A read that fails for any other reason withholds the push and is tallied as an error. Only integrations that implement `contact_exists()` can check — the built-in ESP integration does — so without this flag the run refuses to start if an integration taking part cannot; pass this flag, or scope the run with `--integration=<id>` to one that can. Accepted with `--direction=both`; refused with `--direction=pull`, which never creates contacts.
+	 * : (push leg) Also create a contact for each reader an integration has no contact for. Without this flag the push only updates the contacts an integration already has: it checks for each reader's contact first (one extra provider read per reader) and skips a reader with none (tallied as skipped). For the built-in Mailchimp integration (`esp`), "existing" means a current member of the configured audience; archived members do not count. A read that fails for any other reason withholds the push and is tallied as an error. Only integrations that implement `contact_exists()` can check — the built-in Mailchimp integration does — so without this flag the run refuses to start if an integration taking part cannot; pass this flag, or scope the run with `--integration=<id>` to one that can. Accepted with `--direction=both`; refused with `--direction=pull`, which never creates contacts.
 	 *
 	 * ## NOTES
 	 *
@@ -1014,9 +1014,6 @@ class RAS_Contact_Sync {
 	 *
 	 *     # Refresh one field on the contacts the ESP already has.
 	 *     wp newspack integrations backfill --integration=esp --fields="Newsletter Selection"
-	 *
-	 *     # The same on ActiveCampaign, where a push with the master list would resubscribe contacts who unsubscribed from it.
-	 *     wp newspack integrations backfill --integration=esp --fields="Newsletter Selection" --skip-lists
 	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.

@@ -800,7 +800,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	 * @param string               $list_id      The ESP's configured master list id.
 	 * @return bool|\WP_Error
 	 */
-	private function contact_exists_with( $contact_data, $provider = null, $list_id = 'list-123' ) {
+	private function contact_exists_with( $contact_data, $provider = 'mailchimp', $list_id = 'list-123' ) {
 		\Newspack_Newsletters::$is_service_provider_configured = true;
 		$this->set_provider( $provider );
 		if ( null !== $contact_data ) {
@@ -859,27 +859,16 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Off Mailchimp, contacts are account-wide entities: any returned contact
-	 * exists, list membership or not.
+	 * The integration syncs only to Mailchimp. Another provider's contact must
+	 * not read as existing, or an update-only push would upsert there.
 	 */
-	public function test_contact_exists_is_account_wide_off_mailchimp() {
-		$contact = [
-			'id'    => '42',
-			'email' => 'reader@example.com',
-		];
+	public function test_contact_exists_off_mailchimp_is_an_error_not_an_answer() {
+		$member = [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ];
 
-		$this->assertTrue( $this->contact_exists_with( $contact, 'active_campaign' ) );
-	}
+		$result = $this->contact_exists_with( $member, 'active_campaign' );
 
-	/**
-	 * Constant Contact's lookup also returns deleted contacts, and the upsert's
-	 * update would revive one: a create in every way the flag cares about.
-	 */
-	public function test_contact_exists_on_constant_contact_treats_a_deleted_contact_as_missing() {
-		$contact = [ 'contact_id' => 'cc-42' ];
-
-		$this->assertTrue( $this->contact_exists_with( $contact, 'constant_contact' ) );
-		$this->assertFalse( $this->contact_exists_with( $contact + [ 'deleted_at' => '2026-09-01' ], 'constant_contact' ) );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertContains( 'ras_esp_provider_not_supported', $result->get_error_codes() );
 	}
 
 	/**
@@ -889,7 +878,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	public function test_contact_exists_releases_the_provider_contact_cache_entry() {
 		\Newspack_Newsletters_Service_Provider::$cleared_emails = [];
 
-		$this->contact_exists_with( [ 'id' => '42' ], 'active_campaign' );
+		$this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ] );
 
 		$this->assertSame( [ 'reader@example.com' ], \Newspack_Newsletters_Service_Provider::$cleared_emails );
 	}

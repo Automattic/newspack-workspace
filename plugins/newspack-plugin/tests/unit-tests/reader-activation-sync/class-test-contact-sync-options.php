@@ -493,6 +493,16 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A provider payload for a current member of the configured audience,
+	 * which is what the ESP counts as an existing contact.
+	 *
+	 * @return array
+	 */
+	private function audience_member() {
+		return [ 'lists' => [ '123' => [ 'status' => 'subscribed' ] ] ];
+	}
+
+	/**
 	 * Count `newspack_sync_contact_failed` firings during a callback.
 	 *
 	 * @param callable $callback The work to observe.
@@ -524,7 +534,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	public function test_existing_only_updates_a_reader_the_esp_has() {
-		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = [ 'id' => '42' ];
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = $this->audience_member();
 
 		$result = $this->push_existing_only();
 
@@ -591,7 +601,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		Lookupless_Sample_Integration::reset();
 		Integrations::register( new Lookupless_Sample_Integration( 'existing_only_lookupless', 'Existing Only Lookupless' ) );
 		Integrations::enable( 'existing_only_lookupless' );
-		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = [ 'id' => '42' ];
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = $this->audience_member();
 
 		list( $result, $failed ) = $this->count_failed_syncs( fn() => $this->push_existing_only() );
 
@@ -687,7 +697,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 
 	public function test_dry_run_existing_only_previews_an_update_as_a_sync() {
 		$this->create_custom_access_gate( $this->passing_email_domain_rules() );
-		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = [ 'id' => '42' ];
+		Newspack_Newsletters_Subscription::$contact_data['reader@example.com'] = $this->audience_member();
 
 		$result = Contact_Sync::sync_contact(
 			$this->user_id,

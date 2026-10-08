@@ -559,15 +559,12 @@ class ESP extends Integration {
 	/**
 	 * Whether the ESP already holds a contact for this email.
 	 *
-	 * One provider read, the same lookup the login refresh uses. On Mailchimp a
+	 * One provider read, the same lookup the login refresh uses. A Mailchimp
 	 * contact is a member of one audience, so "exists" means a member of the
 	 * configured audience: an upsert for a reader who is only in another
 	 * audience would create a new member there, and one for an archived member
-	 * would restore it, so neither counts. ActiveCampaign and Constant Contact
-	 * keep account-wide contacts, so any returned contact counts, with one
-	 * exception: Constant Contact's lookup also returns deleted contacts
-	 * (`deleted_at` set) and an update revives them, so a deleted contact counts
-	 * as missing.
+	 * would restore it, so neither counts. The sync gate refuses any other
+	 * provider, so its contacts never read as existing.
 	 *
 	 * @param string $email The contact's email address.
 	 *
@@ -586,17 +583,8 @@ class ESP extends Integration {
 			return $this->is_provider_not_found_error( $contact_data ) ? false : $contact_data;
 		}
 
-		if ( 'mailchimp' === $this->get_provider_slug() ) {
-			$master_list_id = $this->get_master_list_id();
-			$member         = empty( $master_list_id ) ? null : ( $contact_data['lists'][ $master_list_id ] ?? null );
-			return null !== $member && 'archived' !== ( $member['status'] ?? '' );
-		}
-
-		if ( 'constant_contact' === $this->get_provider_slug() ) {
-			return empty( $contact_data['deleted_at'] );
-		}
-
-		return true;
+		$member = $contact_data['lists'][ $this->get_master_list_id() ] ?? null;
+		return null !== $member && 'archived' !== ( $member['status'] ?? '' );
 	}
 
 	/**
