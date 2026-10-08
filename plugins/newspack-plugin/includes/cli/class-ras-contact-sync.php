@@ -864,7 +864,9 @@ class RAS_Contact_Sync {
 	 * Failed pushes are auto-retried only on a `--create-missing` run without
 	 * `--skip-lists` or `--fields`. The retry path rebuilds the full contact and
 	 * upserts it with the master list, skipping the existence check, which would
-	 * undo the intent of any other run. Re-run the affected `--offset` window instead.
+	 * undo the intent of any other run. Re-run the affected `--offset` window instead;
+	 * such a run that tallies errors says so in a warning, since this command exits 0
+	 * either way.
 	 *
 	 * Without `--create-missing`, a `--dry-run` still performs the existence read at
 	 * each integration (that is what previewing the skips means); it only skips the
@@ -895,6 +897,24 @@ class RAS_Contact_Sync {
 			return;
 		}
 		WP_CLI::line( "\n" );
+		// The alias exits 0 whatever the tally, and only a plain --create-missing
+		// run schedules retries, so name the unretried failures on STDERR rather
+		// than leave them as a count in a success line.
+		$retried = empty( $options['existing_only'] ) && empty( $options['skip_lists'] ) && empty( $options['fields'] );
+		if ( ! $config['is_dry_run'] && ! $retried && $results['errors'] > 0 ) {
+			WP_CLI::warning(
+				sprintf(
+					// Translators: %d is the number of contacts that failed to sync.
+					_n(
+						'%d contact failed to sync and will not be retried automatically. Re-run the affected --offset window, or use `wp newspack integrations backfill`, which exits 1 when a run has errors.',
+						'%d contacts failed to sync and will not be retried automatically. Re-run the affected --offset window, or use `wp newspack integrations backfill`, which exits 1 when a run has errors.',
+						$results['errors'],
+						'newspack-plugin'
+					),
+					$results['errors']
+				)
+			);
+		}
 		WP_CLI::success( self::format_summary( $results, $config['is_dry_run'], 'push' ) );
 	}
 

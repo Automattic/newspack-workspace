@@ -223,6 +223,48 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The alias exits 0 whatever the tally, and an update-only or scoped run
+	 * schedules no retries, so a failed push has to be named on STDERR while
+	 * the alias's STDOUT summary stays as it was.
+	 */
+	public function test_esp_sync_alias_warns_when_failures_will_not_be_retried() {
+		WP_CLI::reset();
+		Failing_Sample_Integration::$should_fail = true;
+		Integrations::get_integration( 'tally_mock' )->update_enabled_outgoing_fields( [ 'Content Access' ] );
+
+		RAS_Contact_Sync::cli_sync_contacts(
+			[],
+			[
+				'user-ids' => (string) $this->active_user_id,
+				'fields'   => 'Content Access',
+			]
+		);
+
+		$this->assertStringContainsString( 'will not be retried automatically', implode( "\n", WP_CLI::$warnings ) );
+		$this->assertSame( [ 'Synced 0 contacts (1 errors, 0 skipped).' ], WP_CLI::$successes, 'STDOUT keeps the historical summary.' );
+	}
+
+	/**
+	 * A plain --create-missing run schedules retries for its failures, so it
+	 * has nothing to warn about.
+	 */
+	public function test_esp_sync_alias_does_not_warn_when_failures_are_retried() {
+		WP_CLI::reset();
+		Failing_Sample_Integration::$should_fail = true;
+
+		RAS_Contact_Sync::cli_sync_contacts(
+			[],
+			[
+				'user-ids'       => (string) $this->inactive_user_id,
+				'create-missing' => true,
+			]
+		);
+
+		$this->assertStringNotContainsString( 'will not be retried', implode( "\n", WP_CLI::$warnings ) );
+		$this->assertSame( [ 'Synced 0 contacts (1 errors, 0 skipped).' ], WP_CLI::$successes );
+	}
+
+	/**
 	 * Read the protected static inter-batch pacing counter.
 	 *
 	 * @return int
