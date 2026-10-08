@@ -65,18 +65,25 @@ class User_Updated extends Abstract_Incoming_Event {
 		//
 		// The display name and email address are further gated on the target's own role:
 		// they only apply to an account the sync itself is allowed to resolve into (a synced
-		// reader, or one with no role at all), never to a role set outside the network. Watched
-		// meta (bio, social links, etc.) is unaffected by this gate — that sync also covers
-		// staff bylines, which legitimately hold a role outside the synced set.
-		if ( isset( $data->prop ) && User_Utils::is_syncable_account( $existing_user ) ) {
-			$incoming_props = (array) $data->prop;
-			$update_array   = [
+		// reader, or one with no role at all), never to a role set outside the network. The
+		// user URL and watched meta (bio, social links, etc.) are unaffected by this gate —
+		// that sync also covers staff bylines, which legitimately hold a role outside the
+		// synced set.
+		if ( isset( $data->prop ) ) {
+			$incoming_props      = (array) $data->prop;
+			$can_sync_identity   = User_Utils::is_syncable_account( $existing_user );
+			$identity_prop_keys  = [ 'display_name', 'user_email' ];
+			$update_array        = [
 				'ID' => $existing_user->ID,
 			];
 			foreach ( User_Update_Watcher::$user_props as $prop_key ) {
-				if ( isset( $incoming_props[ $prop_key ] ) ) {
-					$update_array[ $prop_key ] = $incoming_props[ $prop_key ];
+				if ( ! isset( $incoming_props[ $prop_key ] ) ) {
+					continue;
 				}
+				if ( in_array( $prop_key, $identity_prop_keys, true ) && ! $can_sync_identity ) {
+					continue;
+				}
+				$update_array[ $prop_key ] = $incoming_props[ $prop_key ];
 			}
 			// Only update if at least one allowed prop is present; $update_array always has 'ID'.
 			if ( count( $update_array ) > 1 ) {

@@ -123,6 +123,70 @@ class Test_Incoming_User_Sync_Role_Boundary extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An account holding a synced role alongside another role is still a
+	 * non-synced account: every role it holds must be in the synced set, not
+	 * just one of them. A role gained this way is exactly what the fixed
+	 * reader_registered handler above no longer adds, but an account that
+	 * already carried one before the fix must stay protected too.
+	 */
+	public function test_user_updated_does_not_change_profile_fields_of_existing_mixed_role_account() {
+		$user_id = $this->factory->user->create(
+			[
+				'role'         => 'administrator',
+				'user_email'   => 'owner@example.test',
+				'display_name' => 'Original Name',
+			]
+		);
+		get_user_by( 'id', $user_id )->add_role( 'subscriber' );
+
+		$event = new User_Updated(
+			'https://node.example.test',
+			[
+				'email' => 'owner@example.test',
+				'prop'  => [
+					'display_name' => 'Replacement Name',
+					'user_email'   => 'replacement@example.test',
+				],
+			],
+			time()
+		);
+		$event->maybe_update_user();
+
+		$user = get_user_by( 'id', $user_id );
+		$this->assertSame( 'owner@example.test', $user->user_email );
+		$this->assertSame( 'Original Name', $user->display_name );
+	}
+
+	/**
+	 * The user URL is watched alongside the display name and email
+	 * (User_Update_Watcher::$user_props), but the role boundary applies only
+	 * to the latter two — a non-synced account's website still syncs, the
+	 * same as before the fix.
+	 */
+	public function test_user_updated_still_updates_user_url_of_existing_non_synced_account() {
+		$user_id = $this->factory->user->create(
+			[
+				'role'       => 'editor',
+				'user_email' => 'byline@example.test',
+			]
+		);
+
+		$event = new User_Updated(
+			'https://node.example.test',
+			[
+				'email' => 'byline@example.test',
+				'prop'  => [
+					'user_url' => 'https://example.test/byline',
+				],
+			],
+			time()
+		);
+		$event->maybe_update_user();
+
+		$this->assertSame( 'https://example.test/byline', get_user_by( 'id', $user_id )->user_url );
+	}
+
+	/**
 	 * Watched meta (author bio, social links, etc.) still syncs to a
 	 * non-synced account — the role boundary above applies only to the
 	 * display name and email address, not to this existing bio-sync use.
