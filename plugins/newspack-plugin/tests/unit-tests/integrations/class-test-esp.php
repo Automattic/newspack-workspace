@@ -796,16 +796,13 @@ class Test_ESP extends \WP_UnitTestCase {
 	 * Run contact_exists() against a staged provider payload or error.
 	 *
 	 * @param array|\WP_Error $contact_data Payload or error get_contact_data() returns.
-	 * @param string|null     $provider     Provider slug the mock reports, or null for none.
-	 * @param string          $list_id      The ESP's configured master list id.
 	 * @return bool|\WP_Error
 	 */
-	private function contact_exists_with( $contact_data, $provider = 'mailchimp', $list_id = 'list-123' ) {
+	private function contact_exists_with( $contact_data ) {
 		\Newspack_Newsletters::$is_service_provider_configured = true;
-		$this->set_provider( $provider );
 		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => $contact_data ];
 
-		$result = $this->make_esp_with_master_list( $list_id )->contact_exists( 'reader@example.com' );
+		$result = $this->make_esp_with_master_list( 'list-123' )->contact_exists( 'reader@example.com' );
 
 		\Newspack_Newsletters_Subscription::reset_calls();
 		return $result;
@@ -838,8 +835,8 @@ class Test_ESP extends \WP_UnitTestCase {
 	 * would create it — exactly what an update-only push promises not to do.
 	 */
 	public function test_contact_exists_on_mailchimp_requires_the_configured_audience() {
-		$this->assertTrue( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ], 'mailchimp' ) );
-		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-999' => [ 'status' => 'subscribed' ] ] ], 'mailchimp' ), 'A member of another audience only would be created in the configured one.' );
+		$this->assertTrue( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ] ) );
+		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-999' => [ 'status' => 'subscribed' ] ] ] ), 'A member of another audience only would be created in the configured one.' );
 	}
 
 	/**
@@ -848,7 +845,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	 * way an update-only push cares about.
 	 */
 	public function test_contact_exists_on_mailchimp_treats_an_archived_member_as_missing() {
-		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'archived' ] ] ], 'mailchimp' ) );
+		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'archived' ] ] ] ) );
 	}
 
 	/**
