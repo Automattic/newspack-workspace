@@ -422,8 +422,10 @@ wp newspack integrations backfill --direction=both --integration=esp --create-mi
   tallied as an error. Failed pushes are auto-retried only on a
   `--create-missing` run without `--skip-lists`/`--fields`. Without
   `--create-missing`, the run refuses to start if any integration taking part
-  cannot check (`supports_contact_lookup()` false) — pass the flag, or scope
-  the run with `--integration` to one that can. A `--dry-run` without
+  cannot check (`supports_contact_lookup()` false). Scope the run with
+  `--integration` to one that can, and run each of the others on its own with
+  `--integration=<id> --create-missing` if creating contacts there is intended;
+  an unscoped `--create-missing` creates contacts at every integration. A `--dry-run` without
   `--create-missing` still performs the existence read and previews the skips
   in its tally; because it reaches the provider it is gated like a wet run
   (the staging guard applies). A `--dry-run --create-missing` never reaches the
