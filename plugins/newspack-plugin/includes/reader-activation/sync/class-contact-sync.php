@@ -358,7 +358,7 @@ class Contact_Sync extends Sync {
 	 *                                 integration and failed pushes are NOT auto-retried —
 	 *                                 the AS retry handler rebuilds the full contact and
 	 *                                 would push it with the master list, undoing the
-	 *                                 list-less/field-scoped/existing-only intent. Operators
+	 *                                 list-less/field-scoped/update-only intent. Operators
 	 *                                 re-run the affected `--offset` window instead.
 	 *                                 Under `existing_only` each integration's
 	 *                                 `contact_exists()` is consulted first: `false` skips
@@ -410,20 +410,21 @@ class Contact_Sync extends Sync {
 
 			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
 
-			// Under --existing-only, ask the integration before pushing: the push
-			// is an upsert at every provider, so this is the one place an
-			// "update, never create" run can be enforced. An integration that
+			// On an update-only run (`existing_only`, the CLI backfill default),
+			// ask the integration before pushing: the push is an upsert at every
+			// provider, so this is the one place "update, never create" can be
+			// enforced. An integration that
 			// cannot answer gets no push at all: the unknown must resolve to
 			// "do not create", or the run would create contacts and read as clean.
 			if ( ! empty( $options['existing_only'] ) && ! $integration->supports_contact_lookup() ) {
-				$errors[] = sprintf( '[%s] %s', $integration_id, __( 'cannot check whether the contact exists, so --existing-only withheld the push.', 'newspack-plugin' ) );
-				static::log( sprintf( 'Withheld integration "%s" sync of %s: it cannot check for an existing contact (--existing-only).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );
+				$errors[] = sprintf( '[%s] %s', $integration_id, __( 'cannot check whether the contact exists, so the update-only run withheld the push.', 'newspack-plugin' ) );
+				static::log( sprintf( 'Withheld integration "%s" sync of %s: it cannot check for an existing contact (update-only run).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );
 				continue;
 			}
 			$result = empty( $options['existing_only'] ) ? true : self::check_existing_contact( $integration, $integration_contact['email'] ?? '' );
 			if ( false === $result ) {
 				$skipped[] = $integration_id;
-				static::log( sprintf( 'Skipped integration "%s" sync of %s: no existing contact (--existing-only).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );
+				static::log( sprintf( 'Skipped integration "%s" sync of %s: no existing contact (update-only run).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );
 				continue;
 			}
 
@@ -482,7 +483,7 @@ class Contact_Sync extends Sync {
 				if ( self::options_are_default( $options ) ) {
 					self::schedule_integration_retry( $integration_id, $user_id, $context, 0, $result, $previous_email, $log_id );
 				} else {
-					static::log( sprintf( 'Retry skipped for integration "%s" sync of %s: CLI sync with custom options (skip-lists/fields/existing-only). Re-run the affected batch to retry.', $integration_id, $contact['email'] ?? 'unknown' ) );
+					static::log( sprintf( 'Retry skipped for integration "%s" sync of %s: scoped CLI sync (update-only, --skip-lists or --fields). Re-run the affected batch to retry.', $integration_id, $contact['email'] ?? 'unknown' ) );
 				}
 				$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 				if ( self::$current_as_action_id ) {
@@ -522,7 +523,7 @@ class Contact_Sync extends Sync {
 		}
 		return new \WP_Error(
 			'newspack_integration_contact_lookup_invalid',
-			__( 'contact_exists() returned neither true, false nor an error, so --existing-only withheld the push.', 'newspack-plugin' )
+			__( 'contact_exists() returned neither true, false nor an error, so the update-only run withheld the push.', 'newspack-plugin' )
 		);
 	}
 
@@ -1736,9 +1737,9 @@ class Contact_Sync extends Sync {
 	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise.
 	 */
 	public static function sync_contact( $user_id_or_order, $context = '', $is_dry_run = false, $options = [] ) {
-		// A plain dry run never leaves the process, so it may run where syncing
-		// is refused; under --existing-only it reads each contact at the
-		// provider, so it is gated like the wet run it previews.
+		// A dry run that only builds payloads never leaves the process, so it
+		// may run where syncing is refused; an update-only one reads each
+		// contact at the provider, so it is gated like the wet run it previews.
 		$reaches_provider = ! $is_dry_run || ! empty( $options['existing_only'] );
 		$can_sync         = static::can_sync( true );
 		if ( $reaches_provider && $can_sync->has_errors() ) {
@@ -1757,7 +1758,7 @@ class Contact_Sync extends Sync {
 
 		if ( $is_dry_run ) {
 			// A preview with custom options reports the outcome the run would
-			// (an --existing-only skip included), so the CLI tally matches.
+			// (an update-only skip included), so the CLI tally matches.
 			$result = self::options_are_default( $options ) ? true : self::log_dry_run_with_options( $contact, $context, $options );
 		} else {
 			$result = self::sync( $contact, $context, null, $options );
@@ -1828,14 +1829,14 @@ class Contact_Sync extends Sync {
 
 			if ( $existing_only ) {
 				if ( ! $integration->supports_contact_lookup() ) {
-					$errors[] = sprintf( '[%s] %s', $integration_id, __( 'cannot check whether the contact exists, so --existing-only withheld the push.', 'newspack-plugin' ) );
-					static::log( sprintf( '[dry-run] WITHHELD integration "%s" for %s: it cannot check for an existing contact (--existing-only).', $integration_id, $email ) );
+					$errors[] = sprintf( '[%s] %s', $integration_id, __( 'cannot check whether the contact exists, so the update-only run withheld the push.', 'newspack-plugin' ) );
+					static::log( sprintf( '[dry-run] WITHHELD integration "%s" for %s: it cannot check for an existing contact (update-only run).', $integration_id, $email ) );
 					continue;
 				}
 				$exists = self::check_existing_contact( $integration, $prepared['email'] ?? '' );
 				if ( false === $exists ) {
 					$skipped[] = $integration_id;
-					static::log( sprintf( '[dry-run] SKIPPED integration "%s" for %s: no existing contact (--existing-only).', $integration_id, $email ) );
+					static::log( sprintf( '[dry-run] SKIPPED integration "%s" for %s: no existing contact (update-only run).', $integration_id, $email ) );
 					continue;
 				}
 				if ( \is_wp_error( $exists ) ) {

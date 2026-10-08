@@ -663,8 +663,9 @@ abstract class Integration {
 	/**
 	 * Whether pushing this contact would update a live record the integration holds.
 	 *
-	 * Consulted by the sync framework only when a backfill runs with
-	 * `--existing-only`, before `push_contact_data()`: `false` makes the
+	 * Consulted by the sync framework only on an update-only push (the
+	 * `existing_only` sync option, which the backfill CLI sets unless
+	 * `--create-missing` is passed), before `push_contact_data()`: `false` makes the
 	 * framework skip this integration for the reader (tallied as skipped, not
 	 * failed), a `WP_Error` is treated as a failed push, and `true` lets the
 	 * push proceed. Answer by what the push would do: `true` only when it would
@@ -672,8 +673,8 @@ abstract class Integration {
 	 * archived or deleted one. Any answer other than a boolean or a `WP_Error`
 	 * is treated as a failed check. Override it where the external system can be
 	 * asked; the override is what makes `supports_contact_lookup()` true. An
-	 * integration that cannot ask is refused under the flag rather than pushed,
-	 * because a push there is an upsert that would create the contact.
+	 * integration that cannot ask is refused on an update-only push rather than
+	 * pushed, because a push there is an upsert that would create the contact.
 	 *
 	 * @param string $email The contact's email address.
 	 *
@@ -695,9 +696,9 @@ abstract class Integration {
 	 *
 	 * Implementing `contact_exists()` is the opt-in: this is true as soon as a
 	 * subclass overrides it, so an integration written before the lookup
-	 * existed reports false rather than "yes". Under `--existing-only` the sync
+	 * existed reports false rather than "yes". On an update-only push the sync
 	 * withholds the push from an integration that reports false: an unknown
-	 * must resolve to "do not create", or the flag guarantees nothing.
+	 * must resolve to "do not create", or update-only guarantees nothing.
 	 *
 	 * @return bool
 	 */

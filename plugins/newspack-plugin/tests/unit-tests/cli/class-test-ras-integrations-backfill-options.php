@@ -131,7 +131,6 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 	public function test_push_only_flags_rejected_when_direction_includes_pull() {
 		$push_only = [
 			[ 'skip-lists' => true ],
-			[ 'existing-only' => true ],
 			[ 'fields' => 'Content Access' ],
 			[ 'subscription-ids' => '1,2' ],
 			[ 'order-ids' => '3' ],
@@ -149,12 +148,36 @@ class Test_RAS_Integrations_Backfill_Options extends WP_UnitTestCase {
 	public function test_push_only_flags_allowed_under_push_direction() {
 		$parsed = $this->parse(
 			[
-				'direction'     => 'push',
-				'skip-lists'    => true,
-				'existing-only' => true,
+				'direction'      => 'push',
+				'skip-lists'     => true,
+				'create-missing' => true,
 			]
 		);
 		$this->assertIsArray( $parsed, 'parse_backfill_options only routes; push-only flag validity is parse_sync_options\'s job.' );
+	}
+
+	/**
+	 * Only a push can create a contact, so --create-missing is refused where no
+	 * push runs and means the same on `both` as on `push`.
+	 */
+	public function test_create_missing_rejected_only_when_no_push_runs() {
+		$pull = $this->parse(
+			[
+				'direction'      => 'pull',
+				'create-missing' => true,
+			]
+		);
+		$both = $this->parse(
+			[
+				'direction'      => 'both',
+				'create-missing' => true,
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $pull );
+		$this->assertSame( 'newspack_backfill_push_only_flag', $pull->get_error_code() );
+		$this->assertStringContainsString( '--create-missing', $pull->get_error_message() );
+		$this->assertIsArray( $both, 'A both-direction run creates contacts on its push leg only, which is what the flag asks for.' );
 	}
 
 	/**

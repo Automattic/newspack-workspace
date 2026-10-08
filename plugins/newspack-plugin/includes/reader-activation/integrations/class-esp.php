@@ -458,8 +458,8 @@ class ESP extends Integration {
 	 * @param array      $options          Optional. Sync options. Recognized keys:
 	 *                                     `skip_lists` (bool) — upsert without a master
 	 *                                     list so an unsubscribed contact is not
-	 *                                     resubscribed (the contact is still created if
-	 *                                     missing, but joins no list).
+	 *                                     resubscribed (a contact created under
+	 *                                     `--create-missing` joins no list).
 	 *                                     `existing_only` (bool) is honoured by the
 	 *                                     framework, which consults contact_exists()
 	 *                                     before calling this method — by the time it

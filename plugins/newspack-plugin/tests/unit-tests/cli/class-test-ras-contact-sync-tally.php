@@ -256,8 +256,8 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A reader the integration does not have is the case --existing-only exists
-	 * for: skipped, never failed, so a partially-synced site still exits 0.
+	 * A reader the integration does not have is the case an update-only push
+	 * exists for: skipped, never failed, so a partially-synced site still exits 0.
 	 */
 	public function test_existing_only_tallies_missing_contacts_as_skipped() {
 		Failing_Sample_Integration::$contact_exists = false;
@@ -298,9 +298,9 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A dry run under --existing-only reads each contact at the provider —
-	 * that is what previewing the skip means — so it previews the tally and
-	 * paces like a wet run.
+	 * An update-only dry run reads each contact at the provider — that is what
+	 * previewing the skip means — so it previews the tally and paces like a
+	 * wet run.
 	 */
 	public function test_dry_run_existing_only_previews_skips_and_accrues_pacing() {
 		Failing_Sample_Integration::$contact_exists = false;
@@ -341,9 +341,9 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A plain dry run never leaves the process, so it may run where syncing is
-	 * refused; under --existing-only it reads every contact at the provider, so
-	 * it is gated like the wet run it previews.
+	 * A dry run that creates missing contacts never leaves the process, so it
+	 * may run where syncing is refused; an update-only one reads every contact
+	 * at the provider, so it is gated like the wet run it previews.
 	 */
 	public function test_dry_run_existing_only_is_refused_where_syncing_is_not_allowed() {
 		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );

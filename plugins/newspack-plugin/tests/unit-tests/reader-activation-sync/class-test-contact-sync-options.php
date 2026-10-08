@@ -476,7 +476,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Push the seeded reader through push_to_integrations() under --existing-only.
+	 * Push the seeded reader through push_to_integrations() as an update-only push.
 	 *
 	 * @param array $extra_options Options merged over `existing_only => true`.
 	 * @return true|\WP_Error
@@ -517,7 +517,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		// No staged contact data: the subscription mock reports the contact as not found.
 		list( $result, $failed ) = $this->count_failed_syncs( fn() => $this->push_existing_only() );
 
-		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, '--existing-only must not upsert a contact the ESP does not have.' );
+		$this->assertEmpty( Newspack_Newsletters_Contacts::$upsert_calls, 'An update-only push must not upsert a contact the ESP does not have.' );
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code(), 'A skipped reader reports the canonical not-found code so the CLI tallies it as skipped.' );
 		$this->assertSame( 0, $failed, 'A deliberate skip is not a sync failure.' );
@@ -596,7 +596,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		list( $result, $failed ) = $this->count_failed_syncs( fn() => $this->push_existing_only() );
 
 		Integrations::disable( 'existing_only_lookupless' );
-		$this->assertSame( 0, Lookupless_Sample_Integration::$push_count, 'An integration that cannot check must not push under --existing-only.' );
+		$this->assertSame( 0, Lookupless_Sample_Integration::$push_count, 'An integration that cannot check must not push on an update-only run.' );
 		$this->assertCount( 1, Newspack_Newsletters_Contacts::$upsert_calls, 'The ESP, which can check, still updates its existing contact.' );
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'newspack_esp_sync_failed', $result->get_error_code() );

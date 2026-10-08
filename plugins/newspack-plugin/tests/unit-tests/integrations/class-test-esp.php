@@ -814,8 +814,8 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The provider not knowing the reader is the answer --existing-only exists
-	 * for: report it as "no", never as a failure.
+	 * The provider not knowing the reader is the answer an update-only push
+	 * exists for: report it as "no", never as a failure.
 	 */
 	public function test_contact_exists_is_false_when_the_provider_has_no_contact() {
 		$this->assertFalse( $this->contact_exists_with( null ) );
@@ -852,7 +852,7 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The ESP override of contact_exists() is what opts it into --existing-only.
+	 * The ESP override of contact_exists() is what opts it into update-only pushes.
 	 */
 	public function test_esp_supports_contact_lookup() {
 		$this->assertTrue( $this->make_esp_with_master_list()->supports_contact_lookup() );

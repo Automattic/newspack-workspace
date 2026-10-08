@@ -40,13 +40,17 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 		return $parse_method->invoke( null, $assoc_args, $integration_id );
 	}
 
+	/**
+	 * A backfill updates only the contacts an integration already has unless
+	 * the operator asks for the rest to be created.
+	 */
 	public function test_defaults_when_no_options_passed() {
 		$options = $this->parse( [] );
 		$this->assertSame(
 			[
 				'skip_lists'    => false,
 				'fields'        => null,
-				'existing_only' => false,
+				'existing_only' => true,
 			],
 			$options
 		);
@@ -58,9 +62,9 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 		$this->assertNull( $options['fields'] );
 	}
 
-	public function test_existing_only_flag_sets_true() {
-		$options = $this->parse( [ 'existing-only' => true ] );
-		$this->assertTrue( $options['existing_only'] );
+	public function test_create_missing_flag_turns_existing_only_off() {
+		$options = $this->parse( [ 'create-missing' => true ] );
+		$this->assertFalse( $options['existing_only'] );
 		$this->assertFalse( $options['skip_lists'] );
 		$this->assertNull( $options['fields'] );
 	}
@@ -251,43 +255,60 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 	}
 
 	/**
-	 * --existing-only cannot do its job at an integration that cannot check for
-	 * an existing contact, so the run refuses to start rather than creating
+	 * An update-only run cannot do its job at an integration that cannot check
+	 * for an existing contact, so the run refuses to start rather than creating
 	 * contacts there while reporting a clean run.
 	 */
-	public function test_existing_only_preflight_rejects_a_push_integration_without_a_lookup() {
+	public function test_update_only_preflight_rejects_a_push_integration_without_a_lookup() {
 		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
 		Integrations::register( new Lookupless_Sample_Integration( 'preflight_lookupless', 'Preflight Lookupless' ) );
 		Integrations::enable( 'preflight_lookupless' );
 
-		$options = $this->parse( [ 'existing-only' => true ] );
+		$options = $this->parse( [] );
 
 		Integrations::disable( 'preflight_lookupless' );
 		$this->assertInstanceOf( \WP_Error::class, $options );
 		$this->assertSame( 'newspack_esp_sync_existing_only_unsupported', $options->get_error_code() );
 		$this->assertStringContainsString( 'preflight_lookupless', $options->get_error_message() );
+		$this->assertStringContainsString( '--create-missing', $options->get_error_message(), 'The refusal names the flag that lets the run proceed.' );
 	}
 
-	public function test_existing_only_preflight_ignores_an_integration_outside_the_scope() {
+	/**
+	 * Creating contacts is what an integration without a lookup does anyway,
+	 * so a run that asks for it has nothing to refuse.
+	 */
+	public function test_create_missing_lets_a_run_include_an_integration_without_a_lookup() {
 		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
 		Integrations::register( new Lookupless_Sample_Integration( 'preflight_lookupless', 'Preflight Lookupless' ) );
 		Integrations::enable( 'preflight_lookupless' );
 
-		$options = $this->parse( [ 'existing-only' => true ], 'esp' );
+		$options = $this->parse( [ 'create-missing' => true ] );
+
+		Integrations::disable( 'preflight_lookupless' );
+		$this->assertIsArray( $options );
+		$this->assertFalse( $options['existing_only'] );
+	}
+
+	public function test_update_only_preflight_ignores_an_integration_outside_the_scope() {
+		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
+		Integrations::register( new Lookupless_Sample_Integration( 'preflight_lookupless', 'Preflight Lookupless' ) );
+		Integrations::enable( 'preflight_lookupless' );
+
+		$options = $this->parse( [], 'esp' );
 
 		Integrations::disable( 'preflight_lookupless' );
 		$this->assertIsArray( $options, 'A run scoped to a capable integration is not blocked by an incapable one.' );
 		$this->assertTrue( $options['existing_only'] );
 	}
 
-	public function test_existing_only_preflight_ignores_a_push_disabled_integration() {
+	public function test_update_only_preflight_ignores_a_push_disabled_integration() {
 		require_once dirname( __DIR__ ) . '/integrations/class-lookupless-sample-integration.php';
 		$integration = new Lookupless_Sample_Integration( 'preflight_lookupless_paused', 'Preflight Lookupless Paused' );
 		Integrations::register( $integration );
 		Integrations::enable( 'preflight_lookupless_paused' );
 		$integration->update_settings_field_value( 'outgoing_sync_enabled', false );
 
-		$options = $this->parse( [ 'existing-only' => true ] );
+		$options = $this->parse( [] );
 
 		Integrations::disable( 'preflight_lookupless_paused' );
 		$this->assertIsArray( $options, 'A paused integration takes no part in the run and must not block the pre-flight.' );

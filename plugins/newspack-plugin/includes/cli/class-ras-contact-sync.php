@@ -65,13 +65,14 @@ class RAS_Contact_Sync {
 	 * A contact that reached the integrations counts toward the inter-batch
 	 * pacing regardless of whether the push succeeded. A plain dry-run push
 	 * short-circuits before any integration is called, so pacing it would only
-	 * slow the preview without spacing any external request — but a dry run
-	 * under `--existing-only` does perform the existence read, so the caller
-	 * says whether the contact generated provider traffic.
+	 * slow the preview without spacing any external request — but an
+	 * update-only dry run (the default, without `--create-missing`) does
+	 * perform the existence read, so the caller says whether the contact
+	 * generated provider traffic.
 	 *
 	 * A `WP_Error` carrying the canonical not-found code is a deliberate
-	 * `--existing-only` skip: tallied as skipped rather than as an error, as
-	 * the pull leg already does for readers the provider does not know.
+	 * update-only skip: tallied as skipped rather than as an error, as the pull
+	 * leg already does for readers the provider does not know.
 	 *
 	 * @param true|\WP_Error $result               The value returned by Contact_Sync::sync_contact().
 	 * @param bool           $reached_integrations Whether the contact generated provider traffic.
@@ -92,7 +93,7 @@ class RAS_Contact_Sync {
 	}
 
 	/**
-	 * Whether a sync_contact() result is an `--existing-only` skip rather than a failure.
+	 * Whether a sync_contact() result is an update-only skip rather than a failure.
 	 *
 	 * @param mixed $result The value returned by Contact_Sync::sync_contact().
 	 * @return bool
@@ -156,9 +157,9 @@ class RAS_Contact_Sync {
 		$config  = \wp_parse_args( $config, $default_config );
 		$options = $config['options'];
 
-		// A dry run under --existing-only still reads each contact at the provider,
-		// so it paces like a wet run and is gated like one; a plain dry run never
-		// leaves the process.
+		// An update-only dry run still reads each contact at the provider, so it
+		// paces like a wet run and is gated like one; a --create-missing dry run
+		// never leaves the process.
 		$reached_integrations = ! $config['is_dry_run'] || ! empty( $options['existing_only'] );
 
 		// Reset the tally at entry so the counts reflect this run only (the class is
@@ -813,13 +814,14 @@ class RAS_Contact_Sync {
 	 * Sync Reader Activation contact data to the connected ESP for all customers, migrated subscriptions, or specific customers/subscriptions/orders.
 	 *
 	 * Legacy alias of `wp newspack integrations backfill` (push direction). New
-	 * capabilities (--direction, --integration) live on that command; this alias
-	 * keeps the historical flag surface unchanged.
+	 * capabilities (--direction, --integration) live on that command. Like it,
+	 * this alias only updates the contacts an integration already has unless
+	 * `--create-missing` is passed.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [--dry-run]
-	 * : If passed, output results but do not execute the sync. When combined with `--skip-lists`/`--fields`, the preview runs the `newspack_esp_sync_contact` filter for fidelity, so a third-party filter that performs I/O would still run under a dry run.
+	 * : If passed, output results but do not execute the sync. Unless `--create-missing` is passed, the preview still reads each contact at the integrations to report the readers it would skip (see NOTES). The preview runs the `newspack_esp_sync_contact` filter for fidelity (all but a `--create-missing` preview without `--skip-lists`/`--fields`), so a third-party filter that performs I/O would still run under a dry run.
 	 *
 	 * [--active-only]
 	 * : If passed, only sync users who have active subscriptions, otherwise resync all users.
@@ -849,24 +851,26 @@ class RAS_Contact_Sync {
 	 * : Label recorded as the sync context (e.g. in ESP activity logs). Defaults to a generic CLI context.
 	 *
 	 * [--skip-lists]
-	 * : Upsert each contact WITHOUT a master list, so an unsubscribed contact is not resubscribed. Missing contacts are still created (list-less). Use for backfills that must not alter list membership. Honored only by integrations that read the sync options (the built-in ESP integration does); a third-party integration implementing the 3-argument `push_contact_data()` contract will still add to its own lists. Not supported on Mailchimp, which rejects a list-less upsert before writing any metadata — the pre-flight errors out.
+	 * : Upsert each contact WITHOUT a master list, so an unsubscribed contact is not resubscribed. Contacts created under `--create-missing` join no list. Use for backfills that must not alter list membership. Honored only by integrations that read the sync options (the built-in ESP integration does); a third-party integration implementing the 3-argument `push_contact_data()` contract will still add to its own lists. Not supported on Mailchimp, which rejects a list-less upsert before writing any metadata — the pre-flight errors out.
 	 *
 	 * [--fields=<name1,name2>]
 	 * : Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Restricts both what is computed and what is pushed to just these fields; all other metadata — and the reader's name — is left untouched. Every requested field must be enabled as an outgoing field on each active integration. The `newspack_esp_sync_contact` filter still runs, but any metadata it adds outside `--fields` is dropped.
 	 *
-	 * [--existing-only]
-	 * : Update only the contacts an integration already has; a reader it has no contact for is skipped (tallied as skipped) instead of being created. One extra provider read per reader (two on ActiveCampaign, whose upsert reads the contact again). Only integrations that implement `contact_exists()` can take part — the built-in ESP integration does (on Mailchimp, "existing" means a current member of the configured audience, and archived members do not count; on Constant Contact, deleted contacts do not count). The run refuses to start if an integration taking part cannot check, so scope it with `wp newspack integrations backfill --integration=<id>` to one that can. A read that fails for any other reason withholds the push and is tallied as an error.
+	 * [--create-missing]
+	 * : Also create a contact for each reader an integration has no contact for. Without this flag the sync only updates the contacts an integration already has: it checks for each reader's contact first (one extra provider read per reader, two on ActiveCampaign, whose upsert reads the contact again) and skips a reader with none (tallied as skipped). On Mailchimp, "existing" means a current member of the configured audience, and archived members do not count; on Constant Contact, deleted contacts do not count. A read that fails for any other reason withholds the push and is tallied as an error. Only integrations that implement `contact_exists()` can check — the built-in ESP integration does — so without this flag the run refuses to start if an integration taking part cannot; pass this flag, or scope the run with `wp newspack integrations backfill --integration=<id>` to one that can.
 	 *
 	 * ## NOTES
 	 *
-	 * When `--skip-lists`, `--fields` or `--existing-only` is passed, failed pushes are
-	 * NOT auto-retried (the retry path would rebuild the full contact and push it with
-	 * the master list, undoing the intent). Re-run the affected `--offset` window instead.
+	 * Failed pushes are auto-retried only on a `--create-missing` run without
+	 * `--skip-lists` or `--fields`. The retry path rebuilds the full contact and
+	 * upserts it with the master list, skipping the existence check, which would
+	 * undo the intent of any other run. Re-run the affected `--offset` window instead.
 	 *
-	 * A `--dry-run` with `--existing-only` still performs the existence read at each
-	 * integration (that is what previewing the skip means); it only skips the push.
-	 * Because it reaches the provider, it is refused wherever the wet run would be
-	 * (the staging guard applies), unlike a plain dry run.
+	 * Without `--create-missing`, a `--dry-run` still performs the existence read at
+	 * each integration (that is what previewing the skips means); it only skips the
+	 * push. Because it reaches the provider, it is refused wherever the wet run would
+	 * be (the staging guard applies). A `--dry-run --create-missing` never reaches
+	 * the provider.
 	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
@@ -910,7 +914,7 @@ class RAS_Contact_Sync {
 	 * : Restrict the backfill to a single active, configured integration (e.g. `esp`). By default every active, configured integration takes part.
 	 *
 	 * [--dry-run]
-	 * : Output results but do not persist anything. NOTE: a pull dry-run still performs the external API reads (that is what previewing a pull means); it only skips writing reader data. On the push side, combined with `--skip-lists`/`--fields`, the preview runs the `newspack_esp_sync_contact` filter for fidelity.
+	 * : Output results but do not persist anything. NOTE: a pull dry-run still performs the external API reads (that is what previewing a pull means); it only skips writing reader data. A push dry-run without `--create-missing` also reads each contact at the integrations, to report the readers it would skip. On the push side, all but a `--create-missing` preview without `--skip-lists`/`--fields` run the `newspack_esp_sync_contact` filter for fidelity.
 	 *
 	 * [--active-subs-only]
 	 * : Only process users who have active WooCommerce subscriptions (statuses: active, pending, pending-cancel). Requires WooCommerce Subscriptions — without it, every reader is skipped. (The legacy `esp sync` alias spells this `--active-only`.)
@@ -945,13 +949,15 @@ class RAS_Contact_Sync {
 	 * [--fields=<name1,name2>]
 	 * : (push only) Comma-delimited metadata fields (raw keys or display labels, any case) to sync. Each field must be enabled as an outgoing field on every integration taking part in the run (just the `--integration` target when scoped).
 	 *
-	 * [--existing-only]
-	 * : (push only) Update only the contacts an integration already has; a reader it has no contact for is skipped (tallied as skipped) instead of being created. One extra provider read per reader (two on ActiveCampaign, whose upsert reads the contact again). Only integrations that implement `contact_exists()` can take part — the built-in ESP integration does (on Mailchimp, "existing" means a current member of the configured audience, and archived members do not count; on Constant Contact, deleted contacts do not count). The run refuses to start if an integration taking part cannot check, so scope it with `wp newspack integrations backfill --integration=<id>` to one that can. A read that fails for any other reason withholds the push and is tallied as an error.
+	 * [--create-missing]
+	 * : (push leg) Also create a contact for each reader an integration has no contact for. Without this flag the push only updates the contacts an integration already has: it checks for each reader's contact first (one extra provider read per reader, two on ActiveCampaign, whose upsert reads the contact again) and skips a reader with none (tallied as skipped). On Mailchimp, "existing" means a current member of the configured audience, and archived members do not count; on Constant Contact, deleted contacts do not count. A read that fails for any other reason withholds the push and is tallied as an error. Only integrations that implement `contact_exists()` can check — the built-in ESP integration does — so without this flag the run refuses to start if an integration taking part cannot; pass this flag, or scope the run with `--integration=<id>` to one that can. Accepted with `--direction=both`; refused with `--direction=pull`, which never creates contacts.
 	 *
 	 * ## NOTES
 	 *
 	 * Push-only options hard-error when `--direction` includes `pull` — run a
-	 * separate `--direction=push` command for them.
+	 * separate `--direction=push` command for them. `--create-missing` is the
+	 * exception: only a push can create a contact, so it reads the same under
+	 * `--direction=both` and is refused only with `--direction=pull`.
 	 *
 	 * A direction that includes `pull` also requires at least one in-scope
 	 * integration with inbound sync enabled and incoming fields selected; this
@@ -965,13 +971,13 @@ class RAS_Contact_Sync {
 	 *
 	 * Pull failures are NOT auto-retried via ActionScheduler (a bulk run against
 	 * a flaky API would flood the queue). Re-run the affected `--offset` window
-	 * instead. Push retry behavior is unchanged from `wp newspack esp sync`,
-	 * including the no-retry rule for `--skip-lists`/`--fields`/`--existing-only`
-	 * runs.
+	 * instead. Push retry behavior matches `wp newspack esp sync`: failed pushes
+	 * are auto-retried only on a `--create-missing` run without `--skip-lists`
+	 * or `--fields`.
 	 *
 	 * Readers the provider has no contact for are tallied as skipped, not as
-	 * errors — on a pull, and on a push under `--existing-only`: a pull cannot
-	 * create the missing contact and an existing-only push must not, so
+	 * errors — on a pull, and on a push without `--create-missing`: a pull
+	 * cannot create the missing contact and an update-only push must not, so
 	 * re-running the window could never clear them — and a partially-synced
 	 * site (the usual backfill candidate) would otherwise never exit 0.
 	 *
@@ -985,28 +991,32 @@ class RAS_Contact_Sync {
 	 * rejections without persisting, so its error tally previews what a real
 	 * run would report.
 	 *
-	 * A `--dry-run` push with `--existing-only` still performs the existence
-	 * read at each integration (that is what previewing the skip means) and
+	 * A `--dry-run` push without `--create-missing` still performs the existence
+	 * read at each integration (that is what previewing the skips means) and
 	 * tallies the skips it previews; it only skips the push. Because it reaches
 	 * the provider, it is refused wherever the wet run would be (the staging
-	 * guard applies), unlike a plain dry run.
+	 * guard applies). A `--dry-run --create-missing` push never reaches the
+	 * provider.
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     # Re-push all readers to every active integration (same as the legacy `esp sync`).
+	 *     # Update every reader's contact at every active integration, creating none (same as the legacy `esp sync`).
 	 *     wp newspack integrations backfill
+	 *
+	 *     # Also create contacts for the readers an integration does not have yet.
+	 *     wp newspack integrations backfill --create-missing
 	 *
 	 *     # Pull enabled incoming fields for all readers from one integration.
 	 *     wp newspack integrations backfill --direction=pull --integration=esp
 	 *
 	 *     # Fully catch up one integration, 500 readers per batch.
-	 *     wp newspack integrations backfill --direction=both --integration=esp --batch-size=500
+	 *     wp newspack integrations backfill --direction=both --integration=esp --create-missing --batch-size=500
 	 *
-	 *     # Refresh one field on the contacts the ESP already has, creating none.
-	 *     wp newspack integrations backfill --integration=esp --fields="Newsletter Selection" --existing-only
+	 *     # Refresh one field on the contacts the ESP already has.
+	 *     wp newspack integrations backfill --integration=esp --fields="Newsletter Selection"
 	 *
 	 *     # The same on ActiveCampaign, where a push with the master list would resubscribe contacts who unsubscribed from it.
-	 *     wp newspack integrations backfill --integration=esp --fields="Newsletter Selection" --existing-only --skip-lists
+	 *     wp newspack integrations backfill --integration=esp --fields="Newsletter Selection" --skip-lists
 	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
@@ -1104,7 +1114,7 @@ class RAS_Contact_Sync {
 	}
 
 	/**
-	 * Parse and validate the `--skip-lists` / `--fields` / `--existing-only` options (pre-flight).
+	 * Parse and validate the `--skip-lists` / `--fields` / `--create-missing` options (pre-flight).
 	 *
 	 * Runs even under `--dry-run` so misconfiguration surfaces before any batch.
 	 * When `--fields` is set, tokens are resolved to canonical labels and each must
@@ -1123,7 +1133,9 @@ class RAS_Contact_Sync {
 		$options = [
 			'skip_lists'    => ! empty( $assoc_args['skip-lists'] ),
 			'fields'        => null,
-			'existing_only' => ! empty( $assoc_args['existing-only'] ),
+			// A backfill updates only the contacts an integration already has;
+			// creating the rest is the operator's explicit call.
+			'existing_only' => empty( $assoc_args['create-missing'] ),
 		];
 
 		// Mailchimp cannot do a list-less upsert: its upsert_contact() override
@@ -1151,10 +1163,10 @@ class RAS_Contact_Sync {
 			);
 		}
 
-		// --existing-only promises "update, never create". An integration that
-		// cannot check for an existing contact would upsert as usual under the
-		// flag and the run would read as clean, so refuse before any batch
-		// rather than create the contacts the flag exists to prevent.
+		// An update-only run promises "never create". An integration that cannot
+		// check for an existing contact would upsert as usual and the run would
+		// read as clean, so refuse before any batch rather than create the
+		// contacts the default exists to protect.
 		if ( $options['existing_only'] ) {
 			$unsupported = [];
 			foreach ( self::push_integrations_in_scope( $integration_id ) as $id => $integration ) {
@@ -1167,7 +1179,7 @@ class RAS_Contact_Sync {
 					'newspack_esp_sync_existing_only_unsupported',
 					sprintf(
 						// Translators: %s is a comma-separated list of integration ids.
-						__( 'The --existing-only option is not supported by integration(s) "%s": they cannot check whether a contact already exists, so the run would create contacts there. Scope the run with `wp newspack integrations backfill --integration=<id>` to an integration that can, or run without the flag.', 'newspack-plugin' ),
+						__( 'Integration(s) "%s" cannot check whether a contact already exists, so this run, which only updates existing contacts, would create contacts there. Pass --create-missing to let the run create contacts, or scope it with `wp newspack integrations backfill --integration=<id>` to an integration that can check.', 'newspack-plugin' ),
 						implode( ', ', $unsupported )
 					)
 				);
@@ -1313,7 +1325,12 @@ class RAS_Contact_Sync {
 		}
 
 		if ( 'push' !== $direction ) {
-			$push_only_flags = [ 'subscription-ids', 'order-ids', 'migrated-subscriptions', 'skip-lists', 'fields', 'existing-only' ];
+			$push_only_flags = [ 'subscription-ids', 'order-ids', 'migrated-subscriptions', 'skip-lists', 'fields' ];
+			// Only a push can create a contact, so --create-missing means the same
+			// on `both` and is refused only where no push runs.
+			if ( 'pull' === $direction ) {
+				$push_only_flags[] = 'create-missing';
+			}
 			foreach ( $push_only_flags as $flag ) {
 				if ( ! empty( $assoc_args[ $flag ] ) ) {
 					return new \WP_Error(

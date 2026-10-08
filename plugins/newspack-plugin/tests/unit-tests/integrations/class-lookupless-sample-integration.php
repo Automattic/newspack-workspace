@@ -1,7 +1,7 @@
 <?php
 /**
  * A push-enabled integration that inherits the base contact_exists(): the shape
- * of any integration written before the --existing-only seam existed.
+ * of any integration written before the contact_exists() seam existed.
  *
  * @package Newspack\Tests
  */

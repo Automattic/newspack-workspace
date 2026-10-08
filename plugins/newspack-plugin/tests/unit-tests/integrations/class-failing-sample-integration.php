@@ -93,7 +93,7 @@ class Failing_Sample_Integration extends Integration {
 	public static $cannot_sync_reason = null;
 
 	/**
-	 * Value returned by contact_exists(). Tests covering --existing-only set
+	 * Value returned by contact_exists(). Tests covering update-only pushes set
 	 * false (the integration has no such contact) or a WP_Error (failed read).
 	 *
 	 * @var bool|\WP_Error
