@@ -76,7 +76,7 @@ final class Reader_Data {
 
 		// is_donor is only read-only when the platform has a secure server-side
 		// mechanism to manage donor status. Currently only WooCommerce has this
-		// via the donation_new data event. Non-Woo platforms (NRH, other) rely
+		// via the donation_new data event. Non-Woo platforms (RevEngine, other) rely
 		// on client-side writes from the donor landing page.
 		//
 		// Note: when is_donor is NOT read-only, any authenticated reader can

@@ -32,7 +32,7 @@ export const OPTIONS = [
 	{
 		value: NRH,
 		title: __( 'RevEngine', 'newspack-plugin' ),
-		description: __( 'Use the Donate block with News Revenue Hub / RevEngine.', 'newspack-plugin' ),
+		description: __( 'Use the Donate block with RevEngine.', 'newspack-plugin' ),
 	},
 	{
 		value: OTHER,
