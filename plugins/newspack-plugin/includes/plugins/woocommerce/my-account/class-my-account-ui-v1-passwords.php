@@ -144,7 +144,14 @@ class My_Account_UI_V1_Passwords {
 
 		// Check if the current password is correct.
 		$is_without_password = Reader_Activation::is_reader_without_password( $user );
-		$current_password    = filter_input( INPUT_POST, 'current_password', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		// The password is compared against a hash and never output, so it must not be
+		// sanitized or unslashed: WooCommerce hashes the slashed $_POST value when saving
+		// (see WC_Form_Handler::process_reset_password()), as does core's wp_signon().
+		// Any escaping here (FILTER_SANITIZE_FULL_SPECIAL_CHARS turned `&` into `&amp;`)
+		// makes a correct password fail. The nonce is verified by WooCommerce before the
+		// `validate_password_reset` hook fires.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.NonceVerification.Missing
+		$current_password = isset( $_POST['current_password'] ) && is_string( $_POST['current_password'] ) ? $_POST['current_password'] : '';
 		if ( ! $is_without_password && empty( $current_password ) ) {
 			$errors->add( 'missing_current_password', __( 'Please enter your current password.', 'newspack-plugin' ) );
 			return $errors;
