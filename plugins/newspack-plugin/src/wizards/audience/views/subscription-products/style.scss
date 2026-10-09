@@ -20,13 +20,13 @@
 		gap: 4px;
 	}
 
-	// A variable plan row (label + remove, then price/every/period) — separated so each
-	// block reads as a single plan in the narrow side panel.
 	&__field {
 		flex: 1;
 		min-width: 0;
 	}
 
+	// A variable plan row (label + remove, then price/every/period) — separated so each
+	// block reads as a single plan in the narrow side panel.
 	&__plan {
 		padding-bottom: 12px;
 		border-bottom: 1px solid wp-colors.$gray-100;

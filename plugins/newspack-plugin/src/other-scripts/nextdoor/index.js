@@ -148,7 +148,9 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 		if ( isLoading ) {
 			return (
 				<Stack justify="center" align="center" gap="sm" className="nextdoor-sidebar__loading">
-					<Spinner />
+					<div>
+						<Spinner />
+					</div>
 					<p>{ __( 'Loading Nextdoor status…', 'newspack-plugin' ) }</p>
 				</Stack>
 			);
