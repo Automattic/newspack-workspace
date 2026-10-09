@@ -113,7 +113,8 @@ export default function CommentsPanelTriggerEdit( { attributes, setAttributes, c
 							className={ isIconOnly ? 'screen-reader-text' : undefined }
 							aria-label={ __( 'Button text', 'newspack-plugin' ) }
 							placeholder={ __( 'Comments', 'newspack-plugin' ) }
-							value={ triggerText }
+							// The block.json default is untranslated, so show the translated string, as the render does.
+							value={ 'Comments' === triggerText ? __( 'Comments', 'newspack-plugin' ) : triggerText }
 							onChange={ val => setAttributes( { triggerText: stripHTML( val ) } ) }
 							withoutInteractiveFormatting
 						/>
