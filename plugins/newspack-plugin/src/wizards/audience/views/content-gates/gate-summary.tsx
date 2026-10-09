@@ -21,7 +21,7 @@ import {
 } from '../../../../content-gate/access-rule-options';
 import { getMeteringCount, isMalformedAccessRuleValue, isUnconfiguredAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
-import { formatRangeValue } from '../../../../content-gate/utils/access-rule-value';
+import { normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
 
@@ -40,6 +40,38 @@ const formatAccessRuleOptionValues = ( values: Array< string | number >, options
 			return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
 		} )
 		.join( ', ' );
+
+/**
+ * A range rule's bounds in words.
+ *
+ * @param value The rule's stored value.
+ */
+const formatRangeValue = ( value: unknown ): string => {
+	const { min, max } = normalizeRangeValue( value );
+	if ( undefined !== min && undefined !== max ) {
+		return sprintf(
+			// translators: 1: the lowest number the rule admits, 2: the highest.
+			__( '%1$s to %2$s', 'newspack-plugin' ),
+			String( min ),
+			String( max )
+		);
+	}
+	if ( undefined !== min ) {
+		return sprintf(
+			// translators: %s: the lowest number the rule admits.
+			__( 'At least %s', 'newspack-plugin' ),
+			String( min )
+		);
+	}
+	if ( undefined !== max ) {
+		return sprintf(
+			// translators: %s: the highest number the rule admits.
+			__( 'At most %s', 'newspack-plugin' ),
+			String( max )
+		);
+	}
+	return '';
+};
 
 /**
  * Human-readable summary for an access rule value.
@@ -99,9 +131,13 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 	// narrow one — while it is doing something the summary is the only place to
 	// see. Which of the two it does is the rule's own business.
 	if ( isUnconfiguredAccessRuleValue( config, rule.value ) ) {
-		return isUnconstrainedAccessRuleValue( config, rule.value )
-			? __( 'Not set (grants access to everyone)', 'newspack-plugin' )
-			: __( 'Not set (matches no reader)', 'newspack-plugin' );
+		if ( ! isUnconstrainedAccessRuleValue( config, rule.value ) ) {
+			return __( 'Not set (matches no reader)', 'newspack-plugin' );
+		}
+		// A range with no bounds still turns away readers holding no number.
+		return config?.is_range
+			? __( 'Not set (grants access to every reader with a number)', 'newspack-plugin' )
+			: __( 'Not set (grants access to everyone)', 'newspack-plugin' );
 	}
 	if ( config?.is_range ) {
 		return formatRangeValue( rule.value );

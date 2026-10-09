@@ -19,7 +19,7 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 
-type AccessRuleShape = {
+export type AccessRuleShape = {
 	has_options?: boolean;
 	is_boolean?: boolean;
 	is_range?: boolean;
@@ -55,6 +55,14 @@ export type RangeValue = { min?: number | string; max?: number | string };
 const isPlainObject = ( value: unknown ): value is Record< string, unknown > =>
 	null !== value && 'object' === typeof value && ! Array.isArray( value );
 
+/**
+ * Whether a value has the shape of range bounds: an object keyed by nothing but `min`
+ * and `max`, as `Promoted_Fields::is_range_shape()` reads it. Anything else on a range
+ * rule denies every reader there.
+ */
+const isRangeShape = ( value: unknown ): value is Record< string, unknown > =>
+	isPlainObject( value ) && Object.keys( value ).every( key => 'min' === key || 'max' === key );
+
 const isRangeBoundSet = ( bound: unknown ): bound is number | string => ( 'number' === typeof bound || 'string' === typeof bound ) && '' !== bound;
 
 const isNumericBound = ( bound: number | string ) => '' !== String( bound ).trim() && Number.isFinite( Number( bound ) );
@@ -86,7 +94,7 @@ export const normalizeRangeValue = ( value: unknown ): RangeValue => {
  */
 const isEmptyValueForRule = ( config: AccessRuleShape | undefined, value: unknown ) =>
 	isEmptyAccessRuleValue( value ) ||
-	( Boolean( config?.is_range ) && isPlainObject( value ) && 0 === Object.keys( normalizeRangeValue( value ) ).length );
+	( Boolean( config?.is_range ) && isRangeShape( value ) && 0 === Object.keys( normalizeRangeValue( value ) ).length );
 
 /**
  * Whether a stored access rule value is in a shape the rule can't use: free text
@@ -99,9 +107,9 @@ const isEmptyValueForRule = ( config: AccessRuleShape | undefined, value: unknow
  * rule then grants access to every reader — the opposite verdict, which
  * `isUnconstrainedAccessRuleValue()` covers.
  *
- * Rules with a composite value shape (one-time purchase) own their formatting and
- * their control, both of which run before this, so only the list/text split is
- * decided here.
+ * One-time purchase owns its formatting and its control, both of which run before
+ * this. Range bounds are the one composite shape judged here, so that the summary,
+ * both editors, and `Promoted_Fields::is_in_range()` agree on which values deny.
  */
 export const isMalformedAccessRuleValue = ( config: AccessRuleShape | undefined, value: unknown ) => {
 	// Only the rule's own declaration exempts a value from the shape test. A boolean
@@ -112,15 +120,16 @@ export const isMalformedAccessRuleValue = ( config: AccessRuleShape | undefined,
 	if ( ! config || config.is_boolean ) {
 		return false;
 	}
-	// Text saved before range rules had a min/max control. The rule's callback
-	// fails closed on it, so it denies every reader.
+	// Text saved before range rules had a min/max control, or a list left from an
+	// options-backed field. The rule's callback fails closed on either.
 	if ( config.is_range ) {
-		return ! isEmptyAccessRuleValue( value ) && ! isPlainObject( value );
+		return ! isEmptyAccessRuleValue( value ) && ! isRangeShape( value );
 	}
 	if ( takesOptionValues( config ) ) {
 		return ! Array.isArray( value ) && ! isEmptyAccessRuleValue( value );
 	}
-	return Array.isArray( value );
+	// A list, or bounds left on a field whose operator moved from Number to Text.
+	return null !== value && 'object' === typeof value;
 };
 
 /**
@@ -220,12 +229,13 @@ export const isAccessRulePickerInert = ( config: AccessRuleShape | undefined, va
 /**
  * The caution to show under a range rule's inputs, or undefined where the stored
  * value needs none. Each state names what the rule does with the value, which the
- * empty inputs alone would not show.
+ * inputs alone would not show.
  *
- * @param value The rule's stored value.
+ * @param config The rule's registry entry.
+ * @param value  The rule's stored value.
  */
-export const getRangeRuleValueNotice = ( value: unknown ): string | undefined => {
-	if ( ! isEmptyAccessRuleValue( value ) && ! isPlainObject( value ) ) {
+export const getRangeRuleValueNotice = ( config: AccessRuleShape | undefined, value: unknown ): string | undefined => {
+	if ( isMalformedAccessRuleValue( config, value ) ) {
 		return 'string' === typeof value
 			? sprintf(
 					// translators: %s: the stored value.
@@ -240,13 +250,18 @@ export const getRangeRuleValueNotice = ( value: unknown ): string | undefined =>
 					'newspack-plugin'
 			  );
 	}
-	const { min, max } = normalizeRangeValue( value );
-	if ( undefined === min && undefined === max ) {
-		return __(
-			'No minimum or maximum is set, so this rule grants access to every reader with a number in this field. Enter a minimum, a maximum, or both, or turn the rule off.',
-			'newspack-plugin'
-		);
+	if ( isEmptyValueForRule( config, value ) ) {
+		return isUnconstrainedAccessRuleValue( config, value )
+			? __(
+					'No minimum or maximum is set, so this rule grants access to every reader with a number in this field. Enter a minimum, a maximum, or both, or turn the rule off.',
+					'newspack-plugin'
+			  )
+			: __(
+					'No minimum or maximum is set, so this rule matches no reader. Enter a minimum, a maximum, or both, or turn the rule off.',
+					'newspack-plugin'
+			  );
 	}
+	const { min, max } = normalizeRangeValue( value );
 	if ( ( undefined !== min && ! isNumericBound( min ) ) || ( undefined !== max && ! isNumericBound( max ) ) ) {
 		return __( 'The minimum and maximum must be numbers. Until they are, this rule grants no access.', 'newspack-plugin' );
 	}
@@ -254,36 +269,4 @@ export const getRangeRuleValueNotice = ( value: unknown ): string | undefined =>
 		return __( 'The minimum is above the maximum, so this rule matches no reader.', 'newspack-plugin' );
 	}
 	return undefined;
-};
-
-/**
- * A range rule's bounds in words, for the gate summary.
- *
- * @param value The rule's stored value.
- */
-export const formatRangeValue = ( value: unknown ): string => {
-	const { min, max } = normalizeRangeValue( value );
-	if ( undefined !== min && undefined !== max ) {
-		return sprintf(
-			// translators: 1: the lowest number the rule admits, 2: the highest.
-			__( '%1$s to %2$s', 'newspack-plugin' ),
-			String( min ),
-			String( max )
-		);
-	}
-	if ( undefined !== min ) {
-		return sprintf(
-			// translators: %s: the lowest number the rule admits.
-			__( 'At least %s', 'newspack-plugin' ),
-			String( min )
-		);
-	}
-	if ( undefined !== max ) {
-		return sprintf(
-			// translators: %s: the highest number the rule admits.
-			__( 'At most %s', 'newspack-plugin' ),
-			String( max )
-		);
-	}
-	return '';
 };

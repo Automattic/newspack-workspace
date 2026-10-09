@@ -102,6 +102,8 @@ describe( 'isMalformedAccessRuleValue', () => {
 
 	it( 'reads a list on a free-text rule as malformed', () => {
 		expect( isMalformedAccessRuleValue( freeText, [ 'example.com' ] ) ).toBe( true );
+		// Bounds left behind when a field's operator moves from Number to Text.
+		expect( isMalformedAccessRuleValue( freeText, { min: 50 } ) ).toBe( true );
 		expect( isMalformedAccessRuleValue( freeText, 'example.com' ) ).toBe( false );
 	} );
 
@@ -209,6 +211,7 @@ describe( 'range rule values', () => {
 		expect( isMalformedAccessRuleValue( range, '50' ) ).toBe( true );
 		expect( isMalformedAccessRuleValue( range, [ 50 ] ) ).toBe( true );
 		expect( isMalformedAccessRuleValue( range, { min: 50 } ) ).toBe( false );
+		expect( isMalformedAccessRuleValue( range, { minimum: 50 } ) ).toBe( true );
 		expect( isMalformedAccessRuleValue( range, '' ) ).toBe( false );
 	} );
 

@@ -38,7 +38,7 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } TokenField={ FormTokenField } />;
 	}
 	if ( rule.is_range ) {
-		return <RangeRuleControl label={ rule.name } value={ value } onChange={ onChange } />;
+		return <RangeRuleControl config={ rule } value={ value } onChange={ onChange } />;
 	}
 	if ( isOptionBackedAccessRule( slug, rule.options ?? [], rule.has_options ) ) {
 		const selected = Array.isArray( value ) ? value : [];

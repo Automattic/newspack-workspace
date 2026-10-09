@@ -160,6 +160,12 @@ describe( 'gate summary, range rules', () => {
 		expect( screen.getByText( 'At most 10' ) ).toBeInTheDocument();
 	} );
 
+	it( 'says an unset range still turns away readers holding no number', () => {
+		renderPaidAccess( gateWith( { slug: 'esp__DONATION', value: {} } ) );
+
+		expect( screen.getByText( 'Not set (grants access to every reader with a number)' ) ).toBeInTheDocument();
+	} );
+
 	it( 'flags text saved before the min/max control, which the rule denies on', () => {
 		renderPaidAccess( gateWith( { slug: 'esp__DONATION', value: '50' } ) );
 

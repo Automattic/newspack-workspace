@@ -225,7 +225,7 @@ export const AccessRuleValueControl = ( {
 	if ( 'one_time_purchase' === slug ) {
 		control = <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
 	} else if ( config.is_range ) {
-		control = <RangeRuleControl label={ config.name } value={ value } onChange={ onChange } />;
+		control = <RangeRuleControl config={ config } value={ value } onChange={ onChange } />;
 	} else if ( isOptionBackedAccessRule( slug, staticOptions, config.has_options ) ) {
 		const selected = Array.isArray( value ) ? value : [];
 		const hasOptions = hasSelectableAccessRuleOptions( options );

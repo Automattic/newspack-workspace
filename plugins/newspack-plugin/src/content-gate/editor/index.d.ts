@@ -9,7 +9,8 @@ type BlockSettings = {
 };
 // Alias the module's own type rather than restating it, so the two cannot drift.
 type AccessRuleOption = import( '../access-rule-options' ).AccessRuleOption;
-// Single source of truth for the composite value shape lives with the control.
+// Single source of truth for each composite value shape: one-time purchase lives
+// with its control, range bounds with the verdicts that read them.
 type EditorOneTimePurchaseRuleValue = import( '../components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
 type EditorRangeRuleValue = import( '../utils/access-rule-value' ).RangeValue;
 type AccessRuleConfig = {
