@@ -25,6 +25,13 @@ import { Stack } from '@wordpress/ui';
 import { type AccessRuleShape, getRangeRuleValueNotice, normalizeRangeValue, type RangeValue } from '../utils/access-rule-value';
 import './range-rule-control.scss';
 
+/**
+ * How long a notice has to stand before it is announced, in milliseconds. Typing a
+ * range passes through states that are briefly wrong: a maximum of 1 on the way to
+ * 100 reads as inverted against a minimum of 50.
+ */
+export const ANNOUNCE_DELAY = 1000;
+
 export default function RangeRuleControl( {
 	config,
 	value,
@@ -39,19 +46,28 @@ export default function RangeRuleControl( {
 	const noticeId = useInstanceId( RangeRuleControl, 'newspack-range-rule-notice' );
 
 	// A notice that appears or changes while the editor is typing describes what they
-	// just entered, so it is announced. The one present on mount describes the stored
-	// value and stays silent, as standing state does elsewhere in the editors.
+	// just entered, so it is announced once it has stood for ANNOUNCE_DELAY; one the
+	// next keystroke clears is never spoken. Polite rather than assertive, so it
+	// doesn't cut across the screen reader's echo of the keys. The notice present on
+	// mount describes the stored value and stays silent, as standing state does
+	// elsewhere in the editors.
 	const previousNotice = useRef( notice );
 	useEffect( () => {
-		if ( notice && notice !== previousNotice.current ) {
-			speak( notice, 'polite' );
+		if ( notice === previousNotice.current ) {
+			return;
 		}
 		previousNotice.current = notice;
+		if ( ! notice ) {
+			return;
+		}
+		const timer = setTimeout( () => speak( notice, 'polite' ), ANNOUNCE_DELAY );
+		return () => clearTimeout( timer );
 	}, [ notice ] );
 
-	// The typed text is stored as is. A number input would report text it can't parse
-	// as empty, which reads as a cleared bound and silently widens the range; as text,
-	// it reaches the "must be numbers" notice and the save's refusal instead.
+	// The typed text is kept, trimmed, rather than parsed. A number input would report
+	// text it can't parse as empty, which reads as a cleared bound and silently widens
+	// the range; as text, it reaches the "must be numbers" notice, then the gate save's
+	// refusal or, on a block, a rule that admits no one.
 	const update = ( bound: keyof RangeValue, input: string ) => {
 		const next = { ...range };
 		if ( '' === input.trim() ) {

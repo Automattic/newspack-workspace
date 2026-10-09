@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -11,7 +11,7 @@ import { speak } from '@wordpress/a11y';
 /**
  * Internal dependencies
  */
-import RangeRuleControl from './range-rule-control';
+import RangeRuleControl, { ANNOUNCE_DELAY } from './range-rule-control';
 
 jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
@@ -23,6 +23,10 @@ const renderControl = ( value: unknown, onChange = jest.fn() ) => {
 };
 
 describe( 'RangeRuleControl', () => {
+	beforeEach( () => {
+		( speak as jest.Mock ).mockClear();
+	} );
+
 	it( 'stores each typed bound as typed, and drops a cleared one', () => {
 		const onChange = renderControl( { max: 100 } );
 
@@ -42,15 +46,33 @@ describe( 'RangeRuleControl', () => {
 		expect( onChange ).toHaveBeenLastCalledWith( { min: '50O', max: 100 } );
 	} );
 
-	it( 'announces a notice raised by what the editor typed, but not the one present on load', () => {
-		const { rerender } = render( <RangeRuleControl config={ CONFIG } value={ {} } onChange={ jest.fn() } /> );
-		expect( speak ).not.toHaveBeenCalled();
+	describe( 'announcements', () => {
+		beforeEach( () => jest.useFakeTimers() );
+		afterEach( () => jest.useRealTimers() );
 
-		rerender( <RangeRuleControl config={ CONFIG } value={ { min: 100, max: 50 } } onChange={ jest.fn() } /> );
+		it( 'announces a notice raised by what the editor typed, but not the one present on load', () => {
+			const { rerender } = render( <RangeRuleControl config={ CONFIG } value={ {} } onChange={ jest.fn() } /> );
+			act( () => jest.advanceTimersByTime( ANNOUNCE_DELAY ) );
+			expect( speak ).not.toHaveBeenCalled();
 
-		const notice = screen.getByRole( 'note' );
-		expect( speak ).toHaveBeenLastCalledWith( notice.textContent, 'polite' );
-		expect( screen.getByLabelText( 'Minimum' ) ).toHaveAttribute( 'aria-describedby', notice.id );
+			rerender( <RangeRuleControl config={ CONFIG } value={ { min: 100, max: 50 } } onChange={ jest.fn() } /> );
+			act( () => jest.advanceTimersByTime( ANNOUNCE_DELAY ) );
+
+			const notice = screen.getByRole( 'note' );
+			expect( speak ).toHaveBeenLastCalledWith( notice.textContent, 'polite' );
+			expect( screen.getByLabelText( 'Minimum' ) ).toHaveAttribute( 'aria-describedby', notice.id );
+		} );
+
+		it( 'does not announce a state the next keystroke clears', () => {
+			// Typing a maximum of 100 against a minimum of 50 passes through 1, which
+			// reads as inverted for a moment.
+			const { rerender } = render( <RangeRuleControl config={ CONFIG } value={ { min: 50 } } onChange={ jest.fn() } /> );
+			rerender( <RangeRuleControl config={ CONFIG } value={ { min: 50, max: '1' } } onChange={ jest.fn() } /> );
+			rerender( <RangeRuleControl config={ CONFIG } value={ { min: 50, max: '100' } } onChange={ jest.fn() } /> );
+			act( () => jest.advanceTimersByTime( ANNOUNCE_DELAY ) );
+
+			expect( speak ).not.toHaveBeenCalled();
+		} );
 	} );
 
 	it( 'keeps the same inputs while the notice comes and goes, so typing is not cut off', () => {
@@ -72,6 +94,13 @@ describe( 'RangeRuleControl', () => {
 		expect( screen.getByLabelText( 'Minimum' ) ).toHaveValue( '0' );
 		expect( screen.getByLabelText( 'Maximum' ) ).toHaveValue( '10' );
 		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'reads a bound as a number only where the server does', () => {
+		// `Number()` reads hex, binary and octal; PHP's `is_numeric()` refuses them.
+		renderControl( { min: '0x10' } );
+
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( 'The minimum and maximum must be numbers.' );
 	} );
 
 	it( 'names text saved before the min/max control, which the rule denies on', () => {

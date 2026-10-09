@@ -166,6 +166,18 @@ describe( 'gate summary, range rules', () => {
 		expect( screen.getByText( 'Not set (grants access to every reader with a number)' ) ).toBeInTheDocument();
 	} );
 
+	it( 'flags bounds the rule cannot compare, as the save panel shows them before the save refuses', () => {
+		const gate = gateWith();
+		gate.custom_access.access_rules = [
+			{ min: 100, max: 50 },
+			{ min: '50O', max: 100 },
+		].map( value => [ { slug: 'esp__DONATION', value } ] );
+		renderPaidAccess( gate );
+
+		expect( screen.getByText( '100 to 50 (grants no access)' ) ).toBeInTheDocument();
+		expect( screen.getByText( '50O to 100 (grants no access)' ) ).toBeInTheDocument();
+	} );
+
 	it( 'flags text saved before the min/max control, which the rule denies on', () => {
 		renderPaidAccess( gateWith( { slug: 'esp__DONATION', value: '50' } ) );
 

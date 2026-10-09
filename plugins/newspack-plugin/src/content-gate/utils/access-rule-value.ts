@@ -65,7 +65,27 @@ const isRangeShape = ( value: unknown ): value is Record< string, unknown > =>
 
 const isRangeBoundSet = ( bound: unknown ): bound is number | string => ( 'number' === typeof bound || 'string' === typeof bound ) && '' !== bound;
 
-const isNumericBound = ( bound: number | string ) => '' !== String( bound ).trim() && Number.isFinite( Number( bound ) );
+/**
+ * Whether a bound is a number as PHP's `is_numeric()` reads one: decimal only, so the
+ * hex, binary and octal forms `Number()` would accept are refused here too.
+ */
+const DECIMAL_NUMBER = /^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$/;
+const isNumericBound = ( bound: number | string ) => DECIMAL_NUMBER.test( String( bound ) ) && Number.isFinite( Number( bound ) );
+
+/**
+ * Whether stored range bounds set a side that can't be compared, or an inverted pair.
+ * `Promoted_Fields::is_in_range()` matches no reader on either, and the gate save
+ * refuses both.
+ *
+ * @param value The rule's stored value.
+ */
+export const hasUnusableRangeBounds = ( value: unknown ) => {
+	const { min, max } = normalizeRangeValue( value );
+	if ( ( undefined !== min && ! isNumericBound( min ) ) || ( undefined !== max && ! isNumericBound( max ) ) ) {
+		return true;
+	}
+	return undefined !== min && undefined !== max && Number( min ) > Number( max );
+};
 
 /**
  * The bounds a stored range value sets, without anything else it holds. A value that
@@ -98,7 +118,8 @@ const isEmptyValueForRule = ( config: AccessRuleShape | undefined, value: unknow
 
 /**
  * Whether a stored access rule value is in a shape the rule can't use: free text
- * on an options-backed rule, or a list on a free-text one. Such a value denies
+ * on an options-backed rule, a list or object on a free-text one, or anything but
+ * min/max bounds on a range rule. Such a value denies
  * every reader, since `Newspack\Access_Rules::evaluate_rule()` fails closed on
  * it, so a control has to label it rather than render it as a live condition.
  *

@@ -6,7 +6,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, _n, sprintf } from '@wordpress/i18n';
+import { __, _n, _x, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
@@ -21,7 +21,7 @@ import {
 } from '../../../../content-gate/access-rule-options';
 import { getMeteringCount, isMalformedAccessRuleValue, isUnconfiguredAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
-import { normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
+import { hasUnusableRangeBounds, normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
 
@@ -46,12 +46,12 @@ const formatAccessRuleOptionValues = ( values: Array< string | number >, options
  *
  * @param value The rule's stored value.
  */
-const formatRangeValue = ( value: unknown ): string => {
+const formatRangeBounds = ( value: unknown ): string => {
 	const { min, max } = normalizeRangeValue( value );
 	if ( undefined !== min && undefined !== max ) {
 		return sprintf(
 			// translators: 1: the lowest number the rule admits, 2: the highest.
-			__( '%1$s to %2$s', 'newspack-plugin' ),
+			_x( '%1$s to %2$s', 'numeric range', 'newspack-plugin' ),
 			String( min ),
 			String( max )
 		);
@@ -72,6 +72,22 @@ const formatRangeValue = ( value: unknown ): string => {
 	}
 	return '';
 };
+
+/**
+ * A range rule's bounds in words, flagged when they can't be compared. The save panel
+ * summarises unsaved changes, so a typo or an inverted pair can reach it just before
+ * the save refuses it.
+ *
+ * @param value The rule's stored value.
+ */
+const formatRangeValue = ( value: unknown ): string =>
+	hasUnusableRangeBounds( value )
+		? sprintf(
+				// translators: %s: the range as typed, e.g. "100 to 50". Shown when the bounds can't be compared; the rule then never grants access.
+				__( '%s (grants no access)', 'newspack-plugin' ),
+				formatRangeBounds( value )
+		  )
+		: formatRangeBounds( value );
 
 /**
  * Human-readable summary for an access rule value.
