@@ -112,8 +112,9 @@ final class Member_Body_Class {
 		}
 		$has_access = user_can( $user_id, 'edit_others_posts' ) || self::passes_any_gate( $user_id );
 		// The hooks above don't catch every change, so this TTL caps how long the rest take
-		// to reach the class: gate edits, gift recipients and group members (whose access
-		// follows someone else's subscription), email verification, and institution grants
+		// to reach the class, such as gate edits, gift recipients and group members (whose
+		// access follows someone else's subscription), a one-time purchase's access window
+		// closing, email verification, reader data synced from an ESP, and institution grants
 		// that depend on the reader's network.
 		wp_cache_set( $user_id, $has_access ? 'yes' : 'no', self::CACHE_GROUP, 10 * MINUTE_IN_SECONDS );
 		return $has_access;
@@ -155,6 +156,8 @@ final class Member_Body_Class {
 	 * group, or a blank rule whose empty value grants access. There that opens one gate's
 	 * posts; here it would mark every signed-in reader a member on every page. So those
 	 * rules are dropped, and a group left with none no longer counts.
+	 *
+	 * @see Access_Rules::evaluate_rules_for_visitor() for why content gating passes these.
 	 *
 	 * @param array $access_rules The gate's access rules.
 	 * @return array[] Rule groups in grouped format.
