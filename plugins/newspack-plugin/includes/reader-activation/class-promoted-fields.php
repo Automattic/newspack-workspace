@@ -186,9 +186,8 @@ class Promoted_Fields {
 		if ( null === $value || '' === $value ) {
 			return [];
 		}
-		$invalid = new \WP_Error( 'invalid_range_value' );
 		if ( ! self::is_range_shape( $value ) ) {
-			return $invalid;
+			return new \WP_Error( 'invalid_range_value' );
 		}
 		$bounds = [];
 		foreach ( [ 'min', 'max' ] as $bound ) {
@@ -197,13 +196,13 @@ class Promoted_Fields {
 				continue;
 			}
 			if ( ! is_numeric( $submitted ) || ! is_finite( (float) $submitted ) ) {
-				return $invalid;
+				return new \WP_Error( 'invalid_range_value' );
 			}
 			$bounds[ $bound ] = (float) $submitted;
 		}
 		// An inverted range matches no reader, which is never what the operator meant.
 		if ( isset( $bounds['min'], $bounds['max'] ) && $bounds['min'] > $bounds['max'] ) {
-			return $invalid;
+			return new \WP_Error( 'invalid_range_value' );
 		}
 		return $bounds;
 	}

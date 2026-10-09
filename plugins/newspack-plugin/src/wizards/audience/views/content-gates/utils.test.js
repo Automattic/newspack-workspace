@@ -212,6 +212,8 @@ describe( 'range rule values', () => {
 		expect( isMalformedAccessRuleValue( range, [ 50 ] ) ).toBe( true );
 		expect( isMalformedAccessRuleValue( range, { min: 50 } ) ).toBe( false );
 		expect( isMalformedAccessRuleValue( range, { minimum: 50 } ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( range, { min: true } ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( range, { min: null, max: '' } ) ).toBe( false );
 		expect( isMalformedAccessRuleValue( range, '' ) ).toBe( false );
 	} );
 

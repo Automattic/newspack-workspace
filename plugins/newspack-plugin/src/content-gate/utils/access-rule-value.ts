@@ -57,11 +57,15 @@ const isPlainObject = ( value: unknown ): value is Record< string, unknown > =>
 
 /**
  * Whether a value has the shape of range bounds: an object keyed by nothing but `min`
- * and `max`, as `Promoted_Fields::is_range_shape()` reads it. Anything else on a range
- * rule denies every reader there.
+ * and `max`, each unset or a string or number, as `Promoted_Fields` reads it. Anything
+ * else on a range rule denies every reader there, so it must not read as unset here.
  */
 const isRangeShape = ( value: unknown ): value is Record< string, unknown > =>
-	isPlainObject( value ) && Object.keys( value ).every( key => 'min' === key || 'max' === key );
+	isPlainObject( value ) &&
+	Object.entries( value ).every(
+		( [ key, bound ] ) =>
+			( 'min' === key || 'max' === key ) && ( undefined === bound || null === bound || 'string' === typeof bound || 'number' === typeof bound )
+	);
 
 const isRangeBoundSet = ( bound: unknown ): bound is number | string => ( 'number' === typeof bound || 'string' === typeof bound ) && '' !== bound;
 
@@ -73,19 +77,27 @@ const DECIMAL_NUMBER = /^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$/;
 const isNumericBound = ( bound: number | string ) => DECIMAL_NUMBER.test( String( bound ) ) && Number.isFinite( Number( bound ) );
 
 /**
- * Whether stored range bounds set a side that can't be compared, or an inverted pair.
- * `Promoted_Fields::is_in_range()` matches no reader on either, and the gate save
- * refuses both.
+ * What keeps stored range bounds from being compared, if anything: a side that isn't a
+ * number, or a minimum above the maximum. `Promoted_Fields::is_in_range()` matches no
+ * reader on either, and the gate save refuses both. One answer serves the control's
+ * notice and the summary's flag, so the two can't drift apart.
  *
  * @param value The rule's stored value.
  */
-export const hasUnusableRangeBounds = ( value: unknown ) => {
+const getRangeBoundsProblem = ( value: unknown ): 'not-numeric' | 'inverted' | null => {
 	const { min, max } = normalizeRangeValue( value );
 	if ( ( undefined !== min && ! isNumericBound( min ) ) || ( undefined !== max && ! isNumericBound( max ) ) ) {
-		return true;
+		return 'not-numeric';
 	}
-	return undefined !== min && undefined !== max && Number( min ) > Number( max );
+	return undefined !== min && undefined !== max && Number( min ) > Number( max ) ? 'inverted' : null;
 };
+
+/**
+ * Whether stored range bounds can't be compared, so the rule matches no reader.
+ *
+ * @param value The rule's stored value.
+ */
+export const hasUnusableRangeBounds = ( value: unknown ) => null !== getRangeBoundsProblem( value );
 
 /**
  * The bounds a stored range value sets, without anything else it holds. A value that
@@ -119,9 +131,9 @@ const isEmptyValueForRule = ( config: AccessRuleShape | undefined, value: unknow
 /**
  * Whether a stored access rule value is in a shape the rule can't use: free text
  * on an options-backed rule, a list or object on a free-text one, or anything but
- * min/max bounds on a range rule. Such a value denies
- * every reader, since `Newspack\Access_Rules::evaluate_rule()` fails closed on
- * it, so a control has to label it rather than render it as a live condition.
+ * min/max bounds on a range rule. Such a value denies every reader, since
+ * `Newspack\Access_Rules::evaluate_rule()` fails closed on it, so a control has to
+ * label it rather than render it as a live condition.
  *
  * An unset value is not one of those. `Newspack\Access_Rules::is_malformed_options_backed_value()`
  * reads `''` and `null` on an options-backed rule as "not configured", and the
@@ -282,11 +294,11 @@ export const getRangeRuleValueNotice = ( config: AccessRuleShape | undefined, va
 					'newspack-plugin'
 			  );
 	}
-	const { min, max } = normalizeRangeValue( value );
-	if ( ( undefined !== min && ! isNumericBound( min ) ) || ( undefined !== max && ! isNumericBound( max ) ) ) {
+	const problem = getRangeBoundsProblem( value );
+	if ( 'not-numeric' === problem ) {
 		return __( 'The minimum and maximum must be numbers. Until they are, this rule grants no access.', 'newspack-plugin' );
 	}
-	if ( undefined !== min && undefined !== max && Number( min ) > Number( max ) ) {
+	if ( 'inverted' === problem ) {
 		return __( 'The minimum is above the maximum, so this rule matches no reader.', 'newspack-plugin' );
 	}
 	return undefined;

@@ -73,6 +73,20 @@ describe( 'RangeRuleControl', () => {
 
 			expect( speak ).not.toHaveBeenCalled();
 		} );
+
+		it( 'waits for typing to pause, not for the notice to first appear', () => {
+			// Every prefix of a maximum of 10000 reads as inverted against 5000, until
+			// the last digit lands.
+			const { rerender } = render( <RangeRuleControl config={ CONFIG } value={ { min: 5000 } } onChange={ jest.fn() } /> );
+			for ( const max of [ '1', '10', '100', '1000' ] ) {
+				rerender( <RangeRuleControl config={ CONFIG } value={ { min: 5000, max } } onChange={ jest.fn() } /> );
+				act( () => jest.advanceTimersByTime( ANNOUNCE_DELAY / 2 ) );
+			}
+			rerender( <RangeRuleControl config={ CONFIG } value={ { min: 5000, max: '10000' } } onChange={ jest.fn() } /> );
+			act( () => jest.advanceTimersByTime( ANNOUNCE_DELAY ) );
+
+			expect( speak ).not.toHaveBeenCalled();
+		} );
 	} );
 
 	it( 'keeps the same inputs while the notice comes and goes, so typing is not cut off', () => {
@@ -101,6 +115,12 @@ describe( 'RangeRuleControl', () => {
 		renderControl( { min: '0x10' } );
 
 		expect( screen.getByRole( 'note' ) ).toHaveTextContent( 'The minimum and maximum must be numbers.' );
+	} );
+
+	it( 'reads a bound that is not text or a number as malformed, as the server denies on it', () => {
+		renderControl( { max: [ 10 ] } );
+
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( 'The saved value is not a minimum or maximum, so this rule grants no access.' );
 	} );
 
 	it( 'names text saved before the min/max control, which the rule denies on', () => {

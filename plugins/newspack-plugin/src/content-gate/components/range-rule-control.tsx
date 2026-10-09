@@ -45,24 +45,30 @@ export default function RangeRuleControl( {
 	const notice = getRangeRuleValueNotice( config, value );
 	const noticeId = useInstanceId( RangeRuleControl, 'newspack-range-rule-notice' );
 
-	// A notice that appears or changes while the editor is typing describes what they
-	// just entered, so it is announced once it has stood for ANNOUNCE_DELAY; one the
-	// next keystroke clears is never spoken. Polite rather than assertive, so it
-	// doesn't cut across the screen reader's echo of the keys. The notice present on
-	// mount describes the stored value and stays silent, as standing state does
-	// elsewhere in the editors.
-	const previousNotice = useRef( notice );
+	// A notice raised by what the editor typed is announced once typing has paused for
+	// ANNOUNCE_DELAY: every keystroke restarts the wait, so a notice that holds through
+	// several keys (a maximum of 1, 10, 100 against a minimum of 5000) is not spoken
+	// mid-entry, and one the next key clears is never spoken. Polite rather than
+	// assertive, so it doesn't cut across the screen reader's echo of the keys. The
+	// notice present on mount describes the stored value and stays silent, as standing
+	// state does elsewhere in the editors.
+	const boundsKey = `${ range.min ?? '' }|${ range.max ?? '' }`;
+	const spokenNotice = useRef( notice );
 	useEffect( () => {
-		if ( notice === previousNotice.current ) {
-			return;
-		}
-		previousNotice.current = notice;
 		if ( ! notice ) {
+			// Cleared: the next notice is news, even one matching the last.
+			spokenNotice.current = notice;
 			return;
 		}
-		const timer = setTimeout( () => speak( notice, 'polite' ), ANNOUNCE_DELAY );
+		if ( notice === spokenNotice.current ) {
+			return;
+		}
+		const timer = setTimeout( () => {
+			speak( notice, 'polite' );
+			spokenNotice.current = notice;
+		}, ANNOUNCE_DELAY );
 		return () => clearTimeout( timer );
-	}, [ notice ] );
+	}, [ notice, boundsKey ] );
 
 	// The typed text is kept, trimmed, rather than parsed. A number input would report
 	// text it can't parse as empty, which reads as a cleared bound and silently widens
