@@ -931,9 +931,12 @@ final class Newspack_Popups_Segmentation {
 	/**
 	 * The object-cache claim. Windows are aligned to multiples of
 	 * CARRIED_ACCOUNTS_WINDOW so every request agrees on the current one without
-	 * reading shared state. A marker per account keeps repeat clicks free; the
-	 * counter is only touched for an account this window hasn't seen, and
-	 * wp_cache_incr() makes each such claim take its own slot.
+	 * reading shared state. Each account gets a marker, claimed with
+	 * wp_cache_add() so only one request per account can take a slot: the
+	 * request that claims it counts the account with wp_cache_incr() and
+	 * records the outcome, and every other request for that account reads the
+	 * marker instead of counting. A duplicate that arrives while the first is
+	 * still counting carries nothing rather than spending a second slot.
 	 *
 	 * @param string $key        Per-address key.
 	 * @param int    $account_id Account ID from the inbound param.
@@ -949,18 +952,17 @@ final class Newspack_Popups_Segmentation {
 		$counter      = $key . '_' . $window_start;
 		$marker       = $counter . '_' . $account_id;
 
-		if ( false !== wp_cache_get( $marker, $group ) ) {
-			return true;
+		// phpcs:disable WordPressVIPMinimum.Performance.LowExpiryCacheTime.CacheTimeUndetermined -- $ttl is the rest of the window, at most an hour.
+		if ( ! wp_cache_add( $marker, 'pending', $group, $ttl ) ) {
+			return 'ok' === wp_cache_get( $marker, $group );
 		}
 
-		wp_cache_add( $counter, 0, $group, $ttl ); // phpcs:ignore WordPressVIPMinimum.Performance.LowExpiryCacheTime.CacheTimeUndetermined -- $ttl is the rest of the window, at most an hour.
-		$count = wp_cache_incr( $counter, 1, $group );
-		if ( false === $count || $count > $limit ) {
-			return false;
-		}
-
-		wp_cache_set( $marker, 1, $group, $ttl ); // phpcs:ignore WordPressVIPMinimum.Performance.LowExpiryCacheTime.CacheTimeUndetermined -- $ttl is the rest of the window, at most an hour.
-		return true;
+		wp_cache_add( $counter, 0, $group, $ttl );
+		$count   = wp_cache_incr( $counter, 1, $group );
+		$granted = false !== $count && $count <= $limit;
+		wp_cache_set( $marker, $granted ? 'ok' : 'denied', $group, $ttl );
+		// phpcs:enable WordPressVIPMinimum.Performance.LowExpiryCacheTime.CacheTimeUndetermined
+		return $granted;
 	}
 
 	/**

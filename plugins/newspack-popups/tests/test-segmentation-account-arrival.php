@@ -577,6 +577,46 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A duplicate click that arrives while another request for the same account
+	 * is still being counted carries nothing and spends no slot. An account
+	 * turned away by the cap stays turned away for the window without spending
+	 * more slots either.
+	 */
+	public function test_object_cache_duplicates_spend_no_slot() {
+		add_filter( 'newspack_popups_carried_accounts_per_ip', fn() => 1 );
+		\Newspack\Reader_Data::$matched_segments = [
+			1 => [ $this->segment_ids['carried-one'] ],
+			2 => [ $this->segment_ids['carried-one'] ],
+		];
+		$before       = time();
+		$window_start = $before - ( $before % HOUR_IN_SECONDS );
+		$counter      = $this->accounts_key( self::IP ) . '_' . $window_start;
+		$was_external = wp_using_ext_object_cache( true );
+		try {
+			// Another request for account 1 has claimed its marker and not finished.
+			wp_cache_set( $counter . '_1', 'pending', 'newspack_popups_carried_accounts' );
+			$this->arrive( '/p/?np_account=1' );
+			$this->assertNull( $this->cookie(), 'An in-flight duplicate must not resolve.' );
+
+			$this->arrive( '/p/?np_account=2' );
+			$this->assertSame( $this->segment_ids['carried-one'], $this->cookie(), 'The duplicate must not have spent the only slot.' );
+
+			unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			wp_cache_delete( $counter . '_1', 'newspack_popups_carried_accounts' );
+			$this->arrive( '/p/?np_account=1' );
+			$this->arrive( '/p/?np_account=1' );
+			$this->assertNull( $this->cookie(), 'Past the cap the account is turned away.' );
+
+			if ( time() >= $window_start + HOUR_IN_SECONDS ) {
+				$this->markTestSkipped( 'Crossed a window boundary mid-test.' );
+			}
+			$this->assertSame( 2, wp_cache_get( $counter, 'newspack_popups_carried_accounts' ), 'A turned-away account counts once, not per click.' );
+		} finally {
+			wp_using_ext_object_cache( $was_external );
+		}
+	}
+
+	/**
 	 * The transient key the cap uses for an address.
 	 *
 	 * @param string $ip Remote address.
