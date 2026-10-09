@@ -24,7 +24,7 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 	private $prior_products_shortcode = null;
 
 	/**
-	 * Block pattern slugs a test registered, unregistered on tearDown. The
+	 * Block pattern slugs registered by a test, which tearDown unregisters. The
 	 * pattern registry is an in-memory singleton, so like the shortcode
 	 * registry it outlives the test's DB transaction.
 	 *
