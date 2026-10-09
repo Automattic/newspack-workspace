@@ -1511,7 +1511,7 @@ class Newspack_Newsletters_Subscription {
 			$current_lists = [];
 			$lists_to_add  = array_values( array_diff( $lists_to_add, $current_lists ) );
 			if ( false === self::is_newsletter_subscriber( $email ) ) {
-				$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => $email ], $lists, false, 'User subscribed on My Account page' );
+				$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => $email ], $lists_to_add, false, 'User subscribed on My Account page' );
 			} else {
 				$current_lists = self::get_contact_lists( $email );
 				$lists_to_add  = array_values( array_diff( $lists_to_add, $current_lists ) );
