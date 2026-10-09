@@ -365,4 +365,93 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$plain_metadata = Newspack_Popups_Data_Api::get_popup_metadata( self::$popup_id );
 		self::assertArrayNotHasKey( 'ab_test_id', $plain_metadata );
 	}
+
+	/**
+	 * With the flag off, a stored test has no effect: no config reaches the view
+	 * script, so there is no variant selection and no reader bucket assignment.
+	 */
+	public function test_flag_off_ignores_stored_tests() {
+		$this->create_test_variant( 'flag-off-test', 'a' );
+		$this->create_test_variant( 'flag-off-test', 'b' );
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+
+		self::assertSame( [], Newspack_Popups_AB_Tests::get_tests_config() );
+	}
+
+	/**
+	 * Turning the flag off must not record "no tests". A cached '0' would outlive
+	 * the flag and keep every test from running once the flag is turned back on.
+	 */
+	public function test_flag_off_does_not_record_the_has_tests_flag() {
+		$this->create_test_variant( 'flag-toggle-test', 'a' );
+		$this->create_test_variant( 'flag-toggle-test', 'b' );
+
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		Newspack_Popups_AB_Tests::get_tests_config();
+		self::assertFalse( get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ) );
+
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		self::assertArrayHasKey( 'flag-toggle-test', Newspack_Popups_AB_Tests::get_tests_config() );
+	}
+
+	/**
+	 * With the flag off, test prompts behave like plain prompts: no A/B fields on
+	 * the popup object, no markup attributes, and no A/B params on GA events.
+	 */
+	public function test_flag_off_prompts_carry_no_ab_fields() {
+		$overlay_options = [
+			'frequency' => 'always',
+			'placement' => 'center',
+		];
+		$this->create_test_variant( 'flag-off-fields', 'a', $overlay_options );
+		$challenger_id = $this->create_test_variant( 'flag-off-fields', 'b', $overlay_options );
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+
+		self::assertNull( Newspack_Popups_AB_Tests::get_popup_ab_fields( $challenger_id ) );
+		self::assertArrayNotHasKey( 'ab_test_id', Newspack_Popups_Model::create_popup_object( get_post( $challenger_id ) ) );
+		self::assertArrayNotHasKey( 'ab_test_id', Newspack_Popups_Data_Api::get_popup_metadata( $challenger_id ) );
+
+		$this->renderPost();
+		self::assertSame( 0, self::$dom_xpath->query( '//*[@data-ab-test-id]' )->length );
+	}
+
+	/**
+	 * Only administrators can write A/B meta through REST, matching the Campaigns
+	 * permission model. An Editor can edit the prompt itself but not its test.
+	 */
+	public function test_ab_meta_writes_require_manage_options() {
+		Newspack_Popups_AB_Tests::register_meta();
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+		$prompt_id = $this->createPopup();
+		$route     = '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id;
+		$write     = function () use ( $route ) {
+			$request = new WP_REST_Request( 'POST', $route );
+			$request->set_body_params( [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'rest-write-test' ] ] );
+			return rest_do_request( $request );
+		};
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		self::assertSame( 403, $write()->get_status() );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		self::assertSame( 200, $write()->get_status() );
+		self::assertSame( 'rest-write-test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * The flag gates what reads A/B meta, never its registration, so REST writes
+	 * keep their sanitizers and schema checks while the feature is off.
+	 */
+	public function test_flag_off_keeps_meta_registered() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		unregister_post_meta( Newspack_Popups::NEWSPACK_POPUPS_CPT, Newspack_Popups_AB_Tests::META_VARIANT );
+
+		Newspack_Popups_AB_Tests::register_meta();
+
+		$registered = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		self::assertArrayHasKey( Newspack_Popups_AB_Tests::META_VARIANT, $registered );
+	}
 }

@@ -67,6 +67,41 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Whether A/B testing is enabled on this site.
+	 *
+	 * The flag gates what reads A/B meta, never its registration. With it off,
+	 * stored tests have no effect anywhere, while REST writes keep their sanitizers
+	 * and schema checks, and a site can turn the flag off and on again without
+	 * losing its test setup.
+	 *
+	 * Not cached, unlike the sibling flags: the filter has to stay live so one
+	 * PHPUnit run can cover both states.
+	 *
+	 * @return bool
+	 */
+	public static function is_enabled() {
+		/**
+		 * Enables A/B testing for Campaigns prompts: running two versions of a
+		 * prompt against each other and comparing how they convert.
+		 *
+		 * @constant NEWSPACK_CAMPAIGNS_AB_TESTING
+		 * @type     bool
+		 * @default  A/B testing disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_CAMPAIGNS_AB_TESTING', true );
+		 */
+		$enabled = defined( 'NEWSPACK_CAMPAIGNS_AB_TESTING' ) && NEWSPACK_CAMPAIGNS_AB_TESTING;
+
+		/**
+		 * Filters whether A/B testing is enabled.
+		 *
+		 * @param bool $enabled Whether the NEWSPACK_CAMPAIGNS_AB_TESTING constant is set.
+		 */
+		return (bool) apply_filters( 'newspack_popups_ab_testing_enabled', $enabled );
+	}
+
+	/**
 	 * Drop the has-tests flag.
 	 */
 	public static function invalidate_has_tests() {
@@ -106,7 +141,7 @@ final class Newspack_Popups_AB_Tests {
 			'object_subtype' => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 			'show_in_rest'   => true,
 			'single'         => true,
-			'auth_callback'  => '__return_true',
+			'auth_callback'  => [ __CLASS__, 'can_write_meta' ],
 		];
 
 		\register_meta(
@@ -183,6 +218,23 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Whether a user may write A/B meta.
+	 *
+	 * Core still requires edit rights on the prompt; this adds `manage_options` on
+	 * top, because managing tests follows the admin-only Campaigns permission model
+	 * and the prompts CPT itself uses default post capabilities.
+	 *
+	 * @param bool   $allowed   Whether the user can write the meta. Default false.
+	 * @param string $meta_key  Meta key.
+	 * @param int    $object_id Prompt post ID.
+	 * @param int    $user_id   User ID.
+	 * @return bool
+	 */
+	public static function can_write_meta( $allowed, $meta_key, $object_id, $user_id ) {
+		return user_can( $user_id, 'manage_options' );
+	}
+
+	/**
 	 * Sanitize a variant key.
 	 *
 	 * @param string $value Raw value.
@@ -210,9 +262,13 @@ final class Newspack_Popups_AB_Tests {
 	 *                       valid (published control + at least one published
 	 *                       challenger) — an invalid test must not present itself
 	 *                       as a live experiment in markup or analytics params.
-	 * @return array|null Array with test_id and variant, or null if not part of a test.
+	 * @return array|null Array with test_id and variant, or null if not part of a test
+	 *                    or A/B testing is disabled.
 	 */
 	public static function get_popup_ab_fields( $popup_id, $validate = false ) {
+		if ( ! self::is_enabled() ) {
+			return null;
+		}
 		$test_id = get_post_meta( $popup_id, self::META_TEST_ID, true );
 		$variant = get_post_meta( $popup_id, self::META_VARIANT, true );
 		if ( ! $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
@@ -237,6 +293,13 @@ final class Newspack_Popups_AB_Tests {
 	 * @return array Config keyed by test ID: [ 'variants' => [ 'a', 'b' ], 'control_share' => 60 ].
 	 */
 	public static function get_tests_config() {
+		// Ahead of the memo and the has-tests flag, and writing neither: a '0'
+		// recorded while the feature is off would outlive the flag and keep live
+		// tests from running once it is turned back on.
+		if ( ! self::is_enabled() ) {
+			return [];
+		}
+
 		if ( null !== self::$tests_config ) {
 			return self::$tests_config;
 		}
