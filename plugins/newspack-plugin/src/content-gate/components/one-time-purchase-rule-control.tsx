@@ -12,7 +12,8 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { Flex, FlexBlock, FormTokenField as CoreFormTokenField, SelectControl, TextControl } from '@wordpress/components';
+import { FormTokenField as CoreFormTokenField, SelectControl, TextControl } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
@@ -28,6 +29,7 @@ import {
 	type AccessRuleOption,
 } from '../access-rule-options';
 import UnlistedValuesNotice from './unlisted-values-notice';
+import './one-time-purchase-rule-control.scss';
 
 const RULE_SLUG = 'one_time_purchase';
 
@@ -112,8 +114,8 @@ export default function OneTimePurchaseRuleControl( {
 				__nextHasNoMarginBottom
 			/>
 			<UnlistedValuesNotice slug={ RULE_SLUG } options={ options } value={ currentValue.product_ids } />
-			<Flex align="flex-start" gap={ 2 } style={ { marginTop: '8px' } }>
-				<FlexBlock>
+			<Stack align="flex-start" gap="sm" style={ { marginTop: '8px' } }>
+				<div className="newspack-one-time-purchase-rule__field">
 					<SelectControl
 						label={ __( 'Access duration', 'newspack-plugin' ) }
 						help={ durationHelp }
@@ -140,9 +142,9 @@ export default function OneTimePurchaseRuleControl( {
 						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 					/>
-				</FlexBlock>
+				</div>
 				{ isFiniteDuration && (
-					<FlexBlock>
+					<div className="newspack-one-time-purchase-rule__field">
 						<TextControl
 							label={
 								'days' === currentValue.duration_unit
@@ -166,9 +168,9 @@ export default function OneTimePurchaseRuleControl( {
 							__next40pxDefaultSize
 							__nextHasNoMarginBottom
 						/>
-					</FlexBlock>
+					</div>
 				) }
-			</Flex>
+			</Stack>
 		</>
 	);
 }

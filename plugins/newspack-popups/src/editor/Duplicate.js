@@ -2,11 +2,12 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { Button, Flex, Modal, Notice, TextControl } from '@wordpress/components';
+import { Button, Modal, Notice, TextControl } from '@wordpress/components';
 import { compose } from '@wordpress/compose';
 import { withSelect, withDispatch } from '@wordpress/data';
 import { useEffect, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
+import { Stack } from '@wordpress/ui';
 import { addQueryArgs } from '@wordpress/url';
 
 const DuplicateButton = ( { autosave, campaignGroups, duplicateOf, isSavingPost, postId, title } ) => {
@@ -91,14 +92,14 @@ const DuplicateButton = ( { autosave, campaignGroups, duplicateOf, isSavingPost,
 									{ __( 'This prompt is currently not assigned to any campaign.', 'newspack-popups' ) }
 								</Notice>
 							) }
-							<Flex justify="flex-end">
+							<Stack justify="flex-end" align="center" gap="sm">
 								<Button isSecondary onClick={ () => setModalVisible( false ) }>
 									{ __( 'Close', 'newspack-popups' ) }
 								</Button>
 								<Button isPrimary href={ `/wp-admin/post.php?post=${ duplicated }&action=edit` }>
 									{ __( 'Edit', 'newspack-popups' ) }
 								</Button>
-							</Flex>
+							</Stack>
 						</>
 					) : (
 						<>
@@ -113,7 +114,7 @@ const DuplicateButton = ( { autosave, campaignGroups, duplicateOf, isSavingPost,
 								value={ duplicateTitle }
 								onChange={ value => setDuplicateTitle( value ) }
 							/>
-							<Flex justify="flex-end">
+							<Stack justify="flex-end" align="center" gap="sm">
 								<Button
 									isBusy={ isSavingPost }
 									isSecondary
@@ -134,7 +135,7 @@ const DuplicateButton = ( { autosave, campaignGroups, duplicateOf, isSavingPost,
 								>
 									{ __( 'Duplicate', 'newspack-popups' ) }
 								</Button>
-							</Flex>
+							</Stack>
 						</>
 					) }
 				</Modal>
