@@ -227,6 +227,76 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Rule groups that pass every signed-in reader without checking anything.
+	 *
+	 * @return array[]
+	 */
+	public function data_rule_groups_that_admit_every_reader() {
+		return [
+			'a rule the site does not register' => [
+				[
+					[
+						[
+							'slug'  => 'member_body_class_unregistered_rule',
+							'value' => 'x',
+						],
+					],
+				],
+			],
+			'an empty group'                    => [ [ [] ] ],
+			'a rule with no slug'               => [ [ [ [ 'value' => 'x' ] ] ] ],
+			'an email domain rule left blank'   => [
+				[
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => '',
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * Content gating lets every signed-in reader through such a group, but here that would
+	 * mark every reader a member on every page.
+	 *
+	 * @dataProvider data_rule_groups_that_admit_every_reader
+	 *
+	 * @param array $access_rules The gate's access rules.
+	 */
+	public function test_ignores_rule_groups_that_admit_every_reader( $access_rules ) {
+		$this->make_gate( [ 'access_rules' => $access_rules ] );
+		wp_set_current_user( $this->reader_id );
+
+		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes() );
+	}
+
+	/**
+	 * Dropping a rule the site no longer registers leaves the rest of its group to decide.
+	 */
+	public function test_counts_registered_rules_beside_an_unregistered_one() {
+		$this->make_gate(
+			[
+				'access_rules' => [
+					[
+						[ 'slug' => self::RULE ],
+						[
+							'slug'  => 'member_body_class_unregistered_rule',
+							'value' => 'x',
+						],
+					],
+				],
+			]
+		);
+		self::$admitted = [ $this->reader_id ];
+		wp_set_current_user( $this->reader_id );
+
+		$this->assertContains( self::MEMBER_CLASS, $this->body_classes() );
+	}
+
+	/**
 	 * Rules on a gate whose paid access is switched off grant nothing.
 	 */
 	public function test_ignores_gate_with_custom_access_off() {

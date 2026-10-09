@@ -111,8 +111,10 @@ final class Member_Body_Class {
 			return 'yes' === $cached;
 		}
 		$has_access = user_can( $user_id, 'edit_others_posts' ) || self::passes_any_gate( $user_id );
-		// Ten minutes is also the longest a change the hooks above don't catch (a gate edit,
-		// a group subscription's member list) takes to reach the class.
+		// The hooks above don't catch every change, so this TTL caps how long the rest take
+		// to reach the class: gate edits, gift recipients and group members (whose access
+		// follows someone else's subscription), email verification, and institution grants
+		// that depend on the reader's network.
 		wp_cache_set( $user_id, $has_access ? 'yes' : 'no', self::CACHE_GROUP, 10 * MINUTE_IN_SECONDS );
 		return $has_access;
 	}
@@ -121,8 +123,11 @@ final class Member_Body_Class {
 	 * Whether a reader passes the paid-access rules of any published, non-newsletter gate.
 	 *
 	 * Asks about the reader, not the page, so the answer holds site-wide, as the Memberships
-	 * class did. Evaluates rules exactly as Content_Restriction_Control::is_post_restricted()
-	 * does, so the class agrees with what the reader can read.
+	 * class did. Rules go through the same evaluator and payment-recovery setting as
+	 * Content_Restriction_Control::is_post_restricted(), but the answer can differ from what
+	 * the reader may read on a given post: any passing gate counts here, not only the one
+	 * that decides for that post, registration settings aren't consulted, and rule groups
+	 * that can't tell readers apart are left out.
 	 *
 	 * @param int $user_id User ID.
 	 * @return bool
@@ -130,16 +135,54 @@ final class Member_Body_Class {
 	private static function passes_any_gate( $user_id ) {
 		foreach ( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) as $gate ) {
 			$custom_access = $gate['custom_access'] ?? [];
-			// An empty rule set admits everyone, so it must not make every reader a member.
-			if ( empty( $custom_access['active'] ) || empty( $custom_access['access_rules'] ) ) {
+			$rule_groups   = self::get_distinguishing_rule_groups( $custom_access['access_rules'] ?? [] );
+			if ( empty( $custom_access['active'] ) || empty( $rule_groups ) ) {
 				continue;
 			}
 			$rule_context = [ 'payment_recovery_grace' => $custom_access['payment_recovery_grace'] ?? true ];
-			if ( Access_Rules::evaluate_rules_for_visitor( $custom_access['access_rules'], $user_id, $rule_context ) ) {
+			if ( Access_Rules::evaluate_rules_for_visitor( $rule_groups, $user_id, $rule_context ) ) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * A gate's rule groups without the rules that pass every signed-in reader unchecked.
+	 *
+	 * Content gating lets a signed-in reader through a rule the site no longer registers
+	 * (a promoted field whose integration was switched off), a rule with no slug, an empty
+	 * group, or a blank rule whose empty value grants access. There that opens one gate's
+	 * posts; here it would mark every signed-in reader a member on every page. So those
+	 * rules are dropped, and a group left with none no longer counts.
+	 *
+	 * @param array $access_rules The gate's access rules.
+	 * @return array[] Rule groups in grouped format.
+	 */
+	private static function get_distinguishing_rule_groups( $access_rules ) {
+		$rule_groups = [];
+		foreach ( Access_Rules::normalize_rules( $access_rules ) as $group ) {
+			if ( ! is_array( $group ) ) {
+				continue;
+			}
+			$group = array_values(
+				array_filter(
+					$group,
+					function ( $rule ) {
+						$definition = isset( $rule['slug'] ) ? Access_Rules::get_rule( $rule['slug'] ) : null;
+						if ( empty( $definition['callback'] ) ) {
+							return false;
+						}
+						$value = $rule['value'] ?? null;
+						return empty( $definition['empty_grants_access'] ) || ! in_array( $value, [ null, [], '' ], true );
+					}
+				)
+			);
+			if ( $group ) {
+				$rule_groups[] = $group;
+			}
+		}
+		return $rule_groups;
 	}
 }
 Member_Body_Class::init();
