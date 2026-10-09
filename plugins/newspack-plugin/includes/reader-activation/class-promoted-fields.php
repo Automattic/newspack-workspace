@@ -394,7 +394,8 @@ class Promoted_Fields {
 			if ( '' === $limit ) {
 				continue;
 			}
-			if ( ! is_numeric( $limit ) ) {
+			// A bound too large for a float would compare as unbounded.
+			if ( ! is_numeric( $limit ) || ! is_finite( (float) $limit ) ) {
 				return false;
 			}
 			if ( 'min' === $bound ? (float) $value < (float) $limit : (float) $value > (float) $limit ) {

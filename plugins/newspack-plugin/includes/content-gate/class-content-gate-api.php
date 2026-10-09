@@ -335,10 +335,10 @@ class Content_Gate_API {
 	/**
 	 * Whether a rule holds the empty value for its shape.
 	 *
-	 * Both shapes a rule can take carry the same meaning when empty: an
-	 * options-backed rule selects nothing with `[]`, a free-text one with `''`,
-	 * and a stored rule can be missing its value altogether. All three say the
-	 * rule names no condition. Which way it then evaluates is the rule's own
+	 * Every shape a rule can take carries the same meaning when empty: an
+	 * options-backed rule selects nothing with `[]`, a free-text one with `''`, a
+	 * range sets no bound with `[]`, and a stored rule can be missing its value
+	 * altogether. Each says the rule names no condition. Which way it then evaluates is the rule's own
 	 * business, and `empty_grants_access` is where each rule states it.
 	 *
 	 * @param mixed $value The rule's value.
@@ -357,8 +357,9 @@ class Content_Gate_API {
 	 * match everybody. Reporting the wrong one sends the operator looking for the
 	 * wrong symptom on the front end.
 	 *
-	 * No rule the plugin registers reaches the free-text "matches no reader"
-	 * string today; it is kept for rules other plugins register through
+	 * No rule the plugin registers reaches the free-text or range "matches no
+	 * reader" strings today (every promoted range field grants on an empty value);
+	 * they are kept for rules other plugins register through
 	 * Access_Rules::register_rule().
 	 *
 	 * @param array $rule The registered rule.
@@ -424,7 +425,7 @@ class Content_Gate_API {
 			$message = __( 'The “%s” access rule is empty, so it matches no reader. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
 		} elseif ( ! empty( $error_data['is_range'] ) ) {
 			/* translators: %s: the access rule's name, e.g. a promoted number field. */
-			$message = __( 'The “%s” access rule has no minimum or maximum, so it grants access to every reader with a number in that field. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
+			$message = __( 'The “%s” access rule has no minimum or maximum, so it grants access to every reader with a number in that field. Set a minimum, a maximum, or both, or remove it before this gate is active again.', 'newspack-plugin' );
 		} else {
 			/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
 			$message = __( 'The “%s” access rule is empty, so it grants access to everyone. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );

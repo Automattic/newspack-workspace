@@ -373,8 +373,10 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'min' => '10' ] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => '50' ] ) );
 
-		// A bound that isn't a number can't be honored, so the rule matches nobody.
+		// A bound that isn't a number can't be honored, so the rule matches nobody;
+		// neither can one too large for a float, which would read as no limit.
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 'fifty' ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => '1e400' ] ) );
 
 		// 0 is a real bound, not "no bound".
 		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( -5 ) );
@@ -436,9 +438,19 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 			 */
 			protected function configure_incoming_field( $field ) {
 				if ( 'donation_total' === $field->get_key() ) {
+					// Options a provider lists for a number field don't make a range
+					// rule options-backed.
 					$field->set_name( 'Donation total' )
 						->set_value_type( 'number' )
 						->set_matching_function( 'range' )
+						->set_options(
+							[
+								[
+									'value' => '100',
+									'label' => 'Sponsor',
+								],
+							]
+						)
 						->set_is_access_rule( true );
 				}
 				return $field;
@@ -465,7 +477,6 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertTrue( $rule['is_range'] );
 		$this->assertFalse( $rule['has_options'] );
 		$this->assertSame( [], $rule['default'] );
-		$this->assertIsCallable( $rule['sanitize_callback'] );
 	}
 
 	/**
@@ -543,34 +554,58 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An unset range still turns away readers who hold no number, so refusing it on
-	 * an active gate must not say it grants access to everyone, nor ask for "a value"
-	 * when the control offers a minimum and a maximum.
+	 * An unset range still turns away readers who hold no number, so refusing it
+	 * must not say it grants access to everyone, nor ask for "a value" when the
+	 * control offers a minimum and a maximum. Both refusals are covered: the one for
+	 * a gate going live, and the one for a save that leaves it unpublished.
+	 *
+	 * @dataProvider data_unset_range_refusals
+	 *
+	 * @param array  $gate_settings Settings the save carries beside the rules.
+	 * @param string $asks_for      What the refusal must ask the operator to do.
 	 */
-	public function test_an_active_gate_refuses_an_unset_range_in_range_terms() {
+	public function test_an_unset_range_is_refused_in_range_terms( $gate_settings, $asks_for ) {
 		// The refusal is reported only to a caller who can manage gates.
 		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
 		$slug    = $this->register_range_rule();
 		$refused = \Newspack\Content_Gate_API::sanitize_gate(
-			[
-				'custom_access' => [
-					'active'       => true,
-					'access_rules' => [
-						[
+			array_merge(
+				$gate_settings,
+				[
+					'custom_access' => [
+						'active'       => true,
+						'access_rules' => [
 							[
-								'slug'  => $slug,
-								'value' => [],
+								[
+									'slug'  => $slug,
+									'value' => [],
+								],
 							],
 						],
 					],
-				],
-			]
+				]
+			)
 		);
 
 		$this->assertWPError( $refused );
 		$this->assertSame( 'empty_access_rule_value', $refused->get_error_code() );
-		$this->assertStringContainsString( 'every reader with a number in that field', $refused->get_error_message() );
-		$this->assertStringNotContainsString( 'everyone', $refused->get_error_message() );
+		$message = $refused->get_error_message();
+		$this->assertStringContainsString( $asks_for, $message );
+		$this->assertStringContainsString( 'every reader with a number in that field', $message );
+		$this->assertStringNotContainsString( 'everyone', $message );
+		$this->assertStringNotContainsString( 'a value', $message );
+	}
+
+	/**
+	 * The two saves that refuse an unset range, and the wording each must use.
+	 *
+	 * @return array
+	 */
+	public function data_unset_range_refusals() {
+		return [
+			'gate going live'       => [ [ 'status' => 'publish' ], 'Enter a minimum, a maximum, or both' ],
+			'gate left unpublished' => [ [], 'Set a minimum, a maximum, or both' ],
+		];
 	}
 
 	/**
@@ -594,8 +629,21 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 			)
 		);
 		$this->assertSame( 'At most 100', $format_rule_value->invoke( null, $slug, [ 'max' => 100.0 ] ) );
+		// Each stored value reads as the rule evaluates it: blank values set no bounds,
+		// and anything the rule can't read as bounds grants no access.
 		$this->assertSame( '(any number)', $format_rule_value->invoke( null, $slug, [] ) );
-		$this->assertSame( '(invalid range, grants no access)', $format_rule_value->invoke( null, $slug, '50' ) );
+		$this->assertSame( '(any number)', $format_rule_value->invoke( null, $slug, '' ) );
+		foreach ( [
+			'50',
+			[
+				'min' => 50,
+				'x'   => 1,
+			],
+			[ 'min' => 'fifty' ],
+			[ 'max' => [ 10 ] ],
+		] as $unreadable ) {
+			$this->assertSame( '(invalid range, grants no access)', $format_rule_value->invoke( null, $slug, $unreadable ), wp_json_encode( $unreadable ) );
+		}
 	}
 
 	/**

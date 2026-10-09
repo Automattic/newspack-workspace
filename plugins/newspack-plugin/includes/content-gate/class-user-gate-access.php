@@ -157,9 +157,12 @@ class User_Gate_Access {
 
 		// Ahead of the generic branch too: the bounds read as a bare list there, and an
 		// empty range still turns away readers holding no number, so "(any)" is wrong.
+		// Read through the rule's own sanitizer, as the one-time purchase branch above
+		// does, so the panel and the rule agree on which stored values are bounds.
 		$rule = Access_Rules::get_rule( $slug );
 		if ( ! empty( $rule['is_range'] ) ) {
-			return self::format_range_value( $value );
+			$bounds = is_callable( $rule['sanitize_callback'] ?? null ) ? call_user_func( $rule['sanitize_callback'], $value ) : $value;
+			return self::format_range_value( $bounds );
 		}
 
 		if ( empty( $value ) ) {
@@ -182,16 +185,19 @@ class User_Gate_Access {
 	/**
 	 * Format a range rule's bounds in the words the gate summary uses.
 	 *
-	 * @param mixed $value The stored rule value.
+	 * @param array|\WP_Error $bounds The sanitized rule value.
 	 *
-	 * @return string The bounds, or a note that the value sets none (HTML).
+	 * @return string The bounds, or a note that they set none or can't be read (HTML).
 	 */
-	private static function format_range_value( $value ) {
-		$min = is_array( $value ) && isset( $value['min'] ) && '' !== $value['min'] ? (string) $value['min'] : null;
-		$max = is_array( $value ) && isset( $value['max'] ) && '' !== $value['max'] ? (string) $value['max'] : null;
+	private static function format_range_value( $bounds ) {
+		if ( ! is_array( $bounds ) ) {
+			return esc_html__( '(invalid range, grants no access)', 'newspack-plugin' );
+		}
+		$min = isset( $bounds['min'] ) && is_scalar( $bounds['min'] ) ? (string) $bounds['min'] : null;
+		$max = isset( $bounds['max'] ) && is_scalar( $bounds['max'] ) ? (string) $bounds['max'] : null;
 		if ( null !== $min && null !== $max ) {
 			/* translators: 1: the lowest number the rule admits, 2: the highest. */
-			return esc_html( sprintf( __( '%1$s to %2$s', 'newspack-plugin' ), $min, $max ) );
+			return esc_html( sprintf( _x( '%1$s to %2$s', 'numeric range', 'newspack-plugin' ), $min, $max ) );
 		}
 		if ( null !== $min ) {
 			/* translators: %s: the lowest number the rule admits. */
@@ -201,9 +207,7 @@ class User_Gate_Access {
 			/* translators: %s: the highest number the rule admits. */
 			return esc_html( sprintf( __( 'At most %s', 'newspack-plugin' ), $max ) );
 		}
-		return is_array( $value ) && [] === $value
-			? esc_html__( '(any number)', 'newspack-plugin' )
-			: esc_html__( '(invalid range, grants no access)', 'newspack-plugin' );
+		return esc_html__( '(any number)', 'newspack-plugin' );
 	}
 
 	/**
