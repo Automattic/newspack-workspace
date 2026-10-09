@@ -546,11 +546,11 @@ class Content_Gate_API {
 	/**
 	 * Whether a request's access rules are the ones the gate already stores.
 	 *
-	 * Both sides are cast through the same conversions the sanitizer applies to a
-	 * rule value before comparing them as JSON, because the client round-trips the
-	 * rules it read and an integer option value can come back as a string. A
-	 * loose comparison would go further than that and read `'0'` as equal to
-	 * `false`, silently dropping an operator's edit.
+	 * Both sides go through one shared cast before comparing them as JSON,
+	 * because the client round-trips the rules it read and an integer option
+	 * value can come back as a string. A loose comparison would go further than
+	 * that and read `'0'` as equal to `false`, silently dropping an operator's
+	 * edit.
 	 *
 	 * @param array $gate    The gate as it arrived in the request.
 	 * @param int   $gate_id The gate ID from the route.
@@ -572,12 +572,14 @@ class Content_Gate_API {
 	}
 
 	/**
-	 * A comparable rendering of a rule set, with each value cast the way
-	 * `sanitize_access_rule()` casts it.
+	 * A comparable rendering of a rule set: numbers as floats, other scalars as
+	 * sanitized text, the same cast on both sides.
 	 *
-	 * Numbers compare as floats: an option ID sent as a string still matches the
-	 * stored integer, and range bounds that differ only after the decimal point
-	 * stay distinct, rather than reading as unchanged and being dropped.
+	 * Numbers compare as floats so an option ID sent back as a string still
+	 * matches the stored integer, and range bounds that differ only after the
+	 * decimal point stay distinct, rather than reading as unchanged and being
+	 * dropped. `-0` folds into `0`, as it does when the browser sends it back, and
+	 * a number too large for a float stays text so it can't break the encoding.
 	 *
 	 * @param array $rules The access rules, flat or grouped.
 	 *
@@ -591,7 +593,10 @@ class Content_Gate_API {
 			if ( ! is_scalar( $value ) ) {
 				return $value;
 			}
-			return is_numeric( $value ) ? (float) $value : sanitize_text_field( $value );
+			if ( is_numeric( $value ) && is_finite( (float) $value ) ) {
+				return (float) $value + 0.0;
+			}
+			return sanitize_text_field( (string) $value );
 		};
 		return (string) wp_json_encode( $cast( Access_Rules::normalize_rules( $rules ) ) );
 	}

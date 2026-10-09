@@ -388,6 +388,10 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => 100 ] ) );
 
+		// Nor one too large for a float, which would clear any minimum.
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( '1e400' ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 1 ] ) );
+
 		// Neither does a reader the field was never stored for.
 		$no_value_user_id = $this->factory->user->create();
 		$this->assertFalse( $method->invoke( null, $field, $no_value_user_id, [] ) );
@@ -634,6 +638,23 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertSame( $fingerprint( [ 'min' => 50.0 ] ), $fingerprint( [ 'min' => '50' ] ) );
 		// Option IDs submitted as strings still match the stored integers.
 		$this->assertSame( $fingerprint( [ 12 ] ), $fingerprint( [ '12' ] ) );
+		// The browser sends a stored -0 back as 0.
+		$this->assertSame( $fingerprint( [ 'min' => -0.0 ] ), $fingerprint( [ 'min' => 0 ] ) );
+		// A number too large for a float must not blank the whole rendering.
+		$this->assertNotSame(
+			$fingerprint(
+				[
+					'min' => 50,
+					'max' => '1e400',
+				] 
+			),
+			$fingerprint(
+				[
+					'min' => 60,
+					'max' => '1e400',
+				] 
+			) 
+		);
 	}
 
 	/**
