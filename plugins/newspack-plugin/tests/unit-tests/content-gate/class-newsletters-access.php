@@ -190,6 +190,47 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * ESP merge-tag placeholders are host-less, but the ESP expands them into
+	 * whole URLs (unsubscribe, update profile). Signing one appends a query
+	 * string after the expanded URL's own, so they must pass through untouched.
+	 *
+	 * @param string $url Placeholder as the ESP's link filter hands it over.
+	 *
+	 * @dataProvider merge_tag_placeholder_provider
+	 */
+	public function test_append_signature_skips_merge_tag_placeholders( $url ) {
+		$post = $this->factory->post->create_and_get( [ 'post_type' => 'newspack_nl_cpt' ] );
+		$this->assertSame( $url, Newsletters_Access::append_signature_to_link( $url, $url, $post ) );
+	}
+
+	/**
+	 * Whole-URL placeholders, one per supported ESP plus Mailchimp's other
+	 * account links.
+	 *
+	 * @return array[]
+	 */
+	public function merge_tag_placeholder_provider() {
+		return [
+			'mailchimp unsubscribe'    => [ '*|UNSUB|*' ],
+			'mailchimp update profile' => [ '*|UPDATE_PROFILE|*' ],
+			'mailchimp forward'        => [ '*|FORWARD|*' ],
+			'constant contact'         => [ '[[UNSUBSCRIBE]]' ],
+			'active campaign'          => [ '%UNSUBSCRIBELINK%' ],
+			'campaign monitor'         => [ '[unsubscribe]' ],
+		];
+	}
+
+	/**
+	 * A real link that only carries a merge tag in a query value is still signed.
+	 */
+	public function test_append_signature_still_signs_url_with_merge_tag_value() {
+		$post   = $this->factory->post->create_and_get( [ 'post_type' => 'newspack_nl_cpt' ] );
+		$url    = home_url( '/some-article/?utm_content=*|CAMPAIGN_UID|*' );
+		$result = Newsletters_Access::append_signature_to_link( $url, $url, $post );
+		$this->assertStringContainsString( 'npnl=', $result );
+	}
+
+	/**
 	 * Test that append_signature_to_link() returns the URL unchanged when post is null.
 	 */
 	public function test_append_signature_returns_url_unchanged_when_post_is_null() {
