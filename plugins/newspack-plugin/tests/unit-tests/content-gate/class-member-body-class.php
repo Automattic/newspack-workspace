@@ -372,16 +372,17 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The class is added once, even if another source already added it.
+	 * When another source already added the class, no lookup runs.
 	 */
-	public function test_does_not_duplicate_class() {
+	public function test_skips_lookup_when_class_is_already_present() {
 		$this->make_gate();
 		self::$admitted = [ $this->reader_id ];
 		wp_set_current_user( $this->reader_id );
 
 		$classes = apply_filters( 'body_class', [ self::MEMBER_CLASS ] );
 
-		$this->assertSame( 1, count( array_keys( $classes, self::MEMBER_CLASS, true ) ) );
+		$this->assertSame( [ self::MEMBER_CLASS ], $classes );
+		$this->assertSame( 0, self::$evaluations );
 	}
 
 	/**
@@ -397,7 +398,7 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A reader's result is evaluated once, then served from the cache.
+	 * A reader's result is evaluated once, then served from a cache entry that is theirs alone.
 	 */
 	public function test_result_is_cached_per_reader() {
 		$this->make_gate();
@@ -406,8 +407,11 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 
 		$this->body_classes();
 		$this->body_classes();
-
 		$this->assertSame( 1, self::$evaluations );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+
+		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes() );
 	}
 
 	/**
@@ -420,7 +424,10 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 		$this->assertContains( self::MEMBER_CLASS, $this->body_classes() );
 
 		self::$admitted = [];
+		// Status changes arrive from webhooks, renewals, and admins, not the reader's own session.
+		wp_set_current_user( 0 );
 		$this->fire_with_only_member_body_class_listening( 'woocommerce_subscription_status_updated', $this->customer_object( $this->reader_id ), 'on-hold', 'active' );
+		wp_set_current_user( $this->reader_id );
 
 		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes() );
 	}
@@ -434,7 +441,9 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes() );
 
 		self::$admitted = [ $this->reader_id ];
+		wp_set_current_user( 0 );
 		$this->fire_with_only_member_body_class_listening( 'woocommerce_order_status_changed', 123, 'pending', 'completed', $this->customer_object( $this->reader_id ) );
+		wp_set_current_user( $this->reader_id );
 
 		$this->assertContains( self::MEMBER_CLASS, $this->body_classes() );
 	}
