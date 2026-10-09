@@ -177,9 +177,8 @@ class Promoted_Fields {
 	 *
 	 * Either bound may be left blank, which leaves that side open; with both blank the
 	 * rule is unconfigured, and an active gate refuses to save it. Anything else that
-	 * can't be read as bounds is refused rather than stored. Before range rules had a
-	 * min/max control, the editors saved whatever was typed into a text box, and the
-	 * comparison found no bounds in that text and admitted every signed-in reader.
+	 * can't be read as bounds is refused rather than stored, since `is_in_range()`
+	 * would deny every reader on it.
 	 *
 	 * @param mixed $value The submitted value.
 	 *
@@ -190,7 +189,7 @@ class Promoted_Fields {
 			return [];
 		}
 		$invalid = new \WP_Error( 'invalid_range_value' );
-		if ( ! is_array( $value ) ) {
+		if ( ! self::is_range_shape( $value ) ) {
 			return $invalid;
 		}
 		$bounds = [];
@@ -375,9 +374,10 @@ class Promoted_Fields {
 	 *
 	 * Fails closed wherever the comparison can't be made as the operator meant it. A
 	 * reader holding no number is not read as 0, and a stored rule value that isn't
-	 * a set of bounds matches nobody: that is text saved before range rules had a
-	 * min/max control, and reading bounds off it would find none and admit every
-	 * signed-in reader. An empty rule value is the unconfigured rule, with no bounds.
+	 * a set of bounds matches nobody: text saved before range rules had a min/max
+	 * control, or a list left from an options-backed field, would otherwise read as
+	 * no bounds and admit every signed-in reader. An empty rule value is the
+	 * unconfigured rule, with no bounds.
 	 *
 	 * @param mixed $value  The reader's decoded value.
 	 * @param mixed $bounds The rule's stored value: `min` and `max`, each optional.
@@ -388,7 +388,7 @@ class Promoted_Fields {
 		if ( null === $bounds || '' === $bounds ) {
 			$bounds = [];
 		}
-		if ( ! is_array( $bounds ) || ! is_numeric( $value ) ) {
+		if ( ! self::is_range_shape( $bounds ) || ! is_numeric( $value ) ) {
 			return false;
 		}
 		foreach ( [ 'min', 'max' ] as $bound ) {
@@ -404,6 +404,18 @@ class Promoted_Fields {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Whether a value has the shape of range bounds: an array keyed by nothing but
+	 * `min` and `max`. An empty array qualifies, as the unconfigured rule.
+	 *
+	 * @param mixed $value The value.
+	 *
+	 * @return bool
+	 */
+	private static function is_range_shape( $value ) {
+		return is_array( $value ) && [] === array_diff( array_keys( $value ), [ 'min', 'max' ] );
 	}
 
 	/**

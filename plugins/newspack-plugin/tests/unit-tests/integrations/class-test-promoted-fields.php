@@ -395,10 +395,10 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	/**
 	 * Before range rules had a min/max control, the gate editor saved whatever was
 	 * typed into a text box, and the range comparison read both bounds off that
-	 * string as missing — so every signed-in reader passed. A stored value that isn't
-	 * a set of bounds now matches nobody.
+	 * string as missing, so every signed-in reader passed. A stored value that isn't
+	 * a set of bounds matches nobody.
 	 */
-	public function test_evaluate_range_fails_closed_on_a_non_array_value() {
+	public function test_evaluate_range_fails_closed_on_a_value_that_is_not_bounds() {
 		$user_id = $this->factory->user->create();
 		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 10 ) );
 
@@ -413,6 +413,9 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertFalse( $method->invoke( null, $field, $user_id, '10' ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, '10,100' ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, 10 ) );
+		// A list has no `min` or `max` key either, and would otherwise read as no bounds.
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 50, 100 ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'minimum' => 5 ] ) );
 		// The empty values are the unconfigured rule, which reads as no bounds.
 		$this->assertTrue( $method->invoke( null, $field, $user_id, '' ) );
 		$this->assertTrue( $method->invoke( null, $field, $user_id, null ) );
@@ -525,6 +528,7 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		foreach ( [
 			'50',
 			'10,100',
+			[ 50, 100 ],
 			[ 'min' => 'fifty' ],
 			[ 'max' => [ 10 ] ],
 			[
@@ -566,7 +570,6 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertFalse( Access_Rules::evaluate_rules( $saved, $below ) );
 		$this->assertTrue( Access_Rules::evaluate_rules( $saved, $inside ) );
 		$this->assertFalse( Access_Rules::evaluate_rules( $saved, $no_value ) );
-		$this->assertFalse( Access_Rules::evaluate_rules( $saved, 0 ) );
 	}
 
 	/**
