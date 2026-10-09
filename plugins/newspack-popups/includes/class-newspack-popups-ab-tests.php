@@ -273,7 +273,7 @@ final class Newspack_Popups_AB_Tests {
 			if ( ! $is_autosave && (string) $meta[ $meta_key ] !== (string) $stored ) {
 				return new WP_Error(
 					'rest_cannot_update',
-					__( "Only administrators can change A/B test settings. If this prompt's test changed while it was open, reload the editor and try again.", 'newspack-popups' ),
+					__( "Only administrators can change A/B test settings. If someone changed this prompt's test while you were editing, reload the editor and try again.", 'newspack-popups' ),
 					[
 						'status' => rest_authorization_required_code(),
 						'key'    => $meta_key,
