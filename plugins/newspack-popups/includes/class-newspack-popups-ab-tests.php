@@ -246,6 +246,10 @@ final class Newspack_Popups_AB_Tests {
 	 * sees them, and a changed one refuses the request here, before the post or
 	 * any other meta is written.
 	 *
+	 * Autosaves are the exception: they never store A/B meta, and core's autosave
+	 * route ignores an error from this filter and would record an empty autosave,
+	 * so there the A/B keys are dropped whatever their value.
+	 *
 	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
 	 * @param WP_REST_Request   $request       Request.
 	 * @return stdClass|WP_Error
@@ -256,22 +260,20 @@ final class Newspack_Popups_AB_Tests {
 			return $prepared_post;
 		}
 
-		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
+		$registered  = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
 		foreach ( self::META_KEYS as $meta_key ) {
 			if ( ! array_key_exists( $meta_key, $meta ) ) {
 				continue;
 			}
 			// get_post_meta() applies the registered default to an unset key, which
 			// is also what the editor read and is sending back.
-			if ( $post_id ) {
-				$stored = get_post_meta( $post_id, $meta_key, true );
-			} else {
-				$stored = self::META_CONTROL_SHARE === $meta_key ? self::DEFAULT_CONTROL_SHARE : '';
-			}
-			if ( (string) $meta[ $meta_key ] !== (string) $stored ) {
+			$stored = $post_id ? get_post_meta( $post_id, $meta_key, true ) : ( $registered[ $meta_key ]['default'] ?? '' );
+			if ( ! $is_autosave && (string) $meta[ $meta_key ] !== (string) $stored ) {
 				return new WP_Error(
 					'rest_cannot_update',
-					__( 'Sorry, you are not allowed to change the A/B test settings of this prompt.', 'newspack-popups' ),
+					__( "Only administrators can change A/B test settings. If this prompt's test changed while it was open, reload the editor and try again.", 'newspack-popups' ),
 					[
 						'status' => rest_authorization_required_code(),
 						'key'    => $meta_key,

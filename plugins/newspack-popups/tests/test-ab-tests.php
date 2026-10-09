@@ -477,6 +477,62 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * An Editor's autosave that carries a changed A/B value still records the
+	 * Editor's own changes. Core's autosave route ignores an error from the guard,
+	 * so refusing there would leave an empty autosave for the editor to restore.
+	 */
+	public function test_editor_autosave_with_a_changed_test_keeps_its_content() {
+		$prompt_id = $this->createPopup();
+		Newspack_Popups_AB_Tests::register_meta();
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $editor_id );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id . '/autosaves' );
+		$request->set_body_params(
+			[
+				'title' => 'Autosaved by an editor',
+				'meta'  => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'editor-made-test' ],
+			]
+		);
+		rest_do_request( $request );
+
+		$autosave = wp_get_post_autosave( $prompt_id, $editor_id );
+		self::assertNotFalse( $autosave );
+		self::assertSame( 'Autosaved by an editor', $autosave->post_title );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * An Editor can create a prompt through REST when the A/B fields carry their
+	 * registered defaults, as a client that read the schema sends them.
+	 */
+	public function test_editor_can_create_a_prompt_with_default_ab_meta() {
+		Newspack_Popups::register_meta();
+		Newspack_Popups_AB_Tests::register_meta();
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		$request->set_body_params(
+			[
+				'title' => 'Created by an editor',
+				'meta'  => [
+					Newspack_Popups_AB_Tests::META_TEST_ID => '',
+					Newspack_Popups_AB_Tests::META_CONTROL_SHARE => Newspack_Popups_AB_Tests::DEFAULT_CONTROL_SHARE,
+				],
+			]
+		);
+		$response = rest_do_request( $request );
+
+		self::assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+	}
+
+	/**
 	 * Administrators can create and change tests through REST.
 	 */
 	public function test_administrator_can_write_ab_meta() {
