@@ -1,7 +1,8 @@
 name: Label PRs merged without peer review
 
 # Tags a PR merged into main, alpha or release with `no-peer-review` when no
-# one other than its author approved it, so those merges can be audited later.
+# teammate other than its author approved it, so those merges can be audited
+# later.
 #
 # pull_request_target (not pull_request) so fork PRs get a writable token. This
 # is safe because the job never checks out or runs the PR's code; it only reads
@@ -77,28 +78,39 @@ jobs:
               { owner, repo, pull_number: pr.number }
             );
 
-            // A peer is a team member other than the author: the repo is public, so
-            // anyone can submit an approval. Only each peer's latest decision counts,
-            // so an approval later followed by changes requested doesn't clear the
-            // label. listReviews returns reviews oldest first, and a dismissed
-            // approval reports DISMISSED.
-            const PEER_ASSOCIATIONS = [ 'OWNER', 'MEMBER', 'COLLABORATOR' ];
+            // Only each reviewer's latest decision counts, so an approval later
+            // followed by changes requested doesn't clear the label. listReviews
+            // returns reviews oldest first, and a dismissed approval reports
+            // DISMISSED.
             const latestDecision = new Map();
             for ( const review of reviews ) {
               if (
                 ! review.user ||
                 review.user.type !== 'User' ||
                 review.user.login === author ||
-                MACHINE_REVIEWERS.includes( review.user.login ) ||
-                ! PEER_ASSOCIATIONS.includes( review.author_association )
+                MACHINE_REVIEWERS.includes( review.user.login )
               ) {
                 continue;
               }
               if ( [ 'APPROVED', 'CHANGES_REQUESTED', 'DISMISSED' ].includes( review.state ) ) {
-                latestDecision.set( review.user.id, review.state );
+                latestDecision.set( review.user.login, review.state );
               }
             }
-            const peerApproved = [ ...latestDecision.values() ].includes( 'APPROVED' );
+
+            // The repo is public, so anyone can approve; a peer has write access.
+            // author_association can't tell: GITHUB_TOKEN sees private org members
+            // as CONTRIBUTOR.
+            let peerApproved = false;
+            for ( const [ username, state ] of latestDecision ) {
+              if ( state !== 'APPROVED' ) continue;
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel(
+                { owner, repo, username }
+              );
+              if ( [ 'admin', 'write' ].includes( data.permission ) ) {
+                peerApproved = true;
+                break;
+              }
+            }
             if ( peerApproved ) {
               core.info( 'Approved by a peer; nothing to label.' );
               return;
