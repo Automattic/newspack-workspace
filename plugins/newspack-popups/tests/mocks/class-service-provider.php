@@ -1,0 +1,57 @@
+<?php // phpcs:ignore WordPress.Files.FileName.InvalidClassFileName
+/**
+ * Mock ESP service provider for popups tests.
+ *
+ * Stands in for a newspack-newsletters service provider so the account-param
+ * link handler can resolve a merge-tag name without the plugin loaded.
+ *
+ * @package Newspack_Popups
+ */
+
+if ( ! class_exists( 'Newspack_Popups_Test_Service_Provider' ) ) {
+	/**
+	 * Configurable stand-in provider.
+	 */
+	class Newspack_Popups_Test_Service_Provider {
+		/**
+		 * The ESP's slug.
+		 *
+		 * @var string
+		 */
+		public $service = 'mailchimp';
+
+		/**
+		 * Tag name to return, keyed by field name.
+		 *
+		 * @var array
+		 */
+		public $tags = [];
+
+		/**
+		 * List ID the handler passed in on the last call.
+		 *
+		 * @var string|null
+		 */
+		public $received_list_id = 'unset';
+
+		/**
+		 * How many times a tag name was looked up.
+		 *
+		 * @var int
+		 */
+		public $lookups = 0;
+
+		/**
+		 * Resolve a field's merge-tag name.
+		 *
+		 * @param string      $field_name Field name.
+		 * @param string|null $list_id    Audience ID.
+		 * @return string
+		 */
+		public function get_field_merge_tag_name( string $field_name, ?string $list_id = null ): string {
+			$this->received_list_id = $list_id;
+			++$this->lookups;
+			return $this->tags[ $field_name ] ?? '';
+		}
+	}
+}

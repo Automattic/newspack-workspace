@@ -40,6 +40,77 @@ final class Newspack_Popups_Segmentation {
 	const DONOR_SEGMENT_QUERY_PARAM = 'np_seg_donor';
 
 	/**
+	 * Query param appended to newsletter links carrying the reader's account ID.
+	 * Its value is the ESP merge tag for the synced Account field, substituted
+	 * per recipient at send time. On arrival the ID resolves to the reader's
+	 * last-known matched segments for the browsing session.
+	 *
+	 * The ID is unsigned, so on its own it would let anyone read any reader's
+	 * segments by walking IDs. It only resolves alongside a valid newsletter
+	 * pass (NEWSLETTER_PASS_QUERY_PARAM), which proves the link came from a
+	 * newsletter this site sent recently, and only for a capped number of
+	 * distinct accounts per IP (CARRIED_ACCOUNTS_PER_IP). Anyone holding a
+	 * reader's link (a forwarded newsletter) still gets that reader's segments,
+	 * so it drives prompt segmentation and its reach reporting only — never
+	 * content access, analytics identity, or reader-profile writes.
+	 *
+	 * Emitted for every supported ESP, including ActiveCampaign's `%FIELD%`
+	 * syntax (unsafe when unsubstituted, NPPM-3032), because
+	 * handle_account_param() always redirects the param away before any output.
+	 */
+	const ACCOUNT_QUERY_PARAM = 'np_account';
+
+	/**
+	 * Query param carrying the signed newsletter pass that newspack-plugin
+	 * appends to every first-party newsletter link. Mirrors
+	 * `Newspack\Newsletters_Access::QUERY_PARAM` — must stay in sync.
+	 */
+	const NEWSLETTER_PASS_QUERY_PARAM = 'npnl';
+
+	/**
+	 * How many distinct accounts one IP (or IPv6 /64) can resolve per fixed
+	 * CARRIED_ACCOUNTS_WINDOW. Counts accounts, not clicks: a reader clicking
+	 * through again costs nothing, and readers sharing an institution's IP each
+	 * spend one slot. Past the cap an arrival carries nothing, and the reader
+	 * sees the prompts any signed-out visitor would.
+	 * Filterable via `newspack_popups_carried_accounts_per_ip`.
+	 */
+	const CARRIED_ACCOUNTS_PER_IP = 20;
+
+	/**
+	 * Window, in seconds, for CARRIED_ACCOUNTS_PER_IP. Fixed, not sliding:
+	 * adding accounts never extends it.
+	 */
+	const CARRIED_ACCOUNTS_WINDOW = HOUR_IN_SECONDS;
+
+	/**
+	 * Session cookie handing the resolved segment IDs to the view script, which
+	 * reads it on every page so all tabs of the browsing session agree. Nothing
+	 * server-side reads it, so pages stay shared and cacheable. The name must
+	 * not start with `wp`, `wordpress`, or `comment_author` — Batcache skips
+	 * page cache for requests carrying such cookies.
+	 */
+	const CARRIED_SEGMENTS_COOKIE = 'np_carried_segments';
+
+	/**
+	 * Cookie value asserting the account matched no segments, distinct from an
+	 * absent cookie (no handoff). Cannot be an empty string: setcookie() sends a
+	 * deletion for an empty value regardless of `expires`, so the assertion
+	 * would never reach the browser. Never collides with a real segment ID
+	 * (positive-integer term IDs). Mirrored in carried-segments.js — keep in sync.
+	 */
+	const CARRIED_SEGMENTS_NONE = 'none';
+
+	/**
+	 * Account merge tags resolved in this request, keyed by newsletter ID. An
+	 * empty string is kept too: resolving can take a request to the ESP, and a
+	 * newsletter must not repeat one that failed for every link it carries.
+	 *
+	 * @var array<int, string>
+	 */
+	private static $account_merge_tags = [];
+
+	/**
 	 * Installed version number of the custom table.
 	 */
 	const TABLE_VERSION = '1.0';
@@ -87,12 +158,22 @@ final class Newspack_Popups_Segmentation {
 		// the ESP being supported, so it's cheap to register unconditionally.
 		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_donor_segment_param' ], 30, 3 );
 
+		// Append the reader's account ID to newsletter links. Self-guards on the
+		// Account field being synced, so it's cheap to register unconditionally.
+		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_account_param' ], 30, 3 );
+
 		// Strip unsubstituted donor merge tags from inbound URLs. Newsletters
 		// already delivered carry tags this plugin can no longer stop emitting, and
 		// an unresolved `%FIELD%` is a malformed percent-escape that crashes
 		// consumers which decode query params strictly — see NPPM-3032. Priority 1
 		// so it runs before redirect_canonical() and before any HTML is generated.
 		add_action( 'template_redirect', [ __CLASS__, 'scrub_unsubstituted_donor_param' ], 1 );
+
+		// Resolve an inbound account ID to carried segments and redirect the param
+		// away. On `init` priority 1, ahead of newspack-plugin's newsletter-pass
+		// handler (`init` priority 2), which redirects the pass away and would
+		// leave this one nothing to verify the account against.
+		add_action( 'init', [ __CLASS__, 'handle_account_param' ], 1 );
 	}
 
 	/**
@@ -242,6 +323,12 @@ final class Newspack_Popups_Segmentation {
 		if ( ! self::is_newsletter_post( $post ) ) {
 			return $url;
 		}
+		// Mailchimp's process_link() (priority 10) can hand back a merge-tag
+		// placeholder as the whole URL (e.g. *|UNSUB|*), which is host-less and so
+		// reads as first-party. Decorating it breaks the expanded link.
+		if ( self::is_merge_tag_placeholder_url( $url ) ) {
+			return $url;
+		}
 		if ( ! self::is_first_party_url( $url ) ) {
 			return $url;
 		}
@@ -277,6 +364,195 @@ final class Newspack_Popups_Segmentation {
 		// Restore the raw tag so the ESP substitutes the recipient's value at send
 		// time. An unsubstituted literal is ignored client-side, so this stays fail-safe.
 		return str_replace( urlencode( $merge_tag ), $merge_tag, $url );
+	}
+
+	/**
+	 * Filter callback: append the reader's account-ID merge tag to first-party
+	 * newsletter links. Skips when the required helpers are unavailable, the
+	 * post isn't a newsletter, the link is third-party, no integration syncs
+	 * the Account field to the newsletter's ESP, or the field has no tag there.
+	 *
+	 * @param string        $url          Processed URL (may already carry other params).
+	 * @param string        $original_url Original URL before processing.
+	 * @param \WP_Post|null $post         Newsletter post object, or null.
+	 *
+	 * @return string
+	 */
+	public static function append_account_param( $url, $original_url, $post ) {
+		// method_exists() covers both a missing plugin and version skew; a fatal
+		// here would break newsletter rendering.
+		if ( ! method_exists( '\Newspack_Newsletters\Tracking\Utils', 'get_merge_tag' ) ) {
+			return $url;
+		}
+		if ( ! method_exists( '\Newspack_Newsletters', 'get_service_provider' ) ) {
+			return $url;
+		}
+		if ( ! method_exists( '\Newspack\Reader_Activation\Sync\Metadata', 'get_keys' ) ) {
+			return $url;
+		}
+		if ( ! method_exists( '\Newspack\Reader_Activation\Integrations', 'get_active_configured_integrations' ) ) {
+			return $url;
+		}
+		if ( ! self::is_newsletter_post( $post ) ) {
+			return $url;
+		}
+		// Mailchimp's process_link() (priority 10) can hand back a merge-tag
+		// placeholder as the whole URL (e.g. *|UNSUB|*), which is host-less and so
+		// reads as first-party. Decorating it breaks the expanded link.
+		if ( self::is_merge_tag_placeholder_url( $url ) ) {
+			return $url;
+		}
+		if ( ! self::is_first_party_url( $url ) ) {
+			return $url;
+		}
+
+		$merge_tag = self::get_account_merge_tag( $post );
+		if ( '' === $merge_tag ) {
+			return $url;
+		}
+
+		// No is_url_safe_merge_tag() guard, unlike the donor handler: an
+		// unsubstituted np_account is always redirected away before output.
+		return self::append_raw_query_param( $url, self::ACCOUNT_QUERY_PARAM, $merge_tag );
+	}
+
+	/**
+	 * The ESP merge tag for the Account field, for a newsletter's links.
+	 *
+	 * Resolved once per newsletter per request, and contained: integrations and
+	 * the ESP provider are code this plugin doesn't own, running inside
+	 * newsletter rendering.
+	 *
+	 * @param \WP_Post $post Newsletter post.
+	 *
+	 * @return string Merge tag, or '' when there is none to emit.
+	 */
+	private static function get_account_merge_tag( $post ): string {
+		if ( isset( self::$account_merge_tags[ $post->ID ] ) ) {
+			return self::$account_merge_tags[ $post->ID ];
+		}
+
+		$merge_tag = '';
+		try {
+			$field_name = self::get_account_field_name();
+			$tag_name   = '' === $field_name ? '' : self::get_esp_field_tag_name( $field_name, $post );
+			// The tag name comes from the ESP and lands unescaped in the link.
+			if ( 1 === preg_match( '/^[A-Za-z0-9_-]+$/', $tag_name ) ) {
+				$merge_tag = (string) \Newspack_Newsletters\Tracking\Utils::get_merge_tag( $tag_name );
+			}
+		} catch ( \Throwable $e ) {
+			$merge_tag = '';
+		}
+
+		self::$account_merge_tags[ $post->ID ] = $merge_tag;
+		return $merge_tag;
+	}
+
+	/**
+	 * Append a query parameter with its value left raw. Not add_query_arg():
+	 * that reparses the URL and urlencode_deep()s values already in it,
+	 * re-encoding another handler's raw merge tag into a form no ESP
+	 * substitutes. The param is inserted before any `#fragment`.
+	 *
+	 * The value is not escaped, so it must not contain `&`, `=`, or `#`. ESP
+	 * merge-tag syntaxes use none of them.
+	 *
+	 * @param string $url   URL, possibly with a query string and/or fragment.
+	 * @param string $param Parameter name.
+	 * @param string $value Raw parameter value; must not contain `&`, `=`, or `#`.
+	 *
+	 * @return string
+	 */
+	private static function append_raw_query_param( $url, $param, $value ) {
+		$fragment = '';
+		$hash_pos = strpos( $url, '#' );
+		if ( false !== $hash_pos ) {
+			$fragment = substr( $url, $hash_pos );
+			$url      = substr( $url, 0, $hash_pos );
+		}
+		$separator = false === strpos( $url, '?' ) ? '?' : '&';
+		return $url . $separator . $param . '=' . $value . $fragment;
+	}
+
+	/**
+	 * The prefixed ESP field name carrying the reader's account ID, as named by
+	 * the integration syncing reader data to the newsletter's ESP. Each
+	 * integration owns its prefix and its selection of fields, so neither can
+	 * be read site-wide.
+	 *
+	 * @return string Prefixed field name, or '' when no integration syncs the
+	 *                field to the newsletter's ESP.
+	 */
+	private static function get_account_field_name(): string {
+		$integration = self::get_newsletter_esp_integration();
+		if ( null === $integration ) {
+			return '';
+		}
+		// The raw key is 'Account' in the current metadata schema and 'account'
+		// in the legacy one; both name the same field.
+		$catalog = \Newspack\Reader_Activation\Sync\Metadata::get_keys();
+		$name    = (string) ( $catalog['Account'] ?? $catalog['account'] ?? '' );
+		if ( '' === $name || ! in_array( $name, (array) $integration->get_enabled_outgoing_fields(), true ) ) {
+			return '';
+		}
+		return $integration->get_metadata_prefix() . $name;
+	}
+
+	/**
+	 * The enabled, set-up integration pushing reader data to the ESP that sends
+	 * newsletters.
+	 *
+	 * Matched on the integration's provider slug. The framework defines that
+	 * slug for the integration's brand mark, and an ESP integration reports the
+	 * Newsletters provider's own slug there; one that reported anything else
+	 * would stop matching, and its links would carry no parameter.
+	 *
+	 * @return object|null The integration, or null when there is none.
+	 */
+	private static function get_newsletter_esp_integration(): ?object {
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider->service ) ) {
+			return null;
+		}
+		foreach ( \Newspack\Reader_Activation\Integrations::get_active_configured_integrations() as $integration ) {
+			if (
+				! is_callable( [ $integration, 'get_provider_slug' ] ) ||
+				! is_callable( [ $integration, 'get_metadata_prefix' ] ) ||
+				! is_callable( [ $integration, 'get_enabled_outgoing_fields' ] ) ||
+				$provider->service !== $integration->get_provider_slug()
+			) {
+				continue;
+			}
+			// Pausing outbound sync keeps the field selection while the field's
+			// values stop updating.
+			if ( is_callable( [ $integration, 'is_push_enabled' ] ) && ! $integration->is_push_enabled() ) {
+				continue;
+			}
+			return $integration;
+		}
+		return null;
+	}
+
+	/**
+	 * The connected ESP's merge-tag name for a synced field. Not derivable from
+	 * the field name: ActiveCampaign perstags can be renamed, and Mailchimp
+	 * assigns tags per audience — hence the newsletter's send list.
+	 *
+	 * @param string   $field_name Prefixed ESP field name.
+	 * @param \WP_Post $post       Newsletter post.
+	 *
+	 * @return string Tag name, or '' when unresolvable.
+	 */
+	private static function get_esp_field_tag_name( $field_name, $post ) {
+		if ( ! method_exists( '\Newspack_Newsletters', 'get_service_provider' ) ) {
+			return '';
+		}
+		$provider = \Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider ) || ! method_exists( $provider, 'get_field_merge_tag_name' ) ) {
+			return '';
+		}
+		$list_id = (string) get_post_meta( $post->ID, 'send_list_id', true );
+		return (string) $provider->get_field_merge_tag_name( $field_name, '' === $list_id ? null : $list_id );
 	}
 
 	/**
@@ -341,6 +617,21 @@ final class Newspack_Popups_Segmentation {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether a link is an ESP merge-tag placeholder (e.g. `*|UNSUB|*`) rather
+	 * than a URL: one that starts with a tag the ESP expands into a whole URL.
+	 * Matched as a prefix, not the whole string, because an earlier filter may
+	 * already have appended a query string to it. A real URL carrying a merge
+	 * tag in a query value doesn't match.
+	 *
+	 * @param string $url Processed link.
+	 *
+	 * @return bool
+	 */
+	private static function is_merge_tag_placeholder_url( $url ) {
+		return 1 === preg_match( '/^(?:\*\|[^|]+\|\*|\[\[[^\]]+\]\]|%[^%]+%|\[[^\][]+\])/', (string) $url );
 	}
 
 	/**
@@ -423,6 +714,317 @@ final class Newspack_Popups_Segmentation {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * A reader's last-known matching segment IDs, filtered to the site's active
+	 * segments. The snapshot is client-asserted and only as fresh as the
+	 * reader's last visit; no age cap by design.
+	 *
+	 * @param int $account_id WordPress user ID from the inbound param.
+	 *
+	 * @return string[] Active segment IDs as strings.
+	 */
+	public static function get_carried_segments_for_account( int $account_id ): array {
+		if ( $account_id < 1 || ! method_exists( '\Newspack\Reader_Data', 'get_matched_segments' ) ) {
+			return [];
+		}
+
+		$snapshot = \Newspack\Reader_Data::get_matched_segments( $account_id );
+		if ( empty( $snapshot ) || ! is_array( $snapshot ) ) {
+			return [];
+		}
+
+		// Client-asserted input: drop shapes strval() below would mishandle.
+		$snapshot = array_filter(
+			$snapshot,
+			function ( $value ) {
+				return is_int( $value ) || is_string( $value );
+			}
+		);
+
+		$active = [];
+		foreach ( self::get_segments( false ) as $segment ) {
+			if ( ! empty( $segment['id'] ) ) {
+				$active[] = (string) $segment['id'];
+			}
+		}
+
+		return array_values( array_intersect( array_map( 'strval', $snapshot ), $active ) );
+	}
+
+	/**
+	 * The setcookie() options for the carried-segments cookie. Extracted so
+	 * tests can reach these values — the setcookie() call itself never runs
+	 * under PHPUnit, where headers are already sent.
+	 *
+	 * @return array setcookie() `$options` argument.
+	 */
+	private static function get_carried_segments_cookie_options(): array {
+		return [
+			'expires'  => 0,
+			'path'     => '/',
+			'secure'   => is_ssl(),
+			// Readable by the view script; a segmentation hint, not a credential.
+			'httponly' => false,
+			'samesite' => 'Lax',
+		];
+	}
+
+	/**
+	 * The cookie value for a resolved segment set. Never an empty string:
+	 * setcookie() sends a deletion for an empty value regardless of `expires`,
+	 * so "matches nothing" would never reach the browser. An empty set becomes
+	 * the CARRIED_SEGMENTS_NONE sentinel instead.
+	 *
+	 * @param string[] $segment_ids Active segment IDs; empty asserts no matches.
+	 *
+	 * @return string Comma-joined IDs, or CARRIED_SEGMENTS_NONE.
+	 */
+	private static function get_carried_segments_cookie_value( array $segment_ids ): string {
+		return empty( $segment_ids ) ? self::CARRIED_SEGMENTS_NONE : implode( ',', $segment_ids );
+	}
+
+	/**
+	 * Hand the resolved segment IDs to the view script in a session cookie.
+	 * Every call is authoritative: an empty set overwrites a previous arrival's
+	 * segments with the "matches nothing" sentinel rather than deleting the
+	 * cookie. Callers must skip values that never passed the arrival gates —
+	 * those assert nothing about the reader.
+	 *
+	 * @param string[] $segment_ids Active segment IDs; empty asserts no matches.
+	 */
+	private static function set_carried_segments_cookie( $segment_ids ) {
+		$value = self::get_carried_segments_cookie_value( $segment_ids );
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+			setcookie(
+				self::CARRIED_SEGMENTS_COOKIE,
+				$value,
+				self::get_carried_segments_cookie_options()
+			);
+		}
+		// Mirror in $_COOKIE so tests, where headers are already sent and
+		// setcookie() can't run, see the value a browser would receive.
+		$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Action callback: resolve an inbound account ID to carried segments, hand
+	 * them off in a cookie, and redirect to the clean URL.
+	 *
+	 * The redirect is unconditional whenever the param is present: it keeps the
+	 * landing page a shared cacheable URL, and it is what makes ActiveCampaign's
+	 * `%FIELD%` syntax safe to emit at all (NPPM-3032) — the param never
+	 * survives into a rendered page.
+	 *
+	 * The cookie handoff takes three gates, in order: a plain positive integer
+	 * (which rejects every unsubstituted merge-tag shape), a valid newsletter
+	 * pass on the same link, and a free slot in the per-IP account cap. Only
+	 * the account param is stripped: the pass stays for newspack-plugin's own
+	 * handler on the next request.
+	 */
+	public static function handle_account_param() {
+		if ( is_admin() ) {
+			return;
+		}
+		// Redirecting a POST would discard its body.
+		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'GET' !== $_SERVER['REQUEST_METHOD'] ) {
+			return;
+		}
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
+			return;
+		}
+		// Reading a URL param to decide where to redirect; there is no form
+		// submission or state change here to nonce-verify.
+		if ( ! isset( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+
+		$raw = sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if (
+			1 === preg_match( '/^[1-9][0-9]*$/', $raw ) &&
+			self::has_valid_newsletter_pass() &&
+			self::claim_carried_account_slot( (int) $raw )
+		) {
+			// This runs ahead of `init` priority 10, where the segments taxonomy
+			// registers; without it every segment reads as unknown and the reader
+			// would carry "no segments". Registering again later is harmless.
+			if ( ! taxonomy_exists( Newspack_Segments_Model::TAX_SLUG ) ) {
+				Newspack_Segments_Model::register_segments_taxonomy();
+			}
+			// Gates passed, so the value asserts something real — including "no
+			// segments" when the resolved set is empty.
+			self::set_carried_segments_cookie( self::get_carried_segments_for_account( (int) $raw ) );
+		}
+
+		// This redirect may carry a per-reader Set-Cookie and must never be stored.
+		if ( function_exists( 'batcache_cancel' ) ) {
+			batcache_cancel();
+		}
+		nocache_headers();
+
+		$clean_url = remove_query_arg(
+			self::ACCOUNT_QUERY_PARAM,
+			esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) )
+		);
+		// Temporary: the param is a property of this one link, not of the page.
+		wp_safe_redirect( $clean_url, 302 );
+		exit;
+	}
+
+	/**
+	 * Whether the current request carries a newsletter pass that verifies: a
+	 * newsletter ID signed with this site's secret, for a newsletter sent within
+	 * the pass's lifetime. Verified through newspack-plugin, which owns the
+	 * secret; false when that plugin is missing.
+	 *
+	 * @return bool
+	 */
+	private static function has_valid_newsletter_pass(): bool {
+		// Reading a URL param to decide whether to trust another; no state change.
+		if ( ! isset( $_GET[ self::NEWSLETTER_PASS_QUERY_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return false;
+		}
+		if ( ! method_exists( '\Newspack\Newsletters_Access', 'verify' ) ) {
+			return false;
+		}
+		$pass = sanitize_text_field( wp_unslash( $_GET[ self::NEWSLETTER_PASS_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return false !== \Newspack\Newsletters_Access::verify( $pass );
+	}
+
+	/**
+	 * Count an account against the requesting IP's cap, and report whether it
+	 * fits. An account the IP already resolved in this window always fits, so
+	 * repeat clicks are free. Without a valid IP to key on there is nothing to
+	 * cap, so nothing resolves.
+	 *
+	 * The cap has to hold against parallel requests, so with a persistent
+	 * object cache it counts with an atomic increment. Without one it falls back
+	 * to a transient, where concurrent arrivals can still race past it.
+	 *
+	 * @param int $account_id Account ID from the inbound param.
+	 *
+	 * @return bool Whether the account may resolve.
+	 */
+	private static function claim_carried_account_slot( int $account_id ): bool {
+		// phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		$ip  = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		$key = self::get_carried_accounts_key( $ip );
+		if ( '' === $key ) {
+			return false;
+		}
+
+		/**
+		 * Filters how many distinct accounts one IP (or IPv6 /64) can resolve
+		 * from newsletter links per window. See CARRIED_ACCOUNTS_PER_IP.
+		 *
+		 * @param int $limit Distinct accounts per IP (or IPv6 /64) per window.
+		 */
+		$limit = (int) apply_filters( 'newspack_popups_carried_accounts_per_ip', self::CARRIED_ACCOUNTS_PER_IP );
+
+		return wp_using_ext_object_cache()
+			? self::claim_carried_account_slot_in_object_cache( $key, $account_id, $limit )
+			: self::claim_carried_account_slot_in_transient( $key, $account_id, $limit );
+	}
+
+	/**
+	 * The object-cache claim. Windows are aligned to multiples of
+	 * CARRIED_ACCOUNTS_WINDOW so every request agrees on the current one without
+	 * reading shared state. Each account gets a marker, claimed with
+	 * wp_cache_add() so only one request per account can take a slot: the
+	 * request that claims it counts the account with wp_cache_incr() and
+	 * records the outcome, and every other request for that account reads the
+	 * marker instead of counting. A duplicate that arrives while the first is
+	 * still counting carries nothing rather than spending a second slot.
+	 *
+	 * @param string $key        Per-address key.
+	 * @param int    $account_id Account ID from the inbound param.
+	 * @param int    $limit      Distinct accounts allowed per window.
+	 *
+	 * @return bool Whether the account may resolve.
+	 */
+	private static function claim_carried_account_slot_in_object_cache( string $key, int $account_id, int $limit ): bool {
+		$group        = 'newspack_popups_carried_accounts';
+		$now          = time();
+		$window_start = $now - ( $now % self::CARRIED_ACCOUNTS_WINDOW );
+		$ttl          = max( 1, $window_start + self::CARRIED_ACCOUNTS_WINDOW - $now );
+		$counter      = $key . '_' . $window_start;
+		$marker       = $counter . '_' . $account_id;
+
+		// phpcs:disable WordPressVIPMinimum.Performance.LowExpiryCacheTime.CacheTimeUndetermined -- $ttl is the rest of the window, at most an hour.
+		if ( ! wp_cache_add( $marker, 'pending', $group, $ttl ) ) {
+			return 'ok' === wp_cache_get( $marker, $group );
+		}
+
+		wp_cache_add( $counter, 0, $group, $ttl );
+		$count   = wp_cache_incr( $counter, 1, $group );
+		$granted = false !== $count && $count <= $limit;
+		wp_cache_set( $marker, $granted ? 'ok' : 'denied', $group, $ttl );
+		// phpcs:enable WordPressVIPMinimum.Performance.LowExpiryCacheTime.CacheTimeUndetermined
+		return $granted;
+	}
+
+	/**
+	 * The transient claim, for sites without a persistent object cache. The
+	 * window is fixed: it starts with the address's first account, and adding
+	 * accounts keeps its original expiry rather than extending it.
+	 *
+	 * @param string $key        Per-address key.
+	 * @param int    $account_id Account ID from the inbound param.
+	 * @param int    $limit      Distinct accounts allowed per window.
+	 *
+	 * @return bool Whether the account may resolve.
+	 */
+	private static function claim_carried_account_slot_in_transient( string $key, int $account_id, int $limit ): bool {
+		$now    = time();
+		$window = get_transient( $key );
+		if (
+			! is_array( $window ) || ! isset( $window['start'], $window['accounts'] ) ||
+			! is_array( $window['accounts'] ) || (int) $window['start'] + self::CARRIED_ACCOUNTS_WINDOW <= $now
+		) {
+			$window = [
+				'start'    => $now,
+				'accounts' => [],
+			];
+		}
+		if ( in_array( $account_id, $window['accounts'], true ) ) {
+			return true;
+		}
+		if ( count( $window['accounts'] ) >= $limit ) {
+			return false;
+		}
+
+		$window['accounts'][] = $account_id;
+		set_transient( $key, $window, max( 1, (int) $window['start'] + self::CARRIED_ACCOUNTS_WINDOW - $now ) );
+		return true;
+	}
+
+	/**
+	 * The key the cap counts an address's accounts under.
+	 *
+	 * An IPv6 address is keyed on its /64 network: one host usually holds the
+	 * whole /64 and can pick a new source address per request, so keying on the
+	 * full address would hand it a fresh allowance every time. A wider
+	 * allocation (a /56 or /48) still gets one allowance per /64: keying wider
+	 * would lump unrelated readers on a carrier's shared prefix into one bucket,
+	 * and the newsletter pass already limits who can try. An IPv4-mapped IPv6
+	 * address is keyed as the IPv4 address it carries.
+	 *
+	 * @param string $ip Remote address.
+	 *
+	 * @return string Key, or '' when the address isn't a valid IP.
+	 */
+	private static function get_carried_accounts_key( string $ip ): string {
+		$packed = false === filter_var( $ip, FILTER_VALIDATE_IP ) ? false : inet_pton( $ip );
+		if ( false === $packed ) {
+			return '';
+		}
+		if ( 16 === strlen( $packed ) ) {
+			$mapped_prefix = str_repeat( "\0", 10 ) . "\xff\xff";
+			$packed        = str_starts_with( $packed, $mapped_prefix ) ? substr( $packed, 12 ) : substr( $packed, 0, 8 );
+		}
+		return 'np_carried_accounts_' . md5( $packed );
 	}
 
 	/**
