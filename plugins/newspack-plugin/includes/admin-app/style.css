@@ -1,0 +1,21 @@
+.newspack-admin-app__stage { position: relative; min-height: 100%; }
+.newspack-admin-app__stage .newspack-footer { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+	.newspack-admin-app__stage > *, .newspack-admin-app .newspack-wizard__content > * { transition: opacity var(--wpds-motion-duration-md) var(--wpds-motion-easing-subtle); }
+	.newspack-admin-app .newspack-wizard__content > :is(.is-fetching, :has(.is-fetching)) { transition-delay: var(--wpds-motion-duration-xl); }
+	@starting-style {
+		.newspack-admin-app__stage > *, .newspack-admin-app .newspack-wizard__content > * { opacity: 0; }
+	}
+}
+.newspack-admin-app .newspack-page__header-region { top: 0; }
+.newspack-admin-app .newspack-settings .newspack-wizard__heading { display: none; }
+.newspack-admin-app:has(.newspack-admin-app__header) .boot-sidebar__back-button { display: none; }
+.newspack-admin-app .boot-navigation-screen__title-icon:has(.newspack-admin-app__header) { padding-block: var(--wpds-dimension-padding-xl) var(--wpds-dimension-padding-3xl); padding-inline-start: calc(var(--wpds-dimension-padding-xl) + var(--wpds-border-width-xs)); }
+.newspack-admin-app .boot-navigation-screen__title-icon:has(.newspack-admin-app__header) > :not(.newspack-admin-app__header-title) { display: none; }
+.newspack-admin-app .newspack-admin-app__header-title { display: flex; margin: 0; font-family: var(--wpds-typography-font-family-heading); font-size: var(--wpds-typography-font-size-xl); font-weight: var(--wpds-typography-font-weight-emphasis); line-height: var(--wpds-typography-line-height-xl); color: var(--wpds-color-foreground-content-neutral); }
+.newspack-admin-app .newspack-admin-app__header-title .components-button.newspack-admin-app__header,
+.newspack-admin-app .newspack-admin-app__header-title .components-button.newspack-admin-app__header:is(:hover, :focus, :active):not(:disabled) { height: auto; min-height: 0; padding: 0; border: 0; gap: var(--wpds-dimension-gap-xs); font: inherit; color: inherit; }
+.newspack-admin-app .boot-sidebar__footer .newspack-footer { position: static; background: none; border: 0; color: var(--wpds-color-foreground-content-neutral-weak); font-size: var(--wpds-typography-font-size-sm); line-height: var(--wpds-typography-line-height-xs); }
+.newspack-admin-app .boot-sidebar__footer .newspack-footer ul { flex-direction: column; padding: 0; gap: var(--wpds-dimension-gap-lg); }
+.newspack-admin-app .boot-sidebar__footer .newspack-footer li { margin: 0; }
+.newspack-admin-app .boot-sidebar__footer .newspack-footer li :is(a, button):is(:hover, :focus, :active) { color: var(--wpds-color-foreground-content-neutral); }
