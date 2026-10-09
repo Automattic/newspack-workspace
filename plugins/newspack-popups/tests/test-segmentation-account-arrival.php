@@ -492,6 +492,65 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The window is fixed: a new account keeps the window's original expiry
+	 * instead of extending it, so a steady trickle of readers on a shared IP
+	 * gets its full allowance back every window.
+	 */
+	public function test_window_does_not_extend_as_accounts_arrive() {
+		\Newspack\Reader_Data::$matched_segments = [ 1 => [ $this->segment_ids['carried-one'] ] ];
+		$key   = $this->accounts_key( self::IP );
+		$start = time() - 50 * MINUTE_IN_SECONDS;
+		set_transient(
+			$key,
+			[
+				'start'    => $start,
+				'accounts' => [ 7 ],
+			],
+			10 * MINUTE_IN_SECONDS
+		);
+
+		$this->arrive( '/p/?np_account=1' );
+
+		$window = get_transient( $key );
+		$this->assertSame( $start, $window['start'] );
+		$this->assertSame( [ 7, 1 ], $window['accounts'] );
+		$this->assertLessThanOrEqual( $start + HOUR_IN_SECONDS, (int) get_option( '_transient_timeout_' . $key ) );
+	}
+
+	/**
+	 * Once the window has passed, the address starts a new one with its full
+	 * allowance, even if the stored list was full.
+	 */
+	public function test_expired_window_starts_over() {
+		add_filter( 'newspack_popups_carried_accounts_per_ip', fn() => 1 );
+		\Newspack\Reader_Data::$matched_segments = [ 1 => [ $this->segment_ids['carried-one'] ] ];
+		set_transient(
+			$this->accounts_key( self::IP ),
+			[
+				'start'    => time() - HOUR_IN_SECONDS - 1,
+				'accounts' => [ 7 ],
+			],
+			HOUR_IN_SECONDS
+		);
+
+		$this->arrive( '/p/?np_account=1' );
+		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
+	}
+
+	/**
+	 * The transient key the cap uses for an address.
+	 *
+	 * @param string $ip Remote address.
+	 *
+	 * @return string
+	 */
+	private function accounts_key( $ip ) {
+		$method = new ReflectionMethod( 'Newspack_Popups_Segmentation', 'get_carried_accounts_key' );
+		$method->setAccessible( true );
+		return $method->invoke( null, $ip );
+	}
+
+	/**
 	 * IPv6 addresses in one /64 share an allowance, so a host can't reset the
 	 * cap by picking a new source address; another /64 has its own. An
 	 * IPv4-mapped IPv6 address shares the allowance of the IPv4 address.
@@ -540,7 +599,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		return [
 			'empty'      => [ '' ],
 			'not an ip'  => [ 'not-an-ip' ],
-			'ip a range' => [ '203.0.113.0/24' ],
+			'cidr range' => [ '203.0.113.0/24' ],
 		];
 	}
 

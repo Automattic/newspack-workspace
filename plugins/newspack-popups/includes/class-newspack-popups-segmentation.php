@@ -68,7 +68,7 @@ final class Newspack_Popups_Segmentation {
 	const NEWSLETTER_PASS_QUERY_PARAM = 'npnl';
 
 	/**
-	 * How many distinct accounts one IP (or IPv6 /64) can resolve per
+	 * How many distinct accounts one IP (or IPv6 /64) can resolve per fixed
 	 * CARRIED_ACCOUNTS_WINDOW. Counts accounts, not clicks: a reader clicking
 	 * through again costs nothing, and readers sharing an institution's IP each
 	 * spend one slot. Past the cap an arrival carries nothing, and the reader
@@ -78,7 +78,8 @@ final class Newspack_Popups_Segmentation {
 	const CARRIED_ACCOUNTS_PER_IP = 20;
 
 	/**
-	 * Window, in seconds, for CARRIED_ACCOUNTS_PER_IP.
+	 * Window, in seconds, for CARRIED_ACCOUNTS_PER_IP. It starts with the first
+	 * account an address resolves and doesn't move as more arrive.
 	 */
 	const CARRIED_ACCOUNTS_WINDOW = HOUR_IN_SECONDS;
 
@@ -885,6 +886,9 @@ final class Newspack_Popups_Segmentation {
 	 * repeat clicks are free. Without a valid IP to key on there is nothing to
 	 * cap, so nothing resolves.
 	 *
+	 * The window is fixed: it starts with the address's first account, and
+	 * adding accounts keeps its original expiry rather than extending it.
+	 *
 	 * Read-modify-write without a lock: concurrent arrivals can overshoot the
 	 * cap by a few accounts, which doesn't matter against an enumeration that
 	 * needs thousands.
@@ -901,25 +905,35 @@ final class Newspack_Popups_Segmentation {
 			return false;
 		}
 
-		$accounts = get_transient( $key );
-		$accounts = is_array( $accounts ) ? $accounts : [];
+		$now    = time();
+		$window = get_transient( $key );
+		if (
+			! is_array( $window ) || ! isset( $window['start'], $window['accounts'] ) ||
+			! is_array( $window['accounts'] ) || (int) $window['start'] + self::CARRIED_ACCOUNTS_WINDOW <= $now
+		) {
+			$window = [
+				'start'    => $now,
+				'accounts' => [],
+			];
+		}
+		$accounts = $window['accounts'];
 		if ( in_array( $account_id, $accounts, true ) ) {
 			return true;
 		}
 
 		/**
-		 * Filters how many distinct accounts one IP can resolve from newsletter
-		 * links per window. See CARRIED_ACCOUNTS_PER_IP.
+		 * Filters how many distinct accounts one IP (or IPv6 /64) can resolve
+		 * from newsletter links per window. See CARRIED_ACCOUNTS_PER_IP.
 		 *
-		 * @param int $limit Distinct accounts per IP per window.
+		 * @param int $limit Distinct accounts per IP (or IPv6 /64) per window.
 		 */
 		$limit = (int) apply_filters( 'newspack_popups_carried_accounts_per_ip', self::CARRIED_ACCOUNTS_PER_IP );
 		if ( count( $accounts ) >= $limit ) {
 			return false;
 		}
 
-		$accounts[] = $account_id;
-		set_transient( $key, $accounts, self::CARRIED_ACCOUNTS_WINDOW );
+		$window['accounts'][] = $account_id;
+		set_transient( $key, $window, max( 1, (int) $window['start'] + self::CARRIED_ACCOUNTS_WINDOW - $now ) );
 		return true;
 	}
 
@@ -928,8 +942,11 @@ final class Newspack_Popups_Segmentation {
 	 *
 	 * An IPv6 address is keyed on its /64 network: one host usually holds the
 	 * whole /64 and can pick a new source address per request, so keying on the
-	 * full address would hand it a fresh allowance every time. An IPv4-mapped
-	 * IPv6 address is keyed as the IPv4 address it carries.
+	 * full address would hand it a fresh allowance every time. A wider
+	 * allocation (a /56 or /48) still gets one allowance per /64: keying wider
+	 * would lump unrelated readers on a carrier's shared prefix into one bucket,
+	 * and the newsletter pass already limits who can try. An IPv4-mapped IPv6
+	 * address is keyed as the IPv4 address it carries.
 	 *
 	 * @param string $ip Remote address.
 	 *
@@ -942,7 +959,7 @@ final class Newspack_Popups_Segmentation {
 		}
 		if ( 16 === strlen( $packed ) ) {
 			$mapped_prefix = str_repeat( "\0", 10 ) . "\xff\xff";
-			$packed        = 0 === strpos( $packed, $mapped_prefix ) ? substr( $packed, 12 ) : substr( $packed, 0, 8 );
+			$packed        = str_starts_with( $packed, $mapped_prefix ) ? substr( $packed, 12 ) : substr( $packed, 0, 8 );
 		}
 		return 'np_carried_accounts_' . md5( $packed );
 	}
