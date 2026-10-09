@@ -29,18 +29,12 @@ final class Comments_Panel_Trigger_Block {
 	 * @return void
 	 */
 	public static function register_block() {
-		$block_type = register_block_type_from_metadata(
+		register_block_type_from_metadata(
 			__DIR__ . '/block.json',
 			[
 				'render_callback' => [ __CLASS__, 'render_block' ],
 			]
 		);
-
-		// block.json defaults aren't translated. The editor loads this server-side definition, so an
-		// unchanged button shows the site language's label in the editor and on the front end.
-		if ( $block_type ) {
-			$block_type->attributes['triggerText']['default'] = __( 'Comments', 'newspack-plugin' );
-		}
 	}
 
 	/**
