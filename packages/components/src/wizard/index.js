@@ -27,11 +27,12 @@ import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 import { Footer, DebugBadge, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page, Waiting } from '../';
 import { activeBreadcrumbs, activeSection, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
-import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
+import { WIZARD_STORE_NAMESPACE } from './store';
 import WizardSnackbar from './components/WizardSnackbar';
 import WizardError from './components/WizardError';
-
-registerStore();
+import '../with-wizard/style.scss';
+import './loading.scss';
+import '../with-wizard-screen/style.scss';
 
 /**
  * Renders a view's page-level banner outside the padded content column, so it sits

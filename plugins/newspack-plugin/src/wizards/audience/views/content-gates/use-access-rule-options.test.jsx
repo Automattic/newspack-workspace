@@ -24,6 +24,7 @@ jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { addNotice: ( ...args ) => mockAddNotice( ...args ) } ),
 	createReduxStore: ( name, config ) => ( { name, ...config } ),
 	register: () => {},
+	select: () => undefined,
 } ) );
 
 // The source hands every reader the same promise – that sharing is what makes one

@@ -14,12 +14,9 @@
 /* stylelint-disable-next-line no-invalid-position-at-import-rule -- sass @use must precede the CSS @import; postcss-import inlines it at build time. */
 @import "@wordpress/theme/prebuilt/css/design-tokens.css";
 
-// Newspack brand mapping: the wpds brand color tokens ship in WordPress
-// blue; remap them onto the Newspack primary scale so every design-system
-// component (focus rings, brand buttons, toggles) renders in brand colors
-// without per-component overrides.
 /* stylelint-disable plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the wpds brand tokens. */
-:root {
+body.newspack-wizard-page,
+body:has(.newspack-page) {
 	--wpds-color-background-interactive-brand-strong: #{np-colors.$primary-600};
 	--wpds-color-background-interactive-brand-strong-active: #{np-colors.$primary-800};
 	--wpds-color-background-interactive-brand-weak-active: #{np-colors.$primary-000};

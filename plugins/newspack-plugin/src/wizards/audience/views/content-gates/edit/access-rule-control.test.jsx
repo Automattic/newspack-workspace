@@ -14,16 +14,9 @@ import { select } from '@wordpress/data';
  */
 import AccessRuleControl from './access-rule-control';
 import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
-import registerWizardStore, { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
-
-// The control dispatches notices through the wizard store, which registers on demand.
-// `@wordpress/data` itself is left real — `@wordpress/components` needs it — and the
-// guard keeps a second suite in the same worker from re-registering.
-if ( ! select( WIZARD_STORE_NAMESPACE ) ) {
-	registerWizardStore();
-}
 
 // FormTokenField scrolls the auto-selected suggestion into view, which jsdom has no
 // implementation for.
