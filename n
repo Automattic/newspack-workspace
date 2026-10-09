@@ -1,6 +1,9 @@
 #!/bin/bash
 
 NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# Where n was called from. The script cds to its own directory before dispatching
+# a command, so anything that needs the caller's directory later must read this.
+N_CALLER_PWD="$PWD"
 source "$(dirname "${BASH_SOURCE[0]}")/bin/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/bin/repos.sh"
 
@@ -145,6 +148,133 @@ require_target_folder() {
     if [[ -z "$target_folder" ]]; then
         echo "Error: You must be inside one of the repos to run this command." >&2
         exit 1
+    fi
+}
+
+# Prints the project a command-line argument names, or fails if it names none.
+# Lets test-php, composer and npm take a project name the way build and test-js
+# do, instead of forwarding it to the tool as a path or subcommand. Only exact
+# project names match (with or without the newspack- prefix), so PHPUnit paths
+# and composer subcommands still pass through untouched.
+project_name_arg() {
+    local arg="$1" candidate p
+    [[ -n "$arg" && "$arg" != -* && "$arg" != */* ]] || return 1
+    for candidate in "$arg" "newspack-$arg"; do
+        for p in "${projects[@]}"; do
+            if [[ "$p" == "$candidate" ]]; then
+                echo "$candidate"
+                return 0
+            fi
+        done
+        if [[ -d "$NABSPATH/repos/plugins/$candidate" || -d "$NABSPATH/repos/themes/$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Shared setup for test-php and test-js. Sets test_output (compact for coding
+# agents; NEWSPACK_TEST_OUTPUT=full or =compact overrides), test_code (the
+# branch@commit of the code the container will run, printed by the compact
+# summaries) and test_host_root (the main checkout, where logs/ lands).
+#
+# Refuses when the caller is in a git worktree of the repository that holds the
+# project under test, but the container would read that project from elsewhere:
+# no isolated env mounts it from this worktree, or this n is the worktree's own
+# copy, which cannot see the envs. The run would report another checkout's
+# result as this branch's. NEWSPACK_TEST_ROOT_OK=1 runs it anyway.
+prepare_test_run() {
+    test_output=${NEWSPACK_TEST_OUTPUT:-}
+    if [[ -z "$test_output" && ( -n "${CLAUDECODE:-}" || -n "${AI_AGENT:-}" || -n "${CODEX_SANDBOX:-}" ) ]]; then
+        test_output=compact
+    fi
+
+    # The containers mount the main checkout, including when this n is a
+    # worktree's own copy, so resolve it from git rather than from NABSPATH.
+    local root="$NABSPATH" common
+    common=$(git -C "$NABSPATH" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=""
+    if [[ "$common" == */.git ]]; then
+        root="${common%/.git}"
+    fi
+    test_host_root="$root"
+
+    # The project's copy in the main checkout, which is what the container reads
+    # unless an env mounts a worktree's copy over it.
+    local root_dir="$root" candidate
+    for candidate in "$root/plugins/$target_folder" "$root/themes/$target_folder" \
+        "$root/repos/plugins/$target_folder" "$root/repos/themes/$target_folder"; do
+        if [[ -d "$candidate" ]]; then
+            root_dir="$candidate"
+            break
+        fi
+    done
+
+    # Guard only a caller in a linked worktree of the project's own repository. A
+    # repos/ project named from a monorepo worktree has no copy in that worktree.
+    local guarded=0 git_dir="" caller_common="" project_common="" caller_top=""
+    git_dir=$(git -C "$N_CALLER_PWD" rev-parse --path-format=absolute --git-dir 2>/dev/null) || git_dir=""
+    caller_common=$(git -C "$N_CALLER_PWD" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || caller_common=""
+    project_common=$(git -C "$root_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || project_common=""
+    if [[ -n "$git_dir" && "$git_dir" != "$caller_common" && "$caller_common" == "$project_common" ]]; then
+        guarded=1
+        caller_top=$(git -C "$N_CALLER_PWD" rev-parse --show-toplevel 2>/dev/null) || caller_top=""
+        # A worktree checked out in place under repos/ is itself what the
+        # container mounts, so it tests the caller's own code.
+        if [[ -n "$caller_top" && ( "$root_dir" == "$caller_top" || "$root_dir" == "$caller_top"/* ) ]]; then
+            guarded=0
+        fi
+    fi
+
+    # An env's mount of the project counts only when it comes from the caller's
+    # worktree; a mount from another worktree tests another branch.
+    local code_dir="" mounted_dir="" compose mount
+    if [[ "$TARGET_CONTAINER" != "newspack_dev" ]]; then
+        compose=$(grep -l -E "^[[:space:]]*container_name:[[:space:]]*${TARGET_CONTAINER}[[:space:]]*$" "$root"/docker-compose.env-*.yml 2>/dev/null | head -n 1)
+        if [[ -n "$compose" ]]; then
+            while IFS= read -r mount; do
+                [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./(worktrees(-repos)?/[^[:space:]:]+):/newspack-(plugins|themes|repos/plugins|repos/themes)/([^[:space:]:/]+) ]] || continue
+                [[ "${BASH_REMATCH[4]}" == "$target_folder" ]] || continue
+                mounted_dir="$root/${BASH_REMATCH[1]}"
+                if [[ $guarded -eq 0 || "$mounted_dir" == "$caller_top" || "$mounted_dir" == "$caller_top"/* ]]; then
+                    code_dir="$mounted_dir"
+                fi
+                break
+            done < "$compose"
+        fi
+    fi
+    if [[ -z "$code_dir" ]]; then
+        if [[ $guarded -eq 1 && "${NEWSPACK_TEST_ROOT_OK:-}" != "1" ]]; then
+            local would_read="${mounted_dir:-$root_dir}"
+            echo "Error: the container would read $target_folder from ${would_read#"$root"/}, not from this" >&2
+            echo "worktree, and the result would read as this branch's." >&2
+            if [[ "$root" != "$NABSPATH" ]]; then
+                echo "  This is a worktree's own copy of n, which cannot see isolated envs." >&2
+                echo "  Run the main checkout's n instead:  $root/n $1 ..." >&2
+            elif [[ "$caller_top" == "$root/worktrees/"* || "$caller_top" == "$root/worktrees-repos/"* ]]; then
+                echo "  An isolated env has to mount this worktree's copy of $target_folder (see" >&2
+                echo "  n env create --help). If one already does, run from inside that project's" >&2
+                echo "  directory so n picks it." >&2
+            else
+                echo "  n picks an isolated env only for directories under $root/worktrees/" >&2
+                echo "  or $root/worktrees-repos/, so no env can serve this one." >&2
+            fi
+            echo "  Or run anyway, testing ${would_read#"$root"/}:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
+            exit 1
+        fi
+        # Overridden: name what the container will really read, which is the
+        # env's mount when it has one, even from another worktree.
+        code_dir="${mounted_dir:-$root_dir}"
+    fi
+
+    test_code="unknown"
+    local ref sha
+    if ref=$(git -C "$code_dir" rev-parse --abbrev-ref HEAD 2>/dev/null) && sha=$(git -C "$code_dir" rev-parse --short HEAD 2>/dev/null); then
+        test_code="$ref@$sha"
+        if [[ -n "$(git -C "$code_dir" status --porcelain --untracked-files=no -- . 2>/dev/null)" ]]; then
+            test_code="$test_code +uncommitted changes"
+        fi
+        test_code="$test_code (${code_dir#"$root"/})"
     fi
 }
 
@@ -429,26 +559,42 @@ case $1 in
         fi
         ;;
     test-php)
+        if named=$(project_name_arg "${2:-}"); then
+            target_folder=$named
+            set -- "$1" "${@:3}"
+        fi
         require_target_folder
+        prepare_test_run test-php
         command="/var/scripts/test-php.sh $target_folder ${@:2}"
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
+        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" -e NEWSPACK_HOST_ROOT="$test_host_root" $TARGET_CONTAINER sh -c "$command"
         ;;
     test-js)
-        if [[ -n "$2" ]]; then
+        if named=$(project_name_arg "${2:-}"); then
+            target_folder=$named
+        elif [[ -n "$2" ]]; then
             target_folder=$2
         fi
         require_target_folder
+        prepare_test_run test-js
         # Run the script directly (no `sh -c`) and quote the folder: it can now
         # come from the command line, where an unquoted value would word-split
         # or be read as shell syntax by the container.
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
+        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" -e NEWSPACK_HOST_ROOT="$test_host_root" $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
         ;;
     composer)
+        if named=$(project_name_arg "${2:-}"); then
+            target_folder=$named
+            set -- "$1" "${@:3}"
+        fi
         require_target_folder
         command="/var/scripts/composer.sh $target_folder ${@:2}"
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
         ;;
     npm)
+        if named=$(project_name_arg "${2:-}"); then
+            target_folder=$named
+            set -- "$1" "${@:3}"
+        fi
         require_target_folder
         command="/var/scripts/npm.sh $target_folder ${@:2}"
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
@@ -529,10 +675,10 @@ case $1 in
         echo "  build [folder]               Build the specified folder (plugin/theme) or all for every repo."
         echo "  ci-build [folder]            Build for CI environment with specific optimizations."
         echo "  watch [folder]               Watch & rebuild the given/current repo; no arg watches every unit from the root."
-        echo "  test-php [args]              Run PHP tests for the current repo with optional arguments."
+        echo "  test-php [project] [args]    Run PHP tests for the current (or named) repo with optional arguments."
         echo "  test-js                      Run JavaScript tests for the current repo."
-        echo "  composer [args]              Run a composer command for the current repo."
-        echo "  npm [args]                   Run an npm command for the current repo."
+        echo "  composer [project] [args]    Run a composer command for the current (or named) repo."
+        echo "  npm [project] [args]         Run an npm command for the current (or named) repo."
         echo ""
         echo "Multi-site:"
         echo "  sites-add [name]             Add a new additional site with the given name."

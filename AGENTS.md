@@ -98,10 +98,10 @@ n build [name]                # Build current project, or a named one ('newspack
 n ci-build [all]              # npm ci + build
 n watch [name]                # Rebuild on change
 
-n test-php [--group X | --filter Y | --list-groups]
-n test-js
+n test-php [project] [--group X | --filter Y | --list-groups]
+n test-js [project]
 
-n composer <args>             # Composer for the CURRENT project (see below)
+n composer [project] <args>   # Composer for the current or named project
 n wp <command>                # WP-CLI (--allow-root added automatically)
 n sh [env]                    # Shell into a container
 
@@ -110,7 +110,7 @@ n sites-add|sites-list|sites-drop <name>   # Extra sites at <name>.test, sharing
 
 Run any command with `--help` for its full options.
 
-**Of the build/test family, only `build`, `ci-build`, `watch` and `test-js` take a project name.** `test-php` and `composer` resolve the project from your cwd, so `cd` into it first. Passing a name does not error usefully: `n composer <project> install` makes the name a bogus composer subcommand, and `n test-php <project>` forwards it to PHPUnit as a positional path (`Cannot open file "..."`). (`bin/composer.sh`'s own usage example is stale on this point.) `n npm` resolves from cwd the same way. Other commands such as `env` and `worktree` do take names.
+**The build/test family takes an optional project name** (`newspack-` optional); without one, a command resolves the project from your cwd. For `test-php`, `composer` and `npm` the name must come first and match a project exactly. Anything else is forwarded to the tool, so `n test-php tests/test-foo.php` hands PHPUnit a path.
 
 **First-time setup**
 
@@ -133,6 +133,10 @@ docker exec newspack_dev sh -c "wp eval 'echo get_option(\"blogname\");' --allow
 The main container is `newspack_dev`; an isolated env is `newspack_env_<name>`, dashes replaced by underscores.
 
 **`n test-php`** uses its own database (`wp_tests`, or `wp_tests_<env>` in an isolated env), separate from the site DB. All containers share one MariaDB server, so the per-env name is what stops concurrent test runs truncating each other's tables.
+
+**`n test-php` and `n test-js` refuse to run from a git worktree when the container would read the project under test from a different checkout**, because the result would read as the branch's. The container reads your worktree's copy when an isolated env mounts that project from it, and when the worktree is itself the project's directory under `repos/`. `n` picks an env from your directory, and only for directories under `worktrees/` or `worktrees-repos/`, so run from inside the project's directory, and use the main checkout's `n`, not a worktree's copy. See `n env create --help` for mounting a worktree. `NEWSPACK_TEST_ROOT_OK=1` runs anyway; the summary's `code:` line then names the checkout that ran.
+
+**Under a coding agent** (`CLAUDECODE`, `AI_AGENT` or `CODEX_SANDBOX` set), both print a short summary instead of the runner's output (`n test-js` on a `repos/` project keeps its full output): the branch and commit under test, a PASS, FAIL, NO TESTS RAN or NO REPORT verdict, and each failure's message and location. Full output goes to `logs/test-php/` or `logs/test-js/` in the main checkout. PHPUnit's `--list-*`, `--help` and `--version` modes, and a run with its own `--log-junit`, always print in full. `NEWSPACK_TEST_OUTPUT=full` restores the normal output, and `=compact` forces the summary.
 
 **`n watch`** from inside a project runs that project's incremental webpack watcher — sub-second rebuilds, and the right choice when iterating on one thing. From the root with no argument it starts a global dispatcher that spawns a watcher lazily the first time you touch a unit, so only units you actually edit get one.
 
