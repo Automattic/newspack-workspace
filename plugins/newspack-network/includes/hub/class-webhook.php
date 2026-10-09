@@ -185,8 +185,8 @@ class Webhook {
 	 *
 	 * Nodes are managed by administrators, so a Node whose author is missing or
 	 * is not one is worth a look. The event is processed either way; the line
-	 * points whoever reads the Newspack log at the Node, about once a day per Node: two
-	 * deliveries handled at the same moment can each log it. It goes
+	 * points whoever reads the Newspack log at the Node, about once a day per
+	 * Node: two deliveries handled at the same moment can each log it. It goes
 	 * through newspack_log because Debugger::log() writes only when
 	 * NEWSPACK_NETWORK_DEBUG is defined.
 	 *
@@ -215,7 +215,7 @@ class Webhook {
 			return;
 		}
 		// A newspack_log listener that throws must not change how the delivery is
-		// handled: this runs while the delivery's claim is held.
+		// handled.
 		try {
 			\Newspack\Logger::newspack_log(
 				'newspack_network_node_origin',
