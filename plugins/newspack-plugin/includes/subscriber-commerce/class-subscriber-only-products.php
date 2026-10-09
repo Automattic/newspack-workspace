@@ -158,6 +158,8 @@ class Subscriber_Only_Products {
 		update_option( self::OPTION_NAME, $rules );
 		Product_Targeting::flush_cache();
 		Product_Purchase_Restriction::flush_cache();
+		// A product's purchase options depend on the rules through the forcing filter.
+		Subscription_Products::flush_cache();
 	}
 
 	/**

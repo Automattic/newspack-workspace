@@ -449,8 +449,16 @@ class Subscriber_Discounts_Pricing {
 	 * @return bool
 	 */
 	private static function product_grants( \WC_Product $product, array $rule ) {
+		// Asked of the instance being priced, not the catalog product: a product sold
+		// both one-time and on plans keeps its one-time price discounted, while a
+		// chosen plan (applied before this filter runs) reads as a subscription and
+		// is left alone. Plan prices shown on the product page come from the stored
+		// price, which this display filter never touches. A plan-based product
+		// forced onto its plans has no one-time price to protect either way, so it
+		// counts as a subscription on the bare catalog instance too, before any plan
+		// has been applied.
 		return Subscriber_Commerce::covers_all_subscriptions( $rule )
-			? WooCommerce_Subscriptions::is_subscription_product( $product )
+			? Subscription_Products::only_sells_as_subscription( $product )
 			: self::product_is_one_of( $product, $rule['subscription_product_ids'] );
 	}
 
@@ -469,15 +477,22 @@ class Subscriber_Discounts_Pricing {
 	/**
 	 * Whether the cart holds any subscription at all.
 	 *
+	 * Checked on each real cart line's own product instance, not a fresh
+	 * wc_get_product() by ID: a plan applied to a cart line lives on that
+	 * instance, and re-fetching by ID would hand back the bare catalog product
+	 * and lose it. IDs the newspack_subscriber_discounts_cart_product_ids filter
+	 * adds or substitutes are still resolved by ID, which is how a legacy
+	 * subscription type is recognised there.
+	 *
 	 * Memoized because every rule and every product on the page asks the same
 	 * question, while answering it hydrates a WC_Product per cart line — and the
 	 * variation-price filter asks once per variable product WooCommerce prices.
 	 *
-	 * Keyed on the cart contents rather than cached as one verdict: the filter
+	 * Keyed on cart_line_tokens() rather than cached as one verdict: the filter
 	 * folds this answer into the price hash, so a cart the reader changes mid
-	 * request has to produce a different answer rather than the one that was
-	 * already computed. Collecting the ids is cheap; it is hydrating them that is
-	 * worth skipping.
+	 * request — including a line that switches between one-time and a plan —
+	 * has to produce a different answer rather than the one that was already
+	 * computed.
 	 *
 	 * @return bool
 	 */
@@ -485,17 +500,15 @@ class Subscriber_Discounts_Pricing {
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			return false;
 		}
-		$cart_product_ids = self::get_cart_product_ids();
-		sort( $cart_product_ids );
-		$cache_key = implode( ',', $cart_product_ids );
+		$tokens    = self::cart_line_tokens();
+		$cache_key = implode( ',', $tokens );
 		if ( isset( self::$cart_holds_subscription[ $cache_key ] ) ) {
 			return self::$cart_holds_subscription[ $cache_key ];
 		}
 
 		$holds_subscription = false;
-		foreach ( $cart_product_ids as $cart_product_id ) {
-			$cart_product = \wc_get_product( $cart_product_id );
-			if ( $cart_product instanceof \WC_Product && WooCommerce_Subscriptions::is_subscription_product( $cart_product ) ) {
+		foreach ( $tokens as $token ) {
+			if ( false !== strpos( $token, ':recurring' ) ) {
 				$holds_subscription = true;
 				break;
 			}
@@ -503,6 +516,63 @@ class Subscriber_Discounts_Pricing {
 
 		self::$cart_holds_subscription[ $cache_key ] = $holds_subscription;
 		return $holds_subscription;
+	}
+
+	/**
+	 * Every cart line's subscription state, as `<id>:<recurring|once>` tokens.
+	 *
+	 * The filtered get_cart_product_ids() list decides which products count, so
+	 * the newspack_subscriber_discounts_cart_product_ids filter can still remove
+	 * a line. A real cart line that list keeps is checked on its own product
+	 * instance (`data`), so a plan applied to it is seen; IDs the filter adds or
+	 * substitutes are resolved fresh by ID, which is how a legacy subscription
+	 * type reaches this check without ever being a real cart line. Shared by
+	 * cart_contains_a_subscription() and cart_signature(), so both fall back to a
+	 * fresh verdict the instant a line's subscription state changes mid-request.
+	 *
+	 * Runs on every rule lookup, several per product on a shop archive, so only
+	 * IDs no cart line already carries are hydrated; a plain cart hydrates none.
+	 *
+	 * @return string[]
+	 */
+	private static function cart_line_tokens() {
+		$tokens  = [];
+		$covered = [];
+		$ids     = self::get_cart_product_ids();
+		if ( $ids && function_exists( 'WC' ) && WC()->cart ) {
+			foreach ( WC()->cart->get_cart() as $cart_item ) {
+				$cart_product = $cart_item['data'] ?? null;
+				if ( ! $cart_product instanceof \WC_Product ) {
+					continue;
+				}
+				$line_ids = array_filter( [ (int) $cart_product->get_id(), absint( $cart_item['product_id'] ?? 0 ), absint( $cart_item['variation_id'] ?? 0 ) ] );
+				$kept     = array_intersect( $line_ids, $ids );
+				if ( $kept ) {
+					$tokens[] = self::cart_line_token( (int) $cart_product->get_id(), $cart_product );
+					$covered  = array_merge( $covered, $kept );
+				}
+			}
+		}
+		foreach ( array_diff( $ids, $covered ) as $cart_product_id ) {
+			$cart_product = \wc_get_product( $cart_product_id );
+			if ( $cart_product instanceof \WC_Product ) {
+				$tokens[] = self::cart_line_token( $cart_product_id, $cart_product );
+			}
+		}
+		$tokens = array_unique( $tokens );
+		sort( $tokens );
+		return $tokens;
+	}
+
+	/**
+	 * One cart_line_tokens() entry.
+	 *
+	 * @param int         $id           Product or variation ID for the line.
+	 * @param \WC_Product $cart_product The line's own product instance.
+	 * @return string
+	 */
+	private static function cart_line_token( $id, \WC_Product $cart_product ) {
+		return $id . ':' . ( Subscription_Products::is_purchased_as_subscription( $cart_product ) ? 'recurring' : 'once' );
 	}
 
 	/**
@@ -588,6 +658,13 @@ class Subscriber_Discounts_Pricing {
 	 * @return array[]
 	 */
 	private static function get_rules_for( $product, $user_id ) {
+		// Nothing to decide, so none of the key below is worth building: this runs
+		// on every price read for a logged-in reader.
+		$active_rules = Subscriber_Discounts::get_active_rules();
+		if ( empty( $active_rules ) ) {
+			return [];
+		}
+
 		// Rule and settings writes flush this memo, so the key does not need to
 		// carry the rule set — and must not, since hashing it on every call
 		// would do the work the memo exists to avoid, several times per product
@@ -599,7 +676,10 @@ class Subscriber_Discounts_Pricing {
 		// again, and a verdict keyed without it leaves the reader a price they have
 		// stopped being entitled to. The payment-recovery grace: the sibling memos
 		// key on it for the same reason, since a reader mid-retry is eligible
-		// inside a gate's evaluation context and not outside it.
+		// inside a gate's evaluation context and not outside it. A plan-priced
+		// instance shares its product ID with the bare product it was cloned from,
+		// but only the plan instance is a subscription purchase — product_grants()
+		// answers differently for each, so they need separate verdicts too.
 		$cache_key = implode(
 			':',
 			[
@@ -607,13 +687,14 @@ class Subscriber_Discounts_Pricing {
 				$product->get_id(),
 				self::cart_signature(),
 				Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) ? 'grace' : 'strict',
+				Subscription_Products::only_sells_as_subscription( $product ) ? 'recurring' : 'once',
 			]
 		);
 		if ( isset( self::$rules_for_product[ $cache_key ] ) ) {
 			return self::$rules_for_product[ $cache_key ];
 		}
 
-		$covering_rules = Product_Targeting::get_matching_rules( Subscriber_Discounts::get_active_rules(), $product );
+		$covering_rules = Product_Targeting::get_matching_rules( $active_rules, $product );
 
 		$qualifying_rules = array_values(
 			array_filter(
@@ -633,7 +714,10 @@ class Subscriber_Discounts_Pricing {
 	 * What the cart contributes to a memoized eligibility verdict.
 	 *
 	 * Empty while "apply at checkout" is off, because nothing then reads the cart
-	 * to decide eligibility and a signature would only fragment the memo.
+	 * to decide eligibility and a signature would only fragment the memo. Built
+	 * from cart_line_tokens() rather than bare ids, so a line that switches
+	 * between a one-time purchase and a plan within a request is not served the
+	 * other's verdict from the memo.
 	 *
 	 * @return string
 	 */
@@ -641,9 +725,7 @@ class Subscriber_Discounts_Pricing {
 		if ( empty( Subscriber_Discounts::get_settings()['apply_at_checkout'] ) ) {
 			return '';
 		}
-		$cart_product_ids = self::get_cart_product_ids();
-		sort( $cart_product_ids );
-		return implode( ',', $cart_product_ids );
+		return implode( ',', self::cart_line_tokens() );
 	}
 
 	/**

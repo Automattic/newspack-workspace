@@ -336,8 +336,12 @@ class Audience_Subscriptions extends Wizard {
 			'is_on_sale'      => (bool) $product->is_on_sale(),
 			// A rule open to every subscriber never discounts a subscription, so the
 			// editor's price preview has to know which of the products it lists are
-			// ones. `type_label` is display copy and cannot answer that.
-			'is_subscription' => WooCommerce_Subscriptions::is_subscription_product( $product ),
+			// ones. `type_label` is display copy and cannot answer that. Must match the
+			// flag product_grants() uses to decide the same question at checkout,
+			// including a plan-based product forced onto its plans: it has no
+			// one-time price to preview a discount on, even on the bare instance
+			// listed here before any plan is chosen.
+			'is_subscription' => Subscription_Products::only_sells_as_subscription( $product ),
 		];
 	}
 
