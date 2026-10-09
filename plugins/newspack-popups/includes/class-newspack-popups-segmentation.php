@@ -68,11 +68,11 @@ final class Newspack_Popups_Segmentation {
 	const NEWSLETTER_PASS_QUERY_PARAM = 'npnl';
 
 	/**
-	 * How many distinct accounts one IP can resolve per CARRIED_ACCOUNTS_WINDOW.
-	 * Counts accounts, not clicks: a reader clicking through again costs nothing,
-	 * and readers sharing an institution's IP each spend one slot. Past the cap
-	 * arrivals carry nothing, which is how every newsletter click behaved before
-	 * this feature, so a false positive costs personalization and nothing else.
+	 * How many distinct accounts one IP (or IPv6 /64) can resolve per
+	 * CARRIED_ACCOUNTS_WINDOW. Counts accounts, not clicks: a reader clicking
+	 * through again costs nothing, and readers sharing an institution's IP each
+	 * spend one slot. Past the cap an arrival carries nothing, and the reader
+	 * sees the prompts any signed-out visitor would.
 	 * Filterable via `newspack_popups_carried_accounts_per_ip`.
 	 */
 	const CARRIED_ACCOUNTS_PER_IP = 20;
@@ -790,8 +790,8 @@ final class Newspack_Popups_Segmentation {
 				self::get_carried_segments_cookie_options()
 			);
 		}
-		// Mirror in $_COOKIE so same-request readers (and tests, where headers are
-		// already sent) see the same value a browser would receive.
+		// Mirror in $_COOKIE so tests, where headers are already sent and
+		// setcookie() can't run, see the value a browser would receive.
 		$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 
