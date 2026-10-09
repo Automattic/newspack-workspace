@@ -225,7 +225,9 @@ final class Access_Attribution {
 				// Probe per product to find which one granted access.
 				// Access_Rules::has_one_time_purchase() memoizes per user and value,
 				// and wc_customer_bought_product() is cached by WooCommerce, so the
-				// repeated calls stay cheap.
+				// repeated calls stay cheap. On WooCommerce before 10.8 each lifetime
+				// probe walks the reader's orders instead, so the cost grows with the
+				// number of products in the rule.
 				$names = [];
 				foreach ( $sanitized['product_ids'] as $product_id ) {
 					$single = array_merge( $sanitized, [ 'product_ids' => [ $product_id ] ] );

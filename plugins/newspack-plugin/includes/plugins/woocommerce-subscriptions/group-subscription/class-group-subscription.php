@@ -43,16 +43,6 @@ class Group_Subscription {
 	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
 
 	/**
-	 * Roles that are eligible to be group-subscription members by default, in addition to readers.
-	 *
-	 * Authors and Contributors can create content but are neither editors/administrators (who bypass
-	 * the content gate outright) nor readers (who satisfy access rules on their own). Without this they
-	 * fall through with no path to restricted content. Administrators/editors are intentionally absent:
-	 * they already have full access and do not need a group grant.
-	 */
-	const DEFAULT_ELIGIBLE_MEMBER_ROLES = [ 'author', 'contributor' ];
-
-	/**
 	 * Build the per-subscription joined-at user_meta key.
 	 *
 	 * @param int $subscription_id Subscription ID.
@@ -868,9 +858,13 @@ class Group_Subscription {
 	 * Whether a user may be a member of a group subscription.
 	 *
 	 * This gates new membership grants (adding a member, accepting an invite) and the read path
-	 * (resolving a user's group subscriptions for access). Readers are always eligible; Author and
-	 * Contributor users are eligible by default. Publishers can opt other users in or out via the
-	 * `newspack_group_subscription_member_eligible` filter.
+	 * (resolving a user's group subscriptions for access). Every user is eligible except staff,
+	 * meaning a user with `edit_others_posts`, whatever other roles they hold. The content gate
+	 * lets anyone who can edit a post read it, so staff do not need a seat, while everyone else
+	 * can be restricted by the gate and needs a path to access through a group. A reader is
+	 * eligible whatever their capabilities: reader status is authoritative, and
+	 * `Reader_Activation::is_user_reader()` already excludes administrators and editors.
+	 * Publishers can opt users in or out via the `newspack_group_subscription_member_eligible` filter.
 	 *
 	 * It does not gate removal. `update_members()` removes a member by ID regardless of current
 	 * eligibility, so a member who loses eligibility after being added (e.g. a role change) can
@@ -887,19 +881,7 @@ class Group_Subscription {
 			return false;
 		}
 
-		// Readers keep their existing eligibility.
-		$eligible = Reader_Activation::is_user_reader( $user );
-
-		// Author/Contributor users are eligible by default -- but not a user who also holds
-		// a privileged role (editor, administrator, or any custom role with the same
-		// capability). Staff are meant to be excluded from default eligibility even when
-		// they also carry an Author/Contributor role; without this guard, a multi-role
-		// staff user would slip in through the Author/Contributor fallback. The
-		// newspack_group_subscription_member_eligible filter below still runs regardless,
-		// so a publisher can explicitly opt such a user in.
-		if ( ! $eligible && ! \user_can( $user, 'edit_others_posts' ) ) {
-			$eligible = (bool) array_intersect( (array) $user->roles, self::DEFAULT_ELIGIBLE_MEMBER_ROLES );
-		}
+		$eligible = Reader_Activation::is_user_reader( $user ) || ! \user_can( $user, 'edit_others_posts' );
 
 		/**
 		 * Filters whether a user is eligible to be a member of a group subscription.

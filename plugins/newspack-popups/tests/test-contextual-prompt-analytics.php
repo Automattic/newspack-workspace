@@ -51,6 +51,7 @@ class ContextualPromptAnalyticsTest extends WP_UnitTestCase {
 	public function tear_down() {
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_PATTERN_ID );
 		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_STAMPED_ACCENT );
+		delete_option( Newspack_Popups_Contextual_Prompt_Pattern::OPTION_WRITTEN_CTA );
 		delete_option( Newspack_Popups_Settings::AI_COPY_ASSISTANT_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Settings::OVERRIDE_ENABLED_OPTION );
 		delete_option( Newspack_Popups_Settings::OVERRIDE_CTA_OPTION );

@@ -247,8 +247,8 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Author/Contributor users are eligible group members by default (see
-	 * Group_Subscription::DEFAULT_ELIGIBLE_MEMBER_ROLES) precisely so they have a path
+	 * Non-staff users such as an author are eligible group members (see
+	 * Group_Subscription::is_eligible_member()) precisely so they have a path
 	 * to content gated behind a group they were added to, even though they are neither
 	 * a reader nor the subscription's WooCommerce customer. A non-eligible role (editor)
 	 * added via the same raw member meta must not gain access, which proves the grant
@@ -1014,6 +1014,150 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 		$values = array_column( Access_Rules::get_subscription_products_options(), 'value' );
 
 		$this->assertSame( [ 930 ], $values, 'A draft subscription should be listed; a trashed one should not.' );
+	}
+
+	/**
+	 * A draft or pending product stays selectable but is labeled with its status, so a
+	 * publisher can tell it from the products they sell. Its variations carry the parent's
+	 * marker, since they can't be bought while the parent is unavailable. A private product,
+	 * its (still published) variations, and a private variation under a published parent
+	 * are marked as private but not flagged ineligible, so a hidden legacy tier reads apart
+	 * from a current one without the "still grants access" warning.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_get_subscription_products_options_marks_unpublished_statuses() {
+		$statuses_by_id = [
+			960 => 'publish',
+			961 => 'private',
+			962 => 'draft',
+			963 => 'pending',
+		];
+		foreach ( $statuses_by_id as $id => $status ) {
+			wc_create_mock_product(
+				[
+					'id'     => $id,
+					'type'   => 'subscription',
+					'name'   => ucfirst( $status ) . ' tier',
+					'status' => $status,
+				]
+			);
+		}
+		wc_create_mock_product(
+			[
+				'id'     => 964,
+				'type'   => 'variable-subscription',
+				'name'   => 'Draft membership',
+				'status' => 'draft',
+			]
+		);
+		$variation_id = $this->create_variation_post( 964, 'Draft membership - Annual' );
+		// A disabled (private) variation under a draft parent: the parent's status wins.
+		$draft_private_variation_id = $this->create_variation_post( 964, 'Draft membership - Monthly', '', 'private' );
+		wc_create_mock_product(
+			[
+				'id'   => 965,
+				'type' => 'variable-subscription',
+				'name' => 'Membership',
+			]
+		);
+		$private_variation_id = $this->create_variation_post( 965, 'Membership - Legacy', '', 'private' );
+		wc_create_mock_product(
+			[
+				'id'     => 966,
+				'type'   => 'variable-subscription',
+				'name'   => 'Legacy membership',
+				'status' => 'private',
+			]
+		);
+		$hidden_tier_id = $this->create_variation_post( 966, 'Legacy membership - Annual' );
+
+		$options = array_column( Access_Rules::get_subscription_products_options(), null, 'value' );
+
+		$this->assertSame(
+			[
+				960                         => 'Publish tier',
+				961                         => 'Private tier [status: Private]',
+				962                         => 'Draft tier [invalid status: Draft]',
+				963                         => 'Pending tier [invalid status: Pending]',
+				964                         => 'Draft membership [invalid status: Draft]',
+				$variation_id               => 'Draft membership - Annual [invalid status: Draft]',
+				$draft_private_variation_id => 'Draft membership - Monthly [invalid status: Draft]',
+				965                         => 'Membership',
+				$private_variation_id       => 'Membership - Legacy [status: Private]',
+				966                         => 'Legacy membership [status: Private]',
+				$hidden_tier_id             => 'Legacy membership - Annual [status: Private]',
+			],
+			array_column( $options, 'label', 'value' )
+		);
+		$this->assertSame( [ 962, 963, 964, $variation_id, $draft_private_variation_id ], array_keys( array_filter( array_column( $options, 'ineligible', 'value' ) ) ), 'Only non-eligible products and their variations are flagged.' );
+	}
+
+	/**
+	 * A gate saved while a product was live keeps naming it after the product is
+	 * scheduled or trashed, since the rule still matches subscriptions to it. The rule's
+	 * options carry those products as label-only entries; the list the picker offers, and
+	 * that the CLI audit mirrors, does not.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_rule_options_name_scheduled_and_trashed_products_without_offering_them() {
+		$statuses_by_id = [
+			970 => 'publish',
+			971 => 'future',
+			972 => 'trash',
+		];
+		foreach ( $statuses_by_id as $id => $status ) {
+			wc_create_mock_product(
+				[
+					'id'     => $id,
+					'type'   => 'subscription',
+					'name'   => ucfirst( $status ) . ' tier',
+					'status' => $status,
+				]
+			);
+		}
+
+		$rule_options = array_column( Access_Rules::get_access_rules()['subscription']['options'], null, 'value' );
+
+		$this->assertSame( [ 970 ], array_column( Access_Rules::get_subscription_products_options(), 'value' ), 'The offered list leaves out scheduled and trashed products.' );
+		$this->assertSame( [ 970, 971, 972 ], array_keys( $rule_options ) );
+		$this->assertArrayNotHasKey( 'selectable', $rule_options[970] );
+		$this->assertSame(
+			[
+				'label'      => 'Future tier [invalid status: Scheduled]',
+				'value'      => 971,
+				'ineligible' => true,
+				'selectable' => false,
+			],
+			$rule_options[971]
+		);
+		$this->assertSame( 'Trash tier [invalid status: Trash]', $rule_options[972]['label'] );
+		$this->assertFalse( $rule_options[972]['selectable'] );
+	}
+
+	/**
+	 * WooCommerce trashes a variable subscription's variations along with it, so a gate
+	 * holding one of those variation IDs can only keep its name if the label-only entries
+	 * read trashed variations too.
+	 *
+	 * @group Access_Rules
+	 */
+	public function test_rule_options_name_variations_of_a_trashed_variable_subscription() {
+		wc_create_mock_product(
+			[
+				'id'     => 980,
+				'type'   => 'variable-subscription',
+				'name'   => 'Retired membership',
+				'status' => 'trash',
+			]
+		);
+		$variation_id = $this->create_variation_post( 980, 'Retired membership - Annual', '', 'trash' );
+
+		$rule_options = array_column( Access_Rules::get_access_rules()['subscription']['options'], null, 'value' );
+
+		$this->assertSame( 'Retired membership - Annual [invalid status: Trash]', $rule_options[ $variation_id ]['label'] ?? null );
+		$this->assertFalse( $rule_options[ $variation_id ]['selectable'] );
 	}
 
 	/**

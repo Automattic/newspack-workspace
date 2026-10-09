@@ -9,10 +9,10 @@
 // postcss-import cannot resolve exports maps, and resolving the public
 // specifier through sass/webpack leaks a bogus `wp-theme/design-tokens.css`
 // script dependency into consumers' asset manifests, which silently blocks
-// their enqueues. If upstream moves `src/prebuilt/`, this fails loudly at
+// their enqueues. If upstream moves `prebuilt/`, this fails loudly at
 // build time.
 /* stylelint-disable-next-line no-invalid-position-at-import-rule -- sass @use must precede the CSS @import; postcss-import inlines it at build time. */
-@import "@wordpress/theme/src/prebuilt/css/design-tokens.css";
+@import "@wordpress/theme/prebuilt/css/design-tokens.css";
 
 // Newspack brand mapping: the wpds brand color tokens ship in WordPress
 // blue; remap them onto the Newspack primary scale so every design-system
@@ -51,18 +51,37 @@
 }
 
 .newspack-page__header {
-	/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
 	background: var(--wpds-color-background-surface-neutral-strong);
 	border-block-end: var(--wpds-border-width-xs) solid var(--wpds-color-stroke-surface-neutral-weak);
 	padding: var(--wpds-dimension-padding-lg) var(--wpds-dimension-padding-2xl);
 }
 
+.newspack-page__header-title {
+	min-width: 0;
+}
+
 .newspack-page__header-actions {
+	flex-basis: 100%;
 	flex-shrink: 0;
+	justify-content: flex-end;
+	margin-inline-start: auto;
+
+	@include wp-mixins.break-medium {
+		flex-basis: auto;
+	}
+
+	&:empty,
+	&:has(> :only-child:empty) {
+		display: none;
+	}
+}
+
+.newspack-page__header-badges {
+	flex-shrink: 0;
+	min-height: wp-vars.$button-size;
 }
 
 .newspack-page__header-subtitle {
-	/* stylelint-disable-next-line plugin-wpds/no-unknown-ds-tokens -- the plugin's token list lags the prebuilt design-tokens.css names. */
 	color: var(--wpds-color-foreground-content-neutral-weak);
 	padding-block-end: var(--wpds-dimension-padding-xs);
 }
@@ -70,7 +89,7 @@
 .newspack-page__header-visual {
 	display: grid;
 	flex-shrink: 0;
-	height: 24px;
+	height: wp-vars.$button-size;
 	place-items: center;
 	width: 24px;
 
@@ -82,5 +101,6 @@
 }
 
 .newspack-page__breadcrumbs {
-	min-height: wp-vars.$button-size;
+	min-width: 0;
+	padding-block: calc((#{wp-vars.$button-size} - var(--wpds-typography-line-height-md)) / 2);
 }

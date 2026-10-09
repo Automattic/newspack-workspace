@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import './style.scss';
 import { getSamplePosts } from '../../editor/blocks/posts-inserter/sample-posts';
 import { getTemplateBlocks } from '../../editor/blocks/posts-inserter/utils';
+import { BLOCK_PREVIEW_IFRAME_SELECTOR } from '../../utils/consts';
 
 const POSTS_INSERTER = 'newspack-newsletters/posts-inserter';
 
@@ -112,7 +113,7 @@ const NewsletterPreview = ( { layoutId = null, meta = {}, blocks, ...props } ) =
 
 	// Apply the styles to the iframe editor.
 	const useInlineStyles = () => {
-		const ref = useRef();
+		const ref = useRef( undefined );
 		useEffect( () => {
 			const node = ref.current;
 			if ( ! node ) {
@@ -164,7 +165,7 @@ const NewsletterPreview = ( { layoutId = null, meta = {}, blocks, ...props } ) =
 				iframe.addEventListener( 'load', appendStyle );
 				cleanup = () => iframe.removeEventListener( 'load', appendStyle );
 			};
-			const initial = node.querySelector( 'iframe[title="Editor canvas"]' );
+			const initial = node.querySelector( BLOCK_PREVIEW_IFRAME_SELECTOR );
 			if ( initial ) {
 				attach( initial );
 				return () => {
@@ -174,7 +175,7 @@ const NewsletterPreview = ( { layoutId = null, meta = {}, blocks, ...props } ) =
 				};
 			}
 			const observer = new MutationObserver( () => {
-				const iframe = node.querySelector( 'iframe[title="Editor canvas"]' );
+				const iframe = node.querySelector( BLOCK_PREVIEW_IFRAME_SELECTOR );
 				if ( iframe ) {
 					observer.disconnect();
 					attach( iframe );

@@ -117,6 +117,9 @@ export type GateSummarySection = {
 	key: string;
 	label: string;
 	content: React.ReactNode;
+	// Sections sharing a column stack in the gate card, so a setting that belongs to
+	// another section reads as part of it. The save panel lists each section as a row.
+	column?: string;
 };
 
 /**
@@ -258,6 +261,19 @@ export const getGateSummarySections = (
 				</>
 			),
 		} );
+
+		// Visitors these rules match count as registered, so they belong with Registered Access.
+		const registrationRules = ( gate.registration?.access_rules ?? [] ).flat();
+		if ( gate.registration?.active && registrationRules.length > 0 ) {
+			sections.push( {
+				key: 'registration_institutions',
+				column: 'registration',
+				label: __( 'Institutional Access', 'newspack-plugin' ),
+				content: registrationRules.map( ( rule, index ) => (
+					<p key={ `${ index }-${ rule.slug }` }>{ formatAccessRuleValue( rule, optionsBySlug ) }</p>
+				) ),
+			} );
+		}
 	}
 
 	const showsAccessRules = Boolean( gate.custom_access?.active && gate.custom_access.access_rules.length > 0 );
@@ -303,3 +319,20 @@ export const getGateSummarySections = (
 
 	return sections;
 };
+
+/**
+ * Group summary sections into the gate card's columns. A section naming a `column`
+ * stacks under the section with that key; every other section starts its own.
+ *
+ * @param sections Sections from `getGateSummarySections()`.
+ */
+export const groupSummaryColumns = ( sections: GateSummarySection[] ): GateSummarySection[][] =>
+	sections.reduce< GateSummarySection[][] >( ( columns, section ) => {
+		const home = section.column ? columns.find( column => column[ 0 ].key === section.column ) : undefined;
+		if ( home ) {
+			home.push( section );
+		} else {
+			columns.push( [ section ] );
+		}
+		return columns;
+	}, [] );

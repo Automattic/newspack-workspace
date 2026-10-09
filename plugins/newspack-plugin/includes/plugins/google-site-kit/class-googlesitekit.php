@@ -306,14 +306,12 @@ class GoogleSiteKit {
 		$is_logged_in = 0 < $current_user->ID;
 		$params['is_reader'] = $is_logged_in && Reader_Activation::is_user_reader( $current_user ) ? 'yes' : 'no';
 
-		$reader_data = method_exists( 'Newspack\Reader_Data', 'get_data' ) ? Reader_Data::get_data( $current_user->ID ) : [];
-
 		// If the reader is signed up for any newsletters.
-		$params['is_newsletter_subscriber'] = empty( $reader_data['is_newsletter_subscriber'] ) ? 'no' : 'yes';
-		// If reader has donated.
-		$params['is_donor'] = empty( $reader_data['is_donor'] ) ? 'no' : 'yes';
+		$params['is_newsletter_subscriber'] = Reader_Data::get_bool( $current_user->ID, 'is_newsletter_subscriber' ) ? 'yes' : 'no';
+		// If the reader is a donor. Cancelling a recurring donation makes them a former donor instead.
+		$params['is_donor'] = Reader_Data::get_bool( $current_user->ID, 'is_donor' ) ? 'yes' : 'no';
 		// If reader has any currently active non-donation subscriptions.
-		$params['is_subscriber'] = empty( $reader_data['active_subscriptions'] ) ? 'no' : 'yes';
+		$params['is_subscriber'] = empty( Reader_Data::get_active_subscriptions( $current_user->ID ) ) ? 'no' : 'yes';
 
 		// Content access groups: anonymized identifiers for the user's active group
 		// subscriptions and matching institutions. See get_user_group_labels() for
@@ -370,11 +368,10 @@ class GoogleSiteKit {
 			return $labels;
 		}
 		// Attribution follows group-member eligibility, not reader status: a
-		// non-reader author/contributor who is an eligible group member (by
+		// non-reader who is an eligible group member (any non-staff user by
 		// default, or via the newspack_group_subscription_member_eligible
 		// filter) still gets real gated access and should be attributed for
-		// it. Admins/editors remain non-eligible by default, so they are
-		// still excluded here.
+		// it. Staff are not eligible by default, so they are excluded here.
 		if ( ! Group_Subscription::is_eligible_member( $user ) ) {
 			return $labels;
 		}

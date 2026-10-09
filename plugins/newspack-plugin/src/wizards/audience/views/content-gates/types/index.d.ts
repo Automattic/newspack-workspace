@@ -33,6 +33,8 @@ type AccessRule = {
 	has_options: boolean;
 	empty_grants_access?: boolean;
 	requires_value?: boolean;
+	// Whether the rule can judge a signed-out visitor, and so can let one skip registration.
+	supports_anonymous?: boolean;
 	placeholder?: string;
 	value: GateAccessRuleValue;
 };
@@ -135,6 +137,8 @@ type Registration = {
 	// Optional: the edit UI rebuilds this object without `gate_layout_id`
 	// (see edit/registration.tsx), and the server falls back to the gate ID.
 	gate_layout_id?: number;
+	// Conditions that count a signed-out visitor as registered.
+	access_rules: GateAccessRuleGroup[];
 };
 
 type GateAccessRuleGroup = GateAccessRule[];
@@ -185,6 +189,11 @@ type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
 	feed_restriction_mode: FeedRestrictionMode;
 	newsletter_link_bypass_enabled: boolean;
+	institutional_access_text: string;
+	// 0 leaves commenting to the site's Discussion Settings.
+	comment_restriction_gate_id: number;
+	comment_restriction_message: string;
+	comment_restriction_purchase_url: string;
 };
 
 type GateSettings = {

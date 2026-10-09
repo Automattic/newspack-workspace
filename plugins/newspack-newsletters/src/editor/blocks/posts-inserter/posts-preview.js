@@ -8,6 +8,7 @@ import { Placeholder, Spinner } from '@wordpress/components';
 import { forwardRef } from '@wordpress/element';
 import { pages } from '@wordpress/icons';
 import { useCustomFontsInIframe } from '../../../newsletter-editor/styling';
+import { BLOCK_PREVIEW_IFRAME_SELECTOR } from '../../../utils/consts';
 
 /**
  * External dependencies.
@@ -71,7 +72,7 @@ const PostsPreview = ( { isReady, blocks, className, viewportWidth }, ref ) => {
 	// This fix ensures the iframe is properly styled.
 	const useIframeBorderFix = useRefEffect( node => {
 		const observerCallback = () => {
-			const iframe = node.querySelector( 'iframe[title="Editor canvas"]' );
+			const iframe = node.querySelector( BLOCK_PREVIEW_IFRAME_SELECTOR );
 			if ( iframe ) {
 				const updateIframeStyle = () => {
 					iframe.style.border = 0;
@@ -133,7 +134,7 @@ const PostsPreview = ( { isReady, blocks, className, viewportWidth }, ref ) => {
 			} );
 		};
 		const scan = () => {
-			const iframe = node.querySelector( 'iframe[title="Editor canvas"]' );
+			const iframe = node.querySelector( BLOCK_PREVIEW_IFRAME_SELECTOR );
 			if ( iframe ) {
 				watchIframe( iframe );
 			}

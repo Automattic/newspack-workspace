@@ -146,6 +146,7 @@ class Perfmatters {
 	 */
 	private static function unused_css_excluded_stylesheets() {
 		return [
+			'plugins/newspack-ads', // Newspack Ads; the sticky footer ad never renders if this loads late.
 			'plugins/newspack-blocks', // Newspack Blocks.
 			'plugins/newspack-newsletters', // Newspack Newsletters.
 			'plugins/newspack-plugin', // Newspack main plugin.

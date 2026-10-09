@@ -54,6 +54,8 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$wcs_mock_cart_switches                   = null;
 		$wcs_mock_product_switchable              = null;
 		remove_all_filters( 'newspack_wc_subs_switch_include_signup_fee' );
+		remove_all_filters( 'woocommerce_cart_item_removed_message' );
+		unset( $_GET['pay_for_order'], $GLOBALS['wp']->query_vars['order-pay'] );
 		wp_set_current_user( 0 );
 		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
 		parent::tear_down();
@@ -1436,5 +1438,208 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$this->assertSame( 40, has_action( 'woocommerce_store_api_checkout_order_processed', [ WooCommerce_Subscriptions::class, 'maybe_reactivate_pending_cancel_switch' ] ) );
 		$this->assertSame( 10, has_action( 'woocommerce_order_status_failed', [ WooCommerce_Subscriptions::class, 'maybe_revert_reactivation_on_failed_switch' ] ) );
 		$this->assertSame( 10, has_action( 'woocommerce_order_status_cancelled', [ WooCommerce_Subscriptions::class, 'maybe_revert_reactivation_on_failed_switch' ] ) );
+	}
+
+	/**
+	 * Set up a reader with a pending subscription to a product limited to one
+	 * active subscription, plus the unpaid parent order an admin creates for it.
+	 *
+	 * @param string $order_status Status of the parent order.
+	 *
+	 * @return array{user_id: int, product: WC_Product, order: WC_Order, subscription: WC_Subscription}
+	 */
+	private function create_pending_limited_subscription( $order_status = 'pending' ) {
+		$user_id      = $this->factory->user->create();
+		$product      = wc_create_mock_product(
+			[
+				'id'   => 300,
+				'meta' => [ '_subscription_limit' => 'active' ],
+			]
+		);
+		$order        = wc_create_order(
+			[
+				'customer_id' => $user_id,
+				'status'      => $order_status,
+			]
+		);
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'   => $user_id,
+				'status'        => 'pending',
+				'parent_id'     => $order->get_id(),
+				'products'      => [ $product->get_id() ],
+				'needs_payment' => true,
+			]
+		);
+		return compact( 'user_id', 'product', 'order', 'subscription' );
+	}
+
+	/**
+	 * Simulate the pay-for-order request for an order.
+	 *
+	 * @param WC_Order $order The order being paid.
+	 */
+	private function set_paying_for_order( $order ) {
+		global $wp;
+		$_GET['pay_for_order']       = 'true';
+		$wp->query_vars['order-pay'] = $order->get_id();
+	}
+
+	/**
+	 * Simulate the checkout request that follows: WooCommerce Subscriptions has
+	 * stored the order in the session and the URL no longer names it.
+	 *
+	 * Only callable from `@runInSeparateProcess` tests, because defining WC()
+	 * in the main suite process would flip every later `function_exists( 'WC' )` gate.
+	 *
+	 * @param WC_Order $order The order being paid.
+	 */
+	private function set_order_awaiting_payment_in_session( $order ) {
+		if ( ! $this->isInIsolation() ) {
+			$this->fail( 'set_order_awaiting_payment_in_session() may only be called from @runInSeparateProcess tests.' );
+		}
+		if ( ! function_exists( 'WC' ) ) {
+			/**
+			 * Mock WC() exposing only a session.
+			 *
+			 * @return object
+			 */
+			function WC() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global, isolated to a separate test process.
+				global $newspack_test_wc;
+				return $newspack_test_wc;
+			}
+		}
+		$GLOBALS['newspack_test_wc'] = (object) [
+			'session' => new class( $order->get_id() ) {
+				/**
+				 * Session data.
+				 *
+				 * @var array
+				 */
+				private $data;
+
+				/**
+				 * Constructor.
+				 *
+				 * @param int $order_id Order awaiting payment.
+				 */
+				public function __construct( $order_id ) {
+					$this->data = [ 'order_awaiting_payment' => $order_id ];
+				}
+
+				/**
+				 * Get a session value.
+				 *
+				 * @param string $key Key.
+				 */
+				public function get( $key ) {
+					return $this->data[ $key ] ?? null;
+				}
+			},
+		];
+	}
+
+	/**
+	 * A reader paying for their own pending subscription is not blocked by it.
+	 *
+	 * WooCommerce Subscriptions 9 sets the subscription being paid for aside
+	 * when it evaluates the limit, so our pending-status check has to as well.
+	 */
+	public function test_limit_ignores_pending_subscription_being_paid_for() {
+		$fixture = $this->create_pending_limited_subscription();
+		$this->set_paying_for_order( $fixture['order'] );
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'The subscription being paid for should not count toward the limit.'
+		);
+	}
+
+	/**
+	 * At checkout the order being paid comes from the session, not the URL.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_limit_ignores_pending_subscription_awaiting_payment_in_session() {
+		$fixture = $this->create_pending_limited_subscription();
+		$this->set_order_awaiting_payment_in_session( $fixture['order'] );
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'The subscription on the order in the session should not count toward the limit.'
+		);
+	}
+
+	/**
+	 * Paying for one order does not exempt a different pending subscription.
+	 */
+	public function test_limit_counts_other_pending_subscription_while_paying() {
+		$fixture = $this->create_pending_limited_subscription();
+		wcs_create_subscription(
+			[
+				'customer_id'   => $fixture['user_id'],
+				'status'        => 'pending',
+				'products'      => [ $fixture['product']->get_id() ],
+				'needs_payment' => true,
+			]
+		);
+		$this->set_paying_for_order( $fixture['order'] );
+
+		$this->assertTrue(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'Another pending subscription to the product should still count toward the limit.'
+		);
+	}
+
+	/**
+	 * Outside of paying for an order, a pending subscription still counts.
+	 */
+	public function test_limit_counts_pending_subscription_when_not_paying() {
+		$fixture = $this->create_pending_limited_subscription();
+
+		$this->assertTrue(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'A pending subscription should count toward the limit when no order is being paid.'
+		);
+	}
+
+	/**
+	 * When Subscriptions passes the subscriptions being paid for, those are the ones set aside.
+	 */
+	public function test_limit_ignores_subscriptions_passed_by_subscriptions() {
+		$fixture = $this->create_pending_limited_subscription();
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'], [ $fixture['subscription']->get_id() ] ),
+			'A subscription Subscriptions passes as being paid for should not count toward the limit.'
+		);
+	}
+
+	/**
+	 * A list from Subscriptions is used as given, even an empty one: the fallback lookup
+	 * is only for versions that don't pass the list at all.
+	 */
+	public function test_limit_prefers_empty_list_passed_by_subscriptions_over_fallback() {
+		$fixture = $this->create_pending_limited_subscription();
+		$this->set_paying_for_order( $fixture['order'] );
+
+		$this->assertTrue(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'], [] ),
+			'An empty list from Subscriptions should not fall back to the mirrored lookup.'
+		);
+	}
+
+	/**
+	 * Retrying a failed parent order is paying for it too.
+	 */
+	public function test_limit_ignores_subscription_on_failed_order_being_paid() {
+		$fixture = $this->create_pending_limited_subscription( 'failed' );
+		$this->set_paying_for_order( $fixture['order'] );
+
+		$this->assertFalse(
+			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
+			'The subscription on a failed order being paid should not count toward the limit.'
+		);
 	}
 }
