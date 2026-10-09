@@ -3,6 +3,7 @@
  * Plugin Name: Newspack Story Budget
  * Description: Story budgeting by Newspack.
  * Version: 1.3.5
+ * Requires PHP: 8.1
  * Author: Automattic
  * Author URI: https://newspack.com/
  * License: GPL2

@@ -6,6 +6,7 @@
  * Author:          Automattic
  * License:         GPL2
  * Version:         3.15.3
+ * Requires PHP:    8.1
  *
  * @package         Newspack
  */
