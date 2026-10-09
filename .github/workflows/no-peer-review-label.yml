@@ -18,7 +18,9 @@ jobs:
   label:
     name: Label if merged without peer review
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true
+    if: >-
+      github.repository == 'Automattic/newspack-workspace' &&
+      github.event.pull_request.merged == true
     steps:
       - name: Check reviews and label
         uses: actions/github-script@v7
@@ -36,6 +38,7 @@ jobs:
             // minor/patch bumps are auto-approved, and majors wait for a human.
             const SKIPPED_AUTHORS = [ 'dependabot[bot]' ];
 
+            const { owner, repo } = context.repo;
             const pr = context.payload.pull_request;
             const base = pr.base.ref;
             const head = pr.head.ref;
@@ -55,17 +58,20 @@ jobs:
 
             // Branch promotions (main -> alpha -> release), reverts of them, and
             // release back-merges (sync/*, chore/forward-port-*) only move commits
-            // that were already merged through their own PRs.
+            // that were already merged through their own PRs. They always come from
+            // this repo, so a fork PR from its own main is still audited. A deleted
+            // fork reports no head repo and is audited too.
+            const fromThisRepo = pr.head.repo?.full_name === `${ owner }/${ repo }`;
             const isPromotion =
-              AUDITED_BASES.includes( head ) ||
-              /^revert-\d+-(main|alpha|release)$/.test( head ) ||
-              /^(sync\/|chore\/forward-port-)/.test( head );
+              fromThisRepo &&
+              ( AUDITED_BASES.includes( head ) ||
+                /^revert-\d+-(main|alpha|release)$/.test( head ) ||
+                /^(sync\/|chore\/forward-port-)/.test( head ) );
             if ( isPromotion ) {
               core.info( `${ head } -> ${ base } is a promotion or sync; skipping.` );
               return;
             }
 
-            const { owner, repo } = context.repo;
             const reviews = await github.paginate(
               github.rest.pulls.listReviews,
               { owner, repo, pull_number: pr.number }
