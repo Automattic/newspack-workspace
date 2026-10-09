@@ -140,7 +140,7 @@
 // ─── Scrim ──────────────────────────────────────────────────────────────────────
 
 .comments-panel__scrim {
-	background: var(--wp--custom--color--overlay-70);
+	background: var(--wp--custom--color--overlay-70, var(--newspack-ui-color-overlay-70, #{colors.$overlay-700}));
 	cursor: pointer;
 	inset: 0;
 	margin: 0 !important;
