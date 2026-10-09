@@ -623,16 +623,26 @@ function process_form() {
 		}
 	}
 
-	$result = \Newspack_Newsletters_Contacts::subscribe(
-		[
-			'name'     => $name ?? null,
-			'email'    => $email,
-			'metadata' => $metadata,
-		],
-		$lists,
-		true, // Async.
-		'User subscribed via Newsletters Subscription block'
-	);
+	$contact = [
+		'name'     => $name ?? null,
+		'email'    => $email,
+		'metadata' => $metadata,
+	];
+
+	// The write path leaves out lists this address may not join. When none would
+	// remain, make no subscribe call and send the usual success response.
+	$provider_name = $provider ? $provider->service : '';
+	$has_open_list = ! empty( \apply_filters( 'newspack_newsletters_contact_lists', $lists, $contact, $provider_name ) );
+	if ( $has_open_list ) {
+		$result = \Newspack_Newsletters_Contacts::subscribe(
+			$contact,
+			$lists,
+			true, // Async.
+			'User subscribed via Newsletters Subscription block'
+		);
+	} else {
+		$result = new \WP_Error( 'newspack_newsletters_no_open_lists', 'None of the requested lists is open to this address.' );
+	}
 
 	/**
 	 * Fires after subscribing a user to a list.
@@ -642,6 +652,10 @@ function process_form() {
 	 * @param array               $metadata Some metadata about the subscription. Always contains `current_page_url`, `newspack_popup_id` and `newsletters_subscription_method` keys.
 	 */
 	\do_action( 'newspack_newsletters_subscribe_form_processed', $email, $result, $metadata );
+
+	if ( ! $has_open_list ) {
+		$result = true;
+	}
 
 	// The async subscription strategy returns true.
 	if ( true === $result ) {

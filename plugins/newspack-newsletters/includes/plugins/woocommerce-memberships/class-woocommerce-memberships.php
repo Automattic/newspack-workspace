@@ -59,7 +59,10 @@ class Woocommerce_Memberships {
 	 * Initialize the hooks after all plugins are loaded
 	 */
 	public static function init_hooks() {
-		add_filter( 'newspack_newsletters_contact_lists', [ __CLASS__, 'filter_lists' ] );
+		// Two arguments, so the gate sees the contact being written. The priority
+		// stays at the default: the membership sync CLI removes this callback by
+		// name at that priority.
+		add_filter( 'newspack_newsletters_contact_lists', [ __CLASS__, 'filter_lists' ], 10, 2 );
 		add_filter( 'newspack_newsletters_subscription_block_available_lists', [ __CLASS__, 'filter_lists' ] );
 		add_filter( 'newspack_newsletters_manage_newsletters_available_lists', [ __CLASS__, 'filter_lists_objects' ] );
 		add_filter( 'newspack_post_registration_newsletters_lists', [ __CLASS__, 'filter_lists_objects' ], 10, 2 );
@@ -86,17 +89,28 @@ class Woocommerce_Memberships {
 	 * Keep users from being added to lists that require a membership plan they dont have
 	 * Also filters lists that require a membership plan to be displayed in the subscription block and in the Manage Newsletters page in My Account
 	 *
-	 * @param array  $lists         The List IDs.
-	 * @param string $email_address The email address of the user to check against. Optional.
+	 * @param array        $lists         The List IDs.
+	 * @param string|array $email_address The email address of the user to check against, or the
+	 *                                    contact array `newspack_newsletters_contact_lists` passes.
+	 *                                    Optional. A string that is not a valid address falls back
+	 *                                    to the current user; a contact without one is treated as
+	 *                                    having no membership.
 	 * @return array
 	 */
 	public static function filter_lists( $lists, $email_address = '' ) {
 		if ( ! self::is_enabled() || ! is_array( $lists ) || empty( $lists ) ) {
 			return $lists;
 		}
+		// A contact is being written, so whoever is logged in is never the one to check,
+		// and neither is a member a membership activation left in scope earlier in the
+		// request.
+		$is_contact = is_array( $email_address );
+		if ( $is_contact ) {
+			$email_address = isset( $email_address['email'] ) && is_string( $email_address['email'] ) ? $email_address['email'] : '';
+		}
 		$lists = array_filter(
 			$lists,
-			function ( $list ) use ( $email_address ) {
+			function ( $list ) use ( $email_address, $is_contact ) {
 				$list_object = Subscription_List::from_public_id( $list );
 				if ( ! $list_object ) {
 					return false;
@@ -108,12 +122,14 @@ class Woocommerce_Memberships {
 					return true;
 				}
 
-				$user_id = self::$user_id_in_scope;
+				$user_id = $is_contact ? 0 : self::$user_id_in_scope;
 				if ( ! $user_id ) {
 					if ( is_email( $email_address ) ) {
-						$user_id = get_user_by( 'email', $email_address )->ID;
+						// An address with no account holds no membership.
+						$user    = get_user_by( 'email', $email_address );
+						$user_id = $user ? $user->ID : 0;
 					} else {
-						$user_id = get_current_user_id();
+						$user_id = $is_contact ? 0 : get_current_user_id();
 					}
 				}
 
