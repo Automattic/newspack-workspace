@@ -1,0 +1,122 @@
+name: Label PRs merged without peer review
+
+# Tags a PR merged into main, alpha or release with `no-peer-review` when no
+# teammate other than its author approved it, so those merges can be audited
+# later.
+#
+# pull_request_target (not pull_request) so fork PRs get a writable token. This
+# is safe because the job never checks out or runs the PR's code; it only reads
+# the PR's reviews through the API.
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    name: Label if merged without peer review
+    runs-on: ubuntu-latest
+    if: >-
+      github.repository == 'Automattic/newspack-workspace' &&
+      github.event.pull_request.merged == true
+    steps:
+      - name: Check reviews and label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const LABEL = 'no-peer-review';
+            const AUDITED_BASES = [ 'main', 'alpha', 'release' ];
+
+            // Accounts whose approvals are automated even though GitHub reports
+            // them as users. matticbot holds the GH_TOKEN that auto-merge.yml uses
+            // to approve Dependabot PRs.
+            const MACHINE_REVIEWERS = [ 'matticbot' ];
+
+            // Authors left out of this audit by decision. Dependabot's minor and
+            // patch bumps are auto-approved by auto-merge.yml.
+            const SKIPPED_AUTHORS = [ 'dependabot[bot]' ];
+
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const base = pr.base.ref;
+            const head = pr.head.ref;
+            const author = pr.user.login;
+
+            // Stacked and epic PRs into feature branches are reviewed when the
+            // branch itself lands on main.
+            if ( ! AUDITED_BASES.includes( base ) ) {
+              core.info( `Base ${ base } is not audited; skipping.` );
+              return;
+            }
+
+            if ( SKIPPED_AUTHORS.includes( author ) ) {
+              core.info( `Author ${ author } is skipped.` );
+              return;
+            }
+
+            // Branch promotions (main -> alpha -> release), reverts of them, and
+            // release back-merges (sync/*, chore/forward-port-*) only move commits
+            // that were already merged through their own PRs. They always come from
+            // this repo, so a fork PR from its own main is still audited. A deleted
+            // fork reports no head repo and is audited too.
+            const fromThisRepo = pr.head.repo?.full_name === `${ owner }/${ repo }`;
+            const isPromotion =
+              fromThisRepo &&
+              ( AUDITED_BASES.includes( head ) ||
+                /^revert-\d+-(main|alpha|release)$/.test( head ) ||
+                /^(sync\/|chore\/forward-port-)/.test( head ) );
+            if ( isPromotion ) {
+              core.info( `${ head } -> ${ base } is a promotion or sync; skipping.` );
+              return;
+            }
+
+            const reviews = await github.paginate(
+              github.rest.pulls.listReviews,
+              { owner, repo, pull_number: pr.number }
+            );
+
+            // Only each reviewer's latest decision counts, so an approval later
+            // followed by changes requested doesn't clear the label. listReviews
+            // returns reviews oldest first, and a dismissed approval reports
+            // DISMISSED.
+            const latestDecision = new Map();
+            for ( const review of reviews ) {
+              if (
+                ! review.user ||
+                review.user.type !== 'User' ||
+                review.user.login === author ||
+                MACHINE_REVIEWERS.includes( review.user.login )
+              ) {
+                continue;
+              }
+              if ( [ 'APPROVED', 'CHANGES_REQUESTED', 'DISMISSED' ].includes( review.state ) ) {
+                latestDecision.set( review.user.login, review.state );
+              }
+            }
+
+            // The repo is public, so anyone can approve; a peer has write access.
+            // author_association can't tell: GITHUB_TOKEN sees private org members
+            // as CONTRIBUTOR.
+            let peerApproved = false;
+            for ( const [ username, state ] of latestDecision ) {
+              if ( state !== 'APPROVED' ) continue;
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel(
+                { owner, repo, username }
+              );
+              if ( [ 'admin', 'write' ].includes( data.permission ) ) {
+                peerApproved = true;
+                break;
+              }
+            }
+            if ( peerApproved ) {
+              core.info( 'Approved by a peer; nothing to label.' );
+              return;
+            }
+
+            await github.rest.issues.addLabels(
+              { owner, repo, issue_number: pr.number, labels: [ LABEL ] }
+            );
+            core.info( `Labeled #${ pr.number } ${ LABEL }.` );
