@@ -66,9 +66,8 @@ bin/install-wp-tests.sh "$TEST_DB_NAME" root $MYSQL_ROOT_PASSWORD $MYSQL_HOST la
 # `n` sets NEWSPACK_TEST_OUTPUT=compact when it runs under a coding agent. The
 # agent then gets a short summary built from the JUnit log instead of PHPUnit's
 # full output, which goes to logs/test-php/ under the workspace root. The
-# summary always names the project path, test database and test count: a bare
-# PASS would hide a run against the wrong checkout or a filter that matched
-# nothing.
+# summary always names what ran (see bin/test-php-summary.php): a bare PASS
+# would hide a run against the wrong checkout or a filter that matched nothing.
 # PHPUnit's listing and help modes run no tests and write no JUnit log, so their
 # output is the answer and passes through whole. A caller's own --log-junit
 # replaces the report the summary reads, so that run passes through too.

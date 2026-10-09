@@ -55,19 +55,17 @@ cat > "$WORK/pass.xml" <<'XML'
 <testsuites><testsuite name="demo" tests="3" assertions="5" errors="0" warnings="0" failures="0" skipped="1" time="0.2"><testcase name="test_a" class="Demo_Test"/></testsuite></testsuites>
 XML
 php_summary "$WORK/pass.xml" 0
-expect "php: a clean run is PASS with its counts" '^result:  PASS - 3 tests, 5 assertions' "$WORK/out"
+expect "php: a clean run is PASS with its counts" '^result:  PASS - 3 tests, 5 assertions, 1 skipped, 0\.2s$' "$WORK/out"
 expect "php: names the code under test" '^code:    main@abc1234 \(plugins/newspack-demo\)$' "$WORK/out"
 expect "php: a pass shows its arguments" '^args:    --filter x$' "$WORK/out"
 reject "php: a pass leaves out the project, test db and log lines" '^(project|test db|full log):' "$WORK/out"
-php "$BIN/test-php-summary.php" "$WORK/fail.xml" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
-expect "php: without a host root the log path is relative to the monorepo" '^full log: logs/test-php/demo.log$' "$WORK/out"
 
-php_summary_rooted() { # the log as test-php.sh names it, under /newspack-monorepo
-	NEWSPACK_HOST_ROOT=/Users/dev/newspack-workspace php "$BIN/test-php-summary.php" "$1" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
-}
-php_summary_rooted "$WORK/fail.xml"
-expect "php: the full log path is a host path under the main checkout" '^full log: /Users/dev/newspack-workspace/logs/test-php/demo.log$' "$WORK/out"
+php "$BIN/test-php-summary.php" "$WORK/pass.xml" "$WORK/php.log" /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
+expect "php: a pass with no arguments still reports" '^result:  PASS - 3 tests' "$WORK/out"
+reject "php: and prints no args line" '^args:' "$WORK/out"
 
+NEWSPACK_TEST_CODE='' php "$BIN/test-php-summary.php" "$WORK/pass.xml" "$WORK/php.log" /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
+expect "php: a pass with the checkout unknown names the project" '^project: /newspack-plugins/newspack-demo$' "$WORK/out"
 cat > "$WORK/fail.xml" <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites><testsuite name="demo" tests="2" assertions="1" errors="1" warnings="0" failures="1" skipped="0" time="0.1">
@@ -79,6 +77,15 @@ RuntimeException: planted error
 /tests/test-demo.php:4</error></testcase>
 </testsuite></testsuites>
 XML
+php "$BIN/test-php-summary.php" "$WORK/fail.xml" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
+expect "php: without a host root the log path is relative to the monorepo" '^full log: logs/test-php/demo.log$' "$WORK/out"
+
+php_summary_rooted() { # the log as test-php.sh names it, under /newspack-monorepo
+	NEWSPACK_HOST_ROOT=/Users/dev/newspack-workspace php "$BIN/test-php-summary.php" "$1" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
+}
+php_summary_rooted "$WORK/fail.xml"
+expect "php: the full log path is a host path under the main checkout" '^full log: /Users/dev/newspack-workspace/logs/test-php/demo.log$' "$WORK/out"
+
 php_summary "$WORK/fail.xml" 2
 expect "php: failures make FAIL" '^result:  FAIL - 2 tests' "$WORK/out"
 expect "php: lists a failure by test id" '^- failure: Demo_Test::test_fails$' "$WORK/out"

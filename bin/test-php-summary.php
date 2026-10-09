@@ -4,10 +4,12 @@
  *
  * Usage: php test-php-summary.php <junit.xml> <full-log> <project-dir> <test-db> <exit-code> [phpunit args...]
  *
- * The summary always names what ran (project path, test database, arguments,
- * test count), because a bare pass/fail verdict hides the cases where the wrong
- * code or no code was tested. Failures are listed with a trimmed message; the
- * full output stays in <full-log>.
+ * Every summary names what ran, because a bare pass/fail verdict hides the cases
+ * where the wrong code or no code was tested. A clean pass names the checkout
+ * under test (or the project path when the checkout is unknown), the test count
+ * and any arguments; any other verdict adds the project path, test database and
+ * full-log path. Failures are listed with a trimmed message; the full output
+ * stays in <full-log>.
  */
 
 list( , $junit, $log, $project, $db, $exit ) = array_pad( $argv, 6, '' );
@@ -69,6 +71,9 @@ if ( 'PASS' === $verdict ) {
 	$extra = ( $skipped ? ", $skipped skipped" : '' ) . ( $warnings ? ", $warnings warnings" : '' );
 	printf( "result:  PASS - %d tests, %d assertions%s, %.1fs\n", $tests, (int) $suite['assertions'], $extra, (float) $suite['time'] );
 	echo "code:    $code\n";
+	if ( 'unknown' === $code ) {
+		echo "project: $project\n";
+	}
 	if ( '' !== $args ) {
 		echo "args:    $args\n";
 	}

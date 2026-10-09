@@ -69,12 +69,8 @@ if [ -z "$TESTS_LINE" ]; then
     exit 0
 fi
 
-if [ "$STATUS" = "0" ] && ! grep -q 'failed' <<< "$TESTS_LINE"; then
-    VERDICT=PASS
-else
-    VERDICT=FAIL
-fi
-echo "result:  $VERDICT (exit $STATUS)"
+# A clean pass exited above, so whatever reaches here failed.
+echo "result:  FAIL (exit $STATUS)"
 echo "  $SUITES_LINE"
 echo "  $TESTS_LINE"
 
