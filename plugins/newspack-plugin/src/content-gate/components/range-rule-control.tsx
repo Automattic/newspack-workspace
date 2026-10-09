@@ -26,9 +26,9 @@ import { type AccessRuleShape, getRangeRuleValueNotice, normalizeRangeValue, typ
 import './range-rule-control.scss';
 
 /**
- * How long a notice has to stand before it is announced, in milliseconds. Typing a
- * range passes through states that are briefly wrong: a maximum of 1 on the way to
- * 100 reads as inverted against a minimum of 50.
+ * How long typing has to pause before the notice it left is announced, in
+ * milliseconds. Typing a range passes through states that are briefly wrong: a
+ * maximum of 1 on the way to 100 reads as inverted against a minimum of 50.
  */
 export const ANNOUNCE_DELAY = 1000;
 

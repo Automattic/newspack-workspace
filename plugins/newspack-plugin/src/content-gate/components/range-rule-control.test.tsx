@@ -87,6 +87,25 @@ describe( 'RangeRuleControl', () => {
 
 			expect( speak ).not.toHaveBeenCalled();
 		} );
+
+		it( 'speaks a notice once while it holds, and again if it returns after being fixed', () => {
+			const inverted = ( max: string ) => <RangeRuleControl config={ CONFIG } value={ { min: 5000, max } } onChange={ jest.fn() } />;
+			const { rerender } = render( <RangeRuleControl config={ CONFIG } value={ { min: 5000 } } onChange={ jest.fn() } /> );
+
+			rerender( inverted( '1' ) );
+			act( () => jest.advanceTimersByTime( ANNOUNCE_DELAY ) );
+			// More digits that keep it inverted, after a pause: already said.
+			rerender( inverted( '12' ) );
+			act( () => jest.advanceTimersByTime( ANNOUNCE_DELAY ) );
+			expect( speak ).toHaveBeenCalledTimes( 1 );
+
+			// Fixed, then broken again: news again.
+			rerender( inverted( '6000' ) );
+			act( () => jest.advanceTimersByTime( ANNOUNCE_DELAY ) );
+			rerender( inverted( '60' ) );
+			act( () => jest.advanceTimersByTime( ANNOUNCE_DELAY ) );
+			expect( speak ).toHaveBeenCalledTimes( 2 );
+		} );
 	} );
 
 	it( 'keeps the same inputs while the notice comes and goes, so typing is not cut off', () => {

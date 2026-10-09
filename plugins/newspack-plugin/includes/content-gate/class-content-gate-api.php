@@ -338,8 +338,9 @@ class Content_Gate_API {
 	 * Every shape a rule can take carries the same meaning when empty: an
 	 * options-backed rule selects nothing with `[]`, a free-text one with `''`,
 	 * a range sets no bound with `[]`, and a stored rule can be missing its
-	 * value altogether. Each says the rule names no condition. Which way it then evaluates is the rule's own
-	 * business, and `empty_grants_access` is where each rule states it.
+	 * value altogether. Each says the rule names no condition. Which way it then
+	 * evaluates is the rule's own business, and `empty_grants_access` is where
+	 * each rule states it.
 	 *
 	 * @param mixed $value The rule's value.
 	 *
@@ -418,20 +419,22 @@ class Content_Gate_API {
 		if ( ! $leaves_rules_unenforced || 'empty_access_rule_value' !== $error->get_error_code() ) {
 			return $error;
 		}
-		$error_data = $error->get_error_data();
-		$rule_name  = $error_data['rule_name'] ?? '';
-		if ( empty( $error_data['empty_grants_access'] ) && ! empty( $error_data['is_range'] ) ) {
-			/* translators: %s: the access rule's name. */
-			$message = __( 'The “%s” access rule has no minimum or maximum, so it matches no reader. Set a minimum, a maximum, or both, or remove it before this gate is active again.', 'newspack-plugin' );
-		} elseif ( empty( $error_data['empty_grants_access'] ) ) {
-			/* translators: %s: the access rule's name, e.g. "Institutional access". */
-			$message = __( 'The “%s” access rule is empty, so it matches no reader. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
-		} elseif ( ! empty( $error_data['is_range'] ) ) {
-			/* translators: %s: the access rule's name, e.g. a promoted number field. */
-			$message = __( 'The “%s” access rule has no minimum or maximum, so it grants access to every reader with a number in that field. Set a minimum, a maximum, or both, or remove it before this gate is active again.', 'newspack-plugin' );
+		$error_data    = $error->get_error_data();
+		$rule_name     = $error_data['rule_name'] ?? '';
+		$grants_access = ! empty( $error_data['empty_grants_access'] );
+		$is_range      = ! empty( $error_data['is_range'] );
+		if ( $is_range ) {
+			$message = $grants_access
+				/* translators: %s: the access rule's name, e.g. a promoted number field. */
+				? __( 'The “%s” access rule has no minimum or maximum, so it grants access to every reader with a number in that field. Set a minimum, a maximum, or both, or remove it before this gate is active again.', 'newspack-plugin' )
+				/* translators: %s: the access rule's name. */
+				: __( 'The “%s” access rule has no minimum or maximum, so it matches no reader. Set a minimum, a maximum, or both, or remove it before this gate is active again.', 'newspack-plugin' );
 		} else {
-			/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
-			$message = __( 'The “%s” access rule is empty, so it grants access to everyone. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
+			$message = $grants_access
+				/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
+				? __( 'The “%s” access rule is empty, so it grants access to everyone. Give it a value or remove it before this gate is active again.', 'newspack-plugin' )
+				/* translators: %s: the access rule's name, e.g. "Institutional access". */
+				: __( 'The “%s” access rule is empty, so it matches no reader. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
 		}
 		return new \WP_Error(
 			'empty_access_rule_value',
@@ -439,8 +442,8 @@ class Content_Gate_API {
 			[
 				'status'              => 400,
 				'rule_name'           => $rule_name,
-				'empty_grants_access' => ! empty( $error_data['empty_grants_access'] ),
-				'is_range'            => ! empty( $error_data['is_range'] ),
+				'empty_grants_access' => $grants_access,
+				'is_range'            => $is_range,
 			]
 		);
 	}
