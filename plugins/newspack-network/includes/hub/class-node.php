@@ -84,6 +84,34 @@ class Node {
 	}
 
 	/**
+	 * Returns when the Node was recorded as linked.
+	 *
+	 * @return int Unix timestamp, or 0 if it has not been.
+	 */
+	public function get_paired_at() {
+		return (int) get_post_meta( $this->get_id(), 'paired-at', true );
+	}
+
+	/**
+	 * Whether the Node has been recorded as linked.
+	 *
+	 * @return bool
+	 */
+	public function is_paired() {
+		return $this->get_paired_at() > 0;
+	}
+
+	/**
+	 * Records that the Node was given its key through the connect link, or
+	 * sent a delivery or a pull request signed with it.
+	 *
+	 * @return void
+	 */
+	public function mark_paired() {
+		update_post_meta( $this->get_id(), 'paired-at', time() );
+	}
+
+	/**
 	 * Returns the Node's Authorization Header to be used in REST request to it
 	 *
 	 * @param int $endpoint_id The ID of the endpoint to be accessed. IDs are defined in Newspack_Network\Rest_Authentication.

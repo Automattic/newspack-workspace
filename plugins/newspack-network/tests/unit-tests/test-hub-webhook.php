@@ -52,6 +52,13 @@ class TestHubWebhook extends \WP_UnitTestCase {
 	private $secret_key;
 
 	/**
+	 * The fixture Node's post ID.
+	 *
+	 * @var int
+	 */
+	private $node_id;
+
+	/**
 	 * Create the custom tables once, before the per-test transaction.
 	 *
 	 * Both the used-nonce store and the event log create their table lazily via
@@ -74,15 +81,15 @@ class TestHubWebhook extends \WP_UnitTestCase {
 
 		$this->secret_key = Crypto::generate_secret_key();
 
-		$node_id = self::factory()->post->create(
+		$this->node_id = self::factory()->post->create(
 			[
 				'post_type'   => Nodes::POST_TYPE_SLUG,
 				'post_title'  => 'Sync Node',
 				'post_status' => 'publish',
 			]
 		);
-		update_post_meta( $node_id, 'node-url', self::NODE_URL );
-		update_post_meta( $node_id, 'secret-key', $this->secret_key );
+		update_post_meta( $this->node_id, 'node-url', self::NODE_URL );
+		update_post_meta( $this->node_id, 'secret-key', $this->secret_key );
 	}
 
 	/**
@@ -428,5 +435,145 @@ class TestHubWebhook extends \WP_UnitTestCase {
 		remove_filter( 'query', $break_insert );
 
 		$this->assertNull( $result, 'A claim that could not be recorded reports no state, so the caller retries rather than guesses.' );
+	}
+
+	/**
+	 * Set the fixture Node's author, deliver events from it, and collect what
+	 * was reported through newspack_log about the Node's origin.
+	 *
+	 * @param int $author_id  The user to record as the Node's author.
+	 * @param int $deliveries How many distinct deliveries to send.
+	 * @return array{0: \WP_REST_Response, 1: array} The last response and the matching log entries.
+	 */
+	private function deliver_from_node_authored_by( $author_id, $deliveries = 1 ) {
+		wp_update_post(
+			[
+				'ID'          => $this->node_id,
+				'post_author' => $author_id,
+			]
+		);
+
+		$logged  = [];
+		$capture = function ( $code, $message, $params ) use ( &$logged ) {
+			if ( 'newspack_network_node_origin' === $code ) {
+				$logged[] = [ $message, $params ];
+			}
+		};
+		add_action( 'newspack_log', $capture, 10, 3 );
+
+		$timestamp = time();
+		for ( $i = 0; $i < $deliveries; $i++ ) {
+			// Distinct timestamps, so the Event Log records each delivery.
+			$response = Webhook::handle_webhook( $this->build_request( $timestamp + $i * HOUR_IN_SECONDS, Crypto::generate_nonce(), $this->probe_payload() ) );
+		}
+
+		remove_action( 'newspack_log', $capture, 10 );
+
+		return [ $response, $logged ];
+	}
+
+	/**
+	 * An event from a Node whose author is not currently an administrator (here,
+	 * an editor) is processed as before, and one line is logged naming the Node.
+	 */
+	public function test_event_from_node_whose_author_is_not_currently_administrator_is_processed_and_logged() {
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+
+		list( $response, $logged ) = $this->deliver_from_node_authored_by( $editor_id );
+
+		$this->assertSame( 200, $response->get_status(), 'The event is processed as before.' );
+		$this->assertSame( 1, $this->event_log_count(), 'The event is persisted as before.' );
+		$this->assertCount( 1, $logged, 'One line is logged for the Node.' );
+		$this->assertStringContainsString( (string) $this->node_id, $logged[0][0] );
+		$this->assertStringContainsString( self::NODE_URL, $logged[0][0] );
+		$this->assertSame( 'warning', $logged[0][1]['type'] );
+		$this->assertStringContainsString( 'has no author who is currently an administrator', $logged[0][0] );
+	}
+
+	/**
+	 * A Node with no recorded author is logged the same way.
+	 */
+	public function test_event_from_node_without_author_is_processed_and_logged() {
+		list( $response, $logged ) = $this->deliver_from_node_authored_by( 0 );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $this->event_log_count() );
+		$this->assertCount( 1, $logged );
+	}
+
+	/**
+	 * An event from a Node whose author is currently an administrator logs nothing.
+	 */
+	public function test_event_from_node_whose_author_is_currently_administrator_is_not_logged() {
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+
+		list( $response, $logged ) = $this->deliver_from_node_authored_by( $admin_id );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 1, $this->event_log_count() );
+		$this->assertCount( 0, $logged );
+	}
+
+	/**
+	 * A later delivery from the same Node that day is processed but not logged
+	 * again.
+	 */
+	public function test_node_origin_is_not_logged_again_the_same_day() {
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+
+		list( $response, $logged ) = $this->deliver_from_node_authored_by( $editor_id, 2 );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 2, $this->event_log_count(), 'Both deliveries are processed.' );
+		$this->assertCount( 1, $logged, 'The Node is logged once.' );
+	}
+
+	/**
+	 * A newspack_log listener that throws does not change how the delivery is
+	 * handled.
+	 */
+	public function test_throwing_log_listener_does_not_change_delivery_handling() {
+		$throw = function ( $code ) {
+			if ( 'newspack_network_node_origin' === $code ) {
+				throw new \RuntimeException( 'Listener failed.' );
+			}
+		};
+		add_action( 'newspack_log', $throw, 5 );
+
+		list( $response ) = $this->deliver_from_node_authored_by( 0 );
+
+		remove_action( 'newspack_log', $throw, 5 );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'success', $response->get_data() );
+		$this->assertSame( 1, $this->event_log_count(), 'The event is processed.' );
+	}
+
+	/**
+	 * A verified delivery from a Node with no pairing on record records one, so
+	 * a Node linked by pasting its key stops showing the key once it delivers.
+	 */
+	public function test_verified_delivery_records_pairing() {
+		$this->assertSame( '', get_post_meta( $this->node_id, 'paired-at', true ) );
+
+		$before   = time();
+		$response = Webhook::handle_webhook( $this->build_request( time(), Crypto::generate_nonce(), $this->probe_payload() ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertGreaterThanOrEqual( $before, (int) get_post_meta( $this->node_id, 'paired-at', true ) );
+	}
+
+	/**
+	 * A delivery that fails the signature check records no pairing.
+	 */
+	public function test_unverified_delivery_does_not_record_pairing() {
+		$nonce   = Crypto::generate_nonce();
+		$request = $this->build_request( time(), $nonce, $this->probe_payload() );
+		$request->set_param( 'data', Crypto::encrypt_message( $this->probe_payload(), Crypto::generate_secret_key(), $nonce ) );
+
+		$response = Webhook::handle_webhook( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( '', get_post_meta( $this->node_id, 'paired-at', true ) );
 	}
 }
