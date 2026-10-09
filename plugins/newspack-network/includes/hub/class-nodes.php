@@ -167,6 +167,7 @@ class Nodes {
 			'show_in_menu'         => Network_Admin::PAGE_SLUG,
 			'can_export'           => false,
 			'capabilities'         => $capabilities,
+			'map_meta_cap'         => false,
 			'show_in_rest'         => false,
 			'delete_with_user'     => false,
 			'register_meta_box_cb' => [ __CLASS__, 'add_metabox' ],
