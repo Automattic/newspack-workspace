@@ -32,6 +32,11 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 	const ANONYMOUS_RULE = 'member_body_class_anonymous_rule';
 
 	/**
+	 * Slug of an access rule whose blank value grants access, as email domain and reader data do.
+	 */
+	const GRANT_ON_BLANK_RULE = 'member_body_class_grant_on_blank_rule';
+
+	/**
 	 * User IDs the test rule admits.
 	 *
 	 * @var int[]
@@ -90,6 +95,18 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 					'callback'           => function() {
 						++self::$evaluations;
 						return true;
+					},
+				]
+			);
+		}
+		if ( ! isset( Access_Rules::get_registered_rules()[ self::GRANT_ON_BLANK_RULE ] ) ) {
+			Access_Rules::register_rule(
+				[
+					'id'                  => self::GRANT_ON_BLANK_RULE,
+					'name'                => 'Member body class grant-on-blank test rule',
+					'empty_grants_access' => true,
+					'callback'            => function( $user_id, $value ) {
+						return '' === $value || in_array( (int) $user_id, self::$admitted, true );
 					},
 				]
 			);
@@ -217,22 +234,13 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An empty rule set admits everyone, so it must not mark every reader a member.
-	 */
-	public function test_ignores_gate_with_no_access_rules() {
-		$this->make_gate( [ 'access_rules' => [] ] );
-		wp_set_current_user( $this->reader_id );
-
-		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes() );
-	}
-
-	/**
 	 * Rule groups that pass every signed-in reader without checking anything.
 	 *
 	 * @return array[]
 	 */
 	public function data_rule_groups_that_admit_every_reader() {
 		return [
+			'no rules at all'                   => [ [] ],
 			'a rule the site does not register' => [
 				[
 					[
@@ -271,6 +279,29 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 		wp_set_current_user( $this->reader_id );
 
 		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes() );
+	}
+
+	/**
+	 * Only a blank value is dropped: a filled-in rule whose blank value would grant access
+	 * still decides, so readers admitted by an email domain or reader data keep the class.
+	 */
+	public function test_counts_filled_in_rule_whose_blank_value_grants_access() {
+		$this->make_gate(
+			[
+				'access_rules' => [
+					[
+						[
+							'slug'  => self::GRANT_ON_BLANK_RULE,
+							'value' => 'x',
+						],
+					],
+				],
+			]
+		);
+		self::$admitted = [ $this->reader_id ];
+		wp_set_current_user( $this->reader_id );
+
+		$this->assertContains( self::MEMBER_CLASS, $this->body_classes() );
 	}
 
 	/**
