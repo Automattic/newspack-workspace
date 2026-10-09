@@ -17,7 +17,7 @@
 /**
  * External dependencies
  */
-import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor, cleanup } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -197,5 +197,19 @@ describe( 'the invite link', () => {
 		await act( async () => {} );
 		// Snackbar renders its message twice (visible copy plus the live region).
 		expect( screen.getAllByText( /could not be copied/ ).length ).toBeGreaterThan( 0 );
+	} );
+} );
+
+describe( 'change owner', () => {
+	// The owner holds billing: a group renewing from their payment method would go
+	// on charging them for someone else's group, so the endpoint 409s and the
+	// screen does not offer it.
+	it( 'is offered only while no payment method renews the group', async () => {
+		await renderDetail( group( { ownerChangeable: true } ) );
+		expect( screen.queryByRole( 'button', { name: 'Change owner' } ) ).not.toBeNull();
+
+		cleanup();
+		await renderDetail( group( { ownerChangeable: false } ) );
+		expect( screen.queryByRole( 'button', { name: 'Change owner' } ) ).toBeNull();
 	} );
 } );

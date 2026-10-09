@@ -1012,6 +1012,24 @@ class WC_Order {
 		// customer must read the same way when another suite's query walks it.
 		return $this->data['customer_id'] ?? 0;
 	}
+	public function set_customer_id( $customer_id ) {
+		$this->data['customer_id'] = (int) $customer_id;
+	}
+	/**
+	 * Billing setters, as flat data keys the getters read back.
+	 *
+	 * @param string $name      Method name.
+	 * @param array  $arguments Arguments.
+	 *
+	 * @throws BadMethodCallException For any other undefined method.
+	 */
+	public function __call( $name, $arguments ) {
+		if ( 0 === strpos( $name, 'set_billing_' ) ) {
+			$this->data[ substr( $name, 4 ) ] = $arguments[0] ?? '';
+			return;
+		}
+		throw new BadMethodCallException( sprintf( 'Call to undefined method %s::%s()', __CLASS__, $name ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+	}
 	public function get_meta( $field_name ) {
 		return isset( $this->meta[ $field_name ] ) ? $this->meta[ $field_name ] : '';
 	}
@@ -1223,8 +1241,23 @@ class WC_Subscription {
 	public function get_user_id() {
 		return $this->data['customer_id'] ?? null;
 	}
+	public function set_customer_id( $customer_id ) {
+		$this->data['customer_id'] = (int) $customer_id;
+	}
 	public function get_payment_method() {
 		return $this->data['payment_method'] ?? '';
+	}
+	/**
+	 * Like WC_Subscription::set_payment_method(): an empty gateway also makes the
+	 * subscription manual-renewal.
+	 *
+	 * @param string $payment_method Gateway ID.
+	 */
+	public function set_payment_method( $payment_method = '' ) {
+		$this->data['payment_method'] = (string) $payment_method;
+		if ( '' === (string) $payment_method ) {
+			$this->data['requires_manual_renewal'] = true;
+		}
 	}
 	public function get_payment_method_title() {
 		return $this->data['payment_method_title'] ?? '';
@@ -1590,6 +1623,10 @@ class WC_Subscription {
 		// fixtures stage address data.
 		if ( 0 === strpos( $name, 'get_billing_' ) || 0 === strpos( $name, 'get_shipping_' ) ) {
 			return $this->data[ substr( $name, 4 ) ] ?? '';
+		}
+		if ( 0 === strpos( $name, 'set_billing_' ) || 0 === strpos( $name, 'set_shipping_' ) ) {
+			$this->data[ substr( $name, 4 ) ] = $arguments[0] ?? '';
+			return;
 		}
 		throw new BadMethodCallException( sprintf( 'Call to undefined method %s::%s()', __CLASS__, $name ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}

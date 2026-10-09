@@ -440,6 +440,47 @@ class Group_Subscription_Invite {
 	}
 
 	/**
+	 * Re-attribute the invite links one person minted to another, keeping their keys.
+	 *
+	 * A legacy per-manager link validates only while its creator manages the group, so a
+	 * link minted by an owner who steps down would otherwise stop working. Moving it to the
+	 * new owner keeps it live. When the new owner already holds a legacy link of their own,
+	 * the moved key takes the subscription-wide slot instead, if that is free. When both are
+	 * taken, which needs a subscription holding both storage shapes at once, the key stays
+	 * with its creator and stops working once they no longer manage the group. The
+	 * current-shape link already belongs to the subscription, so only its `created_by` changes.
+	 *
+	 * Changes the meta in memory; the caller saves the subscription.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @param int              $from_user_id The user the links are attributed to.
+	 * @param int              $to_user_id   The user to attribute them to.
+	 */
+	public static function reassign_link_invites( \WC_Subscription $subscription, int $from_user_id, int $to_user_id ): void {
+		$stored = $subscription->get_meta( self::LINK_META, true );
+		if ( ! $from_user_id || ! is_array( $stored ) || empty( $stored ) ) {
+			return;
+		}
+		$has_current_link = array_key_exists( 'key', $stored );
+		if ( $has_current_link && (int) ( $stored['created_by'] ?? 0 ) === $from_user_id ) {
+			$stored['created_by'] = $to_user_id;
+		}
+		if ( isset( $stored[ $from_user_id ] ) && is_array( $stored[ $from_user_id ] ) ) {
+			$legacy_entry = $stored[ $from_user_id ];
+			if ( ! isset( $stored[ $to_user_id ] ) ) {
+				unset( $stored[ $from_user_id ] );
+				$stored[ $to_user_id ] = $legacy_entry;
+			} elseif ( ! $has_current_link && ! empty( $legacy_entry['key'] ) ) {
+				unset( $stored[ $from_user_id ] );
+				$stored['key']        = $legacy_entry['key'];
+				$stored['created_at'] = $legacy_entry['created_at'] ?? time();
+				$stored['created_by'] = $to_user_id;
+			}
+		}
+		$subscription->update_meta_data( self::LINK_META, $stored );
+	}
+
+	/**
 	 * Delete a subscription's invite link.
 	 *
 	 * `$is_store_admin` is the one way in without a manager to act as. The link belongs to the
