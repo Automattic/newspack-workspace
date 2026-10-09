@@ -227,7 +227,7 @@ final class Newspack_Popups_AB_Tests {
 	 * top, because managing tests follows the admin-only Campaigns permission model
 	 * and the prompts CPT itself uses default post capabilities.
 	 *
-	 * @param bool   $allowed   Whether the user can write the meta. Default false.
+	 * @param bool   $allowed   Core's default for the key; ignored.
 	 * @param string $meta_key  Meta key.
 	 * @param int    $object_id Prompt post ID.
 	 * @param int    $user_id   User ID.

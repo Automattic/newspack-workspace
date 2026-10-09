@@ -369,25 +369,15 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	/**
 	 * With the flag off, a stored test has no effect: no config reaches the view
 	 * script, so there is no variant selection and no reader bucket assignment.
+	 * It must not record "no tests" either: a cached '0' would outlive the flag
+	 * and keep every test from running once the flag is turned back on.
 	 */
-	public function test_flag_off_ignores_stored_tests() {
-		$this->create_test_variant( 'flag-off-test', 'a' );
-		$this->create_test_variant( 'flag-off-test', 'b' );
-		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
-
-		self::assertSame( [], Newspack_Popups_AB_Tests::get_tests_config() );
-	}
-
-	/**
-	 * Turning the flag off must not record "no tests". A cached '0' would outlive
-	 * the flag and keep every test from running once the flag is turned back on.
-	 */
-	public function test_flag_off_does_not_record_the_has_tests_flag() {
+	public function test_flag_off_ignores_stored_tests_without_recording_none() {
 		$this->create_test_variant( 'flag-toggle-test', 'a' );
 		$this->create_test_variant( 'flag-toggle-test', 'b' );
 
 		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
-		Newspack_Popups_AB_Tests::get_tests_config();
+		self::assertSame( [], Newspack_Popups_AB_Tests::get_tests_config() );
 		self::assertFalse( get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ) );
 
 		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
@@ -412,6 +402,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertArrayNotHasKey( 'ab_test_id', Newspack_Popups_Data_Api::get_popup_metadata( $challenger_id ) );
 
 		$this->renderPost();
+		self::assertSame( 3, $this->getRenderedPopupsAmount(), 'Both test prompts and the plain one should still render.' );
 		self::assertSame( 0, self::$dom_xpath->query( '//*[@data-ab-test-id]' )->length );
 	}
 
@@ -498,8 +489,10 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * The flag gates what reads A/B meta, never its registration, so REST writes
-	 * keep their sanitizers and schema checks while the feature is off.
+	 * Pins a decision rather than this change: the flag gates what reads A/B meta,
+	 * never its registration, so REST writes keep their sanitizers and schema
+	 * checks while the feature is off. A gate added where the class hooks in at
+	 * load would not show here, since the suite runs with the flag on.
 	 */
 	public function test_flag_off_keeps_meta_registered() {
 		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
