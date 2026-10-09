@@ -332,7 +332,11 @@ class Google_OAuth {
 		$result = \wp_safe_remote_post(
 			add_query_arg( [ 'token' => $token ], 'https://oauth2.googleapis.com/revoke' )
 		);
-		if ( 200 === $result['response']['code'] ) {
+		if ( is_wp_error( $result ) ) {
+			Logger::error( 'Failed revoking credentials: ' . $result->get_error_message() );
+			return new \WP_Error( 'newspack_google_oauth', __( 'Could not revoke credentials.', 'newspack' ) );
+		}
+		if ( 200 === wp_remote_retrieve_response_code( $result ) ) {
 			Logger::log( 'Revoking credentials success.' );
 			self::remove_credentials();
 			return \rest_ensure_response( [ 'status' => 'ok' ] );
@@ -388,7 +392,11 @@ class Google_OAuth {
 		);
 
 		if ( 200 === wp_remote_retrieve_response_code( $token_info_response ) ) {
-			$token_info     = json_decode( wp_remote_retrieve_body( $token_info_response ) );
+			$token_info = json_decode( wp_remote_retrieve_body( $token_info_response ) );
+			if ( ! is_object( $token_info ) || ! isset( $token_info->scope ) || ! is_string( $token_info->scope ) ) {
+				Logger::error( 'OAuth token validation failed: tokeninfo returned an unusable body.' );
+				return new \WP_Error( 'newspack_google_oauth', __( 'Invalid Google credentials. Please reconnect.', 'newspack' ) );
+			}
 			$granted_scopes = explode( ' ', $token_info->scope );
 			/** If granted scope is 'dfp', interpret as 'admanager'.  */
 			foreach ( $granted_scopes as &$scope ) {
@@ -405,7 +413,7 @@ class Google_OAuth {
 			// The /tokeninfo response will contain the email address, as long as the email scope is present in the request.
 			// We always request the email scope. Otherwise, the https://www.googleapis.com/oauth2/v2/userinfo endpoint can be used
 			// to retrieve the user email.
-			if ( isset( $token_info->email ) ) {
+			if ( isset( $token_info->email ) && is_string( $token_info->email ) ) {
 				// Confirm the token was issued to this site's own OAuth client, when that is known.
 				$expected_client_id = self::get_expected_client_id();
 				if ( '' !== $expected_client_id ) {
@@ -414,7 +422,7 @@ class Google_OAuth {
 					$token_client_id = '' !== ( $token_info->audience ?? '' )
 						? $token_info->audience
 						: ( $token_info->issued_to ?? '' );
-					if ( (string) $expected_client_id !== (string) $token_client_id ) {
+					if ( ! is_string( $token_client_id ) || $expected_client_id !== $token_client_id ) {
 						Logger::error( 'OAuth token was issued to a different client id than expected.' );
 						// Surface via the always-on log so a rejection (an attack attempt, or a
 						// legitimate login broken by a client-id skew) is auditable fleet-wide.
