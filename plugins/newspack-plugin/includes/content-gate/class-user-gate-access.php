@@ -155,6 +155,13 @@ class User_Gate_Access {
 			return __( '(no institutions selected)', 'newspack-plugin' );
 		}
 
+		// Ahead of the generic branch too: the bounds read as a bare list there, and an
+		// empty range still turns away readers holding no number, so "(any)" is wrong.
+		$rule = Access_Rules::get_rule( $slug );
+		if ( ! empty( $rule['is_range'] ) ) {
+			return self::format_range_value( $value );
+		}
+
 		if ( empty( $value ) ) {
 			return __( '(any)', 'newspack-plugin' );
 		}
@@ -170,6 +177,33 @@ class User_Gate_Access {
 			'<code>%s</code>',
 			esc_html( is_array( $value ) ? implode( ', ', $value ) : (string) $value )
 		);
+	}
+
+	/**
+	 * Format a range rule's bounds in the words the gate summary uses.
+	 *
+	 * @param mixed $value The stored rule value.
+	 *
+	 * @return string The bounds, or a note that the value sets none (HTML).
+	 */
+	private static function format_range_value( $value ) {
+		$min = is_array( $value ) && isset( $value['min'] ) && '' !== $value['min'] ? (string) $value['min'] : null;
+		$max = is_array( $value ) && isset( $value['max'] ) && '' !== $value['max'] ? (string) $value['max'] : null;
+		if ( null !== $min && null !== $max ) {
+			/* translators: 1: the lowest number the rule admits, 2: the highest. */
+			return esc_html( sprintf( __( '%1$s to %2$s', 'newspack-plugin' ), $min, $max ) );
+		}
+		if ( null !== $min ) {
+			/* translators: %s: the lowest number the rule admits. */
+			return esc_html( sprintf( __( 'At least %s', 'newspack-plugin' ), $min ) );
+		}
+		if ( null !== $max ) {
+			/* translators: %s: the highest number the rule admits. */
+			return esc_html( sprintf( __( 'At most %s', 'newspack-plugin' ), $max ) );
+		}
+		return is_array( $value ) && [] === $value
+			? esc_html__( '(any number)', 'newspack-plugin' )
+			: esc_html__( '(invalid range, grants no access)', 'newspack-plugin' );
 	}
 
 	/**

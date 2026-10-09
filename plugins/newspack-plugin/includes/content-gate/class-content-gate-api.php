@@ -367,7 +367,15 @@ class Content_Gate_API {
 	 */
 	private static function empty_access_rule_value_error( $rule ) {
 		$grants_access = ! empty( $rule['empty_grants_access'] );
-		if ( empty( $rule['has_options'] ) ) {
+		if ( ! empty( $rule['is_range'] ) ) {
+			// Narrower than "everyone": a range with no bounds still turns away readers
+			// who hold no number in the field.
+			$message = $grants_access
+				/* translators: %s: the access rule's name, e.g. a promoted number field. */
+				? __( 'Enter a minimum, a maximum, or both for the “%s” access rule, or turn the rule off. Left empty, it grants access to every reader with a number in that field.', 'newspack-plugin' )
+				/* translators: %s: the access rule's name. */
+				: __( 'Enter a minimum, a maximum, or both for the “%s” access rule, or turn the rule off. Left empty, it matches no reader.', 'newspack-plugin' );
+		} elseif ( empty( $rule['has_options'] ) ) {
 			$message = $grants_access
 				/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
 				? __( 'Enter a value for the “%s” access rule, or turn the rule off. Left empty, it grants access to everyone.', 'newspack-plugin' )
@@ -387,6 +395,7 @@ class Content_Gate_API {
 				'status'              => 400,
 				'rule_name'           => $rule['name'],
 				'empty_grants_access' => $grants_access,
+				'is_range'            => ! empty( $rule['is_range'] ),
 			]
 		);
 	}
@@ -410,11 +419,16 @@ class Content_Gate_API {
 		}
 		$error_data = $error->get_error_data();
 		$rule_name  = $error_data['rule_name'] ?? '';
-		$message    = empty( $error_data['empty_grants_access'] )
+		if ( empty( $error_data['empty_grants_access'] ) ) {
 			/* translators: %s: the access rule's name, e.g. "Institutional access". */
-			? __( 'The “%s” access rule is empty, so it matches no reader. Give it a value or remove it before this gate is active again.', 'newspack-plugin' )
+			$message = __( 'The “%s” access rule is empty, so it matches no reader. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
+		} elseif ( ! empty( $error_data['is_range'] ) ) {
+			/* translators: %s: the access rule's name, e.g. a promoted number field. */
+			$message = __( 'The “%s” access rule has no minimum or maximum, so it grants access to every reader with a number in that field. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
+		} else {
 			/* translators: %s: the access rule's name, e.g. "Whitelisted email domain". */
-			: __( 'The “%s” access rule is empty, so it grants access to everyone. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
+			$message = __( 'The “%s” access rule is empty, so it grants access to everyone. Give it a value or remove it before this gate is active again.', 'newspack-plugin' );
+		}
 		return new \WP_Error(
 			'empty_access_rule_value',
 			sprintf( $message, $rule_name ),
@@ -422,6 +436,7 @@ class Content_Gate_API {
 				'status'              => 400,
 				'rule_name'           => $rule_name,
 				'empty_grants_access' => ! empty( $error_data['empty_grants_access'] ),
+				'is_range'            => ! empty( $error_data['is_range'] ),
 			]
 		);
 	}
@@ -869,6 +884,8 @@ class Content_Gate_API {
 		// Rules with a composite value shape sanitize it themselves.
 		if ( ! empty( $rule['sanitize_callback'] ) && is_callable( $rule['sanitize_callback'] ) ) {
 			$value = call_user_func( $rule['sanitize_callback'], $access_rule['value'] ?? null );
+			// Re-coded rather than passed through: the group sanitizer fails the save only
+			// on this code, and drops the rule on any other, which would loosen its group.
 			if ( is_wp_error( $value ) ) {
 				return self::invalid_access_rule_value_error( $rule );
 			}

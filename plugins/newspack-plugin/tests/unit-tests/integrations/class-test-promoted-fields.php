@@ -543,6 +543,62 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An unset range still turns away readers who hold no number, so refusing it on
+	 * an active gate must not say it grants access to everyone, nor ask for "a value"
+	 * when the control offers a minimum and a maximum.
+	 */
+	public function test_an_active_gate_refuses_an_unset_range_in_range_terms() {
+		// The refusal is reported only to a caller who can manage gates.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		$slug    = $this->register_range_rule();
+		$refused = \Newspack\Content_Gate_API::sanitize_gate(
+			[
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => $slug,
+								'value' => [],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertWPError( $refused );
+		$this->assertSame( 'empty_access_rule_value', $refused->get_error_code() );
+		$this->assertStringContainsString( 'every reader with a number in that field', $refused->get_error_message() );
+		$this->assertStringNotContainsString( 'everyone', $refused->get_error_message() );
+	}
+
+	/**
+	 * The user-profile gate panel reads a range back as the gate summary does, rather
+	 * than as a bare list of its bounds.
+	 */
+	public function test_the_user_gate_panel_reads_range_bounds_in_words() {
+		$slug                = $this->register_range_rule();
+		$format_rule_value   = new \ReflectionMethod( \Newspack\User_Gate_Access::class, 'format_rule_value' );
+		$format_rule_value->setAccessible( true );
+
+		$this->assertSame(
+			'50 to 100',
+			$format_rule_value->invoke(
+				null,
+				$slug,
+				[
+					'min' => 50.0,
+					'max' => 100.0,
+				]
+			)
+		);
+		$this->assertSame( 'At most 100', $format_rule_value->invoke( null, $slug, [ 'max' => 100.0 ] ) );
+		$this->assertSame( '(any number)', $format_rule_value->invoke( null, $slug, [] ) );
+		$this->assertSame( '(invalid range, grants no access)', $format_rule_value->invoke( null, $slug, '50' ) );
+	}
+
+	/**
 	 * End to end: a range saved through the gate API admits only readers whose
 	 * value falls inside it.
 	 */

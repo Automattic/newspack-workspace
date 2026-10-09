@@ -129,7 +129,8 @@ class Access_Rules {
 	 *                                        must provide one — Content_Gate_API delegates to it
 	 *                                        instead of the generic list/scalar sanitization.
 	 *                                        Returning a WP_Error refuses the value and fails
-	 *                                        the save.
+	 *                                        the save, with the generic invalid-value message
+	 *                                        in place of the callback's own.
 	 *     @type bool     $is_boolean         Whether the rule is a boolean rule.
 	 *     @type bool     $is_range           Optional. Whether the rule's value is a pair of
 	 *                                        numeric bounds, `[ 'min' => …, 'max' => … ]`, either

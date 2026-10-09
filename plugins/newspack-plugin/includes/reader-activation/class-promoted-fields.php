@@ -155,10 +155,8 @@ class Promoted_Fields {
 				// value as unconfigured whichever way the rule then evaluates: a
 				// `list__in` field naming nothing denies every reader, saves without
 				// refusal, and reads as a blank condition in the gate summary. Only
-				// the granting ones are refused a save here, so that this change
-				// leaves promoted fields evaluating and saving as they did. Closing
-				// the gap belongs with the rest of the unconfigured-rule warnings, in
-				// NPPD-2227.
+				// the granting ones are refused a save here. Closing the gap belongs
+				// with the rest of the unconfigured-rule warnings, in NPPD-2227.
 				'requires_value'      => $empty_grants_access,
 				'callback'            => function ( $user_id, $args ) use ( $field ) {
 					return self::evaluate_field( $field, $user_id, $args );
@@ -342,7 +340,7 @@ class Promoted_Fields {
 				$user_values = self::parse_list_value( $value );
 				return empty( array_intersect( (array) $args, $user_values ) );
 			case 'date_range':
-				// Access rules have no range UI — a rule still holds one typed value and
+				// A date rule has no range UI — it still holds one typed value and
 				// still matches it exactly. Both sides go through the same normalizer:
 				// the rule, because a publisher may write it in the provider's own
 				// format ('03/04/2026') while the pull rewrites stored values to ISO;
