@@ -931,8 +931,10 @@ class Integrations {
 	 * Logs failures and fires an action for the Alert Manager.
 	 */
 	public static function run_health_checks() {
+		$checked_ids = [];
 		foreach ( self::get_active_configured_integrations() as $integration ) {
-			$result = $integration->health_check();
+			$checked_ids[] = $integration->get_id();
+			$result        = $integration->health_check();
 			if ( is_wp_error( $result ) ) {
 				Logger::error(
 					sprintf(
@@ -962,8 +964,42 @@ class Integrations {
 						'error'            => $result,
 					]
 				);
+				continue;
 			}
+
+			/**
+			 * Fires when an integration health check passes.
+			 *
+			 * Recovery is only observable through this signal: without it, an
+			 * integration that stopped failing would stay recorded as broken.
+			 *
+			 * @param array $payload {
+			 *     Health check pass data.
+			 *
+			 *     @type string $integration_id   The integration ID.
+			 *     @type string $integration_name The integration display name.
+			 * }
+			 */
+			do_action(
+				'newspack_integration_health_check_passed',
+				[
+					'integration_id'   => $integration->get_id(),
+					'integration_name' => $integration->get_name(),
+				]
+			);
 		}
+
+		/**
+		 * Fires after a health-check run with the IDs of the integrations it
+		 * checked.
+		 *
+		 * An integration that is disabled or no longer set up drops out of the
+		 * run and fires neither a pass nor a failure again, so a consumer that
+		 * keeps state per integration needs this list to let go of the rest.
+		 *
+		 * @param string[] $integration_ids IDs of the integrations this run checked.
+		 */
+		do_action( 'newspack_integration_health_checks_completed', $checked_ids );
 	}
 }
 Integrations::init();

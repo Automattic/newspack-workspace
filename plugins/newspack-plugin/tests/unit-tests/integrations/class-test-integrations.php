@@ -978,8 +978,10 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test run_health_checks fires the action for set-up integrations whose
-	 * health check fails — the control case for the skip behavior above.
+	 * Test run_health_checks fires the failed action, and not the passed one,
+	 * for set-up integrations whose health check fails — the control case for
+	 * the skip behavior above. A pass after a failure would clear the Alert
+	 * Manager's record, so no outage could ever reach the paging threshold.
 	 */
 	public function test_run_health_checks_fires_when_set_up_and_failing() {
 		$integration = new Sample_Integration( 'failing', 'Failing' );
@@ -989,11 +991,16 @@ class Test_Integrations extends \WP_UnitTestCase {
 		Sample_Integration::$is_set_up_value      = true;
 		Sample_Integration::$can_sync_error_codes = [ 'ras_esp_master_list_id_not_found' ];
 
-		$payload  = null;
-		$listener = function ( $data ) use ( &$payload ) {
+		$payload         = null;
+		$passed          = false;
+		$listener        = function ( $data ) use ( &$payload ) {
 			$payload = $data;
 		};
+		$passed_listener = function () use ( &$passed ) {
+			$passed = true;
+		};
 		add_action( 'newspack_integration_health_check_failed', $listener );
+		add_action( 'newspack_integration_health_check_passed', $passed_listener );
 
 		try {
 			Integrations::run_health_checks();
@@ -1001,8 +1008,66 @@ class Test_Integrations extends \WP_UnitTestCase {
 			$this->assertSame( 'failing', $payload['integration_id'] );
 			$this->assertInstanceOf( \WP_Error::class, $payload['error'] );
 			$this->assertContains( 'ras_esp_master_list_id_not_found', $payload['error']->get_error_codes() );
+			$this->assertFalse( $passed, 'A failing integration must not also fire the passed action.' );
 		} finally {
 			remove_action( 'newspack_integration_health_check_failed', $listener );
+			remove_action( 'newspack_integration_health_check_passed', $passed_listener );
+		}
+	}
+
+	/**
+	 * Test run_health_checks fires the passed action for a healthy
+	 * integration, so the Alert Manager can observe recovery.
+	 */
+	public function test_run_health_checks_fires_passed_when_healthy() {
+		$integration = new Sample_Integration( 'healthy', 'Healthy' );
+		Integrations::register( $integration );
+		Integrations::enable( 'healthy' );
+
+		$passed          = null;
+		$failed          = false;
+		$passed_listener = function ( $data ) use ( &$passed ) {
+			$passed = $data;
+		};
+		$failed_listener = function () use ( &$failed ) {
+			$failed = true;
+		};
+		add_action( 'newspack_integration_health_check_passed', $passed_listener );
+		add_action( 'newspack_integration_health_check_failed', $failed_listener );
+
+		try {
+			Integrations::run_health_checks();
+			$this->assertFalse( $failed, 'A healthy integration must not fire the failed action.' );
+			$this->assertNotNull( $passed, 'A healthy integration must fire the passed action.' );
+			$this->assertSame( 'healthy', $passed['integration_id'] );
+			$this->assertSame( 'Healthy', $passed['integration_name'] );
+		} finally {
+			remove_action( 'newspack_integration_health_check_passed', $passed_listener );
+			remove_action( 'newspack_integration_health_check_failed', $failed_listener );
+		}
+	}
+
+	/**
+	 * Test run_health_checks reports which integrations it checked, so the
+	 * Alert Manager can let go of the records of integrations that dropped
+	 * out of the run.
+	 */
+	public function test_run_health_checks_reports_the_integrations_it_checked() {
+		Integrations::register( new Sample_Integration( 'enabled', 'Enabled' ) );
+		Integrations::register( new Sample_Integration( 'disabled', 'Disabled' ) );
+		Integrations::enable( 'enabled' );
+
+		$checked  = null;
+		$listener = function ( $integration_ids ) use ( &$checked ) {
+			$checked = $integration_ids;
+		};
+		add_action( 'newspack_integration_health_checks_completed', $listener );
+
+		try {
+			Integrations::run_health_checks();
+			$this->assertSame( [ 'enabled' ], $checked );
+		} finally {
+			remove_action( 'newspack_integration_health_checks_completed', $listener );
 		}
 	}
 
