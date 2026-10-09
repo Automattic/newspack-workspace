@@ -127,8 +127,6 @@ class Webhook {
 			return new WP_REST_Response( array( 'error' => $error ), 500 );
 		}
 
-		self::maybe_log_node_origin( $node );
-
 		$incoming_event_class = 'Newspack_Network\\Incoming_Events\\' . $incoming_events[ $action ];
 
 		// The claim is held while the event is processed. Processing that fails
@@ -177,6 +175,8 @@ class Webhook {
 			Debugger::log( 'Webhook delivery processed, but marking it completed failed; the claim stays pending.' );
 		}
 
+		self::maybe_log_node_origin( $node );
+
 		return new WP_REST_Response( 'success' );
 	}
 
@@ -185,7 +185,7 @@ class Webhook {
 	 *
 	 * Nodes are managed by administrators, so a Node whose author is missing or
 	 * is not one is worth a look. The event is processed either way; the line
-	 * points an administrator at the Node, about once a day per Node: two
+	 * points whoever reads the Newspack log at the Node, about once a day per Node: two
 	 * deliveries handled at the same moment can each log it. It goes
 	 * through newspack_log because Debugger::log() writes only when
 	 * NEWSPACK_NETWORK_DEBUG is defined.
