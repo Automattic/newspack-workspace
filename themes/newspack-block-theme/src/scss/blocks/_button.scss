@@ -84,8 +84,8 @@
 	}
 }
 
-// Keep a 1px border from making the button taller than a solid one. Custom padding is
-// inline, so this only works for default padding.
+// Keep a 1px border from making the button taller than a solid one. Inline custom padding wins over
+// this, but padding set in Global Styles is replaced, so this only works for the theme's default padding.
 .wp-block-button__link:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
 	padding-block: calc(var(--wp--custom--spacing--25) - 1px);
 }
