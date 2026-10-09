@@ -99,7 +99,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 		} );
 	}, [ isFetching, gates, hasInstitutions ] );
 
-	const toggleContentGifting = useRef< () => void >();
+	const toggleContentGifting = useRef< () => void >( undefined );
 	const handleToggleContentGifting = () => {
 		resetError();
 		resetNotices();

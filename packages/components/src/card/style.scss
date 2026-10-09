@@ -7,7 +7,7 @@
 
 .newspack-card {
 	border-radius: 2px;
-	border: 1px solid wp-colors.$gray-300;
+	border: 1px solid var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
 	color: wp-colors.$gray-900;
 	margin: 32px 0;
 	padding: 16px 48px;

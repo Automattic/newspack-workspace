@@ -23,6 +23,11 @@
 		margin: 0 0 wp-vars.$grid-unit-40;
 	}
 
+	&__readonly-value {
+		flex: 1;
+		min-width: 0;
+	}
+
 	&__readonly-value .components-input-control__container {
 		background: wp-colors.$gray-100;
 	}

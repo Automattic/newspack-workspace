@@ -36,32 +36,8 @@ class Audience_Integrations extends Wizard {
 	 * Constructor.
 	 */
 	public function __construct() {
-		if ( ! self::is_enabled() ) {
-			return;
-		}
 		parent::__construct();
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
-	}
-
-	/**
-	 * Check if the integrations settings feature is enabled.
-	 *
-	 * @return bool
-	 */
-	public static function is_enabled() {
-		/**
-		 * Enables the Audience / Integrations settings screen and its REST
-		 * endpoints. The wizard does not register itself at all while this is
-		 * unset, so the screen is absent rather than empty.
-		 *
-		 * @constant NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED
-		 * @type     bool
-		 * @default  Screen and endpoints not registered
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED', true );
-		 */
-		return defined( 'NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED' ) && NEWSPACK_INTEGRATIONS_SETTINGS_ENABLED;
 	}
 
 	/**
@@ -99,9 +75,7 @@ class Audience_Integrations extends Wizard {
 
 		wp_enqueue_script( 'newspack-wizards' );
 
-		$localized_data = [
-			'integrations_settings_enabled' => self::is_enabled(),
-		];
+		$localized_data = [];
 
 		if ( class_exists( 'Newspack_Newsletters' ) ) {
 			$localized_data['esp_provider'] = \Newspack_Newsletters::service_provider();

@@ -2,7 +2,7 @@
  * Internal dependencies
  */
 import '../shared/js/public-path';
-import { getMatchedForms, getEmailValue, getNameValues } from './utils';
+import { getMatchedForms, getEmailValue, getNameValues, isGravityForm } from './utils';
 
 // v3 tokens expire at 120s; refresh with margin.
 const CAPTCHA_TOKEN_TTL = 100 * 1000;
@@ -19,16 +19,23 @@ const GF_CAPTURE_WAIT = 3000;
 window.newspackRAS = window.newspackRAS || [];
 window.newspackRAS.push( readerActivation => {
 	const config = window.newspack_form_capture || {};
-	const selectors = Array.isArray( config.selectors ) ? config.selectors : [];
-	if ( ! selectors.length ) {
+	// Each form belongs to one integration: a Gravity Forms form to the Gravity
+	// Forms integration, any other form to Form Capture. The config has
+	// an entry only for an integration that captures, so a form whose
+	// integration is off stays unmatched even where the other's selectors
+	// reach it, and each integration's switch covers its own forms.
+	const ownerOf = form => ( isGravityForm( form ) ? config.gravity_forms : config.other_forms );
+	const entries = [ config.gravity_forms, config.other_forms ].filter( entry => Array.isArray( entry?.selectors ) && entry.selectors.length );
+	if ( ! entries.length ) {
 		return;
 	}
+	const getCapturedForms = () => entries.flatMap( entry => getMatchedForms( entry.selectors ).filter( form => ownerOf( form ) === entry ) );
 
 	const captured = new Set();
 	const attached = new WeakSet();
 	// Gravity Forms ids of matched GF forms. Only forms whose element id is
 	// gform_<formid> are remembered: WPForms stamps data-formid too, and a
-	// publisher's selectors may match one of its forms. GF's AJAX postback
+	// WPForms form can carry the marker class. GF's AJAX postback
 	// re-renders the form from GFFormDisplay::get_form(), outside the block
 	// render filter that adds the marker class, so after a validation error
 	// or a page change the form on the page carries no marker. Its data-formid
@@ -132,7 +139,7 @@ window.newspackRAS.push( readerActivation => {
 			// v3 tokens are single-use.
 			warmToken = null;
 		}
-		return readerActivation.register( email, 'form-capture', getNameValues( form ), options ).catch( error => {
+		return readerActivation.register( email, ownerOf( form ).integration, getNameValues( form ), options ).catch( error => {
 			// Only failures that can succeed on a retry within this pageview
 			// release the dedupe: a network error (the response never parsed,
 			// so no code) or a server-side registration failure. Everything
@@ -152,7 +159,7 @@ window.newspackRAS.push( readerActivation => {
 	const handleSubmit = event => captureForm( event.target );
 
 	const attach = () => {
-		const forms = new Set( getMatchedForms( selectors ) );
+		const forms = new Set( getCapturedForms() );
 		document.querySelectorAll( 'form[id^="gform_"][data-formid]' ).forEach( form => {
 			if ( matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) {
 				forms.add( form );
@@ -217,7 +224,7 @@ window.newspackRAS.push( readerActivation => {
 		window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
 			try {
 				const form = data?.form;
-				if ( form && ( getMatchedForms( selectors ).includes( form ) || matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) ) {
+				if ( form && ( getCapturedForms().includes( form ) || matchedFormIds.has( form.getAttribute( 'data-formid' ) ) ) ) {
 					const pending = captureForm( form );
 					if ( pending ) {
 						// GF awaits this filter, so hold the submission until

@@ -408,9 +408,9 @@ $wc_mock_is_product = false;
  *
  * Every WC_Order_Item_Product construction across the whole suite registers
  * itself in $order_items_database (mirroring WooCommerce, where order item IDs
- * are globally unique), and test fixtures reuse low integer IDs across files —
- * call this from a test class's set_up() before staging order items so a stale
- * item created by an unrelated suite can't resolve.
+ * are globally unique), and test fixtures reuse low integer IDs across files.
+ * Newspack_Request_Memo_Reset already clears the table before each test; call
+ * this only to clear it partway through one.
  */
 function wc_mocks_reset_order_items() {
 	global $order_items_database;
@@ -792,10 +792,16 @@ class WC_Product {
 	/**
 	 * Price reads apply their WooCommerce filters, as WC_Data::get_prop() does
 	 * in `view` context. Without this, code that filters a price and code that
-	 * reads one can disagree with no test able to see it.
+	 * reads one can disagree with no test able to see it. `edit` context returns
+	 * the stored price unfiltered, as WC_Data::get_prop() does.
+	 *
+	 * @param string $context `view` or `edit`.
 	 */
-	public function get_price() {
+	public function get_price( $context = 'view' ) {
 		$price = $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+		if ( 'edit' === $context ) {
+			return $price;
+		}
 		return apply_filters( 'woocommerce_product_get_price', $price, $this );
 	}
 	public function set_price( $price ) {
@@ -1048,6 +1054,9 @@ class WC_Order {
 	public function get_status() {
 		return $this->data['status'];
 	}
+	public function get_type() {
+		return 'shop_order';
+	}
 	public function get_coupon_codes() {
 		return $this->data['coupon_codes'] ?? [];
 	}
@@ -1139,6 +1148,46 @@ class WC_Order {
 	}
 	public function set_transaction_id( $transaction_id ) {
 		$this->data['transaction_id'] = (string) $transaction_id;
+	}
+}
+
+/**
+ * Real WC_Order_Refund extends WC_Abstract_Order, not WC_Order, so it has no
+ * customer or billing getters. Its status is always 'completed', a line-item
+ * refund copies the refunded items with their product IDs, and order queries
+ * return refunds unless they ask for 'shop_order' only.
+ */
+class WC_Order_Refund {
+	public $data = [];
+	public function __construct( $data ) {
+		global $orders_database;
+		$data['id']        = count( $orders_database ) + 1;
+		$this->data        = $data;
+		$orders_database[] = $this;
+	}
+	public function get_id() {
+		return $this->data['id'];
+	}
+	public function get_type() {
+		return 'shop_order_refund';
+	}
+	public function get_status() {
+		return 'completed';
+	}
+	public function has_status( $statuses ) {
+		return in_array( 'completed', (array) $statuses, true );
+	}
+	public function get_items() {
+		return $this->data['items'] ?? [];
+	}
+	public function get_date_created() {
+		return new WC_DateTime( $this->data['date_created'] );
+	}
+	public function get_date_paid() {
+		return $this->get_date_created();
+	}
+	public function get_meta( $field_name ) {
+		return '';
 	}
 }
 
@@ -1275,7 +1324,22 @@ class WC_Subscription {
 	public function get_status() {
 		return $this->data['status'];
 	}
-	public function set_status( $status ) {
+	/**
+	 * Stand-in for WC_Subscription::set_status(). Unlike update_status(), the
+	 * real method skips the can_be_updated_to() check. The transition and its
+	 * note are recorded on `status_sets` so tests can assert on them.
+	 *
+	 * @param string $status        New status.
+	 * @param string $note          Optional transition note.
+	 * @param bool   $manual_update Whether an admin made the change.
+	 */
+	public function set_status( $status, $note = '', $manual_update = false ) {
+		$this->data['status_sets'][] = [
+			'from'   => $this->data['status'] ?? '',
+			'to'     => $status,
+			'note'   => $note,
+			'manual' => $manual_update,
+		];
 		$this->data['status'] = $status;
 	}
 	public function get_created_via() {
@@ -1423,6 +1487,9 @@ class WC_Subscription {
 			$this->data['dates'][ $type ] = $date;
 		}
 	}
+	public function delete_date( $type ) {
+		unset( $this->data['dates'][ $type ], $this->data['times'][ $type ] );
+	}
 	public function get_formatted_billing_full_name() {
 		$first = $this->data['billing_first_name'] ?? '';
 		$last  = $this->data['billing_last_name'] ?? '';
@@ -1503,6 +1570,20 @@ class WC_Subscription {
 		// Real WC_Subscription keys this 'requires_manual_renewal'; fixtures also stage the shorter 'is_manual'.
 		return ! empty( $this->data['requires_manual_renewal'] ) || ! empty( $this->data['is_manual'] );
 	}
+	/**
+	 * Unlike is_manual(), reads only the stored property. Fixtures staging
+	 * `is_manual` alone model a subscription that is manual only for now, such
+	 * as one whose gateway is unavailable.
+	 */
+	public function get_requires_manual_renewal() {
+		return ! empty( $this->data['requires_manual_renewal'] );
+	}
+	public function get_cancelled_email_sent() {
+		return $this->data['cancelled_email_sent'] ?? '';
+	}
+	public function set_cancelled_email_sent( $value ) {
+		$this->data['cancelled_email_sent'] = $value;
+	}
 	public function __call( $name, $arguments ) {
 		// Address getters: get_billing_first_name(), get_shipping_city(), etc.
 		// resolve to flat data keys ('billing_first_name'), matching how the
@@ -1565,7 +1646,16 @@ class WC_Subscription {
 		$this->data['total'] = $total;
 		return $total;
 	}
+	/**
+	 * Records the status and cancelled-email flag at each save on `saves`. The
+	 * real save() is what persists changes and fires the status hooks, so tests
+	 * can assert a change was saved, not just set.
+	 */
 	public function save() {
+		$this->data['saves'][] = [
+			'status'               => $this->data['status'] ?? '',
+			'cancelled_email_sent' => $this->data['cancelled_email_sent'] ?? '',
+		];
 		return true;
 	}
 }
@@ -2031,7 +2121,7 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
-	// Minimal mock: implements the `customer_id` and `subscription_status` filters
+	// Minimal mock: implements the `customer_id`, `order_id` and `subscription_status` filters
 	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
 	// passes. `subscription_status` accepts a single status or an array; 'any' (or
 	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
@@ -2047,6 +2137,7 @@ function wcs_get_subscriptions( $args = [] ) {
 	global $wcs_mock_query_log;
 	$wcs_mock_query_log[] = $args;
 	$customer_id = $args['customer_id'] ?? null;
+	$order_id    = isset( $args['order_id'] ) ? (int) $args['order_id'] : null;
 	$statuses    = $args['subscription_status'] ?? 'any';
 	$per_page    = isset( $args['subscriptions_per_page'] ) ? (int) $args['subscriptions_per_page'] : 0;
 	// Stageable: set $wcs_mock_ignore_offset to reproduce a query that never advances —
@@ -2062,6 +2153,10 @@ function wcs_get_subscriptions( $args = [] ) {
 	$matches = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
 		if ( null !== $customer_id && $subscription->get_customer_id() !== $customer_id ) {
+			continue;
+		}
+		// Real WCS matches `order_id` against the subscription's parent order.
+		if ( null !== $order_id && (int) $subscription->get_parent_id() !== $order_id ) {
 			continue;
 		}
 		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
@@ -2104,6 +2199,17 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
 	return $subscriptions;
 }
 /**
+ * Records each user ID passed, in the order received, on the
+ * $wcs_mock_made_active_user_ids global. The real function restores the
+ * subscriber role that cancelling a subscription can take away.
+ *
+ * @param int $user_id User ID.
+ */
+function wcs_make_user_active( $user_id ) {
+	global $wcs_mock_made_active_user_ids;
+	$wcs_mock_made_active_user_ids[] = $user_id;
+}
+/**
  * Whether a user holds a subscription, optionally to a given product and in a
  * given set of statuses. Mirrors the real helper closely enough for the
  * `function_exists()` gates production code puts in front of it, which is what
@@ -2112,11 +2218,15 @@ function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args
  * @param int             $user_id    User ID.
  * @param int|string      $product_id Optional product the subscription must hold.
  * @param string|string[] $status     Optional status or statuses; 'any' matches all.
+ * @param int[]           $excluded_subscription_ids Optional subscriptions to ignore, as WCS 9+ accepts.
  *
  * @return bool
  */
-function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any' ) {
+function wcs_user_has_subscription( $user_id = 0, $product_id = '', $status = 'any', $excluded_subscription_ids = [] ) {
 	foreach ( wcs_get_users_subscriptions( (int) $user_id ) as $subscription ) {
+		if ( in_array( $subscription->get_id(), $excluded_subscription_ids, true ) ) {
+			continue;
+		}
 		if ( $product_id && ! $subscription->has_product( (int) $product_id ) ) {
 			continue;
 		}
@@ -2205,12 +2315,23 @@ function wc_get_orders( $args ) {
 	global $orders_database, $wc_mocks_get_orders_calls, $wc_mocks_orders_ignore_page;
 	$wc_mocks_get_orders_calls = (int) $wc_mocks_get_orders_calls + 1;
 	$orders                    = $orders_database;
+	if ( isset( $args['type'] ) ) {
+		// Real WC defaults to every order type, refunds included; a caller has to ask
+		// for 'shop_order' to leave them out.
+		$types  = (array) $args['type'];
+		$orders = array_filter(
+			$orders,
+			function( $order ) use ( $types ) {
+				return in_array( method_exists( $order, 'get_type' ) ? $order->get_type() : 'shop_order', $types, true );
+			}
+		);
+	}
 	if ( isset( $args['customer_id'] ) ) {
-		// Filter by customer.
+		// Filter by customer. A refund has no customer, so it never matches.
 		$orders = array_filter(
 			$orders,
 			function( $order ) use ( $args ) {
-				return $order->get_customer_id() === $args['customer_id'];
+				return method_exists( $order, 'get_customer_id' ) && $order->get_customer_id() === $args['customer_id'];
 			}
 		);
 	}
@@ -2229,6 +2350,9 @@ function wc_get_orders( $args ) {
 		$orders          = array_filter(
 			$orders,
 			function( $order ) use ( $customer_values ) {
+				if ( ! method_exists( $order, 'get_customer_id' ) ) {
+					return false;
+				}
 				foreach ( $customer_values as $customer_value ) {
 					if ( is_numeric( $customer_value ) && $order->get_customer_id() === (int) $customer_value ) {
 						return true;
@@ -2268,10 +2392,30 @@ function wc_get_orders( $args ) {
 			}
 		);
 	}
+	if ( isset( $args['date_created'] ) && is_string( $args['date_created'] ) && str_contains( $args['date_created'], '...' ) ) {
+		// Support the '{timestamp}...{timestamp}' range form. Real WC includes both ends.
+		[ $start, $end ] = array_map( 'intval', explode( '...', $args['date_created'], 2 ) );
+		$orders          = array_filter(
+			$orders,
+			function( $order ) use ( $start, $end ) {
+				$date_created = $order->get_date_created();
+				return $date_created && $date_created->getTimestamp() >= $start && $date_created->getTimestamp() <= $end;
+			}
+		);
+	}
+	// Real WC sorts by creation date, newest first unless `order` says ASC. The ID
+	// tie-breaker stands in for `'orderby' => 'date ID'`; with `date` alone real WC
+	// leaves orders created in the same second in no fixed order.
+	$descending = 'ASC' !== strtoupper( (string) ( $args['order'] ?? '' ) );
+	$sort_key   = function( $order ) {
+		$date_created = $order->get_date_created();
+		return [ $date_created ? $date_created->getTimestamp() : 0, $order->get_id() ];
+	};
 	usort(
 		$orders,
-		function( $a, $b ) {
-			return $b->get_date_paid()->getTimestamp() <=> $a->get_date_paid()->getTimestamp();
+		function( $a, $b ) use ( $descending, $sort_key ) {
+			$comparison = $sort_key( $a ) <=> $sort_key( $b );
+			return $descending ? -$comparison : $comparison;
 		}
 	);
 	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
@@ -2296,6 +2440,9 @@ function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 		// Real WC matches the customer user ID OR the billing email, so guest
 		// orders count toward the buyer's history. The email comparison runs in
 		// SQL under a case-insensitive collation.
+		if ( ! method_exists( $order, 'get_customer_id' ) ) {
+			continue; // A refund belongs to no customer.
+		}
 		$matches_user  = $user_id && $order->get_customer_id() === $user_id;
 		$matches_email = $customer_email && 0 === strcasecmp( (string) $order->get_billing_email(), (string) $customer_email );
 		if ( ! $matches_user && ! $matches_email ) {
@@ -2337,19 +2484,55 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 	}
 }
 /**
- * Minimal stand-in for WooCommerce's admin field renderer. Only enough markup to let a metabox
- * callback render end to end; assertions belong on the surrounding markup, not on this field.
+ * Minimal stand-in for WooCommerce's admin field renderer. The input is always `type="text"`
+ * and custom attributes such as `min` are not printed, so a test can't assert on them.
+ *
+ * Without a `value`, WooCommerce reads the field's meta off the global post, so the product
+ * editor shows whatever was last saved. The mock does the same, or a test of what the editor
+ * shows would see an empty field where production shows the stored value.
  *
  * @param array $field The field definition.
  */
 function woocommerce_wp_text_input( $field ) {
+	global $post;
+	$value = $field['value'] ?? ( $post ? get_post_meta( $post->ID, $field['id'] ?? '', true ) : '' );
 	printf(
 		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><input type="text" id="%2$s" name="%4$s" value="%5$s" /></p>',
 		esc_attr( $field['wrapper_class'] ?? '' ),
 		esc_attr( $field['id'] ?? '' ),
 		esc_html( $field['label'] ?? '' ),
 		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
-		esc_attr( $field['value'] ?? '' )
+		esc_attr( $value )
+	);
+}
+/**
+ * Minimal stand-in for WooCommerce's admin select renderer, so a callback that renders a select
+ * beside text fields can run end to end. The options themselves are not rendered.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_select( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><select id="%2$s" name="%4$s"></select></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) )
+	);
+}
+/**
+ * Textarea counterpart of woocommerce_wp_text_input(), same caveat.
+ *
+ * @param array $field The field definition.
+ */
+function woocommerce_wp_textarea_input( $field ) {
+	printf(
+		'<p class="form-field %1$s"><label for="%2$s">%3$s</label><textarea id="%2$s" name="%4$s">%5$s</textarea></p>',
+		esc_attr( $field['wrapper_class'] ?? '' ),
+		esc_attr( $field['id'] ?? '' ),
+		esc_html( $field['label'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
+		esc_textarea( $field['value'] ?? '' )
 	);
 }
 /**

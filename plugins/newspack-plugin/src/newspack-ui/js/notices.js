@@ -29,14 +29,18 @@ domReady( function () {
 } );
 
 /**
- * Get (or create) the shared `.newspack-ui` wrapper that hosts snackbars and the live regions.
+ * Get (or create) the top-level wrapper that hosts snackbars and the live regions.
+ *
+ * Any other `.newspack-ui` element may sit inside a modal or prompt that is hidden, which would
+ * hide the snackbars and silence the live regions with it.
  *
  * @return {Element} The wrapper element.
  */
 function getWrapper() {
-	let wrapper = document.querySelector( '.newspack-ui' );
+	let wrapper = document.getElementById( 'newspack-ui__notices' );
 	if ( ! wrapper ) {
 		wrapper = document.createElement( 'div' );
+		wrapper.id = 'newspack-ui__notices';
 		wrapper.classList.add( 'newspack-ui' );
 		document.body.appendChild( wrapper );
 	}
@@ -131,11 +135,12 @@ function closeNotice( element, remove = true ) {
  * @param {string} type    Severity; drives the ARIA announcement and the type icon ('error' and 'warning').
  */
 function createNotice( message, type = 'success' ) {
-	let snackbar = document.querySelector( '.newspack-ui__snackbar' );
+	const wrapper = getWrapper();
+	let snackbar = wrapper.querySelector( '.newspack-ui__snackbar' );
 	if ( ! snackbar ) {
 		snackbar = document.createElement( 'div' );
 		snackbar.classList.add( 'newspack-ui__snackbar' );
-		getWrapper().appendChild( snackbar );
+		wrapper.appendChild( snackbar );
 	}
 
 	const item = document.createElement( 'div' );

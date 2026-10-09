@@ -22,10 +22,11 @@ describe( 'group labels', () => {
 	} );
 
 	it( 'interpolates the publisher’s own noun instead', () => {
-		const { groupCountLabel } = loadLabels( { groupLabel: 'Team', groupLabelPlural: 'Teams' } );
+		const { groupCountLabel, groupNameLabel } = loadLabels( { groupLabel: 'Team', groupLabelPlural: 'Teams' } );
 
 		expect( groupCountLabel( 14 ) ).toBe( '14 Teams' );
 		expect( groupCountLabel( 1 ) ).toBe( '1 Team' );
+		expect( groupNameLabel() ).toBe( 'Team name' );
 	} );
 
 	it( 'speaks the same noun the heading shows when only the singular is set', () => {
@@ -80,28 +81,31 @@ describe( 'group labels', () => {
 	} );
 
 	// Every sentence that wraps the noun takes its template from PHP, not just the count.
-	it( 'takes the role, failure and link phrasing from PHP too', () => {
-		const { groupRoleLabel, groupLoadFailedLabel, groupViewLabel } = loadLabels( {
+	it( 'takes the role, name, failure and link phrasing from PHP too', () => {
+		const { groupRoleLabel, groupNameLabel, groupLoadFailedLabel, groupViewLabel } = loadLabels( {
 			groupLabel: '',
 			groupLabelPlural: '',
 			groupLabelDefault: 'Gruppe',
 			groupLabelDefaultPlural: 'Gruppen',
 			groupPhrases: {
 				role: '%s-Rolle',
+				name: 'Name der %s',
 				loadFailed: '%1$s konnten nicht geladen werden: %2$s',
 				view: '%1$s ansehen: %2$s',
 			},
 		} );
 
 		expect( groupRoleLabel() ).toBe( 'Gruppe-Rolle' );
+		expect( groupNameLabel() ).toBe( 'Name der Gruppe' );
 		expect( groupLoadFailedLabel( 'Zeitüberschreitung' ) ).toBe( 'Gruppen konnten nicht geladen werden: Zeitüberschreitung' );
 		expect( groupViewLabel( 'Familienabo' ) ).toBe( 'Gruppe ansehen: Familienabo' );
 	} );
 
 	it( 'falls back to the English source when the payload carries no phrasing', () => {
-		const { groupRoleLabel, groupLoadFailedLabel, groupViewLabel } = loadLabels();
+		const { groupRoleLabel, groupNameLabel, groupLoadFailedLabel, groupViewLabel } = loadLabels();
 
 		expect( groupRoleLabel() ).toBe( 'Group role' );
+		expect( groupNameLabel() ).toBe( 'Group name' );
 		expect( groupLoadFailedLabel( 'timed out' ) ).toBe( 'Could not load Groups: timed out' );
 		expect( groupViewLabel( 'Family plan' ) ).toBe( 'View Group: Family plan' );
 	} );

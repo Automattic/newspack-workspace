@@ -11,7 +11,6 @@ use DateTime;
 use WP_Post;
 
 require_once 'class-major-revisions.php';
-require_once 'class-autosave-cleanup.php';
 
 /**
  * Revisions Control class
@@ -141,8 +140,7 @@ class Revisions_Control {
 		if ( ! is_null( $check ) || ! self::is_active() || 'revision' !== $post->post_type ) {
 			return $check;
 		}
-		// WordPress only deletes an autosave it no longer needs (stale, identical to the post, or with its parent), so the minimum age doesn't apply.
-		if ( ! wp_is_post_autosave( $post ) && $post->post_date > self::get_min_age() ) {
+		if ( $post->post_date > self::get_min_age() ) {
 			return true; // do not delete.
 		}
 		$revision = new Major_Revision( $post->post_parent, $post->ID );

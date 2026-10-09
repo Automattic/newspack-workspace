@@ -5,6 +5,15 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
+.newspack-card--core.components-card:where(:not(.newspack-card--core__no-border)) {
+	box-shadow: 0 0 0 1px var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
+}
+
+.newspack-card--core .newspack-card--core__header.components-card__header,
+.newspack-card--core .components-card__footer {
+	border-color: var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
+}
+
 .newspack-card--core,
 .newspack-wizard .newspack-card--core {
 	background: wp-colors.$white;
@@ -107,7 +116,7 @@
 		}
 		> .components-dropdown-menu {
 			aspect-ratio: 1;
-			border-left: 1px solid wp-colors.$gray-200;
+			border-left: 1px solid var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
 			display: grid;
 			height: 100%;
 			max-width: 70px;
@@ -127,7 +136,7 @@
 		padding-left: 80px !important;
 		.newspack-card--core__header__draggable-controls {
 			align-items: center;
-			border-right: 1px solid wp-colors.$gray-200;
+			border-right: 1px solid var( --wpds-color-stroke-surface-neutral, #{wp-colors.$gray-300} );
 			display: flex;
 			height: 100%;
 			justify-content: space-between;

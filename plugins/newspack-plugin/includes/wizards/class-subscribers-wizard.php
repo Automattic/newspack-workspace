@@ -678,15 +678,19 @@ class Subscribers_Wizard extends Wizard {
 				// see the group list's `editUrl` for the subscription itself.
 				'editUrl' => (string) get_edit_user_link( $owner_id ),
 			] : null,
+			// The group's own name: its custom name when set, else the product name,
+			// else the group label.
 			'plan'        => (string) $settings['name'],
+			// The product alone, which `plan` hides once the group is renamed.
+			'product'     => $this->individual_plan_name( $subscription ),
 			'status'      => self::map_subscription_status( $subscription->get_status() ),
 			// The configured limit is owner-inclusive (0 = unlimited); the member
 			// count is likewise owner-inclusive, so "members / seatLimit" reads true.
 			'seatLimit'   => (int) $settings['limit'],
 			'members'     => Group_Subscription::get_member_count( $subscription ),
 			'createdAt'   => $created_at,
-			// Interim click-through target: the WooCommerce subscription edit
-			// screen (HPOS-safe), until the in-wizard group detail lands (PR 4).
+			// The WooCommerce subscription edit screen (HPOS-safe), linked from the
+			// group's "View subscription" drawer.
 			'editUrl'     => $this->subscription_edit_url( $subscription ),
 			// Always null: nothing on the site records a seat-increase request yet,
 			// so there is nothing to report. The field stays in the response because
@@ -1665,7 +1669,8 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Resolve the display name of an individual subscription's plan (its product name).
+	 * Resolve a subscription's product name: an individual plan's display name, or
+	 * the product behind a group.
 	 *
 	 * @param \WC_Subscription $subscription The subscription.
 	 *
@@ -2438,6 +2443,8 @@ class Subscribers_Wizard extends Wizard {
 						'count'      => __( '%1$s %2$s', 'newspack-plugin' ),
 						/* translators: %s: the group label, e.g. "Group". */
 						'role'       => __( '%s role', 'newspack-plugin' ),
+						/* translators: %s: the group label, e.g. "Group". */
+						'name'       => __( '%s name', 'newspack-plugin' ),
 						/* translators: 1: the group label, e.g. "Groups". 2: the error message. */
 						'loadFailed' => __( 'Could not load %1$s: %2$s', 'newspack-plugin' ),
 						/* translators: 1: the group label, e.g. "Group". 2: the group name. */

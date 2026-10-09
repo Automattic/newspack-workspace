@@ -1,6 +1,6 @@
 {
 	"name": "newspack-network",
-	"version": "2.22.9",
+	"version": "2.22.11",
 	"description": "The Newspack Network plugin.",
 	"license": "GPL-2.0-or-later",
 	"repository": {
@@ -44,6 +44,7 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"dependencies": {
+		"@wordpress/ui": "^0.23.0",
 		"newspack-icons": "workspace:*"
 	},
 	"devDependencies": {

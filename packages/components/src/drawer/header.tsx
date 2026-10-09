@@ -1,4 +1,9 @@
 /**
+ * WordPress dependencies.
+ */
+import { Stack } from '@wordpress/ui';
+
+/**
  * External dependencies.
  */
 import classnames from 'classnames';
@@ -9,7 +14,9 @@ import classnames from 'classnames';
 import type { DrawerHeaderProps } from './types';
 
 const Header = ( { className, children }: DrawerHeaderProps ) => (
-	<div className={ classnames( 'newspack-drawer__header', className ) }>{ children }</div>
+	<Stack direction="row" align="center" gap="sm" className={ classnames( 'newspack-drawer__header', className ) }>
+		{ children }
+	</Stack>
 );
 
 export default Header;

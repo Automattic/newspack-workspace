@@ -12,6 +12,7 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { SyncActivity } from './sync-activity';
 import { ScheduledActions } from './scheduled-actions';
+import { hasSettingsToShow } from './settings-field';
 import './style.scss';
 
 const { Redirect } = Router;
@@ -56,8 +57,12 @@ export const LogsView = ( { integrations, match } ) => {
 
 	useEffect( () => {
 		if ( integration ) {
+			// The name links to the integration's settings page, unless it has none.
+			const integrationCrumb = hasSettingsToShow( integration.settings )
+				? { label: integration.name, url: `#/settings/${ integrationId }` }
+				: { label: integration.name };
 			setHeaderData( {
-				sectionName: [ { label: integration.name, url: `#/settings/${ integrationId }` }, { label: __( 'Logs', 'newspack-plugin' ) } ],
+				sectionName: [ integrationCrumb, { label: __( 'Logs', 'newspack-plugin' ) } ],
 			} );
 		}
 	}, [ integration, integrationId, setHeaderData ] );

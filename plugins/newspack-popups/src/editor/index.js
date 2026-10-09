@@ -12,10 +12,11 @@ import { compose } from '@wordpress/compose';
 import { withSelect, withDispatch, useSelect, useDispatch } from '@wordpress/data';
 import { registerPlugin } from '@wordpress/plugins';
 import { PluginDocumentSettingPanel, PluginPostStatusInfo } from '@wordpress/edit-post';
-import { ExternalLink, Flex } from '@wordpress/components';
+import { ExternalLink } from '@wordpress/components';
 import { store as coreStore } from '@wordpress/core-data';
 import { store as editorStore } from '@wordpress/editor';
 import { useEffect } from '@wordpress/element';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -236,7 +237,7 @@ const NewspackPopupsSegmentsHelper = ( { slug } ) => {
 	}, [] );
 
 	return (
-		<Flex direction="column" gap="4">
+		<Stack direction="column" gap="lg">
 			<div className="newspack-popups-segments-tax-control-helper">
 				{ terms.length === 0 && <p>{ __( 'The prompt will be shown to all readers.', 'newspack-popups' ) }</p> }
 				{ terms.length === 1 && (
@@ -250,7 +251,7 @@ const NewspackPopupsSegmentsHelper = ( { slug } ) => {
 			<ExternalLink href={ ADMIN_URL } key="segmentation-link">
 				{ __( 'Manage segments', 'newspack-popups' ) }
 			</ExternalLink>
-		</Flex>
+		</Stack>
 	);
 };
 
