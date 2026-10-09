@@ -77,15 +77,28 @@ jobs:
               { owner, repo, pull_number: pr.number }
             );
 
-            // A dismissed approval reports DISMISSED, so it no longer counts here.
-            const peerApproved = reviews.some(
-              ( review ) =>
-                review.state === 'APPROVED' &&
-                review.user &&
-                review.user.type === 'User' &&
-                review.user.login !== author &&
-                ! MACHINE_REVIEWERS.includes( review.user.login )
-            );
+            // A peer is a team member other than the author: the repo is public, so
+            // anyone can submit an approval. Only each peer's latest decision counts,
+            // so an approval later followed by changes requested doesn't clear the
+            // label. listReviews returns reviews oldest first, and a dismissed
+            // approval reports DISMISSED.
+            const PEER_ASSOCIATIONS = [ 'OWNER', 'MEMBER', 'COLLABORATOR' ];
+            const latestDecision = new Map();
+            for ( const review of reviews ) {
+              if (
+                ! review.user ||
+                review.user.type !== 'User' ||
+                review.user.login === author ||
+                MACHINE_REVIEWERS.includes( review.user.login ) ||
+                ! PEER_ASSOCIATIONS.includes( review.author_association )
+              ) {
+                continue;
+              }
+              if ( [ 'APPROVED', 'CHANGES_REQUESTED', 'DISMISSED' ].includes( review.state ) ) {
+                latestDecision.set( review.user.id, review.state );
+              }
+            }
+            const peerApproved = [ ...latestDecision.values() ].includes( 'APPROVED' );
             if ( peerApproved ) {
               core.info( 'Approved by a peer; nothing to label.' );
               return;
