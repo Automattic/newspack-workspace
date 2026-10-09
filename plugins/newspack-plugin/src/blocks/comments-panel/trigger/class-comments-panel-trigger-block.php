@@ -29,12 +29,18 @@ final class Comments_Panel_Trigger_Block {
 	 * @return void
 	 */
 	public static function register_block() {
-		register_block_type_from_metadata(
+		$block_type = register_block_type_from_metadata(
 			__DIR__ . '/block.json',
 			[
 				'render_callback' => [ __CLASS__, 'render_block' ],
 			]
 		);
+
+		// block.json defaults aren't translated. The editor loads this server-side definition, so an
+		// unchanged button shows the site language's label in the editor and on the front end.
+		if ( $block_type ) {
+			$block_type->attributes['triggerText']['default'] = __( 'Comments', 'newspack-plugin' );
+		}
 	}
 
 	/**
@@ -47,8 +53,7 @@ final class Comments_Panel_Trigger_Block {
 	public static function render_block( array $attributes ) {
 		$default_text = __( 'Comments', 'newspack-plugin' );
 		$trigger_text = $attributes['triggerText'] ?? $default_text;
-		// The block.json default is untranslated, so swap it for the translated string.
-		if ( '' === trim( (string) $trigger_text ) || 'Comments' === $trigger_text ) {
+		if ( '' === trim( (string) $trigger_text ) ) {
 			$trigger_text = $default_text;
 		}
 
