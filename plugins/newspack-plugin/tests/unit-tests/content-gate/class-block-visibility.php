@@ -1339,4 +1339,49 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 
 		$this->assertSame( $sees_block ? '<div>members</div>' : '', $this->render_for_signed_out_visitor_at( $block, $ip ) );
 	}
+
+	/**
+	 * The strip answers the listing's stricter anonymous reader apart from the
+	 * article page's. A listing declines the anonymous bypass, so content one
+	 * keeps the other can drop, and the memo must not hand one the other's.
+	 */
+	public function test_strip_answers_a_listing_apart_from_the_article_page() {
+		$rule_id = 'anonymous_rule_' . uniqid();
+		\Newspack\Access_Rules::register_rule(
+			[
+				'id'                 => $rule_id,
+				'name'               => 'Anonymous Rule',
+				'callback'           => '__return_true',
+				'supports_anonymous' => true,
+			]
+		);
+		$markup = '<!-- wp:group ' . wp_json_encode(
+			[
+				'newspackAccessControlMode'  => 'custom',
+				'newspackAccessControlRules' => [
+					'custom_access' => [
+						'active'       => true,
+						'access_rules' => [
+							[
+								[
+									'slug'  => $rule_id,
+									'value' => [ 1 ],
+								],
+							],
+						],
+					],
+				],
+			]
+		) . ' --><div class="wp-block-group"><!-- wp:paragraph --><p>RULEONLY</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+
+		$article = Block_Visibility::strip_blocks_hidden_from_public( $markup );
+		$listing = \Newspack\Content_Gate::in_listing_context(
+			function () use ( $markup ) {
+				return Block_Visibility::strip_blocks_hidden_from_public( $markup );
+			}
+		);
+
+		$this->assertStringContainsString( 'RULEONLY', $article, 'The anonymous rule lets the article page keep the block, which is the premise of this test.' );
+		$this->assertStringNotContainsString( 'RULEONLY', $listing );
+	}
 }

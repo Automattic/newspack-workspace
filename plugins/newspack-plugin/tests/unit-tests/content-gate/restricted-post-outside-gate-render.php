@@ -279,6 +279,282 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A restricted post opening with a captioned image, as a slideshow does.
+	 *
+	 * @return int
+	 */
+	private function create_restricted_post_with_caption() {
+		return $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:image --><figure class="wp-block-image"><img src="https://example.com/a.jpg" alt=""/><figcaption>CAPTIONTEXT</figcaption></figure><!-- /wp:image -->'
+					. '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+			]
+		);
+	}
+
+	/**
+	 * NPPM-3488: the teaser is rendered, so core's excerpt_remove_blocks() cannot
+	 * drop the blocks it keeps out of an excerpt. Their text must not lead it.
+	 */
+	public function test_auto_excerpt_leaves_out_blocks_core_excludes() {
+		$post_id = $this->create_restricted_post_with_caption();
+
+		$excerpt = get_the_excerpt( $post_id );
+
+		$this->assertStringNotContainsString( 'CAPTIONTEXT', $excerpt );
+		$this->assertStringContainsString( self::FREE_MARKER, $excerpt );
+		$this->assertStringContainsString( 'Second free line.', $excerpt, 'The excerpt keeps the whole free part.' );
+	}
+
+	/**
+	 * The teaser renders some words differently from the post (footnote markers,
+	 * curly quotes, entities). The excerpt still runs to the end of the free part.
+	 */
+	public function test_excerpt_keeps_footnoted_and_punctuated_free_text() {
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' the reader\'s "budget"<sup data-fn="fn1" class="fn"><a href="#fn1" id="fn1-link">1</a></sup> passed &amp; closed.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+			]
+		);
+		$this->go_to( home_url( '/' ) );
+
+		$loop = new \WP_Query( [ 'p' => $post_id ] );
+		$loop->the_post();
+		$post_content = $GLOBALS['post']->post_content;
+		wp_reset_postdata();
+
+		foreach ( [ get_the_excerpt( $post_id ), $post_content ] as $text ) {
+			$this->assertStringContainsString( 'Second free line.', $text );
+			$this->assertStringNotContainsString( self::PAID_MARKER, $text );
+			$this->assertMatchesRegularExpression( '/passed (&amp;|&#038;|&) closed\./', $text, 'Punctuation in the free text is kept.' );
+		}
+	}
+
+	/**
+	 * A stripped shortcode's punctuation does not end the excerpt early, and stays
+	 * in place as in core's excerpt: strip_shortcodes() leaves it on the post
+	 * side, while the teaser renders the shortcode.
+	 */
+	public function test_shortcode_punctuation_does_not_end_the_excerpt() {
+		add_shortcode(
+			'np_test_year',
+			static function () {
+				return '2026';
+			}
+		);
+		try {
+			$post_id = $this->create_restricted_post(
+				[
+					'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' published in [np_test_year]. More free text.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+				]
+			);
+			$excerpt = get_the_excerpt( $post_id );
+		} finally {
+			remove_shortcode( 'np_test_year' );
+		}
+
+		$this->assertSame( self::FREE_MARKER . ' published in . More free text. Second free line.', $excerpt, 'Matches core, which leaves a stripped shortcode\'s punctuation in place.' );
+	}
+
+	/**
+	 * A free part ending in a caption above the more tag does not let a gated
+	 * body that opens with the caption's own words into the excerpt.
+	 */
+	public function test_excerpt_ends_at_the_free_text_before_a_trailing_caption() {
+		update_post_meta( $this->gate_layout_id, 'use_more_tag', true );
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:image --><figure class="wp-block-image"><img src="https://example.test/a.jpg" alt=""/><figcaption>The mayor speaks to the press at city hall.</figcaption></figure><!-- /wp:image -->'
+					. '<!-- wp:more --><!--more--><!-- /wp:more -->'
+					. '<!-- wp:paragraph --><p>The mayor speaks to the press at city hall, where ' . self::PAID_MARKER . ' begins.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$this->assertSame( self::FREE_MARKER . ' opening line.', get_the_excerpt( $post_id ) );
+	}
+
+	/**
+	 * An overlay post whose free part holds no excerpt text gets no excerpt, as
+	 * core gives none, rather than the ending on its own.
+	 */
+	public function test_overlay_excerpt_without_free_text_is_empty() {
+		update_post_meta( $this->gate_layout_id, 'style', 'overlay' );
+		update_post_meta( $this->gate_layout_id, 'visible_paragraphs', 1 );
+		// A classic [caption] renders a paragraph of its own, so it is the one
+		// paragraph the gate shows.
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '[caption id="" align="alignnone" width="300"]<img src="https://example.test/a.jpg" width="300" height="200" /> CAPTIONTEXT[/caption]'
+					. "\n\n" . self::PAID_MARKER . ' is behind the gate.',
+			]
+		);
+
+		$teaser = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$this->assertStringContainsString( 'CAPTIONTEXT', $teaser, 'The caption is the whole free part, which is the premise of this test.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $teaser, 'The caption is the whole free part, which is the premise of this test.' );
+		$this->assertSame( '', get_the_excerpt( $post_id ) );
+	}
+
+	/**
+	 * A teaser that ends inside a container block takes the container's free
+	 * inner blocks and stops where the teaser does.
+	 */
+	public function test_excerpt_stops_inside_a_container_block() {
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:group --><div class="wp-block-group">'
+					. '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:image --><figure class="wp-block-image"><img src="https://example.test/a.jpg" alt=""/><figcaption>CAPTIONTEXT</figcaption></figure><!-- /wp:image -->'
+					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->'
+					. '</div><!-- /wp:group -->',
+			]
+		);
+
+		$this->assertSame( self::FREE_MARKER . ' opening line. Second free line.', get_the_excerpt( $post_id ) );
+	}
+
+	/**
+	 * A block the teaser ends inside and that cannot be entered, such as Custom
+	 * HTML holding several paragraphs, is left out rather than shown whole.
+	 */
+	public function test_excerpt_leaves_out_a_block_the_teaser_cuts_through() {
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:html --><p>HTMLFREE line.</p><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:html -->',
+			]
+		);
+
+		$this->assertSame( self::FREE_MARKER . ' opening line.', get_the_excerpt( $post_id ) );
+	}
+
+	/**
+	 * A classic post has no blocks to cut at, so its paragraphs stand in for
+	 * them, and a [caption] in the free part stays out as core leaves it out.
+	 * The caption renders a paragraph of its own, so it is one of the two the
+	 * gate shows.
+	 */
+	public function test_classic_post_excerpt_leaves_out_captions() {
+		$post_id = $this->create_restricted_post(
+			[
+				'post_content' => '[caption id="" align="alignnone" width="300"]<img src="https://example.test/a.jpg" width="300" height="200" /> CAPTIONTEXT[/caption]'
+					. "\n\n" . self::FREE_MARKER . " opening line.\n\n" . self::PAID_MARKER . ' is behind the gate.',
+			]
+		);
+
+		$this->assertSame( self::FREE_MARKER . ' opening line.', get_the_excerpt( $post_id ) );
+	}
+
+	/**
+	 * Homepage Posts builds its excerpt from a listing post's `post_content`, so
+	 * that carries the excerpt's teaser, while the card's content render keeps the
+	 * image.
+	 */
+	public function test_listing_post_content_leaves_out_blocks_core_excludes() {
+		$post_id = $this->create_restricted_post_with_caption();
+		$this->go_to( home_url( '/' ) );
+
+		$loop = new \WP_Query( [ 'p' => $post_id ] );
+		$loop->the_post();
+		$post_content = $GLOBALS['post']->post_content;
+		$rendered     = apply_filters( 'the_content', get_the_content() );
+		wp_reset_postdata();
+
+		$this->assertStringNotContainsString( 'CAPTIONTEXT', $post_content );
+		$this->assertStringContainsString( self::FREE_MARKER, $post_content );
+		$this->assertStringContainsString( 'CAPTIONTEXT', $rendered, 'The card itself still shows the image.' );
+	}
+
+	/**
+	 * The overlay layout ends its teaser with an ellipsis. An excerpt ends with the
+	 * site's own `excerpt_more` instead, and the page teaser keeps the ellipsis.
+	 */
+	public function test_overlay_excerpt_ends_with_excerpt_more() {
+		update_post_meta( $this->gate_layout_id, 'style', 'overlay' );
+		$post_id = $this->create_restricted_post();
+		$more    = static function () {
+			return ' MORELINK';
+		};
+		add_filter( 'excerpt_more', $more );
+
+		$excerpt = get_the_excerpt( $post_id );
+		remove_filter( 'excerpt_more', $more );
+
+		$this->assertStringEndsWith( ' MORELINK', $excerpt );
+		$this->assertStringNotContainsString( '[&hellip;]', $excerpt );
+		$this->assertStringContainsString( '[&hellip;]', Content_Gate::get_teaser_outside_article( get_post( $post_id ) ) );
+	}
+
+	/**
+	 * In a loop the post's `post_content` already holds the excerpt text. The
+	 * excerpt is built from the post itself, so the ending is not added twice.
+	 */
+	public function test_overlay_excerpt_in_a_loop_ends_once() {
+		update_post_meta( $this->gate_layout_id, 'style', 'overlay' );
+		$post_id = $this->create_restricted_post_with_caption();
+		$more    = static function () {
+			return ' MORELINK';
+		};
+		add_filter( 'excerpt_more', $more );
+		$this->go_to( home_url( '/' ) );
+
+		$loop = new \WP_Query( [ 'p' => $post_id ] );
+		$loop->the_post();
+		$excerpt = get_the_excerpt();
+		wp_reset_postdata();
+		remove_filter( 'excerpt_more', $more );
+
+		$this->assertSame( 1, substr_count( $excerpt, 'MORELINK' ) );
+		$this->assertStringNotContainsString( '[&hellip;]', $excerpt );
+		$this->assertStringNotContainsString( 'CAPTIONTEXT', $excerpt );
+		$this->assertStringContainsString( 'Second free line.', $excerpt );
+	}
+
+	/**
+	 * The inline layout adds no ending to its teaser, and its excerpt gets none
+	 * either while it stays under the excerpt length.
+	 */
+	public function test_inline_excerpt_gets_no_added_ending() {
+		$post_id = $this->create_restricted_post();
+		$more    = static function () {
+			return ' MORELINK';
+		};
+		add_filter( 'excerpt_more', $more );
+
+		$excerpt = get_the_excerpt( $post_id );
+		remove_filter( 'excerpt_more', $more );
+
+		$this->assertStringNotContainsString( 'MORELINK', $excerpt );
+		$this->assertStringEndsWith( 'Second free line.', $excerpt );
+	}
+
+	/**
+	 * Homepage Posts reads the overlay's ellipsis from `post_content`, as it did
+	 * from the rendered teaser.
+	 */
+	public function test_listing_post_content_keeps_the_overlay_ellipsis() {
+		update_post_meta( $this->gate_layout_id, 'style', 'overlay' );
+		$post_id = $this->create_restricted_post_with_caption();
+		$this->go_to( home_url( '/' ) );
+
+		$loop = new \WP_Query( [ 'p' => $post_id ] );
+		$loop->the_post();
+		$post_content = $GLOBALS['post']->post_content;
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( 'Second free line. [&hellip;]', $post_content );
+		$this->assertStringNotContainsString( 'CAPTIONTEXT', $post_content );
+	}
+
+	/**
 	 * The article page is unchanged: the body is replaced by the teaser and the
 	 * gate renders once, not once per pass through the content filters.
 	 */
@@ -544,6 +820,74 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The excerpt, like the teaser, is cut for the anonymous reader. For a member,
+	 * a block hidden from members renders empty, so the group around it reads as
+	 * free text alone and would be kept whole, paid text and all, in an excerpt
+	 * cached for everyone.
+	 */
+	public function test_excerpt_cut_by_a_member_keeps_paid_text_out() {
+		$post_id       = $this->create_restricted_post(
+			[
+				'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:group --><div class="wp-block-group">'
+					. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+					. '<!-- wp:group {"newspackAccessControlMode":"gate","newspackAccessControlGateIds":[' . $this->gate_id . '],"newspackAccessControlVisibility":"hidden"} --><div class="wp-block-group">'
+					. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->'
+					. '</div><!-- /wp:group -->'
+					. '</div><!-- /wp:group -->'
+					. '<!-- wp:paragraph --><p>Closing paid line.</p><!-- /wp:paragraph -->',
+			]
+		);
+		$subscriber_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+
+		$excerpts = [];
+		foreach ( [
+			'subscriber' => $subscriber_id,
+			'anonymous'  => 0,
+		] as $reader => $user_id ) {
+			wp_set_current_user( $user_id );
+			$this->reset_restriction_cache();
+			$this->reset_gate_render_state();
+			\Newspack\Block_Visibility::reset_cache_for_tests();
+			$excerpts[ $reader ] = get_the_excerpt( $post_id );
+		}
+		wp_set_current_user( 0 );
+
+		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpts['anonymous'] );
+		$this->assertStringContainsString( 'Second free line.', $excerpts['anonymous'] );
+	}
+
+	/**
+	 * A container a render filter empties is entered rather than kept whole: core's
+	 * excerpt never renders the container itself, only its inner blocks, so the
+	 * filter that emptied it would not apply there.
+	 */
+	public function test_excerpt_enters_a_container_that_renders_empty() {
+		$empty_marked_group = static function ( $content, $block ) {
+			return str_contains( $block['attrs']['className'] ?? '', 'np-test-emptied' ) ? '' : $content;
+		};
+		add_filter( 'render_block_core/group', $empty_marked_group, 10, 2 );
+		try {
+			$post_id = $this->create_restricted_post(
+				[
+					'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:group {"className":"np-test-emptied"} --><div class="wp-block-group np-test-emptied">'
+						. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->'
+						. '</div><!-- /wp:group -->'
+						. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>Closing paid line.</p><!-- /wp:paragraph -->',
+				]
+			);
+			$excerpt = get_the_excerpt( $post_id );
+		} finally {
+			remove_filter( 'render_block_core/group', $empty_marked_group, 10 );
+		}
+
+		$this->assertStringContainsString( self::FREE_MARKER, $excerpt, 'The cut starts at the opening paragraph, which is the premise of this test.' );
+		$this->assertStringNotContainsString( self::PAID_MARKER, $excerpt );
+	}
+
+	/**
 	 * A post shown twice in one request — a Query Loop and a sidebar listing over
 	 * the same posts — is withheld in both, with no state reset in between.
 	 *
@@ -571,26 +915,32 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Editing the gate layout shortens the free preview at once.
+	 * Editing the gate layout shortens the free preview, and the excerpt cut from
+	 * it, at once.
 	 *
-	 * The teaser is cached across requests, and the layout settings that slice it
-	 * live on the layout post's meta — editing them leaves the article's own
-	 * modified time untouched, so the key has to carry them.
+	 * The teaser and the excerpt are cached across requests, and the layout
+	 * settings that slice them live on the layout post's meta — editing them
+	 * leaves the article's own modified time untouched, so the keys have to
+	 * carry them.
 	 */
 	public function test_a_layout_edit_reshapes_the_teaser_at_once() {
 		update_post_meta( $this->gate_layout_id, 'visible_paragraphs', 2 );
 		$post_id = $this->create_restricted_post();
 
-		$two_paragraphs = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$two_paragraphs         = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$two_paragraphs_excerpt = get_the_excerpt( $post_id );
 
 		update_post_meta( $this->gate_layout_id, 'visible_paragraphs', 1 );
 		$this->reset_restriction_cache();
 		$this->reset_gate_render_state();
 
-		$one_paragraph = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$one_paragraph         = Content_Gate::get_teaser_outside_article( get_post( $post_id ) );
+		$one_paragraph_excerpt = get_the_excerpt( $post_id );
 
 		$this->assertStringContainsString( 'Second free line', $two_paragraphs, 'Two paragraphs are free, which is the premise of this test.' );
 		$this->assertStringNotContainsString( 'Second free line', $one_paragraph, 'A shorter preview takes effect without waiting for the cached teaser to expire.' );
+		$this->assertStringContainsString( 'Second free line', $two_paragraphs_excerpt );
+		$this->assertStringNotContainsString( 'Second free line', $one_paragraph_excerpt, 'The excerpt shortens with the teaser rather than serving the cached longer one.' );
 	}
 
 	/**
@@ -935,6 +1285,55 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 		$this->assertSame( 1, $builds, 'The re-entrant `the_post` is answered from the claimed slot, so the body is built into a teaser once.' );
 		$this->assertStringNotContainsString( self::PAID_MARKER, $rendered );
 		$this->assertStringContainsString( self::FREE_MARKER, $rendered );
+	}
+
+	/**
+	 * The same looping block inside the free part is rendered again when the
+	 * excerpt is cut, and the `the_post` it fires asks for that excerpt while it
+	 * is still being built. That asks once and ends; it does not render again.
+	 */
+	public function test_a_block_looping_over_the_post_does_not_re_enter_the_excerpt_build() {
+		$post_id = null;
+		$loops   = 0;
+		register_block_type(
+			'newspack-test/looping-block',
+			[
+				'render_callback' => function () use ( &$post_id, &$loops ) {
+					// A cap, not a guard: see the teaser test above.
+					if ( ++$loops > 5 ) {
+						return '';
+					}
+					$loop = new \WP_Query( [ 'post__in' => [ $post_id ] ] );
+					while ( $loop->have_posts() ) {
+						$loop->the_post();
+					}
+					wp_reset_postdata();
+					return '';
+				},
+			]
+		);
+
+		try {
+			$post_id = $this->create_restricted_post(
+				[
+					'post_content' => '<!-- wp:paragraph --><p>' . self::FREE_MARKER . ' opening line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:newspack-test/looping-block /-->'
+						. '<!-- wp:paragraph --><p>Second free line.</p><!-- /wp:paragraph -->'
+						. '<!-- wp:paragraph --><p>' . self::PAID_MARKER . ' is behind the gate.</p><!-- /wp:paragraph -->',
+				]
+			);
+			$this->go_to( home_url( '/' ) );
+
+			$loop = new \WP_Query( [ 'post__in' => [ $post_id ] ] );
+			$loop->the_post();
+			$post_content = get_post()->post_content;
+			wp_reset_postdata();
+		} finally {
+			unregister_block_type( 'newspack-test/looping-block' );
+		}
+
+		$this->assertSame( '<p>' . self::FREE_MARKER . ' opening line. Second free line.</p>', $post_content );
+		$this->assertLessThan( 5, $loops, 'The excerpt build is asked for once more and ends there, rather than rendering the block until the cap.' );
 	}
 
 	/**

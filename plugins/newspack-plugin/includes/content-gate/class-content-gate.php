@@ -129,7 +129,7 @@ class Content_Gate {
 	private static array $withheld_instances = [];
 
 	/**
-	 * Whether a listing teaser is being built right now.
+	 * Whether a listing teaser, or the excerpt cut from it, is being built right now.
 	 *
 	 * The teaser is cached with no reader dimension and served to everyone for an
 	 * hour, so every question asked while it is being built has to answer to the
@@ -137,8 +137,9 @@ class Content_Gate {
 	 *
 	 * - {@see Block_Visibility::filter_render_block()} evaluates a block's
 	 *   visibility as user 0 and skips the admin bypass.
-	 * - {@see Block_Visibility::evaluation_cache_suffix()} keeps those evaluations
-	 *   out of the entries the article page cached under the same user 0.
+	 * - {@see Block_Visibility::evaluation_cache_suffix()} keeps those evaluations,
+	 *   and the stripped-content memo, out of the entries the article page cached
+	 *   under the same user 0.
 	 * - {@see Access_Rules::evaluate_anonymous_rules()} declines the anonymous
 	 *   bypass, which the `institution` rule grants on an IP match.
 	 * - {@see Content_Restriction_Control::get_gate_memo_key()} keeps the resolved
@@ -209,7 +210,8 @@ class Content_Gate {
 
 	/**
 	 * Object cache group holding the teasers built by
-	 * {@see self::get_teaser_outside_article()}.
+	 * {@see self::get_teaser_outside_article()}, and the excerpt texts
+	 * {@see Content_Gate_Excerpt::get_free_excerpt_text()} cuts from them.
 	 */
 	const WITHHELD_TEASER_CACHE_GROUP = 'newspack_withheld_teasers';
 
@@ -1027,11 +1029,15 @@ class Content_Gate {
 			];
 		}
 
-		// post_excerpt is deliberately left alone. Empty, it makes core build the
-		// excerpt from post_content — now the teaser — so the trimming and the
-		// "read more" suffix stay core's to decide; non-empty, it is the author's
-		// own words about a post they chose to gate, and survives.
-		$post->post_content = $teaser;
+		// A hand-written excerpt (post_excerpt) is left alone: it is the author's
+		// own words about a post they chose to gate. An auto-generated one stops
+		// where the free part ends, so post_content carries the free part as
+		// excerpt text, captions and the like already removed, for a block that
+		// builds its own excerpt from it, as Homepage Posts does. The content passes
+		// above substitute the full teaser from the staged entry.
+		$text               = Content_Gate_Excerpt::get_free_excerpt_text( $post, $teaser );
+		$post->post_content = '<p>' . $text
+			. ( '' !== $text && Content_Gate_Excerpt::has_overlay_ellipsis( $teaser ) ? ' [&hellip;]' : '' ) . '</p>';
 	}
 
 	/**
@@ -1193,10 +1199,10 @@ class Content_Gate {
 	 * nests, and a block inside a teaser that lists another withheld post builds
 	 * that post's teaser from inside this one.
 	 *
-	 * @param callable $build Callback producing the teaser.
+	 * @param callable $build Callback producing the teaser, or the excerpt cut from it.
 	 * @return mixed The callback's return value.
 	 */
-	private static function in_listing_context( $build ) {
+	public static function in_listing_context( callable $build ): mixed {
 		$was_listing_context      = self::$is_listing_context;
 		self::$is_listing_context = true;
 		try {
