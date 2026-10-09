@@ -575,6 +575,10 @@ class Content_Gate_API {
 	 * A comparable rendering of a rule set, with each value cast the way
 	 * `sanitize_access_rule()` casts it.
 	 *
+	 * Numbers compare as floats: an option ID sent as a string still matches the
+	 * stored integer, and range bounds that differ only after the decimal point
+	 * stay distinct, rather than reading as unchanged and being dropped.
+	 *
 	 * @param array $rules The access rules, flat or grouped.
 	 *
 	 * @return string
@@ -587,7 +591,7 @@ class Content_Gate_API {
 			if ( ! is_scalar( $value ) ) {
 				return $value;
 			}
-			return is_numeric( $value ) ? intval( $value ) : sanitize_text_field( $value );
+			return is_numeric( $value ) ? (float) $value : sanitize_text_field( $value );
 		};
 		return (string) wp_json_encode( $cast( Access_Rules::normalize_rules( $rules ) ) );
 	}

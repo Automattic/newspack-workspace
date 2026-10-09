@@ -609,6 +609,34 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A save that leaves the rules unenforced keeps the stored ones when the
+	 * submitted rules match them. Bounds that differ only after the decimal point
+	 * are a different rule, or the edit would be dropped while the save reports
+	 * success.
+	 */
+	public function test_rule_fingerprint_tells_decimal_bounds_apart() {
+		$slug                     = $this->register_range_rule();
+		$access_rules_fingerprint = new \ReflectionMethod( \Newspack\Content_Gate_API::class, 'access_rules_fingerprint' );
+		$access_rules_fingerprint->setAccessible( true );
+		$fingerprint = fn( $value ) => $access_rules_fingerprint->invoke(
+			null,
+			[
+				[
+					[
+						'slug'  => $slug,
+						'value' => $value,
+					],
+				],
+			]
+		);
+
+		$this->assertNotSame( $fingerprint( [ 'min' => 50.2 ] ), $fingerprint( [ 'min' => '50.7' ] ) );
+		$this->assertSame( $fingerprint( [ 'min' => 50.0 ] ), $fingerprint( [ 'min' => '50' ] ) );
+		// Option IDs submitted as strings still match the stored integers.
+		$this->assertSame( $fingerprint( [ 12 ] ), $fingerprint( [ '12' ] ) );
+	}
+
+	/**
 	 * The user-profile gate panel reads a range back as the gate summary does, rather
 	 * than as a bare list of its bounds.
 	 */
