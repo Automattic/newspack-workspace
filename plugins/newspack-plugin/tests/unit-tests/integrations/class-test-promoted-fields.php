@@ -388,7 +388,8 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => 100 ] ) );
 
-		// Nor one too large for a float, which would clear any minimum.
+		// Nor one too large for a float, which reads as infinite and clears the
+		// bound on its side.
 		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( '1e400' ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 1 ] ) );
 
@@ -614,11 +615,12 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 
 	/**
 	 * A save that leaves the rules unenforced keeps the stored ones when the
-	 * submitted rules match them. Bounds that differ only after the decimal point
-	 * are a different rule, or the edit would be dropped while the save reports
-	 * success.
+	 * submitted rules match them. Any edit to a bound is a different rule —
+	 * one after the decimal point, or one beside a value too large for a float —
+	 * or the edit would be dropped while the save reports success. Values the
+	 * client only sends back in another form still match.
 	 */
-	public function test_rule_fingerprint_tells_decimal_bounds_apart() {
+	public function test_rule_fingerprint_tells_edited_bounds_apart() {
 		$slug                     = $this->register_range_rule();
 		$access_rules_fingerprint = new \ReflectionMethod( \Newspack\Content_Gate_API::class, 'access_rules_fingerprint' );
 		$access_rules_fingerprint->setAccessible( true );
@@ -641,20 +643,15 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		// The browser sends a stored -0 back as 0.
 		$this->assertSame( $fingerprint( [ 'min' => -0.0 ] ), $fingerprint( [ 'min' => 0 ] ) );
 		// A number too large for a float must not blank the whole rendering.
-		$this->assertNotSame(
-			$fingerprint(
-				[
-					'min' => 50,
-					'max' => '1e400',
-				] 
-			),
-			$fingerprint(
-				[
-					'min' => 60,
-					'max' => '1e400',
-				] 
-			) 
-		);
+		$stored = [
+			'min' => 50,
+			'max' => '1e400',
+		];
+		$edited = [
+			'min' => 60,
+			'max' => '1e400',
+		];
+		$this->assertNotSame( $fingerprint( $stored ), $fingerprint( $edited ) );
 	}
 
 	/**

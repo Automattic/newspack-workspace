@@ -385,7 +385,8 @@ class Promoted_Fields {
 		if ( null === $bounds || '' === $bounds ) {
 			$bounds = [];
 		}
-		// A reader value too large for a float would clear any minimum.
+		// A reader value too large for a float reads as infinite and clears the
+		// bound on its side.
 		if ( ! self::is_range_shape( $bounds ) || ! is_numeric( $value ) || ! is_finite( (float) $value ) ) {
 			return false;
 		}
