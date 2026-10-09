@@ -34,8 +34,8 @@ jobs:
             // to approve Dependabot PRs.
             const MACHINE_REVIEWERS = [ 'matticbot' ];
 
-            // Bot authors whose PRs are reviewed by policy elsewhere: Dependabot
-            // minor/patch bumps are auto-approved, and majors wait for a human.
+            // Authors left out of this audit by decision. Dependabot's minor and
+            // patch bumps are auto-approved by auto-merge.yml.
             const SKIPPED_AUTHORS = [ 'dependabot[bot]' ];
 
             const { owner, repo } = context.repo;
