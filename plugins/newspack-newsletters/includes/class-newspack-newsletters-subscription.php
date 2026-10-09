@@ -1534,6 +1534,7 @@ class Newspack_Newsletters_Subscription {
 				self::add_account_notice( __( 'You must select newsletters to update.', 'newspack-newsletters' ), 'error' );
 			} else {
 				self::add_account_notice( __( 'Your subscriptions were updated.', 'newspack-newsletters' ), 'success' );
+				$lists_to_add = Newspack_Newsletters_Contacts::filter_lists_to_add( $lists_to_add, $email );
 				if ( ! empty( $lists_to_add ) ) {
 					wp_safe_redirect(
 						add_query_arg(

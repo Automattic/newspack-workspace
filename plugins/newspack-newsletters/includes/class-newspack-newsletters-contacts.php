@@ -310,7 +310,8 @@ class Newspack_Newsletters_Contacts {
 	 * Update a contact lists subscription.
 	 *
 	 * This method will remove the contact from all subscription lists and add
-	 * them to the specified lists.
+	 * them to the specified lists. Lists to add are first narrowed by the
+	 * `newspack_newsletters_contact_lists` filter; lists to remove are not.
 	 *
 	 * @param string   $email Contact email address.
 	 * @param string[] $lists Array of list IDs to subscribe the contact to.
@@ -336,11 +337,38 @@ class Newspack_Newsletters_Contacts {
 		$lists_to_add    = array_diff( $lists_to_add, $current_lists );
 		$lists_to_remove = array_intersect( $current_lists, $lists_to_remove );
 
+		// Only additions are narrowed; leaving a list is always allowed.
+		$lists_to_add = self::filter_lists_to_add( $lists_to_add, $email );
+
 		if ( empty( $lists_to_add ) && empty( $lists_to_remove ) ) {
 			return false;
 		}
 
 		return self::add_and_remove_lists( $email, $lists_to_add, $lists_to_remove, $context );
+	}
+
+	/**
+	 * Narrow a contact's list additions with the `newspack_newsletters_contact_lists` filter.
+	 *
+	 * Additions go through the same filter as a new contact's lists, so
+	 * integrations that limit who may join a list apply to updates too. The
+	 * result is intersected so a callback can only drop a selection, never add
+	 * one the reader did not choose. Callers that report what was added use the
+	 * same narrowing.
+	 *
+	 * @param (int|string)[] $lists_to_add List IDs to add.
+	 * @param string         $email        Contact email address.
+	 *
+	 * @return (int|string)[] The list IDs that remain.
+	 */
+	public static function filter_lists_to_add( $lists_to_add, $email ) {
+		$provider = Newspack_Newsletters::get_service_provider();
+		if ( empty( $lists_to_add ) || ! $provider ) {
+			return $lists_to_add;
+		}
+		/** This filter is documented in includes/class-newspack-newsletters-contacts.php */
+		$allowed_lists = apply_filters( 'newspack_newsletters_contact_lists', array_values( $lists_to_add ), [ 'email' => $email ], $provider->service );
+		return array_intersect( $lists_to_add, (array) $allowed_lists );
 	}
 
 	/**
