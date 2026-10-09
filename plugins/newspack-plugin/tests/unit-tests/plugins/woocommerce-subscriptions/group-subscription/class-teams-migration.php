@@ -1635,7 +1635,7 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		}
 		$gated_team_id = $teams['gated product']['team_id'];
 		$this->assertStringContainsString( sprintf( 'Success: Team %d: Migrated team membership to existing subscription %d, added 1 group member(s)', $gated_team_id, $teams['gated product']['subscription']->get_id() ), $output, 'A $0 team on an accepted product should still migrate.' );
-		$this->assertStringContainsString( '3 team(s) processed: 1 used existing subscriptions, 0 had new subscriptions created, 2 not migrated, 0 skipped, 2 had error(s).', $output, 'Skipped teams should count as not migrated, not as using an existing subscription.' );
+		$this->assertStringContainsString( '3 team(s) processed: 1 used existing subscriptions, 0 had new subscriptions created, 2 not migrated, 0 skipped (no linked subscription), 0 skipped with no access to carry over, 2 had error(s).', $output, 'Skipped teams should count as not migrated, not as using an existing subscription.' );
 		$this->assertStringContainsString( '2 team(s) were not migrated because their $0 subscription holds no product a published gate accepts', $output, 'The run should close with a count of the skipped $0 teams and how to fix them.' );
 	}
 	/**

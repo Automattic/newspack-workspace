@@ -42,10 +42,10 @@ class One_Time_Purchase_Changed extends Reader_Product_Changed {
 	}
 
 	/**
-	 * A paid order grants; a refunded or cancelled one only revokes. An order with no
-	 * customer (a guest checkout, or one an admin created without choosing a customer)
-	 * still records on an account that exists here, but creates none: the origin
-	 * names no reader to propagate.
+	 * A paid order grants; a refunded or cancelled one only revokes. The origin sends
+	 * no paid order without a customer account (#1244); an unpaid one, or a paid one
+	 * from an earlier build, still records on an account that exists here and creates
+	 * none: the origin names no reader to propagate.
 	 *
 	 * @return bool
 	 */

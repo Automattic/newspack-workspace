@@ -25,6 +25,9 @@ import * as overlayMenu from './overlay-menu';
 import * as overlayMenuTrigger from './overlay-menu/trigger';
 import * as overlayMenuPanel from './overlay-menu/panel';
 import * as overlaySearch from './overlay-search';
+import * as commentsPanel from './comments-panel';
+import * as commentsPanelTrigger from './comments-panel/trigger';
+import * as commentsPanelContent from './comments-panel/content';
 import * as responsiveContainer from './responsive-container';
 import * as responsiveContainerBreakpoint from './responsive-container/breakpoint';
 
@@ -51,6 +54,9 @@ export const blocks = [
 	overlayMenuTrigger,
 	overlayMenuPanel,
 	overlaySearch,
+	commentsPanel,
+	commentsPanelTrigger,
+	commentsPanelContent,
 	responsiveContainer,
 	responsiveContainerBreakpoint,
 ];
@@ -71,6 +77,9 @@ const blockThemeBlocks = [
 	'newspack/overlay-menu-panel',
 	'newspack/my-account-button',
 	'newspack/overlay-search',
+	'newspack/comments-panel',
+	'newspack/comments-panel-trigger',
+	'newspack/comments-panel-content',
 	'newspack/responsive-container',
 	'newspack/responsive-container-breakpoint',
 ];

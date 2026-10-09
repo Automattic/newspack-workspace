@@ -67,20 +67,19 @@
 }
 
 .wp-block-comment-template {
-	ol {
+	ol:not(.wp-block-comment-content *) {
 		list-style: none;
 		padding-left: var(--wp--preset--spacing--40);
 
-		&:has(.comment) {
+		&:has(> li) {
 			border-left: 1px solid var(--wp--preset--color--base-3);
 			margin: var(--wp--preset--spacing--50) 0 0;
 			padding-left: var(--wp--preset--spacing--50);
 		}
 	}
 
-	.comment,
-	.pingback,
-	.trackback {
+	// Comments and replies, but not list items inside comment text.
+	li:not(.wp-block-comment-content *) {
 		font-size: var(--wp--preset--font-size--small);
 		line-height: var(--wp--custom--line-height--small);
 

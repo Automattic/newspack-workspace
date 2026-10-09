@@ -181,8 +181,11 @@ final class Session_Hydration {
 		 * requests.
 		 *
 		 * IMPORTANT: This endpoint authenticates via cookies without a CSRF
-		 * nonce (providing a nonce is its purpose). Callbacks MUST be
-		 * side-effect-free — only read data, never write or mutate state.
+		 * nonce (providing a nonce is its purpose), so a cross-site request can
+		 * trigger it. Callbacks MUST NOT write anything derived from the request.
+		 * The one write allowed is recomputing server-derived data for the
+		 * authenticated user from server state alone, which a forged request can
+		 * only make correct (see Gate_Access_Reader_Data).
 		 *
 		 * @param array $data    Response data containing 'nonce'.
 		 * @param int   $user_id The authenticated user's ID.

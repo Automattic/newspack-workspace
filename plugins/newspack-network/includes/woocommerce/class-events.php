@@ -8,6 +8,7 @@
 namespace Newspack_Network\Woocommerce;
 
 use Newspack\Data_Events;
+use Newspack_Network\Content_Gate\Access;
 use Newspack_Network\Woocommerce_Memberships\Admin as Memberships_Admin;
 use Newspack_Network\Woocommerce\Product_Admin;
 
@@ -96,7 +97,7 @@ class Events {
 			'id'                        => $item_id,
 			'user_id'                   => $item->get_customer_id(),
 			'user_name'                 => '',
-			'email'                     => $item->get_billing_email(),
+			'email'                     => self::get_reader_email( $item ),
 			'status_before'             => $status_from,
 			'status_after'              => $status_to,
 			'formatted_total'           => wp_strip_all_tags( $item->get_formatted_order_total() ),
@@ -128,13 +129,23 @@ class Events {
 	 * A variable product's line item is the variation, so the event lists the parent
 	 * as well: other sites only know the parent's Network ID.
 	 *
+	 * A paid order with no customer account is not reported: the one-time rule on the
+	 * selling site counts only orders that belong to a reader's account (#1244), so a
+	 * guest order grants nothing anywhere until WooCommerce links it to the account,
+	 * and the next status change or backfill then sends it. Its unpaid statuses still
+	 * go out, under the billing email, so a record an earlier build wrote elsewhere is
+	 * revoked rather than left granting.
+	 *
 	 * @param int       $item_id     The Order ID.
 	 * @param string    $status_from The status before the change.
 	 * @param string    $status_to   The status after the change.
 	 * @param \WC_Order $order       The Order object.
-	 * @return array|null Null when the order has no such product.
+	 * @return array|null Null when the order is a paid one with no customer account, or holds no such product.
 	 */
 	public static function one_time_purchase_changed( $item_id, $status_from, $status_to, $order ) {
+		if ( ! self::get_customer( $order ) && in_array( $status_to, Access::get_paid_statuses(), true ) ) {
+			return null;
+		}
 		$products = [];
 		foreach ( $order->get_items() as $item ) {
 			$product = $item->get_product();
@@ -164,11 +175,38 @@ class Events {
 		return [
 			'id'           => $item_id,
 			'user_id'      => $order->get_customer_id(),
-			'email'        => $order->get_billing_email(),
+			'email'        => self::get_reader_email( $order ),
 			'status_after' => $status_to,
 			'purchased_at' => $date_created ? $date_created->getTimestamp() : 0,
 			'products'     => $products,
 		];
+	}
+
+	/**
+	 * The customer account behind an order or subscription, if one still exists.
+	 *
+	 * @param object $item The Subscription or Order object.
+	 * @return \WP_User|false
+	 */
+	private static function get_customer( $item ) {
+		$customer_id = (int) $item->get_customer_id();
+		return $customer_id ? get_userdata( $customer_id ) : false;
+	}
+
+	/**
+	 * The email that names the reader on the other sites: the customer account's,
+	 * since that is the identity every site matches and creates accounts by, and the
+	 * billing email only when no account can be named (a guest order, a customer since
+	 * deleted, an account with no email). A reader who checks out with a billing
+	 * address other than their login would otherwise be recorded, and have an account
+	 * created, under an address they can't log in with.
+	 *
+	 * @param object $item The Subscription or Order object.
+	 * @return string
+	 */
+	private static function get_reader_email( $item ) {
+		$customer = self::get_customer( $item );
+		return $customer && $customer->user_email ? $customer->user_email : $item->get_billing_email();
 	}
 
 	/**

@@ -276,6 +276,23 @@ final class Reader_Data {
 	}
 
 	/**
+	 * Whether the reader's boolean data item is true.
+	 *
+	 * Booleans are stored JSON-encoded, so a false comes back from get_data() as
+	 * the string "false", which PHP treats as true. This decodes it the way the
+	 * browser store does, so a flag reads the same on both sides.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $key     Key.
+	 *
+	 * @return bool Whether the stored value decodes to a truthy value. False when the item was never set.
+	 */
+	public static function get_bool( int $user_id, string $key ): bool {
+		$value = self::get_data( $user_id, $key );
+		return is_string( $value ) && (bool) json_decode( $value );
+	}
+
+	/**
 	 * The reader's last-known matching segment IDs (term IDs as strings), or [].
 	 *
 	 * Client-computed snapshot: a best-effort record of the reader's segment
@@ -324,6 +341,20 @@ final class Reader_Data {
 			return null;
 		}
 		return array_values( array_map( 'strval', array_filter( $ids, 'is_scalar' ) ) );
+	}
+
+	/**
+	 * The product IDs of the reader's active non-donation subscriptions, or [].
+	 *
+	 * The list is stored JSON-encoded, so once the reader's last subscription
+	 * ends, get_data() returns the string "[]", which PHP treats as non-empty.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return array Product IDs. Empty when the reader has none, or the item was never set.
+	 */
+	public static function get_active_subscriptions( int $user_id ): array {
+		return self::decode_item_list( self::get_data( $user_id, 'active_subscriptions' ) );
 	}
 
 	/**

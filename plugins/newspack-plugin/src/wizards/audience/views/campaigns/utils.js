@@ -417,6 +417,20 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 	return message;
 } );
 
+addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.gateAccess', ( message, value, config, item ) => {
+	if ( [ 'can_access_gates', 'cannot_access_gates' ].includes( config.id ) ) {
+		if ( ! Array.isArray( item.value ) || ! item.value.length ) {
+			return null;
+		}
+		const labels = item.value.map(
+			id => config.options?.find( option => option.value === String( id ) )?.label || __( 'Unavailable gate', 'newspack-plugin' )
+		);
+		/* translators: 1: criterion name, 2: comma-separated content gate names. */
+		return sprintf( __( '%1$s: %2$s', 'newspack-plugin' ), config.name, labels.join( ', ' ) );
+	}
+	return message;
+} );
+
 export const isSameType = ( campaignA, campaignB ) => {
 	return campaignA.options.placement === campaignB.options.placement;
 };
