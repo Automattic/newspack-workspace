@@ -174,11 +174,29 @@ class Newsletters_Access {
 		if ( ! $post || ! self::is_newsletter_post( $post ) ) {
 			return $url;
 		}
+		if ( self::is_merge_tag_placeholder( $url ) ) {
+			return $url;
+		}
 		if ( ! self::is_first_party_url( $url ) ) {
 			return $url;
 		}
 		$token = self::sign( $post->ID );
 		return add_query_arg( self::QUERY_PARAM, $token, $url );
+	}
+
+	/**
+	 * Whether a link is an ESP merge-tag placeholder (e.g. Mailchimp's
+	 * `*|UNSUB|*`) rather than a URL. The ESP expands the tag into a whole URL
+	 * at send time, so a query string appended here lands after that URL's own
+	 * query and corrupts it. Placeholders are host-less, so without this check
+	 * they would read as first-party.
+	 *
+	 * @param string $url Link to test.
+	 *
+	 * @return bool
+	 */
+	private static function is_merge_tag_placeholder( $url ) {
+		return 1 === preg_match( '/^(?:\*\|[^|]+\|\*|\[\[[^\]]+\]\]|%[^%]+%|\[[^\][]+\])/', (string) $url );
 	}
 
 	/**
