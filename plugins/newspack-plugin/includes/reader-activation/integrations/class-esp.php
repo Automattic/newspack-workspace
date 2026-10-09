@@ -458,8 +458,11 @@ class ESP extends Integration {
 	 * @param array      $options          Optional. Sync options. Recognized keys:
 	 *                                     `skip_lists` (bool) — upsert without a master
 	 *                                     list so an unsubscribed contact is not
-	 *                                     resubscribed (the contact is still created if
-	 *                                     missing, but joins no list).
+	 *                                     resubscribed.
+	 *                                     `existing_only` (bool) is honoured by the
+	 *                                     framework, which consults contact_exists()
+	 *                                     before calling this method — by the time it
+	 *                                     runs the contact is known to exist.
 	 *
 	 * @return true|\WP_Error True on success or WP_Error on failure.
 	 */
@@ -553,6 +556,71 @@ class ESP extends Integration {
 	}
 
 	/**
+	 * Whether the ESP already holds a contact for this email.
+	 *
+	 * One provider read, the same lookup the login refresh uses. A Mailchimp
+	 * contact is a member of one audience, so "exists" means a member of the
+	 * configured audience: an upsert for a reader who is only in another
+	 * audience would create a new member there, and one for an archived member
+	 * would restore it, so neither counts. Any other provider is refused here
+	 * as well as by the sync gate, because `NEWSPACK_FORCE_ALLOW_ESP_SYNC`
+	 * skips that gate: no other provider's contact may read as existing.
+	 *
+	 * @param string $email The contact's email address.
+	 *
+	 * @return bool|\WP_Error True if the configured audience has a live member, false if it has
+	 *                       none (no contact, a member of another audience only, or an
+	 *                       archived member), WP_Error if the provider is not Mailchimp, the
+	 *                       integration cannot sync, or the read failed.
+	 */
+	public function contact_exists( string $email ) {
+		if ( 'mailchimp' !== $this->get_provider_slug() ) {
+			return new \WP_Error(
+				'ras_esp_provider_not_supported',
+				__( 'Sync requires Mailchimp as the newsletter provider.', 'newspack-plugin' )
+			);
+		}
+
+		$can_sync = $this->can_sync( true );
+		if ( $can_sync->has_errors() ) {
+			return $can_sync;
+		}
+
+		$contact_data = Newspack_Newsletters_Subscription::get_contact_data( $email );
+
+		if ( is_wp_error( $contact_data ) ) {
+			return $this->is_provider_not_found_error( $contact_data ) ? false : $contact_data;
+		}
+
+		$member = $contact_data['lists'][ $this->get_master_list_id() ] ?? null;
+		return null !== $member && 'archived' !== ( $member['status'] ?? '' );
+	}
+
+	/**
+	 * Whether a provider error means "no such contact" rather than a failure.
+	 *
+	 * Providers name the miss differently (Mailchimp and Constant Contact have
+	 * dedicated codes, ActiveCampaign a generic one). Matched exactly rather than
+	 * by suffix: this list is what the framework has verified means a miss, and a
+	 * code it has not seen must reach the caller as the error it is.
+	 *
+	 * @param \WP_Error $error The provider error.
+	 *
+	 * @return bool
+	 */
+	private function is_provider_not_found_error( \WP_Error $error ): bool {
+		return in_array(
+			$error->get_error_code(),
+			[
+				'newspack_newsletters_mailchimp_contact_not_found',
+				'newspack_newsletters_constant_contact_contact_not_found',
+				'newspack_newsletters_contact_not_found',
+			],
+			true
+		);
+	}
+
+	/**
 	 * Pull contact data from the ESP for a given user.
 	 *
 	 * @param int $user_id WordPress user ID.
@@ -582,19 +650,10 @@ class ESP extends Integration {
 		}
 
 		if ( is_wp_error( $contact_data ) ) {
-			// Providers name "no such contact" differently (Mailchimp and Constant
-			// Contact have dedicated codes, ActiveCampaign a generic one); normalize
-			// to the framework's canonical code so batch drivers can classify the
-			// reader as skipped without provider knowledge. Matched exactly rather
-			// than by suffix: this list is what the framework has verified means a
-			// miss, and a code it has not seen must reach the caller as the error it
-			// is.
-			$not_found_codes = [
-				'newspack_newsletters_mailchimp_contact_not_found',
-				'newspack_newsletters_constant_contact_contact_not_found',
-				'newspack_newsletters_contact_not_found',
-			];
-			if ( in_array( $contact_data->get_error_code(), $not_found_codes, true ) ) {
+			// Normalize the providers' not-found errors onto the framework's
+			// canonical code so batch drivers can classify the reader as skipped
+			// without provider knowledge.
+			if ( $this->is_provider_not_found_error( $contact_data ) ) {
 				return new \WP_Error( self::CONTACT_NOT_FOUND_ERROR_CODE, $contact_data->get_error_message() );
 			}
 			return $contact_data;

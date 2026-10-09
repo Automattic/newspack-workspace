@@ -8,6 +8,7 @@
 namespace Newspack\Reader_Activation;
 
 use Newspack\Reader_Activation;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Push_Log;
 use Newspack\Data_Events;
@@ -194,11 +195,10 @@ class Contact_Sync extends Sync {
 	 * @param string $context          The context of the sync. Defaults to static::$context.
 	 * @param array  $existing_contact Optional. Existing contact data to merge with. Defaults to null.
 	 * @param array  $options          Optional. Sync options threaded to the integration push:
-	 *                                 `skip_lists` (bool) and `fields` (string[]|null). These apply
-	 *                                 only to the direct push path below — not the queued Data Events
-	 *                                 branch, which never runs under WP-CLI. `integration_id`
-	 *                                 (string|null) restricts the push fan-out to a single active
-	 *                                 integration.
+	 *                                 `skip_lists` (bool), `fields` (string[]|null) and `existing_only`
+	 *                                 (bool); `integration_id` (string|null) restricts the push fan-out
+	 *                                 to a single active integration. A call that sets any of them
+	 *                                 always takes the direct push path, even inside a data event.
 	 *
 	 * @return true|\WP_Error True if succeeded or WP_Error.
 	 */
@@ -213,7 +213,11 @@ class Contact_Sync extends Sync {
 		}
 
 		// If we're running in a data event, queue the sync to run on shutdown.
-		if ( Data_Events::current_event() ) {
+		// The queue keeps only the contact, so a call with any sync option
+		// pushes now instead: a queued update-only push would create the
+		// contact, and a queued scoped one would resend the master list and the
+		// name, or reach every integration instead of the one it named.
+		if ( Data_Events::current_event() && self::options_are_default( $options ) && empty( $options['integration_id'] ) ) {
 			if ( ! isset( self::$queued_syncs[ $contact['email'] ] ) ) {
 				self::$queued_syncs[ $contact['email'] ] = [
 					'contexts'     => [],
@@ -235,14 +239,19 @@ class Contact_Sync extends Sync {
 	}
 
 	/**
-	 * Whether the given sync options are the default (no CLI field/list scoping).
+	 * Whether the sync options are the defaults every real-time sync uses: no
+	 * list-less, field-scoped or update-only push. Only such a push may be
+	 * queued inside a data event (the queue drops options), retried (the retry
+	 * rebuilds the full contact and upserts it without the existence check) or
+	 * previewed without the scoped dry-run log. `integration_id` stays out: the
+	 * queue gate checks it separately, and a retry targets the same integration.
 	 *
 	 * @param array $options Sync options.
 	 *
-	 * @return bool True when neither `skip_lists` nor `fields` scoping is set.
+	 * @return bool True when none of `skip_lists`, `fields` or `existing_only` is set.
 	 */
 	private static function options_are_default( $options ): bool {
-		return empty( $options['skip_lists'] ) && empty( $options['fields'] );
+		return empty( $options['skip_lists'] ) && empty( $options['fields'] ) && empty( $options['existing_only'] );
 	}
 
 	/**
@@ -255,8 +264,11 @@ class Contact_Sync extends Sync {
 	 * labels. Filtering runs after `prepare_contact()`, so keys already arrive
 	 * prefixed; a key is kept when its de-prefixed remainder equals a requested
 	 * label, or begins with a requested label ending in `': '` (the UTM label
-	 * shape, e.g. `Signup UTM: source`). Everything else — including `status` /
-	 * `status_if_new` — is dropped.
+	 * shape, e.g. `Signup UTM: source`). The sync-control keys
+	 * (`Metadata::SYNC_CONTROL_KEYS`) are kept, since they are not fields: without
+	 * `status_if_new`, Mailchimp's upsert sends `status: subscribed` and turns every
+	 * existing transactional member it updates into a subscribed one. Everything
+	 * else is dropped.
 	 *
 	 * @param \Newspack\Reader_Activation\Integration $integration The target integration.
 	 * @param array                                   $contact     The contact data.
@@ -281,6 +293,10 @@ class Contact_Sync extends Sync {
 		$labels   = $options['fields'];
 		$filtered = [];
 		foreach ( $integration_contact['metadata'] ?? [] as $key => $value ) {
+			if ( in_array( $key, Metadata::SYNC_CONTROL_KEYS, true ) ) {
+				$filtered[ $key ] = $value;
+				continue;
+			}
 			$remainder = 0 === strpos( $key, $prefix ) ? substr( $key, strlen( $prefix ) ) : $key;
 			foreach ( $labels as $label ) {
 				if ( $remainder === $label ) {
@@ -337,23 +353,32 @@ class Contact_Sync extends Sync {
 	 * Push contact data to all active integrations.
 	 *
 	 * Failed integrations are scheduled for retry via ActionScheduler
-	 * with exponential backoff — unless `$options` carries CLI field/list scoping,
-	 * in which case retries are suppressed (see below).
+	 * with exponential backoff — unless `$options` carries CLI scoping (update-only,
+	 * list-less or field-scoped), in which case retries are suppressed (see below).
 	 *
 	 * @param array  $contact          The contact data to sync.
 	 * @param string $context          The context of the sync.
 	 * @param array  $existing_contact Optional. Existing contact data to merge with.
-	 * @param array  $options          Optional. Sync options: `skip_lists` (bool) and
-	 *                                 `fields` (string[]|null). When non-default, contacts
-	 *                                 are field/name-scoped per integration and failed pushes
-	 *                                 are NOT auto-retried — the AS retry handler rebuilds the
-	 *                                 full contact and would push it with the master list,
-	 *                                 undoing the list-less/field-scoped intent. Operators
+	 * @param array  $options          Optional. Sync options: `skip_lists` (bool),
+	 *                                 `fields` (string[]|null) and `existing_only` (bool).
+	 *                                 When non-default, contacts are field/name-scoped per
+	 *                                 integration and failed pushes are NOT auto-retried —
+	 *                                 the AS retry handler rebuilds the full contact and
+	 *                                 would push it with the master list, undoing the
+	 *                                 list-less/field-scoped/update-only intent. Operators
 	 *                                 re-run the affected `--offset` window instead.
-	 *                                 `integration_id` (string|null) restricts the fan-out to
-	 *                                 that integration; retries for it are scheduled normally.
+	 *                                 Under `existing_only` each integration's
+	 *                                 `contact_exists()` is consulted first: `false` skips
+	 *                                 that integration, a `WP_Error` is handled as a failed
+	 *                                 push. `integration_id` (string|null) restricts the
+	 *                                 fan-out to that integration; retries for it are
+	 *                                 scheduled normally.
 	 *
-	 * @return true|\WP_Error True if all succeeded, or WP_Error with combined messages.
+	 * @return true|\WP_Error True if at least one integration was pushed (or none needed to
+	 *                        be), WP_Error with combined messages on failure, or WP_Error
+	 *                        with `Integration::CONTACT_NOT_FOUND_ERROR_CODE` when every
+	 *                        push-enabled integration declined the contact under
+	 *                        `existing_only`.
 	 */
 	private static function push_to_integrations( $contact, $context, $existing_contact = null, $options = [] ) {
 		/**
@@ -367,7 +392,9 @@ class Contact_Sync extends Sync {
 		if ( ! empty( $options['integration_id'] ) ) {
 			$integrations = array_intersect_key( $integrations, [ $options['integration_id'] => true ] );
 		}
-		$errors = [];
+		$errors  = [];
+		$skipped = [];
+		$pushed  = 0;
 
 		// Resolve user ID for retry scheduling.
 		$user    = ! empty( $contact['email'] ) ? \get_user_by( 'email', $contact['email'] ) : false;
@@ -390,23 +417,46 @@ class Contact_Sync extends Sync {
 
 			$integration_contact = self::prepare_contact_for_integration( $integration, $contact, $options );
 
-			$result = $integration->push_contact( $integration_contact, $context, $existing_contact, $options );
+			// On an update-only run (`existing_only`, the CLI backfill default),
+			// ask the integration before pushing: the push is an upsert at every
+			// provider, so this is the one place "update, never create" can be
+			// enforced. An integration that cannot answer gets no push at all:
+			// the unknown must resolve to "do not create", or the run would
+			// create contacts and read as clean.
+			if ( ! empty( $options['existing_only'] ) && ! $integration->supports_contact_lookup() ) {
+				$errors[] = sprintf( '[%s] %s', $integration_id, __( 'cannot check whether the contact exists, so the update-only run withheld the push.', 'newspack-plugin' ) );
+				static::log( sprintf( 'Withheld integration "%s" sync of %s: it cannot check for an existing contact (update-only run).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );
+				continue;
+			}
+			$result = empty( $options['existing_only'] ) ? true : self::check_existing_contact( $integration, $integration_contact['email'] ?? '' );
+			if ( false === $result ) {
+				$skipped[] = $integration_id;
+				static::log( sprintf( 'Skipped integration "%s" sync of %s: no existing contact (update-only run).', $integration_id, $integration_contact['email'] ?? 'unknown' ) );
+				continue;
+			}
 
-			// A failure is only retried for a full, unscoped push of a contact
-			// with an account to rebuild it from (see schedule_integration_retry()).
-			$can_retry = self::options_are_default( $options ) && $user_id > 0;
-			$log_id    = self::log_push_attempt(
-				$integration,
-				[
-					'operation'    => Push_Log::OPERATION_UPSERT,
-					'email'        => $integration_contact['email'] ?? '',
-					'user_id'      => $user_id,
-					'context'      => $context,
-					'payload'      => '' === (string) $previous_email ? $integration_contact : array_merge( $integration_contact, [ 'previous_email' => $previous_email ] ),
-					'result'       => $result,
-					'max_attempts' => $can_retry ? self::MAX_RETRIES + 1 : 1,
-				]
-			);
+			// The push log records pushes; a failed existence read never reached one.
+			$log_id = 0;
+			if ( ! \is_wp_error( $result ) ) {
+				$result = $integration->push_contact( $integration_contact, $context, $existing_contact, $options );
+				$pushed++;
+
+				// A failure is only retried for a full, unscoped push of a contact
+				// with an account to rebuild it from (see schedule_integration_retry()).
+				$can_retry = self::options_are_default( $options ) && $user_id > 0;
+				$log_id    = self::log_push_attempt(
+					$integration,
+					[
+						'operation'    => Push_Log::OPERATION_UPSERT,
+						'email'        => $integration_contact['email'] ?? '',
+						'user_id'      => $user_id,
+						'context'      => $context,
+						'payload'      => '' === (string) $previous_email ? $integration_contact : array_merge( $integration_contact, [ 'previous_email' => $previous_email ] ),
+						'result'       => $result,
+						'max_attempts' => $can_retry ? self::MAX_RETRIES + 1 : 1,
+					]
+				);
+			}
 
 			if ( \is_wp_error( $result ) ) {
 				/**
@@ -440,7 +490,7 @@ class Contact_Sync extends Sync {
 				if ( self::options_are_default( $options ) ) {
 					self::schedule_integration_retry( $integration_id, $user_id, $context, 0, $result, $previous_email, $log_id );
 				} else {
-					static::log( sprintf( 'Retry skipped for integration "%s" sync of %s: CLI sync with custom options (skip-lists/fields). Re-run the affected batch to retry.', $integration_id, $contact['email'] ?? 'unknown' ) );
+					static::log( sprintf( 'Retry skipped for integration "%s" sync of %s: scoped CLI sync (update-only, --skip-lists or --fields). Re-run the affected batch to retry.', $integration_id, $contact['email'] ?? 'unknown' ) );
 				}
 				$errors[] = sprintf( '[%s] %s', $integration_id, $result->get_error_message() );
 				if ( self::$current_as_action_id ) {
@@ -457,8 +507,64 @@ class Contact_Sync extends Sync {
 			}
 		}
 
+		return self::resolve_push_result( $contact['email'] ?? 'unknown', $errors, $skipped, $pushed );
+	}
+
+	/**
+	 * Ask an integration whether it holds the contact, for `existing_only`.
+	 *
+	 * `contact_exists()` declares no return type, so an override that answers a
+	 * miss with `null` or `0` would read as "exists" and get the upsert the flag
+	 * exists to prevent. Only `true` or `false` is an answer; anything else comes
+	 * back as a failed check. Shared by the wet push and the dry-run preview.
+	 *
+	 * @param Integration $integration The integration to ask.
+	 * @param string      $email       The contact's email address.
+	 *
+	 * @return bool|\WP_Error
+	 */
+	private static function check_existing_contact( Integration $integration, string $email ): bool|\WP_Error {
+		$exists = $integration->contact_exists( $email );
+		if ( \is_bool( $exists ) || \is_wp_error( $exists ) ) {
+			return $exists;
+		}
+		return new \WP_Error(
+			'newspack_integration_contact_lookup_invalid',
+			__( 'contact_exists() returned neither true, false nor an error, so the update-only run withheld the push.', 'newspack-plugin' )
+		);
+	}
+
+	/**
+	 * Fold a per-integration push (or preview) outcome into one result.
+	 *
+	 * Errors win. Otherwise, a contact every push-enabled integration declined
+	 * under `existing_only` comes back with the canonical not-found code, so the
+	 * CLI tallies the reader as skipped — as the pull leg already does — rather
+	 * than as a failure no re-run could clear. Shared by the wet push and the
+	 * dry-run preview so the two report the same outcome.
+	 *
+	 * @param string   $email   The contact's email address, for the message.
+	 * @param string[] $errors  Per-integration error messages.
+	 * @param string[] $skipped Ids of integrations that declined the contact.
+	 * @param int      $pushed  Number of integrations that received a push.
+	 *
+	 * @return true|\WP_Error
+	 */
+	private static function resolve_push_result( string $email, array $errors, array $skipped, int $pushed ): bool|\WP_Error {
 		if ( ! empty( $errors ) ) {
 			return new \WP_Error( 'newspack_esp_sync_failed', implode( '; ', $errors ) );
+		}
+
+		if ( ! empty( $skipped ) && 0 === $pushed ) {
+			return new \WP_Error(
+				Integration::CONTACT_NOT_FOUND_ERROR_CODE,
+				sprintf(
+					// Translators: 1: contact email, 2: comma-separated integration ids.
+					__( 'No existing contact for %1$s at: %2$s.', 'newspack-plugin' ),
+					$email,
+					implode( ', ', $skipped )
+				)
+			);
 		}
 
 		return true;
@@ -1625,18 +1731,28 @@ class Contact_Sync extends Sync {
 	 * @param int|\WC_order $user_id_or_order User ID or WC_Order object.
 	 * @param string        $context          The context of the sync.
 	 * @param bool          $is_dry_run       True if a dry run.
-	 * @param array         $options          Optional. Sync options: `skip_lists` (bool) and
-	 *                                        `fields` (string[]|null, canonical labels). `fields`
-	 *                                        restricts both what metadata is computed and what is
-	 *                                        pushed; `skip_lists` upserts without a master list.
-	 *                                        `integration_id` (string|null) restricts the push
-	 *                                        fan-out to a single active integration.
+	 * @param array         $options          Optional. Sync options: `skip_lists` (bool),
+	 *                                        `fields` (string[]|null, canonical labels) and
+	 *                                        `existing_only` (bool). `fields` restricts both what
+	 *                                        metadata is computed and what is pushed;
+	 *                                        `skip_lists` upserts without a master list;
+	 *                                        `existing_only` restricts the push to contacts the
+	 *                                        integration already has. `integration_id`
+	 *                                        (string|null) restricts the push fan-out to a
+	 *                                        single active integration.
 	 *
-	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise.
+	 * @return true|\WP_Error True if the contact was synced successfully, WP_Error otherwise. Under
+	 *                        `existing_only`, a reader every integration declined comes back
+	 *                        with `Integration::CONTACT_NOT_FOUND_ERROR_CODE`, which callers can
+	 *                        treat as a skip.
 	 */
 	public static function sync_contact( $user_id_or_order, $context = '', $is_dry_run = false, $options = [] ) {
-		$can_sync = static::can_sync( true );
-		if ( ! $is_dry_run && $can_sync->has_errors() ) {
+		// A dry run that only builds payloads never leaves the process, so it
+		// may run where syncing is refused; an update-only one reads each
+		// contact at the provider, so it is gated like the wet run it previews.
+		$reaches_provider = ! $is_dry_run || ! empty( $options['existing_only'] );
+		$can_sync         = static::can_sync( true );
+		if ( $reaches_provider && $can_sync->has_errors() ) {
 			return $can_sync;
 		}
 
@@ -1650,11 +1766,13 @@ class Contact_Sync extends Sync {
 			return \is_wp_error( $contact ) ? $contact : new \WP_Error( 'newspack_esp_sync_contact', __( 'Contact email is empty.', 'newspack-plugin' ) );
 		}
 
-		if ( $is_dry_run && ! self::options_are_default( $options ) ) {
-			self::log_dry_run_with_options( $contact, $context, $options );
+		if ( $is_dry_run ) {
+			// A preview with custom options reports the outcome the run would
+			// (an update-only skip included), so the CLI tally matches.
+			$result = self::options_are_default( $options ) ? true : self::log_dry_run_with_options( $contact, $context, $options );
+		} else {
+			$result = self::sync( $contact, $context, null, $options );
 		}
-
-		$result = $is_dry_run ? true : self::sync( $contact, $context, null, $options );
 
 		if ( $result && ! \is_wp_error( $result ) ) {
 			static::log(
@@ -1672,26 +1790,35 @@ class Contact_Sync extends Sync {
 
 	/**
 	 * Log, per active integration, the field/list-scoped payload a `--dry-run`
-	 * with custom options would push. Warns when scoping leaves no metadata to
-	 * send (e.g. requested fields aren't enabled as outgoing for that integration).
+	 * with custom options would push, and report the outcome the run would.
+	 * Warns when scoping leaves no metadata to send (e.g. requested fields
+	 * aren't enabled as outgoing for that integration).
+	 *
+	 * Under `existing_only` the preview performs the same existence read the
+	 * run would — that is what previewing the skip means, and it is the one
+	 * external call a push dry run makes.
 	 *
 	 * @param array  $contact The computed contact data.
 	 * @param string $context The sync context.
-	 * @param array  $options Sync options (`skip_lists`, `fields`).
+	 * @param array  $options Sync options (`skip_lists`, `fields`, `existing_only`).
 	 *
-	 * @return void
+	 * @return true|\WP_Error The outcome the run would report; see resolve_push_result().
 	 */
 	private static function log_dry_run_with_options( $contact, $context, $options ) {
 		// Mirror the real push path (push_to_integrations): run the contact filter
 		// before per-integration scoping so the preview reflects any metadata a
 		// publisher filter contributes.
 		/** This filter is documented in includes/reader-activation/sync/class-contact-sync.php. */
-		$contact    = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$skip_lists   = ! empty( $options['skip_lists'] );
-		$integrations = Integrations::get_active_configured_integrations();
+		$contact       = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
+		$skip_lists    = ! empty( $options['skip_lists'] );
+		$existing_only = ! empty( $options['existing_only'] );
+		$integrations  = Integrations::get_active_configured_integrations();
 		if ( ! empty( $options['integration_id'] ) ) {
 			$integrations = array_intersect_key( $integrations, [ $options['integration_id'] => true ] );
 		}
+		$errors  = [];
+		$skipped = [];
+		$pushed  = 0;
 		foreach ( $integrations as $integration_id => $integration ) {
 			// The real push path skips integrations without an (enabled) push, so
 			// report the skip rather than a payload the run would never send —
@@ -1707,13 +1834,35 @@ class Contact_Sync extends Sync {
 				continue;
 			}
 
-
 			$prepared = self::prepare_contact_for_integration( $integration, $contact, $options );
-			$metadata = $prepared['metadata'] ?? [];
+			$email    = $prepared['email'] ?? 'unknown';
+
+			if ( $existing_only ) {
+				if ( ! $integration->supports_contact_lookup() ) {
+					$errors[] = sprintf( '[%s] %s', $integration_id, __( 'cannot check whether the contact exists, so the update-only run withheld the push.', 'newspack-plugin' ) );
+					static::log( sprintf( '[dry-run] WITHHELD integration "%s" for %s: it cannot check for an existing contact (update-only run).', $integration_id, $email ) );
+					continue;
+				}
+				$exists = self::check_existing_contact( $integration, $prepared['email'] ?? '' );
+				if ( false === $exists ) {
+					$skipped[] = $integration_id;
+					static::log( sprintf( '[dry-run] SKIPPED integration "%s" for %s: no existing contact (update-only run).', $integration_id, $email ) );
+					continue;
+				}
+				if ( \is_wp_error( $exists ) ) {
+					$errors[] = sprintf( '[%s] %s', $integration_id, $exists->get_error_message() );
+					static::log( sprintf( '[dry-run] ERROR checking for an existing contact at integration "%s" for %s: %s', $integration_id, $email, $exists->get_error_message() ) );
+					continue;
+				}
+			}
+
+			$pushed++;
+			// Sync-control keys ride along with the push but are not fields.
+			$metadata = array_diff_key( $prepared['metadata'] ?? [], array_flip( Metadata::SYNC_CONTROL_KEYS ) );
 			static::log(
 				sprintf(
 					'[dry-run] %s → integration "%s": lists %s, %d field(s): %s',
-					$prepared['email'] ?? 'unknown',
+					$email,
 					$integration_id,
 					$skip_lists ? 'skipped' : 'master list',
 					count( $metadata ),
@@ -1729,6 +1878,8 @@ class Contact_Sync extends Sync {
 				);
 			}
 		}
+
+		return self::resolve_push_result( $contact['email'] ?? 'unknown', $errors, $skipped, $pushed );
 	}
 
 	/**

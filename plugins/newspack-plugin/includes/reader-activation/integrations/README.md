@@ -152,6 +152,8 @@ class My_Integration extends Integration {
 | `get_my_account_menu_item()` | Return `[ 'slug' => ..., 'label' => ..., 'position' => ... ]` to add a tab to the WooCommerce My Account page. Default returns `null` (no tab). |
 | `render_my_account_page( $value )` | Echo markup for the integration's My Account page. Called inside the WooCommerce account template. |
 | `delete_contact( $email )` | Remove the contact identified by `$email` from the external system. Default returns a `not_implemented` WP_Error. Required only if the integration declares it can be set to `delete` mode for account-deletion handling. |
+| `contact_exists( $email )` | Whether pushing this contact would update a live record the external system holds. Consulted by `Contact_Sync` only on an update-only push (the backfill CLI's default; `--create-missing` turns it off), before `push_contact_data()`: return `false` to have the reader skipped (tallied as skipped), a `WP_Error` if the lookup failed (handled as a failed push), `true` to let the push proceed. Answer by what the push would do: `true` only when it would update a live record, `false` when it would create one or restore an archived or deleted one. Anything other than a boolean or a `WP_Error` is handled as a failed lookup. The default returns a `WP_Error`, and `supports_contact_lookup()` is false until this method is overridden: on an update-only push the framework withholds the push from an integration that cannot ask (reported as an error, never retried) and the CLI pre-flight refuses the run, rather than let an upsert create the contact. The built-in Mailchimp integration (`esp`) reads the contact once and requires current (not archived) membership of the configured audience. |
+| `supports_contact_lookup()` | Whether `contact_exists()` is implemented. True as soon as a subclass overrides that method, so implementing it is the opt-in; override this only to opt out explicitly. Read by the sync on an update-only push and by the CLI pre-flight. |
 
 ---
 
@@ -299,7 +301,8 @@ An integration that has **never saved** an Outbound selection inherits the ESP i
 `Contact_Sync` may pass a fourth `$options` array to `push_contact_data()` carrying operator-driven sync scoping (currently used by the `wp newspack integrations backfill` CLI and its legacy alias `wp newspack esp sync`):
 
 - `skip_lists` (bool) — upsert the contact without adding it to any list, so an unsubscribed contact isn't resubscribed.
-- `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called).
+- `fields` (string[]|null) — the canonical field labels the sync is scoped to (already applied to the metadata before your method is called). The sync-control keys are not fields and stay in the metadata.
+- `existing_only` (bool) — update-only: the framework asks `contact_exists()` before calling `push_contact_data()` and skips integrations that answer `false`, so an implementation never sees a contact it reported missing. An integration whose `supports_contact_lookup()` is false gets no push (withheld and reported as an error), and the CLI refuses such a run before any batch. The backfill CLI sets it unless `--create-missing` is passed; real-time syncs never do. Integrations do not need to read this key.
 - `integration_id` (string|null) — restricts the push fan-out to a single active integration. The framework acts on this key in `Contact_Sync::push_to_integrations()` before any integration is called; like the rest of `$options`, it is still visible to `push_contact_data()` overrides that declare the fourth parameter, but integrations don't need to (and shouldn't) act on it.
 
 The abstract signature intentionally stays three-parameter (`push_contact_data( $contact, $context, $existing_contact )`). `Contact_Sync::push_to_integrations()` calls every integration with the fourth `$options` argument; PHP discards surplus positional arguments to a method that declares fewer parameters (they remain available via `func_get_args()`) — there is no warning or error, so a three-parameter implementation keeps working unchanged. Adding the fourth parameter to the *abstract* instead would be a fatal "declaration must be compatible" error for every existing three-parameter override, which is why the parameter lives only on the concrete overrides that use it. Add `$options = []` to your override only if the integration needs to react to these flags (the built-in `esp` integration reads `skip_lists`). Integrations that ignore `$options` behave exactly as before.
@@ -371,19 +374,24 @@ The base class also offers `get_filtered_incoming_fields()`, which hides fields 
 direction, optionally scoped to a single integration:
 
 ```sh
-# Re-push all readers to every active integration (same as the legacy `esp sync`).
+# Update every reader's contact at every active integration, creating none (same as the legacy `esp sync`).
 wp newspack integrations backfill
+
+# Also create contacts for the readers an integration does not have yet.
+wp newspack integrations backfill --create-missing
 
 # Pull enabled incoming fields for all readers from one integration.
 wp newspack integrations backfill --direction=pull --integration=esp
 
 # Fully catch up one integration, 500 readers per batch.
-wp newspack integrations backfill --direction=both --integration=esp --batch-size=500
+wp newspack integrations backfill --direction=both --integration=esp --create-missing --batch-size=500
 ```
 
 - `--direction=push|pull|both` (default `push`). Push-only flags
   (`--subscription-ids`, `--order-ids`, `--migrated-subscriptions`,
   `--skip-lists`, `--fields`) hard-error when the direction includes pull.
+  `--create-missing` is refused only with `--direction=pull`: only a push can
+  create a contact, so it means the same under `--direction=both`.
 - Both legs honor the per-direction toggles: the push leg skips integrations
   where `is_push_enabled()` is false, and the pull leg skips those where
   `is_pull_enabled()` is false, matching every other sync dispatch site.
@@ -402,11 +410,26 @@ wp newspack integrations backfill --direction=both --integration=esp --batch-siz
   rejections, so its error tally previews what a real run would report.
 - Pull failures are **not** retried via ActionScheduler (a bulk run against a
   flaky API would flood the queue): errors are tallied and logged, and the
-  affected `--offset` window can be re-run. Push retry semantics are unchanged.
+  affected `--offset` window can be re-run.
 - Readers the provider has no contact for (`ras_contact_not_found`) are tallied
   as skipped, not as errors: a pull cannot create the missing contact, so
   re-running could never clear them and a partially-synced site would never
   exit 0.
+- The push updates only the contacts an integration already has, unless
+  `--create-missing` is passed: readers it reports no contact for
+  (`contact_exists()` returning `false`) are tallied as skipped and never
+  created; a read that fails for any other reason withholds the push and is
+  tallied as an error. Failed pushes are auto-retried only on a
+  `--create-missing` run without `--skip-lists`/`--fields`. Without
+  `--create-missing`, the run refuses to start if any integration taking part
+  cannot check (`supports_contact_lookup()` false). Scope the run with
+  `--integration` to one that can, and run each of the others on its own with
+  `--integration=<id> --create-missing` if creating contacts there is
+  intended; an unscoped `--create-missing` creates contacts at every
+  integration taking part. A `--dry-run` without `--create-missing` still
+  performs the existence read and previews the skips in its tally; because it
+  reaches the provider it is gated like a wet run (the staging guard applies).
+  A `--dry-run --create-missing` never reaches the provider.
 - A run that tallies any error prints its summary as a warning and **exits 1**,
   so unattended runbooks can detect partial failure from the exit status. A
   clean run exits 0.
@@ -415,8 +438,12 @@ wp newspack integrations backfill --direction=both --integration=esp --batch-siz
   is therefore proportional to provider traffic and independent of
   `--batch-size`.
 - `wp newspack esp sync` remains as a backward-compatible alias frozen to the
-  push direction and its historical flag surface. It still exits 0 even when
-  errors are tallied; a pre-flight failure exits 1 on both commands.
+  push direction and its historical flag surface, plus `--create-missing`:
+  like `backfill`, it only updates existing contacts unless that flag is
+  passed. It still exits 0 even when errors are tallied, and warns on STDERR
+  when a non-dry run that schedules no retries (any but a plain
+  `--create-missing` run) tallies errors; a pre-flight failure exits 1 on both
+  commands.
 
 See `wp help newspack integrations backfill` for the full option reference.
 
@@ -482,13 +509,13 @@ An empty `integration_id` queries every group registered by the framework.
 
 `Push_Log` records every outbound operation `Contact_Sync` performs against an integration — contact upserts, deletion flags and hard deletes — in the `{prefix}newspack_integrations_push_log` table. It answers "what did we send this reader's CRM record, when, and did it arrive?", which ActionScheduler cannot: most pushes are not actions of their own, retry args carry a user ID rather than an email, and an intermediate retry completes normally while the sync is still failing.
 
-Integrations do not write to it. `Contact_Sync` does, because only it knows which attempt of a chain a push was, whether another follows, and when a chain gives up. Pulls, dry runs and pushes that never ran (sync disabled, outbound paused) are not recorded.
+Integrations do not write to it. `Contact_Sync` does, because only it knows which attempt of a chain a push was, whether another follows, and when a chain gives up. Pulls, dry runs and pushes that never ran (sync disabled, outbound paused, or skipped or withheld by an update-only backfill) are not recorded.
 
 ### What a row is
 
 One reader, one integration, one triggering push. A fan-out to three integrations writes three rows.
 
-- **Retries update the row.** The row ID rides in the retry's ActionScheduler args as `log_id`. `attempts` counts pushes made so far; `max_attempts` is the ceiling when the row was written (`MAX_RETRIES + 1`, or 1 when nothing will retry: a CLI push scoped with `--skip-lists`/`--fields`, or a contact with no account to rebuild from). It is a ceiling, not a promise: a permanent or benign result ends a row on its first attempt. Read `status` to know whether another attempt is coming.
+- **Retries update the row.** The row ID rides in the retry's ActionScheduler args as `log_id`. `attempts` counts pushes made so far; `max_attempts` is the ceiling when the row was written (`MAX_RETRIES + 1`, or 1 when nothing will retry: a CLI push without `--create-missing` or scoped with `--skip-lists`/`--fields`, or a contact with no account to rebuild from). It is a ceiling, not a promise: a permanent or benign result ends a row on its first attempt. Read `status` to know whether another attempt is coming.
 - **`status` describes the sync, not an action**: `success`, `retrying` or `failed`. An error row is written as `failed` and becomes `retrying` only when a retry is actually scheduled: if Action Scheduler stores nothing, the row stays `failed`. A retry that gives up before pushing ends the row as `failed` with `error_code = retry_aborted`. A benign result is a `success` that keeps `error_class = benign`.
 - **`payload`** is the prepared contact as handed to the integration: as close to the wire as the framework sees. An integration may still reshape it internally. Hard deletes have none. On an email change it also carries `previous_email`, the address the contact was matched on: that is log context, not data sent. Because it is part of the payload, the first routine push after an email change adds a row of its own rather than collapsing, which leaves the email-change row intact as the record of the change.
 - **Identical pushes collapse.** A clean successful first-attempt upsert whose payload matches the reader's latest row for that integration bumps `repeat_count` and `updated_at` on that row instead of adding one, so the recurring sync does not grow the table. The comparison ignores key order and volatile fields (`Last Active` by default; filter `newspack_integrations_push_log_volatile_fields`, whose names are field names as sent to the integration, without its prefix). Deletion rows never collapse.

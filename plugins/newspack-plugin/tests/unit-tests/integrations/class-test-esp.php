@@ -793,6 +793,106 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Run contact_exists() against a staged provider payload or error.
+	 *
+	 * @param array|\WP_Error $contact_data Payload or error get_contact_data() returns.
+	 * @return bool|\WP_Error
+	 */
+	private function contact_exists_with( $contact_data ) {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => $contact_data ];
+
+		$result = $this->make_esp_with_master_list( 'list-123' )->contact_exists( 'reader@example.com' );
+
+		\Newspack_Newsletters_Subscription::reset_calls();
+		return $result;
+	}
+
+	/**
+	 * The provider not knowing the reader is the answer an update-only push
+	 * exists for: report it as "no", never as a failure.
+	 */
+	public function test_contact_exists_is_false_when_the_provider_has_no_contact() {
+		$not_found = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+
+		$this->assertFalse( $this->contact_exists_with( $not_found ) );
+	}
+
+	/**
+	 * A read that failed for any other reason is not a missing contact; the
+	 * caller must see the error so the reader is tallied as one.
+	 */
+	public function test_contact_exists_passes_other_read_errors_through() {
+		$result = $this->contact_exists_with( new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Error reaching to search-members endpoint' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_newsletters_mailchimp_search_members', $result->get_error_code() );
+	}
+
+	/**
+	 * A Mailchimp contact is a member of one audience. A reader who exists only
+	 * in another audience has no member in the configured one, and an upsert
+	 * would create it — exactly what an update-only push promises not to do.
+	 */
+	public function test_contact_exists_on_mailchimp_requires_the_configured_audience() {
+		$this->assertTrue( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ] ) );
+		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-999' => [ 'status' => 'subscribed' ] ] ] ), 'A member of another audience only would be created in the configured one.' );
+	}
+
+	/**
+	 * An archived member is a record Mailchimp keeps for a subscriber the
+	 * publisher removed; the upsert would restore it, which is a create in every
+	 * way an update-only push cares about.
+	 */
+	public function test_contact_exists_on_mailchimp_treats_an_archived_member_as_missing() {
+		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'archived' ] ] ] ) );
+	}
+
+	/**
+	 * The ESP override of contact_exists() is what opts it into update-only pushes.
+	 */
+	public function test_esp_supports_contact_lookup() {
+		$this->assertTrue( $this->make_esp_with_master_list()->supports_contact_lookup() );
+	}
+
+	/**
+	 * The integration syncs only to Mailchimp. Another provider's contact must
+	 * not read as existing, or an update-only push would upsert there, even
+	 * when `NEWSPACK_FORCE_ALLOW_ESP_SYNC` waves every sync gate through.
+	 */
+	public function test_contact_exists_off_mailchimp_is_an_error_not_an_answer() {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$this->set_provider( 'active_campaign' );
+		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ] ];
+		$force_allowed_esp = new class() extends ESP {
+			/**
+			 * Pass every sync gate, as the force constant does.
+			 *
+			 * @param bool $return_errors Whether to return a WP_Error.
+			 * @return bool|\WP_Error
+			 */
+			public function can_sync( $return_errors = false ) {
+				return $return_errors ? new \WP_Error() : true;
+			}
+
+			/**
+			 * The audience the staged member belongs to.
+			 *
+			 * @return string
+			 */
+			public function get_master_list_id() {
+				return 'list-123';
+			}
+		};
+
+		$result = $force_allowed_esp->contact_exists( 'reader@example.com' );
+		\Newspack_Newsletters_Subscription::reset_calls();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'ras_esp_provider_not_supported', $result->get_error_code() );
+	}
+
+	/**
 	 * Set the newsletters provider the mock reports (it reads this option).
 	 *
 	 * @param string|null $slug Provider slug, or null to unset.
