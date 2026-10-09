@@ -17,6 +17,16 @@ use Newspack_Network\Site_Role;
  */
 class Network {
 	/**
+	 * Whether the plugin's redirect guard refused a hop. Set by the guard;
+	 * safe_peer_remote_get() resets it and reads it after its request. WP_Http reports the
+	 * guard's exception as an `http_request_failed` WP_Error that keeps only its message,
+	 * so the flag is what ties the error to the guard.
+	 *
+	 * @var bool
+	 */
+	private static bool $redirect_refused = false;
+
+	/**
 	 * Get all networked URLs - excluding url of the site where the function is called.
 	 *
 	 * Note that all urls have been run through untrailingslashit.
@@ -107,20 +117,125 @@ class Network {
 		// throws on an unsafe target. Requests only propagates it — WP_Http::request()
 		// is what catches it and hands the caller a WP_Error, which is where the
 		// no-fatal behaviour actually comes from.
-		add_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+		$added_guard = self::add_redirect_guard();
 		try {
 			return media_sideload_image( $url, $post_id, $desc, $return );
 		} finally {
-			remove_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+			if ( $added_guard ) {
+				self::remove_redirect_guard();
+			}
 		}
+	}
+
+	/**
+	 * GET a URL on a peer site, refusing private and reserved addresses.
+	 *
+	 * For requests to a peer's stored URL, which is site configuration rather than a
+	 * known-good constant. Applies the same address rules as sideload_peer_image(), to the
+	 * initial URL and to every redirect hop, and sends the request with core's own
+	 * reject_unsafe_urls check on as well.
+	 *
+	 * @param mixed $url  URL to request.
+	 * @param array $args wp_safe_remote_get() arguments.
+	 *
+	 * @return array|\WP_Error The response, or WP_Error if the address or a redirect is refused.
+	 */
+	public static function safe_peer_remote_get( $url, array $args = [] ): array|\WP_Error {
+		if ( ! self::is_safe_sideload_url( $url ) ) {
+			self::log_peer_refusal( $url, 'Refused a request to a peer: the URL is not http(s) on an allowed port, resolves to a private or reserved address, or its lookup failed.' );
+			return new \WP_Error( 'newspack_network_unsafe_peer_url', __( 'Refused a request to a URL that is not a public http(s) address on an allowed port.', 'newspack-network' ) );
+		}
+
+		// Saved and restored so a safe_peer_remote_get() nested inside this one cannot
+		// change what this one reports.
+		$outer_refused          = self::$redirect_refused;
+		self::$redirect_refused = false;
+		$added_guard            = self::add_redirect_guard();
+		try {
+			$response = wp_safe_remote_get( $url, $args );
+			$refused  = self::$redirect_refused;
+		} finally {
+			self::$redirect_refused = $outer_refused;
+			if ( $added_guard ) {
+				self::remove_redirect_guard();
+			}
+		}
+		// Core checks each hop before the plugin's guard does and refuses most unsafe ones
+		// itself, leaving only its message on the error. The URL has already passed the
+		// check above, so that message means a hop was refused, or a second lookup of the
+		// host failed or gave a different answer, which is a refusal too.
+		// phpcs:ignore WordPress.WP.I18n.MissingArgDomain -- core's own string, matched in core's domain.
+		$core_refused = is_wp_error( $response ) && __( 'A valid URL was not provided.' ) === $response->get_error_message();
+		if ( is_wp_error( $response ) && ( $refused || $core_refused ) ) {
+			self::log_peer_refusal( $url, 'Refused a request to a peer: it, or a URL it redirected to, is not http(s) on an allowed port, resolves to a private or reserved address, or its lookup failed.' );
+		}
+		return $response;
+	}
+
+	/**
+	 * Record a refused peer request.
+	 *
+	 * Callers turn the refusal into empty data, so without a record a Node that resolves
+	 * privately just shows blank site info. Debugger::log() is silent unless
+	 * NEWSPACK_NETWORK_DEBUG is defined; newspack_log reaches production.
+	 *
+	 * @param mixed  $url     The peer URL that was requested.
+	 * @param string $message Why it was refused.
+	 */
+	private static function log_peer_refusal( $url, string $message ): void {
+		if ( ! method_exists( 'Newspack\Logger', 'newspack_log' ) ) {
+			return;
+		}
+		$host = is_string( $url ) ? wp_parse_url( $url, PHP_URL_HOST ) : null;
+		$port = is_string( $url ) ? wp_parse_url( $url, PHP_URL_PORT ) : null;
+		if ( null === $port && is_string( $url ) ) {
+			// A URL with no explicit port uses its scheme's default.
+			$port = [
+				'http'  => 80,
+				'https' => 443,
+			][ strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ) ] ?? null;
+		}
+		\Newspack\Logger::newspack_log(
+			'newspack_network_peer_request',
+			$message,
+			[
+				'host' => $host,
+				'port' => $port,
+			],
+			'error'
+		);
+	}
+
+	/**
+	 * Register the redirect guard, unless it is already registered.
+	 *
+	 * WordPress keeps one registration per callback and priority, so a request started while
+	 * another holds the guard must leave it in place for the outer request's remaining hops.
+	 *
+	 * @return bool Whether this call registered it, and so must remove it.
+	 */
+	private static function add_redirect_guard(): bool {
+		if ( false !== has_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ) ) { // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+			return false;
+		}
+		add_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+		return true;
+	}
+
+	/**
+	 * Remove the redirect guard registered by add_redirect_guard().
+	 */
+	private static function remove_redirect_guard(): void {
+		remove_action( 'requests-requests.before_redirect', [ __CLASS__, 'assert_safe_redirect' ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
 	}
 
 	/**
 	 * Refuse a redirect whose target resolves into a private or reserved range.
 	 *
-	 * Registered on the Requests before_redirect bridge during a peer sideload. Throwing
-	 * aborts the redirect the way core's own reject_unsafe_urls check does, but through
-	 * is_safe_sideload_url(), which blocks the ranges core misses on older WordPress.
+	 * Registered on the Requests before_redirect bridge during a peer sideload or peer
+	 * request (safe_peer_remote_get()). Throwing aborts the redirect the way core's own
+	 * reject_unsafe_urls check does, but through is_safe_sideload_url(), which blocks the
+	 * ranges core misses on older WordPress.
 	 *
 	 * @param string $location Redirect target URL.
 	 *
@@ -135,6 +250,7 @@ class Network {
 	 */
 	public static function assert_safe_redirect( $location ): void {
 		if ( is_string( $location ) && ! self::is_safe_sideload_url( $location ) ) {
+			self::$redirect_refused = true;
 			// The namespaced Requests exception only exists on WordPress 6.2+, but this guard
 			// protects older versions too, where the class is Requests_Exception. Throw whichever
 			// the running core provides so WP_Http catches it and returns a WP_Error, rather than
@@ -288,12 +404,15 @@ class Network {
 		}
 
 		/**
-		 * Filters whether a resolved address is refused for a peer image sideload.
+		 * Filters whether a resolved address is refused for a peer image sideload, or for
+		 * a request to a peer's stored URL (safe_peer_remote_get()).
 		 *
 		 * This check runs after wp_http_validate_url() and overrides it, so a network
 		 * that answers `http_request_host_is_external` to allow its own private
-		 * addressing still loses avatar and thumbnail sync here. This filter is how
-		 * such a network opts an address back in; the default is to refuse.
+		 * addressing still loses avatar and thumbnail sync, and the Hub's requests to
+		 * its Nodes, here. This filter is how such a network opts an address back in;
+		 * the default is to refuse. Such a network needs both answers, since the
+		 * request itself also goes through core's check.
 		 *
 		 * @param bool   $blocked Whether the address is refused.
 		 * @param string $ip      The resolved IPv4 or IPv6 address.
