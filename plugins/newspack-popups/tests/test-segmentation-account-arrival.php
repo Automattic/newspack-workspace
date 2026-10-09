@@ -541,6 +541,42 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * With a persistent object cache the cap counts with an atomic increment,
+	 * so parallel requests can't all read the same count and slip past it.
+	 * Repeat clicks still don't spend a slot.
+	 */
+	public function test_object_cache_counts_each_new_account_atomically() {
+		add_filter( 'newspack_popups_carried_accounts_per_ip', fn() => 2 );
+		\Newspack\Reader_Data::$matched_segments = [
+			1 => [ $this->segment_ids['carried-one'] ],
+			2 => [ $this->segment_ids['carried-one'] ],
+			3 => [ $this->segment_ids['carried-two'] ],
+		];
+		$before       = time();
+		$was_external = wp_using_ext_object_cache( true );
+		try {
+			$this->arrive( '/p/?np_account=1' );
+			$this->arrive( '/p/?np_account=1' );
+			$this->arrive( '/p/?np_account=2' );
+			unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			$this->arrive( '/p/?np_account=3' );
+			$this->assertNull( $this->cookie(), 'A third distinct account must not resolve.' );
+
+			$window_start = $before - ( $before % HOUR_IN_SECONDS );
+			if ( time() >= $window_start + HOUR_IN_SECONDS ) {
+				$this->markTestSkipped( 'Crossed a window boundary mid-test.' );
+			}
+			$this->assertSame(
+				3,
+				wp_cache_get( $this->accounts_key( self::IP ) . '_' . $window_start, 'newspack_popups_carried_accounts' ),
+				'Each new account takes a slot through the shared counter; the repeat click takes none.'
+			);
+		} finally {
+			wp_using_ext_object_cache( $was_external );
+		}
+	}
+
+	/**
 	 * The transient key the cap uses for an address.
 	 *
 	 * @param string $ip Remote address.

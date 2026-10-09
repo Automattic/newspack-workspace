@@ -375,18 +375,20 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 
 	/**
 	 * Whole-URL merge-tag placeholders: the Mailchimp links that carry real
-	 * consequences, plus one shape per other supported ESP.
+	 * consequences, one shape per other supported ESP, and a placeholder an
+	 * earlier filter already appended a query string to.
 	 *
 	 * @return array[]
 	 */
 	public function placeholder_url_provider() {
 		return [
-			'mailchimp unsubscribe'    => [ '*|UNSUB|*' ],
-			'mailchimp update profile' => [ '*|UPDATE_PROFILE|*' ],
-			'mailchimp forward'        => [ '*|FORWARD|*' ],
-			'constant contact'         => [ '[[UNSUBSCRIBE]]' ],
-			'active campaign'          => [ '%UNSUBSCRIBE%' ],
-			'campaign monitor'         => [ '[unsubscribe]' ],
+			'mailchimp unsubscribe'       => [ '*|UNSUB|*' ],
+			'mailchimp update profile'    => [ '*|UPDATE_PROFILE|*' ],
+			'mailchimp forward'           => [ '*|FORWARD|*' ],
+			'constant contact'            => [ '[[UNSUBSCRIBE]]' ],
+			'active campaign'             => [ '%UNSUBSCRIBE%' ],
+			'campaign monitor'            => [ '[unsubscribe]' ],
+			'signed by an earlier filter' => [ '*|UNSUB|*?npnl=abc' ],
 		];
 	}
 }

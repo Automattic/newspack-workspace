@@ -420,19 +420,40 @@ class SegmentationAccountLinkTest extends WP_UnitTestCase {
 
 	/**
 	 * Whole-URL merge-tag placeholders: the Mailchimp links that carry real
-	 * consequences, plus one shape per other supported ESP.
+	 * consequences, one shape per other supported ESP, and a placeholder an
+	 * earlier filter already appended a query string to.
 	 *
 	 * @return array[]
 	 */
 	public function placeholder_url_provider() {
 		return [
-			'mailchimp unsubscribe'    => [ '*|UNSUB|*' ],
-			'mailchimp update profile' => [ '*|UPDATE_PROFILE|*' ],
-			'mailchimp forward'        => [ '*|FORWARD|*' ],
-			'constant contact'         => [ '[[UNSUBSCRIBE]]' ],
-			'active campaign'          => [ '%UNSUBSCRIBE%' ],
-			'campaign monitor'         => [ '[unsubscribe]' ],
+			'mailchimp unsubscribe'       => [ '*|UNSUB|*' ],
+			'mailchimp update profile'    => [ '*|UPDATE_PROFILE|*' ],
+			'mailchimp forward'           => [ '*|FORWARD|*' ],
+			'constant contact'            => [ '[[UNSUBSCRIBE]]' ],
+			'active campaign'             => [ '%UNSUBSCRIBE%' ],
+			'campaign monitor'            => [ '[unsubscribe]' ],
+			'signed by an earlier filter' => [ '*|UNSUB|*?npnl=abc' ],
 		];
+	}
+
+	/**
+	 * Through the real filter chain: newspack-plugin's newsletter-pass signer
+	 * runs at priority 20, ahead of this handler, and may already have appended
+	 * its query string to a placeholder. A stand-in at the same priority plays
+	 * that part, since this suite doesn't load newspack-plugin.
+	 */
+	public function test_leaves_placeholder_alone_after_an_earlier_filter_decorates_it() {
+		$signer = function ( $url ) {
+			return $url . '?npnl=abc';
+		};
+		add_filter( 'newspack_newsletters_process_link', $signer, 20 );
+		try {
+			$result = apply_filters( 'newspack_newsletters_process_link', '*|UNSUB|*', '*|UNSUB|*', $this->make_newsletter() );
+		} finally {
+			remove_filter( 'newspack_newsletters_process_link', $signer, 20 );
+		}
+		$this->assertSame( '*|UNSUB|*?npnl=abc', $result );
 	}
 
 	/**

@@ -78,8 +78,8 @@ final class Newspack_Popups_Segmentation {
 	const CARRIED_ACCOUNTS_PER_IP = 20;
 
 	/**
-	 * Window, in seconds, for CARRIED_ACCOUNTS_PER_IP. It starts with the first
-	 * account an address resolves and doesn't move as more arrive.
+	 * Window, in seconds, for CARRIED_ACCOUNTS_PER_IP. Fixed, not sliding:
+	 * adding accounts never extends it.
 	 */
 	const CARRIED_ACCOUNTS_WINDOW = HOUR_IN_SECONDS;
 
@@ -323,11 +323,10 @@ final class Newspack_Popups_Segmentation {
 		if ( ! self::is_newsletter_post( $post ) ) {
 			return $url;
 		}
-		// Mailchimp's process_link() (priority 10) can hand back a bare merge-tag
+		// Mailchimp's process_link() (priority 10) can hand back a merge-tag
 		// placeholder as the whole URL (e.g. *|UNSUB|*), which is host-less and so
-		// reads as first-party. Decorating it breaks the expanded link. Anchored
-		// match: a real URL carrying a merge tag in a query value still passes.
-		if ( self::is_unsubstituted_merge_tag( $url ) ) {
+		// reads as first-party. Decorating it breaks the expanded link.
+		if ( self::is_merge_tag_placeholder_url( $url ) ) {
 			return $url;
 		}
 		if ( ! self::is_first_party_url( $url ) ) {
@@ -397,11 +396,10 @@ final class Newspack_Popups_Segmentation {
 		if ( ! self::is_newsletter_post( $post ) ) {
 			return $url;
 		}
-		// Mailchimp's process_link() (priority 10) can hand back a bare merge-tag
+		// Mailchimp's process_link() (priority 10) can hand back a merge-tag
 		// placeholder as the whole URL (e.g. *|UNSUB|*), which is host-less and so
-		// reads as first-party. Decorating it breaks the expanded link. Anchored
-		// match: a real URL carrying a merge tag in a query value still passes.
-		if ( self::is_unsubstituted_merge_tag( $url ) ) {
+		// reads as first-party. Decorating it breaks the expanded link.
+		if ( self::is_merge_tag_placeholder_url( $url ) ) {
 			return $url;
 		}
 		if ( ! self::is_first_party_url( $url ) ) {
@@ -619,6 +617,21 @@ final class Newspack_Popups_Segmentation {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether a link is an ESP merge-tag placeholder (e.g. `*|UNSUB|*`) rather
+	 * than a URL: one that starts with a tag the ESP expands into a whole URL.
+	 * Matched as a prefix, not the whole string, because an earlier filter may
+	 * already have appended a query string to it. A real URL carrying a merge
+	 * tag in a query value doesn't match.
+	 *
+	 * @param string $url Processed link.
+	 *
+	 * @return bool
+	 */
+	private static function is_merge_tag_placeholder_url( $url ) {
+		return 1 === preg_match( '/^(?:\*\|[^|]+\|\*|\[\[[^\]]+\]\]|%[^%]+%|\[[^\][]+\])/', (string) $url );
 	}
 
 	/**
@@ -886,12 +899,9 @@ final class Newspack_Popups_Segmentation {
 	 * repeat clicks are free. Without a valid IP to key on there is nothing to
 	 * cap, so nothing resolves.
 	 *
-	 * The window is fixed: it starts with the address's first account, and
-	 * adding accounts keeps its original expiry rather than extending it.
-	 *
-	 * Read-modify-write without a lock: concurrent arrivals can overshoot the
-	 * cap by a few accounts, which doesn't matter against an enumeration that
-	 * needs thousands.
+	 * The cap has to hold against parallel requests, so with a persistent
+	 * object cache it counts with an atomic increment. Without one it falls back
+	 * to a transient, where concurrent arrivals can still race past it.
 	 *
 	 * @param int $account_id Account ID from the inbound param.
 	 *
@@ -905,6 +915,66 @@ final class Newspack_Popups_Segmentation {
 			return false;
 		}
 
+		/**
+		 * Filters how many distinct accounts one IP (or IPv6 /64) can resolve
+		 * from newsletter links per window. See CARRIED_ACCOUNTS_PER_IP.
+		 *
+		 * @param int $limit Distinct accounts per IP (or IPv6 /64) per window.
+		 */
+		$limit = (int) apply_filters( 'newspack_popups_carried_accounts_per_ip', self::CARRIED_ACCOUNTS_PER_IP );
+
+		return wp_using_ext_object_cache()
+			? self::claim_carried_account_slot_in_object_cache( $key, $account_id, $limit )
+			: self::claim_carried_account_slot_in_transient( $key, $account_id, $limit );
+	}
+
+	/**
+	 * The object-cache claim. Windows are aligned to multiples of
+	 * CARRIED_ACCOUNTS_WINDOW so every request agrees on the current one without
+	 * reading shared state. A marker per account keeps repeat clicks free; the
+	 * counter is only touched for an account this window hasn't seen, and
+	 * wp_cache_incr() makes each such claim take its own slot.
+	 *
+	 * @param string $key        Per-address key.
+	 * @param int    $account_id Account ID from the inbound param.
+	 * @param int    $limit      Distinct accounts allowed per window.
+	 *
+	 * @return bool Whether the account may resolve.
+	 */
+	private static function claim_carried_account_slot_in_object_cache( string $key, int $account_id, int $limit ): bool {
+		$group        = 'newspack_popups_carried_accounts';
+		$now          = time();
+		$window_start = $now - ( $now % self::CARRIED_ACCOUNTS_WINDOW );
+		$ttl          = max( 1, $window_start + self::CARRIED_ACCOUNTS_WINDOW - $now );
+		$counter      = $key . '_' . $window_start;
+		$marker       = $counter . '_' . $account_id;
+
+		if ( false !== wp_cache_get( $marker, $group ) ) {
+			return true;
+		}
+
+		wp_cache_add( $counter, 0, $group, $ttl ); // phpcs:ignore WordPressVIPMinimum.Performance.LowExpiryCacheTime.CacheTimeUndetermined -- $ttl is the rest of the window, at most an hour.
+		$count = wp_cache_incr( $counter, 1, $group );
+		if ( false === $count || $count > $limit ) {
+			return false;
+		}
+
+		wp_cache_set( $marker, 1, $group, $ttl ); // phpcs:ignore WordPressVIPMinimum.Performance.LowExpiryCacheTime.CacheTimeUndetermined -- $ttl is the rest of the window, at most an hour.
+		return true;
+	}
+
+	/**
+	 * The transient claim, for sites without a persistent object cache. The
+	 * window is fixed: it starts with the address's first account, and adding
+	 * accounts keeps its original expiry rather than extending it.
+	 *
+	 * @param string $key        Per-address key.
+	 * @param int    $account_id Account ID from the inbound param.
+	 * @param int    $limit      Distinct accounts allowed per window.
+	 *
+	 * @return bool Whether the account may resolve.
+	 */
+	private static function claim_carried_account_slot_in_transient( string $key, int $account_id, int $limit ): bool {
 		$now    = time();
 		$window = get_transient( $key );
 		if (
@@ -916,19 +986,10 @@ final class Newspack_Popups_Segmentation {
 				'accounts' => [],
 			];
 		}
-		$accounts = $window['accounts'];
-		if ( in_array( $account_id, $accounts, true ) ) {
+		if ( in_array( $account_id, $window['accounts'], true ) ) {
 			return true;
 		}
-
-		/**
-		 * Filters how many distinct accounts one IP (or IPv6 /64) can resolve
-		 * from newsletter links per window. See CARRIED_ACCOUNTS_PER_IP.
-		 *
-		 * @param int $limit Distinct accounts per IP (or IPv6 /64) per window.
-		 */
-		$limit = (int) apply_filters( 'newspack_popups_carried_accounts_per_ip', self::CARRIED_ACCOUNTS_PER_IP );
-		if ( count( $accounts ) >= $limit ) {
+		if ( count( $window['accounts'] ) >= $limit ) {
 			return false;
 		}
 
@@ -938,7 +999,7 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
-	 * The transient key holding the accounts an address resolved this window.
+	 * The key the cap counts an address's accounts under.
 	 *
 	 * An IPv6 address is keyed on its /64 network: one host usually holds the
 	 * whole /64 and can pick a new source address per request, so keying on the
@@ -950,7 +1011,7 @@ final class Newspack_Popups_Segmentation {
 	 *
 	 * @param string $ip Remote address.
 	 *
-	 * @return string Transient key, or '' when the address isn't a valid IP.
+	 * @return string Key, or '' when the address isn't a valid IP.
 	 */
 	private static function get_carried_accounts_key( string $ip ): string {
 		$packed = false === filter_var( $ip, FILTER_VALIDATE_IP ) ? false : inet_pton( $ip );
