@@ -17,6 +17,18 @@ defined( 'ABSPATH' ) || exit;
 class Block_Visibility {
 
 	/**
+	 * Capability required to configure block visibility in the block editor.
+	 *
+	 * Also the read gate on the institution route, which fills the panel's
+	 * institution picker: Institution_REST_Controller::READ_CAPABILITY is defined
+	 * as this constant. Change it here and both move together. A role shown the
+	 * panel but refused the route gets an empty picker with nothing failing.
+	 *
+	 * @var string
+	 */
+	const CONFIGURE_CAPABILITY = 'edit_others_posts';
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -393,7 +405,7 @@ class Block_Visibility {
 	 * Enqueue block editor assets.
 	 */
 	public static function enqueue_block_editor_assets() {
-		if ( ! current_user_can( 'edit_others_posts' ) ) {
+		if ( ! current_user_can( self::CONFIGURE_CAPABILITY ) ) {
 			return;
 		}
 
