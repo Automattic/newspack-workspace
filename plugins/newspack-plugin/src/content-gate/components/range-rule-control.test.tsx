@@ -24,6 +24,19 @@ describe( 'RangeRuleControl', () => {
 		expect( onChange ).toHaveBeenLastCalledWith( {} );
 	} );
 
+	it( 'keeps the same inputs while the notice comes and goes, so typing is not cut off', () => {
+		// The first keystroke clears the "not set" notice. Were the inputs rebuilt
+		// then, focus would drop and the rest of what the editor typed would be lost.
+		const { rerender } = render( <RangeRuleControl label="Donation total" value={ {} } onChange={ jest.fn() } /> );
+		const minimum = screen.getByLabelText( 'Minimum' );
+		expect( screen.getByRole( 'note' ) ).toBeInTheDocument();
+
+		rerender( <RangeRuleControl label="Donation total" value={ { min: 1 } } onChange={ jest.fn() } /> );
+
+		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
+		expect( screen.getByLabelText( 'Minimum' ) ).toBe( minimum );
+	} );
+
 	it( 'shows the stored bounds, including a bound of 0', () => {
 		renderControl( { min: 0, max: 10 } );
 

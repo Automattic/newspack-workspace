@@ -14,12 +14,12 @@
  */
 import { __ } from '@wordpress/i18n';
 import { TextControl } from '@wordpress/components';
+import { useInstanceId } from '@wordpress/compose';
 import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import AccessRuleValueNotice from './access-rule-value-notice';
 import { getRangeRuleValueNotice, normalizeRangeValue, type RangeValue } from '../utils/access-rule-value';
 import './range-rule-control.scss';
 
@@ -37,6 +37,8 @@ const toBound = ( input: string ) => {
 
 export default function RangeRuleControl( { label, value, onChange }: { label: string; value: unknown; onChange: ( value: RangeValue ) => void } ) {
 	const range = normalizeRangeValue( value );
+	const notice = getRangeRuleValueNotice( value );
+	const noticeId = useInstanceId( RangeRuleControl, 'newspack-range-rule-notice' );
 	const update = ( bound: keyof RangeValue, input: string ) => {
 		const next = { ...range };
 		if ( '' === input ) {
@@ -48,8 +50,11 @@ export default function RangeRuleControl( { label, value, onChange }: { label: s
 	};
 
 	return (
-		<AccessRuleValueNotice label={ label } notice={ getRangeRuleValueNotice( value ) }>
-			<Stack align="flex-start" gap="sm">
+		<>
+			{ /* The group is always rendered, unlike AccessRuleValueNotice's: the first
+			     keystroke clears the "not set" notice, and wrapping the inputs only while
+			     a notice shows would rebuild them mid-entry and drop the editor's focus. */ }
+			<Stack role="group" aria-label={ label } aria-describedby={ notice ? noticeId : undefined } align="flex-start" gap="sm">
 				<div className="newspack-range-rule__field">
 					<TextControl
 						label={ __( 'Minimum', 'newspack-plugin' ) }
@@ -71,6 +76,11 @@ export default function RangeRuleControl( { label, value, onChange }: { label: s
 					/>
 				</div>
 			</Stack>
-		</AccessRuleValueNotice>
+			{ notice && (
+				<p id={ noticeId } role="note" className="newspack-access-rule-values-notice">
+					{ notice }
+				</p>
+			) }
+		</>
 	);
 }
