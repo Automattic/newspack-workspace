@@ -92,7 +92,7 @@ const DuplicateButton = ( { autosave, campaignGroups, duplicateOf, isSavingPost,
 									{ __( 'This prompt is currently not assigned to any campaign.', 'newspack-popups' ) }
 								</Notice>
 							) }
-							<Stack justify="flex-end" align="center" gap="sm">
+							<Stack className="newspack-popups__duplicate-modal-actions" justify="flex-end" align="center" gap="sm">
 								<Button isSecondary onClick={ () => setModalVisible( false ) }>
 									{ __( 'Close', 'newspack-popups' ) }
 								</Button>
@@ -114,7 +114,7 @@ const DuplicateButton = ( { autosave, campaignGroups, duplicateOf, isSavingPost,
 								value={ duplicateTitle }
 								onChange={ value => setDuplicateTitle( value ) }
 							/>
-							<Stack justify="flex-end" align="center" gap="sm">
+							<Stack className="newspack-popups__duplicate-modal-actions" justify="flex-end" align="center" gap="sm">
 								<Button
 									isBusy={ isSavingPost }
 									isSecondary
