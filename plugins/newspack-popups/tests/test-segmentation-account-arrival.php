@@ -100,8 +100,10 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		}
 		\Newspack\Reader_Data::$matched_segments    = [];
 		\Newspack\Newsletters_Access::$valid_passes = [ self::VALID_PASS => 99 ];
-		foreach ( [ self::IP, '198.51.100.9' ] as $ip ) {
-			delete_transient( 'np_carried_accounts_' . md5( $ip ) );
+		$key_method = new ReflectionMethod( 'Newspack_Popups_Segmentation', 'get_carried_accounts_key' );
+		$key_method->setAccessible( true );
+		foreach ( [ self::IP, '198.51.100.9', '2001:db8:1:1::1', '2001:db8:1:2::1' ] as $ip ) {
+			delete_transient( $key_method->invoke( null, $ip ) );
 		}
 		unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
@@ -140,6 +142,10 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		// Simulating an inbound request, so populating the superglobals the
 		// handler reads is the point of this helper.
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$previous_server           = [
+			'REQUEST_URI'    => $_SERVER['REQUEST_URI'] ?? null, // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			'REQUEST_METHOD' => $_SERVER['REQUEST_METHOD'] ?? null, // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		];
 		$_SERVER['REQUEST_URI']    = $request_uri;
 		$_SERVER['REQUEST_METHOD'] = $method;
 		$_GET                      = [];
@@ -162,7 +168,14 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 			unset( $e ); // Expected: stands in for the exit() after the redirect.
 		} finally {
 			remove_filter( 'wp_redirect', $filter );
-			unset( $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD'] );
+			// Restored rather than unset: core reads REQUEST_URI at shutdown.
+			foreach ( $previous_server as $name => $value ) {
+				if ( null === $value ) {
+					unset( $_SERVER[ $name ] );
+				} else {
+					$_SERVER[ $name ] = $value;
+				}
+			}
 			if ( null === $previous_ip ) {
 				unset( $_SERVER['REMOTE_ADDR'] ); // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 			} else {
@@ -479,12 +492,56 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * With no remote address there is nothing to cap on, so nothing resolves.
+	 * IPv6 addresses in one /64 share an allowance, so a host can't reset the
+	 * cap by picking a new source address; another /64 has its own. An
+	 * IPv4-mapped IPv6 address shares the allowance of the IPv4 address.
 	 */
-	public function test_request_without_an_ip_carries_nothing() {
+	public function test_caps_ipv6_per_network_and_mapped_ipv4_as_ipv4() {
+		add_filter( 'newspack_popups_carried_accounts_per_ip', fn() => 1 );
+		\Newspack\Reader_Data::$matched_segments = [
+			1 => [ $this->segment_ids['carried-one'] ],
+			2 => [ $this->segment_ids['carried-two'] ],
+		];
+
+		$this->arrive( '/p/?np_account=1', 'GET', self::VALID_PASS, '2001:db8:1:1::1' );
+		unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->arrive( '/p/?np_account=2', 'GET', self::VALID_PASS, '2001:db8:1:1:ffff::9' );
+		$this->assertNull( $this->cookie(), 'Another address in the same /64 must share the allowance.' );
+
+		$this->arrive( '/p/?np_account=2', 'GET', self::VALID_PASS, '2001:db8:1:2::1' );
+		$this->assertSame( $this->segment_ids['carried-two'], $this->cookie(), 'Another /64 has its own allowance.' );
+
+		$this->arrive( '/p/?np_account=1', 'GET', self::VALID_PASS, self::IP );
+		unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->arrive( '/p/?np_account=2', 'GET', self::VALID_PASS, '::ffff:' . self::IP );
+		$this->assertNull( $this->cookie(), 'An IPv4-mapped address must share the IPv4 allowance.' );
+	}
+
+	/**
+	 * Without a valid remote address there is nothing to cap on, so nothing
+	 * resolves — and an invalid one raises no warning.
+	 *
+	 * @param string $ip Remote address.
+	 *
+	 * @dataProvider unusable_ip_provider
+	 */
+	public function test_request_without_a_valid_ip_carries_nothing( $ip ) {
 		\Newspack\Reader_Data::$matched_segments = [ 42 => [ $this->segment_ids['carried-one'] ] ];
-		$this->assertSame( '/p/', $this->arrive( '/p/?np_account=42', 'GET', self::VALID_PASS, '' ) );
+		$this->assertSame( '/p/', $this->arrive( '/p/?np_account=42', 'GET', self::VALID_PASS, $ip ) );
 		$this->assertNull( $this->cookie() );
+	}
+
+	/**
+	 * Remote addresses the cap can't key on.
+	 *
+	 * @return array[]
+	 */
+	public function unusable_ip_provider() {
+		return [
+			'empty'      => [ '' ],
+			'not an ip'  => [ 'not-an-ip' ],
+			'ip a range' => [ '203.0.113.0/24' ],
+		];
 	}
 
 	/**

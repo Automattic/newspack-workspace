@@ -882,8 +882,8 @@ final class Newspack_Popups_Segmentation {
 	/**
 	 * Count an account against the requesting IP's cap, and report whether it
 	 * fits. An account the IP already resolved in this window always fits, so
-	 * repeat clicks are free. Without an IP to key on there is nothing to cap,
-	 * so nothing resolves.
+	 * repeat clicks are free. Without a valid IP to key on there is nothing to
+	 * cap, so nothing resolves.
 	 *
 	 * Read-modify-write without a lock: concurrent arrivals can overshoot the
 	 * cap by a few accounts, which doesn't matter against an enumeration that
@@ -895,12 +895,12 @@ final class Newspack_Popups_Segmentation {
 	 */
 	private static function claim_carried_account_slot( int $account_id ): bool {
 		// phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
-		if ( '' === $ip ) {
+		$ip  = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		$key = self::get_carried_accounts_key( $ip );
+		if ( '' === $key ) {
 			return false;
 		}
 
-		$key      = 'np_carried_accounts_' . md5( $ip );
 		$accounts = get_transient( $key );
 		$accounts = is_array( $accounts ) ? $accounts : [];
 		if ( in_array( $account_id, $accounts, true ) ) {
@@ -921,6 +921,30 @@ final class Newspack_Popups_Segmentation {
 		$accounts[] = $account_id;
 		set_transient( $key, $accounts, self::CARRIED_ACCOUNTS_WINDOW );
 		return true;
+	}
+
+	/**
+	 * The transient key holding the accounts an address resolved this window.
+	 *
+	 * An IPv6 address is keyed on its /64 network: one host usually holds the
+	 * whole /64 and can pick a new source address per request, so keying on the
+	 * full address would hand it a fresh allowance every time. An IPv4-mapped
+	 * IPv6 address is keyed as the IPv4 address it carries.
+	 *
+	 * @param string $ip Remote address.
+	 *
+	 * @return string Transient key, or '' when the address isn't a valid IP.
+	 */
+	private static function get_carried_accounts_key( string $ip ): string {
+		$packed = false === filter_var( $ip, FILTER_VALIDATE_IP ) ? false : inet_pton( $ip );
+		if ( false === $packed ) {
+			return '';
+		}
+		if ( 16 === strlen( $packed ) ) {
+			$mapped_prefix = str_repeat( "\0", 10 ) . "\xff\xff";
+			$packed        = 0 === strpos( $packed, $mapped_prefix ) ? substr( $packed, 12 ) : substr( $packed, 0, 8 );
+		}
+		return 'np_carried_accounts_' . md5( $packed );
 	}
 
 	/**
