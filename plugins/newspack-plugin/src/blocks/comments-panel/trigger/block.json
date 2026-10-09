@@ -8,7 +8,8 @@
 	"textdomain": "newspack-plugin",
 	"parent": [ "newspack/comments-panel" ],
 	"attributes": {
-		"triggerText": { "type": "string", "default": "" },
+		"triggerText": { "type": "string", "default": "Comments" },
+		"width": { "type": "number" },
 		"lock": { "type": "object", "default": { "move": true, "remove": true } }
 	},
 	"supports": {
@@ -38,9 +39,15 @@
 			}
 		},
 		"__experimentalBorder": {
+			"color": true,
 			"radius": true,
+			"style": true,
+			"width": true,
 			"__experimentalDefaultControls": {
-				"radius": false
+				"color": false,
+				"radius": false,
+				"style": false,
+				"width": false
 			}
 		}
 	},

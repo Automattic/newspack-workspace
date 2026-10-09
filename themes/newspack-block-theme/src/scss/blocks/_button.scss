@@ -84,6 +84,12 @@
 	}
 }
 
+// Keep a 1px border from making the button taller than a solid one. Custom padding is
+// inline, so this only works for default padding.
+.wp-block-button__link:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
+	padding-block: calc(var(--wp--custom--spacing--25) - 1px);
+}
+
 .has-small-size {
 	.wp-block-button {
 		&__link {
@@ -91,6 +97,10 @@
 			display: inline-flex;
 			min-height: var(--wp--custom--spacing--65);
 			padding: var(--wp--preset--spacing--20) var(--wp--preset--spacing--30);
+
+			&:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
+				padding-block: calc(var(--wp--preset--spacing--20) - 1px);
+			}
 		}
 	}
 
@@ -110,6 +120,10 @@
 			display: inline-flex;
 			min-height: var(--wp--custom--spacing--55);
 			padding: var(--wp--custom--spacing--15) var(--wp--custom--spacing--25);
+
+			&:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
+				padding-block: calc(var(--wp--custom--spacing--15) - 1px);
+			}
 		}
 	}
 

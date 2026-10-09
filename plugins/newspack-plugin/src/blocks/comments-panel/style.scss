@@ -1,3 +1,4 @@
+@use "sass:math";
 @use "../../newspack-ui/scss/variables/breakpoints";
 @use "../../../packages/colors/colors.module" as colors;
 
@@ -6,9 +7,29 @@
 		display: none;
 	}
 
-	// The icon SVG ships with fill="none", so it needs a fill outside the Newspack theme.
-	.comments-panel__trigger svg {
-		fill: currentcolor;
+	> .block-editor-inner-blocks {
+		flex-grow: 1;
+	}
+
+	.comments-panel__trigger {
+		justify-content: center;
+		svg {
+			fill: currentcolor;
+		}
+	}
+
+	.wp-block-buttons > .wp-block-button.has-custom-width {
+		max-width: none;
+
+		.comments-panel__trigger {
+			width: 100%;
+		}
+	}
+
+	@each $width in 25, 50, 75, 100 {
+		.wp-block-buttons > .wp-block-button.wp-block-button__width-#{$width} {
+			width: percentage(math.div($width, 100));
+		}
 	}
 }
 
@@ -108,10 +129,11 @@
 		}
 	}
 
-	&:has(#disqus_thread) { /* stylelint-disable-line selector-id-pattern */
-		max-width:
-			calc((var(--wp--style--global--content-size) - (var(--wp--preset--spacing--50) * 5)) / 6 * 7 +
-			(var(--wp--preset--spacing--50) * 6));
+	/* stylelint-disable-next-line selector-id-pattern */
+	&:has(#disqus_thread) {
+		max-width: calc(
+			(var(--wp--style--global--content-size) - (var(--wp--preset--spacing--50) * 5)) / 6 * 7 + (var(--wp--preset--spacing--50) * 6)
+		);
 	}
 
 	&--left {

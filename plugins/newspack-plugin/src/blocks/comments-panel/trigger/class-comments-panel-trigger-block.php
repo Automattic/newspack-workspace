@@ -47,7 +47,8 @@ final class Comments_Panel_Trigger_Block {
 	public static function render_block( array $attributes ) {
 		$default_text = __( 'Comments', 'newspack-plugin' );
 		$trigger_text = $attributes['triggerText'] ?? $default_text;
-		if ( '' === trim( (string) $trigger_text ) ) {
+		// The block.json default is untranslated, so swap it for the translated string.
+		if ( '' === trim( (string) $trigger_text ) || 'Comments' === $trigger_text ) {
 			$trigger_text = $default_text;
 		}
 
@@ -56,12 +57,15 @@ final class Comments_Panel_Trigger_Block {
 		$show_icon  = ! in_array( 'is-style-text-only', $classes, true );
 		$text_class = in_array( 'is-style-icon-only', $classes, true ) ? 'screen-reader-text' : '';
 
+		$width        = (int) ( $attributes['width'] ?? 0 );
+		$button_class = in_array( $width, [ 25, 50, 75, 100 ], true ) ? 'wp-block-button has-custom-width wp-block-button__width-' . $width : 'wp-block-button';
+
 		$wrapper_attributes = get_block_wrapper_attributes( [ 'class' => 'comments-panel__trigger wp-block-button__link wp-element-button' ] );
 
 		ob_start();
 		?>
 		<div class="wp-block-buttons is-layout-flex">
-			<div class="wp-block-button">
+			<div class="<?php echo esc_attr( $button_class ); ?>">
 				<button
 					<?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 					type="button"

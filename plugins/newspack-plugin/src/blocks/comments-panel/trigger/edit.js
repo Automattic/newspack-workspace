@@ -1,11 +1,21 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __unstableStripHTML as stripHTML } from '@wordpress/dom';
 import { useEffect, useState } from '@wordpress/element';
-import { RichText, useBlockProps } from '@wordpress/block-editor';
+import { InspectorControls, RichText, useBlockProps } from '@wordpress/block-editor';
+import {
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControl as ToggleGroupControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToolsPanel as ToolsPanel,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToolsPanelItem as ToolsPanelItem,
+} from '@wordpress/components';
 import { useSelect } from '@wordpress/data';
 
 /**
@@ -26,7 +36,7 @@ import { comments as commentsIcon } from '../../../../packages/icons';
  * @return {JSX.Element} The block editor UI.
  */
 export default function CommentsPanelTriggerEdit( { attributes, setAttributes, clientId } ) {
-	const { triggerText, className: blockClassName } = attributes;
+	const { triggerText, width, className: blockClassName } = attributes;
 
 	const classes = ( blockClassName || '' ).split( ' ' );
 	const isIconOnly = classes.includes( 'is-style-icon-only' );
@@ -62,8 +72,36 @@ export default function CommentsPanelTriggerEdit( { attributes, setAttributes, c
 		<>
 			{ isFirstInstance && <PanelPreviewToggle isOpen={ isPanelOpen } onToggle={ () => panelToggles.get( parentClientId )?.() } /> }
 
+			<InspectorControls>
+				<ToolsPanel label={ __( 'Settings', 'newspack-plugin' ) } resetAll={ () => setAttributes( { width: undefined } ) }>
+					<ToolsPanelItem
+						label={ __( 'Width', 'newspack-plugin' ) }
+						isShownByDefault
+						hasValue={ () => !! width }
+						onDeselect={ () => setAttributes( { width: undefined } ) }
+					>
+						<ToggleGroupControl
+							label={ __( 'Width', 'newspack-plugin' ) }
+							value={ width }
+							onChange={ newWidth => setAttributes( { width: newWidth } ) }
+							isBlock
+							__next40pxDefaultSize
+						>
+							{ [ 25, 50, 75, 100 ].map( widthValue => (
+								<ToggleGroupControlOption
+									key={ widthValue }
+									value={ widthValue }
+									/* translators: %d: Percentage value. */
+									label={ sprintf( __( '%d%%', 'newspack-plugin' ), widthValue ) }
+								/>
+							) ) }
+						</ToggleGroupControl>
+					</ToolsPanelItem>
+				</ToolsPanel>
+			</InspectorControls>
+
 			<div className="wp-block-buttons is-layout-flex">
-				<div className="wp-block-button">
+				<div className={ width ? `wp-block-button has-custom-width wp-block-button__width-${ width }` : 'wp-block-button' }>
 					<button { ...blockProps } type="button" aria-controls="newspack-comments-panel" onClick={ e => e.preventDefault() }>
 						{ showTriggerIcon && (
 							<span className="comments-panel__icon" aria-hidden="true">
