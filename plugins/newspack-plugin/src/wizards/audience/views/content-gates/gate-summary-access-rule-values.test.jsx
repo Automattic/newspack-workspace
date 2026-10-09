@@ -19,6 +19,7 @@ window.newspackAudienceContentGates = {
 		},
 		institution: { name: 'Institutional access', has_options: true, requires_value: true, options: [] },
 		email_domain: { name: 'Whitelisted email domain', has_options: false, empty_grants_access: true, requires_value: true },
+		esp__DONATION: { name: 'Donation total', has_options: false, is_range: true, empty_grants_access: true, requires_value: true },
 	},
 	available_content_rules: {},
 };
@@ -144,5 +145,24 @@ describe( 'gate summary, Paid access', () => {
 
 		expect( screen.getByText( 'Not set (matches no reader)' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Not set (grants access to everyone)' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'gate summary, range rules', () => {
+	it( 'reads the bounds back in words', () => {
+		// One group per rule, since the summary keys each line by group and slug.
+		const gate = gateWith();
+		gate.custom_access.access_rules = [ { min: 50, max: 100 }, { min: 50 }, { max: 10 } ].map( value => [ { slug: 'esp__DONATION', value } ] );
+		renderPaidAccess( gate );
+
+		expect( screen.getByText( '50 to 100' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'At least 50' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'At most 10' ) ).toBeInTheDocument();
+	} );
+
+	it( 'flags text saved before the min/max control, which the rule denies on', () => {
+		renderPaidAccess( gateWith( { slug: 'esp__DONATION', value: '50' } ) );
+
+		expect( screen.getByText( '50 (invalid value, grants no access)' ) ).toBeInTheDocument();
 	} );
 } );

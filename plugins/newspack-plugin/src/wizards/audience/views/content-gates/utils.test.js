@@ -202,6 +202,25 @@ describe( 'isUnconstrainedAccessRuleValue and isUnconfiguredAccessRuleValue', ()
 	} );
 } );
 
+describe( 'range rule values', () => {
+	const range = { name: 'Donation total', has_options: false, is_range: true, empty_grants_access: true, requires_value: true };
+
+	it( 'reads text saved before the min/max control as malformed, since the rule denies on it', () => {
+		expect( isMalformedAccessRuleValue( range, '50' ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( range, [ 50 ] ) ).toBe( true );
+		expect( isMalformedAccessRuleValue( range, { min: 50 } ) ).toBe( false );
+		expect( isMalformedAccessRuleValue( range, '' ) ).toBe( false );
+	} );
+
+	it( 'reads bounds with neither side set as unconfigured, which grants every reader holding a number', () => {
+		expect( isUnconfiguredAccessRuleValue( range, {} ) ).toBe( true );
+		expect( isUnconfiguredAccessRuleValue( range, { min: '', max: '' } ) ).toBe( true );
+		expect( isUnconstrainedAccessRuleValue( range, {} ) ).toBe( true );
+		expect( isUnconfiguredAccessRuleValue( range, { min: 0 } ) ).toBe( false );
+		expect( isUnconfiguredAccessRuleValue( range, { max: 10 } ) ).toBe( false );
+	} );
+} );
+
 /**
  * The two warnings on the Metering page are the only thing telling a publisher which
  * gates their edit governs. `hasOwnMeter` and `hasSharedMeteredPath` are deliberately

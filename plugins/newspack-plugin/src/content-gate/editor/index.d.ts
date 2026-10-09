@@ -11,11 +11,14 @@ type BlockSettings = {
 type AccessRuleOption = import( '../access-rule-options' ).AccessRuleOption;
 // Single source of truth for the composite value shape lives with the control.
 type EditorOneTimePurchaseRuleValue = import( '../components/one-time-purchase-rule-control' ).OneTimePurchaseValue;
+type EditorRangeRuleValue = import( '../utils/access-rule-value' ).RangeValue;
 type AccessRuleConfig = {
 	name: string;
 	description: string;
-	default: string | Array< string | number > | EditorOneTimePurchaseRuleValue;
+	default: string | Array< string | number > | EditorOneTimePurchaseRuleValue | EditorRangeRuleValue;
 	is_boolean?: boolean;
+	// Whether the value is `{ min, max }` bounds on a number, rendered as a min/max control.
+	is_range?: boolean;
 	placeholder?: string;
 	options?: AccessRuleOption[];
 	has_options: boolean;
@@ -24,7 +27,7 @@ type AccessRuleConfig = {
 };
 type ActiveRule = {
 	slug: string;
-	value: string | Array< string | number > | EditorOneTimePurchaseRuleValue | null;
+	value: string | Array< string | number > | EditorOneTimePurchaseRuleValue | EditorRangeRuleValue | null;
 };
 type RegistrationRule = {
 	active: boolean;

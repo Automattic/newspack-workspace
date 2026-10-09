@@ -868,9 +868,13 @@ class Content_Gate_API {
 		$rule  = $rules[ $slug ];
 		// Rules with a composite value shape sanitize it themselves.
 		if ( ! empty( $rule['sanitize_callback'] ) && is_callable( $rule['sanitize_callback'] ) ) {
+			$value = call_user_func( $rule['sanitize_callback'], $access_rule['value'] ?? null );
+			if ( is_wp_error( $value ) ) {
+				return self::invalid_access_rule_value_error( $rule );
+			}
 			return [
 				'slug'  => $slug,
-				'value' => call_user_func( $rule['sanitize_callback'], $access_rule['value'] ?? null ),
+				'value' => $value,
 			];
 		}
 		if ( $rule['is_boolean'] ) {

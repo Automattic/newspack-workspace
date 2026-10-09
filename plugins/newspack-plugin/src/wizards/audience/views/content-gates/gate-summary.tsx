@@ -21,6 +21,7 @@ import {
 } from '../../../../content-gate/access-rule-options';
 import { getMeteringCount, isMalformedAccessRuleValue, isUnconfiguredAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
+import { formatRangeValue } from '../../../../content-gate/utils/access-rule-value';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
 
@@ -101,6 +102,9 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 		return isUnconstrainedAccessRuleValue( config, rule.value )
 			? __( 'Not set (grants access to everyone)', 'newspack-plugin' )
 			: __( 'Not set (matches no reader)', 'newspack-plugin' );
+	}
+	if ( config?.is_range ) {
+		return formatRangeValue( rule.value );
 	}
 	if ( Array.isArray( rule.value ) && options ) {
 		return formatAccessRuleOptionValues( rule.value, options, rule.slug );
