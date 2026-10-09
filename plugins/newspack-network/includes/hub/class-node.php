@@ -84,7 +84,7 @@ class Node {
 	}
 
 	/**
-	 * Returns when the Node was recorded as holding its key.
+	 * Returns when the Node was recorded as linked.
 	 *
 	 * @return int Unix timestamp, or 0 if it has not been.
 	 */
@@ -93,7 +93,7 @@ class Node {
 	}
 
 	/**
-	 * Whether the Node has been recorded as holding its key.
+	 * Whether the Node has been recorded as linked.
 	 *
 	 * @return bool
 	 */
