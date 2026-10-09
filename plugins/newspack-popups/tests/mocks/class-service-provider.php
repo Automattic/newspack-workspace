@@ -48,7 +48,7 @@ if ( ! class_exists( 'Newspack_Popups_Test_Service_Provider' ) ) {
 		 * @param string|null $list_id    Audience ID.
 		 * @return string
 		 */
-		public function get_field_merge_tag_name( $field_name, $list_id = null ) {
+		public function get_field_merge_tag_name( string $field_name, ?string $list_id = null ): string {
 			$this->received_list_id = $list_id;
 			++$this->lookups;
 			return $this->tags[ $field_name ] ?? '';

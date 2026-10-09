@@ -1369,8 +1369,8 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 *
 	 * @return string Merge-field tag, or '' when unknown.
 	 */
-	public function get_field_merge_tag_name( $field_name, $list_id = null ) {
-		$field_name = trim( (string) $field_name );
+	public function get_field_merge_tag_name( string $field_name, ?string $list_id = null ): string {
+		$field_name = trim( $field_name );
 		if ( '' === $field_name || empty( $list_id ) ) {
 			return '';
 		}

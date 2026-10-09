@@ -605,7 +605,7 @@ Error message(s) received:
 	 *
 	 * @return string The ESP's bare tag name, or '' when it can't be resolved.
 	 */
-	public function get_field_merge_tag_name( $field_name, $list_id = null ) {
+	public function get_field_merge_tag_name( string $field_name, ?string $list_id = null ): string {
 		return '';
 	}
 

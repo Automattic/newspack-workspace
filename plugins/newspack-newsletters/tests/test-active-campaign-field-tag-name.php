@@ -33,8 +33,6 @@ class ActiveCampaignFieldTagNameTest extends WP_UnitTestCase {
 		parent::set_up();
 		$this->remote_fields = [];
 		$this->list_calls    = 0;
-		delete_transient( 'np_nl_field_tag_' . md5( 'NP_Account' ) );
-		delete_transient( 'np_nl_field_tag_' . md5( 'NP_Missing' ) );
 		// The per-request memo is a static property (see
 		// $field_merge_tag_name_memo's docblock), so it otherwise survives
 		// across every test in this process, not just within one. Reset it
@@ -48,7 +46,55 @@ class ActiveCampaignFieldTagNameTest extends WP_UnitTestCase {
 				'key' => 'test-key',
 			]
 		);
+		delete_transient( $this->cache_key( 'NP_Account' ) );
+		delete_transient( $this->cache_key( 'NP_Missing' ) );
 		add_filter( 'pre_http_request', [ $this, 'mock_http' ], 10, 3 );
+	}
+
+	/**
+	 * The transient key a field's perstag is cached under, for the account
+	 * currently connected.
+	 *
+	 * @param string $field_name Field title.
+	 *
+	 * @return string
+	 */
+	private function cache_key( $field_name ) {
+		$method = new ReflectionMethod( 'Newspack_Newsletters_Active_Campaign', 'get_field_merge_tag_cache_key' );
+		$method->setAccessible( true );
+		return $method->invoke( null, $field_name );
+	}
+
+	/**
+	 * Reconnecting to another ActiveCampaign account must not serve the
+	 * previous account's cached perstag.
+	 */
+	public function test_cache_does_not_survive_switching_accounts() {
+		$this->remote_fields = [
+			[
+				'title'   => 'NP_Account',
+				'perstag' => 'NP_ACCOUNT',
+			],
+		];
+		$this->assertSame( 'NP_ACCOUNT', Newspack_Newsletters_Active_Campaign::instance()->get_field_merge_tag_name( 'NP_Account' ) );
+
+		$memo = new ReflectionProperty( 'Newspack_Newsletters_Active_Campaign', 'field_merge_tag_name_memo' );
+		$memo->setAccessible( true );
+		$memo->setValue( null, [] );
+		Newspack_Newsletters_Active_Campaign::instance()->set_api_credentials(
+			[
+				'url' => 'https://other.api-us1.com',
+				'key' => 'test-key',
+			]
+		);
+		$this->remote_fields = [
+			[
+				'title'   => 'NP_Account',
+				'perstag' => 'NP_ACCOUNT_2',
+			],
+		];
+		$this->assertSame( 'NP_ACCOUNT_2', Newspack_Newsletters_Active_Campaign::instance()->get_field_merge_tag_name( 'NP_Account' ) );
+		delete_transient( $this->cache_key( 'NP_Account' ) );
 	}
 
 	/**
@@ -202,7 +248,7 @@ class ActiveCampaignFieldTagNameTest extends WP_UnitTestCase {
 				'perstag' => 'NP_ACCOUNT',
 			],
 		];
-		$cache_key = 'np_nl_field_tag_' . md5( 'NP_Account' );
+		$cache_key = $this->cache_key( 'NP_Account' );
 		add_filter( "transient_{$cache_key}", '__return_false' );
 
 		try {

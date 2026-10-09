@@ -2322,8 +2322,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 *
 	 * @return string Perstag, or '' when unknown.
 	 */
-	public function get_field_merge_tag_name( $field_name, $list_id = null ) {
-		$field_name = trim( (string) $field_name );
+	public function get_field_merge_tag_name( string $field_name, ?string $list_id = null ): string {
+		$field_name = trim( $field_name );
 		if ( '' === $field_name ) {
 			return '';
 		}
@@ -2332,7 +2332,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return self::$field_merge_tag_name_memo[ $field_name ];
 		}
 
-		$cache_key = 'np_nl_field_tag_' . md5( $field_name );
+		$cache_key = self::get_field_merge_tag_cache_key( $field_name );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			self::$field_merge_tag_name_memo[ $field_name ] = (string) $cached;
@@ -2369,6 +2369,19 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		set_transient( $cache_key, $perstag, '' === $perstag ? 15 * MINUTE_IN_SECONDS : 12 * HOUR_IN_SECONDS );
 		self::$field_merge_tag_name_memo[ $field_name ] = $perstag;
 		return $perstag;
+	}
+
+	/**
+	 * Transient key for a field's perstag. Scoped to the connected account, so
+	 * reconnecting the site to another ActiveCampaign account never serves the
+	 * previous account's perstag.
+	 *
+	 * @param string $field_name Field title as synced.
+	 *
+	 * @return string
+	 */
+	private static function get_field_merge_tag_cache_key( string $field_name ): string {
+		return 'np_nl_field_tag_' . md5( (string) get_option( 'newspack_newsletters_active_campaign_url' ) . '|' . $field_name );
 	}
 
 	/**
