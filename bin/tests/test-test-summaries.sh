@@ -57,14 +57,15 @@ XML
 php_summary "$WORK/pass.xml" 0
 expect "php: a clean run is PASS with its counts" '^result:  PASS - 3 tests, 5 assertions' "$WORK/out"
 expect "php: names the code under test" '^code:    main@abc1234 \(plugins/newspack-demo\)$' "$WORK/out"
-expect "php: names the project" '^project: /newspack-plugins/newspack-demo$' "$WORK/out"
-php "$BIN/test-php-summary.php" "$WORK/pass.xml" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
+expect "php: a pass shows its arguments" '^args:    --filter x$' "$WORK/out"
+reject "php: a pass leaves out the project, test db and log lines" '^(project|test db|full log):' "$WORK/out"
+php "$BIN/test-php-summary.php" "$WORK/fail.xml" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
 expect "php: without a host root the log path is relative to the monorepo" '^full log: logs/test-php/demo.log$' "$WORK/out"
 
 php_summary_rooted() { # the log as test-php.sh names it, under /newspack-monorepo
 	NEWSPACK_HOST_ROOT=/Users/dev/newspack-workspace php "$BIN/test-php-summary.php" "$1" /newspack-monorepo/logs/test-php/demo.log /newspack-plugins/newspack-demo wp_tests 0 > "$WORK/out" 2>&1
 }
-php_summary_rooted "$WORK/pass.xml"
+php_summary_rooted "$WORK/fail.xml"
 expect "php: the full log path is a host path under the main checkout" '^full log: /Users/dev/newspack-workspace/logs/test-php/demo.log$' "$WORK/out"
 
 cat > "$WORK/fail.xml" <<'XML'
@@ -153,8 +154,8 @@ Test Suites: 6 passed, 6 total
 Tests:       71 passed, 71 total
 LOG
 js_summary "$WORK/js-pass.log" 0
-expect "js: a clean run is PASS" '^result:  PASS \(exit 0\)$' "$WORK/out"
-expect "js: shows Jest's test count" 'Tests: +71 passed, 71 total' "$WORK/out"
+expect "js: a clean run is PASS with Jest's count" '^result:  PASS - 71 passed, 71 total$' "$WORK/out"
+reject "js: a pass leaves out the project, suites and log lines" '^(project:|full log:|  Test Suites:)' "$WORK/out"
 expect "js: names the directory pnpm ran in" '^ran in:  /newspack-monorepo/plugins/newspack-demo$' "$WORK/out"
 expect "js: names the code under test" '^code:    main@abc1234' "$WORK/out"
 reject "js: no install warning after a clean install" '^install:' "$WORK/out"
@@ -209,10 +210,10 @@ reject "js: and is never PASS" 'PASS' "$WORK/out"
 js_summary "$WORK/js-install.log" 0 1
 expect "js: a failed install is reported" '^install: FAILED \(exit 1\)' "$WORK/out"
 expect "js: with pnpm's error" 'ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY' "$WORK/out"
-expect "js: and the tests still report" '^result:  PASS' "$WORK/out"
+expect "js: and the tests still report" '^result:  PASS - 71 passed' "$WORK/out"
 
-NEWSPACK_HOST_ROOT=/Users/dev/newspack-workspace bash "$BIN/test-js-summary.sh" "$WORK/js-pass.log" /newspack-plugins/newspack-demo newspack-demo 0 "$WORK" 0 > "$WORK/out" 2>&1
-expect "js: the full log path is a host path under the main checkout" '^full log: /Users/dev/newspack-workspace/js-pass.log$' "$WORK/out"
+NEWSPACK_HOST_ROOT=/Users/dev/newspack-workspace bash "$BIN/test-js-summary.sh" "$WORK/js-fail.log" /newspack-plugins/newspack-demo newspack-demo 0 "$WORK" 0 > "$WORK/out" 2>&1
+expect "js: the full log path is a host path under the main checkout" '^full log: /Users/dev/newspack-workspace/js-fail.log$' "$WORK/out"
 
 # --- test-js.sh compact mode, end to end with pnpm stubbed ---------------------
 # A scoped package name must not reach the log file name: "@scope/name" would
@@ -232,9 +233,10 @@ STUB
 chmod +x "$WORK/stub/pnpm"
 PATH="$WORK/stub:$PATH" PLUGINS_PATH="$M/plugins" THEMES_PATH="$M/themes" REPOS_PATH="$M/repos" \
 	MONOREPO_ROOT="$M" NEWSPACK_TEST_OUTPUT=compact bash "$BIN/test-js.sh" newspack-scoped > "$WORK/out" 2>&1
-expect "test-js.sh: a scoped package runs its tests in compact mode" '^result:  PASS \(exit 0\)$' "$WORK/out"
+expect "test-js.sh: a scoped package runs its tests in compact mode" '^result:  PASS - 3 passed, 3 total$' "$WORK/out"
 reject "test-js.sh: and its install is not reported failed" '^install:' "$WORK/out"
-expect "test-js.sh: the log is in a per-run directory named after the project" 'logs/test-js/newspack-scoped-[0-9TZ]+-[A-Za-z0-9]{6}/output\.log$' "$WORK/out"
+scoped_logs=$(find "$M/logs/test-js" -path '*/newspack-scoped-*/output.log' 2>/dev/null | grep -cE '/newspack-scoped-[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9]{6}/output\.log$')
+if [[ "$scoped_logs" -ge 1 ]]; then echo "ok   - test-js.sh: the log is in a per-run directory named after the project"; else echo "FAIL - test-js.sh: no per-run log directory named after the project"; failures=$((failures + 1)); fi
 
 # --- test-php.sh, end to end with phpunit stubbed -------------------------------
 # PHPUnit's listing modes write no JUnit log, so compact mode must pass them

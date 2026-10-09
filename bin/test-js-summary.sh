@@ -33,17 +33,30 @@ TEST_OUT=$(sed -n '/^=== pnpm run test ===$/,$p' "$LOG" | tail -n +2)
 # which is what shows whether a worktree or the root checkout was tested.
 RAN_IN=$(grep -m1 -oE '^> [^ ]+ test (/.*)$' <<< "$TEST_OUT" | sed -E 's/^> [^ ]+ test //')
 
-echo "project: $PKG"
-echo "ran in:  ${RAN_IN:-unknown (pnpm matched no package, or never started)}"
-echo "code:    ${NEWSPACK_TEST_CODE:-unknown}"
-if [ "$INSTALL_STATUS" != "0" ]; then
-    INSTALL_ERR=$(sed -n '/^=== pnpm run test ===$/q;p' "$LOG" | grep -m1 -E 'ERR_|ERROR' | sed 's/^ *//')
-    echo "install: FAILED (exit $INSTALL_STATUS) - tests ran against the existing node_modules"
-    echo "  ${INSTALL_ERR:-see the full log}"
-fi
-
 TESTS_LINE=$(grep -E '^Tests:' <<< "$TEST_OUT" | tail -1)
 SUITES_LINE=$(grep -E '^Test Suites:' <<< "$TEST_OUT" | tail -1)
+
+# The checkout and the directory pnpm ran in print on every verdict: they are
+# what shows a run tested the wrong copy. The rest of the header is for
+# anything but a clean pass.
+print_code() {
+    echo "code:    ${NEWSPACK_TEST_CODE:-unknown}"
+    echo "ran in:  ${RAN_IN:-unknown (pnpm matched no package, or never started)}"
+    if [ "$INSTALL_STATUS" != "0" ]; then
+        INSTALL_ERR=$(sed -n '/^=== pnpm run test ===$/q;p' "$LOG" | grep -m1 -E 'ERR_|ERROR' | sed 's/^ *//')
+        echo "install: FAILED (exit $INSTALL_STATUS) - tests ran against the existing node_modules"
+        echo "  ${INSTALL_ERR:-see the full log}"
+    fi
+}
+
+if [ -n "$TESTS_LINE" ] && [ "$STATUS" = "0" ] && ! grep -q 'failed' <<< "$TESTS_LINE"; then
+    echo "result:  PASS - $(tr -s ' ' <<< "${TESTS_LINE#Tests:}" | sed 's/^ //')"
+    print_code
+    exit 0
+fi
+
+echo "project: $PKG"
+print_code
 
 if [ -z "$TESTS_LINE" ]; then
     if [ "$STATUS" = "0" ]; then

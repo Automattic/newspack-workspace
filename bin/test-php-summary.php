@@ -17,13 +17,22 @@ $host_root = rtrim( (string) getenv( 'NEWSPACK_HOST_ROOT' ), '/' );
 $log_shown = preg_replace( '#^/newspack-monorepo/#', '' === $host_root ? '' : $host_root . '/', $log );
 $args = implode( ' ', array_slice( $argv, 6 ) );
 
-echo "project: $project\n";
 // Set by `n` on the host, which can resolve a worktree's branch; git in the container cannot.
-echo 'code:    ' . ( getenv( 'NEWSPACK_TEST_CODE' ) ?: 'unknown' ) . "\n";
-echo "test db: $db\n";
-echo 'args:    ' . ( '' === $args ? '(none)' : $args ) . "\n";
+$code = getenv( 'NEWSPACK_TEST_CODE' ) ?: 'unknown';
+
+// Anything but a clean pass gets the full header, since that is when the reader
+// has to work out what ran. A pass keeps only what it tested.
+function print_header( $project, $code, $db, $args ) {
+	echo "project: $project\n";
+	echo "code:    $code\n";
+	echo "test db: $db\n";
+	echo 'args:    ' . ( '' === $args ? '(none)' : $args ) . "\n";
+}
 
 $xml = is_readable( $junit ) && filesize( $junit ) > 0 ? @simplexml_load_file( $junit ) : false;
+if ( false === $xml || ! isset( $xml->testsuite ) ) {
+	print_header( $project, $code, $db, $args );
+}
 if ( false !== $xml && ! isset( $xml->testsuite ) ) {
 	// PHPUnit 9 writes an empty <testsuites/> and exits 0 when a filter or path matches nothing.
 	echo "result:  NO TESTS RAN (phpunit exit $exit) - check --filter, --group or the path\n";
@@ -56,6 +65,17 @@ if ( 0 === $tests ) {
 	$verdict = 'PASS';
 }
 
+if ( 'PASS' === $verdict ) {
+	$extra = ( $skipped ? ", $skipped skipped" : '' ) . ( $warnings ? ", $warnings warnings" : '' );
+	printf( "result:  PASS - %d tests, %d assertions%s, %.1fs\n", $tests, (int) $suite['assertions'], $extra, (float) $suite['time'] );
+	echo "code:    $code\n";
+	if ( '' !== $args ) {
+		echo "args:    $args\n";
+	}
+	exit;
+}
+
+print_header( $project, $code, $db, $args );
 printf(
 	"result:  %s - %d tests, %d assertions, %d failures, %d errors, %d warnings, %d skipped, %.1fs (phpunit exit %s)\n",
 	$verdict,
