@@ -516,7 +516,8 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		$this->assertSame( [ 7, 1 ], $window['accounts'] );
 		$timeout = (int) get_option( '_transient_timeout_' . $key );
 		$this->assertGreaterThan( time(), $timeout, 'The window must keep an expiry.' );
-		$this->assertLessThanOrEqual( $start + HOUR_IN_SECONDS, $timeout, 'Adding an account must not extend the window.' );
+		// One second of slack: the handler and set_transient() each read the clock.
+		$this->assertLessThanOrEqual( $start + HOUR_IN_SECONDS + 1, $timeout, 'Adding an account must not extend the window.' );
 	}
 
 	/**
