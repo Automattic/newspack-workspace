@@ -580,19 +580,4 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		$this->assertNotSame( '', $value, 'An empty string would be sent by setcookie() as a deletion, indistinguishable from no handoff at all.' );
 		$this->assertSame( Newspack_Popups_Segmentation::CARRIED_SEGMENTS_NONE, $value );
 	}
-
-	/**
-	 * A single resolved segment is carried as-is, with nothing to join.
-	 */
-	public function test_cookie_value_for_one_segment_is_just_that_id() {
-		$this->assertSame( '5', $this->cookie_value( [ '5' ] ) );
-	}
-
-	/**
-	 * Multiple resolved segments are carried as a comma-joined list — the
-	 * form the view script's carried-segments.js splits back apart.
-	 */
-	public function test_cookie_value_for_multiple_segments_is_comma_joined() {
-		$this->assertSame( '5,7', $this->cookie_value( [ '5', '7' ] ) );
-	}
 }

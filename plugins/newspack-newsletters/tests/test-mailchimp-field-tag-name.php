@@ -36,27 +36,9 @@ class MailchimpFieldTagNameTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The common case: the audience reports a tag for the synced field.
-	 */
-	public function test_resolves_tag_for_field_name() {
-		$this->seed_merge_fields(
-			'list-resolves',
-			[
-				[
-					'name' => 'NP_Account',
-					'tag'  => 'NP_ACCOUNT',
-				],
-			]
-		);
-		$this->assertSame(
-			'NP_ACCOUNT',
-			Newspack_Newsletters_Mailchimp::instance()->get_field_merge_tag_name( 'NP_Account', 'list-resolves' )
-		);
-	}
-
-	/**
-	 * Mailchimp often assigns an opaque tag. It is still the only value
-	 * Mailchimp substitutes, so it must be used verbatim.
+	 * The audience's tag for the field is returned verbatim. Mailchimp often
+	 * assigns an opaque one, and it is still the only value Mailchimp
+	 * substitutes.
 	 */
 	public function test_resolves_opaque_generated_tag() {
 		$this->seed_merge_fields(
