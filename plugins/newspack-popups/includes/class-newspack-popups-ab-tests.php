@@ -23,6 +23,8 @@ final class Newspack_Popups_AB_Tests {
 	const META_GOAL          = 'newspack_popups_ab_test_goal';
 	const META_CONTROL_SHARE = 'newspack_popups_ab_control_share';
 
+	const META_KEYS = [ self::META_TEST_ID, self::META_VARIANT, self::META_GOAL, self::META_CONTROL_SHARE ];
+
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
 	/**
@@ -51,6 +53,7 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_filter( 'rest_pre_insert_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'guard_rest_ab_meta' ], 10, 2 );
 
 		// Anything that can add or remove a test invalidates the flag. Scoped to the
 		// prompts CPT and to the test-id meta key: a news site saves posts constantly,
@@ -232,6 +235,54 @@ final class Newspack_Popups_AB_Tests {
 	 */
 	public static function can_write_meta( $allowed, $meta_key, $object_id, $user_id ) {
 		return user_can( $user_id, 'manage_options' );
+	}
+
+	/**
+	 * Keep A/B meta admin-only on prompt saves without breaking saves by other roles.
+	 *
+	 * The block editor sends a prompt's whole meta object on every save, A/B keys
+	 * included, and core runs the write check on any key with no stored row. So a
+	 * non-admin's unchanged A/B values are dropped from the request before core
+	 * sees them, and a changed one refuses the request here, before the post or
+	 * any other meta is written.
+	 *
+	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
+	 * @param WP_REST_Request   $request       Request.
+	 * @return stdClass|WP_Error
+	 */
+	public static function guard_rest_ab_meta( $prepared_post, $request ) {
+		$meta = $request->get_param( 'meta' );
+		if ( is_wp_error( $prepared_post ) || ! is_array( $meta ) || current_user_can( 'manage_options' ) ) {
+			return $prepared_post;
+		}
+
+		$post_id = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
+		foreach ( self::META_KEYS as $meta_key ) {
+			if ( ! array_key_exists( $meta_key, $meta ) ) {
+				continue;
+			}
+			// get_post_meta() applies the registered default to an unset key, which
+			// is also what the editor read and is sending back.
+			if ( $post_id ) {
+				$stored = get_post_meta( $post_id, $meta_key, true );
+			} else {
+				$stored = self::META_CONTROL_SHARE === $meta_key ? self::DEFAULT_CONTROL_SHARE : '';
+			}
+			if ( (string) $meta[ $meta_key ] !== (string) $stored ) {
+				return new WP_Error(
+					'rest_cannot_update',
+					__( 'Sorry, you are not allowed to change the A/B test settings of this prompt.', 'newspack-popups' ),
+					[
+						'status' => rest_authorization_required_code(),
+						'key'    => $meta_key,
+					]
+				);
+			}
+			unset( $meta[ $meta_key ] );
+		}
+		$request->set_param( 'meta', $meta );
+
+		return $prepared_post;
 	}
 
 	/**

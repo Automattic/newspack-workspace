@@ -416,29 +416,85 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * Only administrators can write A/B meta through REST, matching the Campaigns
-	 * permission model. An Editor can edit the prompt itself but not its test.
+	 * Save a prompt through REST the way the block editor does: the stored meta
+	 * object sent back whole, with the changes merged in.
+	 *
+	 * @param int    $prompt_id Prompt post ID.
+	 * @param string $role      Role of the user saving.
+	 * @param array  $changes   Post fields to change; a 'meta' entry merges into the stored meta.
+	 * @return WP_REST_Response
 	 */
-	public function test_ab_meta_writes_require_manage_options() {
+	private function save_prompt_as( $prompt_id, $role, $changes ) {
+		// Meta registered at boot does not survive into later tests in this suite,
+		// and REST silently ignores an unregistered key.
+		Newspack_Popups::register_meta();
 		Newspack_Popups_AB_Tests::register_meta();
 		global $wp_rest_server;
 		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		do_action( 'rest_api_init' );
-		$prompt_id = $this->createPopup();
-		$route     = '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id;
-		$write     = function () use ( $route ) {
-			$request = new WP_REST_Request( 'POST', $route );
-			$request->set_body_params( [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'rest-write-test' ] ] );
-			return rest_do_request( $request );
-		};
+		wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
 
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
-		self::assertSame( 403, $write()->get_status() );
+		$route   = '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id;
+		$stored  = rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data();
+		$request = new WP_REST_Request( 'POST', $route );
+		$request->set_body_params( array_merge( $changes, [ 'meta' => array_merge( $stored['meta'], $changes['meta'] ?? [] ) ] ) );
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * An Editor can save a prompt's other settings whether or not it is in a test:
+	 * A/B values sent back unchanged never need manage_options.
+	 */
+	public function test_editor_can_save_a_prompt_without_changing_its_test() {
+		$plain_prompt  = $this->createPopup();
+		$tested_prompt = $this->create_test_variant( 'editor-save-test', 'a', null, [], 60 );
+
+		foreach ( [ $plain_prompt, $tested_prompt ] as $prompt_id ) {
+			$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ 'trigger_delay' => 7 ] ] );
+			self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+			self::assertSame( '7', get_post_meta( $prompt_id, 'trigger_delay', true ) );
+		}
+		self::assertSame( 'editor-save-test', get_post_meta( $tested_prompt, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		self::assertSame( '60', get_post_meta( $tested_prompt, Newspack_Popups_AB_Tests::META_CONTROL_SHARE, true ) );
+	}
+
+	/**
+	 * An Editor's request that changes a test is refused before anything saves,
+	 * so the editor never reports a failure over a half-applied change.
+	 */
+	public function test_editor_cannot_change_a_test_and_nothing_saves() {
+		$prompt_id     = $this->createPopup();
+		$title_before  = get_the_title( $prompt_id );
+		$delay_before  = get_post_meta( $prompt_id, 'trigger_delay', true );
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'editor',
+			[
+				'title' => 'Edited alongside a test change',
+				'meta'  => [
+					Newspack_Popups_AB_Tests::META_TEST_ID => 'editor-made-test',
+					'trigger_delay'                        => 7,
+				],
+			]
+		);
+
+		self::assertSame( 403, $response->get_status() );
 		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		self::assertSame( $delay_before, get_post_meta( $prompt_id, 'trigger_delay', true ) );
+		self::assertSame( $title_before, get_the_title( $prompt_id ) );
+	}
 
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
-		self::assertSame( 200, $write()->get_status() );
-		self::assertSame( 'rest-write-test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	/**
+	 * Administrators can create and change tests through REST.
+	 */
+	public function test_administrator_can_write_ab_meta() {
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'admin-made-test' ] ] );
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( 'admin-made-test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 	}
 
 	/**
