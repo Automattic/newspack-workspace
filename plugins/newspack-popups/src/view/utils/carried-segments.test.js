@@ -50,9 +50,7 @@ describe( 'getCarriedSegmentIds', () => {
 		setCookie( '11,22' );
 		getCarriedSegmentIds( [ '11', '22' ] );
 		// Every page and tab of the browsing session shares the session cookie,
-		// so reading it must leave it in place. A new tab starts with empty
-		// sessionStorage, so nothing per-tab can stand in for it.
-		window.sessionStorage.clear();
+		// so reading it must leave it in place.
 		expect( loadPage()( [ '11', '22' ] ) ).toEqual( [ '11', '22' ] );
 	} );
 

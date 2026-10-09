@@ -214,12 +214,11 @@ const reportFreshMatches = ras => {
 	if ( ! Object.keys( reportableSegments ).length ) {
 		return;
 	}
-	// Read for every reader, signed in or not: reading is what clears the
-	// cookie, and prompt display may never run on this page.
-	const carriedIds = getCarriedSegmentIds( Object.keys( reportableSegments ) );
 	const liveIds = getMatchingSegmentIds( reportableSegments );
 	// A signed-in reader's prompts follow their live match alone.
-	const ids = ras?.store?.get( 'reader' )?.authenticated ? liveIds : [ ...new Set( [ ...liveIds, ...carriedIds ] ) ].sort();
+	const ids = ras?.store?.get( 'reader' )?.authenticated
+		? liveIds
+		: [ ...new Set( [ ...liveIds, ...getCarriedSegmentIds( Object.keys( reportableSegments ) ) ] ) ].sort();
 	// The empty match is tracked as a pseudo-ID, so "matched nothing" is
 	// measurable and follows the same once-per-session rule as a real segment.
 	const matched = ids.length ? ids : [ EMPTY_VALUE ];

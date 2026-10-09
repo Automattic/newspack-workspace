@@ -332,12 +332,12 @@ describe( 'segmentation API', () => {
 		// Carried IDs are forgeable, link-supplied input and must never be
 		// persisted: segment4 is carried but does not match locally, so it must
 		// be absent from what syncMatchedSegments writes.
-		window.sessionStorage.setItem( 'newspack-popups-carried-segments', 'segment4' );
+		document.cookie = 'np_carried_segments=segment4; path=/';
 		ras.store.set( 'reader', { authenticated: true } );
 		ras.store.set( 'simple', 'simple-match' );
 		syncMatchedSegments( ras, segments );
 		expect( ras.store.get( 'matched_segments' ) ).toEqual( [ 'segment2', 'segment3' ] );
-		window.sessionStorage.removeItem( 'newspack-popups-carried-segments' );
+		document.cookie = 'np_carried_segments=; path=/; max-age=0';
 	} );
 } );
 
