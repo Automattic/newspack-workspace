@@ -1,6 +1,7 @@
 /**
  * Segment IDs carried in from a newsletter click. The server resolves the
- * reader's link token to their last-known matched segments and hands them off
+ * reader's account ID (with a valid newsletter pass on the same link) to their
+ * last-known matched segments and hands them off
  * in a session cookie, which every page and tab of the browsing session reads.
  *
  * Segmentation-only and transient: never written to the reader-data store

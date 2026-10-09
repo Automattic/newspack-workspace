@@ -26,13 +26,11 @@ export const handleSegmentation = prompts => {
 			return;
 		}
 		const segments = newspack_popups_view?.segments || {};
-		// Always consume the handoff so the cookie is cleared even when the IDs
-		// are then discarded: a signed-in reader's live matching wins over any
-		// carried snapshot.
+		// Read once per page; a signed-in reader's live matching wins over any
+		// carried snapshot, which getCarried() applies on every call.
 		const carriedIds = getCarriedSegmentIds( Object.keys( segments ) );
 		// Re-read the authenticated flag on every call: RAS can authenticate a
 		// reader mid-page, and a delayed prompt's unhide() re-check must see it.
-		// Reuses carriedIds — the cookie is already consumed.
 		const getCarried = () => ( ras?.store?.get( 'reader' )?.authenticated ? [] : carriedIds );
 		// An admin switched into the reader's account sees the reader's stored
 		// segment; a match computed here would come from the admin's browser.

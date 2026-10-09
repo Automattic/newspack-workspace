@@ -45,9 +45,14 @@ final class Newspack_Popups_Segmentation {
 	 * per recipient at send time. On arrival the ID resolves to the reader's
 	 * last-known matched segments for the browsing session.
 	 *
-	 * Unsigned, forgeable, and enumerable: drives prompt segmentation and its
-	 * reach reporting only — never content access, analytics identity, or
-	 * reader-profile writes.
+	 * The ID is unsigned, so on its own it would let anyone read any reader's
+	 * segments by walking IDs. It only resolves alongside a valid newsletter
+	 * pass (NEWSLETTER_PASS_QUERY_PARAM), which proves the link came from a
+	 * newsletter this site sent recently, and only for a capped number of
+	 * distinct accounts per IP (CARRIED_ACCOUNTS_PER_IP). Anyone holding a
+	 * reader's link (a forwarded newsletter) still gets that reader's segments,
+	 * so it drives prompt segmentation and its reach reporting only — never
+	 * content access, analytics identity, or reader-profile writes.
 	 *
 	 * Emitted for every supported ESP, including ActiveCampaign's `%FIELD%`
 	 * syntax (unsafe when unsubstituted, NPPM-3032), because
@@ -56,10 +61,33 @@ final class Newspack_Popups_Segmentation {
 	const ACCOUNT_QUERY_PARAM = 'np_account';
 
 	/**
-	 * Cookie handing the resolved segment IDs to the view script, which moves
-	 * them into sessionStorage and deletes the cookie on first read. The name
-	 * must not start with `wp`, `wordpress`, or `comment_author` — Batcache
-	 * skips page cache for requests carrying such cookies.
+	 * Query param carrying the signed newsletter pass that newspack-plugin
+	 * appends to every first-party newsletter link. Mirrors
+	 * `Newspack\Newsletters_Access::QUERY_PARAM` — must stay in sync.
+	 */
+	const NEWSLETTER_PASS_QUERY_PARAM = 'npnl';
+
+	/**
+	 * How many distinct accounts one IP can resolve per CARRIED_ACCOUNTS_WINDOW.
+	 * Counts accounts, not clicks: a reader clicking through again costs nothing,
+	 * and readers sharing an institution's IP each spend one slot. Past the cap
+	 * arrivals carry nothing, which is how every newsletter click behaved before
+	 * this feature, so a false positive costs personalization and nothing else.
+	 * Filterable via `newspack_popups_carried_accounts_per_ip`.
+	 */
+	const CARRIED_ACCOUNTS_PER_IP = 20;
+
+	/**
+	 * Window, in seconds, for CARRIED_ACCOUNTS_PER_IP.
+	 */
+	const CARRIED_ACCOUNTS_WINDOW = HOUR_IN_SECONDS;
+
+	/**
+	 * Session cookie handing the resolved segment IDs to the view script, which
+	 * reads it on every page so all tabs of the browsing session agree. Nothing
+	 * server-side reads it, so pages stay shared and cacheable. The name must
+	 * not start with `wp`, `wordpress`, or `comment_author` — Batcache skips
+	 * page cache for requests carrying such cookies.
 	 */
 	const CARRIED_SEGMENTS_COOKIE = 'np_carried_segments';
 
@@ -141,8 +169,10 @@ final class Newspack_Popups_Segmentation {
 		add_action( 'template_redirect', [ __CLASS__, 'scrub_unsubstituted_donor_param' ], 1 );
 
 		// Resolve an inbound account ID to carried segments and redirect the param
-		// away. Priority 1: before redirect_canonical() and any HTML output.
-		add_action( 'template_redirect', [ __CLASS__, 'handle_account_param' ], 1 );
+		// away. On `init` priority 1, ahead of newspack-plugin's newsletter-pass
+		// handler (`init` priority 2), which redirects the pass away and would
+		// leave this one nothing to verify the account against.
+		add_action( 'init', [ __CLASS__, 'handle_account_param' ], 1 );
 	}
 
 	/**
@@ -745,7 +775,7 @@ final class Newspack_Popups_Segmentation {
 	 * Hand the resolved segment IDs to the view script in a session cookie.
 	 * Every call is authoritative: an empty set overwrites a previous arrival's
 	 * segments with the "matches nothing" sentinel rather than deleting the
-	 * cookie. Callers must skip values that never passed the account-ID gate —
+	 * cookie. Callers must skip values that never passed the arrival gates —
 	 * those assert nothing about the reader.
 	 *
 	 * @param string[] $segment_ids Active segment IDs; empty asserts no matches.
@@ -772,11 +802,18 @@ final class Newspack_Popups_Segmentation {
 	 * The redirect is unconditional whenever the param is present: it keeps the
 	 * landing page a shared cacheable URL, and it is what makes ActiveCampaign's
 	 * `%FIELD%` syntax safe to emit at all (NPPM-3032) — the param never
-	 * survives into a rendered page. Only a plain positive integer is accepted;
-	 * that one rule rejects every unsubstituted merge-tag shape. The cookie
-	 * handoff is conditional on that gate, the redirect is not.
+	 * survives into a rendered page.
+	 *
+	 * The cookie handoff takes three gates, in order: a plain positive integer
+	 * (which rejects every unsubstituted merge-tag shape), a valid newsletter
+	 * pass on the same link, and a free slot in the per-IP account cap. Only
+	 * the account param is stripped: the pass stays for newspack-plugin's own
+	 * handler on the next request.
 	 */
 	public static function handle_account_param() {
+		if ( is_admin() ) {
+			return;
+		}
 		// Redirecting a POST would discard its body.
 		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'GET' !== $_SERVER['REQUEST_METHOD'] ) {
 			return;
@@ -791,8 +828,18 @@ final class Newspack_Popups_Segmentation {
 		}
 
 		$raw = sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( 1 === preg_match( '/^[1-9][0-9]*$/', $raw ) ) {
-			// Gate passed, so the value asserts something real — including "no
+		if (
+			1 === preg_match( '/^[1-9][0-9]*$/', $raw ) &&
+			self::has_valid_newsletter_pass() &&
+			self::claim_carried_account_slot( (int) $raw )
+		) {
+			// This runs ahead of `init` priority 10, where the segments taxonomy
+			// registers; without it every segment reads as unknown and the reader
+			// would carry "no segments". Registering again later is harmless.
+			if ( ! taxonomy_exists( Newspack_Segments_Model::TAX_SLUG ) ) {
+				Newspack_Segments_Model::register_segments_taxonomy();
+			}
+			// Gates passed, so the value asserts something real — including "no
 			// segments" when the resolved set is empty.
 			self::set_carried_segments_cookie( self::get_carried_segments_for_account( (int) $raw ) );
 		}
@@ -810,6 +857,70 @@ final class Newspack_Popups_Segmentation {
 		// Temporary: the param is a property of this one link, not of the page.
 		wp_safe_redirect( $clean_url, 302 );
 		exit;
+	}
+
+	/**
+	 * Whether the current request carries a newsletter pass that verifies: a
+	 * newsletter ID signed with this site's secret, for a newsletter sent within
+	 * the pass's lifetime. Verified through newspack-plugin, which owns the
+	 * secret; false when that plugin is missing.
+	 *
+	 * @return bool
+	 */
+	private static function has_valid_newsletter_pass(): bool {
+		// Reading a URL param to decide whether to trust another; no state change.
+		if ( ! isset( $_GET[ self::NEWSLETTER_PASS_QUERY_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return false;
+		}
+		if ( ! method_exists( '\Newspack\Newsletters_Access', 'verify' ) ) {
+			return false;
+		}
+		$pass = sanitize_text_field( wp_unslash( $_GET[ self::NEWSLETTER_PASS_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return false !== \Newspack\Newsletters_Access::verify( $pass );
+	}
+
+	/**
+	 * Count an account against the requesting IP's cap, and report whether it
+	 * fits. An account the IP already resolved in this window always fits, so
+	 * repeat clicks are free. Without an IP to key on there is nothing to cap,
+	 * so nothing resolves.
+	 *
+	 * Read-modify-write without a lock: concurrent arrivals can overshoot the
+	 * cap by a few accounts, which doesn't matter against an enumeration that
+	 * needs thousands.
+	 *
+	 * @param int $account_id Account ID from the inbound param.
+	 *
+	 * @return bool Whether the account may resolve.
+	 */
+	private static function claim_carried_account_slot( int $account_id ): bool {
+		// phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		if ( '' === $ip ) {
+			return false;
+		}
+
+		$key      = 'np_carried_accounts_' . md5( $ip );
+		$accounts = get_transient( $key );
+		$accounts = is_array( $accounts ) ? $accounts : [];
+		if ( in_array( $account_id, $accounts, true ) ) {
+			return true;
+		}
+
+		/**
+		 * Filters how many distinct accounts one IP can resolve from newsletter
+		 * links per window. See CARRIED_ACCOUNTS_PER_IP.
+		 *
+		 * @param int $limit Distinct accounts per IP per window.
+		 */
+		$limit = (int) apply_filters( 'newspack_popups_carried_accounts_per_ip', self::CARRIED_ACCOUNTS_PER_IP );
+		if ( count( $accounts ) >= $limit ) {
+			return false;
+		}
+
+		$accounts[] = $account_id;
+		set_transient( $key, $accounts, self::CARRIED_ACCOUNTS_WINDOW );
+		return true;
 	}
 
 	/**
