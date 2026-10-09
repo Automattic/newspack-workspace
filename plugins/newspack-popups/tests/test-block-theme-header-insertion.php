@@ -104,10 +104,14 @@ class BlockThemeHeaderInsertionTest extends WP_UnitTestCase_PageWithPopups {
 	/**
 	 * Prepare inserter cache with popup objects for deterministic tests.
 	 *
+	 * self::$popups is now keyed by post ID (see popups_for_post()), so seed
+	 * it at whatever post ID is current when popups_for_post() will actually
+	 * be called, rather than as a flat list.
+	 *
 	 * @param array $popups Popup objects.
 	 */
 	private function seed_inserter_popups( $popups ) {
-		self::$inserter_popups_property->setValue( null, $popups );
+		self::$inserter_popups_property->setValue( null, [ get_the_ID() ?: 0 => $popups ] );
 		self::$header_template_part_has_rendered_property->setValue( null, false );
 	}
 
