@@ -28,8 +28,8 @@ Array.prototype.forEach.call( document.querySelectorAll( '.wp-block-newspack-blo
  */
 function buildLoadMoreHandler( blockWrapperEl ) {
 	// Scoped to the wrapper's own direct children, since the button is one of
-	// them in the server-rendered markup. IE11 has no :scope support in
-	// querySelector(), so this is a manual filter rather than `:scope > [data-next]`.
+	// them in the server-rendered markup. Written as a manual filter rather
+	// than `:scope > [data-next]` to match this file's existing idiom.
 	const btnEl = Array.prototype.filter.call( blockWrapperEl.children, el => el.hasAttribute( 'data-next' ) )[ 0 ];
 	if ( ! btnEl ) {
 		return;
@@ -60,12 +60,15 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 		blockWrapperEl.classList.remove( 'is-error' );
 		blockWrapperEl.classList.add( 'is-loading' );
 
-		const nextUrl = btnEl.getAttribute( 'data-next' );
-
 		// The wrapper is matched by CSS class alone, which content elsewhere
 		// on the page can also carry, so the URL has to be checked before
 		// it's fetched - checking which element it came from isn't enough.
-		if ( ! isNextUrlTrusted( nextUrl ) ) {
+		// Resolved once, the same way the browser resolves it when the
+		// request is actually made, and reused below: checking one string
+		// and fetching another is itself a way to drift past the check.
+		const resolvedNextUrl = resolveUrl( btnEl.getAttribute( 'data-next' ) );
+
+		if ( ! isNextUrlTrusted( resolvedNextUrl ) ) {
 			// This instance never joined the shared fetch queue for this
 			// attempt, so failing here must not touch the lock or queue
 			// another block's in-progress fetch is relying on.
@@ -75,8 +78,16 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 			return false;
 		}
 
-		// Set currently rendered posts' IDs as a query param (e.g. exclude_ids=1,2,3)
-		const requestURL = nextUrl + '&exclude_ids=' + getRenderedPostsIds().join( ',' );
+		// Set currently rendered posts' IDs as a query param (e.g.
+		// exclude_ids=1,2,3), through the URL API rather than string
+		// concatenation: a raw `+'&exclude_ids='+` append lets a value
+		// containing its own `&key=value` pair add a query parameter the
+		// check above never saw. Only numeric IDs are sent - the values come
+		// from data-post-id attributes, which kses lets post content carry
+		// too, so they're no more trusted than the next URL itself.
+		const excludeIds = getRenderedPostsIds().filter( id => /^\d+$/.test( id ) );
+		resolvedNextUrl.searchParams.set( 'exclude_ids', excludeIds.join( ',' ) );
+		const requestURL = resolvedNextUrl.href;
 
 		// If there's already a fetch in progress, queue this one to run after it ends.
 		if ( window.newspackBlocksIsFetching ) {
@@ -103,7 +114,7 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 			postsContainerEl.insertAdjacentHTML( 'beforeend', postsHTML );
 		}
 
-		const hasTrustedNext = Boolean( data.next ) && isNextUrlTrusted( data.next );
+		const hasTrustedNext = Boolean( data.next ) && isNextUrlTrusted( resolveUrl( data.next ) );
 
 		if ( hasTrustedNext ) {
 			// Save next URL as button's attribute.
@@ -262,6 +273,23 @@ function hasOwnProp( obj, prop ) {
 }
 
 /**
+ * Resolves a candidate URL the same way the browser resolves it when the
+ * value is actually used as a request URL (XMLHttpRequest.open() resolves a
+ * relative string against the current document, not just its origin) -
+ * checking one resolution and fetching another is itself a way for a value
+ * to pass validation while requesting something else.
+ *
+ * @param {string} url candidate URL
+ */
+function resolveUrl( url ) {
+	try {
+		return new URL( url, window.location.href );
+	} catch ( e ) {
+		return null;
+	}
+}
+
+/**
  * This site's REST API root, read from the link WordPress core renders in
  * `<head>` on every front-end page. `<head>` is never built from post
  * content, so - unlike a `data-next` attribute - this value can't be
@@ -270,76 +298,57 @@ function hasOwnProp( obj, prop ) {
 function getTrustedRestRoot() {
 	const link = document.querySelector( 'link[rel="https://api.w.org/"]' );
 
-	if ( ! link ) {
-		return null;
-	}
-
-	try {
-		return new URL( link.getAttribute( 'href' ), window.location.origin );
-	} catch ( e ) {
-		return null;
-	}
+	return link ? resolveUrl( link.getAttribute( 'href' ) ) : null;
 }
 
 /**
- * PHP folds `.`, a space, and a bare `[` in a query parameter's name to `_`
- * when building `$_GET`, so `rest.route`, `rest route` and `rest[route` all
- * set the same request var a pretty-permalink URL's rewrite rule also sets -
- * and PHP keeps the LAST occurrence of a repeated key, which
- * `URLSearchParams.get()` does not. Collect every value under any spelling,
- * in order, so the caller can check what WordPress would actually route to.
- *
- * @param {URL} parsed
+ * A query parameter name this plugin's own server-generated URLs can ever
+ * carry: plain identifier characters, optionally followed by an empty `[]`
+ * for an array-valued block attribute. PHP folds characters outside this
+ * set (a dot, a space, a null byte, ...) into a query key in ways that
+ * don't match how `URLSearchParams` reads them, so rather than mirroring
+ * that folding, a key carrying any of them is treated as untrustworthy on
+ * sight, whatever it would normalize to.
  */
-function getRestRouteOverrides( parsed ) {
-	const values = [];
-
-	for ( const [ key, value ] of parsed.searchParams.entries() ) {
-		if ( key.replace( /[.[ ]/g, '_' ) === 'rest_route' ) {
-			values.push( value );
-		}
-	}
-
-	return values;
-}
+const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[\])?$/;
 
 /**
- * Checks whether a "next" URL resolves to this site's own articles REST
- * route - not just whether its path looks right, since an explicit
- * `rest_route`-shaped query parameter can make WordPress route an
- * otherwise-correct-looking URL somewhere else.
+ * Checks whether a URL resolves to this site's own articles REST route -
+ * not just whether its path looks right, since a query parameter can make
+ * WordPress route an otherwise-correct-looking URL somewhere else.
  *
- * @param {string} url candidate "next" URL
+ * @param {URL|null} parsed a URL already resolved with resolveUrl()
  */
-function isNextUrlTrusted( url ) {
-	const restRoot = getTrustedRestRoot();
-
-	if ( ! restRoot ) {
+function isNextUrlTrusted( parsed ) {
+	if ( ! parsed || parsed.origin !== window.location.origin ) {
 		return false;
 	}
 
-	let parsed;
+	const keys = Array.from( parsed.searchParams.keys() );
 
-	try {
-		parsed = new URL( url, window.location.origin );
-	} catch ( e ) {
-		return false;
-	}
-
-	if ( parsed.origin !== restRoot.origin ) {
+	if ( keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
 		return false;
 	}
 
 	const route = 'newspack-blocks/v1/articles';
-	const overrides = getRestRouteOverrides( parsed );
 
-	if ( ! restRoot.search ) {
+	if ( ! keys.includes( 'rest_route' ) && parsed.pathname.endsWith( '/' + route ) ) {
 		// Pretty permalinks: a request to our own endpoint never needs a
-		// rest_route override, under any spelling.
-		return overrides.length === 0 && parsed.pathname === restRoot.pathname + route;
+		// rest_route override.
+		return true;
 	}
 
 	// Plain permalinks: everything goes through the REST root's own path,
-	// naming the route via rest_route. Mirror PHP's last-value-wins rule.
-	return parsed.pathname === restRoot.pathname && overrides[ overrides.length - 1 ] === '/' + route;
+	// naming the route via rest_route. That path isn't derivable from the
+	// route string alone, so pin it to the trusted root. PHP keeps the LAST
+	// value for a repeated key, which URLSearchParams.get() does not.
+	const restRoot = getTrustedRestRoot();
+
+	if ( ! restRoot || ! restRoot.search || parsed.pathname !== restRoot.pathname ) {
+		return false;
+	}
+
+	const routeValues = parsed.searchParams.getAll( 'rest_route' );
+
+	return routeValues[ routeValues.length - 1 ] === '/' + route;
 }

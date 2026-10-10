@@ -116,4 +116,46 @@ describe( 'homepage-articles load more', () => {
 
 		expect( requestedUrls ).toHaveLength( 0 );
 	} );
+
+	it( 'refuses a route override under an unusual query-key spelling', () => {
+		const UNUSUAL_SPELLING_URL = `${ window.location.origin }/wp-json/newspack-blocks/v1/articles?${ encodeURIComponent(
+			' rest_route'
+		) }=/wp/v2/types/post`;
+
+		document.body.innerHTML = `
+			<div class="wp-block-newspack-blocks-homepage-articles has-more-button">
+				<div data-posts data-current-post-id="1"></div>
+				<button type="button" class="wp-block-button__link" data-next="${ UNUSUAL_SPELLING_URL }">
+					<span class="label">Load more posts</span>
+				</button>
+			</div>
+		`;
+
+		require( './view.js' );
+
+		document.querySelector( 'button[data-next]' ).click();
+
+		expect( requestedUrls ).toHaveLength( 0 );
+	} );
+
+	it( 'does not let a stray data-post-id value smuggle an extra query parameter into the request', () => {
+		document.body.innerHTML = `
+			<div class="wp-block-newspack-blocks-homepage-articles has-more-article-ids">
+				<span data-post-id="1&amp;rest_route=/wp/v2/types/post"></span>
+			</div>
+			<div class="wp-block-newspack-blocks-homepage-articles has-more-button">
+				<div data-posts data-current-post-id="2"></div>
+				<button type="button" class="wp-block-button__link" data-next="${ BUTTON_NEXT_URL }">
+					<span class="label">Load more posts</span>
+				</button>
+			</div>
+		`;
+
+		require( './view.js' );
+
+		document.querySelector( 'button[data-next]' ).click();
+
+		expect( requestedUrls ).toHaveLength( 1 );
+		expect( requestedUrls[ 0 ] ).not.toContain( 'rest_route' );
+	} );
 } );
