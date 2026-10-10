@@ -27,7 +27,12 @@ Array.prototype.forEach.call( document.querySelectorAll( '.wp-block-newspack-blo
  * @param {HTMLElement} blockWrapperEl the button that was clicked
  */
 function buildLoadMoreHandler( blockWrapperEl ) {
-	const btnEl = blockWrapperEl.querySelector( '[data-next]' );
+	// Scoped to direct children only: `data-*` is in kses's global attribute
+	// allowlist, so a `data-next` can also land on an element rendered inside
+	// the post content above the button, and a plain querySelector() would
+	// match that one first. IE11 has no :scope support in querySelector(), so
+	// this is a manual filter rather than `:scope > [data-next]`.
+	const btnEl = Array.prototype.filter.call( blockWrapperEl.children, el => el.hasAttribute( 'data-next' ) )[ 0 ];
 	if ( ! btnEl ) {
 		return;
 	}
