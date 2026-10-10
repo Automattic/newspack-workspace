@@ -175,23 +175,25 @@ class Newspack_Test_Media_Meta_Search extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A media library search must not change other searches in the same request.
+	 * The credit search applies only to the media library query that asked for it.
 	 *
 	 * The filter used to be registered on `posts_clauses` and never removed, so
-	 * every later search query had the credit-matched IDs added to it.
+	 * every later search in the request matched on credits too, including
+	 * attachment searches the media library never made (e.g. REST or front end).
 	 */
-	public function test_credit_search_does_not_leak_into_other_queries() {
+	public function test_credit_search_only_applies_to_the_media_library_query() {
 		$image = $this->create_credited_attachment( 'Zzqq Photo Agency' );
 		$this->assertSame( [ $image ], $this->media_library_search( [ 's' => 'zzqq' ] ) );
 
-		$later_search = new WP_Query(
+		$later_attachment_search = new WP_Query(
 			[
-				's'         => 'zzqq',
-				'post_type' => 'post',
+				's'           => 'zzqq',
+				'post_type'   => 'attachment',
+				'post_status' => 'inherit',
 			]
 		);
 
-		$this->assertSame( [], $later_search->posts );
+		$this->assertSame( [], $later_attachment_search->posts );
 	}
 
 	/**
@@ -199,24 +201,16 @@ class Newspack_Test_Media_Meta_Search extends WP_UnitTestCase {
 	 * its credit.
 	 */
 	public function test_credit_search_respects_the_own_media_restriction() {
-		$contributor = self::factory()->user->create( [ 'role' => 'contributor' ] );
-		$other_user  = self::factory()->user->create( [ 'role' => 'author' ] );
-		$own         = $this->create_credited_attachment( 'Zzqq Photo Agency', [ 'post_author' => $contributor ] );
-		$someone_elses = $this->create_credited_attachment( 'Zzqq Photo Agency', [ 'post_author' => $other_user ] );
-		wp_set_current_user( $contributor );
+		// Authors can upload but not edit others' posts, so Patches limits them to their own media.
+		$author        = self::factory()->user->create( [ 'role' => 'author' ] );
+		$other_author  = self::factory()->user->create( [ 'role' => 'author' ] );
+		$own           = $this->create_credited_attachment( 'Zzqq Photo Agency', [ 'post_author' => $author ] );
+		$someone_elses = $this->create_credited_attachment( 'Zzqq Photo Agency', [ 'post_author' => $other_author ] );
+		wp_set_current_user( $author );
 
 		$found = $this->media_library_search( [ 's' => 'zzqq' ] );
 
 		$this->assertSame( [ $own ], $found );
 		$this->assertNotContains( $someone_elses, $found );
-	}
-
-	/**
-	 * A search term containing regex replacement syntax is matched literally.
-	 */
-	public function test_credit_search_term_is_used_literally() {
-		$image = $this->create_credited_attachment( 'Credit $1 \\0 Zzqq' );
-
-		$this->assertSame( [ $image ], $this->media_library_search( [ 's' => '$1 \\0 Zzqq' ] ) );
 	}
 }

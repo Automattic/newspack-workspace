@@ -539,16 +539,22 @@ class Newspack_Image_Credits {
 		}
 
 		global $wpdb;
-		$credit_match = $wpdb->prepare(
-			"{$wpdb->posts}.ID IN ( SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key IN ( %s, %s, %s ) AND meta_value LIKE %s )",
-			self::MEDIA_CREDIT_META,
-			self::MEDIA_CREDIT_URL_META,
-			self::MEDIA_CREDIT_ORG_META,
-			'%' . $wpdb->esc_like( $query->get( 's' ) ) . '%'
+		// Fetch post IDs that have the search term in the media credit meta.
+		$post_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT post_id FROM $wpdb->postmeta WHERE meta_key IN ( %s, %s, %s ) AND meta_value LIKE %s",
+				self::MEDIA_CREDIT_META,
+				self::MEDIA_CREDIT_URL_META,
+				self::MEDIA_CREDIT_ORG_META,
+				'%' . $wpdb->esc_like( $query->get( 's' ) ) . '%'
+			)
 		);
+		if ( empty( $post_ids ) ) {
+			return $search;
+		}
+		$credit_match = "{$wpdb->posts}.ID IN ( " . implode( ',', array_map( 'absint', $post_ids ) ) . ' )';
 
-		// ' AND (terms) ' becomes ' AND ( credit_match OR (terms) ) '. substr_replace(), not preg_replace(): the
-		// search term is user input and may contain '$' or '\', which preg_replace() would read as backreferences.
+		// ' AND (terms) ' becomes ' AND ( credit_match OR (terms) ) '.
 		return substr_replace( $search, '( ' . $credit_match . ' OR ', strpos( $search, '(' ), 1 );
 	}
 
