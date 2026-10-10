@@ -502,7 +502,7 @@ class Newspack_Image_Credits {
 	 *
 	 * This hook runs only in the ajax call for the media library, and will only do anything if it's a search query.
 	 *
-	 * It will not modify the query, but register the hooks that will act on the query later on
+	 * It tags the query and registers the hook that acts on it later on, so no other query in the request is touched.
 	 *
 	 * @param array $query The query parameters.
 	 * @return array
@@ -511,37 +511,51 @@ class Newspack_Image_Credits {
 		if ( empty( $query['s'] ) ) {
 			return $query;
 		}
-		add_filter( 'posts_clauses', [ __CLASS__, 'filter_posts_clauses' ], 10, 2 );
+		$query['newspack_media_credit_search'] = true;
+		add_filter( 'posts_search', [ __CLASS__, 'filter_posts_search' ], 10, 2 );
 		return $query;
 	}
 
 	/**
-	 * Filter posts query clauses to include media credit meta search.
+	 * Let the media library search also match media credits.
 	 *
-	 * @param array     $clauses The current query clauses.
-	 * @param \WP_Query $query The current WP_Query object.
+	 * The credit match is added inside the search group, as an alternative to the title/caption/content match, so the
+	 * rest of the WHERE clause (post type, status, mime type, author) still applies to credit matches.
 	 *
-	 * @return array
+	 * @param string    $search The search SQL, as built by WP_Query::parse_search(): ' AND (...) '.
+	 * @param \WP_Query $query  The current WP_Query object.
+	 *
+	 * @return string
 	 */
-	public static function filter_posts_clauses( $clauses, $query ) {
-		if ( empty( $query->get( 's' ) ) ) {
-			return $clauses;
+	public static function filter_posts_search( $search, $query ) {
+		if ( ! $query->get( 'newspack_media_credit_search' ) || empty( $query->get( 's' ) ) ) {
+			return $search;
 		}
+
+		// Only extend the shape core builds. If another plugin rewrote the search, leave it alone rather than risk
+		// an OR that escapes the rest of the WHERE clause.
+		if ( ! preg_match( '/^\s*AND\s*\(/', $search ) ) {
+			return $search;
+		}
+
 		global $wpdb;
 		// Fetch post IDs that have the search term in the media credit meta.
 		$post_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				"SELECT post_id FROM $wpdb->postmeta WHERE meta_key IN ( '_media_credit', '_media_credit_url', '_navis_media_credit_org' ) AND meta_value LIKE %s",
+				"SELECT post_id FROM $wpdb->postmeta WHERE meta_key IN ( %s, %s, %s ) AND meta_value LIKE %s",
+				self::MEDIA_CREDIT_META,
+				self::MEDIA_CREDIT_URL_META,
+				self::MEDIA_CREDIT_ORG_META,
 				'%' . $wpdb->esc_like( $query->get( 's' ) ) . '%'
 			)
 		);
 		if ( empty( $post_ids ) ) {
-			return $clauses;
+			return $search;
 		}
-		// Add the post IDs to the search query.
-		$post_ids          = array_map( 'absint', $post_ids );
-		$clauses['where'] .= " OR ( {$wpdb->posts}.ID IN ( " . implode( ',', $post_ids ) . ' ) )';
-		return $clauses;
+		$credit_match = "{$wpdb->posts}.ID IN ( " . implode( ',', array_map( 'absint', $post_ids ) ) . ' )';
+
+		// ' AND (terms) ' becomes ' AND ( credit_match OR (terms) ) '.
+		return substr_replace( $search, '( ' . $credit_match . ' OR ', strpos( $search, '(' ), 1 );
 	}
 
 	/**
