@@ -24,14 +24,12 @@ Array.prototype.forEach.call( document.querySelectorAll( '.wp-block-newspack-blo
  * Creates internal state via closure to ensure all state is
  * isolated to a single Block + button instance.
  *
- * @param {HTMLElement} blockWrapperEl the button that was clicked
+ * @param {HTMLElement} blockWrapperEl the block's wrapper element
  */
 function buildLoadMoreHandler( blockWrapperEl ) {
-	// Scoped to direct children only: `data-*` is in kses's global attribute
-	// allowlist, so a `data-next` can also land on an element rendered inside
-	// the post content above the button, and a plain querySelector() would
-	// match that one first. IE11 has no :scope support in querySelector(), so
-	// this is a manual filter rather than `:scope > [data-next]`.
+	// Scoped to the wrapper's own direct children, since the button is one of
+	// them in the server-rendered markup. IE11 has no :scope support in
+	// querySelector(), so this is a manual filter rather than `:scope > [data-next]`.
 	const btnEl = Array.prototype.filter.call( blockWrapperEl.children, el => el.hasAttribute( 'data-next' ) )[ 0 ];
 	if ( ! btnEl ) {
 		return;
@@ -62,8 +60,17 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 		blockWrapperEl.classList.remove( 'is-error' );
 		blockWrapperEl.classList.add( 'is-loading' );
 
+		const nextUrl = btnEl.getAttribute( 'data-next' );
+
+		// The wrapper is matched by CSS class alone, which content elsewhere
+		// on the page can also carry, so the URL has to be checked before
+		// it's fetched - checking which element it came from isn't enough.
+		if ( ! isNextUrlTrusted( nextUrl ) ) {
+			return onError();
+		}
+
 		// Set currently rendered posts' IDs as a query param (e.g. exclude_ids=1,2,3)
-		const requestURL = btnEl.getAttribute( 'data-next' ) + '&exclude_ids=' + getRenderedPostsIds().join( ',' );
+		const requestURL = nextUrl + '&exclude_ids=' + getRenderedPostsIds().join( ',' );
 
 		// If there's already a fetch in progress, queue this one to run after it ends.
 		if ( window.newspackBlocksIsFetching ) {
@@ -90,12 +97,14 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 			postsContainerEl.insertAdjacentHTML( 'beforeend', postsHTML );
 		}
 
-		if ( data.next ) {
+		const hasTrustedNext = Boolean( data.next ) && isNextUrlTrusted( data.next );
+
+		if ( hasTrustedNext ) {
 			// Save next URL as button's attribute.
 			btnEl.setAttribute( 'data-next', data.next );
 		}
 
-		if ( ! data.items.length || ! data.next ) {
+		if ( ! data.items.length || ! hasTrustedNext ) {
 			isEndOfData = true;
 			blockWrapperEl.classList.remove( 'has-more-button' );
 		}
@@ -244,4 +253,31 @@ function isPostsDataValid( data ) {
  */
 function hasOwnProp( obj, prop ) {
 	return Object.prototype.hasOwnProperty.call( obj, prop );
+}
+
+/**
+ * Checks whether a "next" URL is this site's own articles endpoint, under
+ * either permalink structure (`/wp-json/...` or `?rest_route=...`). The
+ * block instance that reads this value is identified by CSS class, which is
+ * not a trust boundary, so the URL is what has to be checked before it's
+ * fetched or written back - not which element it came from.
+ *
+ * @param {string} url candidate "next" URL
+ */
+function isNextUrlTrusted( url ) {
+	let parsed;
+
+	try {
+		parsed = new URL( url, window.location.origin );
+	} catch ( e ) {
+		return false;
+	}
+
+	if ( parsed.origin !== window.location.origin ) {
+		return false;
+	}
+
+	const route = '/newspack-blocks/v1/articles';
+
+	return parsed.pathname.endsWith( route ) || parsed.searchParams.get( 'rest_route' ) === route;
 }
