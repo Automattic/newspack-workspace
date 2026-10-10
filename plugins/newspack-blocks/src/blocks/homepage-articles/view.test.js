@@ -8,6 +8,10 @@
 describe( 'homepage-articles load more', () => {
 	const BUTTON_NEXT_URL = '/wp-json/newspack-blocks/v1/articles?page=2';
 	const OTHER_ORIGIN_NEXT_URL = 'https://example.test/other-origin';
+	// Matches what add_query_arg() actually renders for this block's default
+	// attributes (postType and includedPostStatuses both default to a
+	// one-item array), captured from a real rendered page.
+	const SERVER_RENDERED_NEXT_URL = '/wp-json/newspack-blocks/v1/articles?postType%5B0%5D=post&includedPostStatuses%5B0%5D=publish&page=2';
 
 	let requestedUrls;
 
@@ -157,5 +161,23 @@ describe( 'homepage-articles load more', () => {
 
 		expect( requestedUrls ).toHaveLength( 1 );
 		expect( requestedUrls[ 0 ] ).not.toContain( 'rest_route' );
+	} );
+
+	it( 'accepts a real server-rendered next URL carrying the array-valued block attributes WordPress always encodes', () => {
+		document.body.innerHTML = `
+			<div class="wp-block-newspack-blocks-homepage-articles has-more-button">
+				<div data-posts data-current-post-id="1"></div>
+				<button type="button" class="wp-block-button__link" data-next="${ SERVER_RENDERED_NEXT_URL }">
+					<span class="label">Load more posts</span>
+				</button>
+			</div>
+		`;
+
+		require( './view.js' );
+
+		document.querySelector( 'button[data-next]' ).click();
+
+		expect( requestedUrls ).toHaveLength( 1 );
+		expect( requestedUrls[ 0 ] ).toContain( 'postType' );
 	} );
 } );

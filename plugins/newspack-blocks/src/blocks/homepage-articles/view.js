@@ -303,14 +303,16 @@ function getTrustedRestRoot() {
 
 /**
  * A query parameter name this plugin's own server-generated URLs can ever
- * carry: plain identifier characters, optionally followed by an empty `[]`
- * for an array-valued block attribute. PHP folds characters outside this
- * set (a dot, a space, a null byte, ...) into a query key in ways that
- * don't match how `URLSearchParams` reads them, so rather than mirroring
- * that folding, a key carrying any of them is treated as untrustworthy on
- * sight, whatever it would normalize to.
+ * carry: plain identifier characters, optionally followed by an indexed or
+ * empty `[]` for an array-valued block attribute (`add_query_arg()` renders
+ * every array attribute this way, e.g. `postType[0]`, and several default
+ * to a non-empty array). PHP folds characters outside this set (a dot, a
+ * space, a null byte, ...) into a query key in ways that don't match how
+ * `URLSearchParams` reads them, so rather than mirroring that folding, a
+ * key carrying any of them is treated as untrustworthy on sight, whatever
+ * it would normalize to.
  */
-const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[\])?$/;
+const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[\d*\])?$/;
 
 /**
  * Checks whether a URL resolves to this site's own articles REST route -
