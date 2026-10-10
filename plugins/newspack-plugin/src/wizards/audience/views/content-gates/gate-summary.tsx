@@ -6,7 +6,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, _n, sprintf } from '@wordpress/i18n';
+import { __, _n, _x, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
@@ -21,6 +21,7 @@ import {
 } from '../../../../content-gate/access-rule-options';
 import { getMeteringCount, isMalformedAccessRuleValue, isUnconfiguredAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
+import { hasUnusableRangeBounds, normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
 
 const availableAccessRules = window.newspackAudienceContentGates.available_access_rules || {};
 
@@ -39,6 +40,54 @@ const formatAccessRuleOptionValues = ( values: Array< string | number >, options
 			return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
 		} )
 		.join( ', ' );
+
+/**
+ * A range rule's bounds in words.
+ *
+ * @param value The rule's stored value.
+ */
+const formatRangeBounds = ( value: unknown ): string => {
+	const { min, max } = normalizeRangeValue( value );
+	if ( undefined !== min && undefined !== max ) {
+		return sprintf(
+			// translators: 1: the lowest number the rule admits, 2: the highest.
+			_x( '%1$s to %2$s', 'numeric range', 'newspack-plugin' ),
+			String( min ),
+			String( max )
+		);
+	}
+	if ( undefined !== min ) {
+		return sprintf(
+			// translators: %s: the lowest number the rule admits.
+			__( 'At least %s', 'newspack-plugin' ),
+			String( min )
+		);
+	}
+	if ( undefined !== max ) {
+		return sprintf(
+			// translators: %s: the highest number the rule admits.
+			__( 'At most %s', 'newspack-plugin' ),
+			String( max )
+		);
+	}
+	return '';
+};
+
+/**
+ * A range rule's bounds in words, flagged when they can't be compared. The save panel
+ * summarises unsaved changes, so a typo or an inverted pair can reach it just before
+ * the save refuses it.
+ *
+ * @param value The rule's stored value.
+ */
+const formatRangeValue = ( value: unknown ): string =>
+	hasUnusableRangeBounds( value )
+		? sprintf(
+				// translators: %s: the range as typed, e.g. "100 to 50". Shown when the bounds can't be compared; the rule then never grants access.
+				__( '%s (grants no access)', 'newspack-plugin' ),
+				formatRangeBounds( value )
+		  )
+		: formatRangeBounds( value );
 
 /**
  * Human-readable summary for an access rule value.
@@ -98,9 +147,16 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 	// narrow one — while it is doing something the summary is the only place to
 	// see. Which of the two it does is the rule's own business.
 	if ( isUnconfiguredAccessRuleValue( config, rule.value ) ) {
-		return isUnconstrainedAccessRuleValue( config, rule.value )
-			? __( 'Not set (grants access to everyone)', 'newspack-plugin' )
-			: __( 'Not set (matches no reader)', 'newspack-plugin' );
+		if ( ! isUnconstrainedAccessRuleValue( config, rule.value ) ) {
+			return __( 'Not set (matches no reader)', 'newspack-plugin' );
+		}
+		// A range with no bounds still turns away readers holding no number.
+		return config?.is_range
+			? __( 'Not set (grants access to every reader with a number)', 'newspack-plugin' )
+			: __( 'Not set (grants access to everyone)', 'newspack-plugin' );
+	}
+	if ( config?.is_range ) {
+		return formatRangeValue( rule.value );
 	}
 	if ( Array.isArray( rule.value ) && options ) {
 		return formatAccessRuleOptionValues( rule.value, options, rule.slug );

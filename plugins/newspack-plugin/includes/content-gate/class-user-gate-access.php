@@ -155,6 +155,16 @@ class User_Gate_Access {
 			return __( '(no institutions selected)', 'newspack-plugin' );
 		}
 
+		// Ahead of the generic branch too: the bounds read as a bare list there, and an
+		// empty range still turns away readers holding no number, so "(any)" is wrong.
+		// Read through the rule's own sanitizer, as the one-time purchase branch above
+		// does, so the panel and the rule agree on which stored values are bounds.
+		$rule = Access_Rules::get_rule( $slug );
+		if ( ! empty( $rule['is_range'] ) ) {
+			$bounds = is_callable( $rule['sanitize_callback'] ?? null ) ? call_user_func( $rule['sanitize_callback'], $value ) : $value;
+			return self::format_range_value( $bounds );
+		}
+
 		if ( empty( $value ) ) {
 			return __( '(any)', 'newspack-plugin' );
 		}
@@ -170,6 +180,34 @@ class User_Gate_Access {
 			'<code>%s</code>',
 			esc_html( is_array( $value ) ? implode( ', ', $value ) : (string) $value )
 		);
+	}
+
+	/**
+	 * Format a range rule's bounds in the words the gate summary uses.
+	 *
+	 * @param array|\WP_Error $bounds The sanitized rule value.
+	 *
+	 * @return string The bounds, or a note that they set none or can't be read (HTML).
+	 */
+	private static function format_range_value( $bounds ) {
+		if ( ! is_array( $bounds ) ) {
+			return esc_html__( '(invalid range, grants no access)', 'newspack-plugin' );
+		}
+		$min = isset( $bounds['min'] ) && is_scalar( $bounds['min'] ) ? (string) $bounds['min'] : null;
+		$max = isset( $bounds['max'] ) && is_scalar( $bounds['max'] ) ? (string) $bounds['max'] : null;
+		if ( null !== $min && null !== $max ) {
+			/* translators: 1: the lowest number the rule admits, 2: the highest. */
+			return esc_html( sprintf( _x( '%1$s to %2$s', 'numeric range', 'newspack-plugin' ), $min, $max ) );
+		}
+		if ( null !== $min ) {
+			/* translators: %s: the lowest number the rule admits. */
+			return esc_html( sprintf( __( 'At least %s', 'newspack-plugin' ), $min ) );
+		}
+		if ( null !== $max ) {
+			/* translators: %s: the highest number the rule admits. */
+			return esc_html( sprintf( __( 'At most %s', 'newspack-plugin' ), $max ) );
+		}
+		return esc_html__( '(any number)', 'newspack-plugin' );
 	}
 
 	/**
