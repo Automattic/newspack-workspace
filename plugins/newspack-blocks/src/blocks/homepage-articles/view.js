@@ -66,7 +66,13 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 		// on the page can also carry, so the URL has to be checked before
 		// it's fetched - checking which element it came from isn't enough.
 		if ( ! isNextUrlTrusted( nextUrl ) ) {
-			return onError();
+			// This instance never joined the shared fetch queue for this
+			// attempt, so failing here must not touch the lock or queue
+			// another block's in-progress fetch is relying on.
+			blockWrapperEl.classList.remove( 'is-loading' );
+			blockWrapperEl.classList.add( 'is-error' );
+			isPending = false;
+			return false;
 		}
 
 		// Set currently rendered posts' IDs as a query param (e.g. exclude_ids=1,2,3)
@@ -256,15 +262,62 @@ function hasOwnProp( obj, prop ) {
 }
 
 /**
- * Checks whether a "next" URL is this site's own articles endpoint, under
- * either permalink structure (`/wp-json/...` or `?rest_route=...`). The
- * block instance that reads this value is identified by CSS class, which is
- * not a trust boundary, so the URL is what has to be checked before it's
- * fetched or written back - not which element it came from.
+ * This site's REST API root, read from the link WordPress core renders in
+ * `<head>` on every front-end page. `<head>` is never built from post
+ * content, so - unlike a `data-next` attribute - this value can't be
+ * spoofed by anything kses lets through.
+ */
+function getTrustedRestRoot() {
+	const link = document.querySelector( 'link[rel="https://api.w.org/"]' );
+
+	if ( ! link ) {
+		return null;
+	}
+
+	try {
+		return new URL( link.getAttribute( 'href' ), window.location.origin );
+	} catch ( e ) {
+		return null;
+	}
+}
+
+/**
+ * PHP folds `.`, a space, and a bare `[` in a query parameter's name to `_`
+ * when building `$_GET`, so `rest.route`, `rest route` and `rest[route` all
+ * set the same request var a pretty-permalink URL's rewrite rule also sets -
+ * and PHP keeps the LAST occurrence of a repeated key, which
+ * `URLSearchParams.get()` does not. Collect every value under any spelling,
+ * in order, so the caller can check what WordPress would actually route to.
+ *
+ * @param {URL} parsed
+ */
+function getRestRouteOverrides( parsed ) {
+	const values = [];
+
+	for ( const [ key, value ] of parsed.searchParams.entries() ) {
+		if ( key.replace( /[.[ ]/g, '_' ) === 'rest_route' ) {
+			values.push( value );
+		}
+	}
+
+	return values;
+}
+
+/**
+ * Checks whether a "next" URL resolves to this site's own articles REST
+ * route - not just whether its path looks right, since an explicit
+ * `rest_route`-shaped query parameter can make WordPress route an
+ * otherwise-correct-looking URL somewhere else.
  *
  * @param {string} url candidate "next" URL
  */
 function isNextUrlTrusted( url ) {
+	const restRoot = getTrustedRestRoot();
+
+	if ( ! restRoot ) {
+		return false;
+	}
+
 	let parsed;
 
 	try {
@@ -273,11 +326,20 @@ function isNextUrlTrusted( url ) {
 		return false;
 	}
 
-	if ( parsed.origin !== window.location.origin ) {
+	if ( parsed.origin !== restRoot.origin ) {
 		return false;
 	}
 
-	const route = '/newspack-blocks/v1/articles';
+	const route = 'newspack-blocks/v1/articles';
+	const overrides = getRestRouteOverrides( parsed );
 
-	return parsed.pathname.endsWith( route ) || parsed.searchParams.get( 'rest_route' ) === route;
+	if ( ! restRoot.search ) {
+		// Pretty permalinks: a request to our own endpoint never needs a
+		// rest_route override, under any spelling.
+		return overrides.length === 0 && parsed.pathname === restRoot.pathname + route;
+	}
+
+	// Plain permalinks: everything goes through the REST root's own path,
+	// naming the route via rest_route. Mirror PHP's last-value-wins rule.
+	return parsed.pathname === restRoot.pathname && overrides[ overrides.length - 1 ] === '/' + route;
 }
