@@ -388,8 +388,8 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [] ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'max' => 100 ] ) );
 
-		// Nor one too large for a float, which reads as infinite and clears the
-		// bound on its side.
+		// Nor one too large for a float, which reads as infinite and would pass
+		// any minimum.
 		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( '1e400' ) );
 		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'min' => 1 ] ) );
 
