@@ -303,16 +303,20 @@ function getTrustedRestRoot() {
 
 /**
  * A query parameter name this plugin's own server-generated URLs can ever
- * carry: plain identifier characters, optionally followed by an indexed or
- * empty `[]` for an array-valued block attribute (`add_query_arg()` renders
- * every array attribute this way, e.g. `postType[0]`, and several default
- * to a non-empty array). PHP folds characters outside this set (a dot, a
- * space, a null byte, ...) into a query key in ways that don't match how
+ * carry: plain identifier characters, followed by zero or more `[...]`
+ * groups for an array- or object-valued block attribute. `add_query_arg()`
+ * renders every such attribute this way - a flat array as `name[0]`, and a
+ * nested one (e.g. this block's custom-taxonomy filters) as
+ * `name[0][slug]` or `name[0][terms][0]` - and several default to a
+ * non-empty value. PHP folds characters outside this set (a dot, a space, a
+ * null byte, ...) into a query key in ways that don't match how
  * `URLSearchParams` reads them, so rather than mirroring that folding, a
  * key carrying any of them is treated as untrustworthy on sight, whatever
- * it would normalize to.
+ * it would normalize to. A bracket-suffixed `rest_route` is no exception to
+ * reject specially: PHP builds it into an array value, which WordPress's
+ * REST router can't use as a route and always answers with an error.
  */
-const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[\d*\])?$/;
+const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
 
 /**
  * Checks whether a URL resolves to this site's own articles REST route -

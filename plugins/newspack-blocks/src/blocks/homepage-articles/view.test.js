@@ -180,4 +180,28 @@ describe( 'homepage-articles load more', () => {
 		expect( requestedUrls ).toHaveLength( 1 );
 		expect( requestedUrls[ 0 ] ).toContain( 'postType' );
 	} );
+
+	it( 'accepts a server-rendered next URL for a block with a custom-taxonomy filter configured', () => {
+		// add_query_arg() nests an array-of-objects attribute (this block's
+		// customTaxonomies filter) two levels deep: name[0][slug] and
+		// name[0][terms][0].
+		const CUSTOM_TAXONOMY_NEXT_URL =
+			'/wp-json/newspack-blocks/v1/articles?customTaxonomies%5B0%5D%5Bslug%5D=format&customTaxonomies%5B0%5D%5Bterms%5D%5B0%5D=5&page=2';
+
+		document.body.innerHTML = `
+			<div class="wp-block-newspack-blocks-homepage-articles has-more-button">
+				<div data-posts data-current-post-id="1"></div>
+				<button type="button" class="wp-block-button__link" data-next="${ CUSTOM_TAXONOMY_NEXT_URL }">
+					<span class="label">Load more posts</span>
+				</button>
+			</div>
+		`;
+
+		require( './view.js' );
+
+		document.querySelector( 'button[data-next]' ).click();
+
+		expect( requestedUrls ).toHaveLength( 1 );
+		expect( requestedUrls[ 0 ] ).toContain( 'customTaxonomies' );
+	} );
 } );
