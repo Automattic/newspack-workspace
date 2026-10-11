@@ -60,12 +60,29 @@ const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
  *
  * @param {URL|null} parsed a URL already resolved with resolveUrl()
  */
+// PHP's `max_input_vars` (default 1000) silently stops populating $_GET once
+// this many input variables have been seen, so a `rest_route` occurrence
+// placed after enough padding params never reaches $_GET at all - "PHP keeps
+// the LAST value for a repeated key" (below) only holds below that ceiling.
+// Padding a URL past it to make an EARLIER, attacker-chosen rest_route the
+// one PHP actually uses - while this check still inspects every occurrence,
+// including a decoy final one chosen to read as trusted - is a real,
+// reachable bypass of the check below, not just this plugin's own query
+// shape, so it's rejected on shape alone: this plugin's own URLs never carry
+// more than a handful of params, nowhere near enough padding for the trick
+// to even begin, so any URL already past this count isn't one of ours.
+const MAX_SAFE_QUERY_PARAMS = 50;
+
 function isNextUrlTrusted( parsed ) {
 	if ( ! parsed || parsed.origin !== window.location.origin ) {
 		return false;
 	}
 
 	const keys = Array.from( parsed.searchParams.keys() );
+
+	if ( keys.length > MAX_SAFE_QUERY_PARAMS ) {
+		return false;
+	}
 
 	if ( keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
 		return false;
