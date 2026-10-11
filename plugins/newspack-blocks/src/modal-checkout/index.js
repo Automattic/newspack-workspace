@@ -148,7 +148,7 @@ import { domReady, isSameDocumentRedirect, onCheckoutPlaceOrderProcessing } from
 				} );
 
 				$( document.body ).on( 'checkout_error', function ( event, errors ) {
-					// A gateway step that fails or is cancelled reports its error here, after the order was placed.
+					// A gateway step that fails or is canceled reports its error here, after the order was placed.
 					if ( ! placedOrder && ! awaitingGatewayAction ) {
 						return;
 					}
