@@ -18,12 +18,16 @@ import {
 	onCheckoutComplete,
 	onCheckoutCancel,
 	onCheckoutPlaceOrderStart,
+	onCheckoutPlaceOrderGatewayAction,
 	onCheckoutPlaceOrderError,
 	onCheckoutPlaceOrderCriticalError,
 	createHiddenInput,
 	triggerFormSubmit,
 	getCheckoutData,
 	getFormattedAmount,
+	mountFrameProcessingScreen,
+	removeFrameProcessingScreen,
+	setCloseButtonsDisabled,
 } from './utils';
 import {
 	resolveCheckoutButtonForm,
@@ -88,6 +92,7 @@ domReady( () => {
 	const modalContent = modalCheckout.querySelector( `.${ MODAL_CLASS_PREFIX }__content` );
 	const modalCheckoutHiddenInput = createHiddenInput( 'modal_checkout', '1' );
 	const spinner = modalContent.querySelector( `.${ CLASS_PREFIX }__spinner` );
+	const closeButtons = modalCheckout.querySelectorAll( `.${ MODAL_CLASS_PREFIX }__close` );
 	let modalTrigger = document.querySelector( '.newspack-reader__account-link' )?.[ 0 ];
 	// Initialize empty iframe.
 	const initialHeight = '600px'; // Fixed initial height to avoid too much layout shift.
@@ -106,6 +111,7 @@ domReady( () => {
 		if ( spinner.style.display !== 'none' ) {
 			spinner.style.display = 'none';
 		}
+		setCloseButtonsDisabled( closeButtons, false );
 		if ( iframe.style.visibility !== 'visible' ) {
 			iframe.style.visibility = 'visible';
 		}
@@ -158,12 +164,26 @@ domReady( () => {
 				processingPaymentTimeouts.push( timeoutId );
 			} );
 			spinner.appendChild( processingPaymentText );
+			setCloseButtonsDisabled( closeButtons, true );
 		};
 
 		const hideProcessingPaymentScreen = () => {
 			spinner.style.display = 'none';
 			clearProcessingPaymentTimeouts();
 			spinner.querySelectorAll( `.${ PROCESSING_PAYMENT_TEXT_CLASS }` ).forEach( node => node.remove() );
+			removeFrameProcessingScreen( container.ownerDocument );
+			setCloseButtonsDisabled( closeButtons, false );
+		};
+
+		// The gateway draws its step (e.g. a 3D Secure challenge) inside the checkout
+		// document, so the screen in this document would cover it. Move the processing
+		// screen into the checkout document, where the gateway's step sits on top of it.
+		// Without newspack-ui, the checkout document has no spinner styles to show it with.
+		const moveProcessingPaymentScreenToCheckout = () => {
+			spinner.style.display = 'none';
+			if ( CLASS_PREFIX === 'newspack-ui' ) {
+				mountFrameProcessingScreen( container.ownerDocument, `${ CLASS_PREFIX }__spinner`, processingPaymentText );
+			}
 		};
 
 		onCheckoutCancel( container, () => {
@@ -171,6 +191,8 @@ domReady( () => {
 		} );
 
 		onCheckoutPlaceOrderStart( container, renderProcessingPaymentScreen );
+
+		onCheckoutPlaceOrderGatewayAction( container, moveProcessingPaymentScreenToCheckout );
 
 		onCheckoutPlaceOrderError( container, hideProcessingPaymentScreen );
 
@@ -724,9 +746,13 @@ domReady( () => {
 	/**
 	 * Handle modal checkout close button.
 	 */
-	modalCheckout.querySelectorAll( `.${ MODAL_CLASS_PREFIX }__close` ).forEach( button => {
+	closeButtons.forEach( button => {
 		button.addEventListener( 'click', ev => {
 			ev.preventDefault();
+			// Disabled while a payment is processing.
+			if ( button.getAttribute( 'aria-disabled' ) === 'true' ) {
+				return;
+			}
 			closeCheckout();
 		} );
 	} );

@@ -8,7 +8,7 @@ import './checkout.scss';
  * Internal dependencies
  */
 import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination } from './analytics';
-import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
+import { domReady, isSameDocumentRedirect, onCheckoutPlaceOrderProcessing } from './utils';
 
 ( $ => {
 	domReady( () => {
@@ -25,6 +25,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 		const cancelEvent = new CustomEvent( 'checkout-cancel' );
 		const placeOrderStartEvent = new CustomEvent( 'checkout-place-order-start' );
 		const placeOrderSuccessEvent = new CustomEvent( 'checkout-place-order-success' );
+		const placeOrderGatewayActionEvent = new CustomEvent( 'checkout-place-order-gateway-action' );
 		const placeOrderErrorEvent = new CustomEvent( 'checkout-place-order-error' );
 		const placeOrderCriticalErrorEvent = new CustomEvent( 'checkout-place-order-critical-error' );
 
@@ -117,11 +118,14 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				 * Bubble up checkout place order event.
 				 */
 				let placedOrder = false;
+				// Set while the gateway shows its own step in place after the order is placed (e.g. a 3D Secure challenge).
+				let awaitingGatewayAction = false;
 				$form.on( 'checkout_place_order', function () {
 					if ( placedOrder ) {
 						return;
 					}
 					placedOrder = true;
+					awaitingGatewayAction = false;
 					container.dispatchEvent( placeOrderStartEvent );
 				} );
 				onCheckoutPlaceOrderProcessing( container, function () {
@@ -134,16 +138,22 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						container.dispatchEvent( placeOrderErrorEvent );
 					}
 				} );
-				$form.on( 'checkout_place_order_success', function () {
+				$form.on( 'checkout_place_order_success', function ( event, result ) {
 					placedOrder = false;
 					container.dispatchEvent( placeOrderSuccessEvent );
+					if ( isSameDocumentRedirect( result?.redirect, window.location.href ) ) {
+						awaitingGatewayAction = true;
+						container.dispatchEvent( placeOrderGatewayActionEvent );
+					}
 				} );
 
 				$( document.body ).on( 'checkout_error', function ( event, errors ) {
-					if ( ! placedOrder ) {
+					// A gateway step that fails or is cancelled reports its error here, after the order was placed.
+					if ( ! placedOrder && ! awaitingGatewayAction ) {
 						return;
 					}
 					placedOrder = false;
+					awaitingGatewayAction = false;
 					if ( errors && errors.indexOf( newspackBlocksModalCheckout.labels.critical_error ) >= 0 ) {
 						container.dispatchEvent( placeOrderCriticalErrorEvent );
 						return;

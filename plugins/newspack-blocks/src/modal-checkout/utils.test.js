@@ -2,7 +2,14 @@
  * Tests for modal-checkout utils.
  */
 
-import { afterDeferredScripts, getCheckoutData } from './utils';
+import {
+	afterDeferredScripts,
+	getCheckoutData,
+	isSameDocumentRedirect,
+	mountFrameProcessingScreen,
+	removeFrameProcessingScreen,
+	setCloseButtonsDisabled,
+} from './utils';
 
 afterEach( () => {
 	document.body.innerHTML = '';
@@ -111,5 +118,93 @@ describe( 'getCheckoutData()', () => {
 		const data = getCheckoutData( form );
 
 		expect( data.quantity ).toBe( 5 );
+	} );
+} );
+
+describe( 'isSameDocumentRedirect()', () => {
+	const checkoutUrl = 'https://example.test/checkout/?modal_checkout=1';
+
+	// A gateway that needs the shopper (3D Secure, a voucher, a wallet QR code)
+	// answers the place-order request with a fragment on the checkout page
+	// itself, and its own script takes over in place.
+	it.each( [
+		[ 'a Stripe confirm hash', '#wc-stripe-confirm-pi:82:pi_123_secret_456:abc123' ],
+		[ 'a Stripe setup-intent hash', '#wc-stripe-confirm-si:82:seti_123_secret_456:abc123' ],
+		[ 'a Stripe voucher hash', '#wc-stripe-voucher-82:boleto:pi_123_secret_456:https%3A%2F%2Fexample.test' ],
+		[ 'a WooPayments confirm hash', '#wcpay-confirm-pi:82:pi_123_secret_456:abc123' ],
+		[ 'the full checkout URL with a fragment', `${ checkoutUrl }#confirm-pi-pi_123_secret_456:https%3A%2F%2Fexample.test` ],
+	] )( 'is true for %s', ( _, redirect ) => {
+		expect( isSameDocumentRedirect( redirect, checkoutUrl ) ).toBe( true );
+	} );
+
+	// Anything that leaves the checkout page keeps today's behavior.
+	it.each( [
+		[ 'the order-received page', 'https://example.test/checkout/order-received/80/?key=wc_order_abc&modal_checkout=1' ],
+		[ 'an off-site authentication page', 'https://hooks.stripe.test/redirect/authenticate/src_123' ],
+		[ 'the checkout page with a different query and a fragment', 'https://example.test/checkout/?modal_checkout=1&retry=1#step' ],
+		[ 'the checkout page without a fragment', checkoutUrl ],
+		[ 'an empty fragment', '#' ],
+		[ 'an empty string', '' ],
+		[ 'undefined', undefined ],
+		[ 'a non-string value', { redirect: '#wc-stripe-confirm-pi:1:2:3' } ],
+	] )( 'is false for %s', ( _, redirect ) => {
+		expect( isSameDocumentRedirect( redirect, checkoutUrl ) ).toBe( false );
+	} );
+} );
+
+describe( 'mountFrameProcessingScreen()', () => {
+	let frameDocument;
+
+	beforeEach( () => {
+		frameDocument = document.implementation.createHTMLDocument( 'checkout' );
+	} );
+
+	it( 'mounts the processing screen in the checkout document with the live message', () => {
+		const message = document.createElement( 'p' );
+		message.textContent = 'Finalizing transaction...';
+
+		const screen = mountFrameProcessingScreen( frameDocument, 'newspack-ui__spinner', message );
+
+		expect( screen.ownerDocument ).toBe( frameDocument );
+		expect( screen.parentNode ).toBe( frameDocument.body );
+		expect( screen.classList.contains( 'newspack-ui__spinner' ) ).toBe( true );
+		expect( screen.contains( message ) ).toBe( true );
+		// The message keeps updating after the move, so later text shows here too.
+		message.textContent = 'Verifying details...';
+		expect( screen.textContent ).toBe( 'Verifying details...' );
+	} );
+
+	it( 'reuses one screen per document when mounted again', () => {
+		const first = mountFrameProcessingScreen( frameDocument, 'newspack-ui__spinner', document.createElement( 'p' ) );
+		const second = mountFrameProcessingScreen( frameDocument, 'newspack-ui__spinner', document.createElement( 'p' ) );
+
+		expect( second ).toBe( first );
+		expect( frameDocument.querySelectorAll( '.newspack-ui__spinner' ) ).toHaveLength( 1 );
+	} );
+
+	it( 'does nothing without a document to mount into', () => {
+		expect( mountFrameProcessingScreen( null, 'newspack-ui__spinner', document.createElement( 'p' ) ) ).toBeNull();
+	} );
+
+	it( 'is removed by removeFrameProcessingScreen()', () => {
+		mountFrameProcessingScreen( frameDocument, 'newspack-ui__spinner', document.createElement( 'p' ) );
+
+		removeFrameProcessingScreen( frameDocument );
+
+		expect( frameDocument.querySelector( '.newspack-ui__spinner' ) ).toBeNull();
+		expect( () => removeFrameProcessingScreen( null ) ).not.toThrow();
+	} );
+} );
+
+describe( 'setCloseButtonsDisabled()', () => {
+	it( 'marks the close buttons disabled for assistive tech, then clears it', () => {
+		document.body.innerHTML = '<button class="a">Close</button><button class="b">Close</button>';
+		const buttons = document.querySelectorAll( 'button' );
+
+		setCloseButtonsDisabled( buttons, true );
+		expect( [ ...buttons ].map( button => button.getAttribute( 'aria-disabled' ) ) ).toEqual( [ 'true', 'true' ] );
+
+		setCloseButtonsDisabled( buttons, false );
+		expect( [ ...buttons ].map( button => button.hasAttribute( 'aria-disabled' ) ) ).toEqual( [ false, false ] );
 	} );
 } );

@@ -227,6 +227,16 @@ export function onCheckoutPlaceOrderProcessing( container, callback ) {
 }
 
 /**
+ * Run a callback when the order is placed and the gateway shows its own step in place.
+ *
+ * @param {Object}   container The container element inside the iframe document.
+ * @param {Function} callback  The callback to execute when the gateway takes over.
+ */
+export function onCheckoutPlaceOrderGatewayAction( container, callback ) {
+	container.addEventListener( 'checkout-place-order-gateway-action', callback );
+}
+
+/**
  * Run a callback when the checkout place order fails.
  *
  * @param {Object}   container The container element inside the iframe document.
@@ -338,5 +348,94 @@ export function getFormattedAmount( amount, currency = 'USD' ) {
 		style: 'currency',
 		currency,
 		currencyDisplay: 'narrowSymbol',
+	} );
+}
+
+/**
+ * Whether a place-order redirect keeps the shopper on the checkout page.
+ *
+ * Gateways that need the shopper for another step (a 3D Secure challenge, a
+ * voucher, a wallet QR code) answer a successful place-order request with a
+ * fragment on the current page, and their own script then shows that step in
+ * place. Any other redirect leaves the checkout.
+ *
+ * @param {string} redirect   The `redirect` value from the place-order response.
+ * @param {string} currentUrl The checkout page URL.
+ *
+ * @return {boolean} Whether the redirect only changes the fragment.
+ */
+export function isSameDocumentRedirect( redirect, currentUrl ) {
+	if ( ! redirect || typeof redirect !== 'string' ) {
+		return false;
+	}
+	let target, current;
+	try {
+		target = new URL( redirect, currentUrl );
+		current = new URL( currentUrl );
+	} catch ( error ) {
+		return false;
+	}
+	return target.hash.length > 1 && target.origin === current.origin && target.pathname === current.pathname && target.search === current.search;
+}
+
+const FRAME_PROCESSING_SCREEN_ATTRIBUTE = 'data-newspack-processing-screen';
+
+/**
+ * Show the processing screen inside the checkout document.
+ *
+ * A gateway step shown in place (see isSameDocumentRedirect) is drawn on top
+ * of everything in the checkout document, so a processing screen mounted here
+ * stays visible around it without covering it. Reuses the screen already in
+ * the document, if any.
+ *
+ * @param {Document} doc       The checkout document.
+ * @param {string}   className The spinner class name.
+ * @param {Node}     content   The processing message node, moved into the screen.
+ *
+ * @return {HTMLElement|null} The screen, or null without a document.
+ */
+export function mountFrameProcessingScreen( doc, className, content ) {
+	if ( ! doc?.body ) {
+		return null;
+	}
+	let screen = doc.querySelector( `[${ FRAME_PROCESSING_SCREEN_ATTRIBUTE }]` );
+	if ( ! screen ) {
+		screen = doc.createElement( 'div' );
+		screen.className = className;
+		screen.setAttribute( FRAME_PROCESSING_SCREEN_ATTRIBUTE, '' );
+		screen.appendChild( doc.createElement( 'span' ) );
+		doc.body.appendChild( screen );
+	}
+	if ( content ) {
+		screen.appendChild( content );
+	}
+	return screen;
+}
+
+/**
+ * Remove the processing screen from the checkout document.
+ *
+ * @param {Document} doc The checkout document.
+ */
+export function removeFrameProcessingScreen( doc ) {
+	doc?.querySelector( `[${ FRAME_PROCESSING_SCREEN_ATTRIBUTE }]` )?.remove();
+}
+
+/**
+ * Disable or re-enable the modal close buttons.
+ *
+ * Uses `aria-disabled` rather than `disabled` so the button stays in the focus
+ * order the modal's focus trap relies on.
+ *
+ * @param {NodeList|Array} buttons  The close buttons.
+ * @param {boolean}        disabled Whether to disable them.
+ */
+export function setCloseButtonsDisabled( buttons, disabled ) {
+	buttons.forEach( button => {
+		if ( disabled ) {
+			button.setAttribute( 'aria-disabled', 'true' );
+		} else {
+			button.removeAttribute( 'aria-disabled' );
+		}
 	} );
 }
