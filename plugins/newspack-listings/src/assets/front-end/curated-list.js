@@ -148,8 +148,8 @@ Array.prototype.forEach.call( document.querySelectorAll( '.newspack-listings__cu
  */
 function buildLoadMoreHandler( blockWrapperEl ) {
 	// Scoped to the wrapper's own direct children, since the button is one of
-	// them in the server-rendered markup. Written as a manual filter rather
-	// than `:scope > [data-next]` to match this file's existing idiom.
+	// them in the server-rendered markup. Equivalent to `:scope > [data-next]`;
+	// written as a manual filter instead, matching this function's own style.
 	const btnEl = Array.prototype.filter.call( blockWrapperEl.children, el => el.hasAttribute( 'data-next' ) )[ 0 ];
 	if ( ! btnEl ) {
 		return;
