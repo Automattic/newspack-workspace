@@ -204,4 +204,65 @@ describe( 'homepage-articles load more', () => {
 		expect( requestedUrls ).toHaveLength( 1 );
 		expect( requestedUrls[ 0 ] ).toContain( 'customTaxonomies' );
 	} );
+	describe( 'URL shapes', () => {
+		const clickLoadMore = nextUrl => {
+			document.body.innerHTML = `
+				<div class="wp-block-newspack-blocks-homepage-articles has-more-button">
+					<div data-posts data-current-post-id="1"></div>
+					<button type="button" class="wp-block-button__link" data-next="${ nextUrl }">
+						<span class="label">Load more posts</span>
+					</button>
+				</div>
+			`;
+
+			require( './view.js' );
+
+			document.querySelector( 'button[data-next]' ).click();
+		};
+
+		const usePlainPermalinks = () => {
+			document.head.innerHTML = `<link rel="https://api.w.org/" href="${ window.location.origin }/?rest_route=/" />`;
+		};
+
+		it( 'accepts a plain-permalink next URL that names the articles route', () => {
+			usePlainPermalinks();
+
+			clickLoadMore( '/?rest_route=/newspack-blocks/v1/articles&amp;postType%5B0%5D=post&amp;page=2' );
+
+			expect( requestedUrls ).toHaveLength( 1 );
+			expect( requestedUrls[ 0 ] ).toContain( 'rest_route' );
+		} );
+
+		it( 'refuses a plain-permalink next URL padded with enough parameters to change which route PHP reads', () => {
+			usePlainPermalinks();
+
+			const padding = Array.from( { length: 1000 }, () => 'p=1' ).join( '&amp;' );
+
+			clickLoadMore( `/?rest_route=/wp/v2/types/post&amp;${ padding }&amp;rest_route=/newspack-blocks/v1/articles` );
+
+			expect( requestedUrls ).toHaveLength( 0 );
+		} );
+
+		it( 'accepts a next URL for a block with a large selection of terms', () => {
+			const categories = Array.from( { length: 200 }, ( _, i ) => `categories%5B${ i }%5D=${ i + 1 }` ).join( '&amp;' );
+
+			clickLoadMore( `/wp-json/newspack-blocks/v1/articles?${ categories }&amp;page=2` );
+
+			expect( requestedUrls ).toHaveLength( 1 );
+		} );
+
+		it( 'refuses a same-origin page whose permalink merely ends in the articles route', () => {
+			clickLoadMore( '/some-page/newspack-blocks/v1/articles' );
+
+			expect( requestedUrls ).toHaveLength( 0 );
+		} );
+
+		it( 'accepts the articles route under a non-default REST prefix advertised in <head>', () => {
+			document.head.innerHTML = `<link rel="https://api.w.org/" href="${ window.location.origin }/api/" />`;
+
+			clickLoadMore( '/api/newspack-blocks/v1/articles?page=2' );
+
+			expect( requestedUrls ).toHaveLength( 1 );
+		} );
+	} );
 } );

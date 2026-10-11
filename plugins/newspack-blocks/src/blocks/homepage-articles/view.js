@@ -319,6 +319,19 @@ function getTrustedRestRoot() {
 const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
 
 /**
+ * PHP's `max_input_vars` (default 1000) silently stops populating $_GET once
+ * that many input variables have been seen, so a `rest_route` placed after
+ * enough padding never reaches WordPress, and an earlier one is used
+ * instead - the "last value wins" check below only holds below that
+ * ceiling. Rather than mirror where the ceiling falls, a URL with more
+ * parameters than this plugin ever generates is refused outright. This
+ * block's own URLs carry one parameter per scalar attribute (about 50) plus
+ * one per selected author, term, exclusion or specific post, so 300 leaves
+ * room for an unusually large selection and stays far below the ceiling.
+ */
+const MAX_SAFE_QUERY_PARAMS = 300;
+
+/**
  * Checks whether a URL resolves to this site's own articles REST route -
  * not just whether its path looks right, since a query parameter can make
  * WordPress route an otherwise-correct-looking URL somewhere else.
@@ -332,25 +345,40 @@ function isNextUrlTrusted( parsed ) {
 
 	const keys = Array.from( parsed.searchParams.keys() );
 
-	if ( keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
+	if ( keys.length > MAX_SAFE_QUERY_PARAMS || keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
 		return false;
 	}
 
 	const route = 'newspack-blocks/v1/articles';
 
-	if ( ! keys.includes( 'rest_route' ) && parsed.pathname.endsWith( '/' + route ) ) {
-		// Pretty permalinks: a request to our own endpoint never needs a
-		// rest_route override.
+	// Pretty permalinks, WordPress's default REST prefix: an exact match,
+	// not a suffix check - an ordinary page's permalink can also end in
+	// this string, and only the real `/wp-json/` prefix is routed to the
+	// REST API. Independent of the <head> link below, so a site that strips
+	// that link keeps load-more in the common case.
+	if ( ! keys.includes( 'rest_route' ) && parsed.pathname === '/wp-json/' + route ) {
 		return true;
 	}
 
-	// Plain permalinks: everything goes through the REST root's own path,
-	// naming the route via rest_route. That path isn't derivable from the
-	// route string alone, so pin it to the trusted root. PHP keeps the LAST
-	// value for a repeated key, which URLSearchParams.get() does not.
+	// A non-default REST prefix, or plain permalinks: anchor to the REST
+	// root this site's own <head> advertises, since neither form is
+	// derivable from the route string alone.
 	const restRoot = getTrustedRestRoot();
 
-	if ( ! restRoot || ! restRoot.search || parsed.pathname !== restRoot.pathname ) {
+	if ( ! restRoot ) {
+		return false;
+	}
+
+	if ( ! restRoot.search ) {
+		// Pretty permalinks, non-default prefix.
+		return ! keys.includes( 'rest_route' ) && parsed.pathname === restRoot.pathname + route;
+	}
+
+	// Plain permalinks: everything goes through the REST root's own path,
+	// naming the route via rest_route. Below MAX_SAFE_QUERY_PARAMS, PHP
+	// keeps the LAST value for a repeated key, which URLSearchParams.get()
+	// does not.
+	if ( parsed.pathname !== restRoot.pathname ) {
 		return false;
 	}
 
