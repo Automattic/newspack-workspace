@@ -5,10 +5,11 @@
 import {
 	afterDeferredScripts,
 	getCheckoutData,
+	hasFrameProcessingScreen,
 	isSameDocumentRedirect,
 	mountFrameProcessingScreen,
+	preventDisabledCloseClicks,
 	removeFrameProcessingScreen,
-	setCloseButtonsDisabled,
 } from './utils';
 
 afterEach( () => {
@@ -142,6 +143,8 @@ describe( 'isSameDocumentRedirect()', () => {
 		[ 'the order-received page', 'https://example.test/checkout/order-received/80/?key=wc_order_abc&modal_checkout=1' ],
 		[ 'an off-site authentication page', 'https://hooks.stripe.test/redirect/authenticate/src_123' ],
 		[ 'the checkout page with a different query and a fragment', 'https://example.test/checkout/?modal_checkout=1&retry=1#step' ],
+		[ 'another page on the same site with a fragment', 'https://example.test/other/?modal_checkout=1#step' ],
+		[ 'the checkout path on another site with a fragment', 'https://elsewhere.test/checkout/?modal_checkout=1#step' ],
 		[ 'the checkout page without a fragment', checkoutUrl ],
 		[ 'an empty fragment', '#' ],
 		[ 'an empty string', '' ],
@@ -180,6 +183,8 @@ describe( 'mountFrameProcessingScreen()', () => {
 
 		expect( second ).toBe( first );
 		expect( frameDocument.querySelectorAll( '.newspack-ui__spinner' ) ).toHaveLength( 1 );
+		// A second mount replaces the message rather than stacking a duplicate under it.
+		expect( first.querySelectorAll( 'p' ) ).toHaveLength( 1 );
 	} );
 
 	it( 'does nothing without a document to mount into', () => {
@@ -194,17 +199,42 @@ describe( 'mountFrameProcessingScreen()', () => {
 		expect( frameDocument.querySelector( '.newspack-ui__spinner' ) ).toBeNull();
 		expect( () => removeFrameProcessingScreen( null ) ).not.toThrow();
 	} );
+
+	it( 'is reported by hasFrameProcessingScreen() while mounted', () => {
+		expect( hasFrameProcessingScreen( frameDocument ) ).toBe( false );
+		mountFrameProcessingScreen( frameDocument, 'newspack-ui__spinner', document.createElement( 'p' ) );
+		expect( hasFrameProcessingScreen( frameDocument ) ).toBe( true );
+		removeFrameProcessingScreen( frameDocument );
+		expect( hasFrameProcessingScreen( frameDocument ) ).toBe( false );
+		expect( hasFrameProcessingScreen( null ) ).toBe( false );
+	} );
 } );
 
-describe( 'setCloseButtonsDisabled()', () => {
-	it( 'marks the close buttons disabled for assistive tech, then clears it', () => {
-		document.body.innerHTML = '<button class="a">Close</button><button class="b">Close</button>';
-		const buttons = document.querySelectorAll( 'button' );
+describe( 'preventDisabledCloseClicks()', () => {
+	// Other scripts (newspack-ui's shared modal handler) close the modal from their own
+	// listener on the close button, so the guard must stop the click before it gets there.
+	let modal, button, otherCloseHandler;
 
-		setCloseButtonsDisabled( buttons, true );
-		expect( [ ...buttons ].map( button => button.getAttribute( 'aria-disabled' ) ) ).toEqual( [ 'true', 'true' ] );
+	beforeEach( () => {
+		document.body.innerHTML = '<div id="modal"><header><button class="newspack-ui__modal__close">Close</button></header></div>';
+		modal = document.getElementById( 'modal' );
+		button = modal.querySelector( 'button' );
+		otherCloseHandler = jest.fn();
+		button.addEventListener( 'click', otherCloseHandler );
+		preventDisabledCloseClicks( modal, '.newspack-ui__modal__close' );
+	} );
 
-		setCloseButtonsDisabled( buttons, false );
-		expect( [ ...buttons ].map( button => button.hasAttribute( 'aria-disabled' ) ) ).toEqual( [ false, false ] );
+	it( 'keeps a click on a disabled close button from reaching any close handler', () => {
+		button.setAttribute( 'aria-disabled', 'true' );
+
+		button.click();
+
+		expect( otherCloseHandler ).not.toHaveBeenCalled();
+	} );
+
+	it( 'lets the click through once the close button is enabled again', () => {
+		button.click();
+
+		expect( otherCloseHandler ).toHaveBeenCalledTimes( 1 );
 	} );
 } );

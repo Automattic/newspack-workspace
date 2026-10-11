@@ -383,10 +383,10 @@ const FRAME_PROCESSING_SCREEN_ATTRIBUTE = 'data-newspack-processing-screen';
 /**
  * Show the processing screen inside the checkout document.
  *
- * A gateway step shown in place (see isSameDocumentRedirect) is drawn on top
- * of everything in the checkout document, so a processing screen mounted here
- * stays visible around it without covering it. Reuses the screen already in
- * the document, if any.
+ * Stripe.js draws its in-place steps (e.g. a 3D Secure challenge) in a layer
+ * above everything else in the checkout document, so a processing screen
+ * mounted here stays behind them without covering them. Reuses the screen
+ * already in the document, if any, and replaces its message.
  *
  * @param {Document} doc       The checkout document.
  * @param {string}   className The spinner class name.
@@ -407,9 +407,21 @@ export function mountFrameProcessingScreen( doc, className, content ) {
 		doc.body.appendChild( screen );
 	}
 	if ( content ) {
+		[ ...screen.children ].filter( child => child.tagName !== 'SPAN' ).forEach( child => child.remove() );
 		screen.appendChild( content );
 	}
 	return screen;
+}
+
+/**
+ * Whether the checkout document is showing the processing screen.
+ *
+ * @param {Document} doc The checkout document.
+ *
+ * @return {boolean} Whether the screen is mounted.
+ */
+export function hasFrameProcessingScreen( doc ) {
+	return !! doc?.querySelector( `[${ FRAME_PROCESSING_SCREEN_ATTRIBUTE }]` );
 }
 
 /**
@@ -419,6 +431,29 @@ export function mountFrameProcessingScreen( doc, className, content ) {
  */
 export function removeFrameProcessingScreen( doc ) {
 	doc?.querySelector( `[${ FRAME_PROCESSING_SCREEN_ATTRIBUTE }]` )?.remove();
+}
+
+/**
+ * Keep clicks on a disabled close button from reaching any close handler.
+ *
+ * Other scripts close the modal from their own listeners on the button (the
+ * newspack-ui modal handler sets the modal's state directly), so the click is
+ * stopped on its way down, before any of them run.
+ *
+ * @param {HTMLElement} root     The modal.
+ * @param {string}      selector The close button selector.
+ */
+export function preventDisabledCloseClicks( root, selector ) {
+	root.addEventListener(
+		'click',
+		ev => {
+			if ( ev.target.closest?.( selector )?.getAttribute( 'aria-disabled' ) === 'true' ) {
+				ev.preventDefault();
+				ev.stopPropagation();
+			}
+		},
+		true
+	);
 }
 
 /**
