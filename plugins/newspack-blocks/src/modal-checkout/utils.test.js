@@ -138,7 +138,7 @@ describe( 'isSameDocumentRedirect()', () => {
 		expect( isSameDocumentRedirect( redirect, checkoutUrl ) ).toBe( true );
 	} );
 
-	// Anything that leaves the checkout page keeps today's behavior.
+	// Anything that leaves the checkout page is an ordinary redirect, not a gateway step.
 	it.each( [
 		[ 'the order-received page', 'https://example.test/checkout/order-received/80/?key=wc_order_abc&modal_checkout=1' ],
 		[ 'an off-site authentication page', 'https://hooks.stripe.test/redirect/authenticate/src_123' ],
@@ -233,6 +233,9 @@ describe( 'preventDisabledCloseClicks()', () => {
 	} );
 
 	it( 'lets the click through once the close button is enabled again', () => {
+		button.setAttribute( 'aria-disabled', 'true' );
+		button.removeAttribute( 'aria-disabled' );
+
 		button.click();
 
 		expect( otherCloseHandler ).toHaveBeenCalledTimes( 1 );
