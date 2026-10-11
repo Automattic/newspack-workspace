@@ -365,8 +365,7 @@ function isNextUrlTrusted( parsed ) {
 	}
 
 	if ( ! restRoot.searchParams.has( 'rest_route' ) ) {
-		// Pretty permalinks. The root may still carry an unrelated query
-		// parameter that a filter on the home URL added.
+		// Pretty permalinks.
 		return ! keys.includes( 'rest_route' ) && parsed.pathname === restRoot.pathname + route;
 	}
 
