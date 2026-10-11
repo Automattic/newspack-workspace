@@ -327,7 +327,8 @@ const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
  * parameters than this plugin ever generates is refused outright. This
  * block's own URLs carry one parameter per scalar attribute (about 50) plus
  * one per selected author, term, exclusion or specific post, so 300 leaves
- * room for an unusually large selection and stays far below the ceiling.
+ * room for an unusually large selection and stays far below the default
+ * ceiling.
  */
 const MAX_SAFE_QUERY_PARAMS = 300;
 
@@ -351,26 +352,20 @@ function isNextUrlTrusted( parsed ) {
 
 	const route = 'newspack-blocks/v1/articles';
 
-	// Pretty permalinks, WordPress's default REST prefix: an exact match,
-	// not a suffix check - an ordinary page's permalink can also end in
-	// this string, and only the real `/wp-json/` prefix is routed to the
-	// REST API. Independent of the <head> link below, so a site that strips
-	// that link keeps load-more in the common case.
-	if ( ! keys.includes( 'rest_route' ) && parsed.pathname === '/wp-json/' + route ) {
-		return true;
-	}
-
-	// A non-default REST prefix, or plain permalinks: anchor to the REST
-	// root this site's own <head> advertises, since neither form is
-	// derivable from the route string alone.
+	// Anchor to the REST root this site's own <head> advertises: neither a
+	// custom REST prefix, a subdirectory install nor plain permalinks is
+	// derivable from the route string alone. Paths are matched exactly, not
+	// by suffix, since an ordinary page's permalink can also end in it.
 	const restRoot = getTrustedRestRoot();
 
 	if ( ! restRoot ) {
-		return false;
+		// A site that strips the link keeps load-more on WordPress's
+		// default REST root.
+		return ! keys.includes( 'rest_route' ) && parsed.pathname === '/wp-json/' + route;
 	}
 
 	if ( ! restRoot.search ) {
-		// Pretty permalinks, non-default prefix.
+		// Pretty permalinks.
 		return ! keys.includes( 'rest_route' ) && parsed.pathname === restRoot.pathname + route;
 	}
 

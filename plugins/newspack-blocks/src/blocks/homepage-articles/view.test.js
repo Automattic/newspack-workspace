@@ -221,13 +221,13 @@ describe( 'homepage-articles load more', () => {
 		};
 
 		const usePlainPermalinks = () => {
-			document.head.innerHTML = `<link rel="https://api.w.org/" href="${ window.location.origin }/?rest_route=/" />`;
+			document.head.innerHTML = `<link rel="https://api.w.org/" href="${ window.location.origin }/index.php?rest_route=/" />`;
 		};
 
 		it( 'accepts a plain-permalink next URL that names the articles route', () => {
 			usePlainPermalinks();
 
-			clickLoadMore( '/?rest_route=/newspack-blocks/v1/articles&amp;postType%5B0%5D=post&amp;page=2' );
+			clickLoadMore( '/index.php?rest_route=/newspack-blocks/v1/articles&amp;postType%5B0%5D=post&amp;page=2' );
 
 			expect( requestedUrls ).toHaveLength( 1 );
 			expect( requestedUrls[ 0 ] ).toContain( 'rest_route' );
@@ -238,7 +238,7 @@ describe( 'homepage-articles load more', () => {
 
 			const padding = Array.from( { length: 1000 }, () => 'p=1' ).join( '&amp;' );
 
-			clickLoadMore( `/?rest_route=/wp/v2/types/post&amp;${ padding }&amp;rest_route=/newspack-blocks/v1/articles` );
+			clickLoadMore( `/index.php?rest_route=/wp/v2/types/post&amp;${ padding }&amp;rest_route=/newspack-blocks/v1/articles` );
 
 			expect( requestedUrls ).toHaveLength( 0 );
 		} );
@@ -261,6 +261,22 @@ describe( 'homepage-articles load more', () => {
 			document.head.innerHTML = `<link rel="https://api.w.org/" href="${ window.location.origin }/api/" />`;
 
 			clickLoadMore( '/api/newspack-blocks/v1/articles?page=2' );
+
+			expect( requestedUrls ).toHaveLength( 1 );
+		} );
+
+		it( 'refuses the default REST path when <head> advertises a different REST root', () => {
+			document.head.innerHTML = `<link rel="https://api.w.org/" href="${ window.location.origin }/api/" />`;
+
+			clickLoadMore( '/wp-json/newspack-blocks/v1/articles?page=2' );
+
+			expect( requestedUrls ).toHaveLength( 0 );
+		} );
+
+		it( 'accepts the default REST path on a page whose <head> has no REST link', () => {
+			document.head.innerHTML = '';
+
+			clickLoadMore( '/wp-json/newspack-blocks/v1/articles?page=2' );
 
 			expect( requestedUrls ).toHaveLength( 1 );
 		} );
