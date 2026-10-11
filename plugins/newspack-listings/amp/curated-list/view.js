@@ -2,23 +2,35 @@
 
 // This is a hand-maintained duplicate of curated-list.js's front-end logic
 // for the amp-script sandbox, which can't load that file's webpack bundle.
-// Its trust check (isNextUrlTrusted below) differs from the main file's in
-// one way, forced by the sandbox: amp-script's worker-dom gives this script
-// a virtual `document` scoped to the <amp-script> container alone, with no
-// visibility into the real page's <head> - so there is no `<link
-// rel="https://api.w.org/">` to anchor a plain-permalink check to. Rather
-// than guess at that link's content, this only ever trusts the
-// pretty-permalink shape (exact path match against WordPress's REST prefix,
-// which is "/wp-json/" unless a site filters `rest_url_prefix`); a
-// plain-permalink site, or one with a non-default REST prefix, fails closed
-// here, same as the main file already does when the discovery link is
-// missing.
+// Its trust check (isNextUrlTrusted below) can't use curated-list.js's
+// `getTrustedRestRoot()` (a `<link rel="https://api.w.org/">` read from the
+// page's own <head>): amp-script's worker-dom gives this script a virtual
+// `document` scoped to the <amp-script> container alone, with no visibility
+// into <head>. `window.location` is no substitute either - on a page served
+// from an AMP cache, it reflects the cache's origin, not this site's, while
+// `data-next`/`data-url` still correctly target this site. view.php instead
+// renders this site's real REST root as a server-rendered marker element
+// inside the block's own container (`.newspack-listings__rest-root`),
+// visible to the worker since it's part of the same subtree - trustworthy
+// for the same reason the real data-next attribute already is - and this
+// file anchors to that marker instead of to window.location or a hardcoded
+// path, so a subdirectory install or a cached page doesn't break it.
 // See curated-list.js's own MAX_SAFE_QUERY_PARAMS comment: forecloses a
 // PHP max_input_vars padding/truncation bypass while staying clear of real
 // usage (measured up to ~210 vars for a 200-item manually-curated list).
 const MAX_SAFE_QUERY_PARAMS = 300;
 const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
 const ROUTE = 'newspack-listings/v1/listings';
+
+function getTrustedRestRoot() {
+	const marker = document.querySelector( '.newspack-listings__rest-root' );
+	if ( ! marker ) return null;
+	try {
+		return new URL( marker.getAttribute( 'data-rest-root' ) );
+	} catch ( e ) {
+		return null;
+	}
+}
 
 function isNextUrlTrusted( url ) {
 	let parsed;
@@ -28,7 +40,9 @@ function isNextUrlTrusted( url ) {
 		return false;
 	}
 
-	if ( parsed.origin !== window.location.origin ) {
+	const restRoot = getTrustedRestRoot();
+
+	if ( ! restRoot || parsed.origin !== restRoot.origin ) {
 		return false;
 	}
 
@@ -38,7 +52,21 @@ function isNextUrlTrusted( url ) {
 		return false;
 	}
 
-	return ! keys.includes( 'rest_route' ) && parsed.pathname === '/wp-json/' + ROUTE;
+	if ( ! restRoot.search ) {
+		// Pretty permalinks: anchor to the real REST root's own path, not a
+		// hardcoded one - a subdirectory install's prefix isn't "/wp-json/".
+		return ! keys.includes( 'rest_route' ) && parsed.pathname === restRoot.pathname + ROUTE;
+	}
+
+	// Plain permalinks: PHP keeps the LAST value for a repeated key, which
+	// URLSearchParams.get() does not.
+	if ( parsed.pathname !== restRoot.pathname ) {
+		return false;
+	}
+
+	const routeValues = parsed.searchParams.getAll( 'rest_route' );
+
+	return routeValues[ routeValues.length - 1 ] === '/' + ROUTE;
 }
 
 let isFetching = false;
