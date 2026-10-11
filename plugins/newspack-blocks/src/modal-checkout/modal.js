@@ -96,8 +96,8 @@ domReady( () => {
 	const spinner = modalContent.querySelector( `.${ CLASS_PREFIX }__spinner` );
 	const closeButtons = modalCheckout.querySelectorAll( `.${ MODAL_CLASS_PREFIX }__close` );
 	preventDisabledCloseClicks( modalCheckout, `.${ MODAL_CLASS_PREFIX }__close` );
-	// newspack-ui's processing screen covers the modal header, close button included,
-	// and its styles are what the checkout document has for showing the screen itself.
+	// newspack-ui's processing screen already covers the modal header, close button included,
+	// and the checkout document only has styles for a processing screen of its own with newspack-ui.
 	const HAS_NEWSPACK_UI = CLASS_PREFIX === 'newspack-ui';
 	let modalTrigger = document.querySelector( '.newspack-reader__account-link' )?.[ 0 ];
 	// Initialize empty iframe.

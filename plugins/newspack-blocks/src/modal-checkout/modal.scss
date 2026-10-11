@@ -14,7 +14,6 @@
 
 // Close button while a payment is processing (see modal.js).
 #newspack_modal_checkout [class*="__modal__close"][aria-disabled="true"] {
-	cursor: default;
 	opacity: 0.4;
 	pointer-events: none;
 }
