@@ -13,7 +13,10 @@
 // plain-permalink site, or one with a non-default REST prefix, fails closed
 // here, same as the main file already does when the discovery link is
 // missing.
-const MAX_SAFE_QUERY_PARAMS = 50;
+// See curated-list.js's own MAX_SAFE_QUERY_PARAMS comment: forecloses a
+// PHP max_input_vars padding/truncation bypass while staying clear of real
+// usage (measured up to ~210 vars for a 200-item manually-curated list).
+const MAX_SAFE_QUERY_PARAMS = 300;
 const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
 const ROUTE = 'newspack-listings/v1/listings';
 
