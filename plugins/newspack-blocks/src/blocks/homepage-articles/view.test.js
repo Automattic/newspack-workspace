@@ -273,6 +273,14 @@ describe( 'homepage-articles load more', () => {
 			expect( requestedUrls ).toHaveLength( 0 );
 		} );
 
+		it( 'accepts the articles route when the advertised pretty-permalink REST root carries an unrelated query parameter', () => {
+			document.head.innerHTML = `<link rel="https://api.w.org/" href="${ window.location.origin }/wp-json/?lang=fr" />`;
+
+			clickLoadMore( '/wp-json/newspack-blocks/v1/articles?lang=fr&amp;page=2' );
+
+			expect( requestedUrls ).toHaveLength( 1 );
+		} );
+
 		it( 'accepts the default REST path on a page whose <head> has no REST link', () => {
 			document.head.innerHTML = '';
 
