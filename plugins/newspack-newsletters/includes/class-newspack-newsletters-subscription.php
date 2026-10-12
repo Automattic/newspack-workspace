@@ -618,6 +618,33 @@ class Newspack_Newsletters_Subscription {
 	}
 
 	/**
+	 * Get the lists configuration for the active provider, without the
+	 * `newspack_newsletters_subscription_lists` filter.
+	 *
+	 * Note: get_lists_config() drops lists the current reader is restricted from, which
+	 * makes a restricted list indistinguishable from a missing one. Comparing the
+	 * two reads is how a caller finds the lists hidden from this reader. Never use
+	 * this to decide what a reader may sign up for.
+	 *
+	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
+	 */
+	public static function get_unfiltered_lists_config() {
+		$provider = Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider ) ) {
+			return new WP_Error( 'newspack_newsletters_invalid_provider', __( 'Provider is not set.', 'newspack-newsletters' ) );
+		}
+
+		$active_lists = [];
+		foreach ( Subscription_Lists::get_configured_for_current_provider( false ) as $list ) {
+			if ( ! $list->is_active() ) {
+				continue;
+			}
+			$active_lists[ $list->get_public_id() ] = $list->to_array();
+		}
+		return $active_lists;
+	}
+
+	/**
 	 * Reset the memoized lists config so the next get_lists_config() call rebuilds
 	 * it. Called when a subscription list changes within the same request.
 	 *

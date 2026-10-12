@@ -171,6 +171,46 @@ class Subscription_Lists_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The unfiltered config keeps a list that the lists filter removed, so a
+	 * caller can tell a hidden list from one that does not exist.
+	 */
+	public function test_unfiltered_lists_config_ignores_the_lists_filter() {
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		$hidden_id = self::$posts['only_mailchimp'];
+		$hide      = function ( $lists ) use ( $hidden_id ) {
+			return array_values(
+				array_filter(
+					$lists,
+					function ( $list ) use ( $hidden_id ) {
+						return $list->get_id() !== $hidden_id;
+					}
+				)
+			);
+		};
+
+		add_filter( 'newspack_newsletters_subscription_lists', $hide );
+		$filtered   = Newspack_Newsletters_Subscription::get_lists_config();
+		$unfiltered = Newspack_Newsletters_Subscription::get_unfiltered_lists_config();
+		remove_filter( 'newspack_newsletters_subscription_lists', $hide );
+
+		$hidden_public_id = ( new Subscription_List( $hidden_id ) )->get_public_id();
+		$this->assertArrayNotHasKey( $hidden_public_id, $filtered );
+		$this->assertArrayHasKey( $hidden_public_id, $unfiltered );
+		$this->assertSame( [ $hidden_public_id ], array_keys( array_diff_key( $unfiltered, $filtered ) ) );
+	}
+
+	/**
+	 * With no filter callback removing anything, both reads agree.
+	 */
+	public function test_unfiltered_lists_config_matches_filtered_by_default() {
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		$this->assertSame(
+			array_keys( Newspack_Newsletters_Subscription::get_lists_config() ),
+			array_keys( Newspack_Newsletters_Subscription::get_unfiltered_lists_config() )
+		);
+	}
+
+	/**
 	 * Test get_filtered
 	 */
 	public function test_get_filtered() {
