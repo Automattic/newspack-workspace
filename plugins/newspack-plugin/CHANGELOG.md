@@ -1,3 +1,10 @@
+## newspack [6.53.13](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.12...newspack@6.53.13) (2026-10-12)
+
+
+### Bug Fixes
+
+* **content-gate:** add the member-logged-in body class for paid access ([#1278](https://github.com/Automattic/newspack-workspace/issues/1278)) ([811045b](https://github.com/Automattic/newspack-workspace/commit/811045b8246cf07620fae03f3b8d3a46fbc45276))
+
 ## newspack [6.53.12](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.11...newspack@6.53.12) (2026-10-08)
 
 
