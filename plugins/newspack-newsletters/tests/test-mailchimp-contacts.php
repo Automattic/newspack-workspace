@@ -308,6 +308,161 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A callback can take lists away but can't add any: opting a contact in to a
+	 * list they never asked for is a consent problem.
+	 */
+	public function test_subscribe_filter_cannot_add_lists() {
+		$seen = null;
+		$spy  = function ( $lists ) use ( &$seen ) {
+			$seen = $lists;
+		};
+		$add  = function ( $lists ) {
+			return array_merge( $lists, [ 'list2' ] );
+		};
+		add_action( 'newspack_newsletters_pre_add_contact', $spy );
+		add_filter( 'newspack_newsletters_subscribe_lists', $add );
+
+		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [ 'list1' ] );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', $add );
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy );
+
+		$this->assertSame( [ 'list1' ], $seen );
+	}
+
+	/**
+	 * A single ID passed as a string is filtered like an array of one, including
+	 * an ID that PHP treats as empty.
+	 */
+	public function test_subscribe_filters_a_single_list_id() {
+		$seen_by_filter = [];
+		$spy            = function ( $lists ) use ( &$seen_by_filter ) {
+			$seen_by_filter[] = $lists;
+			return [];
+		};
+		add_filter( 'newspack_newsletters_subscribe_lists', $spy );
+
+		$first  = Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], 'list1' );
+		$second = Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], '0' );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', $spy );
+
+		$this->assertSame( [ [ 'list1' ], [ '0' ] ], $seen_by_filter );
+		$this->assertSame( 'newspack_newsletters_lists_not_allowed', $first->get_error_code() );
+		$this->assertSame( 'newspack_newsletters_lists_not_allowed', $second->get_error_code() );
+	}
+
+	/**
+	 * A callback that returns something other than an array refuses the sign-up
+	 * rather than letting every list through.
+	 */
+	public function test_subscribe_errors_when_the_filter_returns_a_non_array() {
+		add_filter( 'newspack_newsletters_subscribe_lists', '__return_false' );
+		$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [ 'list1' ] );
+		remove_filter( 'newspack_newsletters_subscribe_lists', '__return_false' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_newsletters_lists_not_allowed', $result->get_error_code() );
+	}
+
+	/**
+	 * A sign-up that asks for no lists has nothing to check, so the filter stays
+	 * out of it.
+	 */
+	public function test_subscribe_without_lists_skips_the_filter() {
+		$calls = 0;
+		$spy   = function ( $lists ) use ( &$calls ) {
+			++$calls;
+			return $lists;
+		};
+		add_filter( 'newspack_newsletters_subscribe_lists', $spy );
+
+		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [] );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', $spy );
+
+		$this->assertSame( 0, $calls );
+	}
+
+	/**
+	 * Lists that were already checked skip the filter. This is how a queued
+	 * sign-up is replayed: there is no session left to judge it by.
+	 */
+	public function test_subscribe_skips_the_filter_for_checked_lists() {
+		$seen = null;
+		$spy  = function ( $lists ) use ( &$seen ) {
+			$seen = $lists;
+		};
+		add_action( 'newspack_newsletters_pre_add_contact', $spy );
+		add_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+
+		$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [ 'list1' ], false, 'Test context', true );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy );
+
+		$this->assertNotWPError( $result );
+		$this->assertSame( [ 'list1' ], $seen );
+	}
+
+	/**
+	 * A queued sign-up is replayed without the lists filter. Its lists were checked
+	 * when it was queued, in the reader's own request, and the replay runs from
+	 * cron with no session to check them by.
+	 */
+	public function test_queued_sign_up_is_replayed_without_the_filter() {
+		if ( ! defined( 'NEWSPACK_NEWSLETTERS_ASYNC_SUBSCRIPTION_ENABLED' ) ) {
+			define( 'NEWSPACK_NEWSLETTERS_ASYNC_SUBSCRIPTION_ENABLED', true );
+		}
+		$email = 'queued-replay@example.com';
+		// Keyed by email so any other queued sign-up the replay picks up can't
+		// change what this test reads.
+		$reached_upsert = [];
+		$spy            = function ( $lists, $contact ) use ( &$reached_upsert ) {
+			$reached_upsert[ $contact['email'] ] = $lists;
+		};
+		add_action( 'newspack_newsletters_pre_add_contact', $spy, 10, 2 );
+
+		// No filter is hooked yet, so the request passes its check and is queued.
+		$queued = Newspack_Newsletters_Contacts::subscribe( [ 'email' => $email ], [ 'list1' ], true );
+		$this->assertTrue( $queued, 'The sign-up is queued, not run.' );
+		$this->assertArrayNotHasKey( $email, $reached_upsert );
+
+		// Now a filter that would refuse every list. The replay must not consult it.
+		add_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+		Newspack_Newsletters_Subscription::process_subscription_intents();
+		remove_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy, 10 );
+
+		$this->assertSame( [ 'list1' ], $reached_upsert[ $email ] ?? null );
+	}
+
+	/**
+	 * Only an intent post can be replayed. Replaying skips the lists filter, so it
+	 * must not be reachable with the ID of an arbitrary post.
+	 */
+	public function test_only_an_intent_post_can_be_replayed() {
+		$email   = 'not-an-intent@example.com';
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		update_post_meta( $post_id, 'contact', [ 'email' => $email ] );
+		update_post_meta( $post_id, 'lists', [ 'list1' ] );
+		update_post_meta( $post_id, 'context', 'Test context' );
+
+		$reached_upsert = [];
+		$spy            = function ( $lists, $contact ) use ( &$reached_upsert ) {
+			$reached_upsert[] = $contact['email'];
+		};
+		add_action( 'newspack_newsletters_pre_add_contact', $spy, 10, 2 );
+
+		Newspack_Newsletters_Subscription::process_subscription_intents( $post_id );
+
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy, 10 );
+
+		$this->assertNotContains( $email, $reached_upsert, 'A post that is not an intent is not replayed.' );
+		$this->assertInstanceOf( WP_Post::class, get_post( $post_id ), 'The post is left alone.' );
+	}
+
+	/**
 	 * Upsert a contact to a single list.
 	 */
 	public function test_upsert_contact_to_single_list() {

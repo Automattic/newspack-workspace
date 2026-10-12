@@ -17,6 +17,30 @@ use Newspack\Newsletters\Subscription_List;
 class Newspack_Newsletters_Contacts {
 
 	/**
+	 * Get the list IDs a caller asked for, as strings.
+	 *
+	 * Callers pass false, a single ID, or an array taken from a request, which can
+	 * hold nested arrays. Only a scalar can name a list. Normalizing here means
+	 * the sign-up filter sees every ID that upsert() would go on to act on.
+	 *
+	 * @param mixed $lists Lists as passed to subscribe().
+	 *
+	 * @return string[]
+	 */
+	private static function get_requested_list_ids( $lists ) {
+		if ( false === $lists || null === $lists ) {
+			return [];
+		}
+		$list_ids = [];
+		foreach ( (array) $lists as $list_id ) {
+			if ( is_scalar( $list_id ) && '' !== (string) $list_id ) {
+				$list_ids[] = (string) $list_id;
+			}
+		}
+		return array_values( array_unique( $list_ids ) );
+	}
+
+	/**
 	 * Subscribe a contact to lists.
 	 *
 	 * This method uses an upsert strategy, which means the contact will be
@@ -38,28 +62,40 @@ class Newspack_Newsletters_Contacts {
 	 * @param string[]|false $lists   Array of list IDs to subscribe the contact to. If empty or false, contact will be created but not subscribed to any lists.
 	 * @param bool           $async   Whether to add the contact asynchronously. Default is false.
 	 * @param string         $context Context of the update for logging purposes.
+	 * @param bool           $lists_checked Whether `$lists` already went through the
+	 *                                      `newspack_newsletters_subscribe_lists` filter. Pass true only
+	 *                                      when replaying a queued sign-up: its lists were filtered in the
+	 *                                      reader's own request, and the replay has no session to judge
+	 *                                      them by.
 	 *
 	 * @return array|WP_Error|true Contact data if it was added, or error otherwise. True if async.
 	 */
-	public static function subscribe( $contact, $lists = false, $async = false, $context = 'Subscribe contact' ) {
+	public static function subscribe( $contact, $lists = false, $async = false, $context = 'Subscribe contact', $lists_checked = false ) {
 		$provider = Newspack_Newsletters::get_service_provider();
 
-		if ( false !== $lists && ! empty( $lists ) ) {
+		$requested_lists = $lists_checked ? [] : self::get_requested_list_ids( $lists );
+		if ( ! empty( $requested_lists ) ) {
 			/**
 			 * Filters the lists a contact is opting in to.
 			 *
 			 * This runs in subscribe() because it is the entry point for reader opt-ins
-			 * (sign-up forms, the registration hook, My Account, queued sign-up intents),
-			 * so this is where a list the contact isn't entitled to gets refused. upsert()
-			 * is not filtered this way: it also carries system writes that must go through.
+			 * (sign-up forms, the registration hook, a first sign-up from My Account),
+			 * so this is where a list the reader may not join gets refused. upsert() is
+			 * not filtered this way: it also carries system writes that must go through.
+			 *
+			 * A callback may only remove lists. Anything it adds is dropped.
 			 *
 			 * @param string[] $lists   Public IDs of the lists requested.
 			 * @param array    $contact Contact information. Always has an `email` key.
 			 * @param string   $context Context of the sign-up, for logging.
 			 */
-			$allowed_lists = apply_filters( 'newspack_newsletters_subscribe_lists', (array) $lists, $contact, $context );
-			$allowed_lists = is_array( $allowed_lists ) ? array_values( $allowed_lists ) : [];
+			$allowed_lists = apply_filters( 'newspack_newsletters_subscribe_lists', $requested_lists, $contact, $context );
+			$allowed_lists = is_array( $allowed_lists ) ? array_filter( $allowed_lists, 'is_scalar' ) : [];
+			// Opting a contact in to a list they never asked for is a consent problem,
+			// so a callback's result can only narrow the request.
+			$allowed_lists = array_values( array_intersect( $requested_lists, array_map( 'strval', $allowed_lists ) ) );
 			if ( empty( $allowed_lists ) ) {
+				Newspack_Newsletters_Logger::log( 'Sign-up refused: none of the requested lists are available to this contact. Context: ' . $context );
 				return new WP_Error(
 					'newspack_newsletters_lists_not_allowed',
 					__( 'The selected lists are not available for this email address.', 'newspack-newsletters' )

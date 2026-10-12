@@ -838,6 +838,11 @@ class Newspack_Newsletters_Subscription {
 		if ( ! $intent ) {
 			return false;
 		}
+		// Replaying an intent skips the sign-up lists filter, so nothing but a real
+		// intent may be read as one.
+		if ( ! $intent instanceof \WP_Post || self::SUBSCRIPTION_INTENT_CPT !== $intent->post_type ) {
+			return false;
+		}
 		return [
 			'id'      => $intent->ID,
 			'contact' => get_post_meta( $intent->ID, 'contact', true ),
@@ -916,7 +921,10 @@ class Newspack_Newsletters_Subscription {
 			$lists   = $intent['lists'];
 			$context = $intent['context'];
 
-			$result = Newspack_Newsletters_Contacts::subscribe( $contact, $lists, false, $context . ' (ASYNC)' );
+			// The lists were filtered when the intent was queued, in the reader's own
+			// request. This replay runs from cron with no session, so a check that
+			// judges the session would refuse lists the reader may join.
+			$result = Newspack_Newsletters_Contacts::subscribe( $contact, $lists, false, $context . ' (ASYNC)', true );
 
 			$user = get_user_by( 'email', $email );
 			if ( \is_wp_error( $result ) ) {
