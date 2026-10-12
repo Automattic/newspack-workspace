@@ -43,10 +43,6 @@ describe( 'syncListOrder', () => {
 		expect( syncListOrder( order, [ 'a', 'c' ], [ 'a', 'b', 'c' ] ) ).toBe( order );
 	} );
 
-	it( 'keeps a list that is off between two that are on', () => {
-		expect( syncListOrder( [ 'a', 'b', 'c' ], [ 'a', 'c' ], [ 'a', 'b', 'c' ] ) ).toEqual( [ 'a', 'b', 'c' ] );
-	} );
-
 	it( 'rebuilds when the lists that are on come in a different order', () => {
 		expect( syncListOrder( [ 'a', 'b', 'c' ], [ 'c', 'a' ], [ 'a', 'b', 'c' ] ) ).toEqual( [ 'c', 'a', 'b' ] );
 	} );

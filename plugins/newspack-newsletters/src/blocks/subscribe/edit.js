@@ -4,6 +4,8 @@
  * External dependencies.
  */
 import classnames from 'classnames';
+// Imported by path, not from the package root: the root pulls the whole
+// component library and its global `:root` styles into every editor screen.
 import CardSortableList from 'newspack-components/dist/esm/card-sortable-list';
 
 /**
@@ -162,7 +164,12 @@ export default function SubscribeEdit( {
 			if ( ! hasMissingLists && isConfigMissingList() ) {
 				setHasMissingLists( true );
 				// Remove the missing lists from the selected lists.
-				setAttributes( { lists: lists.filter( listId => listConfig.hasOwnProperty( listId ) ) } );
+				const availableLists = lists.filter( listId => listConfig.hasOwnProperty( listId ) );
+				// The config only holds lists this user can join, and is empty when the request
+				// fails. Saving no lists would hide the form from every reader, so keep the saved ones.
+				if ( availableLists.length ) {
+					setAttributes( { lists: availableLists } );
+				}
 			}
 		} else {
 			setAttributes( { lists: [ Object.keys( listConfig )[ 0 ] ] } );
@@ -246,7 +253,8 @@ export default function SubscribeEdit( {
 		<>
 			<InspectorControls>
 				<PanelBody title={ __( 'Form settings', 'newspack-newsletters' ) }>
-					{ showListUi && (
+					{ /* A form shows its lists, and so has a position for them, only when it has more than one. */ }
+					{ lists.length > 1 && (
 						<ToggleGroupControl
 							__next40pxDefaultSize
 							__nextHasNoMarginBottom
