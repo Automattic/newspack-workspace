@@ -15,7 +15,7 @@ overrides:
 
 patchedDependencies:
   multi-semantic-release:
-    hash: 5018d4cd8498f6b91de8e1bace2a42f96c182f95086674f26486e45a2b60605d
+    hash: 9f6b4fb5274f7aa38c621c75346494190d0f6a710c7dd56de6a78a791a06e457
     path: patches/multi-semantic-release.patch
 
 importers:
@@ -114,7 +114,7 @@ importers:
         version: 16.4.0
       multi-semantic-release:
         specifier: ^3.0.2
-        version: 3.1.0(patch_hash=5018d4cd8498f6b91de8e1bace2a42f96c182f95086674f26486e45a2b60605d)(typescript@5.9.3)
+        version: 3.1.0(patch_hash=9f6b4fb5274f7aa38c621c75346494190d0f6a710c7dd56de6a78a791a06e457)(typescript@5.9.3)
       newspack-scripts:
         specifier: workspace:*
         version: link:packages/scripts
@@ -23050,7 +23050,7 @@ snapshots:
 
   ms@2.1.3: {}
 
-  multi-semantic-release@3.1.0(patch_hash=5018d4cd8498f6b91de8e1bace2a42f96c182f95086674f26486e45a2b60605d)(typescript@5.9.3):
+  multi-semantic-release@3.1.0(patch_hash=9f6b4fb5274f7aa38c621c75346494190d0f6a710c7dd56de6a78a791a06e457)(typescript@5.9.3):
     dependencies:
       '@manypkg/get-packages': 1.1.3
       blork: 9.3.0
