@@ -34,7 +34,8 @@ on:
       # later run can redo it: the bumps lived in that run's working tree. The
       # manual WP.org deploy stops on a version mismatch until they are there,
       # and committing them before this sync is what carries them to `alpha`
-      # and the default branch. The Slack announcement is not re-sent either.
+      # and the default branch. The Slack announcement was not sent either, and
+      # this run does not send it.
       run_post_release:
         description: 'Run the post-release branch sync even if this run releases nothing.'
         type: boolean

@@ -243,7 +243,7 @@ if [ "${ALPHA_SYNC:-auto}" != merge ] && echo "$SECOND_TO_LAST_COMMIT_MSG" | gre
   restore_workspace_deps_and_commit alpha
   git push --force origin alpha
 else
-  echo "[post-release] Release came from a non-alpha branch (e.g. a hotfix), or this is a manual sync. Merging release into alpha."
+  echo "[post-release] Release came from a non-alpha branch (e.g. a hotfix), or this run was dispatched. Merging release into alpha."
   if git merge --no-ff release -m "chore(release): merge in release $LATEST_VERSION_TAG"; then
     restore_workspace_deps_and_commit alpha
     git push origin alpha

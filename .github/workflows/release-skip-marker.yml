@@ -9,7 +9,11 @@ name: Release skip-marker safety net
 # This starts that release. It reads the merge commit of a pull request merged
 # into `release` or `alpha`, and dispatches release.yml when a marker appears
 # only below the subject line. A marker in the subject is left alone: that is
-# someone asking for the skip.
+# someone asking for the skip. It also dispatches when the message is too long
+# to read in full and the push started no Release run.
+#
+# On `release`, a release started this way merges `release` into `alpha`
+# afterwards and never resets it (see ALPHA_SYNC in release.yml).
 #
 # pull_request_target rather than pull_request, because a skip marker on the
 # pull request's head commit silences pull_request runs too, and GitHub
@@ -41,7 +45,7 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch release.yml when only the commit body carries a marker
+      - name: Dispatch release.yml when a skip marker silenced the push
         env:
           GH_TOKEN: ${{ github.token }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
@@ -68,17 +72,22 @@ jobs:
 
           if has_marker "$message"; then
             reason="The body of $MERGE_SHA quotes a skip marker, so GitHub started no workflow for this push to $BASE_REF."
-          elif [ "$(printf '%s' "$message" | wc -c)" -lt 65535 ]; then
+          elif [ "$(printf '%s' "$message" | wc -c)" -lt 65000 ]; then
             echo "No skip marker in $MERGE_SHA; the push started its own runs."
             exit 0
           else
             # The API returns only the first 64 KiB of a message, and a merge
             # that lists its commits runs well past that (#1287 was 115 KB), so
             # a marker may sit beyond what was read. The message cannot settle
-            # it; whether the push started a Release run can. The wait gives
-            # that run time to register. Dispatching when it has not costs
-            # nothing: a second run queues behind the first and finds nothing
-            # to release.
+            # it; whether the push started a Release run can. The test above
+            # stops short of the API's limit so it does not depend on how the
+            # API ends a cut-off message.
+            #
+            # The wait gives the push's run time to register. If it registers
+            # later still, the dispatch is a duplicate: the two runs queue, the
+            # second starts behind the first's release commits, and on
+            # `release` it fails at the plan step. That is one red run, not a
+            # second publish.
             sleep 60
             runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --commit "$MERGE_SHA" --event push --json databaseId --jq 'length')
             if [ "$runs" -gt 0 ]; then
