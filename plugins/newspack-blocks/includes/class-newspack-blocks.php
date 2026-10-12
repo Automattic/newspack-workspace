@@ -864,26 +864,27 @@ class Newspack_Blocks {
 	}
 
 	/**
-	 * Restrict a list of post types to those the articles REST routes may serve:
-	 * publicly-viewable types, plus any explicitly allow-listed via the
+	 * Restrict a list of post types to those a Homepage Posts or Carousel query may
+	 * read: publicly-viewable types, plus any explicitly allow-listed via the
 	 * `newspack_blocks_articles_allowed_post_types` filter.
 	 *
-	 * Keeps the routes from exposing post types WordPress would not surface on the
-	 * front end, while letting a plugin deliberately opt a specific non-viewable CPT
-	 * in. Applies to the editor routes too: their `edit_posts` gate is held by
-	 * Contributors, so it says nothing about which post types the caller may read.
-	 * Disallowed types are dropped; the returned list may be empty when none
-	 * qualify (the caller then returns no results).
+	 * Every query those blocks build goes through this, on the front end, in the
+	 * editor and through the REST routes, because the routes that render them are
+	 * open to anyone who can edit posts, Contributors included. Disallowed types are
+	 * dropped; the returned list may be empty when none qualify (the caller then
+	 * returns no results).
 	 *
 	 * @param array|string $post_types Requested post type(s).
 	 * @return array Allowed post types (may be empty).
 	 */
 	public static function filter_viewable_post_types( $post_types ) {
 		/**
-		 * Post types the articles routes may serve in addition to the
+		 * Post types Homepage Posts and Carousel blocks may query in addition to the
 		 * publicly-viewable ones. Each entry is an explicit, per-CPT decision to
-		 * expose that type's published posts to unauthenticated callers — do not
-		 * add types whose published content should stay off the public REST surface.
+		 * expose that type's published posts to unauthenticated callers, including
+		 * through the public articles REST route — do not add types whose published
+		 * content should stay off it. A non-viewable type left off this list can still
+		 * be picked in the block's post type panel, but its blocks render empty.
 		 *
 		 * @param string[] $allowed Post type slugs to allow. Default empty.
 		 */
@@ -1093,6 +1094,8 @@ class Newspack_Blocks {
 		 *
 		 * The filter is called after the build_articles_query() function is called by a Newspack block to
 		 * build the WP_Query arguments based on the given attributes and block requesting the query.
+		 * When no requested post type is allowed, `post__in` is `[ 0 ]` so the query matches nothing;
+		 * allow a post type through `newspack_blocks_articles_allowed_post_types` rather than here.
 		 *
 		 * @param array     $args       WP_Query arguments as created by build_articles_query()
 		 * @param array     $attributes The attributes initial passed to build_articles_query()

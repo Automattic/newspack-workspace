@@ -882,8 +882,8 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		);
 		self::assertSame(
 			[],
-			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret ], 'include' => [ $secret_id ], 'specificMode' => true, 'specificPosts' => [ $secret_id ] ] ),
-			'Naming a non-viewable post by ID does not get it past the post type restriction.'
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret ], 'include' => [ $secret_id, $post_id ], 'specificMode' => true, 'specificPosts' => [ $secret_id, $post_id ] ] ),
+			'Naming posts by ID gets neither the non-viewable post nor a substituted post of the default type.'
 		);
 		self::assertSame(
 			[],
@@ -962,6 +962,14 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertSame( 200, $response->get_status(), 'The block-renderer route answers the request.' );
 		self::assertStringNotContainsString( 'Secret CPT title', $response->get_data()['rendered'], 'The render does not list a non-viewable post type.' );
 		self::assertStringNotContainsString( 'Regular post title', $response->get_data()['rendered'], 'The render returns nothing rather than substituting the default post type.' );
+
+		$request->set_query_params(
+			[
+				'context'    => 'edit',
+				'attributes' => [ 'postType' => [ 'post' ] ],
+			]
+		);
+		self::assertStringContainsString( 'Regular post title', rest_do_request( $request )->get_data()['rendered'], 'The same request for a viewable post type renders its posts.' );
 	}
 
 	/**
