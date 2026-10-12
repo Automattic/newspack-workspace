@@ -2187,4 +2187,95 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$this->assertSame( 0, (int) $wc_mocks_get_orders_calls, 'The sweep must not query orders while Memberships is active.' );
 		$this->assertEmpty( get_option( Premium_Newsletters::QUEUE_OPTION, [] ) );
 	}
+
+	// =========================================================================
+	// filter_list_gates() — gate names for the block editor
+	// =========================================================================
+
+	/**
+	 * A gated list maps to its gate; an ungated list is absent.
+	 */
+	public function test_filter_list_gates_maps_gated_lists_to_their_gates() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		$list_id = $this->create_premium_list();
+		$this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertSame( [ 'newspack-' . $list_id ], array_keys( $result ) );
+		$this->assertSame(
+			[
+				[
+					'id'       => $gate_id,
+					'title'    => 'Newsletter Gate',
+					'edit_url' => admin_url( 'admin.php?page=newspack-premium-newsletters#/edit/' . $gate_id ),
+				],
+			],
+			$result[ 'newspack-' . $list_id ]
+		);
+	}
+
+	/**
+	 * A user who can't open the wizard gets the gate's name without a link.
+	 */
+	public function test_filter_list_gates_omits_edit_url_without_capability() {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'editor' ] ) );
+		$list_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertArrayNotHasKey( 'edit_url', $result[ 'newspack-' . $list_id ][0] );
+		$this->assertSame( 'Newsletter Gate', $result[ 'newspack-' . $list_id ][0]['title'] );
+	}
+
+	/**
+	 * A draft gate restricts nothing, so it marks nothing.
+	 */
+	public function test_filter_list_gates_excludes_draft_gates() {
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		wp_update_post(
+			[
+				'ID'          => $gate_id,
+				'post_status' => 'draft',
+			]
+		);
+
+		$this->assertSame( [], Premium_Newsletters::filter_list_gates( [] ) );
+	}
+
+	/**
+	 * A published gate with neither registration nor paid access switched on
+	 * restricts nothing either.
+	 */
+	public function test_filter_list_gates_excludes_gates_with_no_active_access() {
+		$list_id = $this->create_premium_list();
+		$gate_id = $this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		Content_Gate::update_custom_access_settings( $gate_id, [ 'active' => false ] );
+
+		$this->assertSame( [], Premium_Newsletters::filter_list_gates( [] ) );
+	}
+
+	/**
+	 * With Audience Management off, no list is reported as gated.
+	 */
+	public function test_filter_list_gates_is_empty_when_gating_is_inactive() {
+		$list_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$result = Premium_Newsletters::filter_list_gates( [] );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$this->assertSame( [], $result );
+	}
+
+	/**
+	 * The callback is hooked.
+	 */
+	public function test_filter_list_gates_is_hooked() {
+		$this->assertSame( 10, has_filter( 'newspack_newsletters_subscription_list_gates', [ Premium_Newsletters::class, 'filter_list_gates' ] ) );
+	}
 }

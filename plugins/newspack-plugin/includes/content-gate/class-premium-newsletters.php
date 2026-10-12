@@ -111,6 +111,9 @@ class Premium_Newsletters {
 		// Filter the subscription lists.
 		add_filter( 'newspack_newsletters_subscription_lists', [ __CLASS__, 'filter_subscription_lists' ] );
 
+		// Tell the Newsletter Subscription Form block's editor which lists are gated.
+		add_filter( 'newspack_newsletters_subscription_list_gates', [ __CLASS__, 'filter_list_gates' ] );
+
 		// Register Data Events handlers.
 		add_action( 'init', [ __CLASS__, 'register_handlers' ] );
 
@@ -488,6 +491,49 @@ class Premium_Newsletters {
 			)
 		);
 		return $lists;
+	}
+
+	/**
+	 * Report the premium newsletter gates that restrict each subscription list.
+	 *
+	 * Uses the same matcher that decides access, so a gate is listed here exactly
+	 * when it can restrict the list: published, with registration or paid access
+	 * switched on, and content rules that match.
+	 *
+	 * @param array[] $list_gates Gates keyed by public list ID.
+	 *
+	 * @return array[] Gates keyed by public list ID. Each gate has `id` and `title`,
+	 *                 plus `edit_url` for users who can open the wizard.
+	 */
+	public static function filter_list_gates( $list_gates ) {
+		$list_gates = is_array( $list_gates ) ? $list_gates : [];
+		if ( ! self::is_access_control_active() || ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
+			return $list_gates;
+		}
+		// The Premium Newsletters wizard's capability and page slug. The link goes
+		// to the wizard's edit route rather than the gate's post editor, which
+		// edits the layout readers see and not the gate's rules.
+		$can_edit = current_user_can( 'manage_options' );
+		foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
+			$gates = Content_Restriction_Control::get_post_gates( $list->get_id() );
+			if ( empty( $gates ) ) {
+				continue;
+			}
+			$list_gates[ $list->get_public_id() ] = array_map(
+				function ( $gate ) use ( $can_edit ) {
+					$item = [
+						'id'    => (int) $gate['id'],
+						'title' => (string) $gate['title'],
+					];
+					if ( $can_edit ) {
+						$item['edit_url'] = admin_url( 'admin.php?page=newspack-premium-newsletters#/edit/' . (int) $gate['id'] );
+					}
+					return $item;
+				},
+				array_values( $gates )
+			);
+		}
+		return $list_gates;
 	}
 
 	/**
