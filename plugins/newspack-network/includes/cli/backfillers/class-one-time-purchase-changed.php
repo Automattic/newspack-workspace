@@ -12,11 +12,13 @@ use Newspack_Network\Woocommerce\Events as Woo_Listeners;
 use WP_CLI;
 
 /**
- * Sends every order that was ever paid or refunded and holds a one-time product
- * with a Network ID, for orders placed before purchases were reported or before
- * the product was tagged. Orders since refunded or cancelled go too, so a
- * revocation whose event never arrived is repaired as well as a purchase that
- * never was; an order never paid granted nothing, so it stays out. Each event is
+ * Sends every order that was ever paid or refunded, belongs to a customer account
+ * and holds a one-time product with a Network ID (the rule the event builder
+ * applies; see Events::one_time_purchase_changed()), for orders placed before
+ * purchases were reported or before the product was tagged. Orders since refunded
+ * or cancelled go too, so a revocation whose event never arrived is repaired as
+ * well as a purchase that never was; an order never paid granted nothing, so it
+ * stays out. Each event is
  * stamped with the order's creation time, so a status a backfill has already sent
  * for the order is a duplicate to the hub and isn't sent again; the live event,
  * stamped when it fires, is what carries a status that returns to an earlier one.
