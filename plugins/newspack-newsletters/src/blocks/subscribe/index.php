@@ -155,6 +155,38 @@ function render_honeypot_field( $placeholder = '' ) {
 }
 
 /**
+ * Render a list the reader can see but can't sign up for.
+ *
+ * The row has no input and never prints the list's ID, so nothing in the
+ * markup can be submitted. The empty `.list-checkbox` keeps the title aligned
+ * with rows that have a checkbox.
+ *
+ * @param array $list  List configuration, as in the lists config.
+ * @param array $attrs Block attributes.
+ */
+function render_gated_list_item( $list, $attrs ) {
+	$label = isset( $attrs['showPremiumLabel'] ) ? trim( (string) $attrs['showPremiumLabel'] ) : '';
+	?>
+	<li class="is-gated">
+		<span class="list-checkbox" aria-hidden="true"></span>
+		<span class="list-details">
+			<span class="list-label">
+				<span class="list-title">
+					<?php echo \esc_html( $list['title'] ); ?>
+					<?php if ( '' !== $label ) : ?>
+						<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php echo \esc_html( $label ); ?></span>
+					<?php endif; ?>
+				</span>
+				<?php if ( $attrs['displayDescription'] ) : ?>
+					<span class="list-description"><?php echo nl2br( \esc_html( $list['description'] ) ); ?></span>
+				<?php endif; ?>
+			</span>
+		</span>
+	</li>
+	<?php
+}
+
+/**
  * Work out which of the block's lists to render for the current reader.
  *
  * @param array $attrs Block attributes.
@@ -170,28 +202,61 @@ function render_honeypot_field( $placeholder = '' ) {
  */
 function get_block_lists( $attrs ) {
 	$list_config = \Newspack_Newsletters_Subscription::get_lists_config();
-	if ( empty( $list_config ) || \is_wp_error( $list_config ) ) {
+	if ( \is_wp_error( $list_config ) ) {
+		return null;
+	}
+	$show_premium = ! empty( $attrs['showPremium'] );
+	if ( empty( $list_config ) && ! $show_premium ) {
 		return null;
 	}
 	$accessible = array_values( array_intersect( $attrs['lists'], array_keys( $list_config ) ) );
 
-	/**
-	 * Filters the lists that are about to be displayed in the Subscription block
-	 *
-	 * @param array $available_lists The lists that are about to be displayed.
-	 * @param array $attrs           Block attributes.
-	 */
-	$accessible = apply_filters( 'newspack_newsletters_subscription_block_available_lists', $accessible, $attrs );
+	if ( ! empty( $list_config ) ) {
+		/**
+		 * Filters the lists that are about to be displayed in the Subscription block
+		 *
+		 * @param array $available_lists The lists that are about to be displayed.
+		 * @param array $attrs           Block attributes.
+		 */
+		$accessible = apply_filters( 'newspack_newsletters_subscription_block_available_lists', $accessible, $attrs );
+	}
 
-	if ( empty( $accessible ) ) {
+	// A list the reader is restricted from is missing from the filtered config, so
+	// the gated lists are whatever the unfiltered read has that the filtered one
+	// lacks. The filter stays the only judge of access.
+	$gated = [];
+	if ( $show_premium ) {
+		$all_lists = \Newspack_Newsletters_Subscription::get_unfiltered_lists_config();
+		$hidden    = \is_wp_error( $all_lists ) ? [] : array_diff_key( $all_lists, $list_config );
+		foreach ( $attrs['lists'] as $list_id ) {
+			if ( isset( $hidden[ $list_id ] ) ) {
+				$gated[ $list_id ] = $hidden[ $list_id ];
+			}
+		}
+	}
+
+	if ( empty( $accessible ) && empty( $gated ) ) {
 		return null;
+	}
+
+	$order = $accessible;
+	if ( ! empty( $gated ) ) {
+		$accessible_ids = array_map( 'strval', $accessible );
+		$order          = array_values(
+			array_filter(
+				$attrs['lists'],
+				function ( $list_id ) use ( $accessible_ids, $gated ) {
+					return in_array( (string) $list_id, $accessible_ids, true ) || isset( $gated[ $list_id ] );
+				}
+			)
+		);
 	}
 
 	return [
 		'config'     => $list_config,
 		'accessible' => $accessible,
-		'gated'      => [],
-		'order'      => $accessible,
+		'gated'      => $gated,
+		'order'      => $order,
 	];
 }
 
@@ -231,6 +296,8 @@ function render_form( $attrs, $lists ) {
 	$message         = '';
 	$email           = '';
 	$list_map        = array_flip( array_keys( $list_config ) );
+	$gated_lists  = $lists['gated'];
+	$show_list_ui = 1 < count( $available_lists ) || ! empty( $gated_lists );
 
 	$provider = \Newspack_Newsletters::get_service_provider();
 
@@ -293,7 +360,18 @@ function render_form( $attrs, $lists ) {
 		<?php endif; ?>
 		<?php echo $subscribed ? 'data-status="200"' : ''; ?>
 	>
-		<?php if ( ! $subscribed ) : ?>
+		<?php if ( ! $subscribed && empty( $available_lists ) ) : ?>
+			<?php // Nothing here can be signed up for, so there is no form. view.js skips a block without one. ?>
+			<div class="newspack-newsletters-lists">
+				<ul>
+					<?php
+					foreach ( $gated_lists as $gated_list ) {
+						render_gated_list_item( $gated_list, $attrs );
+					}
+					?>
+				</ul>
+			</div>
+		<?php elseif ( ! $subscribed ) : ?>
 			<form id="<?php echo esc_attr( get_form_id() ); ?>" data-newspack-recaptcha="newspack_newsletter_signup">
 				<input type="hidden" name="<?php echo esc_attr( FORM_ACTION ); ?>" value="1" />
 				<?php
@@ -304,11 +382,15 @@ function render_form( $attrs, $lists ) {
 				 */
 				do_action( 'newspack_newsletters_subscribe_block_before_form_fields', $attrs );
 				?>
-				<?php if ( 1 < count( $available_lists ) ) : ?>
+				<?php if ( $show_list_ui ) : ?>
 					<div class="newspack-newsletters-lists">
 						<ul>
 						<?php
-						foreach ( $available_lists as $list_id ) :
+						foreach ( $lists['order'] as $list_id ) :
+							if ( isset( $gated_lists[ $list_id ] ) ) {
+								render_gated_list_item( $gated_lists[ $list_id ], $attrs );
+								continue;
+							}
 							if ( ! isset( $list_config[ $list_id ] ) ) {
 								continue;
 							}

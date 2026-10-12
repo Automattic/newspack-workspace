@@ -20,6 +20,10 @@
 
 			label {
 				cursor: pointer;
+			}
+
+			label,
+			.list-label {
 				font-size: var(--newspack-ui-font-size-s, 16px);
 				font-weight: 400;
 				line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -316,6 +320,18 @@
 
 				input[type="checkbox"] {
 					margin: 0;
+				}
+			}
+
+			// Cards put the checkbox on its own row at the bottom. A gated list has
+			// nothing to put there, so drop the row and the space reserved above it.
+			.is-gated {
+				.list-checkbox {
+					display: none;
+				}
+
+				.list-details {
+					padding-bottom: 0;
 				}
 			}
 		}

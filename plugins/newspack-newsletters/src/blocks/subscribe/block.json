@@ -51,6 +51,14 @@
 			"type": "boolean",
 			"default": true
 		},
+		"showPremium": {
+			"type": "boolean",
+			"default": false
+		},
+		"showPremiumLabel": {
+			"type": "string",
+			"default": "Premium"
+		},
 		"lists": {
 			"type": "array",
 			"default": [],

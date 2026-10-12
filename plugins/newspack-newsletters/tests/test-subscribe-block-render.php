@@ -160,4 +160,195 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	public function test_nothing_renders_without_an_available_list() {
 		$this->assertNull( $this->render( $this->get_attrs( [ 'lists' => [ 'does-not-exist' ] ] ) ) );
 	}
+
+	/**
+	 * Checkboxes follow the order of the lists attribute.
+	 */
+	public function test_multiple_lists_keep_the_attribute_order() {
+		$first  = $this->get_list( 'two_settings' );
+		$second = $this->get_list( 'only_mailchimp' );
+		$html   = $this->render( $this->get_attrs( [ 'lists' => [ $first->get_public_id(), $second->get_public_id() ] ] ) );
+
+		$this->assertLessThan(
+			strpos( $html, 'value="' . $second->get_public_id() . '"' ),
+			strpos( $html, 'value="' . $first->get_public_id() . '"' )
+		);
+	}
+
+	/**
+	 * With showPremium on, a list hidden from the reader renders as a row with a
+	 * badge and nothing to submit.
+	 */
+	public function test_show_premium_renders_a_gated_row_without_an_input() {
+		$free                  = $this->get_list( 'only_mailchimp' );
+		$gated                 = $this->get_list( 'two_settings' );
+		$this->hidden_list_ids = [ $gated->get_id() ];
+		$html                  = $this->render(
+			$this->get_attrs(
+				[
+					'lists'       => [ $free->get_public_id(), $gated->get_public_id() ],
+					'showPremium' => true,
+				]
+			)
+		);
+
+		$this->assertSame( 1, substr_count( $html, 'class="is-gated"' ) );
+		$this->assertSame( 1, substr_count( $html, 'type="checkbox"' ), 'Only the free list gets a checkbox.' );
+		$this->assertStringContainsString( esc_html( $gated->get_title() ), $html );
+		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--secondary">Premium</span>', $html );
+		$this->assertStringNotContainsString( 'value="' . $gated->get_public_id() . '"', $html );
+		$this->assertStringNotContainsString( 'checkbox-' . $gated->get_public_id() . '"', $html );
+		$this->assertStringNotContainsString( 'type="hidden" name="lists[]"', $html, 'One free list plus a gated one shows the list, not a hidden input.' );
+	}
+
+	/**
+	 * Rows follow the order of the lists attribute, gated or not.
+	 */
+	public function test_show_premium_keeps_the_attribute_order() {
+		$free                  = $this->get_list( 'only_mailchimp' );
+		$gated                 = $this->get_list( 'two_settings' );
+		$this->hidden_list_ids = [ $gated->get_id() ];
+		$html                  = $this->render(
+			$this->get_attrs(
+				[
+					'lists'       => [ $gated->get_public_id(), $free->get_public_id() ],
+					'showPremium' => true,
+				]
+			)
+		);
+
+		$this->assertLessThan( strpos( $html, 'type="checkbox"' ), strpos( $html, 'class="is-gated"' ) );
+	}
+
+	/**
+	 * When the reader can join none of the block's lists, the gated rows render
+	 * with no form at all.
+	 */
+	public function test_all_gated_renders_no_form() {
+		$first                 = $this->get_list( 'only_mailchimp' );
+		$second                = $this->get_list( 'two_settings' );
+		$this->hidden_list_ids = [ $first->get_id(), $second->get_id() ];
+		$html                  = $this->render(
+			$this->get_attrs(
+				[
+					'lists'            => [ $first->get_public_id(), $second->get_public_id() ],
+					'showPremium'      => true,
+					'displayNameField' => true,
+				]
+			)
+		);
+
+		$this->assertSame( 2, substr_count( $html, 'class="is-gated"' ) );
+		$this->assertStringNotContainsString( '<form', $html );
+		$this->assertStringNotContainsString( '<input', $html );
+		$this->assertStringNotContainsString( '<button', $html );
+	}
+
+	/**
+	 * A single gated list still shows, where showPremium off would render nothing.
+	 */
+	public function test_single_gated_list_renders_with_show_premium() {
+		$gated                 = $this->get_list( 'only_mailchimp' );
+		$this->hidden_list_ids = [ $gated->get_id() ];
+		$attrs                 = [ 'lists' => [ $gated->get_public_id() ] ];
+
+		$this->assertNull( $this->render( $this->get_attrs( $attrs ) ) );
+		$this->assertStringContainsString( 'class="is-gated"', $this->render( $this->get_attrs( $attrs + [ 'showPremium' => true ] ) ) );
+	}
+
+	/**
+	 * The label is publisher-entered text and is escaped.
+	 */
+	public function test_premium_label_is_escaped() {
+		$gated                 = $this->get_list( 'only_mailchimp' );
+		$this->hidden_list_ids = [ $gated->get_id() ];
+		$html                  = $this->render(
+			$this->get_attrs(
+				[
+					'lists'            => [ $gated->get_public_id() ],
+					'showPremium'      => true,
+					'showPremiumLabel' => '<script>alert(1)</script>',
+				]
+			)
+		);
+
+		$this->assertStringContainsString( '&lt;script&gt;alert(1)&lt;/script&gt;', $html );
+		$this->assertStringNotContainsString( '<script>', $html );
+	}
+
+	/**
+	 * A label that is empty or only whitespace renders no badge.
+	 */
+	public function test_blank_label_renders_no_badge() {
+		$gated                 = $this->get_list( 'only_mailchimp' );
+		$this->hidden_list_ids = [ $gated->get_id() ];
+		foreach ( [ '', '   ' ] as $label ) {
+			$html = $this->render(
+				$this->get_attrs(
+					[
+						'lists'            => [ $gated->get_public_id() ],
+						'showPremium'      => true,
+						'showPremiumLabel' => $label,
+					]
+				)
+			);
+			$this->assertStringContainsString( 'class="is-gated"', $html );
+			$this->assertStringNotContainsString( 'newspack-ui__badge', $html );
+		}
+	}
+
+	/**
+	 * A gated row honors the "Display list description" setting.
+	 */
+	public function test_gated_row_honors_the_description_setting() {
+		$gated                 = $this->get_list( 'only_mailchimp' );
+		$this->hidden_list_ids = [ $gated->get_id() ];
+		$attrs                 = [
+			'lists'       => [ $gated->get_public_id() ],
+			'showPremium' => true,
+		];
+
+		$this->assertStringContainsString( 'class="list-description"', $this->render( $this->get_attrs( $attrs ) ) );
+		$this->assertStringNotContainsString( 'class="list-description"', $this->render( $this->get_attrs( $attrs + [ 'displayDescription' => false ] ) ) );
+	}
+
+	/**
+	 * With no list hidden from the reader, turning showPremium on changes
+	 * nothing: existing blocks and readers with full access see today's markup.
+	 */
+	public function test_show_premium_without_gated_lists_matches_default() {
+		$lists = [ $this->get_list( 'only_mailchimp' )->get_public_id(), $this->get_list( 'two_settings' )->get_public_id() ];
+
+		foreach ( [ $lists, [ $lists[0] ] ] as $selection ) {
+			$off = $this->render( $this->get_attrs( [ 'lists' => $selection ] ) );
+			$on  = $this->render(
+				$this->get_attrs(
+					[
+						'lists'       => $selection,
+						'showPremium' => true,
+					]
+				)
+			);
+			$this->assertSame( $this->normalize( $off ), $this->normalize( $on ) );
+		}
+	}
+
+	/**
+	 * A list ID left in the attribute after its list was removed is skipped.
+	 */
+	public function test_stale_list_id_is_skipped() {
+		$free = $this->get_list( 'only_mailchimp' );
+		$html = $this->render(
+			$this->get_attrs(
+				[
+					'lists'       => [ 'no-longer-a-list', $free->get_public_id() ],
+					'showPremium' => true,
+				]
+			)
+		);
+
+		$this->assertStringContainsString( '<input type="hidden" name="lists[]" value="' . $free->get_public_id() . '"', $html );
+		$this->assertStringNotContainsString( 'no-longer-a-list', $html );
+		$this->assertStringNotContainsString( 'class="is-gated"', $html );
+	}
 }

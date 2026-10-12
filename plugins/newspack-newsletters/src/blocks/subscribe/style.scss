@@ -88,7 +88,8 @@
 	.newspack-newsletters-name-input + .newspack-newsletters-email-input {
 		margin-top: 0.25rem;
 	}
-	label {
+	label,
+	.list-label {
 		font-size: 0.9rem;
 		font-weight: 700;
 		flex: 1 1 100%;
@@ -166,6 +167,17 @@
 			font-size: 0.8rem;
 			color: wp-colors.$gray-700;
 			margin: 0;
+		}
+
+		// A gated list has no checkbox. Hold its place so the title lines up with
+		// rows that have one. Both Newspack themes size checkboxes this way.
+		.is-gated .list-checkbox {
+			width: var(--wp--custom--spacing--35, 20px);
+		}
+
+		.list-title .newspack-ui__badge {
+			margin-left: 0.5em;
+			vertical-align: middle;
 		}
 	}
 
