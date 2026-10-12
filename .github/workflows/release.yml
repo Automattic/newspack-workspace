@@ -17,6 +17,9 @@ on:
   # and GitHub refuses one whose target lacks this trigger. The hatch is
   # therefore unusable on a branch until a promotion has carried this file to
   # it -- the empty commit stays the fallback until then.
+  #
+  # release-skip-marker.yml dispatches this workflow by name with no inputs, so
+  # an input added here has to stay optional.
   workflow_dispatch:
     inputs:
       # A second hatch, for a run that published and then failed before the
@@ -25,6 +28,13 @@ on:
       # along with it. This input runs that job anyway. It publishes nothing: a
       # WP.org deploy the failed run skipped goes through
       # release-wporg-manual.yml.
+      #
+      # Commit the released versions to each package.json on `release` by hand
+      # first. The failed run skipped "Sync package.json versions" too, and no
+      # later run can redo it: the bumps lived in that run's working tree. The
+      # manual WP.org deploy stops on a version mismatch until they are there,
+      # and committing them before this sync is what carries them to `alpha`
+      # and the default branch. The Slack announcement is not re-sent either.
       run_post_release:
         description: 'Run the post-release branch sync even if this run releases nothing.'
         type: boolean
@@ -75,7 +85,8 @@ jobs:
     # creates none, so that read lands a commit early, and a stale `Merge ...
     # alpha` sitting there sends it down the path that force-pushes alpha.
     # The run_post_release input is the one way post-release runs without a
-    # release, and it has the script merge instead (see ALPHA_SYNC there).
+    # release. Every dispatched run has the script merge instead (see
+    # ALPHA_SYNC there).
     outputs:
       release_needed: ${{ steps.plan.outputs.release_needed }}
       # Newline-separated `<pkg>@<version>` tags created by this run. Narrows
@@ -150,8 +161,9 @@ jobs:
           # loud is the right outcome there.
           #
           # The message is captured before it is matched rather than piped into
-          # grep. Under `set -o pipefail` -- the idiom the run blocks at :206
-          # and :302 already use -- grep exits at its first match, git log dies
+          # grep. Under `set -o pipefail` -- the idiom the "Install WP-CLI and
+          # gettext" and "Collect released tags" steps already use -- grep
+          # exits at its first match, git log dies
           # of SIGPIPE, and that status becomes the pipeline's, which a leading
           # `!` reads as "no skip marker" and skips the release on a green run.
           # It only bites once the message passes the 64 KiB pipe buffer, which
@@ -462,8 +474,6 @@ jobs:
 
   # Branch maintenance after a stable release: reset alpha and sync release into
   # the default branch. Only runs on the release branch (not alpha).
-  #
-  # Runs after a release, or without one when dispatched with run_post_release.
   post-release:
     name: Post-release branch sync
     if: github.ref == 'refs/heads/release' && (needs.release.outputs.release_needed == 'true' || inputs.run_post_release)
@@ -480,7 +490,7 @@ jobs:
           git config user.email "newspack-release-bot@users.noreply.github.com"
       - name: Post-release branch maintenance
         env:
-          ALPHA_SYNC: ${{ needs.release.outputs.release_needed == 'true' && 'auto' || 'merge' }}
+          ALPHA_SYNC: ${{ github.event_name == 'workflow_dispatch' && 'merge' || 'auto' }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           SLACK_AUTH_TOKEN: ${{ secrets.SLACK_AUTH_TOKEN }}
         run: ./.github/scripts/post-release.sh
