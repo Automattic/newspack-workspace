@@ -60,21 +60,6 @@ const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
  *
  * @param {URL|null} parsed a URL already resolved with resolveUrl()
  */
-// PHP's `max_input_vars` (default 1000) silently stops populating $_GET once
-// this many input variables have been seen, so a `rest_route` occurrence
-// placed after enough padding params never reaches $_GET at all - "PHP keeps
-// the LAST value for a repeated key" (below) only holds below that ceiling.
-// Padding a URL past it to make an EARLIER, attacker-chosen rest_route the
-// one PHP actually uses - while this check still inspects every occurrence,
-// including a decoy final one chosen to read as trusted - is a real,
-// reachable bypass of the check below, not just this plugin's own query
-// shape, so it's rejected on shape alone. 300 is well clear of both sides:
-// measured against add_query_arg() for a manually-curated (non-query-mode)
-// list of 200 individually-picked listings - an unusually large one - this
-// plugin's own URLs carry 210 query variables, and 300 is still far short of
-// the padding an attacker would need to reach the 1000-variable ceiling.
-const MAX_SAFE_QUERY_PARAMS = 300;
-
 function isNextUrlTrusted( parsed ) {
 	if ( ! parsed || parsed.origin !== window.location.origin ) {
 		return false;
@@ -82,50 +67,42 @@ function isNextUrlTrusted( parsed ) {
 
 	const keys = Array.from( parsed.searchParams.keys() );
 
-	if ( keys.length > MAX_SAFE_QUERY_PARAMS ) {
-		return false;
-	}
-
 	if ( keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
 		return false;
 	}
 
 	const route = 'newspack-listings/v1/listings';
 
-	// Pretty permalinks, WordPress's default REST prefix: exact match, not a
-	// suffix check - an ordinary same-origin permalink (any Author/Editor can
-	// title a page so its slug ends this way) could also end in this string,
-	// and only the real `/wp-json/` prefix is ever rewritten to a REST
-	// request. Independent of the <head> discovery link below, so a site
-	// that strips that link doesn't lose load-more on the common case.
-	if ( ! keys.includes( 'rest_route' ) && parsed.pathname === '/wp-json/' + route ) {
-		return true;
-	}
-
-	// A non-default `rest_url_prefix`, or plain permalinks: anchor to the
-	// REST root this site's own <head> advertises, since neither shape is
-	// derivable from the route string alone.
+	// Anchor to the REST root this site's own <head> advertises: neither a
+	// custom REST prefix, a subdirectory install nor plain permalinks is
+	// derivable from the route string alone. Paths are matched exactly, not
+	// by suffix, since an ordinary page's permalink can also end in it.
 	const restRoot = getTrustedRestRoot();
 
 	if ( ! restRoot ) {
-		return false;
+		// A site that strips the link keeps load-more on WordPress's
+		// default REST root.
+		return ! keys.includes( 'rest_route' ) && parsed.pathname === '/wp-json/' + route;
 	}
 
-	if ( ! restRoot.search ) {
-		// Pretty permalinks, non-default prefix.
+	if ( ! restRoot.searchParams.has( 'rest_route' ) ) {
+		// Pretty permalinks.
 		return ! keys.includes( 'rest_route' ) && parsed.pathname === restRoot.pathname + route;
 	}
 
 	// Plain permalinks: everything goes through the REST root's own path,
-	// naming the route via rest_route. PHP keeps the LAST value for a
-	// repeated key, which URLSearchParams.get() does not.
+	// naming the route via rest_route. Exactly one is accepted. PHP reads a
+	// repeated key's last value, but stops reading the query string at
+	// `max_input_vars`, which a host can set low enough that an earlier
+	// value wins instead; with a single occurrence there is nothing else
+	// for PHP to fall back to.
 	if ( parsed.pathname !== restRoot.pathname ) {
 		return false;
 	}
 
 	const routeValues = parsed.searchParams.getAll( 'rest_route' );
 
-	return routeValues[ routeValues.length - 1 ] === '/' + route;
+	return routeValues.length === 1 && routeValues[ 0 ] === '/' + route;
 }
 
 /**

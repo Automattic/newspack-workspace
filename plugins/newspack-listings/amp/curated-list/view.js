@@ -15,10 +15,6 @@
 // for the same reason the real data-next attribute already is - and this
 // file anchors to that marker instead of to window.location or a hardcoded
 // path, so a subdirectory install or a cached page doesn't break it.
-// See curated-list.js's own MAX_SAFE_QUERY_PARAMS comment: forecloses a
-// PHP max_input_vars padding/truncation bypass while staying clear of real
-// usage (measured up to ~210 vars for a 200-item manually-curated list).
-const MAX_SAFE_QUERY_PARAMS = 300;
 const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
 const ROUTE = 'newspack-listings/v1/listings';
 
@@ -48,25 +44,25 @@ function isNextUrlTrusted( url ) {
 
 	const keys = Array.from( parsed.searchParams.keys() );
 
-	if ( keys.length > MAX_SAFE_QUERY_PARAMS || keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
+	if ( keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
 		return false;
 	}
 
-	if ( ! restRoot.search ) {
+	if ( ! restRoot.searchParams.has( 'rest_route' ) ) {
 		// Pretty permalinks: anchor to the real REST root's own path, not a
 		// hardcoded one - a subdirectory install's prefix isn't "/wp-json/".
 		return ! keys.includes( 'rest_route' ) && parsed.pathname === restRoot.pathname + ROUTE;
 	}
 
-	// Plain permalinks: PHP keeps the LAST value for a repeated key, which
-	// URLSearchParams.get() does not.
+	// Plain permalinks: exactly one rest_route, for the reason given in
+	// curated-list.js.
 	if ( parsed.pathname !== restRoot.pathname ) {
 		return false;
 	}
 
 	const routeValues = parsed.searchParams.getAll( 'rest_route' );
 
-	return routeValues[ routeValues.length - 1 ] === '/' + ROUTE;
+	return routeValues.length === 1 && routeValues[ 0 ] === '/' + ROUTE;
 }
 
 let isFetching = false;
