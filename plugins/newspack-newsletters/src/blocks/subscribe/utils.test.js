@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { hasGatedLists, isListGated, moveItem, toggleList } from './utils';
+import { enabledInOrder, hasGatedLists, isListGated, moveItem, syncListOrder } from './utils';
 
 describe( 'moveItem', () => {
 	const lists = [ 'a', 'b', 'c', 'd' ];
@@ -33,13 +33,58 @@ describe( 'moveItem', () => {
 	} );
 } );
 
-describe( 'toggleList', () => {
-	it( 'appends a list that is not enabled', () => {
-		expect( toggleList( [ 'a', 'b' ], 'c' ) ).toEqual( [ 'a', 'b', 'c' ] );
+describe( 'syncListOrder', () => {
+	it( 'builds the order on first load: lists that are on first, in form order, then the rest', () => {
+		expect( syncListOrder( [], [ 'c', 'a' ], [ 'a', 'b', 'c' ] ) ).toEqual( [ 'c', 'a', 'b' ] );
 	} );
 
-	it( 'removes a list that is enabled, keeping the order of the rest', () => {
-		expect( toggleList( [ 'a', 'b', 'c' ], 'b' ) ).toEqual( [ 'a', 'c' ] );
+	it( 'returns the same array when it agrees with the block', () => {
+		const order = [ 'a', 'b', 'c' ];
+		expect( syncListOrder( order, [ 'a', 'c' ], [ 'a', 'b', 'c' ] ) ).toBe( order );
+	} );
+
+	it( 'keeps a list that is off between two that are on', () => {
+		expect( syncListOrder( [ 'a', 'b', 'c' ], [ 'a', 'c' ], [ 'a', 'b', 'c' ] ) ).toEqual( [ 'a', 'b', 'c' ] );
+	} );
+
+	it( 'rebuilds when the lists that are on come in a different order', () => {
+		expect( syncListOrder( [ 'a', 'b', 'c' ], [ 'c', 'a' ], [ 'a', 'b', 'c' ] ) ).toEqual( [ 'c', 'a', 'b' ] );
+	} );
+
+	it( 'rebuilds when a list was added', () => {
+		expect( syncListOrder( [ 'a', 'b' ], [ 'a' ], [ 'a', 'b', 'c' ] ) ).toEqual( [ 'a', 'b', 'c' ] );
+	} );
+
+	it( 'rebuilds when a list was removed', () => {
+		expect( syncListOrder( [ 'a', 'b', 'c' ], [ 'a' ], [ 'a', 'c' ] ) ).toEqual( [ 'a', 'c' ] );
+	} );
+
+	it( 'ignores an enabled ID that no longer exists', () => {
+		expect( syncListOrder( [], [ 'gone', 'a' ], [ 'a', 'b' ] ) ).toEqual( [ 'a', 'b' ] );
+	} );
+
+	it( 'does not mutate its inputs', () => {
+		const order = [ 'a', 'b' ];
+		const lists = [ 'c', 'a' ];
+		const allIds = [ 'a', 'b', 'c' ];
+		syncListOrder( order, lists, allIds );
+		expect( order ).toEqual( [ 'a', 'b' ] );
+		expect( lists ).toEqual( [ 'c', 'a' ] );
+		expect( allIds ).toEqual( [ 'a', 'b', 'c' ] );
+	} );
+} );
+
+describe( 'enabledInOrder', () => {
+	it( 'returns the enabled IDs in sidebar order', () => {
+		expect( enabledInOrder( [ 'b', 'c', 'a' ], [ 'a', 'b' ] ) ).toEqual( [ 'b', 'a' ] );
+	} );
+
+	it( 'drops an enabled ID the sidebar does not have', () => {
+		expect( enabledInOrder( [ 'b', 'a' ], [ 'a', 'gone', 'b' ] ) ).toEqual( [ 'b', 'a' ] );
+	} );
+
+	it( 'returns an empty array when nothing is on', () => {
+		expect( enabledInOrder( [ 'a', 'b' ], [] ) ).toEqual( [] );
 	} );
 } );
 

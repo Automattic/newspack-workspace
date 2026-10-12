@@ -20,13 +20,38 @@ export const moveItem = ( items, from, to ) => {
 };
 
 /**
- * Enable a list by appending it, or disable it by removing it.
+ * Bring the sidebar's list order in step with the block.
  *
- * @param {string[]} lists  IDs of the enabled lists, in display order.
- * @param {string}   listId ID of the list to toggle.
- * @return {string[]} The new enabled lists.
+ * The sidebar shows every list. The block only stores the lists that are on,
+ * in form order, so where a list that is off sits is only known to the editor,
+ * for the session. This keeps that order while it still agrees with the block,
+ * and rebuilds it (lists that are on first, in form order, then the rest) when
+ * it doesn't: on first load, after an undo, or when a list is added or removed.
+ *
+ * @param {string[]} order  Every list ID in sidebar order, as last known.
+ * @param {string[]} lists  IDs of the lists that are on, in form order.
+ * @param {string[]} allIds IDs of every list that exists.
+ * @return {string[]} The sidebar order. The same array when nothing changed.
  */
-export const toggleList = ( lists, listId ) => ( lists.includes( listId ) ? lists.filter( id => id !== listId ) : [ ...lists, listId ] );
+export const syncListOrder = ( order, lists, allIds ) => {
+	const enabled = lists.filter( id => allIds.includes( id ) );
+	const sameMembers = order.length === allIds.length && allIds.every( id => order.includes( id ) );
+	const enabledNow = order.filter( id => enabled.includes( id ) );
+	const agrees = sameMembers && enabledNow.length === enabled.length && enabledNow.every( ( id, index ) => id === enabled[ index ] );
+	if ( agrees ) {
+		return order;
+	}
+	return [ ...enabled, ...allIds.filter( id => ! enabled.includes( id ) ) ];
+};
+
+/**
+ * The lists that are on, in sidebar order: what the block stores.
+ *
+ * @param {string[]} order   Every list ID in sidebar order.
+ * @param {string[]} enabled IDs of the lists that are on.
+ * @return {string[]} The enabled IDs, ordered as the sidebar has them.
+ */
+export const enabledInOrder = ( order, enabled ) => order.filter( id => enabled.includes( id ) );
 
 /**
  * Whether an access gate restricts a list.
