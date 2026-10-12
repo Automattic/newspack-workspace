@@ -133,47 +133,32 @@ class Newspack_Newsletters_Contacts {
 				// so a callback's result can only narrow the request.
 				$allowed_lists = array_values( array_intersect( $requested_lists, array_map( 'strval', $allowed_lists ) ) );
 			}
+			// A refusal and a narrowing report the same details, in the shape upsert()
+			// reports its writes. The plain log lines below leave the address out; this
+			// carries it, as upsert()'s does.
+			$log_details = [
+				'type'       => 'debug',
+				'data'       => [
+					'requested' => $requested_lists,
+					'allowed'   => $allowed_lists,
+				],
+				'user_email' => $contact['email'] ?? '',
+				'file'       => 'newspack_esp_sync',
+			];
 			if ( empty( $allowed_lists ) ) {
 				Newspack_Newsletters_Logger::log( 'Sign-up refused: none of the requested lists are available to this contact. Context: ' . $context );
-				do_action(
-					'newspack_log',
-					'newspack_newsletters_sign_up_lists_refused',
-					$context,
-					[
-						'type'       => 'debug',
-						'data'       => [
-							'requested' => $requested_lists,
-							'allowed'   => $allowed_lists,
-						],
-						'user_email' => $contact['email'] ?? '',
-						'file'       => 'newspack_esp_sync',
-					]
-				);
+				do_action( 'newspack_log', 'newspack_newsletters_sign_up_lists_refused', $context, $log_details );
 				return new WP_Error(
 					'newspack_newsletters_lists_not_allowed',
 					__( 'The selected lists are not available for this email address.', 'newspack-newsletters' )
 				);
 			}
 			// A sign-up that lost only some of its lists still reports success to the
-			// reader, so these two lines are the only trace of it. The plain log line
-			// leaves the address out; the structured one carries it, as upsert()'s does.
+			// reader, so these two lines are the only trace of it.
 			$dropped_lists = array_values( array_diff( $requested_lists, $allowed_lists ) );
 			if ( ! empty( $dropped_lists ) ) {
 				Newspack_Newsletters_Logger::log( 'Sign-up narrowed: dropped ' . implode( ', ', $dropped_lists ) . ' from the requested lists. Context: ' . $context );
-				do_action(
-					'newspack_log',
-					'newspack_newsletters_sign_up_lists_narrowed',
-					$context,
-					[
-						'type'       => 'debug',
-						'data'       => [
-							'requested' => $requested_lists,
-							'allowed'   => $allowed_lists,
-						],
-						'user_email' => $contact['email'] ?? '',
-						'file'       => 'newspack_esp_sync',
-					]
-				);
+				do_action( 'newspack_log', 'newspack_newsletters_sign_up_lists_narrowed', $context, $log_details );
 			}
 			$lists = $allowed_lists;
 		}
