@@ -1276,23 +1276,15 @@ class WooCommerce_My_Account {
 	}
 
 	/**
-	 * Get the verification url for a user's pending email change.
+	 * Whether a token set is still the user's standing email change request.
 	 *
-	 * Deliberately private, and deliberately not the mirror image of the
-	 * accessor above: this hands out the token that completes the change, so it
-	 * exists to keep the two links assembled the same way and under test, not
-	 * as something other code should be able to call.
+	 * @param int   $user_id User ID.
+	 * @param array $tokens  Token set from create_email_change_tokens().
 	 *
-	 * @param int $user_id User ID.
-	 *
-	 * @return string Verification url, or an empty string if there is no pending change.
+	 * @return bool
 	 */
-	private static function get_verify_email_change_url( $user_id ) {
-		$tokens = self::get_email_change_tokens( $user_id );
-		if ( empty( $tokens['verify'] ) ) {
-			return '';
-		}
-		return self::get_email_change_url( self::VERIFY_EMAIL_CHANGE_PARAM, $tokens['verify'] );
+	private static function is_current_email_change_request( $user_id, $tokens ) {
+		return \get_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_TOKENS_META, true ) === $tokens;
 	}
 
 	/**
@@ -1406,6 +1398,97 @@ class WooCommerce_My_Account {
 	}
 
 	/**
+	 * Start a verified email change for an account.
+	 *
+	 * The account address does not move here. The old address is told about the
+	 * request and can cancel it; the new address gets the link that applies it,
+	 * which only works for someone signed in to that account.
+	 *
+	 * This performs no capability check: deciding who may start a change for
+	 * whose account is the caller's job, e.g. `current_user_can( 'edit_user', $user_id )`.
+	 * Nothing is read from the request, but the emails are rendered in the
+	 * current user's locale, which is not the account holder's when another
+	 * user starts the change.
+	 *
+	 * @param int    $user_id   User ID.
+	 * @param string $new_email The address to change to.
+	 *
+	 * @return true|\WP_Error True once the request is stored and the verification email is sent.
+	 */
+	public static function request_email_change( int $user_id, string $new_email ) {
+		// The verification and cancellation links are only handled with Reader
+		// Activation on, so without it a request could never be settled.
+		if ( ! Reader_Activation::is_enabled() || ! self::is_email_change_enabled() ) {
+			return new \WP_Error( 'newspack_email_change_disabled', __( 'Email changes are not enabled.', 'newspack-plugin' ) );
+		}
+		$user = \get_userdata( $user_id );
+		if ( ! $user || ! \is_email( $user->user_email ) ) {
+			return new \WP_Error( 'newspack_email_change_invalid_user', __( 'Something went wrong. Please try again.', 'newspack-plugin' ) );
+		}
+		if ( ! \is_email( $new_email ) ) {
+			return new \WP_Error( 'newspack_email_change_invalid_email', __( 'Please enter a valid email address.', 'newspack-plugin' ) );
+		}
+		if ( 0 === strcasecmp( $new_email, $user->user_email ) ) {
+			return new \WP_Error( 'newspack_email_change_same_email', __( 'This is already the email address on the account.', 'newspack-plugin' ) );
+		}
+		if ( \email_exists( $new_email ) ) {
+			return new \WP_Error( 'newspack_email_change_email_exists', __( 'This email address is already in use.', 'newspack-plugin' ) );
+		}
+		// The token record carries the requested address, so it is written
+		// first. The plain meta below mirrors it for anything still reading
+		// that key directly. The emails are built from this call's tokens, not
+		// from the stored record, which a newer request may already have
+		// replaced; its verification token must never reach this address.
+		$tokens = self::create_email_change_tokens( $user_id, $new_email );
+		if ( ! $tokens ) {
+			return new \WP_Error( 'newspack_email_change_failed', __( 'Something went wrong. Please try again.', 'newspack-plugin' ) );
+		}
+		\update_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_META, $new_email );
+		$verification_sent = Emails::send_email(
+			Reader_Activation_Emails::EMAIL_TYPES['CHANGE_EMAIL'],
+			$new_email,
+			[
+				[
+					'template' => '*EMAIL_VERIFICATION_URL*',
+					'value'    => self::get_email_change_url( self::VERIFY_EMAIL_CHANGE_PARAM, $tokens['verify'] ),
+				],
+				[
+					'template' => '*EMAIL_CANCELLATION_URL*',
+					'value'    => self::get_email_change_url( self::CANCEL_EMAIL_CHANGE_PARAM, $tokens['cancel'] ),
+				],
+			]
+		);
+		// Without the verification email nobody can complete the request, so
+		// it is dropped rather than left locking the account form until it
+		// expires, unless a newer request has replaced it in the meantime. The
+		// old address is only told about a request that is still standing.
+		if ( ! $verification_sent ) {
+			if ( self::is_current_email_change_request( $user_id, $tokens ) ) {
+				self::clear_pending_email_change( $user_id );
+			}
+			return new \WP_Error( 'newspack_email_change_not_sent', __( 'Something went wrong. Please contact the site administrator.', 'newspack-plugin' ) );
+		}
+		if ( ! self::is_current_email_change_request( $user_id, $tokens ) ) {
+			return true;
+		}
+		Emails::send_email(
+			Reader_Activation_Emails::EMAIL_TYPES['CHANGE_EMAIL_CANCEL'],
+			$user->user_email,
+			[
+				[
+					'template' => '*PENDING_EMAIL_ADDRESS*',
+					'value'    => $new_email,
+				],
+				[
+					'template' => '*EMAIL_CANCELLATION_URL*',
+					'value'    => self::get_email_change_url( self::CANCEL_EMAIL_CHANGE_PARAM, $tokens['cancel'] ),
+				],
+			]
+		);
+		return true;
+	}
+
+	/**
 	 * Handle email change request.
 	 *
 	 * @param int $user_id User ID.
@@ -1420,72 +1503,20 @@ class WooCommerce_My_Account {
 		) {
 			return;
 		}
-		$old_email = \wp_get_current_user()->user_email;
-		if ( $new_email === $old_email ) {
+		if ( $new_email === \wp_get_current_user()->user_email ) {
 			return;
 		}
-		if ( ! \is_email( $new_email ) ) {
-			\wc_add_notice( __( 'Please enter a valid email address.', 'newspack-plugin' ), 'error' );
-		} elseif ( \email_exists( $new_email ) ) {
-			\wc_add_notice( __( 'This email address is already in use.', 'newspack-plugin' ), 'error' );
+		$result = self::request_email_change( (int) $user_id, $new_email );
+		if ( \is_wp_error( $result ) ) {
+			\wc_add_notice( $result->get_error_message(), 'error' );
 		} else {
-			// The token record carries the requested address, so it is written
-			// first and is what every later step reads. The plain meta below
-			// mirrors it for anything still reading that key directly.
-			$tokens = self::create_email_change_tokens( $user_id, $new_email );
-			if ( ! $tokens ) {
-				\wc_add_notice( __( 'Something went wrong. Please try again.', 'newspack-plugin' ), 'error' );
-			} else {
-				\update_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_META, $new_email );
-				$sent = [];
-				if (
-					Emails::send_email(
-						Reader_Activation_Emails::EMAIL_TYPES['CHANGE_EMAIL_CANCEL'],
-						$old_email,
-						[
-							[
-								'template' => '*PENDING_EMAIL_ADDRESS*',
-								'value'    => $new_email,
-							],
-							[
-								'template' => '*EMAIL_CANCELLATION_URL*',
-								'value'    => self::get_cancel_email_change_url( $user_id ),
-							],
-						]
-					)
-				) {
-					$sent[] = $old_email;
-				}
-				if (
-					Emails::send_email(
-						Reader_Activation_Emails::EMAIL_TYPES['CHANGE_EMAIL'],
-						$new_email,
-						[
-							[
-								'template' => '*EMAIL_VERIFICATION_URL*',
-								'value'    => self::get_verify_email_change_url( $user_id ),
-							],
-							[
-								'template' => '*EMAIL_CANCELLATION_URL*',
-								'value'    => self::get_cancel_email_change_url( $user_id ),
-							],
-						]
-					)
-				) {
-					$sent[] = $new_email;
-				}
-				if ( empty( $sent ) ) {
-					\wc_add_notice( __( 'Something went wrong. Please contact the site administrator.', 'newspack-plugin' ), 'error' );
-				} else {
-					\wc_add_notice(
-						sprintf(
-							// Translators: %s is the email address the verification email was sent to..
-							__( 'A verification email has been sent to %s. Please verify to complete the change.', 'newspack-plugin' ),
-							$new_email
-						)
-					);
-				}
-			}
+			\wc_add_notice(
+				sprintf(
+					// Translators: %s is the email address the verification email was sent to..
+					__( 'A verification email has been sent to %s. Please verify to complete the change.', 'newspack-plugin' ),
+					$new_email
+				)
+			);
 		}
 		// Redirect and exit ahead of Woo so only our notice is displayed.
 		\wp_safe_redirect( \wc_get_endpoint_url( 'edit-account', '', \wc_get_page_permalink( 'myaccount' ) ) );
