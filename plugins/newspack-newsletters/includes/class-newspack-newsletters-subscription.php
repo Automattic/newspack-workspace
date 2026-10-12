@@ -918,7 +918,10 @@ class Newspack_Newsletters_Subscription {
 
 			$contact = $intent['contact'];
 			$email   = $contact['email'];
-			$lists   = $intent['lists'];
+			// Stored lists come back from post meta, where "no lists" (false) is saved
+			// as an empty string. The replay skips the sign-up check, so it only ever
+			// passes on an array of lists or false.
+			$lists   = is_array( $intent['lists'] ) ? $intent['lists'] : false;
 			$context = $intent['context'];
 
 			// The lists were filtered when the intent was queued, in the reader's own

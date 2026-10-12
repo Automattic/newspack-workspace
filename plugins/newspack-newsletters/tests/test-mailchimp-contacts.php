@@ -438,6 +438,38 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A sign-up queued with no lists is replayed with no lists. Post meta saves
+	 * "no lists" (false) as an empty string, and the replay skips the sign-up check,
+	 * so it must not hand that string on to be looked up as a list with an empty ID.
+	 */
+	public function test_queued_sign_up_with_no_lists_is_replayed_with_no_lists() {
+		if ( ! defined( 'NEWSPACK_NEWSLETTERS_ASYNC_SUBSCRIPTION_ENABLED' ) ) {
+			define( 'NEWSPACK_NEWSLETTERS_ASYNC_SUBSCRIPTION_ENABLED', true );
+		}
+		$email = 'queued-no-lists@example.com';
+		// Keyed by email so any other queued sign-up the replay picks up can't
+		// change what this test reads.
+		$reached_upsert = [];
+		$spy            = function ( $lists, $contact ) use ( &$reached_upsert ) {
+			$reached_upsert[ $contact['email'] ] = $lists;
+		};
+		add_action( 'newspack_newsletters_pre_add_contact', $spy, 10, 2 );
+
+		$queued = Newspack_Newsletters_Contacts::subscribe( [ 'email' => $email ], false, true );
+		$this->assertTrue( $queued, 'The sign-up is queued, not run.' );
+
+		Newspack_Newsletters_Subscription::process_subscription_intents();
+
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy, 10 );
+		// The ESP has nothing to subscribe the contact to, so the sign-up stays
+		// queued. Remove it so it can't be replayed by another test.
+		$this->take_queued_sign_up_lists( $email );
+
+		$this->assertArrayHasKey( $email, $reached_upsert, 'The queued sign-up was replayed.' );
+		$this->assertFalse( $reached_upsert[ $email ], 'upsert() gets false, not a list with an empty ID.' );
+	}
+
+	/**
 	 * Only an intent post can be replayed. Replaying skips the lists filter, so it
 	 * must not be reachable with the ID of an arbitrary post.
 	 */
