@@ -203,7 +203,12 @@ export default function SubscribeEdit( {
 	const moveList = ( from, to ) => {
 		const reordered = moveItem( listOrder, from, to );
 		setStoredListOrder( reordered );
-		setAttributes( { lists: enabledInOrder( reordered, lists ) } );
+		// Moving a list that is off changes nothing the block stores. Skip the
+		// write, or the post is marked as changed with nothing to save.
+		const next = enabledInOrder( reordered, lists );
+		if ( next.length !== lists.length || next.some( ( id, index ) => id !== lists[ index ] ) ) {
+			setAttributes( { lists: next } );
+		}
 	};
 	// Memoized because it feeds sortableItems below, which must keep its identity.
 	const toggleListEnabled = useCallback(
@@ -485,7 +490,7 @@ export default function SubscribeEdit( {
 															<span className="list-title">
 																{ listConfig[ listId ]?.title }
 																{ premiumLabel && isListGated( listGates, listId ) && (
-																	<span className="newspack-ui__badge newspack-ui__badge--secondary">
+																	<span className="newspack-ui__badge newspack-ui__badge--primary">
 																		{ premiumLabel }
 																	</span>
 																) }

@@ -59,6 +59,10 @@ describe( 'syncListOrder', () => {
 		expect( syncListOrder( [ 'a', 'b', 'c' ], [ 'a' ], [ 'a', 'c' ] ) ).toEqual( [ 'a', 'c' ] );
 	} );
 
+	it( 'rebuilds when one list was swapped for another, with the count unchanged', () => {
+		expect( syncListOrder( [ 'a', 'b' ], [ 'a' ], [ 'a', 'c' ] ) ).toEqual( [ 'a', 'c' ] );
+	} );
+
 	it( 'ignores an enabled ID that no longer exists', () => {
 		expect( syncListOrder( [], [ 'gone', 'a' ], [ 'a', 'b' ] ) ).toEqual( [ 'a', 'b' ] );
 	} );
