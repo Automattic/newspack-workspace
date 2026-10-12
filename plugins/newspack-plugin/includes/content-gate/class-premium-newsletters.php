@@ -138,7 +138,7 @@ class Premium_Newsletters {
 		// Tell a reader who was refused a premium list what to do about it.
 		add_filter( 'newspack_newsletters_add_contact_reader_error_message', [ __CLASS__, 'filter_sign_up_error_message' ], 20, 3 );
 
-		// Tell the Newsletter Subscription Form block's editor which lists are gated.
+		// Tell the Newsletter Subscription Form block which lists are gated.
 		add_filter( 'newspack_newsletters_subscription_list_gates', [ __CLASS__, 'filter_list_gates' ] );
 
 		// Register Data Events handlers.

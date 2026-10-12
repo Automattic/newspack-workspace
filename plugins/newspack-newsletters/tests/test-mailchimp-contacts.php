@@ -267,6 +267,36 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A sign-up that loses only some of its lists still succeeds for the reader, so
+	 * it leaves a structured log entry for support: the address, and the lists
+	 * requested and allowed.
+	 */
+	public function test_subscribe_logs_a_narrowed_sign_up() {
+		$entries = [];
+		$spy     = function ( $code, $context, $payload ) use ( &$entries ) {
+			if ( 'newspack_newsletters_sign_up_lists_narrowed' === $code ) {
+				$entries[] = [ $context, $payload ];
+			}
+		};
+		$drop    = function ( $lists ) {
+			return array_diff( $lists, [ 'list2' ] );
+		};
+		add_action( 'newspack_log', $spy, 10, 3 );
+		add_filter( 'newspack_newsletters_subscribe_lists', $drop );
+
+		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [ 'list2', 'list1' ], false, 'Test context' );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', $drop );
+		remove_action( 'newspack_log', $spy, 10 );
+
+		$this->assertCount( 1, $entries, 'The narrowing is logged once.' );
+		$this->assertSame( 'Test context', $entries[0][0] );
+		$this->assertSame( [ 'list2', 'list1' ], $entries[0][1]['data']['requested'] );
+		$this->assertSame( [ 'list1' ], $entries[0][1]['data']['allowed'] );
+		$this->assertSame( 'test@example.com', $entries[0][1]['user_email'] );
+	}
+
+	/**
 	 * When the filter removes every requested list, subscribe() returns an error
 	 * and nothing reaches upsert().
 	 */
@@ -363,25 +393,6 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 
 		$this->assertWPError( $result );
 		$this->assertSame( 'newspack_newsletters_lists_not_allowed', $result->get_error_code() );
-	}
-
-	/**
-	 * A sign-up that asks for no lists has nothing to check, so the filter stays
-	 * out of it.
-	 */
-	public function test_subscribe_without_lists_skips_the_filter() {
-		$calls = 0;
-		$spy   = function ( $lists ) use ( &$calls ) {
-			++$calls;
-			return $lists;
-		};
-		add_filter( 'newspack_newsletters_subscribe_lists', $spy );
-
-		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [] );
-
-		remove_filter( 'newspack_newsletters_subscribe_lists', $spy );
-
-		$this->assertSame( 0, $calls );
 	}
 
 	/**
@@ -626,48 +637,31 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An empty array is how a caller asks for a contact with no lists, so the check
-	 * leaves it alone and the request reaches upsert(). (What the ESP then says
-	 * about an empty list is its own business: the Mailchimp provider reports "No
-	 * lists found.")
-	 */
-	public function test_subscribe_with_an_empty_list_array_is_not_refused() {
-		$reached_upsert = false;
-		$spy            = function () use ( &$reached_upsert ) {
-			$reached_upsert = true;
-		};
-		add_action( 'newspack_newsletters_pre_add_contact', $spy );
-
-		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [] );
-
-		remove_action( 'newspack_newsletters_pre_add_contact', $spy );
-
-		$this->assertTrue( $reached_upsert );
-	}
-
-	/**
-	 * Ways a caller says "no lists" besides an empty array.
+	 * Ways a caller says "no lists", with the value upsert() should receive.
 	 *
 	 * @return array
 	 */
 	public static function requests_for_no_lists() {
 		return [
-			'false' => [ false ],
-			'null'  => [ null ],
+			'empty array' => [ [], [] ],
+			'false'       => [ false, false ],
+			'null'        => [ null, false ],
 		];
 	}
 
 	/**
-	 * False and null both mean "no lists". Neither has anything to check, and both
-	 * reach upsert() as false, which it documents. Null would otherwise be wrapped
+	 * An empty array, false and null all mean "no lists". None has anything to check,
+	 * so the filter stays out of it and the request still reaches upsert(). False and
+	 * null reach it as false, which it documents; null would otherwise be wrapped
 	 * into a list with an empty ID. What the ESP says about a contact with no lists
 	 * is its own business, so the result is not asserted.
 	 *
 	 * @dataProvider requests_for_no_lists
 	 *
-	 * @param false|null $lists Lists as passed to subscribe().
+	 * @param array|false|null $lists    Lists as passed to subscribe().
+	 * @param array|false      $expected The lists upsert() should receive.
 	 */
-	public function test_subscribe_treats_false_and_null_as_no_lists( $lists ) {
+	public function test_subscribe_with_no_lists_skips_the_check_and_reaches_upsert( $lists, $expected ) {
 		$filter_calls = 0;
 		$count        = function ( $requested ) use ( &$filter_calls ) {
 			++$filter_calls;
@@ -686,7 +680,7 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 		remove_filter( 'newspack_newsletters_subscribe_lists', $count );
 
 		$this->assertSame( 0, $filter_calls, 'There is nothing to check.' );
-		$this->assertFalse( $seen, 'upsert() gets false.' );
+		$this->assertSame( $expected, $seen, 'upsert() is reached with the lists in the form it documents.' );
 	}
 
 	/**
@@ -810,7 +804,7 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 
 	/**
 	 * An ID that matches no list reaches the filter as given. upsert() reports it
-	 * as invalid, as it always has.
+	 * as invalid.
 	 */
 	public function test_subscribe_filter_sees_an_unknown_list_id_unchanged() {
 		$this->assertSame( [ 'not-a-list' ], $this->get_lists_seen_by_the_filter( 'not-a-list' ) );

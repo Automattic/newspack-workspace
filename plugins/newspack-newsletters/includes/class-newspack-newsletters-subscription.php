@@ -596,22 +596,8 @@ class Newspack_Newsletters_Subscription {
 		if ( $use_cache && null !== self::$lists_config ) {
 			return self::$lists_config;
 		}
-		$provider = Newspack_Newsletters::get_service_provider();
-		if ( empty( $provider ) ) {
-			return new WP_Error( 'newspack_newsletters_invalid_provider', __( 'Provider is not set.', 'newspack-newsletters' ) );
-		}
-
-		$saved_lists  = Subscription_Lists::get_configured_for_current_provider();
-		$active_lists = [];
-
-		foreach ( $saved_lists as $list ) {
-			if ( ! $list->is_active() ) {
-				continue;
-			}
-			$active_lists[ $list->get_public_id() ] = $list->to_array();
-		}
-
-		if ( $use_cache ) {
+		$active_lists = self::build_lists_config( true );
+		if ( $use_cache && ! is_wp_error( $active_lists ) ) {
 			self::$lists_config = $active_lists;
 		}
 		return $active_lists;
@@ -630,13 +616,27 @@ class Newspack_Newsletters_Subscription {
 	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
 	 */
 	public static function get_unfiltered_lists_config() {
+		return self::build_lists_config( false );
+	}
+
+	/**
+	 * Build the lists configuration for the active provider.
+	 *
+	 * Shared by get_lists_config() and get_unfiltered_lists_config(), which differ
+	 * only in whether the `newspack_newsletters_subscription_lists` filter runs.
+	 *
+	 * @param bool $apply_filters Whether to apply that filter to the lists first.
+	 *
+	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
+	 */
+	private static function build_lists_config( $apply_filters ) {
 		$provider = Newspack_Newsletters::get_service_provider();
 		if ( empty( $provider ) ) {
 			return new WP_Error( 'newspack_newsletters_invalid_provider', __( 'Provider is not set.', 'newspack-newsletters' ) );
 		}
 
 		$active_lists = [];
-		foreach ( Subscription_Lists::get_configured_for_current_provider( false ) as $list ) {
+		foreach ( Subscription_Lists::get_configured_for_current_provider( $apply_filters ) as $list ) {
 			if ( ! $list->is_active() ) {
 				continue;
 			}

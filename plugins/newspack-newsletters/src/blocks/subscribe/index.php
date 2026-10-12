@@ -213,7 +213,7 @@ function render_gated_list_item( $list, $attrs ) {
  *     @type string[] $accessible Public IDs of the block's lists the reader can sign up for.
  *     @type array[]  $gated      The block's lists the reader may see but not join, keyed by public ID.
  *     @type string[] $order      Public IDs in the order their rows render.
- *     @type bool[]   $premium    True for each premium list, keyed by public ID.
+ *     @type bool[]   $premium    True for each list an access gate restricts, whether or not this reader gets past it, keyed by public ID.
  * }
  */
 function get_block_lists( $attrs ) {
@@ -256,11 +256,13 @@ function get_block_lists( $attrs ) {
 	}
 
 	// A list is premium when an access gate restricts it, whether or not this
-	// reader gets past the gate. The gated lists are added for a list hidden by
-	// something other than an access gate, which the gate map doesn't know about.
+	// reader gets past the gate. The gate map says which lists those are, and an
+	// entry counts only when it holds at least one gate, as in the editor.
 	$premium = [];
-	foreach ( array_merge( array_keys( \Newspack_Newsletters_Blocks::get_list_gates() ), array_keys( $gated ) ) as $premium_id ) {
-		$premium[ $premium_id ] = true;
+	foreach ( \Newspack_Newsletters_Blocks::get_list_gates() as $premium_id => $list_gates ) {
+		if ( is_array( $list_gates ) && ! empty( $list_gates ) ) {
+			$premium[ $premium_id ] = true;
+		}
 	}
 
 	$order = $accessible;

@@ -413,7 +413,7 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 
 	/**
 	 * With no list hidden from the reader, turning showPremium on changes
-	 * nothing: existing blocks and readers with full access see today's markup.
+	 * nothing: the markup is the same as with it off.
 	 */
 	public function test_show_premium_without_gated_lists_matches_default() {
 		$lists = [ $this->get_list( 'only_mailchimp' )->get_public_id(), $this->get_list( 'two_settings' )->get_public_id() ];
@@ -519,9 +519,27 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A reader who can join a premium list sees its badge; a free list gets none.
+	 * The two settings of showPremium.
+	 *
+	 * @return array
 	 */
-	public function test_reader_with_access_sees_the_badge_on_a_premium_list() {
+	public static function show_premium_settings() {
+		return [
+			'showPremium on'  => [ true ],
+			'showPremium off' => [ false ],
+		];
+	}
+
+	/**
+	 * A reader who can join a premium list sees its badge; a free list gets none.
+	 * The badge marks every premium list whatever showPremium says. The setting
+	 * only adds rows for the lists the reader can't join.
+	 *
+	 * @dataProvider show_premium_settings
+	 *
+	 * @param bool $show_premium The block's showPremium attribute.
+	 */
+	public function test_reader_with_access_sees_the_badge_on_a_premium_list( $show_premium ) {
 		$free    = $this->get_list( 'only_mailchimp' );
 		$premium = $this->get_list( 'two_settings' );
 		$this->mark_premium( [ 'two_settings' ] );
@@ -529,7 +547,7 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 			$this->get_attrs(
 				[
 					'lists'       => [ $free->get_public_id(), $premium->get_public_id() ],
-					'showPremium' => true,
+					'showPremium' => $show_premium,
 				]
 			)
 		);
@@ -542,20 +560,6 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'newspack-ui__badge', $free_row );
 		$this->assertSame( 1, substr_count( $html, '<span class="newspack-ui__badge ' ), 'Only the premium list is badged.' );
 		$this->assertStringNotContainsString( 'class="is-gated"', $html, 'Nothing is hidden from this reader.' );
-	}
-
-	/**
-	 * The badge shows whether or not showPremium is on, which changes published blocks.
-	 */
-	public function test_badge_shows_with_show_premium_off() {
-		$free    = $this->get_list( 'only_mailchimp' );
-		$premium = $this->get_list( 'two_settings' );
-		$this->mark_premium( [ 'two_settings' ] );
-		$html = $this->render( $this->get_attrs( [ 'lists' => [ $free->get_public_id(), $premium->get_public_id() ] ] ) );
-
-		$this->assertStringContainsString( 'newspack-ui__badge', $this->get_checkbox_row( $premium->get_public_id(), $html ) );
-		$this->assertStringNotContainsString( 'newspack-ui__badge', $this->get_checkbox_row( $free->get_public_id(), $html ) );
-		$this->assertSame( 1, substr_count( $html, '<span class="newspack-ui__badge ' ) );
 	}
 
 	/**
@@ -624,26 +628,28 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Premium lists are the gate map's lists plus the hidden ones, never a free list.
+	 * Premium lists are the ones the gate map reports with at least one gate. A free
+	 * list is not premium, and neither is an entry with no gates in it.
 	 */
 	public function test_get_block_lists_reports_premium_lists() {
-		$free    = $this->get_list( 'only_mailchimp' );
-		$mapped  = $this->get_list( 'two_settings' );
-		$hidden  = $this->get_list( 'remote_mailchimp' );
-		$attrs   = $this->get_attrs(
-			[
-				'lists'       => [ $free->get_public_id(), $mapped->get_public_id(), $hidden->get_public_id() ],
-				'showPremium' => true,
-			]
-		);
-		$this->hidden_list_ids = [ $hidden->get_id() ];
+		$free     = $this->get_list( 'only_mailchimp' );
+		$mapped   = $this->get_list( 'two_settings' );
+		$no_gates = $this->get_list( 'remote_mailchimp' );
+		$attrs    = $this->get_attrs( [ 'lists' => [ $free->get_public_id(), $mapped->get_public_id(), $no_gates->get_public_id() ] ] );
 		$this->mark_premium( [ 'two_settings' ] );
+		$report_no_gates = function ( $list_gates ) use ( $no_gates ) {
+			$list_gates[ $no_gates->get_public_id() ] = [];
+			return $list_gates;
+		};
+		add_filter( 'newspack_newsletters_subscription_list_gates', $report_no_gates );
 
 		$lists = get_block_lists( $attrs );
 
-		$this->assertArrayHasKey( $mapped->get_public_id(), $lists['premium'], 'A list the reader can join, but a gate restricts.' );
-		$this->assertArrayHasKey( $hidden->get_public_id(), $lists['premium'], 'A list hidden from the reader.' );
+		remove_filter( 'newspack_newsletters_subscription_list_gates', $report_no_gates );
+
+		$this->assertArrayHasKey( $mapped->get_public_id(), $lists['premium'] );
 		$this->assertArrayNotHasKey( $free->get_public_id(), $lists['premium'] );
+		$this->assertArrayNotHasKey( $no_gates->get_public_id(), $lists['premium'], 'An entry with no gates is not premium.' );
 	}
 
 	/**
