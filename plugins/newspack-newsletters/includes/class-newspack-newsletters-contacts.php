@@ -44,6 +44,30 @@ class Newspack_Newsletters_Contacts {
 	public static function subscribe( $contact, $lists = false, $async = false, $context = 'Subscribe contact' ) {
 		$provider = Newspack_Newsletters::get_service_provider();
 
+		if ( false !== $lists && ! empty( $lists ) ) {
+			/**
+			 * Filters the lists a contact is opting in to.
+			 *
+			 * This runs in subscribe() because it is the entry point for reader opt-ins
+			 * (sign-up forms, the registration hook, My Account, queued sign-up intents),
+			 * so this is where a list the contact isn't entitled to gets refused. upsert()
+			 * is not filtered this way: it also carries system writes that must go through.
+			 *
+			 * @param string[] $lists   Public IDs of the lists requested.
+			 * @param array    $contact Contact information. Always has an `email` key.
+			 * @param string   $context Context of the sign-up, for logging.
+			 */
+			$allowed_lists = apply_filters( 'newspack_newsletters_subscribe_lists', (array) $lists, $contact, $context );
+			$allowed_lists = is_array( $allowed_lists ) ? array_values( $allowed_lists ) : [];
+			if ( empty( $allowed_lists ) ) {
+				return new WP_Error(
+					'newspack_newsletters_lists_not_allowed',
+					__( 'The selected lists are not available for this email address.', 'newspack-newsletters' )
+				);
+			}
+			$lists = $allowed_lists;
+		}
+
 		/**
 		 * Enables asynchronous contact subscription processing. When enabled,
 		 * subscription requests return immediately and contacts are added

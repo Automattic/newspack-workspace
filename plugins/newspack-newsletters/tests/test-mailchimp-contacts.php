@@ -245,6 +245,69 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A list removed by the sign-up filter never reaches upsert().
+	 */
+	public function test_subscribe_drops_lists_removed_by_the_filter() {
+		$seen = null;
+		$spy  = function ( $lists ) use ( &$seen ) {
+			$seen = $lists;
+		};
+		$drop = function ( $lists ) {
+			return array_diff( $lists, [ 'list2' ] );
+		};
+		add_action( 'newspack_newsletters_pre_add_contact', $spy );
+		add_filter( 'newspack_newsletters_subscribe_lists', $drop );
+
+		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [ 'list2', 'list1' ] );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', $drop );
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy );
+
+		$this->assertSame( [ 'list1' ], $seen, 'Only the surviving list reaches upsert(), reindexed.' );
+	}
+
+	/**
+	 * When the filter removes every requested list, subscribe() returns an error
+	 * and nothing reaches upsert().
+	 */
+	public function test_subscribe_errors_when_the_filter_removes_every_list() {
+		$reached_upsert = false;
+		$spy            = function () use ( &$reached_upsert ) {
+			$reached_upsert = true;
+		};
+		add_action( 'newspack_newsletters_pre_add_contact', $spy );
+		add_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+
+		$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [ 'list1' ] );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_newsletters_lists_not_allowed', $result->get_error_code() );
+		$this->assertFalse( $reached_upsert );
+	}
+
+	/**
+	 * The filter receives the contact and the context so a callback can judge
+	 * the contact rather than the session.
+	 */
+	public function test_subscribe_filter_receives_contact_and_context() {
+		$args = [];
+		$spy  = function ( $lists, $contact, $context ) use ( &$args ) {
+			$args = [ $lists, $contact['email'], $context ];
+			return $lists;
+		};
+		add_filter( 'newspack_newsletters_subscribe_lists', $spy, 10, 3 );
+
+		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [ 'list1' ], false, 'Test context' );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', $spy, 10 );
+
+		$this->assertSame( [ [ 'list1' ], 'test@example.com', 'Test context' ], $args );
+	}
+
+	/**
 	 * Upsert a contact to a single list.
 	 */
 	public function test_upsert_contact_to_single_list() {
