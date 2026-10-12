@@ -1,3 +1,23 @@
+# newspack-newsletters [3.42.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.5...newspack-newsletters@3.42.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **newsletters:** persist list appearance and cut load time (NPPM-3140) ([#901](https://github.com/Automattic/newspack-workspace/issues/901)) ([5fd1f4c](https://github.com/Automattic/newspack-workspace/commit/5fd1f4c208ccce0f7b35044f6a519677577680fb)), closes [#931](https://github.com/Automattic/newspack-workspace/issues/931) [#854](https://github.com/Automattic/newspack-workspace/issues/854) [#857](https://github.com/Automattic/newspack-workspace/issues/857) [#846](https://github.com/Automattic/newspack-workspace/issues/846) [#887](https://github.com/Automattic/newspack-workspace/issues/887) [#872](https://github.com/Automattic/newspack-workspace/issues/872)
+* **phpcs:** point constant ignores at the documenting file ([#1130](https://github.com/Automattic/newspack-workspace/issues/1130)) ([9468c79](https://github.com/Automattic/newspack-workspace/commit/9468c79ef60ae098237278bbdd774574b95caa0e))
+
+
+### Features
+
+* add ability to select draft/scheduled/pending posts in newsletter Posts Inserter ([2fd1261](https://github.com/Automattic/newspack-workspace/commit/2fd12617c66e7d50fb664c782d9e415b6e0dac61))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-icons:** upgraded to 1.2.0
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## newspack-newsletters [3.41.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.4...newspack-newsletters@3.41.5) (2026-10-06)
 
 
