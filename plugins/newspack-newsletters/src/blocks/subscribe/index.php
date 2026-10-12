@@ -155,6 +155,24 @@ function render_honeypot_field( $placeholder = '' ) {
 }
 
 /**
+ * Print the badge that marks a list as premium.
+ *
+ * Every premium list gets it, for readers with and without access, so the two
+ * kinds of list can be told apart. An empty label hides it.
+ *
+ * @param array $attrs Block attributes.
+ */
+function render_premium_badge( $attrs ) {
+	$label = isset( $attrs['showPremiumLabel'] ) ? trim( (string) $attrs['showPremiumLabel'] ) : '';
+	if ( '' === $label ) {
+		return;
+	}
+	?>
+	<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php echo \esc_html( $label ); ?></span>
+	<?php
+}
+
+/**
  * Render a list the reader can see but can't sign up for.
  *
  * The row has no input and never prints the list's ID, so nothing in the
@@ -165,7 +183,6 @@ function render_honeypot_field( $placeholder = '' ) {
  * @param array $attrs Block attributes.
  */
 function render_gated_list_item( $list, $attrs ) {
-	$label = isset( $attrs['showPremiumLabel'] ) ? trim( (string) $attrs['showPremiumLabel'] ) : '';
 	?>
 	<li class="is-gated">
 		<span class="list-checkbox" aria-hidden="true"></span>
@@ -173,9 +190,7 @@ function render_gated_list_item( $list, $attrs ) {
 			<span class="list-label">
 				<span class="list-title">
 					<?php echo \esc_html( $list['title'] ); ?>
-					<?php if ( '' !== $label ) : ?>
-						<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php echo \esc_html( $label ); ?></span>
-					<?php endif; ?>
+					<?php render_premium_badge( $attrs ); ?>
 				</span>
 				<?php if ( $attrs['displayDescription'] ) : ?>
 					<span class="list-description"><?php echo nl2br( \esc_html( $list['description'] ) ); ?></span>
@@ -198,6 +213,7 @@ function render_gated_list_item( $list, $attrs ) {
  *     @type string[] $accessible Public IDs of the block's lists the reader can sign up for.
  *     @type array[]  $gated      The block's lists the reader may see but not join, keyed by public ID.
  *     @type string[] $order      Public IDs in the order their rows render.
+ *     @type bool[]   $premium    True for each premium list, keyed by public ID.
  * }
  */
 function get_block_lists( $attrs ) {
@@ -239,6 +255,14 @@ function get_block_lists( $attrs ) {
 		return null;
 	}
 
+	// A list is premium when an access gate restricts it, whether or not this
+	// reader gets past the gate. The gated lists are added for a list hidden by
+	// something other than an access gate, which the gate map doesn't know about.
+	$premium = [];
+	foreach ( array_merge( array_keys( \Newspack_Newsletters_Blocks::get_list_gates() ), array_keys( $gated ) ) as $premium_id ) {
+		$premium[ $premium_id ] = true;
+	}
+
 	$order = $accessible;
 	if ( ! empty( $gated ) ) {
 		$accessible_ids = array_map( 'strval', $accessible );
@@ -267,6 +291,7 @@ function get_block_lists( $attrs ) {
 		'accessible' => $accessible,
 		'gated'      => $gated,
 		'order'      => $order,
+		'premium'    => $premium,
 	];
 }
 
@@ -306,8 +331,9 @@ function render_form( $attrs, $lists ) {
 	$message         = '';
 	$email           = '';
 	$list_map        = array_flip( array_keys( $list_config ) );
-	$gated_lists  = $lists['gated'];
-	$show_list_ui = 1 < count( $available_lists ) || ! empty( $gated_lists );
+	$gated_lists     = $lists['gated'];
+	$premium_lists   = $lists['premium'] ?? [];
+	$show_list_ui    = 1 < count( $available_lists ) || ! empty( $gated_lists );
 
 	$provider = \Newspack_Newsletters::get_service_provider();
 
@@ -421,7 +447,14 @@ function render_form( $attrs, $lists ) {
 								</span>
 								<span class="list-details">
 									<label for="<?php echo \esc_attr( $checkbox_id ); ?>">
-										<span class="list-title"><?php echo \esc_html( $list['title'] ); ?></span>
+										<span class="list-title">
+											<?php echo \esc_html( $list['title'] ); ?>
+											<?php
+											if ( isset( $premium_lists[ $list_id ] ) ) {
+												render_premium_badge( $attrs );
+											}
+											?>
+										</span>
 										<?php if ( $attrs['displayDescription'] ) : ?>
 											<span class="list-description"><?php echo nl2br( \esc_html( $list['description'] ) ); ?></span>
 										<?php endif; ?>
@@ -514,6 +547,10 @@ function get_block_classes( $attrs = [] ) {
 	}
 	if ( 1 < count( $attrs['lists'] ) ) {
 		$classes[] = 'multiple-lists';
+	}
+	// The lists sit before the email field unless the block asks otherwise.
+	if ( 'after' === ( $attrs['listsPosition'] ?? 'before' ) ) {
+		$classes[] = 'has-lists-after';
 	}
 	return implode( ' ', $classes );
 }

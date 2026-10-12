@@ -1,6 +1,8 @@
 .wp-block-newspack-newsletters-subscribe {
-	&.is-style-modern,
-	&.is-style-modern--grid {
+	// Modern is the default look: a block gets it unless it picks Legacy. That
+	// covers a block with no style class, which is every block saved before
+	// Legacy existed.
+	&:not(.is-style-legacy) {
 		font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		font-weight: 400;
@@ -250,8 +252,6 @@
 		}
 
 		.newspack-newsletters-lists {
-			order: 2;
-
 			ul,
 			&__container {
 				display: grid;

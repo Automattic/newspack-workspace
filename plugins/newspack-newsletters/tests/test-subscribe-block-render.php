@@ -29,6 +29,13 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	private $hidden_list_ids = [];
 
 	/**
+	 * Public IDs of lists the gate map reports as premium for this test.
+	 *
+	 * @var string[]
+	 */
+	private $premium_public_ids = [];
+
+	/**
 	 * Use the Mailchimp lists from Lists_Setup, and let each test hide some.
 	 */
 	public function set_up() {
@@ -42,7 +49,9 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		remove_filter( 'newspack_newsletters_subscription_lists', [ $this, 'hide_lists' ] );
-		$this->hidden_list_ids = [];
+		remove_filter( 'newspack_newsletters_subscription_list_gates', [ $this, 'report_premium_lists' ] );
+		$this->hidden_list_ids    = [];
+		$this->premium_public_ids = [];
 		parent::tear_down();
 	}
 
@@ -64,6 +73,60 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 				}
 			)
 		);
+	}
+
+	/**
+	 * Stand in for Access Control's gate map: report each marked list as gated.
+	 *
+	 * @param array[] $list_gates Gates keyed by public list ID.
+	 *
+	 * @return array[]
+	 */
+	public function report_premium_lists( $list_gates ) {
+		foreach ( $this->premium_public_ids as $public_id ) {
+			$list_gates[ $public_id ] = [
+				[
+					'id'    => 1,
+					'title' => 'Premium Gate',
+				],
+			];
+		}
+		return $list_gates;
+	}
+
+	/**
+	 * Mark fixture lists as premium, as an access gate would, without hiding them.
+	 *
+	 * That is a premium list for a reader who has access to it.
+	 *
+	 * @param string[] $keys Keys in Lists_Setup::$posts.
+	 */
+	private function mark_premium( $keys ) {
+		$this->premium_public_ids = array_map(
+			function ( $key ) {
+				return $this->get_list( $key )->get_public_id();
+			},
+			$keys
+		);
+		add_filter( 'newspack_newsletters_subscription_list_gates', [ $this, 'report_premium_lists' ] );
+	}
+
+	/**
+	 * Get the markup of the list row that holds a list's checkbox.
+	 *
+	 * @param string $public_id The list's public ID.
+	 * @param string $html      Rendered markup.
+	 *
+	 * @return string Empty when no row has that checkbox.
+	 */
+	private function get_checkbox_row( $public_id, $html ) {
+		preg_match_all( '#<li\b.*?</li>#s', $html, $rows );
+		foreach ( $rows[0] as $row ) {
+			if ( false !== strpos( $row, 'value="' . $public_id . '"' ) ) {
+				return $row;
+			}
+		}
+		return '';
 	}
 
 	/**
@@ -453,5 +516,133 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assert_public_id_absent( $gated->get_public_id(), $html );
 
 		remove_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
+	}
+
+	/**
+	 * A reader who can join a premium list sees its badge; a free list gets none.
+	 */
+	public function test_reader_with_access_sees_the_badge_on_a_premium_list() {
+		$free    = $this->get_list( 'only_mailchimp' );
+		$premium = $this->get_list( 'two_settings' );
+		$this->mark_premium( [ 'two_settings' ] );
+		$html = $this->render(
+			$this->get_attrs(
+				[
+					'lists'       => [ $free->get_public_id(), $premium->get_public_id() ],
+					'showPremium' => true,
+				]
+			)
+		);
+
+		$premium_row = $this->get_checkbox_row( $premium->get_public_id(), $html );
+		$this->assertStringContainsString( 'type="checkbox"', $premium_row, 'The reader can still join the premium list.' );
+		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--secondary">Premium</span>', $premium_row );
+		$free_row = $this->get_checkbox_row( $free->get_public_id(), $html );
+		$this->assertStringContainsString( 'type="checkbox"', $free_row );
+		$this->assertStringNotContainsString( 'newspack-ui__badge', $free_row );
+		$this->assertSame( 1, substr_count( $html, '<span class="newspack-ui__badge ' ), 'Only the premium list is badged.' );
+		$this->assertStringNotContainsString( 'class="is-gated"', $html, 'Nothing is hidden from this reader.' );
+	}
+
+	/**
+	 * The badge shows whether or not showPremium is on, which changes published blocks.
+	 */
+	public function test_badge_shows_with_show_premium_off() {
+		$free    = $this->get_list( 'only_mailchimp' );
+		$premium = $this->get_list( 'two_settings' );
+		$this->mark_premium( [ 'two_settings' ] );
+		$html = $this->render( $this->get_attrs( [ 'lists' => [ $free->get_public_id(), $premium->get_public_id() ] ] ) );
+
+		$this->assertStringContainsString( 'newspack-ui__badge', $this->get_checkbox_row( $premium->get_public_id(), $html ) );
+		$this->assertStringNotContainsString( 'newspack-ui__badge', $this->get_checkbox_row( $free->get_public_id(), $html ) );
+		$this->assertSame( 1, substr_count( $html, '<span class="newspack-ui__badge ' ) );
+	}
+
+	/**
+	 * A blank label hides the badge for a reader with access too.
+	 */
+	public function test_blank_label_hides_the_badge_for_a_reader_with_access() {
+		$free    = $this->get_list( 'only_mailchimp' );
+		$premium = $this->get_list( 'two_settings' );
+		$this->mark_premium( [ 'two_settings' ] );
+		$html = $this->render(
+			$this->get_attrs(
+				[
+					'lists'            => [ $free->get_public_id(), $premium->get_public_id() ],
+					'showPremium'      => true,
+					'showPremiumLabel' => '  ',
+				]
+			)
+		);
+
+		$this->assertStringContainsString( 'value="' . $premium->get_public_id() . '"', $html );
+		$this->assertStringNotContainsString( 'newspack-ui__badge', $html );
+	}
+
+	/**
+	 * A single premium list the reader can join stays a hidden input, with no badge.
+	 */
+	public function test_single_premium_list_with_access_stays_a_hidden_input() {
+		$premium = $this->get_list( 'only_mailchimp' );
+		$this->mark_premium( [ 'only_mailchimp' ] );
+		$html = $this->render( $this->get_attrs( [ 'lists' => [ $premium->get_public_id() ] ] ) );
+
+		$this->assertStringContainsString( '<input type="hidden" name="lists[]" value="' . $premium->get_public_id() . '"', $html );
+		$this->assertStringNotContainsString( 'newspack-newsletters-lists', $html );
+		$this->assertStringNotContainsString( 'newspack-ui__badge', $html );
+	}
+
+	/**
+	 * Only listsPosition "after" adds the has-lists-after class.
+	 */
+	public function test_lists_position_adds_a_class_only_for_after() {
+		$lists = [ $this->get_list( 'only_mailchimp' )->get_public_id(), $this->get_list( 'two_settings' )->get_public_id() ];
+
+		$wrapper_classes = function ( $overrides ) use ( $lists ) {
+			$html = $this->render( $this->get_attrs( [ 'lists' => $lists ] + $overrides ) );
+			preg_match( '/class="([^"]*)"/', $html, $matches );
+			return preg_split( '/\s+/', trim( $matches[1] ) );
+		};
+
+		$this->assertNotContains( 'has-lists-after', $wrapper_classes( [] ), 'The default puts the lists first.' );
+		$this->assertContains( 'has-lists-after', $wrapper_classes( [ 'listsPosition' => 'after' ] ) );
+		$this->assertNotContains( 'has-lists-after', $wrapper_classes( [ 'listsPosition' => 'before' ] ) );
+	}
+
+	/**
+	 * Modern is the default style, Legacy is registered, and lists default to before.
+	 */
+	public function test_block_registers_modern_as_the_default_style() {
+		$block_type = WP_Block_Type_Registry::get_instance()->get_registered( 'newspack-newsletters/subscribe' );
+
+		$styles = array_column( $block_type->styles, null, 'name' );
+		$this->assertSame( [ 'modern', 'modern--grid', 'legacy' ], array_keys( $styles ) );
+		$this->assertTrue( $styles['modern']['isDefault'] );
+		$this->assertArrayNotHasKey( 'isDefault', $styles['modern--grid'] );
+		$this->assertArrayNotHasKey( 'isDefault', $styles['legacy'] );
+		$this->assertSame( 'before', $block_type->attributes['listsPosition']['default'] );
+	}
+
+	/**
+	 * Premium lists are the gate map's lists plus the hidden ones, never a free list.
+	 */
+	public function test_get_block_lists_reports_premium_lists() {
+		$free    = $this->get_list( 'only_mailchimp' );
+		$mapped  = $this->get_list( 'two_settings' );
+		$hidden  = $this->get_list( 'remote_mailchimp' );
+		$attrs   = $this->get_attrs(
+			[
+				'lists'       => [ $free->get_public_id(), $mapped->get_public_id(), $hidden->get_public_id() ],
+				'showPremium' => true,
+			]
+		);
+		$this->hidden_list_ids = [ $hidden->get_id() ];
+		$this->mark_premium( [ 'two_settings' ] );
+
+		$lists = get_block_lists( $attrs );
+
+		$this->assertArrayHasKey( $mapped->get_public_id(), $lists['premium'], 'A list the reader can join, but a gate restricts.' );
+		$this->assertArrayHasKey( $hidden->get_public_id(), $lists['premium'], 'A list hidden from the reader.' );
+		$this->assertArrayNotHasKey( $free->get_public_id(), $lists['premium'] );
 	}
 }

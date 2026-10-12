@@ -59,6 +59,11 @@
 			"type": "string",
 			"default": "Premium"
 		},
+		"listsPosition": {
+			"type": "string",
+			"enum": [ "before", "after" ],
+			"default": "before"
+		},
 		"lists": {
 			"type": "array",
 			"default": [],
@@ -116,11 +121,16 @@
 	"styles": [
 		{
 			"name": "modern",
-			"label": "Modern"
+			"label": "Modern",
+			"isDefault": true
 		},
 		{
 			"name": "modern--grid",
 			"label": "Modern Grid"
+		},
+		{
+			"name": "legacy",
+			"label": "Legacy"
 		}
 	]
 }

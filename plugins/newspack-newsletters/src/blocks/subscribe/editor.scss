@@ -106,7 +106,7 @@
 		}
 	}
 
-	&.is-style-modern {
+	&:not(.is-style-legacy):not(.is-style-modern--grid) {
 		.newspack-newsletters-subscribe__response {
 			padding: 24px;
 

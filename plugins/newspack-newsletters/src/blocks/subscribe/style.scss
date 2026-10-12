@@ -122,6 +122,13 @@
 	input[disabled] {
 		opacity: 0.5;
 	}
+
+	// The lists come first in the markup. This moves them below the name and
+	// email fields when the block asks for that.
+	&.has-lists-after .newspack-newsletters-lists {
+		order: 2;
+	}
+
 	.newspack-newsletters-lists {
 		background: white;
 		border: 1px solid wp-colors.$gray-200;
@@ -158,8 +165,20 @@
 			margin: 0 0.5rem 0 0;
 		}
 
+		// Fill the row, so the title can push its badge to the far edge.
+		.list-details {
+			width: 100%;
+		}
+
+		// The badge sits at the far edge of the title's row, or under the title in
+		// a narrow column. A gap rather than a margin, so a wrapped badge starts
+		// flush with the title.
 		.list-title {
-			display: block;
+			align-items: center;
+			column-gap: 0.5em;
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: space-between;
 		}
 
 		.list-description {
@@ -173,15 +192,6 @@
 		// rows that have one. Both Newspack themes size checkboxes this way.
 		.is-gated .list-checkbox {
 			width: var(--wp--custom--spacing--35, 20px);
-		}
-
-		// The badge sits beside the title, or under it in a narrow column. A gap
-		// rather than a margin, so a wrapped badge starts flush with the title.
-		.is-gated .list-title {
-			align-items: center;
-			column-gap: 0.5em;
-			display: flex;
-			flex-wrap: wrap;
 		}
 	}
 
