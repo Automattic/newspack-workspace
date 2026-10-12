@@ -595,8 +595,7 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	 * An empty array is how a caller asks for a contact with no lists, so the check
 	 * leaves it alone and the request reaches upsert(). (What the ESP then says
 	 * about an empty list is its own business: the Mailchimp provider reports "No
-	 * lists found.") `false` is the same request, but upsert() iterates it and
-	 * warns, so it is not asserted here.
+	 * lists found.")
 	 */
 	public function test_subscribe_with_an_empty_list_array_is_not_refused() {
 		$reached_upsert = false;
@@ -610,6 +609,50 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 		remove_action( 'newspack_newsletters_pre_add_contact', $spy );
 
 		$this->assertTrue( $reached_upsert );
+	}
+
+	/**
+	 * Ways a caller says "no lists" besides an empty array.
+	 *
+	 * @return array
+	 */
+	public static function requests_for_no_lists() {
+		return [
+			'false' => [ false ],
+			'null'  => [ null ],
+		];
+	}
+
+	/**
+	 * False and null both mean "no lists". Neither has anything to check, and both
+	 * reach upsert() as false, which it documents. Null would otherwise be wrapped
+	 * into a list with an empty ID. What the ESP says about a contact with no lists
+	 * is its own business, so the result is not asserted.
+	 *
+	 * @dataProvider requests_for_no_lists
+	 *
+	 * @param false|null $lists Lists as passed to subscribe().
+	 */
+	public function test_subscribe_treats_false_and_null_as_no_lists( $lists ) {
+		$filter_calls = 0;
+		$count        = function ( $requested ) use ( &$filter_calls ) {
+			++$filter_calls;
+			return $requested;
+		};
+		$seen         = 'upsert() was not reached';
+		$spy          = function ( $upsert_lists ) use ( &$seen ) {
+			$seen = $upsert_lists;
+		};
+		add_filter( 'newspack_newsletters_subscribe_lists', $count );
+		add_action( 'newspack_newsletters_pre_add_contact', $spy );
+
+		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], $lists );
+
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy );
+		remove_filter( 'newspack_newsletters_subscribe_lists', $count );
+
+		$this->assertSame( 0, $filter_calls, 'There is nothing to check.' );
+		$this->assertFalse( $seen, 'upsert() gets false.' );
 	}
 
 	/**

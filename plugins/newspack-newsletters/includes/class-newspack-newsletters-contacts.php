@@ -89,12 +89,18 @@ class Newspack_Newsletters_Contacts {
 	public static function subscribe( $contact, $lists = false, $async = false, $context = 'Subscribe contact', $lists_checked = false ) {
 		$provider = Newspack_Newsletters::get_service_provider();
 
-		// False, null and [] are how a caller asks for a contact with no lists, so they
-		// are the only requests with nothing to check. Anything else names lists, even
-		// if no usable ID is left once it is read (`''`, a nested array), and upsert()
+		// Callers pass false for "no lists". Treat null the same way, or upsert() would
+		// wrap it into [ null ] and look up a list with an empty ID.
+		if ( null === $lists ) {
+			$lists = false;
+		}
+
+		// False and [] are how a caller asks for a contact with no lists, so they are
+		// the only requests with nothing to check. Anything else names lists, even if
+		// no usable ID is left once it is read (`''`, a nested array), and upsert()
 		// would still try to act on it. `true !==` so a stray truthy value can't turn
 		// the check off.
-		if ( true !== $lists_checked && false !== $lists && null !== $lists && [] !== $lists ) {
+		if ( true !== $lists_checked && false !== $lists && [] !== $lists ) {
 			$requested_lists = self::get_requested_list_ids( $lists );
 			$allowed_lists   = [];
 			if ( ! empty( $requested_lists ) ) {
@@ -287,7 +293,7 @@ class Newspack_Newsletters_Contacts {
 		$result = [];
 
 		$lists_objects = [];
-		foreach ( $lists as $list_id ) {
+		foreach ( is_array( $lists ) ? $lists : [] as $list_id ) {
 			$list_obj = Subscription_List::from_public_id( $list_id );
 			if ( ! $list_obj ) {
 				$errors->add( 'newspack_newsletters_invalid_list', 'Invalid list ID: ' . $list_id );
