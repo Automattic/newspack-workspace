@@ -26,7 +26,9 @@ describe( 'moveItem', () => {
 	it( 'returns the input unchanged for a no-op or out-of-range move', () => {
 		expect( moveItem( lists, 1, 1 ) ).toBe( lists );
 		expect( moveItem( lists, -1, 2 ) ).toBe( lists );
+		expect( moveItem( lists, 2, -1 ) ).toBe( lists );
 		expect( moveItem( lists, 0, 4 ) ).toBe( lists );
+		expect( moveItem( lists, 4, 0 ) ).toBe( lists );
 		expect( moveItem( lists, 9, 0 ) ).toBe( lists );
 	} );
 } );
@@ -52,6 +54,7 @@ describe( 'isListGated', () => {
 		expect( isListGated( listGates, 'b' ) ).toBe( false );
 		expect( isListGated( listGates, 'c' ) ).toBe( false );
 		expect( isListGated( undefined, 'a' ) ).toBe( false );
+		expect( isListGated( [], 'a' ) ).toBe( false );
 	} );
 } );
 
@@ -64,5 +67,6 @@ describe( 'hasGatedLists', () => {
 		expect( hasGatedLists( {} ) ).toBe( false );
 		expect( hasGatedLists( { a: [] } ) ).toBe( false );
 		expect( hasGatedLists( undefined ) ).toBe( false );
+		expect( hasGatedLists( [] ) ).toBe( false );
 	} );
 } );

@@ -2273,6 +2273,25 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * While Woo Memberships is active it still decides who can join a list, so no
+	 * list is reported as gated by Access Control.
+	 *
+	 * Runs isolated because WC_Memberships, once declared, would make
+	 * Memberships::is_active() true for every later test in this process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_filter_list_gates_is_empty_while_memberships_is_active() {
+		require dirname( __DIR__, 2 ) . '/mocks/wc-memberships-active-mock.php';
+
+		$list_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+
+		$this->assertSame( [], Premium_Newsletters::filter_list_gates( [] ) );
+	}
+
+	/**
 	 * The callback is hooked.
 	 */
 	public function test_filter_list_gates_is_hooked() {

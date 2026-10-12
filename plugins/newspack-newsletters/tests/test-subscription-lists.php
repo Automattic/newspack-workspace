@@ -205,8 +205,8 @@ class Subscription_Lists_Test extends WP_UnitTestCase {
 	public function test_unfiltered_lists_config_matches_filtered_by_default() {
 		Newspack_Newsletters::set_service_provider( 'mailchimp' );
 		$this->assertSame(
-			array_keys( Newspack_Newsletters_Subscription::get_lists_config() ),
-			array_keys( Newspack_Newsletters_Subscription::get_unfiltered_lists_config() )
+			Newspack_Newsletters_Subscription::get_lists_config(),
+			Newspack_Newsletters_Subscription::get_unfiltered_lists_config()
 		);
 	}
 

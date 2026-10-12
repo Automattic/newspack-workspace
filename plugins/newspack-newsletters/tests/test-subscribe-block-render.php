@@ -116,6 +116,19 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Assert a list's public ID appears nowhere in the markup.
+	 *
+	 * The lookahead keeps a shorter ID from matching inside a longer one, such as
+	 * `newspack-12` inside `newspack-123`.
+	 *
+	 * @param string $public_id The list's public ID.
+	 * @param string $html      Rendered markup.
+	 */
+	private function assert_public_id_absent( $public_id, $html ) {
+		$this->assertDoesNotMatchRegularExpression( '/' . preg_quote( $public_id, '/' ) . '(?![0-9A-Za-z_-])/', $html );
+	}
+
+	/**
 	 * One list renders as a hidden input, with no list of checkboxes.
 	 */
 	public function test_single_list_renders_a_hidden_input() {
@@ -169,10 +182,11 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$second = $this->get_list( 'only_mailchimp' );
 		$html   = $this->render( $this->get_attrs( [ 'lists' => [ $first->get_public_id(), $second->get_public_id() ] ] ) );
 
-		$this->assertLessThan(
-			strpos( $html, 'value="' . $second->get_public_id() . '"' ),
-			strpos( $html, 'value="' . $first->get_public_id() . '"' )
-		);
+		$first_position  = strpos( $html, 'value="' . $first->get_public_id() . '"' );
+		$second_position = strpos( $html, 'value="' . $second->get_public_id() . '"' );
+		$this->assertNotFalse( $first_position, 'The first list renders.' );
+		$this->assertNotFalse( $second_position, 'The second list renders.' );
+		$this->assertLessThan( $second_position, $first_position );
 	}
 
 	/**
@@ -199,6 +213,7 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'value="' . $gated->get_public_id() . '"', $html );
 		$this->assertStringNotContainsString( 'checkbox-' . $gated->get_public_id() . '"', $html );
 		$this->assertStringNotContainsString( 'type="hidden" name="lists[]"', $html, 'One free list plus a gated one shows the list, not a hidden input.' );
+		$this->assert_public_id_absent( $gated->get_public_id(), $html );
 	}
 
 	/**
@@ -217,7 +232,26 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 			)
 		);
 
-		$this->assertLessThan( strpos( $html, 'type="checkbox"' ), strpos( $html, 'class="is-gated"' ) );
+		$gated_position    = strpos( $html, 'class="is-gated"' );
+		$checkbox_position = strpos( $html, 'type="checkbox"' );
+		$this->assertNotFalse( $gated_position, 'The gated row renders.' );
+		$this->assertNotFalse( $checkbox_position, 'The free list renders a checkbox.' );
+		$this->assertLessThan( $checkbox_position, $gated_position, 'The gated row comes first when its list is first.' );
+
+		$html = $this->render(
+			$this->get_attrs(
+				[
+					'lists'       => [ $free->get_public_id(), $gated->get_public_id() ],
+					'showPremium' => true,
+				]
+			)
+		);
+
+		$gated_position    = strpos( $html, 'class="is-gated"' );
+		$checkbox_position = strpos( $html, 'type="checkbox"' );
+		$this->assertNotFalse( $gated_position, 'The gated row renders.' );
+		$this->assertNotFalse( $checkbox_position, 'The free list renders a checkbox.' );
+		$this->assertLessThan( $gated_position, $checkbox_position, 'The checkbox comes first when its list is first.' );
 	}
 
 	/**
@@ -242,6 +276,8 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '<form', $html );
 		$this->assertStringNotContainsString( '<input', $html );
 		$this->assertStringNotContainsString( '<button', $html );
+		$this->assert_public_id_absent( $first->get_public_id(), $html );
+		$this->assert_public_id_absent( $second->get_public_id(), $html );
 	}
 
 	/**
@@ -350,5 +386,34 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( '<input type="hidden" name="lists[]" value="' . $free->get_public_id() . '"', $html );
 		$this->assertStringNotContainsString( 'no-longer-a-list', $html );
 		$this->assertStringNotContainsString( 'class="is-gated"', $html );
+	}
+
+	/**
+	 * A list removed by the block's own filter is hidden outright. It is not a
+	 * gated list, so showPremium does not bring it back as a gated row.
+	 */
+	public function test_list_removed_by_the_block_filter_is_hidden_not_gated() {
+		$kept    = $this->get_list( 'only_mailchimp' );
+		$removed = $this->get_list( 'two_settings' );
+		$filter  = function ( $list_ids ) use ( $removed ) {
+			return array_values( array_diff( $list_ids, [ $removed->get_public_id() ] ) );
+		};
+		add_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
+
+		foreach ( [ false, true ] as $show_premium ) {
+			$html = $this->render(
+				$this->get_attrs(
+					[
+						'lists'       => [ $kept->get_public_id(), $removed->get_public_id() ],
+						'showPremium' => $show_premium,
+					]
+				)
+			);
+			$this->assertStringContainsString( '<input type="hidden" name="lists[]" value="' . $kept->get_public_id() . '"', $html );
+			$this->assertStringNotContainsString( 'class="is-gated"', $html );
+			$this->assert_public_id_absent( $removed->get_public_id(), $html );
+		}
+
+		remove_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
 	}
 }
