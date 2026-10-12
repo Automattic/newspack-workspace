@@ -177,8 +177,8 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 		}
 
 		// This endpoint is public, so restrict it to publicly viewable post types — matching
-		// what WordPress exposes on the front end. The editor endpoints are capability-gated.
-		$attributes['postType'] = self::filter_viewable_post_types( $attributes['postType'] );
+		// what WordPress exposes on the front end.
+		$attributes['postType'] = Newspack_Blocks::filter_viewable_post_types( $attributes['postType'] );
 		if ( empty( $attributes['postType'] ) ) {
 			// Every requested post type was non-viewable; return nothing rather than
 			// substituting a different post type.
@@ -267,39 +267,6 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 				'ids'   => $ids,
 				'next'  => $next,
 			]
-		);
-	}
-
-	/**
-	 * Restrict a list of post types to those the public articles endpoint may serve:
-	 * publicly-viewable types, plus any explicitly allow-listed via the
-	 * `newspack_blocks_articles_allowed_post_types` filter.
-	 *
-	 * Keeps the endpoint from exposing post types WordPress would not surface on the
-	 * front end, while letting a plugin deliberately opt a specific non-viewable CPT
-	 * in. Disallowed types are dropped; the returned list may be empty when none
-	 * qualify (the caller then returns no results).
-	 *
-	 * @param array|string $post_types Requested post type(s).
-	 * @return array Allowed post types (may be empty).
-	 */
-	private static function filter_viewable_post_types( $post_types ) {
-		/**
-		 * Post types the public articles endpoint may serve in addition to the
-		 * publicly-viewable ones. Each entry is an explicit, per-CPT decision to
-		 * expose that type's published posts to unauthenticated callers — do not
-		 * add types whose published content should stay off the public REST surface.
-		 *
-		 * @param string[] $allowed Post type slugs to allow. Default empty.
-		 */
-		$allowed = (array) apply_filters( 'newspack_blocks_articles_allowed_post_types', [] );
-		return array_values(
-			array_filter(
-				(array) $post_types,
-				function ( $type ) use ( $allowed ) {
-					return is_post_type_viewable( $type ) || in_array( $type, $allowed, true );
-				}
-			)
 		);
 	}
 

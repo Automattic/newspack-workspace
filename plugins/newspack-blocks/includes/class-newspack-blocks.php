@@ -864,6 +864,41 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Restrict a list of post types to those the articles REST routes may serve:
+	 * publicly-viewable types, plus any explicitly allow-listed via the
+	 * `newspack_blocks_articles_allowed_post_types` filter.
+	 *
+	 * Keeps the routes from exposing post types WordPress would not surface on the
+	 * front end, while letting a plugin deliberately opt a specific non-viewable CPT
+	 * in. Applies to the editor routes too: their `edit_posts` gate is held by
+	 * Contributors, so it says nothing about which post types the caller may read.
+	 * Disallowed types are dropped; the returned list may be empty when none
+	 * qualify (the caller then returns no results).
+	 *
+	 * @param array|string $post_types Requested post type(s).
+	 * @return array Allowed post types (may be empty).
+	 */
+	public static function filter_viewable_post_types( $post_types ) {
+		/**
+		 * Post types the articles routes may serve in addition to the
+		 * publicly-viewable ones. Each entry is an explicit, per-CPT decision to
+		 * expose that type's published posts to unauthenticated callers — do not
+		 * add types whose published content should stay off the public REST surface.
+		 *
+		 * @param string[] $allowed Post type slugs to allow. Default empty.
+		 */
+		$allowed = (array) apply_filters( 'newspack_blocks_articles_allowed_post_types', [] );
+		return array_values(
+			array_filter(
+				(array) $post_types,
+				function ( $type ) use ( $allowed ) {
+					return is_string( $type ) && ( is_post_type_viewable( $type ) || in_array( $type, $allowed, true ) );
+				}
+			)
+		);
+	}
+
+	/**
 	 * Builds and returns query args based on block attributes.
 	 *
 	 * @param array $attributes An array of block attributes.
@@ -887,7 +922,12 @@ class Newspack_Blocks {
 		$post_type              = isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ];
 		$included_post_statuses = [ 'publish' ];
 		if ( current_user_can( 'edit_others_posts' ) && isset( $attributes['includedPostStatuses'] ) ) {
-			$included_post_statuses = $attributes['includedPostStatuses'];
+			// Only the statuses the editor offers. Anything else (private, or core's request-*
+			// statuses) would let the editor routes read content the block was never meant to show.
+			$included_post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
+			if ( empty( $included_post_statuses ) ) {
+				$included_post_statuses = [ 'publish' ];
+			}
 		}
 		$authors                    = isset( $attributes['authors'] ) ? $attributes['authors'] : array();
 		$categories                 = isset( $attributes['categories'] ) ? $attributes['categories'] : array();

@@ -325,7 +325,15 @@ class Newspack_Blocks_API {
 	 */
 	public static function posts_endpoint( $request ) {
 		$attributes = $request->get_params();
-		$args       = Newspack_Blocks::build_articles_query( $attributes, apply_filters( 'newspack_blocks_block_name', 'newspack-blocks/homepage-articles' ) );
+
+		$attributes['postType'] = Newspack_Blocks::filter_viewable_post_types( $attributes['postType'] ?? [ 'post' ] );
+		if ( empty( $attributes['postType'] ) ) {
+			// Every requested post type was non-viewable; return nothing rather than
+			// substituting a different post type.
+			return new \WP_REST_Response( [] );
+		}
+
+		$args = Newspack_Blocks::build_articles_query( $attributes, apply_filters( 'newspack_blocks_block_name', 'newspack-blocks/homepage-articles' ) );
 
 		if ( $attributes['exclude'] && count( $attributes['exclude'] ) ) {
 			$args['post__not_in'] = $attributes['exclude']; // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in
@@ -431,7 +439,6 @@ class Newspack_Blocks_API {
 		if ( empty( $params['search'] ) ) {
 			return new \WP_REST_Response( [] );
 		}
-		add_filter( 'posts_where', [ 'Newspack_Blocks_API', 'add_post_title_wildcard_search' ], 10, 2 );
 
 		$args = [
 			'post_status'           => 'publish',
@@ -440,11 +447,15 @@ class Newspack_Blocks_API {
 		];
 
 		if ( $params['postType'] && count( $params['postType'] ) ) {
-			$args['post_type'] = $params['postType'];
+			$args['post_type'] = Newspack_Blocks::filter_viewable_post_types( $params['postType'] );
+			if ( empty( $args['post_type'] ) ) {
+				return new \WP_REST_Response( [] );
+			}
 		} else {
 			$args['post_type'] = 'post';
 		}
 
+		add_filter( 'posts_where', [ 'Newspack_Blocks_API', 'add_post_title_wildcard_search' ], 10, 2 );
 		$query = new WP_Query( $args );
 		remove_filter( 'posts_where', [ 'Newspack_Blocks_API', 'add_post_title_wildcard_search' ], 10, 2 );
 		return new \WP_REST_Response(

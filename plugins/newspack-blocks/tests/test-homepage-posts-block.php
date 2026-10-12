@@ -833,6 +833,146 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Request an editor route and return the IDs of the posts it served.
+	 *
+	 * @param string $route  Route under the newspack-blocks/v1 namespace.
+	 * @param array  $params Query params.
+	 * @return int[]
+	 */
+	private static function editor_route_ids( $route, $params ) {
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/' . $route );
+		$request->set_query_params( $params );
+		$response = rest_do_request( $request );
+		self::assertSame( 200, $response->get_status(), "The $route route answers the request." );
+		return array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
+	}
+
+	/**
+	 * The editor routes are gated on edit_posts, which a Contributor holds, so the gate says
+	 * nothing about which post types the caller may read. They apply the same post type
+	 * restriction as the public route (NPPM-3509).
+	 */
+	public function test_editor_posts_endpoints_exclude_non_viewable_post_types() {
+		$secret    = $this->register_non_viewable_cpt();
+		$secret_id = self::factory()->post->create(
+			[
+				'post_type'   => $secret,
+				'post_status' => 'publish',
+				'post_title'  => 'Secret CPT title',
+			]
+		);
+		$post_id   = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_title'  => 'Secret CPT neighbour',
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		self::assertSame(
+			[],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret ], 'postsToShow' => 10 ] ),
+			'A request for only a non-viewable post type returns nothing, not substituted posts.'
+		);
+		self::assertSame(
+			[ $post_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret, 'post' ], 'postsToShow' => 10 ] ),
+			'Mixed input keeps the viewable post type and drops the non-viewable one.'
+		);
+		self::assertSame(
+			[],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret ], 'include' => [ $secret_id ], 'specificMode' => true, 'specificPosts' => [ $secret_id ] ] ),
+			'Naming a non-viewable post by ID does not get it past the post type restriction.'
+		);
+		self::assertSame(
+			[],
+			self::editor_route_ids( 'newspack-blocks-specific-posts', [ 'postType' => [ $secret ], 'search' => 'Secret', 'postsToShow' => 10 ] ),
+			'The specific posts search does not list titles of a non-viewable post type.'
+		);
+		self::assertSame(
+			[ $post_id ],
+			self::editor_route_ids( 'newspack-blocks-specific-posts', [ 'postType' => [ $secret, 'post' ], 'search' => 'Secret', 'postsToShow' => 10 ] ),
+			'The specific posts search keeps the viewable post type in mixed input.'
+		);
+	}
+
+	/**
+	 * The batch route answers each block through the single editor route, so it gets the
+	 * same post type restriction.
+	 */
+	public function test_editor_posts_batch_excludes_non_viewable_post_types() {
+		$secret = $this->register_non_viewable_cpt();
+		self::factory()->post->create( [ 'post_type' => $secret, 'post_status' => 'publish' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-blocks/v1/newspack-blocks-posts-batch' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				[
+					'queries' => [
+						[
+							'clientId'   => 'a',
+							'postsQuery' => [
+								'postType'    => [ $secret ],
+								'postsToShow' => 10,
+							],
+						],
+					],
+				]
+			)
+		);
+		$data = rest_do_request( $request )->get_data();
+
+		self::assertSame( 'a', $data[0]['clientId'] );
+		self::assertSame( [], $data[0]['posts'], 'The batch serves nothing for a non-viewable post type.' );
+	}
+
+	/**
+	 * The editor routes keep serving a non-viewable post type a plugin opted in, which is
+	 * how the Sponsors CPT stays usable in the block's post type picker.
+	 */
+	public function test_editor_posts_endpoint_allows_filter_allowlisted_post_type() {
+		$allowed    = $this->register_non_viewable_cpt( 'newspack_allowed_cpt' );
+		$allowed_id = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		self::assertSame(
+			[ $allowed_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $allowed ], 'postsToShow' => 10 ] ),
+			'An allow-listed non-viewable post type is served to the editor.'
+		);
+	}
+
+	/**
+	 * An Editor may preview drafts and scheduled posts, the statuses the block offers, but
+	 * not statuses it never offers, such as private.
+	 */
+	public function test_editor_posts_endpoint_limits_statuses_to_those_the_editor_offers() {
+		$published_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		$draft_id     = self::factory()->post->create( [ 'post_status' => 'draft' ] );
+		$private_id   = self::factory()->post->create( [ 'post_status' => 'private' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+
+		$ids = self::editor_route_ids( 'newspack-blocks-posts', [ 'includedPostStatuses' => [ 'publish', 'draft', 'private' ], 'postsToShow' => 10 ] );
+		self::assertContains( $published_id, $ids, 'Published posts are served.' );
+		self::assertContains( $draft_id, $ids, 'Drafts are served to an Editor who asked for them.' );
+		self::assertNotContains( $private_id, $ids, 'A status the block does not offer is dropped.' );
+
+		self::assertSame(
+			[ $published_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'includedPostStatuses' => [ 'private' ], 'postsToShow' => 10 ] ),
+			'When no requested status is allowed, the route falls back to published posts.'
+		);
+	}
+
+	/**
 	 * The filter_excerpt() method routes its content through Block_Visibility sanitization
 	 * before excerpt_remove_blocks(), verifying the integration point that strips gated
 	 * content from excerpts built by the homepage-posts block.
