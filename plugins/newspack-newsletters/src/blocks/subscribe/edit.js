@@ -38,18 +38,22 @@ const listGates = newspack_newsletters_blocks.list_gates || {};
  * @param {Object[]} props.gates Gates restricting a list.
  */
 const GatedBy = ( { gates } ) =>
-	createInterpolateElement( __( 'Gated by <gates />', 'newspack-newsletters' ), {
-		gates: (
-			<>
-				{ gates.map( ( gate, index ) => (
-					<Fragment key={ gate.id }>
-						{ index > 0 && ', ' }
-						{ gate.edit_url ? <a href={ gate.edit_url }>{ gate.title }</a> : gate.title }
-					</Fragment>
-				) ) }
-			</>
-		),
-	} );
+	createInterpolateElement(
+		// translators: <gates /> is replaced with the names of the access gates restricting a list. Keep it as is.
+		__( 'Gated by <gates />', 'newspack-newsletters' ),
+		{
+			gates: (
+				<>
+					{ gates.map( ( gate, index ) => (
+						<Fragment key={ gate.id }>
+							{ index > 0 && ', ' }
+							{ gate.edit_url ? <a href={ gate.edit_url }>{ gate.title }</a> : gate.title }
+						</Fragment>
+					) ) }
+				</>
+			),
+		}
+	);
 
 /**
  * A list's description, with its line breaks kept.
@@ -177,20 +181,21 @@ export default function SubscribeEdit( {
 		setAttributes( { listsCheckboxes: newListsCheckboxes } );
 	};
 
-	// Enabled lists that still exist, in the order the block renders them.
-	const enabledLists = lists.filter( listId => listConfig.hasOwnProperty( listId ) );
+	// Enabled lists that still exist, in block order. The sortable list reports a
+	// reorder as indices into the items it was given, so those items and the array
+	// passed to moveItem() both come from this, never from `lists` directly: `lists`
+	// can hold the ID of a list that has since been removed.
+	const enabledLists = useMemo( () => lists.filter( listId => listConfig.hasOwnProperty( listId ) ), [ lists, listConfig ] );
 	const sortableItems = useMemo(
 		() =>
-			lists
-				.filter( listId => listConfig.hasOwnProperty( listId ) )
-				.map( listId => ( {
-					id: listId,
-					title: listConfig[ listId ].title,
-					description: isListGated( listGates, listId ) ? <GatedBy gates={ listGates[ listId ] } /> : undefined,
-					toggleChecked: true,
-					onToggleChange: () => setAttributes( { lists: toggleList( lists, listId ) } ),
-				} ) ),
-		[ lists, listConfig, setAttributes ]
+			enabledLists.map( listId => ( {
+				id: listId,
+				title: listConfig[ listId ].title,
+				description: isListGated( listGates, listId ) ? <GatedBy gates={ listGates[ listId ] } /> : undefined,
+				toggleChecked: true,
+				onToggleChange: () => setAttributes( { lists: toggleList( lists, listId ) } ),
+			} ) ),
+		[ enabledLists, lists, listConfig, setAttributes ]
 	);
 	const isGatedPreview = listId => showPremium && isListGated( listGates, listId );
 	// The front end shows the list when there is more than one row, or any gated row.

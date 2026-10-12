@@ -625,6 +625,7 @@ class Newspack_Newsletters_Subscription {
 	 * makes a restricted list indistinguishable from a missing one. Comparing the
 	 * two reads is how a caller finds the lists hidden from this reader. Never use
 	 * this to decide what a reader may sign up for.
+	 * The result is not memoized, so read it once per render.
 	 *
 	 * @return array[]|WP_Error Associative array with list configuration keyed by list ID or error.
 	 */

@@ -120,9 +120,10 @@ domReady( function () {
 	document.querySelectorAll( '.newspack-newsletters-subscribe' ).forEach( container => {
 		const form = container.querySelector( 'form' );
 		if ( ! form ) {
-			// No form means the reader is already subscribed: render_block emits
-			// the block with data-status="200" and no form, so there's nothing to
-			// wire up. By design the Continue button only appears for the reader
+			// No form means there is nothing to wire up. Either the reader is already
+			// subscribed (render_block emits the block with data-status="200" and no
+			// form), or the block shows only premium lists this reader can't join.
+			// By design the Continue button only appears for the reader
 			// who just subscribed in this page view — a returning/already-subscribed
 			// reader (including one who reloads after subscribing) sees the plain
 			// success message, matching the "redirect the reader who just engaged"

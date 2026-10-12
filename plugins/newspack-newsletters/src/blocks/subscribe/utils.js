@@ -31,8 +31,8 @@ export const toggleList = ( lists, listId ) => ( lists.includes( listId ) ? list
 /**
  * Whether an access gate restricts a list.
  *
- * @param {Object} listGates Gates keyed by list ID.
- * @param {string} listId    ID of the list.
+ * @param {Object|undefined} listGates Gates keyed by list ID. May be missing.
+ * @param {string}           listId    ID of the list.
  * @return {boolean} True when at least one gate restricts the list.
  */
 export const isListGated = ( listGates, listId ) => Array.isArray( listGates?.[ listId ] ) && listGates[ listId ].length > 0;
@@ -40,7 +40,7 @@ export const isListGated = ( listGates, listId ) => Array.isArray( listGates?.[ 
 /**
  * Whether the site has any gated list.
  *
- * @param {Object} listGates Gates keyed by list ID.
+ * @param {Object|undefined} listGates Gates keyed by list ID. May be missing.
  * @return {boolean} True when any list is gated.
  */
 export const hasGatedLists = listGates => Object.keys( listGates || {} ).some( listId => isListGated( listGates, listId ) );
