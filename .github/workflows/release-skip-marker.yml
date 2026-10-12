@@ -16,6 +16,11 @@ name: Release skip-marker safety net
 # documents pull_request_target as exempt. Nothing from the pull request is
 # checked out or run here, so the token this event grants never meets PR code.
 #
+# GitHub runs a pull_request_target workflow from the default branch's copy,
+# whatever the pull request's base. This file does nothing until the default
+# branch carries it, and a change made only on `release` or `alpha` has no
+# effect.
+#
 # Only release.yml has a manual trigger, so CI and the merge feed still do not
 # run for the skipped push.
 
@@ -56,14 +61,32 @@ jobs:
           message=$(gh api "repos/$GITHUB_REPOSITORY/commits/$MERGE_SHA" --jq '.commit.message')
           subject=${message%%$'\n'*}
 
-          if ! has_marker "$message"; then
-            echo "No skip marker in $MERGE_SHA; the push started its own runs."
-            exit 0
-          fi
           if has_marker "$subject"; then
             echo "::notice::$MERGE_SHA carries a skip marker in its subject, so the skip is treated as deliberate."
             exit 0
           fi
 
-          echo "::warning::The body of $MERGE_SHA quotes a skip marker, so GitHub started no workflow for this push to $BASE_REF. Dispatching release.yml on $BASE_REF."
+          if has_marker "$message"; then
+            reason="The body of $MERGE_SHA quotes a skip marker, so GitHub started no workflow for this push to $BASE_REF."
+          elif [ "$(printf '%s' "$message" | wc -c)" -lt 65535 ]; then
+            echo "No skip marker in $MERGE_SHA; the push started its own runs."
+            exit 0
+          else
+            # The API returns only the first 64 KiB of a message, and a merge
+            # that lists its commits runs well past that (#1287 was 115 KB), so
+            # a marker may sit beyond what was read. The message cannot settle
+            # it; whether the push started a Release run can. The wait gives
+            # that run time to register. Dispatching when it has not costs
+            # nothing: a second run queues behind the first and finds nothing
+            # to release.
+            sleep 60
+            runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --commit "$MERGE_SHA" --event push --json databaseId --jq 'length')
+            if [ "$runs" -gt 0 ]; then
+              echo "The message of $MERGE_SHA is longer than the API returns, and the push started a Release run."
+              exit 0
+            fi
+            reason="The message of $MERGE_SHA is longer than the API returns, and no Release run started for this push to $BASE_REF."
+          fi
+
+          echo "::warning::$reason Dispatching release.yml on $BASE_REF."
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$BASE_REF"
