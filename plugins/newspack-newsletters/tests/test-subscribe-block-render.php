@@ -272,7 +272,7 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertSame( 1, substr_count( $html, 'class="is-gated"' ) );
 		$this->assertSame( 1, substr_count( $html, 'type="checkbox"' ), 'Only the free list gets a checkbox.' );
 		$this->assertStringContainsString( esc_html( $gated->get_title() ), $html );
-		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--secondary">Premium</span>', $html );
+		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--primary">Premium</span>', $html );
 		$this->assertStringNotContainsString( 'value="' . $gated->get_public_id() . '"', $html );
 		$this->assertStringNotContainsString( 'checkbox-' . $gated->get_public_id() . '"', $html );
 		$this->assertStringNotContainsString( 'type="hidden" name="lists[]"', $html, 'One free list plus a gated one shows the list, not a hidden input.' );
@@ -536,7 +536,7 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 
 		$premium_row = $this->get_checkbox_row( $premium->get_public_id(), $html );
 		$this->assertStringContainsString( 'type="checkbox"', $premium_row, 'The reader can still join the premium list.' );
-		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--secondary">Premium</span>', $premium_row );
+		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--primary">Premium</span>', $premium_row );
 		$free_row = $this->get_checkbox_row( $free->get_public_id(), $html );
 		$this->assertStringContainsString( 'type="checkbox"', $free_row );
 		$this->assertStringNotContainsString( 'newspack-ui__badge', $free_row );

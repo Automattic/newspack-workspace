@@ -168,7 +168,7 @@ function render_premium_badge( $attrs ) {
 		return;
 	}
 	?>
-	<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php echo \esc_html( $label ); ?></span>
+	<span class="newspack-ui__badge newspack-ui__badge--primary"><?php echo \esc_html( $label ); ?></span>
 	<?php
 }
 
