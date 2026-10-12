@@ -4,13 +4,14 @@
  * External dependencies.
  */
 import classnames from 'classnames';
+import { CardSortableList } from 'newspack-components';
 
 /**
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
 import { __, sprintf } from '@wordpress/i18n';
-import { Fragment, useState, useEffect } from '@wordpress/element';
+import { Fragment, createInterpolateElement, useState, useEffect, useMemo } from '@wordpress/element';
 import { TextControl, ToggleControl, CheckboxControl, PanelBody, Notice, Spinner, Button, SelectControl } from '@wordpress/components';
 import { useBlockProps, InspectorControls, RichText, PanelColorSettings, getColorObjectByColorValue } from '@wordpress/block-editor';
 import { select } from '@wordpress/data';
@@ -18,6 +19,7 @@ import { select } from '@wordpress/data';
 /**
  * Internal dependencies
  */
+import { hasGatedLists, isListGated, moveItem, toggleList } from './utils';
 import './editor.scss';
 
 const getListCheckboxId = listId => {
@@ -25,6 +27,46 @@ const getListCheckboxId = listId => {
 };
 
 const settingsUrl = newspack_newsletters_blocks.settings_url;
+
+// Access gates per list, keyed by list ID. Empty unless something restricts lists.
+const listGates = newspack_newsletters_blocks.list_gates || {};
+
+/**
+ * "Gated by <gate>, <gate>", each gate linked when the user can edit it.
+ *
+ * @param {Object}   props       Component props.
+ * @param {Object[]} props.gates Gates restricting a list.
+ */
+const GatedBy = ( { gates } ) =>
+	createInterpolateElement( __( 'Gated by <gates />', 'newspack-newsletters' ), {
+		gates: (
+			<>
+				{ gates.map( ( gate, index ) => (
+					<Fragment key={ gate.id }>
+						{ index > 0 && ', ' }
+						{ gate.edit_url ? <a href={ gate.edit_url }>{ gate.title }</a> : gate.title }
+					</Fragment>
+				) ) }
+			</>
+		),
+	} );
+
+/**
+ * A list's description, with its line breaks kept.
+ *
+ * @param {Object} props             Component props.
+ * @param {string} props.description The description.
+ */
+const ListDescription = ( { description } ) => (
+	<span className="list-description">
+		{ ( description || '' ).split( '\n' ).map( ( line, index, arr ) => (
+			<Fragment key={ index }>
+				{ line }
+				{ index < arr.length - 1 && <br /> }
+			</Fragment>
+		) ) }
+	</span>
+);
 
 const editedStateOptions = [
 	{ label: __( 'Initial', 'newspack-newsletters' ), value: 'initial' },
@@ -63,6 +105,8 @@ export default function SubscribeEdit( {
 		lists,
 		listsCheckboxes,
 		displayDescription,
+		showPremium,
+		showPremiumLabel,
 		mailchimpDoubleOptIn,
 		textColor,
 		backgroundColor,
@@ -133,6 +177,25 @@ export default function SubscribeEdit( {
 		setAttributes( { listsCheckboxes: newListsCheckboxes } );
 	};
 
+	// Enabled lists that still exist, in the order the block renders them.
+	const enabledLists = lists.filter( listId => listConfig.hasOwnProperty( listId ) );
+	const sortableItems = useMemo(
+		() =>
+			lists
+				.filter( listId => listConfig.hasOwnProperty( listId ) )
+				.map( listId => ( {
+					id: listId,
+					title: listConfig[ listId ].title,
+					description: isListGated( listGates, listId ) ? <GatedBy gates={ listGates[ listId ] } /> : undefined,
+					toggleChecked: true,
+					onToggleChange: () => setAttributes( { lists: toggleList( lists, listId ) } ),
+				} ) ),
+		[ lists, listConfig, setAttributes ]
+	);
+	const isGatedPreview = listId => showPremium && isListGated( listGates, listId );
+	// The front end shows the list when there is more than one row, or any gated row.
+	const showListUi = lists.length > 1 || lists.some( isGatedPreview );
+
 	return (
 		<>
 			<InspectorControls>
@@ -173,12 +236,29 @@ export default function SubscribeEdit( {
 							) }
 						</>
 					) }
-					{ lists.length > 1 && (
+					{ showListUi && (
 						<ToggleControl
 							label={ __( 'Display list description', 'newspack-newsletters' ) }
 							checked={ displayDescription }
 							onChange={ () => setAttributes( { displayDescription: ! displayDescription } ) }
 						/>
+					) }
+					{ hasGatedLists( listGates ) && (
+						<>
+							<ToggleControl
+								label={ __( 'Always show premium lists', 'newspack-newsletters' ) }
+								help={ __( 'Readers without access see premium lists, but can’t sign up for them.', 'newspack-newsletters' ) }
+								checked={ showPremium }
+								onChange={ value => setAttributes( { showPremium: value } ) }
+							/>
+							{ showPremium && (
+								<TextControl
+									label={ __( 'Premium list label', 'newspack-newsletters' ) }
+									value={ showPremiumLabel }
+									onChange={ value => setAttributes( { showPremiumLabel: value } ) }
+								/>
+							) }
+						</>
 					) }
 				</PanelBody>
 				<PanelBody title={ __( 'After subscribe', 'newspack-newsletters' ) } initialOpen={ false }>
@@ -248,20 +328,23 @@ export default function SubscribeEdit( {
 							</Notice>
 						</div>
 					) }
-					{ Object.keys( listConfig ).map( listId => (
-						<ToggleControl
-							key={ listId }
-							label={ listConfig[ listId ].title }
-							checked={ lists.includes( listId ) }
-							onChange={ () => {
-								if ( ! lists.includes( listId ) ) {
-									setAttributes( { lists: lists.concat( listId ) } );
-								} else {
-									setAttributes( { lists: lists.filter( id => id !== listId ) } );
-								}
-							} }
+					{ sortableItems.length > 0 && (
+						<CardSortableList
+							items={ sortableItems }
+							onDragCallback={ ( from, to ) => setAttributes( { lists: moveItem( enabledLists, from, to ) } ) }
 						/>
-					) ) }
+					) }
+					{ Object.keys( listConfig )
+						.filter( listId => ! lists.includes( listId ) )
+						.map( listId => (
+							<ToggleControl
+								key={ listId }
+								label={ listConfig[ listId ].title }
+								help={ isListGated( listGates, listId ) ? <GatedBy gates={ listGates[ listId ] } /> : undefined }
+								checked={ false }
+								onChange={ () => setAttributes( { lists: toggleList( lists, listId ) } ) }
+							/>
+						) ) }
 					<p>
 						<a href={ settingsUrl }>{ __( 'Manage your subscription lists', 'newspack-newsletters' ) }</a>
 					</p>
@@ -342,36 +425,50 @@ export default function SubscribeEdit( {
 										) }
 									</Notice>
 								) }
-								{ lists.length > 1 && (
+								{ showListUi && (
 									<div className="newspack-newsletters-lists">
 										<ul>
-											{ lists.map( listId => (
-												<li key={ listId }>
-													<span className="list-checkbox">
-														<input
-															id={ getListCheckboxId( listId ) }
-															type="checkbox"
-															checked={ isListSelected( listId ) }
-															onChange={ toggleListCheckbox( listId ) }
-														/>
-													</span>
-													<span className="list-details">
-														<label htmlFor={ getListCheckboxId( listId ) }>
-															<span className="list-title">{ listConfig[ listId ]?.title }</span>
-															{ displayDescription && (
-																<span className="list-description">
-																	{ listConfig[ listId ]?.description?.split( '\n' ).map( ( line, index, arr ) => (
-																		<Fragment key={ index }>
-																			{ line }
-																			{ index < arr.length - 1 && <br /> }
-																		</Fragment>
-																	) ) }
+											{ lists.map( listId =>
+												isGatedPreview( listId ) ? (
+													<li key={ listId } className="is-gated">
+														<span className="list-checkbox" aria-hidden="true" />
+														<span className="list-details">
+															<span className="list-label">
+																<span className="list-title">
+																	{ listConfig[ listId ]?.title }
+																	{ showPremiumLabel?.trim() && (
+																		<span className="newspack-ui__badge newspack-ui__badge--secondary">
+																			{ showPremiumLabel.trim() }
+																		</span>
+																	) }
 																</span>
-															) }
-														</label>
-													</span>
-												</li>
-											) ) }
+																{ displayDescription && (
+																	<ListDescription description={ listConfig[ listId ]?.description } />
+																) }
+															</span>
+														</span>
+													</li>
+												) : (
+													<li key={ listId }>
+														<span className="list-checkbox">
+															<input
+																id={ getListCheckboxId( listId ) }
+																type="checkbox"
+																checked={ isListSelected( listId ) }
+																onChange={ toggleListCheckbox( listId ) }
+															/>
+														</span>
+														<span className="list-details">
+															<label htmlFor={ getListCheckboxId( listId ) }>
+																<span className="list-title">{ listConfig[ listId ]?.title }</span>
+																{ displayDescription && (
+																	<ListDescription description={ listConfig[ listId ]?.description } />
+																) }
+															</label>
+														</span>
+													</li>
+												)
+											) }
 										</ul>
 									</div>
 								) }
