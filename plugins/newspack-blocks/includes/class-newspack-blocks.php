@@ -919,7 +919,10 @@ class Newspack_Blocks {
 			$newspack_blocks_all_specific_posts_ids = self::get_specific_posts_from_blocks( $blocks, $block_name );
 		}
 
-		$post_type              = isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ];
+		// Every block render goes through here, including core's block-renderer route and draft
+		// previews, which are open to anyone who can edit posts. So the post type restriction
+		// lives here rather than in each caller.
+		$post_type              = self::filter_viewable_post_types( isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ] );
 		$included_post_statuses = [ 'publish' ];
 		if ( current_user_can( 'edit_others_posts' ) && isset( $attributes['includedPostStatuses'] ) ) {
 			// Only the statuses the editor offers. Anything else (private, or core's request-*
@@ -1077,6 +1080,12 @@ class Newspack_Blocks {
 					}
 				}
 			}
+		}
+
+		if ( empty( $post_type ) ) {
+			// Every requested post type was disallowed. Match nothing rather than let
+			// WP_Query fall back to its default post type.
+			$args['post__in'] = [ 0 ];
 		}
 
 		/**

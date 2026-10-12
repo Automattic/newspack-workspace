@@ -189,7 +189,8 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * HPB query from attributes.
 	 */
 	public function test_hpb_build_articles_query() {
-		$cases = [
+		$custom_type = $this->register_viewable_cpt( 'some-type' );
+		$cases       = [
 			[
 				'block_attributes'        => [
 					'postsToShow' => 5,
@@ -210,7 +211,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 				],
 				'resulting_query_partial' => [
 					'posts_per_page' => 1,
-					'post_type'      => 'some-type',
+					'post_type'      => [ $custom_type ],
 					'author__in'     => [ 1 ],
 				],
 				'description'             => 'With custom post type and author',
@@ -926,6 +927,41 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		self::assertSame( 'a', $data[0]['clientId'] );
 		self::assertSame( [], $data[0]['posts'], 'The batch serves nothing for a non-viewable post type.' );
+	}
+
+	/**
+	 * Core's block-renderer route is open to anyone with edit_posts, so the block's own
+	 * server render must not list a non-viewable post type either.
+	 */
+	public function test_block_render_excludes_non_viewable_post_types() {
+		$secret = $this->register_non_viewable_cpt();
+		self::factory()->post->create(
+			[
+				'post_type'   => $secret,
+				'post_status' => 'publish',
+				'post_title'  => 'Secret CPT title',
+			]
+		);
+		self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_title'  => 'Regular post title',
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/block-renderer/newspack-blocks/homepage-articles' );
+		$request->set_query_params(
+			[
+				'context'    => 'edit',
+				'attributes' => [ 'postType' => [ $secret ] ],
+			]
+		);
+		$response = rest_do_request( $request );
+
+		self::assertSame( 200, $response->get_status(), 'The block-renderer route answers the request.' );
+		self::assertStringNotContainsString( 'Secret CPT title', $response->get_data()['rendered'], 'The render does not list a non-viewable post type.' );
+		self::assertStringNotContainsString( 'Regular post title', $response->get_data()['rendered'], 'The render returns nothing rather than substituting the default post type.' );
 	}
 
 	/**

@@ -176,12 +176,10 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 			$exclude_ids = [];
 		}
 
-		// This endpoint is public, so restrict it to publicly viewable post types — matching
-		// what WordPress exposes on the front end.
+		// This endpoint is public, so it only serves the post types filter_viewable_post_types()
+		// allows. The filtered list also feeds the next-page URL below.
 		$attributes['postType'] = Newspack_Blocks::filter_viewable_post_types( $attributes['postType'] );
 		if ( empty( $attributes['postType'] ) ) {
-			// Every requested post type was non-viewable; return nothing rather than
-			// substituting a different post type.
 			return self::articles_response();
 		}
 

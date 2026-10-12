@@ -326,10 +326,9 @@ class Newspack_Blocks_API {
 	public static function posts_endpoint( $request ) {
 		$attributes = $request->get_params();
 
-		$attributes['postType'] = Newspack_Blocks::filter_viewable_post_types( $attributes['postType'] ?? [ 'post' ] );
-		if ( empty( $attributes['postType'] ) ) {
-			// Every requested post type was non-viewable; return nothing rather than
-			// substituting a different post type.
+		// build_articles_query() applies the same restriction, but the `include` handling below
+		// replaces its no-match post__in, so stop here when no requested post type is allowed.
+		if ( empty( Newspack_Blocks::filter_viewable_post_types( $attributes['postType'] ?? [ 'post' ] ) ) ) {
 			return new \WP_REST_Response( [] );
 		}
 
