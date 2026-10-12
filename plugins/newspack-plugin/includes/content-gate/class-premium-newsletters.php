@@ -635,6 +635,12 @@ class Premium_Newsletters {
 		if ( ! self::is_access_control_active() || ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
 			return $list_gates;
 		}
+		// A site with no premium newsletter gate has nothing to report. Forms call
+		// this on every front-end render, so skip the per-list checks. Read through
+		// Content_Gate, whose cache is flushed when a gate changes.
+		if ( empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) ) ) {
+			return $list_gates;
+		}
 		// The Premium Newsletters wizard's capability and page slug. The link goes
 		// to the wizard's edit route rather than the gate's post editor, which
 		// edits the layout readers see and not the gate's rules.

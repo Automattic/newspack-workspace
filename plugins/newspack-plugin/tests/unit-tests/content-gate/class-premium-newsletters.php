@@ -2377,6 +2377,28 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * With no premium newsletter gate, the input comes back unchanged and the
+	 * lists are never read. Forms call this on every front-end render, so a site
+	 * with no gate must not pay for a per-list check.
+	 */
+	public function test_filter_list_gates_passes_the_input_through_without_gates() {
+		global $newsletter_lists_query_count;
+		$this->create_premium_list();
+		$input                        = [
+			'x' => [
+				[
+					'id'    => 1,
+					'title' => 't',
+				],
+			],
+		];
+		$newsletter_lists_query_count = 0;
+
+		$this->assertSame( $input, Premium_Newsletters::filter_list_gates( $input ) );
+		$this->assertSame( 0, $newsletter_lists_query_count, 'No gate means no list is read.' );
+	}
+
+	/**
 	 * The callback is hooked.
 	 */
 	public function test_filter_list_gates_is_hooked() {
