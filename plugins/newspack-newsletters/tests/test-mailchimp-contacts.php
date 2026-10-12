@@ -463,6 +463,283 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Only `true` marks lists as already checked. A stray truthy value must not turn
+	 * the check off.
+	 */
+	public function test_subscribe_checks_lists_unless_checked_is_exactly_true() {
+		add_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+
+		$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [ 'list1' ], false, 'Test context', 'yes' );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_newsletters_lists_not_allowed', $result->get_error_code() );
+	}
+
+	/**
+	 * Get the lists of each queued sign-up for an email address, and remove those
+	 * sign-ups.
+	 *
+	 * Removing them in the same step stops a failed assertion from leaving a queued
+	 * sign-up behind for another test to replay.
+	 *
+	 * @param string $email Email address of the sign-up.
+	 *
+	 * @return array[] The stored lists of each queued sign-up for that address.
+	 */
+	private function take_queued_sign_up_lists( $email ) {
+		$taken      = [];
+		$intent_ids = get_posts(
+			[
+				'post_type'   => Newspack_Newsletters_Subscription::SUBSCRIPTION_INTENT_CPT,
+				'numberposts' => 100,
+				'fields'      => 'ids',
+			]
+		);
+		foreach ( $intent_ids as $intent_id ) {
+			$contact = get_post_meta( $intent_id, 'contact', true );
+			if ( is_array( $contact ) && isset( $contact['email'] ) && $email === $contact['email'] ) {
+				$taken[] = get_post_meta( $intent_id, 'lists', true );
+				wp_delete_post( $intent_id, true );
+			}
+		}
+		return $taken;
+	}
+
+	/**
+	 * The filter runs before a sign-up is queued, so the queued sign-up holds only
+	 * the lists the filter kept. The replay doesn't filter again, which makes this
+	 * the only check a reader's sign-up gets.
+	 */
+	public function test_queued_sign_up_stores_only_the_lists_the_filter_kept() {
+		if ( ! defined( 'NEWSPACK_NEWSLETTERS_ASYNC_SUBSCRIPTION_ENABLED' ) ) {
+			define( 'NEWSPACK_NEWSLETTERS_ASYNC_SUBSCRIPTION_ENABLED', true );
+		}
+		$email = 'queued-filtered@example.com';
+		$drop  = function ( $lists ) {
+			return array_diff( $lists, [ 'list2' ] );
+		};
+		add_filter( 'newspack_newsletters_subscribe_lists', $drop );
+
+		$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => $email ], [ 'list1', 'list2' ], true );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', $drop );
+		$stored = $this->take_queued_sign_up_lists( $email );
+
+		$this->assertTrue( $result, 'The sign-up is queued, not run.' );
+		$this->assertSame( [ [ 'list1' ] ], $stored, 'The queued sign-up holds only the list the filter kept.' );
+	}
+
+	/**
+	 * A sign-up the filter refuses in full is never queued.
+	 */
+	public function test_refused_sign_up_is_not_queued() {
+		if ( ! defined( 'NEWSPACK_NEWSLETTERS_ASYNC_SUBSCRIPTION_ENABLED' ) ) {
+			define( 'NEWSPACK_NEWSLETTERS_ASYNC_SUBSCRIPTION_ENABLED', true );
+		}
+		$email = 'queued-refused@example.com';
+		add_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+
+		$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => $email ], [ 'list1' ], true );
+
+		remove_filter( 'newspack_newsletters_subscribe_lists', '__return_empty_array' );
+		$stored = $this->take_queued_sign_up_lists( $email );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_newsletters_lists_not_allowed', $result->get_error_code() );
+		$this->assertSame( [], $stored, 'Nothing is queued for a refused sign-up.' );
+	}
+
+	/**
+	 * Requests that ask for lists but name none that can be looked up.
+	 *
+	 * @return array
+	 */
+	public static function requests_with_no_usable_list_id() {
+		return [
+			'empty string'           => [ '' ],
+			'list of an empty ID'    => [ [ '' ] ],
+			'list of false'          => [ [ false ] ],
+			'list of null'           => [ [ null ] ],
+			'list of a nested array' => [ [ [ 'list1' ] ] ],
+		];
+	}
+
+	/**
+	 * A request that asks for lists but names none that can be looked up is
+	 * refused, with no filter hooked and nothing reaching upsert(). Skipping the
+	 * check for it would hand upsert() a value the filter never saw.
+	 *
+	 * @dataProvider requests_with_no_usable_list_id
+	 *
+	 * @param mixed $lists Lists as passed to subscribe().
+	 */
+	public function test_subscribe_refuses_a_request_with_no_usable_list_id( $lists ) {
+		$reached_upsert = false;
+		$spy            = function () use ( &$reached_upsert ) {
+			$reached_upsert = true;
+		};
+		add_action( 'newspack_newsletters_pre_add_contact', $spy );
+
+		$result = Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], $lists );
+
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_newsletters_lists_not_allowed', $result->get_error_code() );
+		$this->assertFalse( $reached_upsert );
+	}
+
+	/**
+	 * An empty array is how a caller asks for a contact with no lists, so the check
+	 * leaves it alone and the request reaches upsert(). (What the ESP then says
+	 * about an empty list is its own business: the Mailchimp provider reports "No
+	 * lists found.") `false` is the same request, but upsert() iterates it and
+	 * warns, so it is not asserted here.
+	 */
+	public function test_subscribe_with_an_empty_list_array_is_not_refused() {
+		$reached_upsert = false;
+		$spy            = function () use ( &$reached_upsert ) {
+			$reached_upsert = true;
+		};
+		add_action( 'newspack_newsletters_pre_add_contact', $spy );
+
+		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], [] );
+
+		remove_action( 'newspack_newsletters_pre_add_contact', $spy );
+
+		$this->assertTrue( $reached_upsert );
+	}
+
+	/**
+	 * Create a remote list post, as sync does for a list that lives in the ESP.
+	 *
+	 * @param string $remote_id The list's ID in the ESP.
+	 *
+	 * @return int The list's post ID.
+	 */
+	private function create_remote_list_post( $remote_id ) {
+		$post_id = wp_insert_post(
+			[
+				'post_title'  => 'Canonical ID test list',
+				'post_type'   => Subscription_Lists::CPT,
+				'post_status' => 'publish',
+			]
+		);
+		$list    = new Subscription_List( $post_id );
+		$list->set_remote_id( $remote_id );
+		$list->set_type( 'remote' );
+		$list->set_provider( 'mailchimp' );
+		return $post_id;
+	}
+
+	/**
+	 * Remove a list post made by a test.
+	 *
+	 * @param int $post_id The list's post ID.
+	 */
+	private function delete_list_post( $post_id ) {
+		wp_delete_post( $post_id, true );
+		Subscription_Lists::flush_cache();
+	}
+
+	/**
+	 * Get the list IDs the sign-up filter receives for a request. The callback
+	 * refuses the sign-up, so nothing reaches the ESP.
+	 *
+	 * @param mixed $lists Lists as passed to subscribe().
+	 *
+	 * @return string[]|null
+	 */
+	private function get_lists_seen_by_the_filter( $lists ) {
+		$seen = null;
+		$spy  = function ( $requested ) use ( &$seen ) {
+			$seen = $requested;
+			return [];
+		};
+		add_filter( 'newspack_newsletters_subscribe_lists', $spy );
+		Newspack_Newsletters_Contacts::subscribe( [ 'email' => 'test@example.com' ], $lists );
+		remove_filter( 'newspack_newsletters_subscribe_lists', $spy );
+		return $seen;
+	}
+
+	/**
+	 * A remote list asked for under a spelling that still resolves to it reaches the
+	 * filter as its own public ID, the string a callback compares against. upsert()
+	 * resolves the same spelling to the same list.
+	 */
+	public function test_subscribe_filter_sees_a_remote_list_under_its_public_id() {
+		$post_id = $this->create_remote_list_post( 'canonical-remote-id' );
+
+		$seen = $this->get_lists_seen_by_the_filter( ' canonical-remote-id' );
+
+		$this->delete_list_post( $post_id );
+
+		$this->assertSame( [ 'canonical-remote-id' ], $seen );
+	}
+
+	/**
+	 * Two spellings of one list count once, so a callback can't be shown a list
+	 * under one spelling and have the other slip past it.
+	 */
+	public function test_subscribe_filter_sees_one_list_once_under_two_spellings() {
+		$post_id = $this->create_remote_list_post( 'canonical-remote-id' );
+
+		$seen = $this->get_lists_seen_by_the_filter( [ 'canonical-remote-id', ' canonical-remote-id' ] );
+
+		$this->delete_list_post( $post_id );
+
+		$this->assertSame( [ 'canonical-remote-id' ], $seen );
+	}
+
+	/**
+	 * A local list is known by `newspack-<post ID>`. Padding the number with zeros,
+	 * or ending the ID with a newline, still resolves to the list, so the filter
+	 * is shown the plain form.
+	 */
+	public function test_subscribe_filter_sees_a_local_list_under_its_public_id() {
+		$post_id = wp_insert_post(
+			[
+				'post_title'  => 'Local canonical ID test list',
+				'post_type'   => Subscription_Lists::CPT,
+				'post_status' => 'publish',
+			]
+		);
+		$public_id = 'newspack-' . $post_id;
+
+		$padded  = $this->get_lists_seen_by_the_filter( 'newspack-0' . $post_id );
+		$newline = $this->get_lists_seen_by_the_filter( $public_id . "\n" );
+
+		$this->delete_list_post( $post_id );
+
+		$this->assertSame( [ $public_id ], $padded );
+		$this->assertSame( [ $public_id ], $newline );
+	}
+
+	/**
+	 * A remote list with no ID stored has no public ID to swap in, so the ID the
+	 * caller gave reaches the filter as it is, never as an empty string.
+	 */
+	public function test_subscribe_filter_sees_a_list_with_no_public_id_under_the_id_given() {
+		$post_id = $this->create_remote_list_post( '' );
+
+		$seen = $this->get_lists_seen_by_the_filter( 'newspack-' . $post_id );
+
+		$this->delete_list_post( $post_id );
+
+		$this->assertSame( [ 'newspack-' . $post_id ], $seen );
+	}
+
+	/**
+	 * An ID that matches no list reaches the filter as given. upsert() reports it
+	 * as invalid, as it always has.
+	 */
+	public function test_subscribe_filter_sees_an_unknown_list_id_unchanged() {
+		$this->assertSame( [ 'not-a-list' ], $this->get_lists_seen_by_the_filter( 'not-a-list' ) );
+	}
+
+	/**
 	 * Upsert a contact to a single list.
 	 */
 	public function test_upsert_contact_to_single_list() {
