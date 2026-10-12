@@ -1,3 +1,24 @@
+# @automattic/newspack-blocks [4.35.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.3...newspack-blocks@4.35.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **blocks:** load multiple Content Loop blocks in one editor request ([#1110](https://github.com/Automattic/newspack-workspace/issues/1110)) ([e2cde5c](https://github.com/Automattic/newspack-workspace/commit/e2cde5ce77ba7a3caff86f55172db76815fa5934))
+* **phpcs:** point constant ignores at the documenting file ([#1130](https://github.com/Automattic/newspack-workspace/issues/1130)) ([9468c79](https://github.com/Automattic/newspack-workspace/commit/9468c79ef60ae098237278bbdd774574b95caa0e))
+
+
+### Features
+
+* **components:** update @wordpress/ui and match its card borders ([#1195](https://github.com/Automattic/newspack-workspace/issues/1195)) ([9b62fe7](https://github.com/Automattic/newspack-workspace/commit/9b62fe7b69d824616ca931069c3a32738517d365))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.5
+* **newspack-icons:** upgraded to 1.2.0
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## @automattic/newspack-blocks [4.34.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.2...newspack-blocks@4.34.3) (2026-10-06)
 
 

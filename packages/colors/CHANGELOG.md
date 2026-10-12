@@ -1,3 +1,10 @@
+## newspack-colors [1.1.5](https://github.com/Automattic/newspack-workspace/compare/newspack-colors@1.1.4...newspack-colors@1.1.5) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## newspack-colors [1.1.4](https://github.com/Automattic/newspack-workspace/compare/newspack-colors@1.1.3...newspack-colors@1.1.4) (2026-08-31)
 
 
