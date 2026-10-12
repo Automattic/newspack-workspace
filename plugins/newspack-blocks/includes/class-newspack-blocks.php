@@ -868,9 +868,9 @@ class Newspack_Blocks {
 	 * read: publicly-viewable types, plus any explicitly allow-listed via the
 	 * `newspack_blocks_articles_allowed_post_types` filter.
 	 *
-	 * Every query those blocks build goes through this, on the front end, in the
-	 * editor and through the REST routes, because the routes that render them are
-	 * open to anyone who can edit posts, Contributors included. Disallowed types are
+	 * Every query those blocks build goes through this, so the front end, the editor
+	 * routes (open to anyone who can edit posts, Contributors included) and the
+	 * public articles route all serve the same post types. Disallowed types are
 	 * dropped; the returned list may be empty when none qualify (the caller then
 	 * returns no results).
 	 *
@@ -883,8 +883,9 @@ class Newspack_Blocks {
 		 * publicly-viewable ones. Each entry is an explicit, per-CPT decision to
 		 * expose that type's published posts to unauthenticated callers, including
 		 * through the public articles REST route — do not add types whose published
-		 * content should stay off it. A non-viewable type left off this list can still
-		 * be picked in the block's post type panel, but its blocks render empty.
+		 * content should stay off it. A non-viewable type that declares `newspack_blocks`
+		 * support but is left off this list can still be picked in the block's post
+		 * type panel, but its blocks render empty.
 		 *
 		 * @param string[] $allowed Post type slugs to allow. Default empty.
 		 */
