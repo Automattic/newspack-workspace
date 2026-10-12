@@ -1,3 +1,10 @@
+## newspack-network [2.22.13](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.12...newspack-network@2.22.13) (2026-10-12)
+
+
+### Bug Fixes
+
+* **network:** name the reader by account email and drop guest orders ([#1255](https://github.com/Automattic/newspack-workspace/issues/1255)) ([02e05da](https://github.com/Automattic/newspack-workspace/commit/02e05da14d85b04342048a27f562035bd0de51e1))
+
 ## newspack-network [2.22.12](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.11...newspack-network@2.22.12) (2026-10-12)
 
 
