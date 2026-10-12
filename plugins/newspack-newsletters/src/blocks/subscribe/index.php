@@ -155,22 +155,25 @@ function render_honeypot_field( $placeholder = '' ) {
 }
 
 /**
- * Render Registration Block.
+ * Work out which of the block's lists to render for the current reader.
  *
- * @param array[] $attrs Block attributes.
+ * @param array $attrs Block attributes.
+ *
+ * @return array|null {
+ *     Null when the block has nothing to render.
+ *
+ *     @type array[]  $config     Lists the reader can sign up for, keyed by public ID.
+ *     @type string[] $accessible Public IDs of the block's lists the reader can sign up for.
+ *     @type array[]  $gated      The block's lists the reader may see but not join, keyed by public ID.
+ *     @type string[] $order      Public IDs in the order their rows render.
+ * }
  */
-function render_block( $attrs ) {
+function get_block_lists( $attrs ) {
 	$list_config = \Newspack_Newsletters_Subscription::get_lists_config();
 	if ( empty( $list_config ) || \is_wp_error( $list_config ) ) {
-		return;
+		return null;
 	}
-	$block_id        = \wp_rand( 0, 99999 );
-	$subscribed      = false;
-	$message         = '';
-	$email           = '';
-	$lists           = array_keys( $list_config );
-	$list_map        = array_flip( $lists );
-	$available_lists = array_values( array_intersect( $attrs['lists'], $lists ) );
+	$accessible = array_values( array_intersect( $attrs['lists'], array_keys( $list_config ) ) );
 
 	/**
 	 * Filters the lists that are about to be displayed in the Subscription block
@@ -178,16 +181,58 @@ function render_block( $attrs ) {
 	 * @param array $available_lists The lists that are about to be displayed.
 	 * @param array $attrs           Block attributes.
 	 */
-	$available_lists = apply_filters( 'newspack_newsletters_subscription_block_available_lists', $available_lists, $attrs );
+	$accessible = apply_filters( 'newspack_newsletters_subscription_block_available_lists', $accessible, $attrs );
 
-	if ( empty( $available_lists ) ) {
+	if ( empty( $accessible ) ) {
+		return null;
+	}
+
+	return [
+		'config'     => $list_config,
+		'accessible' => $accessible,
+		'gated'      => [],
+		'order'      => $accessible,
+	];
+}
+
+/**
+ * Render Registration Block.
+ *
+ * @param array[] $attrs Block attributes.
+ */
+function render_block( $attrs ) {
+	$lists = get_block_lists( $attrs );
+	if ( null === $lists ) {
 		return;
 	}
 
-	$provider = \Newspack_Newsletters::get_service_provider();
-
 	// Enqueue scripts.
 	enqueue_scripts();
+
+	return render_form( $attrs, $lists );
+}
+
+/**
+ * Render the block's markup.
+ *
+ * Separate from render_block() so the markup can be tested without the built
+ * assets that enqueue_scripts() reads.
+ *
+ * @param array $attrs Block attributes.
+ * @param array $lists The block's lists, from get_block_lists().
+ *
+ * @return string
+ */
+function render_form( $attrs, $lists ) {
+	$list_config     = $lists['config'];
+	$available_lists = $lists['accessible'];
+	$block_id        = \wp_rand( 0, 99999 );
+	$subscribed      = false;
+	$message         = '';
+	$email           = '';
+	$list_map        = array_flip( array_keys( $list_config ) );
+
+	$provider = \Newspack_Newsletters::get_service_provider();
 
 	if ( \is_user_logged_in() ) {
 		$email = \wp_get_current_user()->user_email;
