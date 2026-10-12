@@ -165,8 +165,11 @@
 			margin: 0 0.5rem 0 0;
 		}
 
-		// Fill the row, so the title can push its badge to the far edge.
+		// Fill the row, so the title can push its badge to the far edge. Rows read
+		// from the start edge even inside a centered container: across the full
+		// width, a centered description would drift away from its title.
 		.list-details {
+			text-align: start;
 			width: 100%;
 		}
 

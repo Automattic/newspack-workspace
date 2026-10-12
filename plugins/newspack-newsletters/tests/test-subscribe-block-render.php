@@ -645,4 +645,33 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertArrayHasKey( $hidden->get_public_id(), $lists['premium'], 'A list hidden from the reader.' );
 		$this->assertArrayNotHasKey( $free->get_public_id(), $lists['premium'] );
 	}
+
+	/**
+	 * A provider's list ID can be all digits, which PHP stores as an integer array key.
+	 */
+	public function test_numeric_list_id_gets_the_badge() {
+		$html = render_form(
+			$this->get_attrs( [ 'lists' => [ '7', '8' ] ] ),
+			[
+				'config'     => [
+					'7' => [
+						'title'       => 'Seven',
+						'description' => '',
+					],
+					'8' => [
+						'title'       => 'Eight',
+						'description' => '',
+					],
+				],
+				'accessible' => [ '7', '8' ],
+				'gated'      => [],
+				'order'      => [ '7', '8' ],
+				'premium'    => [ '7' => true ],
+			]
+		);
+
+		$this->assertStringContainsString( 'newspack-ui__badge', $this->get_checkbox_row( '7', $html ) );
+		$this->assertNotSame( '', $this->get_checkbox_row( '8', $html ) );
+		$this->assertStringNotContainsString( 'newspack-ui__badge', $this->get_checkbox_row( '8', $html ) );
+	}
 }
