@@ -74,21 +74,6 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	}
 
 	/**
-	 * The verification link for the test reader's pending request.
-	 *
-	 * Private on purpose in the class under test — it hands out the token that
-	 * completes a change — so the test reaches it the same way it reaches the
-	 * other private members here.
-	 *
-	 * @return string
-	 */
-	private function verify_url() {
-		$method = new ReflectionMethod( WooCommerce_My_Account::class, 'get_verify_email_change_url' );
-		$method->setAccessible( true );
-		return $method->invoke( null, $this->user_id );
-	}
-
-	/**
 	 * Move the account address, as an admin correction or any other route would.
 	 *
 	 * @param string $email The address to move the account to.
@@ -322,25 +307,6 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	}
 
 	/**
-	 * The verification link carries the token that completes the change, and
-	 * never the one that cancels it. This is the line the vulnerability was on,
-	 * so it is asserted rather than assumed.
-	 */
-	public function test_verification_link_carries_only_the_verification_token() {
-		$tokens = $this->start_email_change();
-		$url    = $this->verify_url();
-		$this->assertStringContainsString( WooCommerce_My_Account::VERIFY_EMAIL_CHANGE_PARAM . '=' . $tokens['verify'], $url, 'The verification link should carry the verification token.' );
-		$this->assertStringNotContainsString( $tokens['cancel'], $url, 'The verification link should never carry the cancellation token.' );
-	}
-
-	/**
-	 * With nothing pending there is no verification link to hand out either.
-	 */
-	public function test_no_verification_link_without_a_pending_change() {
-		$this->assertSame( '', $this->verify_url() );
-	}
-
-	/**
 	 * A pending link must not survive the account address moving by another
 	 * route. Settling it would revert the newer address and push that revert on
 	 * to Stripe and the ESP, with the reader told the change succeeded.
@@ -509,6 +475,43 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 		$this->assertWPError( $result, 'An unsent verification email should be reported.' );
 		$this->assertSame( [], $recipients, 'The old address should not be told about a request that was dropped.' );
 		$this->assertNoPendingRequest();
+	}
+
+	/**
+	 * Each request's emails carry the links issued for that request. When a
+	 * newer request replaces it partway through, the first new address must
+	 * not receive the newer request's verification token, which would let it
+	 * confirm an address it does not control, and the old address is told only
+	 * about the request that is still standing.
+	 */
+	public function test_a_replaced_request_does_not_send_the_newer_links() {
+		$first       = null;
+		$replaced_by = null;
+		$replace     = function ( $meta_id, $user_id, $meta_key ) use ( &$first, &$replaced_by ) {
+			if ( WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META !== $meta_key || null !== $first ) {
+				return;
+			}
+			$first = \get_user_meta( $user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_TOKENS_META, true );
+			WooCommerce_My_Account::request_email_change( $user_id, 'second@example.test' );
+			$replaced_by = \get_user_meta( $user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_TOKENS_META, true );
+		};
+		\add_action( 'added_user_meta', $replace, 10, 3 );
+		\add_action( 'updated_user_meta', $replace, 10, 3 );
+		\Newspack\Emails::reset_email_configs_cache();
+		reset_phpmailer_instance();
+		WooCommerce_My_Account::request_email_change( $this->user_id, 'first@example.test' );
+		\remove_action( 'added_user_meta', $replace, 10 );
+		\remove_action( 'updated_user_meta', $replace, 10 );
+
+		$bodies_by_recipient = [];
+		foreach ( tests_retrieve_phpmailer_instance()->mock_sent as $sent ) {
+			$bodies_by_recipient[ $sent['to'][0][0] ][] = quoted_printable_decode( $sent['body'] );
+		}
+		$first_verification = implode( '', $bodies_by_recipient['first@example.test'] );
+		$this->assertStringContainsString( WooCommerce_My_Account::VERIFY_EMAIL_CHANGE_PARAM . '=' . $first['verify'], $first_verification, 'The first address should get the link issued for it.' );
+		$this->assertStringNotContainsString( $replaced_by['verify'], $first_verification, 'The first address should not get the newer verification token.' );
+		$this->assertCount( 1, $bodies_by_recipient['reader@example.test'], 'The old address should be told about the standing request only.' );
+		$this->assertStringContainsString( $replaced_by['cancel'], $bodies_by_recipient['reader@example.test'][0] );
 	}
 
 	/**

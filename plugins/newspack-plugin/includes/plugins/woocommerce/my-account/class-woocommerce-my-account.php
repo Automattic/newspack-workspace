@@ -1276,23 +1276,15 @@ class WooCommerce_My_Account {
 	}
 
 	/**
-	 * Get the verification url for a user's pending email change.
+	 * Whether a token set is still the user's standing email change request.
 	 *
-	 * Deliberately private, and deliberately not the mirror image of the
-	 * accessor above: this hands out the token that completes the change, so it
-	 * exists to keep the two links assembled the same way and under test, not
-	 * as something other code should be able to call.
+	 * @param int   $user_id User ID.
+	 * @param array $tokens  Token set from create_email_change_tokens().
 	 *
-	 * @param int $user_id User ID.
-	 *
-	 * @return string Verification url, or an empty string if there is no pending change.
+	 * @return bool
 	 */
-	private static function get_verify_email_change_url( $user_id ) {
-		$tokens = self::get_email_change_tokens( $user_id );
-		if ( empty( $tokens['verify'] ) ) {
-			return '';
-		}
-		return self::get_email_change_url( self::VERIFY_EMAIL_CHANGE_PARAM, $tokens['verify'] );
+	private static function is_current_email_change_request( $user_id, $tokens ) {
+		return \get_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_TOKENS_META, true ) === $tokens;
 	}
 
 	/**
@@ -1443,8 +1435,10 @@ class WooCommerce_My_Account {
 			return new \WP_Error( 'newspack_email_change_email_exists', __( 'This email address is already in use.', 'newspack-plugin' ) );
 		}
 		// The token record carries the requested address, so it is written
-		// first and is what every later step reads. The plain meta below
-		// mirrors it for anything still reading that key directly.
+		// first. The plain meta below mirrors it for anything still reading
+		// that key directly. The emails are built from this call's tokens, not
+		// from the stored record, which a newer request may already have
+		// replaced; its verification token must never reach this address.
 		$tokens = self::create_email_change_tokens( $user_id, $new_email );
 		if ( ! $tokens ) {
 			return new \WP_Error( 'newspack_email_change_failed', __( 'Something went wrong. Please try again.', 'newspack-plugin' ) );
@@ -1456,11 +1450,11 @@ class WooCommerce_My_Account {
 			[
 				[
 					'template' => '*EMAIL_VERIFICATION_URL*',
-					'value'    => self::get_verify_email_change_url( $user_id ),
+					'value'    => self::get_email_change_url( self::VERIFY_EMAIL_CHANGE_PARAM, $tokens['verify'] ),
 				],
 				[
 					'template' => '*EMAIL_CANCELLATION_URL*',
-					'value'    => self::get_cancel_email_change_url( $user_id ),
+					'value'    => self::get_email_change_url( self::CANCEL_EMAIL_CHANGE_PARAM, $tokens['cancel'] ),
 				],
 			]
 		);
@@ -1469,10 +1463,13 @@ class WooCommerce_My_Account {
 		// expires, unless a newer request has replaced it in the meantime. The
 		// old address is only told about a request that is still standing.
 		if ( ! $verification_sent ) {
-			if ( \get_user_meta( $user_id, self::PENDING_EMAIL_CHANGE_TOKENS_META, true ) === $tokens ) {
+			if ( self::is_current_email_change_request( $user_id, $tokens ) ) {
 				self::clear_pending_email_change( $user_id );
 			}
 			return new \WP_Error( 'newspack_email_change_not_sent', __( 'Something went wrong. Please contact the site administrator.', 'newspack-plugin' ) );
+		}
+		if ( ! self::is_current_email_change_request( $user_id, $tokens ) ) {
+			return true;
 		}
 		Emails::send_email(
 			Reader_Activation_Emails::EMAIL_TYPES['CHANGE_EMAIL_CANCEL'],
@@ -1484,7 +1481,7 @@ class WooCommerce_My_Account {
 				],
 				[
 					'template' => '*EMAIL_CANCELLATION_URL*',
-					'value'    => self::get_cancel_email_change_url( $user_id ),
+					'value'    => self::get_email_change_url( self::CANCEL_EMAIL_CHANGE_PARAM, $tokens['cancel'] ),
 				],
 			]
 		);
