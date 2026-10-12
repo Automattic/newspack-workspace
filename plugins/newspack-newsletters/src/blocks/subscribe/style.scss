@@ -173,6 +173,13 @@
 			width: 100%;
 		}
 
+		// A theme can make a label shrink to its content. Keep it as wide as the
+		// row, or the badge stops at the end of the text.
+		.list-details label,
+		.list-label {
+			display: block;
+		}
+
 		// The badge sits at the far edge of the title's row, or under the title in
 		// a narrow column. A gap rather than a margin, so a wrapped badge starts
 		// flush with the title.
