@@ -386,7 +386,8 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 
 	/**
 	 * Lists that were already checked skip the filter. This is how a queued
-	 * sign-up is replayed: there is no session left to judge it by.
+	 * sign-up is replayed: the replay can't be relied on to carry the reader's
+	 * session, so it can't judge the lists again.
 	 */
 	public function test_subscribe_skips_the_filter_for_checked_lists() {
 		$seen = null;

@@ -81,8 +81,8 @@ class Newspack_Newsletters_Contacts {
 	 * @param bool           $lists_checked Whether `$lists` already went through the
 	 *                                      `newspack_newsletters_subscribe_lists` filter. Pass true only
 	 *                                      when replaying a queued sign-up: its lists were filtered in the
-	 *                                      reader's own request, and the replay has no session to judge
-	 *                                      them by.
+	 *                                      reader's own request, and the replay can't be relied on to
+	 *                                      carry that session.
 	 *
 	 * @return array|WP_Error|true Contact data if it was added, or error otherwise. True if async.
 	 */
