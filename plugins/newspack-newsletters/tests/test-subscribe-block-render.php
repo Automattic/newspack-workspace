@@ -416,4 +416,42 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 
 		remove_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
 	}
+
+	/**
+	 * A list that the block's own filter adds renders with showPremium on as it
+	 * does with it off, after the rows for the lists the attribute names. The gated
+	 * rows follow the attribute, so without this the added list would vanish.
+	 */
+	public function test_list_added_by_the_block_filter_renders_with_show_premium() {
+		$free                  = $this->get_list( 'only_mailchimp' );
+		$gated                 = $this->get_list( 'two_settings' );
+		$added                 = $this->get_list( 'remote_mailchimp' );
+		$this->hidden_list_ids = [ $gated->get_id() ];
+		$filter                = function ( $list_ids ) use ( $added ) {
+			return array_merge( $list_ids, [ $added->get_public_id() ] );
+		};
+		add_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
+
+		$attrs = [ 'lists' => [ $free->get_public_id(), $gated->get_public_id() ] ];
+
+		$html = $this->render( $this->get_attrs( $attrs ) );
+		$this->assertSame( 2, substr_count( $html, 'type="checkbox"' ), 'With showPremium off, the free list and the added list get a checkbox.' );
+		$this->assertStringContainsString( 'value="' . $free->get_public_id() . '"', $html );
+		$this->assertStringContainsString( 'value="' . $added->get_public_id() . '"', $html );
+		$this->assertStringNotContainsString( 'class="is-gated"', $html );
+
+		$html = $this->render( $this->get_attrs( $attrs + [ 'showPremium' => true ] ) );
+		$this->assertSame( 2, substr_count( $html, 'type="checkbox"' ), 'With showPremium on, the free list and the added list get a checkbox.' );
+		$this->assertStringContainsString( 'value="' . $free->get_public_id() . '"', $html );
+		$this->assertStringContainsString( 'value="' . $added->get_public_id() . '"', $html );
+		$this->assertSame( 1, substr_count( $html, 'class="is-gated"' ), 'The hidden list still shows as a gated row.' );
+		$this->assertLessThan(
+			strpos( $html, 'value="' . $added->get_public_id() . '"' ),
+			strpos( $html, 'class="is-gated"' ),
+			'The added list comes after the lists the attribute names.'
+		);
+		$this->assert_public_id_absent( $gated->get_public_id(), $html );
+
+		remove_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
+	}
 }

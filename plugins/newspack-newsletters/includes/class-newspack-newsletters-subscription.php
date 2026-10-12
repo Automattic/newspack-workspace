@@ -925,8 +925,9 @@ class Newspack_Newsletters_Subscription {
 			$context = $intent['context'];
 
 			// The lists were filtered when the intent was queued, in the reader's own
-			// request. This replay runs from cron with no session, so a check that
-			// judges the session would refuse lists the reader may join.
+			// request. The replay arrives by a loopback request or from cron, and neither
+			// can be relied on to carry the reader's session, so a check that judges the
+			// session would refuse lists the reader may join.
 			$result = Newspack_Newsletters_Contacts::subscribe( $contact, $lists, false, $context . ' (ASYNC)', true );
 
 			$user = get_user_by( 'email', $email );

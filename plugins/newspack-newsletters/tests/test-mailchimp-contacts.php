@@ -289,8 +289,8 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The filter receives the contact and the context so a callback can judge
-	 * the contact rather than the session.
+	 * The filter is handed the contact and the context of the sign-up, for logging
+	 * and for comparing the contact against the requester.
 	 */
 	public function test_subscribe_filter_receives_contact_and_context() {
 		$args = [];
@@ -407,8 +407,9 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 
 	/**
 	 * A queued sign-up is replayed without the lists filter. Its lists were checked
-	 * when it was queued, in the reader's own request, and the replay runs from
-	 * cron with no session to check them by.
+	 * when it was queued, in the reader's own request. The replay arrives by a
+	 * loopback request or from cron, and neither can be relied on to carry the
+	 * reader's session to check them by.
 	 */
 	public function test_queued_sign_up_is_replayed_without_the_filter() {
 		if ( ! defined( 'NEWSPACK_NEWSLETTERS_ASYNC_SUBSCRIPTION_ENABLED' ) ) {

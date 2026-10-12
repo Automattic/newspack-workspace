@@ -114,6 +114,11 @@ class Newspack_Newsletters_Contacts {
 				 *
 				 * A callback may only remove lists. Anything it adds is dropped.
 				 *
+				 * A callback that decides who may join a list should judge the requester,
+				 * meaning the current session, and not the account behind the contact's
+				 * email. A result that depends on someone else's account tells the
+				 * requester something about that account.
+				 *
 				 * @param string[] $lists   Public IDs of the lists requested.
 				 * @param array    $contact Contact information. Always has an `email` key.
 				 * @param string   $context Context of the sign-up, for logging.
@@ -130,6 +135,12 @@ class Newspack_Newsletters_Contacts {
 					'newspack_newsletters_lists_not_allowed',
 					__( 'The selected lists are not available for this email address.', 'newspack-newsletters' )
 				);
+			}
+			// A sign-up that lost only some of its lists still reports success to the
+			// reader, so this line is the only trace of it. It leaves the address out.
+			$dropped_lists = array_values( array_diff( $requested_lists, $allowed_lists ) );
+			if ( ! empty( $dropped_lists ) ) {
+				Newspack_Newsletters_Logger::log( 'Sign-up narrowed: dropped ' . implode( ', ', $dropped_lists ) . ' from the requested lists. Context: ' . $context );
 			}
 			$lists = $allowed_lists;
 		}

@@ -250,6 +250,16 @@ function get_block_lists( $attrs ) {
 				}
 			)
 		);
+		// A callback on the filter above can add a list the attribute doesn't name.
+		// The rows follow the attribute, so without this that list would render with
+		// showPremium off and vanish with it on.
+		$ordered_ids = array_map( 'strval', $order );
+		foreach ( $accessible as $list_id ) {
+			if ( ! in_array( (string) $list_id, $ordered_ids, true ) ) {
+				$order[]       = $list_id;
+				$ordered_ids[] = (string) $list_id;
+			}
+		}
 	}
 
 	return [
