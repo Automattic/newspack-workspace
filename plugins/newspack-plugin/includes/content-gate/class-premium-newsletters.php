@@ -34,6 +34,16 @@ class Premium_Newsletters {
 	private static $restricted_lists = [];
 
 	/**
+	 * Why the sign-up being filtered lost a gated list, if it did. One of
+	 * 'not_own_address', 'no_access', or '' when nothing was refused.
+	 *
+	 * Read when the refusal is turned into a message for the reader.
+	 *
+	 * @var string
+	 */
+	private static $sign_up_refusal = '';
+
+	/**
 	 * Hook name for the scheduled access check action.
 	 */
 	const SCHEDULED_HOOK = 'newspack_premium_newsletters_access_check';
@@ -113,6 +123,9 @@ class Premium_Newsletters {
 
 		// Refuse sign-ups to gated lists unless the reader is signing up their own address.
 		add_filter( 'newspack_newsletters_subscribe_lists', [ __CLASS__, 'filter_subscribe_lists' ], 10, 2 );
+
+		// Tell a reader who was refused a premium list what to do about it.
+		add_filter( 'newspack_newsletters_add_contact_reader_error_message', [ __CLASS__, 'filter_sign_up_error_message' ], 20, 3 );
 
 		// Tell the Newsletter Subscription Form block's editor which lists are gated.
 		add_filter( 'newspack_newsletters_subscription_list_gates', [ __CLASS__, 'filter_list_gates' ] );
@@ -516,11 +529,17 @@ class Premium_Newsletters {
 	 * @return string[] The lists the sign-up may proceed with.
 	 */
 	public static function filter_subscribe_lists( $lists, $contact = [] ) {
+		// Reset before any early return, so one sign-up's refusal is never read as another's.
+		self::$sign_up_refusal = '';
 		if ( ! is_array( $lists ) || empty( $lists ) || ! self::is_access_control_active() ) {
 			return $lists;
 		}
 		// With no premium newsletter gates, no list can be gated, so there is nothing to judge.
-		if ( empty( self::get_gates() ) ) {
+		// This reads Content_Gate directly rather than get_gates(): that one memoizes in a
+		// static nothing clears outside tests, so in a process that outlives a request a gate
+		// published after the first check would never be seen and every list would pass.
+		// Content_Gate::get_gates() is flushed on every post and meta write.
+		if ( empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) ) ) {
 			return $lists;
 		}
 		if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( 'Newspack\Newsletters\Subscription_List', 'from_public_id' ) ) {
@@ -545,10 +564,50 @@ class Premium_Newsletters {
 					if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
 						return true;
 					}
-					return $is_own_address && ! Content_Restriction_Control::is_post_restricted( false, $list->get_id(), $session_user->ID );
+					// The reason comes from the same two facts as the rule: whether this is the
+					// session reader's own address, and whether that reader has access. The
+					// access check stays behind the address check, so it never runs for an
+					// address that isn't theirs.
+					if ( ! $is_own_address ) {
+						self::$sign_up_refusal = 'not_own_address';
+						return false;
+					}
+					if ( Content_Restriction_Control::is_post_restricted( false, $list->get_id(), $session_user->ID ) ) {
+						self::$sign_up_refusal = 'no_access';
+						return false;
+					}
+					return true;
 				}
 			)
 		);
+	}
+
+	/**
+	 * Replace the generic sign-up error with one that explains a premium list
+	 * refusal.
+	 *
+	 * The generic message tells a refused reader nothing. These two say what
+	 * happened, and neither reveals anything about another person: the first is
+	 * what every request for someone else's address gets, and the second is only
+	 * shown to a reader about their own account.
+	 *
+	 * @param string $message   The reader-facing message so far.
+	 * @param array  $params    Details of the sign-up request.
+	 * @param mixed  $raw_error The error the sign-up produced.
+	 *
+	 * @return string
+	 */
+	public static function filter_sign_up_error_message( $message, $params = [], $raw_error = null ) {
+		if ( ! is_wp_error( $raw_error ) || 'newspack_newsletters_lists_not_allowed' !== $raw_error->get_error_code() ) {
+			return $message;
+		}
+		if ( 'not_own_address' === self::$sign_up_refusal ) {
+			return __( 'Sign in with this email address to subscribe to premium newsletters.', 'newspack-plugin' );
+		}
+		if ( 'no_access' === self::$sign_up_refusal ) {
+			return __( 'This account doesn\'t include access to premium newsletters.', 'newspack-plugin' );
+		}
+		return $message;
 	}
 
 	/**

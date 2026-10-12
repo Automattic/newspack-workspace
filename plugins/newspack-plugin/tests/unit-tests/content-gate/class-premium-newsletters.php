@@ -244,6 +244,16 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		return Premium_Newsletters::filter_subscribe_lists( [ 'newspack-' . $list_id ], [ 'email' => $email ] );
 	}
 
+	/**
+	 * Ask for the reader-facing message after a sign-up produced the error that
+	 * newsletters returns when every requested list was refused.
+	 *
+	 * @return string The message.
+	 */
+	private function get_refusal_message(): string {
+		return Premium_Newsletters::filter_sign_up_error_message( 'Generic.', [], new \WP_Error( 'newspack_newsletters_lists_not_allowed', 'x' ) );
+	}
+
 	// =========================================================================
 	// filter_subscription_lists() — no-gates guard
 	// =========================================================================
@@ -2634,5 +2644,162 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$result = apply_filters( 'newspack_newsletters_subscribe_lists', [ 'newspack-' . $list_id ], [ 'email' => 'nobody@example.com' ], 'Test' );
 
 		$this->assertSame( [], $result );
+	}
+
+	/**
+	 * A gate published after the first sign-up check is seen by the next one. The
+	 * no-gates shortcut must not trust a memo that nothing clears: in a process
+	 * that lives across requests, a publisher who adds a premium gate would
+	 * otherwise find their list still open to everyone.
+	 *
+	 * Within one test the Premium_Newsletters gate memo persists (set_up() resets
+	 * it only between tests), which is what lets this catch the stale read.
+	 */
+	public function test_filter_subscribe_lists_sees_a_gate_published_after_the_first_check() {
+		$list_id = $this->create_premium_list();
+		wp_set_current_user( 0 );
+
+		$this->assertSame( [ 'newspack-' . $list_id ], $this->filter_sign_up( $list_id, 'nobody@example.com' ), 'With no gate, the list is open.' );
+
+		$this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+
+		$this->assertSame( [], $this->filter_sign_up( $list_id, 'nobody@example.com' ), 'Once a gate names the list, the next check must refuse it.' );
+	}
+
+	// =========================================================================
+	// filter_sign_up_error_message() — telling a refused reader what to do
+	// =========================================================================
+
+	/**
+	 * A signed-out request for a gated list is told to sign in.
+	 */
+	public function test_sign_up_error_message_tells_a_signed_out_reader_to_sign_in() {
+		$list_id = $this->create_gated_list();
+		wp_set_current_user( 0 );
+
+		$this->filter_sign_up( $list_id, 'nobody@example.com' );
+
+		$this->assertSame( 'Sign in with this email address to subscribe to premium newsletters.', $this->get_refusal_message() );
+	}
+
+	/**
+	 * The message must not depend on who the submitted address belongs to. If it
+	 * did, a signed-out request could tell a paying subscriber's address from
+	 * anyone else's, which is what the sign-up rule was built to prevent.
+	 */
+	public function test_sign_up_error_message_is_the_same_whoever_the_address_belongs_to() {
+		$list_id    = $this->create_gated_list();
+		$entitled   = get_userdata( $this->create_reader( true ) )->user_email;
+		$unentitled = get_userdata( $this->create_reader() )->user_email;
+		wp_set_current_user( 0 );
+
+		$messages = [];
+		foreach ( [ $entitled, $unentitled, 'nobody@example.com' ] as $email ) {
+			$this->filter_sign_up( $list_id, $email );
+			$messages[] = $this->get_refusal_message();
+		}
+
+		$sign_in = 'Sign in with this email address to subscribe to premium newsletters.';
+		$this->assertSame( [ $sign_in, $sign_in, $sign_in ], $messages );
+	}
+
+	/**
+	 * A signed-in reader signing up their own address, without access, is told
+	 * their account lacks it. This is about their own account, so it reveals
+	 * nothing about anyone else.
+	 */
+	public function test_sign_up_error_message_tells_a_reader_without_access_so() {
+		$list_id = $this->create_gated_list();
+		$user_id = $this->create_reader();
+		wp_set_current_user( $user_id );
+
+		$this->filter_sign_up( $list_id, get_userdata( $user_id )->user_email );
+
+		$this->assertSame( 'This account doesn\'t include access to premium newsletters.', $this->get_refusal_message() );
+	}
+
+	/**
+	 * A signed-in reader with access who submits someone else's address is told to
+	 * sign in with that address, the same as a signed-out request. Their own
+	 * access is not what was refused, and the answer is the same whether or not
+	 * the other person has an account or access.
+	 */
+	public function test_sign_up_error_message_tells_a_reader_to_sign_in_for_another_address() {
+		$list_id    = $this->create_gated_list();
+		$entitled   = get_userdata( $this->create_reader( true ) )->user_email;
+		$unentitled = get_userdata( $this->create_reader() )->user_email;
+		wp_set_current_user( $this->create_reader( true ) );
+
+		$messages = [];
+		foreach ( [ $entitled, $unentitled, 'nobody@example.com' ] as $email ) {
+			$this->filter_sign_up( $list_id, $email );
+			$messages[] = $this->get_refusal_message();
+		}
+
+		$sign_in = 'Sign in with this email address to subscribe to premium newsletters.';
+		$this->assertSame( [ $sign_in, $sign_in, $sign_in ], $messages );
+	}
+
+	/**
+	 * An error this class did not cause keeps its message, and so does a value that
+	 * is not an error at all.
+	 */
+	public function test_sign_up_error_message_leaves_other_errors_alone() {
+		$list_id = $this->create_gated_list();
+		wp_set_current_user( 0 );
+		$this->filter_sign_up( $list_id, 'nobody@example.com' );
+
+		$this->assertSame( 'Generic.', Premium_Newsletters::filter_sign_up_error_message( 'Generic.', [], new \WP_Error( 'some_other_error', 'x' ) ) );
+		$this->assertSame( 'Generic.', Premium_Newsletters::filter_sign_up_error_message( 'Generic.', [], 'newspack_newsletters_lists_not_allowed' ) );
+		$this->assertSame( 'Generic.', Premium_Newsletters::filter_sign_up_error_message( 'Generic.', [], null ) );
+		$this->assertSame( 'Generic.', Premium_Newsletters::filter_sign_up_error_message( 'Generic.' ) );
+	}
+
+	/**
+	 * The same error code is also returned when a sign-up names no usable list, or
+	 * when something else refused it. Access Control claims only the refusals it
+	 * made, and a later sign-up that refused nothing does not inherit an earlier
+	 * one's reason.
+	 */
+	public function test_sign_up_error_message_only_claims_its_own_refusals() {
+		$gated_id = $this->create_gated_list();
+		$free_id  = $this->create_premium_list();
+		wp_set_current_user( 0 );
+
+		$this->filter_sign_up( $free_id, 'nobody@example.com' );
+		$this->assertSame( 'Generic.', $this->get_refusal_message(), 'Nothing was refused, so the generic message stands.' );
+
+		$this->filter_sign_up( $gated_id, 'nobody@example.com' );
+		$this->assertNotSame( 'Generic.', $this->get_refusal_message(), 'The refusal must be claimed for this test to mean anything.' );
+
+		$this->filter_sign_up( $free_id, 'nobody@example.com' );
+		$this->assertSame( 'Generic.', $this->get_refusal_message(), 'The earlier sign-up\'s reason must not be read for this one.' );
+	}
+
+	/**
+	 * A sign-up that returns before judging any list also resets the reason, so a
+	 * refusal is never read for a request that did not make one.
+	 */
+	public function test_sign_up_error_message_is_reset_by_a_sign_up_that_returns_early() {
+		$list_id = $this->create_gated_list();
+		wp_set_current_user( 0 );
+
+		$this->filter_sign_up( $list_id, 'nobody@example.com' );
+		$this->assertNotSame( 'Generic.', $this->get_refusal_message(), 'The refusal must be claimed for this test to mean anything.' );
+		Premium_Newsletters::filter_subscribe_lists( [], [ 'email' => 'nobody@example.com' ] );
+		$this->assertSame( 'Generic.', $this->get_refusal_message(), 'An empty sign-up refused nothing.' );
+
+		$this->filter_sign_up( $list_id, 'nobody@example.com' );
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$this->filter_sign_up( $list_id, 'nobody@example.com' );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$this->assertSame( 'Generic.', $this->get_refusal_message(), 'A sign-up while gating is off refused nothing.' );
+	}
+
+	/**
+	 * The callback runs after the provider's own, which hooks at 10.
+	 */
+	public function test_sign_up_error_message_is_hooked() {
+		$this->assertSame( 20, has_filter( 'newspack_newsletters_add_contact_reader_error_message', [ Premium_Newsletters::class, 'filter_sign_up_error_message' ] ) );
 	}
 }
