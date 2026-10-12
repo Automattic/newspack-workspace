@@ -38,7 +38,7 @@ export default withWizardScreen( ( { fetchConfig } ) => {
 	const [ progress, setProgress ] = useState( null );
 	const [ progressLabel, setProgressLabel ] = useState( false );
 	const [ completed, setCompleted ] = useState( false );
-	const timer = useRef();
+	const timer = useRef( undefined );
 	const { reader_activation_url } = newspackAudience;
 
 	useEffect( () => {

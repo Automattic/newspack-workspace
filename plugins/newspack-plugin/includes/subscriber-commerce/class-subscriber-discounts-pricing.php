@@ -32,6 +32,9 @@ class Subscriber_Discounts_Pricing {
 	/**
 	 * Memoized per-product rule lookups, keyed by "user_id:product_id".
 	 *
+	 * Qualifying rules, keyed by reader, product, cart and payment-recovery grace —
+	 * every input that changes the verdict and is not flushed by a rule write.
+	 *
 	 * @var array
 	 */
 	private static $rules_for_product = [];
@@ -43,6 +46,14 @@ class Subscriber_Discounts_Pricing {
 	 * @var array
 	 */
 	private static $variation_price_base = [];
+
+	/**
+	 * Whether the cart holds a subscription, keyed on the cart contents that
+	 * answered the question.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static $cart_holds_subscription = [];
 
 	/**
 	 * Register the price filters once plugins and the cart session are loaded.
@@ -205,11 +216,13 @@ class Subscriber_Discounts_Pricing {
 	}
 
 	/**
-	 * Discard the memoized per-product lookups.
+	 * Discard every memoized lookup: the per-product rule sets, the variation base
+	 * prices, and whether the cart holds a subscription.
 	 */
 	public static function flush_cache() {
-		self::$rules_for_product    = [];
-		self::$variation_price_base = [];
+		self::$rules_for_product       = [];
+		self::$variation_price_base    = [];
+		self::$cart_holds_subscription = [];
 	}
 
 	/**
@@ -406,24 +419,90 @@ class Subscriber_Discounts_Pricing {
 	 * A rule never discounts the subscription that grants it, whether the reader
 	 * holds that subscription or has it in the cart: discounting the thing that
 	 * grants the discount is circular, and it would otherwise quietly cut the
-	 * renewal price of every subscription a whole-catalogue rule reaches.
+	 * renewal price of every subscription a whole-catalogue rule reaches. Under
+	 * "all subscriptions" there is no named grantor, so every subscription on the
+	 * site is one.
 	 *
 	 * @param int         $user_id Reader.
 	 * @param array       $rule    Rule being considered.
 	 * @param \WC_Product $product Product being priced.
 	 * @return bool
 	 */
-	private static function reader_qualifies( $user_id, $rule, $product ) {
-		if ( self::product_is_one_of( $product, $rule['subscription_product_ids'] ) ) {
+	private static function reader_qualifies( $user_id, array $rule, \WC_Product $product ) {
+		if ( self::product_grants( $product, $rule ) ) {
 			return false;
 		}
-		if ( Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] ) ) {
+		if ( Subscriber_Eligibility::user_matches_rule( $user_id, $rule ) ) {
 			return true;
 		}
 		if ( empty( Subscriber_Discounts::get_settings()['apply_at_checkout'] ) ) {
 			return false;
 		}
-		return self::cart_contains_any( $rule['subscription_product_ids'] );
+		return self::cart_grants( $rule );
+	}
+
+	/**
+	 * Whether a product is one that buys into the rule's audience.
+	 *
+	 * @param \WC_Product $product Product being priced.
+	 * @param array       $rule    Rule being considered.
+	 * @return bool
+	 */
+	private static function product_grants( \WC_Product $product, array $rule ) {
+		return Subscriber_Commerce::covers_all_subscriptions( $rule )
+			? WooCommerce_Subscriptions::is_subscription_product( $product )
+			: self::product_is_one_of( $product, $rule['subscription_product_ids'] );
+	}
+
+	/**
+	 * Whether the cart holds something that buys into the rule's audience.
+	 *
+	 * @param array $rule Rule being considered.
+	 * @return bool
+	 */
+	private static function cart_grants( array $rule ) {
+		return Subscriber_Commerce::covers_all_subscriptions( $rule )
+			? self::cart_contains_a_subscription()
+			: self::cart_contains_any( $rule['subscription_product_ids'] );
+	}
+
+	/**
+	 * Whether the cart holds any subscription at all.
+	 *
+	 * Memoized because every rule and every product on the page asks the same
+	 * question, while answering it hydrates a WC_Product per cart line — and the
+	 * variation-price filter asks once per variable product WooCommerce prices.
+	 *
+	 * Keyed on the cart contents rather than cached as one verdict: the filter
+	 * folds this answer into the price hash, so a cart the reader changes mid
+	 * request has to produce a different answer rather than the one that was
+	 * already computed. Collecting the ids is cheap; it is hydrating them that is
+	 * worth skipping.
+	 *
+	 * @return bool
+	 */
+	private static function cart_contains_a_subscription() {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return false;
+		}
+		$cart_product_ids = self::get_cart_product_ids();
+		sort( $cart_product_ids );
+		$cache_key = implode( ',', $cart_product_ids );
+		if ( isset( self::$cart_holds_subscription[ $cache_key ] ) ) {
+			return self::$cart_holds_subscription[ $cache_key ];
+		}
+
+		$holds_subscription = false;
+		foreach ( $cart_product_ids as $cart_product_id ) {
+			$cart_product = \wc_get_product( $cart_product_id );
+			if ( $cart_product instanceof \WC_Product && WooCommerce_Subscriptions::is_subscription_product( $cart_product ) ) {
+				$holds_subscription = true;
+				break;
+			}
+		}
+
+		self::$cart_holds_subscription[ $cache_key ] = $holds_subscription;
+		return $holds_subscription;
 	}
 
 	/**
@@ -490,12 +569,12 @@ class Subscriber_Discounts_Pricing {
 			array_filter(
 				Subscriber_Discounts::get_active_rules(),
 				function ( $rule ) use ( $user_id, $apply_at_checkout ) {
-					if ( Subscriber_Eligibility::user_has( $user_id, $rule['subscription_product_ids'] ) ) {
+					if ( Subscriber_Eligibility::user_matches_rule( $user_id, $rule ) ) {
 						return true;
 					}
 					// Cart contents are part of the entitlement once they can
 					// grant it, so the variation-price cache key varies with them.
-					return $apply_at_checkout && self::cart_contains_any( $rule['subscription_product_ids'] );
+					return $apply_at_checkout && self::cart_grants( $rule );
 				}
 			)
 		);
@@ -513,7 +592,23 @@ class Subscriber_Discounts_Pricing {
 		// carry the rule set — and must not, since hashing it on every call
 		// would do the work the memo exists to avoid, several times per product
 		// on a shop archive.
-		$cache_key = $user_id . ':' . $product->get_id();
+		//
+		// Two inputs a write does not flush, both of which change what the reader
+		// qualifies for, so both belong in the key. The cart: with "apply at
+		// checkout" on, WooCommerce changes it mid request and then prices the page
+		// again, and a verdict keyed without it leaves the reader a price they have
+		// stopped being entitled to. The payment-recovery grace: the sibling memos
+		// key on it for the same reason, since a reader mid-retry is eligible
+		// inside a gate's evaluation context and not outside it.
+		$cache_key = implode(
+			':',
+			[
+				$user_id,
+				$product->get_id(),
+				self::cart_signature(),
+				Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) ? 'grace' : 'strict',
+			]
+		);
 		if ( isset( self::$rules_for_product[ $cache_key ] ) ) {
 			return self::$rules_for_product[ $cache_key ];
 		}
@@ -532,6 +627,23 @@ class Subscriber_Discounts_Pricing {
 		self::$rules_for_product[ $cache_key ] = $qualifying_rules;
 
 		return $qualifying_rules;
+	}
+
+	/**
+	 * What the cart contributes to a memoized eligibility verdict.
+	 *
+	 * Empty while "apply at checkout" is off, because nothing then reads the cart
+	 * to decide eligibility and a signature would only fragment the memo.
+	 *
+	 * @return string
+	 */
+	private static function cart_signature() {
+		if ( empty( Subscriber_Discounts::get_settings()['apply_at_checkout'] ) ) {
+			return '';
+		}
+		$cart_product_ids = self::get_cart_product_ids();
+		sort( $cart_product_ids );
+		return implode( ',', $cart_product_ids );
 	}
 
 	/**

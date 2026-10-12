@@ -680,7 +680,11 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	 * donation platform the stored CTA can disagree with the site. Normalize:
 	 * the native platform renders the donate form, off-site renders a button to
 	 * the donor landing page — or copy only when none is configured. Matching
-	 * CTAs pass through untouched, preserving publisher customization.
+	 * CTAs pass through untouched, preserving publisher customization, and so
+	 * does a CTA the publisher swapped in from the pattern editor, as long as it
+	 * can render: that is their choice, not a platform left behind. One that
+	 * cannot render gets the fallback here, in memory only — repair() never
+	 * persists over it.
 	 *
 	 * @param array $parsed_block Parsed prompt card.
 	 * @return array
@@ -688,6 +692,10 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 	public static function normalize_cta( $parsed_block ) {
 		$cta = self::find_cta( $parsed_block );
 		if ( null === $cta ) {
+			return $parsed_block;
+		}
+
+		if ( Newspack_Popups_Contextual_Prompt_Pattern::is_cta_publisher_owned( $cta['name'] ) && self::can_render_cta( $parsed_block['innerBlocks'][ $cta['index'] ] ) ) {
 			return $parsed_block;
 		}
 
@@ -1092,6 +1100,25 @@ final class Newspack_Popups_Contextual_Prompt_Render {
 		array_splice( $parsed_block['innerContent'], max( 0, $last_chunk ), 0, [ null ] );
 
 		return $parsed_block;
+	}
+
+	/**
+	 * Whether a CTA can render as stored: a donate block needs Newspack Blocks
+	 * active and a donation platform that renders it — the "other" platform
+	 * strips it from every render — and a button needs somewhere to send the
+	 * reader.
+	 *
+	 * @param array $cta Parsed CTA child.
+	 * @return bool
+	 */
+	private static function can_render_cta( $cta ) {
+		if ( 'newspack-blocks/donate' === ( $cta['blockName'] ?? '' ) ) {
+			$stripped = method_exists( '\Newspack\Donations', 'is_platform_other' ) && \Newspack\Donations::is_platform_other();
+
+			return ! $stripped && WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-blocks/donate' );
+		}
+
+		return self::buttons_have_destination( $cta );
 	}
 
 	/**

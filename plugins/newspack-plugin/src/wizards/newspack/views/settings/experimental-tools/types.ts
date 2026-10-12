@@ -28,3 +28,8 @@ export interface Tool {
 	fields: ToolField[];
 	usage_count: number;
 }
+
+export interface SaveNotice {
+	message: string;
+	actions?: Array< { label: string; onClick: () => void } >;
+}

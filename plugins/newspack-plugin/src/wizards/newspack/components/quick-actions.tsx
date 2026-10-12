@@ -8,13 +8,12 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Icon } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { Card, Grid } from '../../../../packages/components/src';
-import { icons } from './icons';
+import DashboardCard from './dashboard-card';
+import { Grid, SectionHeader } from '../../../../packages/components/src';
 
 const {
 	newspackDashboard: { quickActions },
@@ -23,20 +22,11 @@ const {
 const QuickActions = () => {
 	return (
 		<div className="newspack-dashboard__section">
-			<h3>{ __( 'Quick actions', 'newspack-plugin' ) }</h3>
-			<Grid style={ { '--np-dash-card-icon-size': '40px' } } columns={ 3 } gutter={ 24 }>
-				{ quickActions.map( ( action, i ) => {
-					return (
-						<a href={ action.href } key={ i }>
-							<Card className="newspack-dashboard__card">
-								<div className="newspack-dashboard__card-icon">
-									<Icon icon={ icons[ action.icon ] } />
-								</div>
-								<h4>{ action.title }</h4>
-							</Card>
-						</a>
-					);
-				} ) }
+			<SectionHeader heading={ 3 } title={ __( 'Quick actions', 'newspack-plugin' ) } />
+			<Grid columns={ 3 } gutter={ 16 }>
+				{ quickActions.map( ( action, i ) => (
+					<DashboardCard key={ i } href={ action.href } icon={ action.icon } title={ action.title } />
+				) ) }
 			</Grid>
 		</div>
 	);

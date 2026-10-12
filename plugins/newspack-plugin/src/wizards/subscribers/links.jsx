@@ -1,9 +1,10 @@
 /**
  * Click-through targets shared by the subscriber and group lists.
  *
- * The rule both tabs follow: a person's name goes to that person, a plan name
- * goes to that plan. Names are the DataViews title cell, so their target is the
- * list's `onClickItem`; plan names are ordinary cells and carry their own link.
+ * The rule both tabs follow: a row's own name goes to that row — the person on
+ * the subscriber list, the group on the group list — and a plan name goes to that
+ * plan. Row names are the DataViews title cell, so their target is the list's
+ * `onClickItem`; plan names are ordinary cells and carry their own link.
  */
 
 /**
@@ -17,14 +18,14 @@
  * leave an invisible link with no accessible name.
  *
  * The click is stopped from bubbling: both lists delegate row clicks to the
- * person, and a plan name must not resolve to two destinations at once.
+ * row's own target, and a plan name must not resolve to two destinations at once.
  *
  * Keydown needs no equivalent guard, but only because of where this is used:
  * always an ordinary cell, never the DataViews title cell. That cell's
  * ItemClickWrapper fires its onClickItem on Enter/Space without checking that
  * the key originated on the wrapper itself, so a link nested there would
  * navigate to the row's target as well as its own. Keep it out of title cells —
- * see the owner field in GroupList.
+ * see the name field in GroupList.
  *
  * @param {Object} props          Component props.
  * @param {string} props.href     The subscription edit URL, if any.
@@ -42,21 +43,16 @@ export const SubscriptionLink = ( { href, children } ) => {
 };
 
 /**
- * Where a group's name goes.
+ * Where a group's name goes: the in-wizard group detail screen.
  *
- * The in-wizard group detail screen is not registered yet, and the wizard
- * redirects an unmatched route back to the subscriber list — so pointing a group
- * at `#/groups/<id>` today would silently strand the user rather than 404. Until
- * that screen lands the target stays the group's own subscription edit screen,
- * which is what the group list already links to.
+ * The single switch every group affordance in the wizard follows. `/groups/:id`
+ * is registered in the wizard's sections, so a group with an id resolves to the
+ * detail screen; one without has nothing to open and renders unlinked.
  *
- * SINGLE SWITCH: when the group detail route is registered, change this to
- * return `#/groups/${ id }` and every group affordance in the wizard follows.
- *
- * @param {Object} group A group entry carrying `id` and `editUrl`.
+ * @param {Object} group A group entry carrying `id`.
  * @return {string} The href, or '' when there is nothing to open.
  */
-export const groupDetailHref = group => group?.editUrl || '';
+export const groupDetailHref = group => ( group?.id ? `#/groups/${ group.id }` : '' );
 
 /**
  * Whether a value is a safe in-wizard hash route (`#/…`).

@@ -16,10 +16,9 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
  * Internal dependencies.
  */
 import { Button, Modal } from '../../../../../../../packages/components/src';
-import SearchTokenField from '../../components/search-token-field';
+import SubscriberFields from '../../components/subscriber-fields';
 import TargetingFields from '../../components/targeting-fields';
-import { SEARCH_ENDPOINTS } from '../../constants';
-import type { RuleTargeting } from '../../types';
+import type { RuleTargeting, SubscriberAudience } from '../../types';
 import type { Restriction } from './types';
 
 interface RestrictionEditorProps {
@@ -39,7 +38,10 @@ const emptyTargeting: RuleTargeting = {
 
 export default function RestrictionEditor( { restriction, saving, onSave, onClose }: RestrictionEditorProps ) {
 	const isEdit = Boolean( restriction.id );
-	const [ subscriptionIds, setSubscriptionIds ] = useState< number[] >( restriction.subscription_product_ids || [] );
+	const [ audience, setAudience ] = useState< SubscriberAudience >( {
+		subscription_targeting: restriction.subscription_targeting || 'subscriptions',
+		subscription_product_ids: restriction.subscription_product_ids || [],
+	} );
 	const [ targeting, setTargeting ] = useState< RuleTargeting >( {
 		targeting: restriction.targeting || emptyTargeting.targeting,
 		product_ids: restriction.product_ids || [],
@@ -47,18 +49,21 @@ export default function RestrictionEditor( { restriction, saving, onSave, onClos
 		excluded_product_ids: restriction.excluded_product_ids || [],
 	} );
 
-	// A restriction naming no subscription would be unbuyable by everyone, and a
-	// "specific products" one naming no product would restrict nothing. Neither
-	// is savable, so Save stays disabled until the rule says something.
+	// A restriction that names its subscriptions and then names none would be
+	// unbuyable by everyone, and a "specific products" one naming no product would
+	// restrict nothing. Neither is savable, so Save stays disabled until the rule
+	// says something. "All subscriptions" names its audience through the mode, so
+	// an empty list there is the rule working as written.
 	const isComplete =
-		subscriptionIds.length > 0 &&
+		( 'all' === audience.subscription_targeting || audience.subscription_product_ids.length > 0 ) &&
 		( 'products' !== targeting.targeting || targeting.product_ids.length > 0 ) &&
 		( 'category' !== targeting.targeting || targeting.category_ids.length > 0 );
 
 	const handleSave = () => {
 		onSave( {
 			...restriction,
-			subscription_product_ids: subscriptionIds,
+			subscription_targeting: audience.subscription_targeting,
+			subscription_product_ids: 'all' === audience.subscription_targeting ? [] : audience.subscription_product_ids,
 			targeting: targeting.targeting,
 			// Only the fields the chosen targeting uses, so switching mode before
 			// saving can't persist ids the rule no longer means.
@@ -78,12 +83,12 @@ export default function RestrictionEditor( { restriction, saving, onSave, onClos
 			shouldCloseOnClickOutside={ false }
 		>
 			<VStack spacing={ 4 } className="newspack-subscriptions-drawer__content">
-				<SearchTokenField
-					endpoint={ SEARCH_ENDPOINTS.subscriptions }
+				<SubscriberFields
+					value={ audience }
+					onChange={ partial => setAudience( current => ( { ...current, ...partial } ) ) }
 					label={ __( 'Available to', 'newspack-plugin' ) }
-					help={ __( 'Subscribers of any of these subscriptions can purchase the products.', 'newspack-plugin' ) }
-					value={ subscriptionIds }
-					onChange={ setSubscriptionIds }
+					specificHelp={ __( 'Only subscribers of the subscriptions below can purchase the products.', 'newspack-plugin' ) }
+					allHelp={ __( 'Anyone with an active subscription can purchase the products.', 'newspack-plugin' ) }
 					disabled={ saving }
 				/>
 				<TargetingFields

@@ -1,51 +1,33 @@
+/**
+ * Newspack > Settings > Advanced Settings > PWA Display Mode
+ */
+
+/**
+ * WordPress dependencies
+ */
 import { __ } from '@wordpress/i18n';
-import { Notice, SelectControl } from '@wordpress/components';
-
-import { Grid } from '../../../../../../packages/components/src';
-
-interface PwaDisplayModeProps extends ThemeModComponentProps< AdvancedSettings > {}
+import { SelectControl } from '@wordpress/components';
 
 const DISPLAY_MODE_OPTIONS = [
-	{
-		label: __( 'Fullscreen', 'newspack-plugin' ),
-		value: 'fullscreen',
-	},
-	{
-		label: __( 'Standalone', 'newspack-plugin' ),
-		value: 'standalone',
-	},
-	{
-		label: __( 'Minimal UI', 'newspack-plugin' ),
-		value: 'minimal-ui',
-	},
-	{
-		label: __( 'Browser', 'newspack-plugin' ),
-		value: 'browser',
-	},
+	{ label: __( 'Fullscreen', 'newspack-plugin' ), value: 'fullscreen' },
+	{ label: __( 'Standalone', 'newspack-plugin' ), value: 'standalone' },
+	{ label: __( 'Minimal UI', 'newspack-plugin' ), value: 'minimal-ui' },
+	{ label: __( 'Browser', 'newspack-plugin' ), value: 'browser' },
 ];
 
-export default function PwaDisplayMode( { data, isFetching, update }: PwaDisplayModeProps ) {
+export default function PwaDisplayMode( { data, isFetching, update }: ThemeModComponentProps< AdvancedSettings > ) {
 	return (
-		<Grid gutter={ 32 }>
-			<Grid columns={ 1 } gutter={ 16 }>
-				<SelectControl
-					label={ __( 'Web App Display Mode', 'newspack-plugin' ) }
-					help={ __(
-						'Choose how your site appears when installed as a Progressive Web App. Fullscreen: Full screen without browser UI. Standalone: Looks like a standalone app. Minimal UI: Minimal browser controls. Browser: Standard browser experience.',
-						'newspack-plugin'
-					) }
-					value={ data.pwa_display_mode || 'minimal-ui' }
-					options={ DISPLAY_MODE_OPTIONS }
-					onChange={ ( pwa_display_mode: string ) => update( { pwa_display_mode } ) }
-					disabled={ isFetching }
-				/>
-				<Notice status="info" isDismissible={ false } spokenMessage="">
-					{ __(
-						'This setting controls how your site appears when users install it as a Progressive Web App on their devices.',
-						'newspack-plugin'
-					) }
-				</Notice>
-			</Grid>
-		</Grid>
+		<SelectControl
+			__nextHasNoMarginBottom
+			label={ __( 'Web app display mode', 'newspack-plugin' ) }
+			help={ __(
+				'Fullscreen: Full screen without browser UI. Standalone: Looks like a standalone app. Minimal UI: Minimal browser controls. Browser: Standard browser experience.',
+				'newspack-plugin'
+			) }
+			value={ data.pwa_display_mode || 'minimal-ui' }
+			options={ DISPLAY_MODE_OPTIONS }
+			onChange={ ( pwa_display_mode: string ) => update( { pwa_display_mode } ) }
+			disabled={ isFetching }
+		/>
 	);
 }
