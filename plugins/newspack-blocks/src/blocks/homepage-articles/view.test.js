@@ -233,18 +233,16 @@ describe( 'homepage-articles load more', () => {
 			expect( requestedUrls[ 0 ] ).toContain( 'rest_route' );
 		} );
 
-		it( 'refuses a plain-permalink next URL padded with enough parameters to change which route PHP reads', () => {
+		it( 'refuses a plain-permalink next URL naming more than one route, even when the last names the articles route', () => {
 			usePlainPermalinks();
 
-			const padding = Array.from( { length: 1000 }, () => 'p=1' ).join( '&amp;' );
-
-			clickLoadMore( `/index.php?rest_route=/wp/v2/types/post&amp;${ padding }&amp;rest_route=/newspack-blocks/v1/articles` );
+			clickLoadMore( '/index.php?rest_route=/wp/v2/types/post&amp;rest_route=/newspack-blocks/v1/articles' );
 
 			expect( requestedUrls ).toHaveLength( 0 );
 		} );
 
 		it( 'accepts a next URL for a block with a large selection of terms', () => {
-			const categories = Array.from( { length: 200 }, ( _, i ) => `categories%5B${ i }%5D=${ i + 1 }` ).join( '&amp;' );
+			const categories = Array.from( { length: 400 }, ( _, i ) => `categories%5B${ i }%5D=${ i + 1 }` ).join( '&amp;' );
 
 			clickLoadMore( `/wp-json/newspack-blocks/v1/articles?${ categories }&amp;page=2` );
 

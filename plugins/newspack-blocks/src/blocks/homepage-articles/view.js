@@ -319,20 +319,6 @@ function getTrustedRestRoot() {
 const SAFE_QUERY_KEY = /^[A-Za-z0-9_-]+(\[[A-Za-z0-9_-]*\])*$/;
 
 /**
- * PHP's `max_input_vars` (default 1000) silently stops populating $_GET once
- * that many input variables have been seen, so a `rest_route` placed after
- * enough padding never reaches WordPress, and an earlier one is used
- * instead - the "last value wins" check below only holds below that
- * ceiling. Rather than mirror where the ceiling falls, a URL with more
- * parameters than this plugin ever generates is refused outright. This
- * block's own URLs carry one parameter per scalar attribute (about 50) plus
- * one per selected author, term, exclusion or specific post, so 300 leaves
- * room for an unusually large selection and stays far below the default
- * ceiling.
- */
-const MAX_SAFE_QUERY_PARAMS = 300;
-
-/**
  * Checks whether a URL resolves to this site's own articles REST route -
  * not just whether its path looks right, since a query parameter can make
  * WordPress route an otherwise-correct-looking URL somewhere else.
@@ -346,7 +332,7 @@ function isNextUrlTrusted( parsed ) {
 
 	const keys = Array.from( parsed.searchParams.keys() );
 
-	if ( keys.length > MAX_SAFE_QUERY_PARAMS || keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
+	if ( keys.some( key => ! SAFE_QUERY_KEY.test( key ) ) ) {
 		return false;
 	}
 
@@ -370,14 +356,16 @@ function isNextUrlTrusted( parsed ) {
 	}
 
 	// Plain permalinks: everything goes through the REST root's own path,
-	// naming the route via rest_route. Below MAX_SAFE_QUERY_PARAMS, PHP
-	// keeps the LAST value for a repeated key, which URLSearchParams.get()
-	// does not.
+	// naming the route via rest_route. Exactly one is accepted. PHP reads a
+	// repeated key's last value, but stops reading the query string at
+	// `max_input_vars`, which a host can set low enough that an earlier
+	// value wins instead. With a single occurrence, and PHP's default `&`
+	// separator, there is nothing else for PHP to fall back to.
 	if ( parsed.pathname !== restRoot.pathname ) {
 		return false;
 	}
 
 	const routeValues = parsed.searchParams.getAll( 'rest_route' );
 
-	return routeValues[ routeValues.length - 1 ] === '/' + route;
+	return routeValues.length === 1 && routeValues[ 0 ] === '/' + route;
 }
