@@ -181,12 +181,14 @@ class Premium_Newsletters {
 	 * Reads Content_Gate directly rather than get_gates(): that one memoizes in a
 	 * static nothing clears outside tests, so a process that outlives a request
 	 * would never see a gate published after its first check. Content_Gate's own
-	 * cache is flushed on every post and meta write. The per-list answer still
-	 * comes from Content_Restriction_Control's memo, which lasts the request.
+	 * cache is flushed on every post and meta write. That covers this check only:
+	 * the per-list answer comes from Content_Restriction_Control's memo, another
+	 * static nothing clears, so in such a process a list keeps the answer it got
+	 * the first time it was judged.
 	 *
 	 * @return bool
 	 */
-	private static function has_newsletter_gates() {
+	private static function has_newsletter_gates(): bool {
 		return ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) );
 	}
 
@@ -509,9 +511,8 @@ class Premium_Newsletters {
 			return $lists;
 		}
 
-		// With no gates at all, no list can be restricted, so skip the per-list
-		// check entirely. Only premium newsletter gates can restrict a list, so the
-		// second lookup is more than is needed. Both are cached outside PHPUnit.
+		// With no gate of either kind, no list can be restricted, so skip the
+		// per-list check entirely.
 		if ( empty( self::get_gates() ) && empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) ) ) {
 			return $lists;
 		}

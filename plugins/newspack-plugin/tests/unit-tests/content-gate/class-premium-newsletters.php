@@ -2263,7 +2263,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	// =========================================================================
-	// filter_list_gates() — gate names for the block editor
+	// filter_list_gates() — gate names for the subscribe block
 	// =========================================================================
 
 	/**
