@@ -529,7 +529,9 @@ class Premium_Newsletters {
 	 * @return string[] The lists the sign-up may proceed with.
 	 */
 	public static function filter_subscribe_lists( $lists, $contact = [] ) {
-		// Reset before any early return, so one sign-up's refusal is never read as another's.
+		// Reset before any early return, so a refusal recorded here is never read
+		// for a later sign-up that this filter also sees. A sign-up that never
+		// reaches this filter (one that names no usable list) resets nothing.
 		self::$sign_up_refusal = '';
 		if ( ! is_array( $lists ) || empty( $lists ) || ! self::is_access_control_active() ) {
 			return $lists;
@@ -587,9 +589,15 @@ class Premium_Newsletters {
 	 * refusal.
 	 *
 	 * The generic message tells a refused reader nothing. These two say what
-	 * happened, and neither reveals anything about another person: the first is
-	 * what every request for someone else's address gets, and the second is only
-	 * shown to a reader about their own account.
+	 * happened, and neither says anything about another account's access: the
+	 * first goes to every request for an address that is not the session
+	 * reader's, whatever that address's account can read, and the second is
+	 * about the session reader's own account.
+	 *
+	 * They do tell a new address from a registered one. A sign-up form can
+	 * create an account for a new address and sign the visitor in as it before
+	 * the lists are checked, so that visitor gets the second message. The same
+	 * response already says as much: it carries the new reader's login cookie.
 	 *
 	 * @param string $message   The reader-facing message so far.
 	 * @param array  $params    Details of the sign-up request.

@@ -84,6 +84,9 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$gates_prop = new \ReflectionProperty( Premium_Newsletters::class, 'gates' );
 		$gates_prop->setAccessible( true );
 		$gates_prop->setValue( null, null );
+		$refusal_prop = new \ReflectionProperty( Premium_Newsletters::class, 'sign_up_refusal' );
+		$refusal_prop->setAccessible( true );
+		$refusal_prop->setValue( null, '' );
 
 		// Content_Restriction_Control memoizes per post for the life of the request.
 		// PHPUnit shares one process across the suite, so without this the maps
@@ -248,10 +251,23 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 * Ask for the reader-facing message after a sign-up produced the error that
 	 * newsletters returns when every requested list was refused.
 	 *
+	 * The callback gets the details both real callers pass, so a callback that
+	 * chose its words from the submitted address's account would be caught.
+	 *
+	 * @param int    $list_id List post ID that was requested.
+	 * @param string $email   Address that was signed up.
+	 *
 	 * @return string The message.
 	 */
-	private function get_refusal_message(): string {
-		return Premium_Newsletters::filter_sign_up_error_message( 'Generic.', [], new \WP_Error( 'newspack_newsletters_lists_not_allowed', 'x' ) );
+	private function get_refusal_message( int $list_id, string $email ): string {
+		return Premium_Newsletters::filter_sign_up_error_message(
+			'Generic.',
+			[
+				'email' => $email,
+				'lists' => [ 'newspack-' . $list_id ],
+			],
+			new \WP_Error( 'newspack_newsletters_lists_not_allowed', 'x' )
+		);
 	}
 
 	// =========================================================================
@@ -2679,7 +2695,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 		$this->filter_sign_up( $list_id, 'nobody@example.com' );
 
-		$this->assertSame( 'Sign in with this email address to subscribe to premium newsletters.', $this->get_refusal_message() );
+		$this->assertSame( 'Sign in with this email address to subscribe to premium newsletters.', $this->get_refusal_message( $list_id, 'nobody@example.com' ) );
 	}
 
 	/**
@@ -2696,7 +2712,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$messages = [];
 		foreach ( [ $entitled, $unentitled, 'nobody@example.com' ] as $email ) {
 			$this->filter_sign_up( $list_id, $email );
-			$messages[] = $this->get_refusal_message();
+			$messages[] = $this->get_refusal_message( $list_id, $email );
 		}
 
 		$sign_in = 'Sign in with this email address to subscribe to premium newsletters.';
@@ -2711,11 +2727,12 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	public function test_sign_up_error_message_tells_a_reader_without_access_so() {
 		$list_id = $this->create_gated_list();
 		$user_id = $this->create_reader();
+		$email   = get_userdata( $user_id )->user_email;
 		wp_set_current_user( $user_id );
 
-		$this->filter_sign_up( $list_id, get_userdata( $user_id )->user_email );
+		$this->filter_sign_up( $list_id, $email );
 
-		$this->assertSame( 'This account doesn\'t include access to premium newsletters.', $this->get_refusal_message() );
+		$this->assertSame( 'This account doesn\'t include access to premium newsletters.', $this->get_refusal_message( $list_id, $email ) );
 	}
 
 	/**
@@ -2733,7 +2750,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$messages = [];
 		foreach ( [ $entitled, $unentitled, 'nobody@example.com' ] as $email ) {
 			$this->filter_sign_up( $list_id, $email );
-			$messages[] = $this->get_refusal_message();
+			$messages[] = $this->get_refusal_message( $list_id, $email );
 		}
 
 		$sign_in = 'Sign in with this email address to subscribe to premium newsletters.';
@@ -2767,13 +2784,13 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		wp_set_current_user( 0 );
 
 		$this->filter_sign_up( $free_id, 'nobody@example.com' );
-		$this->assertSame( 'Generic.', $this->get_refusal_message(), 'Nothing was refused, so the generic message stands.' );
+		$this->assertSame( 'Generic.', $this->get_refusal_message( $free_id, 'nobody@example.com' ), 'Nothing was refused, so the generic message stands.' );
 
 		$this->filter_sign_up( $gated_id, 'nobody@example.com' );
-		$this->assertNotSame( 'Generic.', $this->get_refusal_message(), 'The refusal must be claimed for this test to mean anything.' );
+		$this->assertNotSame( 'Generic.', $this->get_refusal_message( $gated_id, 'nobody@example.com' ), 'The refusal must be claimed for this test to mean anything.' );
 
 		$this->filter_sign_up( $free_id, 'nobody@example.com' );
-		$this->assertSame( 'Generic.', $this->get_refusal_message(), 'The earlier sign-up\'s reason must not be read for this one.' );
+		$this->assertSame( 'Generic.', $this->get_refusal_message( $free_id, 'nobody@example.com' ), 'The earlier sign-up\'s reason must not be read for this one.' );
 	}
 
 	/**
@@ -2785,21 +2802,37 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		wp_set_current_user( 0 );
 
 		$this->filter_sign_up( $list_id, 'nobody@example.com' );
-		$this->assertNotSame( 'Generic.', $this->get_refusal_message(), 'The refusal must be claimed for this test to mean anything.' );
+		$this->assertNotSame( 'Generic.', $this->get_refusal_message( $list_id, 'nobody@example.com' ), 'The refusal must be claimed for this test to mean anything.' );
 		Premium_Newsletters::filter_subscribe_lists( [], [ 'email' => 'nobody@example.com' ] );
-		$this->assertSame( 'Generic.', $this->get_refusal_message(), 'An empty sign-up refused nothing.' );
+		$this->assertSame( 'Generic.', $this->get_refusal_message( $list_id, 'nobody@example.com' ), 'An empty sign-up refused nothing.' );
 
 		$this->filter_sign_up( $list_id, 'nobody@example.com' );
 		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
 		$this->filter_sign_up( $list_id, 'nobody@example.com' );
 		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
-		$this->assertSame( 'Generic.', $this->get_refusal_message(), 'A sign-up while gating is off refused nothing.' );
+		$this->assertSame( 'Generic.', $this->get_refusal_message( $list_id, 'nobody@example.com' ), 'A sign-up while gating is off refused nothing.' );
 	}
 
 	/**
-	 * The callback runs after the provider's own, which hooks at 10.
+	 * The callback runs after the provider's own, which hooks at 10, and is handed
+	 * all three arguments the filter passes.
 	 */
 	public function test_sign_up_error_message_is_hooked() {
 		$this->assertSame( 20, has_filter( 'newspack_newsletters_add_contact_reader_error_message', [ Premium_Newsletters::class, 'filter_sign_up_error_message' ] ) );
+
+		$list_id = $this->create_gated_list();
+		wp_set_current_user( 0 );
+		$this->filter_sign_up( $list_id, 'nobody@example.com' );
+		$result = apply_filters(
+			'newspack_newsletters_add_contact_reader_error_message',
+			'Generic.',
+			[
+				'email' => 'nobody@example.com',
+				'lists' => [ 'newspack-' . $list_id ],
+			],
+			new \WP_Error( 'newspack_newsletters_lists_not_allowed', 'x' )
+		);
+
+		$this->assertSame( 'Sign in with this email address to subscribe to premium newsletters.', $result );
 	}
 }
