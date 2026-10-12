@@ -12,7 +12,7 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Card } from '../';
+import Card from '../card';
 import type { CardBadge } from '../types';
 import './style.scss';
 

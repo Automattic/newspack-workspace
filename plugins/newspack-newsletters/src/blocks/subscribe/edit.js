@@ -4,7 +4,7 @@
  * External dependencies.
  */
 import classnames from 'classnames';
-import { CardSortableList } from 'newspack-components';
+import CardSortableList from 'newspack-components/dist/esm/card-sortable-list';
 
 /**
  * WordPress dependencies
