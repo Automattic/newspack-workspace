@@ -433,6 +433,85 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	}
 
 	/**
+	 * Request a change through the public initiator, recording who was mailed.
+	 *
+	 * @param string $new_email The address to request.
+	 *
+	 * @return array The result, and the recipients of each email sent.
+	 */
+	private function request_and_capture_recipients( $new_email ) {
+		\Newspack\Emails::reset_email_configs_cache();
+		reset_phpmailer_instance();
+		$result     = WooCommerce_My_Account::request_email_change( $this->user_id, $new_email );
+		$recipients = array_map(
+			function ( $sent ) {
+				return $sent['to'][0][0];
+			},
+			tests_retrieve_phpmailer_instance()->mock_sent
+		);
+		return [ $result, $recipients ];
+	}
+
+	/**
+	 * A change requested for any account, by other code rather than the account
+	 * form, starts the same verified flow: the old address is told, the new one
+	 * is asked to confirm, and nothing moves until it does.
+	 */
+	public function test_requesting_a_change_waits_for_verification() {
+		list( $result, $recipients ) = $this->request_and_capture_recipients( 'requested@example.com' );
+
+		$this->assertTrue( $result );
+		$this->assertSame( [ 'requested@example.com', 'reader@example.com' ], $recipients, 'The new address should get the verification link and the old one the notice.' );
+		$this->assertSame( 'reader@example.com', $this->account_email(), 'The address should not change before it is verified.' );
+		$this->assertSame( 'requested@example.com', WooCommerce_My_Account::get_pending_email_change( $this->user_id ) );
+
+		$tokens = \get_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_TOKENS_META, true );
+		$this->assertTrue( WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] ) );
+		$this->assertSame( 'requested@example.com', $this->account_email(), 'Verifying should apply the requested address.' );
+	}
+
+	/**
+	 * An address that cannot be used is refused before anything is stored or sent.
+	 */
+	public function test_requesting_an_unusable_address_is_refused() {
+		self::factory()->user->create( [ 'user_email' => 'taken@example.com' ] );
+
+		foreach ( [ 'taken@example.com', 'not-an-email', 'a b@example.com' ] as $new_email ) {
+			list( $result, $recipients ) = $this->request_and_capture_recipients( $new_email );
+
+			$this->assertWPError( $result, "$new_email should be refused." );
+			$this->assertSame( [], $recipients, 'Nothing should be sent.' );
+			$this->assertNoPendingRequest();
+		}
+	}
+
+	/**
+	 * A request is refused when it could never be settled: with Reader
+	 * Activation off the links go nowhere, and without the verification email
+	 * nobody can complete it. Either way nothing is left locking the account form.
+	 */
+	public function test_an_unsettleable_request_is_not_left_pending() {
+		\add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		list( $result, $recipients ) = $this->request_and_capture_recipients( 'requested@example.com' );
+		\remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$this->assertWPError( $result, 'Without Reader Activation the request should be refused.' );
+		$this->assertSame( [], $recipients, 'Nothing should be sent.' );
+		$this->assertNoPendingRequest();
+
+		$fail_verification = function ( $return, $atts ) {
+			return in_array( 'requested@example.com', (array) $atts['to'], true ) ? false : $return;
+		};
+		\add_filter( 'pre_wp_mail', $fail_verification, 10, 2 );
+		list( $result, $recipients ) = $this->request_and_capture_recipients( 'requested@example.com' );
+		\remove_filter( 'pre_wp_mail', $fail_verification, 10 );
+
+		$this->assertWPError( $result, 'An unsent verification email should be reported.' );
+		$this->assertSame( [], $recipients, 'The old address should not be told about a request that was dropped.' );
+		$this->assertNoPendingRequest();
+	}
+
+	/**
 	 * A request that cannot be stored is reported rather than half-started.
 	 */
 	public function test_unstorable_request_is_reported() {
