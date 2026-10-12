@@ -1,3 +1,59 @@
+diff --git a/lib/createInlinePluginCreator.js b/lib/createInlinePluginCreator.js
+index 025e5cb38febd85b1f7773bf24cc7d94b9c6d3f7..16377139c8c0dcd4e8c2f956908004d0a81fa4d5 100644
+--- a/lib/createInlinePluginCreator.js
++++ b/lib/createInlinePluginCreator.js
+@@ -255,12 +255,51 @@ function createInlinePluginCreator(packages, multiContext, synchronizer, flags)
+ 			return res.length ? res[0] : {};
+ 		};
+ 
++		/**
++		 * Run the package's success plugins against this package's own commits.
++		 *
++		 * Without this step semantic-release hands them every commit since the package's last release, from anywhere in the
++		 * repository, so each package comments on and labels every merged pull request whether or not it changed that package.
++		 *
++		 * The release is already published by the time this runs, so a failure here is reported and not rethrown.
++		 *
++		 * @param {object} pluginOptions Options to configure this plugin.
++		 * @param {object} context The semantic-release context.
++		 * @returns {Promise<void>} void
++		 * @internal
++		 */
++		const success = async (pluginOptions, context) => {
++			try {
++				// Same filter as analyzeCommits and generateNotes, so the comments match the release notes.
++				const firstParentBranch = flags.firstParent ? context.branch.name : undefined;
++				const commits = await getCommitsFiltered(
++					cwd,
++					dir,
++					context.lastRelease ? context.lastRelease.gitHead : undefined,
++					context.nextRelease ? context.nextRelease.gitHead : undefined,
++					firstParentBranch
++				);
++
++				await plugins.success({ ...context, commits });
++			} catch (error) {
++				const reason = (error.errors || [error])
++					.map((e) => e.message)
++					.join("; ")
++					.replace(/\s+/g, " ");
++				context.logger.error(`The success step failed after ${name} was published: ${reason}`);
++				process.stdout.write(
++					`::warning title=Release notifications::${name} was published, but its success step failed: ${reason}\n`
++				);
++			}
++		};
++
+ 		const inlinePlugin = {
+ 			verifyConditions,
+ 			analyzeCommits,
+ 			generateNotes,
+ 			prepare,
+ 			publish,
++			success,
+ 		};
+ 
+ 		// Add labels for logs.
 diff --git a/lib/multiSemanticRelease.js b/lib/multiSemanticRelease.js
 index 4629a92993e2b794287cfa8dd026a8ee2285c548..82e9b50acdbe3e2ea7d9ba6114a67bf408af79ae 100644
 --- a/lib/multiSemanticRelease.js
