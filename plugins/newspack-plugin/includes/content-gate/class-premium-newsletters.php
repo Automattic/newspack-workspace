@@ -44,6 +44,17 @@ class Premium_Newsletters {
 	private static $sign_up_refusal = '';
 
 	/**
+	 * The address, lowercased, that $sign_up_refusal was recorded for.
+	 *
+	 * A sign-up that never reaches filter_subscribe_lists() resets nothing, yet its
+	 * error can carry the same code. Keeping the address lets the message callback
+	 * claim only an error raised for the address the refusal was recorded for.
+	 *
+	 * @var string
+	 */
+	private static $sign_up_refusal_email = '';
+
+	/**
 	 * Hook name for the scheduled access check action.
 	 */
 	const SCHEDULED_HOOK = 'newspack_premium_newsletters_access_check';
@@ -158,6 +169,25 @@ class Premium_Newsletters {
 		}
 		self::$gates = Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true );
 		return self::$gates;
+	}
+
+	/**
+	 * Whether the site has any premium newsletter gate.
+	 *
+	 * Without one no list can be gated, so callers skip their per-list work. Only
+	 * these gates can restrict a list: Content_Restriction_Control::get_post_gates()
+	 * reads no others for a list post.
+	 *
+	 * Reads Content_Gate directly rather than get_gates(): that one memoizes in a
+	 * static nothing clears outside tests, so a process that outlives a request
+	 * would never see a gate published after its first check. Content_Gate's own
+	 * cache is flushed on every post and meta write. The per-list answer still
+	 * comes from Content_Restriction_Control's memo, which lasts the request.
+	 *
+	 * @return bool
+	 */
+	private static function has_newsletter_gates() {
+		return ! empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) );
 	}
 
 	/**
@@ -480,14 +510,8 @@ class Premium_Newsletters {
 		}
 
 		// With no gates at all, no list can be restricted, so skip the per-list
-		// check entirely. Both kinds have to be absent: get_gates()'s $is_newsletter
-		// argument selects between premium newsletter gates and ordinary ones rather
-		// than widening to both — the meta query is EXISTS vs NOT EXISTS — while the
-		// per-list check below runs through Content_Restriction_Control, which
-		// honours any gate whose content rules match the list. Testing only the
-		// newsletter half would skip lists an ordinary gate restricts. In non-test
-		// requests both gate lookups are cached (Content_Gate::get_gates cache is
-		// disabled under PHPUnit), so the fast path stays cheap.
+		// check entirely. Only premium newsletter gates can restrict a list, so the
+		// second lookup is more than is needed. Both are cached outside PHPUnit.
 		if ( empty( self::get_gates() ) && empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) ) ) {
 			return $lists;
 		}
@@ -529,19 +553,13 @@ class Premium_Newsletters {
 	 * @return string[] The lists the sign-up may proceed with.
 	 */
 	public static function filter_subscribe_lists( $lists, $contact = [] ) {
-		// Reset before any early return, so a refusal recorded here is never read
-		// for a later sign-up that this filter also sees. A sign-up that never
-		// reaches this filter (one that names no usable list) resets nothing.
-		self::$sign_up_refusal = '';
+		// Reset before any early return, so a refusal recorded here is never read for a later sign-up.
+		self::$sign_up_refusal       = '';
+		self::$sign_up_refusal_email = '';
 		if ( ! is_array( $lists ) || empty( $lists ) || ! self::is_access_control_active() ) {
 			return $lists;
 		}
-		// With no premium newsletter gates, no list can be gated, so there is nothing to judge.
-		// This reads Content_Gate directly rather than get_gates(): that one memoizes in a
-		// static nothing clears outside tests, so in a process that outlives a request a gate
-		// published after the first check would never be seen and every list would pass.
-		// Content_Gate::get_gates() is flushed on every post and meta write.
-		if ( empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) ) ) {
+		if ( ! self::has_newsletter_gates() ) {
 			return $lists;
 		}
 		if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( 'Newspack\Newsletters\Subscription_List', 'from_public_id' ) ) {
@@ -554,12 +572,11 @@ class Premium_Newsletters {
 		return array_values(
 			array_filter(
 				$lists,
-				function ( $public_id ) use ( $is_own_address, $session_user ) {
+				function ( $public_id ) use ( $is_own_address, $session_user, $email ) {
 					$list = Subscription_List::from_public_id( $public_id );
 					// A public ID can name any post, not only a list. Judging those would
 					// turn a sign-up attempt into a way to probe every gate on the site,
-					// so anything that isn't a list passes through unjudged, as it did
-					// before this check existed.
+					// so anything that isn't a list passes through unjudged.
 					if ( ! $list || \Newspack\Newsletters\Subscription_Lists::CPT !== get_post_type( $list->get_id() ) ) {
 						return true;
 					}
@@ -571,11 +588,13 @@ class Premium_Newsletters {
 					// access check stays behind the address check, so it never runs for an
 					// address that isn't theirs.
 					if ( ! $is_own_address ) {
-						self::$sign_up_refusal = 'not_own_address';
+						self::$sign_up_refusal       = 'not_own_address';
+						self::$sign_up_refusal_email = strtolower( $email );
 						return false;
 					}
 					if ( Content_Restriction_Control::is_post_restricted( false, $list->get_id(), $session_user->ID ) ) {
-						self::$sign_up_refusal = 'no_access';
+						self::$sign_up_refusal       = 'no_access';
+						self::$sign_up_refusal_email = strtolower( $email );
 						return false;
 					}
 					return true;
@@ -600,13 +619,17 @@ class Premium_Newsletters {
 	 * response already says as much: it carries the new reader's login cookie.
 	 *
 	 * @param string $message   The reader-facing message so far.
-	 * @param array  $params    Details of the sign-up request.
+	 * @param array  $params    Details of the sign-up request, with an `email` key.
 	 * @param mixed  $raw_error The error the sign-up produced.
 	 *
 	 * @return string
 	 */
 	public static function filter_sign_up_error_message( $message, $params = [], $raw_error = null ) {
 		if ( ! is_wp_error( $raw_error ) || 'newspack_newsletters_lists_not_allowed' !== $raw_error->get_error_code() ) {
+			return $message;
+		}
+		$email = is_array( $params ) && isset( $params['email'] ) && is_string( $params['email'] ) ? strtolower( trim( $params['email'] ) ) : '';
+		if ( '' === self::$sign_up_refusal || $email !== self::$sign_up_refusal_email ) {
 			return $message;
 		}
 		if ( 'not_own_address' === self::$sign_up_refusal ) {
@@ -635,10 +658,7 @@ class Premium_Newsletters {
 		if ( ! self::is_access_control_active() || ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) ) {
 			return $list_gates;
 		}
-		// A site with no premium newsletter gate has nothing to report. Forms call
-		// this on every front-end render, so skip the per-list checks. Read through
-		// Content_Gate, whose cache is flushed when a gate changes.
-		if ( empty( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', true ) ) ) {
+		if ( ! self::has_newsletter_gates() ) {
 			return $list_gates;
 		}
 		// The Premium Newsletters wizard's capability and page slug. The link goes

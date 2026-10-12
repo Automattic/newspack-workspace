@@ -7,8 +7,11 @@ if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
 		// The real class's own prefix and format: a local list's public ID is the
 		// prefix plus its post ID, and that ID is the join key a stored
 		// `newsletter_subscribed_lists` entry is matched against. A remote-only list
-		// carries the ESP's own ID instead, which this stub does not model.
+		// carries the ESP's own ID instead; from_public_id() finds it by the post meta
+		// the real class reads.
 		const PUBLIC_ID_PREFIX = 'newspack-';
+
+		const REMOTE_ID_META = '_remote_id';
 
 		private $id;
 
@@ -34,17 +37,34 @@ if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
 		/**
 		 * Look up a list by its public ID. Like the real class, a public ID of the
 		 * prefix plus a post ID resolves for ANY existing post, whatever its type;
-		 * callers that need a list must check the post type themselves.
+		 * callers that need a list must check the post type themselves. Any other ID
+		 * is looked up as an ESP-side remote ID, among list posts only.
 		 *
 		 * @param string $public_id The list's public ID.
 		 *
 		 * @return static|null
 		 */
 		public static function from_public_id( $public_id ) {
-			if ( ! preg_match( '/^' . self::PUBLIC_ID_PREFIX . '([0-9]+)$/', (string) $public_id, $matches ) ) {
-				return null;
+			if ( preg_match( '/^' . self::PUBLIC_ID_PREFIX . '([0-9]+)$/', (string) $public_id, $matches ) ) {
+				return get_post( (int) $matches[1] ) ? new self( (int) $matches[1] ) : null;
 			}
-			return get_post( (int) $matches[1] ) ? new self( (int) $matches[1] ) : null;
+			$list_ids = get_posts(
+				[
+					'post_type'      => Subscription_Lists::CPT,
+					'posts_per_page' => 1,
+					'post_status'    => 'any',
+					'fields'         => 'ids',
+					'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						[
+							'key'   => self::REMOTE_ID_META,
+							'value' => (string) $public_id,
+						],
+					],
+					'orderby'        => 'ID',
+					'order'          => 'ASC',
+				]
+			);
+			return 1 === count( $list_ids ) ? new self( (int) $list_ids[0] ) : null;
 		}
 
 		/**
@@ -56,7 +76,8 @@ if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
 		 * treats a null return as "this send list is not in the registry". Tests that
 		 * need a positive match should short-circuit the check with the
 		 * `newspack_newsletters_access_is_valid_send_list_id` filter, which runs
-		 * before this lookup.
+		 * before this lookup. from_public_id() does its own remote lookup and does
+		 * not call this.
 		 *
 		 * @param string $remote_id The ESP-side list ID.
 		 *

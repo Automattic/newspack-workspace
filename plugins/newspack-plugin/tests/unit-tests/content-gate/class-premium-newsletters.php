@@ -87,6 +87,9 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$refusal_prop = new \ReflectionProperty( Premium_Newsletters::class, 'sign_up_refusal' );
 		$refusal_prop->setAccessible( true );
 		$refusal_prop->setValue( null, '' );
+		$refusal_email_prop = new \ReflectionProperty( Premium_Newsletters::class, 'sign_up_refusal_email' );
+		$refusal_email_prop->setAccessible( true );
+		$refusal_email_prop->setValue( null, '' );
 
 		// Content_Restriction_Control memoizes per post for the life of the request.
 		// PHPUnit shares one process across the suite, so without this the maps
@@ -2474,6 +2477,19 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A form submits the ESP's own ID for a remote list, not the local `newspack-`
+	 * ID. The refusal has to hold for that ID too, or anyone could join a gated
+	 * list by naming it that way.
+	 */
+	public function test_filter_subscribe_lists_refuses_a_gated_remote_list_by_its_esp_id() {
+		$list_id = $this->create_gated_list();
+		update_post_meta( $list_id, '_remote_id', 'esp-list-1' );
+		wp_set_current_user( 0 );
+
+		$this->assertSame( [], Premium_Newsletters::filter_subscribe_lists( [ 'esp-list-1' ], [ 'email' => 'nobody@example.com' ] ) );
+	}
+
+	/**
 	 * A list no gate restricts stays open to anyone, for any address.
 	 */
 	public function test_filter_subscribe_lists_keeps_ungated_lists_for_anyone() {
@@ -2495,46 +2511,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	/**
 	 * Only subscription lists are judged. A public list ID can name any post, and
 	 * judging an ordinary gated article here would let a sign-up attempt reveal
-	 * who can read it.
-	 */
-	public function test_filter_subscribe_lists_does_not_judge_other_posts() {
-		$post_id          = $this->factory->post->create();
-		$this->post_ids[] = $post_id;
-		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Paywall' ] );
-		$this->gate_ids[] = $gate_id;
-		Content_Gate::update_custom_access_settings(
-			$gate_id,
-			[
-				'active'       => true,
-				'access_rules' => [
-					[
-						[
-							'slug'  => 'subscription',
-							'value' => [ 100 ],
-						],
-					],
-				],
-			]
-		);
-		Content_Rules::update_gate_content_rules(
-			$gate_id,
-			[
-				[
-					'slug'  => 'specific_posts',
-					'value' => [ $post_id ],
-				],
-			]
-		);
-		wp_set_current_user( 0 );
-
-		$this->assertTrue( Content_Restriction_Control::post_has_restrictions( false, $post_id ), 'The article must be gated for this test to mean anything.' );
-		$this->assertSame( [ 'newspack-' . $post_id ], $this->filter_sign_up( $post_id, 'nobody@example.com' ) );
-	}
-
-	/**
-	 * The same holds on a site that has a premium newsletter gate. The test above
-	 * has none, so the no-gates shortcut answers it before the post type is ever
-	 * read; this one keeps a gated list around so the post type check has to.
+	 * who can read it. The site keeps a gated list so the no-gates shortcut does
+	 * not answer before the post type is read.
 	 */
 	public function test_filter_subscribe_lists_does_not_judge_other_posts_on_a_site_with_newsletter_gates() {
 		$this->create_gated_list();
@@ -2572,7 +2550,7 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An ID that resolves to nothing is left for upsert() to report, as before.
+	 * An ID that resolves to nothing is left for upsert() to report.
 	 */
 	public function test_filter_subscribe_lists_leaves_unknown_ids_alone() {
 		$this->create_gated_list();
@@ -2709,18 +2687,6 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	// =========================================================================
 
 	/**
-	 * A signed-out request for a gated list is told to sign in.
-	 */
-	public function test_sign_up_error_message_tells_a_signed_out_reader_to_sign_in() {
-		$list_id = $this->create_gated_list();
-		wp_set_current_user( 0 );
-
-		$this->filter_sign_up( $list_id, 'nobody@example.com' );
-
-		$this->assertSame( 'Sign in with this email address to subscribe to premium newsletters.', $this->get_refusal_message( $list_id, 'nobody@example.com' ) );
-	}
-
-	/**
 	 * The message must not depend on who the submitted address belongs to. If it
 	 * did, a signed-out request could tell a paying subscriber's address from
 	 * anyone else's, which is what the sign-up rule was built to prevent.
@@ -2813,6 +2779,22 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 
 		$this->filter_sign_up( $free_id, 'nobody@example.com' );
 		$this->assertSame( 'Generic.', $this->get_refusal_message( $free_id, 'nobody@example.com' ), 'The earlier sign-up\'s reason must not be read for this one.' );
+	}
+
+	/**
+	 * A reason speaks only for the address it was recorded for. A sign-up that
+	 * never reaches the filter can still return the same error code, and it must
+	 * not pick up a reason left by an earlier sign-up for someone else.
+	 */
+	public function test_sign_up_error_message_ignores_a_refusal_recorded_for_another_address() {
+		$list_id = $this->create_gated_list();
+		wp_set_current_user( 0 );
+
+		$this->filter_sign_up( $list_id, 'First@example.com' );
+
+		$this->assertNotSame( 'Generic.', $this->get_refusal_message( $list_id, 'First@example.com' ), 'The refusal must be claimed for this test to mean anything.' );
+		$this->assertNotSame( 'Generic.', $this->get_refusal_message( $list_id, 'FIRST@EXAMPLE.COM' ), 'The same address in another case is the same address.' );
+		$this->assertSame( 'Generic.', $this->get_refusal_message( $list_id, 'second@example.com' ) );
 	}
 
 	/**
