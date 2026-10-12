@@ -94,8 +94,8 @@ function isNextUrlTrusted( parsed ) {
 	// naming the route via rest_route. Exactly one is accepted. PHP reads a
 	// repeated key's last value, but stops reading the query string at
 	// `max_input_vars`, which a host can set low enough that an earlier
-	// value wins instead; with a single occurrence there is nothing else
-	// for PHP to fall back to.
+	// value wins instead. With a single occurrence, and PHP's default `&`
+	// separator, there is nothing else for PHP to fall back to.
 	if ( parsed.pathname !== restRoot.pathname ) {
 		return false;
 	}
