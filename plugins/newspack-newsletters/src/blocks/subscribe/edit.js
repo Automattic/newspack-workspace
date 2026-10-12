@@ -33,7 +33,7 @@ import { select } from '@wordpress/data';
 /**
  * Internal dependencies
  */
-import { enabledInOrder, hasGatedLists, isListGated, moveItem, syncListOrder } from './utils';
+import { enabledInOrder, hasGatedLists, isListGated, listsToKeep, moveItem, syncListOrder } from './utils';
 import './editor.scss';
 
 const getListCheckboxId = listId => {
@@ -163,12 +163,10 @@ export default function SubscribeEdit( {
 		if ( lists.length ) {
 			if ( ! hasMissingLists && isConfigMissingList() ) {
 				setHasMissingLists( true );
-				// Remove the missing lists from the selected lists.
-				const availableLists = lists.filter( listId => listConfig.hasOwnProperty( listId ) );
-				// The config only holds lists this user can join, and is empty when the request
-				// fails. Saving no lists would hide the form from every reader, so keep the saved ones.
-				if ( availableLists.length ) {
-					setAttributes( { lists: availableLists } );
+				// Remove the missing lists from the selected lists, unless none would be left.
+				const keptLists = listsToKeep( lists, listConfig );
+				if ( keptLists.length !== lists.length ) {
+					setAttributes( { lists: keptLists } );
 				}
 			}
 		} else {
@@ -248,13 +246,16 @@ export default function SubscribeEdit( {
 	// a reader without access would be shown a premium one.
 	const showsPremiumRow = listId => showPremium && isListGated( listGates, listId );
 	const showListUi = lists.length > 1 || lists.some( showsPremiumRow );
+	// A lone list never sits beside the email field: a reader who can join it gets
+	// a hidden input, and one who can't gets no form. So where the lists go only
+	// matters with two or more.
+	const showListPosition = lists.length > 1;
 
 	return (
 		<>
 			<InspectorControls>
 				<PanelBody title={ __( 'Form settings', 'newspack-newsletters' ) }>
-					{ /* A form shows its lists, and so has a position for them, only when it has more than one. */ }
-					{ lists.length > 1 && (
+					{ showListPosition && (
 						<ToggleGroupControl
 							__next40pxDefaultSize
 							__nextHasNoMarginBottom

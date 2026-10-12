@@ -1,7 +1,7 @@
 /**
  * Internal dependencies
  */
-import { enabledInOrder, hasGatedLists, isListGated, moveItem, syncListOrder } from './utils';
+import { enabledInOrder, hasGatedLists, isListGated, listsToKeep, moveItem, syncListOrder } from './utils';
 
 describe( 'moveItem', () => {
 	const lists = [ 'a', 'b', 'c', 'd' ];
@@ -100,6 +100,24 @@ describe( 'isListGated', () => {
 		expect( isListGated( listGates, 'c' ) ).toBe( false );
 		expect( isListGated( undefined, 'a' ) ).toBe( false );
 		expect( isListGated( [], 'a' ) ).toBe( false );
+	} );
+} );
+
+describe( 'listsToKeep', () => {
+	it( 'drops the saved lists the config lacks', () => {
+		expect( listsToKeep( [ 'a', 'gone', 'b' ], { a: {}, b: {} } ) ).toEqual( [ 'a', 'b' ] );
+	} );
+
+	it( 'keeps every saved list when the config holds none of them', () => {
+		expect( listsToKeep( [ 'premium-1', 'premium-2' ], { a: {} } ) ).toEqual( [ 'premium-1', 'premium-2' ] );
+	} );
+
+	it.each( [
+		[ 'an empty object', {} ],
+		[ 'an empty array', [] ],
+		[ 'nothing', undefined ],
+	] )( 'keeps every saved list when the config is %s', ( _label, config ) => {
+		expect( listsToKeep( [ 'premium-1' ], config ) ).toEqual( [ 'premium-1' ] );
 	} );
 } );
 
