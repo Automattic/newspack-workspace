@@ -1,3 +1,15 @@
+## newspack-theme [2.27.2](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.27.1...newspack-theme@2.27.2) (2026-10-12)
+
+
+### Bug Fixes
+
+* use :focus-visible for link focus ([#985](https://github.com/Automattic/newspack-workspace/issues/985)) ([faf8596](https://github.com/Automattic/newspack-workspace/commit/faf85961db1a5e3458bc5823cac20932be1ee7b8))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## newspack-theme [2.27.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.27.0...newspack-theme@2.27.1) (2026-09-28)
 
 
