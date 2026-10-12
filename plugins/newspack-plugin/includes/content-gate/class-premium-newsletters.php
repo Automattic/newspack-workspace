@@ -504,10 +504,11 @@ class Premium_Newsletters {
 	 * subscribed until a later event queues their access check.
 	 *
 	 * A gated list can be joined only by the logged-in reader signing up their
-	 * own address, and only if their account has access. The decision reads the
-	 * requester's session and never the account behind the submitted address. If
-	 * it did, anyone could submit another person's address and learn from the
-	 * result whether that person has access.
+	 * own address, and only if their account has access. The submitted address is
+	 * compared with the session reader's own and nothing more: the account behind
+	 * it, if there is one, is never looked up. If the result depended on that
+	 * account, anyone could submit another person's address and learn from it
+	 * whether that person has access.
 	 *
 	 * @param string[] $lists   Public IDs of the lists requested.
 	 * @param array    $contact Contact information, with an `email` key.
@@ -518,29 +519,33 @@ class Premium_Newsletters {
 		if ( ! is_array( $lists ) || empty( $lists ) || ! self::is_access_control_active() ) {
 			return $lists;
 		}
+		// With no premium newsletter gates, no list can be gated, so there is nothing to judge.
+		if ( empty( self::get_gates() ) ) {
+			return $lists;
+		}
 		if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( 'Newspack\Newsletters\Subscription_List', 'from_public_id' ) ) {
 			return $lists;
 		}
-		$session_user_id = get_current_user_id();
-		$email           = is_array( $contact ) && ! empty( $contact['email'] ) ? $contact['email'] : '';
-		$contact_user    = $email ? get_user_by( 'email', $email ) : false;
-		$is_own_address  = $session_user_id && $contact_user && (int) $contact_user->ID === $session_user_id;
+		$session_user   = wp_get_current_user();
+		$email          = is_array( $contact ) && isset( $contact['email'] ) && is_string( $contact['email'] ) ? trim( $contact['email'] ) : '';
+		$is_own_address = $session_user->exists() && '' !== $email && 0 === strcasecmp( $email, $session_user->user_email );
 
 		return array_values(
 			array_filter(
 				$lists,
-				function ( $public_id ) use ( $is_own_address, $session_user_id ) {
+				function ( $public_id ) use ( $is_own_address, $session_user ) {
 					$list = Subscription_List::from_public_id( $public_id );
 					// A public ID can name any post, not only a list. Judging those would
 					// turn a sign-up attempt into a way to probe every gate on the site,
-					// so they pass through for upsert() to reject, as before.
+					// so anything that isn't a list passes through unjudged, as it did
+					// before this check existed.
 					if ( ! $list || \Newspack\Newsletters\Subscription_Lists::CPT !== get_post_type( $list->get_id() ) ) {
 						return true;
 					}
 					if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
 						return true;
 					}
-					return $is_own_address && ! Content_Restriction_Control::is_post_restricted( false, $list->get_id(), $session_user_id );
+					return $is_own_address && ! Content_Restriction_Control::is_post_restricted( false, $list->get_id(), $session_user->ID );
 				}
 			)
 		);
@@ -568,6 +573,12 @@ class Premium_Newsletters {
 		// edits the layout readers see and not the gate's rules.
 		$can_edit = current_user_can( 'manage_options' );
 		foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
+			// The marker must mean the same thing as the sign-up check, which honors
+			// a list marked exempt. get_post_gates() alone would mark it as gated
+			// while anyone can join it.
+			if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
+				continue;
+			}
 			$gates = Content_Restriction_Control::get_post_gates( $list->get_id() );
 			if ( empty( $gates ) ) {
 				continue;

@@ -2304,6 +2304,20 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A list marked exempt is open to everyone, so the editor must not mark it as
+	 * gated. The marker has to mean what the sign-up check means.
+	 */
+	public function test_filter_list_gates_skips_an_exempt_list() {
+		$exempt_id = $this->create_gated_list();
+		$gated_id  = $this->create_gated_list();
+		update_post_meta( $exempt_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true );
+
+		$result = Premium_Newsletters::filter_list_gates( [] );
+
+		$this->assertSame( [ 'newspack-' . $gated_id ], array_keys( $result ) );
+	}
+
+	/**
 	 * With Audience Management off, no list is reported as gated.
 	 */
 	public function test_filter_list_gates_is_empty_when_gating_is_inactive() {
@@ -2470,6 +2484,46 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The same holds on a site that has a premium newsletter gate. The test above
+	 * has none, so the no-gates shortcut answers it before the post type is ever
+	 * read; this one keeps a gated list around so the post type check has to.
+	 */
+	public function test_filter_subscribe_lists_does_not_judge_other_posts_on_a_site_with_newsletter_gates() {
+		$this->create_gated_list();
+		$post_id          = $this->factory->post->create();
+		$this->post_ids[] = $post_id;
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Paywall' ] );
+		$this->gate_ids[] = $gate_id;
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 100 ],
+						],
+					],
+				],
+			]
+		);
+		Content_Rules::update_gate_content_rules(
+			$gate_id,
+			[
+				[
+					'slug'  => 'specific_posts',
+					'value' => [ $post_id ],
+				],
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$this->assertTrue( Content_Restriction_Control::post_has_restrictions( false, $post_id ), 'The article must be gated for this test to mean anything.' );
+		$this->assertSame( [ 'newspack-' . $post_id ], $this->filter_sign_up( $post_id, 'nobody@example.com' ) );
+	}
+
+	/**
 	 * An ID that resolves to nothing is left for upsert() to report, as before.
 	 */
 	public function test_filter_subscribe_lists_leaves_unknown_ids_alone() {
@@ -2494,6 +2548,79 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
 
 		$this->assertSame( [ 'newspack-' . $list_id ], $result );
+	}
+
+	/**
+	 * The submitted address is compared with the session reader's own whatever its
+	 * case. A reader who types their address in capitals is still signing up their
+	 * own, and the comparison must not lean on the database's collation to say so.
+	 */
+	public function test_filter_subscribe_lists_matches_own_address_whatever_its_case() {
+		$list_id = $this->create_gated_list();
+		$user_id = $this->create_reader( true );
+		wp_set_current_user( $user_id );
+
+		$this->assertSame( [ 'newspack-' . $list_id ], $this->filter_sign_up( $list_id, strtoupper( get_userdata( $user_id )->user_email ) ) );
+	}
+
+	/**
+	 * An address that isn't a string matches no one, and doesn't throw. Contact data
+	 * can come from a request, where a caller can send an array.
+	 */
+	public function test_filter_subscribe_lists_ignores_a_non_string_address() {
+		$list_id = $this->create_gated_list();
+		wp_set_current_user( $this->create_reader( true ) );
+
+		$result = Premium_Newsletters::filter_subscribe_lists( [ 'newspack-' . $list_id ], [ 'email' => [ 'x@example.com' ] ] );
+
+		$this->assertSame( [], $result );
+	}
+
+	/**
+	 * A list marked exempt is open to anyone, whatever address they submit.
+	 */
+	public function test_filter_subscribe_lists_keeps_an_exempt_list_for_anyone() {
+		$list_id = $this->create_gated_list();
+		update_post_meta( $list_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true );
+		wp_set_current_user( 0 );
+
+		$this->assertFalse( Content_Restriction_Control::post_has_restrictions( false, $list_id ), 'The exemption must open the list for this test to mean anything.' );
+		$this->assertSame( [ 'newspack-' . $list_id ], $this->filter_sign_up( $list_id, 'nobody@example.com' ) );
+	}
+
+	/**
+	 * While Woo Memberships is active it still decides who can join a list, so the
+	 * sign-up check leaves every list alone.
+	 *
+	 * Runs isolated because WC_Memberships, once declared, would make
+	 * Memberships::is_active() true for every later test in this process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_filter_subscribe_lists_stands_down_while_memberships_is_active() {
+		require dirname( __DIR__, 2 ) . '/mocks/wc-memberships-active-mock.php';
+
+		$list_id = $this->create_gated_list();
+		wp_set_current_user( 0 );
+
+		$this->assertSame( [ 'newspack-' . $list_id ], $this->filter_sign_up( $list_id, 'nobody@example.com' ) );
+	}
+
+	/**
+	 * With no premium newsletter gates, no list can be gated, so the sign-up passes
+	 * through whatever the lists are. An ID that names no list at all is simply
+	 * returned too.
+	 */
+	public function test_filter_subscribe_lists_does_nothing_without_gates() {
+		$list_id = $this->create_premium_list();
+		wp_set_current_user( 0 );
+
+		$this->assertSame( [ 'newspack-' . $list_id ], $this->filter_sign_up( $list_id, 'nobody@example.com' ) );
+		$this->assertSame(
+			[ 'newspack-999999' ],
+			Premium_Newsletters::filter_subscribe_lists( [ 'newspack-999999' ], [ 'email' => 'nobody@example.com' ] )
+		);
 	}
 
 	/**
