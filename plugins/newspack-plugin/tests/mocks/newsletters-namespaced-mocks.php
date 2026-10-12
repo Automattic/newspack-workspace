@@ -32,6 +32,22 @@ if ( ! class_exists( 'Newspack\Newsletters\Subscription_List' ) ) {
 		}
 
 		/**
+		 * Look up a list by its public ID. Like the real class, a public ID of the
+		 * prefix plus a post ID resolves for ANY existing post, whatever its type;
+		 * callers that need a list must check the post type themselves.
+		 *
+		 * @param string $public_id The list's public ID.
+		 *
+		 * @return static|null
+		 */
+		public static function from_public_id( $public_id ) {
+			if ( ! preg_match( '/^' . self::PUBLIC_ID_PREFIX . '([0-9]+)$/', (string) $public_id, $matches ) ) {
+				return null;
+			}
+			return get_post( (int) $matches[1] ) ? new self( (int) $matches[1] ) : null;
+		}
+
+		/**
 		 * Look up a list by its ESP-side remote ID.
 		 *
 		 * The real implementation returns a Subscription_List when exactly one list

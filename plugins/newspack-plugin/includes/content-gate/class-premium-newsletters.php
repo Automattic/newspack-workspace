@@ -111,6 +111,9 @@ class Premium_Newsletters {
 		// Filter the subscription lists.
 		add_filter( 'newspack_newsletters_subscription_lists', [ __CLASS__, 'filter_subscription_lists' ] );
 
+		// Refuse sign-ups to gated lists unless the reader is signing up their own address.
+		add_filter( 'newspack_newsletters_subscribe_lists', [ __CLASS__, 'filter_subscribe_lists' ], 10, 2 );
+
 		// Tell the Newsletter Subscription Form block's editor which lists are gated.
 		add_filter( 'newspack_newsletters_subscription_list_gates', [ __CLASS__, 'filter_list_gates' ] );
 
@@ -491,6 +494,56 @@ class Premium_Newsletters {
 			)
 		);
 		return $lists;
+	}
+
+	/**
+	 * Remove lists a reader may not join from a sign-up.
+	 *
+	 * Display is all filter_subscription_lists() decides. Without this, a request
+	 * naming a gated list's ID subscribes the contact anyway, and they stay
+	 * subscribed until a later event queues their access check.
+	 *
+	 * A gated list can be joined only by the logged-in reader signing up their
+	 * own address, and only if their account has access. The decision reads the
+	 * requester's session and never the account behind the submitted address. If
+	 * it did, anyone could submit another person's address and learn from the
+	 * result whether that person has access.
+	 *
+	 * @param string[] $lists   Public IDs of the lists requested.
+	 * @param array    $contact Contact information, with an `email` key.
+	 *
+	 * @return string[] The lists the sign-up may proceed with.
+	 */
+	public static function filter_subscribe_lists( $lists, $contact = [] ) {
+		if ( ! is_array( $lists ) || empty( $lists ) || ! self::is_access_control_active() ) {
+			return $lists;
+		}
+		if ( ! class_exists( 'Newspack\Newsletters\Subscription_Lists' ) || ! method_exists( 'Newspack\Newsletters\Subscription_List', 'from_public_id' ) ) {
+			return $lists;
+		}
+		$session_user_id = get_current_user_id();
+		$email           = is_array( $contact ) && ! empty( $contact['email'] ) ? $contact['email'] : '';
+		$contact_user    = $email ? get_user_by( 'email', $email ) : false;
+		$is_own_address  = $session_user_id && $contact_user && (int) $contact_user->ID === $session_user_id;
+
+		return array_values(
+			array_filter(
+				$lists,
+				function ( $public_id ) use ( $is_own_address, $session_user_id ) {
+					$list = Subscription_List::from_public_id( $public_id );
+					// A public ID can name any post, not only a list. Judging those would
+					// turn a sign-up attempt into a way to probe every gate on the site,
+					// so they pass through for upsert() to reject, as before.
+					if ( ! $list || \Newspack\Newsletters\Subscription_Lists::CPT !== get_post_type( $list->get_id() ) ) {
+						return true;
+					}
+					if ( ! Content_Restriction_Control::post_has_restrictions( false, $list->get_id() ) ) {
+						return true;
+					}
+					return $is_own_address && ! Content_Restriction_Control::is_post_restricted( false, $list->get_id(), $session_user_id );
+				}
+			)
+		);
 	}
 
 	/**

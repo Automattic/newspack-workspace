@@ -199,6 +199,51 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		return $gate_id;
 	}
 
+	/**
+	 * Create a reader, optionally with a subscription that satisfies the gates
+	 * create_gated_list() makes.
+	 *
+	 * @param bool $with_access Whether the reader has access to gated lists.
+	 *
+	 * @return int User ID.
+	 */
+	private function create_reader( bool $with_access = false ): int {
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		if ( $with_access ) {
+			wcs_create_subscription(
+				[
+					'customer_id' => $user_id,
+					'status'      => 'active',
+					'products'    => [ 100 ],
+				]
+			);
+		}
+		return $user_id;
+	}
+
+	/**
+	 * Create a list restricted by a premium newsletter gate.
+	 *
+	 * @return int List post ID.
+	 */
+	private function create_gated_list(): int {
+		$list_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_id ] );
+		return $list_id;
+	}
+
+	/**
+	 * Run the sign-up filter for a list and an address.
+	 *
+	 * @param int    $list_id List post ID.
+	 * @param string $email   Address being signed up.
+	 *
+	 * @return string[] The lists the filter kept.
+	 */
+	private function filter_sign_up( int $list_id, string $email ): array {
+		return Premium_Newsletters::filter_subscribe_lists( [ 'newspack-' . $list_id ], [ 'email' => $email ] );
+	}
+
 	// =========================================================================
 	// filter_subscription_lists() — no-gates guard
 	// =========================================================================
@@ -2296,5 +2341,171 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 */
 	public function test_filter_list_gates_is_hooked() {
 		$this->assertSame( 10, has_filter( 'newspack_newsletters_subscription_list_gates', [ Premium_Newsletters::class, 'filter_list_gates' ] ) );
+	}
+
+	// =========================================================================
+	// filter_subscribe_lists() — sign-up enforcement
+	// =========================================================================
+
+	/**
+	 * A logged-in reader with access can sign their own address up for a gated list.
+	 */
+	public function test_filter_subscribe_lists_keeps_gated_list_for_own_address_with_access() {
+		$list_id = $this->create_gated_list();
+		$user_id = $this->create_reader( true );
+		wp_set_current_user( $user_id );
+
+		$this->assertSame( [ 'newspack-' . $list_id ], $this->filter_sign_up( $list_id, get_userdata( $user_id )->user_email ) );
+	}
+
+	/**
+	 * A logged-in reader without access can't, even for their own address.
+	 */
+	public function test_filter_subscribe_lists_removes_gated_list_for_own_address_without_access() {
+		$list_id = $this->create_gated_list();
+		$user_id = $this->create_reader();
+		wp_set_current_user( $user_id );
+
+		$this->assertSame( [], $this->filter_sign_up( $list_id, get_userdata( $user_id )->user_email ) );
+	}
+
+	/**
+	 * A signed-out request is refused whatever address it submits. The answer
+	 * must not depend on whether that address belongs to someone with access, or
+	 * a sign-up attempt would reveal who is a paying subscriber.
+	 */
+	public function test_filter_subscribe_lists_refuses_a_signed_out_request_whatever_the_address() {
+		$list_id    = $this->create_gated_list();
+		$entitled   = get_userdata( $this->create_reader( true ) )->user_email;
+		$unentitled = get_userdata( $this->create_reader() )->user_email;
+		wp_set_current_user( 0 );
+
+		$this->assertSame( [], $this->filter_sign_up( $list_id, $entitled ) );
+		$this->assertSame( [], $this->filter_sign_up( $list_id, $unentitled ) );
+		$this->assertSame( [], $this->filter_sign_up( $list_id, 'nobody@example.com' ) );
+	}
+
+	/**
+	 * A logged-in reader with access can't sign someone else's address up, and
+	 * again the answer is the same whether or not that other person has access.
+	 */
+	public function test_filter_subscribe_lists_refuses_another_readers_address() {
+		$list_id    = $this->create_gated_list();
+		$entitled   = get_userdata( $this->create_reader( true ) )->user_email;
+		$unentitled = get_userdata( $this->create_reader() )->user_email;
+		wp_set_current_user( $this->create_reader( true ) );
+
+		$this->assertSame( [], $this->filter_sign_up( $list_id, $entitled ) );
+		$this->assertSame( [], $this->filter_sign_up( $list_id, $unentitled ) );
+	}
+
+	/**
+	 * An administrator can edit every list, so judging by the session alone would
+	 * let them subscribe anyone. They are refused for other people's addresses too.
+	 */
+	public function test_filter_subscribe_lists_refuses_an_administrator_signing_up_someone_else() {
+		$list_id  = $this->create_gated_list();
+		$entitled = get_userdata( $this->create_reader( true ) )->user_email;
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->assertSame( [], $this->filter_sign_up( $list_id, $entitled ) );
+	}
+
+	/**
+	 * A list no gate restricts stays open to anyone, for any address.
+	 */
+	public function test_filter_subscribe_lists_keeps_ungated_lists_for_anyone() {
+		$gated_id = $this->create_gated_list();
+		$free_id  = $this->create_premium_list();
+		wp_set_current_user( 0 );
+
+		$this->assertSame( [ 'newspack-' . $free_id ], $this->filter_sign_up( $free_id, 'nobody@example.com' ) );
+		$this->assertSame(
+			[ 'newspack-' . $free_id ],
+			Premium_Newsletters::filter_subscribe_lists(
+				[ 'newspack-' . $gated_id, 'newspack-' . $free_id ],
+				[ 'email' => 'nobody@example.com' ]
+			),
+			'A refused list is dropped and the rest are reindexed.'
+		);
+	}
+
+	/**
+	 * Only subscription lists are judged. A public list ID can name any post, and
+	 * judging an ordinary gated article here would let a sign-up attempt reveal
+	 * who can read it.
+	 */
+	public function test_filter_subscribe_lists_does_not_judge_other_posts() {
+		$post_id          = $this->factory->post->create();
+		$this->post_ids[] = $post_id;
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Paywall' ] );
+		$this->gate_ids[] = $gate_id;
+		Content_Gate::update_custom_access_settings(
+			$gate_id,
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'subscription',
+							'value' => [ 100 ],
+						],
+					],
+				],
+			]
+		);
+		Content_Rules::update_gate_content_rules(
+			$gate_id,
+			[
+				[
+					'slug'  => 'specific_posts',
+					'value' => [ $post_id ],
+				],
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$this->assertTrue( Content_Restriction_Control::post_has_restrictions( false, $post_id ), 'The article must be gated for this test to mean anything.' );
+		$this->assertSame( [ 'newspack-' . $post_id ], $this->filter_sign_up( $post_id, 'nobody@example.com' ) );
+	}
+
+	/**
+	 * An ID that resolves to nothing is left for upsert() to report, as before.
+	 */
+	public function test_filter_subscribe_lists_leaves_unknown_ids_alone() {
+		$this->create_gated_list();
+		wp_set_current_user( 0 );
+
+		$this->assertSame(
+			[ 'not-a-list' ],
+			Premium_Newsletters::filter_subscribe_lists( [ 'not-a-list' ], [ 'email' => 'nobody@example.com' ] )
+		);
+	}
+
+	/**
+	 * With Audience Management off, Access Control restricts nothing.
+	 */
+	public function test_filter_subscribe_lists_stands_down_when_gating_is_inactive() {
+		$list_id = $this->create_gated_list();
+		wp_set_current_user( 0 );
+
+		add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		$result = $this->filter_sign_up( $list_id, 'nobody@example.com' );
+		remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$this->assertSame( [ 'newspack-' . $list_id ], $result );
+	}
+
+	/**
+	 * The callback is hooked where newsletters applies the filter.
+	 */
+	public function test_filter_subscribe_lists_is_hooked() {
+		$this->assertSame( 10, has_filter( 'newspack_newsletters_subscribe_lists', [ Premium_Newsletters::class, 'filter_subscribe_lists' ] ) );
+
+		$list_id = $this->create_gated_list();
+		wp_set_current_user( 0 );
+		$result = apply_filters( 'newspack_newsletters_subscribe_lists', [ 'newspack-' . $list_id ], [ 'email' => 'nobody@example.com' ], 'Test' );
+
+		$this->assertSame( [], $result );
 	}
 }
