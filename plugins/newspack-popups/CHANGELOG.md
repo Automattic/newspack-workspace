@@ -1,3 +1,35 @@
+## newspack-popups [3.20.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.0...newspack-popups@3.20.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **campaigns:** support on-page links on prompt buttons (NPPD-2348) ([#1271](https://github.com/Automattic/newspack-workspace/issues/1271)) ([439cfc1](https://github.com/Automattic/newspack-workspace/commit/439cfc1209b6ff36587433611e3f9c32ef4e3409))
+
+# newspack-popups [3.20.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.19.3...newspack-popups@3.20.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **campaigns:** fall back from a Donate CTA the platform won't render ([26fb6eb](https://github.com/Automattic/newspack-workspace/commit/26fb6eb657a50b7c64a4dc40584312a90f7271e3))
+* **campaigns:** harden prompt CTA locks and keep an admin's pattern CTA ([1f421d4](https://github.com/Automattic/newspack-workspace/commit/1f421d490d13f2802ba8d6547f32b4acaa8bade2))
+* **campaigns:** keep a publisher's pattern CTA through saves and resets ([53f4321](https://github.com/Automattic/newspack-workspace/commit/53f4321b9fcdd2d92a681f8bd319ce32fbe2db7c))
+* **campaigns:** lift only the seeded CTA lock on a detached prompt card ([1b47d2f](https://github.com/Automattic/newspack-workspace/commit/1b47d2ffafa0e278a9fc6bc6716238ae742a647c))
+* **phpcs:** point constant ignores at the documenting file ([#1130](https://github.com/Automattic/newspack-workspace/issues/1130)) ([9468c79](https://github.com/Automattic/newspack-workspace/commit/9468c79ef60ae098237278bbdd774574b95caa0e))
+* **popups:** match former donors in Donation segments ([#1122](https://github.com/Automattic/newspack-workspace/issues/1122)) ([54d240c](https://github.com/Automattic/newspack-workspace/commit/54d240c7f2ec783d5b364a6d4ed65ad9c6bc627d))
+* **reader-activation:** switched sessions never write reader data ([#1081](https://github.com/Automattic/newspack-workspace/issues/1081)) ([da090aa](https://github.com/Automattic/newspack-workspace/commit/da090aa01ba578ff763c1cb657f7b61d5a8a3cd9))
+
+
+### Features
+
+* **campaigns:** let editors replace a detached prompt's call to action ([df681aa](https://github.com/Automattic/newspack-workspace/commit/df681aac559cc271645fcefef54ee4cb5b57fce7))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.5
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## newspack-popups [3.19.3](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.19.2...newspack-popups@3.19.3) (2026-09-28)
 
 

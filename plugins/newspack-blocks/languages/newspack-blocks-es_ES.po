@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.20\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
-"POT-Creation-Date: 2026-09-28T17:15:16+00:00\n"
+"POT-Creation-Date: 2026-10-12T18:25:27+00:00\n"
 "PO-Revision-Date: 2025-08-12T14:56:45+00:00\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -275,6 +275,11 @@ msgid ""
 "Thank you for supporting %s. Your transaction was completed successfully."
 msgstr ""
 
+#: includes/class-newspack-blocks-api.php:290 dist/editor.js:23
+#: src/blocks/homepage-articles/store.js:182
+msgid "The posts for this block could not be loaded."
+msgstr ""
+
 #: includes/class-newspack-blocks-patterns.php:130
 msgid "Support our publication"
 msgstr ""
@@ -306,45 +311,45 @@ msgstr ""
 msgid "Newspack Subscribe"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1132
+#: includes/class-newspack-blocks.php:1134
 msgid "Common"
 msgstr ""
 
 #. translators: separates last two sponsor names; needs a space on either side.
-#: includes/class-newspack-blocks.php:1233
+#: includes/class-newspack-blocks.php:1235
 msgid " and "
 msgstr " y "
 
 #. translators: separates all but the last two sponsor names; needs a space at the end.
-#: includes/class-newspack-blocks.php:1236
+#: includes/class-newspack-blocks.php:1238
 msgid ", "
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1571
+#: includes/class-newspack-blocks.php:1573
 msgid "Jetpack donations is disabled in favour of Newspack donations."
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1604 dist/editor.js:30
+#: includes/class-newspack-blocks.php:1606 dist/editor.js:30
 #: src/shared/js/utils.js:54
 msgid "Draft"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1605 dist/editor.js:30
+#: includes/class-newspack-blocks.php:1607 dist/editor.js:30
 #: src/shared/js/utils.js:54
 msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1803 dist/editor.js:52
+#: includes/class-newspack-blocks.php:1805 dist/editor.js:52
 #, php-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1834
+#: includes/class-newspack-blocks.php:1836
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1837
+#: includes/class-newspack-blocks.php:1839
 msgid " per "
 msgstr ""
 
