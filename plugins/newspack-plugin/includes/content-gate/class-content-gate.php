@@ -281,6 +281,7 @@ class Content_Gate {
 		include __DIR__ . '/class-access-rules.php';
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
+		include __DIR__ . '/class-member-body-class.php';
 		include __DIR__ . '/class-block-patterns.php';
 		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
