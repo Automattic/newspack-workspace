@@ -1,0 +1,69 @@
+name: Release skip-marker safety net
+
+# GitHub drops every push-triggered workflow when the pushed commit's message
+# carries a skip marker anywhere in it, body included. The marker is meant for
+# the release bot's own commits, where it sits in the subject. A merge commit
+# whose body quotes one of those commits trips the same rule, and the release
+# the merge was meant to start never runs (#1287).
+#
+# This starts that release. It reads the merge commit of a pull request merged
+# into `release` or `alpha`, and dispatches release.yml when a marker appears
+# only below the subject line. A marker in the subject is left alone: that is
+# someone asking for the skip.
+#
+# pull_request_target rather than pull_request, because a skip marker on the
+# pull request's head commit silences pull_request runs too, and GitHub
+# documents pull_request_target as exempt. Nothing from the pull request is
+# checked out or run here, so the token this event grants never meets PR code.
+#
+# Only release.yml has a manual trigger, so CI and the merge feed still do not
+# run for the skipped push.
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches:
+      - release
+      - alpha
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  start-release:
+    name: Start a release that a quoted skip marker silenced
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch release.yml when only the commit body carries a marker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          # The five spellings GitHub honours, matching the plan step in
+          # release.yml.
+          has_marker() {
+            case "$1" in
+              *'[skip ci]'*|*'[ci skip]'*|*'[no ci]'*|*'[skip actions]'*|*'[actions skip]'*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          message=$(gh api "repos/$GITHUB_REPOSITORY/commits/$MERGE_SHA" --jq '.commit.message')
+          subject=${message%%$'\n'*}
+
+          if ! has_marker "$message"; then
+            echo "No skip marker in $MERGE_SHA; the push started its own runs."
+            exit 0
+          fi
+          if has_marker "$subject"; then
+            echo "::notice::$MERGE_SHA carries a skip marker in its subject, so the skip is treated as deliberate."
+            exit 0
+          fi
+
+          echo "::warning::The body of $MERGE_SHA quotes a skip marker, so GitHub started no workflow for this push to $BASE_REF. Dispatching release.yml on $BASE_REF."
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$BASE_REF"
