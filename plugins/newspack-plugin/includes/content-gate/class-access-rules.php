@@ -1073,6 +1073,15 @@ class Access_Rules {
 	 * so refunded, cancelled, failed, and pending orders never grant access. The
 	 * order's creation date anchors the duration.
 	 *
+	 * Orders are matched by customer ID only, never by billing email. The account
+	 * email is not proof of ownership of an order: matching on it would let a
+	 * reader who sets their address to someone else's billing email inherit that
+	 * person's purchases. Guest orders (no customer ID) therefore never grant
+	 * access. That is not a flow Newspack supports: with Reader Activation on,
+	 * guest checkout is disabled and every order is placed by a reader account.
+	 * Guest orders from elsewhere (placed before Reader Activation, created by
+	 * hand, imported) can be linked to the reader's account in WooCommerce.
+	 *
 	 * @param int   $user_id User ID.
 	 * @param array $args {
 	 *     Rule value.
@@ -1092,11 +1101,9 @@ class Access_Rules {
 			if ( isset( self::$one_time_purchase_memo[ $memo_key ] ) ) {
 				$has_purchase = self::$one_time_purchase_memo[ $memo_key ];
 			} else {
-				$user     = \get_userdata( $user_id );
-				$email    = $user ? $user->user_email : '';
-				$customer = array_values( array_filter( [ $user_id, $email ] ) );
-				$cutoff   = self::get_one_time_purchase_cutoff( $value );
-				if ( empty( $customer ) ) {
+				$user_id = (int) $user_id;
+				$cutoff  = self::get_one_time_purchase_cutoff( $value );
+				if ( ! $user_id ) {
 					// Fail closed with no identity to match a purchase against. Both
 					// paths need this guard, for different reasons. The finite path:
 					// an empty customer constraint is dropped by both WooCommerce
@@ -1107,19 +1114,24 @@ class Access_Rules {
 					// identity check, so a third-party filter can answer truthy for
 					// nobody in particular. Neither branch is redundant.
 					$has_purchase = false;
-				} elseif ( null === $cutoff ) {
+				} elseif ( null === $cutoff && self::customer_bought_product_matches_id_only() ) {
 					// Lifetime access: any paid order ever. wc_customer_bought_product()
-					// is exhaustive across the customer's order history (matching both
-					// user ID and billing email, so guest orders count), runs SQL-side,
+					// is exhaustive across the customer's order history, runs SQL-side,
 					// and is cached by WooCommerce with invalidation on order writes.
+					// A null email keeps the match on the customer ID. It must not be
+					// '': WooCommerce caches that call by the customer's order count,
+					// which a status change leaves as it is, so a cancelled or refunded
+					// order would keep granting access.
 					foreach ( $value['product_ids'] as $product_id ) {
-						if ( \wc_customer_bought_product( $email, $user_id, $product_id ) ) {
+						if ( \wc_customer_bought_product( null, $user_id, $product_id ) ) {
 							$has_purchase = true;
 							break;
 						}
 					}
 				} elseif ( false !== $cutoff ) {
-					$has_purchase = self::customer_bought_product_after( $customer, $value['product_ids'], $cutoff );
+					// Finite duration, or lifetime on a WooCommerce that would match
+					// wc_customer_bought_product() on the account email.
+					$has_purchase = self::customer_bought_product_after( $user_id, $value['product_ids'], $cutoff );
 				}
 				// A false cutoff is a misconfigured duration and fails closed.
 				self::$one_time_purchase_memo[ $memo_key ] = $has_purchase;
@@ -1194,17 +1206,15 @@ class Access_Rules {
 		if ( isset( self::$one_time_purchase_orders_memo[ $memo_key ] ) ) {
 			return self::$one_time_purchase_orders_memo[ $memo_key ];
 		}
-		$user      = \get_userdata( $user_id );
-		$email     = $user ? $user->user_email : '';
-		$customer  = array_values( array_filter( [ $user_id, $email ] ) );
+		$user_id   = (int) $user_id;
 		$cutoff    = self::get_one_time_purchase_cutoff( $value );
 		$order_ids = [];
-		if ( ! empty( $customer ) && false !== $cutoff ) {
+		if ( $user_id && false !== $cutoff ) {
 			$order_ids = array_map(
 				function ( $order ) {
 					return (int) $order->get_id();
 				},
-				self::get_paid_orders_with_products( $customer, $value['product_ids'], $cutoff, (int) $limit )
+				self::get_paid_orders_with_products( [ $user_id ], $value['product_ids'], $cutoff, (int) $limit )
 			);
 		}
 		self::$one_time_purchase_orders_memo[ $memo_key ] = $order_ids;
@@ -1215,15 +1225,42 @@ class Access_Rules {
 	 * Whether the user has a paid order containing one of the given products,
 	 * created after the given cutoff timestamp.
 	 *
-	 * @param array $customer    Non-empty list of user IDs and/or billing emails to match.
-	 * @param int[] $product_ids Product IDs to look for.
-	 * @param int   $cutoff      Unix timestamp orders must be created after.
+	 * @param int      $user_id     Non-zero user ID.
+	 * @param int[]    $product_ids Product IDs to look for.
+	 * @param int|null $cutoff      Unix timestamp orders must be created after, or
+	 *                              null for the customer's whole order history.
 	 *
 	 * @return bool
 	 */
-	private static function customer_bought_product_after( $customer, $product_ids, $cutoff ) {
-		return ! empty( self::get_paid_orders_with_products( $customer, $product_ids, $cutoff, 1 ) );
+	private static function customer_bought_product_after( $user_id, $product_ids, $cutoff ) {
+		return ! empty( self::get_paid_orders_with_products( [ $user_id ], $product_ids, $cutoff, 1 ) );
 	}
+
+	/**
+	 * Whether wc_customer_bought_product() matches on the customer ID alone when
+	 * given no email.
+	 *
+	 * Before WooCommerce 10.8 it also matched the billing email against the
+	 * account email it looked up from the user ID, which is the identity
+	 * has_one_time_purchase() must not trust. On those versions the lifetime
+	 * check walks the order store instead.
+	 *
+	 * @return bool
+	 */
+	private static function customer_bought_product_matches_id_only() {
+		if ( null !== self::$customer_bought_product_matches_id_only ) {
+			return self::$customer_bought_product_matches_id_only;
+		}
+		return defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '10.8.0', '>=' );
+	}
+
+	/**
+	 * Overrides the WooCommerce version check above when not null. Tests set it
+	 * to exercise both lifetime paths.
+	 *
+	 * @var bool|null
+	 */
+	private static $customer_bought_product_matches_id_only = null;
 
 	/**
 	 * Orders are fetched in pages of this many. Tests shrink it to exercise the walk.
@@ -1248,15 +1285,16 @@ class Access_Rules {
 	 * The customer's paid orders containing one of the given products, newest
 	 * first, optionally limited to orders created after a cutoff timestamp.
 	 *
-	 * A null $cutoff walks the whole history and is only appropriate for a
-	 * bounded, admin-side caller. The `customer` parameter matches the user ID
-	 * or the billing email, so guest orders count, mirroring
-	 * wc_customer_bought_product() on the lifetime path. `date ID` is the sort
-	 * key because `date` alone is not unique: same-second orders (imports, batch
-	 * renewals) could straddle a page boundary and be skipped or repeated.
+	 * A null $cutoff walks the whole history, so it suits an admin-side caller
+	 * or the front end only as the fallback for an older WooCommerce (see
+	 * customer_bought_product_matches_id_only()). Callers pass user IDs only: a
+	 * string in `customer` would match billing emails, which
+	 * has_one_time_purchase() does not trust. `date ID` is the sort key because
+	 * `date` alone is not unique: same-second orders (imports, batch renewals)
+	 * could straddle a page boundary and be skipped or repeated.
 	 *
-	 * @param array    $customer    Non-empty list of user IDs and/or billing emails to
-	 *                              match. Callers must reject an empty list: both
+	 * @param int[]    $customer    Non-empty list of user IDs to match. Callers must
+	 *                              reject an empty list: both
 	 *                              WooCommerce order stores drop an empty `customer`
 	 *                              constraint and return every customer's orders.
 	 * @param int[]    $product_ids Product IDs to look for.

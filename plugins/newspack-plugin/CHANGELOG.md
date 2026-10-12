@@ -1,3 +1,10 @@
+## newspack [6.53.12](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.11...newspack@6.53.12) (2026-10-08)
+
+
+### Bug Fixes
+
+* **content-gate:** stop trusting unverified account email for access ([#1244](https://github.com/Automattic/newspack-workspace/issues/1244)) ([9929acc](https://github.com/Automattic/newspack-workspace/commit/9929acc7aa4c35c70063cec4fdabc38861983b2a))
+
 ## newspack [6.53.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.53.10...newspack@6.53.11) (2026-10-06)
 
 
