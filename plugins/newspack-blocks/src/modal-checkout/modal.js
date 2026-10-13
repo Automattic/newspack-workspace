@@ -64,6 +64,20 @@ const closeModal = el => {
 	document.body.style.overflow = 'auto';
 };
 
+// A content gate on the page reloads it once the last overlay closes after a checkout,
+// which cancels a post-checkout navigation that is still loading. An overlay held from
+// the moment the checkout navigates keeps the gate waiting.
+const heldOverlays = [];
+const holdOverlay = () => {
+	const overlayId = window.newspackReaderActivation?.overlays?.add?.();
+	if ( overlayId ) {
+		heldOverlays.push( overlayId );
+	}
+};
+const releaseHeldOverlays = () => {
+	heldOverlays.splice( 0 ).forEach( overlayId => window.newspackReaderActivation?.overlays?.remove?.( overlayId ) );
+};
+
 // Cleanup if page is loaded via back button.
 window.onpageshow = event => {
 	if ( event.persisted ) {
@@ -71,6 +85,8 @@ window.onpageshow = event => {
 		document.querySelectorAll( '.modal-processing' ).forEach( el => el.classList.remove( 'modal-processing' ) );
 		document.querySelectorAll( '.non-modal-checkout-loading' ).forEach( el => el.classList.remove( 'non-modal-checkout-loading' ) );
 		document.querySelectorAll( `.${ MODAL_CLASS_PREFIX }-container` ).forEach( el => closeModal( el ) );
+		// The reader is back on a page they were redirected away from, so the gate may reload it.
+		releaseHeldOverlays();
 	}
 };
 
@@ -606,9 +622,6 @@ domReady( () => {
 		}
 
 		if ( container?.checkoutComplete ) {
-			// A content gate on the page reloads it once the last overlay closes after a checkout,
-			// which cancels a navigation that is still loading. Holding an overlay keeps it waiting.
-			const holdOverlay = () => window.newspackReaderActivation?.overlays?.add?.();
 			let isComplete = false;
 			const handleCheckoutComplete = () => {
 				// The signup modal can report twice: answered, then closed while the redirect loads.
@@ -643,12 +656,10 @@ domReady( () => {
 							}
 						}
 						if ( ! navigated ) {
-							const overlayId = holdOverlay();
+							holdOverlay();
 							window.history.back();
 							// With no entry to go back to, the reader stays on this page: let go.
-							if ( overlayId ) {
-								setTimeout( () => window.newspackReaderActivation?.overlays?.remove?.( overlayId ), 1000 );
-							}
+							setTimeout( releaseHeldOverlays, 1000 );
 						}
 					}
 				}

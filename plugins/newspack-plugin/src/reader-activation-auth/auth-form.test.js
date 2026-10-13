@@ -4,8 +4,9 @@
  * The opener's success callback carries on with a flow of its own (a redirect,
  * a checkout), so a call that comes early runs that flow over the verification
  * step, and each extra call runs it again. An opener can ask to skip the step:
- * modal checkout does, because a completed payment verifies the reader. An
- * inline form has no opener, so it has to finish by itself once the step is over.
+ * modal checkout does, because a payment that completes at checkout verifies
+ * the reader. An inline form has no opener, so it has to finish by itself once
+ * the step is over.
  */
 
 // checkout.js loads the whole reader-activation library, which would take the auth
