@@ -493,8 +493,9 @@ domReady( () => {
 				},
 				skipSuccess: true,
 				skipNewslettersSignup: true,
-				// A completed payment verifies the reader, so don't hold a new reader at the
-				// "verify your email" step on the way to the checkout.
+				// A payment that completes at checkout verifies the reader, so don't hold a new
+				// reader at the "verify your email" step on the way there. One whose payment is
+				// still pending (a check, a bank transfer) is asked to verify in My Account.
 				skipVerification: true,
 				labels: {
 					signin: {
@@ -605,12 +606,22 @@ domReady( () => {
 		}
 
 		if ( container?.checkoutComplete ) {
+			// A content gate on the page reloads it once the last overlay closes after a checkout,
+			// which cancels a navigation that is still loading. Holding an overlay keeps it waiting.
+			const holdOverlay = () => window.newspackReaderActivation?.overlays?.add?.();
+			let isComplete = false;
 			const handleCheckoutComplete = () => {
+				// The signup modal can report twice: answered, then closed while the redirect loads.
+				if ( isComplete ) {
+					return;
+				}
+				isComplete = true;
 				if ( afterSuccessUrlInput && afterSuccessBehaviorInput ) {
 					const afterSuccessUrl = afterSuccessUrlInput.getAttribute( 'value' );
 					const afterSuccessBehavior = afterSuccessBehaviorInput.getAttribute( 'value' );
 
 					if ( 'custom' === afterSuccessBehavior ) {
+						holdOverlay();
 						window.location.href = afterSuccessUrl;
 					} else if ( 'referrer' === afterSuccessBehavior ) {
 						// window.history.back() is a no-op when there's no in-session
@@ -623,6 +634,7 @@ domReady( () => {
 						if ( referrer ) {
 							try {
 								if ( new URL( referrer ).origin === window.location.origin ) {
+									holdOverlay();
 									window.location.href = referrer;
 									navigated = true;
 								}
@@ -631,7 +643,12 @@ domReady( () => {
 							}
 						}
 						if ( ! navigated ) {
+							const overlayId = holdOverlay();
 							window.history.back();
+							// With no entry to go back to, the reader stays on this page: let go.
+							if ( overlayId ) {
+								setTimeout( () => window.newspackReaderActivation?.overlays?.remove?.( overlayId ), 1000 );
+							}
 						}
 					}
 				}

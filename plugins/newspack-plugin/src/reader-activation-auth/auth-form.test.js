@@ -194,6 +194,7 @@ describe( 'auth form with post-registration verification', () => {
 		openAuthModalWithCallback( onSuccess, { skipVerification: true } );
 
 		form.endLoginFlow( 'Registered', 200, REGISTERED );
+		jest.advanceTimersByTime( 1000 );
 
 		expect( verificationModal.getAttribute( 'data-state' ) ).toBe( 'closed' );
 		expect( onSuccess ).toHaveBeenCalledTimes( 1 );

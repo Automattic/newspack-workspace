@@ -158,7 +158,8 @@ const authStrategies = [ 'pwd', 'link' ];
  *
  * Pass `skipVerification` when the flow that follows verifies a new reader by
  * itself, so they are not asked to verify their email first. Modal checkout does:
- * a completed payment marks the reader verified.
+ * a payment that completes at checkout marks the reader verified. The reader is
+ * then never shown the address they registered with before the flow carries on.
  *
  * @param {Object} config Config.
  */
