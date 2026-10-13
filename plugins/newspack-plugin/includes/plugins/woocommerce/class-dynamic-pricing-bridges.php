@@ -23,11 +23,11 @@ defined( 'ABSPATH' ) || exit;
  *  - Donation products (via Newspack\Donations::is_donation_product).
  *  - Group subscriptions (via Newspack\Group_Subscription::is_group_subscription).
  *
- * Also bridges the standalone plugin's reader-facing annotation onto the
- * Newspack Blocks Modal Checkout summary line — the modal's JS does
- * `textContent = price_summary`, so the plugin's HTML-filter annotations
- * never reach it; we hook the modal's own summary filter and emit plain text
- * built from the surface's public API.
+ * Also appends the standalone plugin's deal annotation (rule label, regular
+ * price) to the Newspack Blocks Modal Checkout price summary, which readers
+ * never see: it reaches analytics only (see annotate_modal_checkout_summary()).
+ * The plugin's HTML-filter annotations never reach that summary, so we hook its
+ * own filter and emit plain text built from the surface's public API.
  */
 final class Dynamic_Pricing_Bridges {
 	/**
@@ -141,9 +141,11 @@ final class Dynamic_Pricing_Bridges {
 
 	/**
 	 * Annotate the Newspack Blocks Modal Checkout price summary with the
-	 * dynamic-pricing rule (regular-price comparison, rule label, first-cycle
-	 * qualifier when the charged price doesn't recur). Output is plain text —
-	 * the modal's JS assigns it via `textContent`, so HTML would be stripped.
+	 * dynamic-pricing rule (rule label, regular-price comparison). The summary
+	 * is never shown to readers; it reaches analytics only, as the hidden
+	 * `data-checkout` payload, the reader-activation `checkout_completed`
+	 * activity built from it, and the GA4 event parameter. Output is plain
+	 * text, like the rest of the summary, so those values carry no markup.
 	 *
 	 * Inert when the standalone plugin isn't active (the surface class won't
 	 * exist) and a no-op when no annotation applies to the displayed product.
