@@ -991,7 +991,9 @@ final class Newspack_Popups_Segmentation {
 
 		// phpcs:disable WordPressVIPMinimum.Performance.LowExpiryCacheTime.CacheTimeUndetermined -- $ttl is the rest of the window, at most an hour.
 		if ( ! wp_cache_add( $marker, 'pending', $group, $ttl ) ) {
-			return 'ok' === wp_cache_get( $marker, $group );
+			// Forced: the memcached drop-in keeps a failed add's value in its
+			// runtime cache, so an unforced read returns 'pending', not the outcome.
+			return 'ok' === wp_cache_get( $marker, $group, true );
 		}
 
 		wp_cache_add( $counter, 0, $group, $ttl );
