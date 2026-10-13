@@ -381,6 +381,50 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether Access Control should skip its checks for a user.
+	 *
+	 * By default that is staff: anyone who can edit other people's posts. Every
+	 * other account is checked as a reader is, whatever its role is called, so an
+	 * Author or Contributor meets the same gates and comment restrictions a
+	 * subscriber does. A site can add accounts that are not staff with the filter.
+	 *
+	 * Every reader-facing feature asks here (gates, block visibility, comment
+	 * restrictions, the paid-member body class, group seats), so two of them
+	 * cannot disagree about one account.
+	 *
+	 * Two neighbouring questions are answered elsewhere. Who may change gate
+	 * settings stays a capability check, so adding an account here grants it no
+	 * say over them. Who gets reader account features is
+	 * {@see Reader_Activation::is_user_reader()}.
+	 *
+	 * @param int|\WP_User|null $user User ID or object. Defaults to the current user.
+	 *
+	 * @return bool
+	 */
+	public static function should_skip_access_checks( $user = null ): bool {
+		if ( null === $user ) {
+			$user = \wp_get_current_user();
+		} elseif ( ! $user instanceof \WP_User ) {
+			$user = \get_user_by( 'id', (int) $user );
+		}
+		if ( ! $user instanceof \WP_User || ! $user->exists() ) {
+			return false;
+		}
+
+		/**
+		 * Filters whether Access Control skips its checks for a user.
+		 *
+		 * Returning true lifts every reader-facing restriction for that account:
+		 * gates, restricted blocks, comment restrictions. It grants no permission
+		 * to change gate settings.
+		 *
+		 * @param bool $skips   Whether to skip the checks. Defaults to whether the user can edit other people's posts.
+		 * @param int  $user_id The user ID.
+		 */
+		return (bool) \apply_filters( 'newspack_content_gate_should_skip_access_checks', \user_can( $user, 'edit_others_posts' ), $user->ID );
+	}
+
+	/**
 	 * The unfiltered half of {@see self::has_first_party_restriction_source()}.
 	 *
 	 * Separate so a caller that combines this with another restriction source
