@@ -52,6 +52,8 @@ const thankYou = ( { behavior, url } ) => `
 describe( 'modal checkout, leaving the newsletter signup modal after a purchase', () => {
 	const openNewslettersSignupModal = jest.fn();
 	const setPendingCheckout = jest.fn();
+	// Every overlay gets its own id: the checkout modal registers one too, and a test
+	// about the held overlay has to tell the two apart.
 	let overlayCount = 0;
 	const overlays = { add: jest.fn( () => `overlay-${ ++overlayCount }` ), remove: jest.fn() };
 	let goBack;
@@ -134,7 +136,7 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 		const heldOverlay = overlays.add.mock.results[ 0 ].value;
 
 		// The browser restores the page as the reader left it, and says so.
-		window.onpageshow( { persisted: true } );
+		window.dispatchEvent( new window.PageTransitionEvent( 'pageshow', { persisted: true } ) );
 
 		expect( overlays.remove ).toHaveBeenCalledWith( heldOverlay );
 	} );
@@ -144,6 +146,7 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 		jest.useFakeTimers();
 
 		signupModal.onDismiss();
+		expect( overlays.add ).toHaveBeenCalledTimes( 1 );
 		const heldOverlay = overlays.add.mock.results[ 0 ].value;
 		jest.advanceTimersByTime( 999 );
 
