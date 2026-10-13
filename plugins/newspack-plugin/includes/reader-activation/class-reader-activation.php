@@ -16,6 +16,13 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Reader Activation Class.
+ *
+ * "Reader Activation" (RAS) is the code name for the product feature called
+ * "Audience Management". The two mean the same thing. Public identifiers keep the
+ * code name because sites and other plugins depend on them: this class, the
+ * `newspack_reader_activation_*` options and hooks, and the
+ * `window.newspackReaderActivation` JS API. The wp-admin "Audience" menu is
+ * wider than this feature: it also holds Campaigns, Donations and Subscriptions.
  */
 final class Reader_Activation {
 
@@ -569,7 +576,7 @@ final class Reader_Activation {
 	 */
 	public static function activate() {
 		if ( ! method_exists( 'Newspack_Popups_Presets', 'activate_ras_presets' ) ) {
-			return new \WP_Error( 'newspack_reader_activation_missing_dependencies', __( 'Newspack Campaigns plugin is required to activate Reader Activation features.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_reader_activation_missing_dependencies', __( 'Newspack Campaigns plugin is required to activate Audience Management features.', 'newspack-plugin' ) );
 		}
 
 		return \Newspack_Popups_Presets::activate_ras_presets();

@@ -1294,7 +1294,7 @@ class Premium_Newsletters_Verify {
 			return 'WooCommerce Memberships is still active, so every restricted list reads as unrestricted and this comparison would be meaningless. Run this after deactivating it.';
 		}
 		if ( ! $gating_active ) {
-			return 'Content gating is inactive, so no gate enforces anything and there is no expected state to compare against. Enable Audience Management and Reader Activation first.';
+			return 'Content gating is inactive, so no gate enforces anything and there is no expected state to compare against. Enable the content gates feature (NEWSPACK_CONTENT_GATES) and Audience Management first.';
 		}
 		if ( ! $subscriptions_available ) {
 			return 'WooCommerce Subscriptions is not active, so the command cannot enumerate who holds a gate\'s products and would silently check nobody. Activate it and run this again.';
