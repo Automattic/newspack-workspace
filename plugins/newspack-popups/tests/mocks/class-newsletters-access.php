@@ -2,8 +2,9 @@
 /**
  * Mock of the newspack-plugin Newsletters_Access class.
  *
- * Only verify() is needed: the account-param arrival handler requires a valid
- * newsletter pass on the same link before it resolves an account.
+ * The account-param arrival handler requires a valid newsletter pass on the
+ * same link before it resolves an account (verify()), and strips the pass
+ * unless handle_inbound_request_action() is hooked to consume it.
  *
  * @package Newspack_Popups
  */
@@ -37,5 +38,11 @@ if ( ! class_exists( __NAMESPACE__ . '\Newsletters_Access' ) ) {
 				'sent_at'       => time(),
 			];
 		}
+
+		/**
+		 * Inbound pass handler. Never runs in tests; only its registration on
+		 * `init` matters, which tells the arrival handler the pass is consumed.
+		 */
+		public static function handle_inbound_request_action() {}
 	}
 }

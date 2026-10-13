@@ -47,12 +47,17 @@ final class Newspack_Popups_Segmentation {
 	 *
 	 * The ID is unsigned, so on its own it would let anyone read any reader's
 	 * segments by walking IDs. It only resolves alongside a valid newsletter
-	 * pass (NEWSLETTER_PASS_QUERY_PARAM), which proves the link came from a
-	 * newsletter this site sent recently, and only for a capped number of
-	 * distinct accounts per IP (CARRIED_ACCOUNTS_PER_IP). Anyone holding a
-	 * reader's link (a forwarded newsletter) still gets that reader's segments,
-	 * so it drives prompt segmentation and its reach reporting only — never
-	 * content access, analytics identity, or reader-profile writes.
+	 * pass (NEWSLETTER_PASS_QUERY_PARAM), and only for a capped number of
+	 * distinct accounts per IP (CARRIED_ACCOUNTS_PER_IP). The pass shows that
+	 * this site sent some newsletter recently. It is not tied to the account,
+	 * so it does not show that this account received that newsletter: anyone
+	 * holding a pass can resolve accounts other than their own, up to the cap.
+	 * This narrows the exposure rather than closing it, by choice (NPPM-3490):
+	 * binding the ID to the reader would need a new signed field synced to
+	 * every ESP. Anyone holding a reader's link (a forwarded newsletter) also
+	 * gets that reader's segments, so it drives prompt segmentation and its
+	 * reach reporting only — never content access, analytics identity, or
+	 * reader-profile writes.
 	 *
 	 * Emitted for every supported ESP, including ActiveCampaign's `%FIELD%`
 	 * syntax (unsafe when unsubstituted, NPPM-3032), because
@@ -88,7 +93,8 @@ final class Newspack_Popups_Segmentation {
 	 * reads it on every page so all tabs of the browsing session agree. Nothing
 	 * server-side reads it, so pages stay shared and cacheable. The name must
 	 * not start with `wp`, `wordpress`, or `comment_author` — Batcache skips
-	 * page cache for requests carrying such cookies.
+	 * page cache for requests carrying such cookies. A prefix: the full name
+	 * comes from get_carried_segments_cookie_name().
 	 */
 	const CARRIED_SEGMENTS_COOKIE = 'np_carried_segments';
 
@@ -170,9 +176,10 @@ final class Newspack_Popups_Segmentation {
 		add_action( 'template_redirect', [ __CLASS__, 'scrub_unsubstituted_donor_param' ], 1 );
 
 		// Resolve an inbound account ID to carried segments and redirect the param
-		// away. On `init` priority 1, ahead of newspack-plugin's newsletter-pass
-		// handler (`init` priority 2), which redirects the pass away and would
-		// leave this one nothing to verify the account against.
+		// away, along with a newsletter pass nothing else will consume. On `init`
+		// priority 1, ahead of newspack-plugin's newsletter-pass handler (`init`
+		// priority 2), which redirects the pass away and would leave this one
+		// nothing to verify the account against.
 		add_action( 'init', [ __CLASS__, 'handle_account_param' ], 1 );
 	}
 
@@ -754,6 +761,19 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
+	 * The carried-segments cookie name for the current site. Suffixed with the
+	 * blog ID because the cookie path is `/`: on a subdirectory multisite every
+	 * site would otherwise read its siblings' cookie, where colliding segment
+	 * term IDs read as matched. Mirrored in carried-segments.js, which builds it
+	 * from the localized `site_id` — keep in sync.
+	 *
+	 * @return string Cookie name.
+	 */
+	public static function get_carried_segments_cookie_name(): string {
+		return self::CARRIED_SEGMENTS_COOKIE . '_' . get_current_blog_id();
+	}
+
+	/**
 	 * The setcookie() options for the carried-segments cookie. Extracted so
 	 * tests can reach these values — the setcookie() call itself never runs
 	 * under PHPUnit, where headers are already sent.
@@ -799,14 +819,14 @@ final class Newspack_Popups_Segmentation {
 		if ( ! headers_sent() ) {
 			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
 			setcookie(
-				self::CARRIED_SEGMENTS_COOKIE,
+				self::get_carried_segments_cookie_name(),
 				$value,
 				self::get_carried_segments_cookie_options()
 			);
 		}
 		// Mirror in $_COOKIE so tests, where headers are already sent and
 		// setcookie() can't run, see the value a browser would receive.
-		$_COOKIE[ self::CARRIED_SEGMENTS_COOKIE ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ self::get_carried_segments_cookie_name() ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 
 	/**
@@ -820,9 +840,13 @@ final class Newspack_Popups_Segmentation {
 	 *
 	 * The cookie handoff takes three gates, in order: a plain positive integer
 	 * (which rejects every unsubstituted merge-tag shape), a valid newsletter
-	 * pass on the same link, and a free slot in the per-IP account cap. Only
-	 * the account param is stripped: the pass stays for newspack-plugin's own
-	 * handler on the next request.
+	 * pass on the same link, and a free slot in the per-IP account cap.
+	 *
+	 * The pass is stripped too unless newspack-plugin's handler will consume it
+	 * on the next request. Left in place it would stay in the landing URL, where
+	 * anyone the reader shares it with could pair it with other account IDs
+	 * for the rest of its lifetime. For the same reason a pass arriving without
+	 * an account param is redirected away when nothing consumes it.
 	 */
 	public static function handle_account_param() {
 		if ( is_admin() ) {
@@ -837,11 +861,13 @@ final class Newspack_Popups_Segmentation {
 		}
 		// Reading a URL param to decide where to redirect; there is no form
 		// submission or state change here to nonce-verify.
-		if ( ! isset( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$has_account = isset( $_GET[ self::ACCOUNT_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$strip_pass  = isset( $_GET[ self::NEWSLETTER_PASS_QUERY_PARAM ] ) && ! self::is_newsletter_pass_consumed(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! $has_account && ! $strip_pass ) {
 			return;
 		}
 
-		$raw = sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$raw = $has_account ? sanitize_text_field( wp_unslash( $_GET[ self::ACCOUNT_QUERY_PARAM ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if (
 			1 === preg_match( '/^[1-9][0-9]*$/', $raw ) &&
 			self::has_valid_newsletter_pass() &&
@@ -865,12 +891,23 @@ final class Newspack_Popups_Segmentation {
 		nocache_headers();
 
 		$clean_url = remove_query_arg(
-			self::ACCOUNT_QUERY_PARAM,
+			$strip_pass ? [ self::ACCOUNT_QUERY_PARAM, self::NEWSLETTER_PASS_QUERY_PARAM ] : self::ACCOUNT_QUERY_PARAM,
 			esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) )
 		);
-		// Temporary: the param is a property of this one link, not of the page.
+		// Temporary: the params are properties of this one link, not of the page.
 		wp_safe_redirect( $clean_url, 302 );
 		exit;
+	}
+
+	/**
+	 * Whether newspack-plugin will consume the newsletter pass on this request.
+	 * Its inbound handler registers only while the newsletter-link bypass is on
+	 * and gating is active; otherwise nothing strips the pass from the URL.
+	 *
+	 * @return bool
+	 */
+	private static function is_newsletter_pass_consumed(): bool {
+		return false !== has_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ] );
 	}
 
 	/**

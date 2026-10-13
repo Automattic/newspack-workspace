@@ -9,7 +9,17 @@
  * segments), never grants content access.
  */
 
-const COOKIE_NAME = 'np_carried_segments';
+const COOKIE_PREFIX = 'np_carried_segments';
+
+/**
+ * The handoff cookie's name for this site. Per site because the cookie path is
+ * `/`: on a subdirectory multisite, siblings would otherwise read each other's
+ * cookie. Mirrors get_carried_segments_cookie_name() in
+ * class-newspack-popups-segmentation.php — keep in sync.
+ *
+ * @return {string} Cookie name.
+ */
+const cookieName = () => `${ COOKIE_PREFIX }_${ window.newspack_popups_view?.site_id || 0 }`;
 
 /**
  * Cookie value asserting the reader matched no segments, distinct from an
@@ -23,7 +33,7 @@ export const CARRIED_SEGMENTS_NONE = 'none';
  * Expire the handoff cookie.
  */
 const deleteCookie = () => {
-	document.cookie = `${ COOKIE_NAME }=; path=/; max-age=0`;
+	document.cookie = `${ cookieName() }=; path=/; max-age=0`;
 };
 
 /**
@@ -32,7 +42,7 @@ const deleteCookie = () => {
  * @return {string|null} Raw cookie value, or null when there is no handoff.
  */
 const readCookie = () => {
-	const match = document.cookie.match( new RegExp( `(?:^|;\\s*)${ COOKIE_NAME }=([^;]*)` ) );
+	const match = document.cookie.match( new RegExp( `(?:^|;\\s*)${ cookieName() }=([^;]*)` ) );
 	if ( ! match ) {
 		return null;
 	}

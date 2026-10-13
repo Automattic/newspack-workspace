@@ -1,6 +1,8 @@
 import { CARRIED_SEGMENTS_NONE } from './carried-segments';
 
-const COOKIE = 'np_carried_segments';
+const COOKIE = 'np_carried_segments_1';
+
+window.newspack_popups_view = { site_id: 1 };
 
 /**
  * Set the handoff cookie as the inbound redirect would.
@@ -39,6 +41,17 @@ describe( 'getCarriedSegmentIds', () => {
 
 	it( 'returns nothing when there is no cookie', () => {
 		expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [] );
+	} );
+
+	it( "ignores a sibling site's cookie on a subdirectory multisite", () => {
+		setCookie( '11,22' );
+		window.newspack_popups_view.site_id = 2;
+		try {
+			expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [] );
+		} finally {
+			window.newspack_popups_view.site_id = 1;
+		}
+		expect( getCarriedSegmentIds( [ '11', '22' ] ) ).toEqual( [ '11', '22' ] );
 	} );
 
 	it( 'reads the cookie on the landing page', () => {

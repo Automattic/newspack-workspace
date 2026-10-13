@@ -105,14 +105,17 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		foreach ( [ self::IP, '198.51.100.9', '2001:db8:1:1::1', '2001:db8:1:2::1' ] as $ip ) {
 			delete_transient( $key_method->invoke( null, $ip ) );
 		}
-		unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		unset( $_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		// As on a site with the newsletter-link bypass on, so the pass stays in
+		// place unless a test removes its consumer.
+		add_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ], 2 );
 	}
 
 	/**
 	 * Tear down.
 	 */
 	public function tear_down() {
-		unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		unset( $_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		parent::tear_down();
 	}
 
@@ -122,8 +125,8 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	 *
 	 * A valid newsletter pass is added to $_GET unless the URI names one or the
 	 * test passes null, so tests about other gates can keep their URIs (and
-	 * the redirect targets they assert) free of it. The handler never strips
-	 * the pass, so leaving it out of the URI changes no redirect target.
+	 * the redirect targets they assert) free of it. The pass is stripped only
+	 * from the URI, so leaving it out of the URI changes no redirect target.
 	 *
 	 * @param string      $request_uri Request URI, including query string.
 	 * @param string      $method      HTTP method.
@@ -194,7 +197,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	 */
 	private function cookie() {
 		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		return $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ?? null;
+		return $_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] ?? null;
 	}
 
 	/**
@@ -384,7 +387,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	 * No param: no redirect, and an existing cookie is left alone.
 	 */
 	public function test_ignores_request_without_the_param() {
-		$_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] = $this->segment_ids['carried-one']; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] = $this->segment_ids['carried-one']; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertNull( $this->arrive( '/p/?utm_medium=email' ) );
 		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
 	}
@@ -394,7 +397,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	 * cookie is left alone.
 	 */
 	public function test_ignores_non_get_requests() {
-		$_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] = $this->segment_ids['carried-one']; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] = $this->segment_ids['carried-one']; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertNull( $this->arrive( '/p/?np_account=42', 'POST' ) );
 		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
 	}
@@ -450,6 +453,36 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * With nothing to consume the pass (newsletter-link bypass off), it is
+	 * stripped along with the account: left in the landing URL, anyone the
+	 * reader shared it with could pair it with other account IDs.
+	 */
+	public function test_strips_an_unconsumed_pass_with_the_account() {
+		remove_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ], 2 );
+		\Newspack\Reader_Data::$matched_segments = [ 42 => [ $this->segment_ids['carried-one'] ] ];
+		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&np_account=42&npnl=ABC123' ) );
+		$this->assertSame( $this->segment_ids['carried-one'], $this->cookie() );
+	}
+
+	/**
+	 * A pass arriving without an account (a site that doesn't sync the Account
+	 * field) is stripped too when nothing consumes it, and carries nothing.
+	 */
+	public function test_strips_an_unconsumed_pass_without_an_account() {
+		remove_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ], 2 );
+		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&npnl=ABC123' ) );
+		$this->assertNull( $this->cookie() );
+	}
+
+	/**
+	 * A pass newspack-plugin will consume is left for it when no account
+	 * arrives with it: no redirect at all.
+	 */
+	public function test_leaves_a_consumed_pass_without_an_account_alone() {
+		$this->assertNull( $this->arrive( '/p/?a=1&npnl=ABC123' ) );
+	}
+
+	/**
 	 * Past the per-IP cap, new accounts carry nothing; accounts the IP already
 	 * resolved keep working, and another IP has its own allowance.
 	 */
@@ -463,7 +496,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 
 		$this->arrive( '/p/?np_account=1' );
 		$this->arrive( '/p/?np_account=2' );
-		unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		unset( $_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 
 		$this->assertSame( '/p/', $this->arrive( '/p/?np_account=3' ), 'Over the cap still redirects the param away.' );
 		$this->assertNull( $this->cookie(), 'A third distinct account from one IP must not resolve.' );
@@ -558,7 +591,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 			$this->arrive( '/p/?np_account=1' );
 			$this->arrive( '/p/?np_account=1' );
 			$this->arrive( '/p/?np_account=2' );
-			unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			unset( $_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 			$this->arrive( '/p/?np_account=3' );
 			$this->assertNull( $this->cookie(), 'A third distinct account must not resolve.' );
 
@@ -601,7 +634,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 			$this->arrive( '/p/?np_account=2' );
 			$this->assertSame( $this->segment_ids['carried-one'], $this->cookie(), 'The duplicate must not have spent the only slot.' );
 
-			unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			unset( $_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 			wp_cache_delete( $counter . '_1', 'newspack_popups_carried_accounts' );
 			$this->arrive( '/p/?np_account=1' );
 			$this->arrive( '/p/?np_account=1' );
@@ -642,7 +675,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		];
 
 		$this->arrive( '/p/?np_account=1', 'GET', self::VALID_PASS, '2001:db8:1:1::1' );
-		unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		unset( $_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->arrive( '/p/?np_account=2', 'GET', self::VALID_PASS, '2001:db8:1:1:ffff::9' );
 		$this->assertNull( $this->cookie(), 'Another address in the same /64 must share the allowance.' );
 
@@ -650,7 +683,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		$this->assertSame( $this->segment_ids['carried-two'], $this->cookie(), 'Another /64 has its own allowance.' );
 
 		$this->arrive( '/p/?np_account=1', 'GET', self::VALID_PASS, self::IP );
-		unset( $_COOKIE[ Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		unset( $_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->arrive( '/p/?np_account=2', 'GET', self::VALID_PASS, '::ffff:' . self::IP );
 		$this->assertNull( $this->cookie(), 'An IPv4-mapped address must share the IPv4 allowance.' );
 	}
@@ -706,6 +739,17 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		$this->assertFalse( $options['httponly'], 'The view script reads this cookie via document.cookie; httponly would silently break the feature.' );
 		$this->assertSame( 'Lax', $options['samesite'] );
 		$this->assertSame( '/', $options['path'] );
+	}
+
+	/**
+	 * The cookie name is per site: with path `/`, a subdirectory multisite
+	 * would otherwise send one site's carried segments to its siblings.
+	 */
+	public function test_cookie_name_is_per_site() {
+		$this->assertSame(
+			Newspack_Popups_Segmentation::CARRIED_SEGMENTS_COOKIE . '_' . get_current_blog_id(),
+			Newspack_Popups_Segmentation::get_carried_segments_cookie_name()
+		);
 	}
 
 	/**
