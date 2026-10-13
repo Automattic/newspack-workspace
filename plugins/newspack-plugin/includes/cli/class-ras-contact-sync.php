@@ -154,6 +154,17 @@ class RAS_Contact_Sync {
 			return $can_sync;
 		}
 
+		// A dry run is the operator's pre-flight, so it reports the configuration
+		// errors that would stop a live run. It still previews: on staging and
+		// cloned sites, which never sync live, the preview is the point of the run.
+		// The reasons are printed before the preview too, so they show even if a
+		// long preview is interrupted or ends on another error.
+		if ( $config['is_dry_run'] ) {
+			foreach ( $can_sync->get_error_messages() as $message ) {
+				WP_CLI::warning( $message );
+			}
+		}
+
 		// If syncing only migrated subscriptions.
 		if ( $config['migrated_only'] ) {
 			$config['subscription_ids'] = self::get_migrated_subscriptions( $config['migrated_only'], $config['batch_size'], $config['offset'], $config['active_only'] );
@@ -314,6 +325,18 @@ class RAS_Contact_Sync {
 					$user_ids = self::get_batch_of_readers( $config['batch_size'], $config['offset'] + ( $batches * $config['batch_size'] ) );
 				}
 			}
+		}
+
+		if ( $config['is_dry_run'] && $can_sync->has_errors() ) {
+			return new \WP_Error(
+				'newspack_dry_run_cannot_sync',
+				sprintf(
+					// Translators: 1: the dry-run summary, e.g. "Would sync 5 contacts (0 errors, 0 skipped).", 2: the configuration errors, space-separated.
+					__( '%1$s A live run would fail the configuration check: %2$s', 'newspack-plugin' ),
+					self::format_summary( static::$results, true, 'push' ),
+					implode( ' ', $can_sync->get_error_messages() )
+				)
+			);
 		}
 
 		return static::$results;
@@ -794,7 +817,7 @@ class RAS_Contact_Sync {
 	 * ## OPTIONS
 	 *
 	 * [--dry-run]
-	 * : If passed, output results but do not execute the sync. When combined with `--skip-lists`/`--fields`, the preview runs the `newspack_esp_sync_contact` filter for fidelity, so a third-party filter that performs I/O would still run under a dry run.
+	 * : If passed, output results but do not execute the sync. Makes the same configuration check as a live run: if it fails, the preview still runs, then the command exits 1 with every reason. When combined with `--skip-lists`/`--fields`, the preview runs the `newspack_esp_sync_contact` filter for fidelity, so a third-party filter that performs I/O would still run under a dry run.
 	 *
 	 * [--active-only]
 	 * : If passed, only sync users who have active subscriptions, otherwise resync all users.
@@ -877,7 +900,7 @@ class RAS_Contact_Sync {
 	 * : Restrict the backfill to a single active, configured integration (e.g. `esp`). By default every active, configured integration takes part.
 	 *
 	 * [--dry-run]
-	 * : Output results but do not persist anything. NOTE: a pull dry-run still performs the external API reads (that is what previewing a pull means); it only skips writing reader data. On the push side, combined with `--skip-lists`/`--fields`, the preview runs the `newspack_esp_sync_contact` filter for fidelity.
+	 * : Output results but do not persist anything. NOTE: a pull dry-run still performs the external API reads (that is what previewing a pull means); it only skips writing reader data. A push dry run makes the same configuration check as a live run: if it fails, the preview still runs, then the command exits 1 with every reason (so a `--direction=both` dry run stops before the pull leg). On the push side, combined with `--skip-lists`/`--fields`, the preview runs the `newspack_esp_sync_contact` filter for fidelity.
 	 *
 	 * [--active-subs-only]
 	 * : Only process users who have active WooCommerce subscriptions (statuses: active, pending, pending-cancel). Requires WooCommerce Subscriptions — without it, every reader is skipped. (The legacy `esp sync` alias spells this `--active-only`.)
