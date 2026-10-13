@@ -643,6 +643,9 @@ domReady( () => {
 				window.newspackReaderActivation.openNewslettersSignupModal( {
 					onSuccess: handleCheckoutComplete,
 					onError: handleCheckoutComplete,
+					// Closing the signup modal ends the checkout the same way as answering it,
+					// or the reader never reaches the post-checkout destination.
+					onDismiss: handleCheckoutComplete,
 					closeOnSuccess: shouldCloseModal,
 				} );
 			} else {
