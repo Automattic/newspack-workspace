@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Campaigns plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Campaigns 3.20.0\n"
+"Project-Id-Version: Newspack Campaigns 3.20.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-popups\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-12T18:29:25+00:00\n"
+"POT-Creation-Date: 2026-10-12T22:41:12+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-popups\n"
@@ -1167,45 +1167,62 @@ msgid "Only one Contextual Prompt can be added per post."
 msgstr ""
 
 #: dist/blocks.js:42
+#: src/blocks/contextual-prompt/button-link.js:65
+msgid "Link"
+msgstr ""
+
+#: dist/blocks.js:42
+#: src/blocks/contextual-prompt/button-link.js:69
+msgid "Button link"
+msgstr ""
+
+#. translators: %s: an example on-page link.
+#: dist/blocks.js:43
+#: src/blocks/contextual-prompt/button-link.js:72
+#, js-format
+msgid "Also accepts on-page links that the toolbar rejects, such as %s"
+msgstr ""
+
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:33
 #: src/blocks/single-prompt/index.js:33
 msgid "newspack"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:34
 #: src/blocks/single-prompt/index.js:34
 msgid "campaigns"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:35
 #: src/blocks/single-prompt/index.js:35
 msgid "campaign"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:36
 #: src/blocks/single-prompt/index.js:37
 msgid "prompt"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:37
 msgid "custom"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/custom-placement/index.js:38
 msgid "placement"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/single-prompt/index.js:26
 msgid "Campaigns: Single Prompt"
 msgstr ""
 
-#: dist/blocks.js:42
+#: dist/blocks.js:43
 #: src/blocks/single-prompt/index.js:36
 msgid "single"
 msgstr ""
