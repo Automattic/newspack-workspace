@@ -297,7 +297,7 @@ class Group_Subscription {
 			if ( $subscription ) {
 				$stored = \get_users(
 					[
-						'fields'      => [ 'ID' ],
+						'fields'      => 'ID',
 						'count_total' => false,
 						'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 							[
@@ -307,8 +307,8 @@ class Group_Subscription {
 						],
 					]
 				);
-				foreach ( $stored as $user ) {
-					$managers[] = (int) $user->ID;
+				foreach ( $stored as $user_id ) {
+					$managers[] = (int) $user_id;
 				}
 				$managers = array_values( array_unique( $managers ) );
 			}
@@ -573,13 +573,14 @@ class Group_Subscription {
 		if ( isset( self::$members_cache[ $subscription_id ] ) ) {
 			$members = self::$members_cache[ $subscription_id ];
 		} else {
+			// Query plain IDs, as Newspack Network's seat sync does for this meta key.
+			// WordPress caches user queries by their SQL alone, and `fields => [ 'ID' ]` builds
+			// the same SQL but returns objects, so mixed shapes read each other's cached results.
 			$members = array_map(
-				function( $user ) {
-					return $user->ID;
-				},
+				'intval',
 				\get_users(
 					[
-						'fields'      => [ 'ID' ],
+						'fields'      => 'ID',
 						'count_total' => false,
 						'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 							[
