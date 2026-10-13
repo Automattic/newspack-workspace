@@ -85,6 +85,48 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create a published gate that only a subscriber to a product passes.
+	 *
+	 * @param string[] $post_types Post types the gate covers.
+	 *
+	 * @return int Gate ID.
+	 */
+	private function create_paid_gate_for( $post_types ) {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		global $subscriptions_database, $products_database;
+		$subscriptions_database = [];
+		$products_database      = [];
+
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Paid Gate' ] );
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'status'        => 'publish',
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => $post_types,
+					],
+				],
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [ 50 ],
+							],
+						],
+					],
+				],
+			]
+		);
+		Content_Gate::flush_gates_cache();
+		$this->reset_post_gates_cache();
+		return $gate_id;
+	}
+
+	/**
 	 * The post_has_restrictions() check is the user-agnostic "is this post
 	 * gated at all" check (used e.g. by the Extended Access LD+JSON schema):
 	 * it must be true for a gated post even for users who themselves have access.
@@ -267,5 +309,56 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 			get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true ),
 			'The exempt meta must not be written by an account that only skips access checks.'
 		);
+	}
+
+	/**
+	 * An account Access Control never restricts reads a gated post whether or
+	 * not it can edit that post.
+	 */
+	public function test_accounts_that_skip_access_checks_read_gated_posts() {
+		$this->enable_gates_and_register();
+		$this->create_paid_gate_for( [ 'post' ] );
+		$post_id    = self::factory()->post->create();
+		$held_id    = self::factory()->user->create( [ 'role' => 'author' ] );
+		$skipped_id = self::factory()->user->create( [ 'role' => 'author' ] );
+		$skip       = function ( $skips, $user_id ) use ( $skipped_id ) {
+			return $user_id === $skipped_id ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		$held    = Content_Restriction_Control::is_post_restricted( false, $post_id, $held_id );
+		$skipped = Content_Restriction_Control::is_post_restricted( false, $post_id, $skipped_id );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertTrue( $held, 'An author meets the paywall on a post they cannot edit.' );
+		$this->assertFalse( $skipped, 'An account filtered in does not.' );
+	}
+
+	/**
+	 * Staff are never gated, including on a post type they cannot edit.
+	 */
+	public function test_staff_read_gated_posts_of_a_type_they_cannot_edit() {
+		$this->enable_gates_and_register();
+		register_post_type(
+			'np_test_locked',
+			[
+				'public'          => true,
+				'show_in_rest'    => true,
+				'capability_type' => 'np_test_locked',
+				'map_meta_cap'    => true,
+			]
+		);
+		$this->create_paid_gate_for( [ 'np_test_locked' ] );
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'np_test_locked' ] );
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		$author_id = self::factory()->user->create( [ 'role' => 'author' ] );
+
+		$editor_can_edit   = user_can( $editor_id, 'edit_post', $post_id );
+		$editor_restricted = Content_Restriction_Control::is_post_restricted( false, $post_id, $editor_id );
+		$author_restricted = Content_Restriction_Control::is_post_restricted( false, $post_id, $author_id );
+		unregister_post_type( 'np_test_locked' );
+
+		$this->assertFalse( $editor_can_edit, 'The premise: an editor cannot edit this type.' );
+		$this->assertTrue( $author_restricted, 'An author is gated here, which shows the gate covers the type.' );
+		$this->assertFalse( $editor_restricted, 'An editor is never gated.' );
 	}
 }

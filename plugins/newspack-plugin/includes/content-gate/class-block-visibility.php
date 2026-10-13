@@ -230,8 +230,9 @@ class Block_Visibility {
 			}
 		}
 
-		// Don't restrict content for users who can edit the post it's in.
-		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
+		// Don't restrict content for users who can edit the post it's in, nor any
+		// content for an account Access Control never restricts.
+		if ( ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) || Content_Gate::should_skip_access_checks( $user_id ) ) {
 			return false;
 		}
 

@@ -242,6 +242,52 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An account Access Control never restricts sees a restricted block on a
+	 * post it cannot edit.
+	 */
+	public function test_accounts_that_skip_access_checks_see_restricted_blocks() {
+		$author_id = $this->factory->user->create( [ 'role' => 'author' ] );
+		$post_id   = $this->factory->post->create(
+			[
+				'post_author' => $this->factory->user->create( [ 'role' => 'editor' ] ),
+				'post_status' => 'publish',
+			]
+		);
+		// A rule the author does not satisfy, so only the helper could show them the block.
+		$rules = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'test_rule',
+							'value' => $this->test_user_id,
+						],
+					],
+				],
+			],
+		];
+		$block = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		$skip  = function ( $skips, $user_id ) use ( $author_id ) {
+			return $user_id === $author_id ? true : $skips;
+		};
+		wp_set_current_user( $author_id );
+		$GLOBALS['post'] = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		Block_Visibility::reset_cache_for_tests();
+		$as_reader = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		Block_Visibility::reset_cache_for_tests();
+		$as_skipped = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+		unset( $GLOBALS['post'] );
+
+		$this->assertSame( '', $as_reader, 'An author is treated as a reader on a colleague\'s post.' );
+		$this->assertSame( '<div>restricted</div>', $as_skipped, 'An account filtered in sees the block.' );
+	}
+
+	/**
 	 * Registration: logged-out user does not match.
 	 */
 	public function test_registration_logged_out_does_not_match() {
