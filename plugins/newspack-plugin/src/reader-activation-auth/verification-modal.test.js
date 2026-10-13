@@ -39,18 +39,7 @@ function closeModal( modal ) {
 }
 
 describe( 'openVerificationModal() dismissal', () => {
-	it( 'reports a dismissal when the reader closes the modal', () => {
-		const modal = renderModal();
-		const onDismiss = jest.fn();
-		openVerificationModal( { email: 'reader@example.test', verificationNonce: 'nonce-123', onDismiss } );
-		expect( modal.getAttribute( 'data-state' ) ).toBe( 'open' );
-
-		closeModal( modal );
-
-		expect( onDismiss ).toHaveBeenCalledTimes( 1 );
-	} );
-
-	it( 'does not report the dismissal again when the closed modal is closed a second time', () => {
+	it( 'reports the dismissal once when the closed modal is closed a second time', () => {
 		const modal = renderModal();
 		const onDismiss = jest.fn();
 		openVerificationModal( { email: 'reader@example.test', verificationNonce: 'nonce-123', onDismiss } );

@@ -444,7 +444,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 							},
 							onDismiss: () => {
 								restoreAuthModal();
-								callback?.( message, data );
+								if ( callback ) {
+									callback( message, data );
+								} else {
+									// An inline form has no opener to hand back to, so it finishes by
+									// itself. No data: passing the registration would reopen this step.
+									form.endLoginFlow( null, 200 );
+								}
 								form.isVerifying = false;
 							},
 						} );

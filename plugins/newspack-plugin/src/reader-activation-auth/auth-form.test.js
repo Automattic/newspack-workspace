@@ -1,10 +1,11 @@
 /**
- * A reader who registers through the auth modal on a site that verifies new
- * accounts is sent through the verification modal before the flow that asked
- * them to sign in carries on. Modal checkout is the caller these tests stand in
- * for: its success callback submits the checkout, so a call that comes early
- * opens the checkout over the verification step, and each extra call submits the
- * checkout again for a purchase the reader has already made.
+ * A reader who registers through the auth form on a site that verifies new
+ * accounts is sent through the verification modal before the flow carries on.
+ * Modal checkout is the opener most of these tests stand in for: its success
+ * callback submits the checkout, so a call that comes early opens the checkout
+ * over the verification step, and each extra call submits the checkout again for
+ * a purchase the reader has already made. An inline form has no opener, so it
+ * has to finish by itself once the verification step is over.
  */
 
 // checkout.js loads the whole reader-activation library, which would take the auth
@@ -27,6 +28,21 @@ const REGISTERED = {
 	verification_nonce: 'nonce-123',
 };
 
+const AUTH_FORM = `
+	<div class="newspack-reader-auth">
+		<form>
+			<input type="hidden" name="action" value="signin" />
+			<input type="email" name="npe" />
+			<p class="response"></p>
+			<button type="submit">Continue</button>
+			<div data-action="success">
+				<p class="success-title"></p>
+				<p class="success-description"></p>
+			</div>
+		</form>
+	</div>
+`;
+
 /**
  * A stand-in for the reader-activation library with the part the auth form
  * leans on here: every change to the reader is announced to its listeners.
@@ -47,30 +63,19 @@ function createReaderActivation() {
 		setAuthenticated: authenticated => update( { authenticated } ),
 		dispatchActivity: jest.fn(),
 		hasAuthLink: () => false,
-		getOTPHash: () => null,
-		getOTPTimeRemaining: () => 0,
-		setOTPTimer: jest.fn(),
 	};
 }
 
 /**
- * Render the auth modal and the verification modal, then start the auth form.
+ * Render a page holding one auth form and the verification modal, then start the form.
  *
- * @return {Object} The form and the verification modal.
+ * @param {string} authFormMarkup The auth form, wrapped the way the page prints it.
+ *
+ * @return {Object} The form, its action input and the verification modal.
  */
-function renderModals() {
+function renderPage( authFormMarkup ) {
 	document.body.innerHTML = `
-		<div class="newspack-ui__modal-container newspack-reader-auth-modal" data-state="closed">
-			<h2></h2>
-			<div class="newspack-reader-auth">
-				<form>
-					<input type="hidden" name="action" value="signin" />
-					<input type="email" name="npe" />
-					<p class="response"></p>
-					<button type="submit">Continue</button>
-				</form>
-			</div>
-		</div>
+		${ authFormMarkup }
 		<div id="${ VERIFICATION_MODAL_ID }" class="newspack-ui__modal-container" data-state="closed">
 			<p>We'll send a verification code to <strong class="email-address"></strong>.</p>
 			<p data-error-target role="status" hidden></p>
@@ -79,10 +84,26 @@ function renderModals() {
 	`;
 	window.newspackReaderActivation = createReaderActivation();
 	window.newspackRAS.forEach( callback => callback( window.newspackReaderActivation ) );
+	const form = document.querySelector( '.newspack-reader-auth form' );
 	return {
-		form: document.querySelector( '.newspack-reader-auth form' ),
+		form,
+		formStep: form.querySelector( 'input[name="action"]' ),
 		verificationModal: document.getElementById( VERIFICATION_MODAL_ID ),
 	};
+}
+
+/**
+ * Render the form inside the auth modal, as every page prints it in the footer.
+ *
+ * @return {Object} The form, its action input and the verification modal.
+ */
+function renderAuthModal() {
+	return renderPage( `
+		<div class="newspack-ui__modal-container newspack-reader-auth-modal" data-state="closed">
+			<h2></h2>
+			${ AUTH_FORM }
+		</div>
+	` );
 }
 
 /**
@@ -116,11 +137,8 @@ function closeEveryModal() {
 describe( 'auth form with post-registration verification', () => {
 	beforeEach( () => {
 		jest.useFakeTimers();
-		window.newspack_ras_config = { verify_new_reader_accounts: true, verification_url: 'https://example.test/verify' };
-		window.newspack_reader_activation_labels = {
-			signin: { title: 'Sign in' },
-			register: { title: 'Create an account' },
-		};
+		window.newspack_ras_config = { verify_new_reader_accounts: true };
+		window.newspack_reader_activation_labels = { signin: { title: 'Sign in' } };
 	} );
 
 	afterEach( () => {
@@ -129,7 +147,7 @@ describe( 'auth form with post-registration verification', () => {
 	} );
 
 	it( 'waits for the verification step before reporting success', () => {
-		const { form, verificationModal } = renderModals();
+		const { form, verificationModal } = renderAuthModal();
 		const onSuccess = jest.fn();
 		openAuthModalForCheckout( onSuccess );
 
@@ -143,7 +161,7 @@ describe( 'auth form with post-registration verification', () => {
 	} );
 
 	it( 'reports success once, as a registration, when the reader dismisses the verification step', () => {
-		const { form, verificationModal } = renderModals();
+		const { form, verificationModal } = renderAuthModal();
 		const onSuccess = jest.fn();
 		openAuthModalForCheckout( onSuccess );
 		form.endLoginFlow( 'Registered', 200, REGISTERED );
@@ -156,7 +174,7 @@ describe( 'auth form with post-registration verification', () => {
 	} );
 
 	it( 'does not report success again when every modal is closed after the purchase', () => {
-		const { form, verificationModal } = renderModals();
+		const { form, verificationModal } = renderAuthModal();
 		const onSuccess = jest.fn();
 		openAuthModalForCheckout( onSuccess );
 		form.endLoginFlow( 'Registered', 200, REGISTERED );
@@ -167,5 +185,16 @@ describe( 'auth form with post-registration verification', () => {
 		closeEveryModal();
 
 		expect( onSuccess ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'moves a form with no opener to its success step when the reader dismisses the verification step', () => {
+		// The logged-out My Account page prints the form inline, outside the auth modal.
+		const { form, formStep, verificationModal } = renderPage( AUTH_FORM );
+		form.endLoginFlow( 'Registered', 200, REGISTERED );
+		jest.advanceTimersByTime( 1000 );
+
+		closeModal( verificationModal );
+
+		expect( formStep.value ).toBe( 'success' );
 	} );
 } );
