@@ -213,6 +213,8 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 	private function submit_comment_as( $user_id ) {
 		wp_set_current_user( $user_id );
 		Comment_Restriction::reset_cache();
+		// A submission arrives with no current post, unlike the rendered form.
+		unset( $GLOBALS['post'] );
 		return wp_handle_comment_submission(
 			[
 				'comment_post_ID' => $this->post_id,
@@ -231,6 +233,8 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 	private function rest_create_comment_as( $user_id ) {
 		wp_set_current_user( $user_id );
 		Comment_Restriction::reset_cache();
+		// A submission arrives with no current post, unlike the rendered form.
+		unset( $GLOBALS['post'] );
 		$request = new WP_REST_Request( 'POST', '/wp/v2/comments' );
 		$request->set_param( 'post', $this->post_id );
 		$request->set_param( 'content', 'A comment ' . wp_generate_password( 8, false ) );
@@ -436,6 +440,7 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 		);
 
 		$this->assertFalse( Comment_Restriction::is_restricted_for_user( $author_id ) );
+		$this->assertInstanceOf( WP_Comment::class, $this->submit_comment_as( $author_id ) );
 	}
 
 	/**
@@ -481,6 +486,7 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( '<textarea', $this->render_comment_form_as( $contributor_id ) );
 		$this->assertWPError( $this->submit_comment_as( $contributor_id ) );
+		$this->assertSame( 403, $this->rest_create_comment_as( $contributor_id ) );
 	}
 
 	/**
@@ -503,7 +509,7 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An account a site filters in comments regardless, as staff do.
+	 * An account a site filters in may always comment, as staff may.
 	 */
 	public function test_filtered_in_account_comments_regardless() {
 		$this->restrict_comments_to_gate();

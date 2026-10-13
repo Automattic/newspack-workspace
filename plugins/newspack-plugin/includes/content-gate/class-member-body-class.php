@@ -99,7 +99,7 @@ final class Member_Body_Class {
 	/**
 	 * Whether a reader has paid access, cached per reader.
 	 *
-	 * Accounts Access Control never restricts count ({@see Content_Gate::should_skip_access_checks()}),
+	 * Accounts that Access Control never restricts count ({@see Content_Gate::should_skip_access_checks()}),
 	 * as admins did under Memberships.
 	 *
 	 * @param int $user_id User ID.

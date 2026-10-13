@@ -383,14 +383,23 @@ class Content_Gate {
 	/**
 	 * Whether Access Control should skip its checks for a user.
 	 *
-	 * By default that is staff: anyone who can edit other people's posts. Every
-	 * other account is checked as a reader is, whatever its role is called, so an
-	 * Author or Contributor meets the same gates and comment restrictions a
-	 * subscriber does. A site can add accounts that are not staff with the filter.
+	 * By default that is staff: an account whose role, or own capabilities, let
+	 * it edit other people's posts. Every other account is checked as a reader
+	 * is, whatever its role is called, so an Author or Contributor meets the same
+	 * gates and comment restrictions a subscriber does. A site can move the line
+	 * in either direction with the filter.
 	 *
-	 * Every reader-facing feature asks here (gates, block visibility, comment
-	 * restrictions, the paid-member body class, group seats), so two of them
-	 * cannot disagree about one account.
+	 * The answer belongs to the account, not to the request. It reads the
+	 * capabilities the account holds and ignores ones granted on the fly, which
+	 * can depend on the post in view: Co-Authors Plus grants `edit_others_posts`
+	 * to a co-author while their own post is the current one. Asking
+	 * `user_can()` here would let that account past every check on that page
+	 * and nowhere else.
+	 *
+	 * Gates, block visibility, comment restrictions, the paid-member body class,
+	 * newsletter-link checks, group seats and the Teams migration all ask here.
+	 * Gates, blocks and comments also let through whoever can edit the post in
+	 * hand, so an account can pass on its own post and still be checked elsewhere.
 	 *
 	 * Two neighbouring questions are answered elsewhere. Who may change gate
 	 * settings stays a capability check, so adding an account here grants it no
@@ -405,23 +414,35 @@ class Content_Gate {
 		if ( null === $user ) {
 			$user = \wp_get_current_user();
 		} elseif ( ! $user instanceof \WP_User ) {
-			$user = \get_user_by( 'id', (int) $user );
+			// Anything that is not an ID is nobody. Casting it would turn `true` into user 1.
+			$user = is_numeric( $user ) ? \get_user_by( 'id', (int) $user ) : false;
 		}
 		if ( ! $user instanceof \WP_User || ! $user->exists() ) {
 			return false;
 		}
 
+		$skips = ! empty( $user->allcaps['edit_others_posts'] ) || ( \is_multisite() && \is_super_admin( $user->ID ) );
+
 		/**
 		 * Filters whether Access Control skips its checks for a user.
 		 *
 		 * Returning true lifts every reader-facing restriction for that account:
-		 * gates, restricted blocks, comment restrictions. It grants no permission
-		 * to change gate settings.
+		 * gates, restricted blocks, comment restrictions and newsletter-link
+		 * checks. The account also gets the paid-member body class, can see and
+		 * join premium newsletter lists, and, unless it is a reader, stops
+		 * qualifying for a group subscription seat by default. It grants no
+		 * permission to change gate settings.
 		 *
-		 * @param bool $skips   Whether to skip the checks. Defaults to whether the user can edit other people's posts.
+		 * Returning false applies the checks to an account that would skip them.
+		 * Gates, blocks and comments still let that account through on any post
+		 * it can edit.
+		 *
+		 * Runs several times per request, so keep callbacks cheap.
+		 *
+		 * @param bool $skips   Whether to skip the checks. Defaults to whether the account's role or own capabilities include `edit_others_posts`.
 		 * @param int  $user_id The user ID.
 		 */
-		return (bool) \apply_filters( 'newspack_content_gate_should_skip_access_checks', \user_can( $user, 'edit_others_posts' ), $user->ID );
+		return (bool) \apply_filters( 'newspack_content_gate_should_skip_access_checks', $skips, $user->ID );
 	}
 
 	/**
@@ -429,7 +450,8 @@ class Content_Gate {
 	 *
 	 * Reader Activation verifies readers and no one else. An account it cannot
 	 * verify, such as an Author, has no way to meet the requirement, so it is
-	 * not held to one. A reader meets it once they have verified.
+	 * not held to one. A reader meets it once they have verified. An ID that
+	 * matches no user does not meet it.
 	 *
 	 * @param int $user_id User ID.
 	 *

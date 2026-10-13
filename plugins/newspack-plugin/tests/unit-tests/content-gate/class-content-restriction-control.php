@@ -392,5 +392,6 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 		$this->assertTrue( $is_restricted( $reader_author_id ), 'A reader who is also an author is held.' );
 
 		$this->assertTrue( $is_restricted( 0 ), 'A logged-out visitor still meets the wall.' );
+		$this->assertTrue( $is_restricted( 999999 ), 'An ID that matches no user is held.' );
 	}
 }

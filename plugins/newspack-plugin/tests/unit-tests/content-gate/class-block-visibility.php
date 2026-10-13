@@ -288,6 +288,39 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * With no post in scope, as in a REST render, staff still see a restricted
+	 * block and an author is still treated as a reader.
+	 */
+	public function test_staff_see_restricted_blocks_with_no_post_in_scope() {
+		$rules = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'test_rule',
+							'value' => $this->test_user_id,
+						],
+					],
+				],
+			],
+		];
+		$block = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		unset( $GLOBALS['post'] );
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		Block_Visibility::reset_cache_for_tests();
+		$as_author = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'editor' ] ) );
+		Block_Visibility::reset_cache_for_tests();
+		$as_editor = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		$this->assertSame( '', $as_author, 'An author with no post in scope is a reader.' );
+		$this->assertSame( '<div>restricted</div>', $as_editor, 'An editor is never restricted.' );
+	}
+
+	/**
 	 * Registration: logged-out user does not match.
 	 */
 	public function test_registration_logged_out_does_not_match() {

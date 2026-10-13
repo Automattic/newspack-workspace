@@ -87,6 +87,10 @@ class Comment_Restriction {
 	 * reader: reopening commenting to all of them would quietly undo what the
 	 * publisher chose, while a closed form is noticed and fixed in the settings.
 	 *
+	 * This is the site-wide verdict, and it knows nothing about the post. The
+	 * hooks in this class also let through whoever can edit the post in hand
+	 * ({@see self::is_restricted_on_post()}).
+	 *
 	 * @param int $user_id User ID; 0 for a logged-out visitor.
 	 *
 	 * @return bool
@@ -103,8 +107,8 @@ class Comment_Restriction {
 			// Access Control is not the gating engine on this site, so its gates decide nothing.
 			$is_restricted = false;
 		} elseif ( $user_id && Content_Gate::should_skip_access_checks( $user_id ) ) {
-			// An account Access Control never restricts comments regardless. Everyone
-			// else is judged by the gate, whatever their role.
+			// An account that skips access checks may always comment. Everyone else
+			// is judged by the gate, whatever their role.
 			$is_restricted = false;
 		} else {
 			$gate          = Content_Gate::GATE_CPT === get_post_type( $config['gate_id'] ) ? Content_Gate::get_gate( $config['gate_id'] ) : null;
@@ -140,6 +144,22 @@ class Comment_Restriction {
 	}
 
 	/**
+	 * Whether a user is refused commenting on a post.
+	 *
+	 * The site-wide verdict comes first because it is memoized: the comment form
+	 * asks once per reply link, and most askers are settled there without a
+	 * capability check. Whoever can edit the post is then let through.
+	 *
+	 * @param int $user_id User ID; 0 for a logged-out visitor.
+	 * @param int $post_id Post ID; 0 when there is no post to ask about.
+	 *
+	 * @return bool
+	 */
+	private static function is_restricted_on_post( int $user_id, int $post_id ): bool {
+		return self::is_restricted_for_user( $user_id ) && ! self::can_edit_post( $user_id, $post_id );
+	}
+
+	/**
 	 * Whether the comment form being rendered is refused to the current user.
 	 *
 	 * Product pages are left alone: their form collects reviews, not comments.
@@ -147,11 +167,7 @@ class Comment_Restriction {
 	 * @return bool
 	 */
 	private static function is_form_restricted(): bool {
-		if ( 'product' === get_post_type() ) {
-			return false;
-		}
-		$user_id = get_current_user_id();
-		return ! self::can_edit_post( $user_id, (int) get_the_ID() ) && self::is_restricted_for_user( $user_id );
+		return 'product' !== get_post_type() && self::is_restricted_on_post( get_current_user_id(), (int) get_the_ID() );
 	}
 
 	/**
@@ -237,8 +253,9 @@ class Comment_Restriction {
 	 *
 	 * Both reach wp_allow_comment(), which returns this error to the caller. The
 	 * verdict is the comment author's, so a background job creating a comment
-	 * on a reader's behalf is judged as that reader. Cron and WP-CLI are not
-	 * reader submissions and pass through.
+	 * on a reader's behalf is judged as that reader. Whoever can edit the post is
+	 * let through, as on the form. Cron and WP-CLI are not reader submissions and
+	 * pass through.
 	 *
 	 * @param int|string|\WP_Error $approved    Approval status.
 	 * @param array                $commentdata Comment data.
@@ -258,8 +275,7 @@ class Comment_Restriction {
 			return $approved;
 		}
 		$author_id = isset( $commentdata['user_id'] ) ? (int) $commentdata['user_id'] : get_current_user_id();
-		$post_id   = (int) ( $commentdata['comment_post_ID'] ?? 0 );
-		if ( self::can_edit_post( $author_id, $post_id ) || ! self::is_restricted_for_user( $author_id ) ) {
+		if ( ! self::is_restricted_on_post( $author_id, (int) ( $commentdata['comment_post_ID'] ?? 0 ) ) ) {
 			return $approved;
 		}
 		// wp-comments-post.php reads the error data as the HTTP status.
@@ -287,9 +303,7 @@ class Comment_Restriction {
 		if ( is_wp_error( $prepared_comment ) || ! empty( $request['id'] ) ) {
 			return $prepared_comment;
 		}
-		$user_id = get_current_user_id();
-		$post_id = (int) ( $prepared_comment['comment_post_ID'] ?? 0 );
-		if ( self::can_edit_post( $user_id, $post_id ) || ! self::is_restricted_for_user( $user_id ) ) {
+		if ( ! self::is_restricted_on_post( get_current_user_id(), (int) ( $prepared_comment['comment_post_ID'] ?? 0 ) ) ) {
 			return $prepared_comment;
 		}
 		return new \WP_Error( self::ERROR_CODE, self::get_config()['message'], [ 'status' => 403 ] );

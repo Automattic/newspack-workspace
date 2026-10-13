@@ -1231,8 +1231,8 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	/**
 	 * INDIVIDUAL mode regression guard: an editor (who has edit_others_posts and
 	 * so already bypasses the content gate) must still be skipped — no personal
-	 * subscription created. This is the edit_others_posts-only predicate, not
-	 * group eligibility.
+	 * subscription created. This is the shared access check
+	 * (Content_Gate::should_skip_access_checks()), not group eligibility.
 	 */
 	public function test_individual_mode_skips_an_editor() {
 		$plan_id   = $this->create_plan( 'manual-only' );
