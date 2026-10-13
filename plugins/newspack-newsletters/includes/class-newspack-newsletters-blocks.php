@@ -25,7 +25,7 @@ final class Newspack_Newsletters_Blocks {
 	 * Newsletters has no notion of gates itself. Whatever restricts lists (Access
 	 * Control in Newspack) reports them here. The subscribe block reads the map in
 	 * the editor, to mark and preview gated lists, and on every front-end render,
-	 * to badge the premium lists a reader can join.
+	 * to badge premium lists and to tell which hidden lists it may show.
 	 *
 	 * @return array[] Gates keyed by public list ID. Each gate is an array with
 	 *                 `id` and `title`, plus `edit_url` when the current user may edit it.
@@ -36,8 +36,9 @@ final class Newspack_Newsletters_Blocks {
 		 *
 		 * The subscribe block reads this map in the editor and on every front-end
 		 * render. A list counts as gated only when its entry is a non-empty array of
-		 * gates. Each gate holds `id`, `title` and, for a user who may edit it,
-		 * `edit_url`.
+		 * gates. A list hidden from a reader shows as a premium row only when it is
+		 * gated here, so report every list a gate hides. Each gate holds `id`, `title`
+		 * and, for a user who may edit it, `edit_url`.
 		 *
 		 * @param array[] $list_gates Gates keyed by public list ID.
 		 */

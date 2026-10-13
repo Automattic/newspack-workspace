@@ -42,6 +42,7 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		parent::set_up();
 		Newspack_Newsletters::set_service_provider( 'mailchimp' );
 		add_filter( 'newspack_newsletters_subscription_lists', [ $this, 'hide_lists' ] );
+		add_filter( 'newspack_newsletters_subscription_list_gates', [ $this, 'report_premium_lists' ] );
 	}
 
 	/**
@@ -76,14 +77,21 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Stand in for Access Control's gate map: report each marked list as gated.
+	 * Stand in for Access Control's gate map: report each marked list as gated,
+	 * and each hidden one too, since a gate is the only reason it hides a list.
 	 *
 	 * @param array[] $list_gates Gates keyed by public list ID.
 	 *
 	 * @return array[]
 	 */
 	public function report_premium_lists( $list_gates ) {
-		foreach ( $this->premium_public_ids as $public_id ) {
+		$hidden_public_ids = array_map(
+			function ( $list_id ) {
+				return ( new Subscription_List( $list_id ) )->get_public_id();
+			},
+			$this->hidden_list_ids
+		);
+		foreach ( array_merge( $this->premium_public_ids, $hidden_public_ids ) as $public_id ) {
 			$list_gates[ $public_id ] = [
 				[
 					'id'    => 1,
@@ -108,7 +116,6 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 			},
 			$keys
 		);
-		add_filter( 'newspack_newsletters_subscription_list_gates', [ $this, 'report_premium_lists' ] );
 	}
 
 	/**
@@ -478,6 +485,43 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		}
 
 		remove_filter( 'newspack_newsletters_subscription_block_available_lists', $filter );
+	}
+
+	/**
+	 * A list withheld for a reason other than an access gate stays hidden. Only a
+	 * list the gate map marks as gated comes back as a gated row, so showPremium
+	 * can't reveal the title of a list something else took away.
+	 */
+	public function test_list_hidden_without_a_gate_stays_hidden_with_show_premium() {
+		$kept     = $this->get_list( 'only_mailchimp' );
+		$withheld = $this->get_list( 'two_settings' );
+		$withhold = function ( $lists ) use ( $withheld ) {
+			return array_values(
+				array_filter(
+					$lists,
+					function ( $list ) use ( $withheld ) {
+						return $list->get_id() !== $withheld->get_id();
+					}
+				)
+			);
+		};
+		add_filter( 'newspack_newsletters_subscription_lists', $withhold );
+
+		$html = $this->render(
+			$this->get_attrs(
+				[
+					'lists'       => [ $kept->get_public_id(), $withheld->get_public_id() ],
+					'showPremium' => true,
+				]
+			)
+		);
+
+		remove_filter( 'newspack_newsletters_subscription_lists', $withhold );
+
+		$this->assertStringContainsString( '<input type="hidden" name="lists[]" value="' . $kept->get_public_id() . '"', $html );
+		$this->assertStringNotContainsString( 'class="is-gated"', $html );
+		$this->assertStringNotContainsString( $withheld->get_title(), $html );
+		$this->assert_public_id_absent( $withheld->get_public_id(), $html );
 	}
 
 	/**

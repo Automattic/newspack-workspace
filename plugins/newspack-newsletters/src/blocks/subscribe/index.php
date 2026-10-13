@@ -237,24 +237,6 @@ function get_block_lists( $attrs ) {
 		$accessible = apply_filters( 'newspack_newsletters_subscription_block_available_lists', $accessible, $attrs );
 	}
 
-	// A list the reader is restricted from is missing from the filtered config, so
-	// the gated lists are whatever the unfiltered read has that the filtered one
-	// lacks. The filter stays the only judge of access.
-	$gated = [];
-	if ( $show_premium ) {
-		$all_lists = \Newspack_Newsletters_Subscription::get_unfiltered_lists_config();
-		$hidden    = \is_wp_error( $all_lists ) ? [] : array_diff_key( $all_lists, $list_config );
-		foreach ( $attrs['lists'] as $list_id ) {
-			if ( isset( $hidden[ $list_id ] ) ) {
-				$gated[ $list_id ] = $hidden[ $list_id ];
-			}
-		}
-	}
-
-	if ( empty( $accessible ) && empty( $gated ) ) {
-		return null;
-	}
-
 	// A list is premium when an access gate restricts it, whether or not this
 	// reader gets past the gate. The gate map says which lists those are, and an
 	// entry counts only when it holds at least one gate, as in the editor.
@@ -263,6 +245,25 @@ function get_block_lists( $attrs ) {
 		if ( is_array( $list_gates ) && ! empty( $list_gates ) ) {
 			$premium[ $premium_id ] = true;
 		}
+	}
+
+	// A list the reader is restricted from is missing from the filtered config, so
+	// the gated lists are the premium ones the unfiltered read has and the filtered
+	// one lacks. The filter stays the only judge of access. A list it withholds for
+	// any other reason stays hidden: showing its title here would undo that.
+	$gated = [];
+	if ( $show_premium ) {
+		$all_lists = \Newspack_Newsletters_Subscription::get_unfiltered_lists_config();
+		$hidden    = \is_wp_error( $all_lists ) ? [] : array_diff_key( $all_lists, $list_config );
+		foreach ( $attrs['lists'] as $list_id ) {
+			if ( isset( $hidden[ $list_id ], $premium[ $list_id ] ) ) {
+				$gated[ $list_id ] = $hidden[ $list_id ];
+			}
+		}
+	}
+
+	if ( empty( $accessible ) && empty( $gated ) ) {
+		return null;
 	}
 
 	$order = $accessible;
