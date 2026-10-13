@@ -1250,6 +1250,30 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	}
 
 	/**
+	 * INDIVIDUAL mode skips an account Access Control never restricts, so the
+	 * helper's filter moves the line here too.
+	 */
+	public function test_individual_mode_follows_the_skip_filter() {
+		$plan_id = $this->create_plan( 'manual-only' );
+		$user_id = $this->create_reader_user();
+		$this->create_membership( $plan_id, $user_id );
+		$skip = function ( $skips, $filtered_user_id ) use ( $user_id ) {
+			return $filtered_user_id === $user_id ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids' => (string) $plan_id,
+				'live'     => true,
+			]
+		);
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $user_id ), 'An account that is never restricted needs no personal subscription.' );
+		$this->assertStringContainsString( 'skipped — Access Control never restricts this account', $output );
+	}
+
+	/**
 	 * The raw-argv guard: WP-CLI strips a valueless value flag (with only a
 	 * warning) before the command runs, so the in-method boolean-flag guards
 	 * never see it — the raw command line is the only place the mistake is
