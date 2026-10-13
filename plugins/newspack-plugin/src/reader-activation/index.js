@@ -156,6 +156,10 @@ const authStrategies = [ 'pwd', 'link' ];
  * logged in — the content gate's verification prompt needs it, since an
  * unverified reader is authenticated but still has to enter an OTP.
  *
+ * Pass `skipVerification` when the flow that follows verifies a new reader by
+ * itself, so they are not asked to verify their email first. Modal checkout does:
+ * a completed payment marks the reader verified.
+ *
  * @param {Object} config Config.
  */
 export function openAuthModal( config = {} ) {
@@ -167,6 +171,7 @@ export function openAuthModal( config = {} ) {
 		skipSuccess: false,
 		skipAuthenticatedCheck: false,
 		skipNewslettersSignup: false,
+		skipVerification: false,
 		labels: {
 			signin: {
 				title: window.newspack_reader_activation_labels.signin.title,

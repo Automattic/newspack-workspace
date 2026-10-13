@@ -1,11 +1,11 @@
 /**
  * A reader who registers through the auth form on a site that verifies new
  * accounts is sent through the verification modal before the flow carries on.
- * Modal checkout is the opener most of these tests stand in for: its success
- * callback submits the checkout, so a call that comes early opens the checkout
- * over the verification step, and each extra call submits the checkout again for
- * a purchase the reader has already made. An inline form has no opener, so it
- * has to finish by itself once the verification step is over.
+ * The opener's success callback carries on with a flow of its own (a redirect,
+ * a checkout), so a call that comes early runs that flow over the verification
+ * step, and each extra call runs it again. An opener can ask to skip the step:
+ * modal checkout does, because a completed payment verifies the reader. An
+ * inline form has no opener, so it has to finish by itself once the step is over.
  */
 
 // checkout.js loads the whole reader-activation library, which would take the auth
@@ -107,12 +107,13 @@ function renderAuthModal() {
 }
 
 /**
- * Open the auth modal the way modal checkout does for a reader who has to sign in first.
+ * Open the auth modal for an opener that carries on with its own flow on success.
  *
  * @param {Function} onSuccess Called when the reader is through the auth flow.
+ * @param {Object}   config    Extra options for the opener.
  */
-function openAuthModalForCheckout( onSuccess ) {
-	openAuthModal( { onSuccess, skipSuccess: true, skipNewslettersSignup: true, closeOnSuccess: true } );
+function openAuthModalWithCallback( onSuccess, config = {} ) {
+	openAuthModal( { onSuccess, skipSuccess: true, skipNewslettersSignup: true, closeOnSuccess: true, ...config } );
 }
 
 /**
@@ -149,7 +150,7 @@ describe( 'auth form with post-registration verification', () => {
 	it( 'waits for the verification step before reporting success', () => {
 		const { form, verificationModal } = renderAuthModal();
 		const onSuccess = jest.fn();
-		openAuthModalForCheckout( onSuccess );
+		openAuthModalWithCallback( onSuccess );
 
 		form.endLoginFlow( 'Registered', 200, REGISTERED );
 		expect( verificationModal.getAttribute( 'data-state' ) ).toBe( 'open' );
@@ -163,7 +164,7 @@ describe( 'auth form with post-registration verification', () => {
 	it( 'reports success once, as a registration, when the reader dismisses the verification step', () => {
 		const { form, verificationModal } = renderAuthModal();
 		const onSuccess = jest.fn();
-		openAuthModalForCheckout( onSuccess );
+		openAuthModalWithCallback( onSuccess );
 		form.endLoginFlow( 'Registered', 200, REGISTERED );
 		jest.advanceTimersByTime( 1000 );
 
@@ -173,10 +174,10 @@ describe( 'auth form with post-registration verification', () => {
 		expect( onSuccess ).toHaveBeenCalledWith( 'Registered', expect.objectContaining( { registered: 1 } ) );
 	} );
 
-	it( 'does not report success again when every modal is closed after the purchase', () => {
+	it( 'does not report success again when every modal on the page is closed later', () => {
 		const { form, verificationModal } = renderAuthModal();
 		const onSuccess = jest.fn();
-		openAuthModalForCheckout( onSuccess );
+		openAuthModalWithCallback( onSuccess );
 		form.endLoginFlow( 'Registered', 200, REGISTERED );
 		jest.advanceTimersByTime( 1000 );
 		closeModal( verificationModal );
@@ -185,6 +186,18 @@ describe( 'auth form with post-registration verification', () => {
 		closeEveryModal();
 
 		expect( onSuccess ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'skips the verification step for an opener that asks to, and reports the registration at once', () => {
+		const { form, verificationModal } = renderAuthModal();
+		const onSuccess = jest.fn();
+		openAuthModalWithCallback( onSuccess, { skipVerification: true } );
+
+		form.endLoginFlow( 'Registered', 200, REGISTERED );
+
+		expect( verificationModal.getAttribute( 'data-state' ) ).toBe( 'closed' );
+		expect( onSuccess ).toHaveBeenCalledTimes( 1 );
+		expect( onSuccess ).toHaveBeenCalledWith( 'Registered', expect.objectContaining( { registered: 1 } ) );
 	} );
 
 	it( 'moves a form with no opener to its success step when the reader dismisses the verification step', () => {

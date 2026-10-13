@@ -493,6 +493,9 @@ domReady( () => {
 				},
 				skipSuccess: true,
 				skipNewslettersSignup: true,
+				// A completed payment verifies the reader, so don't hold a new reader at the
+				// "verify your email" step on the way to the checkout.
+				skipVerification: true,
 				labels: {
 					signin: {
 						title: newspackBlocksModal.labels.signin_modal_title,
