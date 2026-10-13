@@ -395,4 +395,55 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 		$command->migrate_product_restrictions( [], [ 'live' => true ] );
 		$this->assertNotNull( Subscriber_Only_Products::get_rule( $monthly_id ), 'A rule skipped for a decision keeps its restriction.' );
 	}
+
+	/**
+	 * A plan that loses its granting product keeps only the restriction for
+	 * the rule Memberships still enforces. Its other restriction, whose
+	 * source rule is gone, is removed.
+	 */
+	public function test_only_the_still_enforced_rules_restriction_is_kept() {
+		$product_rule  = $this->memberships_rule( [ 'membership_plan_id' => 'monthly' ] );
+		$category_rule = $this->memberships_rule(
+			[
+				'id'                 => 'rule_2',
+				'membership_plan_id' => 'monthly',
+				'content_type'       => 'taxonomy',
+				'content_type_name'  => 'product_cat',
+				'object_ids'         => [ 7 ],
+			]
+		);
+		$this->store_memberships_rules( [ $product_rule, $category_rule ] );
+		$command = new Product_Restrictions_Migration();
+		$command->migrate_product_restrictions( [], [ 'live' => true ] );
+
+		$stored_rules = get_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION );
+		$plan_id      = $stored_rules[1]['membership_plan_id'];
+		update_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION, [ $stored_rules[1] ] );
+		delete_post_meta( $plan_id, '_product_ids' );
+		$command->migrate_product_restrictions( [], [ 'live' => true ] );
+
+		$this->assertSame(
+			[ Product_Restrictions_Migration::migrated_rule_id( $plan_id, Product_Targeting::TARGETING_CATEGORY ) ],
+			wp_list_pluck( Subscriber_Only_Products::get_rules(), 'id' )
+		);
+	}
+
+	/**
+	 * Unreadable Memberships rules stop the command. Read as an empty rule
+	 * set, they would mark every migrated restriction stale and delete it.
+	 */
+	public function test_unreadable_memberships_rules_change_nothing() {
+		$this->store_memberships_rules( [ $this->memberships_rule( [ 'membership_plan_id' => 'monthly' ] ) ] );
+		$command = new Product_Restrictions_Migration();
+		$command->migrate_product_restrictions( [], [ 'live' => true ] );
+		$migrated_rules = Subscriber_Only_Products::get_rules();
+
+		update_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION, 'not-an-array' );
+		try {
+			$command->migrate_product_restrictions( [], [ 'live' => true ] );
+			$this->fail( 'The command should stop on unreadable rules.' );
+		} catch ( \WP_CLI_Mock_Exception $exception ) {
+			$this->assertSame( $migrated_rules, Subscriber_Only_Products::get_rules() );
+		}
+	}
 }

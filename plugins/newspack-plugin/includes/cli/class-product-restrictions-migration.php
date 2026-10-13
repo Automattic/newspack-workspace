@@ -83,15 +83,20 @@ class Product_Restrictions_Migration {
 		}
 
 		$memberships_rules = get_option( self::MEMBERSHIPS_RULES_OPTION, [] );
+		// Read as "no rules", unreadable source data would mark every migrated
+		// restriction stale, and a live run would delete them all.
+		if ( ! is_array( $memberships_rules ) ) {
+			WP_CLI::error( sprintf( 'The %s option is not an array, so the Memberships rules cannot be read. Nothing was changed.', self::MEMBERSHIPS_RULES_OPTION ) );
+		}
 		$mapped            = self::map_rules(
-			is_array( $memberships_rules ) ? $memberships_rules : [],
+			$memberships_rules,
 			[ Discounts_Migration::class, 'get_plan_subscription_product_ids' ],
 			self::get_force_public_product_ids(),
 			function ( int $plan_id ): bool {
 				return 'publish' === get_post_status( $plan_id );
 			}
 		);
-		$stale_rule_ids    = self::get_stale_rule_ids( $mapped['rules'], $mapped['still_enforced_plan_ids'] );
+		$stale_rule_ids    = self::get_stale_rule_ids( $mapped['rules'], $mapped['still_enforced_rule_ids'] );
 
 		if ( empty( $mapped['rules'] ) && empty( $mapped['skipped'] ) && empty( $stale_rule_ids ) ) {
 			WP_CLI::success( 'No WooCommerce Memberships product restrictions found. Nothing to migrate.' );
@@ -187,11 +192,12 @@ class Product_Restrictions_Migration {
 		$unchanged_count = count( wp_list_filter( $summary, [ 'result' => 'unchanged' ] ) );
 		WP_CLI::success(
 			sprintf(
-				'Done. %1$d restriction(s) %2$s, %3$d unchanged, %4$d removed, %5$d Memberships rule(s) skipped.',
+				'Done. %1$d restriction(s) %2$s, %3$d unchanged, %4$d %5$s, %6$d Memberships rule(s) skipped.',
 				count( $summary ) - $unchanged_count,
 				$dry_run ? 'would be written' : 'written',
 				$unchanged_count,
 				count( $stale_rule_ids ),
+				$dry_run ? 'would be removed' : 'removed',
 				count( $mapped['skipped'] )
 			)
 		);
@@ -259,7 +265,7 @@ class Product_Restrictions_Migration {
 	 *     @type array[] $delayed Rules that granted purchase only some time after joining.
 	 *     @type array[] $view_only_buyers Named products a view-only plan could see but not buy.
 	 *     @type array[] $unchecked_view_overlaps View rules that may overlap another plan's purchase rule by category or catalog.
-	 *     @type int[]   $still_enforced_plan_ids Plans skipped here whose rules Memberships still enforces.
+	 *     @type string[] $still_enforced_rule_ids Earlier restrictions for rules skipped here that Memberships still enforces.
 	 * }
 	 */
 	public static function map_rules( array $memberships_rules, callable $plan_products_getter, array $force_public_product_ids = [], ?callable $plan_is_published = null ): array {
@@ -272,7 +278,7 @@ class Product_Restrictions_Migration {
 		// Plans per named product and access type, to find view-only plans
 		// that gain purchase rights; see the end of this method.
 		$plans_by_product_access = [];
-		$still_enforced_plan_ids = [];
+		$still_enforced_rule_ids = [];
 		$view_scopes             = [];
 		$purchase_scopes         = [];
 
@@ -298,19 +304,26 @@ class Product_Restrictions_Migration {
 				continue;
 			}
 
+			$object_ids  = array_values( array_filter( array_map( 'absint', (array) ( $memberships_rule['object_ids'] ?? [] ) ) ) );
+			$is_taxonomy = 'taxonomy' === ( $memberships_rule['content_type'] ?? '' );
+
 			$subscription_product_ids = $plan_id ? array_map( 'intval', (array) call_user_func( $plan_products_getter, $plan_id ) ) : [];
 			if ( empty( $subscription_product_ids ) ) {
 				// A restriction naming no subscription is skipped by the store as
 				// unbuyable-by-everyone, so the rule would migrate and do nothing.
 				$skip( 'Plan grants access without a subscription product — pick the subscription(s) by hand.' );
-				// Memberships still enforces this rule, so a restriction written
-				// for the plan on an earlier run must stay until someone decides.
-				$still_enforced_plan_ids[] = $plan_id;
+				// Memberships still enforces this rule, so the restriction an
+				// earlier run wrote for it must stay until someone decides.
+				if ( $plan_id ) {
+					if ( empty( $object_ids ) ) {
+						$skipped_targeting = Product_Targeting::TARGETING_ALL;
+					} else {
+						$skipped_targeting = $is_taxonomy ? Product_Targeting::TARGETING_CATEGORY : Product_Targeting::TARGETING_PRODUCTS;
+					}
+					$still_enforced_rule_ids[] = self::migrated_rule_id( $plan_id, $skipped_targeting );
+				}
 				continue;
 			}
-
-			$object_ids  = array_values( array_filter( array_map( 'absint', (array) ( $memberships_rule['object_ids'] ?? [] ) ) ) );
-			$is_taxonomy = 'taxonomy' === ( $memberships_rule['content_type'] ?? '' );
 
 			if ( $is_taxonomy && self::SUPPORTED_TAXONOMY !== ( $memberships_rule['content_type_name'] ?? '' ) ) {
 				$skip(
@@ -433,7 +446,7 @@ class Product_Restrictions_Migration {
 			'delayed'                 => $delayed,
 			'view_only_buyers'        => $view_only_buyers,
 			'unchecked_view_overlaps' => array_values( $unchecked_view_overlaps ),
-			'still_enforced_plan_ids' => array_values( array_unique( $still_enforced_plan_ids ) ),
+			'still_enforced_rule_ids' => array_values( array_unique( $still_enforced_rule_ids ) ),
 		];
 	}
 
@@ -452,17 +465,12 @@ class Product_Restrictions_Migration {
 	 * Restrictions this command wrote on an earlier run that the current
 	 * Memberships rules no longer produce.
 	 *
-	 * @param array[] $mapped_rules            Rules mapped on this run.
-	 * @param int[]   $still_enforced_plan_ids Plans whose earlier restrictions stay, though nothing maps to them now.
+	 * @param array[]  $mapped_rules            Rules mapped on this run.
+	 * @param string[] $still_enforced_rule_ids Earlier restrictions to keep, though nothing maps to them now.
 	 * @return string[]
 	 */
-	private static function get_stale_rule_ids( array $mapped_rules, array $still_enforced_plan_ids ): array {
-		$kept_ids = wp_list_pluck( $mapped_rules, 'id' );
-		foreach ( $still_enforced_plan_ids as $plan_id ) {
-			foreach ( [ Product_Targeting::TARGETING_PRODUCTS, Product_Targeting::TARGETING_CATEGORY, Product_Targeting::TARGETING_ALL ] as $targeting ) {
-				$kept_ids[] = self::migrated_rule_id( $plan_id, $targeting );
-			}
-		}
+	private static function get_stale_rule_ids( array $mapped_rules, array $still_enforced_rule_ids ): array {
+		$kept_ids = array_merge( wp_list_pluck( $mapped_rules, 'id' ), $still_enforced_rule_ids );
 		$stale_ids = [];
 		foreach ( Subscriber_Only_Products::get_rules() as $existing_rule ) {
 			if ( str_starts_with( $existing_rule['id'], self::MIGRATED_RULE_ID_PREFIX ) && ! in_array( $existing_rule['id'], $kept_ids, true ) ) {
@@ -487,7 +495,7 @@ class Product_Restrictions_Migration {
 	/**
 	 * Products Memberships never restricts.
 	 *
-	 * <PERSON_06f9e545bd0d>[]
+	 * @return int[]
 	 */
 	private static function get_force_public_product_ids(): array {
 		global $wpdb;
