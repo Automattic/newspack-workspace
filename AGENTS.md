@@ -43,6 +43,8 @@ Each plugin/theme directory is standalone and can be zipped and installed on its
 
 **Not in this monorepo** (separate repos): `newspack-manager-admin` (hub UI on newspack.com) and `newspack-manager` (companion plugin on each managed site).
 
+**"Reader Activation" (RAS) in code is "Audience Management" in the product.** They are the same feature. Public identifiers keep the code name, because sites, custom code and other plugins depend on them: `Newspack\Reader_Activation`, the `newspack_reader_activation_*` options and hooks, `window.newspackReaderActivation`, and the `reader-activation` paths. Use "Audience Management" in anything a publisher or reader sees. Code above the feature, such as the Audience wizard, may use the product name. Do not rename an identifier inside `Reader_Activation`, because that mixes the two names in one place. The wp-admin "Audience" menu is wider than the feature: it also holds Campaigns, Donations and Subscriptions.
+
 Most cross-plugin coupling runs through `newspack-plugin`. Before changing something there, find its consumers — `grep -rn "Data_Events" plugins/` and similar. Read the class you intend to call rather than trusting a remembered signature; these APIs move.
 
 ## Conventions
