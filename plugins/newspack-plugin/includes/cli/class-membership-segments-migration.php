@@ -182,7 +182,7 @@ class Membership_Segments_Migration {
 			$product_ids = [];
 			foreach ( Gate_Access_Reader_Data::get_product_rule_groups( $gate ) as $group ) {
 				foreach ( $group as $rule ) {
-					$product_ids = array_merge( $product_ids, self::get_rule_product_ids( $rule ) );
+					$product_ids = array_merge( $product_ids, Gate_Access_Reader_Data::get_rule_product_ids( $rule ) );
 				}
 			}
 			$gate_products[ (int) $gate['id'] ] = array_values( array_unique( $product_ids ) );
@@ -222,7 +222,7 @@ class Membership_Segments_Migration {
 			// accepts some product outside the plans.
 			$extra = [];
 			foreach ( $groups as $group ) {
-				$outside = array_map( fn( $rule ) => array_diff( self::get_rule_product_ids( $rule ), $plan_products ), $group );
+				$outside = array_map( fn( $rule ) => array_diff( Gate_Access_Reader_Data::get_rule_product_ids( $rule ), $plan_products ), $group );
 				if ( ! in_array( [], $outside, true ) ) {
 					$extra = array_merge( $extra, ...$outside );
 				}
@@ -237,7 +237,7 @@ class Membership_Segments_Migration {
 			foreach ( array_intersect( $plan_products, $gate_products[ $gate_id ] ?? [] ) as $product_id ) {
 				$passes_alone = false;
 				foreach ( $groups as $group ) {
-					if ( ! array_filter( $group, fn( $rule ) => ! in_array( $product_id, self::get_rule_product_ids( $rule ), true ) ) ) {
+					if ( ! array_filter( $group, fn( $rule ) => ! in_array( $product_id, Gate_Access_Reader_Data::get_rule_product_ids( $rule ), true ) ) ) {
 						$passes_alone = true;
 						break;
 					}
@@ -255,18 +255,6 @@ class Membership_Segments_Migration {
 			$notes[] = sprintf( 'no mapped gate requires plan product(s) %s', implode( ', ', $uncovered ) );
 		}
 		return implode( '; ', $notes );
-	}
-
-	/**
-	 * Products a product rule accepts.
-	 *
-	 * @param array $rule A subscription or one-time purchase rule.
-	 *
-	 * @return int[]
-	 */
-	private static function get_rule_product_ids( array $rule ): array {
-		$value = $rule['value'] ?? [];
-		return array_map( 'intval', (array) ( 'one_time_purchase' === ( $rule['slug'] ?? '' ) ? ( $value['product_ids'] ?? [] ) : $value ) );
 	}
 
 	/**
