@@ -1,10 +1,11 @@
 <?php
 /**
- * Tests for `wp newspack migrate-teams` on teams whose subscription has ended (NPPD-2340).
+ * Tests for `wp newspack migrate-teams` on teams with no access to carry over (NPPD-2340, NPPD-2412).
  *
  * A team with nothing to reuse gets a new $0 group subscription only while someone
  * in it still has access through the team. Recreating a group for a team that
- * lapsed would re-add every member and hand them free access they no longer have.
+ * lapsed, or for one nobody ever joined, would hand its owner and members free
+ * access they do not have today.
  *
  * @package Newspack\Tests
  * @group teams-migration
@@ -196,6 +197,31 @@ class Test_Migrate_Teams_Ended_Teams extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Lines of the end-of-run section that gives each skipped team's reason, keyed
+	 * by team ID.
+	 *
+	 * @return array<int, string>
+	 */
+	private function summary_skip_reasons(): array {
+		$header = false;
+		foreach ( WP_CLI::$output as $index => $line ) {
+			if ( str_starts_with( $line, '=== SKIPPED: NO ACCESS TO CARRY OVER' ) ) {
+				$header = $index;
+				break;
+			}
+		}
+		$this->assertNotFalse( $header, 'The summary should have a section for teams skipped with no access.' );
+		$reasons = [];
+		foreach ( array_slice( WP_CLI::$output, $header + 1 ) as $line ) {
+			if ( ! preg_match( '/^Team (\d+): (.+)$/', $line, $matches ) ) {
+				break;
+			}
+			$reasons[ (int) $matches[1] ] = $matches[2];
+		}
+		return $reasons;
+	}
+
+	/**
 	 * Teams in which nobody has access today, per run mode.
 	 *
 	 * @return array[]
@@ -208,6 +234,8 @@ class Test_Migrate_Teams_Ended_Teams extends WP_UnitTestCase {
 			'free on-hold subscription, paused membership' => [ [ 'live' => true ], 'on-hold', 'wcm-paused', '' ],
 			'never linked, past its end date'              => [ [ 'live' => true ], null, 'wcm-expired', $past ],
 			'never linked, past its end date, membership lagging' => [ [ 'live' => true ], null, 'wcm-active', $past ],
+			'never linked, no members'                     => [ [ 'live' => true ], null, null, '' ],
+			'never linked, membership expired'             => [ [ 'live' => true ], null, 'wcm-expired', '' ],
 		];
 	}
 
@@ -220,10 +248,10 @@ class Test_Migrate_Teams_Ended_Teams extends WP_UnitTestCase {
 	 * @dataProvider teams_without_access
 	 * @param array       $flags               Run-mode flags.
 	 * @param string|null $subscription_status Linked subscription status, null for none.
-	 * @param string      $membership_status   The member's team membership status.
+	 * @param string|null $membership_status   The member's team membership status, null for a team with no members.
 	 * @param string      $end_date            The team's own end date.
 	 */
-	public function test_team_with_nobody_holding_access_is_skipped( array $flags, ?string $subscription_status, string $membership_status, string $end_date ) {
+	public function test_team_with_nobody_holding_access_is_skipped( array $flags, ?string $subscription_status, ?string $membership_status, string $end_date ) {
 		$skipped_team = $this->create_team( $subscription_status, $membership_status, $end_date );
 		$active_team  = $this->create_team( 'active', 'wcm-expired' );
 
@@ -240,22 +268,24 @@ class Test_Migrate_Teams_Ended_Teams extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Teams in which someone still has access, or that are still within their term.
+	 * Teams in which someone still has access.
 	 *
 	 * @return array[]
 	 */
 	public function teams_with_access() {
 		return [
-			'cancelled subscription, active membership' => [ 'cancelled', 'wcm-active', '' ],
+			// A linked team's own end date is not checked: Teams ends its memberships with the subscription.
+			'cancelled subscription, active membership, past team end date' => [ 'cancelled', 'wcm-active', gmdate( 'Y-m-d H:i:s', strtotime( '-1 month' ) ) ],
+			'cancelled subscription, active membership'    => [ 'cancelled', 'wcm-active', '' ],
 			'cancelled subscription, pending-cancellation membership' => [ 'cancelled', 'wcm-pending', '' ],
-			'never linked, no end date, invitee not yet joined' => [ null, null, '' ],
-			'never linked, future end date, invitee not yet joined' => [ null, null, gmdate( 'Y-m-d H:i:s', strtotime( '+1 month' ) ) ],
+			'never linked, active membership, no end date' => [ null, 'wcm-active', '' ],
+			'never linked, active membership, future end date' => [ null, 'wcm-active', gmdate( 'Y-m-d H:i:s', strtotime( '+1 month' ) ) ],
 		];
 	}
 
 	/**
 	 * A team with nothing to reuse gets a new group while someone in it has access
-	 * or, for a team never linked to a subscription, while its term runs.
+	 * and, for a team never linked to a subscription, while its term runs.
 	 *
 	 * @dataProvider teams_with_access
 	 * @param string|null $subscription_status Linked subscription status, null for none.
@@ -268,9 +298,70 @@ class Test_Migrate_Teams_Ended_Teams extends WP_UnitTestCase {
 		$created = $this->migrate( [ 'live' => true ] );
 
 		$this->assertCount( 1, $created, 'The team should get a new subscription.' );
-		if ( null !== $membership_status ) {
-			$this->assertTrue( (bool) Group_Subscription::user_is_member( $team['member_id'], reset( $created ) ), 'The member with access should be in the new group.' );
+		$this->assertTrue( (bool) Group_Subscription::user_is_member( $team['member_id'], reset( $created ) ), 'The member with access should be in the new group.' );
+	}
+
+	/**
+	 * A dry run over three teams never linked to a subscription—one nobody joined,
+	 * one holding only a pending invitee, and one whose memberships all expired—
+	 * plans nothing for any of them and gives each one's reason in the summary. The
+	 * invitee is listed with no group to resolve to.
+	 */
+	public function test_unlinked_teams_without_access_are_reported_with_a_reason() {
+		$empty_team   = $this->create_team( null, null );
+		$invited_team = $this->create_team( null, null );
+		$expired_team = $this->create_team( null, 'wcm-expired' );
+		$invitation   = wp_insert_post(
+			[
+				'post_type'   => 'wc_team_invitation',
+				'post_status' => 'wcmti-pending',
+				'post_title'  => 'invitee@example.test',
+				'post_parent' => $invited_team['team_id'],
+			]
+		);
+		$this->assertNotWPError( $invitation, 'Fixture invitation creation should succeed.' );
+		$this->post_ids[] = $invitation;
+
+		$this->migrate( [ 'only-unlinked' => true ] );
+
+		foreach ( [ $empty_team, $invited_team, $expired_team ] as $team ) {
+			$this->assertSame( 'SKIPPED', $this->summary_sub_for( $team['team_id'] ), 'Each team should show as SKIPPED.' );
 		}
+		$done_lines = preg_grep( '/^Done\. /', WP_CLI::$successes );
+		$this->assertStringContainsString( '0 had new subscriptions created', (string) reset( $done_lines ), 'The dry run should plan no subscription.' );
+		$reasons = $this->summary_skip_reasons();
+		$this->assertSame( 'nobody has joined the team', $reasons[ $empty_team['team_id'] ] ?? null, 'The empty team\'s reason should say nobody joined.' );
+		$this->assertSame( 'nobody has joined the team, so its 1 pending invitation(s) will not resolve', $reasons[ $invited_team['team_id'] ] ?? null, 'The invited team\'s reason should name its unresolved invitation.' );
+		$this->assertSame( 'nobody in the team has access today', $reasons[ $expired_team['team_id'] ] ?? null, 'The expired team\'s reason should say nobody has access.' );
+		$invitation_table = end( WP_CLI::$tables );
+		$this->assertContains(
+			[
+				'team_id' => $invited_team['team_id'],
+				'sub'     => '—',
+				'invitee' => 'invitee@example.test',
+			],
+			$invitation_table['items'],
+			'The invitee should be listed with no group to resolve to.'
+		);
+	}
+
+	/**
+	 * A team never linked to a subscription ends on its own end date, and the group
+	 * created for it ends then too.
+	 */
+	public function test_unlinked_team_end_date_carries_to_the_new_group() {
+		$end_date = gmdate( 'Y-m-d H:i:s', strtotime( '+3 months' ) );
+		$this->create_team( null, 'wcm-active', $end_date );
+
+		$created = $this->migrate(
+			[
+				'live'          => true,
+				'only-unlinked' => true,
+			]
+		);
+
+		$this->assertCount( 1, $created, 'The team should get a new subscription.' );
+		$this->assertSame( $end_date, reset( $created )->get_date( 'end' ), 'The new group should end on the team\'s end date.' );
 	}
 
 	/**
