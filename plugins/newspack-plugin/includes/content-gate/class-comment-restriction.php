@@ -102,8 +102,9 @@ class Comment_Restriction {
 		} elseif ( Memberships::is_active() || ! Content_Gate::is_gating_active() ) {
 			// Access Control is not the gating engine on this site, so its gates decide nothing.
 			$is_restricted = false;
-		} elseif ( $user_id && user_can( $user_id, 'edit_posts' ) ) {
-			// Anyone who writes for the site comments regardless, as the Memberships-based module allows.
+		} elseif ( $user_id && Content_Gate::should_skip_access_checks( $user_id ) ) {
+			// An account Access Control never restricts comments regardless. Everyone
+			// else is judged by the gate, whatever their role.
 			$is_restricted = false;
 		} else {
 			$gate          = Content_Gate::GATE_CPT === get_post_type( $config['gate_id'] ) ? Content_Gate::get_gate( $config['gate_id'] ) : null;
@@ -122,6 +123,23 @@ class Comment_Restriction {
 	}
 
 	/**
+	 * Whether a user may edit the post a comment belongs to.
+	 *
+	 * Whoever can edit a post is never restricted on it, as with the content gate
+	 * itself. That keeps an author able to reply under their own article when the
+	 * gate would otherwise refuse them. Checked per post, so it stays outside the
+	 * per-user verdict memo.
+	 *
+	 * @param int $user_id User ID; 0 for a logged-out visitor.
+	 * @param int $post_id Post ID; 0 when there is no post to ask about.
+	 *
+	 * @return bool
+	 */
+	private static function can_edit_post( int $user_id, int $post_id ): bool {
+		return $user_id && $post_id && user_can( $user_id, 'edit_post', $post_id );
+	}
+
+	/**
 	 * Whether the comment form being rendered is refused to the current user.
 	 *
 	 * Product pages are left alone: their form collects reviews, not comments.
@@ -129,7 +147,11 @@ class Comment_Restriction {
 	 * @return bool
 	 */
 	private static function is_form_restricted(): bool {
-		return 'product' !== get_post_type() && self::is_restricted_for_user( get_current_user_id() );
+		if ( 'product' === get_post_type() ) {
+			return false;
+		}
+		$user_id = get_current_user_id();
+		return ! self::can_edit_post( $user_id, (int) get_the_ID() ) && self::is_restricted_for_user( $user_id );
 	}
 
 	/**
@@ -227,15 +249,17 @@ class Comment_Restriction {
 		if ( is_wp_error( $approved ) || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
 			return $approved;
 		}
-		// Staff may post on anyone's behalf, such as a reply from the comments screen.
-		if ( current_user_can( 'edit_posts' ) ) {
+		// An account Access Control never restricts may post, including on
+		// someone's behalf, such as a staff reply from the comments screen.
+		if ( Content_Gate::should_skip_access_checks() ) {
 			return $approved;
 		}
 		if ( ! self::is_reader_comment_type( $commentdata['comment_type'] ?? '' ) ) {
 			return $approved;
 		}
 		$author_id = isset( $commentdata['user_id'] ) ? (int) $commentdata['user_id'] : get_current_user_id();
-		if ( ! self::is_restricted_for_user( $author_id ) ) {
+		$post_id   = (int) ( $commentdata['comment_post_ID'] ?? 0 );
+		if ( self::can_edit_post( $author_id, $post_id ) || ! self::is_restricted_for_user( $author_id ) ) {
 			return $approved;
 		}
 		// wp-comments-post.php reads the error data as the HTTP status.
@@ -250,8 +274,8 @@ class Comment_Restriction {
 	 * from an array the submission path above cannot use.
 	 *
 	 * Comment type needs no check here: the controller accepts only `comment` and
-	 * `note`, and a note needs edit_post on its post, which already exempts the
-	 * author from this restriction.
+	 * `note`, and a note needs edit_post on its post, and whoever holds that on a
+	 * post is exempt from this restriction on it.
 	 *
 	 * @param array|\WP_Error  $prepared_comment Prepared comment.
 	 * @param \WP_REST_Request $request          Request.
@@ -263,7 +287,9 @@ class Comment_Restriction {
 		if ( is_wp_error( $prepared_comment ) || ! empty( $request['id'] ) ) {
 			return $prepared_comment;
 		}
-		if ( ! self::is_restricted_for_user( get_current_user_id() ) ) {
+		$user_id = get_current_user_id();
+		$post_id = (int) ( $prepared_comment['comment_post_ID'] ?? 0 );
+		if ( self::can_edit_post( $user_id, $post_id ) || ! self::is_restricted_for_user( $user_id ) ) {
 			return $prepared_comment;
 		}
 		return new \WP_Error( self::ERROR_CODE, self::get_config()['message'], [ 'status' => 403 ] );

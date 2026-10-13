@@ -196,6 +196,8 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 	private function render_comment_form_as( $user_id ) {
 		wp_set_current_user( $user_id );
 		Comment_Restriction::reset_cache();
+		// A theme renders the form inside the loop, with this post as the current one.
+		$GLOBALS['post'] = get_post( $this->post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		ob_start();
 		comment_form( [], $this->post_id );
 		return ob_get_clean();
@@ -402,5 +404,120 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 		ob_start();
 		comment_form( [], $product_id );
 		$this->assertStringContainsString( '<textarea', ob_get_clean() );
+	}
+
+	/**
+	 * Authors and Contributors are judged by the gate, as any reader is.
+	 */
+	public function test_authors_and_contributors_are_judged_by_the_gate() {
+		$this->restrict_comments_to_gate();
+		foreach ( [ 'author', 'contributor' ] as $role ) {
+			$user_id = self::factory()->user->create( [ 'role' => $role ] );
+
+			$this->assertTrue( Comment_Restriction::is_restricted_for_user( $user_id ), "A $role with no subscription." );
+			$this->assertStringNotContainsString( '<textarea', $this->render_comment_form_as( $user_id ), "The form, for a $role." );
+			$this->assertWPError( $this->submit_comment_as( $user_id ), "A direct submit, from a $role." );
+			$this->assertSame( 403, $this->rest_create_comment_as( $user_id ), "A REST submit, from a $role." );
+		}
+	}
+
+	/**
+	 * An author who passes the gate comments, the same as a subscribed reader.
+	 */
+	public function test_an_author_who_passes_the_gate_may_comment() {
+		$this->restrict_comments_to_gate();
+		$author_id = self::factory()->user->create( [ 'role' => 'author' ] );
+		wcs_create_subscription(
+			[
+				'customer_id' => $author_id,
+				'status'      => 'active',
+				'products'    => [ self::PRODUCT_ID ],
+			]
+		);
+
+		$this->assertFalse( Comment_Restriction::is_restricted_for_user( $author_id ) );
+	}
+
+	/**
+	 * Whoever can edit a post may comment on it, as they may read it. An author
+	 * replies under their own article and is refused under a colleague's.
+	 */
+	public function test_whoever_can_edit_a_post_may_comment_on_it() {
+		$this->restrict_comments_to_gate();
+		$author_id     = self::factory()->user->create( [ 'role' => 'author' ] );
+		$other_post_id = $this->post_id;
+		$own_post_id   = self::factory()->post->create(
+			[
+				'post_author'    => $author_id,
+				'comment_status' => 'open',
+			]
+		);
+
+		$this->post_id = $own_post_id;
+		$this->assertStringContainsString( '<textarea', $this->render_comment_form_as( $author_id ), 'The form on their own post.' );
+		$this->assertInstanceOf( WP_Comment::class, $this->submit_comment_as( $author_id ), 'A direct submit on their own post.' );
+		$this->assertSame( 201, $this->rest_create_comment_as( $author_id ), 'A REST submit on their own post.' );
+
+		$this->post_id = $other_post_id;
+		$this->assertStringNotContainsString( '<textarea', $this->render_comment_form_as( $author_id ), 'The form on a colleague\'s post.' );
+		$this->assertWPError( $this->submit_comment_as( $author_id ), 'A direct submit on a colleague\'s post.' );
+		$this->assertSame( 403, $this->rest_create_comment_as( $author_id ), 'A REST submit on a colleague\'s post.' );
+	}
+
+	/**
+	 * A contributor cannot edit their own post once it is published, so the
+	 * gate decides there too.
+	 */
+	public function test_a_contributor_is_judged_by_the_gate_on_their_own_published_post() {
+		$this->restrict_comments_to_gate();
+		$contributor_id = self::factory()->user->create( [ 'role' => 'contributor' ] );
+		$this->post_id  = self::factory()->post->create(
+			[
+				'post_author'    => $contributor_id,
+				'post_status'    => 'publish',
+				'comment_status' => 'open',
+			]
+		);
+
+		$this->assertStringNotContainsString( '<textarea', $this->render_comment_form_as( $contributor_id ) );
+		$this->assertWPError( $this->submit_comment_as( $contributor_id ) );
+	}
+
+	/**
+	 * With no current post, the form falls back to the gate's verdict.
+	 */
+	public function test_the_form_falls_back_to_the_gate_without_a_current_post() {
+		$this->restrict_comments_to_gate();
+		$author_id     = self::factory()->user->create( [ 'role' => 'author' ] );
+		$this->post_id = self::factory()->post->create(
+			[
+				'post_author'    => $author_id,
+				'comment_status' => 'open',
+			]
+		);
+		wp_set_current_user( $author_id );
+		Comment_Restriction::reset_cache();
+		unset( $GLOBALS['post'] );
+
+		$this->assertSame( [], Comment_Restriction::filter_comment_form_fields( [ 'comment' => '<textarea></textarea>' ] ) );
+	}
+
+	/**
+	 * An account a site filters in comments regardless, as staff do.
+	 */
+	public function test_filtered_in_account_comments_regardless() {
+		$this->restrict_comments_to_gate();
+		$author_id = self::factory()->user->create( [ 'role' => 'author' ] );
+		$skip      = function ( $skips, $user_id ) use ( $author_id ) {
+			return $user_id === $author_id ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		Comment_Restriction::reset_cache();
+		$is_restricted = Comment_Restriction::is_restricted_for_user( $author_id );
+		$submitted     = $this->submit_comment_as( $author_id );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertFalse( $is_restricted );
+		$this->assertInstanceOf( WP_Comment::class, $submitted );
 	}
 }
