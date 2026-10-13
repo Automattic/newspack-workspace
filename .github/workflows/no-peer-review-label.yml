@@ -57,10 +57,12 @@ jobs:
               return;
             }
 
-            // Branch promotions (main -> alpha -> release) and reverts of them only
-            // move commits that were already merged through their own PRs. They
-            // always come from this repo, so a fork PR from its own main is still
-            // audited. A deleted fork reports no head repo and is audited too.
+            // Merges between main, alpha and release, and reverts of them, only move
+            // commits that were already merged through their own PRs. They always
+            // come from this repo, so a fork PR from its own main is still audited.
+            // A deleted fork reports no head repo and is audited too. Back-merge PRs
+            // from any other branch are audited: post-release.sh pushes clean
+            // back-merges directly, so a PR means a person resolved a conflict.
             const fromThisRepo = pr.head.repo?.full_name === `${ owner }/${ repo }`;
             const isPromotion =
               fromThisRepo &&
@@ -70,10 +72,6 @@ jobs:
               core.info( `${ head } -> ${ base } is a promotion; skipping.` );
               return;
             }
-
-            // Back-merge PRs are audited. post-release.sh pushes release back-merges
-            // directly, so one only arrives as a PR when a person resolved a
-            // conflict, and that resolution is unreviewed work.
 
             const reviews = await github.paginate(
               github.rest.pulls.listReviews,
