@@ -236,6 +236,77 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Newspack Network's `Group_Seats::get_member_ids()` query (in its
+	 * woocommerce-subscriptions/class-group-seats.php), copied verbatim so the test doesn't
+	 * need Network loaded; update it if that query changes. WordPress caches user queries by
+	 * their SQL alone, and this one builds the same SQL as get_members(), so the two share a
+	 * cache entry.
+	 *
+	 * @param int $subscription_id Subscription ID.
+	 * @return int[]
+	 */
+	private function network_get_member_ids( int $subscription_id ): array {
+		return array_map(
+			'intval',
+			get_users(
+				[
+					'fields'      => 'ID',
+					'count_total' => false,
+					'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						[
+							'key'   => Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY,
+							'value' => absint( $subscription_id ),
+						],
+					],
+				]
+			)
+		);
+	}
+
+	/**
+	 * Data provider: which query runs first in the request.
+	 *
+	 * @return array
+	 */
+	public function data_member_query_order() {
+		return [
+			'Network first'     => [ true ],
+			'get_members first' => [ false ],
+		];
+	}
+
+	/**
+	 * Group_Subscription::get_members() and Network's member query share a user-query
+	 * cache entry, so both must ask for the same result shape to agree on the members.
+	 *
+	 * @dataProvider data_member_query_order
+	 *
+	 * @param bool $network_first Whether Network's query runs before get_members().
+	 */
+	public function test_get_members_and_network_member_query_agree_in_either_order( $network_first ) {
+		$owner_id = $this->create_reader_user();
+		$expected = [ $this->create_reader_user(), $this->create_reader_user() ];
+		$sub      = $this->create_group_subscription( $owner_id );
+		foreach ( $expected as $member_id ) {
+			$this->add_member( $member_id, $sub );
+		}
+		Group_Subscription::reset_cache();
+
+		if ( $network_first ) {
+			$network_ids = $this->network_get_member_ids( $sub->get_id() );
+			$members     = Group_Subscription::get_members( $sub );
+		} else {
+			$members     = Group_Subscription::get_members( $sub );
+			$network_ids = $this->network_get_member_ids( $sub->get_id() );
+		}
+		sort( $members );
+		sort( $network_ids );
+
+		$this->assertSame( $expected, $members, 'get_members() should return the member IDs as ints.' );
+		$this->assertSame( $expected, $network_ids, "Network's query should return the member IDs." );
+	}
+
+	/**
 	 * A user who is both the owner and carries member meta is only counted once.
 	 */
 	public function test_member_count_dedupes_owner_with_member_meta() {
