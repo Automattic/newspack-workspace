@@ -99,8 +99,8 @@ final class Member_Body_Class {
 	/**
 	 * Whether a reader has paid access, cached per reader.
 	 *
-	 * Staff who can edit others' posts count, as admins did under Memberships: Access
-	 * Control never restricts them.
+	 * Accounts Access Control never restricts count ({@see Content_Gate::should_skip_access_checks()}),
+	 * as admins did under Memberships.
 	 *
 	 * @param int $user_id User ID.
 	 * @return bool
@@ -110,7 +110,7 @@ final class Member_Body_Class {
 		if ( false !== $cached ) {
 			return 'yes' === $cached;
 		}
-		$has_access = user_can( $user_id, 'edit_others_posts' ) || self::passes_any_gate( $user_id );
+		$has_access = Content_Gate::should_skip_access_checks( $user_id ) || self::passes_any_gate( $user_id );
 		// The hooks above don't catch every change, so this TTL caps how long the rest take
 		// to reach the class, such as gate edits, gift recipients and group members (whose
 		// access follows someone else's subscription), a one-time purchase's access window

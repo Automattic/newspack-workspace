@@ -235,4 +235,37 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 			(bool) get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true )
 		);
 	}
+
+	/**
+	 * Skipping access checks grants no say over gate settings. That stays with
+	 * whoever can edit other people's posts.
+	 */
+	public function test_skipping_access_checks_does_not_grant_the_exempt_meta() {
+		$this->enable_gates_and_register();
+		$author  = self::factory()->user->create( [ 'role' => 'author' ] );
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'   => 'post',
+				'post_author' => $author,
+			]
+		);
+		$skip    = function ( $skips, $user_id ) use ( $author ) {
+			return $user_id === $author ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		wp_set_current_user( $author );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $post_id );
+		$request->set_body_params(
+			[ 'meta' => [ Content_Restriction_Control::IS_EXEMPT_META_KEY => true ] ]
+		);
+		$response = rest_do_request( $request );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEmpty(
+			get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true ),
+			'The exempt meta must not be written by an account that only skips access checks.'
+		);
+	}
 }

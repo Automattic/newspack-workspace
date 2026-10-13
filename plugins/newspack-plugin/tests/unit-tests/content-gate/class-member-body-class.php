@@ -371,6 +371,39 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Authors and Contributors are readers here: the class follows paid access.
+	 */
+	public function test_authors_and_contributors_need_paid_access_for_the_class() {
+		$this->make_gate();
+		foreach ( [ 'author', 'contributor' ] as $role ) {
+			wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
+			$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes(), "$role without paid access." );
+
+			$admitted_id    = self::factory()->user->create( [ 'role' => $role ] );
+			self::$admitted = [ $admitted_id ];
+			wp_set_current_user( $admitted_id );
+			$this->assertContains( self::MEMBER_CLASS, $this->body_classes(), "$role with paid access." );
+		}
+	}
+
+	/**
+	 * An account a site filters in gets the class, as staff do.
+	 */
+	public function test_filtered_in_account_gets_class() {
+		$this->make_gate();
+		$author_id = self::factory()->user->create( [ 'role' => 'author' ] );
+		$skip      = function ( $skips, $user_id ) use ( $author_id ) {
+			return $user_id === $author_id ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		wp_set_current_user( $author_id );
+		$classes = $this->body_classes();
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertContains( self::MEMBER_CLASS, $classes );
+	}
+
+	/**
 	 * Inert gating restricts nothing, so it adds nothing.
 	 */
 	public function test_no_class_while_gating_is_inactive() {
