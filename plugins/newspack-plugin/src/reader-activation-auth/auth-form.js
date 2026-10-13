@@ -178,7 +178,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 					emailInput.value = reader?.email || '';
 				}
 				setTimeout( function () {
-					if ( reader?.authenticated && formAction !== 'success' ) {
+					// A reader who has just registered is authenticated but still owes the
+					// verification step. Resolving the flow here would report success to the
+					// opener while the verification modal is up, and modal checkout answers
+					// that by opening the checkout over it.
+					if ( reader?.authenticated && formAction !== 'success' && ! form.isVerifying ) {
 						form.endLoginFlow( null, 200 );
 					}
 				}, 1000 );
