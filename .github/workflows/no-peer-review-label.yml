@@ -71,14 +71,9 @@ jobs:
               return;
             }
 
-            // Back-merges are skipped only when matticbot opens them, since those
-            // carry commits already merged elsewhere. A person opens one when the
-            // automatic merge hits a conflict, so it holds a hand-written
-            // resolution and is audited like any other PR.
-            if ( author === 'matticbot' && /^(sync\/|chore\/forward-port-)/.test( head ) ) {
-              core.info( `${ head } -> ${ base } is an automated back-merge; skipping.` );
-              return;
-            }
+            // Back-merge PRs are audited. post-release.sh pushes release back-merges
+            // directly, so one only arrives as a PR when a person resolved a
+            // conflict, and that resolution is unreviewed work.
 
             const reviews = await github.paginate(
               github.rest.pulls.listReviews,
