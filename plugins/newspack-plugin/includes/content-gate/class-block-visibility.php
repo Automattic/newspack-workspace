@@ -713,7 +713,7 @@ class Block_Visibility {
 					? $access_passes
 					: Access_Rules::evaluate_anonymous_rules( $registration['access_rules'] ?? [] );
 			} elseif ( ! empty( $registration['require_verification'] ) ) {
-				$registration_passes = (bool) get_user_meta( $user_id, Reader_Activation::EMAIL_VERIFIED, true );
+				$registration_passes = Content_Gate::is_email_verification_met( (int) $user_id );
 			}
 		}
 

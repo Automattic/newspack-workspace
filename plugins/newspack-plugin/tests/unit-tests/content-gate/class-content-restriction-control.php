@@ -42,9 +42,11 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 	/**
 	 * Create a published gate with an active registration wall applying to all posts.
 	 *
+	 * @param bool $require_verification Whether the wall requires a verified email.
+	 *
 	 * @return int Gate ID.
 	 */
-	private function create_regwall_gate_for_posts() {
+	private function create_regwall_gate_for_posts( $require_verification = false ) {
 		$regwall_gate_id = Content_Gate::create_gate( [ 'title' => 'Regwall Gate' ] );
 		Content_Gate::update_gate_settings(
 			$regwall_gate_id,
@@ -65,7 +67,7 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 						'count'   => 0,
 						'period'  => 'month',
 					],
-					'require_verification' => false,
+					'require_verification' => $require_verification,
 					'gate_id'              => 0,
 				],
 				'custom_access' => [
@@ -360,5 +362,35 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 		$this->assertFalse( $editor_can_edit, 'The premise: an editor cannot edit this type.' );
 		$this->assertTrue( $author_restricted, 'An author is gated here, which shows the gate covers the type.' );
 		$this->assertFalse( $editor_restricted, 'An editor is never gated.' );
+	}
+
+	/**
+	 * A registration wall that requires a verified email holds readers only.
+	 * Reader Activation verifies no one else, so any other account held there
+	 * would have no way through.
+	 */
+	public function test_verification_wall_holds_readers_only() {
+		$this->enable_gates_and_register();
+		$gate          = Content_Gate::get_gate( $this->create_regwall_gate_for_posts( true ) );
+		$is_restricted = function ( $user_id ) use ( $gate ) {
+			return Content_Restriction_Control::evaluate_gate( $gate, $user_id )['restricted'];
+		};
+
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$this->assertTrue( $is_restricted( $reader_id ), 'An unverified reader is held.' );
+		update_user_meta( $reader_id, \Newspack\Reader_Activation::EMAIL_VERIFIED, true );
+		$this->assertFalse( $is_restricted( $reader_id ), 'A verified reader passes.' );
+
+		foreach ( [ 'author', 'contributor', 'editor' ] as $role ) {
+			$user_id = self::factory()->user->create( [ 'role' => $role ] );
+			$this->assertFalse( $is_restricted( $user_id ), "A $role cannot verify, so is not held." );
+		}
+
+		// An author who registered as a reader can verify, so is held until they do.
+		$reader_author_id = self::factory()->user->create( [ 'role' => 'author' ] );
+		update_user_meta( $reader_author_id, \Newspack\Reader_Activation::READER, true );
+		$this->assertTrue( $is_restricted( $reader_author_id ), 'A reader who is also an author is held.' );
+
+		$this->assertTrue( $is_restricted( 0 ), 'A logged-out visitor still meets the wall.' );
 	}
 }

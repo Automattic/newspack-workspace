@@ -549,8 +549,7 @@ class Content_Restriction_Control {
 				// here too, or a gate that both walls registration behind verification
 				// and grants by email domain reports itself still restricting for a
 				// reader whose one act of verifying would satisfy both.
-				$user = get_user_by( 'id', $user_id );
-				if ( ! $user || ( ! \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true ) && ! Access_Rules::is_verification_assumed_for( $user->ID ) ) ) {
+				if ( ! Content_Gate::is_email_verification_met( (int) $user_id ) && ! Access_Rules::is_verification_assumed_for( (int) $user_id ) ) {
 					$is_restricted  = true;
 					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
 				}

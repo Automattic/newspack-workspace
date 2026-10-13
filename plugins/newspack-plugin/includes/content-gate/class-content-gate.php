@@ -425,6 +425,25 @@ class Content_Gate {
 	}
 
 	/**
+	 * Whether a signed-in user meets a "verified email" requirement.
+	 *
+	 * Reader Activation verifies readers and no one else. An account it cannot
+	 * verify, such as an Author, has no way to meet the requirement, so it is
+	 * not held to one. A reader meets it once they have verified.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool
+	 */
+	public static function is_email_verification_met( int $user_id ): bool {
+		$user = \get_user_by( 'id', $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		return ! Reader_Activation::is_user_reader( $user ) || (bool) \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true );
+	}
+
+	/**
 	 * The unfiltered half of {@see self::has_first_party_restriction_source()}.
 	 *
 	 * Separate so a caller that combines this with another restriction source

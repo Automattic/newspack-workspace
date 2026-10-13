@@ -332,6 +332,22 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Registration + require_verification: an account that cannot verify matches.
+	 */
+	public function test_registration_verification_is_not_required_of_non_readers() {
+		$rules = [
+			'registration' => [
+				'active'               => true,
+				'require_verification' => true,
+			],
+		];
+		foreach ( [ 'author', 'contributor' ] as $role ) {
+			$user_id = $this->factory->user->create( [ 'role' => $role ] );
+			$this->assertTrue( Block_Visibility::evaluate_rules_for_user_public( $rules, $user_id ), "A $role cannot verify." );
+		}
+	}
+
+	/**
 	 * Custom access rule: matching user passes.
 	 */
 	public function test_access_rule_matching_user_passes() {
