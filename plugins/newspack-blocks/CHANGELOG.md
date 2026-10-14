@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.36.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.0...newspack-blocks@4.36.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **reader-activation:** stop repeat checkout after verifying (NPPM-3540) ([#1299](https://github.com/Automattic/newspack-workspace/issues/1299)) ([582450f](https://github.com/Automattic/newspack-workspace/commit/582450f3f4800d576974d54d7238a253e66cbbc7))
+
 # @automattic/newspack-blocks [4.36.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.35.0...newspack-blocks@4.36.0) (2026-10-14)
 
 
