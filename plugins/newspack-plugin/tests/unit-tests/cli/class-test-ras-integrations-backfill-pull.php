@@ -351,8 +351,9 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 	 * `--direction=both` through the public command entry point runs push then
 	 * pull and joins both summaries into one success line (NPPD-2076).
 	 *
-	 * `--create-missing` keeps the push preview offline, so the joined summary
-	 * does not depend on an existence check at the test integration.
+	 * `--create-missing` keeps the push preview from reading contacts, so the
+	 * joined summary does not depend on an existence check at the test
+	 * integration.
 	 */
 	public function test_cli_backfill_direction_both_runs_push_then_pull() {
 		WP_CLI::reset();

@@ -429,7 +429,7 @@ wp newspack integrations backfill --direction=both --integration=esp --create-mi
   integration taking part. A `--dry-run` without `--create-missing` still
   performs the existence read and previews the skips in its tally; because it
   reaches the provider it is gated like a wet run (the staging guard applies).
-  A `--dry-run --create-missing` never reaches the provider.
+  A `--dry-run --create-missing` reads no contacts at the provider.
 - A run that tallies any error prints its summary as a warning and **exits 1**,
   so unattended runbooks can detect partial failure from the exit status. A
   clean run exits 0.

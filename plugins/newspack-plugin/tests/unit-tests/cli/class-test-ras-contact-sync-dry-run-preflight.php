@@ -82,7 +82,7 @@ class Test_RAS_Contact_Sync_Dry_Run_Preflight extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A `--create-missing` preview stays offline, so it still runs, but names
+	 * A `--create-missing` preview reads no contacts, so it still runs, but names
 	 * every reason and exits non-zero instead of reporting success.
 	 *
 	 * @dataProvider command_provider
@@ -108,7 +108,7 @@ class Test_RAS_Contact_Sync_Dry_Run_Preflight extends WP_UnitTestCase {
 	/**
 	 * The default, update-only preview reads each contact at the integrations,
 	 * so a failed check stops it before any read, as it would a live run. It
-	 * still names every reason, and how to get a preview that stays offline.
+	 * still names every reason, and how to get a preview that reads no contacts.
 	 *
 	 * @dataProvider command_provider
 	 *

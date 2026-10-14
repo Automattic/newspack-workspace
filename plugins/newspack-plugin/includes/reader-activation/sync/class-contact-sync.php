@@ -1748,9 +1748,9 @@ class Contact_Sync extends Sync {
 	 *                        treat as a skip.
 	 */
 	public static function sync_contact( $user_id_or_order, $context = '', $is_dry_run = false, $options = [] ) {
-		// A dry run that only builds payloads never leaves the process, so it
-		// may run where syncing is refused; an update-only one reads each
-		// contact at the provider, so it is gated like the wet run it previews.
+		// A dry run that only builds payloads reads no contacts at the
+		// provider, so it may run where syncing is refused; an update-only one
+		// reads each contact there, so it is gated like the wet run it previews.
 		$reaches_provider = ! $is_dry_run || ! empty( $options['existing_only'] );
 		$can_sync         = static::can_sync( true );
 		if ( $reaches_provider && $can_sync->has_errors() ) {

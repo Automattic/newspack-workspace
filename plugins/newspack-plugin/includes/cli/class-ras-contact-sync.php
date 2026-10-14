@@ -159,7 +159,7 @@ class RAS_Contact_Sync {
 
 		// An update-only dry run still reads each contact at the provider, so it
 		// paces like a wet run and is gated like one; a --create-missing dry run
-		// never leaves the process.
+		// reads no contacts there.
 		$reached_integrations = ! $config['is_dry_run'] || ! empty( $options['existing_only'] );
 
 		// Reset the tally at entry so the counts reflect this run only (the class is
@@ -191,7 +191,7 @@ class RAS_Contact_Sync {
 
 		if ( $reached_integrations && $can_sync->has_errors() ) {
 			if ( $config['is_dry_run'] ) {
-				WP_CLI::warning( __( 'This dry run reads each contact at the integrations, so it stops where a live run would. Add --create-missing for a preview that stays offline.', 'newspack-plugin' ) );
+				WP_CLI::warning( __( 'This dry run reads each contact at the integrations, so it stops where a live run would. Adding --create-missing gives a preview that reads no contacts, but of a run that also creates the missing ones, so keep that flag in the live run only if creating them is intended.', 'newspack-plugin' ) );
 			}
 			return $can_sync;
 		}
@@ -849,7 +849,7 @@ class RAS_Contact_Sync {
 	 * ## OPTIONS
 	 *
 	 * [--dry-run]
-	 * : If passed, output results but do not execute the sync. Makes the same configuration check as a live run. Unless `--create-missing` is passed, the preview reads each contact at the integrations to report the readers it would skip, so a failed check stops it before any read, as it would a live run (see NOTES). A `--create-missing` preview stays offline: if the check fails, it still runs, then the command exits 1 with every reason. The preview runs the `newspack_esp_sync_contact` filter for fidelity (all but a `--create-missing` preview without `--skip-lists`/`--fields`), so a third-party filter that performs I/O would still run under a dry run.
+	 * : If passed, output results but do not execute the sync. Makes the same configuration check as a live run. Unless `--create-missing` is passed, the preview reads each contact at the integrations to report the readers it would skip, so a failed check stops it before any read, as it would a live run (see NOTES). A `--create-missing` preview reads no contacts at the provider: if the check fails, it still runs, then the command exits 1 with every reason. The preview runs the `newspack_esp_sync_contact` filter for fidelity (all but a `--create-missing` preview without `--skip-lists`/`--fields`), so a third-party filter that performs I/O would still run under a dry run.
 	 *
 	 * [--active-only]
 	 * : If passed, only sync users who have active subscriptions, otherwise resync all users.
@@ -899,8 +899,8 @@ class RAS_Contact_Sync {
 	 * Without `--create-missing`, a `--dry-run` still performs the existence read at
 	 * each integration (that is what previewing the skips means); it only skips the
 	 * push. Because it reaches the provider, it is refused wherever the wet run would
-	 * be (the staging guard applies). A `--dry-run --create-missing` never reaches
-	 * the provider.
+	 * be (the staging guard applies). A `--dry-run --create-missing` reads no
+	 * contacts at the provider.
 	 *
 	 * @param array $args Positional args.
 	 * @param array $assoc_args Associative args.
@@ -962,7 +962,7 @@ class RAS_Contact_Sync {
 	 * : Restrict the backfill to a single active, configured integration (e.g. `esp`). By default every active, configured integration takes part.
 	 *
 	 * [--dry-run]
-	 * : Output results but do not persist anything. NOTE: a pull dry-run still performs the external API reads (that is what previewing a pull means); it only skips writing reader data. A push dry run makes the same configuration check as a live run. Without `--create-missing` it also reads each contact at the integrations, to report the readers it would skip, so a failed check stops it before any read. A `--create-missing` push preview stays offline: if the check fails, it still runs, then the command exits 1 with every reason (so a `--direction=both` dry run stops before the pull leg). On the push side, all but a `--create-missing` preview without `--skip-lists`/`--fields` run the `newspack_esp_sync_contact` filter for fidelity.
+	 * : Output results but do not persist anything. NOTE: a pull dry-run still performs the external API reads (that is what previewing a pull means); it only skips writing reader data. A push dry run makes the same configuration check as a live run. Without `--create-missing` it also reads each contact at the integrations, to report the readers it would skip, so a failed check stops it before any read. A `--create-missing` push preview reads no contacts at the provider: if the check fails, it still runs, then the command exits 1 with every reason (so a `--direction=both` dry run stops before the pull leg). A run scoped with `--integration` checks its target first, and is refused before any preview if that target cannot sync. On the push side, all but a `--create-missing` preview without `--skip-lists`/`--fields` run the `newspack_esp_sync_contact` filter for fidelity.
 	 *
 	 * [--active-subs-only]
 	 * : Only process users who have active WooCommerce subscriptions (statuses: active, pending, pending-cancel). Requires WooCommerce Subscriptions — without it, every reader is skipped. (The legacy `esp sync` alias spells this `--active-only`.)
@@ -1043,8 +1043,8 @@ class RAS_Contact_Sync {
 	 * read at each integration (that is what previewing the skips means) and
 	 * tallies the skips it previews; it only skips the push. Because it reaches
 	 * the provider, it is refused wherever the wet run would be (the staging
-	 * guard applies). A `--dry-run --create-missing` push never reaches the
-	 * provider.
+	 * guard applies). A `--dry-run --create-missing` push reads no
+	 * contacts at the provider.
 	 *
 	 * ## EXAMPLES
 	 *
