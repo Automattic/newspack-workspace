@@ -20,6 +20,9 @@ final class Blocks {
 	 * Initialize Hooks.
 	 */
 	public static function init() {
+		// Before the requires below, so it applies to every block they register.
+		\add_filter( 'block_type_metadata', [ __CLASS__, 'version_block_styles' ] );
+
 		require_once NEWSPACK_ABSPATH . 'src/blocks/reader-registration/index.php';
 		require_once NEWSPACK_ABSPATH . 'src/blocks/my-account-button/class-my-account-button-block.php';
 		require_once NEWSPACK_ABSPATH . 'src/blocks/content-gate/countdown/class-content-gate-countdown-block.php';
@@ -54,6 +57,54 @@ final class Blocks {
 
 		\add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 		\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_frontend_assets' ] );
+	}
+
+	/**
+	 * Version block.json stylesheets from this plugin's build by their content.
+	 *
+	 * WordPress versions a block.json `file:` stylesheet by the block's
+	 * `version` field, or by the WordPress version when there is none; it uses
+	 * the file's mtime only under SCRIPT_DEBUG, so local sites don't show this.
+	 * Without a version, an updated stylesheet keeps its URL until WordPress
+	 * itself updates, and browsers and the CDN keep serving the cached copy.
+	 * Scripts aren't affected: WordPress reads their own `.asset.php` first.
+	 *
+	 * @param array $metadata Block metadata read from block.json.
+	 * @return array Metadata with `version` set to the stylesheets' content hash.
+	 */
+	public static function version_block_styles( $metadata ) {
+		if ( ! is_array( $metadata ) || ! empty( $metadata['version'] ) || empty( $metadata['file'] ) ) {
+			return $metadata;
+		}
+		/** This filter is documented in includes/class-newspack.php */
+		$dist_dir = realpath( \apply_filters( 'newspack_asset_dist_dir', NEWSPACK_ABSPATH . 'dist/', '' ) );
+		if ( ! $dist_dir ) {
+			return $metadata;
+		}
+		$dist_dir = \wp_normalize_path( $dist_dir ) . '/';
+		$versions = [];
+		foreach ( [ 'style', 'editorStyle', 'viewStyle' ] as $field ) {
+			foreach ( (array) ( $metadata[ $field ] ?? [] ) as $style ) {
+				if ( ! is_string( $style ) || ! str_starts_with( $style, 'file:' ) ) {
+					continue;
+				}
+				$path = realpath( dirname( $metadata['file'] ) . '/' . \remove_block_asset_path_prefix( $style ) );
+				$path = $path ? \wp_normalize_path( $path ) : '';
+				if ( ! str_starts_with( $path, $dist_dir ) ) {
+					continue;
+				}
+				$versions[] = Newspack::asset_version( preg_replace( '/\.css$/', '', substr( $path, strlen( $dist_dir ) ) ) );
+			}
+		}
+		$versions = array_values( array_unique( $versions ) );
+		if ( 1 === count( $versions ) ) {
+			$metadata['version'] = $versions[0];
+		} elseif ( $versions ) {
+			// The block's stylesheets come from more than one build entry but share
+			// one `version`, so derive it from all of their hashes.
+			$metadata['version'] = substr( md5( implode( ',', $versions ) ), 0, 20 );
+		}
+		return $metadata;
 	}
 
 	/**
