@@ -97,7 +97,7 @@ class Newspack_Test_Block_Style_Version extends WP_UnitTestCase {
 
 	/**
 	 * Stylesheets from two entries share one version, which differs from either
-	 * hash and changes when either entry changes.
+	 * hash and changes when either entry is rebuilt.
 	 */
 	public function test_combines_hashes_from_several_entries() {
 		$two_entries = $this->metadata(
@@ -109,14 +109,18 @@ class Newspack_Test_Block_Style_Version extends WP_UnitTestCase {
 		$combined    = Blocks::version_block_styles( $two_entries )['version'];
 		$this->assertNotContains( $combined, [ 'hash-entry-a', 'hash-entry-b' ] );
 
-		file_put_contents( $this->fixture_dir . 'entry-b.asset.php', '<?php return [ "version" => "hash-entry-b-rebuilt" ];' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
-		Newspack::asset_version_reset_cache();
-		$this->assertNotSame( $combined, Blocks::version_block_styles( $two_entries )['version'] );
+		foreach ( [ 'entry-a', 'entry-b' ] as $entry ) {
+			file_put_contents( $this->fixture_dir . $entry . '.asset.php', '<?php return [ "version" => "hash-' . $entry . '-rebuilt" ];' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
+			Newspack::asset_version_reset_cache();
+			$rebuilt = Blocks::version_block_styles( $two_entries )['version'];
+			$this->assertNotSame( $combined, $rebuilt, "Rebuilding {$entry} should change the version." );
+			$combined = $rebuilt;
+		}
 	}
 
 	/**
-	 * Blocks outside this plugin's `newspack/` namespace, a version set in
-	 * block.json, and a block with no stylesheet from the build are left alone.
+	 * Blocks outside the `newspack/` namespace, a version set in block.json,
+	 * and a block with no stylesheet from the build are left alone.
 	 */
 	public function test_leaves_other_blocks_alone() {
 		$other_plugin = array_merge( $this->metadata( [ 'style' => 'file:../entry-a.css' ] ), [ 'name' => 'example/other-block' ] );
