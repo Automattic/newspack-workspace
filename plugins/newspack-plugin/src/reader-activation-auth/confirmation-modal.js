@@ -72,7 +72,7 @@ function openConfirmationModal( config = {} ) {
 	function handleConfirmClick() {
 		confirmed = true;
 		modal.setAttribute( 'data-state', 'closed' );
-		currentController?.abort();
+		controller.abort();
 		releaseController();
 		if ( typeof config.onConfirm === 'function' ) {
 			config.onConfirm();
@@ -84,8 +84,8 @@ function openConfirmationModal( config = {} ) {
 			return;
 		}
 		// A reader who cancels can fix a typo and submit again, which opens this modal for
-		// the new address. Stop listening now, or Continue on that next step would also
-		// confirm the address they cancelled.
+		// the new address. Stop listening now, or Continue on that next step would confirm
+		// the address they cancelled instead of the new one.
 		controller.abort();
 		releaseController();
 		if ( typeof config.onCancel === 'function' ) {
