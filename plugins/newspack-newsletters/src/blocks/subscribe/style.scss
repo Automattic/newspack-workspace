@@ -129,6 +129,10 @@
 		order: 2;
 	}
 
+	&.is-style-legacy .newspack-newsletters-lists .list-title {
+		display: block;
+	}
+
 	.newspack-newsletters-lists {
 		background: white;
 		border: 1px solid wp-colors.$gray-200;
@@ -163,6 +167,10 @@
 			flex: 0 0 auto;
 			height: 1.6em;
 			margin: 0 0.5rem 0 0;
+
+			.newspack-ui__badge {
+				display: none;
+			}
 		}
 
 		// Fill the row, so the title can push its badge to the far edge. Rows read
@@ -196,12 +204,6 @@
 			font-size: 0.8rem;
 			color: wp-colors.$gray-700;
 			margin: 0;
-		}
-
-		// A gated list has no checkbox. Hold its place so the title lines up with
-		// rows that have one. Both Newspack themes size checkboxes this way.
-		.is-gated .list-checkbox {
-			width: var(--wp--custom--spacing--35, 20px);
 		}
 	}
 

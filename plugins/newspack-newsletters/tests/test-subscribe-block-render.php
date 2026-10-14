@@ -261,9 +261,9 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 
 	/**
 	 * With showPremium on, a list hidden from the reader renders as a row with a
-	 * badge and nothing to submit.
+	 * badge and a disabled checkbox that submits nothing.
 	 */
-	public function test_show_premium_renders_a_gated_row_without_an_input() {
+	public function test_show_premium_renders_a_gated_row_with_a_disabled_checkbox() {
 		$free                  = $this->get_list( 'only_mailchimp' );
 		$gated                 = $this->get_list( 'two_settings' );
 		$this->hidden_list_ids = [ $gated->get_id() ];
@@ -277,13 +277,37 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 1, substr_count( $html, 'class="is-gated"' ) );
-		$this->assertSame( 1, substr_count( $html, 'type="checkbox"' ), 'Only the free list gets a checkbox.' );
+		$this->assertSame( 2, substr_count( $html, 'type="checkbox"' ), 'Both lists get a checkbox.' );
+		$this->assertSame( 1, preg_match_all( '/<input[^>]*\sdisabled[\s\/>]/', $html ), 'Only the gated list\'s checkbox is disabled.' );
+		$this->assertMatchesRegularExpression( '/<input type="checkbox" id="([^"]+)" disabled.*<label class="list-label" for="\1"/s', $html, 'The gated row\'s label points at its checkbox.' );
+		$this->assertSame( 1, substr_count( $html, 'name="lists[]"' ), 'Only the free list\'s checkbox can be submitted.' );
 		$this->assertStringContainsString( esc_html( $gated->get_title() ), $html );
-		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--primary">Premium</span>', $html );
+		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--secondary">Premium</span>', $html );
 		$this->assertStringNotContainsString( 'value="' . $gated->get_public_id() . '"', $html );
 		$this->assertStringNotContainsString( 'checkbox-' . $gated->get_public_id() . '"', $html );
 		$this->assertStringNotContainsString( 'type="hidden" name="lists[]"', $html, 'One free list plus a gated one shows the list, not a hidden input.' );
 		$this->assert_public_id_absent( $gated->get_public_id(), $html );
+	}
+
+	/**
+	 * Legacy marks a premium list with its label as text after the title, not a badge.
+	 */
+	public function test_legacy_style_marks_premium_lists_with_text() {
+		$free                  = $this->get_list( 'only_mailchimp' );
+		$gated                 = $this->get_list( 'two_settings' );
+		$this->hidden_list_ids = [ $gated->get_id() ];
+		$html                  = $this->render(
+			$this->get_attrs(
+				[
+					'lists'       => [ $free->get_public_id(), $gated->get_public_id() ],
+					'showPremium' => true,
+					'className'   => 'my-class is-style-legacy',
+				]
+			)
+		);
+
+		$this->assertSame( 1, preg_match_all( '/' . preg_quote( $gated->get_title(), '/' ) . '\s+<span class="list-premium-label">\(Premium\)<\/span>/', $html ) );
+		$this->assertStringNotContainsString( 'newspack-ui__badge', $html );
 	}
 
 	/**
@@ -303,7 +327,7 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		);
 
 		$gated_position    = strpos( $html, 'class="is-gated"' );
-		$checkbox_position = strpos( $html, 'type="checkbox"' );
+		$checkbox_position = strpos( $html, 'value="' . $free->get_public_id() . '"' );
 		$this->assertNotFalse( $gated_position, 'The gated row renders.' );
 		$this->assertNotFalse( $checkbox_position, 'The free list renders a checkbox.' );
 		$this->assertLessThan( $checkbox_position, $gated_position, 'The gated row comes first when its list is first.' );
@@ -318,7 +342,7 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		);
 
 		$gated_position    = strpos( $html, 'class="is-gated"' );
-		$checkbox_position = strpos( $html, 'type="checkbox"' );
+		$checkbox_position = strpos( $html, 'value="' . $free->get_public_id() . '"' );
 		$this->assertNotFalse( $gated_position, 'The gated row renders.' );
 		$this->assertNotFalse( $checkbox_position, 'The free list renders a checkbox.' );
 		$this->assertLessThan( $gated_position, $checkbox_position, 'The checkbox comes first when its list is first.' );
@@ -344,7 +368,8 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 
 		$this->assertSame( 2, substr_count( $html, 'class="is-gated"' ) );
 		$this->assertStringNotContainsString( '<form', $html );
-		$this->assertStringNotContainsString( '<input', $html );
+		$this->assertSame( 2, preg_match_all( '/<input[^>]*\sdisabled[\s\/>]/', $html ), 'Each gated row has a disabled checkbox.' );
+		$this->assertStringNotContainsString( 'name="', $html, 'Nothing can be submitted.' );
 		$this->assertStringNotContainsString( '<button', $html );
 		$this->assert_public_id_absent( $first->get_public_id(), $html );
 		$this->assert_public_id_absent( $second->get_public_id(), $html );
@@ -548,7 +573,7 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'class="is-gated"', $html );
 
 		$html = $this->render( $this->get_attrs( $attrs + [ 'showPremium' => true ] ) );
-		$this->assertSame( 2, substr_count( $html, 'type="checkbox"' ), 'With showPremium on, the free list and the added list get a checkbox.' );
+		$this->assertSame( 2, substr_count( $html, 'name="lists[]"' ), 'With showPremium on, the free list and the added list get a checkbox that can be submitted.' );
 		$this->assertStringContainsString( 'value="' . $free->get_public_id() . '"', $html );
 		$this->assertStringContainsString( 'value="' . $added->get_public_id() . '"', $html );
 		$this->assertSame( 1, substr_count( $html, 'class="is-gated"' ), 'The hidden list still shows as a gated row.' );
@@ -598,11 +623,11 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 
 		$premium_row = $this->get_checkbox_row( $premium->get_public_id(), $html );
 		$this->assertStringContainsString( 'type="checkbox"', $premium_row, 'The reader can still join the premium list.' );
-		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--primary">Premium</span>', $premium_row );
+		$this->assertStringContainsString( '<span class="newspack-ui__badge newspack-ui__badge--secondary">Premium</span>', $premium_row );
 		$free_row = $this->get_checkbox_row( $free->get_public_id(), $html );
 		$this->assertStringContainsString( 'type="checkbox"', $free_row );
 		$this->assertStringNotContainsString( 'newspack-ui__badge', $free_row );
-		$this->assertSame( 1, substr_count( $html, '<span class="newspack-ui__badge ' ), 'Only the premium list is badged.' );
+		$this->assertSame( 2, substr_count( $html, '<span class="newspack-ui__badge ' ), 'Only the premium list is badged, by its title and by its checkbox.' );
 		$this->assertStringNotContainsString( 'class="is-gated"', $html, 'Nothing is hidden from this reader.' );
 	}
 

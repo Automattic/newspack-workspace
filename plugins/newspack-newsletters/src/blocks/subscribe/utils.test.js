@@ -1,37 +1,7 @@
 /**
  * Internal dependencies
  */
-import { enabledInOrder, hasGatedLists, isListGated, listsToKeep, moveItem, syncListOrder } from './utils';
-
-describe( 'moveItem', () => {
-	const lists = [ 'a', 'b', 'c', 'd' ];
-
-	it( 'moves an item down', () => {
-		expect( moveItem( lists, 0, 2 ) ).toEqual( [ 'b', 'c', 'a', 'd' ] );
-	} );
-
-	it( 'moves an item up', () => {
-		expect( moveItem( lists, 3, 1 ) ).toEqual( [ 'a', 'd', 'b', 'c' ] );
-	} );
-
-	it( 'moves an item to the end', () => {
-		expect( moveItem( lists, 1, 3 ) ).toEqual( [ 'a', 'c', 'd', 'b' ] );
-	} );
-
-	it( 'does not mutate its input', () => {
-		moveItem( lists, 0, 3 );
-		expect( lists ).toEqual( [ 'a', 'b', 'c', 'd' ] );
-	} );
-
-	it( 'returns the input unchanged for a no-op or out-of-range move', () => {
-		expect( moveItem( lists, 1, 1 ) ).toBe( lists );
-		expect( moveItem( lists, -1, 2 ) ).toBe( lists );
-		expect( moveItem( lists, 2, -1 ) ).toBe( lists );
-		expect( moveItem( lists, 0, 4 ) ).toBe( lists );
-		expect( moveItem( lists, 4, 0 ) ).toBe( lists );
-		expect( moveItem( lists, 9, 0 ) ).toBe( lists );
-	} );
-} );
+import { hasGatedLists, isListGated, listsToKeep, syncListOrder } from './utils';
 
 describe( 'syncListOrder', () => {
 	it( 'builds the order on first load: lists that are on first, in form order, then the rest', () => {
@@ -71,20 +41,6 @@ describe( 'syncListOrder', () => {
 		expect( order ).toEqual( [ 'a', 'b' ] );
 		expect( lists ).toEqual( [ 'c', 'a' ] );
 		expect( allIds ).toEqual( [ 'a', 'b', 'c' ] );
-	} );
-} );
-
-describe( 'enabledInOrder', () => {
-	it( 'returns the enabled IDs in sidebar order', () => {
-		expect( enabledInOrder( [ 'b', 'c', 'a' ], [ 'a', 'b' ] ) ).toEqual( [ 'b', 'a' ] );
-	} );
-
-	it( 'drops an enabled ID the sidebar does not have', () => {
-		expect( enabledInOrder( [ 'b', 'a' ], [ 'a', 'gone', 'b' ] ) ).toEqual( [ 'b', 'a' ] );
-	} );
-
-	it( 'returns an empty array when nothing is on', () => {
-		expect( enabledInOrder( [ 'a', 'b' ], [] ) ).toEqual( [] );
 	} );
 } );
 

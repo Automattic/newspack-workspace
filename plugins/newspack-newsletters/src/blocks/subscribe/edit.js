@@ -6,14 +6,14 @@
 import classnames from 'classnames';
 // Imported by path, not from the package root: the root pulls the whole
 // component library and its global `:root` styles into every editor screen.
-import CardSortableList from 'newspack-components/dist/esm/card-sortable-list';
+import ReorderModal from 'newspack-components/dist/esm/reorder-modal';
 
 /**
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
 import { __, sprintf } from '@wordpress/i18n';
-import { Fragment, createInterpolateElement, useState, useEffect, useMemo, useCallback } from '@wordpress/element';
+import { Fragment, useState, useEffect, useMemo, useCallback } from '@wordpress/element';
 import {
 	BaseControl,
 	TextControl,
@@ -26,6 +26,7 @@ import {
 	SelectControl,
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { useBlockProps, InspectorControls, RichText, PanelColorSettings, getColorObjectByColorValue } from '@wordpress/block-editor';
 import { select } from '@wordpress/data';
@@ -33,7 +34,7 @@ import { select } from '@wordpress/data';
 /**
  * Internal dependencies
  */
-import { enabledInOrder, hasGatedLists, isListGated, listsToKeep, moveItem, syncListOrder } from './utils';
+import { hasGatedLists, isListGated, listsToKeep, syncListOrder } from './utils';
 import './editor.scss';
 
 const getListCheckboxId = listId => {
@@ -44,30 +45,6 @@ const settingsUrl = newspack_newsletters_blocks.settings_url;
 
 // Access gates per list, keyed by list ID. Empty unless something restricts lists.
 const listGates = newspack_newsletters_blocks.list_gates || {};
-
-/**
- * "Gated by <gate>, <gate>", each gate linked when the user can edit it.
- *
- * @param {Object}   props       Component props.
- * @param {Object[]} props.gates Gates restricting a list.
- */
-const GatedBy = ( { gates } ) =>
-	createInterpolateElement(
-		// translators: <gates /> is replaced with the names of the access gates restricting a list. Keep it as is.
-		__( 'Gated by <gates />', 'newspack-newsletters' ),
-		{
-			gates: (
-				<>
-					{ gates.map( ( gate, index ) => (
-						<Fragment key={ gate.id }>
-							{ index > 0 && ', ' }
-							{ gate.edit_url ? <a href={ gate.edit_url }>{ gate.title }</a> : gate.title }
-						</Fragment>
-					) ) }
-				</>
-			),
-		}
-	);
 
 /**
  * A list's description, with its line breaks kept.
@@ -126,6 +103,7 @@ export default function SubscribeEdit( {
 		displayDescription,
 		showPremium,
 		showPremiumLabel,
+		className,
 		mailchimpDoubleOptIn,
 		textColor,
 		backgroundColor,
@@ -199,49 +177,40 @@ export default function SubscribeEdit( {
 		setAttributes( { listsCheckboxes: newListsCheckboxes } );
 	};
 
-	// Every list, in sidebar order. The block only stores the lists that are on,
-	// so where a list that is off sits is kept here, for this editing session.
+	// Every list, in the order the Edit Lists modal shows them. The block only
+	// stores the lists that are on, so where a list that is off sits is kept here,
+	// for this editing session.
 	const [ storedListOrder, setStoredListOrder ] = useState( [] );
 	const allListIds = useMemo( () => Object.keys( listConfig ), [ listConfig ] );
 	const listOrder = useMemo( () => syncListOrder( storedListOrder, lists, allListIds ), [ storedListOrder, lists, allListIds ] );
 
-	const moveList = ( from, to ) => {
-		const reordered = moveItem( listOrder, from, to );
-		setStoredListOrder( reordered );
-		// Moving a list that is off changes nothing the block stores. Skip the
-		// write, or the post is marked as changed with nothing to save.
-		const next = enabledInOrder( reordered, lists );
-		if ( next.length !== lists.length || next.some( ( id, index ) => id !== lists[ index ] ) ) {
-			setAttributes( { lists: next } );
-		}
-	};
-	// Memoized because it feeds sortableItems below, which must keep its identity.
-	const toggleListEnabled = useCallback(
-		listId => {
-			// Keep the order as it is shown, so the card stays where it is.
-			setStoredListOrder( listOrder );
-			setAttributes( {
-				lists: lists.includes( listId ) ? lists.filter( id => id !== listId ) : enabledInOrder( listOrder, [ ...lists, listId ] ),
-			} );
-		},
-		[ listOrder, lists, setAttributes ]
-	);
-	// CardSortableList copies `items` into its own state whenever the prop's identity
-	// changes. A fresh array on every render would reset it mid-drag or mid-animation,
-	// so this only changes when the lists, their order or their settings do.
-	const sortableItems = useMemo(
-		() =>
-			listOrder.map( listId => ( {
-				id: listId,
-				title: listConfig[ listId ].title,
-				description: isListGated( listGates, listId ) ? <GatedBy gates={ listGates[ listId ] } /> : undefined,
-				toggleChecked: lists.includes( listId ),
-				onToggleChange: () => toggleListEnabled( listId ),
-			} ) ),
-		[ listOrder, lists, listConfig, toggleListEnabled ]
+	const premiumLabel = showPremiumLabel?.trim();
+	const isLegacyStyle = /(^|\s)is-style-legacy(\s|$)/.test( className || '' );
+
+	const [ isEditingLists, setIsEditingLists ] = useState( false );
+	const editListsLabel = __( 'Edit Lists', 'newspack-newsletters' );
+	const badgeLabel = premiumLabel || __( 'Premium', 'newspack-newsletters' );
+	const fetchListItems = useCallback(
+		ids =>
+			Promise.resolve(
+				ids.map( id => ( {
+					value: id,
+					label: listConfig[ id ]?.title,
+					badge: isListGated( listGates, id )
+						? {
+								label: badgeLabel,
+								tooltip: sprintf(
+									// translators: %s: names of the access gates restricting a list, separated by commas.
+									__( 'Gated by %s', 'newspack-newsletters' ),
+									listGates[ id ].map( gate => gate.title ).join( ', ' )
+								),
+						  }
+						: undefined,
+				} ) )
+			),
+		[ listConfig, badgeLabel ]
 	);
 
-	const premiumLabel = showPremiumLabel?.trim();
 	// The front end lists the block's lists when there is more than one, or when
 	// a reader without access would be shown a premium one.
 	const showsPremiumRow = listId => showPremium && isListGated( listGates, listId );
@@ -254,7 +223,24 @@ export default function SubscribeEdit( {
 	return (
 		<>
 			<InspectorControls>
-				<PanelBody title={ __( 'Form settings', 'newspack-newsletters' ) }>
+				<PanelBody title={ __( 'Form', 'newspack-newsletters' ) }>
+					{ ( inFlight || ! Object.keys( listConfig ).length || lists.length < 1 ) && (
+						<BaseControl __nextHasNoMarginBottom>
+							<VStack spacing={ 4 }>
+								{ inFlight && <Spinner /> }
+								{ ! inFlight && ! Object.keys( listConfig ).length && (
+									<Notice isDismissible={ false } status="error">
+										{ __( 'You must enable lists for subscription.', 'newspack-newsletters' ) }
+									</Notice>
+								) }
+								{ lists.length < 1 && (
+									<Notice isDismissible={ false } status="error">
+										{ __( 'You must select at least one list.', 'newspack-newsletters' ) }
+									</Notice>
+								) }
+							</VStack>
+						</BaseControl>
+					) }
 					{ showListPosition && (
 						<ToggleGroupControl
 							__next40pxDefaultSize
@@ -327,6 +313,40 @@ export default function SubscribeEdit( {
 							/>
 						</>
 					) }
+					<BaseControl __nextHasNoMarginBottom>
+						<VStack spacing={ 4 }>
+							{ listOrder.length > 0 && (
+								<Button
+									className="newspack-newsletters-subscribe__edit-lists"
+									variant="secondary"
+									__next40pxDefaultSize
+									onClick={ () => setIsEditingLists( true ) }
+								>
+									{ editListsLabel }
+								</Button>
+							) }
+							<a href={ settingsUrl }>{ __( 'Manage your subscription lists', 'newspack-newsletters' ) }</a>
+						</VStack>
+					</BaseControl>
+					{ isEditingLists && (
+						<ReorderModal
+							title={ editListsLabel }
+							ids={ listOrder }
+							enabledIds={ lists }
+							description={ __(
+								'Turn on the lists readers can sign up for in this form, and put them in the order they appear.',
+								'newspack-newsletters'
+							) }
+							noneOnHelp={ __( 'Turn on at least one list to save.', 'newspack-newsletters' ) }
+							fetchItems={ fetchListItems }
+							onSave={ ( order, enabled ) => {
+								setStoredListOrder( order );
+								setAttributes( { lists: enabled } );
+								setIsEditingLists( false );
+							} }
+							onClose={ () => setIsEditingLists( false ) }
+						/>
+					) }
 				</PanelBody>
 				<PanelBody title={ __( 'After subscribe', 'newspack-newsletters' ) } initialOpen={ false }>
 					<SelectControl
@@ -378,31 +398,6 @@ export default function SubscribeEdit( {
 							},
 						] }
 					/>
-				</PanelBody>
-				<PanelBody title={ __( 'Subscription Lists', 'newspack-newsletters' ) }>
-					{ inFlight && <Spinner /> }
-					{ ! inFlight && ! Object.keys( listConfig ).length && (
-						<div style={ { marginBottom: '1.5rem' } }>
-							<Notice isDismissible={ false } status="error">
-								{ __( 'You must enable lists for subscription.', 'newspack-newsletters' ) }
-							</Notice>
-						</div>
-					) }
-					{ lists.length < 1 && (
-						<div style={ { marginBottom: '1.5rem' } }>
-							<Notice isDismissible={ false } status="error">
-								{ __( 'You must select at least one list.', 'newspack-newsletters' ) }
-							</Notice>
-						</div>
-					) }
-					{ sortableItems.length > 0 && (
-						<BaseControl __nextHasNoMarginBottom>
-							<CardSortableList items={ sortableItems } onDragCallback={ moveList } />
-						</BaseControl>
-					) }
-					<p>
-						<a href={ settingsUrl }>{ __( 'Manage your subscription lists', 'newspack-newsletters' ) }</a>
-					</p>
 				</PanelBody>
 				{ newspack_newsletters_blocks.provider === 'mailchimp' && (
 					<PanelBody title={ __( 'Mailchimp Settings', 'newspack-newsletters' ) }>
@@ -487,6 +482,11 @@ export default function SubscribeEdit( {
 											{ lists.map( listId => (
 												<li key={ listId }>
 													<span className="list-checkbox">
+														{ premiumLabel && ! isLegacyStyle && isListGated( listGates, listId ) && (
+															<span className="newspack-ui__badge newspack-ui__badge--secondary" aria-hidden="true">
+																{ premiumLabel }
+															</span>
+														) }
 														<input
 															id={ getListCheckboxId( listId ) }
 															type="checkbox"
@@ -498,11 +498,22 @@ export default function SubscribeEdit( {
 														<label htmlFor={ getListCheckboxId( listId ) }>
 															<span className="list-title">
 																{ listConfig[ listId ]?.title }
-																{ premiumLabel && isListGated( listGates, listId ) && (
-																	<span className="newspack-ui__badge newspack-ui__badge--primary">
-																		{ premiumLabel }
-																	</span>
-																) }
+																{ premiumLabel &&
+																	isListGated( listGates, listId ) &&
+																	( isLegacyStyle ? (
+																		<span className="list-premium-label">
+																			{ ' ' }
+																			{ sprintf(
+																				/* translators: %s: label marking a premium list, such as "Premium". */
+																				__( '(%s)', 'newspack-newsletters' ),
+																				premiumLabel
+																			) }
+																		</span>
+																	) : (
+																		<span className="newspack-ui__badge newspack-ui__badge--secondary">
+																			{ premiumLabel }
+																		</span>
+																	) ) }
 															</span>
 															{ displayDescription && (
 																<ListDescription description={ listConfig[ listId ]?.description } />

@@ -155,39 +155,64 @@ function render_honeypot_field( $placeholder = '' ) {
 }
 
 /**
- * Print the badge that marks a list as premium.
- *
- * Every premium list gets it, for readers with and without access, so the two
- * kinds of list can be told apart. An empty label hides it.
+ * Whether the block uses the Legacy style.
  *
  * @param array $attrs Block attributes.
+ *
+ * @return bool
  */
-function render_premium_badge( $attrs ) {
+function is_legacy_style( $attrs ) {
+	return ! empty( $attrs['className'] ) && (bool) preg_match( '/(^|\s)is-style-legacy(\s|$)/', (string) $attrs['className'] );
+}
+
+/**
+ * Print the marker that labels a list as premium.
+ *
+ * Every premium list gets it, for readers with and without access, so the two
+ * kinds of list can be told apart. An empty label hides it. Each premium row
+ * prints it twice, by the title and by the checkbox: Modern Grid shows the
+ * second copy and the other styles show the first. Legacy, whose type comes from
+ * the theme, gets the label as plain text after the title instead.
+ *
+ * @param array $attrs      Block attributes.
+ * @param bool  $decorative Whether this copy repeats a badge screen readers already announce.
+ */
+function render_premium_badge( $attrs, $decorative = false ) {
 	$label = isset( $attrs['showPremiumLabel'] ) ? trim( (string) $attrs['showPremiumLabel'] ) : '';
 	if ( '' === $label ) {
 		return;
 	}
+	if ( is_legacy_style( $attrs ) ) {
+		if ( ! $decorative ) {
+			/* translators: %s: label marking a premium list, such as "Premium". */
+			echo ' <span class="list-premium-label">' . \esc_html( sprintf( __( '(%s)', 'newspack-newsletters' ), $label ) ) . '</span>';
+		}
+		return;
+	}
 	?>
-	<span class="newspack-ui__badge newspack-ui__badge--primary"><?php echo \esc_html( $label ); ?></span>
+	<span class="newspack-ui__badge newspack-ui__badge--secondary"<?php echo $decorative ? ' aria-hidden="true"' : ''; ?>><?php echo \esc_html( $label ); ?></span>
 	<?php
 }
 
 /**
  * Render a list the reader can see but can't sign up for.
  *
- * The row has no input and never prints the list's ID, so nothing in the
- * markup can be submitted. The empty `.list-checkbox` keeps the title aligned
- * with rows that have a checkbox.
+ * The row's checkbox is disabled and has no name or value, so nothing in the
+ * markup can be submitted and the list's ID is never printed.
  *
- * @param array $list  List configuration, as in the lists config.
- * @param array $attrs Block attributes.
+ * @param array  $list        List configuration, as in the lists config.
+ * @param array  $attrs       Block attributes.
+ * @param string $checkbox_id ID for the row's checkbox. Must not contain the list's ID.
  */
-function render_gated_list_item( $list, $attrs ) {
+function render_gated_list_item( $list, $attrs, $checkbox_id ) {
 	?>
 	<li class="is-gated">
-		<span class="list-checkbox" aria-hidden="true"></span>
+		<span class="list-checkbox">
+			<?php render_premium_badge( $attrs, true ); ?>
+			<input type="checkbox" id="<?php echo \esc_attr( $checkbox_id ); ?>" disabled />
+		</span>
 		<span class="list-details">
-			<span class="list-label">
+			<label class="list-label" for="<?php echo \esc_attr( $checkbox_id ); ?>">
 				<span class="list-title">
 					<?php echo \esc_html( $list['title'] ); ?>
 					<?php render_premium_badge( $attrs ); ?>
@@ -195,7 +220,7 @@ function render_gated_list_item( $list, $attrs ) {
 				<?php if ( $attrs['displayDescription'] ) : ?>
 					<span class="list-description"><?php echo nl2br( \esc_html( $list['description'] ) ); ?></span>
 				<?php endif; ?>
-			</span>
+			</label>
 		</span>
 	</li>
 	<?php
@@ -404,8 +429,9 @@ function render_form( $attrs, $lists ) {
 			<div class="newspack-newsletters-lists">
 				<ul>
 					<?php
+					$gated_index = 0;
 					foreach ( $gated_lists as $gated_list ) {
-						render_gated_list_item( $gated_list, $attrs );
+						render_gated_list_item( $gated_list, $attrs, sprintf( 'newspack-newsletters-%s-gated-list-%d', $block_id, $gated_index++ ) );
 					}
 					?>
 				</ul>
@@ -425,9 +451,10 @@ function render_form( $attrs, $lists ) {
 					<div class="newspack-newsletters-lists">
 						<ul>
 						<?php
+						$gated_index = 0;
 						foreach ( $lists['order'] as $list_id ) :
 							if ( isset( $gated_lists[ $list_id ] ) ) {
-								render_gated_list_item( $gated_lists[ $list_id ], $attrs );
+								render_gated_list_item( $gated_lists[ $list_id ], $attrs, sprintf( 'newspack-newsletters-%s-gated-list-%d', $block_id, $gated_index++ ) );
 								continue;
 							}
 							if ( ! isset( $list_config[ $list_id ] ) ) {
@@ -438,6 +465,11 @@ function render_form( $attrs, $lists ) {
 							?>
 							<li>
 								<span class="list-checkbox">
+									<?php
+									if ( isset( $premium_lists[ $list_id ] ) ) {
+										render_premium_badge( $attrs, true );
+									}
+									?>
 									<input
 										type="checkbox"
 										name="lists[]"

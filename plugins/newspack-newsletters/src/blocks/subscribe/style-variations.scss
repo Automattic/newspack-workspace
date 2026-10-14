@@ -24,6 +24,10 @@
 				cursor: pointer;
 			}
 
+			.is-gated label {
+				cursor: default;
+			}
+
 			label,
 			.list-label {
 				font-size: var(--newspack-ui-font-size-s, 16px);
@@ -309,16 +313,20 @@
 				}
 			}
 
-			// Cards put the checkbox on its own row at the bottom. A gated list has
-			// nothing to put there, so drop the row and the space reserved above it.
-			.is-gated {
-				.list-checkbox {
-					display: none;
+			.list-checkbox {
+				.newspack-ui__badge {
+					display: inline-grid;
+					margin-inline-end: auto;
 				}
+			}
 
-				.list-details {
-					padding-bottom: 0;
-				}
+			.list-title .newspack-ui__badge {
+				clip-path: inset(50%);
+				height: 1px;
+				overflow: hidden;
+				position: absolute;
+				white-space: nowrap;
+				width: 1px;
 			}
 		}
 	}
