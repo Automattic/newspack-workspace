@@ -28,7 +28,7 @@ To disclose a security issue to our team, [please submit a report via HackerOne 
 
 ### Content gating
 
-Newspack's content gate controls access to premium content, not confidential content, so we don't treat it as a security boundary. Reports of gated content being accessed without meeting the gate's requirements, including through third-party plugins, are configuration or product issues rather than security issues.
+Newspack's content gate controls access to content behind a login or paywall, not confidential content, so we don't treat it as a security boundary. Reports of gated content being accessed without meeting the gate's requirements, including through third-party plugins, are configuration or product issues rather than security issues.
 
 ## Getting started
 
