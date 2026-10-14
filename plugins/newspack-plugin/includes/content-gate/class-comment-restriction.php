@@ -39,6 +39,14 @@ class Comment_Restriction {
 	private static array $verdicts = [];
 
 	/**
+	 * Per-request memo of the per-post edit check, keyed by "<user ID>:<post ID>".
+	 * The comment form asks once per reply link.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static array $can_edit = [];
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init(): void {
@@ -124,6 +132,7 @@ class Comment_Restriction {
 	 */
 	public static function reset_cache(): void {
 		self::$verdicts = [];
+		self::$can_edit = [];
 	}
 
 	/**
@@ -131,8 +140,8 @@ class Comment_Restriction {
 	 *
 	 * Whoever can edit a post is never restricted on it, as with the content gate
 	 * itself. That keeps an author able to reply under their own article when the
-	 * gate would otherwise refuse them. Checked per post, so it stays outside the
-	 * per-user verdict memo.
+	 * gate would otherwise refuse them. Memoized per user and post, apart from the
+	 * per-user verdict.
 	 *
 	 * @param int $user_id User ID; 0 for a logged-out visitor.
 	 * @param int $post_id Post ID; 0 when there is no post to ask about.
@@ -140,7 +149,14 @@ class Comment_Restriction {
 	 * @return bool
 	 */
 	private static function can_edit_post( int $user_id, int $post_id ): bool {
-		return $user_id && $post_id && user_can( $user_id, 'edit_post', $post_id );
+		if ( ! $user_id || ! $post_id ) {
+			return false;
+		}
+		$key = $user_id . ':' . $post_id;
+		if ( ! isset( self::$can_edit[ $key ] ) ) {
+			self::$can_edit[ $key ] = user_can( $user_id, 'edit_post', $post_id );
+		}
+		return self::$can_edit[ $key ];
 	}
 
 	/**

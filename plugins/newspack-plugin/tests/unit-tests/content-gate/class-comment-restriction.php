@@ -526,4 +526,29 @@ class Test_Comment_Restriction extends WP_UnitTestCase {
 		$this->assertFalse( $is_restricted );
 		$this->assertInstanceOf( WP_Comment::class, $submitted );
 	}
+
+	/**
+	 * The per-post edit check runs once per user and post, however many reply links ask.
+	 */
+	public function test_the_per_post_edit_check_is_asked_once_per_request() {
+		$this->restrict_comments_to_gate();
+		$author_id = self::factory()->user->create( [ 'role' => 'author' ] );
+		wp_set_current_user( $author_id );
+		Comment_Restriction::reset_cache();
+		$GLOBALS['post'] = get_post( $this->post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$asks  = 0;
+		$count = function ( $allcaps, $caps, $args ) use ( &$asks ) {
+			if ( 'edit_post' === ( $args[0] ?? '' ) ) {
+				++$asks;
+			}
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $count, 10, 3 );
+		Comment_Restriction::filter_comment_reply_link( '<a>Reply</a>' );
+		Comment_Restriction::filter_comment_reply_link( '<a>Reply</a>' );
+		Comment_Restriction::filter_comment_reply_link( '<a>Reply</a>' );
+		remove_filter( 'user_has_cap', $count, 10 );
+
+		$this->assertSame( 1, $asks );
+	}
 }
