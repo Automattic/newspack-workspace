@@ -160,13 +160,7 @@ final class Reader_Activation {
 		// (combined with `defer` instead of `async` below) guarantees the load order
 		// even when an optimization plugin (e.g. Perfmatters) delays the scripts. See NPPM-2951.
 		$script_dependencies = [ 'newspack_commons' ];
-		// My Account asks a reader to verify as soon as they're signed in, on every one
-		// of its pages. A reader who registers there skips the post-registration step and
-		// confirms their address before the account is created instead, as on a site that
-		// doesn't verify new accounts.
-		$verify_new_reader_accounts = self::show_post_registration_verification()
-			&& ! ( My_Account::is_account_page() && My_Account::requires_verification() );
-		$script_data                = [
+		$script_data         = [
 			'auth_intention_cookie'      => self::AUTH_INTENTION_COOKIE,
 			'cid_cookie'                 => NEWSPACK_CLIENT_ID_COOKIE_NAME,
 			'is_logged_in'               => \is_user_logged_in(),
@@ -176,7 +170,7 @@ final class Reader_Activation {
 			'auth_action_result'         => Magic_Link::AUTH_ACTION_RESULT,
 			'account_url'                => My_Account::get_endpoint_url(),
 			'is_ras_enabled'             => self::is_enabled(),
-			'verify_new_reader_accounts' => $verify_new_reader_accounts,
+			'verify_new_reader_accounts' => self::verifies_after_registration_here(),
 			'verification_url'           => \admin_url( 'admin-ajax.php' ),
 			'check_email_url'            => \rest_url( NEWSPACK_API_NAMESPACE . '/reader-activation/check-email' ),
 		];
@@ -1677,7 +1671,7 @@ final class Reader_Activation {
 	/**
 	 * Render the pre-registration confirmation modal.
 	 *
-	 * Used when post-registration verification is disabled — the reader sees this
+	 * Used where the page skips post-registration verification — the reader sees this
 	 * modal *before* an account is created, so a typo doesn't silently provision
 	 * an unwanted account. Mirrors render_verification_modal()'s structure: global
 	 * markup in wp_footer, with the email <strong> rendered empty and filled by
@@ -1687,7 +1681,7 @@ final class Reader_Activation {
 	 * @return void
 	 */
 	public static function render_confirmation_modal() {
-		if ( ! self::should_render_auth_modal() || self::show_post_registration_verification() ) {
+		if ( ! self::should_render_auth_modal() || self::verifies_after_registration_here() ) {
 			return;
 		}
 
@@ -2410,6 +2404,24 @@ final class Reader_Activation {
 		 * @param bool $show_pending_verification If true, show the post-registration verification flow.
 		 */
 		return apply_filters( 'newspack_show_post_registration_verification', $should_show );
+	}
+
+	/**
+	 * Whether a reader who registers on the current page goes through the
+	 * post-registration verification step.
+	 *
+	 * My Account is the exception on a site that verifies new accounts: it asks a
+	 * signed-in reader to verify on every one of its pages. A reader who registers
+	 * there confirms their address before the account is created instead, as on a
+	 * site that doesn't verify new accounts. The front-end flag and the confirmation
+	 * modal's markup both follow this, so the step the flag asks for is always on
+	 * the page.
+	 *
+	 * @return bool
+	 */
+	private static function verifies_after_registration_here(): bool {
+		return self::show_post_registration_verification()
+			&& ! ( My_Account::is_account_page() && My_Account::requires_verification() );
 	}
 
 	/**
