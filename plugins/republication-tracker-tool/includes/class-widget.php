@@ -80,7 +80,7 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 				)
 			);
 		}
-		wp_enqueue_style( 'republication-tracker-tool-css', plugins_url( 'assets/widget.css', __DIR__ ), array(), filemtime( plugin_dir_path( __FILE__ ) ) );
+		wp_enqueue_style( 'republication-tracker-tool-css', plugins_url( 'assets/widget.css', __DIR__ ), array(), filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.css' ) );
 
 		echo wp_kses_post( $args['before_widget'] );
 
