@@ -1,3 +1,10 @@
+## newspack [6.55.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.0...newspack@6.55.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **reader-activation:** stop repeat checkout after verifying (NPPM-3540) ([#1299](https://github.com/Automattic/newspack-workspace/issues/1299)) ([582450f](https://github.com/Automattic/newspack-workspace/commit/582450f3f4800d576974d54d7238a253e66cbbc7))
+
 # newspack [6.55.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.54.0...newspack@6.55.0) (2026-10-14)
 
 
