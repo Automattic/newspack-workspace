@@ -126,6 +126,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const isSaving = useRef( false );
 	const gatesRef = useRef< Gate[] >( gates ?? [] );
 	const savedCustomRules = useRef< GateContentRule[] >( gate.content_rules );
+	// The stored gate as last copied into the form, serialized for comparison.
+	const syncedGate = useRef< string | null >( null );
 
 	useEffect( () => {
 		if ( Array.isArray( gates ) ) {
@@ -389,6 +391,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			sectionName: isNew ? __( 'Add new', 'newspack-plugin' ) : __( 'Edit', 'newspack-plugin' ),
 		} );
 		if ( isNew ) {
+			syncedGate.current = null;
 			return;
 		}
 		const matchedGate = gates ? gates.find( g => g.id === id ) : null;
@@ -413,6 +416,13 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			history.push( `/edit/new/all` );
 			return;
 		}
+		// Copy the stored gate only when it changed. A refused save leaves it as it was, and
+		// copying it then would discard everything the operator typed and clear the refusal.
+		const serializedGate = JSON.stringify( matchedGate );
+		if ( serializedGate === syncedGate.current ) {
+			return;
+		}
+		syncedGate.current = serializedGate;
 		setGate( matchedGate );
 		setTitle( matchedGate.title );
 		setContentRules( matchedGate.content_rules );
