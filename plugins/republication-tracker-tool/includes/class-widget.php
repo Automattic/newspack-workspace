@@ -63,7 +63,7 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 				'republication-tracker-tool-clipboard-utils',
 				plugins_url( 'assets/clipboard-utils.js', __DIR__ ),
 				array(),
-				REPUBLICATION_TRACKER_TOOL_VERSION,
+				filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/clipboard-utils.js' ),
 				array(
 					'in_footer' => false,
 					'strategy'  => 'defer',
@@ -73,7 +73,7 @@ class Republication_Tracker_Tool_Widget extends WP_Widget {
 				'republication-tracker-tool-js',
 				plugins_url( 'assets/widget.js', __DIR__ ),
 				array( 'jquery', 'republication-tracker-tool-clipboard-utils' ),
-				REPUBLICATION_TRACKER_TOOL_VERSION,
+				filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.js' ),
 				array(
 					'in_footer' => false,
 					'strategy'  => 'defer',

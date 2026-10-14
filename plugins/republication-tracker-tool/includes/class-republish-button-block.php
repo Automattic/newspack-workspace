@@ -207,7 +207,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			'republication-tracker-tool-css',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/widget.css',
 			[],
-			REPUBLICATION_TRACKER_TOOL_VERSION
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.css' )
 		);
 
 		// Clipboard utilities (shared with widget).
@@ -215,7 +215,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			'republication-tracker-tool-clipboard-utils',
 			REPUBLICATION_TRACKER_TOOL_URL . 'assets/clipboard-utils.js',
 			[],
-			REPUBLICATION_TRACKER_TOOL_VERSION,
+			filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/clipboard-utils.js' ),
 			[
 				'in_footer' => true,
 				'strategy'  => 'defer',
