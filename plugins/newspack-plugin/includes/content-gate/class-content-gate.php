@@ -416,8 +416,9 @@ class Content_Gate {
 		if ( null === $user ) {
 			$user = \wp_get_current_user();
 		} elseif ( ! $user instanceof \WP_User ) {
-			// Anything that is not an ID is nobody. Casting it would turn `true` into user 1.
-			$user = is_numeric( $user ) ? \get_user_by( 'id', (int) $user ) : false;
+			// Only a whole number is an ID. Casting anything else would turn `true`, 1.5 or '1e0' into user 1.
+			$is_id = is_int( $user ) || ( is_string( $user ) && ctype_digit( $user ) );
+			$user  = $is_id ? \get_user_by( 'id', (int) $user ) : false;
 		}
 		if ( ! $user instanceof \WP_User || ! $user->exists() ) {
 			return false;

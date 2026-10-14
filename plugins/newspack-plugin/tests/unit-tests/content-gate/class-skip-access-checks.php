@@ -149,7 +149,10 @@ class Test_Content_Gate_Skip_Access_Checks extends WP_UnitTestCase {
 		$this->assertFalse( Content_Gate::should_skip_access_checks( [ 1 ] ), 'An array.' );
 		$this->assertFalse( Content_Gate::should_skip_access_checks( new stdClass() ), 'An object that is not a user.' );
 		$this->assertFalse( Content_Gate::should_skip_access_checks( 'administrator' ), 'A role name.' );
-		$this->assertTrue( Content_Gate::should_skip_access_checks( '1' ), 'A numeric string is an ID.' );
+		$this->assertFalse( Content_Gate::should_skip_access_checks( 1.5 ), 'A fraction is not user 1.' );
+		$this->assertFalse( Content_Gate::should_skip_access_checks( '1e0' ), 'Scientific notation is not user 1.' );
+		$this->assertFalse( Content_Gate::should_skip_access_checks( '1.0' ), 'A decimal string is not user 1.' );
+		$this->assertTrue( Content_Gate::should_skip_access_checks( '1' ), 'A string of digits is an ID.' );
 	}
 
 	/**
