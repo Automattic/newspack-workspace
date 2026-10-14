@@ -212,8 +212,8 @@ final class Suppression {
 		}
 		$post_type = $screen->post_type;
 		if ( ! empty( $post_type ) && \is_post_type_viewable( $post_type ) && \post_type_supports( $post_type, 'custom-fields' ) ) {
-			\wp_enqueue_script( 'newspack-ads-suppress-ads', Core::plugin_url( 'dist/suppress-ads.js' ), [], NEWSPACK_ADS_VERSION, true );
-			\wp_enqueue_style( 'newspack-ads-suppress-ads', Core::plugin_url( 'dist/suppress-ads.css' ), [], NEWSPACK_ADS_VERSION );
+			\wp_enqueue_script( 'newspack-ads-suppress-ads', Core::plugin_url( 'dist/suppress-ads.js' ), [], Core::asset_version( 'suppress-ads' ), true );
+			\wp_enqueue_style( 'newspack-ads-suppress-ads', Core::plugin_url( 'dist/suppress-ads.css' ), [], Core::asset_version( 'suppress-ads' ) );
 			$placements = Placements::get_placements();
 			\wp_localize_script(
 				'newspack-ads-suppress-ads',
