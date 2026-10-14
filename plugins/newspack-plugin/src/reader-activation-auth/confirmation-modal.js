@@ -53,8 +53,9 @@ function openConfirmationModal( config = {} ) {
 	if ( currentController ) {
 		currentController.abort();
 	}
-	currentController = new AbortController();
-	const { signal } = currentController;
+	const controller = new AbortController();
+	currentController = controller;
+	const { signal } = controller;
 
 	const emailNode = modal.querySelector( '.email-address' );
 	if ( emailNode && config.email ) {
@@ -82,6 +83,10 @@ function openConfirmationModal( config = {} ) {
 		if ( confirmed ) {
 			return;
 		}
+		// A reader who cancels can fix a typo and submit again, which opens this modal for
+		// the new address. Stop listening now, or Continue on that next step would also
+		// confirm the address they cancelled.
+		controller.abort();
 		releaseController();
 		if ( typeof config.onCancel === 'function' ) {
 			config.onCancel();
