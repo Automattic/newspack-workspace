@@ -259,7 +259,7 @@ class Newspack_Newsletters_Subscription {
 		}
 		return new WP_Error(
 			'newspack_newsletters_rest_forbidden_context',
-			__( 'Sorry, you are not allowed to edit newsletter lists.', 'newspack-newsletters' ),
+			__( 'Sorry, you are not allowed to edit posts.', 'newspack-newsletters' ),
 			[ 'status' => rest_authorization_required_code() ]
 		);
 	}
