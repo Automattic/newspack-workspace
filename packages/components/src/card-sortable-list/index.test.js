@@ -26,4 +26,17 @@ describe( 'CardSortableList', () => {
 		// An unguarded Badge would still emit an empty span, so assert on element children.
 		expect( container.querySelector( 'h3' ).children ).toHaveLength( 0 );
 	} );
+
+	it( 'names each toggle after its item', () => {
+		render(
+			<CardSortableList
+				items={ [
+					{ id: 1, title: 'Homepage', toggleChecked: true, onToggleChange: () => {} },
+					{ id: 2, title: 'About', toggleChecked: false, onToggleChange: () => {} },
+				] }
+			/>
+		);
+		expect( screen.getByRole( 'checkbox', { name: 'Homepage' } ) ).toBeChecked();
+		expect( screen.getByRole( 'checkbox', { name: 'About' } ) ).not.toBeChecked();
+	} );
 } );
