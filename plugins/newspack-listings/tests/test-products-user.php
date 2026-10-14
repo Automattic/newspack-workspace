@@ -104,7 +104,7 @@ class ProductsUserTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Request values that earlier decided the broad edit check.
+	 * Request values a REST caller can send, which must not widen the broad edit check.
 	 *
 	 * @return array[] Request values.
 	 */
@@ -158,6 +158,30 @@ class ProductsUserTest extends WP_UnitTestCase {
 		$_REQUEST['post']   = $listing_id;
 
 		$this->assertTrue( user_can( $customer_id, 'edit_posts' ) );
+	}
+
+	/**
+	 * Saving from the editor screen posts the listing id in the body, not the query string.
+	 */
+	public function test_broad_edit_check_holds_when_screen_posts_listing_id_in_body() {
+		$customer_id        = $this->create_listing_customer();
+		$listing_id         = $this->create_listing( $customer_id );
+		$GLOBALS['pagenow'] = 'post.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$_POST['post_ID']   = $listing_id;
+
+		$this->assertTrue( user_can( $customer_id, 'edit_posts' ) );
+	}
+
+	/**
+	 * A listing id that arrives only through the merged request values does not identify the screen.
+	 */
+	public function test_broad_edit_check_ignores_listing_id_outside_get_and_post() {
+		$customer_id        = $this->create_listing_customer();
+		$listing_id         = $this->create_listing( $customer_id );
+		$GLOBALS['pagenow'] = 'post.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$_REQUEST['post']   = $listing_id;
+
+		$this->assertFalse( user_can( $customer_id, 'edit_posts' ) );
 	}
 
 	/**
@@ -232,9 +256,9 @@ class ProductsUserTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The broad edit check is not granted to a write sent to a route whose reads are allowed.
+	 * The broad edit check is not granted to a non-GET request sent to a route whose reads are allowed.
 	 */
-	public function test_broad_edit_check_refused_for_writes_to_read_routes() {
+	public function test_broad_edit_check_refused_for_non_get_requests_to_read_routes() {
 		wp_set_current_user( $this->create_listing_customer() );
 
 		$this->assertSame( 403, $this->rest_status( 'POST', '/wp/v2/block-renderer/core/calendar', [ 'context' => 'edit' ] ) );
