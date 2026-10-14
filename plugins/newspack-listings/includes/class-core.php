@@ -80,12 +80,16 @@ final class Core {
 	 *
 	 * Reads the content hash the build writes to `dist/<name>.asset.php`, so an
 	 * asset's URL changes when its file changes, and only then. The plugin
-	 * version doesn't change when a build is installed without a version bump,
-	 * which left browsers serving the old file. The hash covers every file in
-	 * the entry, so an entry's `.css` can use the same name as its `.js`.
+	 * version can't do that: it stays the same when a build is reinstalled
+	 * without a version bump, so browsers keep the cached file. The hash covers
+	 * every file in the entry, so an entry's `.css` can use the same name as
+	 * its `.js`.
 	 *
-	 * Mirrors `Newspack::asset_version()` in newspack-plugin. This plugin must
-	 * work without newspack-plugin, so it can't call that one.
+	 * A trimmed copy of `Newspack::asset_version()` in newspack-plugin, without
+	 * its cache reset or logging. This plugin must work without newspack-plugin,
+	 * so it can't call that one. newspack-ads, newspack-blocks, newspack-listings
+	 * and newspack-newsletters each carry this copy; a change to the name check
+	 * belongs in all of them.
 	 *
 	 * @param string $name Asset path relative to `dist/`, without the extension.
 	 *                     Examples: 'editor', 'curated-list'.
