@@ -125,5 +125,11 @@ class Test_Newspack_Blocks_Asset_Version extends WP_UnitTestCase {
 			$this->assertFileExists( $this->fixture_dir . $unsafe_name . '.asset.php', 'The fixture must resolve, or this case proves nothing.' );
 			$this->assertSame( $this->fallback_version(), Newspack_Blocks::asset_version( $unsafe_name ), $unsafe_name );
 		}
+
+		// A leading `..`, read from inside `sub/`, resolves to the same fixture.
+		$from_sub = fn() => $this->fixture_dir . 'sub/';
+		add_filter( 'newspack_blocks_asset_dist_dir', $from_sub, 20 );
+		$this->assertSame( $this->fallback_version(), Newspack_Blocks::asset_version( '../' . $name ), '../' . $name );
+		remove_filter( 'newspack_blocks_asset_dist_dir', $from_sub, 20 );
 	}
 }

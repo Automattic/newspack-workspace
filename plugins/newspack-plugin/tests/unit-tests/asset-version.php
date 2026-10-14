@@ -151,17 +151,19 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It rejects unsafe names by character class — absolute paths, spaces,
-	 * backslashes, etc. fall back to NEWSPACK_PLUGIN_VERSION.
+	 * It rejects unsafe names by character class. Each name has a fixture on
+	 * disk, so only the rejection, not a missing file, can return
+	 * NEWSPACK_PLUGIN_VERSION.
 	 */
 	public function test_falls_back_to_plugin_version_when_name_is_unsafe() {
 		$unsafe = [
-			'/absolute/path',
 			'has spaces',
 			'name;with;semicolons',
 			'name\\with\\backslashes',
 		];
 		foreach ( $unsafe as $name ) {
+			$this->write_fixture( $name, '<?php return [ "version" => "fixture-version-that-should-never-be-returned" ];' );
+			$this->assertFileExists( $this->fixture_dir . $name . '.asset.php', 'The fixture must resolve, or this case proves nothing.' );
 			$this->assertSame(
 				NEWSPACK_PLUGIN_VERSION,
 				Newspack::asset_version( $name ),
@@ -195,6 +197,17 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 			Newspack::asset_version( $traversal ),
 			"Traversal should fall back, not resolve via filesystem: {$traversal}"
 		);
+
+		// A leading `..`, read from inside `sub/`, resolves to the same fixture.
+		$from_sub = fn() => $this->fixture_dir . 'sub/';
+		add_filter( 'newspack_asset_dist_dir', $from_sub, 20 );
+		Newspack::asset_version_reset_cache();
+		$this->assertSame(
+			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( '../' . $name ),
+			'A leading `..` should fall back, not resolve via filesystem.'
+		);
+		remove_filter( 'newspack_asset_dist_dir', $from_sub, 20 );
 	}
 
 	/**
