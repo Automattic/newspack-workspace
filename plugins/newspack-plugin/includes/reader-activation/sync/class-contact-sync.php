@@ -1797,7 +1797,7 @@ class Contact_Sync extends Sync {
 	 *
 	 * Under `existing_only` the preview performs the same existence read the
 	 * run would — that is what previewing the skip means, and it is the one
-	 * external call a push dry run makes.
+	 * contact read a push dry run makes.
 	 *
 	 * @param array  $contact The computed contact data.
 	 * @param string $context The sync context.
