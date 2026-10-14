@@ -70,8 +70,10 @@ final class Blocks {
 	 * A block script with its own `.asset.php` keeps that version; one without
 	 * would take this hash too.
 	 *
-	 * Only this plugin's `newspack/` blocks are touched. The filter runs for
-	 * every block on the site, so everything else returns before any lookup.
+	 * The filter runs for every block on the site, so blocks outside the
+	 * `newspack/` namespace return before any lookup. newspack-ads shares that
+	 * namespace, so the `dist/` check below is what limits this to stylesheets
+	 * from this plugin's build.
 	 *
 	 * @param array $metadata Block metadata read from block.json.
 	 * @return array Metadata with `version` set to the stylesheets' content hash.
