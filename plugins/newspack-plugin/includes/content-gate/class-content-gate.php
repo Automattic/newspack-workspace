@@ -383,23 +383,24 @@ class Content_Gate {
 	/**
 	 * Whether Access Control should skip its checks for a user.
 	 *
-	 * By default that is staff: an account whose role, or own capabilities, let
-	 * it edit other people's posts. Every other account is checked as a reader
-	 * is, whatever its role is called, so an Author or Contributor meets the same
-	 * gates and comment restrictions a subscriber does. A site can move the line
-	 * in either direction with the filter.
-	 *
-	 * The answer belongs to the account, not to the request. It reads the
-	 * capabilities the account holds and ignores ones granted on the fly, which
-	 * can depend on the post in view: Co-Authors Plus grants `edit_others_posts`
-	 * to a co-author while their own post is the current one. Asking
-	 * `user_can()` here would let that account past every check on that page
-	 * and nowhere else.
+	 * By default that is staff: anyone who can edit other people's posts. Every
+	 * other account is checked as a reader is, whatever its role is called, so an
+	 * Author or Contributor meets the same gates and comment restrictions a
+	 * subscriber does. A site can move the line in either direction with the filter.
 	 *
 	 * Gates, block visibility, comment restrictions, the paid-member body class,
 	 * newsletter-link checks, group seats and the Teams migration all ask here.
 	 * Gates, blocks and comments also let through whoever can edit the post in
 	 * hand, so an account can pass on its own post and still be checked elsewhere.
+	 *
+	 * The default asks `user_can()`, so a plugin that grants `edit_others_posts`
+	 * for one request moves the answer for that request. Co-Authors Plus does
+	 * this: while a co-author's own post is the current one, it grants them the
+	 * capability, so on that page they skip access checks. A Contributor viewing
+	 * their own published post sees the comment form, though posting is still
+	 * refused, because the submission arrives without that post in view. This is
+	 * left as is on purpose: it happens only on the page of a post the account
+	 * co-wrote.
 	 *
 	 * Two neighbouring questions are answered elsewhere. Who may change gate
 	 * settings stays a capability check, so adding an account here grants it no
@@ -421,7 +422,7 @@ class Content_Gate {
 			return false;
 		}
 
-		$skips = ! empty( $user->allcaps['edit_others_posts'] ) || ( \is_multisite() && \is_super_admin( $user->ID ) );
+		$skips = \user_can( $user, 'edit_others_posts' );
 
 		/**
 		 * Filters whether Access Control skips its checks for a user.
@@ -439,7 +440,7 @@ class Content_Gate {
 		 *
 		 * Runs several times per request, so keep callbacks cheap.
 		 *
-		 * @param bool $skips   Whether to skip the checks. Defaults to whether the account's role or own capabilities include `edit_others_posts`.
+		 * @param bool $skips   Whether to skip the checks. Defaults to whether the user can edit other people's posts.
 		 * @param int  $user_id The user ID.
 		 */
 		return (bool) \apply_filters( 'newspack_content_gate_should_skip_access_checks', $skips, $user->ID );

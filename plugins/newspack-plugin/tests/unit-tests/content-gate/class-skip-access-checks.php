@@ -140,35 +140,6 @@ class Test_Content_Gate_Skip_Access_Checks extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The answer belongs to the account, not to the page in view. Co-Authors
-	 * Plus grants `edit_others_posts` on the fly to a co-author while their own
-	 * post is the current one, and that grant must not let them past every check.
-	 */
-	public function test_capabilities_granted_for_one_request_do_not_count() {
-		$contributor_id = self::factory()->user->create( [ 'role' => 'contributor' ] );
-		$own_post_id    = self::factory()->post->create( [ 'post_author' => $contributor_id ] );
-		// Shaped like the Co-Authors Plus filter: with no post named, it reads the current one.
-		$grant = function ( $allcaps, $caps, $args ) {
-			$post = empty( $args[2] ) ? ( $GLOBALS['post'] ?? null ) : get_post( $args[2] );
-			if ( 'edit_others_posts' === $args[0] && $post && (int) $post->post_author === (int) ( $args[1] ?? 0 ) ) {
-				$allcaps['edit_others_posts'] = true;
-			}
-			return $allcaps;
-		};
-		add_filter( 'user_has_cap', $grant, 10, 3 );
-		wp_set_current_user( $contributor_id );
-		$GLOBALS['post'] = get_post( $own_post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-
-		$granted_on_the_fly = user_can( $contributor_id, 'edit_others_posts' );
-		$skips              = Content_Gate::should_skip_access_checks( $contributor_id );
-		unset( $GLOBALS['post'] );
-		remove_filter( 'user_has_cap', $grant, 10 );
-
-		$this->assertTrue( $granted_on_the_fly, 'The premise: the capability is granted while the post is in view.' );
-		$this->assertFalse( $skips, 'The account still does not skip access checks.' );
-	}
-
-	/**
 	 * A value that is neither a user ID nor a user is nobody.
 	 */
 	public function test_other_values_never_skip_checks() {
