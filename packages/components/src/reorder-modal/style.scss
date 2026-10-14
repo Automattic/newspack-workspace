@@ -2,7 +2,7 @@
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
-.newspack-blocks-reorder-modal {
+.newspack-reorder-modal {
 	&__body {
 		display: flex;
 		flex-direction: column;
@@ -30,7 +30,7 @@
 	}
 
 	&__item {
-		--newspack-blocks-reorder-divider: #{wp-colors.$gray-100};
+		--newspack-reorder-modal-divider: #{wp-colors.$gray-100};
 		--wp-ui-card-padding: #{wp-vars.$grid-unit-15};
 
 		align-items: stretch;
@@ -40,7 +40,7 @@
 
 		&:focus-within,
 		&:hover {
-			--newspack-blocks-reorder-divider: #{wp-colors.$gray-300};
+			--newspack-reorder-modal-divider: #{wp-colors.$gray-300};
 
 			border-color: wp-colors.$gray-300;
 		}
@@ -60,21 +60,48 @@
 
 	&__move {
 		align-items: center;
-		border-right: 1px solid var(--newspack-blocks-reorder-divider);
+		border-right: 1px solid var(--newspack-reorder-modal-divider);
 		display: flex;
 		flex-direction: column;
 		padding: wp-vars.$grid-unit-05;
 	}
 
+	&__content {
+		align-items: center;
+		align-self: center;
+		display: flex;
+		flex: 1;
+		gap: wp-vars.$grid-unit-10;
+		min-width: 0;
+		padding-block-end: var(--wp-ui-card-padding);
+	}
+
 	&__title {
 		@include wp-mixins.heading-large();
 
-		align-self: center;
-		flex: 1;
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	&__badge {
+		display: flex;
+		flex-shrink: 0;
+	}
+
+	&__toggle {
+		align-items: center;
+		display: flex;
+		padding-inline-end: wp-vars.$grid-unit-15;
+	}
+
+	&__description {
+		margin: 0 0 wp-vars.$grid-unit-20;
+	}
+
+	&__item.is-off &__title {
+		color: wp-colors.$gray-700;
 	}
 
 	&__footer {
