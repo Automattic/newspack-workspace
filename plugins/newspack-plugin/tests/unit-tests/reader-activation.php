@@ -603,6 +603,43 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * My Account asks a signed-in reader to verify on every one of its pages, so the
+	 * front end skips the post-registration verification step there, and only there.
+	 */
+	public function test_post_registration_verification_is_off_on_my_account_pages_only() {
+		$original = Reader_Activation::get_setting( 'verify_new_reader_accounts' );
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', true );
+		$account_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		$article_id      = self::factory()->post->create();
+		// The page WooCommerce's My Account uses. Without WooCommerce, My Account falls back to it.
+		update_option( 'woocommerce_myaccount_page_id', $account_page_id );
+
+		// wp_localize_script() prints scalars as strings: '1' for true, '' for false.
+		$this->go_to( get_permalink( $article_id ) );
+		$this->assertSame( '1', self::get_ras_config()['verify_new_reader_accounts'], 'Other pages keep the verification step.' );
+
+		$this->go_to( get_permalink( $account_page_id ) );
+		$this->assertSame( '', self::get_ras_config()['verify_new_reader_accounts'], 'My Account skips the verification step.' );
+
+		delete_option( 'woocommerce_myaccount_page_id' );
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', $original );
+	}
+
+	/**
+	 * The reader activation config for the current page, as the front end receives it.
+	 *
+	 * @return array The `newspack_ras_config` object.
+	 */
+	private static function get_ras_config() {
+		// A fresh script registry, so the localized data holds one copy of the config.
+		$GLOBALS['wp_scripts'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		Reader_Activation::enqueue_scripts();
+		$data = wp_scripts()->get_data( Reader_Activation::SCRIPT_HANDLE, 'data' );
+		preg_match( '/var newspack_ras_config = (\{.*\});/s', $data, $matches );
+		return json_decode( $matches[1], true );
+	}
+
+	/**
 	 * `get_verification_required_gates()` must include only gates that are *both*
 	 * Registered Access active AND have Require Verification on. It must:
 	 *   - skip gates with `active = false` even if `require_verification = true`

@@ -160,7 +160,13 @@ final class Reader_Activation {
 		// (combined with `defer` instead of `async` below) guarantees the load order
 		// even when an optimization plugin (e.g. Perfmatters) delays the scripts. See NPPM-2951.
 		$script_dependencies = [ 'newspack_commons' ];
-		$script_data         = [
+		// My Account asks a reader to verify as soon as they're signed in, on every one
+		// of its pages. A reader who registers there skips the post-registration step and
+		// confirms their address before the account is created instead, as on a site that
+		// doesn't verify new accounts.
+		$verify_new_reader_accounts = self::show_post_registration_verification()
+			&& ! ( My_Account::is_account_page() && My_Account::requires_verification() );
+		$script_data                = [
 			'auth_intention_cookie'      => self::AUTH_INTENTION_COOKIE,
 			'cid_cookie'                 => NEWSPACK_CLIENT_ID_COOKIE_NAME,
 			'is_logged_in'               => \is_user_logged_in(),
@@ -170,7 +176,7 @@ final class Reader_Activation {
 			'auth_action_result'         => Magic_Link::AUTH_ACTION_RESULT,
 			'account_url'                => My_Account::get_endpoint_url(),
 			'is_ras_enabled'             => self::is_enabled(),
-			'verify_new_reader_accounts' => self::show_post_registration_verification(),
+			'verify_new_reader_accounts' => $verify_new_reader_accounts,
 			'verification_url'           => \admin_url( 'admin-ajax.php' ),
 			'check_email_url'            => \rest_url( NEWSPACK_API_NAMESPACE . '/reader-activation/check-email' ),
 		];
