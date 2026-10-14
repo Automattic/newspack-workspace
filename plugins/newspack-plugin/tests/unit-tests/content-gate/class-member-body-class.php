@@ -372,6 +372,8 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 
 	/**
 	 * Authors and Contributors are readers here: the class follows paid access.
+	 * This pins the default for these roles; `test_filtered_in_account_gets_class`
+	 * is the test that proves the class asks the shared check.
 	 */
 	public function test_authors_and_contributors_need_paid_access_for_the_class() {
 		$this->make_gate();

@@ -388,19 +388,20 @@ class Content_Gate {
 	 * Author or Contributor meets the same gates and comment restrictions a
 	 * subscriber does. A site can move the line in either direction with the filter.
 	 *
-	 * Gates, block visibility, comment restrictions, the paid-member body class,
-	 * newsletter-link checks, group seats and the Teams migration all ask here.
-	 * Gates, blocks and comments also let through whoever can edit the post in
-	 * hand, so an account can pass on its own post and still be checked elsewhere.
+	 * Gates, block visibility and comment restrictions also let through whoever
+	 * can edit the post in hand, so an account can pass on its own post and still
+	 * be checked elsewhere.
 	 *
 	 * The default asks `user_can()`, so a plugin that grants `edit_others_posts`
 	 * for one request moves the answer for that request. Co-Authors Plus does
 	 * this: while a co-author's own post is the current one, it grants them the
 	 * capability, so on that page they skip access checks. A Contributor viewing
 	 * their own published post sees the comment form, though posting is still
-	 * refused, because the submission arrives without that post in view. This is
-	 * left as is on purpose: it happens only on the page of a post the account
-	 * co-wrote.
+	 * refused, because the submission arrives without that post in view. Two
+	 * effects outlast that page: a newsletter sign-up made there keeps any
+	 * premium list it joined, and the paid-member body class can stay for up to
+	 * ten minutes while it is cached. Both are left as is on purpose; they reach
+	 * only the publisher's own writers.
 	 *
 	 * Two neighbouring questions are answered elsewhere. Who may change gate
 	 * settings stays a capability check, so adding an account here grants it no
@@ -433,6 +434,8 @@ class Content_Gate {
 		 * join premium newsletter lists, and, unless it is a reader, stops
 		 * qualifying for a group subscription seat by default. It grants no
 		 * permission to change gate settings.
+		 * The Teams migration also skips such an account when it grants personal
+		 * subscriptions, and that outcome stays after the filter changes.
 		 *
 		 * Returning false applies the checks to an account that would skip them.
 		 * Gates, blocks and comments still let that account through on any post
@@ -449,10 +452,15 @@ class Content_Gate {
 	/**
 	 * Whether a signed-in user meets a "verified email" requirement.
 	 *
-	 * Reader Activation verifies readers and no one else. An account it cannot
-	 * verify, such as an Author, has no way to meet the requirement, so it is
-	 * not held to one. A reader meets it once they have verified. An ID that
-	 * matches no user does not meet it.
+	 * Reader Activation verifies readers and no one else. An account that isn't a
+	 * reader, such as an Author added in wp-admin, has no way to meet the
+	 * requirement, so it is not held to one. A reader meets it once they have
+	 * verified. An ID that matches no user does not meet it.
+	 *
+	 * This reads the verified flag itself instead of calling
+	 * {@see Reader_Activation::is_reader_verified()}, which counts every reader as
+	 * verified when NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION is set to
+	 * true. That constant governs My Account and must not open verification walls.
 	 *
 	 * @param int $user_id User ID.
 	 *
