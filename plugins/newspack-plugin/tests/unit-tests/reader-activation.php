@@ -626,6 +626,10 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 
 		delete_option( 'woocommerce_myaccount_page_id' );
 		Reader_Activation::update_setting( 'verify_new_reader_accounts', $original );
+		foreach ( [ Reader_Activation::SCRIPT_HANDLE, Reader_Activation::AUTH_SCRIPT_HANDLE ] as $handle ) {
+			wp_dequeue_script( $handle );
+			wp_deregister_script( $handle );
+		}
 	}
 
 	/**

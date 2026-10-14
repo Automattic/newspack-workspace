@@ -84,8 +84,8 @@ function openConfirmationModal( config = {} ) {
 			return;
 		}
 		// A reader who cancels can fix a typo and submit again, which opens this modal for
-		// the new address. Stop listening now, or Continue on that next step would confirm
-		// the address they cancelled instead of the new one.
+		// the new address. Stop listening now, so Continue on that next step confirms only
+		// the new address.
 		controller.abort();
 		releaseController();
 		if ( typeof config.onCancel === 'function' ) {

@@ -2407,8 +2407,8 @@ final class Reader_Activation {
 	}
 
 	/**
-	 * Whether a reader who registers on the current page goes through the
-	 * post-registration verification step.
+	 * Whether the sign-in form and the Registration block on the current page send
+	 * a newly registered reader through the post-registration verification step.
 	 *
 	 * My Account is the exception on a site that verifies new accounts: it asks a
 	 * signed-in reader to verify on every one of its pages. A reader who registers
