@@ -9,20 +9,24 @@ import classnames from 'classnames';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { speak } from '@wordpress/a11y';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import { useInstanceId } from '@wordpress/compose';
 import {
 	Button,
+	FormToggle,
 	Modal,
 	Notice,
 	Spinner,
+	Tooltip,
+	VisuallyHidden,
 	__experimentalConfirmDialog as ConfirmDialog, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { Icon, chevronDown, chevronUp, close, dragHandle } from '@wordpress/icons';
-import { Card } from '@wordpress/ui';
+import { Badge, Card } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import './reorder-modal.scss';
+import './style.scss';
 
 export const moveItem = ( items, from, to ) => {
 	if ( from === to || from < 0 || to < 0 || from >= items.length || to >= items.length ) {
@@ -54,14 +58,40 @@ const isAvailable = button => !! button && ! button.matches( ':disabled, [aria-d
 const nameWithTitle = ( label, title ) =>
 	sprintf(
 		/* translators: keep %1$s first: it repeats the button's visible label, which speech input matches on. 1: the control's visible label. 2: title of the content being moved. */
-		__( '%1$s: %2$s', 'newspack-blocks' ),
+		__( '%1$s: %2$s', 'newspack-plugin' ),
 		label,
 		title
 	);
 
-const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
-	const moveUpLabel = __( 'Move Up', 'newspack-blocks' );
-	const moveDownLabel = __( 'Move Down', 'newspack-blocks' );
+/**
+ * Put a short list of items in order and, optionally, choose which are on.
+ * Changes apply on Save.
+ *
+ * @param {Object}   props             Component props.
+ * @param {string}   props.title       Modal title.
+ * @param {Array}    props.ids         Item IDs, in their current order.
+ * @param {Function} props.fetchItems  Resolves the IDs to `{ value, label, badge? }`, where `badge` is `{ label, tooltip? }`.
+ * @param {Function} props.onSave      Called with the new order and, when `enabledIds` is given, the enabled IDs: those
+ *                                     on, in that order, then any from `enabledIds` the modal had no row for, kept as they were.
+ * @param {Function} props.onClose     Called when the modal closes without saving.
+ * @param {Array}    props.enabledIds  Optional. Gives each row an on/off toggle, starting on for these IDs. Save is held while none is on.
+ * @param {string}   props.description Optional. Introduces the list, above it.
+ * @param {string}   props.noneOnHelp  Why Save is held while no toggle is on.
+ */
+const ReorderModal = ( {
+	title,
+	ids,
+	fetchItems,
+	onSave,
+	onClose,
+	enabledIds,
+	description,
+	noneOnHelp = __( 'Turn on at least one item to save.', 'newspack-plugin' ),
+} ) => {
+	const hasToggles = Array.isArray( enabledIds );
+	const instanceId = useInstanceId( ReorderModal, 'newspack-reorder-modal' );
+	const moveUpLabel = __( 'Move Up', 'newspack-plugin' );
+	const moveDownLabel = __( 'Move Down', 'newspack-plugin' );
 	const [ items, setItems ] = useState( null );
 	const [ dragIndex, setDragIndex ] = useState( null );
 	const [ hasFetchError, setHasFetchError ] = useState( false );
@@ -79,13 +109,32 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 	// The order the modal opened with. Snapshotted so a change to `ids` from
 	// elsewhere in the editor cannot desynchronise it from `items`.
 	const openedWith = useRef( ids );
+	const openedEnabled = useRef( hasToggles ? enabledIds : [] );
+	const [ enabled, setEnabled ] = useState( () => new Set( openedEnabled.current ) );
 
-	const isDirty = !! items && items.some( ( item, index ) => item.id !== openedWith.current[ index ] );
+	const isReordered = !! items && items.some( ( item, index ) => item.id !== openedWith.current[ index ] );
+	const isToggled = enabled.size !== openedEnabled.current.length || openedEnabled.current.some( id => ! enabled.has( id ) );
+	const isDirty = isReordered || ( hasToggles && isToggled );
+	// Enabled IDs without a row can't be switched off here, so Save keeps them.
+	const enabledWithoutRow = openedEnabled.current.filter( id => ! openedWith.current.includes( id ) );
+	const isNoneOn = hasToggles && 0 === enabled.size && 0 === enabledWithoutRow.length;
+
+	const toggleItem = id =>
+		setEnabled( current => {
+			const next = new Set( current );
+			if ( next.has( id ) ) {
+				next.delete( id );
+			} else {
+				next.add( id );
+			}
+			return next;
+		} );
 
 	useEffect( () => {
 		let cancelled = false;
 		const openIds = openedWith.current;
-		const withLabels = labels => openIds.map( id => ( { id, label: labels[ id ] || __( '(no title)', 'newspack-blocks' ) } ) );
+		const withLabels = ( labels, badges ) =>
+			openIds.map( id => ( { id, label: labels[ id ] || __( '(no title)', 'newspack-plugin' ), badge: badges[ id ] } ) );
 
 		fetchItems( openIds )
 			.then( results => {
@@ -93,22 +142,24 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 					return;
 				}
 				const labels = {};
-				results.forEach( ( { value, label } ) => {
+				const badges = {};
+				results.forEach( ( { value, label, badge } ) => {
 					labels[ value ] = label;
+					badges[ value ] = badge;
 				} );
-				const loaded = withLabels( labels );
+				const loaded = withLabels( labels, badges );
 				setItems( loaded );
 				speak(
 					sprintf(
 						/* translators: %d: number of items in the list. */
-						_n( '%d item ready to reorder.', '%d items ready to reorder.', loaded.length, 'newspack-blocks' ),
+						_n( '%d item ready to reorder.', '%d items ready to reorder.', loaded.length, 'newspack-plugin' ),
 						loaded.length
 					)
 				);
 			} )
 			.catch( error => {
 				// eslint-disable-next-line no-console
-				console.error( 'Newspack Blocks: could not prepare the content to reorder.', error );
+				console.error( 'Newspack: could not prepare the items to reorder.', error );
 				if ( ! cancelled ) {
 					setHasFetchError( true );
 					// Only to leave the loading state: the error view lists nothing.
@@ -152,7 +203,7 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 		speak(
 			sprintf(
 				/* translators: 1: title of the moved item. 2: its new position. 3: total number of items. */
-				__( '%1$s moved to position %2$d of %3$d.', 'newspack-blocks' ),
+				__( '%1$s moved to position %2$d of %3$d.', 'newspack-plugin' ),
 				items[ from ].label,
 				to + 1,
 				items.length
@@ -251,25 +302,31 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 				isDismissible={ false }
 				shouldCloseOnEsc={ false }
 				shouldCloseOnClickOutside={ false }
-				headerActions={ <Button size="compact" icon={ close } label={ __( 'Close', 'newspack-blocks' ) } onClick={ requestClose } /> }
+				headerActions={ <Button size="compact" icon={ close } label={ __( 'Close', 'newspack-plugin' ) } onClick={ requestClose } /> }
 				size="medium"
-				className="newspack-blocks-reorder-modal"
+				className="newspack-reorder-modal"
+				aria={ { describedby: description ? `${ instanceId }-description` : undefined } }
 			>
-				<div className="newspack-blocks-reorder-modal__body" aria-busy={ ! items }>
+				<div className="newspack-reorder-modal__body" aria-busy={ ! items }>
+					{ description && (
+						<p id={ `${ instanceId }-description` } className="newspack-reorder-modal__description">
+							{ description }
+						</p>
+					) }
 					{ ! items && (
-						<div className="newspack-blocks-reorder-modal__loading">
+						<div className="newspack-reorder-modal__loading">
 							<Spinner />
-							<span className="screen-reader-text">{ __( 'Loading content…', 'newspack-blocks' ) }</span>
+							<span className="screen-reader-text">{ __( 'Loading content…', 'newspack-plugin' ) }</span>
 						</div>
 					) }
 					{ items && hasFetchError && (
 						<>
-							<Notice status="error" isDismissible={ false } className="newspack-blocks-reorder-modal__notice">
-								{ __( 'The content could not be loaded, so the order cannot be saved.', 'newspack-blocks' ) }
+							<Notice status="error" isDismissible={ false } className="newspack-reorder-modal__notice">
+								{ __( 'The content could not be loaded, so the order cannot be saved.', 'newspack-plugin' ) }
 							</Notice>
-							<div className="newspack-blocks-reorder-modal__footer">
+							<div className="newspack-reorder-modal__footer">
 								<Button variant="tertiary" onClick={ requestClose }>
-									{ __( 'Cancel', 'newspack-blocks' ) }
+									{ __( 'Cancel', 'newspack-plugin' ) }
 								</Button>
 							</div>
 						</>
@@ -278,20 +335,21 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 						<>
 							{ /* `list-style: none` drops list semantics in Safari, so the role is restated. */ }
 							{ /* eslint-disable-next-line jsx-a11y/no-redundant-roles */ }
-							<ul className="newspack-blocks-reorder-modal__list" role="list" ref={ listRef }>
+							<ul className="newspack-reorder-modal__list" role="list" ref={ listRef }>
 								{ items.map( ( item, index ) => (
 									<Card.Root
 										key={ item.id }
 										render={ <li /> }
 										data-item-id={ item.id }
-										className={ classnames( 'newspack-blocks-reorder-modal__item', {
+										className={ classnames( 'newspack-reorder-modal__item', {
 											'is-dragging': dragIndex === index,
+											'is-off': hasToggles && ! enabled.has( item.id ),
 										} ) }
 										draggable
 										// `dragstart` always fires at the draggable row, never at the
 										// chevron inside it, so the grab point is recorded separately.
 										onPointerDown={ event => {
-											dragBlocked.current = !! event.target.closest?.( 'button' );
+											dragBlocked.current = !! event.target.closest?.( 'button, input' );
 										} }
 										onDragStart={ event => {
 											if ( dragBlocked.current ) {
@@ -315,10 +373,10 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 										} }
 										onDrop={ event => event.preventDefault() }
 									>
-										<span className="newspack-blocks-reorder-modal__grip" aria-hidden="true">
+										<span className="newspack-reorder-modal__grip" aria-hidden="true">
 											<Icon icon={ dragHandle } />
 										</span>
-										<span className="newspack-blocks-reorder-modal__move">
+										<span className="newspack-reorder-modal__move">
 											<Button
 												icon={ chevronUp }
 												size="small"
@@ -340,23 +398,65 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 												onClick={ () => moveTo( index, index + 1, 'down' ) }
 											/>
 										</span>
-										<Card.Content className="newspack-blocks-reorder-modal__title" title={ item.label }>
-											{ item.label }
+										<Card.Content className="newspack-reorder-modal__content">
+											<span className="newspack-reorder-modal__title" title={ item.label }>
+												{ item.label }
+											</span>
+											{ item.badge && (
+												<span className="newspack-reorder-modal__badge">
+													{ item.badge.tooltip ? (
+														<Tooltip text={ item.badge.tooltip }>
+															{ /* Hover only: the toggle already carries the badge and tooltip text for keyboard and screen reader users. */ }
+															<span aria-hidden="true" tabIndex={ -1 }>
+																<Badge intent="draft">{ item.badge.label }</Badge>
+															</span>
+														</Tooltip>
+													) : (
+														<span aria-hidden="true">
+															<Badge intent="draft">{ item.badge.label }</Badge>
+														</span>
+													) }
+													<VisuallyHidden id={ `${ instanceId }-badge-${ item.id }` }>
+														{ item.badge.tooltip ? `${ item.badge.label }: ${ item.badge.tooltip }` : item.badge.label }
+													</VisuallyHidden>
+												</span>
+											) }
 										</Card.Content>
+										{ hasToggles && (
+											<span className="newspack-reorder-modal__toggle">
+												<FormToggle
+													checked={ enabled.has( item.id ) }
+													onChange={ () => toggleItem( item.id ) }
+													aria-label={ item.label }
+													aria-describedby={ item.badge ? `${ instanceId }-badge-${ item.id }` : undefined }
+												/>
+											</span>
+										) }
 									</Card.Root>
 								) ) }
 							</ul>
-							<div className="newspack-blocks-reorder-modal__footer">
+							<div className="newspack-reorder-modal__footer">
 								<Button variant="tertiary" onClick={ requestClose }>
-									{ __( 'Cancel', 'newspack-blocks' ) }
+									{ __( 'Cancel', 'newspack-plugin' ) }
 								</Button>
 								<Button
 									variant="primary"
-									disabled={ ! isDirty }
+									disabled={ ! isDirty || isNoneOn }
 									accessibleWhenDisabled
-									onClick={ () => onSave( items.map( item => item.id ) ) }
+									// A button with visible children shows a tooltip only when asked and labelled.
+									label={ __( 'Save', 'newspack-plugin' ) }
+									showTooltip={ isDirty && isNoneOn }
+									description={ isDirty && isNoneOn ? noneOnHelp : undefined }
+									onClick={ () => {
+										const order = items.map( item => item.id );
+										if ( hasToggles ) {
+											onSave( order, [ ...order.filter( id => enabled.has( id ) ), ...enabledWithoutRow ] );
+										} else {
+											onSave( order );
+										}
+									} }
 								>
-									{ __( 'Save', 'newspack-blocks' ) }
+									{ __( 'Save', 'newspack-plugin' ) }
 								</Button>
 							</div>
 						</>
@@ -366,13 +466,15 @@ const ReorderModal = ( { title, ids, fetchItems, onSave, onClose } ) => {
 			{ isConfirmingDiscard && (
 				<ConfirmDialog
 					isOpen
-					contentLabel={ __( 'Discard the new order?', 'newspack-blocks' ) }
-					confirmButtonText={ __( 'Discard', 'newspack-blocks' ) }
-					cancelButtonText={ __( 'Keep editing', 'newspack-blocks' ) }
+					contentLabel={ hasToggles ? __( 'Discard the changes?', 'newspack-plugin' ) : __( 'Discard the new order?', 'newspack-plugin' ) }
+					confirmButtonText={ __( 'Discard', 'newspack-plugin' ) }
+					cancelButtonText={ __( 'Keep editing', 'newspack-plugin' ) }
 					onConfirm={ onClose }
 					onCancel={ () => setIsConfirmingDiscard( false ) }
 				>
-					{ __( 'The order you set will be lost.', 'newspack-blocks' ) }
+					{ hasToggles
+						? __( 'The changes you made will be lost.', 'newspack-plugin' )
+						: __( 'The order you set will be lost.', 'newspack-plugin' ) }
 				</ConfirmDialog>
 			) }
 		</>
