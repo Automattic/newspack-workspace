@@ -44,6 +44,18 @@ class Group_Subscription_Settings {
 	const GROUP_NAME_MAX_LENGTH = 100;
 
 	/**
+	 * Subscription meta holding the comma-separated email domains whose readers join
+	 * the group on verifying their address. Set per group, never inherited from the product.
+	 */
+	const EMAIL_DOMAINS_META_KEY = self::GROUP_SUBSCRIPTION_META_PREFIX . 'email_domains';
+
+	/**
+	 * Option behind the Advanced Settings toggle that names a group bought at checkout
+	 * after the buyer's billing details. Off unless the publisher turns it on.
+	 */
+	const NAME_FROM_BILLING_OPTION = 'newspack_group_subscription_name_from_billing';
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -58,6 +70,9 @@ class Group_Subscription_Settings {
 		// Priority 20 is load-bearing: see save_group_subscription_seats().
 		\add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'save_group_subscription_seats' ], 20, 2 );
 		\add_action( 'wp_ajax_newspack_group_subscription_search_users', [ __CLASS__, 'ajax_search_users' ] );
+
+		// Optionally name a group bought at checkout. Late priority so a name set on the same hook wins.
+		\add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'set_default_group_name' ], 100 );
 
 		// Customize subscription column in admin list table for group subscriptions.
 		\add_filter( 'woocommerce_subscription_list_table_column_content', [ __CLASS__, 'filter_subscription_column_content' ], 10, 3 );
@@ -319,6 +334,20 @@ class Group_Subscription_Settings {
 	}
 
 	/**
+	 * Normalize an email domain list to one canonical form, e.g. "example.com,example.org",
+	 * so matching never depends on how the admin typed it.
+	 *
+	 * @param mixed $domains The raw domain list.
+	 *
+	 * @return string The normalized list, e.g. "example.com,example.org".
+	 */
+	public static function sanitize_email_domains( $domains ) {
+		$domains = preg_split( '/[\s,]+/', strtolower( (string) $domains ) );
+		$domains = array_map( fn( $domain ) => ltrim( $domain, '@' ), $domains );
+		return implode( ',', array_unique( array_filter( $domains ) ) );
+	}
+
+	/**
 	 * Get the group subscription settings for a product.
 	 *
 	 * @param WC_Product|int $product The product object or ID.
@@ -410,6 +439,58 @@ class Group_Subscription_Settings {
 			? max( 1, (int) ( $settings['limit'] ?? 0 ) ) // Seats bought is exact capacity; a one-seat group is the owner alone.
 			: self::normalize_limit( $settings['limit'] ?? 0 );
 		return $settings;
+	}
+
+	/**
+	 * Name a group bought at checkout after the buyer's billing company, or
+	 * "<buyer>'s <label>" without one, so groups on the same plan don't all carry
+	 * the product name. Off unless a site opts in. Never replaces a name that is
+	 * already set.
+	 *
+	 * @param \WC_Subscription $subscription The subscription created at checkout.
+	 */
+	public static function set_default_group_name( $subscription ): void {
+		$meta_key = self::GROUP_SUBSCRIPTION_META_PREFIX . 'name';
+		if ( ! $subscription instanceof \WC_Subscription || '' !== (string) $subscription->get_meta( $meta_key, true ) ) {
+			return;
+		}
+
+		/**
+		 * Filter whether a subscription created at checkout, when it is a group, is
+		 * named after the buyer's billing details. Off by default, so groups show the
+		 * product name.
+		 *
+		 * @param bool             $enabled      Whether to name the group. Defaults to the Advanced Settings toggle.
+		 * @param \WC_Subscription $subscription The subscription created at checkout.
+		 */
+		if ( ! \apply_filters( 'newspack_group_subscription_name_from_billing', (bool) \get_option( self::NAME_FROM_BILLING_OPTION, false ), $subscription ) ) {
+			return;
+		}
+		if ( ! self::get_subscription_settings( $subscription )['enabled'] ) {
+			return;
+		}
+
+		$name = trim( (string) $subscription->get_billing_company() );
+		if ( '' === $name ) {
+			$buyer = trim( (string) $subscription->get_formatted_billing_full_name() );
+			if ( '' !== $buyer ) {
+				/* translators: 1: buyer's full name, 2: group label, e.g. "Group". */
+				$name = sprintf( __( "%1\$s's %2\$s", 'newspack-plugin' ), $buyer, Group_Subscription::get_label( 'singular' ) );
+			}
+		}
+
+		/**
+		 * Filter the name given to a group bought at checkout. Return an empty string
+		 * to leave it unnamed, so it shows the product name.
+		 *
+		 * @param string           $name         The billing company, "<buyer>'s <label>", or '' when neither is known.
+		 * @param \WC_Subscription $subscription The subscription created at checkout.
+		 */
+		$name = mb_substr( \sanitize_text_field( (string) \apply_filters( 'newspack_group_subscription_default_name', $name, $subscription ) ), 0, self::GROUP_NAME_MAX_LENGTH );
+		if ( '' === $name ) {
+			return;
+		}
+		self::update_subscription_name( $subscription, $name );
 	}
 
 	/**
@@ -560,6 +641,14 @@ class Group_Subscription_Settings {
 			if ( in_array( 'enabled', $changed_keys, true ) ) {
 				self::clear_group_subscription_ids_cache();
 			}
+
+			/**
+			 * Fires after a group subscription's settings are saved with at least one change.
+			 *
+			 * @param \WC_Subscription $subscription The group subscription.
+			 * @param string[]         $changed_keys The settings that changed.
+			 */
+			do_action( 'newspack_group_subscription_settings_updated', $subscription, $changed_keys );
 		}
 	}
 
@@ -743,6 +832,20 @@ class Group_Subscription_Settings {
 							'label'         => __( 'Group subscription name', 'newspack-plugin' ),
 							'value'         => $settings['name'],
 							'type'          => 'text',
+							'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
+						]
+					);
+					// Stored comma-separated, shown one domain per line so a long list stays editable.
+					\woocommerce_wp_textarea_input(
+						[
+							'id'            => self::EMAIL_DOMAINS_META_KEY,
+							'name'          => self::EMAIL_DOMAINS_META_KEY,
+							'label'         => __( 'Auto-join email domains', 'newspack-plugin' ),
+							'desc_tip'      => true,
+							'description'   => __( 'Readers who verify an email address on one of these domains join this group automatically while it has a free seat. Enter one domain per line.', 'newspack-plugin' ),
+							'placeholder'   => "example.com\nexample.org",
+							'value'         => str_replace( ',', "\n", (string) $subscription->get_meta( self::EMAIL_DOMAINS_META_KEY, true ) ),
+							'rows'          => 5,
 							'wrapper_class' => 'show_if_newspack_group_subscription_enabled',
 						]
 					);
@@ -937,6 +1040,14 @@ class Group_Subscription_Settings {
 
 		if ( ! empty( $changed ) ) {
 			self::update_subscription_settings( $subscription, $changed );
+		}
+
+		if ( isset( $_POST[ self::EMAIL_DOMAINS_META_KEY ] ) ) {
+			$email_domains = self::sanitize_email_domains( sanitize_textarea_field( wp_unslash( $_POST[ self::EMAIL_DOMAINS_META_KEY ] ) ) );
+			if ( $email_domains !== $subscription->get_meta( self::EMAIL_DOMAINS_META_KEY, true ) ) {
+				$subscription->update_meta_data( self::EMAIL_DOMAINS_META_KEY, $email_domains );
+				$subscription->save();
+			}
 		}
 
 		// Effective group status can flip via inherited product settings without a meta write; refresh the cached ID set when it changed.

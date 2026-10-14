@@ -186,6 +186,11 @@ class Content_Restriction_Control {
 	/**
 	 * Get post gates.
 	 *
+	 * Returns the matching gates in Content_Gate::get_gates() priority order. Callers
+	 * rely on this order to find the gate that decides access (is_post_restricted(),
+	 * Site Kit attribution, the email verification prompt), so a change here that
+	 * reorders the list changes who gets in.
+	 *
 	 * @param int $post_id Optional post ID.
 	 *
 	 * @return array Array of post gates.
@@ -400,6 +405,14 @@ class Content_Restriction_Control {
 	/**
 	 * Whether the post is restricted for the current user.
 	 *
+	 * Gates compose first-match: of the gates whose content rules match the post,
+	 * the one with the highest priority (lowest number, see Content_Gate::get_gates())
+	 * decides alone. A reader it admits is admitted, and a reader it refuses is
+	 * refused and shown its layout; no lower gate is consulted either way, unless
+	 * the gate has no layout to show that reader and is passed over. That lets
+	 * a publisher open a free section inside a paid one by ranking a registration
+	 * wall on the free section above the paywall on its parent (NPPD-2289).
+	 *
 	 * @param bool     $is_post_restricted Whether the post is restricted for the current or given user.
 	 * @param int      $post_id            Post ID.
 	 * @param int|null $user_id            Optional user ID to check access for.
@@ -459,61 +472,104 @@ class Content_Restriction_Control {
 			return true;
 		}
 
+		// get_post_gates() keeps the priority order from get_gates(). A gate that refuses
+		// the reader with no layout to show them is passed over, so the next gate decides.
 		foreach ( $post_gates as $gate ) {
-			$gate_layout_id = null;
-			$is_restricted  = false;
-			// Tracks the anonymous-bypass result so the same custom_access rules don't get
-			// evaluated twice in the second pass below. Stays null for non-anonymous calls.
-			$anonymous_bypass_passed = null;
-
-			// If registration mode is active.
-			if ( ! empty( $gate['registration']['active'] ) ) {
-				// Check if user is logged in.
-				if ( $user_id === 0 ) {
-					// Anonymous visitors can still pass via the gate's custom_access rules if they
-					// match a populated rule with `supports_anonymous` (currently only `institution`).
-					// A rule left with no value names no condition, so it cannot be what lets a
-					// visitor past the registration wall.
-					//
-					// Inside a listing teaser this bypass yields nothing:
-					// evaluate_anonymous_rules() declines there, because its one rule
-					// answers from the current request and a listing is built once for
-					// everyone. {@see Content_Gate::is_withheld_outside_article()}.
-					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
-						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
-					$is_restricted  = ! $anonymous_bypass_passed;
-					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
-				} elseif ( ! empty( $gate['registration']['require_verification'] ) ) {
-					// Check if email verification is required. A hypothetical evaluation
-					// asking what this reader would see if they verified has to be answered
-					// here too, or a gate that both walls registration behind verification
-					// and grants by email domain reports itself still restricting for a
-					// reader whose one act of verifying would satisfy both.
-					$user = get_user_by( 'id', $user_id );
-					if ( ! $user || ( ! \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true ) && ! Access_Rules::is_verification_assumed_for( $user->ID ) ) ) {
-						$is_restricted  = true;
-						$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
-					}
-				}
+			$verdict = self::evaluate_gate( $gate, $user_id );
+			if ( ! $verdict['restricted'] ) {
+				return false;
 			}
-
-			// If custom_access mode is active and we didn't already evaluate it above for an anonymous bypass.
-			if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
-				$access_rules = $gate['custom_access']['access_rules'] ?? [];
-				$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
-				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules_for_visitor( $access_rules, $user_id, $rule_context ) ) {
-					$is_restricted  = true;
-					$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
-				}
-			}
-
-			if ( $is_restricted && $gate_layout_id ) {
+			if ( $verdict['gate_layout_id'] ) {
 				self::$post_gate_id_map[ $memo_key ]        = $gate['id'];
-				self::$post_gate_layout_id_map[ $memo_key ] = $gate_layout_id;
+				self::$post_gate_layout_id_map[ $memo_key ] = $verdict['gate_layout_id'];
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether one gate's walls (registration, then paid access) refuse a reader.
+	 *
+	 * This is the per-gate verdict {@see self::is_post_restricted()} reaches for each
+	 * gate on a post. It is public so that a rule keyed on "passes gate X" rather than
+	 * on a post, such as {@see Comment_Restriction}, answers exactly as gated content
+	 * would for the same reader.
+	 *
+	 * @param array $gate    Gate data from {@see Content_Gate::get_gate()}.
+	 * @param int   $user_id Reader to evaluate for; 0 for a logged-out visitor.
+	 *
+	 * @return array {
+	 *     @type bool            $restricted     Whether the gate refuses the reader.
+	 *     @type int|string|null $gate_layout_id The layout to show a refused reader;
+	 *                                           empty when the gate has none.
+	 * }
+	 */
+	public static function evaluate_gate( $gate, $user_id ) {
+		$gate_layout_id = null;
+		$is_restricted  = false;
+		// Tracks the anonymous-bypass result so the same custom_access rules don't get
+		// evaluated twice in the second pass below. Stays null for non-anonymous calls.
+		$anonymous_bypass_passed = null;
+
+		// If registration mode is active.
+		if ( ! empty( $gate['registration']['active'] ) ) {
+			// Check if user is logged in.
+			if ( $user_id === 0 ) {
+				// Anonymous visitors can still pass via the gate's custom_access rules if they
+				// match a populated rule with `supports_anonymous` (currently only `institution`).
+				// A visitor who counts as paying doesn't need to register first, so this skips
+				// both walls. A rule left with no value names no condition, so it cannot be
+				// what lets a visitor past the registration wall.
+				//
+				// Inside a listing teaser this bypass yields nothing:
+				// evaluate_anonymous_rules() declines there, because its one rule
+				// answers from the current request and a listing is built once for
+				// everyone. {@see Content_Gate::is_withheld_outside_article()}.
+				$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
+					&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
+				if ( $anonymous_bypass_passed ) {
+					$is_restricted = false;
+				} elseif ( Access_Rules::evaluate_anonymous_rules( $gate['registration']['access_rules'] ?? [] ) ) {
+					// Registered access's own rules let the visitor count as registered, which
+					// is all they skip: paid access still applies, and the paid check above
+					// has already refused them (NPPD-2310).
+					$is_restricted = ! empty( $gate['custom_access']['active'] ) && ! empty( $gate['custom_access']['access_rules'] );
+					if ( $is_restricted ) {
+						$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
+					}
+				} else {
+					$is_restricted  = true;
+					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+				}
+			} elseif ( ! empty( $gate['registration']['require_verification'] ) ) {
+				// Check if email verification is required. A hypothetical evaluation
+				// asking what this reader would see if they verified has to be answered
+				// here too, or a gate that both walls registration behind verification
+				// and grants by email domain reports itself still restricting for a
+				// reader whose one act of verifying would satisfy both.
+				$user = get_user_by( 'id', $user_id );
+				if ( ! $user || ( ! \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true ) && ! Access_Rules::is_verification_assumed_for( $user->ID ) ) ) {
+					$is_restricted  = true;
+					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+				}
+			}
+		}
+
+		// If custom_access mode is active and we didn't already evaluate it above for an anonymous bypass.
+		if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
+			$access_rules = $gate['custom_access']['access_rules'] ?? [];
+			$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
+			if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules_for_visitor( $access_rules, $user_id, $rule_context ) ) {
+				$is_restricted  = true;
+				$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
+			}
+		}
+
+		return [
+			'restricted'     => $is_restricted,
+			'gate_layout_id' => $is_restricted ? $gate_layout_id : null,
+		];
 	}
 
 	/**

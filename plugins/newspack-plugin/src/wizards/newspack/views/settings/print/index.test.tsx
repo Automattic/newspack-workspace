@@ -78,6 +78,7 @@ beforeEach( () => {
 	mockState.rejectNext = false;
 	server = { ...SETTINGS };
 	( dispatch( WIZARD_STORE_NAMESPACE ) as { resetHeaderData: () => void } ).resetHeaderData();
+	( dispatch( WIZARD_STORE_NAMESPACE ) as { resetNotices: () => void } ).resetNotices();
 } );
 
 describe( 'when InDesign export is off', () => {
@@ -151,6 +152,11 @@ describe( 'when InDesign export is on', () => {
 			indesign_exclude_captions: true,
 		} );
 		expect( headerAction( 'Save' ).disabled ).toBe( true );
+		expect(
+			select( WIZARD_STORE_NAMESPACE )
+				.getNotices()
+				.map( ( notice: { message: string } ) => notice.message )
+		).toContain( 'Settings saved.' );
 	} );
 
 	it( 'keeps the draft when a save fails, and settles rather than rejecting', async () => {

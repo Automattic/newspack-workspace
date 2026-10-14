@@ -281,6 +281,7 @@ class Content_Gate {
 		include __DIR__ . '/class-access-rules.php';
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
+		include __DIR__ . '/class-member-body-class.php';
 		include __DIR__ . '/class-block-patterns.php';
 		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
@@ -292,9 +293,12 @@ class Content_Gate {
 		include __DIR__ . '/class-newsletters-access.php';
 		include __DIR__ . '/class-user-gate-access.php';
 		include __DIR__ . '/class-premium-newsletters.php';
+		include __DIR__ . '/class-gate-access-reader-data.php';
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 		include __DIR__ . '/class-email-verification-prompt.php';
+		include __DIR__ . '/class-institutional-access-prompt.php';
+		include __DIR__ . '/class-comment-restriction.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
@@ -758,7 +762,10 @@ class Content_Gate {
 			$data['content']['rendered'] = $restriction['teaser'] . $restriction['gate'];
 		}
 		if ( isset( $data['excerpt']['rendered'] ) ) {
-			$data['excerpt']['rendered'] = $restriction['teaser'];
+			// excerpt.rendered is a summary surface, like the feed <description>:
+			// prefer the author's excerpt over the teaser. content.rendered above
+			// stays the teaser — it is the body-substitute the front end renders.
+			$data['excerpt']['rendered'] = self::get_withheld_summary( $post, $restriction['teaser'] );
 		}
 		if ( isset( $data['comment_status'] ) ) {
 			$data['comment_status'] = 'closed';
@@ -1244,7 +1251,7 @@ class Content_Gate {
 	/**
 	 * The staged pieces a 'the_content' pass over a restricted post is answered
 	 * from — the teaser to substitute, and the gate that pass owes — or null when
-	 * nothing is staged for the post.
+	 * nothing is staged for the post or the request is a feed.
 	 *
 	 * One post can be both the article being read and a card in a listing on that
 	 * same page, and the two are not answered alike. The article's entry holds a
@@ -1268,6 +1275,15 @@ class Content_Gate {
 	 * @return array{teaser: string, gate: string}|null
 	 */
 	private static function get_staged_restriction_for_render( $post_id ) {
+		// Feeds answer to Content_Gate_Advanced_Settings, as in restrict_post().
+		// Asked again here because staging can happen inside a feed request with
+		// the feed flag off: newspack-manager's Pugpig homepage feed renders the
+		// front page to learn which posts to list, and the teasers its listings
+		// stage would otherwise replace those posts' feed items.
+		if ( is_feed() ) {
+			return null;
+		}
+
 		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
 			return null;
 		}
@@ -1447,6 +1463,88 @@ class Content_Gate {
 			return 0;
 		}
 		return count( array_keys( $GLOBALS['wp_current_filter'], 'the_content', true ) );
+	}
+
+	/**
+	 * Run a gated teaser through the 'the_content' callbacks registered above
+	 * self::RESTRICTION_PRIORITY.
+	 *
+	 * The server-side path gets these for free: the teaser is substituted into a
+	 * live 'the_content' pass at that priority, so every callback above it
+	 * processes the teaser rather than the restricted body, which is what keeps an
+	 * integration gating its own embeds composing with the gate. A teaser built
+	 * outside such a pass — {@see Metering::get_metered_excerpt()}, the string the
+	 * frontend metering strategy hands the browser — has to be given the same
+	 * callbacks explicitly, or the markup that ends up in the DOM is the one piece
+	 * of gated output no third-party gate ever sees.
+	 *
+	 * Applies the callbacks directly rather than running a nested
+	 * apply_filters( 'the_content' ), which would also run everything at or below
+	 * the priority — ad inserters, prompt injectors, related-post blocks — over a
+	 * teaser that never sees them today. Everything else about the dispatch mirrors
+	 * core: 'the_content' is pushed onto $wp_current_filter so current_filter() and
+	 * doing_filter() answer as they would in a real pass — a callback that guards on
+	 * either would otherwise decline to run, which for a gate means declining to
+	 * gate — and each callback is passed the argument count it registered for.
+	 *
+	 * The result is cast on the way out rather than relied on to be a string. Core's
+	 * 'the_content' is untyped and carries a callback's non-string return onward
+	 * without fataling; a declared string return here would turn one misbehaving
+	 * third-party callback into a TypeError at wp_footer, on exactly the callbacks
+	 * this method exists to run.
+	 *
+	 * Two consequences of running a second time over content the request has already
+	 * filtered once. A callback that guards against running twice will no-op here,
+	 * and so will not gate the teaser; one with side effects — an enqueue, a counter,
+	 * an analytics ping — fires again. Both are inherent to there being no server-side
+	 * teaser on this path to filter in the first place.
+	 *
+	 * Boundary: a callback registered at exactly self::RESTRICTION_PRIORITY is
+	 * excluded. Server-side such a callback sees the teaser or the full post
+	 * depending on which registered first, so it has no settled behavior to
+	 * reproduce; excluding it is the half that cannot leak restricted content.
+	 *
+	 * The callbacks are a snapshot: a callback that adds or removes a 'the_content'
+	 * filter mid-loop does not change what this pass runs, where core would resort
+	 * the live iteration.
+	 *
+	 * This class's own closing callback is skipped: it appends the gate to a teaser
+	 * it has already substituted, and there is no substitution here to close. Matched
+	 * by the unique id WP keys it under rather than by the shape of the callable, so
+	 * the skip holds however it was registered.
+	 *
+	 * @param string $teaser Gated teaser markup.
+	 *
+	 * @return string
+	 */
+	public static function apply_late_content_filters( string $teaser ): string {
+		$hook = $GLOBALS['wp_filter']['the_content'] ?? null;
+		if ( ! $hook instanceof \WP_Hook ) {
+			return $teaser;
+		}
+
+		$own_callback_id       = _wp_filter_build_unique_id( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
+		$callbacks_by_priority = $hook->callbacks;
+		ksort( $callbacks_by_priority, SORT_NUMERIC );
+
+		$GLOBALS['wp_current_filter'][] = 'the_content'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Pushed and popped around the dispatch, as core's apply_filters() does.
+		try {
+			foreach ( $callbacks_by_priority as $priority => $callbacks ) {
+				if ( $priority <= self::RESTRICTION_PRIORITY ) {
+					continue;
+				}
+				foreach ( $callbacks as $callback_id => $callback ) {
+					if ( $own_callback_id === $callback_id || ! is_callable( $callback['function'] ) ) {
+						continue;
+					}
+					$teaser = call_user_func_array( $callback['function'], array_slice( [ $teaser ], 0, (int) $callback['accepted_args'] ) );
+				}
+			}
+		} finally {
+			array_pop( $GLOBALS['wp_current_filter'] );
+		}
+
+		return (string) $teaser;
 	}
 
 	/**
@@ -2559,6 +2657,48 @@ class Content_Gate {
 	}
 
 	/**
+	 * Resolve the summary shown for a restricted post on syndication surfaces —
+	 * RSS feeds and the REST `excerpt` field: the author's own excerpt when the
+	 * post has one, otherwise the constructed gate teaser.
+	 *
+	 * Deliberately distinct from get_restricted_post_excerpt_for_gate(), which
+	 * builds the on-page reveal from the gate layout's visible-paragraph count. A
+	 * summary surface answers "what is this post about", and an authored excerpt
+	 * is the best answer — this is the WooCommerce Memberships "show excerpts"
+	 * behaviour a migrated site expects. The on-page gate answers a different
+	 * question ("how much of the body may an anonymous reader see") and keeps its
+	 * configured paragraph reveal, so the two are not merged.
+	 *
+	 * @param \WP_Post    $post     Restricted post.
+	 * @param string|null $fallback Teaser the caller already built, if any. Passing
+	 *                              it avoids rendering the post body a second time.
+	 * @return string Authored excerpt, or the gate teaser as a fallback.
+	 */
+	public static function get_withheld_summary( $post, $fallback = null ) {
+		/**
+		 * Filters whether a restricted post's authored excerpt is preferred over
+		 * the constructed teaser on syndication surfaces (feeds, REST excerpt).
+		 *
+		 * The seam a future "show written excerpt in feeds" setting hooks into:
+		 * returning false falls back to the paragraph teaser everywhere this
+		 * resolves, restoring the pre-parity behaviour without touching call sites.
+		 *
+		 * @param bool     $prefer_written_excerpt Whether to prefer the authored excerpt.
+		 * @param \WP_Post $post                   The restricted post.
+		 */
+		$prefer_written_excerpt = apply_filters( 'newspack_content_gate_prefer_written_excerpt', true, $post );
+
+		if ( $prefer_written_excerpt && '' !== trim( (string) $post->post_excerpt ) ) {
+			return $post->post_excerpt;
+		}
+
+		if ( null !== $fallback ) {
+			return $fallback;
+		}
+		return self::get_restricted_post_excerpt_for_gate( $post, self::get_gate_layout_id( $post->ID ) );
+	}
+
+	/**
 	 * Render the overlay gate.
 	 */
 	public static function render_overlay_gate() {
@@ -2713,6 +2853,10 @@ class Content_Gate {
 			'metering'             => isset( $registration['metering'] ) && is_array( $registration['metering'] ) ? wp_parse_args( $registration['metering'], $default_metering ) : $default_metering,
 			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
 			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
+			// Conditions that let a visitor count as registered without an account.
+			// Only rules that can judge a signed-out visitor belong here; today that
+			// is `institution`. See Content_Restriction_Control::is_post_restricted().
+			'access_rules'         => Access_Rules::normalize_rules( isset( $registration['access_rules'] ) && is_array( $registration['access_rules'] ) ? $registration['access_rules'] : [] ),
 		];
 	}
 
@@ -3059,10 +3203,15 @@ class Content_Gate {
 		);
 		$gates = array_map( [ __CLASS__, 'get_gate' ], wp_list_pluck( $posts, 'ID' ) );
 		if ( $post_type === self::GATE_CPT ) {
+			// The first gate matching a post decides access to it, so the order has
+			// to be total. Equal priorities (a partial priority save, a direct meta
+			// write) fall back to the older gate, matching where new gates go: after
+			// every existing one. Left to the query's own order, a tie would go to
+			// the newest gate.
 			usort(
 				$gates,
 				function( $a, $b ) {
-					return $a['priority'] <=> $b['priority'];
+					return [ $a['priority'], $a['id'] ] <=> [ $b['priority'], $b['id'] ];
 				}
 			);
 		}

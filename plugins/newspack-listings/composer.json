@@ -12,11 +12,6 @@
 		"phpunit/phpunit": "^7.0 || ^9.5"
 	},
 	"license": "GPL-2.0-or-later",
-	"scripts": {
-		"post-update-cmd": [
-			"vendor/bin/cghooks update"
-		]
-	},
 	"extra": {},
 	"config": {
 		"platform": {

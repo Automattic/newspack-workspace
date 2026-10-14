@@ -96,6 +96,13 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 		$this->institution_ids = [];
 		delete_transient( Institution::TRANSIENT_KEY );
 
+		// The PHPUnit extension clears the mock stores before each test, which is after
+		// the next class's set_up_before_class(). A subscription left here would stay
+		// active for a user that setup creates with this test's user ID.
+		global $subscriptions_database, $products_database;
+		$subscriptions_database = [];
+		$products_database      = [];
+
 		Group_Subscription::reset_cache();
 		Institution::reset_matching_cache();
 		Content_Gate_Metadata::reset_cache();

@@ -116,3 +116,15 @@ body {
 .newspack-ui.newspack-content-gate__verification-prompt > .newspack-ui__box {
 	margin-bottom: var(--newspack-ui-spacer-9);
 }
+
+// The institutional access link sits right below the gate's calls to action, secondary to them.
+.newspack-ui.newspack-content-gate__institutional-access {
+	margin-top: var(--newspack-ui-spacer-2);
+	text-align: center;
+
+	// The muted colour sits on the paragraph; without this the theme's link colour wins.
+	a {
+		color: inherit;
+		text-decoration: underline;
+	}
+}

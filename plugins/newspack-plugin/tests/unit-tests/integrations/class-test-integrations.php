@@ -1846,6 +1846,19 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Integrations that don't override get_guide() report an empty guide in
+	 * the settings payload, so their card offers no How it works menu item.
+	 */
+	public function test_get_all_integration_settings_defaults_guide_to_empty_array() {
+		$integration = new Sample_Integration( 'no-guide', 'No Guide' );
+		Integrations::register( $integration );
+
+		$settings = Integrations::get_all_integration_settings();
+
+		$this->assertSame( [], $settings['no-guide']['guide'] );
+	}
+
+	/**
 	 * A child integration overriding get_required_plugins() has its declaration
 	 * surfaced verbatim in the settings payload that drives the audience UI card.
 	 */

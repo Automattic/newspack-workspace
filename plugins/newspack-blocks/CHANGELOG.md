@@ -1,3 +1,72 @@
+# @automattic/newspack-blocks [4.35.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.3...newspack-blocks@4.35.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **blocks:** load multiple Content Loop blocks in one editor request ([#1110](https://github.com/Automattic/newspack-workspace/issues/1110)) ([e2cde5c](https://github.com/Automattic/newspack-workspace/commit/e2cde5ce77ba7a3caff86f55172db76815fa5934))
+* **phpcs:** point constant ignores at the documenting file ([#1130](https://github.com/Automattic/newspack-workspace/issues/1130)) ([9468c79](https://github.com/Automattic/newspack-workspace/commit/9468c79ef60ae098237278bbdd774574b95caa0e))
+
+
+### Features
+
+* **components:** update @wordpress/ui and match its card borders ([#1195](https://github.com/Automattic/newspack-workspace/issues/1195)) ([9b62fe7](https://github.com/Automattic/newspack-workspace/commit/9b62fe7b69d824616ca931069c3a32738517d365))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.5
+* **newspack-icons:** upgraded to 1.2.0
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
+## @automattic/newspack-blocks [4.34.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.2...newspack-blocks@4.34.3) (2026-10-06)
+
+
+### Bug Fixes
+
+* **blocks:** let Load More reach the last page (NPPM-3337) ([#1241](https://github.com/Automattic/newspack-workspace/issues/1241)) ([183d05d](https://github.com/Automattic/newspack-workspace/commit/183d05d99fd695e68c8b118fe963ad3b3c67f2db))
+
+## @automattic/newspack-blocks [4.34.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.1...newspack-blocks@4.34.2) (2026-09-29)
+
+
+### Bug Fixes
+
+* **modal-checkout:** promotional links wait for reader activation ([#1076](https://github.com/Automattic/newspack-workspace/issues/1076)) ([522ae9a](https://github.com/Automattic/newspack-workspace/commit/522ae9aeb3235a91972f3835a4c21aff6acc5543))
+
+## @automattic/newspack-blocks [4.34.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.0...newspack-blocks@4.34.1) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.1.3
+* **newspack-components:** upgraded to 4.9.2
+
+# @automattic/newspack-blocks [4.34.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.2...newspack-blocks@4.34.0) (2026-09-28)
+
+
+### Bug Fixes
+
+* **author-profile:** load a page's authors in one request instead of one per block ([#1030](https://github.com/Automattic/newspack-workspace/issues/1030)) ([cd3248f](https://github.com/Automattic/newspack-workspace/commit/cd3248fab4588091a045babbbeb70ef819d6c07f))
+* **theme:** tighten post subtitle handling ([#1024](https://github.com/Automattic/newspack-workspace/issues/1024)) ([609cd84](https://github.com/Automattic/newspack-workspace/commit/609cd84ad058a21b5b99841394cc7d0c4c1ba4b9))
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([72d80b8](https://github.com/Automattic/newspack-workspace/commit/72d80b844796b29752e33e290ad8f1ffd923c6f2))
+* **plans:** promotional URL generator for modal checkout (NPPD-1707) ([#783](https://github.com/Automattic/newspack-workspace/issues/783)) ([7f5f904](https://github.com/Automattic/newspack-workspace/commit/7f5f90416a2c9598429eae55072ebb1c65328b9b))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
+## @automattic/newspack-blocks [4.33.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.1...newspack-blocks@4.33.2) (2026-09-26)
+
+
+### Bug Fixes
+
+* skip Content Loop/Carousel render for REST revisions and autosaves ([26b84c9](https://github.com/Automattic/newspack-workspace/commit/26b84c9e2bbf0021a534c20984eb95b0b33aec43))
+
 ## @automattic/newspack-blocks [4.33.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.33.0...newspack-blocks@4.33.1) (2026-09-21)
 
 

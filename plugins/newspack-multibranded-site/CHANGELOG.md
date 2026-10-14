@@ -1,3 +1,30 @@
+## newspack-multibranded-site [2.4.9](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.8...newspack-multibranded-site@2.4.9) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
+## newspack-multibranded-site [2.4.8](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.7...newspack-multibranded-site@2.4.8) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+
+## newspack-multibranded-site [2.4.7](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.6...newspack-multibranded-site@2.4.7) (2026-09-28)
+
+
+### Bug Fixes
+
+* **multibranded:** resolve brand URL conflict with WooCommerce ([#957](https://github.com/Automattic/newspack-workspace/issues/957)) ([5d4beb2](https://github.com/Automattic/newspack-workspace/commit/5d4beb237b69a79f69407fe70def069383242216))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
 ## newspack-multibranded-site [2.4.6](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.4.5...newspack-multibranded-site@2.4.6) (2026-09-14)
 
 

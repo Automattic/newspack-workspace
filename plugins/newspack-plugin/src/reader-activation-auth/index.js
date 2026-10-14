@@ -4,7 +4,6 @@
  */
 import { SIGN_IN_MODAL_HASHES, getModalContainer, openAuthModal } from './auth-modal.js';
 import { openVerificationModal as openVerificationModalImpl } from './verification-modal.js';
-import { maybeConfirmRegistration as maybeConfirmRegistrationImpl } from './confirmation-modal.js';
 
 import { domReady } from '../utils';
 
@@ -26,11 +25,6 @@ window.newspackRAS.push( readerActivation => {
 				setOTPTimer: readerActivation.setOTPTimer,
 				...config,
 			} );
-		/**
-		 * Expose the maybeConfirmRegistration helper on the RAS scope (consumed
-		 * cross-plugin by registration entry points).
-		 */
-		readerActivation.maybeConfirmRegistration = maybeConfirmRegistrationImpl;
 
 		/**
 		 * Handle hash change.

@@ -25,7 +25,7 @@ import classNames from 'classnames';
  * }} props - Component props: the documented options plus any `hr` attribute.
  * @return {JSX.Element} Divider component.
  */
-const Divider = ( { alignment = 'none', className = undefined, marginBottom = 64, marginTop = 64, variant = 'default', ...otherProps } ) => {
+const Divider = ( { alignment = 'none', className = undefined, marginBottom = 48, marginTop = 48, variant = 'default', ...otherProps } ) => {
 	const classes = classNames(
 		'newspack-divider',
 		className,

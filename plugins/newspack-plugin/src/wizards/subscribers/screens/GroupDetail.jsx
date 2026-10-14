@@ -18,7 +18,7 @@
  * WordPress dependencies.
  */
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
-import { __, _n, sprintf } from '@wordpress/i18n';
+import { __, _n, _x, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import {
@@ -172,26 +172,38 @@ function GroupDetailView() {
 			return;
 		}
 		const ownerName = group.owner?.name;
+		// translators: %s: name of the group owner.
+		const ownedBy = sprintf( __( 'Owned by %s', 'newspack-plugin' ), ownerName );
 		const withOwner = content => (
 			<>
 				{ content }
 				{ ownerName && (
 					<>
 						{ ' ' }
-						<span
-							className="newspack-subscribers__header-count"
-							/* translators: %s: name of the group owner. */
-							aria-label={ sprintf( __( 'Owned by %s', 'newspack-plugin' ), ownerName ) }
-						>
-							{ `(${ ownerName })` }
+						{ /* ARIA ignores a name on a plain span, so the spoken phrasing travels as screen-reader text. */ }
+						<span className="newspack-subscribers__header-count">
+							<span aria-hidden="true">{ `(${ ownerName })` }</span>
+							<span className="screen-reader-text">{ ownedBy }</span>
 						</span>
 					</>
 				) }
 			</>
 		);
+		const groupsHref = '#/groups';
 		setHeaderData( {
-			backNav: '#/groups',
-			sectionName: withOwner( `${ GROUP_LABEL_PLURAL } / ${ group.plan }` ),
+			backNav: groupsHref,
+			// Separate crumbs, so the group list stays a link back from here. The
+			// leaf is a plain string: the page region takes its accessible name
+			// from it, and markup there would be announced as "[object Object]".
+			sectionName: [
+				{ label: GROUP_LABEL_PLURAL, url: groupsHref },
+				{
+					label: ownerName
+						? /* translators: 1: group name, 2: name of the group owner. */
+						  sprintf( _x( '%1$s (%2$s)', 'group name and owner', 'newspack-plugin' ), group.plan, ownerName )
+						: group.plan,
+				},
+			],
 			// A function title renders its own badge: SectionHeader only auto-renders
 			// the `badges` array for string titles.
 			sectionTitle: () => (

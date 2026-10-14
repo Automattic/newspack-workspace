@@ -1,3 +1,59 @@
+# newspack-newsletters [3.42.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.5...newspack-newsletters@3.42.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **newsletters:** persist list appearance and cut load time (NPPM-3140) ([#901](https://github.com/Automattic/newspack-workspace/issues/901)) ([5fd1f4c](https://github.com/Automattic/newspack-workspace/commit/5fd1f4c208ccce0f7b35044f6a519677577680fb)), closes [#931](https://github.com/Automattic/newspack-workspace/issues/931) [#854](https://github.com/Automattic/newspack-workspace/issues/854) [#857](https://github.com/Automattic/newspack-workspace/issues/857) [#846](https://github.com/Automattic/newspack-workspace/issues/846) [#887](https://github.com/Automattic/newspack-workspace/issues/887) [#872](https://github.com/Automattic/newspack-workspace/issues/872)
+* **phpcs:** point constant ignores at the documenting file ([#1130](https://github.com/Automattic/newspack-workspace/issues/1130)) ([9468c79](https://github.com/Automattic/newspack-workspace/commit/9468c79ef60ae098237278bbdd774574b95caa0e))
+
+
+### Features
+
+* add ability to select draft/scheduled/pending posts in newsletter Posts Inserter ([2fd1261](https://github.com/Automattic/newspack-workspace/commit/2fd12617c66e7d50fb664c782d9e415b6e0dac61))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-icons:** upgraded to 1.2.0
+* **newspack-scripts:** upgraded to 5.12.0
+
+## newspack-newsletters [3.41.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.4...newspack-newsletters@3.41.5) (2026-10-06)
+
+
+### Bug Fixes
+
+* **newsletters:** send AC test emails to multiple recipients (NPPM-3417) ([#1118](https://github.com/Automattic/newspack-workspace/issues/1118)) ([eaf5bd5](https://github.com/Automattic/newspack-workspace/commit/eaf5bd58b186a6c58be862fbac926f9780f5b64a))
+
+## newspack-newsletters [3.41.4](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.3...newspack-newsletters@3.41.4) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+* **newspack-icons:** upgraded to 1.1.3
+
+## newspack-newsletters [3.41.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.2...newspack-newsletters@3.41.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **newsletters:** keep block editor chrome on admin typography ([#799](https://github.com/Automattic/newspack-workspace/issues/799)) ([a24636a](https://github.com/Automattic/newspack-workspace/commit/a24636a807fff48e42bf9a11c0c8fd185156f352))
+* **newsletters:** resolve the send list against the connected ESP ([#979](https://github.com/Automattic/newspack-workspace/issues/979)) ([cfc2f39](https://github.com/Automattic/newspack-workspace/commit/cfc2f39679a1660f27484e697e75426f08ffc1a3))
+* **theme:** tighten post subtitle handling ([#1024](https://github.com/Automattic/newspack-workspace/issues/1024)) ([609cd84](https://github.com/Automattic/newspack-workspace/commit/609cd84ad058a21b5b99841394cc7d0c4c1ba4b9))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
+## newspack-newsletters [3.41.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.1...newspack-newsletters@3.41.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* **newsletters:** subscribing no longer prompts to create an account ([#1108](https://github.com/Automattic/newspack-workspace/issues/1108)) ([99c8e63](https://github.com/Automattic/newspack-workspace/commit/99c8e6300675ceff8fe7365348d1f912716fb4da))
+
 ## newspack-newsletters [3.41.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.41.0...newspack-newsletters@3.41.1) (2026-09-15)
 
 

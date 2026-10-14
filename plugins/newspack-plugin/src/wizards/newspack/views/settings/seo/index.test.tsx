@@ -93,3 +93,26 @@ describe( 'profiles stored in Yoast’s catch-all list', () => {
 		expect( post[ 0 ].data.urls.bluesky ).toBe( 'https://bsky.app/profile/example' );
 	} );
 } );
+
+describe( 'a successful save', () => {
+	it( 'confirms with a snackbar', () => {
+		( dispatch( WIZARD_STORE_NAMESPACE ) as { resetNotices: () => void } ).resetNotices();
+		mockWizardApiFetch.mockImplementation( ( request, callbacks ) => {
+			if ( request.method === 'POST' ) {
+				callbacks?.onSuccess?.( request.data );
+			}
+			return Promise.resolve();
+		} );
+		render( <Seo /> );
+
+		typeInto( 'Bluesky', 'https://bsky.app/profile/example' );
+		save();
+
+		expect(
+			select( WIZARD_STORE_NAMESPACE )
+				.getNotices()
+				.map( ( notice: { message: string } ) => notice.message )
+		).toContain( 'Settings saved.' );
+		mockWizardApiFetch.mockReset();
+	} );
+} );

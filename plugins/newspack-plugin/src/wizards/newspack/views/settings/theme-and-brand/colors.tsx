@@ -6,15 +6,16 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { ColorPicker, Grid } from '../../../../../../packages/components/src';
+import { ColorPicker } from '../../../../../../packages/components/src';
 
 export default function Colors( { themeMods, updateColors }: { themeMods: ThemeMods; updateColors: ( a: ThemeMods ) => void } ) {
 	return (
-		<Grid gutter={ 32 }>
+		<Stack direction="column" gap="xl">
 			{ /* This UI does not enable setting 'theme_colors' to 'default'. As soon as a color is picked, 'theme_colors' will be 'custom'. */ }
 			<ColorPicker
 				label={ __( 'Primary', 'newspack-plugin' ) }
@@ -38,6 +39,6 @@ export default function Colors( { themeMods, updateColors }: { themeMods: ThemeM
 					} )
 				}
 			/>
-		</Grid>
+		</Stack>
 	);
 }

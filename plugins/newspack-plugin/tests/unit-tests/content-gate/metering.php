@@ -46,9 +46,24 @@ class Test_Metering extends \WP_UnitTestCase {
 	private static $reader_email = 'reader@metering-test.com';
 
 	/**
+	 * Turn the gating feature on, so the restriction path these tests wire up is
+	 * reachable when this class runs on its own. The constant is process-wide and
+	 * other content-gate suites define it too, so this only fixes the ordering.
+	 */
+	public static function setUpBeforeClass(): void {
+		parent::setUpBeforeClass();
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+	}
+
+	/**
 	 * Teardown after tests.
 	 */
 	public function tear_down() {
+		remove_action( 'the_post', [ Content_Gate::class, 'restrict_post' ], 10 );
+		remove_filter( 'newspack_content_gate_restrict_post', [ Metering::class, 'restrict_post' ] );
+		$this->reset_gate_render_state();
 		foreach ( $this->gate_ids as $gate_id ) {
 			wp_delete_post( $gate_id, true );
 		}
@@ -1147,6 +1162,355 @@ class Test_Metering extends \WP_UnitTestCase {
 		);
 		$this->gate_ids[] = $gate_id;
 		return $gate_id;
+	}
+
+	/**
+	 * An integration that gates its own embed — an audio player, a video — hooks
+	 * 'the_content' above Content_Gate::RESTRICTION_PRIORITY and asks
+	 * Metering::is_metering() whether this reader may have it. The server-side
+	 * teaser reaches such a callback as the locked view (NPPD-2096); the excerpt
+	 * the frontend strategy swaps in once the meter is spent has to as well, or
+	 * the embed plays on past the paywall.
+	 *
+	 * Both halves ride on the one substitution: the callback has to run over the
+	 * excerpt at all, and it has to see metering answering false while it does.
+	 */
+	public function test_metered_excerpt_reaches_third_party_gating_as_the_locked_view() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create(
+			[
+				'post_content' => '<p>[PLAYER] Opening paragraph.</p><p>Second paragraph.</p><p>Third paragraph.</p>',
+			]
+		);
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		add_filter(
+			'the_content',
+			function ( $content ) {
+				return str_replace( '[PLAYER]', Metering::is_metering() ? '[PLAYER]' : '[CTA]', $content );
+			},
+			999999
+		);
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertStringContainsString( '[CTA]', $excerpt, 'The metered excerpt should reach the integration with metering off, so it swaps its embed for the CTA.' );
+		$this->assertStringNotContainsString( '[PLAYER]', $excerpt, 'The metered excerpt should not carry the ungated embed.' );
+	}
+
+	/**
+	 * The excerpt is handed only the callbacks that would have run after the
+	 * server-side teaser was substituted in. Anything at or below the substitution
+	 * priority — ad inserters, prompt injectors — never sees a teaser today and
+	 * must not start seeing this one.
+	 */
+	public function test_metered_excerpt_skips_filters_below_the_restriction_priority() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>Opening paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		$append = function ( $marker ) {
+			return function ( $content ) use ( $marker ) {
+				return $content . $marker;
+			};
+		};
+		add_filter( 'the_content', $append( '[EARLY]' ), Content_Gate::RESTRICTION_PRIORITY );
+		add_filter( 'the_content', $append( '[LATE]' ), Content_Gate::RESTRICTION_PRIORITY + 1 );
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertStringContainsString( '[LATE]', $excerpt, 'Filters above the substitution priority process the excerpt.' );
+		$this->assertStringNotContainsString( '[EARLY]', $excerpt, 'Filters at or below the substitution priority do not.' );
+	}
+
+	/**
+	 * The short-circuit is scoped to the excerpt build. A late callback that throws
+	 * must not leave it behind: metering would then report itself off for the rest of
+	 * the request, and the gate would stop metering anyone.
+	 */
+	public function test_metered_excerpt_removes_its_metering_short_circuit_when_a_filter_throws() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>Opening paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		add_filter(
+			'the_content',
+			// phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.TerminatingInsteadOfReturn -- Throwing is what this test is about.
+			function () {
+				throw new \RuntimeException( 'third-party filter blew up' );
+			},
+			Content_Gate::RESTRICTION_PRIORITY + 1
+		);
+
+		try {
+			Metering::get_metered_excerpt( get_post( $post_id ) );
+			$this->fail( 'The exception should propagate rather than be swallowed.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertTrue( Metering::is_frontend_metering(), 'Metering should answer for the request again once the excerpt build has unwound.' );
+		}
+	}
+
+	/**
+	 * A per-post integration decides whether to lock its embed by asking which post
+	 * it is on. Server-side it reads that inside a real 'the_content' pass, where
+	 * the article is the current post; the excerpt is built at wp_footer, where the
+	 * global may be on whatever a widget's secondary loop left behind. It has to see
+	 * the metered post there too, or it skips an excerpt it believes belongs to
+	 * someone else — and the caller's own loop state has to survive the build.
+	 */
+	public function test_metered_excerpt_runs_late_filters_with_the_metered_post_current() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>[PLAYER] Opening paragraph.</p>' ] );
+		$other_id = $this->factory->post->create( [ 'post_content' => '<p>A sidebar post.</p>' ] );
+		$this->post_ids[] = $post_id;
+		$this->post_ids[] = $other_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		add_filter(
+			'the_content',
+			function ( $content ) use ( $post_id ) {
+				return get_the_ID() === $post_id ? str_replace( '[PLAYER]', '[CTA]', $content ) : $content;
+			},
+			Content_Gate::RESTRICTION_PRIORITY + 1
+		);
+
+		$GLOBALS['post'] = get_post( $other_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- The drifted global this defends against.
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertStringContainsString( '[CTA]', $excerpt, 'The integration should see the metered post as the current one and lock its embed.' );
+		$this->assertSame( $other_id, get_the_ID(), 'The global post the build displaced should be put back.' );
+	}
+
+	/**
+	 * A late callback that builds the excerpt again must not take the outer build's
+	 * metering short-circuit with it when it unwinds: the outer excerpt — the one
+	 * actually served — would then be composed with metering answering true, which
+	 * is an ungated embed for a reader who is out of views.
+	 */
+	public function test_metered_excerpt_keeps_its_short_circuit_through_a_reentrant_filter() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>[PLAYER] Opening paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		add_filter(
+			'the_content',
+			function ( $content ) use ( $post_id ) {
+				static $reentered = false;
+				if ( ! $reentered ) {
+					$reentered = true;
+					Metering::get_metered_excerpt( get_post( $post_id ) );
+				}
+				return str_replace( '[PLAYER]', Metering::is_metering() ? '[PLAYER]' : '[CTA]', $content );
+			},
+			Content_Gate::RESTRICTION_PRIORITY + 1
+		);
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertStringContainsString( '[CTA]', $excerpt, 'The nested build should leave the outer short-circuit in place.' );
+	}
+
+	/**
+	 * The excerpt is the teaser alone. Content_Gate's closing 'the_content' callback
+	 * is what would append the gate: it runs at PHP_INT_MAX — above the priority
+	 * apply_late_content_filters() dispatches from — and appends whatever restriction
+	 * the request has recorded for the current post. Skipping that callback is what
+	 * keeps the gate out of the string the browser swaps in, whatever the request
+	 * happens to be carrying by the time the excerpt is built.
+	 */
+	public function test_metered_excerpt_excludes_the_gate_markup() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id = $this->factory->post->create( [ 'post_content' => '<p>Opening paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+
+		$restricted_content = new \ReflectionProperty( Content_Gate::class, 'restricted_content' );
+		$restricted_content->setAccessible( true );
+		$restricted_content->setValue(
+			null,
+			[
+				$post_id => [
+					'teaser' => '<p>Opening paragraph.</p>',
+					'gate'   => '<div>[GATE]</div>',
+				],
+			]
+		);
+
+		try {
+			$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+		} finally {
+			$restricted_content->setValue( null, [] );
+		}
+
+		$this->assertStringContainsString( 'Opening paragraph.', $excerpt, 'The metered excerpt is the teaser.' );
+		$this->assertStringNotContainsString( '[GATE]', $excerpt, 'The metered excerpt must not carry the gate markup.' );
+	}
+
+	/**
+	 * Building the excerpt must not restrict the post it describes.
+	 *
+	 * Content_Gate::restrict_post() listens on 'the_post', and at wp_footer on a
+	 * frontend-metered post none of its guards bail: no gate render has been
+	 * claimed (the frontend strategy renders none server-side), the metered post
+	 * is the main query's post, and the build's own metering short-circuit makes
+	 * should_restrict_post() answer true. Restricting there rewrites the post
+	 * object, leaves Content_Gate::$is_content_locked set for the rest of the
+	 * request — the flag the comment filters key on, whose contract is that a
+	 * still-readable metered post is left alone — and folds the gate into the very
+	 * string the browser swaps in, doubling the gate on a short post whose teaser
+	 * is its whole body.
+	 *
+	 * Wired here the way production wires it, which the other tests in this class
+	 * do not need: 'the_post' carries no listener and metering answers no
+	 * restriction filter unless a test says so.
+	 */
+	public function test_metered_excerpt_does_not_restrict_the_post_it_describes() {
+		$gate_id = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		// One paragraph, fewer than the layout's visible_paragraphs, so the teaser is
+		// the whole post and anything the gate adds to it is unambiguous.
+		$post_id          = $this->factory->post->create( [ 'post_content' => '<p>The only paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+		$this->wire_production_restriction();
+
+		$the_post_dispatches = 0;
+		add_action(
+			'the_post',
+			function () use ( &$the_post_dispatches ) {
+				$the_post_dispatches++;
+			}
+		);
+
+		$excerpt = Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertSame( 0, $the_post_dispatches, 'Building the excerpt must not announce a post to the loop — setup_postdata() dispatches this action.' );
+		$this->assertStringNotContainsString( 'newspack-content-gate__inline-gate', $excerpt, 'The metered excerpt must not carry the gate markup.' );
+		$this->assertFalse( $this->get_gate_property( 'is_content_locked' ), 'Building the excerpt must leave the request unlocked — the comment filters read that flag.' );
+	}
+
+	/**
+	 * The same restriction has a second way in, and closing the first does not
+	 * close it: a late 'the_content' callback that runs a secondary loop — a
+	 * related-posts list, an ad inserter — ends it with wp_reset_postdata(), which
+	 * re-fires 'the_post' for the main post. Metering is short-circuited off for
+	 * the build, so the restriction that would normally decline runs instead. The
+	 * excerpt string is already composed by then, so what leaks is the request
+	 * state: Content_Gate's content-locked flag, which the comment filters read, is
+	 * left set for a reader the gate has not actually locked out.
+	 */
+	public function test_metered_excerpt_survives_a_secondary_loop_in_a_late_filter() {
+		$gate_id          = $this->create_gate_with_settings( [ 'metering_count' => 1 ] );
+		$post_id          = $this->factory->post->create( [ 'post_content' => '<p>The only paragraph.</p>' ] );
+		$this->post_ids[] = $post_id;
+
+		$this->go_to_metered_post( $post_id, $gate_id );
+		$this->wire_production_restriction();
+
+		add_filter(
+			'the_content',
+			function ( $content ) {
+				$related = new \WP_Query( [ 'posts_per_page' => 1 ] );
+				while ( $related->have_posts() ) {
+					$related->the_post();
+				}
+				wp_reset_postdata();
+				return $content;
+			},
+			Content_Gate::RESTRICTION_PRIORITY + 1
+		);
+
+		Metering::get_metered_excerpt( get_post( $post_id ) );
+
+		$this->assertFalse( $this->get_gate_property( 'is_content_locked' ), 'A secondary loop inside the excerpt build must not lock the request.' );
+	}
+
+	/**
+	 * Register the restriction path the way production does — Content_Gate on
+	 * 'the_post', metering answering the restriction filter. The test bootstrap
+	 * runs neither class's init(), so nothing here is wired unless a test asks
+	 * for it. Removed again in tear_down().
+	 */
+	private function wire_production_restriction() {
+		$this->reset_gate_render_state();
+		add_action( 'the_post', [ Content_Gate::class, 'restrict_post' ], 10, 2 );
+		add_filter( 'newspack_content_gate_restrict_post', [ Metering::class, 'restrict_post' ] );
+	}
+
+	/**
+	 * Read one of Content_Gate's private render-time statics.
+	 *
+	 * @param string $property Property name.
+	 *
+	 * @return mixed
+	 */
+	private function get_gate_property( $property ) {
+		$reflection = new \ReflectionProperty( Content_Gate::class, $property );
+		$reflection->setAccessible( true );
+		return $reflection->getValue();
+	}
+
+	/**
+	 * Clear the render-time statics Content_Gate carries across a request, so a
+	 * gate another test claimed cannot stand in for the guard under test here.
+	 */
+	private function reset_gate_render_state() {
+		foreach ( [ 'gate_rendered', 'is_gated', 'is_content_locked' ] as $property ) {
+			$reflection = new \ReflectionProperty( Content_Gate::class, $property );
+			$reflection->setAccessible( true );
+			$reflection->setValue( null, false );
+		}
+		$reflection = new \ReflectionProperty( Content_Gate::class, 'restricted_content' );
+		$reflection->setAccessible( true );
+		$reflection->setValue( null, [] );
+	}
+
+	/**
+	 * Put an anonymous reader on a post the given gate meters, the only state the
+	 * frontend metering strategy — and so the excerpt it carries — exists in.
+	 *
+	 * @param int $post_id Post ID.
+	 * @param int $gate_id Gate ID.
+	 */
+	private function go_to_metered_post( $post_id, $gate_id ) {
+		// go_to() rather than a hand-built WP_Query: it assigns $wp_the_query as
+		// well, so is_main_query() answers true. Everything Content_Gate does on
+		// the front end is behind that guard, so a query that is not the main one
+		// leaves the code under test unreachable.
+		$this->go_to( get_permalink( $post_id ) );
+		$GLOBALS['wp_query']->the_post();
+		wp_set_current_user( 0 );
+
+		// The layout carries the excerpt's own settings — how many paragraphs survive
+		// the cut — and is normally resolved by the restriction evaluation this class
+		// stands in for, so it has to be named alongside the gate.
+		$registration_layout_id = Content_Gate::get_registration_settings( $gate_id )['gate_layout_id'] ?? 0;
+
+		add_filter( 'newspack_is_post_restricted', '__return_true' );
+		add_filter(
+			'newspack_content_gate_post_id',
+			function () use ( $gate_id ) {
+				return $gate_id;
+			}
+		);
+		add_filter(
+			'newspack_content_gate_layout_id',
+			function () use ( $registration_layout_id ) {
+				return $registration_layout_id;
+			}
+		);
+		$this->assertTrue( Metering::is_frontend_metering(), 'The reader should be on the frontend metering strategy.' );
 	}
 
 	/**

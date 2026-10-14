@@ -49,15 +49,19 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 		<>
 			<Stack direction="column" className="newspack-page__header-region">
 				<Stack direction="column" className="newspack-page__header">
-					<Stack direction="row" gap="sm" justify="space-between">
-						<Stack direction="row" gap="sm" align="center" justify="start">
+					<Stack direction="row" gap="sm" justify="space-between" wrap="wrap">
+						<Stack direction="row" gap="sm" align="start" justify="start" className="newspack-page__header-title">
 							<div className="newspack-page__header-visual" aria-hidden="true">
 								<Icon icon={ newspack } />
 							</div>
 							<HStack className="newspack-page__breadcrumbs" justify="flex-start">
 								<Breadcrumbs items={ breadcrumbItems } />
 							</HStack>
-							{ badges }
+							{ badges && (
+								<Stack direction="row" gap="sm" align="center" className="newspack-page__header-badges">
+									{ badges }
+								</Stack>
+							) }
 						</Stack>
 						{ actions && (
 							<Stack direction="row" gap="sm" align="center" className="newspack-page__header-actions">

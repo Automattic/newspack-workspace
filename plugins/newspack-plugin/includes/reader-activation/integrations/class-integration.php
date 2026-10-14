@@ -268,6 +268,22 @@ abstract class Integration {
 	}
 
 	/**
+	 * How-to steps the Integrations UI shows as a guide, one step per page,
+	 * from the How it works item in the integration card's menu.
+	 *
+	 * Child classes override this when the way in is a workflow elsewhere in
+	 * the admin, such as a setting on a block, so the admin has to say where
+	 * to look. Each step carries a `title` and a `description`, and can carry
+	 * a `link` to documentation, with a `label` and a `url`. The default is no
+	 * guide.
+	 *
+	 * @return array List of associative arrays with keys `title`, `description`, and an optional `link`.
+	 */
+	public function get_guide(): array {
+		return [];
+	}
+
+	/**
 	 * Whether this integration supports frontend reader registration.
 	 *
 	 * Integrations that return true will have their key output to the page
@@ -381,6 +397,12 @@ abstract class Integration {
 	 * this method to perform additional checks on the request (e.g. verifying
 	 * custom headers, validating metadata, or enforcing integration-specific rules).
 	 *
+	 * Runs for every request that reaches the key gate, including one from an
+	 * already-authenticated caller: the endpoint's logged-in branch sits behind
+	 * this check, so rejecting here also suppresses
+	 * handle_logged_in_user_registration(). Fields like `npe` are
+	 * caller-supplied on that path too — validating them is not a session check.
+	 *
 	 * @param string           $key     The submitted key to validate.
 	 * @param \WP_REST_Request $request The full registration request.
 	 * @return bool Whether the registration request is valid.
@@ -434,10 +456,10 @@ abstract class Integration {
 	 * permanent for the pageview — so without this the submission is lost
 	 * rather than retried. This matters in production today: the ESP
 	 * integration emits the legacy key on released sites and validates through
-	 * this method. (newspack-manager's Fundraise Up handler emits it too, but
-	 * replaces validate_registration_request() wholesale — it authenticates on
-	 * verified supporter identifiers rather than the key — so it never reaches
-	 * this branch and the allowance does nothing for it.)
+	 * this method. (newspack-manager's Fundraise Up handler emits it too.
+	 * Handler versions that call this method before their own supporter check
+	 * get the allowance; older ones replace the method and never reach this
+	 * branch.)
 	 *
 	 * @todo Remove this method and its branch in validate_registration_request()
 	 *       once the seeded key has been in production for a release cycle
@@ -693,6 +715,13 @@ abstract class Integration {
 	 * Integrations can override this method to update user data or perform other actions when an existing user attempts to register again via the frontend registration flow. For example, an integration might want to link the existing user account to the integration, record a new donation for a returning donor, or log this event for analytics purposes.
 	 *
 	 * The default implementation is a no-op.
+	 *
+	 * Runs only for requests that passed the gates ahead of the logged-in
+	 * branch in \Newspack\Reader_Registration::api_frontend_register_reader(),
+	 * this integration's own validate_registration_request() included when
+	 * supports_frontend_registration() returns true. None of those gates ties
+	 * `$request` to `$user`: `npe` and `metadata` are whatever the caller sent,
+	 * so check that anything stored on `$user` belongs to that account.
 	 *
 	 * @param \WP_User         $user    The currently logged-in user attempting to register again.
 	 * @param \WP_REST_Request $request The original registration request.

@@ -1086,6 +1086,7 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 		Integrations::register( $esp );
 		\update_option( Integrations::OPTION_NAME, [ 'esp' ] );
 		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp->update_settings_field_value( 'sync_account_deletion', true );
 		$esp->update_settings_field_value( 'account_deletion_handling', 'flag' );
 

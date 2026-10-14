@@ -10,21 +10,3 @@
 		box-sizing: border-box;
 	}
 }
-
-.newspack-dashboard__brand-header {
-	padding: 40px 0;
-
-	.brand-header__inner {
-		margin: 0 auto;
-		max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
-		padding: 0 var(--newspack-wizard-section-space);
-	}
-
-	&__title {
-		font-size: 32px;
-		font-style: normal;
-		font-weight: 400;
-		line-height: 40px;
-		margin: 0;
-	}
-}

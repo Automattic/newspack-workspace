@@ -69,7 +69,8 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 		);
 		Reader_Activation::set_reader_verified( $this->user_id );
 
-		// Configure the ESP master list so ESP::push_contact_data() can sync.
+		// Configure a Mailchimp master list so ESP::push_contact_data() can sync.
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		$esp = Integrations::get_integration( 'esp' );
 		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
 	}

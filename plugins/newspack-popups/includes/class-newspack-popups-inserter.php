@@ -1005,7 +1005,7 @@ final class Newspack_Popups_Inserter {
 		 *
 		 * @example define( 'NEWSPACK_POPUPS_DEBUG', true );
 		 */
-		return ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || ( defined( 'NEWSPACK_LOG_LEVEL' ) && 1 < NEWSPACK_LOG_LEVEL ) || ( defined( 'NEWSPACK_POPUPS_DEBUG' ) && NEWSPACK_POPUPS_DEBUG ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
+		return ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || ( defined( 'NEWSPACK_LOG_LEVEL' ) && 1 < NEWSPACK_LOG_LEVEL ) || ( defined( 'NEWSPACK_POPUPS_DEBUG' ) && NEWSPACK_POPUPS_DEBUG ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/class-logger.php.
 	}
 
 	/**

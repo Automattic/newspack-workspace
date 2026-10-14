@@ -16,6 +16,13 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Reader Activation Class.
+ *
+ * "Reader Activation" (RAS) is the code name for the product feature called
+ * "Audience Management". The two mean the same thing. Public identifiers keep the
+ * code name because sites and other plugins depend on them: this class, the
+ * `newspack_reader_activation_*` options and hooks, and the
+ * `window.newspackReaderActivation` JS API. The wp-admin "Audience" menu is
+ * wider than this feature: it also holds Campaigns, Donations and Subscriptions.
  */
 final class Reader_Activation {
 
@@ -358,18 +365,18 @@ final class Reader_Activation {
 			*/
 			$filtered_labels = apply_filters( 'newspack_reader_activation_auth_labels', $default_labels );
 
-			foreach ( $default_labels as $key => $label ) {
-				if ( isset( $filtered_labels[ $key ] ) ) {
-					if ( is_array( $label ) && is_array( $filtered_labels[ $key ] ) ) {
-						self::$reader_activation_labels[ $key ] = array_merge( $label, $filtered_labels[ $key ] );
-					} elseif ( is_string( $label ) && is_string( $filtered_labels[ $key ] ) ) {
-						self::$reader_activation_labels[ $key ] = $filtered_labels[ $key ];
+			foreach ( $default_labels as $label_key => $label ) {
+				if ( isset( $filtered_labels[ $label_key ] ) ) {
+					if ( is_array( $label ) && is_array( $filtered_labels[ $label_key ] ) ) {
+						self::$reader_activation_labels[ $label_key ] = array_merge( $label, $filtered_labels[ $label_key ] );
+					} elseif ( is_string( $label ) && is_string( $filtered_labels[ $label_key ] ) ) {
+						self::$reader_activation_labels[ $label_key ] = $filtered_labels[ $label_key ];
 					} else {
 						// If filtered label type doesn't match, fallback to default.
-						self::$reader_activation_labels[ $key ] = $label;
+						self::$reader_activation_labels[ $label_key ] = $label;
 					}
 				} else {
-					self::$reader_activation_labels[ $key ] = $label;
+					self::$reader_activation_labels[ $label_key ] = $label;
 				}
 			}
 		}
@@ -569,7 +576,7 @@ final class Reader_Activation {
 	 */
 	public static function activate() {
 		if ( ! method_exists( 'Newspack_Popups_Presets', 'activate_ras_presets' ) ) {
-			return new \WP_Error( 'newspack_reader_activation_missing_dependencies', __( 'Newspack Campaigns plugin is required to activate Reader Activation features.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_reader_activation_missing_dependencies', __( 'Newspack Campaigns plugin is required to activate Audience Management features.', 'newspack-plugin' ) );
 		}
 
 		return \Newspack_Popups_Presets::activate_ras_presets();
@@ -770,7 +777,7 @@ final class Reader_Activation {
 
 	/**
 	 * Get an array of required plugins for satisfying Reader Revenue prerequisites.
-	 * WooCommerce and Woo Subscriptions are required for Newspack, but not for NRH.
+	 * WooCommerce and Woo Subscriptions are required for Newspack, but not for RevEngine.
 	 */
 	public static function get_reader_revenue_required_plugins() {
 		$required_plugins = [
@@ -2318,7 +2325,7 @@ final class Reader_Activation {
 			return null;
 		}
 
-		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Undocumented flag, pending a docblock.
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php.
 			return true;
 		}
 

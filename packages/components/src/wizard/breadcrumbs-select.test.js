@@ -1,7 +1,7 @@
 /**
  * Internal dependencies.
  */
-import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
+import { activeBreadcrumbs, activeSection, appendSectionName } from './breadcrumbs-select';
 
 const SECTIONS = [
 	{ path: '/', breadcrumbs: [ { label: 'Audience Management' }, { label: 'Configuration' } ] },
@@ -120,5 +120,19 @@ describe( 'appendSectionName', () => {
 		const trail = [ { label: 'Access Control' } ];
 		appendSectionName( trail, 'Content Gifting' );
 		expect( trail ).toEqual( [ { label: 'Access Control' } ] );
+	} );
+} );
+
+describe( 'activeSection', () => {
+	const sections = [ { path: '/settings', exact: true, subHeaderText: 'Intro' }, { path: '/settings/:integrationId' } ];
+
+	it( 'returns the section matching the route', () => {
+		expect( activeSection( sections, '/settings/esp' ) ).toBe( sections[ 1 ] );
+		expect( activeSection( sections, '/settings' ).subHeaderText ).toBe( 'Intro' );
+	} );
+
+	it( 'falls back to the first section, or nothing without sections', () => {
+		expect( activeSection( sections, '/unknown' ) ).toBe( sections[ 0 ] );
+		expect( activeSection( [], '/settings' ) ).toBeUndefined();
 	} );
 } );

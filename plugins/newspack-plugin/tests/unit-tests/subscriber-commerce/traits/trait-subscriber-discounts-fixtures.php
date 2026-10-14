@@ -41,21 +41,28 @@ trait Trait_Subscriber_Discounts_Fixtures {
 	 * @return bool
 	 */
 	public function grant_subscription_to_subscriber( $has_subscription, $user_id, $product_ids ) {
-		return (int) $user_id === $this->subscriber_id && in_array( self::GRANTING_SUBSCRIPTION_ID, array_map( 'absint', $product_ids ), true );
+		if ( (int) $user_id !== $this->subscriber_id ) {
+			return false;
+		}
+		// An empty list is the oracle's "any active subscription" question, which a
+		// rule open to every subscriber asks. The subscriber holds one.
+		return empty( $product_ids ) || in_array( self::GRANTING_SUBSCRIPTION_ID, array_map( 'absint', $product_ids ), true );
 	}
 
 	/**
 	 * Create a product post plus its mock, registered so wc_get_product() finds it.
 	 *
-	 * @param float $price      Product price.
-	 * @param float $sale_price Sale price, when the product is on sale.
-	 * @param int   $product_id Explicit post ID, when the test needs a known one.
+	 * @param float  $price      Product price.
+	 * @param float  $sale_price Sale price, when the product is on sale.
+	 * @param int    $product_id Explicit post ID, when the test needs a known one.
+	 * @param string $type       WooCommerce product type.
 	 * @return \WC_Product
 	 */
-	private function create_product( $price, $sale_price = null, $product_id = 0 ) {
+	private function create_product( $price, $sale_price = null, $product_id = 0, $type = 'simple' ) {
 		$post_id = $product_id ? $product_id : $this->factory->post->create( [ 'post_type' => 'product' ] );
 		$data    = [
 			'id'            => $post_id,
+			'type'          => $type,
 			'price'         => $price,
 			'regular_price' => $price,
 		];
