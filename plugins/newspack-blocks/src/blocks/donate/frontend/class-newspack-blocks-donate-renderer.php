@@ -64,7 +64,7 @@ class Newspack_Blocks_Donate_Renderer {
 			$handle,
 			$script_data['script_path'],
 			$dependencies,
-			NEWSPACK_BLOCKS__VERSION,
+			Newspack_Blocks::asset_version( $filename ),
 			true
 		);
 		wp_script_add_data( $handle, 'async', true );
@@ -75,7 +75,7 @@ class Newspack_Blocks_Donate_Renderer {
 				$handle,
 				plugins_url( $style_path, NEWSPACK_BLOCKS__PLUGIN_FILE ),
 				[],
-				NEWSPACK_BLOCKS__VERSION
+				Newspack_Blocks::asset_version( $filename )
 			);
 			wp_style_add_data( $handle, 'rtl', 'replace' );
 		}

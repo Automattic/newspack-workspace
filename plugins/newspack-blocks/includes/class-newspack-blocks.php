@@ -29,6 +29,13 @@ class Newspack_Blocks {
 	private static $content_render_depth = 0;
 
 	/**
+	 * Per-request memoization for self::asset_version().
+	 *
+	 * @var array<string, string>
+	 */
+	private static $asset_version_cache = [];
+
+	/**
 	 * Stack of routes for the REST requests currently being served, innermost
 	 * last. Pushed on `rest_request_before_callbacks` and popped on
 	 * `rest_request_after_callbacks`, which bracket the endpoint callback on every
@@ -202,6 +209,53 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Resolve the cache-busting version for a built dist asset.
+	 *
+	 * Reads the content hash the build writes to `dist/<name>.asset.php`, so an
+	 * asset's URL changes when its file changes, and only then. The plugin
+	 * version doesn't change when a build is installed without a version bump,
+	 * which left browsers serving the old file. The hash covers every file in
+	 * the entry, so an entry's `.css` can use the same name as its `.js`.
+	 *
+	 * Mirrors `Newspack::asset_version()` in newspack-plugin. This plugin must
+	 * work without newspack-plugin, so it can't call that one.
+	 *
+	 * @param string $name Asset path relative to `dist/`, without the extension.
+	 *                     Examples: 'modal', 'carousel/view'.
+	 * @return string The content hash, or NEWSPACK_BLOCKS__VERSION when the
+	 *                `.asset.php` file is missing or malformed.
+	 */
+	public static function asset_version( string $name ): string {
+		if ( isset( self::$asset_version_cache[ $name ] ) ) {
+			return self::$asset_version_cache[ $name ];
+		}
+		$version = NEWSPACK_BLOCKS__VERSION;
+		// Accept only entry-shaped names, so a caller can't include a file
+		// outside dist/. The second pattern rejects `..` segments, which the
+		// first pattern's character set would otherwise let through.
+		if (
+			preg_match( '#^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$#', $name )
+			&& ! preg_match( '#(^|/)\.\.(/|$)#', $name )
+		) {
+			/**
+			 * Filters the directory asset_version() reads `.asset.php` files from.
+			 * Tests point this at a temp dir instead of writing into dist/.
+			 *
+			 * @param string $dir  Absolute path with a trailing slash.
+			 * @param string $name Asset name being resolved.
+			 */
+			$dist_dir = apply_filters( 'newspack_blocks_asset_dist_dir', NEWSPACK_BLOCKS__PLUGIN_DIR . 'dist/', $name );
+			$path     = $dist_dir . $name . '.asset.php';
+			$asset    = file_exists( $path ) ? include $path : null;
+			if ( is_array( $asset ) && ! empty( $asset['version'] ) && is_string( $asset['version'] ) ) {
+				$version = $asset['version'];
+			}
+		}
+		self::$asset_version_cache[ $name ] = $version;
+		return $version;
+	}
+
+	/**
 	 * Enqueue placeholder blocks assets.
 	 */
 	public static function enqueue_placeholder_blocks_assets() {
@@ -349,7 +403,7 @@ class Newspack_Blocks {
 			$handle,
 			$editor_style,
 			array(),
-			NEWSPACK_BLOCKS__VERSION
+			self::asset_version( 'editor' )
 		);
 		wp_style_add_data( $handle, 'rtl', 'replace' );
 	}
@@ -407,7 +461,7 @@ class Newspack_Blocks {
 				$handle,
 				plugins_url( $style_path, NEWSPACK_BLOCKS__PLUGIN_FILE ),
 				array(),
-				NEWSPACK_BLOCKS__VERSION
+				self::asset_version( 'block_styles' )
 			);
 			wp_style_add_data( $handle, 'rtl', 'replace' );
 		}
@@ -436,7 +490,7 @@ class Newspack_Blocks {
 				$handle,
 				plugins_url( $style_path, NEWSPACK_BLOCKS__PLUGIN_FILE ),
 				array(),
-				NEWSPACK_BLOCKS__VERSION
+				self::asset_version( $type . '/view' )
 			);
 			wp_style_add_data( $handle, 'rtl', 'replace' );
 		}
