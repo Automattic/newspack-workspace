@@ -9,6 +9,7 @@
  * Text Domain:     newspack-newsletters
  * Domain Path:     /languages
  * Version:         3.43.0
+ * Requires PHP:    8.1
  *
  * @package         Newspack_Newsletters
  */
