@@ -1,3 +1,15 @@
+# @automattic/newspack-blocks [4.36.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.35.0...newspack-blocks@4.36.0) (2026-10-14)
+
+
+### Features
+
+* **newsletters:** show premium lists in the subscription form ([#1291](https://github.com/Automattic/newspack-workspace/issues/1291)) ([456d762](https://github.com/Automattic/newspack-workspace/commit/456d762ba465aafc6e5be08ed47836acafaad1a6))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
 # @automattic/newspack-blocks [4.35.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.34.3...newspack-blocks@4.35.0) (2026-10-12)
 
 
