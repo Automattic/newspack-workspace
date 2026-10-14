@@ -384,8 +384,9 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 
 	/**
 	 * A dry run that creates missing contacts never leaves the process, so it
-	 * may run where syncing is refused; an update-only one reads every contact
-	 * at the provider, so it is gated like the wet run it previews.
+	 * still previews where syncing is refused and then reports the failed
+	 * check; an update-only one reads every contact at the provider, so it
+	 * stops before the preview, like the wet run it previews.
 	 */
 	public function test_dry_run_existing_only_is_refused_where_syncing_is_not_allowed() {
 		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
@@ -404,9 +405,11 @@ class Test_RAS_Contact_Sync_Tally extends WP_UnitTestCase {
 			[ 'existing_only' => true ]
 		);
 
-		$this->assertIsArray( $plain, 'A plain dry run stays available on a site that cannot sync.' );
+		$this->assertInstanceOf( \WP_Error::class, $plain );
+		$this->assertSame( 'newspack_dry_run_cannot_sync', $plain->get_error_code() );
+		$this->assertStringStartsWith( 'Would sync 1 contacts', $plain->get_error_message(), 'The offline preview still runs on a site that cannot sync.' );
 		$this->assertInstanceOf( \WP_Error::class, $flagged );
-		$this->assertContains( 'esp_sync_not_allowed', $flagged->get_error_codes() );
+		$this->assertContains( 'esp_sync_not_allowed', $flagged->get_error_codes(), 'The update-only preview stops before reading any contact.' );
 	}
 
 	public function test_sync_contact_dry_run_existing_only_is_gated_like_a_wet_run() {

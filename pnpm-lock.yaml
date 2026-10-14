@@ -15,7 +15,7 @@ overrides:
 
 patchedDependencies:
   multi-semantic-release:
-    hash: de869147a2e6f39769712c1e37db133a5723e60b2bf1d792eb5c7e58d621a638
+    hash: 9f6b4fb5274f7aa38c621c75346494190d0f6a710c7dd56de6a78a791a06e457
     path: patches/multi-semantic-release.patch
 
 importers:
@@ -114,7 +114,7 @@ importers:
         version: 16.4.0
       multi-semantic-release:
         specifier: ^3.0.2
-        version: 3.1.0(patch_hash=de869147a2e6f39769712c1e37db133a5723e60b2bf1d792eb5c7e58d621a638)(typescript@5.9.3)
+        version: 3.1.0(patch_hash=9f6b4fb5274f7aa38c621c75346494190d0f6a710c7dd56de6a78a791a06e457)(typescript@5.9.3)
       newspack-scripts:
         specifier: workspace:*
         version: link:packages/scripts
@@ -444,6 +444,9 @@ importers:
 
   plugins/newspack-multibranded-site:
     dependencies:
+      '@wordpress/ui':
+        specifier: ^0.23.0
+        version: 0.23.0(@date-fns/tz@1.5.0)(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -475,6 +478,9 @@ importers:
 
   plugins/newspack-network:
     dependencies:
+      '@wordpress/ui':
+        specifier: ^0.23.0
+        version: 0.23.0(@date-fns/tz@1.5.0)(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
       newspack-icons:
         specifier: workspace:*
         version: link:../../packages/icons
@@ -574,6 +580,9 @@ importers:
 
   plugins/newspack-popups:
     dependencies:
+      '@wordpress/ui':
+        specifier: ^0.23.0
+        version: 0.23.0(@date-fns/tz@1.5.0)(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(stylelint@16.26.1(typescript@5.9.3))
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
@@ -23050,7 +23059,7 @@ snapshots:
 
   ms@2.1.3: {}
 
-  multi-semantic-release@3.1.0(patch_hash=de869147a2e6f39769712c1e37db133a5723e60b2bf1d792eb5c7e58d621a638)(typescript@5.9.3):
+  multi-semantic-release@3.1.0(patch_hash=9f6b4fb5274f7aa38c621c75346494190d0f6a710c7dd56de6a78a791a06e457)(typescript@5.9.3):
     dependencies:
       '@manypkg/get-packages': 1.1.3
       blork: 9.3.0

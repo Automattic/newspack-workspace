@@ -169,11 +169,14 @@ class Teams_Migration {
 	 * member and hand them free access they no longer have. "Has access" means a
 	 * WooCommerce Memberships user membership linked to the team (Teams stamps each
 	 * seat's membership with `_team_id`) in a status that grants access today. A
-	 * team never linked to a subscription is judged by its own end date instead:
-	 * Teams ends such a team on that date, its members' memberships can lag behind
-	 * it, and it may hold only pending invitees so far. The check is per team: a team that passes it re-adds
-	 * all of its members, as before. Pass --include-ended-teams to create a group
-	 * for every team with nothing to reuse.
+	 * team never linked to a subscription must also be within its own end date:
+	 * Teams ends such a team on that date and its members' memberships can lag
+	 * behind it. A team holding only pending invitees has nobody with access, so
+	 * it is skipped and its invitees are listed as unresolved. The check is per
+	 * team: a team that passes it re-adds all of its members, and its end date
+	 * carries over to the new group. Pass --include-ended-teams to create a group
+	 * for every team with nothing to reuse, and add --team-ids to limit that to
+	 * the listed teams.
 	 *
 	 * Pending team invitations are not re-sent. Their existing `join-team` links keep
 	 * working: once WooCommerce Teams is deactivated the plugin answers that route and
@@ -197,7 +200,10 @@ class Teams_Migration {
 	 * : Only process teams that have no linked subscription. Use to safely re-run the command for previously skipped teams.
 	 *
 	 * [--include-ended-teams]
-	 * : With --product-id, create a subscription for every team that has nothing to reuse, including teams in which nobody has access today. Without it those teams are skipped and marked SKIPPED in the summary.
+	 * : With --product-id, create a subscription for every team that has nothing to reuse, including teams in which nobody has access today. Without it those teams are skipped and marked SKIPPED in the summary. Combine with --team-ids to create one for the listed teams only.
+	 *
+	 * [--team-ids=<ids>]
+	 * : Comma-delimited list of team IDs to process; every other team is left alone. Each ID must be a published team, or the run stops before writing anything.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -205,6 +211,7 @@ class Teams_Migration {
 	 *     wp newspack migrate-teams --product-id=519858 --live
 	 *     wp newspack migrate-teams --skip-unlinked --live
 	 *     wp newspack migrate-teams --product-id=519858 --only-unlinked --live
+	 *     wp newspack migrate-teams --product-id=519858 --team-ids=4521 --include-ended-teams --live
 	 *
 	 * @param array $args       Positional args (unused).
 	 * @param array $assoc_args Named args.
@@ -217,8 +224,25 @@ class Teams_Migration {
 		$skip_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
 		$only_unlinked       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
 		$include_ended_teams = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'include-ended-teams', false );
+		$team_ids            = \WP_CLI\Utils\get_flag_value( $assoc_args, 'team-ids', '' );
 
 		// Pre-flight checks.
+		// A --team-ids that names no team would otherwise widen the run to every
+		// team: a bare flag reaches this method as the empty default (see
+		// get_valueless_value_flags()), and an unset shell variable as ''.
+		$team_ids_given   = array_key_exists( 'team-ids', $assoc_args );
+		$team_ids_missing = 'The --team-ids flag requires a value (e.g. --team-ids=12,34).';
+		if ( self::get_valueless_value_flags( null, [ '--team-ids' ] ) || ! is_string( $team_ids ) ) {
+			WP_CLI::error( $team_ids_missing );
+		}
+		$team_ids = self::parse_id_tokens( $team_ids, 'team ID', '--team-ids' );
+		if ( \is_wp_error( $team_ids ) ) {
+			WP_CLI::error( $team_ids->get_error_message() );
+		}
+		if ( $team_ids_given && ! $team_ids ) {
+			WP_CLI::error( $team_ids_missing );
+		}
+
 		if ( ! $product_id && ! $skip_unlinked ) {
 			WP_CLI::error( 'Missing required option: --product-id=<id>. Pass --skip-unlinked if you only want to process teams already linked to a subscription.' );
 		}
@@ -306,6 +330,27 @@ class Teams_Migration {
 			}
 		}
 
+		$team_query = [
+			'post_type'      => 'wc_memberships_team',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+			'orderby'        => 'ID',
+			'order'          => 'ASC',
+			'no_found_rows'  => true,
+		];
+		if ( $team_ids ) {
+			$team_query['post__in'] = $team_ids;
+		}
+		$teams = \get_posts( $team_query );
+
+		// A listed ID that matched no team is most likely a typo for the team the
+		// operator meant to migrate, so stop rather than migrate fewer than listed.
+		$unknown_team_ids = array_diff( $team_ids, $teams );
+		if ( $unknown_team_ids ) {
+			WP_CLI::error( sprintf( 'Not a published team: %s. Fix the --team-ids input and re-run.', implode( ', ', $unknown_team_ids ) ) );
+		}
+
 		if ( $dry_run ) {
 			WP_CLI::line( '' );
 			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to apply. ***' );
@@ -317,18 +362,6 @@ class Teams_Migration {
 		// activity during the run.
 		self::suppress_woocommerce_emails();
 		self::suppress_data_events();
-
-		$teams = \get_posts(
-			[
-				'post_type'      => 'wc_memberships_team',
-				'post_status'    => 'publish',
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
-				'no_found_rows'  => true,
-			]
-		);
 
 		$total = count( $teams );
 		WP_CLI::line( sprintf( 'Found %d active team membership(s). Starting migration…', $total ) );
@@ -351,6 +384,7 @@ class Teams_Migration {
 
 		$summary               = [];
 		$skipped               = [];
+		$no_access_reasons     = []; // Team ID → why a team marked SKIPPED had no access to carry over.
 		$ungated_free_skips    = 0; // $0 teams skipped because no gate accepts their subscription's products.
 		$invitation_rows       = []; // Pending-invitation rows: team → invitee email.
 		$invitation_teams_seen = []; // Teams whose invitees already have rows, so the skipped-team pass doesn't double-report.
@@ -533,22 +567,27 @@ class Teams_Migration {
 			}
 
 			// Nothing to reuse and nobody in the team has access through it, so there
-			// is no access to carry over. Creating a $0 group here would re-add every
-			// lapsed member and give them free access they no longer have. Reported
+			// is no access to carry over. Creating a $0 group here would give the owner,
+			// and any lapsed member it re-adds, free access they do not have today. Reported
 			// as SKIPPED rather than as an error: it is the expected outcome for a
-			// team whose subscription ended. A team never linked to a subscription is
-			// judged by its own term instead (see the command docblock), so one
-			// holding only pending invitees still gets a group for their join-team
-			// links to resolve to.
-			$team_has_access = $raw_sub_id
-				? isset( $team_ids_with_access[ $team_id ] )
-				: ( '' === $end_date || strtotime( $end_date . ' UTC' ) > time() );
+			// team whose subscription ended, and for one nobody ever joined. A team
+			// never linked to a subscription must also be within its own term (see
+			// the command docblock).
+			$team_term_ended = ! $raw_sub_id && '' !== $end_date && strtotime( $end_date . ' UTC' ) <= time();
+			$team_has_access = isset( $team_ids_with_access[ $team_id ] ) && ! $team_term_ended;
 			if ( ! $subscription && ! $include_ended_teams && ! $team_has_access ) {
 				$summary[] = self::summary_row( $team_id, self::SKIPPED_ENDED_TEAM, 0, 0, $group_limit, false, [] );
-				$skip_reason = $raw_sub_id
-					? 'nobody in the team has access today'
-					: sprintf( 'the team, never linked to a subscription, ended on %s', $end_date );
-				WP_CLI::line( sprintf( 'Team %d: nothing to reuse, and %s — skipping. Pass --include-ended-teams to create one anyway.', $team_id, $skip_reason ) );
+				if ( $team_term_ended ) {
+					$skip_reason = sprintf( 'the team, never linked to a subscription, ended on %s', $end_date );
+				} elseif ( empty( $member_ids ) && ! empty( $pending_invitations[ $team_id ] ) ) {
+					$skip_reason = sprintf( 'nobody has joined the team, so its %d pending invitation(s) will not resolve', count( $pending_invitations[ $team_id ] ) );
+				} elseif ( empty( $member_ids ) ) {
+					$skip_reason = 'nobody has joined the team';
+				} else {
+					$skip_reason = 'nobody in the team has access today';
+				}
+				$no_access_reasons[ $team_id ] = $skip_reason;
+				WP_CLI::line( sprintf( 'Team %d: nothing to reuse, and %s — skipping. Pass --team-ids=%d --include-ended-teams to create one anyway.', $team_id, $skip_reason, $team_id ) );
 				\WP_CLI\Utils\wp_clear_object_cache();
 				continue;
 			}
@@ -827,6 +866,14 @@ class Teams_Migration {
 			}
 		}
 
+		if ( ! empty( $no_access_reasons ) ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( sprintf( '=== SKIPPED: NO ACCESS TO CARRY OVER — %d total ===', count( $no_access_reasons ) ) );
+			foreach ( $no_access_reasons as $skipped_team_id => $skip_reason ) {
+				WP_CLI::line( sprintf( 'Team %d: %s', $skipped_team_id, $skip_reason ) );
+			}
+		}
+
 		// Skipped teams section.
 		if ( ! empty( $skipped ) ) {
 			WP_CLI::line( '' );
@@ -838,7 +885,7 @@ class Teams_Migration {
 		// Invitees of teams the run never reached — skipped by --skip-unlinked or
 		// --only-unlinked, skipped with no access to carry over, or errored out for
 		// having no subscription to migrate into. They are listed too, so "the
-		// pending invitees are always listed" holds for every team rather than only
+		// pending invitees are always listed" holds for every team in scope rather than only
 		// the processed ones. The em dash in their `sub`
 		// column is what tells an operator their links resolve to nothing: with no group
 		// subscription to map onto, the handler can only show the invalid-link notice.
@@ -876,7 +923,7 @@ class Teams_Migration {
 		WP_CLI::line( '' );
 		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d not migrated, %d skipped (no linked subscription), %d skipped with no access to carry over, %d had error(s).', count( $summary ), count( $migrated_rows ) - $new_count, $new_count, count( $summary ) - count( $migrated_rows ) - $ended_count, count( $skipped ), $ended_count, count( $errored_rows ) ) );
 		if ( $ended_count ) {
-			WP_CLI::line( 'No subscription was created for the teams marked SKIPPED above. Pass --include-ended-teams to create one for each.' );
+			WP_CLI::line( 'No subscription was created for the teams marked SKIPPED above. To create one for a team anyway, re-run with --team-ids=<id> --include-ended-teams. --include-ended-teams without --team-ids creates one for each.' );
 		}
 		if ( $ungated_free_skips ) {
 			// --product-id is the other fix, but it also mints a new subscription for
@@ -900,7 +947,7 @@ class Teams_Migration {
 				)
 			);
 			if ( $unresolved ) {
-				WP_CLI::warning( sprintf( '%d of them belong to teams with no group subscription (an em dash in the sub column). Those links resolve to nothing — contact those invitees directly, or re-run so their team migrates (a team marked SKIPPED needs --include-ended-teams).', $unresolved ) );
+				WP_CLI::warning( sprintf( '%d of them belong to teams with no group subscription (an em dash in the sub column). Those links resolve to nothing — contact those invitees directly, or re-run so their team migrates (a team marked SKIPPED needs --team-ids=<id> --include-ended-teams).', $unresolved ) );
 			}
 		}
 	}

@@ -276,6 +276,10 @@ class Group_Seats {
 	 * IDs of the users holding a seat on a subscription, from the meta itself
 	 * (see MEMBER_META_KEY for why not newspack-plugin's `get_members()`).
 	 *
+	 * Keep `fields => 'ID'`: newspack-plugin's `get_members()` runs the same SQL, and
+	 * WordPress caches user queries by their SQL alone, so a different `fields` shape
+	 * here would hand each query the other's cached rows.
+	 *
 	 * @param int $subscription_id Subscription ID.
 	 * @return int[]
 	 */

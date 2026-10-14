@@ -150,6 +150,21 @@ final class Gate_Access_Reader_Data {
 	}
 
 	/**
+	 * The product ids one product rule names.
+	 *
+	 * @param array $rule A `subscription` or `one_time_purchase` access rule.
+	 *
+	 * @return int[]
+	 */
+	public static function get_rule_product_ids( array $rule ): array {
+		$value = $rule['value'] ?? [];
+		if ( 'one_time_purchase' === ( $rule['slug'] ?? '' ) ) {
+			$value = $value['product_ids'] ?? [];
+		}
+		return array_map( 'intval', (array) $value );
+	}
+
+	/**
 	 * Paid gates: published, with custom access on and at least one rule group
 	 * that grants access by product.
 	 *

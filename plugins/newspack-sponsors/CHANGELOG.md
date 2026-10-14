@@ -1,3 +1,10 @@
+## newspack-sponsors [2.2.4](https://github.com/Automattic/newspack-workspace/compare/newspack-sponsors@2.2.3...newspack-sponsors@2.2.4) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## newspack-sponsors [2.2.3](https://github.com/Automattic/newspack-workspace/compare/newspack-sponsors@2.2.2...newspack-sponsors@2.2.3) (2026-08-31)
 
 
