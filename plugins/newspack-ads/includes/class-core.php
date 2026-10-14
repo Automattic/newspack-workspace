@@ -153,7 +153,7 @@ final class Core {
 	 * its cache reset or logging. This plugin must work without newspack-plugin,
 	 * so it can't call that one. newspack-ads, newspack-blocks, newspack-listings
 	 * and newspack-newsletters each carry this copy; a change to the name check
-	 * belongs in all of them.
+	 * belongs in all of them and in the original.
 	 *
 	 * @param string $name Asset path relative to `dist/`, without the extension.
 	 *                     Examples: 'editor', 'suppress-ads'.

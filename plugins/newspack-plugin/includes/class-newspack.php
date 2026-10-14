@@ -521,6 +521,10 @@ final class Newspack {
 	 * dist/ mid-run can call self::asset_version_reset_cache() to drop
 	 * stale entries.
 	 *
+	 * newspack-ads, newspack-blocks, newspack-listings and newspack-newsletters
+	 * carry trimmed copies of this helper, since each must work without this
+	 * plugin. A change to the name check belongs in those copies too.
+	 *
 	 * @param string $name Asset basename relative to `dist/`, without the
 	 *                     `.asset.php` suffix. Examples: 'wizards',
 	 *                     'other-scripts/relative-time'.
