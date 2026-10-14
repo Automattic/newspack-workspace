@@ -28,11 +28,11 @@ import { ad, emailAd, gift } from 'newspack-icons';
 
 ## Development
 
-Icons are stored as JS files in the `src` directory that export React components containing SVG data. Each icon is exported through the main `index.js` file.
+Icons are stored as TSX files in the `src` directory that export React components containing SVG data. Each icon is exported through the main `index.ts` file.
 
 To add a new icon:
-1. Create a JS file in the `src` directory that exports a React component with SVG data
-2. Export it in `index.js`
+1. Create a TSX file in the `src` directory that exports a React component with SVG data
+2. Export it in `index.ts`
 3. Follow the existing naming conventions
 
 ## Building

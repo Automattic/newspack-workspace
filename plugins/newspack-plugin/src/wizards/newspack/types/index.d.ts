@@ -92,9 +92,8 @@ declare global {
 				};
 			};
 		};
-		newspack_urls: {
-			site: string;
-		};
+		// newspack_urls is declared by newspack-components (packages/components/src/footer),
+		// which owns the full shape of that payload.
 	}
 }
 

@@ -58,7 +58,8 @@ interface ThemeAndBrand {
 	header_simplified: boolean;
 	header_solid_background: boolean;
 	header_color_hex: string;
-	custom_logo: string;
+	// An empty string when unset, or the media-modal attachment selected in the header settings.
+	custom_logo: string | { id: number; url: string } | null;
 	logo_size: number;
 	header_text: boolean;
 	header_display_tagline: boolean;
@@ -67,7 +68,8 @@ interface ThemeAndBrand {
 	footer_copyright: string;
 	footer_color: string;
 	footer_color_hex: string;
-	newspack_footer_logo: string;
+	// An empty string when unset, or the media-modal attachment selected in the footer settings.
+	newspack_footer_logo: string | { id: number; url: string } | null;
 	footer_logo_size: string;
 
 	// Homepage pattern.
