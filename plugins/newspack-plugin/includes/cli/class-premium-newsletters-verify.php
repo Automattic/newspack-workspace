@@ -1482,10 +1482,10 @@ class Premium_Newsletters_Verify {
 	 * this command already applies to any lookup it cannot trust.
 	 *
 	 * The same provider knowledge is kept as an exact-match allowlist in
-	 * Newspack\Reader_Activation\Integrations\ESP::pull_contact_data()
-	 * (includes/reader-activation/integrations/class-esp.php), which normalizes a miss
-	 * to the framework's canonical code for its batch drivers. Adding a fourth
-	 * provider means adding it there too.
+	 * Newspack\Reader_Activation\Integrations\ESP::is_provider_not_found_error()
+	 * (includes/reader-activation/integrations/class-esp.php), which the ESP's pull and
+	 * existence check use to tell a miss from a failure. Adding a fourth provider
+	 * means adding it there too.
 	 *
 	 * @param \WP_Error $error The error get_contact_data() returned.
 	 *
