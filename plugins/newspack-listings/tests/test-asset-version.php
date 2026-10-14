@@ -40,6 +40,9 @@ class Test_Newspack_Listings_Asset_Version extends WP_UnitTestCase {
 		foreach ( glob( $this->fixture_dir . '*.asset.php' ) as $file ) {
 			unlink( $file ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
 		}
+		if ( is_dir( $this->fixture_dir . 'sub' ) ) {
+			rmdir( $this->fixture_dir . 'sub' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_rmdir
+		}
 		rmdir( $this->fixture_dir ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_rmdir
 		parent::tear_down();
 	}
@@ -106,23 +109,22 @@ class Test_Newspack_Listings_Asset_Version extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It rejects names that aren't entry-shaped, including `..` segments that
-	 * would resolve on disk to a real fixture. The fixture resolves on its own
-	 * first, which proves the rejection is what returns the fallback.
+	 * It rejects names that aren't entry-shaped. Each unsafe name points at a
+	 * fixture that exists on disk, so only the name check, not a missing file,
+	 * can return the fallback.
 	 */
 	public function test_rejects_unsafe_names() {
-		$name = $this->write_fixture( '<?php return [ "version" => "must-not-be-returned" ];' );
-		$this->assertSame( 'must-not-be-returned', Core::asset_version( $name ) );
+		$contents = '<?php return [ "version" => "must-not-be-returned" ];';
+		$name     = $this->write_fixture( $contents );
+		wp_mkdir_p( $this->fixture_dir . 'sub' );
+		file_put_contents( $this->fixture_dir . 'has spaces.asset.php', $contents ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
 
 		$unsafe = [
-			'/absolute/path',
-			'has spaces',
-			'name\\with\\backslashes',
-			'..',
-			'../' . $name,
-			$name . '/../' . $name,
+			'sub/../' . $name, // A `..` segment.
+			'has spaces',      // A character outside the allowed set.
 		];
 		foreach ( $unsafe as $unsafe_name ) {
+			$this->assertFileExists( $this->fixture_dir . $unsafe_name . '.asset.php', 'The fixture must resolve, or this case proves nothing.' );
 			$this->assertSame( $this->fallback_version(), Core::asset_version( $unsafe_name ), $unsafe_name );
 		}
 	}
