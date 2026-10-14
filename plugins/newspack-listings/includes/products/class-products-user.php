@@ -17,11 +17,30 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Products_User extends Products {
 	/**
+	 * Read-only REST routes the editor calls with the broad `edit_posts` check, as a route prefix or an exact route.
+	 * Anything not listed here is refused to the customer, so extending the list is a deliberate decision.
+	 *
+	 * @var string[]
+	 */
+	const EDITOR_READ_ROUTES = [ '/wp/v2/posts', '/wp/v2/block-renderer/' ];
+
+	/**
+	 * Method and route of the REST requests being dispatched, innermost last.
+	 *
+	 * A stack because a handler can dispatch another request internally.
+	 *
+	 * @var array[]
+	 */
+	private static $rest_requests = [];
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		// WP user actions to add capabilities and admin access for WC customers, who normally can't access the post editor.
 		add_filter( 'user_has_cap', [ $this, 'allow_customers_to_edit_own_posts' ], 10, 3 );
+		add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'push_rest_method' ], 10, 3 );
+		add_filter( 'rest_request_after_callbacks', [ __CLASS__, 'pop_rest_method' ], 10, 3 );
 		add_filter( 'allowed_block_types_all', [ $this, 'restrict_blocks_for_customers' ], 10, 2 );
 		add_action( 'admin_menu', [ $this, 'hide_admin_menu_for_customers' ], PHP_INT_MAX ); // Late execution to override other plugins like Jetpack.
 		add_filter( 'admin_bar_menu', [ $this, 'hide_admin_bar_for_customers' ], PHP_INT_MAX ); // Late execution to override other plugins like Jetpack.
@@ -54,16 +73,11 @@ final class Products_User extends Products {
 		}
 
 		if ( (bool) $is_listing_customer ) {
-			global $pagenow;
 			$is_published   = 'publish' === get_post_status( get_the_ID() );
-			$actions        = [ 'edit', 'editposts' ];
-			$action         = isset( $_REQUEST['action'] ) ? sanitize_text_field( wp_unslash( sanitize_text_field( $_REQUEST['action'] ) ) ) : null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$context        = isset( $_REQUEST['context'] ) ? sanitize_text_field( wp_unslash( sanitize_text_field( $_REQUEST['context'] ) ) ) : null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$is_edit_screen = ( $action && in_array( $action, $actions, true ) ) || ( $context && in_array( $context, $actions, true ) );
+			$is_edit_screen = self::is_own_listing_edit_screen( $user_id );
 
-			// If not an edit screen, if the post ID isn't set or isn't in the user's allowed post IDs,
-			// or the user is trying to access an admin page other than the post editor, disallow.
-			if ( ! $is_edit_screen || 'post.php' !== $pagenow ) {
+			// Outside the editor screen of one of the customer's own listings, disallow.
+			if ( ! $is_edit_screen ) {
 				$allcaps[ $capability ] = 0;
 			}
 
@@ -72,13 +86,87 @@ final class Products_User extends Products {
 				$allcaps[ $capability ] = $is_published ? 1 : 0;
 			}
 
-			// As of WP 5.9, some capabilities in the block editor are checked via REST API. e.g. reusable blocks and featured images.
-			if ( 'edit_posts' === $capability && $is_edit_screen ) {
+			// The editor's block previews read from a few REST routes with the broad check, so those reads keep it.
+			// It is never granted to a write: creating a post is a broad `edit_posts` check, and the customer may only
+			// edit the listings they own, which are checked per post.
+			if ( 'edit_posts' === $capability && ( $is_edit_screen || self::is_editor_read_request() ) ) {
 				$allcaps[ $capability ] = 1;
 			}
 		}
 
 		return $allcaps;
+	}
+
+	/**
+	 * Record the method and route of a REST request before its permission check runs.
+	 *
+	 * Reads what the route is dispatched on rather than a superglobal, so a method override is accounted for.
+	 *
+	 * @param WP_REST_Response|WP_HTTP_Response|WP_Error|mixed $response Response so far, passed through.
+	 * @param array                                            $handler  Route handler, unused.
+	 * @param WP_REST_Request                                  $request  Request being dispatched.
+	 *
+	 * @return mixed The response, unchanged.
+	 */
+	public static function push_rest_method( $response, $handler, $request ) {
+		self::$rest_requests[] = $request instanceof \WP_REST_Request ? [ strtoupper( $request->get_method() ), $request->get_route() ] : [ '', '' ];
+		return $response;
+	}
+
+	/**
+	 * Drop the method recorded for the request that just finished.
+	 *
+	 * @param WP_REST_Response|WP_HTTP_Response|WP_Error|mixed $response Response, passed through.
+	 * @param array                                            $handler  Route handler, unused.
+	 * @param WP_REST_Request                                  $request  Request that was dispatched, unused.
+	 *
+	 * @return mixed The response, unchanged.
+	 */
+	public static function pop_rest_method( $response, $handler, $request ) {
+		array_pop( self::$rest_requests );
+		return $response;
+	}
+
+	/**
+	 * Whether the REST request being dispatched is a read of one of the editor routes.
+	 *
+	 * @return boolean True for a GET or HEAD request to a route in EDITOR_READ_ROUTES; false otherwise, and outside REST dispatch.
+	 */
+	private static function is_editor_read_request() {
+		$current = end( self::$rest_requests );
+		if ( ! $current || ! in_array( $current[0], [ 'GET', 'HEAD' ], true ) ) {
+			return false;
+		}
+		foreach ( self::EDITOR_READ_ROUTES as $route ) {
+			if ( $current[1] === $route || ( '/' === substr( $route, -1 ) && 0 === strpos( $current[1], $route ) ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether this request is the editor screen of a listing the user owns.
+	 *
+	 * Derived from the admin screen and the stored post author. Request values such as `action` or `context`
+	 * are not used to decide it: any caller of the REST API can send those.
+	 *
+	 * @param int $user_id ID of the user to check.
+	 *
+	 * @return boolean True on the editor screen of one of the user's own listings.
+	 */
+	private static function is_own_listing_edit_screen( $user_id ) {
+		global $pagenow;
+
+		if ( 'post.php' !== $pagenow ) {
+			return false;
+		}
+
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
+		$post_id = isset( $_REQUEST['post'] ) ? absint( $_REQUEST['post'] ) : ( isset( $_REQUEST['post_ID'] ) ? absint( $_REQUEST['post_ID'] ) : 0 );
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
+
+		return $post_id && self::does_user_own_listing( $user_id, $post_id );
 	}
 
 	/**
