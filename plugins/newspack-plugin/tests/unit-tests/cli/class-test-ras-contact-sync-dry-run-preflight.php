@@ -54,33 +54,46 @@ class Test_RAS_Contact_Sync_Dry_Run_Preflight extends WP_UnitTestCase {
 		];
 	}
 
-	private function dry_run( string $command ): void {
+	private function dry_run( string $command, array $extra_args = [] ): void {
 		RAS_Contact_Sync::$command(
 			[],
-			[
-				'dry-run'  => true,
-				'user-ids' => (string) $this->reader_id,
-			]
+			array_merge(
+				[
+					'dry-run'  => true,
+					'user-ids' => (string) $this->reader_id,
+				],
+				$extra_args
+			)
 		);
 	}
 
 	/**
-	 * The built-in ESP integration is the only push target and has no audience
-	 * set, which a live run refuses. The dry run still previews, but names every
-	 * reason and exits non-zero instead of reporting success.
+	 * Configuration errors a live run refuses: the built-in ESP integration is
+	 * the only push target and has no audience set.
+	 *
+	 * @return string[]
+	 */
+	private function configuration_errors(): array {
+		Integrations::enable( 'esp' );
+		$configuration_errors = Contact_Sync::has_one_syncable_integration( true )->get_error_messages();
+		$this->assertContains( 'ESP master list ID is not set.', $configuration_errors );
+		$this->assertGreaterThan( 1, count( $configuration_errors ), 'The fixture must yield several reasons, so the test shows that each is printed.' );
+		return $configuration_errors;
+	}
+
+	/**
+	 * A `--create-missing` preview reads no contacts, so it still runs, but names
+	 * every reason and exits non-zero instead of reporting success.
 	 *
 	 * @dataProvider command_provider
 	 *
 	 * @param string $command CLI method under test.
 	 */
 	public function test_dry_run_fails_on_configuration_errors( string $command ): void {
-		Integrations::enable( 'esp' );
-		$configuration_errors = Contact_Sync::has_one_syncable_integration( true )->get_error_messages();
-		$this->assertContains( 'ESP master list ID is not set.', $configuration_errors );
-		$this->assertGreaterThan( 1, count( $configuration_errors ), 'The fixture must yield several reasons, so the test shows that each is printed.' );
+		$configuration_errors = $this->configuration_errors();
 
 		try {
-			$this->dry_run( $command );
+			$this->dry_run( $command, [ 'create-missing' => true ] );
 			$this->fail( 'A dry run with a configuration error must exit non-zero.' );
 		} catch ( WP_CLI_Mock_Exception $e ) {
 			$this->assertStringStartsWith( 'Would sync 1 contacts (0 errors, 0 skipped).', $e->getMessage(), 'The preview still runs.' );
@@ -89,6 +102,32 @@ class Test_RAS_Contact_Sync_Dry_Run_Preflight extends WP_UnitTestCase {
 		foreach ( $configuration_errors as $configuration_error ) {
 			$this->assertContains( $configuration_error, WP_CLI::$warnings );
 		}
+		$this->assertSame( [], WP_CLI::$successes );
+	}
+
+	/**
+	 * The default, update-only preview reads each contact at the integrations,
+	 * so a failed check stops it before any read, as it would a live run. It
+	 * still names every reason, and how to get a preview that reads no contacts.
+	 *
+	 * @dataProvider command_provider
+	 *
+	 * @param string $command CLI method under test.
+	 */
+	public function test_update_only_dry_run_stops_on_configuration_errors( string $command ): void {
+		$configuration_errors = $this->configuration_errors();
+
+		try {
+			$this->dry_run( $command );
+			$this->fail( 'A dry run with a configuration error must exit non-zero.' );
+		} catch ( WP_CLI_Mock_Exception $e ) {
+			$this->assertStringStartsNotWith( 'Would sync', $e->getMessage(), 'No preview runs.' );
+		}
+
+		foreach ( $configuration_errors as $configuration_error ) {
+			$this->assertContains( $configuration_error, WP_CLI::$warnings );
+		}
+		$this->assertStringContainsString( '--create-missing', implode( "\n", WP_CLI::$warnings ) );
 		$this->assertSame( [], WP_CLI::$successes );
 	}
 
