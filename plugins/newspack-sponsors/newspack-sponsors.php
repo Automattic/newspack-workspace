@@ -7,7 +7,7 @@
  * Author URI:      https://newspack.com
  * Text Domain:     newspack-sponsors
  * Domain Path:     /languages
- * Version:         2.2.3
+ * Version:         2.2.4
  * Requires PHP:    8.1
  *
  * @package         Newspack_Sponsors

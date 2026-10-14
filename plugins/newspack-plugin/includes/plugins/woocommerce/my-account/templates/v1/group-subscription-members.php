@@ -15,8 +15,8 @@ use Newspack\Newspack_UI_Icons;
 defined( 'ABSPATH' ) || exit;
 
 \do_action( 'newspack_woocommerce_before_subscription_header', $subscription, $actions );
-// get_managers() returns ints while get_members() returns string IDs; normalize so the
-// strict in_array() and integer-keyed lookup below don't depend on PHP's key coercion.
+// Both lists pass through public filters, so normalize to ints: the strict in_array()
+// and integer-keyed lookup below shouldn't depend on what a filter returns.
 $members              = array_map( 'intval', Group_Subscription::get_members( $subscription ) );
 $managers             = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
 // array_unique() guards against a user appearing in both lists (e.g. the owner also carrying

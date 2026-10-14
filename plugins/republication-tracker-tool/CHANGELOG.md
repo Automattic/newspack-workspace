@@ -1,3 +1,10 @@
+## republication-tracker-tool [2.9.4](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.3...republication-tracker-tool@2.9.4) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## republication-tracker-tool [2.9.3](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.2...republication-tracker-tool@2.9.3) (2026-09-28)
 
 
