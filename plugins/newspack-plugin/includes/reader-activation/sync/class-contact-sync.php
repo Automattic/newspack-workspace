@@ -361,12 +361,13 @@ class Contact_Sync extends Sync {
 	 * @param array  $existing_contact Optional. Existing contact data to merge with.
 	 * @param array  $options          Optional. Sync options: `skip_lists` (bool),
 	 *                                 `fields` (string[]|null) and `existing_only` (bool).
-	 *                                 When non-default, contacts are field/name-scoped per
-	 *                                 integration and failed pushes are NOT auto-retried —
-	 *                                 the AS retry handler rebuilds the full contact and
-	 *                                 would push it with the master list, undoing the
-	 *                                 list-less/field-scoped/update-only intent. Operators
-	 *                                 re-run the affected `--offset` window instead.
+	 *                                 When `fields` is set, contacts are field/name-scoped
+	 *                                 per integration. When any of the three is set, failed
+	 *                                 pushes are NOT auto-retried — the AS retry handler
+	 *                                 rebuilds the full contact and upserts it with the
+	 *                                 master list and no existence check, undoing the
+	 *                                 list-less, field-scoped or update-only intent.
+	 *                                 Operators re-run the affected `--offset` window instead.
 	 *                                 Under `existing_only` each integration's
 	 *                                 `contact_exists()` is consulted first: `false` skips
 	 *                                 that integration, a `WP_Error` is handled as a failed

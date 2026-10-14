@@ -898,7 +898,7 @@ class RAS_Contact_Sync {
 		}
 		WP_CLI::line( "\n" );
 		// The alias exits 0 whatever the tally, and only a plain --create-missing
-		// run schedules retries, so name the unretried failures on STDERR rather
+		// run can schedule retries, so name the unretried failures on STDERR rather
 		// than leave them as a count in a success line.
 		$retried = empty( $options['existing_only'] ) && empty( $options['skip_lists'] ) && empty( $options['fields'] );
 		if ( ! $config['is_dry_run'] && ! $retried && $results['errors'] > 0 ) {
