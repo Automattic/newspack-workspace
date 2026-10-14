@@ -17,12 +17,13 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Products_User extends Products {
 	/**
-	 * Read-only REST routes the editor calls with the broad `edit_posts` check, as a route prefix or an exact route.
+	 * Read-only REST routes the editor calls with the broad `edit_posts` check: the post list and media library the
+	 * block inserter reads, and block previews. An entry ending in a slash is a route prefix; any other is an exact route.
 	 * Anything not listed here is refused to the customer, so extending the list is a deliberate decision.
 	 *
 	 * @var string[]
 	 */
-	const EDITOR_READ_ROUTES = [ '/wp/v2/posts', '/wp/v2/block-renderer/' ];
+	const EDITOR_READ_ROUTES = [ '/wp/v2/posts', '/wp/v2/media', '/wp/v2/block-renderer/' ];
 
 	/**
 	 * Method and route of the REST requests being dispatched, innermost last.
@@ -51,8 +52,9 @@ final class Products_User extends Products {
 	 * Filter user capability check. Customers who have purchased a listing item have the edit_posts capability added
 	 * so that they can be assigned as an author to listing posts, edit those posts, and submit for review to publish.
 	 * However, we only want them to be able to edit the specific posts they've purchased, not create new ones.
-	 * So we should remove the edit_posts capability if the user tries to edit another post create a new one,
-	 * or access other WordPress admin pages that are usually allowed under the edit_posts capability.
+	 * So the broad edit_posts capability is kept only on the editor screen of one of their own listings, and for
+	 * the editor's read requests listed in EDITOR_READ_ROUTES. It is removed everywhere else, including other
+	 * WordPress admin pages that are usually allowed under the edit_posts capability.
 	 *
 	 * @param bool[]   $allcaps Array of key/value pairs where keys represent a capability name and
 	 *                          boolean values represent whether the user has that capability.
@@ -86,9 +88,8 @@ final class Products_User extends Products {
 				$allcaps[ $capability ] = $is_published ? 1 : 0;
 			}
 
-			// The editor's block previews read from a few REST routes with the broad check, so those reads keep it.
-			// It is never granted to a write: creating a post is a broad `edit_posts` check, and the customer may only
-			// edit the listings they own, which are checked per post.
+			// Over REST the broad check is kept for the editor's reads only. Creating a post is a broad `edit_posts`
+			// check, and the customer may only edit the listings they own, which are checked per post.
 			if ( 'edit_posts' === $capability && ( $is_edit_screen || self::is_editor_read_request() ) ) {
 				$allcaps[ $capability ] = 1;
 			}
@@ -148,8 +149,7 @@ final class Products_User extends Products {
 	/**
 	 * Whether this request is the editor screen of a listing the user owns.
 	 *
-	 * Derived from the admin screen and the stored post author. Request values such as `action` or `context`
-	 * are not used to decide it: any caller of the REST API can send those.
+	 * Derived from the admin screen and the stored post author.
 	 *
 	 * @param int $user_id ID of the user to check.
 	 *
@@ -163,7 +163,8 @@ final class Products_User extends Products {
 		}
 
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
-		$post_id = isset( $_REQUEST['post'] ) ? absint( $_REQUEST['post'] ) : ( isset( $_REQUEST['post_ID'] ) ? absint( $_REQUEST['post_ID'] ) : 0 );
+		// Same sources, in the same order, as the post.php screen itself.
+		$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
 
 		return $post_id && self::does_user_own_listing( $user_id, $post_id );

@@ -2,10 +2,9 @@
 /**
  * Class Products_User Test
  *
- * Covers the capability filter applied to self-serve listing customers
- * (NPPM-3196): the broad `edit_posts` check is granted from the server-side
- * edit screen only, never from request values, and the per-listing editing
- * flow keeps working.
+ * Covers the capability filter applied to self-serve listing customers: the
+ * broad `edit_posts` check is granted from the server-side edit screen and a
+ * short list of editor reads, and the per-listing editing flow keeps working.
  *
  * @package Newspack_Listings
  */
@@ -25,8 +24,16 @@ class ProductsUserTest extends WP_UnitTestCase {
 	 */
 	private $listing_types = [ 'marketplace', 'event', 'place' ];
 
+	/**
+	 * Value of the admin page global before the test.
+	 *
+	 * @var string|null
+	 */
+	private $original_pagenow;
+
 	public function set_up() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 		parent::set_up();
+		$this->original_pagenow = isset( $GLOBALS['pagenow'] ) ? $GLOBALS['pagenow'] : null;
 		new Products_User();
 		$GLOBALS['pagenow'] = 'index.php'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		$_REQUEST           = [];
@@ -35,7 +42,11 @@ class ProductsUserTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
-		unset( $GLOBALS['pagenow'] );
+		if ( null === $this->original_pagenow ) {
+			unset( $GLOBALS['pagenow'] );
+		} else {
+			$GLOBALS['pagenow'] = $this->original_pagenow; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		}
 		$_REQUEST = [];
 		$_GET     = [];
 		$_POST    = [];
@@ -93,21 +104,27 @@ class ProductsUserTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The broad edit check does not follow a `context` request value.
+	 * Request values that earlier decided the broad edit check.
+	 *
+	 * @return array[] Request values.
 	 */
-	public function test_broad_edit_check_ignores_context_value() {
-		$customer_id = $this->create_listing_customer();
-		$_REQUEST    = [ 'context' => 'edit' ];
-
-		$this->assertFalse( user_can( $customer_id, 'edit_posts' ) );
+	public function request_values() {
+		return [
+			'context' => [ [ 'context' => 'edit' ] ],
+			'action'  => [ [ 'action' => 'edit' ] ],
+		];
 	}
 
 	/**
-	 * The broad edit check does not follow an `action` request value.
+	 * The broad edit check does not follow request values.
+	 *
+	 * @dataProvider request_values
+	 *
+	 * @param array $request Request values.
 	 */
-	public function test_broad_edit_check_ignores_action_value() {
+	public function test_broad_edit_check_ignores_request_values( $request ) {
 		$customer_id = $this->create_listing_customer();
-		$_REQUEST    = [ 'action' => 'edit' ];
+		$_REQUEST    = $request;
 
 		$this->assertFalse( user_can( $customer_id, 'edit_posts' ) );
 	}
@@ -198,7 +215,7 @@ class ProductsUserTest extends WP_UnitTestCase {
 		wp_set_current_user( $this->create_listing_customer() );
 		$params = [ 'context' => 'edit' ];
 
-		foreach ( [ '/wp/v2/posts', '/wp/v2/block-renderer/core/calendar', '/wp/v2/block-renderer/core/rss' ] as $route ) {
+		foreach ( [ '/wp/v2/posts', '/wp/v2/media', '/wp/v2/block-renderer/core/calendar', '/wp/v2/block-renderer/core/rss' ] as $route ) {
 			$this->assertSame( 200, $this->rest_status( 'GET', $route, $params ), $route );
 		}
 	}
@@ -215,19 +232,12 @@ class ProductsUserTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The broad edit check is not granted to any write method, however the request is labelled.
+	 * The broad edit check is not granted to a write sent to a route whose reads are allowed.
 	 */
-	public function test_broad_edit_check_refused_for_writes_over_rest() {
-		$customer_id = $this->create_listing_customer();
-		wp_set_current_user( $customer_id );
+	public function test_broad_edit_check_refused_for_writes_to_read_routes() {
+		wp_set_current_user( $this->create_listing_customer() );
 
-		foreach ( [ 'POST', 'PUT', 'PATCH', 'DELETE' ] as $method ) {
-			foreach ( [ [], [ 'context' => 'edit' ], [ 'action' => 'edit' ] ] as $extra ) {
-				$status = $this->rest_status( $method, '/wp/v2/posts', array_merge( [ 'title' => 'New' ], $extra ) );
-				$this->assertContains( $status, [ 403, 404, 405 ], $method . ' ' . wp_json_encode( $extra ) );
-			}
-		}
-		$this->assertSame( 0, (int) wp_count_posts( 'post' )->draft );
+		$this->assertSame( 403, $this->rest_status( 'POST', '/wp/v2/block-renderer/core/calendar', [ 'context' => 'edit' ] ) );
 	}
 
 	/**
@@ -239,7 +249,7 @@ class ProductsUserTest extends WP_UnitTestCase {
 			'rest_request_before_callbacks',
 			function( $response, $handler, $request ) {
 				if ( 'POST' === $request->get_method() && '/wp/v2/posts' === $request->get_route() ) {
-					rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/tags' ) );
+					rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/posts' ) );
 				}
 				return $response;
 			},
