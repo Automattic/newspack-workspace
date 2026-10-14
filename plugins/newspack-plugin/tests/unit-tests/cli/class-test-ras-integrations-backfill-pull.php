@@ -32,6 +32,9 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 		parent::set_up();
 		global $subscriptions_database;
 		$subscriptions_database = [];
+		// The push leg of a --direction=both run makes the live-run configuration
+		// check, which refuses this non-production host unless syncing is allowed.
+		add_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
 		Integrations::disable( 'esp' );
 		Failing_Sample_Integration::reset();
 		Integrations::register( new Failing_Sample_Integration( 'pull_cli_mock', 'Pull CLI Mock' ) );
@@ -43,6 +46,7 @@ class Test_RAS_Integrations_Backfill_Pull extends WP_UnitTestCase {
 	public function tear_down() {
 		global $subscriptions_database;
 		$subscriptions_database = [];
+		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
 		foreach ( [ 'pull_cli_mock', 'pull_cli_other' ] as $integration_id ) {
 			self::delete_integration_options( $integration_id );
 		}
