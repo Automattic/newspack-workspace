@@ -41,8 +41,8 @@ class Newspack_Test_Block_Style_Version extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		remove_filter( 'newspack_asset_dist_dir', [ $this, 'filter_dist_dir' ] );
-		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-test/style-version' ) ) {
-			unregister_block_type( 'newspack-test/style-version' );
+		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'newspack/test-style-version' ) ) {
+			unregister_block_type( 'newspack/test-style-version' );
 		}
 		foreach ( glob( $this->fixture_dir . '{,block/}*', GLOB_BRACE ) as $file ) {
 			if ( is_file( $file ) ) {
@@ -73,7 +73,7 @@ class Newspack_Test_Block_Style_Version extends WP_UnitTestCase {
 	private function metadata( $fields ) {
 		return array_merge(
 			[
-				'name' => 'newspack-test/style-version',
+				'name' => 'newspack/test-style-version',
 				'file' => wp_normalize_path( $this->fixture_dir . 'block/block.json' ),
 			],
 			$fields
@@ -96,25 +96,32 @@ class Newspack_Test_Block_Style_Version extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Stylesheets from two entries share one version that differs from either hash.
+	 * Stylesheets from two entries share one version, which differs from either
+	 * hash and changes when either entry changes.
 	 */
 	public function test_combines_hashes_from_several_entries() {
-		$metadata = Blocks::version_block_styles(
-			$this->metadata(
-				[
-					'style'     => 'file:../entry-a.css',
-					'viewStyle' => [ 'file:../entry-b.css' ],
-				]
-			)
+		$two_entries = $this->metadata(
+			[
+				'style'     => 'file:../entry-a.css',
+				'viewStyle' => [ 'file:../entry-b.css' ],
+			]
 		);
-		$this->assertSame( substr( md5( 'hash-entry-a,hash-entry-b' ), 0, 20 ), $metadata['version'] );
+		$combined    = Blocks::version_block_styles( $two_entries )['version'];
+		$this->assertNotContains( $combined, [ 'hash-entry-a', 'hash-entry-b' ] );
+
+		file_put_contents( $this->fixture_dir . 'entry-b.asset.php', '<?php return [ "version" => "hash-entry-b-rebuilt" ];' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
+		Newspack::asset_version_reset_cache();
+		$this->assertNotSame( $combined, Blocks::version_block_styles( $two_entries )['version'] );
 	}
 
 	/**
-	 * A version set in block.json is left alone, and so is a block with no
-	 * stylesheet from the build.
+	 * Blocks outside this plugin's `newspack/` namespace, a version set in
+	 * block.json, and a block with no stylesheet from the build are left alone.
 	 */
 	public function test_leaves_other_blocks_alone() {
+		$other_plugin = array_merge( $this->metadata( [ 'style' => 'file:../entry-a.css' ] ), [ 'name' => 'example/other-block' ] );
+		$this->assertSame( $other_plugin, Blocks::version_block_styles( $other_plugin ) );
+
 		$with_version = $this->metadata(
 			[
 				'version' => '1.2.3',
@@ -141,7 +148,7 @@ class Newspack_Test_Block_Style_Version extends WP_UnitTestCase {
 			wp_json_encode(
 				[
 					'apiVersion' => 3,
-					'name'       => 'newspack-test/style-version',
+					'name'       => 'newspack/test-style-version',
 					'title'      => 'Style version fixture',
 					'style'      => 'file:../entry-a.css',
 				]

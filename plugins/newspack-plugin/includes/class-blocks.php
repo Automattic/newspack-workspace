@@ -20,7 +20,7 @@ final class Blocks {
 	 * Initialize Hooks.
 	 */
 	public static function init() {
-		// Before the requires below, so it applies to every block they register.
+		// Hooked here, before `init`, because the blocks register on `init`.
 		\add_filter( 'block_type_metadata', [ __CLASS__, 'version_block_styles' ] );
 
 		require_once NEWSPACK_ABSPATH . 'src/blocks/reader-registration/index.php';
@@ -67,13 +67,22 @@ final class Blocks {
 	 * the file's mtime only under SCRIPT_DEBUG, so local sites don't show this.
 	 * Without a version, an updated stylesheet keeps its URL until WordPress
 	 * itself updates, and browsers and the CDN keep serving the cached copy.
-	 * Scripts aren't affected: WordPress reads their own `.asset.php` first.
+	 * A block script with its own `.asset.php` keeps that version; one without
+	 * would take this hash too.
+	 *
+	 * Only this plugin's `newspack/` blocks are touched. The filter runs for
+	 * every block on the site, so everything else returns before any lookup.
 	 *
 	 * @param array $metadata Block metadata read from block.json.
 	 * @return array Metadata with `version` set to the stylesheets' content hash.
 	 */
 	public static function version_block_styles( $metadata ) {
-		if ( ! is_array( $metadata ) || ! empty( $metadata['version'] ) || empty( $metadata['file'] ) ) {
+		if (
+			! is_array( $metadata )
+			|| ! str_starts_with( (string) ( $metadata['name'] ?? '' ), 'newspack/' )
+			|| ! empty( $metadata['version'] )
+			|| empty( $metadata['file'] )
+		) {
 			return $metadata;
 		}
 		/** This filter is documented in includes/class-newspack.php */

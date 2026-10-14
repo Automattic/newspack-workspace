@@ -559,7 +559,8 @@ final class Newspack {
 		 * to avoid writing fixtures into the production-served path.
 		 *
 		 * @param string $dir  Absolute path with trailing slash.
-		 * @param string $name Asset basename being resolved.
+		 * @param string $name Asset basename being resolved, or empty when
+		 *                     resolving the directory itself.
 		 */
 		$dist_dir = apply_filters( 'newspack_asset_dist_dir', NEWSPACK_ABSPATH . 'dist/', $name );
 		$path     = $dist_dir . $name . '.asset.php';
