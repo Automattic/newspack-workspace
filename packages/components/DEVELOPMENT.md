@@ -93,6 +93,7 @@ When building a screen, use the **spacing scale** (8px unit: 16, 24, 32, 48, 64)
 - **`FormTokenField`** - Token input field for tags/categories; prefer the Newspack component over the core `FormTokenField` because it also supports a `description` prop for help text like other controls.
 - **`ImageUpload`** - Image upload and selection component
 - **`RadioControl`** - Radio button group control
+- **`ReorderModal`** - Modal for putting a short list of items in order, by dragging or with move buttons; applies on Save
 - **`TextControl`** - Text input with Newspack styling and required field support
 
 ### Content Components
