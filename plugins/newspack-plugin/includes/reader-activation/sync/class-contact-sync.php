@@ -1531,6 +1531,7 @@ class Contact_Sync extends Sync {
 			$log_id = $logged_row_id;
 		}
 
+		$push_was_benign = false;
 		if ( \is_wp_error( $result ) ) {
 			$error_messages = implode( '; ', $result->get_error_messages() );
 			static::log(
@@ -1543,8 +1544,9 @@ class Contact_Sync extends Sync {
 					$error_messages
 				)
 			);
-			$error_class   = self::schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $result, $log_id );
-			$error_message = sprintf(
+			$error_class     = self::schedule_deletion_retry( $integration_id, $mode, $email, $contact, $context, $retry_count, $result, $log_id );
+			$push_was_benign = 'benign' === $error_class;
+			$error_message   = sprintf(
 				'Retry %d/%d failed for deletion (%s) sync of %s in integration "%s": %s',
 				$retry_count,
 				self::MAX_RETRIES,
@@ -1561,7 +1563,7 @@ class Contact_Sync extends Sync {
 			// A benign result (contact already gone from the ESP) is the deletion
 			// end-state, not a failure, so its deliberately-ended chain must not
 			// mark the action as failed.
-			if ( $retry_count >= self::MAX_RETRIES && 'benign' !== $error_class ) {
+			if ( $retry_count >= self::MAX_RETRIES && ! $push_was_benign ) {
 				throw new \Exception( esc_html( $error_message ) );
 			}
 		} else {
@@ -1577,20 +1579,25 @@ class Contact_Sync extends Sync {
 			if ( self::$current_as_action_id ) {
 				\ActionScheduler_Logger::instance()->log( self::$current_as_action_id, $success_message );
 			}
-			if ( 'flag' === $mode ) {
-				// The retried push can re-attach the reader to lists: `skip_lists`
-				// is advisory, and an integration on the three-argument contract
-				// never sees it. The original deletion already ran the cleanup,
-				// so run it again here to leave the provider state where that
-				// deletion left it. As on the original path, a cleanup failure
-				// is logged, not retried.
-				$cleanup_result = $integration->flag_deletion_cleanup( $email );
-				if ( \is_wp_error( $cleanup_result ) ) {
-					static::log( sprintf( 'Flag-deletion cleanup failed after retry %d for integration "%s" of %s: %s', $retry_count, $integration_id, $email, $cleanup_result->get_error_message() ) );
-					Push_Log::mark_failed( $log_id, 'flag_cleanup_failed', sprintf( 'The deletion flag was pushed, but removing the reader from lists failed: %s', $cleanup_result->get_error_message() ) );
-				} else {
-					static::log( sprintf( 'Flag-deletion cleanup succeeded after retry %d for integration "%s" of %s.', $retry_count, $integration_id, $email ) );
-				}
+		}
+
+		// A retry that ends the chain, landed or benign, runs the cleanup again.
+		// The retried push can re-attach the reader to lists: `skip_lists` is
+		// advisory, and an integration on the three-argument contract never
+		// sees it. And the first attempt's cleanup failure is not on the row,
+		// since this retry was to run it again; a benign end that skipped it
+		// would leave a list holding the reader with nothing to say so. As on
+		// the original path, a cleanup failure is logged, not retried.
+		if ( 'flag' === $mode && ( ! \is_wp_error( $result ) || $push_was_benign ) ) {
+			$cleanup_result = $integration->flag_deletion_cleanup( $email );
+			if ( \is_wp_error( $cleanup_result ) ) {
+				static::log( sprintf( 'Flag-deletion cleanup failed after retry %d for integration "%s" of %s: %s', $retry_count, $integration_id, $email, $cleanup_result->get_error_message() ) );
+				$reason = $push_was_benign
+					? 'The contact was already deleted at the integration, but removing the reader from lists failed: %s'
+					: 'The deletion flag was pushed, but removing the reader from lists failed: %s';
+				Push_Log::mark_failed( $log_id, 'flag_cleanup_failed', sprintf( $reason, $cleanup_result->get_error_message() ) );
+			} else {
+				static::log( sprintf( 'Flag-deletion cleanup succeeded after retry %d for integration "%s" of %s.', $retry_count, $integration_id, $email ) );
 			}
 		}
 	}
