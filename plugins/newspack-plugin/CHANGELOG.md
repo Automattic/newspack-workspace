@@ -1,3 +1,10 @@
+## newspack [6.55.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.1...newspack@6.55.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **bylines:** limit custom bylines to the post-content allowlist ([#1181](https://github.com/Automattic/newspack-workspace/issues/1181)) ([326a031](https://github.com/Automattic/newspack-workspace/commit/326a031019fc516e69e5923184ba94e4d4d2c2cf))
+
 ## newspack [6.55.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.55.0...newspack@6.55.1) (2026-10-14)
 
 
