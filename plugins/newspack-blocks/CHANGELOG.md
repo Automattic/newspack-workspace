@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.36.2](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.1...newspack-blocks@4.36.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **modal-checkout:** keep the 3D Secure step visible during processing ([#1289](https://github.com/Automattic/newspack-workspace/issues/1289)) ([e92052b](https://github.com/Automattic/newspack-workspace/commit/e92052b6ed8d1d91231b3fe48c38658e75718d25))
+
 ## @automattic/newspack-blocks [4.36.1](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.0...newspack-blocks@4.36.1) (2026-10-14)
 
 
