@@ -22,6 +22,14 @@ Built packages are available in two places:
 
 Download the `.zip` file for the plugin or theme you want, then install it on your WordPress site via the WordPress admin interface (Plugins → Add New → Upload Plugin, or Appearance → Themes → Add New → Upload Theme).
 
+## Reporting Security Issues
+
+To disclose a security issue to our team, [please submit a report via HackerOne here](https://hackerone.com/automattic/).
+
+### Content gating
+
+Newspack's content gate controls access to content behind a login or paywall, not confidential content, so we don't treat it as a security boundary. Reports of gated content being accessed without meeting the gate's requirements, including through third-party plugins, are configuration or product issues rather than security issues.
+
 ## Getting started
 
 ### Clone this repository

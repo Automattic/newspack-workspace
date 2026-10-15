@@ -1,6 +1,8 @@
 .wp-block-newspack-newsletters-subscribe {
-	&.is-style-modern,
-	&.is-style-modern--grid {
+	// Modern is the default look: a block gets it unless it picks Legacy. That
+	// covers a block with no style class and one that carries `is-style-default`,
+	// which the style picker wrote before Legacy existed.
+	&:not(.is-style-legacy) {
 		font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		font-weight: 400;
@@ -20,6 +22,14 @@
 
 			label {
 				cursor: pointer;
+			}
+
+			.is-gated label {
+				cursor: default;
+			}
+
+			label,
+			.list-label {
 				font-size: var(--newspack-ui-font-size-s, 16px);
 				font-weight: 400;
 				line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -30,33 +40,20 @@
 				display: grid;
 				gap: var(--newspack-ui-spacer-2, 12px);
 
-				&:not(:has(.list-description)) {
+				// Each list is its own card, with or without a description. Only the
+				// Legacy style puts the lists in one box.
+				li {
 					background: var(--newspack-ui-color-neutral-0, #fff);
 					border: 1px solid var(--newspack-ui-color-border, #ddd);
 					border-radius: var(--newspack-ui-border-radius-m, 6px);
-					gap: var(--newspack-ui-spacer-3, 16px);
-					padding: var(--newspack-ui-spacer-3, 16px);
-
-					.list-title {
-						font-weight: 400;
-					}
-				}
-
-				li {
 					margin: 0;
 					min-width: 100%;
+					padding: var(--newspack-ui-spacer-3, 16px);
+					transition: background 125ms ease-in-out, border 125ms ease-in-out;
 
-					&:has(.list-description) {
-						background: var(--newspack-ui-color-neutral-0, #fff);
-						border: 1px solid var(--newspack-ui-color-border, #ddd);
-						border-radius: var(--newspack-ui-border-radius-m, 6px);
-						padding: var(--newspack-ui-spacer-3, 16px);
-						transition: background 125ms ease-in-out, border 125ms ease-in-out;
-
-						&:has(input[type="checkbox"]:checked) {
-							background: var(--newspack-ui-color-neutral-5, #f7f7f7);
-							border-color: var(--newspack-ui-color-neutral-90, #1e1e1e);
-						}
+					&:has(input[type="checkbox"]:checked) {
+						background: var(--newspack-ui-color-neutral-5, #f7f7f7);
+						border-color: var(--newspack-ui-color-neutral-90, #1e1e1e);
 					}
 				}
 			}
@@ -246,8 +243,6 @@
 		}
 
 		.newspack-newsletters-lists {
-			order: 2;
-
 			ul,
 			&__container {
 				display: grid;
@@ -276,7 +271,6 @@
 			}
 
 			ul li,
-			ul li:has(.list-description),
 			&__list {
 				background: var(--newspack-ui-color-neutral-0, #fff);
 				border: 1px solid var(--newspack-ui-color-border, #ddd);
@@ -317,6 +311,22 @@
 				input[type="checkbox"] {
 					margin: 0;
 				}
+			}
+
+			.list-checkbox {
+				.newspack-ui__badge {
+					display: inline-grid;
+					margin-inline-end: auto;
+				}
+			}
+
+			.list-title .newspack-ui__badge {
+				clip-path: inset(50%);
+				height: 1px;
+				overflow: hidden;
+				position: absolute;
+				white-space: nowrap;
+				width: 1px;
 			}
 		}
 	}

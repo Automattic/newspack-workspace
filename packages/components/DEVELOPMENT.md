@@ -111,8 +111,9 @@ Their class names are hashed CSS modules, so never target them from our styleshe
 - **`CustomSelectControl`** - Custom select dropdown component
 - **`FormTokenField`** - Token input field for tags/categories; prefer the Newspack component over the core `FormTokenField` because it also supports a `description` prop for help text like other controls.
 - **`ImageUpload`** - Image upload and selection component
-- **`RadioControl`** - Radio button group control
 - **`PageControl`** - Picks one page through an autocomplete search
+- **`RadioControl`** - Radio button group control
+- **`ReorderModal`** - Modal for putting a short list of items in order, by dragging or with move buttons; applies on Save
 - **`SelectControl`** - Deprecated; use core `SelectControl`, or `__experimentalToggleGroupControl` for grouped or button-style choices
 - **`TextControl`** - Text input with Newspack styling and required field support
 

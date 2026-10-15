@@ -7,6 +7,8 @@
  * WordPress dependencies.
  */
 import { __, _n, _x, sprintf } from '@wordpress/i18n';
+import { Button } from '@wordpress/components';
+import { useLayoutEffect, useRef, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies.
@@ -33,13 +35,146 @@ const noOp = () => {};
  * across product and institution tiers, and a value the option list cannot describe is
  * named rather than printed bare.
  */
+const listAccessRuleOptionValues = ( values: Array< string | number >, options: AccessRuleOption[] = [], slug: string ) =>
+	values.map( value => {
+		const option = findAccessRuleOption( options, value );
+		return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
+	} );
+
 const formatAccessRuleOptionValues = ( values: Array< string | number >, options: AccessRuleOption[] = [], slug: string ) =>
-	values
-		.map( value => {
-			const option = findAccessRuleOption( options, value );
-			return option ? formatAccessRuleOptionLabel( option ) : formatMissingAccessRuleOptionLabel( value, getMissingOptionLabel( slug ) );
-		} )
-		.join( ', ' );
+	listAccessRuleOptionValues( values, options, slug ).join( ', ' );
+
+const MAX_VALUE_LINES = 2;
+
+/**
+ * A rule's values, cut to what fits in two lines of its summary line until the
+ * publisher asks for the rest, so a rule naming many institutions or products does
+ * not stretch the whole gate card.
+ */
+const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: string } ) => {
+	const ref = useRef< HTMLSpanElement >( null );
+	const toggleRef = useRef< HTMLButtonElement >( null );
+	const [ isExpanded, setIsExpanded ] = useState( false );
+	const [ visibleCount, setVisibleCount ] = useState( values.length );
+	// Keeps an existing toggle mounted while a layout change re-measures from every
+	// value, so a keyboard user's focus is not dropped.
+	const [ holdToggle, setHoldToggle ] = useState( false );
+	const [ width, setWidth ] = useState( 0 );
+	const layoutKey = `${ values.join( '\n' ) }|${ width }`;
+	const measuredKey = useRef( layoutKey );
+
+	useLayoutEffect( () => {
+		const line = ref.current?.parentElement;
+		if ( ! line || typeof ResizeObserver === 'undefined' ) {
+			return;
+		}
+		const observer = new ResizeObserver( ( [ entry ] ) => setWidth( Math.round( entry.contentRect.width ) ) );
+		observer.observe( line );
+		return () => observer.disconnect();
+	}, [] );
+
+	// Settles in a few passes whatever the list length: one state update per value
+	// would hit React's nested-update limit on a long list and crash the screen.
+	useLayoutEffect( () => {
+		if ( isExpanded ) {
+			return;
+		}
+		if ( measuredKey.current !== layoutKey ) {
+			measuredKey.current = layoutKey;
+			if ( visibleCount !== values.length ) {
+				setHoldToggle( true );
+				setVisibleCount( values.length );
+				return;
+			}
+		}
+		const line = ref.current?.parentElement;
+		const text = ref.current?.firstChild;
+		const lineHeight = line ? parseFloat( window.getComputedStyle( line ).lineHeight ) : NaN;
+		if ( ! line || ! text || text.nodeType !== Node.TEXT_NODE || ! lineHeight ) {
+			return;
+		}
+		// A held toggle about to unmount with focus would drop it to the page.
+		const releaseToggle = () => {
+			const toggle = toggleRef.current;
+			if ( visibleCount === values.length && toggle && toggle === toggle.ownerDocument.activeElement ) {
+				ref.current?.focus();
+			}
+			setHoldToggle( false );
+		};
+		const lineBox = line.getBoundingClientRect();
+		const limit = lineBox.top + lineHeight * MAX_VALUE_LINES + 1;
+		if ( lineBox.bottom <= limit || visibleCount <= 1 ) {
+			if ( holdToggle ) {
+				releaseToggle();
+			}
+			return;
+		}
+		const range = document.createRange();
+		if ( typeof range.getBoundingClientRect !== 'function' ) {
+			return;
+		}
+		let end = 0;
+		let fitting = 0;
+		for ( const [ index, value ] of values.slice( 0, visibleCount ).entries() ) {
+			end += ( index > 0 ? 2 : 0 ) + value.length;
+			range.setStart( text, end - 1 );
+			range.setEnd( text, end );
+			if ( range.getBoundingClientRect().bottom > limit ) {
+				break;
+			}
+			fitting = index + 1;
+		}
+		if ( holdToggle && fitting === visibleCount ) {
+			releaseToggle();
+			return;
+		}
+		setHoldToggle( false );
+		// At least one fewer than shown, so a toggle that pushes the line over makes room for itself.
+		setVisibleCount( Math.max( 1, Math.min( fitting, visibleCount - 1 ) ) );
+	} );
+
+	const hiddenCount = isExpanded ? 0 : values.length - visibleCount;
+	if ( hiddenCount < 1 && ! isExpanded && ! holdToggle ) {
+		return (
+			<span ref={ ref } tabIndex={ -1 }>
+				{ values.join( ', ' ) }
+			</span>
+		);
+	}
+	return (
+		<span ref={ ref } tabIndex={ -1 }>
+			{ ( isExpanded ? values : values.slice( 0, visibleCount ) ).join( ', ' ) }{ ' ' }
+			<Button
+				ref={ toggleRef }
+				variant="link"
+				aria-expanded={ isExpanded }
+				aria-label={
+					isExpanded
+						? sprintf(
+								// translators: %s: access rule name, e.g. "Institutional access".
+								__( 'Show less for %s', 'newspack-plugin' ),
+								ruleName
+						  )
+						: sprintf(
+								// translators: 1: number of hidden values, 2: access rule name, e.g. "Institutional access".
+								_n( '%1$d more for %2$s', '%1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
+								hiddenCount,
+								ruleName
+						  )
+				}
+				onClick={ () => setIsExpanded( ! isExpanded ) }
+			>
+				{ isExpanded
+					? __( 'Show less', 'newspack-plugin' )
+					: sprintf(
+							// translators: %d: number of hidden values.
+							_n( '+ %d more', '+ %d more', hiddenCount, 'newspack-plugin' ),
+							hiddenCount
+					  ) }
+			</Button>
+		</span>
+	);
+};
 
 /**
  * A range rule's bounds in words.
@@ -97,7 +232,7 @@ const formatRangeValue = ( value: unknown ): string =>
  *                      `useAccessRuleOptions()`. Falls back to the list localised with
  *                      the page for a rule the caller did not supply.
  */
-const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string => {
+const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string | string[] => {
 	const config = availableAccessRules[ rule.slug ];
 	const options = optionsBySlug[ rule.slug ] ?? config?.options;
 	if ( 'one_time_purchase' === rule.slug ) {
@@ -159,7 +294,7 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 		return formatRangeValue( rule.value );
 	}
 	if ( Array.isArray( rule.value ) && options ) {
-		return formatAccessRuleOptionValues( rule.value, options, rule.slug );
+		return listAccessRuleOptionValues( rule.value, options, rule.slug );
 	}
 	// Boolean rules carry no displayable value (mirrors the pre-formatter
 	// rendering, where React printed nothing for a boolean child).
@@ -169,13 +304,37 @@ const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< str
 	return String( rule.value );
 };
 
+const AccessRuleValue = ( { rule, optionsBySlug }: { rule: GateAccessRule; optionsBySlug: Record< string, AccessRuleOption[] > } ) => {
+	const value = formatAccessRuleValue( rule, optionsBySlug );
+	return Array.isArray( value ) ? (
+		<CollapsibleValues values={ value } ruleName={ availableAccessRules[ rule.slug ]?.name ?? rule.slug } />
+	) : (
+		<>{ value }</>
+	);
+};
+
+/**
+ * One bold-labeled line per access rule, the way every other gate setting reads in
+ * the summary.
+ */
+const AccessRuleLines = ( { groups, optionsBySlug }: { groups: GateAccessRuleGroup[]; optionsBySlug: Record< string, AccessRuleOption[] > } ) => (
+	<>
+		{ groups.map( ( ruleGroup, groupIndex ) =>
+			ruleGroup.map( rule =>
+				availableAccessRules[ rule.slug ]?.name ? (
+					<p key={ `${ groupIndex }-${ rule.slug }` }>
+						<strong>{ availableAccessRules[ rule.slug ].name }:</strong> <AccessRuleValue rule={ rule } optionsBySlug={ optionsBySlug } />
+					</p>
+				) : null
+			)
+		) }
+	</>
+);
+
 export type GateSummarySection = {
 	key: string;
 	label: string;
 	content: React.ReactNode;
-	// Sections sharing a column stack in the gate card, so a setting that belongs to
-	// another section reads as part of it. The save panel lists each section as a row.
-	column?: string;
 };
 
 /**
@@ -309,6 +468,9 @@ export const getGateSummarySections = (
 							{ formatMetering( gate.registration.metering, siteMeter?.anonymous_count, siteMeter?.period ) }
 						</p>
 					) }
+					{ gate.registration?.active && (
+						<AccessRuleLines groups={ gate.registration.access_rules ?? [] } optionsBySlug={ optionsBySlug } />
+					) }
 					{ ! gate.registration?.active && (
 						<p>
 							<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
@@ -317,19 +479,6 @@ export const getGateSummarySections = (
 				</>
 			),
 		} );
-
-		// Visitors these rules match count as registered, so they belong with Registered Access.
-		const registrationRules = ( gate.registration?.access_rules ?? [] ).flat();
-		if ( gate.registration?.active && registrationRules.length > 0 ) {
-			sections.push( {
-				key: 'registration_institutions',
-				column: 'registration',
-				label: __( 'Institutional Access', 'newspack-plugin' ),
-				content: registrationRules.map( ( rule, index ) => (
-					<p key={ `${ index }-${ rule.slug }` }>{ formatAccessRuleValue( rule, optionsBySlug ) }</p>
-				) ),
-			} );
-		}
 	}
 
 	const showsAccessRules = Boolean( gate.custom_access?.active && gate.custom_access.access_rules.length > 0 );
@@ -341,16 +490,7 @@ export const getGateSummarySections = (
 		label: __( 'Paid Access', 'newspack-plugin' ),
 		content: (
 			<>
-				{ showsAccessRules &&
-					gate.custom_access.access_rules.map( ( ruleGroup, groupIndex ) =>
-						ruleGroup.map( rule =>
-							availableAccessRules[ rule.slug ]?.name ? (
-								<p key={ `${ groupIndex }-${ rule.slug }` }>
-									<strong>{ availableAccessRules[ rule.slug ].name }:</strong> { formatAccessRuleValue( rule, optionsBySlug ) }
-								</p>
-							) : null
-						)
-					) }
+				{ showsAccessRules && <AccessRuleLines groups={ gate.custom_access.access_rules } optionsBySlug={ optionsBySlug } /> }
 				{ showsPaidMetering && (
 					<p>
 						<strong>{ __( 'Metered:', 'newspack-plugin' ) } </strong>{ ' ' }
@@ -375,20 +515,3 @@ export const getGateSummarySections = (
 
 	return sections;
 };
-
-/**
- * Group summary sections into the gate card's columns. A section naming a `column`
- * stacks under the section with that key; every other section starts its own.
- *
- * @param sections Sections from `getGateSummarySections()`.
- */
-export const groupSummaryColumns = ( sections: GateSummarySection[] ): GateSummarySection[][] =>
-	sections.reduce< GateSummarySection[][] >( ( columns, section ) => {
-		const home = section.column ? columns.find( column => column[ 0 ].key === section.column ) : undefined;
-		if ( home ) {
-			home.push( section );
-		} else {
-			columns.push( [ section ] );
-		}
-		return columns;
-	}, [] );
