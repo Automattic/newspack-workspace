@@ -110,7 +110,10 @@ if ( $using_license ) {
 			echo wp_kses_post( $article_info );
 			echo '</div>'; // .article-info
 
-			// The text area that is copyable.
+			// The text area that is copyable. A browser decodes its source once, and the caption strip
+			// (assets/widget.js, the block's view.js) writes its result back without decoding again, so
+			// each part has to arrive escaped exactly once. The footer comes from create_content_footer()
+			// already entity-encoded, which is why it is decoded before it is escaped.
 ?>
 			<div class="republication-content-section">
 				<?php if ( $plain_text_enabled ) : ?>
@@ -132,7 +135,7 @@ if ( $using_license ) {
 						readonly
 						rows="5"
 						aria-label="<?php esc_attr_e( 'Republish this article (HTML format)', 'republication-tracker-tool' ); ?>"
-					><?php echo esc_html( $article_info ); ?><?php echo wp_kses_post( $content ); ?><?php echo wp_kses_post( htmlspecialchars( $content_footer, ENT_QUOTES, 'UTF-8' ) ); ?></textarea>
+					><?php echo esc_html( $article_info ); ?><?php echo wp_kses_post( $content ); ?><?php echo wp_kses_post( htmlspecialchars( html_entity_decode( $content_footer, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), ENT_QUOTES, 'UTF-8' ) ); ?></textarea>
 
 					<?php if ( $plain_text_enabled ) : ?>
 						<div class="republish-content" data-tab-content="plain-text">

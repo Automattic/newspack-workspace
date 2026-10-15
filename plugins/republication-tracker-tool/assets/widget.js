@@ -48,7 +48,8 @@ function modal_actions(){
 	var doc = parser.parseFromString(html, "text/html");
 	$(doc).find('.wp-caption').remove();
 	var captionless = $(doc).find('body').html();
-	$shareable.html(captionless);
+	// .val(), not .html(): markup written into the textarea is decoded one more level.
+	$shareable.val(captionless);
 
 	// Responsive modal
 	var $modal = $('#republication-tracker-tool-modal');
