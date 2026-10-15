@@ -40,11 +40,13 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	private $non_subscriber_id;
 
 	/**
-	 * Load the WooCommerce mocks.
+	 * Load the WooCommerce mocks, plans included: a product_grants() decision can
+	 * turn on whether a plan is applied to the instance being priced, so this
+	 * suite needs the plans API mocked, not just plain WooCommerce.
 	 */
 	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
-		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-plans-mocks.php';
 	}
 
 	/**
@@ -69,6 +71,13 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 
 		add_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10, 3 );
 
+		// WP_UnitTestCase snapshots $wp_filter once, at the first test of the whole
+		// run, and restores that snapshot after every test's tear_down() — so a
+		// filter added once at require_once time (by wcs-plans-mocks.php, loaded
+		// only in setUpBeforeClass()) survives only if this class happens to run
+		// first. Re-adding it per test makes that independent of suite order.
+		add_filter( 'woocommerce_is_subscription', [ 'WCS_ATT_Product_Schemes', 'filter_is_subscription' ], 10, 3 );
+
 		$this->flush_caches();
 	}
 
@@ -81,6 +90,8 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 		remove_filter( 'newspack_access_rules_has_active_subscription', [ $this, 'grant_subscription_to_subscriber' ], 10 );
 		$this->flush_caches();
 		$this->reset_products_database();
+		\WCS_ATT_Product_Schemes::mock_reset();
+		\Newspack\Subscription_Products::flush_cache();
 		parent::tear_down();
 	}
 
@@ -554,6 +565,163 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Stub WC() with a cart of real line items, in this process only.
+	 *
+	 * Only callable from tests annotated `@runInSeparateProcess` — defining WC()
+	 * in the main suite process would flip `function_exists( 'WC' )` gates for
+	 * every later test in the run. Needed so the cart branch can be exercised
+	 * against a line item's own product instance (with a plan applied) rather
+	 * than through the `newspack_subscriber_discounts_cart_product_ids` filter's
+	 * IDs, which is how the rest of this suite simulates a cart. The stub itself
+	 * lives in mocks/wc-cart-global-mock.php: this file is namespaced, and a
+	 * `function WC() {}` declared in here would land in this namespace, not the
+	 * global one production code actually calls.
+	 *
+	 * @param array $cart_items Cart line items, keyed however WooCommerce would key them.
+	 */
+	private function stub_wc_cart( array $cart_items ) {
+		if ( ! $this->isInIsolation() ) {
+			$this->fail( 'stub_wc_cart() may only be called from @runInSeparateProcess tests — defining WC() in the main suite process would flip function_exists( "WC" ) gates for every later test in the run.' );
+		}
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-cart-global-mock.php';
+		\WC()->cart = new \WC_Cart( $cart_items );
+		// The stubbed cart is now the source of truth; set_up()'s empty filtered
+		// list would otherwise remove every line in it.
+		remove_all_filters( 'newspack_subscriber_discounts_cart_product_ids' );
+	}
+
+	/**
+	 * A plan applied to a cart line counts as a subscription in the cart for an
+	 * "apply at checkout" all-subscribers discount: the cart branch asks each line
+	 * what it is, because re-fetching the product by ID would drop the plan applied
+	 * to that line. Runs in its own process because it needs a real WC()->cart stub.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_all_subscriptions_rule_reads_a_plan_applied_cart_line() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-plans-mocks.php';
+		add_filter( 'woocommerce_is_subscription', [ 'WCS_ATT_Product_Schemes', 'filter_is_subscription' ], 10, 3 );
+		// A fresh process has never run whichever other test file's top-level
+		// require_once first populated these globals in the main run, so the
+		// mocks that read them need them initialized here.
+		global $subscriptions_database, $orders_database, $order_items_database;
+		$subscriptions_database = $subscriptions_database ?? [];
+		$orders_database        = $orders_database ?? [];
+		$order_items_database   = $order_items_database ?? [];
+
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+				'targeting'                => 'all',
+				'product_ids'              => [],
+			]
+		);
+
+		$plan_product = $this->create_product( 50.0, null, 0, 'simple' );
+		\WCS_ATT_Product_Schemes::mock_register(
+			$plan_product->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			]
+		);
+		$options       = \Newspack\Subscription_Products::get_purchase_options( $plan_product );
+		$plan_instance = \Newspack\Subscription_Products::get_option_product( $options[1] );
+
+		$this->stub_wc_cart(
+			[
+				'line' => [
+					'product_id' => $plan_product->get_id(),
+					'data'       => $plan_instance,
+				],
+			]
+		);
+		$this->flush_caches();
+
+		$this->assertSame(
+			90.0,
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'A plan applied to the cart line grants the all-subscribers discount before checkout.'
+		);
+
+		$this->stub_wc_cart(
+			[
+				'line' => [
+					'product_id' => $plan_product->get_id(),
+					'data'       => $plan_product,
+				],
+			]
+		);
+		$this->flush_caches();
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'The same cart holding the bare one-time instance does not grant the discount.'
+		);
+	}
+
+	/**
+	 * The newspack_subscriber_discounts_cart_product_ids filter decides which
+	 * products count as in the cart, real lines included: a filter that drops a
+	 * line holding a plan takes its all-subscribers discount with it.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_cart_product_ids_filter_can_remove_a_real_cart_line() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-plans-mocks.php';
+		add_filter( 'woocommerce_is_subscription', [ 'WCS_ATT_Product_Schemes', 'filter_is_subscription' ], 10, 3 );
+		global $subscriptions_database, $orders_database, $order_items_database;
+		$subscriptions_database = $subscriptions_database ?? [];
+		$orders_database        = $orders_database ?? [];
+		$order_items_database   = $order_items_database ?? [];
+
+		Subscriber_Discounts::save_settings( [ 'apply_at_checkout' => true ] );
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+				'targeting'                => 'all',
+				'product_ids'              => [],
+			]
+		);
+
+		$plan_product = $this->create_product( 50.0, null, 0, 'simple' );
+		\WCS_ATT_Product_Schemes::mock_register(
+			$plan_product->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			]
+		);
+		$options       = \Newspack\Subscription_Products::get_purchase_options( $plan_product );
+		$plan_instance = \Newspack\Subscription_Products::get_option_product( $options[1] );
+
+		$this->stub_wc_cart(
+			[
+				'line' => [
+					'product_id' => $plan_product->get_id(),
+					'data'       => $plan_instance,
+				],
+			]
+		);
+		add_filter( 'newspack_subscriber_discounts_cart_product_ids', '__return_empty_array' );
+		$this->flush_caches();
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->non_subscriber_id ),
+			'A cart line the filter removes grants no discount.'
+		);
+	}
+
+	/**
 	 * The cart is not fixed for the life of a request — WooCommerce mutates it and
 	 * then prices the rest of the page. A reader who removes the subscription from
 	 * their cart must lose the discount on everything priced afterwards, and the
@@ -642,5 +810,178 @@ class Test_Subscriber_Discounts_Pricing extends \WP_UnitTestCase {
 			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $subscription, $this->subscriber_id ),
 			'A subscription product keeps its price.'
 		);
+	}
+
+	/**
+	 * A plan-based product forced onto its plans has no one-time price to
+	 * protect, so an all-subscribers rule must not discount it either — the
+	 * bare catalog instance reads as `is_purchased_as_subscription() === false`
+	 * (no plan applied yet), so the guard needs is_subscription_only() to catch it.
+	 */
+	public function test_all_subscriptions_rule_never_discounts_a_subscription_only_plan_product() {
+		$plan_product = wc_create_mock_product(
+			[
+				'id'            => 505,
+				'type'          => 'simple',
+				'regular_price' => '100',
+				'price'         => '100',
+			]
+		);
+		\WCS_ATT_Product_Schemes::mock_register(
+			$plan_product->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			],
+			true // Forced: no one-time option.
+		);
+		$this->add_book_discount(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+				'targeting'                => 'all',
+				'product_ids'              => [],
+			]
+		);
+
+		$this->assertNull(
+			Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $plan_product, $this->subscriber_id ),
+			'A subscription-only plan product keeps its price, even on the bare catalog instance no plan has been applied to.'
+		);
+	}
+
+	/**
+	 * A product sold both one-time and on a subscription plan keeps its
+	 * one-time price open to an all-subscribers rule, but a plan chosen on an
+	 * instance of it reads as a subscription and the same rule leaves it alone
+	 * — the guard `product_grants()` applies against the instance being priced,
+	 * not the catalog product, so it must see the plan once it is applied.
+	 * Runs the real WooCommerce filter chain, not the `get_subscriber_price()`
+	 * shortcut the rest of this suite uses, because that is the seam
+	 * `product_grants()`'s instance-vs-catalog decision can only be observed on.
+	 */
+	public function test_hybrid_one_time_price_is_discounted_and_plan_price_is_not() {
+		$hybrid = wc_create_mock_product(
+			[
+				'id'            => 501,
+				'type'          => 'simple',
+				'regular_price' => '100',
+				'price'         => '100',
+			]
+		);
+		\WCS_ATT_Product_Schemes::mock_register(
+			$hybrid->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+					'price'    => 10,
+				],
+			]
+		);
+		Subscriber_Discounts::save_rule(
+			[
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_ALL,
+				'subscription_product_ids' => [],
+				'targeting'                => 'products',
+				'product_ids'              => [ $hybrid->get_id() ],
+				'discount_type'            => 'percent',
+				'amount'                   => 20,
+			]
+		);
+		$this->flush_caches();
+		\Newspack\Subscription_Products::flush_cache();
+		wp_set_current_user( $this->subscriber_id );
+		$this->enable_gates();
+		Subscriber_Discounts_Pricing::register_price_filters();
+
+		try {
+			$this->assertEquals( 80.0, (float) $hybrid->get_price(), 'One-time price is discounted.' );
+
+			$options   = \Newspack\Subscription_Products::get_purchase_options( $hybrid );
+			$plan_line = \Newspack\Subscription_Products::get_option_product( $options[1] );
+			$this->assertTrue(
+				\Newspack\Subscription_Products::is_purchased_as_subscription( $plan_line ),
+				'The plan instance reads as a subscription once the plan is applied.'
+			);
+			$this->assertEquals( 100.0, (float) $plan_line->get_price(), 'A chosen plan is never discounted by an all-subscribers rule.' );
+		} finally {
+			self::remove_price_filters();
+		}
+	}
+
+	/**
+	 * Plan products for the Audience preview flag: sold both ways, and forced onto
+	 * its plans.
+	 *
+	 * @return array[]
+	 */
+	public function plan_products_for_the_audience_flag() {
+		return [
+			'sold both ways'     => [ 502, false, false ],
+			'forced onto a plan' => [ 506, true, true ],
+		];
+	}
+
+	/**
+	 * The Audience wizard's price-preview flag agrees with product_grants() on the
+	 * bare catalog instance, where no plan is applied yet: a product sold both ways
+	 * previews as not-a-subscription, the verdict that leaves its one-time price
+	 * open to discount at checkout, and a product forced onto its plans can never
+	 * be bought one-time, so it previews as a subscription.
+	 *
+	 * @dataProvider plan_products_for_the_audience_flag
+	 *
+	 * @param int  $product_id Mock product ID.
+	 * @param bool $forced     Whether the product is forced onto its plans.
+	 * @param bool $expected   The expected preview flag.
+	 */
+	public function test_audience_flag_matches_product_grants_for_plan_products( $product_id, $forced, $expected ) {
+		$product = wc_create_mock_product(
+			[
+				'id'    => $product_id,
+				'type'  => 'simple',
+				'price' => '50',
+			]
+		);
+		\WCS_ATT_Product_Schemes::mock_register(
+			$product->get_id(),
+			[
+				'1_month' => [
+					'period'   => 'month',
+					'interval' => 1,
+				],
+			],
+			$forced
+		);
+
+		$get_product_data = new \ReflectionMethod( \Newspack\Audience_Subscriptions::class, 'get_product_data' );
+		$get_product_data->setAccessible( true );
+
+		$this->assertSame( $expected, $get_product_data->invoke( null, $product )['is_subscription'] );
+	}
+
+	/**
+	 * With no active discount rule there is nothing to decide, so pricing a product
+	 * never asks whether it is a subscription: that question runs on every price
+	 * read on the storefront.
+	 */
+	public function test_no_active_rules_skip_the_subscription_check() {
+		// Written, not just deleted: the rules memo is flushed by the option write
+		// hooks, and a rolled-back row from an earlier test fires none.
+		update_option( Subscriber_Discounts::OPTION_NAME, [] );
+		$checks  = 0;
+		$counter = function ( $is_subscription ) use ( &$checks ) {
+			++$checks;
+			return $is_subscription;
+		};
+		add_filter( 'woocommerce_is_subscription', $counter );
+		\WCS_ATT_Product_Schemes::$mock_lookups = 0;
+
+		$this->assertNull( Subscriber_Discounts_Pricing::get_subscriber_price( 100.0, $this->book, $this->subscriber_id ) );
+		$this->assertSame( 0, $checks, 'No subscription check.' );
+		$this->assertSame( 0, \WCS_ATT_Product_Schemes::$mock_lookups, 'No plan lookup.' );
 	}
 }

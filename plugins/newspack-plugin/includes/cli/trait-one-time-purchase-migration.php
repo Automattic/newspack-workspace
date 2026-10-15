@@ -269,31 +269,12 @@ trait One_Time_Purchase_Migration {
 	}
 
 	/**
-	 * Whether a product grants access by subscription rather than by a single purchase.
-	 *
-	 * A membership plan grants on its products without caring which kind they are;
-	 * the two gate rules do. Routing a one-time product into the subscription rule
-	 * writes a condition its buyers can never satisfy, so the split has to happen
-	 * here rather than being assumed.
-	 *
-	 * Both ways of failing to recognize a subscription land on one-time, and that is
-	 * the useful direction: a one-time rule over the product at least grants the
-	 * readers who bought it, where a subscription rule would grant nobody. The cases
-	 * are a product the site can no longer resolve, and a site whose plan products
-	 * outlived WooCommerce Subscriptions — see
-	 * {@see \Newspack\WooCommerce_Subscriptions::is_subscription_product()} for the second.
-	 *
-	 * @param int $product_id Product or variation post ID.
-	 *
-	 * @return bool
-	 */
-	private static function is_subscription_product( int $product_id ): bool {
-		$product = \wc_get_product( $product_id );
-		return $product instanceof \WC_Product && \Newspack\WooCommerce_Subscriptions::is_subscription_product( $product );
-	}
-
-	/**
 	 * Split validated product IDs by the gate rule that can carry them.
+	 *
+	 * A product sold both on plans and one-time goes to both rules: each rule matches
+	 * the record its buyers actually hold (a subscription, or an order), so neither
+	 * set of buyers loses access. A product the site can no longer resolve lands on
+	 * one-time, the direction that still grants the readers who bought it.
 	 *
 	 * @param int[] $product_ids Validated product or variation post IDs.
 	 *
@@ -303,10 +284,16 @@ trait One_Time_Purchase_Migration {
 		$subscription = [];
 		$one_time     = [];
 		foreach ( $product_ids as $product_id ) {
-			if ( self::is_subscription_product( (int) $product_id ) ) {
-				$subscription[] = (int) $product_id;
-			} else {
-				$one_time[] = (int) $product_id;
+			$product_id = (int) $product_id;
+			if ( ! \Newspack\Subscription_Products::offers_subscription( $product_id ) ) {
+				$one_time[] = $product_id;
+				continue;
+			}
+			$subscription[] = $product_id;
+			// The product's own configuration, not what the viewer running the
+			// migration may buy.
+			if ( \Newspack\Subscription_Products::is_sold_both_ways( $product_id ) ) {
+				$one_time[] = $product_id;
 			}
 		}
 		return [
