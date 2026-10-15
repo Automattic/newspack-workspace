@@ -8,6 +8,7 @@
 namespace Newspack\Tests\Unit\Integrations;
 
 use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Push_Log;
 
@@ -531,6 +532,33 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
 		$this->assertSame( 'flag_cleanup_failed', $row['error_code'] );
 		$this->assertStringContainsString( 'Lists API down', $row['error_message'] );
+	}
+
+	/**
+	 * A reader the integration holds no contact for has nothing to flag, and
+	 * no retry can make the contact appear. The row is done, nothing is
+	 * retried, and the cleanup still runs.
+	 */
+	public function test_a_deletion_flag_for_a_reader_without_a_contact_is_final() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'missing-spy', 'flag' );
+		$spy->push_result = new \WP_Error( Integration::CONTACT_NOT_FOUND_ERROR_CODE, 'The reader has no live member in the configured Mailchimp audience.' );
+
+		$this->delete_sample_reader();
+
+		$row     = $this->get_rows_by_integration()['missing-spy'];
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'missing-spy' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			]
+		);
+		$this->assertEmpty( $pending, 'Nothing is retried.' );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertSame( 'benign', $row['error_class'] );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $row['error_code'], 'The row keeps what the integration answered.' );
+		$this->assertCount( 1, $spy->cleanup_calls, 'The cleanup still runs.' );
 	}
 
 	/**

@@ -763,11 +763,10 @@ class Contact_Sync extends Sync {
 				// must never depend on selection state.
 				$integration_contact['metadata'][ $prefix . 'Membership_Status' ] = $flag_contact['metadata']['membership_status'];
 
-				// skip_lists: a deletion upsert must never attach the master list,
-				// re-adding — or first-creating — the deleted reader on it. The
-				// deletion-signal metadata needs no list membership, and the
-				// un-retried cleanup below stays a best-effort extra rather than
-				// the only thing standing between a deleted reader and a list.
+				// skip_lists: a deletion push must never add the deleted reader to
+				// a list, or create them on one, so the un-retried cleanup below
+				// stays a best-effort extra rather than the only thing standing
+				// between a deleted reader and a list.
 				$result = $integration->push_contact( $integration_contact, $context, null, [ 'skip_lists' => true ] );
 				$log_id = self::log_push_attempt(
 					$integration,
@@ -873,7 +872,9 @@ class Contact_Sync extends Sync {
 	 * Matches against every message carried by the error — the ESP layer
 	 * aggregates messages (invalid-list errors, exception detail) ahead of the
 	 * provider's own error, so reading only the first message would miss a
-	 * real signature exactly when a site is misconfigured.
+	 * real signature exactly when a site is misconfigured. On the deletion path,
+	 * an error carrying Integration::CONTACT_NOT_FOUND_ERROR_CODE is benign
+	 * whatever its message.
 	 *
 	 * @param string|\WP_Error $error     The error from a failed push.
 	 * @param string           $direction The sync direction: 'push' (default) or 'deletion'.
@@ -883,6 +884,13 @@ class Contact_Sync extends Sync {
 	 * @return string One of 'permanent_contact', 'permanent_config', 'benign', or 'transient'.
 	 */
 	private static function classify_error( $error, $direction = 'push' ) {
+		// An integration answers with this code when it holds no contact for the
+		// reader. A deletion has nothing left to remove or flag then, and no retry
+		// can make the contact appear.
+		if ( 'deletion' === $direction && $error instanceof \WP_Error && in_array( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $error->get_error_codes(), true ) ) {
+			return 'benign';
+		}
+
 		$message  = $error instanceof \WP_Error ? implode( ' ', $error->get_error_messages() ) : (string) $error;
 		$haystack = strtolower( $message );
 

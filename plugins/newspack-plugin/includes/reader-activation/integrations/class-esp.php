@@ -456,9 +456,10 @@ class ESP extends Integration {
 	 * @param string     $context          Optional. The context of the sync.
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 * @param array      $options          Optional. Sync options. Recognized keys:
-	 *                                     `skip_lists` (bool) — upsert without a master
-	 *                                     list so an unsubscribed contact is not
-	 *                                     resubscribed.
+	 *                                     `skip_lists` (bool) — update only the reader's
+	 *                                     existing member of the configured audience,
+	 *                                     leaving its status as it is; see
+	 *                                     push_to_existing_member().
 	 *                                     `existing_only` (bool) is honoured by the
 	 *                                     framework, which consults contact_exists()
 	 *                                     before calling this method — by the time it
@@ -472,9 +473,53 @@ class ESP extends Integration {
 			return $can_sync;
 		}
 
-		$master_list_id = ! empty( $options['skip_lists'] ) ? false : $this->get_master_list_id();
+		if ( ! empty( $options['skip_lists'] ) ) {
+			return $this->push_to_existing_member( $contact, $context );
+		}
 
-		return Newspack_Newsletters_Contacts::upsert( $contact, $master_list_id, $context, $existing_contact );
+		return Newspack_Newsletters_Contacts::upsert( $contact, $this->get_master_list_id(), $context, $existing_contact );
+	}
+
+	/**
+	 * Write a contact's fields to its existing member of the configured
+	 * audience without changing the member's subscription status.
+	 *
+	 * Mailchimp keeps every contact in an audience and rejects an upsert
+	 * without one, so this is how a push avoids adding the reader to a list.
+	 * Flag-mode account deletion relies on it: the deleted reader's member
+	 * receives the deletion fields, and a reader with no member gets none.
+	 *
+	 * @param array  $contact The contact data to push.
+	 * @param string $context The context of the sync.
+	 *
+	 * @return true|\WP_Error True on success. A WP_Error with
+	 *                        CONTACT_NOT_FOUND_ERROR_CODE when the audience has no
+	 *                        live member for the reader, any other WP_Error when the
+	 *                        lookup or the push failed.
+	 */
+	private function push_to_existing_member( $contact, $context ) {
+		$exists = $this->contact_exists( (string) ( $contact['email'] ?? '' ) );
+		if ( \is_wp_error( $exists ) ) {
+			return $exists;
+		}
+		if ( ! $exists ) {
+			return new \WP_Error(
+				self::CONTACT_NOT_FOUND_ERROR_CODE,
+				__( 'The configured Mailchimp audience has no live member for this reader, so there was nothing to update.', 'newspack-plugin' )
+			);
+		}
+
+		// Mailchimp applies status_if_new only when it creates a member, so the
+		// existing member keeps its status. If the member is removed between the
+		// check above and this push, it is recreated as transactional, which
+		// receives no campaigns.
+		unset( $contact['metadata']['status'] );
+		$contact['metadata']['status_if_new'] = 'transactional';
+
+		// No existing contact on purpose: given one, the upsert sends the member's
+		// own status back, and an unsubscribed member goes back as pending, which
+		// emails the reader a confirmation request.
+		return Newspack_Newsletters_Contacts::upsert( $contact, $this->get_master_list_id(), $context );
 	}
 
 	/**
