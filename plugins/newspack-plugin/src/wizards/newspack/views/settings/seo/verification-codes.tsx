@@ -12,24 +12,25 @@ import { ExternalLink } from '@wordpress/components';
 /**
  * Internal dependencies.
  */
-import { Grid, TextControl } from '../../../../../../packages/components/src';
+import { TextControl } from '../../../../../../packages/components/src';
 
 function VerificationCodes( { data, setData }: { data: SeoData[ 'verification' ]; setData: ( v: SeoData[ 'verification' ] ) => void } ) {
 	return (
-		<Grid>
+		<>
 			<TextControl
 				label="Google"
 				onChange={ ( google: string ) => setData( { ...data, google } ) }
 				value={ data.google }
+				withMargin={ false }
 				help={
 					<Fragment>
-						{ __( 'Get your verification code in', 'newspack' ) + ' ' }
+						{ __( 'Get your verification code in', 'newspack-plugin' ) + ' ' }
 						<ExternalLink
 							href={ `https://search.google.com/search-console/ownership?resource_id=${ encodeURIComponent(
 								window.location.origin
 							) }` }
 						>
-							{ __( 'Google Search Console', 'newspack' ) }
+							{ __( 'Google Search Console', 'newspack-plugin' ) }
 						</ExternalLink>
 					</Fragment>
 				}
@@ -38,16 +39,17 @@ function VerificationCodes( { data, setData }: { data: SeoData[ 'verification' ]
 				label="Bing"
 				onChange={ ( bing: string ) => setData( { ...data, bing } ) }
 				value={ data.bing }
+				withMargin={ false }
 				help={
 					<Fragment>
-						{ `${ __( 'Get your verification code in', 'newspack' ) } ` }
+						{ `${ __( 'Get your verification code in', 'newspack-plugin' ) } ` }
 						<ExternalLink href="https://www.bing.com/toolbox/webmaster/#/Dashboard/">
-							{ __( 'Bing Webmaster Tools', 'newspack' ) }
+							{ __( 'Bing Webmaster Tools', 'newspack-plugin' ) }
 						</ExternalLink>
 					</Fragment>
 				}
 			/>
-		</Grid>
+		</>
 	);
 }
 

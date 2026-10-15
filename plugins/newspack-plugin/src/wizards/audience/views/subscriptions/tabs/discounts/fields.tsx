@@ -17,6 +17,7 @@ import type { Field } from '@wordpress/dataviews';
  * Internal dependencies.
  */
 import { StatusIndicator } from '../../../../../../../packages/components/src';
+import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { discountLabel, excludedLabel, subscriptionNames, subscriptionsSummary, targetingBaseLabel, targetingLabel } from './discount';
 import type { DiscountCurrency, DiscountRule } from './types';
 
@@ -37,12 +38,19 @@ export function discountFields( currency: DiscountCurrency, subscriptions: Subsc
 			id: 'subscription',
 			label: __( 'Subscription', 'newspack-plugin' ),
 			enableHiding: false,
-			elements: subscriptions.map( option => ( { value: option.id, label: decodeEntities( option.name ) } ) ),
+			elements: [
+				{ value: ALL_SUBSCRIPTIONS_FILTER_VALUE, label: allSubscriptionsLabel() },
+				...subscriptions.map( option => ( { value: option.id, label: decodeEntities( option.name ) } ) ),
+			],
 			filterBy: { operators: [ 'isAny' ] },
 			// Ids rather than names, so two subscriptions sharing a name stay
-			// separate options in the filter.
-			getValue: ( { item } ) => item.subscription_product_ids,
+			// separate options in the filter. A rule reaching every subscriber
+			// names none, so it takes the sentinel instead and stays filterable.
+			getValue: ( { item } ) => ( 'all' === item.subscription_targeting ? [ ALL_SUBSCRIPTIONS_FILTER_VALUE ] : item.subscription_product_ids ),
 			render: ( { item } ) => {
+				if ( 'all' === item.subscription_targeting ) {
+					return <span className="newspack-subscriber-discounts__subscriptions">{ allSubscriptionsLabel() }</span>;
+				}
 				const { named, more } = subscriptionsSummary( item.subscription_product_ids, subscriptions );
 				return (
 					<span className="newspack-subscriber-discounts__subscriptions">
@@ -70,7 +78,10 @@ export function discountFields( currency: DiscountCurrency, subscriptions: Subsc
 			enableHiding: false,
 			enableSorting: false,
 			enableGlobalSearch: true,
-			getValue: ( { item } ) => subscriptionNames( item.subscription_product_ids, subscriptions ).join( ' ' ),
+			getValue: ( { item } ) =>
+				'all' === item.subscription_targeting
+					? allSubscriptionsLabel()
+					: subscriptionNames( item.subscription_product_ids, subscriptions ).join( ' ' ),
 		},
 		{
 			id: 'status',

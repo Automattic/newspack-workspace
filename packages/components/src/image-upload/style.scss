@@ -7,6 +7,9 @@
 
 .newspack-image-upload {
 	margin: wp-vars.$grid-unit-40 0;
+	&--no-margin {
+		margin: 0;
+	}
 	&__image {
 		align-items: center;
 		background-position: center;

@@ -355,12 +355,23 @@ class Content_Restriction_Control {
 	 * tree is walked at most once per term, even across many rules and posts (e.g.
 	 * the Premium Newsletters cron loop).
 	 *
+	 * Public because the gate migration has to decide coverage the same way this
+	 * evaluator decides access: a second expansion kept in step by hand would let the
+	 * two disagree about what a rule gates, and the migration would then merge, or
+	 * refuse to merge, on a reading the site never applies.
+	 *
+	 * The memo is request-scoped and nothing invalidates it on a term edit, which is
+	 * right for a web request and wrong for a process that outlives one. A caller that
+	 * changes the term hierarchy mid-run — an importer, a taxonomy remap — calls
+	 * {@see flush_term_descendants_memo()} before expanding again, or it will decide
+	 * access from the tree as it stood before its own edits.
+	 *
 	 * @param array        $term_ids Term IDs from a content rule's value (may be stored as strings).
 	 * @param \WP_Taxonomy $taxonomy Taxonomy object the term IDs belong to.
 	 *
 	 * @return int[] De-duplicated term IDs including descendants.
 	 */
-	private static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
+	public static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
 		$term_ids = array_map( 'intval', $term_ids );
 		if ( ! $taxonomy->hierarchical ) {
 			return $term_ids;
@@ -375,6 +386,20 @@ class Content_Restriction_Control {
 			$expanded = array_merge( $expanded, self::$term_descendants_map[ $cache_key ] );
 		}
 		return array_values( array_unique( $expanded ) );
+	}
+
+	/**
+	 * Discard the request-scoped descendant memo.
+	 *
+	 * {@see expand_hierarchical_terms()} is public, so the memo is reachable from
+	 * outside this class and has to be discardable from there too. In a web request
+	 * the term hierarchy does not change under the memo and this is never needed;
+	 * a long-lived CLI process that edits terms, and the test suite, are the callers.
+	 *
+	 * @return void
+	 */
+	public static function flush_term_descendants_memo() {
+		self::$term_descendants_map = [];
 	}
 
 	/**
@@ -462,8 +487,9 @@ class Content_Restriction_Control {
 				if ( $user_id === 0 ) {
 					// Anonymous visitors can still pass via the gate's custom_access rules if they
 					// match a populated rule with `supports_anonymous` (currently only `institution`).
-					// A rule left with no value names no condition, so it cannot be what lets a
-					// visitor past the registration wall.
+					// A visitor who counts as paying doesn't need to register first, so this skips
+					// both walls. A rule left with no value names no condition, so it cannot be
+					// what lets a visitor past the registration wall.
 					//
 					// Inside a listing teaser this bypass yields nothing:
 					// evaluate_anonymous_rules() declines there, because its one rule
@@ -471,8 +497,20 @@ class Content_Restriction_Control {
 					// everyone. {@see Content_Gate::is_withheld_outside_article()}.
 					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
 						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
-					$is_restricted  = ! $anonymous_bypass_passed;
-					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+					if ( $anonymous_bypass_passed ) {
+						$is_restricted = false;
+					} elseif ( Access_Rules::evaluate_anonymous_rules( $gate['registration']['access_rules'] ?? [] ) ) {
+						// Registered access's own rules let the visitor count as registered, which
+						// is all they skip: paid access still applies, and the paid check above
+						// has already refused them (NPPD-2310).
+						$is_restricted = ! empty( $gate['custom_access']['active'] ) && ! empty( $gate['custom_access']['access_rules'] );
+						if ( $is_restricted ) {
+							$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
+						}
+					} else {
+						$is_restricted  = true;
+						$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+					}
 				} elseif ( ! empty( $gate['registration']['require_verification'] ) ) {
 					// Check if email verification is required. A hypothetical evaluation
 					// asking what this reader would see if they verified has to be answered

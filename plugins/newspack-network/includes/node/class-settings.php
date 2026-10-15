@@ -364,7 +364,7 @@ class Settings {
 			return;
 		}
 
-		$requests = \Newspack\Data_Events\Webhooks::get_endpoint_requests( Webhook::ENDPOINT_ID );
+		$requests = \Newspack\Data_Events\Webhooks::get_endpoint_requests( Webhook::ENDPOINT_ID, 100 );
 
 		?>
 		<h3>

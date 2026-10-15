@@ -120,7 +120,7 @@ export const getScopedCss = ( scope, css ) => {
  * @return {import('react').RefObject} The component to be rendered.
  */
 export const useCustomFontsInIframe = () => {
-	const ref = useRef();
+	const ref = useRef( undefined );
 	const { fontBody, fontHeader } = useSelect( customStylesSelector );
 	useEffect( () => {
 		const node = ref.current;

@@ -63,6 +63,19 @@ export function groupRoleLabel() {
 }
 
 /**
+ * Column header for a group's own name, e.g. "Group name".
+ *
+ * @return {string} Translated column header.
+ */
+export function groupNameLabel() {
+	return sprintf(
+		/* translators: %s: the group label, e.g. "Group". */
+		phrase( 'name', __( '%s name', 'newspack-plugin' ) ),
+		GROUP_LABEL
+	);
+}
+
+/**
  * Message for a failed groups read, e.g. "Could not load Groups: timed out".
  *
  * @param {string} message The underlying error.
@@ -99,4 +112,14 @@ export const ROLE_LABELS = {
 	owner: __( 'Owner', 'newspack-plugin' ),
 	manager: __( 'Manager', 'newspack-plugin' ),
 	member: __( 'Member', 'newspack-plugin' ),
+};
+
+// Sort order for the members table: owner, then managers, then plain members.
+// Sorting the labels alphabetically would put Manager below Member and strand the
+// owner in the middle, so the rank is explicit. It matches the order
+// Subscribers_Wizard::prepare_group_members() already returns rows in.
+export const ROLE_RANK = {
+	owner: 0,
+	manager: 1,
+	member: 2,
 };
