@@ -82,11 +82,14 @@ const getFeedModeHelp = ( mode: string ): string | undefined => {
 	return help[ mode ];
 };
 
+// The Institutions tab owns the link text; posting the copy this modal read on open
+// could write a stale value back over a newer one saved there.
+const getOwnSettings = ( settings: Partial< AdvancedSettingsConfig > = {} ): Partial< AdvancedSettingsConfig > =>
+	Object.fromEntries( Object.entries( settings ).filter( ( [ key ] ) => key !== 'institutional_access_text' ) );
+
 const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; showModal: boolean } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as ContentGatesWizardData;
-	const initialConfig = {
-		...( wizardData?.config?.advanced_settings || {} ),
-	};
+	const initialConfig = getOwnSettings( wizardData?.config?.advanced_settings );
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const { addNotice, resetNotices, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ config, setConfig ] = useState< Partial< AdvancedSettingsConfig > >( initialConfig );
@@ -239,7 +242,9 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 						</Button>
 						<Button
 							variant="primary"
-							disabled={ isFetching || JSON.stringify( wizardData?.config?.advanced_settings || {} ) === JSON.stringify( config ) }
+							disabled={
+								isFetching || JSON.stringify( getOwnSettings( wizardData?.config?.advanced_settings ) ) === JSON.stringify( config )
+							}
 							loading={ isFetching }
 							onClick={ () => updateConfig.current?.( config ) }
 						>

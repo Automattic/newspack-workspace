@@ -14,7 +14,6 @@ import { Stack } from '@wordpress/ui';
  * Internal dependencies
  */
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
-import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ContentGatesOnboarding from './content-gates-onboarding';
 import ContentGatesPriority from './content-gates-priority';
@@ -25,17 +24,13 @@ import './style.scss';
 
 const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
-	const { isFetching, errorMessage } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
-	const { addNotice, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ showPriorityModal, setShowPriorityModal ] = useState( false );
 	const [ showAdvancedSettings, setShowAdvancedSettings ] = useState( false );
 	const gates = ( wizardData?.gates || [] ) as Gate[];
 	const gateCount = gates.length;
 
 	useEffect( () => {
-		if ( isFetching ) {
-			return;
-		}
 		const subTitle = __( 'Choose which content to restrict and how readers get access to it.', 'newspack-plugin' );
 		if ( ! gateCount ) {
 			setHeaderData( { actions: [], subTitle } );
@@ -65,17 +60,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			],
 			subTitle,
 		} );
-	}, [ isFetching, gateCount ] );
-
-	useEffect( () => {
-		if ( errorMessage ) {
-			addNotice( {
-				message: errorMessage,
-				type: 'error',
-				id: 'content-gate-error',
-			} );
-		}
-	}, [ errorMessage ] );
+	}, [ gateCount ] );
 
 	if ( ! gates?.length ) {
 		return <ContentGatesOnboarding />;

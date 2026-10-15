@@ -16,15 +16,6 @@ import ContentGates from './content-gates';
 const mockSetHeaderData = jest.fn();
 let mockWizardData = {};
 
-jest.mock( '../../../hooks/use-wizard-api-fetch', () => ( {
-	useWizardApiFetch: () => ( {
-		wizardApiFetch: jest.fn(),
-		isFetching: false,
-		errorMessage: null,
-		resetError: jest.fn(),
-	} ),
-} ) );
-
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( {
 		addNotice: jest.fn(),
@@ -110,8 +101,13 @@ describe( 'Content Gates page header', () => {
 		expect( headerData.sectionTitle ).toBeUndefined();
 	} );
 
-	it( 'describes the screen in the page subtitle', () => {
-		mockWizardData = { gates: gatesOfLength( 1 ), config: {} };
+	// With no gates the view falls back to a fresh empty array on every render, which is
+	// what an effect depending on the list itself would loop on.
+	it.each( [
+		{ state: 'the empty state', wizardData: { config: {} } },
+		{ state: 'the gates list', wizardData: { gates: gatesOfLength( 1 ), config: {} } },
+	] )( 'describes the screen in the page subtitle on $state', ( { wizardData } ) => {
+		mockWizardData = wizardData;
 		render( <ContentGates updateGatesData={ () => {} } /> );
 
 		const headerData = lastHeaderData();

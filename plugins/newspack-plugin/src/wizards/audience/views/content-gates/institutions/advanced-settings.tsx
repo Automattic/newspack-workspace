@@ -73,7 +73,7 @@ const InstitutionsAdvancedSettings = ( { closeModal }: { closeModal: () => void 
 					closeModal();
 				},
 			}
-		);
+		).catch( () => {} );
 	};
 
 	saveText.current = handleSaveText;

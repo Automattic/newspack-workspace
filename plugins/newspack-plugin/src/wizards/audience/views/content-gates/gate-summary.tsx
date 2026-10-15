@@ -55,7 +55,8 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 	const [ isExpanded, setIsExpanded ] = useState( false );
 	const [ visibleCount, setVisibleCount ] = useState( values.length );
 	const [ width, setWidth ] = useState( 0 );
-	const layoutKey = `${ values.join( '\n' ) }|${ width }|${ isExpanded }`;
+	// Collapsing keeps the count measured before expanding, so the toggle keeps keyboard focus.
+	const layoutKey = `${ values.join( '\n' ) }|${ width }`;
 	const measuredKey = useRef( layoutKey );
 
 	useLayoutEffect( () => {
