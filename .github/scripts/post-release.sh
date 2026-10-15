@@ -28,7 +28,6 @@ DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
 # The last commit here is the automated release commit; the one before it
 # carries the merge info used to decide whether the release came from alpha.
 SECOND_TO_LAST_COMMIT_MSG=$(git log -n 1 --skip 1 --pretty=format:"%s")
-LATEST_VERSION_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "release")
 
 # Restore workspace:* for any internal monorepo dep
 # (newspack-{scripts,components,colors,icons}) in every plugin/theme
@@ -231,6 +230,22 @@ notify_slack() {
 sync_failed=0
 
 git pull origin release
+
+# Names the release in the merge subjects. The checkout is the commit that
+# triggered the run, which predates the tags this release created, so
+# `git describe` from there returns an older package's tag. RELEASED_TAGS is
+# the release job's list of tags this run created. One release can cut several;
+# the foundation plugin's `newspack@` tag is preferred so subjects stay uniform.
+# A run_post_release dispatch releases nothing and passes none, so fall back to
+# the nearest tag, read only after the pull above has reached the release tip.
+LATEST_VERSION_TAG=$(printf '%s\n' "${RELEASED_TAGS:-}" | grep -m 1 '^newspack@' || true)
+if [ -z "$LATEST_VERSION_TAG" ]; then
+  LATEST_VERSION_TAG=$(printf '%s\n' "${RELEASED_TAGS:-}" | grep -m 1 . || true)
+fi
+if [ -z "$LATEST_VERSION_TAG" ]; then
+  LATEST_VERSION_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "release")
+fi
+
 git checkout alpha
 
 # ALPHA_SYNC=merge rules out the reset. A dispatched run can start some time
