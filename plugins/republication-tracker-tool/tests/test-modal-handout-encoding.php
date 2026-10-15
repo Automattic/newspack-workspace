@@ -12,8 +12,7 @@
  * still show code it displays as text, and the footer (tracking and attribution)
  * has to be working markup, because the modal's caption-strip round trip writes
  * back through `.value` and decodes nothing more. The block's round trip is pinned
- * by `src/blocks/republish-button/view.test.js`; the classic widget's, in
- * `assets/widget.js`, has no test.
+ * by `src/blocks/republish-button/view.test.js`.
  *
  * @group modal-encoding
  */
@@ -133,5 +132,21 @@ class ModalHandoutEncodingTest extends WP_UnitTestCase {
 		$value = $this->textarea_value();
 		$this->assertStringContainsString( '<img id="republication-tracker-tool-source" src="', $value );
 		$this->assertStringNotContainsString( '&lt;', str_replace( 'Code: &lt;script&gt;window.rttMarker=1&lt;/script&gt;', '', $value ) );
+	}
+
+	/**
+	 * Raw markup a site's filter adds to the tracking code arrives as markup, inside the textarea.
+	 *
+	 * Passing the encoded footer straight through kses would strip the script and keep the
+	 * closing tag, which would end the textarea early.
+	 */
+	public function test_raw_markup_from_a_tracking_filter_stays_inside_the_textarea() {
+		add_filter(
+			'republication_tracker_tool_tracking_code',
+			function ( $html ) {
+				return $html . '</textarea><script id="raw-from-filter"></script>';
+			}
+		);
+		$this->assertStringContainsString( '</textarea><script id="raw-from-filter"></script>', $this->textarea_value() );
 	}
 }
