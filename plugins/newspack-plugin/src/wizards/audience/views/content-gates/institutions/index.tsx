@@ -21,6 +21,7 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/sr
 import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import InstitutionsOnboarding from './onboarding';
+import InstitutionsAdvancedSettings from './advanced-settings';
 
 const { useHistory } = Router;
 
@@ -51,6 +52,7 @@ export default function Institutions() {
 	const [ data, setData ] = useState< Institution[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	const [ showAdvancedSettings, setShowAdvancedSettings ] = useState( false );
 	// The last has_institutions value pushed to the store, so a fetch that does
 	// not change it does not clone the whole wizard payload.
 	const lastHasInstitutions = useRef< boolean | undefined >( undefined );
@@ -62,6 +64,11 @@ export default function Institutions() {
 				type: 'primary',
 				label: __( 'Add Institution', 'newspack-plugin' ),
 				href: '#/institutions/new',
+			} );
+			actions.push( {
+				type: 'more',
+				label: __( 'Advanced Settings', 'newspack-plugin' ),
+				action: () => setShowAdvancedSettings( true ),
 			} );
 		}
 		setHeaderData( {
@@ -286,18 +293,21 @@ export default function Institutions() {
 	}
 
 	return (
-		<DataViews
-			className="newspack-institutions"
-			data={ processedData }
-			fields={ fields }
-			view={ view }
-			onChangeView={ setView }
-			actions={ actions }
-			paginationInfo={ paginationInfo }
-			defaultLayouts={ { table: {}, grid: {} } }
-			isLoading={ isLoading }
-			getItemId={ ( item: Institution ) => String( item.id ) }
-			search
-		/>
+		<>
+			<DataViews
+				className="newspack-institutions"
+				data={ processedData }
+				fields={ fields }
+				view={ view }
+				onChangeView={ setView }
+				actions={ actions }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ { table: {}, grid: {} } }
+				isLoading={ isLoading }
+				getItemId={ ( item: Institution ) => String( item.id ) }
+				search
+			/>
+			{ showAdvancedSettings && <InstitutionsAdvancedSettings closeModal={ () => setShowAdvancedSettings( false ) } /> }
+		</>
 	);
 }

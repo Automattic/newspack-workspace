@@ -33,7 +33,6 @@ import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
 // Truthy check because wp_localize_script() delivers this as '1'/'' rather than a boolean.
 const governedByMemberships = !! window.newspackAudienceContentGates?.feeds_governed_by_memberships;
-const institutionalAccessDefaultText = window.newspackAudienceContentGates?.institutional_access_default_text || '';
 const commentRestrictionDefaultMessage = window.newspackAudienceContentGates?.comment_restriction_default_message || '';
 
 /**
@@ -232,21 +231,6 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 									newsletter_link_bypass_enabled: value,
 								} )
 							}
-						/>
-					) }
-					{ wizardData?.config?.has_institutions && (
-						<TextControl
-							__next40pxDefaultSize
-							__nextHasNoMarginBottom
-							label={ __( 'Institutional access link text', 'newspack-plugin' ) }
-							help={ __(
-								'Shown to logged-out readers below the gate when an institution with an IP range can unlock it. The link checks whether the reader is on that network. Leave empty to use the default.',
-								'newspack-plugin'
-							) }
-							placeholder={ institutionalAccessDefaultText }
-							maxLength={ 200 }
-							value={ config?.institutional_access_text || '' }
-							onChange={ ( value: string ) => setConfig( { ...config, institutional_access_text: value } ) }
 						/>
 					) }
 					<Stack direction="row" gap="sm" justify="end">
