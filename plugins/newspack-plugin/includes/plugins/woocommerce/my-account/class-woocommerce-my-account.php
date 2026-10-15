@@ -645,19 +645,53 @@ class WooCommerce_My_Account {
 	}
 
 	/**
-	 * Check if the user is logged in and verified.
+	 * Check if a user is logged in and verified.
+	 *
+	 * @param int|null $user_id The user to check. Defaults to the current user.
+	 *
+	 * @return bool
 	 */
-	public static function is_user_verified() {
+	public static function is_user_verified( $user_id = null ) {
 		// Don't lock access if Reader Activation features aren't enabled.
 		if ( ! Reader_Activation::is_enabled() ) {
 			return true;
 		}
+		$user = null === $user_id ? \wp_get_current_user() : \get_userdata( (int) $user_id );
+		if ( ! $user || ! $user->exists() ) {
+			return false;
+		}
 		// Don't lock access if the user is not a reader.
-		if ( \is_user_logged_in() && ! Reader_Activation::is_user_reader( \wp_get_current_user(), true ) ) {
+		if ( ! Reader_Activation::is_user_reader( $user, true ) ) {
 			return true;
 		}
 
-		return \is_user_logged_in() && Reader_Activation::is_reader_verified( \wp_get_current_user() );
+		return (bool) Reader_Activation::is_reader_verified( $user );
+	}
+
+	/**
+	 * Whether My Account shows a user only the verification prompt.
+	 *
+	 * @param int $user_id The user to check.
+	 *
+	 * @return bool
+	 */
+	public static function is_account_locked_for_user( int $user_id ): bool {
+		/**
+		 * Allows unverified readers to access My Account content without
+		 * email verification. By default, unverified users see a verification
+		 * prompt instead of their account content.
+		 *
+		 * @constant NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION
+		 * @type     bool
+		 * @default  Unverified users see verification prompt
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION', true );
+		 */
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
+			return false;
+		}
+		return ! self::is_user_verified( $user_id );
 	}
 
 	/**
@@ -853,23 +887,7 @@ class WooCommerce_My_Account {
 	 * Restrict account content for unverified readers.
 	 */
 	public static function restrict_account_content() {
-		/**
-		 * Allows unverified readers to access My Account content without
-		 * email verification. By default, unverified users see a verification
-		 * prompt instead of their account content.
-		 *
-		 * @constant NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION
-		 * @type     bool
-		 * @default  Unverified users see verification prompt
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION', true );
-		 */
-		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
-			return;
-		}
-
-		if ( \is_user_logged_in() && ! self::is_user_verified() ) {
+		if ( \is_user_logged_in() && self::is_account_locked_for_user( \get_current_user_id() ) ) {
 			\remove_all_actions( 'woocommerce_account_content' );
 			\add_action(
 				'woocommerce_account_content',
