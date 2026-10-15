@@ -54,8 +54,10 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 	const ref = useRef< HTMLSpanElement >( null );
 	const [ isExpanded, setIsExpanded ] = useState( false );
 	const [ visibleCount, setVisibleCount ] = useState( values.length );
+	// Keeps an existing toggle mounted while a layout change re-measures from every
+	// value, so a keyboard user's focus is not dropped.
+	const [ holdToggle, setHoldToggle ] = useState( false );
 	const [ width, setWidth ] = useState( 0 );
-	// Collapsing keeps the count measured before expanding, so the toggle keeps keyboard focus.
 	const layoutKey = `${ values.join( '\n' ) }|${ width }`;
 	const measuredKey = useRef( layoutKey );
 
@@ -69,27 +71,56 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 		return () => observer.disconnect();
 	}, [] );
 
-	// Drops one value per pass until the line fits; a layout change starts again from all of them.
+	// Settles in a few passes whatever the list length: one state update per value
+	// would hit React's nested-update limit on a long list and crash the screen.
 	useLayoutEffect( () => {
+		if ( isExpanded ) {
+			return;
+		}
 		if ( measuredKey.current !== layoutKey ) {
 			measuredKey.current = layoutKey;
 			if ( visibleCount !== values.length ) {
+				setHoldToggle( true );
 				setVisibleCount( values.length );
 				return;
 			}
 		}
 		const line = ref.current?.parentElement;
-		if ( isExpanded || ! line || visibleCount <= 1 ) {
+		const text = ref.current?.firstChild;
+		const lineHeight = line ? parseFloat( window.getComputedStyle( line ).lineHeight ) : NaN;
+		if ( ! line || ! text || text.nodeType !== Node.TEXT_NODE || ! lineHeight ) {
 			return;
 		}
-		const lineHeight = parseFloat( window.getComputedStyle( line ).lineHeight );
-		if ( lineHeight && line.getBoundingClientRect().height > lineHeight * MAX_VALUE_LINES + 1 ) {
-			setVisibleCount( count => count - 1 );
+		const lineBox = line.getBoundingClientRect();
+		const limit = lineBox.top + lineHeight * MAX_VALUE_LINES + 1;
+		if ( lineBox.bottom <= limit || visibleCount <= 1 ) {
+			if ( holdToggle ) {
+				setHoldToggle( false );
+			}
+			return;
 		}
+		const range = document.createRange();
+		if ( typeof range.getBoundingClientRect !== 'function' ) {
+			return;
+		}
+		let end = 0;
+		let fitting = 0;
+		for ( const [ index, value ] of values.slice( 0, visibleCount ).entries() ) {
+			end += ( index > 0 ? 2 : 0 ) + value.length;
+			range.setStart( text, end - 1 );
+			range.setEnd( text, end );
+			if ( range.getBoundingClientRect().bottom > limit ) {
+				break;
+			}
+			fitting = index + 1;
+		}
+		setHoldToggle( false );
+		// At least one fewer than shown, so a toggle that pushes the line over makes room for itself.
+		setVisibleCount( Math.max( 1, Math.min( fitting, visibleCount - 1 ) ) );
 	} );
 
 	const hiddenCount = isExpanded ? 0 : values.length - visibleCount;
-	if ( hiddenCount < 1 && ! isExpanded ) {
+	if ( hiddenCount < 1 && ! isExpanded && ! holdToggle ) {
 		return <span ref={ ref }>{ values.join( ', ' ) }</span>;
 	}
 	return (
@@ -209,7 +240,7 @@ const AccessRuleValue = ( { rule, optionsBySlug }: { rule: GateAccessRule; optio
 };
 
 /**
- * One bold-labelled line per access rule, the way every other gate setting reads in
+ * One bold-labeled line per access rule, the way every other gate setting reads in
  * the summary.
  */
 const AccessRuleLines = ( { groups, optionsBySlug }: { groups: GateAccessRuleGroup[]; optionsBySlug: Record< string, AccessRuleOption[] > } ) => (

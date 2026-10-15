@@ -146,7 +146,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 					closeModal();
 				},
 			}
-		);
+		).catch( () => {} );
 	};
 
 	updateConfig.current = handleUpdateConfig;

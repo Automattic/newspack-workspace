@@ -101,8 +101,7 @@ describe( 'Content Gates page header', () => {
 		expect( headerData.sectionTitle ).toBeUndefined();
 	} );
 
-	// With no gates the view falls back to a fresh empty array on every render, which is
-	// what an effect depending on the list itself would loop on.
+	// The empty state once dropped the subtitle, which made the header jump between tabs.
 	it.each( [
 		{ state: 'the empty state', wizardData: { config: {} } },
 		{ state: 'the gates list', wizardData: { gates: gatesOfLength( 1 ), config: {} } },

@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * The summary reads `available_access_rules` at module scope, so the globals have to be
@@ -59,7 +59,7 @@ describe( 'gate summary, institutions on Registered access', () => {
 	};
 	const institutionRules = [ [ { slug: 'institution', value: [ 7 ] } ] ];
 
-	it( 'lists them as a labelled line inside Registered Access, not as a section of their own', () => {
+	it( 'lists them as a labeled line inside Registered Access, not as a section of their own', () => {
 		const { sections } = renderRegistration( { active: true, access_rules: institutionRules } );
 
 		expect( sections.map( s => s.key ) ).toEqual( [ 'content_rules', 'registration', 'custom_access' ] );
@@ -142,5 +142,80 @@ describe( 'gate summary, Paid access', () => {
 
 		expect( screen.getByText( 'Not set (matches no reader)' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Not set (grants access to everyone)' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'gate summary, long rule values', () => {
+	// jsdom has no layout, so text is modeled as wrapping every PER_LINE characters.
+	const PER_LINE = 60;
+	const LINE_HEIGHT = 20;
+	const INSTITUTIONS = Array.from( { length: 80 }, ( _unused, index ) => ( { value: index + 1, label: `Institution ${ index + 1 }` } ) );
+	const linesFor = characters => Math.max( 1, Math.ceil( characters / PER_LINE ) );
+	const charactersBefore = ( root, node, offset ) => {
+		let total = 0;
+		const walker = document.createTreeWalker( root, NodeFilter.SHOW_TEXT );
+		while ( walker.nextNode() ) {
+			if ( walker.currentNode === node ) {
+				return total + offset;
+			}
+			total += walker.currentNode.textContent.length;
+		}
+		return total;
+	};
+	const realGetComputedStyle = window.getComputedStyle;
+	const realRangeRect = Range.prototype.getBoundingClientRect;
+
+	beforeEach( () => {
+		jest.spyOn( window, 'getComputedStyle' ).mockImplementation(
+			element =>
+				new Proxy( realGetComputedStyle( element ), {
+					get: ( target, prop ) => {
+						if ( 'lineHeight' === prop ) {
+							return `${ LINE_HEIGHT }px`;
+						}
+						return typeof target[ prop ] === 'function' ? target[ prop ].bind( target ) : target[ prop ];
+					},
+				} )
+		);
+		jest.spyOn( HTMLElement.prototype, 'getBoundingClientRect' ).mockImplementation( function () {
+			const height = linesFor( this.textContent.length ) * LINE_HEIGHT;
+			return { top: 0, bottom: height, height };
+		} );
+		Range.prototype.getBoundingClientRect = function () {
+			const paragraph = this.endContainer.parentElement.closest( 'p' );
+			const height = linesFor( charactersBefore( paragraph, this.endContainer, this.endOffset ) ) * LINE_HEIGHT;
+			return { top: 0, bottom: height, height };
+		};
+	} );
+
+	afterEach( () => {
+		jest.restoreAllMocks();
+		Range.prototype.getBoundingClientRect = realRangeRect;
+	} );
+
+	const renderLongRule = () =>
+		renderPaidAccess( gateWith( { slug: 'institution', value: INSTITUTIONS.map( ( { value } ) => value ) } ), { institution: INSTITUTIONS } );
+
+	it( 'fits a long list into two lines with a count of the rest', () => {
+		renderLongRule();
+
+		const toggle = screen.getByRole( 'button' );
+		const shown = toggle.closest( 'p' ).textContent.match( /Institution \d+/g ).length;
+		expect( toggle ).toHaveTextContent( `+ ${ INSTITUTIONS.length - shown } more` );
+		expect( linesFor( toggle.closest( 'p' ).textContent.length ) ).toBeLessThanOrEqual( 2 );
+	} );
+
+	it( 'keeps keyboard focus on the toggle through Show less', () => {
+		renderLongRule();
+		const toggle = screen.getByRole( 'button' );
+		toggle.focus();
+
+		fireEvent.click( toggle );
+		expect( toggle ).toHaveTextContent( 'Show less' );
+		expect( toggle.ownerDocument.activeElement ).toBe( toggle );
+
+		fireEvent.click( toggle );
+		expect( toggle ).toHaveTextContent( /more$/ );
+		expect( toggle.ownerDocument.activeElement ).toBe( toggle );
 	} );
 } );

@@ -30,7 +30,7 @@ jest.mock( '@wordpress/data', () => {
 } );
 
 // The real @wordpress/components and @wordpress/dataviews cannot load in this
-// jsdom env (data-store side effects throw at import); the behaviour under
+// jsdom env (data-store side effects throw at import); the behavior under
 // test does not touch either.
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
@@ -44,7 +44,7 @@ jest.mock( '@wordpress/dataviews', () => ( {
 	filterSortAndPaginate: data => ( { data, paginationInfo: { totalItems: data.length, totalPages: 1 } } ),
 } ) );
 
-// DataViews and the router are irrelevant to the behaviour under test.
+// DataViews and the router are irrelevant to the behavior under test.
 jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
