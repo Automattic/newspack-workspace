@@ -21,6 +21,26 @@
 	&__members,
 	&__invites {
 		margin-top: var(--newspack-ui-spacer-5);
+
+		// Responsive tables give rows a display value, which beats the hidden attribute.
+		&[hidden],
+		tr[hidden] {
+			display: none !important;
+		}
+	}
+
+	&__search {
+		margin-top: var(--newspack-ui-spacer-5);
+
+		+ table {
+			margin-top: var(--newspack-ui-spacer-2);
+		}
+	}
+
+	// The live region stays in the accessibility tree while empty (no display: none),
+	// so screen readers announce the first count after a search starts.
+	&__search-status:empty {
+		margin: 0;
 	}
 
 	// Per-tab info line shown when one tab is empty but the other has content

@@ -5,12 +5,15 @@
  */
 
 import { domReady } from '../../utils';
+import { initGroupMemberSearch } from './group-member-search';
 
 domReady( function () {
 	const content = document.querySelector( '.newspack-my-account__group_subscription__content' );
 	if ( ! content ) {
 		return;
 	}
+
+	initGroupMemberSearch( content );
 
 	const subId = parseInt( content.getAttribute( 'data-subscription-id' ), 10 );
 	const baseUrl = newspackMyAccountV1?.rest?.base_url;
