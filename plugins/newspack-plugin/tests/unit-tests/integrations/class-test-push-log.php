@@ -343,6 +343,61 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A version bump on a table that is already there runs an ALTER, and
+	 * dbDelta does not say when one fails. Recording the version anyway would
+	 * leave the change unapplied for good.
+	 */
+	public function test_a_schema_change_that_did_not_land_is_tried_again() {
+		global $wpdb;
+		update_option( Push_Log::TABLE_VERSION_OPTION, '0.9' );
+		delete_transient( Push_Log::CREATION_RETRY_AFTER );
+		$add_a_column = function ( $create_queries ) {
+			return str_replace( 'updated_at datetime NOT NULL,', "updated_at datetime NOT NULL,\nadded_column varchar(10) DEFAULT NULL,", $create_queries );
+		};
+		// A failing statement that is not an ALTER: a real ALTER would commit
+		// the test's transaction, even one that fails.
+		$refuse_the_alter = function ( $query ) {
+			$is_push_log_alter = 0 === stripos( ltrim( $query ), 'ALTER TABLE' ) && false !== strpos( $query, Push_Log::TABLE_NAME );
+			return $is_push_log_alter ? 'SELECT * FROM table_that_does_not_exist' : $query;
+		};
+		add_filter( 'dbdelta_create_queries', $add_a_column );
+		add_filter( 'query', $refuse_the_alter );
+		$errors_were_suppressed = $wpdb->suppress_errors( true );
+
+		Push_Log::maybe_create_table();
+
+		$wpdb->suppress_errors( $errors_were_suppressed );
+		remove_filter( 'query', $refuse_the_alter );
+		remove_filter( 'dbdelta_create_queries', $add_a_column );
+
+		$this->assertSame( '0.9', get_option( Push_Log::TABLE_VERSION_OPTION ), 'The new version is not recorded.' );
+		$this->assertNotFalse( get_transient( Push_Log::CREATION_RETRY_AFTER ), 'It is tried again later, not on every request.' );
+	}
+
+	/**
+	 * Recording the version relies on dbDelta reading the table back as its
+	 * definition. One it misreads (a type alias such as `integer`, which the
+	 * database reports as `int`) would look like a change on every run: the
+	 * version would never be recorded, and the ALTER would run every hour.
+	 */
+	public function test_the_table_definition_reads_back_as_applied() {
+		$definition         = null;
+		$capture_definition = function ( $queries ) use ( &$definition ) {
+			$definition = $queries;
+			return $queries;
+		};
+		delete_option( Push_Log::TABLE_VERSION_OPTION );
+		delete_transient( Push_Log::CREATION_RETRY_AFTER );
+		add_filter( 'dbdelta_queries', $capture_definition );
+
+		Push_Log::maybe_create_table();
+
+		remove_filter( 'dbdelta_queries', $capture_definition );
+		$this->assertSame( [], dbDelta( $definition, false ) );
+		$this->assertSame( Push_Log::TABLE_VERSION, get_option( Push_Log::TABLE_VERSION_OPTION ) );
+	}
+
+	/**
 	 * A failed write still has the reader's email and payload in its SQL, and
 	 * the database layer copies a failed statement into the PHP error log, and
 	 * into the response when errors are displayed. The once-per-request report

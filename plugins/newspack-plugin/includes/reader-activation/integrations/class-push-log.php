@@ -79,10 +79,11 @@ final class Push_Log {
 	/**
 	 * Create or update the table when the stored schema version differs.
 	 *
-	 * The version is recorded only once the table exists, so a failed creation
-	 * is retried instead of leaving every write to fail. It is retried hourly,
-	 * not on every request: a host that refuses the table, a database user
-	 * without CREATE for one, refuses it each time.
+	 * The version is recorded only once the table exists with nothing left to
+	 * change, so a failed creation or change is retried instead of leaving
+	 * every write to fail. It is retried hourly, not on every request: a host
+	 * that refuses the table, a database user without CREATE for one, refuses
+	 * it each time.
 	 */
 	public static function maybe_create_table() {
 		if ( self::TABLE_VERSION === get_option( self::TABLE_VERSION_OPTION ) ) {
@@ -125,9 +126,13 @@ final class Push_Log {
 		) {$charset_collate};";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $sql );
+		$changes = dbDelta( $sql );
 
-		if ( self::table_exists() ) {
+		// dbDelta does not report a statement that failed. The table being
+		// there confirms a creation, not a change to a table that already
+		// existed, so when it changed something, ask it what is still left: a
+		// version recorded over a failed ALTER would never be tried again.
+		if ( self::table_exists() && ( empty( $changes ) || empty( dbDelta( $sql, false ) ) ) ) {
 			update_option( self::TABLE_VERSION_OPTION, self::TABLE_VERSION );
 		} else {
 			set_transient( self::CREATION_RETRY_AFTER, 1, HOUR_IN_SECONDS );
