@@ -12,7 +12,7 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Card } from '../';
+import Card from '../card';
 import TooltipBadge from '../tooltip-badge';
 import type { CardBadge } from '../types';
 import './style.scss';
@@ -434,6 +434,9 @@ const CardSortableList = ( {
 												actionType: 'toggle',
 												isActive: item.toggleChecked,
 												onToggle: item.onToggleChange,
+												// Names the toggle for assistive tech. The card hides this
+												// label, since the header already shows the title.
+												title: item.title,
 											} ),
 											...( item.actions !== undefined && {
 												actions: item.actions,

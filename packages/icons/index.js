@@ -13,6 +13,7 @@ export { default as broadcast } from './src/broadcast';
 export { default as browser } from './src/browser';
 export { default as chartReport } from './src/chart-report';
 export { default as collections } from './src/collections';
+export { default as comments } from './src/comments';
 export { default as contentCarousel } from './src/content-carousel';
 export { default as contentLocked } from './src/content-locked';
 export { default as contentLoop } from './src/content-loop';

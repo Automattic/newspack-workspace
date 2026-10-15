@@ -139,7 +139,7 @@ class ComponentsDemo extends Component {
 		if ( 1 === count ) {
 			return [ save ];
 		}
-		return 2 === count ? [ cancel, save ] : [ save, cancel, reset ];
+		return 2 === count ? [ cancel, save ] : [ reset, cancel, save ];
 	}
 
 	/**

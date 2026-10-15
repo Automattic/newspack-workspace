@@ -124,7 +124,7 @@ class Audience_Wizard extends Wizard {
 		// the tab is actually opened.
 		//
 		// `isNewspackPlatform` reflects whether Newspack is the reader-revenue
-		// platform (WooCommerce orders drive the commerce emails; RevEngine/NRH
+		// platform (WooCommerce orders drive the commerce emails; RevEngine
 		// redirects checkout off-site and sends its own receipts; "Other" sends
 		// nothing through Newspack). It drives the chip bar + the email-list
 		// scoping; auth/account emails still surface on any platform with RA on.
@@ -385,7 +385,8 @@ class Audience_Wizard extends Wizard {
 			]
 		);
 
-		// Group label settings (publisher-overridable singular/plural for group subscriptions).
+		// Group settings: publisher-overridable singular/plural labels, and whether groups bought
+		// at checkout are named after the buyer's billing details.
 		// The callbacks short-circuit on Content_Gate::is_newspack_feature_enabled() so
 		// stale clients hitting the route after a flag flip get a descriptive error
 		// instead of reading or writing the option directly.
@@ -406,13 +407,16 @@ class Audience_Wizard extends Wizard {
 				'callback'            => [ $this, 'api_update_group_labels' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
-					'label_singular' => [
+					'label_singular'    => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'label_plural'   => [
+					'label_plural'      => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'name_from_billing' => [
+						'type' => 'boolean',
 					],
 				],
 			]
@@ -796,7 +800,7 @@ class Audience_Wizard extends Wizard {
 			Donations::set_platform_slug( $params['platform'] );
 		}
 
-		// Update NRH settings.
+		// Update RevEngine settings.
 		if ( Donations::is_platform_nrh() ) {
 			NRH::update_settings( $params );
 		}
@@ -1098,6 +1102,7 @@ class Audience_Wizard extends Wizard {
 	 * Get the publisher-configurable group subscription labels. The override and the
 	 * default travel separately so the client can tell a custom noun from the default;
 	 * both come from Group_Subscription, which owns the option keys and the defaults.
+	 * Also returns whether groups bought at checkout are named after the buyer.
 	 *
 	 * @return WP_REST_Response|WP_Error
 	 */
@@ -1112,12 +1117,14 @@ class Audience_Wizard extends Wizard {
 				'label_plural'           => Group_Subscription::get_label_override( 'plural' ),
 				'label_singular_default' => Group_Subscription::get_default_label( 'singular' ),
 				'label_plural_default'   => Group_Subscription::get_default_label( 'plural' ),
+				'name_from_billing'      => (bool) get_option( Group_Subscription_Settings::NAME_FROM_BILLING_OPTION, false ),
 			]
 		);
 	}
 
 	/**
-	 * Update the publisher-configurable group subscription labels.
+	 * Update the publisher-configurable group subscription labels and the checkout
+	 * naming toggle. Fields left out of the request keep their stored values.
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 *
@@ -1143,6 +1150,9 @@ class Audience_Wizard extends Wizard {
 			} else {
 				update_option( $option_key, $value );
 			}
+		}
+		if ( array_key_exists( 'name_from_billing', $params ) ) {
+			update_option( Group_Subscription_Settings::NAME_FROM_BILLING_OPTION, (bool) $params['name_from_billing'] );
 		}
 		return $this->api_get_group_labels();
 	}

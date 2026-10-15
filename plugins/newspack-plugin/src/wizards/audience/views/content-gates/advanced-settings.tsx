@@ -5,8 +5,10 @@
 /**
  * WordPress dependencies.
  */
-import { __, _x } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import {
+	Notice,
+	SelectControl,
 	TextControl,
 	ToggleControl,
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -20,7 +22,7 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Button, Modal, Notice } from '../../../../../packages/components/src';
+import { Button, Modal } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
@@ -30,8 +32,35 @@ import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 // storage sanitizer. Its labels are a fallback for a mode this screen has no short label for.
 const feedRestrictionModes = window.newspackAudienceContentGates?.feed_restriction_modes || [];
 // Truthy check because wp_localize_script() delivers this as '1'/'' rather than a boolean.
-const feedsGovernedByMemberships = !! window.newspackAudienceContentGates?.feeds_governed_by_memberships;
+const governedByMemberships = !! window.newspackAudienceContentGates?.feeds_governed_by_memberships;
 const institutionalAccessDefaultText = window.newspackAudienceContentGates?.institutional_access_default_text || '';
+const commentRestrictionDefaultMessage = window.newspackAudienceContentGates?.comment_restriction_default_message || '';
+
+/**
+ * Options for the gate whose readers may comment. A saved gate that is no longer
+ * published still gets an option, so the select shows what is saved rather than
+ * reading as "anyone"; until it is fixed, nobody but staff can comment.
+ */
+const getCommentGateOptions = ( gates: Gate[], selectedGateId: number ) => {
+	const options = [
+		{ value: '0', label: __( 'Anyone the Discussion Settings allow', 'newspack-plugin' ) },
+		...gates
+			// Only a published gate decides who comments, as only a published gate restricts content.
+			.filter( gate => gate.status === 'publish' )
+			.map( gate => ( {
+				value: String( gate.id ),
+				label: decodeEntities( gate.title ) || `#${ gate.id }`,
+			} ) ),
+	];
+	if ( selectedGateId && ! options.some( option => option.value === String( selectedGateId ) ) ) {
+		options.push( {
+			value: String( selectedGateId ),
+			/* translators: %d: gate ID. */
+			label: sprintf( __( 'Unpublished or deleted gate #%d (no reader can comment)', 'newspack-plugin' ), selectedGateId ),
+		} );
+	}
+	return options;
+};
 
 // Not a stored mode: it stands for `restrict_feeds` being off, so one control covers both settings.
 const FEED_MODE_OFF = 'off';
@@ -69,7 +98,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 		}
 	}, [ showModal ] );
 
-	const updateConfig = useRef< ( _config: Partial< AdvancedSettingsConfig > ) => void >();
+	const updateConfig = useRef< ( _config: Partial< AdvancedSettingsConfig > ) => void >( undefined );
 	const handleUpdateConfig = ( _config: Partial< AdvancedSettingsConfig > ) => {
 		if ( isFetching ) {
 			return;
@@ -124,16 +153,15 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 		showModal && (
 			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
-					{ /* Grouped so the Memberships notice reads as covering the feed settings only, not the newsletter toggle below. */ }
+					{ /* Grouped so the Memberships notice reads as covering the feed and commenting settings only, not the newsletter toggle below. */ }
 					<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
-						{ feedsGovernedByMemberships && (
-							<Notice
-								isWarning
-								noticeText={ __(
-									'WooCommerce Memberships controls RSS feeds on this site, so these feed settings have no effect yet. What is saved here applies once Memberships is deactivated.',
+						{ governedByMemberships && (
+							<Notice status="warning" isDismissible={ false } spokenMessage="">
+								{ __(
+									'WooCommerce Memberships is active on this site, so the feed and commenting settings have no effect yet. What is saved here applies once Memberships is deactivated.',
 									'newspack-plugin'
 								) }
-							/>
+							</Notice>
 						) }
 						{ feedRestrictionModes.length > 0 && (
 							<ToggleGroupControl
@@ -155,6 +183,37 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 									<ToggleGroupControlOption key={ mode } value={ mode } label={ getFeedModeLabel( mode ) ?? mode } />
 								) ) }
 							</ToggleGroupControl>
+						) }
+						<SelectControl
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+							label={ __( 'Who can comment', 'newspack-plugin' ) }
+							help={ __(
+								'Limit commenting on every post to readers with access through a gate. Everyone else sees the message below instead of the comment form.',
+								'newspack-plugin'
+							) }
+							value={ String( config?.comment_restriction_gate_id || 0 ) }
+							options={ getCommentGateOptions( wizardData?.gates || [], config?.comment_restriction_gate_id || 0 ) }
+							onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_gate_id: parseInt( value, 10 ) || 0 } ) }
+						/>
+						{ !! config?.comment_restriction_gate_id && (
+							<>
+								<TextControl
+									label={ __( 'Message for readers who cannot comment', 'newspack-plugin' ) }
+									help={ __( 'Leave empty to use the default.', 'newspack-plugin' ) }
+									placeholder={ commentRestrictionDefaultMessage }
+									maxLength={ 200 }
+									value={ config?.comment_restriction_message || '' }
+									onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_message: value } ) }
+								/>
+								<TextControl
+									label={ __( 'Subscribe link', 'newspack-plugin' ) }
+									help={ __( 'Shown after the message as "Subscribe now". Leave empty to show no link.', 'newspack-plugin' ) }
+									type="url"
+									value={ config?.comment_restriction_purchase_url || '' }
+									onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_purchase_url: value } ) }
+								/>
+							</>
 						) }
 					</Stack>
 					{ wizardData?.config?.has_newsletters && (

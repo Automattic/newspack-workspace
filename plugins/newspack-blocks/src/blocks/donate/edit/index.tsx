@@ -393,7 +393,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 					/>
 				</PanelBody>
 				{ settings.platform === 'nrh' && (
-					<PanelBody title={ __( 'News Revenue Hub Settings', 'newspack-blocks' ) } initialOpen={ false }>
+					<PanelBody title={ __( 'RevEngine Settings', 'newspack-blocks' ) } initialOpen={ false }>
 						<TextControl
 							label={ __( 'Campaign ID', 'newspack-blocks' ) }
 							value={ attributes.campaign || '' }
