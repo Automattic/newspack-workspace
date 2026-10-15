@@ -176,7 +176,7 @@ const store = createReduxStore( WIZARD_STORE_NAMESPACE, {
  * get there first and leave newer selectors missing. That is worth knowing about
  * while developing, so keep the breadcrumb outside production builds.
  */
-export default () => {
+const registerStore = () => {
 	if ( select( WIZARD_STORE_NAMESPACE ) ) {
 		if ( 'production' !== process.env.NODE_ENV ) {
 			// eslint-disable-next-line no-console
@@ -188,3 +188,5 @@ export default () => {
 	}
 	register( store );
 };
+
+registerStore();

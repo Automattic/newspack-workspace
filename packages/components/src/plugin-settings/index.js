@@ -15,6 +15,7 @@ import { __ } from '@wordpress/i18n';
  */
 import { SectionHeader, Notice } from '../';
 import SettingsSection from './SettingsSection';
+import '../wizard/loading.scss';
 
 class PluginSettings extends Component {
 	constructor() {

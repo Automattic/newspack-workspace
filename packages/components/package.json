@@ -19,6 +19,55 @@
 		"directory": "packages/components"
 	},
 	"main": "dist/esm/index.js",
+	"exports": {
+		".": {
+			"import": "./dist/esm/index.js",
+			"require": "./dist/cjs/index.js",
+			"default": "./dist/esm/index.js"
+		},
+		"./package.json": "./package.json",
+		"./dist/*": [
+			"./dist/*",
+			"./dist/*.js",
+			"./dist/*/index.js"
+		],
+		"./src/*": [
+			"./src/*",
+			"./src/*.js",
+			"./src/*/index.js"
+		],
+		"./colors/*": "./colors/*",
+		"./shared/*": [
+			"./shared/*",
+			"./shared/*.js",
+			"./shared/*/index.js"
+		],
+		"./*": {
+			"import": [
+				"./dist/esm/*",
+				"./dist/esm/*.js",
+				"./dist/esm/*/index.js"
+			],
+			"require": [
+				"./dist/cjs/*",
+				"./dist/cjs/*.js",
+				"./dist/cjs/*/index.js"
+			],
+			"default": [
+				"./dist/esm/*",
+				"./dist/esm/*.js",
+				"./dist/esm/*/index.js"
+			]
+		}
+	},
+	"sideEffects": [
+		"*.css",
+		"*.scss",
+		"./src/**",
+		"./dist/*/index.js",
+		"./dist/*/wizard/store/index.js",
+		"./shared/js/public-path.js"
+	],
 	"publishConfig": {
 		"access": "public"
 	},
