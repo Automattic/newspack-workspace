@@ -600,7 +600,7 @@ do_action(
 
 One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself. Staging hosts (`*.newspackstaging.com`) fire it too; only their alerts are capped at Watch, so a consumer that should skip staging has to check the host itself.
 
-Contact-sync failures defer to the check too. While an integration's check is failing or broken, retry exhaustion reaches the log at warning severity; while it is broken, its failures stay out of the failure log the pattern alerts read. A record whose last failure is older than `Alert_Manager::HEALTH_STREAK_MAX_GAP` no longer counts, so a check that stops running cannot keep an integration muted.
+While an integration is broken, its contact-sync failures don't page either: retry exhaustion reaches the log at warning severity, and its failures stay out of the failure log the pattern alerts read. A record whose last failure is older than `Alert_Manager::HEALTH_STREAK_MAX_GAP` no longer counts, so a check that stops running cannot keep an integration muted.
 
 To disable the schedule on a specific site, add `'newspack_integration_health_check'` to the `NEWSPACK_CRON_DISABLE` constant array. A disabled or unpaid ESP account is reported from contact sync at most once an hour per integration, at warning severity while the check runs. Without the check, that hourly report pages instead, as it also does when the check's cron has stopped running for longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP`.
 
