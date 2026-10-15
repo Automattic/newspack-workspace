@@ -1468,6 +1468,28 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Before the record turns broken, retry exhaustion still pages. An outage
+	 * that ends after two failed checks never pages from the health check, and
+	 * on a quiet site the pattern rules don't reach their threshold either, so
+	 * these alerts are its only page.
+	 */
+	public function test_sync_retry_exhausted_while_the_check_is_only_failing_still_pages() {
+		do_action( 'newspack_integration_health_check_failed', $this->make_health_check_payload( 'esp', [ 'connection_failed' ] ) );
+		$this->capture_alerts( 'sync_retry_exhausted' );
+
+		do_action(
+			'newspack_sync_retry_exhausted',
+			[
+				'integration_id' => 'esp',
+				'retry_count'    => 5,
+				'reason'         => 'Request timed out.',
+			]
+		);
+
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['error'] );
+	}
+
+	/**
 	 * A broken record the check has stopped updating mutes nothing: only a
 	 * check run clears a record, so one left behind by a check that was
 	 * switched off would otherwise silence the integration's later outages.
