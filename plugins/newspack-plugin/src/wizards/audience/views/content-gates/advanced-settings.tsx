@@ -77,8 +77,8 @@ const getFeedModeLabel = ( mode: string ): string | undefined => {
 const getFeedModeHelp = ( mode: string ): string | undefined => {
 	const help: Record< string, string > = {
 		[ FEED_MODE_OFF ]: __( 'Feeds show restricted articles in full, ignoring gate restrictions.', 'newspack-plugin' ),
-		truncate: __( 'Feeds keep restricted articles but show only the teaser, the same free preview readers see on the site.', 'newspack-plugin' ),
-		exclude: __( 'Feeds leave restricted articles out.', 'newspack-plugin' ),
+		truncate: __( 'Feeds show only the teaser of restricted articles, as the site does.', 'newspack-plugin' ),
+		exclude: __( 'Feeds leave restricted articles out completely, with no teaser.', 'newspack-plugin' ),
 	};
 	return help[ mode ];
 };
