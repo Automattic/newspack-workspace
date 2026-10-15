@@ -26,17 +26,19 @@ import './style.scss';
 const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
 	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
 	const { isFetching, errorMessage } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
-	const { addNotice, resetHeaderData, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { addNotice, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ showPriorityModal, setShowPriorityModal ] = useState( false );
 	const [ showAdvancedSettings, setShowAdvancedSettings ] = useState( false );
 	const gates = ( wizardData?.gates || [] ) as Gate[];
+	const gateCount = gates.length;
 
 	useEffect( () => {
 		if ( isFetching ) {
 			return;
 		}
-		if ( ! gates?.length ) {
-			resetHeaderData();
+		const subTitle = __( 'Choose which content to restrict and how readers get access to it.', 'newspack-plugin' );
+		if ( ! gateCount ) {
+			setHeaderData( { actions: [], subTitle } );
 			return;
 		}
 		setHeaderData( {
@@ -46,7 +48,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 					label: __( 'Add Content Gate', 'newspack-plugin' ),
 					href: '#/edit/new/all',
 				},
-				...( gates.length > 1
+				...( gateCount > 1
 					? [
 							{
 								type: 'more',
@@ -61,9 +63,9 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 					action: () => setShowAdvancedSettings( true ),
 				},
 			],
-			subTitle: __( 'Choose which content to restrict and how readers get access to it.', 'newspack-plugin' ),
+			subTitle,
 		} );
-	}, [ isFetching, gates ] );
+	}, [ isFetching, gateCount ] );
 
 	useEffect( () => {
 		if ( errorMessage ) {
