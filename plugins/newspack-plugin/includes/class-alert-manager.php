@@ -325,9 +325,11 @@ class Alert_Manager {
 	/**
 	 * Handle sync retry exhaustion.
 	 *
-	 * While the integration's health record is broken, the alert reaches the
-	 * log only: the outage has already paged once, and every contact whose
-	 * retries run out during it would page again for the same cause.
+	 * While the integration's health check is failing or broken, the alert
+	 * reaches the log only. The check owns the escalation and pages once if
+	 * the failure lasts, and a contact's retries can run out before the
+	 * check's threshold does, so every contact failing during the outage
+	 * would otherwise page for the same cause.
 	 *
 	 * @param array $payload Alert data from Contact_Sync.
 	 */
@@ -359,7 +361,7 @@ class Alert_Manager {
 			'newspack_alert',
 			[
 				'type'      => 'sync_retry_exhausted',
-				'severity'  => self::is_integration_broken( $payload['integration_id'] ?? '' ) ? 'warning' : 'error',
+				'severity'  => null !== self::get_current_health_record( $payload['integration_id'] ?? '' ) ? 'warning' : 'error',
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),
