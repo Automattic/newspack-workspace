@@ -68,7 +68,7 @@ class Alert_Manager {
 	 * messages, as Contact_Sync::ERROR_SIGNATURES does for push errors. A
 	 * bare 401, 402 or 403 status marks it publisher-side too, whether the
 	 * provider printed it in the message ("401: …" or "status 401") or kept
-	 * it as the error code.
+	 * it as the error code or as `status` in the error data.
 	 *
 	 * Anything unmatched is 'other': a provider outage, a timeout, or an
 	 * error not seen before, which stays an engineering signal.
