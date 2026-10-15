@@ -95,7 +95,9 @@ function stripCaptions( modal ) {
 	const parser = new DOMParser();
 	const doc = parser.parseFromString( html, 'text/html' );
 	doc.querySelectorAll( '.wp-caption' ).forEach( el => el.remove() );
-	shareable.innerHTML = doc.body.innerHTML;
+	// .value, not the textarea's innerHTML: innerHTML would decode the copy one more level,
+	// turning an HTML code sample the story shows as text into markup.
+	shareable.value = doc.body.innerHTML;
 }
 
 /**
