@@ -233,10 +233,10 @@ git pull origin release
 
 # Names the release in the merge subjects. The checkout is the commit that
 # triggered the run, which predates the tags this release created, so
-# `git describe` from there returns an older package's tag. RELEASED_TAGS is
-# the release job's list of tags this run created. One release can cut several;
-# the foundation plugin's `newspack@` tag is preferred so subjects stay uniform.
-# A run_post_release dispatch releases nothing and passes none, so fall back to
+# `git describe` from there returns a tag from an earlier release. RELEASED_TAGS
+# is the release job's list of tags this run created. One release can cut
+# several; from that list, the foundation plugin's `newspack@` tag is preferred.
+# A run_post_release dispatch that releases nothing passes none, so fall back to
 # the nearest tag, read only after the pull above has reached the release tip.
 LATEST_VERSION_TAG=$(printf '%s\n' "${RELEASED_TAGS:-}" | grep -m 1 '^newspack@' || true)
 if [ -z "$LATEST_VERSION_TAG" ]; then
