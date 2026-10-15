@@ -120,31 +120,27 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that repeat permanent config failures are no longer deduped: at
-	 * warning severity each one is a log entry, and per-contact history in
-	 * the log is useful.
+	 * Test that a permanent config failure is reported once an hour per
+	 * integration: the account state is site-level, and the push log keeps
+	 * the per-contact history.
 	 */
-	public function test_permanent_config_failure_is_not_deduped() {
-		$alerts = [];
-		add_action(
-			'newspack_alert',
-			function ( $data ) use ( &$alerts ) {
-				$alerts[] = $data;
-			}
-		);
+	public function test_permanent_config_failure_reports_once_an_hour_per_integration() {
+		$this->capture_alerts( 'sync_permanent_failure' );
 
-		$payload = [
-			'integration_id' => 'esp',
-			'user_id'        => 1,
-			'context'        => 'Reader registered',
-			'reason'         => 'Payment Required',
-			'error_class'    => 'permanent_config',
-		];
-		do_action( 'newspack_sync_permanent_failure', $payload );
-		do_action( 'newspack_sync_permanent_failure', $payload );
+		foreach ( [ 'esp', 'esp', 'crm' ] as $integration_id ) {
+			do_action(
+				'newspack_sync_permanent_failure',
+				[
+					'integration_id' => $integration_id,
+					'user_id'        => 1,
+					'context'        => 'Reader registered',
+					'reason'         => 'Payment Required',
+					'error_class'    => 'permanent_config',
+				]
+			);
+		}
 
-		$this->assertCount( 2, $alerts );
-		$this->assertEquals( 'warning', $alerts[1]['severity'] );
+		$this->assertSame( [ 'esp', 'crm' ], array_column( array_column( $this->captured['sync_permanent_failure']['warning'], 'context' ), 'integration_id' ) );
 	}
 
 	/**
@@ -189,41 +185,44 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Where the hourly health check isn't running, nothing else observes a
-	 * disabled or unpaid account, so a permanent config failure pages from
-	 * the sync path, at most once an hour per integration.
+	 * A permanent config failure pages only where the hourly health check
+	 * isn't running, since nothing else then observes a disabled or unpaid
+	 * account. A run that is late but within HEALTH_STREAK_MAX_GAP still
+	 * counts as running, so a slow WP-Cron doesn't page through this path.
 	 *
-	 * @dataProvider data_health_check_not_running
+	 * @dataProvider data_health_check_schedules
 	 *
-	 * @param int|null $next_run_offset Seconds from now to the check's next run, or null when it is not scheduled.
+	 * @param int|null $next_run_offset   Seconds from now to the check's next run, or null when it is not scheduled.
+	 * @param string   $expected_severity Severity of the failure's hourly report.
 	 */
-	public function test_permanent_config_failure_pages_while_the_health_check_is_not_running( $next_run_offset ) {
+	public function test_permanent_config_failure_pages_only_while_the_health_check_is_not_running( $next_run_offset, $expected_severity ) {
 		$this->set_health_check_next_run( null === $next_run_offset ? false : time() + $next_run_offset );
 		$this->capture_alerts( 'sync_permanent_failure' );
 
-		$payload = [
-			'integration_id' => 'esp',
-			'email'          => 'reader@example.test',
-			'context'        => 'Reader registered',
-			'reason'         => 'API Access has been disabled for this account.',
-			'error_class'    => 'permanent_config',
-		];
-		do_action( 'newspack_sync_permanent_failure', $payload );
-		do_action( 'newspack_sync_permanent_failure', $payload );
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'email'          => 'reader@example.test',
+				'context'        => 'Reader registered',
+				'reason'         => 'API Access has been disabled for this account.',
+				'error_class'    => 'permanent_config',
+			]
+		);
 
-		$this->assertCount( 1, $this->captured['sync_permanent_failure']['error'], 'The first failure pages.' );
-		$this->assertCount( 1, $this->captured['sync_permanent_failure']['warning'], 'A repeat within the hour reaches the log only.' );
+		$this->assertCount( 1, $this->captured['sync_permanent_failure'][ $expected_severity ] );
 	}
 
 	/**
-	 * Health-check schedules that leave the check not running: switched off
-	 * (not scheduled), and a cron that stopped firing, which leaves the next
-	 * run overdue.
+	 * Health-check schedules: switched off (not scheduled), a cron that
+	 * stopped firing (overdue beyond the gap), and two that still run.
 	 */
-	public function data_health_check_not_running() {
+	public function data_health_check_schedules() {
 		return [
-			'not scheduled' => [ null ],
-			'cron stalled'  => [ -Alert_Manager::HEALTH_STREAK_MAX_GAP - 1 ],
+			'not scheduled'          => [ null, 'error' ],
+			'cron stalled'           => [ -Alert_Manager::HEALTH_STREAK_MAX_GAP - 1, 'error' ],
+			'next run ahead'         => [ HOUR_IN_SECONDS, 'warning' ],
+			'overdue within the gap' => [ -Alert_Manager::HEALTH_STREAK_MAX_GAP + MINUTE_IN_SECONDS, 'warning' ],
 		];
 	}
 
