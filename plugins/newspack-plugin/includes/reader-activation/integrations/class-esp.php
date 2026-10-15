@@ -534,6 +534,11 @@ class ESP extends Integration {
 	/**
 	 * Delete a contact from the connected ESP.
 	 *
+	 * A provider with no contact for the reader answers with its own not-found
+	 * error. The reader is already gone there and no retry can change that, so
+	 * the answer carries the framework's not-found code, which the deletion
+	 * path treats as done.
+	 *
 	 * @param string $email Email address.
 	 * @return true|\WP_Error
 	 */
@@ -542,7 +547,11 @@ class ESP extends Integration {
 		if ( $can_sync->has_errors() ) {
 			return $can_sync;
 		}
-		return \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
+		$result = \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
+		if ( \is_wp_error( $result ) && $this->is_provider_not_found_error( $result ) ) {
+			return new \WP_Error( self::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_message() );
+		}
+		return $result;
 	}
 
 	/**

@@ -471,6 +471,44 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Mailchimp answers a hard delete of a reader it has no member for with
+	 * its own "Contact not found". The reader is already gone there, and no
+	 * retry can change that, so the row is done and nothing is retried.
+	 */
+	public function test_a_hard_delete_of_a_reader_mailchimp_does_not_hold_is_final() {
+		$this->require_action_scheduler();
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Contacts::$next_return = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+		Integrations::register( $esp );
+		$esp->update_settings_field_value( 'sync_account_deletion', true );
+		$esp->update_settings_field_value( 'account_deletion_handling', 'delete' );
+		Integrations::enable( 'esp' );
+
+		$this->delete_sample_reader();
+
+		$delete_calls = \Newspack_Newsletters_Contacts::$delete_calls;
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+		\delete_option( 'newspack_newsletters_service_provider' );
+
+		$row     = $this->get_rows_by_integration()['esp'];
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'esp' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			]
+		);
+		$this->assertCount( 1, $delete_calls, 'The delete reached Mailchimp.' );
+		$this->assertEmpty( $pending, 'Nothing is retried.' );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertSame( 'benign', $row['error_class'] );
+	}
+
+	/**
 	 * A deletion flag that fails is retried on the same row, and the row
 	 * shows the flag that was pushed.
 	 */
