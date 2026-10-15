@@ -6,16 +6,8 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import {
-	DropdownMenu,
-	MenuGroup,
-	MenuItem,
-	Notice,
-	SlotFillProvider,
-	createSlotFill,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack,
-} from '@wordpress/components';
+import { DropdownMenu, MenuGroup, MenuItem, Notice, SlotFillProvider, createSlotFill } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { cloneElement, createInterpolateElement, isValidElement, useLayoutEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -111,6 +103,7 @@ const WizardHeaderRegion = ( {
 	sections,
 	sectionName,
 	subTitle,
+	headerSubTitle,
 	actions,
 	tabbedNavigation: wizardTabbedNavigation,
 	children,
@@ -134,6 +127,17 @@ const WizardHeaderRegion = ( {
 		}
 	}
 
+	// WizardError normally mounts inside the tab bar, so a route without one renders it itself.
+	if ( activeSection( sections, pathname )?.hideTabbedNavigation && tabbedNavigation ) {
+		tabbedNavigation = null;
+		children = (
+			<>
+				<WizardError />
+				{ children }
+			</>
+		);
+	}
+
 	if ( hideHeader ) {
 		// Without the Page shell the tabs still own the content: it renders
 		// inside the active tab's panel.
@@ -154,7 +158,12 @@ const WizardHeaderRegion = ( {
 	const sectionSubTitle = activeSection( sections, pathname )?.subHeaderText;
 
 	return (
-		<Page breadcrumbItems={ breadcrumbItems } subTitle={ sectionSubTitle ?? subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
+		<Page
+			breadcrumbItems={ breadcrumbItems }
+			subTitle={ headerSubTitle || ( sectionSubTitle ?? subTitle ) }
+			actions={ actions }
+			tabbedNavigation={ tabbedNavigation }
+		>
 			{ children }
 		</Page>
 	);
@@ -166,7 +175,7 @@ const WizardHeaderRegion = ( {
  * @property {string}     [subHeaderText]           The sub-header text, optional.
  * @property {string}     [apiSlug]                 The API slug, optional.
  * @property {string}     [className]               CSS classes, optional.
- * @property {any[]}      sections                  Array of sections. A section's own `subHeaderText` replaces the wizard's while it is active.
+ * @property {any[]}      sections                  Array of sections. A section's own `subHeaderText` replaces the wizard's while it is active, and `hideTabbedNavigation` hides the tab bar on its route.
  *                                                  Its optional `tabbedNavigation( params )` returns the tab items shown while its route matches.
  * @property {boolean}    [hasSimpleFooter]         Indicates if a simple footer is used, optional.
  * @property {() => void} [renderAboveSections]     Function to render content above sections, optional.
@@ -215,6 +224,7 @@ const Wizard = (
 		sectionTitle,
 		sectionPrimaryAction,
 		sectionSecondaryAction,
+		subTitle: headerSubTitle,
 	} = headerData;
 
 	const mainActions = actions?.filter( action => action.type === 'primary' || action.type === 'secondary' );
@@ -268,10 +278,10 @@ const Wizard = (
 					<>
 						{ ! pluginRequirementsKnown && (
 							<div className="newspack-wizard__loader">
-								<VStack alignment="center" spacing={ 2 }>
+								<Stack direction="column" align="center" gap="sm">
 									<Waiting noMargin />
 									<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
-								</VStack>
+								</Stack>
 							</div>
 						) }
 						<div hidden={ ! pluginRequirementsKnown }>
@@ -443,6 +453,7 @@ const Wizard = (
 							sections={ routedSections }
 							sectionName={ sectionName }
 							subTitle={ subHeaderText }
+							headerSubTitle={ headerSubTitle }
 							actions={ headerActions }
 							tabbedNavigation={ tabbedNavigation }
 						>
