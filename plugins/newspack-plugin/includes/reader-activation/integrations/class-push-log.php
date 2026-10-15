@@ -936,7 +936,12 @@ final class Push_Log {
 		self::$write_failure_reported = true;
 
 		global $wpdb;
-		$db_error = $wpdb->last_error;
+		// The database quotes what a statement failed on (a duplicate entry, the
+		// text near a syntax error), which can be the reader's address or
+		// payload. The words around the quotes say what went wrong, so only the
+		// quoted part goes. First quote to last, because an address can itself
+		// hold a quote.
+		$db_error = preg_replace( "/'.*'/s", "'…'", $wpdb->last_error );
 
 		// A table that disappears after its version was recorded (a restore, a
 		// manual drop) would stay gone, because the recorded version stops

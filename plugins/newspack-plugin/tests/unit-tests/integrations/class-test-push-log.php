@@ -374,6 +374,38 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The failure report goes to a remote log. The database's own message can
+	 * quote the statement it failed on, address included, so the report keeps
+	 * what went wrong and leaves out what was quoted.
+	 */
+	public function test_a_write_failure_report_keeps_the_database_error_but_not_the_values_it_quotes() {
+		$reported_data  = null;
+		$capture_report = function ( $code, $message, $params ) use ( &$reported_data ) {
+			if ( 'newspack_integrations_push_log_write_failed' === $code ) {
+				$reported_data = $params['data'];
+			}
+		};
+		// A statement whose error quotes the address the way a syntax error
+		// quotes the text near it. The quote inside the address is left as is,
+		// as in a duplicate-entry error, so it cannot pair up with the others.
+		$quote_the_address = function ( $query ) {
+			$is_push_log_insert = 0 === stripos( ltrim( $query ), 'INSERT' ) && false !== strpos( $query, Push_Log::TABLE_NAME );
+			return $is_push_log_insert ? 'SELECT * FROM WHERE email = "o\'brien@example.test"' : $query;
+		};
+		add_action( 'newspack_log', $capture_report, 10, 3 );
+		add_filter( 'query', $quote_the_address );
+
+		$row_id = $this->record( [ 'email' => "o'brien@example.test" ] );
+
+		remove_filter( 'query', $quote_the_address );
+		remove_action( 'newspack_log', $capture_report, 10 );
+
+		$this->assertSame( 0, $row_id, 'The write did fail.' );
+		$this->assertStringContainsString( 'SQL syntax', $reported_data['db_error'], 'The report still says what went wrong.' );
+		$this->assertStringNotContainsString( 'brien', $reported_data['db_error'] );
+	}
+
+	/**
 	 * Quiet writes must not silence the rest of the request: whatever runs
 	 * after a push keeps the database error reporting it had.
 	 */
