@@ -51,6 +51,7 @@ class Newspack_Blocks {
 		add_post_type_support( 'page', 'newspack_blocks' );
 		add_action( 'jetpack_register_gutenberg_extensions', [ __CLASS__, 'disable_jetpack_donate' ], 99 );
 		add_filter( 'the_content', [ __CLASS__, 'hide_post_content_when_iframe_block_is_fullscreen' ] );
+		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_prompts_on_fullscreen_iframe_page' ] );
 		add_filter( 'the_content', [ __CLASS__, 'start_content_render_pass' ], PHP_INT_MIN );
 		add_filter( 'the_content', [ __CLASS__, 'end_content_render_pass' ], PHP_INT_MAX );
 		add_filter( 'body_class', [ __CLASS__, 'add_body_classes' ] );
@@ -75,37 +76,80 @@ class Newspack_Blocks {
 	/**
 	 * Hide the post content when it contains an iframe block that is set to fullscreen mode.
 	 *
+	 * Excerpts are left alone: they are built from the same filter, and swapping the text
+	 * for the iframe would leave the excerpt empty.
+	 *
 	 * @param string $content post content from the_content hook.
 	 * @return string the post content.
 	 */
 	public static function hide_post_content_when_iframe_block_is_fullscreen( $content ) {
-		if ( has_block( 'newspack-blocks/iframe' ) ) {
-			$blocks = parse_blocks( get_post()->post_content );
+		if ( doing_filter( 'get_the_excerpt' ) || ! has_block( 'newspack-blocks/iframe' ) ) {
+			return $content;
+		}
 
-			foreach ( $blocks as $block ) {
-				if ( 'newspack-blocks/iframe' === $block['blockName']
-					&& is_array( $block['attrs'] )
-					&& array_key_exists( 'isFullScreen', $block['attrs'] )
-					&& $block['attrs']['isFullScreen']
-					) {
-					// we don't need the post content since the iframe will be fullscreen.
-					$content = render_block( $block );
-
-					add_filter(
-						'body_class',
-						function( $classes ) {
-							$classes[] = 'newspack-post-with-fullscreen-iframe';
-							return $classes;
-						}
-					);
-
-					// we don't need to show Newspack popups since the iframe will take over them.
-					add_filter( 'newspack_popups_assess_has_disabled_popups', '__return_true' );
-				}
-			}
+		$block = self::get_fullscreen_iframe_block( get_post() );
+		if ( $block ) {
+			// we don't need the post content since the iframe will be fullscreen.
+			$content = render_block( $block );
 		}
 
 		return $content;
+	}
+
+	/**
+	 * Get a post's top-level fullscreen Iframe block, if it has one.
+	 *
+	 * @param WP_Post|null $post Post to check.
+	 * @return array|null The block, or null.
+	 */
+	private static function get_fullscreen_iframe_block( $post ) {
+		static $found = [];
+
+		if ( ! $post instanceof WP_Post ) {
+			return null;
+		}
+		if ( array_key_exists( $post->ID, $found ) ) {
+			return $found[ $post->ID ];
+		}
+
+		$found[ $post->ID ] = null;
+		foreach ( parse_blocks( $post->post_content ) as $block ) {
+			if ( 'newspack-blocks/iframe' === $block['blockName'] && ! empty( $block['attrs']['isFullScreen'] ) ) {
+				$found[ $post->ID ] = $block;
+				break;
+			}
+		}
+
+		return $found[ $post->ID ];
+	}
+
+	/**
+	 * Whether this request is the page of a post taken over by a fullscreen Iframe block.
+	 *
+	 * Decided from the queried post rather than while its content renders, so the answer is
+	 * the same for the whole request: the body class is printed before the loop runs, and a
+	 * fullscreen post rendered inside another post's page must not affect that page.
+	 *
+	 * This says the post is built to take over the page, not that the iframe is on screen:
+	 * a content gate can swap the block for its teaser, on the server or in the browser once
+	 * a metered reader runs out, and neither is known when the body class prints. The
+	 * stylesheet hides the rest of the page only while the block's iframe is present, which
+	 * is what keeps the gate visible to that reader.
+	 *
+	 * @return bool
+	 */
+	private static function is_fullscreen_iframe_page() {
+		return is_singular() && null !== self::get_fullscreen_iframe_block( get_queried_object() );
+	}
+
+	/**
+	 * Suppress Newspack prompts on the page of a fullscreen Iframe post, which the iframe covers.
+	 *
+	 * @param bool $disabled Whether prompts are already disabled.
+	 * @return bool
+	 */
+	public static function disable_prompts_on_fullscreen_iframe_page( $disabled ) {
+		return $disabled || self::is_fullscreen_iframe_page();
 	}
 
 	/**
@@ -115,6 +159,10 @@ class Newspack_Blocks {
 	 * @return string|array Modified array or string of body class names.
 	 */
 	public static function add_body_classes( $classes ) {
+		if ( is_array( $classes ) && self::is_fullscreen_iframe_page() ) {
+			$classes[] = 'newspack-post-with-fullscreen-iframe';
+		}
+
 		if ( wp_is_block_theme() ) {
 			// Handle string (admin) vs array (frontend) cases.
 			if ( is_string( $classes ) ) {
@@ -227,7 +275,7 @@ class Newspack_Blocks {
 	 * @return bool True if available, false if not.
 	 */
 	public static function can_use_name_your_price() {
-		// If the donation platform is NRH, the Donate block should behave as if Name Your Price is available.
+		// If the donation platform is RevEngine, the Donate block should behave as if Name Your Price is available.
 		if ( method_exists( 'Newspack\Donations', 'is_platform_nrh' ) && \Newspack\Donations::is_platform_nrh() ) {
 			return true;
 		}
@@ -1394,6 +1442,19 @@ class Newspack_Blocks {
 				// If we don't, built an excerpt but allow no tags.
 				$excerpt      = $post->post_content;
 				$allowed_tags = '';
+
+				// Jetpack's paywall only applies to the_content, which this excerpt skips, so ensure
+				// gated posts get the text above the Paywall block or nothing. Like Access Control,
+				// this applies to every reader, not just those without access, so the block's render
+				// cache stays safe to share.
+				if (
+					has_filter( 'the_content', 'Automattic\Jetpack\Extensions\Subscriptions\add_paywall' )
+					&& method_exists( 'Jetpack_Memberships', 'get_post_access_level' )
+					&& 'everybody' !== \Jetpack_Memberships::get_post_access_level( $post->ID )
+				) {
+					$paywall_block = '<!-- wp:jetpack/paywall /-->';
+					$excerpt       = false !== strpos( $excerpt, $paywall_block ) ? strstr( $excerpt, $paywall_block, true ) : '';
+				}
 			}
 
 			// Recreate logic from wp_trim_excerpt (https://developer.wordpress.org/reference/functions/wp_trim_excerpt/).

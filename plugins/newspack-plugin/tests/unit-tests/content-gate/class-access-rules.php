@@ -247,8 +247,8 @@ class Newspack_Test_Access_Rules extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Author/Contributor users are eligible group members by default (see
-	 * Group_Subscription::DEFAULT_ELIGIBLE_MEMBER_ROLES) precisely so they have a path
+	 * Non-staff users such as an author are eligible group members (see
+	 * Group_Subscription::is_eligible_member()) precisely so they have a path
 	 * to content gated behind a group they were added to, even though they are neither
 	 * a reader nor the subscription's WooCommerce customer. A non-eligible role (editor)
 	 * added via the same raw member meta must not gain access, which proves the grant

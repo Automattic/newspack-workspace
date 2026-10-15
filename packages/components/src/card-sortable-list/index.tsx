@@ -3,23 +3,24 @@
  */
 
 /**
+ * External dependencies
+ */
+import classNames from 'classnames';
+
+/**
  * WordPress dependencies.
  */
-import { Disabled, Draggable, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Disabled, Draggable } from '@wordpress/components';
 import { useEffect, useLayoutEffect, useRef, useState } from '@wordpress/element';
-import { Badge } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import Card from '../card';
+import TooltipBadge from '../tooltip-badge';
 import type { CardBadge } from '../types';
 import './style.scss';
-
-/**
- * External dependencies
- */
-import classNames from 'classnames';
 
 const DROP_ANIMATION_DURATION = 400; // ms — must match $drop-duration in style.scss
 const BUTTON_MOVE_DURATION = 200; // ms — must match $shift-duration in style.scss
@@ -37,6 +38,8 @@ type DraggableItem = {
 	title: string;
 	description?: React.ReactNode;
 	badge?: CardBadge;
+	/** A second badge, e.g. a warning, whose tooltip explains it. */
+	secondaryBadge?: CardBadge & { tooltip?: string };
 	toggleChecked?: boolean;
 	onToggleChange?: () => void;
 	actions?: DraggableItemAction[];
@@ -45,7 +48,7 @@ type DraggableItem = {
 type DragMeasurements = {
 	lockedHeight: number;
 	sourceHeight: number;
-	// Height of each item (including the VStack gap after it, except the last).
+	// Height of each item (including the Stack gap after it, except the last).
 	itemStrides: number[];
 	// Top edge of each item, used for drop position hit-testing in onDragEnd.
 	itemTops: number[];
@@ -357,7 +360,9 @@ const CardSortableList = ( {
 	const isDragging = draggingIndex !== null;
 
 	return (
-		<VStack
+		<Stack
+			direction="column"
+			gap="lg"
 			ref={ listRef }
 			className={ classNames(
 				'newspack-card--core--sortable-list',
@@ -365,7 +370,6 @@ const CardSortableList = ( {
 				isDragging && 'newspack-card--core--sortable-list__is-dragging'
 			) }
 			style={ measurements ? { height: measurements.lockedHeight } : undefined }
-			spacing={ 4 }
 		>
 			{ sortedItems.map( ( item, index ) => {
 				const translateY = getTranslateY( index );
@@ -406,6 +410,18 @@ const CardSortableList = ( {
 														{ item.badge?.label && (
 															<Badge intent={ item.badge.intent ?? 'none' }>{ item.badge.label }</Badge>
 														) }
+														{ item.secondaryBadge?.label &&
+															( item.secondaryBadge.tooltip ? (
+																<TooltipBadge
+																	label={ item.secondaryBadge.label }
+																	tooltip={ item.secondaryBadge.tooltip }
+																	intent={ item.secondaryBadge.intent }
+																/>
+															) : (
+																<Badge intent={ item.secondaryBadge.intent ?? 'none' }>
+																	{ item.secondaryBadge.label }
+																</Badge>
+															) ) }
 													</h3>
 													{ item.description && <p>{ item.description }</p> }
 												</>
@@ -434,7 +450,7 @@ const CardSortableList = ( {
 					</Disabled>
 				);
 			} ) }
-		</VStack>
+		</Stack>
 	);
 };
 

@@ -35,7 +35,7 @@ const Platform = () => {
 							value: NEWSPACK,
 						},
 						{
-							label: __( 'News Revenue Hub', 'newspack' ),
+							label: __( 'RevEngine', 'newspack' ),
 							value: NRH,
 						},
 					] }

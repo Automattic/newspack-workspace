@@ -56,7 +56,7 @@ final class GA4_Custom_Dimensions {
 
 	/**
 	 * Donation parameters, which WooCommerce does not have to itself. A site on
-	 * NRH or an external platform emits all three without it: `gate.js` reads
+	 * RevEngine or an external platform emits all three without it: `gate.js` reads
 	 * `donation_frequency` and `donation_amount` off the submitted Donate block
 	 * form, and non-WooCommerce platforms write `is_donor` client-side (see
 	 * `Reader_Data::get_read_only_keys()`).
@@ -277,7 +277,7 @@ final class GA4_Custom_Dimensions {
 	 * installed, or the publisher picked a platform that isn't it.
 	 *
 	 * The platform slug defaults to `wc`, so it only reads reliably negated - a
-	 * non-`wc` slug is always a deliberate choice of NRH or an external platform.
+	 * non-`wc` slug is always a deliberate choice of RevEngine or an external platform.
 	 * Reads WooCommerce directly rather than through `is_woocommerce_enabled()`,
 	 * so each group takes exactly one filter.
 	 *

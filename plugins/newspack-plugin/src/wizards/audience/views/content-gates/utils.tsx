@@ -66,6 +66,17 @@ export const isGateMetered = ( gate: Gate, siteMeter?: SiteMeterConfig ) => {
 };
 
 /**
+ * Whether a gate switches metering on, whether or not it grants any free views.
+ *
+ * Unlike `isGateMetered()`, a 0/0 allowance still counts, so the Metering form stays
+ * reachable to raise it again.
+ *
+ * @param gate The gate.
+ */
+export const switchesMeteringOn = ( gate: Gate ) =>
+	[ gate.registration, gate.custom_access ].some( section => Boolean( section?.active && section.metering?.enabled ) );
+
+/**
  * Whether any of a gate's audience paths keeps its own allowance.
  *
  * Scope is stored per audience path, and adoption stamps only the paths that disagree
@@ -254,6 +265,11 @@ const sharesContent = ( a: ContentScope, b: ContentScope ) => {
 };
 
 /**
+ * Short label for the badge that carries a priority warning.
+ */
+export const getPriorityWarningLabel = () => __( 'Overrides paid access', 'newspack-plugin' );
+
+/**
  * Warnings for gates ranked where they let readers skip a paid gate below them.
  *
  * The first gate matching a post decides access alone (NPPD-2289). A gate that asks for no paid
@@ -285,7 +301,7 @@ export const getPriorityWarnings = ( gates: Gate[] ): Record< number, string > =
 };
 
 /**
- * Describe the shared allowance, for the Metering card and the Metering page header.
+ * Describe the shared allowance, for the Metering page subtitle.
  *
  * @param siteMeter The site meter, once the wizard has loaded it.
  */

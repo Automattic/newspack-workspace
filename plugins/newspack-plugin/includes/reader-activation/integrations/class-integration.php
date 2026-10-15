@@ -73,7 +73,8 @@ abstract class Integration {
 	 * WP_Error code pull_contact_data() should return when the provider has no
 	 * contact for the reader. Not a failure: no re-run can make an absent
 	 * contact appear, so batch drivers count these readers as skipped rather
-	 * than errored.
+	 * than errored. The sync framework returns the same code for an update-only
+	 * push that every integration declined, for the same reason.
 	 *
 	 * @var string
 	 */
@@ -659,6 +660,52 @@ abstract class Integration {
 	 * @return true|\WP_Error True on success or WP_Error on failure.
 	 */
 	abstract public function push_contact_data( $contact, $context = '', $existing_contact = null );
+
+	/**
+	 * Whether pushing this contact would update a live record the integration holds.
+	 *
+	 * Consulted by the sync framework only on an update-only push (the
+	 * `existing_only` sync option, which the backfill CLI sets unless
+	 * `--create-missing` is passed), before `push_contact_data()`: `false` makes the
+	 * framework skip this integration for the reader (tallied as skipped, not
+	 * failed), a `WP_Error` is treated as a failed push, and `true` lets the
+	 * push proceed. Answer by what the push would do: `true` only when it would
+	 * update a live record, `false` when it would create one or restore an
+	 * archived or deleted one. Any answer other than a boolean or a `WP_Error`
+	 * is treated as a failed check. Override it where the external system can be
+	 * asked; the override is what makes `supports_contact_lookup()` true. An
+	 * integration that cannot ask is refused on an update-only push rather than
+	 * pushed, because a push there is an upsert that would create the contact.
+	 *
+	 * @param string $email The contact's email address.
+	 *
+	 * @return bool|\WP_Error True if the push would update a live record, false if it would create or restore one, WP_Error if the lookup failed or is unsupported.
+	 */
+	public function contact_exists( string $email ) {
+		return new \WP_Error(
+			'newspack_integration_contact_lookup_unsupported',
+			sprintf(
+				// Translators: %s is the integration id.
+				__( 'Integration "%s" cannot check whether a contact exists.', 'newspack-plugin' ),
+				$this->get_id()
+			)
+		);
+	}
+
+	/**
+	 * Whether the integration can answer `contact_exists()`.
+	 *
+	 * Implementing `contact_exists()` is the opt-in: this is true as soon as a
+	 * subclass overrides it, so an integration written before the lookup
+	 * existed reports false rather than "yes". On an update-only push the sync
+	 * withholds the push from an integration that reports false: an unknown
+	 * must resolve to "do not create", or update-only guarantees nothing.
+	 *
+	 * @return bool
+	 */
+	public function supports_contact_lookup(): bool {
+		return ( new \ReflectionMethod( $this, 'contact_exists' ) )->getDeclaringClass()->getName() !== self::class;
+	}
 
 	/**
 	 * Whether this integration can hard-delete a contact from its external system.

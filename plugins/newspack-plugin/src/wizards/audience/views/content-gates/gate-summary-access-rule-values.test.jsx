@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * The summary reads `available_access_rules` at module scope, so the globals have to be
@@ -19,6 +19,7 @@ window.newspackAudienceContentGates = {
 		},
 		institution: { name: 'Institutional access', has_options: true, requires_value: true, options: [] },
 		email_domain: { name: 'Whitelisted email domain', has_options: false, empty_grants_access: true, requires_value: true },
+		esp__DONATION: { name: 'Donation total', has_options: false, is_range: true, empty_grants_access: true, requires_value: true },
 	},
 	available_content_rules: {},
 };
@@ -26,7 +27,7 @@ window.newspackAudienceContentGates = {
 /**
  * Internal dependencies
  */
-const { getGateSummarySections, groupSummaryColumns } = require( './gate-summary' );
+const { getGateSummarySections } = require( './gate-summary' );
 const { formatAccessRuleOptionLabel } = require( '../../../../content-gate/access-rule-options' );
 
 const gateWith = ( ...rules ) => ( {
@@ -42,48 +43,46 @@ const renderPaidAccess = ( gate, optionsBySlug ) => {
 
 describe( 'gate summary, institutions on Registered access', () => {
 	const INSTITUTION = { value: 7, label: 'Example University' };
-	const registrationWith = ( registration, isNewsletter = false ) =>
-		getGateSummarySections(
+	const SECOND = { value: 8, label: 'State Library' };
+	const renderRegistration = registration => {
+		const sections = getGateSummarySections(
 			{
 				content_rules: [],
 				registration: { metering: { enabled: false }, ...registration },
 				custom_access: { active: false, access_rules: [], metering: { enabled: false } },
 			},
-			isNewsletter,
+			false,
 			undefined,
-			{ institution: [ INSTITUTION ] }
+			{ institution: [ INSTITUTION, SECOND ] }
 		);
+		const { container } = render( <div>{ sections.find( s => 'registration' === s.key ).content }</div> );
+		return { sections, container };
+	};
 	const institutionRules = [ [ { slug: 'institution', value: [ 7 ] } ] ];
 
-	it( 'lists them in a section stacked under Registered Access', () => {
-		const sections = registrationWith( { active: true, access_rules: institutionRules } );
-		const keys = sections.map( s => s.key );
-		const section = sections.find( s => 'registration_institutions' === s.key );
+	it( 'lists them as a labeled line inside Registered Access, not as a section of their own', () => {
+		const { sections } = renderRegistration( { active: true, access_rules: institutionRules } );
 
-		expect( keys.indexOf( 'registration_institutions' ) ).toBe( keys.indexOf( 'registration' ) + 1 );
-		expect( section.label ).toBe( 'Institutional Access' );
-		expect( section.column ).toBe( 'registration' );
-		render( <div>{ section.content }</div> );
+		expect( sections.map( s => s.key ) ).toEqual( [ 'content_rules', 'registration', 'custom_access' ] );
+		expect( screen.getByText( 'Institutional access:' ) ).toBeInTheDocument();
 		expect( screen.getByText( formatAccessRuleOptionLabel( INSTITUTION ), { exact: false } ) ).toBeInTheDocument();
 	} );
 
-	it( 'shares a card column with Registered Access', () => {
-		const columns = groupSummaryColumns( registrationWith( { active: true, access_rules: institutionRules } ) );
+	it( 'separates several institutions instead of running their names together', () => {
+		const { container } = renderRegistration( { active: true, access_rules: [ [ { slug: 'institution', value: [ 7, 8 ] } ] ] } );
 
-		expect( columns.map( column => column.map( section => section.key ) ) ).toEqual( [
-			[ 'content_rules' ],
-			[ 'registration', 'registration_institutions' ],
-			[ 'custom_access' ],
-		] );
+		expect( container.textContent ).not.toContain( formatAccessRuleOptionLabel( INSTITUTION ) + formatAccessRuleOptionLabel( SECOND ) );
+		expect( screen.getByText( formatAccessRuleOptionLabel( SECOND ), { exact: false } ) ).toBeInTheDocument();
 	} );
 
-	it( 'leaves the section out while registered access is off or names no institution', () => {
-		expect( registrationWith( { active: false, access_rules: institutionRules } ).map( s => s.key ) ).not.toContain(
-			'registration_institutions'
-		);
-		expect( registrationWith( { active: true, access_rules: [] } ).map( s => s.key ) ).not.toContain( 'registration_institutions' );
-		// A registration object built without the key.
-		expect( registrationWith( { active: true } ).map( s => s.key ) ).not.toContain( 'registration_institutions' );
+	it.each( [
+		[ 'registered access is off', { active: false, access_rules: institutionRules } ],
+		[ 'no institution is named', { active: true, access_rules: [] } ],
+		[ 'the registration object lacks the key', { active: true } ],
+	] )( 'leaves the line out when %s', ( _, registration ) => {
+		renderRegistration( registration );
+
+		expect( screen.queryByText( 'Institutional access:' ) ).not.toBeInTheDocument();
 	} );
 } );
 
@@ -144,5 +143,165 @@ describe( 'gate summary, Paid access', () => {
 
 		expect( screen.getByText( 'Not set (matches no reader)' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Not set (grants access to everyone)' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'gate summary, range rules', () => {
+	it( 'reads the bounds back in words', () => {
+		// One group per rule, since the summary keys each line by group and slug.
+		const gate = gateWith();
+		gate.custom_access.access_rules = [ { min: 50, max: 100 }, { min: 50 }, { max: 10 } ].map( value => [ { slug: 'esp__DONATION', value } ] );
+		renderPaidAccess( gate );
+
+		expect( screen.getByText( '50 to 100' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'At least 50' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'At most 10' ) ).toBeInTheDocument();
+	} );
+
+	it( 'says an unset range still turns away readers holding no number', () => {
+		renderPaidAccess( gateWith( { slug: 'esp__DONATION', value: {} } ) );
+
+		expect( screen.getByText( 'Not set (grants access to every reader with a number)' ) ).toBeInTheDocument();
+	} );
+
+	it( 'flags bounds the rule cannot compare, as the save panel shows them before the save refuses', () => {
+		const gate = gateWith();
+		gate.custom_access.access_rules = [
+			{ min: 100, max: 50 },
+			{ min: '50O', max: 100 },
+		].map( value => [ { slug: 'esp__DONATION', value } ] );
+		renderPaidAccess( gate );
+
+		expect( screen.getByText( '100 to 50 (grants no access)' ) ).toBeInTheDocument();
+		expect( screen.getByText( '50O to 100 (grants no access)' ) ).toBeInTheDocument();
+	} );
+
+	it( 'flags text saved before the min/max control, which the rule denies on', () => {
+		renderPaidAccess( gateWith( { slug: 'esp__DONATION', value: '50' } ) );
+
+		expect( screen.getByText( '50 (invalid value, grants no access)' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'gate summary, long rule values', () => {
+	// jsdom has no layout, so text is modeled as wrapping every perLine characters.
+	let perLine = 60;
+	const LINE_HEIGHT = 20;
+	const INSTITUTIONS = Array.from( { length: 80 }, ( _unused, index ) => ( { value: index + 1, label: `Institution ${ index + 1 }` } ) );
+	const linesFor = characters => Math.max( 1, Math.ceil( characters / perLine ) );
+	const charactersBefore = ( root, node, offset ) => {
+		let total = 0;
+		const walker = document.createTreeWalker( root, NodeFilter.SHOW_TEXT );
+		while ( walker.nextNode() ) {
+			if ( walker.currentNode === node ) {
+				return total + offset;
+			}
+			total += walker.currentNode.textContent.length;
+		}
+		return total;
+	};
+	const realGetComputedStyle = window.getComputedStyle;
+	const realRangeRect = Range.prototype.getBoundingClientRect;
+
+	let resizeCallbacks = [];
+	const resizeTo = width => act( () => resizeCallbacks.forEach( callback => callback( [ { contentRect: { width } } ] ) ) );
+
+	beforeEach( () => {
+		perLine = 60;
+		resizeCallbacks = [];
+		window.ResizeObserver = class {
+			constructor( callback ) {
+				resizeCallbacks.push( callback );
+			}
+			observe() {}
+			disconnect() {}
+		};
+		jest.spyOn( window, 'getComputedStyle' ).mockImplementation(
+			element =>
+				new Proxy( realGetComputedStyle( element ), {
+					get: ( target, prop ) => {
+						if ( 'lineHeight' === prop ) {
+							return `${ LINE_HEIGHT }px`;
+						}
+						return typeof target[ prop ] === 'function' ? target[ prop ].bind( target ) : target[ prop ];
+					},
+				} )
+		);
+		jest.spyOn( HTMLElement.prototype, 'getBoundingClientRect' ).mockImplementation( function () {
+			const height = linesFor( this.textContent.length ) * LINE_HEIGHT;
+			return { top: 0, bottom: height, height };
+		} );
+		Range.prototype.getBoundingClientRect = function () {
+			const paragraph = this.endContainer.parentElement.closest( 'p' );
+			const height = linesFor( charactersBefore( paragraph, this.endContainer, this.endOffset ) ) * LINE_HEIGHT;
+			return { top: 0, bottom: height, height };
+		};
+	} );
+
+	afterEach( () => {
+		jest.restoreAllMocks();
+		Range.prototype.getBoundingClientRect = realRangeRect;
+		delete window.ResizeObserver;
+	} );
+
+	const renderLongRule = () =>
+		renderPaidAccess( gateWith( { slug: 'institution', value: INSTITUTIONS.map( ( { value } ) => value ) } ), { institution: INSTITUTIONS } );
+
+	it( 'fits a long list into two lines with a count of the rest', () => {
+		renderLongRule();
+
+		const toggle = screen.getByRole( 'button' );
+		const shown = toggle.closest( 'p' ).textContent.match( /Institution \d+/g ).length;
+		expect( toggle ).toHaveTextContent( `+ ${ INSTITUTIONS.length - shown } more` );
+		expect( linesFor( toggle.closest( 'p' ).textContent.length ) ).toBeLessThanOrEqual( 2 );
+		const withOneMore = `Institutional access: ${ INSTITUTIONS.slice( 0, shown + 1 )
+			.map( formatAccessRuleOptionLabel )
+			.join( ', ' ) } + ${ INSTITUTIONS.length - shown - 1 } more`;
+		expect( linesFor( withOneMore.length ) ).toBeGreaterThan( 2 );
+	} );
+
+	it( 'keeps keyboard focus on the toggle through Show less', () => {
+		renderLongRule();
+		const toggle = screen.getByRole( 'button' );
+		toggle.focus();
+
+		fireEvent.click( toggle );
+		expect( toggle ).toHaveTextContent( 'Show less' );
+		expect( toggle.ownerDocument.activeElement ).toBe( toggle );
+
+		fireEvent.click( toggle );
+		expect( toggle ).toHaveTextContent( /more$/ );
+		expect( toggle.ownerDocument.activeElement ).toBe( toggle );
+	} );
+
+	it( 'keeps keyboard focus on the toggle when the card is resized while the list is expanded', () => {
+		renderLongRule();
+		const toggle = screen.getByRole( 'button' );
+		toggle.focus();
+		fireEvent.click( toggle );
+
+		perLine = 50;
+		resizeTo( 500 );
+		fireEvent.click( toggle );
+
+		expect( toggle ).toHaveTextContent( /more$/ );
+		expect( toggle.ownerDocument.activeElement ).toBe( toggle );
+		expect( linesFor( toggle.closest( 'p' ).textContent.length ) ).toBeLessThanOrEqual( 2 );
+	} );
+
+	it( 'shows every value and keeps focus in the list when a resize leaves nothing to hide', () => {
+		renderLongRule();
+		const toggle = screen.getByRole( 'button' );
+		const paragraph = toggle.closest( 'p' );
+		toggle.focus();
+		fireEvent.click( toggle );
+
+		perLine = 100000;
+		resizeTo( 5000 );
+		fireEvent.click( toggle );
+
+		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
+		expect( paragraph.textContent.match( /Institution \d+/g ) ).toHaveLength( INSTITUTIONS.length );
+		expect( paragraph.contains( paragraph.ownerDocument.activeElement ) ).toBe( true );
 	} );
 } );

@@ -3,7 +3,7 @@ Contributors: innlabs, automattic
 Tags: ads, advertising,  widget, shortcode, google, post, page
 Requires at least: 6.9
 Tested up to: 7.0
-Requires PHP: 7.4
+Requires PHP: 8.1
 Stable tag: trunk
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
