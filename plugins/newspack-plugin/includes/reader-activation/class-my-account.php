@@ -77,28 +77,19 @@ class My_Account {
 	}
 
 	/**
-	 * Whether My Account asks a signed-in reader who hasn't verified to do so
-	 * before it shows any account content (mirrors
-	 * WooCommerce_My_Account::restrict_account_content). This is the site's
-	 * policy; reader_must_verify() applies it to the current reader.
-	 *
-	 * @return bool
-	 */
-	public static function requires_verification(): bool {
-		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php.
-			return false;
-		}
-		return \class_exists( 'Newspack\WooCommerce_My_Account' );
-	}
-
-	/**
 	 * Whether the current reader must verify their account before accessing
-	 * account content.
+	 * account content (mirrors WooCommerce_My_Account::restrict_account_content).
 	 *
 	 * @return bool
 	 */
 	protected static function reader_must_verify(): bool {
-		return self::requires_verification() && \is_user_logged_in() && ! WooCommerce_My_Account::is_user_verified();
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Documented in plugins/newspack-plugin/includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php.
+			return false;
+		}
+		if ( ! \class_exists( 'Newspack\WooCommerce_My_Account' ) ) {
+			return false;
+		}
+		return \is_user_logged_in() && ! WooCommerce_My_Account::is_user_verified();
 	}
 
 	/**
