@@ -6,7 +6,8 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack, CardDivider } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { CardDivider } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
@@ -623,7 +624,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'content', 'newspack-plugin' )
 					) }
 				/>
-				<VStack spacing={ 4 }>
+				<Stack direction="column" gap="lg">
 					<CardSettingsGroup
 						title={ sprintf(
 							// translators: %s is the type of content to restrict.
@@ -664,7 +665,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							onChange={ setContentRulesMatch }
 						/>
 					</CardSettingsGroup>
-				</VStack>
+				</Stack>
 			</Grid>
 			<Divider alignment="full-width" variant="tertiary" />
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
@@ -687,7 +688,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							  )
 					) }
 				/>
-				<VStack spacing={ 4 }>
+				<Stack direction="column" gap="lg">
 					{ ! isNewsletter && (
 						<CardSettingsGroup
 							actionType="toggle"
@@ -745,7 +746,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							governsSignedOut={ ! registration.active }
 						/>
 					</CardSettingsGroup>
-				</VStack>
+				</Stack>
 			</Grid>
 		</div>
 	);

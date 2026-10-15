@@ -12,8 +12,8 @@ import {
 	__experimentalNumberControl as NumberControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
@@ -236,7 +236,7 @@ const MeteringSettings = () => {
 		<div className="newspack-content-gate__edit">
 			{ confirmDialog }
 			<Grid columns={ 2 } noMargin>
-				<VStack spacing={ 6 } justify="flex-start">
+				<Stack direction="column" gap="xl">
 					<SectionHeader
 						heading={ 2 }
 						title={ __( 'Free Views', 'newspack-plugin' ) }
@@ -279,8 +279,8 @@ const MeteringSettings = () => {
 							) }
 						</Notice>
 					) }
-				</VStack>
-				<VStack spacing={ 6 } justify="flex-start">
+				</Stack>
+				<Stack direction="column" gap="xl">
 					<NumberControl
 						label={ __( 'Signed-out readers', 'newspack-plugin' ) }
 						help={ __( 'Free views before a gate applies.', 'newspack-plugin' ) }
@@ -308,7 +308,7 @@ const MeteringSettings = () => {
 						<ToggleGroupControlOption label={ __( 'Monthly', 'newspack-plugin' ) } value="month" />
 						<ToggleGroupControlOption label={ __( 'Weekly', 'newspack-plugin' ) } value="week" />
 					</ToggleGroupControl>
-				</VStack>
+				</Stack>
 			</Grid>
 			<Divider alignment="full-width" variant="tertiary" />
 			<CountdownBanner

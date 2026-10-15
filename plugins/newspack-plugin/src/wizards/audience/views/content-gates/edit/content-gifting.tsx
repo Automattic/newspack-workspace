@@ -14,8 +14,6 @@ import {
 	__experimentalToggleGroupControl as ToggleGroupControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack,
 } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
@@ -192,7 +190,7 @@ const ContentGiftingSettings = () => {
 			) }
 			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader heading={ 2 } title={ __( 'General Settings', 'newspack-plugin' ) } />
-				<VStack spacing={ 6 }>
+				<Stack direction="column" gap="xl">
 					<RangeControl
 						label={ __( 'Gifting limit', 'newspack-plugin' ) }
 						help={ __( 'Maximum number of articles that can be gifted per user for the configured interval.', 'newspack-plugin' ) }
@@ -238,13 +236,13 @@ const ContentGiftingSettings = () => {
 						] }
 						__next40pxDefaultSize
 					/>
-				</VStack>
+				</Stack>
 			</Grid>
 			<Divider alignment="full-width" variant="tertiary" />
-			<VStack spacing={ 6 }>
+			<Stack direction="column" gap="xl">
 				<Grid columns={ 2 } gutter={ 32 } noMargin>
 					<SectionHeader heading={ 2 } title={ __( 'Recipient Banner', 'newspack-plugin' ) } />
-					<VStack spacing={ 6 }>
+					<Stack direction="column" gap="xl">
 						<TextControl
 							label={ __( 'Message', 'newspack-plugin' ) }
 							help={ __( 'Text displayed in the banner shown to recipients of gifted articles.', 'newspack-plugin' ) }
@@ -316,7 +314,7 @@ const ContentGiftingSettings = () => {
 								__next40pxDefaultSize
 							/>
 						) }
-					</VStack>
+					</Stack>
 				</Grid>
 				<BaseControl id="newspack-content-gifting-cta-preview" label={ __( 'Preview', 'newspack-plugin' ) }>
 					<div className="newspack-content-gifting__cta-preview" inert="true">
@@ -354,7 +352,7 @@ const ContentGiftingSettings = () => {
 						</div>
 					</div>
 				</BaseControl>
-			</VStack>
+			</Stack>
 		</div>
 	);
 };

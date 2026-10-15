@@ -6,16 +6,8 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import {
-	DropdownMenu,
-	MenuGroup,
-	MenuItem,
-	Notice,
-	SlotFillProvider,
-	createSlotFill,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack,
-} from '@wordpress/components';
+import { DropdownMenu, MenuGroup, MenuItem, Notice, SlotFillProvider, createSlotFill } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { cloneElement, createInterpolateElement, isValidElement, useLayoutEffect, useRef, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -286,10 +278,10 @@ const Wizard = (
 					<>
 						{ ! pluginRequirementsKnown && (
 							<div className="newspack-wizard__loader">
-								<VStack alignment="center" spacing={ 2 }>
+								<Stack direction="column" align="center" gap="sm">
 									<Waiting noMargin />
 									<strong>{ __( 'Fetching…', 'newspack-plugin' ) }</strong>
-								</VStack>
+								</Stack>
 							</div>
 						) }
 						<div hidden={ ! pluginRequirementsKnown }>

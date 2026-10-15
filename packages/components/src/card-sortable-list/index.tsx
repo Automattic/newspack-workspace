@@ -5,9 +5,9 @@
 /**
  * WordPress dependencies.
  */
-import { Disabled, Draggable, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { Disabled, Draggable } from '@wordpress/components';
 import { useEffect, useLayoutEffect, useRef, useState } from '@wordpress/element';
-import { Badge } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -48,7 +48,7 @@ type DraggableItem = {
 type DragMeasurements = {
 	lockedHeight: number;
 	sourceHeight: number;
-	// Height of each item (including the VStack gap after it, except the last).
+	// Height of each item (including the Stack gap after it, except the last).
 	itemStrides: number[];
 	// Top edge of each item, used for drop position hit-testing in onDragEnd.
 	itemTops: number[];
@@ -360,7 +360,9 @@ const CardSortableList = ( {
 	const isDragging = draggingIndex !== null;
 
 	return (
-		<VStack
+		<Stack
+			direction="column"
+			gap="lg"
 			ref={ listRef }
 			className={ classNames(
 				'newspack-card--core--sortable-list',
@@ -368,7 +370,6 @@ const CardSortableList = ( {
 				isDragging && 'newspack-card--core--sortable-list__is-dragging'
 			) }
 			style={ measurements ? { height: measurements.lockedHeight } : undefined }
-			spacing={ 4 }
 		>
 			{ sortedItems.map( ( item, index ) => {
 				const translateY = getTranslateY( index );
@@ -449,7 +450,7 @@ const CardSortableList = ( {
 					</Disabled>
 				);
 			} ) }
-		</VStack>
+		</Stack>
 	);
 };
 

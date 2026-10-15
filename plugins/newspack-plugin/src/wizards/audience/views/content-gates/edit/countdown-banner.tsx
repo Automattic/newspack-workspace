@@ -21,9 +21,8 @@ import {
 	__experimentalToggleGroupControl as ToggleGroupControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack,
 } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -107,9 +106,9 @@ export default function CountdownBanner( {
 	const isEnabled = !! countdown.enabled;
 
 	return (
-		<VStack spacing={ 6 }>
+		<Stack direction="column" gap="xl">
 			<Grid columns={ 2 } noMargin>
-				<VStack spacing={ 6 } justify="flex-start">
+				<Stack direction="column" gap="xl">
 					<SectionHeader
 						heading={ 2 }
 						title={ __( 'Countdown Banner', 'newspack-plugin' ) }
@@ -123,8 +122,8 @@ export default function CountdownBanner( {
 							) }
 						</Notice>
 					) }
-				</VStack>
-				<VStack spacing={ 6 } justify="flex-start">
+				</Stack>
+				<Stack direction="column" gap="xl">
 					<ToggleGroupControl
 						label={ __( 'Banner', 'newspack-plugin' ) }
 						value={ isEnabled ? 'enabled' : 'disabled' }
@@ -137,7 +136,7 @@ export default function CountdownBanner( {
 					</ToggleGroupControl>
 					<fieldset className="newspack-countdown-banner__fields" disabled={ ! isEnabled }>
 						<legend className="screen-reader-text">{ __( 'Countdown banner settings', 'newspack-plugin' ) }</legend>
-						<VStack spacing={ 6 } justify="flex-start">
+						<Stack direction="column" gap="xl">
 							<TextControl
 								label={ __( 'Message', 'newspack-plugin' ) }
 								help={ __( 'Text displayed in the countdown banner.', 'newspack-plugin' ) }
@@ -202,9 +201,9 @@ export default function CountdownBanner( {
 									__next40pxDefaultSize
 								/>
 							) }
-						</VStack>
+						</Stack>
 					</fieldset>
-				</VStack>
+				</Stack>
 			</Grid>
 			<div
 				className={ classnames( 'newspack-countdown-banner__preview', {
@@ -247,6 +246,6 @@ export default function CountdownBanner( {
 					</div>
 				</BaseControl>
 			</div>
-		</VStack>
+		</Stack>
 	);
 }
