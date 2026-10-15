@@ -37,11 +37,10 @@ class Alert_Manager {
 	/**
 	 * Option holding one health record per integration ID.
 	 *
-	 * An option rather than a transient: the previous dedup lived in
-	 * transients, and a site's object cache evicting one re-paged the same
-	 * failure hours later. A record exists only while an integration is
-	 * failing or broken, so a healthy integration's hourly pass costs no
-	 * write.
+	 * An option rather than a transient, because a persistent object cache
+	 * can evict a transient early and re-page an outage that has already
+	 * paged. A record exists only while an integration is failing or broken,
+	 * so a healthy integration's hourly pass costs no write.
 	 */
 	const HEALTH_STATE_OPTION = 'newspack_integration_health_state';
 

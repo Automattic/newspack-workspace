@@ -928,7 +928,8 @@ class Integrations {
 	 * runtime incident — surfaces in the integrations UI rather than the
 	 * alerts channel.
 	 *
-	 * Logs failures and fires an action for the Alert Manager.
+	 * Logs failures, fires a failed or passed action for each integration,
+	 * and a completed action for the run.
 	 */
 	public static function run_health_checks() {
 		$checked_ids = [];
