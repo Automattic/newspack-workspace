@@ -44,7 +44,10 @@ describe( 'Republish Button modal copy', () => {
 
 	it( 'keeps the footer as working markup', () => {
 		const { value } = openModal();
-		expect( value ).toContain( '<img id="republication-tracker-tool-source" src="' );
+		// The pixel's &amp; entities survive only if writing back doesn't decode the copy again.
+		expect( value ).toContain(
+			'<img id="republication-tracker-tool-source" src="https://example.test/?republication-pixel=true&amp;post=1&amp;ga4=G-TEST"'
+		);
 		expect( value ).toContain( '<script id="parsely-cfg" src="//cdn.parsely.com/keys/example.test/p.js"></script>' );
 		expect( value ).toContain( '<a target="_blank" href="https://example.test/story/">article</a>' );
 	} );
