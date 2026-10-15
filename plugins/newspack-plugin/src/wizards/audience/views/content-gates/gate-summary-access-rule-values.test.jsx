@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * The summary reads `available_access_rules` at module scope, so the globals have to be
@@ -146,11 +146,11 @@ describe( 'gate summary, Paid access', () => {
 } );
 
 describe( 'gate summary, long rule values', () => {
-	// jsdom has no layout, so text is modeled as wrapping every PER_LINE characters.
-	const PER_LINE = 60;
+	// jsdom has no layout, so text is modeled as wrapping every perLine characters.
+	let perLine = 60;
 	const LINE_HEIGHT = 20;
 	const INSTITUTIONS = Array.from( { length: 80 }, ( _unused, index ) => ( { value: index + 1, label: `Institution ${ index + 1 }` } ) );
-	const linesFor = characters => Math.max( 1, Math.ceil( characters / PER_LINE ) );
+	const linesFor = characters => Math.max( 1, Math.ceil( characters / perLine ) );
 	const charactersBefore = ( root, node, offset ) => {
 		let total = 0;
 		const walker = document.createTreeWalker( root, NodeFilter.SHOW_TEXT );
@@ -165,7 +165,19 @@ describe( 'gate summary, long rule values', () => {
 	const realGetComputedStyle = window.getComputedStyle;
 	const realRangeRect = Range.prototype.getBoundingClientRect;
 
+	let resizeCallbacks = [];
+	const resizeTo = width => act( () => resizeCallbacks.forEach( callback => callback( [ { contentRect: { width } } ] ) ) );
+
 	beforeEach( () => {
+		perLine = 60;
+		resizeCallbacks = [];
+		window.ResizeObserver = class {
+			constructor( callback ) {
+				resizeCallbacks.push( callback );
+			}
+			observe() {}
+			disconnect() {}
+		};
 		jest.spyOn( window, 'getComputedStyle' ).mockImplementation(
 			element =>
 				new Proxy( realGetComputedStyle( element ), {
@@ -191,6 +203,7 @@ describe( 'gate summary, long rule values', () => {
 	afterEach( () => {
 		jest.restoreAllMocks();
 		Range.prototype.getBoundingClientRect = realRangeRect;
+		delete window.ResizeObserver;
 	} );
 
 	const renderLongRule = () =>
@@ -203,6 +216,10 @@ describe( 'gate summary, long rule values', () => {
 		const shown = toggle.closest( 'p' ).textContent.match( /Institution \d+/g ).length;
 		expect( toggle ).toHaveTextContent( `+ ${ INSTITUTIONS.length - shown } more` );
 		expect( linesFor( toggle.closest( 'p' ).textContent.length ) ).toBeLessThanOrEqual( 2 );
+		const withOneMore = `Institutional access: ${ INSTITUTIONS.slice( 0, shown + 1 )
+			.map( formatAccessRuleOptionLabel )
+			.join( ', ' ) } + ${ INSTITUTIONS.length - shown - 1 } more`;
+		expect( linesFor( withOneMore.length ) ).toBeGreaterThan( 2 );
 	} );
 
 	it( 'keeps keyboard focus on the toggle through Show less', () => {
@@ -217,5 +234,36 @@ describe( 'gate summary, long rule values', () => {
 		fireEvent.click( toggle );
 		expect( toggle ).toHaveTextContent( /more$/ );
 		expect( toggle.ownerDocument.activeElement ).toBe( toggle );
+	} );
+
+	it( 'keeps keyboard focus on the toggle when the card is resized while the list is expanded', () => {
+		renderLongRule();
+		const toggle = screen.getByRole( 'button' );
+		toggle.focus();
+		fireEvent.click( toggle );
+
+		perLine = 50;
+		resizeTo( 500 );
+		fireEvent.click( toggle );
+
+		expect( toggle ).toHaveTextContent( /more$/ );
+		expect( toggle.ownerDocument.activeElement ).toBe( toggle );
+		expect( linesFor( toggle.closest( 'p' ).textContent.length ) ).toBeLessThanOrEqual( 2 );
+	} );
+
+	it( 'shows every value and keeps focus in the list when a resize leaves nothing to hide', () => {
+		renderLongRule();
+		const toggle = screen.getByRole( 'button' );
+		const paragraph = toggle.closest( 'p' );
+		toggle.focus();
+		fireEvent.click( toggle );
+
+		perLine = 100000;
+		resizeTo( 5000 );
+		fireEvent.click( toggle );
+
+		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
+		expect( paragraph.textContent.match( /Institution \d+/g ) ).toHaveLength( INSTITUTIONS.length );
+		expect( paragraph.contains( paragraph.ownerDocument.activeElement ) ).toBe( true );
 	} );
 } );

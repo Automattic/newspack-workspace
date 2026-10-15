@@ -52,6 +52,7 @@ const MAX_VALUE_LINES = 2;
  */
 const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: string } ) => {
 	const ref = useRef< HTMLSpanElement >( null );
+	const toggleRef = useRef< HTMLButtonElement >( null );
 	const [ isExpanded, setIsExpanded ] = useState( false );
 	const [ visibleCount, setVisibleCount ] = useState( values.length );
 	// Keeps an existing toggle mounted while a layout change re-measures from every
@@ -91,11 +92,19 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 		if ( ! line || ! text || text.nodeType !== Node.TEXT_NODE || ! lineHeight ) {
 			return;
 		}
+		// A held toggle about to unmount with focus would drop it to the page.
+		const releaseToggle = () => {
+			const toggle = toggleRef.current;
+			if ( visibleCount === values.length && toggle && toggle === toggle.ownerDocument.activeElement ) {
+				ref.current?.focus();
+			}
+			setHoldToggle( false );
+		};
 		const lineBox = line.getBoundingClientRect();
 		const limit = lineBox.top + lineHeight * MAX_VALUE_LINES + 1;
 		if ( lineBox.bottom <= limit || visibleCount <= 1 ) {
 			if ( holdToggle ) {
-				setHoldToggle( false );
+				releaseToggle();
 			}
 			return;
 		}
@@ -114,6 +123,10 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 			}
 			fitting = index + 1;
 		}
+		if ( holdToggle && fitting === visibleCount ) {
+			releaseToggle();
+			return;
+		}
 		setHoldToggle( false );
 		// At least one fewer than shown, so a toggle that pushes the line over makes room for itself.
 		setVisibleCount( Math.max( 1, Math.min( fitting, visibleCount - 1 ) ) );
@@ -121,12 +134,17 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 
 	const hiddenCount = isExpanded ? 0 : values.length - visibleCount;
 	if ( hiddenCount < 1 && ! isExpanded && ! holdToggle ) {
-		return <span ref={ ref }>{ values.join( ', ' ) }</span>;
+		return (
+			<span ref={ ref } tabIndex={ -1 }>
+				{ values.join( ', ' ) }
+			</span>
+		);
 	}
 	return (
-		<span ref={ ref }>
+		<span ref={ ref } tabIndex={ -1 }>
 			{ ( isExpanded ? values : values.slice( 0, visibleCount ) ).join( ', ' ) }{ ' ' }
 			<Button
+				ref={ toggleRef }
 				variant="link"
 				aria-expanded={ isExpanded }
 				aria-label={
