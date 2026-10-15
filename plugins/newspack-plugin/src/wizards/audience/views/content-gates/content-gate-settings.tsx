@@ -1,4 +1,9 @@
 /**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
  * WordPress dependencies.
  */
 import { __, _x, sprintf } from '@wordpress/i18n';
@@ -238,7 +243,7 @@ export default function ContentGateSettings( {
 		<>
 			{ deleteDialog }
 			<Card
-				className="newspack-content-gates__gate"
+				className={ classnames( 'newspack-content-gates__gate', { 'newspack-content-gates__gate--inactive': gate.status !== 'publish' } ) }
 				id={ gate.id }
 				key={ gate.id }
 				isSmall

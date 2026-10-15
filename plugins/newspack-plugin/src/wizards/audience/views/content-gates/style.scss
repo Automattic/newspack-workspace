@@ -21,6 +21,14 @@
 			margin-top: wp-vars.$grid-unit-20;
 		}
 		&__gate {
+			&.newspack-content-gates__gate--inactive {
+				box-shadow: 0 0 0 1px var( --wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100} );
+
+				.components-card__header,
+				.components-dropdown-menu {
+					border-color: var( --wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-100} );
+				}
+			}
 			> .newspack-action-card__region-children {
 				> *:first-child {
 					margin-top: 0 !important;
