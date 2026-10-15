@@ -100,7 +100,7 @@ function show_modal( $modal, $close ) {
 	var $copyBtn = $modal.find( '[data-copy-active]' );
 	$copyBtn.off( 'click.republish' ).on( 'click.republish', function() {
 		if ( window.ClipboardUtils ) {
-			ClipboardUtils.copyFromElement( getActiveTextarea(), this );
+			ClipboardUtils.copyHandoutFromElement( getActiveTextarea(), this );
 		}
 	} );
 
