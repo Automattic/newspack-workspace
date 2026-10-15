@@ -8,7 +8,7 @@
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
-import { useState } from '@wordpress/element';
+import { useLayoutEffect, useRef, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies.
@@ -43,21 +43,57 @@ const listAccessRuleOptionValues = ( values: Array< string | number >, options: 
 const formatAccessRuleOptionValues = ( values: Array< string | number >, options: AccessRuleOption[] = [], slug: string ) =>
 	listAccessRuleOptionValues( values, options, slug ).join( ', ' );
 
-const COLLAPSED_VALUE_COUNT = 3;
+const MAX_VALUE_LINES = 2;
 
 /**
- * A rule's values, cut to the first few until the publisher asks for the rest, so a
- * rule naming many institutions or products does not stretch the whole gate card.
+ * A rule's values, cut to what fits in two lines of its summary line until the
+ * publisher asks for the rest, so a rule naming many institutions or products does
+ * not stretch the whole gate card.
  */
 const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: string } ) => {
+	const ref = useRef< HTMLSpanElement >( null );
 	const [ isExpanded, setIsExpanded ] = useState( false );
-	const hiddenCount = values.length - COLLAPSED_VALUE_COUNT;
-	if ( hiddenCount < 1 ) {
-		return <>{ values.join( ', ' ) }</>;
+	const [ visibleCount, setVisibleCount ] = useState( values.length );
+	const [ width, setWidth ] = useState( 0 );
+	const layoutKey = `${ values.join( '\n' ) }|${ width }|${ isExpanded }`;
+	const measuredKey = useRef( layoutKey );
+
+	useLayoutEffect( () => {
+		const line = ref.current?.parentElement;
+		if ( ! line || typeof ResizeObserver === 'undefined' ) {
+			return;
+		}
+		const observer = new ResizeObserver( ( [ entry ] ) => setWidth( Math.round( entry.contentRect.width ) ) );
+		observer.observe( line );
+		return () => observer.disconnect();
+	}, [] );
+
+	// Drops one value per pass until the line fits; a layout change starts again from all of them.
+	useLayoutEffect( () => {
+		if ( measuredKey.current !== layoutKey ) {
+			measuredKey.current = layoutKey;
+			if ( visibleCount !== values.length ) {
+				setVisibleCount( values.length );
+				return;
+			}
+		}
+		const line = ref.current?.parentElement;
+		if ( isExpanded || ! line || visibleCount <= 1 ) {
+			return;
+		}
+		const lineHeight = parseFloat( window.getComputedStyle( line ).lineHeight );
+		if ( lineHeight && line.getBoundingClientRect().height > lineHeight * MAX_VALUE_LINES + 1 ) {
+			setVisibleCount( count => count - 1 );
+		}
+	} );
+
+	const hiddenCount = isExpanded ? 0 : values.length - visibleCount;
+	if ( hiddenCount < 1 && ! isExpanded ) {
+		return <span ref={ ref }>{ values.join( ', ' ) }</span>;
 	}
 	return (
-		<>
-			{ ( isExpanded ? values : values.slice( 0, COLLAPSED_VALUE_COUNT ) ).join( ', ' ) }{ ' ' }
+		<span ref={ ref }>
+			{ ( isExpanded ? values : values.slice( 0, visibleCount ) ).join( ', ' ) }{ ' ' }
 			<Button
 				variant="link"
 				aria-expanded={ isExpanded }
@@ -85,7 +121,7 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 							hiddenCount
 					  ) }
 			</Button>
-		</>
+		</span>
 	);
 };
 
@@ -171,13 +207,28 @@ const AccessRuleValue = ( { rule, optionsBySlug }: { rule: GateAccessRule; optio
 	);
 };
 
+/**
+ * One bold-labelled line per access rule, the way every other gate setting reads in
+ * the summary.
+ */
+const AccessRuleLines = ( { groups, optionsBySlug }: { groups: GateAccessRuleGroup[]; optionsBySlug: Record< string, AccessRuleOption[] > } ) => (
+	<>
+		{ groups.map( ( ruleGroup, groupIndex ) =>
+			ruleGroup.map( rule =>
+				availableAccessRules[ rule.slug ]?.name ? (
+					<p key={ `${ groupIndex }-${ rule.slug }` }>
+						<strong>{ availableAccessRules[ rule.slug ].name }:</strong> <AccessRuleValue rule={ rule } optionsBySlug={ optionsBySlug } />
+					</p>
+				) : null
+			)
+		) }
+	</>
+);
+
 export type GateSummarySection = {
 	key: string;
 	label: string;
 	content: React.ReactNode;
-	// Sections sharing a column stack in the gate card, so a setting that belongs to
-	// another section reads as part of it. The save panel lists each section as a row.
-	column?: string;
 };
 
 /**
@@ -311,6 +362,9 @@ export const getGateSummarySections = (
 							{ formatMetering( gate.registration.metering, siteMeter?.anonymous_count, siteMeter?.period ) }
 						</p>
 					) }
+					{ gate.registration?.active && (
+						<AccessRuleLines groups={ gate.registration.access_rules ?? [] } optionsBySlug={ optionsBySlug } />
+					) }
 					{ ! gate.registration?.active && (
 						<p>
 							<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
@@ -319,21 +373,6 @@ export const getGateSummarySections = (
 				</>
 			),
 		} );
-
-		// Visitors these rules match count as registered, so they belong with Registered Access.
-		const registrationRules = ( gate.registration?.access_rules ?? [] ).flat();
-		if ( gate.registration?.active && registrationRules.length > 0 ) {
-			sections.push( {
-				key: 'registration_institutions',
-				column: 'registration',
-				label: __( 'Institutional Access', 'newspack-plugin' ),
-				content: registrationRules.map( ( rule, index ) => (
-					<p key={ `${ index }-${ rule.slug }` }>
-						<AccessRuleValue rule={ rule } optionsBySlug={ optionsBySlug } />
-					</p>
-				) ),
-			} );
-		}
 	}
 
 	const showsAccessRules = Boolean( gate.custom_access?.active && gate.custom_access.access_rules.length > 0 );
@@ -345,17 +384,7 @@ export const getGateSummarySections = (
 		label: __( 'Paid Access', 'newspack-plugin' ),
 		content: (
 			<>
-				{ showsAccessRules &&
-					gate.custom_access.access_rules.map( ( ruleGroup, groupIndex ) =>
-						ruleGroup.map( rule =>
-							availableAccessRules[ rule.slug ]?.name ? (
-								<p key={ `${ groupIndex }-${ rule.slug }` }>
-									<strong>{ availableAccessRules[ rule.slug ].name }:</strong>{ ' ' }
-									<AccessRuleValue rule={ rule } optionsBySlug={ optionsBySlug } />
-								</p>
-							) : null
-						)
-					) }
+				{ showsAccessRules && <AccessRuleLines groups={ gate.custom_access.access_rules } optionsBySlug={ optionsBySlug } /> }
 				{ showsPaidMetering && (
 					<p>
 						<strong>{ __( 'Metered:', 'newspack-plugin' ) } </strong>{ ' ' }
@@ -380,20 +409,3 @@ export const getGateSummarySections = (
 
 	return sections;
 };
-
-/**
- * Group summary sections into the gate card's columns. A section naming a `column`
- * stacks under the section with that key; every other section starts its own.
- *
- * @param sections Sections from `getGateSummarySections()`.
- */
-export const groupSummaryColumns = ( sections: GateSummarySection[] ): GateSummarySection[][] =>
-	sections.reduce< GateSummarySection[][] >( ( columns, section ) => {
-		const home = section.column ? columns.find( column => column[ 0 ].key === section.column ) : undefined;
-		if ( home ) {
-			home.push( section );
-		} else {
-			columns.push( [ section ] );
-		}
-		return columns;
-	}, [] );

@@ -26,7 +26,7 @@ window.newspackAudienceContentGates = {
 /**
  * Internal dependencies
  */
-const { getGateSummarySections, groupSummaryColumns } = require( './gate-summary' );
+const { getGateSummarySections } = require( './gate-summary' );
 const { formatAccessRuleOptionLabel } = require( '../../../../content-gate/access-rule-options' );
 
 const gateWith = ( ...rules ) => ( {
@@ -42,66 +42,46 @@ const renderPaidAccess = ( gate, optionsBySlug ) => {
 
 describe( 'gate summary, institutions on Registered access', () => {
 	const INSTITUTION = { value: 7, label: 'Example University' };
-	const registrationWith = ( registration, isNewsletter = false ) =>
-		getGateSummarySections(
+	const SECOND = { value: 8, label: 'State Library' };
+	const renderRegistration = registration => {
+		const sections = getGateSummarySections(
 			{
 				content_rules: [],
 				registration: { metering: { enabled: false }, ...registration },
 				custom_access: { active: false, access_rules: [], metering: { enabled: false } },
 			},
-			isNewsletter,
+			false,
 			undefined,
-			{ institution: [ INSTITUTION ] }
+			{ institution: [ INSTITUTION, SECOND ] }
 		);
+		const { container } = render( <div>{ sections.find( s => 'registration' === s.key ).content }</div> );
+		return { sections, container };
+	};
 	const institutionRules = [ [ { slug: 'institution', value: [ 7 ] } ] ];
 
-	it( 'lists them in a section stacked under Registered Access', () => {
-		const sections = registrationWith( { active: true, access_rules: institutionRules } );
-		const keys = sections.map( s => s.key );
-		const section = sections.find( s => 'registration_institutions' === s.key );
+	it( 'lists them as a labelled line inside Registered Access, not as a section of their own', () => {
+		const { sections } = renderRegistration( { active: true, access_rules: institutionRules } );
 
-		expect( keys.indexOf( 'registration_institutions' ) ).toBe( keys.indexOf( 'registration' ) + 1 );
-		expect( section.label ).toBe( 'Institutional Access' );
-		expect( section.column ).toBe( 'registration' );
-		render( <div>{ section.content }</div> );
+		expect( sections.map( s => s.key ) ).toEqual( [ 'content_rules', 'registration', 'custom_access' ] );
+		expect( screen.getByText( 'Institutional access:' ) ).toBeInTheDocument();
 		expect( screen.getByText( formatAccessRuleOptionLabel( INSTITUTION ), { exact: false } ) ).toBeInTheDocument();
 	} );
 
 	it( 'separates several institutions instead of running their names together', () => {
-		const SECOND = { value: 8, label: 'State Library' };
-		const section = getGateSummarySections(
-			{
-				content_rules: [],
-				registration: { active: true, metering: { enabled: false }, access_rules: [ [ { slug: 'institution', value: [ 7, 8 ] } ] ] },
-				custom_access: { active: false, access_rules: [], metering: { enabled: false } },
-			},
-			false,
-			undefined,
-			{ institution: [ INSTITUTION, SECOND ] }
-		).find( s => 'registration_institutions' === s.key );
-		const { container } = render( <div>{ section.content }</div> );
+		const { container } = renderRegistration( { active: true, access_rules: [ [ { slug: 'institution', value: [ 7, 8 ] } ] ] } );
 
 		expect( container.textContent ).not.toContain( formatAccessRuleOptionLabel( INSTITUTION ) + formatAccessRuleOptionLabel( SECOND ) );
 		expect( screen.getByText( formatAccessRuleOptionLabel( SECOND ), { exact: false } ) ).toBeInTheDocument();
 	} );
 
-	it( 'shares a card column with Registered Access', () => {
-		const columns = groupSummaryColumns( registrationWith( { active: true, access_rules: institutionRules } ) );
+	it.each( [
+		[ 'registered access is off', { active: false, access_rules: institutionRules } ],
+		[ 'no institution is named', { active: true, access_rules: [] } ],
+		[ 'the registration object lacks the key', { active: true } ],
+	] )( 'leaves the line out when %s', ( _, registration ) => {
+		renderRegistration( registration );
 
-		expect( columns.map( column => column.map( section => section.key ) ) ).toEqual( [
-			[ 'content_rules' ],
-			[ 'registration', 'registration_institutions' ],
-			[ 'custom_access' ],
-		] );
-	} );
-
-	it( 'leaves the section out while registered access is off or names no institution', () => {
-		expect( registrationWith( { active: false, access_rules: institutionRules } ).map( s => s.key ) ).not.toContain(
-			'registration_institutions'
-		);
-		expect( registrationWith( { active: true, access_rules: [] } ).map( s => s.key ) ).not.toContain( 'registration_institutions' );
-		// A registration object built without the key.
-		expect( registrationWith( { active: true } ).map( s => s.key ) ).not.toContain( 'registration_institutions' );
+		expect( screen.queryByText( 'Institutional access:' ) ).not.toBeInTheDocument();
 	} );
 } );
 
