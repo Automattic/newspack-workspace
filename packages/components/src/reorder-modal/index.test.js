@@ -11,7 +11,7 @@ import { speak } from '@wordpress/a11y';
 /**
  * Internal dependencies
  */
-import ReorderModal, { findOverlay, moveItem } from './reorder-modal';
+import ReorderModal, { findOverlay, moveItem } from '.';
 
 jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
@@ -62,7 +62,7 @@ const renderModal = ( props = {} ) => {
 	return { onSave, onClose };
 };
 
-const titles = () => Array.from( document.querySelectorAll( '.newspack-blocks-reorder-modal__title' ) ).map( el => el.textContent );
+const titles = () => Array.from( document.querySelectorAll( '.newspack-reorder-modal__title' ) ).map( el => el.textContent );
 
 const overlay = () => document.querySelector( '.components-modal__screen-overlay' );
 
@@ -262,7 +262,7 @@ describe( 'ReorderModal', () => {
 	it( 'ignores a press that starts on a row and ends on the overlay', async () => {
 		const { onClose } = renderModal();
 		await screen.findByText( 'Alpha' );
-		press( document.querySelector( '.newspack-blocks-reorder-modal__item' ), overlay() );
+		press( document.querySelector( '.newspack-reorder-modal__item' ), overlay() );
 		expect( onClose ).not.toHaveBeenCalled();
 		expect( discardPrompt() ).not.toBeInTheDocument();
 	} );
@@ -305,7 +305,7 @@ describe( 'ReorderModal', () => {
 	it( 'carries the full title on a row whose text is clipped', async () => {
 		renderModal();
 		await screen.findByText( 'Alpha' );
-		expect( document.querySelector( '.newspack-blocks-reorder-modal__title' ) ).toHaveAttribute( 'title', 'Alpha' );
+		expect( document.querySelector( '.newspack-reorder-modal__title' ) ).toHaveAttribute( 'title', 'Alpha' );
 	} );
 } );
 
@@ -322,7 +322,86 @@ const dataTransfer = () => ( {
 	},
 } );
 
-const rows = () => Array.from( document.querySelectorAll( '.newspack-blocks-reorder-modal__item' ) );
+const rows = () => Array.from( document.querySelectorAll( '.newspack-reorder-modal__item' ) );
+
+describe( 'ReorderModal toggles and badges', () => {
+	it( 'has no toggles unless enabled IDs are given', async () => {
+		renderModal();
+		await screen.findByText( 'Alpha' );
+		expect( screen.queryByRole( 'checkbox' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'saves the order and the enabled IDs in that order', async () => {
+		const { onSave } = renderModal( { enabledIds: [ 11, 33 ] } );
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Beta' } ) );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'Alpha' } ) );
+		fireEvent.click( screen.getByLabelText( 'Move Up: Gamma' ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+		expect( onSave ).toHaveBeenCalledWith( [ 11, 33, 22 ], [ 33, 22 ] );
+	} );
+
+	it( 'treats a toggle change as unsaved', async () => {
+		renderModal( { enabledIds: [ 11 ] } );
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Beta' } ) );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).not.toHaveAttribute( 'aria-disabled' );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Cancel' } ) );
+		expect( screen.getByRole( 'dialog', { name: 'Discard the changes?' } ) ).toBeInTheDocument();
+	} );
+
+	it( 'disables saving again when a toggle is set back', async () => {
+		renderModal( { enabledIds: [ 11 ] } );
+		const toggle = await screen.findByRole( 'checkbox', { name: 'Beta' } );
+		fireEvent.click( toggle );
+		fireEvent.click( toggle );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+	} );
+
+	const withBadge = () =>
+		Promise.resolve( [ ITEMS[ 0 ], { ...ITEMS[ 1 ], badge: { label: 'Premium', tooltip: 'Gated by Members' } }, ITEMS[ 2 ] ] );
+
+	it( 'shows the badge an item carries', async () => {
+		renderModal( { fetchItems: withBadge } );
+		await screen.findByText( 'Alpha' );
+		const badges = document.querySelectorAll( '.newspack-reorder-modal__badge' );
+		expect( badges ).toHaveLength( 1 );
+		expect( badges[ 0 ].closest( '[data-item-id]' ) ).toHaveAttribute( 'data-item-id', '22' );
+	} );
+
+	it( 'describes the toggle with the badge and its tooltip', async () => {
+		renderModal( { fetchItems: withBadge, enabledIds: [ 11 ] } );
+		expect( await screen.findByRole( 'checkbox', { name: 'Beta' } ) ).toHaveAccessibleDescription( 'Premium: Gated by Members' );
+		expect( screen.getByRole( 'checkbox', { name: 'Alpha' } ) ).not.toHaveAttribute( 'aria-describedby' );
+	} );
+
+	it( 'describes the dialog with the description', async () => {
+		renderModal( { description: 'Turn on the items to include.' } );
+		await screen.findByText( 'Alpha' );
+		expect( screen.getByRole( 'dialog', { name: 'Reorder Content' } ) ).toHaveAccessibleDescription( 'Turn on the items to include.' );
+	} );
+
+	it( 'holds Save while every toggle is off', async () => {
+		renderModal( { enabledIds: [ 11 ] } );
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Alpha' } ) );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toHaveAccessibleDescription( 'Turn on at least one item to save.' );
+	} );
+
+	it( 'keeps enabled IDs that have no row', async () => {
+		const { onSave } = renderModal( { enabledIds: [ 99, 11 ] } );
+		fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Alpha' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Save' } ) );
+		expect( onSave ).toHaveBeenCalledWith( [ 11, 22, 33 ], [ 99 ] );
+	} );
+
+	it( 'does not start a drag that began on a toggle', async () => {
+		renderModal( { enabledIds: [ 11 ] } );
+		const toggle = await screen.findByRole( 'checkbox', { name: 'Gamma' } );
+		fireEvent( toggle, new MouseEvent( 'pointerdown', { bubbles: true } ) );
+		const dt = dataTransfer();
+		fireEvent.dragStart( rows()[ 2 ], { dataTransfer: dt } );
+		expect( dt.getData( 'text/plain' ) ).toBeUndefined();
+	} );
+} );
 
 describe( 'ReorderModal drag and drop', () => {
 	it( 'reorders as a row is dragged over another', async () => {
@@ -405,7 +484,7 @@ describe( 'ReorderModal drag and drop', () => {
 	// cancelled drag and undo the reorder.
 	it.each( [
 		[ 'frame', '.components-modal__frame' ],
-		[ 'body', '.newspack-blocks-reorder-modal__body' ],
+		[ 'body', '.newspack-reorder-modal__body' ],
 	] )( 'accepts a drop released on the %s', async ( _name, selector ) => {
 		renderModal();
 		await screen.findByText( 'Alpha' );
