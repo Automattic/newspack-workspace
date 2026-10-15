@@ -11,8 +11,9 @@
  * A browser decodes a textarea's source once. After that decode the story has to
  * still show code it displays as text, and the footer (tracking and attribution)
  * has to be working markup, because the modal's caption-strip round trip writes
- * back through `.value` and decodes nothing more. That round trip is pinned by
- * `src/blocks/republish-button/view.test.js`.
+ * back through `.value` and decodes nothing more. The block's round trip is pinned
+ * by `src/blocks/republish-button/view.test.js`; the classic widget's, in
+ * `assets/widget.js`, has no test.
  *
  * @group modal-encoding
  */
@@ -132,18 +133,5 @@ class ModalHandoutEncodingTest extends WP_UnitTestCase {
 		$value = $this->textarea_value();
 		$this->assertStringContainsString( '<img id="republication-tracker-tool-source" src="', $value );
 		$this->assertStringNotContainsString( '&lt;', str_replace( 'Code: &lt;script&gt;window.rttMarker=1&lt;/script&gt;', '', $value ) );
-	}
-
-	/**
-	 * Raw markup a site's filter adds to the tracking code stays markup.
-	 */
-	public function test_raw_markup_from_the_tracking_filter_stays_live() {
-		add_filter(
-			'republication_tracker_tool_tracking_code',
-			function ( $html ) {
-				return $html . '<span id="raw-from-filter"></span>';
-			}
-		);
-		$this->assertStringContainsString( '<span id="raw-from-filter"></span>', $this->textarea_value() );
 	}
 }

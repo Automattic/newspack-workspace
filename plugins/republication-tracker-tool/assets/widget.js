@@ -48,7 +48,8 @@ function modal_actions(){
 	var doc = parser.parseFromString(html, "text/html");
 	$(doc).find('.wp-caption').remove();
 	var captionless = $(doc).find('body').html();
-	// .val(), not .html(): markup written into the textarea is decoded one more level.
+	// .val(), not .html(): .html() would decode the copy one more level, and when the copy holds a
+	// script tag, jQuery inserts it into this page and runs it.
 	$shareable.val(captionless);
 
 	// Responsive modal
