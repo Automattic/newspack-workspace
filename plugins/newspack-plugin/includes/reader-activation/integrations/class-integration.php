@@ -834,14 +834,19 @@ abstract class Integration {
 	}
 
 	/**
-	 * Declare a WooCommerce My Account menu item for this integration.
+	 * Declare a My Account menu item for this integration.
 	 *
 	 * Return null (default) to opt out. Otherwise return:
 	 *   [
 	 *     'slug'     => 'rewards',              // endpoint slug, unique across integrations.
 	 *     'label'    => __( 'Rewards', 'newspack-plugin' ),
-	 *     'position' => 25,                     // optional, menu sort order.
+	 *     'position' => 2,                      // optional, zero-based menu index.
 	 *   ]
+	 *
+	 * On WooCommerce's menu, an item without a position is appended before
+	 * Log out, and a position at or past the end of the menu lands after it.
+	 * Newspack's own My Account page, used without WooCommerce, ignores the
+	 * position and appends the item.
 	 *
 	 * The slug must not collide with a core My Account endpoint or one owned by
 	 * another plugin's My Account bridge — `newsletters` is reserved by
