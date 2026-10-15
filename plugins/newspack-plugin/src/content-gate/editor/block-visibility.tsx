@@ -40,6 +40,7 @@ import { getAccessRuleOptionSource, isOptionBackedAccessRule } from '../access-r
 import { getAccessRuleValueNotice, isAccessRulePickerInert, isUnconstrainedAccessRuleValue } from '../utils/access-rule-value';
 import AccessRuleValueNotice from '../components/access-rule-value-notice';
 import OneTimePurchaseRuleControl from '../components/one-time-purchase-rule-control';
+import RangeRuleControl from '../components/range-rule-control';
 import UnlistedValuesNotice from '../components/unlisted-values-notice';
 
 /**
@@ -223,6 +224,8 @@ export const AccessRuleValueControl = ( {
 	let control;
 	if ( 'one_time_purchase' === slug ) {
 		control = <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } productsLabel={ config.name } />;
+	} else if ( config.is_range ) {
+		control = <RangeRuleControl config={ config } value={ value } onChange={ onChange } />;
 	} else if ( isOptionBackedAccessRule( slug, staticOptions, config.has_options ) ) {
 		const selected = Array.isArray( value ) ? value : [];
 		const hasOptions = hasSelectableAccessRuleOptions( options );
