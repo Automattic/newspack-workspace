@@ -153,69 +153,70 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 		showModal && (
 			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 				<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
-					{ /* Grouped so the Memberships notice reads as covering the feed and commenting settings only, not the newsletter toggle below. */ }
-					<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
-						{ governedByMemberships && (
-							<Notice status="warning" isDismissible={ false } spokenMessage="">
-								{ __(
-									'WooCommerce Memberships is active on this site, so the feed and commenting settings have no effect yet. What is saved here applies once Memberships is deactivated.',
-									'newspack-plugin'
-								) }
-							</Notice>
-						) }
-						{ feedRestrictionModes.length > 0 && (
-							<ToggleGroupControl
-								__next40pxDefaultSize
-								__nextHasNoMarginBottom
-								isBlock
-								label={ __( 'Restricted articles in feeds', 'newspack-plugin' ) }
-								help={ getFeedModeHelp( feedMode ) }
-								value={ feedMode }
-								onChange={ value =>
-									setConfig(
-										FEED_MODE_OFF === value
-											? { ...config, restrict_feeds: false }
-											: { ...config, restrict_feeds: true, feed_restriction_mode: value as FeedRestrictionMode }
-									)
-								}
-							>
-								{ [ FEED_MODE_OFF, ...feedRestrictionModes.map( ( { value }: { value: string } ) => value ) ].map( mode => (
-									<ToggleGroupControlOption key={ mode } value={ mode } label={ getFeedModeLabel( mode ) ?? mode } />
-								) ) }
-							</ToggleGroupControl>
-						) }
-						<SelectControl
-							__next40pxDefaultSize
-							__nextHasNoMarginBottom
-							label={ __( 'Who can comment', 'newspack-plugin' ) }
-							help={ __(
-								'Limit commenting on every post to readers with access through a gate. Everyone else sees the message below instead of the comment form.',
+					{ governedByMemberships && (
+						<Notice status="warning" isDismissible={ false } spokenMessage="">
+							{ __(
+								'WooCommerce Memberships is active on this site, so the feed and commenting settings have no effect yet. What is saved here applies once Memberships is deactivated.',
 								'newspack-plugin'
 							) }
-							value={ String( config?.comment_restriction_gate_id || 0 ) }
-							options={ getCommentGateOptions( wizardData?.gates || [], config?.comment_restriction_gate_id || 0 ) }
-							onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_gate_id: parseInt( value, 10 ) || 0 } ) }
-						/>
-						{ !! config?.comment_restriction_gate_id && (
-							<>
-								<TextControl
-									label={ __( 'Message for readers who cannot comment', 'newspack-plugin' ) }
-									help={ __( 'Leave empty to use the default.', 'newspack-plugin' ) }
-									placeholder={ commentRestrictionDefaultMessage }
-									maxLength={ 200 }
-									value={ config?.comment_restriction_message || '' }
-									onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_message: value } ) }
-								/>
-								<TextControl
-									label={ __( 'Subscribe link', 'newspack-plugin' ) }
-									help={ __( 'Shown after the message as "Subscribe now". Leave empty to show no link.', 'newspack-plugin' ) }
-									type="url"
-									value={ config?.comment_restriction_purchase_url || '' }
-									onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_purchase_url: value } ) }
-								/>
-							</>
+						</Notice>
+					) }
+					{ feedRestrictionModes.length > 0 && (
+						<ToggleGroupControl
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+							isBlock
+							label={ __( 'Restricted articles in feeds', 'newspack-plugin' ) }
+							help={ getFeedModeHelp( feedMode ) }
+							value={ feedMode }
+							onChange={ value =>
+								setConfig(
+									FEED_MODE_OFF === value
+										? { ...config, restrict_feeds: false }
+										: { ...config, restrict_feeds: true, feed_restriction_mode: value as FeedRestrictionMode }
+								)
+							}
+						>
+							{ [ FEED_MODE_OFF, ...feedRestrictionModes.map( ( { value }: { value: string } ) => value ) ].map( mode => (
+								<ToggleGroupControlOption key={ mode } value={ mode } label={ getFeedModeLabel( mode ) ?? mode } />
+							) ) }
+						</ToggleGroupControl>
+					) }
+					<SelectControl
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+						label={ __( 'Who can comment', 'newspack-plugin' ) }
+						help={ __(
+							'Limit commenting on every post to readers with access through a gate. Everyone else sees the message below instead of the comment form.',
+							'newspack-plugin'
 						) }
-					</Stack>
+						value={ String( config?.comment_restriction_gate_id || 0 ) }
+						options={ getCommentGateOptions( wizardData?.gates || [], config?.comment_restriction_gate_id || 0 ) }
+						onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_gate_id: parseInt( value, 10 ) || 0 } ) }
+					/>
+					{ !! config?.comment_restriction_gate_id && (
+						<>
+							<TextControl
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+								label={ __( 'Message for readers who cannot comment', 'newspack-plugin' ) }
+								help={ __( 'Leave empty to use the default.', 'newspack-plugin' ) }
+								placeholder={ commentRestrictionDefaultMessage }
+								maxLength={ 200 }
+								value={ config?.comment_restriction_message || '' }
+								onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_message: value } ) }
+							/>
+							<TextControl
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+								label={ __( 'Subscribe link', 'newspack-plugin' ) }
+								help={ __( 'Shown after the message as "Subscribe now". Leave empty to show no link.', 'newspack-plugin' ) }
+								type="url"
+								value={ config?.comment_restriction_purchase_url || '' }
+								onChange={ ( value: string ) => setConfig( { ...config, comment_restriction_purchase_url: value } ) }
+							/>
+						</>
+					) }
 					{ wizardData?.config?.has_newsletters && (
 						<ToggleControl
 							__nextHasNoMarginBottom
@@ -235,6 +236,8 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 					) }
 					{ wizardData?.config?.has_institutions && (
 						<TextControl
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
 							label={ __( 'Institutional access link text', 'newspack-plugin' ) }
 							help={ __(
 								'Shown to logged-out readers below the gate when an institution with an IP range can unlock it. The link checks whether the reader is on that network. Leave empty to use the default.',
