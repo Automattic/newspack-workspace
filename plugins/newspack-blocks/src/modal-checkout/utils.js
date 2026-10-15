@@ -21,6 +21,39 @@ export function domReady( callback ) {
 }
 
 /**
+ * Run a callback once every deferred script on the page has executed.
+ *
+ * Deferred scripts run after parsing ends and before DOMContentLoaded, and
+ * this bundle is async, so it can execute in between — domReady() only waits
+ * for parsing. readyState is `interactive` on both sides of DOMContentLoaded,
+ * so in that state navigation timing settles whether the event already fired.
+ *
+ * @param {Function} callback The function to run.
+ * @return {void}
+ */
+export function afterDeferredScripts( callback ) {
+	const { readyState } = document;
+	if ( readyState === 'complete' || ( readyState === 'interactive' && hasDomContentLoadedFired() ) ) {
+		return void callback();
+	}
+	document.addEventListener( 'DOMContentLoaded', callback, { once: true } );
+}
+
+/**
+ * Whether DOMContentLoaded has fired, according to navigation timing.
+ *
+ * Without a navigation entry there is nothing to consult, and waiting would
+ * risk an event that never comes: report it as fired, which degrades to
+ * running immediately.
+ *
+ * @return {boolean} Whether the event has fired.
+ */
+function hasDomContentLoadedFired() {
+	const [ navigation ] = window.performance?.getEntriesByType?.( 'navigation' ) || [];
+	return ! navigation || navigation.domContentLoadedEventStart > 0;
+}
+
+/**
  * Create a hidden input field.
  *
  * @param {string} name  The name of the input field.

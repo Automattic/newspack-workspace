@@ -3,10 +3,11 @@
 	border-radius: var(--newspack-ui-border-radius-2xs);
 	color: var(--newspack-ui-color-neutral-90);
 	display: inline-grid;
+	font-family: var(--newspack-ui-font-family);
 	font-size: var(--newspack-ui-font-size-xs);
 	font-weight: 600;
 	line-height: var(--newspack-ui-line-height-xs);
-	padding: 2px 6px; // TODO: replace with variables; they only go down to 8px, perhaps they need to be rethought?
+	padding: calc(var(--newspack-ui-spacer-1) / 4) calc(var(--newspack-ui-spacer-1) * 0.75);
 	place-items: center;
 	text-transform: uppercase;
 
@@ -27,14 +28,60 @@
 	}
 
 	&--success {
+		--newspack-ui-badge-dot-color: var(--newspack-ui-color-success-50);
+
 		background: var(--newspack-ui-color-success-0);
 	}
 
 	&--error {
+		--newspack-ui-badge-dot-color: var(--newspack-ui-color-error-50);
+
 		background: var(--newspack-ui-color-error-0);
 	}
 
 	&--warning {
+		--newspack-ui-badge-dot-color: var(--newspack-ui-color-warning-40);
+
 		background: var(--newspack-ui-color-warning-0);
+	}
+
+	&--dot {
+		align-items: baseline;
+		display: inline-flex;
+		gap: calc(var(--newspack-ui-spacer-1) * 0.75);
+
+		&::before {
+			align-self: center;
+			background: var(--newspack-ui-badge-dot-color, var(--newspack-ui-color-neutral-60));
+			border-radius: 50%;
+			content: "";
+			flex-shrink: 0;
+			height: calc(var(--newspack-ui-spacer-1) * 0.75);
+			width: calc(var(--newspack-ui-spacer-1) * 0.75);
+
+			@media ( forced-colors: active ) {
+				background: CanvasText;
+				forced-color-adjust: none;
+			}
+		}
+	}
+
+	&--pulse::before {
+		animation: newspack-ui-badge-pulse 2s ease-out infinite;
+
+		@media ( prefers-reduced-motion: reduce ) {
+			animation: none;
+		}
+	}
+}
+
+@keyframes newspack-ui-badge-pulse {
+	0% {
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--newspack-ui-badge-dot-color, var(--newspack-ui-color-neutral-60)) 60%, transparent);
+	}
+
+	70%,
+	100% {
+		box-shadow: 0 0 0 calc(var(--newspack-ui-spacer-1) / 2) transparent;
 	}
 }

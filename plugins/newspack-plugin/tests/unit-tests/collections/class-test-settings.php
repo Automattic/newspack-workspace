@@ -234,6 +234,56 @@ class Test_Settings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Request body formats a client can send to the settings route.
+	 *
+	 * @return array
+	 */
+	public function data_request_body_formats() {
+		return [
+			'JSON body, as the dashboard sends' => [ 'json' ],
+			'form body'                         => [ 'form' ],
+		];
+	}
+
+	/**
+	 * Test update_from_request applies only what the request sent, even with the route's defaults applied.
+	 *
+	 * @dataProvider data_request_body_formats
+	 * @covers \Newspack\Collections\Settings::update_from_request
+	 *
+	 * @param string $body_format Either 'json' or 'form'.
+	 */
+	public function test_update_from_request_ignores_route_defaults( $body_format ) {
+		Settings::update_settings(
+			[
+				'custom_naming_enabled' => true,
+				'custom_name'           => 'Issues',
+				'posts_per_page'        => 30,
+			]
+		);
+
+		$sent    = [
+			'module_enabled_collections' => true,
+			'order_link'                 => 'https://example.test/order',
+		];
+		$request = new WP_REST_Request( 'POST', '/newspack/v1/wizard/newspack-settings/collections' );
+		$request->set_default_params( Settings::get_rest_args( 'defaults' ) );
+		if ( 'json' === $body_format ) {
+			$request->set_header( 'Content-Type', 'application/json' );
+			$request->set_body( wp_json_encode( $sent ) );
+		} else {
+			$request->set_body_params( $sent );
+		}
+
+		$result = Settings::update_from_request( $request );
+
+		$this->assertEquals( 'https://example.test/order', $result['order_link'] );
+		$this->assertTrue( $result['custom_naming_enabled'] );
+		$this->assertEquals( 'Issues', $result['custom_name'] );
+		$this->assertEquals( 30, $result['posts_per_page'] );
+	}
+
+	/**
 	 * Test sanitize_articles_block_attrs preserves unmanaged keys.
 	 *
 	 * @covers \Newspack\Collections\Settings::sanitize_articles_block_attrs

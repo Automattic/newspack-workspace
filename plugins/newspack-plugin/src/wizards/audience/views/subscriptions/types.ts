@@ -5,6 +5,9 @@
 /** How a rule picks the store products it covers. */
 export type Targeting = 'products' | 'category' | 'all';
 
+/** How a rule picks the subscribers it applies to. */
+export type SubscriberTargeting = 'subscriptions' | 'all';
+
 /**
  * The targeting half of a rule — the "Applies to" fields, shared by every
  * subscriber-commerce feature.
@@ -16,11 +19,20 @@ export interface RuleTargeting {
 	excluded_product_ids: number[];
 }
 
-/** The fields every subscriber-commerce rule carries. */
-export interface BaseRule extends RuleTargeting {
-	id: string;
-	/** Subscription products whose subscribers the rule applies to. */
+/**
+ * The audience half of a rule — the "Subscribers" fields, shared by every
+ * subscriber-commerce feature.
+ */
+export interface SubscriberAudience {
+	/** Whether the rule names its subscriptions or reaches every active subscriber. */
+	subscription_targeting: SubscriberTargeting;
+	/** Subscription products whose subscribers the rule applies to ('subscriptions' targeting). */
 	subscription_product_ids: number[];
+}
+
+/** The fields every subscriber-commerce rule carries. */
+export interface BaseRule extends RuleTargeting, SubscriberAudience {
+	id: string;
 	active: boolean;
 	created_at: string;
 }
@@ -35,6 +47,7 @@ export interface ProductSearchItem {
 	regular_price: string;
 	sale_price: string;
 	is_on_sale: boolean;
+	is_subscription: boolean;
 }
 
 /** A product category as returned by the shell's search endpoint. */

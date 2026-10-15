@@ -1,3 +1,38 @@
+# newspack-components [4.11.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.10.0...newspack-components@4.11.0) (2026-10-14)
+
+
+### Features
+
+* **newsletters:** show premium lists in the subscription form ([#1291](https://github.com/Automattic/newspack-workspace/issues/1291)) ([456d762](https://github.com/Automattic/newspack-workspace/commit/456d762ba465aafc6e5be08ed47836acafaad1a6))
+
+# newspack-components [4.10.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.9.2...newspack-components@4.10.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **components:** reduce admin vertical spacing from 64px to 48px ([#1148](https://github.com/Automattic/newspack-workspace/issues/1148)) ([cc58352](https://github.com/Automattic/newspack-workspace/commit/cc5835298f73cbdea5f94891530b8a4298118679))
+* **components:** reduce the Divider's default margin to 48px ([#1147](https://github.com/Automattic/newspack-workspace/issues/1147)) ([6dda86f](https://github.com/Automattic/newspack-workspace/commit/6dda86fe3866761c00491bdda50e4b4475eaebd2))
+* **content-gate:** tidy the gate card and name its actions menu ([#1161](https://github.com/Automattic/newspack-workspace/issues/1161)) ([d76a562](https://github.com/Automattic/newspack-workspace/commit/d76a562c8bf8063e0fd609c75d3b9f68625c9c76))
+
+
+### Features
+
+* **audience:** refresh the Integrations brand marks ([#1155](https://github.com/Automattic/newspack-workspace/issues/1155)) ([d46ef08](https://github.com/Automattic/newspack-workspace/commit/d46ef0853a766967a2a121b34719f2e5822006f9))
+* **audience:** refresh the Integrations screen icons, order and copy ([#1151](https://github.com/Automattic/newspack-workspace/issues/1151)) ([99912ba](https://github.com/Automattic/newspack-workspace/commit/99912ba739a4f05c86964b88abea263f456a411f))
+* **components:** update @wordpress/ui and match its card borders ([#1195](https://github.com/Automattic/newspack-workspace/issues/1195)) ([9b62fe7](https://github.com/Automattic/newspack-workspace/commit/9b62fe7b69d824616ca931069c3a32738517d365))
+* **dashboard:** remove the brand header ([#1142](https://github.com/Automattic/newspack-workspace/issues/1142)) ([c9f3d16](https://github.com/Automattic/newspack-workspace/commit/c9f3d16b6ee723b5fecf7863370ab6a711511485))
+* **reader-activation:** split Gravity Forms into its own integration ([#1170](https://github.com/Automattic/newspack-workspace/issues/1170)) ([c74c13d](https://github.com/Automattic/newspack-workspace/commit/c74c13d2fc36813ff31ec8d842063e139b1bce19))
+* **settings:** add an empty state to the Print tab ([#1123](https://github.com/Automattic/newspack-workspace/issues/1123)) ([04bbd0b](https://github.com/Automattic/newspack-workspace/commit/04bbd0b99f2e62174273642b64d01116988139a5))
+* **settings:** rework the Experimental Tools configure screens ([#1140](https://github.com/Automattic/newspack-workspace/issues/1140)) ([8aad58b](https://github.com/Automattic/newspack-workspace/commit/8aad58bf4f56a99cbeee92c96b9b41f0a5529058))
+* **settings:** rework the Theme and Brand tab layout ([#1136](https://github.com/Automattic/newspack-workspace/issues/1136)) ([0f54f67](https://github.com/Automattic/newspack-workspace/commit/0f54f671b97aa758b0cfe1d0a6d1a3918c90a4c2))
+* **sync:** read the push log in a sync activity tab ([#1114](https://github.com/Automattic/newspack-workspace/issues/1114)) ([9390fdc](https://github.com/Automattic/newspack-workspace/commit/9390fdc884a9f31d31d1dbd1fbc1f61944dbc3cd))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.2.0
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## newspack-components [4.9.2](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.9.1...newspack-components@4.9.2) (2026-09-28)
 
 

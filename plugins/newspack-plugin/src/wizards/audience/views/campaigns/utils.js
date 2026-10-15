@@ -327,16 +327,18 @@ const getItems = memoize( async path => {
 			label: item.title || item.name,
 		} ) );
 	} catch ( e ) {
-		return [];
+		return null;
 	}
 } );
 
 const ItemNames = ( { label, ids, path, deletedItemLabel } ) => {
-	const [ items, setItems ] = useState( [] );
+	// `null` until the lookup resolves, and after a failed one. An empty list is a real
+	// answer: none of the saved items exist any more, so each reads as deleted.
+	const [ items, setItems ] = useState( null );
 	useEffect( () => {
 		getItems( path ).then( setItems );
 	}, [ ids ] );
-	if ( ! items.length ) {
+	if ( ! items ) {
 		return null;
 	}
 	const labels = ids.map( id => {
@@ -386,7 +388,7 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 						: __( 'Does not have active subscription(s):', 'newspack-plugin' )
 				}
 				ids={ item.value }
-				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
+				path={ addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: item.value } ) }
 				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }
 			/>
 		);
