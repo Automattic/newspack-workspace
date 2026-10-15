@@ -485,12 +485,14 @@ class Alert_Manager {
 			}
 		}
 
-		// Pre-filter once using the widest interval.
+		// Pre-filter once using the widest interval. A broken integration's
+		// outage has already paged, and entries logged before it turned broken
+		// would page it again.
 		$global_cutoff = $now - $max_interval;
 		$recent_log    = array_filter(
 			$log,
 			function ( $entry ) use ( $global_cutoff ) {
-				return $entry['timestamp'] >= $global_cutoff;
+				return $entry['timestamp'] >= $global_cutoff && ! self::is_integration_broken( $entry['integration_id'] ?? '' );
 			}
 		);
 

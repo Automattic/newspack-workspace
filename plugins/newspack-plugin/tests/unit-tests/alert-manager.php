@@ -1511,6 +1511,32 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Entries logged while an integration was failing stay in the failure log
+	 * after it turns broken; the scan skips them, since its outage has paged.
+	 */
+	public function test_scanner_skips_a_broken_integrations_entries() {
+		$log = [];
+		foreach ( [ 'esp', 'crm' ] as $integration_id ) {
+			for ( $i = 0; $i < 5; $i++ ) {
+				$log[] = [
+					'timestamp'      => time() - 60,
+					'integration_id' => $integration_id,
+					'contact_email'  => "{$integration_id}{$i}@example.com",
+					'action_name'    => null,
+					'reason'         => "{$integration_id} timeout {$i}",
+				];
+			}
+		}
+		update_option( Alert_Manager::FAILURE_LOG_OPTION, $log, false );
+		$this->break_integration( 'esp' );
+		$this->capture_alerts( 'failure_pattern' );
+
+		Alert_Manager::scan_failure_patterns();
+
+		$this->assertSame( [ 'crm' ], array_column( array_column( $this->captured['failure_pattern']['error'], 'context' ), 'group_value' ) );
+	}
+
+	/**
 	 * A state-change listener that throws must not cancel the page for the
 	 * outage or the log entry for its recovery: the record already holds the
 	 * new state, so no later check would send either.
