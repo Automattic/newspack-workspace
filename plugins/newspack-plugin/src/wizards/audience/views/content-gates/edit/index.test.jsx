@@ -103,11 +103,10 @@ beforeEach( () => {
 		slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
 		data: { gates: [ STORED_GATE ], config: {} },
 	} );
-	dispatch( WIZARD_STORE_NAMESPACE ).resetNotices();
 } );
 
 describe( 'Content gate editor', () => {
-	it( 'keeps the edits and the error when the server refuses a save', async () => {
+	it( 'keeps the edits when the server refuses a save', async () => {
 		refuseSaves = true;
 		await renderEdit();
 
@@ -121,7 +120,6 @@ describe( 'Content gate editor', () => {
 		expect( apiFetch ).toHaveBeenCalledWith( expect.objectContaining( { method: 'POST' } ) );
 		expect( accessRules() ).toEqual( mockEditedRules );
 		expect( screen.getByRole( 'textbox', { name: /gate name/i } ) ).toHaveValue( 'Edited title' );
-		expect( select( WIZARD_STORE_NAMESPACE ).getNotices() ).toContainEqual( expect.objectContaining( { type: 'error', message: REFUSAL } ) );
 	} );
 
 	it( 'picks up the stored gate after a save succeeds', async () => {

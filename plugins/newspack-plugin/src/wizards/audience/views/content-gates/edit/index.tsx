@@ -416,8 +416,9 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			history.push( `/edit/new/all` );
 			return;
 		}
-		// Copy the stored gate only when it changed. A refused save leaves it as it was, and
-		// copying it then would discard everything the operator typed and clear the refusal.
+		// Copy the stored gate only when it changed. A refused save, a failed status change or
+		// delete, and unrelated wizard-store writes all re-run this with the gate as it was, and
+		// copying it then would discard the operator's edits.
 		const serializedGate = JSON.stringify( matchedGate );
 		if ( serializedGate === syncedGate.current ) {
 			return;
