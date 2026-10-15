@@ -893,15 +893,35 @@ class Alert_Manager {
 	}
 
 	/**
-	 * Whether an integration's health record is broken, meaning its outage
-	 * has already paged once.
+	 * An integration's health record, while the hourly check is keeping it
+	 * current: its last failure is no older than HEALTH_STREAK_MAX_GAP.
+	 *
+	 * Only a check run clears a record, so one left behind by a check that
+	 * was switched off, has stalled, or stopped reaching the integration
+	 * would otherwise mute that integration's sync alerts indefinitely.
+	 *
+	 * @param string $integration_id The integration ID.
+	 * @return array|null The record, or null when there is no current one.
+	 */
+	private static function get_current_health_record( $integration_id ) {
+		$state  = get_option( self::HEALTH_STATE_OPTION, [] );
+		$record = is_array( $state ) ? ( $state[ (string) $integration_id ] ?? null ) : null;
+		if ( ! is_array( $record ) || time() - (int) ( $record['last_failed_at'] ?? 0 ) > self::HEALTH_STREAK_MAX_GAP ) {
+			return null;
+		}
+		return $record;
+	}
+
+	/**
+	 * Whether an integration's current health record is broken, meaning its
+	 * outage has already paged once.
 	 *
 	 * @param string $integration_id The integration ID.
 	 * @return bool
 	 */
 	private static function is_integration_broken( $integration_id ) {
-		$state = get_option( self::HEALTH_STATE_OPTION, [] );
-		return is_array( $state ) && 'broken' === ( $state[ (string) $integration_id ]['status'] ?? '' );
+		$record = self::get_current_health_record( $integration_id );
+		return 'broken' === ( $record['status'] ?? '' );
 	}
 
 	/**

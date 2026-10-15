@@ -1467,6 +1467,29 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A broken record the check has stopped updating mutes nothing: only a
+	 * check run clears a record, so one left behind by a check that was
+	 * switched off would otherwise silence the integration's later outages.
+	 */
+	public function test_a_stale_broken_record_stops_muting_sync_alerts() {
+		$this->break_integration( 'esp' );
+		$this->age_health_record( 'esp', Alert_Manager::HEALTH_STREAK_MAX_GAP + 1 );
+		$this->capture_alerts( 'sync_retry_exhausted' );
+
+		$payload = [
+			'integration_id' => 'esp',
+			'contact'        => [ 'email' => 'reader@example.test' ],
+			'retry_count'    => 5,
+			'reason'         => 'Request timed out.',
+		];
+		do_action( 'newspack_sync_retry_exhausted', $payload );
+		Alert_Manager::record_failure( $payload );
+
+		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['error'], 'Retry exhaustion pages again.' );
+		$this->assertSame( [ 'esp' ], array_column( get_option( Alert_Manager::FAILURE_LOG_OPTION, [] ), 'integration_id' ), 'Failures reach the failure log again.' );
+	}
+
+	/**
 	 * A state-change listener that throws must not cancel the page for the
 	 * outage or the log entry for its recovery: the record already holds the
 	 * new state, so no later check would send either.
