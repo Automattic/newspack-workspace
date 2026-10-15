@@ -187,8 +187,9 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	/**
 	 * A permanent config failure pages only where the hourly health check
 	 * isn't running, since nothing else then observes a disabled or unpaid
-	 * account. A run that is late but within HEALTH_STREAK_MAX_GAP still
-	 * counts as running, so a slow WP-Cron doesn't page through this path.
+	 * account, and either way a repeat within the hour reports nothing. A run
+	 * that is late but within HEALTH_STREAK_MAX_GAP still counts as running,
+	 * so a slow WP-Cron doesn't page through this path.
 	 *
 	 * @dataProvider data_health_check_schedules
 	 *
@@ -199,18 +200,18 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$this->set_health_check_next_run( null === $next_run_offset ? false : time() + $next_run_offset );
 		$this->capture_alerts( 'sync_permanent_failure' );
 
-		do_action(
-			'newspack_sync_permanent_failure',
-			[
-				'integration_id' => 'esp',
-				'email'          => 'reader@example.test',
-				'context'        => 'Reader registered',
-				'reason'         => 'API Access has been disabled for this account.',
-				'error_class'    => 'permanent_config',
-			]
-		);
+		$payload = [
+			'integration_id' => 'esp',
+			'email'          => 'reader@example.test',
+			'context'        => 'Reader registered',
+			'reason'         => 'API Access has been disabled for this account.',
+			'error_class'    => 'permanent_config',
+		];
+		do_action( 'newspack_sync_permanent_failure', $payload );
+		do_action( 'newspack_sync_permanent_failure', $payload );
 
 		$this->assertCount( 1, $this->captured['sync_permanent_failure'][ $expected_severity ] );
+		$this->assertCount( 1, array_merge( ...array_values( $this->captured['sync_permanent_failure'] ) ), 'A repeat within the hour reports nothing.' );
 	}
 
 	/**
