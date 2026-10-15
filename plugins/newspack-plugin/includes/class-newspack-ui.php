@@ -261,7 +261,7 @@ class Newspack_UI {
 			<div class="newspack-ui__modal newspack-ui__modal--<?php echo esc_attr( $args['size'] ); ?>">
 				<header class="newspack-ui__modal__header">
 					<?php if ( ! empty( $args['title'] ) ) : ?>
-						<h2 class="newspack-ui__font--l"><?php echo wp_kses_post( $args['title'] ); ?></h2>
+						<h2><?php echo wp_kses_post( $args['title'] ); ?></h2>
 					<?php endif; ?>
 					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
 						<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
