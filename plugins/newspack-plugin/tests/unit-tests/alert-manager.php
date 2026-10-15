@@ -1575,22 +1575,22 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	 * @param string     $message  The WP_Error message.
 	 * @param string     $expected 'publisher' or 'other'.
 	 * @param string|int $code     The WP_Error code.
+	 * @param mixed      $data     The WP_Error data.
 	 */
-	public function test_classify_health_error( $message, $expected, $code = 'newspack_newsletters_connection_error' ) {
+	public function test_classify_health_error( $message, $expected, $code = 'newspack_newsletters_connection_error', $data = '' ) {
 		$method = new \ReflectionMethod( Alert_Manager::class, 'classify_health_error' );
 		$method->setAccessible( true );
 
-		$this->assertSame( $expected, $method->invoke( null, new \WP_Error( $code, $message ) ) );
+		$this->assertSame( $expected, $method->invoke( null, new \WP_Error( $code, $message, $data ) ) );
 	}
 
 	/**
 	 * Messages seen in the alerts channel during the week of 2026-09-16, plus
-	 * the Newsletters ActiveCampaign provider's dead-key response. The rows
-	 * with a numeric code have that provider's shape for a response without
-	 * an error body: the HTTP status as the code and its reason phrase as the
-	 * message. The last two rows pin the status forms: one printed the way a
-	 * provider prints it, and a connection failure whose duration only looks
-	 * like one.
+	 * a status kept outside the message: as a numeric error code with only its
+	 * reason phrase as the message, or as `status` in the error data beside a
+	 * translated message. The last two rows pin the status forms: one printed
+	 * the way a provider prints it, and a connection failure whose duration
+	 * only looks like one.
 	 */
 	public function data_health_error_classification() {
 		return [
@@ -1601,6 +1601,8 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			'account deactivated'           => [ 'User Disabled: This account has been deactivated.', 'publisher' ],
 			'bare 401 from activecampaign'  => [ 'ActiveCampaign REST returned status 401 for /api/3/users/me.', 'publisher' ],
 			'status only in the code'       => [ 'Forbidden', 'publisher', 403 ],
+			'status only in the error data' => [ 'ActiveCampaign REST a renvoyé le statut 403.', 'publisher', 'activecampaign_http_error', [ 'status' => 403 ] ],
+			'error data with a 503 status'  => [ 'ActiveCampaign REST a renvoyé le statut 503.', 'other', 'activecampaign_http_error', [ 'status' => 503 ] ],
 			'mailchimp timeout'             => [ 'Request timed out after 20.001555 seconds.', 'other' ],
 			'timeout with a 401-like float' => [ 'Request timed out after 401.5 seconds.', 'other' ],
 			'service unavailable'           => [ 'Service Unavailable', 'other', 503 ],

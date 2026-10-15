@@ -966,11 +966,13 @@ class Alert_Manager {
 				return 'publisher';
 			}
 		}
-		// The Newsletters ActiveCampaign provider keeps the status as the error
-		// code when the response has no error body, leaving only the reason
-		// phrase as the message: "Forbidden" with code 403.
+		// A status kept outside the message: as the error code, or as `status`
+		// in the error data. Integrations that report one in the data print it
+		// in a translatable message too, which the patterns above can't rely on.
 		foreach ( $error->get_error_codes() as $code ) {
-			if ( is_numeric( $code ) && in_array( (int) $code, [ 401, 402, 403 ], true ) ) {
+			$data   = $error->get_error_data( $code );
+			$status = is_numeric( $code ) ? $code : ( is_array( $data ) ? ( $data['status'] ?? null ) : null );
+			if ( is_numeric( $status ) && in_array( (int) $status, [ 401, 402, 403 ], true ) ) {
 				return 'publisher';
 			}
 		}
