@@ -116,16 +116,22 @@ class Tag_Labels {
 
 		$outer_element = in_array( $outer_element, [ 'span', 'div' ], true ) ? $outer_element : 'span';
 
-		$labels_html  = '';
-		$labels_html .= '<' . $outer_element . ' class="' . join( ' ', array_map( 'esc_attr', $outer_classes ) ) . '">';
+		$labels_html = '';
 		foreach ( $labels as $label ) {
-			if ( $links && isset( $label['flag'] ) && $label['link'] ) {
+			if ( $links && isset( $label['flag'] ) && ! empty( $label['link'] ) ) {
 				$labels_html .= '<a class="' . join( ' ', array_map( 'esc_attr', $inner_classes ) ) . '" href="' . esc_url( $label['link'] ) . '" rel="tag">' . esc_html( $label['flag'] ) . '</a>';
 			} elseif ( isset( $label['flag'] ) ) {
 				$labels_html .= '<span class="' . join( ' ', array_map( 'esc_attr', $inner_classes ) ) . '">' . esc_html( $label['flag'] ) . '</span>';
 			}
 		}
-		$labels_html .= '</' . $outer_element . '><!-- .tag-labels -->';
+
+		// Return nothing rather than an empty wrapper: theme CSS changes the category's
+		// layout whenever a `.tag-labels` follows it (`.cat-links:has( + .tag-labels )`).
+		if ( '' === $labels_html ) {
+			return '';
+		}
+
+		$labels_html = '<' . $outer_element . ' class="' . join( ' ', array_map( 'esc_attr', $outer_classes ) ) . '">' . $labels_html . '</' . $outer_element . '><!-- .tag-labels -->';
 
 		return $labels_html;
 	}
@@ -150,7 +156,12 @@ class Tag_Labels {
 		// follow a palette they are not meant to follow. Each caller declares its
 		// own styling; see the `.tag-labels` rules in newspack-blocks and both
 		// themes.
-		echo wp_kses_post( self::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), $outer_element ) . ' ' );
+		$html = self::generate_html( $labels, $links, array( 'tag-labels' ), array( 'tag-label', 'flag' ), $outer_element );
+		if ( '' === $html ) {
+			return;
+		}
+
+		echo wp_kses_post( $html . ' ' );
 	}
 
 	/**
