@@ -36,6 +36,7 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'mock_get_response' ] );
 		remove_filter( 'mailchimp_mock_post', [ __CLASS__, 'mock_post_response' ] );
 		remove_filter( 'mailchimp_mock_put', [ __CLASS__, 'mock_put_response' ] );
+		add_filter( 'newspack_mailchimp_merge_fields', [ 'Newspack_Newsletters_Mailchimp_Api', 'mock_merge_fields' ] );
 	}
 
 	/**
@@ -898,5 +899,72 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 			],
 			$result
 		);
+	}
+
+	/**
+	 * Add a contact to an audience that refuses every new merge field, as
+	 * Mailchimp does at its merge field cap, and return the upsert payload.
+	 *
+	 * @param string $email    Contact email. Use a new one per call: the provider caches upserts by email.
+	 * @param array  $metadata Contact metadata.
+	 * @return array|null The member PUT payload, or null if no upsert was sent.
+	 */
+	private function get_upsert_payload_at_merge_field_cap( $email, $metadata ) {
+		$payload       = null;
+		$refuse_create = function ( $response, $endpoint ) {
+			if ( preg_match( '/lists\/.*\/merge-fields/', $endpoint ) ) {
+				return [
+					'status' => 400,
+					'title'  => 'Merge Max Limit Exceeded',
+				];
+			}
+			return $response;
+		};
+		$capture       = function ( $response, $endpoint, $args ) use ( &$payload ) {
+			if ( preg_match( '/lists\/.*\/members\//', $endpoint ) ) {
+				$payload = $args;
+			}
+			return $response;
+		};
+		// The suite-wide stub replaces whatever the provider prepares.
+		remove_filter( 'newspack_mailchimp_merge_fields', [ 'Newspack_Newsletters_Mailchimp_Api', 'mock_merge_fields' ] );
+		add_filter( 'mailchimp_mock_post', $refuse_create, 20, 2 );
+		add_filter( 'mailchimp_mock_put', $capture, 20, 3 );
+		Newspack_Newsletters_Contacts::upsert(
+			[
+				'email'    => $email,
+				'metadata' => $metadata,
+			],
+			[ 'list1' ]
+		);
+		remove_filter( 'mailchimp_mock_post', $refuse_create, 20 );
+		remove_filter( 'mailchimp_mock_put', $capture, 20 );
+		return $payload;
+	}
+
+	/**
+	 * Mailchimp rejects the whole upsert when merge_fields is a JSON array, so
+	 * a contact whose fields all fail to be created must not send an empty one.
+	 */
+	public function test_upsert_omits_merge_fields_when_no_field_can_be_created() {
+		$payload = $this->get_upsert_payload_at_merge_field_cap( 'merge-cap-none@example.test', [ 'NP_Account_Deleted' => '1' ] );
+
+		$this->assertIsArray( $payload );
+		$this->assertArrayNotHasKey( 'merge_fields', $payload );
+	}
+
+	/**
+	 * Fields that already exist in the audience are still sent when others fail.
+	 */
+	public function test_upsert_sends_existing_merge_fields_when_others_cannot_be_created() {
+		$payload = $this->get_upsert_payload_at_merge_field_cap(
+			'merge-cap-some@example.test',
+			[
+				'Name'               => 'Jane',
+				'NP_Account_Deleted' => '1',
+			]
+		);
+
+		$this->assertSame( [ 'FNAME' => 'Jane' ], $payload['merge_fields'] );
 	}
 }

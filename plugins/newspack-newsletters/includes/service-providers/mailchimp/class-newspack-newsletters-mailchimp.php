@@ -2099,6 +2099,12 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				}
 			}
 
+			// Mailchimp rejects the whole upsert when merge_fields is an empty JSON array rather than an object.
+			// It is empty when no field could be matched or created, for example at the audience's merge field cap.
+			if ( empty( $update_payload['merge_fields'] ) ) {
+				unset( $update_payload['merge_fields'] );
+			}
+
 			Newspack_Newsletters_Logger::log( 'Mailchimp add_contact PUT payload: ' . wp_json_encode( $update_payload ) );
 
 			$hash   = $is_email_update && $is_subscribed ? $existing_member_hash : $member_hash;
