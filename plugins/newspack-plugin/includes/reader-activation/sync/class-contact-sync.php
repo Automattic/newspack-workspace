@@ -873,8 +873,8 @@ class Contact_Sync extends Sync {
 	 * aggregates messages (invalid-list errors, exception detail) ahead of the
 	 * provider's own error, so reading only the first message would miss a
 	 * real signature exactly when a site is misconfigured. On the deletion path,
-	 * an error carrying Integration::CONTACT_NOT_FOUND_ERROR_CODE is benign
-	 * whatever its message.
+	 * an error whose only code is Integration::CONTACT_NOT_FOUND_ERROR_CODE is
+	 * benign whatever its message.
 	 *
 	 * @param string|\WP_Error $error     The error from a failed push.
 	 * @param string           $direction The sync direction: 'push' (default) or 'deletion'.
@@ -886,8 +886,9 @@ class Contact_Sync extends Sync {
 	private static function classify_error( $error, $direction = 'push' ) {
 		// An integration answers with this code when it holds no contact for the
 		// reader. A deletion has nothing left to remove or flag then, and no retry
-		// can make the contact appear.
-		if ( 'deletion' === $direction && $error instanceof \WP_Error && in_array( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $error->get_error_codes(), true ) ) {
+		// can make the contact appear. Only as the error's sole code: alongside
+		// another failure, that failure decides.
+		if ( 'deletion' === $direction && $error instanceof \WP_Error && [ Integration::CONTACT_NOT_FOUND_ERROR_CODE ] === $error->get_error_codes() ) {
 			return 'benign';
 		}
 
