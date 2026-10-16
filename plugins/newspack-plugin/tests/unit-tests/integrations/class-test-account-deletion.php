@@ -1201,9 +1201,9 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	 * its groups or tags, and update_lists() clears only the lists offered for
 	 * sign-up. A reader who joined through a group or tag, or whose audience is
 	 * no longer offered, must still leave the audience this integration syncs
-	 * to, or campaigns sent to the whole audience keep reaching them. Another
-	 * audience in the account may belong to another publication, so it is left
-	 * alone.
+	 * to, or campaigns sent to the whole audience keep reaching them. An
+	 * audience neither synced nor offered may belong to another publication, so
+	 * it is left alone.
 	 */
 	public function test_esp_flag_cleanup_unsubscribes_the_reader_from_the_synced_mailchimp_audience() {
 		\Newspack_Newsletters_Contacts::reset_calls();

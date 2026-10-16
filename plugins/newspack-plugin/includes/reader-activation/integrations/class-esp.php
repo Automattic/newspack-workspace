@@ -568,9 +568,9 @@ class ESP extends Integration {
 	 * sign-up. So on Mailchimp the reader also leaves the audience this
 	 * integration syncs to; otherwise a reader who joined through a group or
 	 * tag, or whose audience is no longer offered, keeps receiving campaigns
-	 * sent to the whole audience. Other audiences are left alone, as the flag
-	 * push leaves them, since one account can hold other publications'
-	 * audiences.
+	 * sent to the whole audience. Audiences neither synced nor offered for
+	 * sign-up are left alone, as the flag push leaves them, since one account
+	 * can hold other publications' audiences.
 	 *
 	 * A provider without list management (Campaign Monitor) has no lists to
 	 * clear, so its "not supported" answer is success, not failure — returning
