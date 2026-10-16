@@ -1571,7 +1571,8 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 
 	/**
 	 * An outage an issue tracks reaches the log with the issue URL instead of
-	 * paging, and the URL stays on the record and on the broken change.
+	 * paging, and the URL stays on the record and on the broken change. The
+	 * record turns broken only once the answer is in.
 	 */
 	public function test_health_check_tracked_outage_reaches_the_log_with_its_issue() {
 		$this->capture_alerts( 'integration_health_check_failed' );
@@ -1580,7 +1581,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		add_filter(
 			'newspack_integration_health_issue_url',
 			function ( $issue_url, $change ) use ( &$asked ) {
-				$asked[] = $change;
+				$asked[] = $change + [ 'stored_status' => get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp']['status'] ];
 				return 'https://linear.app/example/issue/NP-1';
 			},
 			10,
@@ -1597,6 +1598,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $asked, 'Only the broken transition asks for an issue.' );
 		$this->assertSame( 'broken', $asked[0]['state'] );
+		$this->assertSame( 'failing', $asked[0]['stored_status'], 'The record turns broken only after the answer, so a run that dies waiting asks again.' );
 		$this->assertCount( 0, $this->captured['integration_health_check_failed']['error'], 'A tracked outage does not page.' );
 		$this->assertStringContainsString( 'Tracked in https://linear.app/example/issue/NP-1.', end( $this->captured['integration_health_check_failed']['warning'] )['message'] );
 		$this->assertSame( 'https://linear.app/example/issue/NP-1', get_option( Alert_Manager::HEALTH_STATE_OPTION )['esp']['issue_url'] );

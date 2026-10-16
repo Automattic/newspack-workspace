@@ -660,9 +660,27 @@ class Alert_Manager {
 		$record['integration_name'] = $integration_name;
 
 		$is_transition = 'broken' !== ( $record['status'] ?? 'failing' ) && $record['failures'] >= self::HEALTH_BROKEN_THRESHOLD;
+		$change        = [];
+		$issue_url     = '';
 		if ( $is_transition ) {
 			$record['status']      = 'broken';
 			$record['error_class'] = self::classify_health_error( $error );
+			$change                = [
+				'integration_id'   => $integration_id,
+				'integration_name' => $integration_name,
+				'state'            => 'broken',
+				'error_class'      => $record['error_class'],
+				'error'            => $message,
+				'first_failed_at'  => (int) $record['first_failed_at'],
+				'failures'         => $record['failures'],
+			];
+			// Asked before the record is written: a process that dies while the
+			// answer is pending leaves the streak one failure short, so the next
+			// check asks again rather than finding an outage it never reported.
+			$issue_url = self::get_tracking_issue_url( $change );
+			if ( '' !== $issue_url ) {
+				$record['issue_url'] = $issue_url;
+			}
 		}
 
 		$state[ $integration_id ] = $record;
@@ -683,24 +701,6 @@ class Alert_Manager {
 				]
 			);
 			return;
-		}
-
-		$change = [
-			'integration_id'   => $integration_id,
-			'integration_name' => $integration_name,
-			'state'            => 'broken',
-			'error_class'      => $record['error_class'],
-			'error'            => $message,
-			'first_failed_at'  => (int) $record['first_failed_at'],
-			'failures'         => $record['failures'],
-		];
-
-		$issue_url = self::get_tracking_issue_url( $change );
-		if ( '' !== $issue_url ) {
-			$record['issue_url']      = $issue_url;
-			$state[ $integration_id ] = $record;
-			update_option( self::HEALTH_STATE_OPTION, $state, false );
-			$context = array_merge( $payload, [ 'health' => $record ] );
 		}
 
 		self::fire_health_changed( $change + [ 'issue_url' => $issue_url ] );
