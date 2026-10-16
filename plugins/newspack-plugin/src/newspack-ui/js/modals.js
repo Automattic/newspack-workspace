@@ -73,6 +73,20 @@ function setupModalObserver( modal ) {
 	} );
 }
 
+// A page restored from the back/forward cache comes back with the busy buttons its
+// form left behind, and its modal may still be open.
+window.addEventListener( 'pageshow', event => {
+	if ( ! event.persisted ) {
+		return;
+	}
+	document.querySelectorAll( '.newspack-ui__modal-container button[type="submit"]' ).forEach( button => {
+		if ( handedOffButtons.has( button ) ) {
+			handedOffButtons.delete( button );
+			setButtonLoading( button, false );
+		}
+	} );
+} );
+
 domReady( function () {
 	const modals = [ ...document.querySelectorAll( '.newspack-ui__modal-container' ) ];
 

@@ -329,6 +329,11 @@ domReady( () => {
 			ev.preventDefault();
 		}
 		const form = ev.target;
+		// On the redirect path the form stays on the page while its cart is built, so a
+		// second press would build another.
+		if ( ! isModalCheckout && form.classList.contains( 'modal-processing' ) ) {
+			return;
+		}
 		form.classList.add( 'modal-processing' );
 
 		// NPPD-1887: if the reader arrived here by clicking a paid-intent CTA in a gate

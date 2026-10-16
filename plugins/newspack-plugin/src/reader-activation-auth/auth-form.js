@@ -295,9 +295,8 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 			form.startLoginFlow = () => {
 				container.removeAttribute( 'data-form-status' );
-				// Set the loading state here so both the modal and the inline auth form (e.g.
-				// /my-account) show it — newspack-ui/js/modals.js also sets it, but only for forms
-				// inside a modal. Removal is centralized in setFormAction() (on every step change)
+				// Set the loading state here for both the modal and the inline auth form (e.g.
+				// /my-account). Removal is centralized in setFormAction() (on every step change)
 				// and endLoginFlow() (on errors), with the few AJAX branches that bypass those
 				// clearing it directly.
 				submitButtons.forEach( button => setButtonLoading( button, true ) );

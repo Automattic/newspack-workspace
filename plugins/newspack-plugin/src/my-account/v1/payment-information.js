@@ -14,7 +14,12 @@ import { domReady, setButtonLoading } from '../../utils';
 function handleFormSubmission( e ) {
 	const modal = e.target.closest( '[id*="newspack-my-account__"]' );
 	if ( modal ) {
-		setButtonLoading( e.target.querySelector( 'button[type="submit"]' ), true );
+		// A script that intercepts the submit, such as a payment gateway, owns the button.
+		setTimeout( () => {
+			if ( ! e.defaultPrevented ) {
+				setButtonLoading( e.target.querySelector( 'button[type="submit"]' ), true );
+			}
+		} );
 	}
 }
 

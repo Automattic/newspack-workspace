@@ -4,7 +4,7 @@
  * nothing else to release it. A form that handles its own submit owns its button.
  */
 
-import { isButtonLoading } from '../../utils';
+import { isButtonLoading, setButtonLoading } from '../../utils';
 
 /**
  * Render a modal holding one form, and load the modal script.
@@ -56,6 +56,20 @@ describe( 'newspack-ui modal forms', () => {
 		modal.setAttribute( 'data-state', 'open' );
 		await nextTask();
 		expect( isButtonLoading( button ) ).toBe( false );
+	} );
+
+	it( 'keeps a button its own form marked busy when the modal reopens', async () => {
+		const { modal, form, button } = renderModal( true );
+		form.addEventListener( 'submit', () => setButtonLoading( button, true ) );
+
+		form.requestSubmit( button );
+		await nextTask();
+		modal.setAttribute( 'data-state', 'closed' );
+		await nextTask();
+		modal.setAttribute( 'data-state', 'open' );
+		await nextTask();
+
+		expect( isButtonLoading( button ) ).toBe( true );
 	} );
 
 	it( 'leaves the button of a form that handles its own submit to that form', async () => {
