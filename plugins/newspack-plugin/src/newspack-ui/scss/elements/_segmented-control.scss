@@ -74,7 +74,7 @@
 
 				&:focus-visible {
 					outline: 2px solid var(--newspack-ui-color-button-bg);
-					outline-offset: 1px;
+					outline-offset: 2px;
 				}
 
 				&:not(:last-child) {
@@ -83,7 +83,7 @@
 
 				&.selected {
 					background: var(--newspack-ui-color-neutral-0);
-					border-color: var(--newspack-ui-color-neutral-60);
+					border-color: currentcolor;
 					color: var(--newspack-ui-color-neutral-90);
 				}
 			}

@@ -424,7 +424,7 @@
 	/* Frequency-based version. */
 	.tab-container .freq-label.wpbnbd__button--active::after {
 		background: var(--newspack-ui-color-neutral-0, np-colors.$neutral-000);
-		border: 1px solid var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+		border: 1px solid currentcolor;
 		border-radius: var(--newspack-ui-border-radius-s, 4px);
 	}
 
@@ -521,12 +521,12 @@
 
 				&:focus-visible {
 					outline: 2px solid var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
-					outline-offset: 1px;
+					outline-offset: 2px;
 				}
 
 				&.wpbnbd__button--active {
 					background: var(--newspack-ui-color-neutral-0, np-colors.$neutral-000);
-					border-color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+					border-color: currentcolor;
 					color: var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
 				}
 			}
@@ -695,7 +695,7 @@
 
 					&:focus-visible {
 						outline: 2px solid var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
-						outline-offset: 1px;
+						outline-offset: 2px;
 					}
 				}
 			}
