@@ -548,7 +548,8 @@ class ESP extends Integration {
 			return $can_sync;
 		}
 		$result = \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
-		if ( \is_wp_error( $result ) && $this->is_provider_not_found_error( $result ) ) {
+		// Only a bare miss: alongside another failure, that failure decides.
+		if ( \is_wp_error( $result ) && 1 === count( $result->get_error_codes() ) && $this->is_provider_not_found_error( $result ) ) {
 			return new \WP_Error( self::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_message() );
 		}
 		return $result;

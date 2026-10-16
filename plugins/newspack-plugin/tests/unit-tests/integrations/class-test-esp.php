@@ -529,7 +529,20 @@ class Test_ESP extends \WP_UnitTestCase {
 		$result = $this->delete_contact_answering( new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $result->get_error_code() );
+		$this->assertSame( [ Integration::CONTACT_NOT_FOUND_ERROR_CODE ], $result->get_error_codes() );
+	}
+
+	/**
+	 * A not-found answer that comes with another failure is that failure, so
+	 * it must reach the caller as it is, not as a finished deletion.
+	 */
+	public function test_esp_delete_contact_passes_a_not_found_with_another_failure_through() {
+		$provider_error = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		$provider_error->add( 'newspack_newsletters_mailchimp_delete_contact_failed', 'Mailchimp is down' );
+
+		$result = $this->delete_contact_answering( $provider_error );
+
+		$this->assertSame( [ 'newspack_newsletters_mailchimp_contact_not_found', 'newspack_newsletters_mailchimp_delete_contact_failed' ], $result->get_error_codes() );
 	}
 
 	/**
