@@ -758,14 +758,14 @@ class Subscribers_Wizard extends Wizard {
 			array_merge(
 				$this->prepare_group( $subscription, $settings ),
 				[
-					'memberList'    => $this->prepare_group_members( $subscription ),
-					'invites'       => $this->prepare_group_invites( $subscription ),
-					'inviteLink'    => $this->prepare_group_invite_link( $subscription ),
+					'memberList'         => $this->prepare_group_members( $subscription ),
+					'invites'            => $this->prepare_group_invites( $subscription ),
+					'inviteLink'         => $this->prepare_group_invite_link( $subscription ),
 					// The floor the seat limit can't be set below. Resolved server-side
 					// by the same helper the write endpoint validates against, so the
 					// form and the rule that rejects it can't disagree.
-					'seatsReserved' => Group_Subscription_API::reserved_seats( $subscription ),
-					'billing'       => $this->subscription_billing( $subscription ),
+					'seatsReserved'      => Group_Subscription_API::reserved_seats( $subscription ),
+					'billing'            => $this->subscription_billing( $subscription ),
 					// Whether this caller may use the screen's write buttons. Reading the
 					// screen needs `manage_options` ($capability); every write on it goes
 					// to the group-subscription API, which admits an admin on
@@ -775,7 +775,13 @@ class Subscribers_Wizard extends Wizard {
 					// group. The two are independent, so a role holding one and not the
 					// other is possible, and without this the buttons would render live
 					// and fail with a 403 on click.
-					'canManage'     => current_user_can( 'manage_woocommerce' ),
+					'canManage'          => current_user_can( 'manage_woocommerce' ),
+					// The owner holds billing, so a group renewing from their payment
+					// method can't change hands here (Group_Subscription::change_owner()).
+					'ownerChangeable'    => ! Group_Subscription::renews_automatically( $subscription ),
+					// Whether a change of owner keeps the current owner in the group as a
+					// member. An owner who can't be a member (staff) leaves it instead.
+					'ownerStaysAsMember' => (bool) $subscription->get_user_id() && Group_Subscription::is_eligible_member( (int) $subscription->get_user_id() ),
 				]
 			)
 		);
