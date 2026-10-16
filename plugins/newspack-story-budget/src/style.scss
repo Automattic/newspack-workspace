@@ -17,7 +17,7 @@ body.toplevel_page_newspack-story-budget {
 	position: relative;
 	z-index: 1;
 
-	@include wp-mixins.break-medium {
+	@media screen and ( min-width: 783px ) {
 		margin-left: -20px;
 	}
 }
@@ -318,7 +318,7 @@ body.toplevel_page_newspack-story-budget {
 	}
 
 	&__budgets {
-		padding: 16px 48px;
+		padding: var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}) 48px 16px;
 		&-actions {
 			margin-bottom: 16px;
 
