@@ -3,7 +3,7 @@
  */
 import { NavigableRegion } from '@wordpress/admin-ui';
 import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
-import { cloneElement, isValidElement } from '@wordpress/element';
+import { cloneElement, isValidElement, useState } from '@wordpress/element';
 import { Icon } from '@wordpress/icons';
 import { Stack, Text } from '@wordpress/ui';
 
@@ -17,6 +17,8 @@ import { newspack } from 'newspack-icons';
  * Internal dependencies.
  */
 import Breadcrumbs from '../breadcrumbs';
+import HeaderActions, { isActionList } from './header-actions';
+import useScrollEdges from './use-scroll-edges';
 import './style.scss';
 
 /**
@@ -33,7 +35,9 @@ import './style.scss';
  * @param {Array}  props.breadcrumbItems    Trail items: `{ label, url? }`.
  * @param {*}      [props.badges]
  * @param {*}      [props.subTitle]
- * @param {*}      [props.actions]
+ * @param {*}      [props.actions]          Rendered nodes, or a list of action objects (see
+ *                                          `PageAction` in `./header-actions`), which below
+ *                                          782px collapse into one menu beside the primary action.
  * @param {*}      [props.tabbedNavigation] A `TabbedNavigation` element; its bar renders inside
  *                                          the sticky header block and the page children render
  *                                          inside its active tab panel — or, when no visible tab
@@ -44,6 +48,9 @@ import './style.scss';
  */
 const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigation, className, children } ) => {
 	const currentLabel = breadcrumbItems[ breadcrumbItems.length - 1 ]?.label;
+	const [ crumbsElement, setCrumbsElement ] = useState( null );
+	const crumbEdges = useScrollEdges( crumbsElement, breadcrumbItems.map( item => item.label ).join( '\u0000' ) );
+	const hasActionList = isActionList( actions );
 
 	const renderShell = ( tabBar, content ) => (
 		<>
@@ -54,7 +61,16 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 							<div className="newspack-page__header-visual" aria-hidden="true">
 								<Icon icon={ newspack } />
 							</div>
-							<HStack className="newspack-page__breadcrumbs" justify="flex-start">
+							<HStack
+								ref={ setCrumbsElement }
+								className={ classnames( 'newspack-page__breadcrumbs', {
+									'is-overflowing-start': crumbEdges.start,
+									'is-overflowing-end': crumbEdges.end,
+								} ) }
+								justify="flex-start"
+								// A trail with no links would otherwise leave its hidden start out of keyboard reach.
+								tabIndex={ crumbEdges.overflowing && ! crumbsElement?.querySelector( 'a[href]' ) ? 0 : undefined }
+							>
 								<Breadcrumbs items={ breadcrumbItems } />
 							</HStack>
 							{ badges && (
@@ -65,7 +81,7 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 						</Stack>
 						{ actions && (
 							<Stack direction="row" gap="sm" align="center" className="newspack-page__header-actions">
-								{ actions }
+								{ hasActionList ? <HeaderActions actions={ actions } /> : actions }
 							</Stack>
 						) }
 					</Stack>

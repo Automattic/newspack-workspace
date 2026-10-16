@@ -8,6 +8,7 @@ type HeaderAction = {
 	label: string;
 	ariaLabel?: string;
 	icon?: import('@wordpress/icons').Icon | string;
+	mobileIcon?: import('@wordpress/icons').Icon | string;
 	disabled?: boolean;
 	destructive?: boolean;
 	action?: () => void;

@@ -41,6 +41,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 				{
 					type: 'primary',
 					label: __( 'Add Content Gate', 'newspack-plugin' ),
+					mobileIcon: 'plus',
 					href: '#/edit/new/all',
 				},
 				...( gateCount > 1
