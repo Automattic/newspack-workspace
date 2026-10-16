@@ -146,6 +146,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const isSaving = useRef( false );
 	const gatesRef = useRef< Gate[] >( gates ?? [] );
 	const savedCustomRules = useRef< GateContentRule[] >( gate.content_rules );
+	// The stored gate as last copied into the form, serialized for comparison.
+	const syncedGate = useRef< string | null >( null );
 
 	useEffect( () => {
 		if ( Array.isArray( gates ) ) {
@@ -409,6 +411,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			sectionName: getGateHeading( isNew ? 'add' : 'edit', isNewsletter ),
 		} );
 		if ( isNew ) {
+			syncedGate.current = null;
 			return;
 		}
 		const matchedGate = gates ? gates.find( g => g.id === id ) : null;
@@ -433,6 +436,14 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			history.push( `/edit/new/all` );
 			return;
 		}
+		// Copy the stored gate only when it changed. A refused save, a failed status change or
+		// delete, and writes to other wizard data in the store all re-run this with the gate as
+		// it was, and copying it then would discard the operator's edits.
+		const serializedGate = JSON.stringify( matchedGate );
+		if ( serializedGate === syncedGate.current ) {
+			return;
+		}
+		syncedGate.current = serializedGate;
 		setGate( matchedGate );
 		setTitle( matchedGate.title );
 		setContentRules( matchedGate.content_rules );
