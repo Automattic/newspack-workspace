@@ -36,7 +36,6 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 		remove_filter( 'mailchimp_mock_get', [ __CLASS__, 'mock_get_response' ] );
 		remove_filter( 'mailchimp_mock_post', [ __CLASS__, 'mock_post_response' ] );
 		remove_filter( 'mailchimp_mock_put', [ __CLASS__, 'mock_put_response' ] );
-		add_filter( 'newspack_mailchimp_merge_fields', [ 'Newspack_Newsletters_Mailchimp_Api', 'mock_merge_fields' ] );
 	}
 
 	/**
@@ -930,15 +929,19 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 		remove_filter( 'newspack_mailchimp_merge_fields', [ 'Newspack_Newsletters_Mailchimp_Api', 'mock_merge_fields' ] );
 		add_filter( 'mailchimp_mock_post', $refuse_create, 20, 2 );
 		add_filter( 'mailchimp_mock_put', $capture, 20, 3 );
-		Newspack_Newsletters_Contacts::upsert(
-			[
-				'email'    => $email,
-				'metadata' => $metadata,
-			],
-			[ 'list1' ]
-		);
-		remove_filter( 'mailchimp_mock_post', $refuse_create, 20 );
-		remove_filter( 'mailchimp_mock_put', $capture, 20 );
+		try {
+			Newspack_Newsletters_Contacts::upsert(
+				[
+					'email'    => $email,
+					'metadata' => $metadata,
+				],
+				[ 'list1' ]
+			);
+		} finally {
+			remove_filter( 'mailchimp_mock_post', $refuse_create, 20 );
+			remove_filter( 'mailchimp_mock_put', $capture, 20 );
+			add_filter( 'newspack_mailchimp_merge_fields', [ 'Newspack_Newsletters_Mailchimp_Api', 'mock_merge_fields' ] );
+		}
 		return $payload;
 	}
 
@@ -954,7 +957,8 @@ class Newsletters_Contacts_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Fields that already exist in the audience are still sent when others fail.
+	 * Omitting an empty merge_fields must not drop the fields that did match
+	 * when others fail to be created.
 	 */
 	public function test_upsert_sends_existing_merge_fields_when_others_cannot_be_created() {
 		$payload = $this->get_upsert_payload_at_merge_field_cap(
