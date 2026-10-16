@@ -51,7 +51,7 @@ mkdir "$WORK/bin"
 cat > "$WORK/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 [ -z "${GH_FAIL:-}" ] || exit 1
-jq_filter=""
+jq_filter="."
 while [ $# -gt 0 ]; do
   case "$1" in
     --jq) jq_filter="$2"; shift 2 ;;
@@ -88,10 +88,20 @@ export GH_RUNS
 check "a cancelled run's commits are tested by the next run" "$SHA_A" "$(push_base)"
 
 GH_RUNS=$(runs "3:$SHA_C:null" "2:$SHA_B:\"failure\"" "1:$SHA_A:\"success\"")
-check "a failed run counts as tested, since its failure was reported" "$SHA_B" "$(push_base)"
+check "a failed run counts as tested, since its failure shows on the run" "$SHA_B" "$(push_base)"
 
-GH_RUNS=$(runs "3:$SHA_C:null" "2:$SHA_B:\"cancelled\"" "1:0000000000000000000000000000000000000001:\"success\"")
-check "a last-tested commit missing from the branch falls back to before" "$SHA_B" "$(push_base)"
+GH_RUNS=$(runs "3:$SHA_C:null" "2:$SHA_B:\"cancelled\"" "1:$SHA_A:\"startup_failure\"")
+check "a run whose jobs never started counts as untested" "$SHA_B" "$(push_base)"
+
+# A reset branch: the last tested commit exists but is off HEAD's history.
+git checkout -q -b side "$SHA_A"
+git -c user.name=t -c user.email=t@example.test commit -q --allow-empty -m side
+SHA_SIDE=$(git rev-parse HEAD)
+git checkout -q -
+GH_RUNS=$(runs "3:$SHA_C:null" "2:$SHA_B:\"cancelled\"" "1:$SHA_SIDE:\"success\"")
+check "a last-tested commit off HEAD's history falls back to before" "$SHA_B" "$(push_base)"
+check "the fallback warns on the run" "::warning" \
+  "$(GITHUB_RUN_NUMBER=3 EVENT_BEFORE=$SHA_B bash "$PUSH_BASE" 2>&1 >/dev/null | cut -c1-9)"
 
 check "a failed API lookup falls back to before" "$SHA_B" "$(GH_FAIL=1 push_base)"
 
