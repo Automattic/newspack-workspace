@@ -899,19 +899,19 @@ class Newspack_UI {
 
 			<div class="newspack-ui__segmented-control">
 				<div class="newspack-ui__segmented-control__tabs">
-					<button class="newspack-ui__button newspack-ui__button--small selected">Tab One</button>
-					<button class="newspack-ui__button newspack-ui__button--small">Tab Two</button>
-					<button class="newspack-ui__button newspack-ui__button--small">Tab Three</button>
-					<button class="newspack-ui__button newspack-ui__button--small">Tab Four</button>
-					<button class="newspack-ui__button newspack-ui__button--small">Tab Five</button>
+					<button class="newspack-ui__button newspack-ui__button--small selected" aria-pressed="true">Tab One</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Two</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Three</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Four</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">Tab Five</button>
 				</div>
 			</div>
 
 			<div class="newspack-ui__segmented-control__form-control newspack-ui__spacing-top--6">
 				<label>Segmented Control (Form) <abbr class="newspack-ui__required" title="required">*</abbr></label>
 				<div class="newspack-ui__segmented-control__tabs">
-					<button class="newspack-ui__button newspack-ui__button--small selected">True</button>
-					<button class="newspack-ui__button newspack-ui__button--small">False</button>
+					<button class="newspack-ui__button newspack-ui__button--small selected" aria-pressed="true">True</button>
+					<button class="newspack-ui__button newspack-ui__button--small" aria-pressed="false">False</button>
 				</div>
 			</div>
 
