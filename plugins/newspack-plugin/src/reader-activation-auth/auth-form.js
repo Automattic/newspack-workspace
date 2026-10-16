@@ -112,6 +112,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				// every step change removes it. Same-state errors clear it in endLoginFlow() instead.
 				submitButtons.forEach( button => {
 					button.classList.remove( 'newspack-ui__button--loading' );
+					button.removeAttribute( 'aria-busy' );
 				} );
 				// Signin and success steps should clear any modal errors or messages.
 				if ( 'signin' === action || 'success' === action ) {
@@ -293,6 +294,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 									// branch doesn't route through setFormAction() on error, so clear it here
 									// in lockstep with the disabled attribute.
 									submitButton.classList.remove( 'newspack-ui__button--loading' );
+									submitButton.removeAttribute( 'aria-busy' );
 								} );
 							} );
 					} );
@@ -311,6 +313,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					// and endLoginFlow() (on errors), with the few AJAX branches that bypass those
 					// clearing it directly.
 					button.classList.add( 'newspack-ui__button--loading' );
+					button.setAttribute( 'aria-busy', 'true' );
 				} );
 				form.setMessageContent();
 				form.style.opacity = 0.5;
@@ -338,6 +341,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					submitButtons.forEach( button => {
 						button.disabled = false;
 						button.classList.remove( 'newspack-ui__button--loading' );
+						button.removeAttribute( 'aria-busy' );
 					} );
 				}
 				if ( status === 200 ) {
@@ -426,6 +430,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 							// instead of routing through setFormAction(), so clear it here in lockstep
 							// with the disabled attribute.
 							button.classList.remove( 'newspack-ui__button--loading' );
+							button.removeAttribute( 'aria-busy' );
 						} );
 						form.style.opacity = 1;
 
@@ -649,6 +654,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 									// without routing through setFormAction(), so clear it here in lockstep
 									// with the disabled attribute.
 									button.classList.remove( 'newspack-ui__button--loading' );
+									button.removeAttribute( 'aria-busy' );
 								} );
 								form.style.opacity = 1;
 							},

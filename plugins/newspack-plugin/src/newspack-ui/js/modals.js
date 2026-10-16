@@ -90,6 +90,7 @@ domReady( function () {
 				const submitButton = modalForm.querySelector( 'button[type="submit"]' );
 				if ( submitButton ) {
 					submitButton.classList.add( 'newspack-ui__button--loading' );
+					submitButton.setAttribute( 'aria-busy', 'true' );
 					submitButton.setAttribute( 'disabled', 'true' );
 				}
 			} );
@@ -107,6 +108,7 @@ domReady( function () {
 					e.preventDefault();
 					fetchButton.setAttribute( 'disabled', true );
 					fetchButton.classList.add( 'newspack-ui__button--loading' );
+					fetchButton.setAttribute( 'aria-busy', 'true' );
 					fetch( fetchData.url, {
 						method: fetchData.method,
 						body: JSON.stringify( fetchData.body || {} ),
@@ -140,6 +142,7 @@ domReady( function () {
 						.finally( () => {
 							fetchButton.removeAttribute( 'disabled' );
 							fetchButton.classList.remove( 'newspack-ui__button--loading' );
+							fetchButton.removeAttribute( 'aria-busy' );
 						} );
 				}
 			} );
