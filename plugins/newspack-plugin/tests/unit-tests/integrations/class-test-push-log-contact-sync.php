@@ -796,7 +796,7 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	/**
 	 * The deletion flag's fields are created on first use, so they are the
 	 * ones a full audience refuses. A flag saved without them must not read
-	 * as delivered, and retrying it would meet the same limit.
+	 * as done, and retrying it would meet the same limit.
 	 */
 	public function test_a_deletion_flag_saved_without_its_fields_is_recorded_as_failed_and_not_retried() {
 		$this->require_action_scheduler();

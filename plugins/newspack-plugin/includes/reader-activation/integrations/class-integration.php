@@ -612,7 +612,7 @@ abstract class Integration {
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 * @param array      $options          Optional. Sync options, passed through to push_contact_data().
 	 *
-	 * @return true|\WP_Error The push_contact_data() result, unchanged.
+	 * @return true|array|\WP_Error The push_contact_data() result, unchanged.
 	 */
 	final public function push_contact( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		
