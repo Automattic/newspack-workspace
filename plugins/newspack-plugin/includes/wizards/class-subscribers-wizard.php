@@ -2467,7 +2467,7 @@ class Subscribers_Wizard extends Wizard {
 			'newspack-subscribers',
 			Newspack::plugin_url() . '/dist/subscribers.css',
 			[ 'wp-components' ],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'subscribers' )
 		);
 	}
 }
