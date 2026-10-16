@@ -69,7 +69,11 @@ export function openVerificationModal( config = {} ) {
 	};
 
 	function handleSendClick() {
-		sendOtpButton.disabled = true;
+		if ( 'true' === sendOtpButton.getAttribute( 'aria-busy' ) ) {
+			return;
+		}
+		sendOtpButton.setAttribute( 'aria-busy', 'true' );
+		sendOtpButton.setAttribute( 'aria-disabled', 'true' );
 		sendVerificationOTP( { url: newspack_ras_config.verification_url, nonce: config.verificationNonce } )
 			.then( () => {
 				codeSent = true;
@@ -84,9 +88,9 @@ export function openVerificationModal( config = {} ) {
 				}
 			} )
 			.catch( error => {
-				sendOtpButton.disabled = false;
+				sendOtpButton.removeAttribute( 'aria-busy' );
+				sendOtpButton.removeAttribute( 'aria-disabled' );
 				sendOtpButton.textContent = sendOtpButton.textContent.trim();
-				sendOtpButton.focus();
 				const errorP = modal.querySelector( '[data-error-target]' );
 				if ( ! errorP ) {
 					return;
@@ -117,7 +121,8 @@ export function openVerificationModal( config = {} ) {
 		}
 	}
 
-	sendOtpButton.disabled = false;
+	sendOtpButton.removeAttribute( 'aria-busy' );
+	sendOtpButton.removeAttribute( 'aria-disabled' );
 	sendOtpButton.addEventListener( 'click', handleSendClick, { signal } );
 	modal.addEventListener( 'closeModal', handleClose, { signal } );
 

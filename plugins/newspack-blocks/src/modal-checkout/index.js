@@ -898,7 +898,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', true ).attr( 'aria-busy', 'true' ).addClass( `${ CLASS_PREFIX }__button--loading` );
+						$( el ).attr( 'aria-disabled', 'true' ).attr( 'aria-busy', 'true' ).addClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.addClass( 'modal-processing' );
 					return true;
@@ -917,7 +917,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', false ).removeAttr( 'aria-busy' ).removeClass( `${ CLASS_PREFIX }__button--loading` );
+						$( el ).removeAttr( 'aria-disabled' ).removeAttr( 'aria-busy' ).removeClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.removeClass( 'modal-processing' );
 					return true;

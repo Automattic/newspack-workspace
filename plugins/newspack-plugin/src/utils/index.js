@@ -111,3 +111,46 @@ export function registerCheckoutActivity( action, cb ) {
 	// Shortcode checkout.
 	registerElementActivity( 'form[name="checkout"]', action, cb );
 }
+
+/**
+ * Whether a button is in its loading state.
+ *
+ * @param {HTMLElement} button The button.
+ * @return {boolean} True while the button is loading.
+ */
+export function isButtonLoading( button ) {
+	return 'true' === button?.getAttribute( 'aria-busy' );
+}
+
+/**
+ * Show or clear a button's loading state.
+ *
+ * The button stays focusable while it loads: disabling the focused button would
+ * drop focus to the page, and `aria-busy` would never be announced. A second
+ * press is ignored instead, which also cancels a form submit from Enter in a field.
+ *
+ * @param {HTMLElement} button    The button.
+ * @param {boolean}     isLoading Whether the button is loading.
+ */
+export function setButtonLoading( button, isLoading ) {
+	if ( ! button ) {
+		return;
+	}
+	if ( ! button.dataset.loadingGuard ) {
+		button.dataset.loadingGuard = '1';
+		button.addEventListener( 'click', event => {
+			if ( isButtonLoading( button ) ) {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+			}
+		} );
+	}
+	button.classList.toggle( 'newspack-ui__button--loading', isLoading );
+	if ( isLoading ) {
+		button.setAttribute( 'aria-busy', 'true' );
+		button.setAttribute( 'aria-disabled', 'true' );
+	} else {
+		button.removeAttribute( 'aria-busy' );
+		button.removeAttribute( 'aria-disabled' );
+	}
+}

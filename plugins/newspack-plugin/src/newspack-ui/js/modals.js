@@ -2,7 +2,7 @@
  * Common functions for Newspack UI modals throughout My Account.
  */
 
-import { domReady } from '../../utils';
+import { domReady, isButtonLoading, setButtonLoading } from '../../utils';
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -87,18 +87,17 @@ domReady( function () {
 		const modalForm = modal.querySelector( 'form.newspack-ui__modal__content, .newspack-ui__modal__content form' );
 		if ( modalForm ) {
 			modalForm.addEventListener( 'submit', () => {
-				const submitButton = modalForm.querySelector( 'button[type="submit"]' );
-				if ( submitButton ) {
-					submitButton.classList.add( 'newspack-ui__button--loading' );
-					submitButton.setAttribute( 'aria-busy', 'true' );
-					submitButton.setAttribute( 'disabled', 'true' );
-				}
+				setButtonLoading( modalForm.querySelector( 'button[type="submit"]' ), true );
 			} );
 		}
 
 		const fetchButtons = [ ...modal.querySelectorAll( '[data-fetch]' ) ];
 		fetchButtons.forEach( fetchButton => {
 			fetchButton.addEventListener( 'click', e => {
+				if ( isButtonLoading( fetchButton ) ) {
+					e.preventDefault();
+					return;
+				}
 				const fetchData = JSON.parse( fetchButton.getAttribute( 'data-fetch' ) );
 				if ( fetchData.url && fetchData.nonce ) {
 					const errors = content.querySelector( '.newspack-ui__notice--error' );
@@ -106,9 +105,7 @@ domReady( function () {
 						errors.parentElement.removeChild( errors );
 					}
 					e.preventDefault();
-					fetchButton.setAttribute( 'disabled', true );
-					fetchButton.classList.add( 'newspack-ui__button--loading' );
-					fetchButton.setAttribute( 'aria-busy', 'true' );
+					setButtonLoading( fetchButton, true );
 					fetch( fetchData.url, {
 						method: fetchData.method,
 						body: JSON.stringify( fetchData.body || {} ),
@@ -140,9 +137,7 @@ domReady( function () {
 							content.insertBefore( errorsDiv, content.firstChild );
 						} )
 						.finally( () => {
-							fetchButton.removeAttribute( 'disabled' );
-							fetchButton.classList.remove( 'newspack-ui__button--loading' );
-							fetchButton.removeAttribute( 'aria-busy' );
+							setButtonLoading( fetchButton, false );
 						} );
 				}
 			} );

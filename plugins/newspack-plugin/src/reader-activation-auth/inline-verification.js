@@ -76,12 +76,9 @@ export function wireInlineVerificationBox( box, { url, nonce, onSent, errorText 
 	// The box marks its own error element. Deriving one structurally would land on a
 	// different paragraph in each of the markups that use this.
 	const showError = error => {
-		button.disabled = false;
 		button.removeAttribute( 'aria-busy' );
+		button.removeAttribute( 'aria-disabled' );
 		button.textContent = button.textContent.trim();
-		// Disabling the button dropped focus to <body>. Put it back, so a keyboard or
-		// screen-reader reader can retry without traversing the page again.
-		button.focus();
 		const errorEl = box.querySelector( '[data-error-target]' );
 		if ( ! errorEl ) {
 			return;
@@ -98,8 +95,13 @@ export function wireInlineVerificationBox( box, { url, nonce, onSent, errorText 
 	};
 
 	button.addEventListener( 'click', () => {
-		button.disabled = true;
+		// The button stays focusable while the code sends, so the busy state is announced
+		// and focus stays put. A second press does nothing.
+		if ( 'true' === button.getAttribute( 'aria-busy' ) ) {
+			return;
+		}
 		button.setAttribute( 'aria-busy', 'true' );
+		button.setAttribute( 'aria-disabled', 'true' );
 		sendVerificationOTP( { url, nonce } )
 			.then( () => {
 				if ( typeof onSent !== 'function' ) {
