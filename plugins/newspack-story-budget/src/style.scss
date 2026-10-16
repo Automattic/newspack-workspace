@@ -13,9 +13,13 @@ body.toplevel_page_newspack-story-budget {
 }
 
 .wrap {
-	margin: 0 0 0 -20px;
+	margin: 0 0 0 -10px;
 	position: relative;
 	z-index: 1;
+
+	@include wp-mixins.break-medium {
+		margin-left: -20px;
+	}
 }
 
 /* Fix fullscreen modal content area */
@@ -32,7 +36,7 @@ body.toplevel_page_newspack-story-budget {
 	$parent-selector: &;
 
 	&__content {
-		padding: 32px 0 0;
+		padding: calc(var(--newspack-page-content-gap, #{wp-vars.$grid-unit-60}) - var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20})) 0 0;
 	}
 	&__loading {
 		display: flex;

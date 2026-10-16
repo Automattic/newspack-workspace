@@ -38,6 +38,21 @@
 }
 /* stylelint-enable plugin-wpds/no-setting-wpds-custom-properties */
 
+$dataviews-compact-max-width: 430px;
+
+:root {
+	--newspack-page-content-gap: #{wp-vars.$grid-unit-30};
+	--newspack-page-dataviews-offset: #{wp-vars.$grid-unit-15};
+
+	@media (min-width: #{$dataviews-compact-max-width + 1px}) {
+		--newspack-page-dataviews-offset: #{wp-vars.$grid-unit-20};
+	}
+
+	@include wp-mixins.break-medium {
+		--newspack-page-content-gap: #{wp-vars.$grid-unit-60};
+	}
+}
+
 [role="region"].newspack-page {
 	background-color: wp-colors.$white;
 }
