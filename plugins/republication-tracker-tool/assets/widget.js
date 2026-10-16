@@ -141,6 +141,18 @@ function close_modal( $modal, $btn ) {
 	$btn.focus();
 }
 
+// Navigate the page-layout button via its data attribute.
+function page_button_actions(){
+	var $ = jQuery;
+	$( '.republication-tracker-tool-button.page' ).on( 'click', function() {
+		var url = $( this ).attr( 'data-republish-url' );
+		// Only follow a root-relative path: a leading '/' that is not '//'.
+		if ( url && '/' === url.charAt( 0 ) && '/' !== url.charAt( 1 ) ) {
+			window.location.href = url;
+		}
+	} );
+}
+
 jQuery(document).ready(function(){
 	var $ = jQuery,
 		postId = $( '#republication-tracker-tool-modal' ).attr( 'data-postid' ),
@@ -150,5 +162,6 @@ jQuery(document).ready(function(){
 		$('body').append($('#republication-tracker-tool-modal'));
 
 		modal_actions();
+		page_button_actions();
 
 });

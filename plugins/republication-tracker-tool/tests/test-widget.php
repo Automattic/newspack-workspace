@@ -25,10 +25,18 @@ class WidgetTest extends WP_UnitTestCase {
 	private $test_post;
 
 	/**
+	 * Server state at set-up, restored in tear_down.
+	 *
+	 * @var array
+	 */
+	private $saved_server;
+
+	/**
 	 * Set up test environment.
 	 */
 	public function set_up() {
 		parent::set_up();
+		$this->saved_server = $_SERVER;
 
 		$this->widget = new Republication_Tracker_Tool_Widget();
 
@@ -47,6 +55,7 @@ class WidgetTest extends WP_UnitTestCase {
 	public function tear_down() {
 		wp_delete_post( $this->test_post->ID, true );
 		Republication_Tracker_Tool::$modal_rendered = false;
+		$_SERVER = $this->saved_server;
 		parent::tear_down();
 	}
 
@@ -163,5 +172,76 @@ class WidgetTest extends WP_UnitTestCase {
 		// Check only one modal wrapper is present.
 		$this->assertEquals( 1, substr_count( $output, 'id="republication-tracker-tool-modal"' ), 'Single modal found in output.' );
 		$this->assertEquals( 3, substr_count( $output, 'republication-tracker-tool-button' ), 'Multiple buttons found in output.' );
+	}
+
+	/**
+	 * The page layout carries its destination in a data attribute that widget.js reads on
+	 * click.
+	 */
+	public function test_page_layout_button_uses_data_attribute() {
+		global $post, $wp_query;
+		$post                        = $this->test_post;
+		$wp_query->is_single         = true;
+		$wp_query->queried_object    = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+
+		$args = array(
+			'before_widget' => '<div class="widget">',
+			'after_widget'  => '</div>',
+			'before_title'  => '<h2>',
+			'after_title'   => '</h2>',
+		);
+
+		ob_start();
+		$this->widget->widget(
+			$args,
+			array(
+				'layout' => 'page',
+				'title'  => 'Republish This Story',
+				'text'   => 'Test widget text',
+			)
+		);
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'republication-tracker-tool-button page', $output );
+		$this->assertStringContainsString( 'data-republish-url=', $output );
+		$this->assertStringNotContainsString( 'onclick', $output );
+	}
+
+	/**
+	 * The request path is escaped into the button's data attribute.
+	 */
+	public function test_page_layout_button_encodes_request_path_in_attribute() {
+		global $post, $wp_query;
+		$post                        = $this->test_post;
+		$wp_query->is_single         = true;
+		$wp_query->queried_object    = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+
+		$args = array(
+			'before_widget' => '<div class="widget">',
+			'after_widget'  => '</div>',
+			'before_title'  => '<h2>',
+			'after_title'   => '</h2>',
+		);
+
+		$_SERVER['REQUEST_URI'] = '/2026/09/sample-story/?ref=o\'brien';
+
+		ob_start();
+		$this->widget->widget(
+			$args,
+			array(
+				'layout' => 'page',
+				'title'  => 'Republish This Story',
+				'text'   => 'Test widget text',
+			)
+		);
+		$output = ob_get_clean();
+
+
+		// The path comes back encoded in the data attribute...
+		$this->assertMatchesRegularExpression( '/data-republish-url="[^"]*o&#039;brien[^"]*"/', $output );
+		// ...and the markup does not set window.location.href itself.
+		$this->assertStringNotContainsString( 'window.location.href', $output );
 	}
 }
