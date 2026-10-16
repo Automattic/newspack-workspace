@@ -390,7 +390,7 @@
 	.modal_checkout_quantity,
 	.modal_checkout_coupon {
 		&.modal-processing {
-			opacity: 0.5;
+			pointer-events: none;
 		}
 	}
 
@@ -1019,7 +1019,7 @@
 	}
 
 	.modal-processing {
-		opacity: 0.5;
+		pointer-events: none;
 	}
 
 	// Hide address-validation-and-auto-complete field.

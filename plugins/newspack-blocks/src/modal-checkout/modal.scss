@@ -263,9 +263,5 @@
 }
 
 .modal-processing {
-	opacity: 0.5;
-
-	&:has(.non-modal-checkout-loading) {
-		opacity: 1;
-	}
+	pointer-events: none;
 }
