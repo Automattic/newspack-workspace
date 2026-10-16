@@ -6,8 +6,8 @@
  * Listens for data event handler and integration sync retry exhaustion and
  * fires a unified alert action for each.
  *
- * Keeps one health record per integration so a broken integration pages
- * once, on the transition, and reports its recovery.
+ * Keeps one health record per integration so a broken integration is
+ * reported once, on the transition, and its recovery is reported too.
  *
  * Also scans the failure log for recurring patterns and fires an alert when a
  * threshold is exceeded within the configured time window.
@@ -46,7 +46,7 @@ class Alert_Manager {
 
 	/**
 	 * Consecutive failed hourly checks before an integration counts as
-	 * broken and pages once. Three outlasts the provider blips seen in the
+	 * broken and is reported once. Three outlasts the provider blips seen in the
 	 * alerts channel, which cleared within a single check.
 	 */
 	const HEALTH_BROKEN_THRESHOLD = 3;
@@ -292,7 +292,7 @@ class Alert_Manager {
 			return;
 		}
 		// A broken integration's failures share its outage's cause, which has
-		// already paged once; logged here, they would page it again every hour.
+		// already been reported; logged here, they would page it again every hour.
 		if ( self::is_integration_broken( $payload['integration_id'] ?? '' ) ) {
 			return;
 		}
@@ -325,7 +325,7 @@ class Alert_Manager {
 	 * Handle sync retry exhaustion.
 	 *
 	 * While the integration's health record is broken, the alert reaches the
-	 * log only: the outage has already paged once, and every contact whose
+	 * log only: the outage has already been reported, and every contact whose
 	 * retries run out during it would page again for the same cause.
 	 *
 	 * @param array $payload Alert data from Contact_Sync.
@@ -483,8 +483,8 @@ class Alert_Manager {
 		}
 
 		// Pre-filter once using the widest interval. A broken integration's
-		// outage has already paged, and entries logged before it turned broken
-		// would page it again.
+		// outage has already been reported, and entries logged before it turned
+		// broken would page it again.
 		$global_cutoff = $now - $max_interval;
 		$recent_log    = array_filter(
 			$log,
@@ -621,7 +621,8 @@ class Alert_Manager {
 	 * history; those after the transition add nothing to Slack, since the
 	 * condition is already reported and the record carries it until a
 	 * passing check, or a run that no longer checks the integration, clears
-	 * it.
+	 * it. When an issue tracks the outage (get_tracking_issue_url()), the
+	 * transition reaches the log with the issue URL instead of paging.
 	 *
 	 * The record is written before dispatch so a `newspack_alert` handler
 	 * that throws cannot leave the transition unrecorded and page again on
@@ -659,9 +660,27 @@ class Alert_Manager {
 		$record['integration_name'] = $integration_name;
 
 		$is_transition = 'broken' !== ( $record['status'] ?? 'failing' ) && $record['failures'] >= self::HEALTH_BROKEN_THRESHOLD;
+		$change        = [];
+		$issue_url     = '';
 		if ( $is_transition ) {
 			$record['status']      = 'broken';
 			$record['error_class'] = self::classify_health_error( $error );
+			$change                = [
+				'integration_id'   => $integration_id,
+				'integration_name' => $integration_name,
+				'state'            => 'broken',
+				'error_class'      => $record['error_class'],
+				'error'            => $message,
+				'first_failed_at'  => (int) $record['first_failed_at'],
+				'failures'         => $record['failures'],
+			];
+			// Asked before the record is written: a process that dies while the
+			// answer is pending leaves the streak one failure short, so the next
+			// check asks again rather than finding an outage it never reported.
+			$issue_url = self::get_tracking_issue_url( $change );
+			if ( '' !== $issue_url ) {
+				$record['issue_url'] = $issue_url;
+			}
 		}
 
 		$state[ $integration_id ] = $record;
@@ -684,17 +703,7 @@ class Alert_Manager {
 			return;
 		}
 
-		self::fire_health_changed(
-			[
-				'integration_id'   => $integration_id,
-				'integration_name' => $integration_name,
-				'state'            => 'broken',
-				'error_class'      => $record['error_class'],
-				'error'            => $message,
-				'first_failed_at'  => (int) $record['first_failed_at'],
-				'failures'         => $record['failures'],
-			]
-		);
+		self::fire_health_changed( $change + [ 'issue_url' => $issue_url ] );
 
 		$alert_message = sprintf(
 			'Integration "%s" has failed %d consecutive health checks since %s. Last error: %s',
@@ -706,18 +715,69 @@ class Alert_Manager {
 		if ( 'publisher' === $record['error_class'] ) {
 			$alert_message .= ' The ESP account itself is the problem, so the fix is on the publisher side.';
 		}
+		if ( '' !== $issue_url ) {
+			$alert_message .= sprintf( ' Tracked in %s.', $issue_url );
+		}
 
 		/** This action is documented in includes/class-alert-manager.php */
 		do_action(
 			'newspack_alert',
 			[
 				'type'      => 'integration_health_check_failed',
-				'severity'  => 'error',
+				'severity'  => '' !== $issue_url ? 'warning' : 'error',
 				'message'   => $alert_message,
 				'context'   => $context,
 				'timestamp' => time(),
 			]
 		);
+	}
+
+	/**
+	 * Ask whether something outside the site tracks a broken integration, and
+	 * where.
+	 *
+	 * A tracking issue gives the outage an owner, so its page would only repeat
+	 * it in the on-call channel. Any failure to get one, a listener that throws
+	 * included, leaves the page in place: an outage nobody tracks must page.
+	 *
+	 * @param array $change The 'broken' state change, as documented on `newspack_integration_health_changed`.
+	 * @return string The issue URL, or '' when nothing tracks the outage.
+	 */
+	private static function get_tracking_issue_url( $change ) {
+		try {
+			/**
+			 * Filters the URL of an issue that tracks an integration that has just
+			 * turned broken. Returning a URL moves the outage's page from Slack to
+			 * the log, with the URL in the message; returning '' keeps the page.
+			 * The URL also travels with the outage's later 'recovered' or
+			 * 'disconnected' change, so the issue can be updated.
+			 *
+			 * @param string $issue_url The issue URL, '' when nothing tracks the outage.
+			 * @param array  $change    The 'broken' state change, as documented on
+			 *                          `newspack_integration_health_changed`.
+			 */
+			$issue_url = apply_filters( 'newspack_integration_health_issue_url', '', $change );
+		} catch ( \Throwable $e ) {
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_alert',
+				[
+					'type'      => 'integration_health_issue_url_failed',
+					'severity'  => 'warning',
+					'message'   => sprintf( 'A newspack_integration_health_issue_url callback failed for integration "%s": %s', $change['integration_id'], $e->getMessage() ),
+					'context'   => $change,
+					'timestamp' => time(),
+				]
+			);
+			return '';
+		}
+		// Checked on the raw value: esc_url_raw() prefixes https:// to a string
+		// without a scheme and passes relative references through, and either
+		// would stop the page for an outage nothing tracks.
+		if ( ! is_string( $issue_url ) || 'https' !== wp_parse_url( $issue_url, PHP_URL_SCHEME ) || ! wp_parse_url( $issue_url, PHP_URL_HOST ) ) {
+			return '';
+		}
+		return esc_url_raw( $issue_url, [ 'https' ] );
 	}
 
 	/**
@@ -765,6 +825,7 @@ class Alert_Manager {
 				'error'            => (string) ( $record['last_error'] ?? '' ),
 				'first_failed_at'  => (int) ( $record['first_failed_at'] ?? 0 ),
 				'failures'         => $failures,
+				'issue_url'        => (string) ( $record['issue_url'] ?? '' ),
 			]
 		);
 
@@ -825,6 +886,7 @@ class Alert_Manager {
 					'error'            => (string) ( $record['last_error'] ?? '' ),
 					'first_failed_at'  => (int) ( $record['first_failed_at'] ?? 0 ),
 					'failures'         => $failures,
+					'issue_url'        => (string) ( $record['issue_url'] ?? '' ),
 				]
 			);
 
@@ -875,6 +937,9 @@ class Alert_Manager {
 			 *     @type string $error            The last health-check error message.
 			 *     @type int    $first_failed_at  Unix timestamp of the first failure in this outage.
 			 *     @type int    $failures         Consecutive failed checks so far.
+			 *     @type string $issue_url        The issue tracking this outage, from the
+			 *                                    `newspack_integration_health_issue_url`
+			 *                                    filter, or '' when nothing tracks it.
 			 * }
 			 */
 			do_action( 'newspack_integration_health_changed', $payload );
@@ -915,7 +980,7 @@ class Alert_Manager {
 
 	/**
 	 * Whether an integration's current health record is broken, meaning its
-	 * outage has already paged once.
+	 * outage has already been reported.
 	 *
 	 * @param string $integration_id The integration ID.
 	 * @return bool
