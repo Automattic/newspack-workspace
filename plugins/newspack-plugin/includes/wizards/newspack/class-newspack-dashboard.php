@@ -419,7 +419,7 @@ class Newspack_Dashboard extends Wizard {
 	public function enqueue_scripts_and_styles() {
 		parent::enqueue_scripts_and_styles();
 
-		if ( filter_input( INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS ) !== $this->slug ) {
+		if ( ! $this->is_wizard_page() && ! Admin_App::serves( $this->slug ) ) {
 			return;
 		}
 
