@@ -32,6 +32,7 @@
 
 		&:disabled {
 			background-color: var(--newspack-ui-color-input-bg-disabled);
+			background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M15.9902 10.889L12.0022 14.307L8.01416 10.889L8.99016 9.74899L12.0022 12.331L15.0142 9.74999L15.9902 10.889Z' fill='%236C6C6C'/%3E%3C/svg%3E");
 			border-color: var(--newspack-ui-color-input-border-disabled);
 			color: var(--newspack-ui-color-neutral-60);
 			cursor: not-allowed;

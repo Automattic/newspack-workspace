@@ -25,6 +25,10 @@
 			padding: var(--newspack-ui-spacer-2) !important;
 			position: relative;
 
+			&:empty {
+				display: none;
+			}
+
 			a:not(.newspack-ui__button) {
 				text-decoration: underline;
 			}

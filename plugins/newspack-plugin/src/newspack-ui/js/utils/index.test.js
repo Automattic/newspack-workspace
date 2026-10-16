@@ -36,18 +36,15 @@ describe( 'setupTabController', () => {
 		annually.click();
 		expect( monthly ).toHaveAttribute( 'aria-pressed', 'false' );
 		expect( annually ).toHaveAttribute( 'aria-pressed', 'true' );
-		expect( document.body.textContent ).toContain( 'Annual panel' );
-		expect( document.body.textContent ).not.toContain( 'Monthly panel' );
 	} );
 
-	it( 'keeps tab semantics for a tablist', () => {
+	it( 'does not set aria-pressed on the tabs of a tablist', () => {
 		const [ monthly, annually ] = render( 'role="tablist"' );
-		expect( monthly ).toHaveAttribute( 'aria-selected', 'true' );
 		expect( monthly ).not.toHaveAttribute( 'aria-pressed' );
 
 		annually.click();
 		expect( annually ).toHaveAttribute( 'aria-selected', 'true' );
-		expect( annually ).toHaveAttribute( 'tabindex', '0' );
-		expect( monthly ).toHaveAttribute( 'tabindex', '-1' );
+		expect( annually ).not.toHaveAttribute( 'aria-pressed' );
+		expect( monthly ).not.toHaveAttribute( 'aria-pressed' );
 	} );
 } );

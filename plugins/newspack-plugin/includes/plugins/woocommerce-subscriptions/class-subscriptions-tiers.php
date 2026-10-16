@@ -712,7 +712,7 @@ class Subscriptions_Tiers {
 			?>
 			<div class="newspack-ui__segmented-control__tabs">
 				<?php foreach ( $frequencies as $frequency ) : ?>
-					<button type="button" class="newspack-ui__button newspack-ui__button--small <?php echo esc_attr( $frequency === $current_frequency ? 'selected' : '' ); ?>">
+					<button type="button" class="newspack-ui__button newspack-ui__button--small <?php echo esc_attr( $frequency === $current_frequency ? 'selected' : '' ); ?>" aria-pressed="<?php echo esc_attr( $frequency === $current_frequency ? 'true' : 'false' ); ?>">
 						<?php echo esc_html( WooCommerce_Subscriptions::get_frequency_label( $frequency ) ); ?>
 					</button>
 				<?php endforeach; ?>

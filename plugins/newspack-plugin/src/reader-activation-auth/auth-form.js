@@ -413,9 +413,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 							authModal.style.display = 'none';
 						}
 
-						// startLoginFlow() disabled the submit buttons and dimmed the form for the in-flight
-						// register request. Restore them now so the auth form is interactive when we switch
-						// back to it in OTP state on Send code.
+						// startLoginFlow() disabled the submit buttons for the in-flight register request.
+						// Restore them now so the auth form is interactive when we switch back to it in
+						// OTP state on Send code.
 						submitButtons.forEach( button => {
 							button.disabled = false;
 							// startLoginFlow() added the spinner; this branch opens the verification modal

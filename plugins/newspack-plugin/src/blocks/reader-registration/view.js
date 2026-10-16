@@ -95,10 +95,26 @@ window.newspackRAS.push( function ( readerActivation ) {
 				container.classList.toggle( 'newspack-registration--in-progress', isLoading );
 			};
 
+			const setEmailError = hasError => {
+				if ( ! emailInput ) {
+					return;
+				}
+				emailInput.classList.toggle( 'newspack-ui__field-error', hasError );
+				if ( hasError ) {
+					emailInput.setAttribute( 'aria-invalid', 'true' );
+					if ( messageElement?.id ) {
+						emailInput.setAttribute( 'aria-describedby', messageElement.id );
+					}
+				} else {
+					emailInput.removeAttribute( 'aria-invalid' );
+					emailInput.removeAttribute( 'aria-describedby' );
+				}
+			};
+
 			form.startLoginFlow = () => {
 				messageElement.classList.add( 'newspack-registration--hidden' );
 				messageElement.innerHTML = '';
-				emailInput?.classList.remove( 'newspack-ui__field-error' );
+				setEmailError( false );
 				setLoading( true );
 			};
 
@@ -232,7 +248,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						}
 					}
 				} else {
-					emailInput?.classList.add( 'newspack-ui__field-error' );
+					setEmailError( true );
 					if ( messageNode ) {
 						messageNode.classList.add( 'newspack-ui__inline-error' );
 						messageElement.appendChild( messageNode );
