@@ -6,8 +6,8 @@
  * Listens for data event handler and integration sync retry exhaustion and
  * fires a unified alert action for each.
  *
- * Keeps one health record per integration so a broken integration pages
- * once, on the transition, and reports its recovery.
+ * Keeps one health record per integration so a broken integration is
+ * reported once, on the transition, and its recovery is reported too.
  *
  * Also scans the failure log for recurring patterns and fires an alert when a
  * threshold is exceeded within the configured time window.
@@ -46,7 +46,7 @@ class Alert_Manager {
 
 	/**
 	 * Consecutive failed hourly checks before an integration counts as
-	 * broken and pages once. Three outlasts the provider blips seen in the
+	 * broken and is reported once. Three outlasts the provider blips seen in the
 	 * alerts channel, which cleared within a single check.
 	 */
 	const HEALTH_BROKEN_THRESHOLD = 3;
@@ -292,7 +292,7 @@ class Alert_Manager {
 			return;
 		}
 		// A broken integration's failures share its outage's cause, which has
-		// already paged once; logged here, they would page it again every hour.
+		// already been reported; logged here, they would page it again every hour.
 		if ( self::is_integration_broken( $payload['integration_id'] ?? '' ) ) {
 			return;
 		}
@@ -325,7 +325,7 @@ class Alert_Manager {
 	 * Handle sync retry exhaustion.
 	 *
 	 * While the integration's health record is broken, the alert reaches the
-	 * log only: the outage has already paged once, and every contact whose
+	 * log only: the outage has already been reported, and every contact whose
 	 * retries run out during it would page again for the same cause.
 	 *
 	 * @param array $payload Alert data from Contact_Sync.
@@ -483,8 +483,8 @@ class Alert_Manager {
 		}
 
 		// Pre-filter once using the widest interval. A broken integration's
-		// outage has already paged, and entries logged before it turned broken
-		// would page it again.
+		// outage has already been reported, and entries logged before it turned
+		// broken would page it again.
 		$global_cutoff = $now - $max_interval;
 		$recent_log    = array_filter(
 			$log,
@@ -980,7 +980,7 @@ class Alert_Manager {
 
 	/**
 	 * Whether an integration's current health record is broken, meaning its
-	 * outage has already paged once.
+	 * outage has already been reported.
 	 *
 	 * @param string $integration_id The integration ID.
 	 * @return bool
