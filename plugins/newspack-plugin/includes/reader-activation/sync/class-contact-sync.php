@@ -325,6 +325,11 @@ class Contact_Sync extends Sync {
 	 * only this class knows which attempt of a chain a push was and whether
 	 * another attempt follows.
 	 *
+	 * A result that names `unsynced_fields` was accepted without those fields,
+	 * for example by a Mailchimp audience at its merge field cap. The row is
+	 * written as a permanent failure so it needs attention, while the caller
+	 * keeps its success: a retry would meet the same limit.
+	 *
 	 * @param Integration $integration The integration the operation targeted.
 	 * @param array       $args        Push_Log::record_attempt() arguments, without the
 	 *                                 integration's own. `direction` ('push' or 'deletion')
@@ -337,13 +342,21 @@ class Contact_Sync extends Sync {
 		// `direction` is this method's own argument, not a push log field.
 		$direction = $args['direction'] ?? 'push';
 		unset( $args['direction'] );
+		$error_class = \is_wp_error( $result ) ? self::classify_error( $result, $direction ) : null;
+		if ( \is_array( $result ) && ! empty( $result['unsynced_fields'] ) ) {
+			$args['result'] = new \WP_Error(
+				'fields_not_synced',
+				sprintf( 'The provider saved the contact without these fields: %s.', implode( ', ', (array) $result['unsynced_fields'] ) )
+			);
+			$error_class    = 'permanent_config';
+		}
 		return Push_Log::record_attempt(
 			array_merge(
 				$args,
 				[
 					'integration_id' => $integration->get_id(),
 					'hash_prefix'    => $integration->get_metadata_prefix(),
-					'error_class'    => \is_wp_error( $result ) ? self::classify_error( $result, $direction ) : null,
+					'error_class'    => $error_class,
 				]
 			)
 		);

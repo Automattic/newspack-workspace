@@ -657,7 +657,9 @@ abstract class Integration {
 	 * @param string     $context Optional. The context of the sync.
 	 * @param array|null $existing_contact Optional. Existing contact data if available.
 	 *
-	 * @return true|\WP_Error True on success or WP_Error on failure.
+	 * @return true|array|\WP_Error True on success or WP_Error on failure. A success that left
+	 *                              fields out can return an array listing their names under
+	 *                              `unsynced_fields`, so the push log records the push as incomplete.
 	 */
 	abstract public function push_contact_data( $contact, $context = '', $existing_contact = null );
 

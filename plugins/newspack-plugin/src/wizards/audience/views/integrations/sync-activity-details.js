@@ -14,8 +14,9 @@ import { API_BASE, PUSH_LOG_OPERATION_LABELS, formatTimestamp } from './constant
 import { getAttemptLabel, getErrorKindLabel, getRetryNote, getStatusDisplay } from './push-log-utils';
 
 // The flag push reached the provider; the list cleanup after it did not, so
-// the fields it sent did arrive.
-const DELIVERED_ERROR_CODES = [ 'flag_cleanup_failed' ];
+// the fields it sent did arrive. A push saved without some fields delivered
+// the rest; the error names the others.
+const DELIVERED_ERROR_CODES = [ 'flag_cleanup_failed', 'fields_not_synced' ];
 
 /**
  * The heading over the fields. A push that did not reach the provider never

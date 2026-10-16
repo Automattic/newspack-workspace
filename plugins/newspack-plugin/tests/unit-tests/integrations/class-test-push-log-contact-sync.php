@@ -426,6 +426,53 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Whether a retry is pending on a hook.
+	 *
+	 * @param string $hook The retry hook.
+	 * @return bool
+	 */
+	private function has_pending_retry( string $hook ): bool {
+		return ! empty(
+			\as_get_scheduled_actions(
+				[
+					'hook'   => $hook,
+					'status' => \ActionScheduler_Store::STATUS_PENDING,
+				],
+				'ids'
+			)
+		);
+	}
+
+	/**
+	 * A provider can accept a push and still leave fields out, as Mailchimp
+	 * does for fields it cannot create in an audience at its merge field cap.
+	 * A retry would hit the same limit, so the sync stays a success with
+	 * nothing scheduled, and the row is what tells the publisher.
+	 */
+	public function test_a_push_saved_without_some_fields_needs_attention_and_is_not_retried() {
+		$this->require_action_scheduler();
+		$this->factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
+		$spy              = $this->register_spy( 'unsynced-spy' );
+		$spy->push_result = [ 'unsynced_fields' => [ 'NP_Account_Deleted', 'NP_Membership_Status' ] ];
+
+		$sync_result = Contact_Sync::sync(
+			[
+				'email'    => 'reader@example.test',
+				'metadata' => [],
+			],
+			'Test context'
+		);
+
+		$row = $this->get_rows_by_integration()['unsynced-spy'];
+		$this->assertTrue( $sync_result );
+		$this->assertFalse( $this->has_pending_retry( Contact_Sync::RETRY_HOOK ) );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'permanent_config', $row['error_class'] );
+		$this->assertSame( 'fields_not_synced', $row['error_code'] );
+		$this->assertStringContainsString( 'NP_Account_Deleted, NP_Membership_Status', $row['error_message'] );
+	}
+
+	/**
 	 * Register a spy configured for account-deletion sync.
 	 *
 	 * @param string $integration_id The integration ID.
@@ -697,6 +744,25 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertCount( 2, $spy->cleanup_calls, 'The retry that ends the chain runs the cleanup again.' );
 		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
 		$this->assertSame( 'last_push_failed', $row['error_code'], 'The row keeps the push error.' );
+	}
+
+	/**
+	 * The deletion flag's fields are created on first use, so they are the
+	 * ones a full audience refuses. A flag saved without them must not read
+	 * as delivered, and retrying it would meet the same limit.
+	 */
+	public function test_a_deletion_flag_saved_without_its_fields_is_recorded_as_failed_and_not_retried() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'unsynced-flag-spy', 'flag' );
+		$spy->push_result = [ 'unsynced_fields' => [ 'NP_Account_Deleted' ] ];
+
+		$this->delete_sample_reader();
+
+		$row = $this->get_rows_by_integration()['unsynced-flag-spy'];
+		$this->assertFalse( $this->has_pending_retry( Contact_Sync::RETRY_DELETION_HOOK ) );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'fields_not_synced', $row['error_code'] );
+		$this->assertStringContainsString( 'NP_Account_Deleted', $row['error_message'] );
 	}
 
 	/**

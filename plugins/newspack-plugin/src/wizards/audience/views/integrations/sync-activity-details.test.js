@@ -210,6 +210,22 @@ describe( 'SyncActivityDetails', () => {
 		expect( screen.queryByRole( 'heading', { name: 'Not delivered' } ) ).toBeNull();
 	} );
 
+	it( 'reads a push saved without some fields as data that did arrive', async () => {
+		await renderDetails( {
+			entry: entry( {
+				status: 'failed',
+				error_class: 'permanent_config',
+				error_code: 'fields_not_synced',
+				error_message: 'The provider saved the contact without these fields: NP_Total Paid.',
+			} ),
+			compared_to: null,
+			fields,
+		} );
+
+		expect( screen.getByRole( 'heading', { name: 'Fields sent' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'heading', { name: 'Not delivered' } ) ).toBeNull();
+	} );
+
 	it( 'reads a benign flag cleanup failure as data that did not arrive', async () => {
 		// A benign result means the provider had no contact to change, so the
 		// cleanup failure that follows it never removed anything either.

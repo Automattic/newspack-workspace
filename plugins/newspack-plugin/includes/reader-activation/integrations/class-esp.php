@@ -465,7 +465,9 @@ class ESP extends Integration {
 	 *                                     before calling this method — by the time it
 	 *                                     runs the contact is known to exist.
 	 *
-	 * @return true|\WP_Error True on success or WP_Error on failure.
+	 * @return array|true|\WP_Error The upsert's contact data on success, naming under
+	 *                              `unsynced_fields` any metadata Mailchimp did not save,
+	 *                              or WP_Error on failure.
 	 */
 	public function push_contact_data( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		$can_sync = $this->can_sync( true );
