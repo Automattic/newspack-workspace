@@ -251,6 +251,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					setEmailError( true );
 					if ( messageNode ) {
 						messageNode.classList.add( 'newspack-ui__inline-error' );
+						messageNode.setAttribute( 'role', 'alert' );
 						messageElement.appendChild( messageNode );
 						messageElement.classList.remove( 'newspack-registration--hidden' );
 					}
