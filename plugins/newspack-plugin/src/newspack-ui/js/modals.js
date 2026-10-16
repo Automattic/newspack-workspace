@@ -2,9 +2,13 @@
  * Common functions for Newspack UI modals throughout My Account.
  */
 
-import { domReady } from '../../utils';
+import { domReady, isButtonLoading, setButtonLoading } from '../../utils';
 
 window.newspackRAS = window.newspackRAS || [];
+
+// Submit buttons this script marked busy. A form that submits but keeps the page,
+// like one posting into the modal checkout iframe, has nothing else to release them.
+const handedOffButtons = new WeakSet();
 
 /**
  * Handle overlays for a modal based on its state.
@@ -47,6 +51,14 @@ function setupModalObserver( modal ) {
 			if ( mutation.type === 'attributes' && mutation.attributeName === 'data-state' ) {
 				const newState = modal.dataset.state;
 				handleModalOverlay( modal, newState );
+				if ( newState === 'open' && mutation.oldValue !== 'open' ) {
+					modal.querySelectorAll( 'button[type="submit"]' ).forEach( button => {
+						if ( handedOffButtons.has( button ) ) {
+							handedOffButtons.delete( button );
+							setButtonLoading( button, false );
+						}
+					} );
+				}
 				if ( newState === 'closed' ) {
 					modal.dispatchEvent( new CustomEvent( 'closeModal' ) );
 				}
@@ -57,8 +69,23 @@ function setupModalObserver( modal ) {
 	observer.observe( modal, {
 		attributes: true,
 		attributeFilter: [ 'data-state' ],
+		attributeOldValue: true,
 	} );
 }
+
+// A page restored from the back/forward cache comes back with the busy buttons its
+// form left behind, and its modal may still be open.
+window.addEventListener( 'pageshow', event => {
+	if ( ! event.persisted ) {
+		return;
+	}
+	document.querySelectorAll( '.newspack-ui__modal-container button[type="submit"]' ).forEach( button => {
+		if ( handedOffButtons.has( button ) ) {
+			handedOffButtons.delete( button );
+			setButtonLoading( button, false );
+		}
+	} );
+} );
 
 domReady( function () {
 	const modals = [ ...document.querySelectorAll( '.newspack-ui__modal-container' ) ];
@@ -77,28 +104,32 @@ domReady( function () {
 			} );
 		} );
 
-		// Form-submit modals: show a spinner on the submit button while the form
-		// navigates away. For forms that reload the page this is the whole story —
-		// the class is gone after the reload. Forms that intercept submit and stay
-		// on the page (e.g. the reader auth form) must clear the class themselves;
-		// the auth form does this in reader-activation-auth/auth-form.js, where it
-		// also adds the class for its inline (non-modal) instances. Covers both
-		// shapes: form IS the modal content, or form lives inside a content section.
+		// Form-submit modals: show the loading state on the submit button while the
+		// form submits. A form that intercepts its own submit owns its button, so this
+		// only marks submits that go ahead, once every listener has had its say. A form
+		// that keeps the page, like one posting into an iframe, is released when its
+		// modal opens again. Covers both shapes: form IS the modal content, or form
+		// lives inside a content section.
 		const modalForm = modal.querySelector( 'form.newspack-ui__modal__content, .newspack-ui__modal__content form' );
 		if ( modalForm ) {
-			modalForm.addEventListener( 'submit', () => {
+			modalForm.addEventListener( 'submit', event => {
 				const submitButton = modalForm.querySelector( 'button[type="submit"]' );
-				if ( submitButton ) {
-					submitButton.classList.add( 'newspack-ui__button--loading' );
-					submitButton.setAttribute( 'aria-busy', 'true' );
-					submitButton.setAttribute( 'disabled', 'true' );
-				}
+				setTimeout( () => {
+					if ( submitButton && ! event.defaultPrevented ) {
+						setButtonLoading( submitButton, true );
+						handedOffButtons.add( submitButton );
+					}
+				} );
 			} );
 		}
 
 		const fetchButtons = [ ...modal.querySelectorAll( '[data-fetch]' ) ];
 		fetchButtons.forEach( fetchButton => {
 			fetchButton.addEventListener( 'click', e => {
+				if ( isButtonLoading( fetchButton ) ) {
+					e.preventDefault();
+					return;
+				}
 				const fetchData = JSON.parse( fetchButton.getAttribute( 'data-fetch' ) );
 				if ( fetchData.url && fetchData.nonce ) {
 					const errors = content.querySelector( '.newspack-ui__notice--error' );
@@ -106,9 +137,7 @@ domReady( function () {
 						errors.parentElement.removeChild( errors );
 					}
 					e.preventDefault();
-					fetchButton.setAttribute( 'disabled', true );
-					fetchButton.classList.add( 'newspack-ui__button--loading' );
-					fetchButton.setAttribute( 'aria-busy', 'true' );
+					setButtonLoading( fetchButton, true );
 					fetch( fetchData.url, {
 						method: fetchData.method,
 						body: JSON.stringify( fetchData.body || {} ),
@@ -140,9 +169,7 @@ domReady( function () {
 							content.insertBefore( errorsDiv, content.firstChild );
 						} )
 						.finally( () => {
-							fetchButton.removeAttribute( 'disabled' );
-							fetchButton.classList.remove( 'newspack-ui__button--loading' );
-							fetchButton.removeAttribute( 'aria-busy' );
+							setButtonLoading( fetchButton, false );
 						} );
 				}
 			} );

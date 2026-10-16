@@ -152,9 +152,9 @@ domReady( function () {
 		form.endFlow = ( message, status = 500, wasSubscribed = false, metadata = {}, isEmailError = false ) => {
 			container.setAttribute( 'data-status', status );
 			const messageNode = document.createElement( 'p' );
-			emailInput.removeAttribute( 'disabled' );
+			emailInput.readOnly = false;
 			submit.removeChild( spinner );
-			submit.removeAttribute( 'disabled' );
+			submit.removeAttribute( 'aria-disabled' );
 			submit.removeAttribute( 'aria-busy' );
 			form.classList.remove( 'in-progress' );
 			messageNode.innerHTML = wasSubscribed ? container.getAttribute( 'data-success-message' ) : message;
@@ -198,12 +198,28 @@ domReady( function () {
 				}
 			}
 		};
+		// The button and field stay focusable while the request runs, so the busy state
+		// is announced and focus stays put. A second press does nothing: cancelling the
+		// click also cancels a submit from Enter in the field, before reCAPTCHA sees it.
+		submit.addEventListener(
+			'click',
+			ev => {
+				if ( form.classList.contains( 'in-progress' ) ) {
+					ev.preventDefault();
+					ev.stopImmediatePropagation();
+				}
+			},
+			true
+		);
 		form.addEventListener( 'submit', ev => {
 			ev.preventDefault();
+			if ( form.classList.contains( 'in-progress' ) ) {
+				return;
+			}
 			messageContainer.innerHTML = '';
 			setEmailError( false );
 			form.classList.add( 'in-progress' );
-			submit.disabled = true;
+			submit.setAttribute( 'aria-disabled', 'true' );
 			submit.setAttribute( 'aria-busy', 'true' );
 			submit.appendChild( spinner );
 
@@ -218,8 +234,7 @@ domReady( function () {
 			if ( nonce ) {
 				body.set( 'newspack_newsletters_subscribe', nonce );
 			}
-			emailInput.setAttribute( 'disabled', 'true' );
-			submit.setAttribute( 'disabled', 'true' );
+			emailInput.readOnly = true;
 
 			const submitSubscribe = () => {
 				fetch( form.getAttribute( 'action' ) || window.location.pathname, {

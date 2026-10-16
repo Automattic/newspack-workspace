@@ -467,7 +467,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						return false;
 					}
 					const input = $nyp.find( 'input[name="price"]' );
-					input.attr( 'disabled', true );
+					input.prop( 'readOnly', true );
 					const data = {
 						_ajax_nonce: newspackBlocksModalCheckout.nyp_nonce,
 						action: 'process_name_your_price_request',
@@ -501,7 +501,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						},
 						complete: () => {
 							unblockForm( $nyp );
-							input.attr( 'disabled', false );
+							input.prop( 'readOnly', false );
 							input.focus();
 						},
 					} );
@@ -550,7 +550,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						return false;
 					}
 					const input = $quantity.find( 'input[name="quantity"]' );
-					input.attr( 'disabled', true );
+					input.prop( 'readOnly', true );
 					const data = {
 						_ajax_nonce: newspackBlocksModalCheckout.quantity_nonce,
 						action: 'process_quantity_request',
@@ -590,7 +590,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						error: () => showQuantityResult( false, newspackBlocksModalCheckout.quantity_error ),
 						complete: () => {
 							unblockForm( $quantity );
-							input.attr( 'disabled', false );
+							input.prop( 'readOnly', false );
 							input.focus();
 						},
 					} );
@@ -607,6 +607,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				function handleFormSubmit( ev ) {
 					ev.preventDefault();
 					ev.stopImmediatePropagation();
+					if ( $form.is( '.modal-processing' ) ) {
+						return;
+					}
 					validateForm();
 					managePagination( 'continue' ); // TODOGA4: this is firing whether or not the form validates.
 				}
@@ -898,7 +901,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', true ).attr( 'aria-busy', 'true' ).addClass( `${ CLASS_PREFIX }__button--loading` );
+						$( el ).attr( 'aria-disabled', 'true' ).attr( 'aria-busy', 'true' ).addClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.addClass( 'modal-processing' );
 					return true;
@@ -917,7 +920,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', false ).removeAttr( 'aria-busy' ).removeClass( `${ CLASS_PREFIX }__button--loading` );
+						$( el ).removeAttr( 'aria-disabled' ).removeAttr( 'aria-busy' ).removeClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.removeClass( 'modal-processing' );
 					return true;

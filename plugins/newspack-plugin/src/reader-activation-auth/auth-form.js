@@ -3,7 +3,7 @@
 /**
  * Internal dependencies.
  */
-import { domReady, formatTime } from '../utils';
+import { domReady, formatTime, setButtonLoading } from '../utils';
 import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
 import { openVerificationModal } from './verification-modal';
@@ -105,14 +105,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 				if ( ! FORM_ALLOWED_ACTIONS.includes( action ) ) {
 					action = 'signin';
 				}
-				// Moving to any form step ends the previous step's in-flight request, so clear the
-				// submit button's loading spinner here. This is the single owner for the transition
-				// case (signin -> pwd/otp, -> success, back button): startLoginFlow() adds the class,
-				// every step change removes it. Same-state errors clear it in endLoginFlow() instead.
-				submitButtons.forEach( button => {
-					button.classList.remove( 'newspack-ui__button--loading' );
-					button.removeAttribute( 'aria-busy' );
-				} );
+				// Moving to any form step ends the previous step's in-flight request, so release the
+				// submit button's loading state here. This is the single owner for the transition
+				// case (signin -> pwd/otp, -> success, back button): startLoginFlow() sets it, every
+				// step change clears it. Same-state errors clear it in endLoginFlow() instead.
+				submitButtons.forEach( button => setButtonLoading( button, false ) );
 				// Signin and success steps should clear any modal errors or messages.
 				if ( 'signin' === action || 'success' === action ) {
 					form.setMessageContent();
@@ -286,14 +283,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 							} )
 							.finally( () => {
 								handleOTPTimer();
-								submitButtons.forEach( submitButton => {
-									submitButton.disabled = false;
-									// startLoginFlow() added the spinner for this send/resend request; this
-									// branch doesn't route through setFormAction() on error, so clear it here
-									// in lockstep with the disabled attribute.
-									submitButton.classList.remove( 'newspack-ui__button--loading' );
-									submitButton.removeAttribute( 'aria-busy' );
-								} );
+								// startLoginFlow() set the loading state for this send/resend request; this
+								// branch doesn't route through setFormAction() on error, so clear it here.
+								submitButtons.forEach( submitButton => setButtonLoading( submitButton, false ) );
 							} );
 					} );
 				} );
@@ -303,16 +295,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 			form.startLoginFlow = () => {
 				container.removeAttribute( 'data-form-status' );
-				submitButtons.forEach( button => {
-					button.disabled = true;
-					// Add the loading spinner here so both the modal and the inline auth form (e.g.
-					// /my-account) show it — newspack-ui/js/modals.js also adds it, but only for forms
-					// inside a modal. Removal is centralized in setFormAction() (on every step change)
-					// and endLoginFlow() (on errors), with the few AJAX branches that bypass those
-					// clearing it directly.
-					button.classList.add( 'newspack-ui__button--loading' );
-					button.setAttribute( 'aria-busy', 'true' );
-				} );
+				// Set the loading state here for both the modal and the inline auth form (e.g.
+				// /my-account). Removal is centralized in setFormAction() (on every step change)
+				// and endLoginFlow() (on errors), with the few AJAX branches that bypass those
+				// clearing it directly.
+				submitButtons.forEach( button => setButtonLoading( button, true ) );
 				form.setMessageContent();
 			};
 
@@ -330,11 +317,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						form.setMessageContent( message, true );
 						messageContentElement.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
 					}
-					submitButtons.forEach( button => {
-						button.disabled = false;
-						button.classList.remove( 'newspack-ui__button--loading' );
-						button.removeAttribute( 'aria-busy' );
-					} );
+					submitButtons.forEach( button => setButtonLoading( button, false ) );
 				}
 				if ( status === 200 ) {
 					if ( data?.email ) {
@@ -413,17 +396,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 							authModal.style.display = 'none';
 						}
 
-						// startLoginFlow() disabled the submit buttons for the in-flight register request.
-						// Restore them now so the auth form is interactive when we switch back to it in
+						// startLoginFlow() set the loading state for the in-flight register request. This
+						// branch opens the verification modal instead of routing through setFormAction(),
+						// so clear it now, leaving the auth form interactive when we switch back to it in
 						// OTP state on Send code.
-						submitButtons.forEach( button => {
-							button.disabled = false;
-							// startLoginFlow() added the spinner; this branch opens the verification modal
-							// instead of routing through setFormAction(), so clear it here in lockstep
-							// with the disabled attribute.
-							button.classList.remove( 'newspack-ui__button--loading' );
-							button.removeAttribute( 'aria-busy' );
-						} );
+						submitButtons.forEach( button => setButtonLoading( button, false ) );
 
 						// Restore the auth modal's inline display before invoking any callback
 						// that might close or re-open it. Skipping this leaves data-state='open'
@@ -600,11 +577,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 												readerActivation.setOTPTimer();
 												handleOTPTimer();
 											}
-											// The spinner is already cleared by setFormAction() above; just
-											// re-enable the button for the new step.
-											submitButtons.forEach( button => {
-												button.disabled = false;
-											} );
 										} else {
 											form.endLoginFlow( message, status, data );
 										}
@@ -626,14 +598,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 							email: body.get( 'npe' ),
 							onProceed: submitForm,
 							onCancel: () => {
-								submitButtons.forEach( button => {
-									button.disabled = false;
-									// startLoginFlow() added the spinner; cancelling keeps us on the signin step
-									// without routing through setFormAction(), so clear it here in lockstep
-									// with the disabled attribute.
-									button.classList.remove( 'newspack-ui__button--loading' );
-									button.removeAttribute( 'aria-busy' );
-								} );
+								// startLoginFlow() set the loading state; cancelling keeps us on the signin step
+								// without routing through setFormAction(), so clear it here.
+								submitButtons.forEach( button => setButtonLoading( button, false ) );
 							},
 						} );
 					} else {
