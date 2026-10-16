@@ -943,9 +943,9 @@ final class Push_Log {
 		global $wpdb;
 		// The database quotes what a statement failed on (a duplicate entry, the
 		// text near a syntax error), which can be the reader's address or
-		// payload. The words around the quotes say what went wrong, so only the
-		// quoted part goes. First quote to last, because an address can itself
-		// hold a quote.
+		// payload. The words around the quotes name the kind of failure, though
+		// not the column or key it hit, so only the quoted part goes. First quote
+		// to last, because an address can itself hold a quote.
 		$db_error = preg_replace( "/'.*'/s", "'…'", $wpdb->last_error );
 
 		// A table that disappears after its version was recorded (a restore, a
@@ -957,10 +957,15 @@ final class Push_Log {
 			delete_option( self::TABLE_VERSION_OPTION );
 		}
 
+		// An empty email keeps the report from naming whoever's request hit the
+		// broken table, which during a sync is often the reader being synced.
 		Logger::newspack_log(
 			'newspack_integrations_push_log_write_failed',
 			'Could not write to the integrations push log.',
-			[ 'db_error' => $db_error ],
+			[
+				'db_error'   => $db_error,
+				'user_email' => '',
+			],
 			'error'
 		);
 	}

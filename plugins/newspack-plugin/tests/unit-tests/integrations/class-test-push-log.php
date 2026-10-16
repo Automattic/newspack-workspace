@@ -431,13 +431,15 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	/**
 	 * The failure report goes to a remote log. The database's own message can
 	 * quote the statement it failed on, address included, so the report keeps
-	 * what went wrong and leaves out what was quoted.
+	 * what went wrong and leaves out what was quoted. Nor does it name the
+	 * user whose request hit the table, who during a sync is often the reader.
 	 */
-	public function test_a_write_failure_report_keeps_the_database_error_but_not_the_values_it_quotes() {
-		$reported_data  = null;
-		$capture_report = function ( $code, $message, $params ) use ( &$reported_data ) {
+	public function test_a_write_failure_report_keeps_the_database_error_but_names_no_reader() {
+		wp_set_current_user( self::factory()->user->create( [ 'user_email' => "o'brien@example.test" ] ) );
+		$reported_params = null;
+		$capture_report  = function ( $code, $message, $params ) use ( &$reported_params ) {
 			if ( 'newspack_integrations_push_log_write_failed' === $code ) {
-				$reported_data = $params['data'];
+				$reported_params = $params;
 			}
 		};
 		// A statement whose error quotes the address the way a syntax error
@@ -456,8 +458,9 @@ class Test_Push_Log extends \WP_UnitTestCase {
 		remove_action( 'newspack_log', $capture_report, 10 );
 
 		$this->assertSame( 0, $row_id, 'The write did fail.' );
-		$this->assertStringContainsString( 'SQL syntax', $reported_data['db_error'], 'The report still says what went wrong.' );
-		$this->assertStringNotContainsString( 'brien', $reported_data['db_error'] );
+		$this->assertStringContainsString( 'SQL syntax', $reported_params['data']['db_error'], 'The report still says what went wrong.' );
+		$this->assertStringNotContainsString( 'brien', $reported_params['data']['db_error'] );
+		$this->assertSame( '', $reported_params['user_email'], 'The report names no user.' );
 	}
 
 	/**
