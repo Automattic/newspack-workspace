@@ -65,9 +65,9 @@
 				input[type="checkbox"] {
 					border-color: var(--newspack-ui-color-input-border, var(--newspack-theme-color-border, #949494));
 					border-radius: var(--newspack-ui-border-radius-2xs, 2px);
-					height: var(--newspack-ui-control-size, 24px) !important;
+					height: var(--newspack-ui-control-size, 20px) !important;
 					transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
-					width: var(--newspack-ui-control-size, 24px) !important;
+					width: var(--newspack-ui-control-size, 20px) !important;
 
 					&:hover:not(:checked, :disabled) {
 						border-color: var(--newspack-ui-color-input-border-hover, #5d5d5d);
@@ -235,12 +235,14 @@
 		}
 
 		form:has(input[value*="invalid_email"]),
-		&[data-status="400"] {
+		&[data-status="400"],
+		&[data-status="500"] {
 			+ .newspack-newsletters-subscribe__response,
 			.newspack-newsletters-subscribe__response {
 				background: none;
 				border-radius: 0;
 				display: block;
+				justify-items: start;
 				margin-top: var(--newspack-ui-spacer-base, 8px);
 
 				p {
@@ -248,7 +250,20 @@
 					font-size: var(--newspack-ui-font-size-xs, 14px);
 					font-weight: 400;
 					line-height: var(--newspack-ui-line-height-xs, 1.4286);
-					text-align: initial;
+					padding-inline-start: calc(var(--newspack-ui-spacer-4, 20px) + var(--newspack-ui-spacer-1, 8px) / 2);
+					position: relative;
+					text-align: start;
+
+					&::before {
+						background: currentcolor;
+						content: "";
+						height: var(--newspack-ui-spacer-4, 20px);
+						inset-inline-start: 0;
+						mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12.218 5.377a.25.25 0 0 0-.436 0l-7.29 12.96a.25.25 0 0 0 .218.373h14.58a.25.25 0 0 0 .218-.372l-7.29-12.96Zm-1.743-.735c.669-1.19 2.381-1.19 3.05 0l7.29 12.96a1.75 1.75 0 0 1-1.525 2.608H4.71a1.75 1.75 0 0 1-1.525-2.608l7.29-12.96ZM12.75 17.46h-1.5v-1.5h1.5v1.5Zm-1.5-3h1.5v-5h-1.5v5Z'/%3E%3C/svg%3E") center / contain no-repeat;
+						position: absolute;
+						top: 0;
+						width: var(--newspack-ui-spacer-4, 20px);
+					}
 				}
 			}
 
