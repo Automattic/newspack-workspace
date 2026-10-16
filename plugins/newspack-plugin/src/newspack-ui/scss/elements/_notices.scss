@@ -168,12 +168,6 @@
 					margin-bottom: var(--newspack-ui-spacer-2);
 				}
 
-				&[data-type="warning"] {
-					border-left: 3px solid var(--newspack-ui-color-warning-30);
-				}
-				&[data-type="error"] {
-					border-left: 3px solid var(--newspack-ui-color-error-50);
-				}
 			}
 			&__icon {
 				order: 1;
