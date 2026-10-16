@@ -3,6 +3,7 @@
  */
 import { NavigableRegion } from '@wordpress/admin-ui';
 import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { useViewportMatch } from '@wordpress/compose';
 import { cloneElement, isValidElement, useState } from '@wordpress/element';
 import { Icon } from '@wordpress/icons';
 import { Stack, Text } from '@wordpress/ui';
@@ -49,7 +50,11 @@ import './style.scss';
 const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigation, className, children } ) => {
 	const currentLabel = breadcrumbItems[ breadcrumbItems.length - 1 ]?.label;
 	const [ crumbsElement, setCrumbsElement ] = useState( null );
-	const crumbEdges = useScrollEdges( crumbsElement, breadcrumbItems.map( item => item.label ).join( '\u0000' ) );
+	const crumbsKey = breadcrumbItems
+		.map( ( item, index ) => `${ 'string' === typeof item.label ? item.label : index }|${ item.count ?? '' }` )
+		.join( '\u0000' );
+	const crumbEdges = useScrollEdges( crumbsElement, crumbsKey );
+	const isWide = useViewportMatch( 'medium' );
 	const hasActionList = isActionList( actions );
 
 	const renderShell = ( tabBar, content ) => (
@@ -68,8 +73,8 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 									'is-overflowing-end': crumbEdges.end,
 								} ) }
 								justify="flex-start"
-								// A trail with no links would otherwise leave its hidden start out of keyboard reach.
-								tabIndex={ crumbEdges.overflowing && ! crumbsElement?.querySelector( 'a[href]' ) ? 0 : undefined }
+								// Tabbing through the links can't bring the middle of a long current-page title into view.
+								tabIndex={ ! isWide && crumbEdges.overflowing ? 0 : undefined }
 							>
 								<Breadcrumbs items={ breadcrumbItems } />
 							</HStack>

@@ -76,6 +76,40 @@ describe( 'Page header actions as data', () => {
 		expect( screen.queryByRole( 'button', { name: 'More actions' } ) ).not.toBeInTheDocument();
 	} );
 
+	it( 'shows no menu from 782px when every action is a button', () => {
+		useViewportMatch.mockReturnValue( true );
+		renderPage( [ { type: 'primary', label: 'Save', onClick: jest.fn() } ] );
+
+		expect( screen.getByRole( 'button', { name: 'Save' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'More actions' } ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'groups collapsed buttons ahead of the menu-only groups below 782px', () => {
+		useViewportMatch.mockReturnValue( false );
+		renderPage( [
+			{ type: 'secondary', label: 'Preview' },
+			{ type: 'primary', label: 'Save' },
+			{ type: 'more', label: 'Rename' },
+			{ type: 'more', label: 'Delete', separator: true, destructive: true },
+		] );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'More actions' } ) );
+		const groups = screen
+			.getAllByRole( 'group' )
+			.map( group => [ ...group.querySelectorAll( '[role="menuitem"]' ) ].map( item => item.textContent ) );
+		expect( groups ).toEqual( [ [ 'Preview' ], [ 'Rename' ], [ 'Delete' ] ] );
+	} );
+
+	it( 'renders an action list with a missing label instead of crashing', () => {
+		useViewportMatch.mockReturnValue( true );
+		renderPage( [
+			{ type: 'primary', onClick: jest.fn() },
+			{ type: 'secondary', label: 'Preview' },
+		] );
+
+		expect( screen.getByRole( 'button', { name: 'Preview' } ) ).toBeInTheDocument();
+	} );
+
 	it( 'still renders actions given as nodes', () => {
 		useViewportMatch.mockReturnValue( false );
 		renderPage( <button>Add new</button> );
@@ -88,6 +122,7 @@ describe( 'Page header actions as data', () => {
 describe( 'isActionList', () => {
 	it( 'accepts action objects and rejects nodes', () => {
 		expect( isActionList( actions ) ).toBe( true );
+		expect( isActionList( [ { type: 'primary' } ] ) ).toBe( true );
 		expect( isActionList( [] ) ).toBe( false );
 		expect( isActionList( [ <button key="a">A</button> ] ) ).toBe( false );
 		expect( isActionList( <button>A</button> ) ).toBe( false );

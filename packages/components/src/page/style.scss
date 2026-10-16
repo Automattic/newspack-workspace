@@ -113,7 +113,7 @@ $dataviews-compact-max-width: 430px;
 	padding-block: calc((#{wp-vars.$button-size} - var(--wpds-typography-line-height-md)) / 2);
 }
 
-@media (max-width: #{wp-breakpoints.$break-medium - 1px}) {
+@media not all and (min-width: #{wp-breakpoints.$break-medium}) {
 	.newspack-page__header-title {
 		flex: 1 1 0;
 		min-width: 50%;
@@ -125,8 +125,10 @@ $dataviews-compact-max-width: 430px;
 		--newspack-page-crumbs-end: right;
 
 		flex: 1 1 auto;
+		margin-inline: calc(-1 * #{wp-vars.$border-width-focus-fallback});
 		overflow-x: auto;
 		overscroll-behavior-inline: none;
+		padding-inline: wp-vars.$border-width-focus-fallback;
 		scrollbar-width: none;
 
 		&:dir(rtl) {
@@ -136,6 +138,10 @@ $dataviews-compact-max-width: 430px;
 
 		&::-webkit-scrollbar {
 			display: none;
+		}
+
+		> nav {
+			flex-shrink: 0;
 		}
 
 		.newspack-breadcrumbs__list {
