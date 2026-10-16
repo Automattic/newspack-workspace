@@ -3,7 +3,7 @@
 /**
  * Internal dependencies.
  */
-import { domReady } from '../utils';
+import { domReady, setButtonLoading } from '../utils';
 
 import './style.scss';
 
@@ -60,7 +60,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				}
 
 				form.classList.add( 'processing' );
-				form.querySelector( 'button' ).setAttribute( 'disabled', 'disabled' );
+				setButtonLoading( form.querySelector( 'button' ), true );
 
 				// Populate email if not already set.
 				const emailInput = form.querySelector( 'input[name="email_address"]' );
@@ -94,7 +94,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 							container.newslettersSignupCallback();
 						}
 						form.classList.remove( 'processing' );
-						form.querySelector( 'button' ).removeAttribute( 'disabled' );
+						setButtonLoading( form.querySelector( 'button' ), false );
 					} );
 			};
 

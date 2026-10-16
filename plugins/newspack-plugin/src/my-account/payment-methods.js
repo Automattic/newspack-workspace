@@ -6,13 +6,24 @@
 import { domReady, isButtonLoading, setButtonLoading } from '../utils';
 
 domReady( function () {
-	const { nonce, rest_url, should_rate_limit } = newspack_my_account || {};
+	const { labels, nonce, rest_url, should_rate_limit } = newspack_my_account || {};
 
 	// Rate limit the add payment method form.
 	const addPaymentForm = document.getElementById( 'add_payment_method' );
 	if ( addPaymentForm && Boolean( should_rate_limit ) ) {
 		const errorContainer = document.querySelector( '.woocommerce-notices-wrapper' );
 		const submitButton = addPaymentForm.querySelector( 'input[type="submit"], button[type="submit"]' );
+		const showError = message => {
+			const error = document.createElement( 'div' );
+			const errorUl = document.createElement( 'ul' );
+			const errorLi = document.createElement( 'li' );
+			errorUl.classList.add( 'woocommerce-error' );
+			errorLi.textContent = message;
+			error.appendChild( errorUl );
+			errorUl.appendChild( errorLi );
+			errorContainer.appendChild( error );
+			errorContainer.scrollIntoView( { behavior: 'smooth' } );
+		};
 		const rateLimit = function ( e ) {
 			if ( addPaymentForm.hasAttribute( 'data-check-rate-limit' ) ) {
 				e.preventDefault();
@@ -29,25 +40,18 @@ domReady( function () {
 					}
 					setButtonLoading( submitButton, false );
 
-					// Call onSuccess with parsed JSON if the request is successful.
-					if ( xhr.status >= 200 && xhr.status < 300 ) {
-						const data = JSON.parse( xhr.responseText );
-						if ( data?.success ) {
-							addPaymentForm.removeAttribute( 'data-check-rate-limit' );
-							addPaymentForm.requestSubmit( submitButton );
-							addPaymentForm.setAttribute( 'data-check-rate-limit', '1' );
-						}
-						if ( data?.error ) {
-							const error = document.createElement( 'div' );
-							const errorUl = document.createElement( 'ul' );
-							const errorLi = document.createElement( 'li' );
-							errorUl.classList.add( 'woocommerce-error' );
-							errorLi.textContent = data.error;
-							error.appendChild( errorUl );
-							errorUl.appendChild( errorLi );
-							errorContainer.appendChild( error );
-							errorContainer.scrollIntoView( { behavior: 'smooth' } );
-						}
+					if ( xhr.status < 200 || xhr.status >= 300 ) {
+						showError( labels?.generic_error );
+						return;
+					}
+					const data = JSON.parse( xhr.responseText );
+					if ( data?.success ) {
+						addPaymentForm.removeAttribute( 'data-check-rate-limit' );
+						addPaymentForm.requestSubmit( submitButton );
+						addPaymentForm.setAttribute( 'data-check-rate-limit', '1' );
+					}
+					if ( data?.error ) {
+						showError( data.error );
 					}
 				};
 

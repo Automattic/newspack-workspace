@@ -36,6 +36,17 @@ describe( 'setButtonLoading', () => {
 		expect( isButtonLoading( button ) ).toBe( true );
 	} );
 
+	it( "stops a press while loading before the button's own click handler runs", () => {
+		const { button } = renderForm();
+		const onClick = jest.fn();
+		button.addEventListener( 'click', onClick );
+
+		setButtonLoading( button, true );
+		button.click();
+
+		expect( onClick ).not.toHaveBeenCalled();
+	} );
+
 	it( 'ignores a press while loading, and submits again once cleared', () => {
 		const { button, onSubmit } = renderForm();
 

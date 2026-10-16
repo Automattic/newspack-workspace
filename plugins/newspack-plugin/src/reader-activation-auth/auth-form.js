@@ -105,10 +105,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 				if ( ! FORM_ALLOWED_ACTIONS.includes( action ) ) {
 					action = 'signin';
 				}
-				// Moving to any form step ends the previous step's in-flight request, so clear the
-				// submit button's loading spinner here. This is the single owner for the transition
-				// case (signin -> pwd/otp, -> success, back button): startLoginFlow() adds the class,
-				// every step change removes it. Same-state errors clear it in endLoginFlow() instead.
+				// Moving to any form step ends the previous step's in-flight request, so release the
+				// submit button's loading state here. This is the single owner for the transition
+				// case (signin -> pwd/otp, -> success, back button): startLoginFlow() sets it, every
+				// step change clears it. Same-state errors clear it in endLoginFlow() instead.
 				submitButtons.forEach( button => setButtonLoading( button, false ) );
 				// Signin and success steps should clear any modal errors or messages.
 				if ( 'signin' === action || 'success' === action ) {

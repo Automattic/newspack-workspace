@@ -47,6 +47,15 @@ function setupModalObserver( modal ) {
 			if ( mutation.type === 'attributes' && mutation.attributeName === 'data-state' ) {
 				const newState = modal.dataset.state;
 				handleModalOverlay( modal, newState );
+				if ( newState === 'open' ) {
+					// A form that submitted without leaving the page, such as one handing off to
+					// modal checkout, keeps its button busy. Opening the modal again starts over.
+					modal.querySelectorAll( 'button[type="submit"]' ).forEach( button => {
+						if ( isButtonLoading( button ) ) {
+							setButtonLoading( button, false );
+						}
+					} );
+				}
 				if ( newState === 'closed' ) {
 					modal.dispatchEvent( new CustomEvent( 'closeModal' ) );
 				}
@@ -77,13 +86,13 @@ domReady( function () {
 			} );
 		} );
 
-		// Form-submit modals: show a spinner on the submit button while the form
-		// navigates away. For forms that reload the page this is the whole story —
-		// the class is gone after the reload. Forms that intercept submit and stay
-		// on the page (e.g. the reader auth form) must clear the class themselves;
-		// the auth form does this in reader-activation-auth/auth-form.js, where it
-		// also adds the class for its inline (non-modal) instances. Covers both
-		// shapes: form IS the modal content, or form lives inside a content section.
+		// Form-submit modals: show the loading state on the submit button while the
+		// form navigates away. For forms that reload the page this is the whole story.
+		// Forms that intercept submit and stay on the page (e.g. the reader auth form)
+		// release the button with setButtonLoading( button, false ) themselves; the auth
+		// form does this in reader-activation-auth/auth-form.js, where it also sets the
+		// state for its inline (non-modal) instances. Covers both shapes: form IS the
+		// modal content, or form lives inside a content section.
 		const modalForm = modal.querySelector( 'form.newspack-ui__modal__content, .newspack-ui__modal__content form' );
 		if ( modalForm ) {
 			modalForm.addEventListener( 'submit', () => {

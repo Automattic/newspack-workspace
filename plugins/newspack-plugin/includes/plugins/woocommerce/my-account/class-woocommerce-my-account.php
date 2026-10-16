@@ -338,6 +338,7 @@ class WooCommerce_My_Account {
 				[
 					'labels'                               => [
 						'cancel_subscription_message' => __( 'Are you sure you want to cancel this subscription?', 'newspack-plugin' ),
+						'generic_error'               => __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
 					],
 					'rest_url'                             => get_rest_url(),
 					'should_rate_limit'                    => WooCommerce_Connection::rate_limiting_enabled(),
