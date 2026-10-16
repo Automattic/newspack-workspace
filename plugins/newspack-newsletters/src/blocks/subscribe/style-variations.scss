@@ -63,14 +63,14 @@
 				margin-right: var(--newspack-ui-spacer-3, 16px);
 
 				input[type="checkbox"] {
-					border-color: var(--newspack-ui-color-input-border, var(--newspack-theme-color-border));
+					border-color: var(--newspack-ui-color-input-border, var(--newspack-theme-color-border, #949494));
 					border-radius: var(--newspack-ui-border-radius-2xs, 2px);
 					height: var(--newspack-ui-control-size, 24px) !important;
 					transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
 					width: var(--newspack-ui-control-size, 24px) !important;
 
 					&:hover:not(:checked, :disabled) {
-						border-color: var(--newspack-ui-color-input-border-hover);
+						border-color: var(--newspack-ui-color-input-border-hover, #5d5d5d);
 					}
 
 					&:focus {
@@ -89,14 +89,14 @@
 					}
 
 					&:disabled {
-						background: var(--newspack-ui-color-input-bg-disabled);
-						border-color: var(--newspack-ui-color-input-border-disabled);
+						background: var(--newspack-ui-color-input-bg-disabled, #f0f0f0);
+						border-color: var(--newspack-ui-color-input-border-disabled, #ddd);
 						opacity: 1;
 					}
 
 					&:checked:disabled {
-						background: var(--newspack-ui-color-neutral-60);
-						border-color: var(--newspack-ui-color-neutral-60);
+						background: var(--newspack-ui-color-neutral-60, #6c6c6c);
+						border-color: var(--newspack-ui-color-neutral-60, #6c6c6c);
 					}
 				}
 			}
@@ -142,7 +142,7 @@
 		input[type="email"],
 		input[type="text"] {
 			background: var(--newspack-ui-color-neutral-0, #fff);
-			border: 1px solid var(--newspack-ui-color-input-border, #ccc);
+			border: 1px solid var(--newspack-ui-color-input-border, #949494);
 			border-radius: var(--newspack-ui-border-radius-m, 6px);
 			color: var(--newspack-ui-color-neutral-90, #1e1e1e);
 			font-family: inherit;
@@ -157,7 +157,7 @@
 			}
 
 			&:hover:not(:disabled) {
-				border-color: var(--newspack-ui-color-input-border-hover);
+				border-color: var(--newspack-ui-color-input-border-hover, #5d5d5d);
 			}
 
 			&:focus {
@@ -167,9 +167,9 @@
 
 			&:disabled {
 				-webkit-text-fill-color: currentcolor;
-				background: var(--newspack-ui-color-input-bg-disabled);
-				border-color: var(--newspack-ui-color-input-border-disabled);
-				color: var(--newspack-ui-color-neutral-60);
+				background: var(--newspack-ui-color-input-bg-disabled, #f0f0f0);
+				border-color: var(--newspack-ui-color-input-border-disabled, #ddd);
+				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
 				cursor: not-allowed;
 				opacity: 1;
 			}
@@ -253,8 +253,8 @@
 			}
 
 			.newspack-newsletters-email-input {
-				--newspack-ui-color-input-border: var(--newspack-ui-color-error-60);
-				--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60);
+				--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, #b32d2e);
+				--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, #b32d2e);
 
 				input[type="email"] {
 					box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
