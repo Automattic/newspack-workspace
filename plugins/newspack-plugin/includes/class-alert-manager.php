@@ -771,7 +771,13 @@ class Alert_Manager {
 			);
 			return '';
 		}
-		return is_string( $issue_url ) ? esc_url_raw( $issue_url, [ 'https' ] ) : '';
+		// Checked on the raw value: esc_url_raw() prefixes https:// to a string
+		// without a scheme and passes relative references through, and either
+		// would stop the page for an outage nothing tracks.
+		if ( ! is_string( $issue_url ) || 'https' !== wp_parse_url( $issue_url, PHP_URL_SCHEME ) || ! wp_parse_url( $issue_url, PHP_URL_HOST ) ) {
+			return '';
+		}
+		return esc_url_raw( $issue_url, [ 'https' ] );
 	}
 
 	/**

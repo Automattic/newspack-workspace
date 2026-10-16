@@ -1635,7 +1635,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 
 	/**
 	 * An outage pages when nothing usable tracks it: a callback that throws,
-	 * or one that returns something other than an https URL.
+	 * or one that returns something other than an absolute https URL.
 	 *
 	 * @dataProvider data_unusable_issue_urls
 	 *
@@ -1656,14 +1656,17 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	 */
 	public function data_unusable_issue_urls() {
 		return [
-			'throws'       => [
+			'throws'            => [
 				function () {
 					throw new \RuntimeException( 'Simulated hub failure.' );
 				},
 			],
-			'plain http'   => [ fn() => 'http://linear.app/example/issue/NP-1' ],
-			'not a URL'    => [ fn() => 'javascript:alert(1)' ],
-			'not a string' => [ fn() => [ 'https://linear.app/example/issue/NP-1' ] ],
+			'plain http'        => [ fn() => 'http://linear.app/example/issue/NP-1' ],
+			'no scheme'         => [ fn() => 'NP-1' ],
+			'relative'          => [ fn() => '/issue/NP-1' ],
+			'protocol-relative' => [ fn() => '//linear.app/example/issue/NP-1' ],
+			'no host'           => [ fn() => 'https://' ],
+			'not a string'      => [ fn() => [ 'https://linear.app/example/issue/NP-1' ] ],
 		];
 	}
 
