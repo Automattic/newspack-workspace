@@ -13,12 +13,13 @@ body.toplevel_page_newspack-story-budget {
 }
 
 .wrap {
-	margin: 0 0 0 -10px;
+	margin: 0;
+	margin-inline-start: -10px;
 	position: relative;
 	z-index: 1;
 
 	@media screen and ( min-width: 783px ) {
-		margin-left: -20px;
+		margin-inline-start: -20px;
 	}
 }
 
@@ -318,7 +319,7 @@ body.toplevel_page_newspack-story-budget {
 	}
 
 	&__budgets {
-		padding: var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}) 48px 16px;
+		padding: var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}) wp-vars.$grid-unit-60 wp-vars.$grid-unit-20;
 		&-actions {
 			margin-bottom: 16px;
 
