@@ -1,4 +1,5 @@
 @use "../../../colors/colors.module" as np-colors;
+@use "~@wordpress/base-styles/breakpoints" as wp-breakpoints;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/variables" as wp-vars;
@@ -68,19 +69,19 @@ $dataviews-compact-max-width: 430px;
 	padding: var(--wpds-dimension-padding-lg) var(--wpds-dimension-padding-2xl);
 }
 
+.newspack-page__header-row {
+	column-gap: var(--wpds-dimension-gap-md, #{wp-vars.$grid-unit-15});
+	row-gap: var(--wpds-dimension-gap-sm, #{wp-vars.$grid-unit-10});
+}
+
 .newspack-page__header-title {
 	min-width: 0;
 }
 
 .newspack-page__header-actions {
-	flex-basis: 100%;
 	flex-shrink: 0;
 	justify-content: flex-end;
 	margin-inline-start: auto;
-
-	@include wp-mixins.break-medium {
-		flex-basis: auto;
-	}
 
 	&:empty,
 	&:has(> :only-child:empty) {
@@ -91,6 +92,17 @@ $dataviews-compact-max-width: 430px;
 .newspack-page__header-badges {
 	flex-shrink: 0;
 	min-height: wp-vars.$button-size;
+}
+
+.newspack-page__header-menu-popover a.components-menu-item__button:not(.is-destructive) {
+	&:focus,
+	&:active {
+		color: var(--wp-components-color-foreground, var(--wpds-color-foreground-content-neutral, #{wp-colors.$gray-900}));
+	}
+
+	&:hover {
+		color: var(--wp-admin-theme-color, #{np-colors.$primary-600});
+	}
 }
 
 .newspack-page__header-subtitle {
@@ -115,4 +127,59 @@ $dataviews-compact-max-width: 430px;
 .newspack-page__breadcrumbs {
 	min-width: 0;
 	padding-block: calc((#{wp-vars.$button-size} - var(--wpds-typography-line-height-md)) / 2);
+}
+
+@media not all and (min-width: #{wp-breakpoints.$break-medium}) {
+	.newspack-page__header-title {
+		flex: 1 1 0;
+		min-width: 50%;
+	}
+
+	.newspack-page__breadcrumbs {
+		--newspack-page-crumbs-fade: #{wp-vars.$grid-unit-40};
+		--newspack-page-crumbs-start: left;
+		--newspack-page-crumbs-end: right;
+
+		flex: 1 1 auto;
+		margin-inline: calc(-1 * #{wp-vars.$border-width-focus-fallback});
+		overflow-x: auto;
+		overscroll-behavior-inline: none;
+		padding-inline: wp-vars.$border-width-focus-fallback;
+		scrollbar-width: none;
+
+		&:dir(rtl) {
+			--newspack-page-crumbs-start: right;
+			--newspack-page-crumbs-end: left;
+		}
+
+		&::-webkit-scrollbar {
+			display: none;
+		}
+
+		> nav {
+			flex-shrink: 0;
+		}
+
+		.newspack-breadcrumbs__list {
+			flex-wrap: nowrap;
+
+			> li,
+			h1.newspack-breadcrumbs__current {
+				flex-shrink: 0;
+				white-space: nowrap;
+			}
+		}
+
+		&.is-overflowing-start {
+			mask-image: linear-gradient(to var(--newspack-page-crumbs-end), transparent, #000 var(--newspack-page-crumbs-fade));
+		}
+
+		&.is-overflowing-end {
+			mask-image: linear-gradient(to var(--newspack-page-crumbs-start), transparent, #000 var(--newspack-page-crumbs-fade));
+		}
+
+		&.is-overflowing-start.is-overflowing-end {
+			mask-image: linear-gradient(to var(--newspack-page-crumbs-end), transparent, #000 var(--newspack-page-crumbs-fade), #000 calc(100% - var(--newspack-page-crumbs-fade)), transparent);
+		}
+	}
 }

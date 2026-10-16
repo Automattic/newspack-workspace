@@ -234,7 +234,14 @@ function SubscriberDiscounts() {
 					</span>
 				</>
 			),
-			actions: [ { type: 'primary', label: __( 'Add Discount', 'newspack-plugin' ), action: () => history.push( `${ baseUrl }/new` ) } ],
+			actions: [
+				{
+					type: 'primary',
+					label: __( 'Add Discount', 'newspack-plugin' ),
+					mobileIcon: 'plus',
+					action: () => history.push( `${ baseUrl }/new` ),
+				},
+			],
 		} );
 		// `pathname` re-asserts the header after the wizard's ResetHeaderData
 		// clears it on every route change, drawer routes included.
