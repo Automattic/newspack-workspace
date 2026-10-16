@@ -1670,4 +1670,67 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->assertContains( sprintf( 'Success: Team %d: Migrated team membership to existing subscription %d, added 1 group member(s), promoted 0 manager(s).', $team_id, $subscription->get_id() ), WP_CLI::$output );
 		$this->assertTrue( (bool) Group_Subscription::user_is_member( $member, $subscription ) );
 	}
+
+	/**
+	 * A migrated group keeps its team's slug, which ESP fields and segments already
+	 * hold, rather than getting one derived from the team title. When another group
+	 * already holds that slug, the migration leaves it to that group and warns, so
+	 * the two groups' readers are never merged downstream.
+	 *
+	 * @dataProvider slug_holder_provider
+	 *
+	 * @param bool $slug_already_held Whether another group already holds the team's slug.
+	 */
+	public function test_migrate_teams_seeds_the_group_slug_from_the_team( bool $slug_already_held ) {
+		require_once dirname( __DIR__, 4 ) . '/mocks/wp-cli-mocks.php';
+		WP_CLI::reset();
+		$this->create_gate_requiring_subscription_to( [] );
+		if ( $slug_already_held ) {
+			$holder = $this->create_group_subscription( $this->create_reader() );
+			$holder->update_meta_data( Group_Subscription::SLUG_META_KEY, 'acme-newsroom-legacy' );
+		}
+		$owner        = $this->create_reader();
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$team_id      = $this->create_team( $owner, [ $this->create_reader() ], $subscription->get_id() );
+		wp_update_post(
+			[
+				'ID'        => $team_id,
+				'post_name' => 'acme-newsroom-legacy',
+			]
+		);
+
+		( new Teams_Migration() )->migrate_teams(
+			[],
+			[
+				'skip-unlinked' => true,
+				'live'          => true,
+			]
+		);
+
+		$migrated_slug = Group_Subscription::get_slug( wcs_get_subscription( $subscription->get_id() ) );
+		if ( $slug_already_held ) {
+			$this->assertNotSame( 'acme-newsroom-legacy', $migrated_slug );
+			$this->assertNotEmpty( preg_grep( '/already uses the slug "acme-newsroom-legacy"/', WP_CLI::$output ) );
+		} else {
+			$this->assertSame( 'acme-newsroom-legacy', $migrated_slug );
+		}
+	}
+
+	/**
+	 * Whether another group already holds the migrating team's slug.
+	 *
+	 * @return array
+	 */
+	public function slug_holder_provider() {
+		return [
+			'slug free'    => [ false ],
+			'slug claimed' => [ true ],
+		];
+	}
 }

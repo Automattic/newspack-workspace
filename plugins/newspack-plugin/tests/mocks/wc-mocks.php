@@ -1658,6 +1658,10 @@ class WC_Subscription {
 		];
 		return true;
 	}
+	/**
+	 * Meta lives on the instance, so there is nothing further to persist.
+	 */
+	public function save_meta_data() {}
 }
 
 class WC_Subscriptions {
@@ -2124,7 +2128,9 @@ function wcs_get_subscriptions( $args = [] ) {
 	// Minimal mock: implements the `customer_id`, `order_id` and `subscription_status` filters
 	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
 	// passes. `subscription_status` accepts a single status or an array; 'any' (or
-	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
+	// unset) means no status filter. `meta_query` clauses comparing with `=` (the
+	// default) or `LIKE` (a substring match, as WP_Meta_Query wraps the value in
+	// wildcards) are honored; other compares and `orderby` are still ignored —
 	// extend here rather than relying on this returning the full set if a test
 	// needs them.
 	//
@@ -2161,6 +2167,17 @@ function wcs_get_subscriptions( $args = [] ) {
 		}
 		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
 			continue;
+		}
+		foreach ( $args['meta_query'] ?? [] as $clause ) {
+			if ( ! is_array( $clause ) || ! isset( $clause['key'], $clause['value'] ) ) {
+				continue;
+			}
+			$meta_value = (string) $subscription->get_meta( $clause['key'], true );
+			$compare    = $clause['compare'] ?? '=';
+			if ( ( '=' === $compare && $meta_value !== (string) $clause['value'] )
+				|| ( 'LIKE' === $compare && ( '' === $meta_value || false === strpos( $meta_value, (string) $clause['value'] ) ) ) ) {
+				continue 2;
+			}
 		}
 		$matches[ $id ] = $subscription;
 	}

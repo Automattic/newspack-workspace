@@ -612,9 +612,15 @@ class Group_Subscription_MyAccount {
 	 */
 	public static function remove_deleted_user_from_groups( $user_id ) {
 		$group_ids = Group_Subscription::get_group_subscriptions_for_user( $user_id, true );
+		$left_ids  = [];
 		foreach ( $group_ids as $subscription_id ) {
-			\delete_user_meta( $user_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription_id );
+			if ( \delete_user_meta( $user_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription_id ) ) {
+				$left_ids[] = $subscription_id;
+			}
 			\delete_user_meta( $user_id, Group_Subscription::get_member_joined_meta_key( $subscription_id ) );
+		}
+		if ( ! empty( $left_ids ) ) {
+			Group_Subscription::announce_memberships_changed( (int) $user_id, [], $left_ids );
 		}
 	}
 

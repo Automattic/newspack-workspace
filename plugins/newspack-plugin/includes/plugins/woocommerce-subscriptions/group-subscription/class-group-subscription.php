@@ -43,6 +43,14 @@ class Group_Subscription {
 	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
 
 	/**
+	 * Subscription meta key holding the group's slug: a stable identifier that
+	 * downstream systems (ESP fields, CRM, segments) key readers on, so a rename
+	 * never moves a group's readers to a new identifier. Like a post slug, a
+	 * non-Latin name yields a percent-encoded slug. Read it through get_slug().
+	 */
+	const SLUG_META_KEY = '_newspack_group_subscription_slug';
+
+	/**
 	 * Build the per-subscription joined-at user_meta key.
 	 *
 	 * @param int $subscription_id Subscription ID.
@@ -138,6 +146,111 @@ class Group_Subscription {
 		// Auto-join trusts the same verified flag as email-domain gate rules, so it fires on
 		// verification, not registration. Paid checkout verifies without an inbox round trip.
 		\add_action( 'newspack_reader_verified', [ __CLASS__, 'auto_join_by_email_domain' ] );
+		// The first settings save fixes the slug, so a rename before anything reads it can't move it.
+		\add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'ensure_slug' ], 10, 1 );
+	}
+
+	/**
+	 * Give a group subscription its slug if it has none yet.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 */
+	public static function ensure_slug( $subscription ): void {
+		self::get_slug( $subscription );
+	}
+
+	/**
+	 * Get a group subscription's slug, creating it from the group name if it has none.
+	 *
+	 * A stored slug is never changed here. migrate-teams seeds it with the source
+	 * team's slug; otherwise the first settings save creates it, and a group never
+	 * saved through the settings (enabled by its product alone) gets one on first
+	 * read, which writes the subscription's meta. A name another group's slug
+	 * already uses gets a numeric suffix, so two groups' readers are never merged
+	 * downstream. Two groups with the same name created at the same moment can
+	 * still race to the same slug; that is rare enough to accept rather than lock.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return string The slug, or '' when the subscription has none and is not a group. A group
+	 *                that is later disabled keeps its slug, so it is unchanged if re-enabled.
+	 */
+	public static function get_slug( \WC_Subscription|int $subscription ): string {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return '';
+		}
+		$slug = (string) $subscription->get_meta( self::SLUG_META_KEY, true );
+		if ( '' !== $slug ) {
+			return $slug;
+		}
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		if ( empty( $settings['enabled'] ) ) {
+			return '';
+		}
+		$base = \sanitize_title( html_entity_decode( (string) $settings['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+		if ( '' === $base ) {
+			$base = 'group-' . $subscription->get_id();
+		}
+		// Groups on one product share its name, so collisions are common: read every
+		// slug containing the base once rather than probing one suffix at a time.
+		$taken  = self::get_slugs_containing( $base, $subscription->get_id() );
+		$slug   = $base;
+		$suffix = 2;
+		while ( in_array( $slug, $taken, true ) ) {
+			$slug = $base . '-' . $suffix;
+			++$suffix;
+		}
+		// Persists the object's pending meta, not its props, which a caller may still be editing.
+		$subscription->update_meta_data( self::SLUG_META_KEY, $slug );
+		$subscription->save_meta_data();
+		return $slug;
+	}
+
+	/**
+	 * Whether a subscription other than the given one already holds a slug.
+	 *
+	 * @param string $slug            The slug.
+	 * @param int    $subscription_id The subscription asking, which never collides with itself.
+	 *
+	 * @return bool
+	 */
+	public static function is_slug_taken( string $slug, int $subscription_id ): bool {
+		return in_array( $slug, self::get_slugs_containing( $slug, $subscription_id ), true );
+	}
+
+	/**
+	 * The slugs of subscriptions, other than the given one, whose slug contains a string.
+	 *
+	 * @param string $needle          The string to look for.
+	 * @param int    $subscription_id The subscription to leave out.
+	 *
+	 * @return string[]
+	 */
+	private static function get_slugs_containing( string $needle, int $subscription_id ): array {
+		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+			return [];
+		}
+		$holders = \wcs_get_subscriptions(
+			[
+				'subscriptions_per_page' => -1,
+				'subscription_status'    => 'any',
+				'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'     => self::SLUG_META_KEY,
+						'value'   => $needle,
+						'compare' => 'LIKE',
+					],
+				],
+			]
+		);
+		unset( $holders[ $subscription_id ] );
+		return array_map(
+			function ( $holder ) {
+				return (string) $holder->get_meta( self::SLUG_META_KEY, true );
+			},
+			array_values( $holders )
+		);
 	}
 
 	/**
@@ -736,6 +849,11 @@ class Group_Subscription {
 			}
 		}
 
+		// Announced before the limit check below, which can reject the additions after these removals are saved.
+		foreach ( array_keys( $members_removed ) as $member_id ) {
+			self::announce_memberships_changed( $member_id, [], [ $subscription->get_id() ] );
+		}
+
 		// Narrow the additions to the IDs that would genuinely become members: ineligible users and
 		// users who already hold this subscription's member meta are no-ops. Filtering them here rather
 		// than in the add loop below keeps the limit projection honest -- counting a no-op ID would
@@ -845,6 +963,10 @@ class Group_Subscription {
 			}
 		}
 
+		foreach ( array_keys( $members_added ) as $member_id ) {
+			self::announce_memberships_changed( $member_id, [ $subscription->get_id() ], [] );
+		}
+
 		return [
 			'members_added'     => $members_added,
 			'members_removed'   => $members_removed,
@@ -853,6 +975,26 @@ class Group_Subscription {
 			// array_values() drops the member-ID keys, so this serializes as a JSON array for the JS.
 			'invites_cancelled' => array_values( $invites_to_cancel ),
 		];
+	}
+
+	/**
+	 * Announce that a reader joined or left group subscriptions. Every write of the
+	 * membership user meta calls this, so integrations listen here instead of
+	 * watching the meta.
+	 *
+	 * @param int   $user_id     The reader.
+	 * @param int[] $added_ids   Subscription IDs of the groups they joined.
+	 * @param int[] $removed_ids Subscription IDs of the groups they left.
+	 */
+	public static function announce_memberships_changed( int $user_id, array $added_ids, array $removed_ids ): void {
+		/**
+		 * Fires after a reader joins or leaves group subscriptions.
+		 *
+		 * @param int   $user_id     The reader.
+		 * @param int[] $added_ids   Subscription IDs of the groups they joined.
+		 * @param int[] $removed_ids Subscription IDs of the groups they left.
+		 */
+		\do_action( 'newspack_group_subscription_memberships_changed', $user_id, $added_ids, $removed_ids );
 	}
 
 	/**

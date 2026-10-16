@@ -686,6 +686,16 @@ class Teams_Migration {
 			// gated, and a per-seat one is sized before the adds (below). A reused
 			// subscription that already carries a limit is still gated by it during
 			// adds; any rejected member is surfaced in the errors below.
+			// Keep the team's slug: ESP fields and segments built on Teams already hold it,
+			// so it replaces any slug a reused group already had. A slug another group
+			// already holds is not seeded, since that would merge the two groups' readers
+			// downstream; the group then derives its own.
+			$team_slug = (string) $team->post_name;
+			if ( '' !== $team_slug && Group_Subscription::is_slug_taken( $team_slug, $subscription ? $subscription->get_id() : 0 ) ) {
+				WP_CLI::warning( sprintf( 'Team %d ("%s"): another group subscription already uses the slug "%s", so this group gets its own. Systems keyed on the team slug need updating for it.', $team_id, $team->post_title, $team_slug ) );
+				$team_slug = '';
+			}
+
 			if ( ! $dry_run ) {
 				$subscription->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
 				$subscription->update_meta_data( '_newspack_group_subscription_name', $team->post_title );
@@ -693,6 +703,9 @@ class Teams_Migration {
 				// find_reusable_group_subscription() for the reuse rules and the dry-run
 				// caveat).
 				$subscription->update_meta_data( self::MIGRATED_TEAM_ID_META_KEY, $team_id );
+				if ( '' !== $team_slug ) {
+					$subscription->update_meta_data( Group_Subscription::SLUG_META_KEY, $team_slug );
+				}
 				$subscription->save();
 			}
 
