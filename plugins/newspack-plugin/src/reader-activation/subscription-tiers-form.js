@@ -1,4 +1,4 @@
-import { domReady } from '../utils';
+import { domReady, setButtonLoading } from '../utils';
 import { queuePageReload } from './utils';
 
 function handleCheckoutClose( completed ) {
@@ -218,7 +218,10 @@ export default function init() {
 					onCheckoutComplete: () => {
 						completed = true;
 					},
-					onClose: () => handleCheckoutClose( completed ),
+					onClose: () => {
+						setButtonLoading( form.querySelector( 'button[type="submit"]' ), false );
+						handleCheckoutClose( completed );
+					},
 				} );
 			} );
 

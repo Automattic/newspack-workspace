@@ -32,6 +32,18 @@ function renderRenameModal() {
 
 let resolveFetch;
 
+/**
+ * Wait until a condition holds, polling between tasks.
+ *
+ * @param {Function} condition Returns true once the wait is over.
+ */
+async function waitFor( condition ) {
+	const deadline = Date.now() + 2000;
+	while ( ! condition() && Date.now() < deadline ) {
+		await new Promise( resolve => setTimeout( resolve, 20 ) );
+	}
+}
+
 beforeEach( () => {
 	global.newspackMyAccountV1 = {
 		rest: { base_url: 'https://example.test/wp-json/', namespaces: { group: 'newspack/v1/group' }, nonce: 'nonce-123' },
@@ -65,7 +77,7 @@ describe( 'group rename', () => {
 		expect( button.getAttribute( 'aria-busy' ) ).toBe( 'true' );
 
 		resolveFetch();
-		await new Promise( resolve => setTimeout( resolve, 600 ) );
+		await waitFor( () => ! button.hasAttribute( 'aria-busy' ) );
 
 		expect( button.hasAttribute( 'aria-busy' ) ).toBe( false );
 		expect( button.hasAttribute( 'aria-disabled' ) ).toBe( false );

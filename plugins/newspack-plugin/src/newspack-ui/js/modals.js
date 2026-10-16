@@ -6,6 +6,10 @@ import { domReady, isButtonLoading, setButtonLoading } from '../../utils';
 
 window.newspackRAS = window.newspackRAS || [];
 
+// Submit buttons whose form submitted without leaving the page, such as a form
+// that posts into the modal checkout iframe. Nothing else will release them.
+const handedOffButtons = new WeakSet();
+
 /**
  * Handle overlays for a modal based on its state.
  *
@@ -47,11 +51,10 @@ function setupModalObserver( modal ) {
 			if ( mutation.type === 'attributes' && mutation.attributeName === 'data-state' ) {
 				const newState = modal.dataset.state;
 				handleModalOverlay( modal, newState );
-				if ( newState === 'open' ) {
-					// A form that submitted without leaving the page, such as one handing off to
-					// modal checkout, keeps its button busy. Opening the modal again starts over.
+				if ( newState === 'open' && mutation.oldValue !== 'open' ) {
 					modal.querySelectorAll( 'button[type="submit"]' ).forEach( button => {
-						if ( isButtonLoading( button ) ) {
+						if ( handedOffButtons.has( button ) ) {
+							handedOffButtons.delete( button );
 							setButtonLoading( button, false );
 						}
 					} );
@@ -66,6 +69,7 @@ function setupModalObserver( modal ) {
 	observer.observe( modal, {
 		attributes: true,
 		attributeFilter: [ 'data-state' ],
+		attributeOldValue: true,
 	} );
 }
 
@@ -91,12 +95,21 @@ domReady( function () {
 		// Forms that intercept submit and stay on the page (e.g. the reader auth form)
 		// release the button with setButtonLoading( button, false ) themselves; the auth
 		// form does this in reader-activation-auth/auth-form.js, where it also sets the
-		// state for its inline (non-modal) instances. Covers both shapes: form IS the
-		// modal content, or form lives inside a content section.
+		// state for its inline (non-modal) instances. A form that submits without
+		// intercepting but still keeps the page, like one targeting an iframe, is
+		// released when its modal opens again. Covers both shapes: form IS the modal
+		// content, or form lives inside a content section.
 		const modalForm = modal.querySelector( 'form.newspack-ui__modal__content, .newspack-ui__modal__content form' );
 		if ( modalForm ) {
-			modalForm.addEventListener( 'submit', () => {
-				setButtonLoading( modalForm.querySelector( 'button[type="submit"]' ), true );
+			modalForm.addEventListener( 'submit', event => {
+				const submitButton = modalForm.querySelector( 'button[type="submit"]' );
+				setButtonLoading( submitButton, true );
+				// Listeners after this one may still intercept the submit.
+				setTimeout( () => {
+					if ( submitButton && ! event.defaultPrevented ) {
+						handedOffButtons.add( submitButton );
+					}
+				} );
 			} );
 		}
 

@@ -44,14 +44,18 @@ domReady( function () {
 						showError( labels?.generic_error );
 						return;
 					}
-					const data = JSON.parse( xhr.responseText );
+					let data;
+					try {
+						data = JSON.parse( xhr.responseText );
+					} catch {
+						data = null;
+					}
 					if ( data?.success ) {
 						addPaymentForm.removeAttribute( 'data-check-rate-limit' );
 						addPaymentForm.requestSubmit( submitButton );
 						addPaymentForm.setAttribute( 'data-check-rate-limit', '1' );
-					}
-					if ( data?.error ) {
-						showError( data.error );
+					} else {
+						showError( data?.error || labels?.generic_error );
 					}
 				};
 

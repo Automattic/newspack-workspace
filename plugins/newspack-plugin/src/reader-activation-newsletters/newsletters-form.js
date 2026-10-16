@@ -60,7 +60,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				}
 
 				form.classList.add( 'processing' );
-				setButtonLoading( form.querySelector( 'button' ), true );
+				setButtonLoading( form.querySelector( 'button[type="submit"]' ), true );
 
 				// Populate email if not already set.
 				const emailInput = form.querySelector( 'input[name="email_address"]' );
@@ -94,7 +94,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 							container.newslettersSignupCallback();
 						}
 						form.classList.remove( 'processing' );
-						setButtonLoading( form.querySelector( 'button' ), false );
+						setButtonLoading( form.querySelector( 'button[type="submit"]' ), false );
 					} );
 			};
 
