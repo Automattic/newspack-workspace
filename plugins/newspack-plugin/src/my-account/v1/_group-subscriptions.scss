@@ -84,3 +84,19 @@
 		transform: translateY(0);
 	}
 }
+
+// The CSV picker's visible control is its label, styled as a button. The input stays in
+// the tab order but out of sight, so the label shows its focus.
+.newspack-ui .newspack-my-account__group_subscription__invite-bulk__file {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+
+	&:focus-visible + label {
+		outline: 2px solid var(--newspack-ui-color-button-bg);
+		outline-offset: 1px;
+	}
+}

@@ -48,12 +48,10 @@ const group = {
 	canManage: true,
 };
 
-/** Type an address into the token field and commit it with Enter. */
-const enterEmail = async ( label, email ) => {
-	const input = screen.getByLabelText( label );
+/** Paste addresses into the textarea. */
+const pasteEmails = async value => {
 	await act( async () => {
-		fireEvent.change( input, { target: { value: email } } );
-		fireEvent.keyDown( input, { key: 'Enter', keyCode: 13 } );
+		fireEvent.change( screen.getByLabelText( 'Email addresses' ), { target: { value } } );
 	} );
 };
 
@@ -63,36 +61,113 @@ const click = async name => {
 	} );
 };
 
+const renderInvite = ( inviteBulk, onDone ) =>
+	act( async () => {
+		render( createElement( InviteMemberFlow, { group, actions: { inviteBulk }, onClose: () => {}, onDone } ) );
+	} );
+
+const preview = ( toInvite, extra = {} ) => ( {
+	to_invite: toInvite,
+	skipped: { duplicate: 0, member: 0, invited: 0 },
+	summary: [ `${ toInvite.length } new addresses to invite.` ],
+	over_limit: null,
+	...extra,
+} );
+
 describe( 'sending invitations', () => {
+	it( 'sends nothing until the reviewed list is confirmed', async () => {
+		const onDone = jest.fn();
+		const inviteBulk = jest
+			.fn()
+			.mockResolvedValueOnce( preview( [ 'a@example.test', 'b@example.test' ] ) )
+			.mockResolvedValueOnce( { invited: [ 'a@example.test', 'b@example.test' ], not_sent: [], failed: [], summary: [] } );
+		await renderInvite( inviteBulk, onDone );
+
+		await pasteEmails( 'a@example.test, b@example.test' );
+		await click( 'Review' );
+
+		expect( inviteBulk ).toHaveBeenLastCalledWith( { emails: 'a@example.test, b@example.test', csv: '' } );
+		expect( screen.getByText( '2 new addresses to invite.' ) ).toBeTruthy();
+		expect( onDone ).not.toHaveBeenCalled();
+
+		await click( 'Send 2 invites' );
+
+		expect( inviteBulk ).toHaveBeenLastCalledWith( { emails: 'a@example.test, b@example.test', csv: '', confirm: true } );
+		expect( onDone ).toHaveBeenCalledWith( '2 invitations sent.' );
+	} );
+
+	it( 'offers no way to send a list the server refused for want of seats', async () => {
+		const inviteBulk = jest
+			.fn()
+			.mockResolvedValue( preview( [ 'a@example.test', 'b@example.test' ], { over_limit: "There aren't enough free seats for this list." } ) );
+		await renderInvite( inviteBulk, jest.fn() );
+
+		await pasteEmails( 'a@example.test b@example.test' );
+		await click( 'Review' );
+
+		expect( document.querySelector( '.components-notice' ).textContent ).toMatch( /enough free seats/ );
+		expect( screen.getByRole( 'button', { name: 'Send 2 invites' } ).disabled ).toBe( true );
+	} );
+
 	it( 'reports an invitation the server stored but could not email, and refreshes for it', async () => {
 		const onDone = jest.fn();
-		const invite = jest.fn().mockResolvedValue( { email: 'nobody@example.com', email_sent: false } );
-		await act( async () => {
-			render( createElement( InviteMemberFlow, { group, actions: { invite }, onClose: () => {}, onDone } ) );
-		} );
+		const inviteBulk = jest
+			.fn()
+			.mockResolvedValueOnce( preview( [ 'nobody@example.test' ] ) )
+			.mockResolvedValueOnce( {
+				invited: [],
+				not_sent: [ 'nobody@example.test' ],
+				failed: [],
+				summary: [ 'These invitations were created, but the email could not be sent.' ],
+			} );
+		await renderInvite( inviteBulk, onDone );
 
-		await enterEmail( 'Invite by email', 'nobody@example.com' );
-		await click( 'Send invites' );
+		await pasteEmails( 'nobody@example.test' );
+		await click( 'Review' );
+		await click( 'Send 1 invite' );
 
 		// The row exists and holds a seat, so silence here would let the admin fill
-		// the group with invitations nobody received. The error says the seat is held
+		// the group with invitations nobody received. The report says the seat is held
 		// until they cancel it, which needs the invitation in the table behind the
 		// modal — hence a refresh with no snackbar, rather than no refresh at all.
-		expect( screen.getByRole( 'alert' ).textContent ).toMatch( /could not be sent/ );
+		expect( document.querySelector( '.components-notice' ).textContent ).toMatch( /could not be sent/ );
 		expect( onDone ).toHaveBeenCalledWith( '', { keepOpen: true } );
 	} );
 
-	it( 'counts an invitation the server both stored and emailed', async () => {
+	it( 'keeps the review and disables Send when the server refuses the confirmed list', async () => {
 		const onDone = jest.fn();
-		const invite = jest.fn().mockResolvedValue( { email: 'reader@example.com', email_sent: true } );
-		await act( async () => {
-			render( createElement( InviteMemberFlow, { group, actions: { invite }, onClose: () => {}, onDone } ) );
-		} );
+		const inviteBulk = jest
+			.fn()
+			.mockResolvedValueOnce( preview( [ 'a@example.test', 'b@example.test' ] ) )
+			.mockRejectedValueOnce( { code: 'over_limit', message: 'Not enough free seats now.', data: { status: 409 } } );
+		await renderInvite( inviteBulk, onDone );
 
-		await enterEmail( 'Invite by email', 'reader@example.com' );
-		await click( 'Send invites' );
+		await pasteEmails( 'a@example.test b@example.test' );
+		await click( 'Review' );
+		await click( 'Send 2 invites' );
 
-		expect( onDone ).toHaveBeenCalledWith( '1 invitation sent.' );
+		// A refusal created nothing, so nothing refreshes and the same list can't be resent.
+		expect( document.querySelector( '.components-notice' ).textContent ).toMatch( /Not enough free seats now/ );
+		expect( screen.getByRole( 'button', { name: 'Send 2 invites' } ).disabled ).toBe( true );
+		expect( onDone ).not.toHaveBeenCalled();
+	} );
+
+	it( 'treats a send that failed without a reason as possibly partial', async () => {
+		const onDone = jest.fn();
+		const inviteBulk = jest
+			.fn()
+			.mockResolvedValueOnce( preview( [ 'a@example.test' ] ) )
+			.mockRejectedValueOnce( { code: 'invalid_json', message: 'The response is not a valid JSON response.' } );
+		await renderInvite( inviteBulk, onDone );
+
+		await pasteEmails( 'a@example.test' );
+		await click( 'Review' );
+		await click( 'Send 1 invite' );
+
+		// The request may have stopped partway, so the table refreshes and Send is gone.
+		expect( document.querySelector( '.components-notice' ).textContent ).toMatch( /may have been sent/ );
+		expect( screen.queryByRole( 'button', { name: 'Send 1 invite' } ) ).toBeNull();
+		expect( onDone ).toHaveBeenCalledWith( '', { keepOpen: true } );
 	} );
 } );
 
