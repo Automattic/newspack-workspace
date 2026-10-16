@@ -728,7 +728,9 @@ abstract class Integration {
 	 *
 	 * Integrations that support hard deletion should override this AND
 	 * `supports_hard_delete()`. The default returns a "not implemented" WP_Error
-	 * so the dispatcher can log and skip.
+	 * so the dispatcher can log and skip. When the system holds no contact for
+	 * the email, answer with a WP_Error whose only code is
+	 * CONTACT_NOT_FOUND_ERROR_CODE: the deletion then ends without a retry.
 	 *
 	 * @param string $email Email address of the contact to delete.
 	 * @return true|\WP_Error True on success, WP_Error otherwise.
