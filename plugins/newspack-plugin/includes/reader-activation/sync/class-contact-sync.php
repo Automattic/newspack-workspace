@@ -581,7 +581,7 @@ class Contact_Sync extends Sync {
 	 * - sync_account_deletion=true + handling='delete' → call $integration->delete_contact($email).
 	 * - sync_account_deletion=true + handling='flag' → push the contact with the
 	 *   `account_deleted` metadata field set to an ISO8601 timestamp. The push
-	 *   carries `skip_lists` (a deletion must never attach the master list) and
+	 *   carries `skip_lists` (a deletion must never add the reader to a list) and
 	 *   runs only for integrations that implement flag_deletion_cleanup() —
 	 *   the base no-op cannot stop outreach, so those integrations are skipped.
 	 *
@@ -1510,8 +1510,8 @@ class Contact_Sync extends Sync {
 		if ( 'delete' === $mode ) {
 			$result = $integration->delete_contact( $email );
 		} elseif ( 'flag' === $mode ) {
-			// Same skip_lists as the original flag push: the retried payload
-			// must not attach the master list either.
+			// Same skip_lists as the original flag push: the retry must not
+			// add the reader to a list either.
 			$result = $integration->push_contact( $contact, $context, null, [ 'skip_lists' => true ] );
 		} else {
 			Logger::log( sprintf( 'Unknown deletion retry mode "%s" for integration "%s".', $mode, $integration_id ), 'NEWSPACK-SYNC', 'error' );
@@ -1745,7 +1745,7 @@ class Contact_Sync extends Sync {
 	 *                                        `fields` (string[]|null, canonical labels) and
 	 *                                        `existing_only` (bool). `fields` restricts both what
 	 *                                        metadata is computed and what is pushed;
-	 *                                        `skip_lists` upserts without a master list;
+	 *                                        `skip_lists` adds the contact to no list;
 	 *                                        `existing_only` restricts the push to contacts the
 	 *                                        integration already has. `integration_id`
 	 *                                        (string|null) restricts the push fan-out to a
