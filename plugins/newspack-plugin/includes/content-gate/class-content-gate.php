@@ -281,6 +281,7 @@ class Content_Gate {
 		include __DIR__ . '/class-access-rules.php';
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
+		include __DIR__ . '/class-member-body-class.php';
 		include __DIR__ . '/class-block-patterns.php';
 		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
@@ -292,10 +293,12 @@ class Content_Gate {
 		include __DIR__ . '/class-newsletters-access.php';
 		include __DIR__ . '/class-user-gate-access.php';
 		include __DIR__ . '/class-premium-newsletters.php';
+		include __DIR__ . '/class-gate-access-reader-data.php';
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 		include __DIR__ . '/class-email-verification-prompt.php';
 		include __DIR__ . '/class-institutional-access-prompt.php';
+		include __DIR__ . '/class-comment-restriction.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();

@@ -236,6 +236,77 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Newspack Network's `Group_Seats::get_member_ids()` query (in its
+	 * woocommerce-subscriptions/class-group-seats.php), copied verbatim so the test doesn't
+	 * need Network loaded; update it if that query changes. WordPress caches user queries by
+	 * their SQL alone, and this one builds the same SQL as get_members(), so the two share a
+	 * cache entry.
+	 *
+	 * @param int $subscription_id Subscription ID.
+	 * @return int[]
+	 */
+	private function network_get_member_ids( int $subscription_id ): array {
+		return array_map(
+			'intval',
+			get_users(
+				[
+					'fields'      => 'ID',
+					'count_total' => false,
+					'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						[
+							'key'   => Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY,
+							'value' => absint( $subscription_id ),
+						],
+					],
+				]
+			)
+		);
+	}
+
+	/**
+	 * Data provider: which query runs first in the request.
+	 *
+	 * @return array
+	 */
+	public function data_member_query_order() {
+		return [
+			'Network first'     => [ true ],
+			'get_members first' => [ false ],
+		];
+	}
+
+	/**
+	 * Group_Subscription::get_members() and Network's member query share a user-query
+	 * cache entry, so both must ask for the same result shape to agree on the members.
+	 *
+	 * @dataProvider data_member_query_order
+	 *
+	 * @param bool $network_first Whether Network's query runs before get_members().
+	 */
+	public function test_get_members_and_network_member_query_agree_in_either_order( $network_first ) {
+		$owner_id = $this->create_reader_user();
+		$expected = [ $this->create_reader_user(), $this->create_reader_user() ];
+		$sub      = $this->create_group_subscription( $owner_id );
+		foreach ( $expected as $member_id ) {
+			$this->add_member( $member_id, $sub );
+		}
+		Group_Subscription::reset_cache();
+
+		if ( $network_first ) {
+			$network_ids = $this->network_get_member_ids( $sub->get_id() );
+			$members     = Group_Subscription::get_members( $sub );
+		} else {
+			$members     = Group_Subscription::get_members( $sub );
+			$network_ids = $this->network_get_member_ids( $sub->get_id() );
+		}
+		sort( $members );
+		sort( $network_ids );
+
+		$this->assertSame( $expected, $members, 'get_members() should return the member IDs as ints.' );
+		$this->assertSame( $expected, $network_ids, "Network's query should return the member IDs." );
+	}
+
+	/**
 	 * A user who is both the owner and carries member meta is only counted once.
 	 */
 	public function test_member_count_dedupes_owner_with_member_meta() {
@@ -888,5 +959,102 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			'example.test,example.org',
 			Group_Subscription_Settings::sanitize_email_domains( " @Example.test,  example.org\nexample.test, " )
 		);
+	}
+
+	/**
+	 * The slug is taken from the group name the first time settings are saved and
+	 * then kept: renaming the group must not move readers to a new identifier in
+	 * the systems that key on it.
+	 */
+	public function test_slug_is_set_on_first_save_and_survives_a_rename() {
+		$saved_first   = $this->create_group_subscription( $this->create_reader_user() );
+		$renamed_first = $this->create_group_subscription( $this->create_reader_user() );
+
+		Group_Subscription_Settings::update_subscription_settings( $saved_first, [ 'name' => 'Acme Newsroom' ] );
+		Group_Subscription_Settings::update_subscription_name( $saved_first, 'Acme Holdings' );
+		Group_Subscription_Settings::update_subscription_name( $renamed_first, 'Beta Desk' );
+		Group_Subscription_Settings::update_subscription_name( $renamed_first, 'Beta Holdings' );
+
+		$this->assertSame( 'acme-newsroom', $saved_first->get_meta( Group_Subscription::SLUG_META_KEY, true ), 'The first save stores the slug.' );
+		$this->assertSame( 'acme-newsroom', Group_Subscription::get_slug( $saved_first ) );
+		$this->assertSame( 'beta-desk', Group_Subscription::get_slug( $renamed_first ), 'A rename can be the first save.' );
+	}
+
+	/**
+	 * Two groups with the same name get distinct slugs, so one group's readers are
+	 * never merged into another's downstream. A group whose settings were never
+	 * saved still gets a slug on first read; a plain subscription gets none.
+	 */
+	public function test_slugs_are_unique_and_only_groups_have_one() {
+		$first  = $this->create_group_subscription( $this->create_reader_user() );
+		$second = $this->create_group_subscription( $this->create_reader_user() );
+		$first->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Acme' );
+		$second->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Acme' );
+		$plain = wcs_create_subscription(
+			[
+				'customer_id' => $this->create_reader_user(),
+				'status'      => 'active',
+			]
+		);
+
+		$this->assertSame( 'acme', Group_Subscription::get_slug( $first ) );
+		$this->assertSame( 'acme-2', Group_Subscription::get_slug( $second ) );
+		$third = $this->create_group_subscription( $this->create_reader_user() );
+		$third->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Acme' );
+		$this->assertSame( 'acme-3', Group_Subscription::get_slug( $third ) );
+		$this->assertSame( '', Group_Subscription::get_slug( $plain ) );
+	}
+
+	/**
+	 * Every membership change is announced for each reader, with the groups they
+	 * joined and left, so integrations need not watch the membership user meta. A
+	 * no-op add (an existing member) announces nothing.
+	 */
+	public function test_membership_changes_are_announced() {
+		$sub       = $this->create_group_subscription( $this->create_reader_user() );
+		$joiner    = $this->create_reader_user();
+		$leaver    = $this->create_reader_user();
+		$announced = [];
+		$listener  = function ( $user_id, $added, $removed ) use ( &$announced ) {
+			$announced[] = [ $user_id, $added, $removed ];
+		};
+		$this->add_member( $leaver, $sub );
+		add_action( 'newspack_group_subscription_memberships_changed', $listener, 10, 3 );
+
+		Group_Subscription::update_members( $sub, [ $joiner ], [ $leaver ] );
+		Group_Subscription::update_members( $sub, [ $joiner ] );
+		$this->add_member( $leaver, $sub );
+		Newspack\Group_Subscription_MyAccount::remove_deleted_user_from_groups( $leaver );
+
+		remove_action( 'newspack_group_subscription_memberships_changed', $listener, 10 );
+		$this->assertSame(
+			[
+				[ $leaver, [], [ $sub->get_id() ] ],
+				[ $joiner, [ $sub->get_id() ], [] ],
+				[ $leaver, [], [ $sub->get_id() ] ],
+			],
+			$announced
+		);
+	}
+
+	/**
+	 * Removals are saved before the member limit is checked, so a call whose
+	 * additions the limit rejects still announces the readers it removed.
+	 */
+	public function test_removals_are_announced_when_the_limit_rejects_additions() {
+		$sub    = $this->create_group_subscription( $this->create_reader_user(), 2 );
+		$leaver = $this->create_reader_user();
+		$this->add_member( $leaver, $sub );
+		$announced = [];
+		$listener  = function ( $user_id, $added, $removed ) use ( &$announced ) {
+			$announced[] = [ $user_id, $added, $removed ];
+		};
+		add_action( 'newspack_group_subscription_memberships_changed', $listener, 10, 3 );
+
+		$result = Group_Subscription::update_members( $sub, [ $this->create_reader_user(), $this->create_reader_user() ], [ $leaver ] );
+
+		remove_action( 'newspack_group_subscription_memberships_changed', $listener, 10 );
+		$this->assertWPError( $result, 'The additions exceed the limit.' );
+		$this->assertSame( [ [ $leaver, [], [ $sub->get_id() ] ] ], $announced );
 	}
 }

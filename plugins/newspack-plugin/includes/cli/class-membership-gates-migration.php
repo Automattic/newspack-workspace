@@ -292,19 +292,17 @@ class Membership_Gates_Migration {
 			if ( null === $paid_layout || '' === trim( $paid_layout ) || self::layout_offers_a_purchase( $paid_layout ) ) {
 				continue;
 			}
-			$gate_post = $layouts_by_group[ $fingerprint ]['gate_post'];
-
-			$needs_purchase_path[ self::gate_title( $group ) ] = $gate_post ? $gate_post->ID : 0;
+			$needs_purchase_path[ self::gate_title( $group ) ] = self::describe_paid_layout_sources( $layouts_by_group[ $fingerprint ]['gate_post'], $paid_layout );
 		}
 		if ( ! empty( $needs_purchase_path ) ) {
 			WP_CLI::error(
 				sprintf(
-					'The paid access copy for %s offers the reader no way to buy — no checkout button, no donate block, and no link that leads anywhere. Migrating it would publish a paywall that stops the reader with nothing to click. Add a checkout button or a subscribe link to the gate post(s) named, then re-run. Nothing has been written.',
+					'The paid access copy for %s offers the reader no way to buy — no checkout button, no donate block, and no link that leads anywhere. Migrating it would publish a paywall that stops the reader with nothing to click. Add a checkout button or a subscribe link to the gate post(s) or synced pattern(s) named, then re-run. Nothing has been written.',
 					implode(
 						', ',
 						array_map(
-							fn( $title, $gate_post_id ) => $gate_post_id
-								? sprintf( '"%s" (gate post %d)', $title, $gate_post_id )
+							fn( $title, string $sources ): string => '' !== $sources
+								? sprintf( '"%s" (%s)', $title, $sources )
 								: sprintf( '"%s"', $title ),
 							array_keys( $needs_purchase_path ),
 							$needs_purchase_path
@@ -1030,9 +1028,11 @@ class Membership_Gates_Migration {
 				&& '' !== trim( $paid_layout->post_content )
 				&& ! self::layout_offers_a_purchase( $paid_layout->post_content )
 			) {
-				$issues[] = sprintf(
-					'its paid access layout (post %d) has no checkout button and no link, so the reader is stopped with no way to buy',
-					$custom_access['gate_layout_id']
+				$patterns_inspected = self::describe_patterns_inspected( $paid_layout->post_content );
+				$issues[]           = sprintf(
+					'its paid access layout (post %d%s) has no checkout button and no link, so the reader is stopped with no way to buy',
+					$custom_access['gate_layout_id'],
+					'' === $patterns_inspected ? '' : '; ' . $patterns_inspected
 				);
 			}
 		}
@@ -1080,11 +1080,162 @@ class Membership_Gates_Migration {
 	 * publisher's own "subscribe" link counts too, so long as it leads somewhere: the
 	 * reader being able to act is the thing, not the block being the Newspack one.
 	 *
+	 * A `core/block` reference counts as the pattern it renders, chains included, because
+	 * a publisher may keep the paywall in a synced pattern and the extracted layout
+	 * carries the reference rather than its content. A reference WordPress would render
+	 * nothing for adds nothing.
+	 *
+	 * Each pattern is read as saved. Pattern overrides are not applied: an override
+	 * that sets a button's link per placement is not counted, and one that blanks a
+	 * saved link does not stop that link counting. Matching overrides to the blocks
+	 * they bind is more than this heuristic needs.
+	 *
 	 * @param string $content Layout block markup.
 	 *
 	 * @return bool
 	 */
 	private static function layout_offers_a_purchase( string $content ): bool {
+		if ( self::markup_offers_a_purchase( $content ) ) {
+			return true;
+		}
+		foreach ( array_filter( self::reached_patterns( $content ) ) as $pattern ) {
+			if ( self::markup_offers_a_purchase( $pattern->post_content ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Where a refused paid layout came from: the gate post, and the synced patterns
+	 * layout_offers_a_purchase() checked.
+	 *
+	 * @param \WP_Post|null $gate_post   The np_memberships_gate post the layout was extracted from.
+	 * @param string        $paid_layout Extracted paid layout markup.
+	 *
+	 * @return string Empty when there is neither a gate post nor a pattern to name.
+	 */
+	private static function describe_paid_layout_sources( ?\WP_Post $gate_post, string $paid_layout ): string {
+		return implode(
+			'; ',
+			array_filter(
+				[
+					$gate_post ? sprintf( 'gate post %d', $gate_post->ID ) : '',
+					self::describe_patterns_inspected( $paid_layout ),
+				]
+			)
+		);
+	}
+
+	/**
+	 * The synced patterns layout_offers_a_purchase() checked, for a refusal message.
+	 *
+	 * The fix for a refused layout that holds only a reference is in the pattern, so the
+	 * operator needs its ID. A pattern WordPress does not render (missing, unpublished or
+	 * password-protected) is the likeliest reason one with a button still fails, so that
+	 * is said too.
+	 *
+	 * @param string $content Layout block markup.
+	 *
+	 * @return string Empty when the layout references no pattern.
+	 */
+	private static function describe_patterns_inspected( string $content ): string {
+		$reached = self::reached_patterns( $content );
+		if ( empty( $reached ) ) {
+			return '';
+		}
+		$description = sprintf(
+			'checked synced pattern%s %s',
+			count( $reached ) > 1 ? 's' : '',
+			self::join_ids( array_keys( $reached ) )
+		);
+		$not_rendered = array_keys( array_filter( $reached, fn( ?\WP_Post $pattern ): bool => null === $pattern ) );
+		if ( ! empty( $not_rendered ) ) {
+			$description .= sprintf( '; WordPress does not render %s', self::join_ids( $not_rendered ) );
+		}
+		return $description;
+	}
+
+	/**
+	 * Join IDs for a message: "4", "4 and 7", "4, 7 and 9".
+	 *
+	 * @param int[] $ids IDs, at least one.
+	 *
+	 * @return string
+	 */
+	private static function join_ids( array $ids ): string {
+		$last = array_pop( $ids );
+		return empty( $ids ) ? (string) $last : implode( ', ', $ids ) . ' and ' . $last;
+	}
+
+	/**
+	 * Every synced pattern a layout reaches, following chains, in the order reached.
+	 *
+	 * @param string $content Layout block markup.
+	 *
+	 * @return array<int,\WP_Post|null> The pattern keyed by ID, or null where WordPress
+	 *                                  renders nothing for the reference.
+	 */
+	private static function reached_patterns( string $content ): array {
+		$reached = [];
+		self::collect_reached_patterns( \parse_blocks( $content ), $reached );
+		return $reached;
+	}
+
+	/**
+	 * Accumulate every synced pattern a block tree reaches, following chains.
+	 *
+	 * @param array                    $blocks  Parsed blocks to search.
+	 * @param array<int,\WP_Post|null> $reached See reached_patterns(), filled by reference.
+	 *                                          Doubles as the visited set.
+	 *
+	 * @return void
+	 */
+	private static function collect_reached_patterns( array $blocks, array &$reached ): void {
+		foreach ( self::find_pattern_refs( $blocks ) as $ref ) {
+			if ( array_key_exists( $ref, $reached ) ) {
+				continue;
+			}
+			$reached[ $ref ] = self::resolve_pattern_reference( $ref );
+			if ( $reached[ $ref ] ) {
+				self::collect_reached_patterns( \parse_blocks( $reached[ $ref ]->post_content ), $reached );
+			}
+		}
+	}
+
+	/**
+	 * IDs of the `core/block` references in a block tree, at any depth, in order.
+	 *
+	 * @param array $blocks Parsed blocks to search.
+	 *
+	 * @return int[]
+	 */
+	private static function find_pattern_refs( array $blocks ): array {
+		$refs = [];
+		foreach ( $blocks as $block ) {
+			if ( 'core/block' === ( $block['blockName'] ?? null ) ) {
+				$ref = (int) ( $block['attrs']['ref'] ?? 0 );
+				if ( $ref ) {
+					$refs[] = $ref;
+				}
+				continue;
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				$refs = array_merge( $refs, self::find_pattern_refs( $block['innerBlocks'] ) );
+			}
+		}
+		return $refs;
+	}
+
+	/**
+	 * Whether markup itself, without following pattern references, gives the reader a
+	 * way to pay.
+	 *
+	 * @param string $content Block markup.
+	 *
+	 * @return bool
+	 */
+	private static function markup_offers_a_purchase( string $content ): bool {
 		foreach ( [ 'newspack-blocks/checkout-button', 'newspack-blocks/donate' ] as $purchase_block ) {
 			if ( \has_block( $purchase_block, $content ) ) {
 				return true;

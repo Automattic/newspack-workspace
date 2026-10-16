@@ -4,7 +4,9 @@
 #
 # After a release on the `release` branch:
 #   - reset the single-serving `alpha` branch onto `release` (when the release
-#     came from an alpha merge), or merge `release` into `alpha` otherwise;
+#     came from an alpha merge), or merge `release` into `alpha` otherwise.
+#     ALPHA_SYNC=merge, which the workflow sets on a dispatched run, always
+#     merges;
 #   - restore `workspace:*` for any internal workspace dep that the release
 #     concretized (see restore_workspace_deps below);
 #   - merge `release` back into the repository's default branch so they stay in
@@ -231,14 +233,17 @@ sync_failed=0
 git pull origin release
 git checkout alpha
 
-if echo "$SECOND_TO_LAST_COMMIT_MSG" | grep -q '^Merge .*alpha'; then
+# ALPHA_SYNC=merge rules out the reset. A dispatched run can start some time
+# after the release it follows: the commit read above is then not the one the
+# release came from, and alpha may hold work that release does not.
+if [ "${ALPHA_SYNC:-auto}" != merge ] && echo "$SECOND_TO_LAST_COMMIT_MSG" | grep -q '^Merge .*alpha'; then
   echo "[post-release] Release came from the alpha branch. Resetting alpha onto release."
   # The alpha branch is single-serving; discard its history after a release.
   git reset --hard release --
   restore_workspace_deps_and_commit alpha
   git push --force origin alpha
 else
-  echo "[post-release] Release came from a non-alpha branch (e.g. a hotfix). Merging release into alpha."
+  echo "[post-release] Release came from a non-alpha branch (e.g. a hotfix), or this run was dispatched. Merging release into alpha."
   if git merge --no-ff release -m "chore(release): merge in release $LATEST_VERSION_TAG"; then
     restore_workspace_deps_and_commit alpha
     git push origin alpha

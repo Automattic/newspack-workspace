@@ -248,7 +248,7 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 if ( $is_group_member_subscription ) :
 	ob_start();
 	?>
-	<h2 class="font-size newspack-ui__font--l">
+	<h2 class="newspack-ui__font--l">
 		<?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?>
 	</h2>
 	<p>
