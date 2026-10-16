@@ -345,7 +345,7 @@ class Contact_Sync extends Sync {
 		$error_class = \is_wp_error( $result ) ? self::classify_error( $result, $direction ) : null;
 		if ( \is_array( $result ) && ! empty( $result['unsynced_fields'] ) ) {
 			$args['result'] = new \WP_Error(
-				'fields_not_synced',
+				Push_Log::ERROR_FIELDS_NOT_SYNCED,
 				sprintf( 'The provider saved the contact without these fields: %s.', implode( ', ', (array) $result['unsynced_fields'] ) )
 			);
 			$error_class    = 'permanent_config';

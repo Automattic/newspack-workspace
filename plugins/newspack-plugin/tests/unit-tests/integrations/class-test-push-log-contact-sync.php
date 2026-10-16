@@ -473,6 +473,53 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Push a reader through a spy once per result, in order.
+	 *
+	 * @param string $integration_id The integration ID.
+	 * @param array  $push_results   What each push returns, in order.
+	 */
+	private function sync_reader_with_results( string $integration_id, array $push_results ) {
+		$spy = $this->register_spy( $integration_id );
+		foreach ( $push_results as $push_result ) {
+			$spy->push_result = $push_result;
+			Contact_Sync::sync(
+				[
+					'email'    => 'reader@example.test',
+					'metadata' => [],
+				],
+				'Test context'
+			);
+		}
+	}
+
+	/**
+	 * While an audience stays at the cap, every push of the same data is
+	 * saved without the same fields. Each one is the same open problem, so it
+	 * stays one row instead of growing the log by a failed row per push.
+	 */
+	public function test_a_repeated_partial_push_folds_into_the_readers_latest_partial_row() {
+		$partial = [ 'unsynced_fields' => [ 'NP_Membership_Status' ] ];
+		$this->sync_reader_with_results( 'repeat-partial-spy', [ $partial, $partial ] );
+
+		$this->assertSame( 1, $this->count_rows() );
+		$row = $this->get_rows_by_integration()['repeat-partial-spy'];
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'fields_not_synced', $row['error_code'] );
+		$this->assertEquals( 1, $row['repeat_count'] );
+	}
+
+	/**
+	 * A partial push after a full one is a new problem, so it must not fold
+	 * into the success row and hide there.
+	 */
+	public function test_a_partial_push_after_a_full_one_adds_its_own_row() {
+		$this->sync_reader_with_results( 'partial-after-full-spy', [ true, [ 'unsynced_fields' => [ 'NP_Membership_Status' ] ] ] );
+
+		$this->assertSame( 2, $this->count_rows() );
+		$this->assertSame( Push_Log::STATUS_FAILED, $this->get_rows_by_integration()['partial-after-full-spy']['status'] );
+	}
+
+	/**
 	 * Register a spy configured for account-deletion sync.
 	 *
 	 * @param string $integration_id The integration ID.
