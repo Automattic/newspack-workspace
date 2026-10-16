@@ -81,7 +81,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 					if ( isError ) {
 						messageContentElement.classList.remove( 'newspack-ui__helper-text' );
 						messageContentElement.classList.add( 'newspack-ui__inline-error' );
-						form.style.opacity = 1;
 					} else {
 						messageContentElement.classList.remove( 'newspack-ui__inline-error' );
 						messageContentElement.classList.add( 'newspack-ui__helper-text' );
@@ -287,7 +286,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 							} )
 							.finally( () => {
 								handleOTPTimer();
-								form.style.opacity = 1;
 								submitButtons.forEach( submitButton => {
 									submitButton.disabled = false;
 									// startLoginFlow() added the spinner for this send/resend request; this
@@ -316,24 +314,18 @@ window.newspackRAS.push( function ( readerActivation ) {
 					button.setAttribute( 'aria-busy', 'true' );
 				} );
 				form.setMessageContent();
-				form.style.opacity = 0.5;
 			};
 
 			form.isVerifying = false;
 			form.endLoginFlow = ( message = null, status = 500, data = null ) => {
 				container.setAttribute( 'data-form-status', status );
-				// Only reset opacity if modal should close on success.
-				if ( container.config?.closeOnSuccess ) {
-					form.style.opacity = 1;
-				}
 				if ( status !== 200 ) {
-					// Any non-success outcome must restore the form so the reader can retry: undim it,
-					// clear the loading spinner, and re-enable the button. This is the only reset for the
+					// Any non-success outcome must restore the form so the reader can retry: clear the
+					// loading spinner and re-enable the button. This is the only reset for the
 					// null-message network/parse failures from the fetch .catch() paths — they have no
-					// other opacity/spinner restore and would otherwise leave the form dimmed with a stuck
-					// spinner. Show an inline error only when we actually have a message.
+					// other spinner restore and would otherwise leave a stuck spinner. Show an inline
+					// error only when we actually have a message.
 					form.isVerifying = false;
-					form.style.opacity = 1;
 					if ( message ) {
 						form.setMessageContent( message, true );
 						messageContentElement.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
@@ -432,7 +424,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 							button.classList.remove( 'newspack-ui__button--loading' );
 							button.removeAttribute( 'aria-busy' );
 						} );
-						form.style.opacity = 1;
 
 						// Restore the auth modal's inline display before invoking any callback
 						// that might close or re-open it. Skipping this leaves data-state='open'
@@ -609,9 +600,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 												readerActivation.setOTPTimer();
 												handleOTPTimer();
 											}
-											if ( data.action === 'otp' || data.action === 'pwd' ) {
-												form.style.opacity = 1;
-											}
 											// The spinner is already cleared by setFormAction() above; just
 											// re-enable the button for the new step.
 											submitButtons.forEach( button => {
@@ -623,16 +611,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 									} )
 									.catch( () => {
 										form.endLoginFlow();
-									} )
-									.finally( () => {
-										const status = res.status;
-										// Check if modal should close on success. If no, reset opacity to 1.
-										// If yes, only reset opacity to 1 if the status is not successful.
-										if ( container.config?.closeOnSuccess ) {
-											form.style.opacity = 1;
-										} else if ( status !== 200 && ! container.config?.closeOnSuccess ) {
-											form.style.opacity = 1;
-										}
 									} );
 							} )
 							.catch( () => {
@@ -656,7 +634,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 									button.classList.remove( 'newspack-ui__button--loading' );
 									button.removeAttribute( 'aria-busy' );
 								} );
-								form.style.opacity = 1;
 							},
 						} );
 					} else {
