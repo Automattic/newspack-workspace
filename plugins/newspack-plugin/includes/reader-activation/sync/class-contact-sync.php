@@ -581,7 +581,7 @@ class Contact_Sync extends Sync {
 	 * - sync_account_deletion=true + handling='delete' → call $integration->delete_contact($email).
 	 * - sync_account_deletion=true + handling='flag' → push the contact with the
 	 *   `account_deleted` metadata field set to an ISO8601 timestamp. The push
-	 *   carries `skip_lists` (a deletion must never attach the master list) and
+	 *   carries `skip_lists` (a deletion must never add the reader to a list) and
 	 *   runs only for integrations that implement flag_deletion_cleanup() —
 	 *   the base no-op cannot stop outreach, so those integrations are skipped.
 	 *
@@ -873,8 +873,8 @@ class Contact_Sync extends Sync {
 	 * aggregates messages (invalid-list errors, exception detail) ahead of the
 	 * provider's own error, so reading only the first message would miss a
 	 * real signature exactly when a site is misconfigured. On the deletion path,
-	 * an error carrying Integration::CONTACT_NOT_FOUND_ERROR_CODE is benign
-	 * whatever its message.
+	 * an error whose only code is Integration::CONTACT_NOT_FOUND_ERROR_CODE is
+	 * benign whatever its message.
 	 *
 	 * @param string|\WP_Error $error     The error from a failed push.
 	 * @param string           $direction The sync direction: 'push' (default) or 'deletion'.
@@ -886,8 +886,9 @@ class Contact_Sync extends Sync {
 	private static function classify_error( $error, $direction = 'push' ) {
 		// An integration answers with this code when it holds no contact for the
 		// reader. A deletion has nothing left to remove or flag then, and no retry
-		// can make the contact appear.
-		if ( 'deletion' === $direction && $error instanceof \WP_Error && in_array( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $error->get_error_codes(), true ) ) {
+		// can make the contact appear. Only as the error's sole code: alongside
+		// another failure, that failure decides.
+		if ( 'deletion' === $direction && $error instanceof \WP_Error && [ Integration::CONTACT_NOT_FOUND_ERROR_CODE ] === $error->get_error_codes() ) {
 			return 'benign';
 		}
 
@@ -1509,8 +1510,8 @@ class Contact_Sync extends Sync {
 		if ( 'delete' === $mode ) {
 			$result = $integration->delete_contact( $email );
 		} elseif ( 'flag' === $mode ) {
-			// Same skip_lists as the original flag push: the retried payload
-			// must not attach the master list either.
+			// Same skip_lists as the original flag push: the retry must not
+			// add the reader to a list either.
 			$result = $integration->push_contact( $contact, $context, null, [ 'skip_lists' => true ] );
 		} else {
 			Logger::log( sprintf( 'Unknown deletion retry mode "%s" for integration "%s".', $mode, $integration_id ), 'NEWSPACK-SYNC', 'error' );
@@ -1744,7 +1745,7 @@ class Contact_Sync extends Sync {
 	 *                                        `fields` (string[]|null, canonical labels) and
 	 *                                        `existing_only` (bool). `fields` restricts both what
 	 *                                        metadata is computed and what is pushed;
-	 *                                        `skip_lists` upserts without a master list;
+	 *                                        `skip_lists` adds the contact to no list;
 	 *                                        `existing_only` restricts the push to contacts the
 	 *                                        integration already has. `integration_id`
 	 *                                        (string|null) restricts the push fan-out to a

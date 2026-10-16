@@ -600,6 +600,22 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A not-found answer that comes with another failure is that failure,
+	 * not a finished deletion, so it is retried.
+	 */
+	public function test_a_deletion_flag_whose_missing_contact_comes_with_another_failure_is_retried() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'mixed-spy', 'flag' );
+		$spy->push_result = new \WP_Error( Integration::CONTACT_NOT_FOUND_ERROR_CODE, 'No contact to update.' );
+		$spy->push_result->add( 'provider_down', 'Provider down' );
+
+		$this->delete_sample_reader();
+
+		$this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'mixed-spy' );
+		$this->assertSame( Push_Log::STATUS_RETRYING, $this->get_rows_by_integration()['mixed-spy']['status'] );
+	}
+
+	/**
 	 * A provider that answers the flag push with "already deleted" ends the
 	 * chain as a success with no retry behind it. A failed cleanup is then the
 	 * only thing left that can say the reader is still on a list.

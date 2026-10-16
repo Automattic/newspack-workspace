@@ -616,8 +616,8 @@ final class Push_Log {
 
 	/**
 	 * The push a row is compared with: the reader's previous one that reached
-	 * the provider. A failed push never arrived, so it says nothing about what
-	 * the provider holds.
+	 * the provider. A failed push never arrived, and a benign one changed
+	 * nothing there, so neither says what the provider holds.
 	 *
 	 * @param array $row A row, as get() returns it.
 	 *
@@ -648,11 +648,12 @@ final class Push_Log {
 
 		$by_address = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				'SELECT * FROM %i WHERE email = %s AND integration_id = %s AND status = %s AND id < %d ORDER BY id DESC LIMIT 1',
+				'SELECT * FROM %i WHERE email = %s AND integration_id = %s AND status = %s AND ( error_class IS NULL OR error_class <> %s ) AND id < %d ORDER BY id DESC LIMIT 1',
 				$table_name,
 				$row['email'],
 				$row['integration_id'],
 				self::STATUS_SUCCESS,
+				'benign',
 				(int) $row['id']
 			),
 			ARRAY_A
@@ -668,11 +669,12 @@ final class Push_Log {
 
 		$by_account = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				'SELECT * FROM %i WHERE user_id = %d AND integration_id = %s AND status = %s AND id < %d ORDER BY id DESC LIMIT 1',
+				'SELECT * FROM %i WHERE user_id = %d AND integration_id = %s AND status = %s AND ( error_class IS NULL OR error_class <> %s ) AND id < %d ORDER BY id DESC LIMIT 1',
 				$table_name,
 				$user_id,
 				$row['integration_id'],
 				self::STATUS_SUCCESS,
+				'benign',
 				(int) $row['id']
 			),
 			ARRAY_A
