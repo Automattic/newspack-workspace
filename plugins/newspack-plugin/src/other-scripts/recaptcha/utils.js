@@ -116,6 +116,52 @@ function refreshV3Token( field, action = 'submit' ) {
 }
 
 /**
+ * Get a fresh reCAPTCHA v3 token for the given form, for use right before submitting it.
+ *
+ * v3 tokens are single-use, so a form that is resubmitted after a server-side error, or submitted
+ * before the hidden field was first populated, needs a new token at submit time.
+ *
+ * @param {HTMLElement} form The form element.
+ *
+ * @return {Promise<string>} Resolves with the token, which is also written to the form's hidden field if present.
+ */
+export function getV3Token( form ) {
+	const action = form.getAttribute( 'data-newspack-recaptcha' ) || 'submit';
+	return new Promise( ( resolve, reject ) => {
+		whenGrecaptchaReady( () => {
+			try {
+				Promise.resolve( window.grecaptcha.execute( newspack_recaptcha_data?.site_key, { action } ) ).then( token => {
+					const field = form.querySelector( 'input[name="g-recaptcha-response"]' );
+					if ( field ) {
+						field.value = token;
+					}
+					resolve( token );
+				}, reject );
+			} catch ( error ) {
+				reject( error );
+			}
+		} );
+	} );
+}
+
+/**
+ * Run a callback once Google's reCAPTCHA API is ready, even if its script hasn't loaded yet.
+ *
+ * Script optimizers can run this file before Google's script. Google runs every function queued in
+ * `___grecaptcha_cfg.fns` once its API loads. See https://developers.google.com/recaptcha/docs/loading
+ *
+ * @param {Function} callback Function to run when the API is ready.
+ */
+function whenGrecaptchaReady( callback ) {
+	if ( typeof window.grecaptcha?.ready === 'function' ) {
+		window.grecaptcha.ready( callback );
+		return;
+	}
+	const config = ( window.___grecaptcha_cfg = window.___grecaptcha_cfg || {} );
+	( config.fns = config.fns || [] ).push( callback );
+}
+
+/**
  * Remove the hidden reCAPTCHA v3 token field from the given form.
  *
  * @param {HTMLElement} form The form element.
