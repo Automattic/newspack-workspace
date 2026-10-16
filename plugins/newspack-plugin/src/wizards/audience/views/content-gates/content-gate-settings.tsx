@@ -11,7 +11,7 @@ import { CardBody } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
 import { createInterpolateElement, useMemo, useRef } from '@wordpress/element';
-import { Badge } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -254,9 +254,11 @@ export default function ContentGateSettings( {
 						<>
 							<h3>
 								<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
+							</h3>
+							<Stack direction="row" gap="sm" wrap="wrap" align="center">
 								<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
 								{ priorityWarning && <TooltipBadge label={ getPriorityWarningLabel() } tooltip={ priorityWarning } intent="low" /> }
-							</h3>
+							</Stack>
 						</>
 					),
 					actions,
