@@ -553,6 +553,73 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A flag push that fails and is retried leaves its cleanup failure off the
+	 * row, because the retry runs the cleanup again. A retry that hears the
+	 * contact is already gone still ends the chain, so it must run the cleanup
+	 * too, or nothing records that a list may still hold the reader.
+	 */
+	public function test_a_deletion_retry_that_finds_the_contact_gone_still_records_a_failed_list_cleanup() {
+		$this->require_action_scheduler();
+		$spy                 = $this->register_deletion_spy( 'gone-on-retry-spy', 'flag' );
+		$spy->push_result    = new \WP_Error( 'provider_down', 'Provider down' );
+		$spy->cleanup_result = new \WP_Error( 'lists_down', 'Lists API down' );
+		$this->delete_sample_reader();
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'gone-on-retry-spy' );
+
+		$spy->push_result = new \WP_Error( 'gone', 'reader@example.test was permanently deleted and cannot be re-imported.' );
+		Contact_Sync::execute_deletion_retry( $retry['args'] );
+
+		$row = $this->get_rows_by_integration()['gone-on-retry-spy'];
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'flag_cleanup_failed', $row['error_code'] );
+		$this->assertStringContainsString( 'Lists API down', $row['error_message'] );
+		$this->assertStringContainsString( 'permanently deleted', $row['error_message'], 'The row keeps what the provider answered.' );
+	}
+
+	/**
+	 * How a deletion retry chain can end on a failure.
+	 *
+	 * @return array[]
+	 */
+	public function failures_that_end_a_deletion_chain(): array {
+		return [
+			'a permanent error'                 => [ 'reader@example.test looks fake or invalid', 1 ],
+			'a transient error on the last try' => [ 'Provider down', Contact_Sync::MAX_RETRIES ],
+		];
+	}
+
+	/**
+	 * The first attempt leaves a failed cleanup off the row for the retry to
+	 * settle, so the retry that ends the chain runs the cleanup again even when
+	 * its own push fails. The row keeps the push's error: that push never
+	 * arrived, and a cleanup code would read as one that did.
+	 *
+	 * @dataProvider failures_that_end_a_deletion_chain
+	 *
+	 * @param string $last_error  What the last push answers.
+	 * @param int    $retry_count The retry that answers it.
+	 */
+	public function test_a_deletion_chain_that_ends_on_a_failure_still_reruns_the_list_cleanup( string $last_error, int $retry_count ) {
+		$this->require_action_scheduler();
+		$spy                 = $this->register_deletion_spy( 'failed-chain-spy', 'flag' );
+		$spy->push_result    = new \WP_Error( 'provider_down', 'Provider down' );
+		$spy->cleanup_result = new \WP_Error( 'lists_down', 'Lists API down' );
+		$this->delete_sample_reader();
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'failed-chain-spy' );
+
+		$spy->push_result = new \WP_Error( 'last_push_failed', $last_error );
+		try {
+			Contact_Sync::execute_deletion_retry( array_merge( $retry['args'], [ 'retry_count' => $retry_count ] ) );
+		} catch ( \Exception $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- The last retry throws so Action Scheduler marks it failed.
+		}
+
+		$row = $this->get_rows_by_integration()['failed-chain-spy'];
+		$this->assertCount( 2, $spy->cleanup_calls, 'The retry that ends the chain runs the cleanup again.' );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'last_push_failed', $row['error_code'], 'The row keeps the push error.' );
+	}
+
+	/**
 	 * A deletion retry that gives up is a reader left undeleted at the
 	 * provider. It has no natural re-trigger, so the row must not stay
 	 * "retrying".
