@@ -18,6 +18,7 @@ use Newspack_Network\Crypto;
 use Newspack_Network\Hub\Nodes;
 use Newspack_Network\Hub\Webhook;
 use Newspack_Network\Used_Nonces;
+use Newspack_Network\User_Update_Watcher;
 use Newspack_Network\Hub\Database\Event_Log as Event_Log_Database;
 
 /**
@@ -100,12 +101,13 @@ class TestHubWebhook extends \WP_UnitTestCase {
 	 * @param int    $timestamp Event timestamp.
 	 * @param string $nonce     Nonce.
 	 * @param string $data_json JSON payload to encrypt.
+	 * @param string $action    Action the delivery carries.
 	 * @return \WP_REST_Request
 	 */
-	private function build_request( $timestamp, $nonce, $data_json ) {
+	private function build_request( $timestamp, $nonce, $data_json, $action = self::ACTION ) {
 		$request = new \WP_REST_Request( 'POST', '/newspack-network/v1/webhook' );
 		$request->set_param( 'site', self::NODE_URL );
-		$request->set_param( 'action', self::ACTION );
+		$request->set_param( 'action', $action );
 		$request->set_param( 'data', Crypto::encrypt_message( $data_json, $this->secret_key, $nonce ) );
 		$request->set_param( 'timestamp', $timestamp );
 		$request->set_param( 'nonce', $nonce );
@@ -487,7 +489,49 @@ class TestHubWebhook extends \WP_UnitTestCase {
 		$this->assertStringContainsString( (string) $this->node_id, $logged[0][0] );
 		$this->assertStringContainsString( self::NODE_URL, $logged[0][0] );
 		$this->assertSame( 'warning', $logged[0][1]['type'] );
-		$this->assertStringContainsString( 'has no author who is currently an administrator', $logged[0][0] );
+		$this->assertStringContainsString( 'while its author was not an administrator', $logged[0][0] );
+	}
+
+	/**
+	 * A delivery that promotes the Node's own author to administrator is still
+	 * logged: the author's role is read before the delivery is processed.
+	 */
+	public function test_delivery_promoting_the_node_author_is_logged() {
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		wp_update_post(
+			[
+				'ID'          => $this->node_id,
+				'post_author' => $editor_id,
+			]
+		);
+
+		$logged  = [];
+		$capture = function ( $code, $message ) use ( &$logged ) {
+			if ( 'newspack_network_node_origin' === $code ) {
+				$logged[] = $message;
+			}
+		};
+		add_action( 'newspack_log', $capture, 10, 2 );
+
+		$payload = wp_json_encode(
+			[
+				'email' => get_userdata( $editor_id )->user_email,
+				'role'  => [ 'administrator' ],
+			]
+		);
+		// Manual sync turns the user-update watcher off and never back on, so
+		// restore it for the tests that follow.
+		$watcher_enabled = User_Update_Watcher::$enabled;
+		try {
+			$response = Webhook::handle_webhook( $this->build_request( time(), Crypto::generate_nonce(), $payload, 'network_manual_sync_user' ) );
+		} finally {
+			User_Update_Watcher::$enabled = $watcher_enabled;
+			remove_action( 'newspack_log', $capture, 10 );
+		}
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( user_can( $editor_id, 'manage_options' ), 'The delivery promoted the author, so the test exercises the case.' );
+		$this->assertCount( 1, $logged, 'The Node is logged even though its author is now an administrator.' );
 	}
 
 	/**

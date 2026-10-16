@@ -129,6 +129,10 @@ class Webhook {
 
 		$incoming_event_class = 'Newspack_Network\\Incoming_Events\\' . $incoming_events[ $action ];
 
+		// Read before processing: a delivery can change the author's role, and one
+		// that promotes them must not clear the condition the log reports.
+		$author_was_administrator = self::node_author_is_administrator( $node );
+
 		// The claim is held while the event is processed. Processing that fails
 		// with nothing persisted releases it and returns a 5xx, so the Node's
 		// retry can reprocess: a throw is caught below, and a failed Event Log
@@ -175,13 +179,25 @@ class Webhook {
 			Debugger::log( 'Webhook delivery processed, but marking it completed failed; the claim stays pending.' );
 		}
 
-		self::maybe_log_node_origin( $node );
+		self::maybe_log_node_origin( $node, $author_was_administrator );
 
 		return new WP_REST_Response( 'success' );
 	}
 
 	/**
-	 * Logs a line when the sending Node's author is not currently an administrator.
+	 * Whether the Node's author is currently an administrator.
+	 *
+	 * @param Node $node The Node.
+	 * @return bool
+	 */
+	private static function node_author_is_administrator( $node ) {
+		$author_id = (int) get_post_field( 'post_author', $node->get_id() );
+		return $author_id && user_can( $author_id, 'manage_options' );
+	}
+
+	/**
+	 * Logs a line when the sending Node's author was not an administrator when
+	 * the delivery arrived.
 	 *
 	 * Nodes are managed by administrators, so a Node whose author is missing or
 	 * is not one is worth a look. The event is processed either way; the line
@@ -190,12 +206,12 @@ class Webhook {
 	 * through newspack_log because Debugger::log() writes only when
 	 * NEWSPACK_NETWORK_DEBUG is defined.
 	 *
-	 * @param Node $node The Node the event came from.
+	 * @param Node $node                     The Node the event came from.
+	 * @param bool $author_was_administrator Whether the author was an administrator before the delivery was processed.
 	 * @return void
 	 */
-	private static function maybe_log_node_origin( $node ) {
-		$author_id = (int) get_post_field( 'post_author', $node->get_id() );
-		if ( $author_id && user_can( $author_id, 'manage_options' ) ) {
+	private static function maybe_log_node_origin( $node, $author_was_administrator ) {
+		if ( $author_was_administrator ) {
 			return;
 		}
 
@@ -206,7 +222,7 @@ class Webhook {
 		set_transient( $throttle_key, 1, DAY_IN_SECONDS );
 
 		$message = sprintf(
-			'Network node %d (%s) has no author who is currently an administrator; review it under Network > Nodes.',
+			'Network node %d (%s) sent an event while its author was not an administrator; review it under Network > Nodes.',
 			$node->get_id(),
 			$node->get_url()
 		);
