@@ -256,7 +256,7 @@
 			label:has(input[type="checkbox"]) {
 				display: grid;
 				gap: 0 var(--newspack-ui-spacer-base, 8px);
-				grid-template-columns: var(--newspack-ui-control-size, 24px) 1fr;
+				grid-template-columns: var(--newspack-ui-control-size, 20px) 1fr;
 				margin: var(--newspack-ui-spacer-5, 24px) 0 0;
 			}
 
@@ -449,7 +449,7 @@
 
 						input {
 							margin-right: var(--newspack-ui-spacer-base, 8px);
-							margin-top: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - var(--newspack-ui-control-size, 24px)) / 2);
+							margin-top: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - var(--newspack-ui-control-size, 20px)) / 2);
 						}
 					}
 				}
@@ -473,7 +473,7 @@
 							align-items: flex-start;
 
 							input {
-								margin: 0;
+								margin: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - var(--newspack-ui-control-size, 20px)) / 2) 0 0;
 							}
 
 							label {
@@ -530,7 +530,7 @@
 			&:has(input[type="checkbox"]),
 			&:has(input[type="radio"]) {
 				display: grid !important;
-				grid-template-columns: var(--newspack-ui-control-size, 24px) 1fr;
+				grid-template-columns: var(--newspack-ui-control-size, 20px) 1fr;
 
 				> *:not(input) {
 					grid-column: 2 / span 1;
@@ -550,9 +550,10 @@
 				background: var(--newspack-ui-color-neutral-0, #fff) !important;
 				border: 1px solid var(--newspack-ui-color-input-border, np-colors.$neutral-500) !important;
 				box-shadow: none;
-				height: var(--newspack-ui-control-size, 24px);
-				width: var(--newspack-ui-control-size, 24px);
-				margin: auto 0;
+				flex-shrink: 0;
+				height: var(--newspack-ui-control-size, 20px);
+				width: var(--newspack-ui-control-size, 20px);
+				margin: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - var(--newspack-ui-control-size, 20px)) / 2) 0 0;
 				transition: border-color 125ms ease-in-out;
 			}
 
@@ -567,10 +568,11 @@
 			> label {
 				margin: unset;
 				display: flex;
-				align-items: center;
+				align-items: flex-start;
 				font-weight: var(--newspack-ui-font-weight-strong, 600);
 
 				img {
+					align-self: center;
 					margin-left: auto;
 				}
 			}
@@ -800,7 +802,11 @@
 				&:has(#wc-braintree-paypal-tokenize-payment-method) {
 					display: grid !important;
 					gap: 0 var(--newspack-ui-spacer-base, 8px);
-					grid-template-columns: var(--newspack-ui-control-size, 24px) 1fr;
+					grid-template-columns: var(--newspack-ui-control-size, 20px) 1fr;
+
+					> input {
+						margin: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - var(--newspack-ui-control-size, 20px)) / 2) 0 0;
+					}
 
 					label {
 						font-weight: 600;
@@ -910,13 +916,17 @@
 		label {
 			display: flex !important; // to override grid on more generic labels with checkboxes.
 			justify-content: flex-start;
-			align-items: center;
+			align-items: flex-start;
 			margin: 0;
 			padding: 0;
 			gap: 0;
 
 			> input {
-				margin: 0 var(--newspack-ui-spacer-2, 12px) 0 0;
+				margin: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - var(--newspack-ui-control-size, 20px)) / 2) var(--newspack-ui-spacer-2, 12px) 0 0;
+			}
+
+			&:has(> span) > input {
+				margin-top: calc((var(--newspack-ui-font-size-xs, 14px) * var(--newspack-ui-line-height-xs, 1.4286) - var(--newspack-ui-control-size, 20px)) / 2);
 			}
 
 			> span {
@@ -1009,6 +1019,10 @@
 				content: none;
 			}
 		}
+	}
+
+	form.checkout > .woocommerce-NoticeGroup.newspack-ui__notice:first-child {
+		margin-top: 0;
 	}
 
 	.woocommerce .woocommerce-notices-wrapper:not(:empty) {
