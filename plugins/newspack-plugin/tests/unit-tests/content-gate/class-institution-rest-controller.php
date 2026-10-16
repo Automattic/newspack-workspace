@@ -5,6 +5,7 @@
  * @package Newspack\Tests\Content_Gate
  */
 
+use Newspack\Block_Visibility;
 use Newspack\Institution;
 use Newspack\Institution_REST_Controller;
 
@@ -42,6 +43,13 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	 * @var int
 	 */
 	private $author_id;
+
+	/**
+	 * A user holding neither capability, logged in.
+	 *
+	 * @var int
+	 */
+	private $contributor_id;
 
 	/**
 	 * A user holding both.
@@ -88,6 +96,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$this->editor_id      = $this->factory->user->create( [ 'role' => 'editor' ] );
 		$this->subscriber_id  = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$this->author_id      = $this->factory->user->create( [ 'role' => 'author' ] );
+		$this->contributor_id = $this->factory->user->create( [ 'role' => 'contributor' ] );
 		$this->admin_id       = $this->factory->user->create( [ 'role' => 'administrator' ] );
 
 		// A built-in role never isolates RULES_CAPABILITY from READ_CAPABILITY —
@@ -108,6 +117,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		);
 		update_post_meta( $this->institution_id, Institution::META_PREFIX . 'email_domain', 'test-university.example' );
 		update_post_meta( $this->institution_id, Institution::META_PREFIX . 'ip_range', '10.0.0.0/8' );
+		update_post_meta( $this->institution_id, Institution::META_PREFIX . 'reader_data', 'org=test-university' );
 
 		Institution::register_meta();
 		do_action( 'rest_api_init' );
@@ -125,6 +135,36 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$request = new WP_REST_Request( 'GET', $this->route );
 		$request->set_param( 'context', $context );
 		return rest_do_request( $request );
+	}
+
+	/**
+	 * Dispatch the request the block editor's visibility panel sends for its
+	 * institution picker, as the given user.
+	 *
+	 * Mirrors the path in src/content-gate/access-rule-option-sources.ts. The
+	 * panel asks for per_page=-1, which api-fetch's fetch-all middleware turns
+	 * into per_page=100 and walks by page, so that is what reaches the server.
+	 * _fields is applied the way serve_request() would apply it, since
+	 * rest_do_request() skips rest_post_dispatch.
+	 *
+	 * @param int $user_id User to act as.
+	 * @return WP_REST_Response
+	 */
+	private function read_as_block_visibility_panel( $user_id ) {
+		wp_set_current_user( $user_id );
+		$request = new WP_REST_Request( 'GET', $this->route );
+		$request->set_query_params(
+			[
+				'context'  => 'edit',
+				'status'   => 'publish',
+				'orderby'  => 'title',
+				'order'    => 'asc',
+				'per_page' => 100,
+				'page'     => 1,
+				'_fields'  => 'id,title',
+			]
+		);
+		return rest_filter_response_fields( rest_do_request( $request ), rest_get_server(), $request );
 	}
 
 	/**
@@ -500,6 +540,53 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The panel and the read gate name one capability.
+	 *
+	 * The panel is the only non-administrator consumer of this route, so the two
+	 * gates have to agree: a panel shown to a role the route refuses renders an
+	 * empty institution picker with nothing failing, which is how NPPM-3128 was
+	 * found. Fails when the read gate names a different capability from the
+	 * panel's constant. The second assertion pins the value, so re-tiering both
+	 * together is a change this test has to be told about. What the panel's
+	 * enqueue gate checks is pinned in Newspack_Test_Block_Visibility.
+	 */
+	public function test_read_capability_is_the_block_visibility_panel_capability() {
+		$this->assertSame( Block_Visibility::CONFIGURE_CAPABILITY, Institution_REST_Controller::READ_CAPABILITY );
+		$this->assertSame( 'edit_others_posts', Institution_REST_Controller::READ_CAPABILITY );
+	}
+
+	/**
+	 * Every role that is shown the panel can fill its institution picker, and
+	 * no role that is refused the panel can read the names.
+	 *
+	 * Sends the panel's own request, edit context included.
+	 */
+	public function test_panel_request_succeeds_for_exactly_the_roles_shown_the_panel() {
+		$users = [
+			'administrator' => $this->admin_id,
+			'editor'        => $this->editor_id,
+			'author'        => $this->author_id,
+			'contributor'   => $this->contributor_id,
+			'subscriber'    => $this->subscriber_id,
+		];
+		foreach ( $users as $role => $user_id ) {
+			$response = $this->read_as_block_visibility_panel( $user_id );
+			$data     = $response->get_data();
+
+			if ( user_can( $user_id, Block_Visibility::CONFIGURE_CAPABILITY ) ) {
+				$this->assertSame( 200, $response->get_status(), "The $role role is shown the panel and must read institution names." );
+				$this->assertCount( 1, $data, "The $role role gets the one institution." );
+				$this->assertSame( [ 'id', 'title' ], array_keys( $data[0] ), "The $role role gets the fields the panel asks for." );
+				$this->assertSame( $this->institution_id, $data[0]['id'] );
+				$this->assertSame( 'Test University', $data[0]['title']['raw'] );
+			} else {
+				$this->assertSame( 403, $response->get_status(), "The $role role is refused the panel and must be refused the route." );
+				$this->assertStringNotContainsString( 'Test University', wp_json_encode( $data ), "A refused $role response must not carry institution names." );
+			}
+		}
+	}
+
+	/**
 	 * A caller without the rules capability sees no stored rules.
 	 */
 	public function test_rules_are_withheld_without_the_rules_capability() {
@@ -508,6 +595,9 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assert_meta_withheld( $data[0]['meta'] );
+		foreach ( [ 'test-university.example', '10.0.0.0/8', 'org=test-university' ] as $value ) {
+			$this->assertStringNotContainsString( $value, wp_json_encode( $data, JSON_UNESCAPED_SLASHES ), 'No stored rule value may appear anywhere in the response.' );
+		}
 	}
 
 	/**
@@ -520,6 +610,7 @@ class Newspack_Test_Institution_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( '10.0.0.0/8', $data[0]['meta'][ Institution::META_PREFIX . 'ip_range' ] );
 		$this->assertSame( 'test-university.example', $data[0]['meta'][ Institution::META_PREFIX . 'email_domain' ] );
+		$this->assertSame( 'org=test-university', $data[0]['meta'][ Institution::META_PREFIX . 'reader_data' ] );
 	}
 
 	/**
