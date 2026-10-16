@@ -1654,6 +1654,24 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A callback that throws is reported in the log, since the page that follows
+	 * looks the same as an untracked outage's.
+	 */
+	public function test_health_check_issue_url_callback_failure_is_logged() {
+		$this->capture_alerts( 'integration_health_issue_url_failed' );
+		add_filter(
+			'newspack_integration_health_issue_url',
+			function () {
+				throw new \RuntimeException( 'Simulated hub failure.' );
+			}
+		);
+
+		$this->break_integration( 'esp' );
+
+		$this->assertCount( 1, $this->captured['integration_health_issue_url_failed']['warning'] );
+	}
+
+	/**
 	 * Issue URL callbacks that must not stop the page.
 	 */
 	public function data_unusable_issue_urls() {
