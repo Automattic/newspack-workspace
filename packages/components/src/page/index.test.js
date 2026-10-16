@@ -19,6 +19,10 @@ jest.mock( '@wordpress/compose', () => ( {
 	useViewportMatch: jest.fn( () => true ),
 } ) );
 
+afterEach( () => {
+	useViewportMatch.mockReturnValue( true );
+} );
+
 const renderInRouter = ui => render( <HashRouter>{ ui }</HashRouter> );
 
 describe( 'Page', () => {

@@ -35,7 +35,7 @@ import './style.scss';
  * @param {Object} props
  * @param {Array}  props.breadcrumbItems    Trail items: `{ label, url? }`.
  * @param {*}      [props.badges]
- * @param {*}      [props.subTitle]
+ * @param {*}      [props.subTitle]         Plain text, hidden visually below 782px.
  * @param {*}      [props.actions]          Rendered nodes, or a list of action objects (see
  *                                          `PageAction` in `./header-actions`), which below
  *                                          782px collapse into one menu beside the primary action.
@@ -61,7 +61,7 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 		<>
 			<Stack direction="column" className="newspack-page__header-region">
 				<Stack direction="column" className="newspack-page__header">
-					<Stack direction="row" gap="md" justify="space-between" wrap="wrap">
+					<Stack direction="row" justify="space-between" wrap="wrap" className="newspack-page__header-row">
 						<Stack direction="row" gap="sm" align="start" justify="start" className="newspack-page__header-title">
 							<div className="newspack-page__header-visual" aria-hidden="true">
 								<Icon icon={ newspack } />

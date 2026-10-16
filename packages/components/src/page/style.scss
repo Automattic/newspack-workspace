@@ -69,6 +69,11 @@ $dataviews-compact-max-width: 430px;
 	padding: var(--wpds-dimension-padding-lg) var(--wpds-dimension-padding-2xl);
 }
 
+.newspack-page__header-row {
+	column-gap: var(--wpds-dimension-gap-md, #{wp-vars.$grid-unit-15});
+	row-gap: var(--wpds-dimension-gap-sm, #{wp-vars.$grid-unit-10});
+}
+
 .newspack-page__header-title {
 	min-width: 0;
 }
