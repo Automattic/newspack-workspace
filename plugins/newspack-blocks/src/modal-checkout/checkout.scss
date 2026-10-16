@@ -256,7 +256,7 @@
 			label:has(input[type="checkbox"]) {
 				display: grid;
 				gap: 0 var(--newspack-ui-spacer-base, 8px);
-				grid-template-columns: var(--newspack-ui-spacer-4, 20px) 1fr;
+				grid-template-columns: var(--newspack-ui-control-size, 24px) 1fr;
 				margin: var(--newspack-ui-spacer-5, 24px) 0 0;
 			}
 
@@ -449,7 +449,7 @@
 
 						input {
 							margin-right: var(--newspack-ui-spacer-base, 8px);
-							margin-top: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - 20px) / 2);
+							margin-top: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - var(--newspack-ui-control-size, 24px)) / 2);
 						}
 					}
 				}
@@ -530,7 +530,7 @@
 			&:has(input[type="checkbox"]),
 			&:has(input[type="radio"]) {
 				display: grid !important;
-				grid-template-columns: var(--newspack-ui-spacer-4, 20px) 1fr;
+				grid-template-columns: var(--newspack-ui-control-size, 24px) 1fr;
 
 				> *:not(input) {
 					grid-column: 2 / span 1;
@@ -544,19 +544,20 @@
 						transform: translateY(0) !important; // Align label text with custom input styles.
 					}
 				}
-
-				> input {
-					margin-top: 0.125em;
-				}
 			}
 
 			> input + label::before {
 				background: var(--newspack-ui-color-neutral-0, #fff) !important;
 				border: 1px solid var(--newspack-ui-color-input-border, #ccc) !important;
 				box-shadow: none;
-				height: var(--newspack-ui-spacer-4, 20px);
-				width: var(--newspack-ui-spacer-4, 20px);
+				height: var(--newspack-ui-control-size, 24px);
+				width: var(--newspack-ui-control-size, 24px);
 				margin: auto 0;
+				transition: border-color 125ms ease-in-out;
+			}
+
+			> input:not(:checked) + label:hover::before {
+				border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700) !important;
 			}
 
 			> input:checked + label::before {
@@ -637,21 +638,30 @@
 			font-size: var(--newspack-ui-font-size-s, 16px);
 			line-height: var(--newspack-ui-line-height-s, 1.5);
 			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-3, 16px) - 1px);
+			transition: border-color 125ms ease-in-out, outline 125ms ease-in-out;
+
+			&:hover {
+				border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700);
+			}
+
+			&.StripeElement--focus {
+				outline: 2px solid var(--newspack-ui-color-input-border-focus, np-colors.$neutral-900);
+				outline-offset: -1px;
+			}
 		}
 
 		&:has(div.stripe-source-errors[role="alert"]:not(:empty)) {
+			--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, np-colors.$error-600);
+			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, np-colors.$error-600);
+
 			.wc-stripe-elements-field,
 			.wc-stripe-iban-element-field {
-				border-color: var(--newspack-ui-color-error-50, np-colors.$error-500);
-			}
-
-			label {
-				color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+				box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
 			}
 
 			.woocommerce_error {
 				background: transparent;
-				color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+				color: var(--newspack-ui-color-error-text, np-colors.$error-600);
 				font-family: var(--newspack-ui-font-family, system-ui);
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-line-height-xs, 1.4286);
@@ -790,7 +800,7 @@
 				&:has(#wc-braintree-paypal-tokenize-payment-method) {
 					display: grid !important;
 					gap: 0 var(--newspack-ui-spacer-base, 8px);
-					grid-template-columns: var(--newspack-ui-spacer-4, 20px) 1fr;
+					grid-template-columns: var(--newspack-ui-control-size, 24px) 1fr;
 
 					label {
 						font-weight: 600;
@@ -853,18 +863,14 @@
 
 	// Errors
 	.woocommerce-invalid {
-		input,
+		--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, np-colors.$error-600);
+		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, np-colors.$error-600);
+
+		input:not([type="hidden"], [type="submit"], [type="button"], [type="reset"]),
 		textarea,
 		.select2-container--default .select2-selection--single {
-			border-color: var(--newspack-ui-color-error-50, np-colors.$error-500);
-
-			&:focus {
-				outline-color: var(--newspack-ui-color-error-50, np-colors.$error-500);
-			}
-		}
-
-		label {
-			color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+			border-color: var(--newspack-ui-color-input-border);
+			box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
 		}
 	}
 
@@ -903,7 +909,6 @@
 			display: flex !important; // to override grid on more generic labels with checkboxes.
 			justify-content: flex-start;
 			align-items: center;
-			height: 20px;
 			margin: 0;
 			padding: 0;
 			gap: 0;
@@ -985,12 +990,28 @@
 		}
 	}
 
+	form.checkout .woocommerce-NoticeGroup.newspack-ui__notice,
+	.woocommerce .woocommerce-notices-wrapper.newspack-ui__notice {
+		grid-auto-rows: auto;
+
+		.woocommerce-message,
+		.woocommerce-error,
+		.woocommerce-info {
+			border: 0;
+			font-size: inherit;
+			line-height: inherit;
+			min-height: 0;
+			padding: 0 !important;
+
+			&::before {
+				content: none;
+			}
+		}
+	}
+
 	.woocommerce .woocommerce-notices-wrapper:not(:empty) {
 		margin-bottom: var(--newspack-ui-spacer-5, 24px);
 		margin-top: 0;
-		/* Prevent duplicated padding and border from Newspack UI notices */
-		padding: 0 !important;
-		border-left: none;
 	}
 
 	.woocommerce .woocommerce-notices-wrapper .woocommerce-error.newspack-ui__notice--error {

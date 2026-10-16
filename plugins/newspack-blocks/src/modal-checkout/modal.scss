@@ -227,10 +227,12 @@
 }
 
 .non-modal-checkout-loading {
+	-webkit-text-fill-color: transparent;
+	pointer-events: none;
 	position: relative;
 
 	span {
-		visibility: hidden;
+		opacity: 0;
 	}
 
 	&::before {
@@ -262,4 +264,8 @@
 
 .modal-processing {
 	opacity: 0.5;
+
+	&:has(.non-modal-checkout-loading) {
+		opacity: 1;
+	}
 }

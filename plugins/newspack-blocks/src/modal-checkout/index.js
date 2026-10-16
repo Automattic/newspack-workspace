@@ -863,7 +863,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', true );
+						$( el ).attr( 'disabled', true ).attr( 'aria-busy', 'true' ).addClass( 'newspack-ui__button--loading' );
 					} );
 					form.addClass( 'modal-processing' );
 					return true;
@@ -882,7 +882,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', false );
+						$( el ).attr( 'disabled', false ).removeAttr( 'aria-busy' ).removeClass( 'newspack-ui__button--loading' );
 					} );
 					form.removeClass( 'modal-processing' );
 					return true;
