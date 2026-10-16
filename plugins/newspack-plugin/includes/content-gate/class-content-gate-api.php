@@ -50,7 +50,8 @@ class Content_Gate_API {
 				'type'       => 'object',
 				'properties' => [
 					'slug'      => [ 'type' => 'string' ],
-					'value'     => [ 'type' => [ 'string', 'array' ] ],
+					// An object for a composite value such as the published-age rule's.
+					'value'     => [ 'type' => [ 'string', 'array', 'object' ] ],
 					'exclusion' => [ 'type' => 'boolean' ],
 				],
 			],
@@ -157,8 +158,8 @@ class Content_Gate_API {
 	/**
 	 * Sanitize the gate.
 	 *
-	 * TODO: Handle errors from the remaining sanitization methods (content rules,
-	 * metering) the way custom access errors already propagate.
+	 * TODO: Handle errors from the remaining sanitization methods (content rules other
+	 * than the published-age rule, metering) the way custom access errors already propagate.
 	 *
 	 * @param array            $gate    The gate.
 	 * @param \WP_REST_Request $request Optional. The request being sanitized, as WP passes it
@@ -168,8 +169,8 @@ class Content_Gate_API {
 	 *                                  first, and the ID there is caller-supplied and can name
 	 *                                  a different gate.
 	 *
-	 * @return array|\WP_Error The sanitized gate, or an error when an access rule
-	 *                         holds an invalid value.
+	 * @return array|\WP_Error The sanitized gate, or an error when an access rule or a
+	 *                         published-age content rule holds an invalid value.
 	 */
 	public static function sanitize_gate( $gate, $request = null ) {
 		$gate_id   = self::get_route_gate_id( $request );
@@ -187,7 +188,15 @@ class Content_Gate_API {
 			$sanitized['status'] = self::sanitize_status( $gate['status'], $gate_id );
 		}
 		if ( isset( $gate['content_rules'] ) ) {
-			$sanitized['content_rules'] = self::sanitize_rules( $gate['content_rules'], 'content' );
+			$sanitized_content_rules = self::sanitize_rules( $gate['content_rules'], 'content' );
+			// The gates list switches a gate off by posting the whole gate back, rules unchanged.
+			// That save leaves the stored rules alone instead of failing, so a gate holding an
+			// unreadable rule can still be turned off. Any other save carrying one fails.
+			if ( ! is_wp_error( $sanitized_content_rules ) ) {
+				$sanitized['content_rules'] = $sanitized_content_rules;
+			} elseif ( 'publish' === ( $gate['status'] ?? 'publish' ) || ! self::content_rules_are_unchanged( $gate['content_rules'], $gate_id ) ) {
+				return $sanitized_content_rules;
+			}
 		}
 		if ( isset( $gate['registration'] ) ) {
 			$sanitized_registration = self::sanitize_registration( $gate['registration'], self::registration_wall_is_live( $gate['registration'], $sanitized, $gate_id ) );
@@ -572,6 +581,22 @@ class Content_Gate_API {
 	}
 
 	/**
+	 * Whether a save posts back the content rules the gate already stores.
+	 *
+	 * @param mixed $content_rules The content rules in the request.
+	 * @param int   $gate_id       The route's gate ID.
+	 *
+	 * @return bool
+	 */
+	private static function content_rules_are_unchanged( $content_rules, $gate_id ) {
+		// Guarded like access_rules_are_unchanged(), for the same reason.
+		if ( ! is_array( $content_rules ) || ! self::caller_can_save_gate( $gate_id ) ) {
+			return false;
+		}
+		return wp_json_encode( array_values( $content_rules ) ) === wp_json_encode( Content_Rules::get_gate_content_rules( $gate_id ) );
+	}
+
+	/**
 	 * A comparable rendering of a rule set: numbers as floats, other scalars as
 	 * sanitized text, the same cast on both sides.
 	 *
@@ -761,8 +786,8 @@ class Content_Gate_API {
 	 * @param array  $rules The rules.
 	 * @param string $type The type of rules to sanitize.
 	 *
-	 * @return array|\WP_Error The sanitized rules, or an error when an access rule
-	 *                         holds an invalid value.
+	 * @return array|\WP_Error The sanitized rules, or an error when an access rule or a
+	 *                         published-age content rule holds an invalid value.
 	 */
 	public static function sanitize_rules( $rules, $type = 'access' ) {
 		if ( ! is_array( $rules ) ) {
@@ -780,6 +805,9 @@ class Content_Gate_API {
 			$sanitized = self::sanitize_content_rule( $rule );
 			if ( ! is_wp_error( $sanitized ) ) {
 				$sanitized_rules[] = $sanitized;
+			} elseif ( Content_Rules::PUBLISHED_AGE_RULE === ( $rule['slug'] ?? '' ) ) {
+				// Dropping an age rule would widen an AND gate from the archive to every post.
+				return $sanitized;
 			}
 		}
 		return $sanitized_rules;
@@ -984,6 +1012,18 @@ class Content_Gate_API {
 	 * @return mixed|\WP_Error The sanitized content rule or error if invalid.
 	 */
 	public static function sanitize_content_rule( $content_rule ) {
+		// Include-only: the rule's own comparison sets the direction, so it never carries `exclusion`.
+		if ( Content_Rules::PUBLISHED_AGE_RULE === ( $content_rule['slug'] ?? '' ) ) {
+			$value = Content_Rules::sanitize_published_age_value( $content_rule['value'] ?? null );
+			if ( is_wp_error( $value ) ) {
+				return $value;
+			}
+			return [
+				'slug'  => Content_Rules::PUBLISHED_AGE_RULE,
+				'value' => $value,
+			];
+		}
+
 		$rules                = Content_Rules::get_content_rules();
 		$newsletter_rules     = Content_Rules::get_premium_newsletter_rules();
 		$newsletter_rules_arr = ( is_array( $newsletter_rules ) && ! is_wp_error( $newsletter_rules ) ) ? $newsletter_rules : [];

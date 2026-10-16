@@ -325,6 +325,10 @@ class Content_Restriction_Control {
 			return in_array( $post_id, array_map( 'intval', $content_rule['value'] ), true );
 		}
 
+		if ( Content_Rules::PUBLISHED_AGE_RULE === $content_rule['slug'] ) {
+			return Content_Rules::post_matches_published_age( $content_rule['value'], $post_id );
+		}
+
 		$taxonomy = get_taxonomy( $content_rule['slug'] );
 		if ( ! $taxonomy ) {
 			return false;
@@ -684,7 +688,8 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Whether the current user may toggle the content-gate exemption meta.
+	 * Whether the current user may toggle the content-gate exemption meta, and set
+	 * the post's own time window for published-age rules.
 	 *
 	 * Single source of truth for the exemption's write capability, shared by
 	 * the meta's register_meta() auth_callback and the REST strip guard so the
@@ -791,7 +796,7 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Register post meta for the exemption flag.
+	 * Register post meta for the exemption flag and the post's own time window.
 	 */
 	public static function register_meta() {
 		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
@@ -807,6 +812,33 @@ class Content_Restriction_Control {
 					'show_in_rest'   => true,
 					'type'           => 'boolean',
 					'default'        => false,
+					'single'         => true,
+					'auth_callback'  => [ __CLASS__, 'current_user_can_edit_exemption' ],
+				]
+			);
+			\register_meta(
+				'post',
+				Content_Rules::AGE_OVERRIDE_META_KEY,
+				[
+					'object_subtype' => $post_type,
+					'show_in_rest'   => [
+						'schema' => [
+							'type'                 => 'object',
+							// No minimum: a count being retyped must not fail the post save. A count
+							// below 1 is stored and ignored, so the gate's own duration applies.
+							'properties'           => [
+								'duration_value' => [
+									'type' => 'integer',
+								],
+								'duration_unit'  => [
+									'type' => 'string',
+									'enum' => Content_Rules::AGE_UNITS,
+								],
+							],
+							'additionalProperties' => false,
+						],
+					],
+					'type'           => 'object',
 					'single'         => true,
 					'auth_callback'  => [ __CLASS__, 'current_user_can_edit_exemption' ],
 				]
@@ -831,8 +863,8 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Remove the exemption meta from an incoming REST save when the current
-	 * user cannot toggle it, so a stray ride-along (Members / Custom Fields /
+	 * Remove the exemption and age-override meta from an incoming REST save when
+	 * the current user cannot set them, so a stray ride-along (Members / Custom Fields /
 	 * third-party) is silently ignored instead of 403-ing the whole save.
 	 *
 	 * Note: `WP_REST_Request` returns array params by value, so the key must be
@@ -845,13 +877,12 @@ class Content_Restriction_Control {
 	 */
 	public static function strip_unauthorized_exempt_meta( $prepared_post, $request ) {
 		$meta = $request['meta'];
-		if (
-			is_array( $meta ) &&
-			array_key_exists( self::IS_EXEMPT_META_KEY, $meta ) &&
-			! self::current_user_can_edit_exemption()
-		) {
-			unset( $meta[ self::IS_EXEMPT_META_KEY ] );
-			$request['meta'] = $meta;
+		if ( ! is_array( $meta ) || self::current_user_can_edit_exemption() ) {
+			return $prepared_post;
+		}
+		$guarded_keys = [ self::IS_EXEMPT_META_KEY, Content_Rules::AGE_OVERRIDE_META_KEY ];
+		if ( array_intersect( $guarded_keys, array_keys( $meta ) ) ) {
+			$request['meta'] = array_diff_key( $meta, array_flip( $guarded_keys ) );
 		}
 		return $prepared_post;
 	}
