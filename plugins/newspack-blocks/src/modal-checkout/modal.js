@@ -83,7 +83,10 @@ window.onpageshow = event => {
 	if ( event.persisted ) {
 		// If the page is loaded from the back button, find and remove any loading-related classes and modals:
 		document.querySelectorAll( '.modal-processing' ).forEach( el => el.classList.remove( 'modal-processing' ) );
-		document.querySelectorAll( '.non-modal-checkout-loading' ).forEach( el => el.classList.remove( 'non-modal-checkout-loading' ) );
+		document.querySelectorAll( '.non-modal-checkout-loading' ).forEach( el => {
+			el.classList.remove( 'non-modal-checkout-loading' );
+			el.removeAttribute( 'aria-busy' );
+		} );
 		document.querySelectorAll( `.${ MODAL_CLASS_PREFIX }-container` ).forEach( el => closeModal( el ) );
 		// The reader is back on a page they were redirected away from, so the gate may reload it.
 		releaseHeldOverlays();
@@ -440,19 +443,29 @@ domReady( () => {
 
 		// Populate cart and redirect to checkout if there is an unsupported payment gateway.
 		if ( ! isModalCheckout && ! shouldPromptRegistration() ) {
-			generateCart( checkoutData ).then( url => {
-				// Remove modal checkout query string and trailing question mark (if any).
-				window.location.href = url;
-			} );
+			generateCart( checkoutData )
+				.then( url => {
+					// Remove modal checkout query string and trailing question mark (if any).
+					window.location.href = url;
+				} )
+				.catch( error => {
+					console.warn( 'Unable to generate cart:', error ); // eslint-disable-line no-console
+					form.classList.remove( 'modal-processing' );
+					form.querySelectorAll( '.non-modal-checkout-loading' ).forEach( button => {
+						button.classList.remove( 'non-modal-checkout-loading' );
+						button.removeAttribute( 'aria-busy' );
+					} );
+				} );
 			// Add some animation to the Checkout Button while the non-modal checkout is loading.
 			// For now, don't do it when any popup opens, just when we go right to the checkout page.
 			if ( ! ( checkoutData.is_variable && ! checkoutData.variation_id ) ) {
-				const buttons = form.querySelectorAll( 'button[type=submit]:focus' );
-				buttons.forEach( button => {
+				const button = ev.submitter || form.querySelector( 'button[type=submit]' );
+				if ( button ) {
 					button.classList.add( 'non-modal-checkout-loading' );
+					button.setAttribute( 'aria-busy', 'true' );
 					const buttonText = button.innerHTML;
 					button.innerHTML = '<span>' + buttonText + '</span>';
-				} );
+				}
 			}
 			return;
 		}

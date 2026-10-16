@@ -137,17 +137,34 @@ domReady( function () {
 		const submit = container.querySelector( 'button[type="submit"]' );
 		const spinner = document.createElement( 'span' );
 		spinner.classList.add( 'spinner' );
+		const messageId = `${ emailInput.id }-message`;
 
-		form.endFlow = ( message, status = 500, wasSubscribed = false, metadata = {} ) => {
+		const setEmailError = hasError => {
+			if ( hasError ) {
+				emailInput.setAttribute( 'aria-invalid', 'true' );
+				emailInput.setAttribute( 'aria-describedby', messageId );
+			} else {
+				emailInput.removeAttribute( 'aria-invalid' );
+				emailInput.removeAttribute( 'aria-describedby' );
+			}
+		};
+
+		form.endFlow = ( message, status = 500, wasSubscribed = false, metadata = {}, isEmailError = false ) => {
 			container.setAttribute( 'data-status', status );
 			const messageNode = document.createElement( 'p' );
 			emailInput.removeAttribute( 'disabled' );
 			submit.removeChild( spinner );
 			submit.removeAttribute( 'disabled' );
+			submit.removeAttribute( 'aria-busy' );
 			form.classList.remove( 'in-progress' );
 			messageNode.innerHTML = wasSubscribed ? container.getAttribute( 'data-success-message' ) : message;
-			messageContainer.appendChild( messageNode );
 			messageNode.className = `message status-${ status }`;
+			if ( status !== 200 ) {
+				messageNode.id = messageId;
+				messageNode.setAttribute( 'role', 'alert' );
+			}
+			messageContainer.appendChild( messageNode );
+			setEmailError( isEmailError );
 			if ( status === 200 ) {
 				container.replaceChild( responseContainer, form );
 				form.dispatchEvent( successEvent );
@@ -184,17 +201,19 @@ domReady( function () {
 		form.addEventListener( 'submit', ev => {
 			ev.preventDefault();
 			messageContainer.innerHTML = '';
+			setEmailError( false );
 			form.classList.add( 'in-progress' );
 			submit.disabled = true;
+			submit.setAttribute( 'aria-busy', 'true' );
 			submit.appendChild( spinner );
 
 			if ( ! form.npe?.value ) {
-				return form.endFlow( newspack_newsletters_subscribe_block.invalid_email, 400 );
+				return form.endFlow( newspack_newsletters_subscribe_block.invalid_email, 400, false, {}, true );
 			}
 
 			const body = new FormData( form );
 			if ( ! body.has( 'npe' ) || ! body.get( 'npe' ) ) {
-				return form.endFlow( newspack_newsletters_subscribe_block.invalid_email, 400 );
+				return form.endFlow( newspack_newsletters_subscribe_block.invalid_email, 400, false, {}, true );
 			}
 			if ( nonce ) {
 				body.set( 'newspack_newsletters_subscribe', nonce );
@@ -211,9 +230,9 @@ domReady( function () {
 					body,
 				} ).then( res => {
 					res.json().then( data => {
-						const { message, newspack_newsletters_subscribed: wasSubscribed, newspack_newsletters_subscribe, metadata } = data;
+						const { message, code, newspack_newsletters_subscribed: wasSubscribed, newspack_newsletters_subscribe, metadata } = data;
 						nonce = newspack_newsletters_subscribe;
-						form.endFlow( message, res.status, wasSubscribed, metadata );
+						form.endFlow( message, res.status, wasSubscribed, metadata, 'invalid_email' === code );
 
 						// Post-registration email verification. When newspack-plugin signals that the
 						// freshly registered reader needs to verify, hand off to the verification modal

@@ -44,6 +44,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			$(
 				`.woocommerce-NoticeGroup-checkout, .${ CLASS_PREFIX }__inline-error, .woocommerce-error, .woocommerce-message, .wc-block-components-notice-banner`
 			).remove();
+			$(
+				'[aria-describedby="modal-checkout-coupon-result"], [aria-describedby="modal-checkout-nyp-result"], [aria-describedby="modal-checkout-quantity-result"]'
+			).removeAttr( 'aria-invalid aria-describedby' );
+			$(
+				'form.modal_checkout_coupon h3, form.modal_checkout_coupon input[name="coupon_code"], form.modal_checkout_nyp h3, form.modal_checkout_nyp input[name="price"], form.modal_checkout_quantity h3, form.modal_checkout_quantity input[name="quantity"]'
+			).removeClass( 'newspack-ui__field-error' );
 		}
 
 		/**
@@ -375,6 +381,21 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				}
 
 				/**
+				 * Mark a field invalid and point it at its result message, or clear both.
+				 *
+				 * @param {jQuery}  $input    The field.
+				 * @param {string}  resultId  The id of the field's result message.
+				 * @param {boolean} isInvalid Whether the field holds an error.
+				 */
+				function setFieldInvalid( $input, resultId, isInvalid ) {
+					if ( isInvalid ) {
+						$input.attr( { 'aria-invalid': 'true', 'aria-describedby': resultId } );
+					} else {
+						$input.removeAttr( 'aria-invalid aria-describedby' );
+					}
+				}
+
+				/**
 				 * Handle coupon form submit.
 				 *
 				 * @param {Event} ev
@@ -401,7 +422,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							if ( code ) {
 								const isError = code.includes( 'error' );
 								$coupon.append(
-									`<p class="result ${ CLASS_PREFIX }__helper-text ${ isError ? CLASS_PREFIX + '__inline-error' : '' }">` +
+									`<p id="modal-checkout-coupon-result" class="result ${ CLASS_PREFIX }__helper-text ${
+										isError ? CLASS_PREFIX + '__inline-error' : ''
+									}">` +
 										$( code ).text() +
 										'</p>'
 								);
@@ -412,6 +435,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 									$coupon.find( 'input[name="coupon_code"]' ).focus();
 									$coupon.find( 'h3, input[name="coupon_code"]' ).removeClass( 'newspack-ui__field-error' );
 								}
+								setFieldInvalid( $coupon.find( 'input[name="coupon_code"]' ), 'modal-checkout-coupon-result', isError );
 								$( document.body ).trigger( 'applied_coupon_in_checkout', [ data.coupon_code ] );
 								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 							}
@@ -426,6 +450,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					$( document.body ).on( 'removed_coupon_in_checkout', () => {
 						clearNotices();
 						$coupon.find( '.result' ).remove();
+						setFieldInvalid( $coupon.find( 'input[name="coupon_code"]' ), 'modal-checkout-coupon-result', false );
 						$coupon.find( 'input[name="coupon_code"]' ).val( '' ).focus();
 					} );
 				}
@@ -454,12 +479,15 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						type: 'POST',
 						url: newspackBlocksModalCheckout.ajax_url,
 						data,
-						success: ( { success, data: res } ) => {
+						success: response => {
+							const success = Boolean( response?.success );
 							clearNotices();
 							$nyp.find( '.result' ).remove();
 							$nyp.append(
-								`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` +
-									res.message +
+								`<p id="modal-checkout-nyp-result" class="result ${ CLASS_PREFIX }__helper-text ${
+									! success ? CLASS_PREFIX + '__inline-error' : ''
+								}">` +
+									( response?.data?.message || newspackBlocksModalCheckout.quantity_error ) +
 									'</p>'
 							);
 							if ( success ) {
@@ -468,6 +496,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 								$nyp.find( 'input[name="price"]' ).focus();
 								$nyp.find( 'h3, input[name="price"]' ).addClass( 'newspack-ui__field-error' );
 							}
+							setFieldInvalid( $nyp.find( 'input[name="price"]' ), 'modal-checkout-nyp-result', ! success );
 							$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 						},
 						complete: () => {
@@ -491,9 +520,14 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				function showQuantityResult( success, message ) {
 					$quantity.find( '.result' ).remove();
 					$quantity.append(
-						`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` + message + '</p>'
+						`<p id="modal-checkout-quantity-result" class="result ${ CLASS_PREFIX }__helper-text ${
+							! success ? CLASS_PREFIX + '__inline-error' : ''
+						}">` +
+							message +
+							'</p>'
 					);
 					$quantity.find( 'h3, input[name="quantity"]' ).toggleClass( 'newspack-ui__field-error', ! success );
+					setFieldInvalid( $quantity.find( 'input[name="quantity"]' ), 'modal-checkout-quantity-result', ! success );
 				}
 
 				/**
@@ -835,6 +869,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							cb( result );
 						},
 						error: ( jqXHR, textStatus, errorThrown ) => {
+							unblockForm( $form );
 							let messages = '';
 							if ( ! silent ) {
 								messages = '<div class="woocommerce-error">' + ( errorThrown || wc_checkout_params.i18n_checkout_error ) + '</div>';
@@ -863,7 +898,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', true );
+						$( el ).attr( 'disabled', true ).attr( 'aria-busy', 'true' ).addClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.addClass( 'modal-processing' );
 					return true;
@@ -882,7 +917,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', false );
+						$( el ).attr( 'disabled', false ).removeAttr( 'aria-busy' ).removeClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.removeClass( 'modal-processing' );
 					return true;

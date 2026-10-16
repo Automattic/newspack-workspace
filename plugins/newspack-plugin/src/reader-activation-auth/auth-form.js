@@ -81,7 +81,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 					if ( isError ) {
 						messageContentElement.classList.remove( 'newspack-ui__helper-text' );
 						messageContentElement.classList.add( 'newspack-ui__inline-error' );
-						form.style.opacity = 1;
 					} else {
 						messageContentElement.classList.remove( 'newspack-ui__inline-error' );
 						messageContentElement.classList.add( 'newspack-ui__helper-text' );
@@ -112,6 +111,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				// every step change removes it. Same-state errors clear it in endLoginFlow() instead.
 				submitButtons.forEach( button => {
 					button.classList.remove( 'newspack-ui__button--loading' );
+					button.removeAttribute( 'aria-busy' );
 				} );
 				// Signin and success steps should clear any modal errors or messages.
 				if ( 'signin' === action || 'success' === action ) {
@@ -286,13 +286,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 							} )
 							.finally( () => {
 								handleOTPTimer();
-								form.style.opacity = 1;
 								submitButtons.forEach( submitButton => {
 									submitButton.disabled = false;
 									// startLoginFlow() added the spinner for this send/resend request; this
 									// branch doesn't route through setFormAction() on error, so clear it here
 									// in lockstep with the disabled attribute.
 									submitButton.classList.remove( 'newspack-ui__button--loading' );
+									submitButton.removeAttribute( 'aria-busy' );
 								} );
 							} );
 					} );
@@ -311,26 +311,21 @@ window.newspackRAS.push( function ( readerActivation ) {
 					// and endLoginFlow() (on errors), with the few AJAX branches that bypass those
 					// clearing it directly.
 					button.classList.add( 'newspack-ui__button--loading' );
+					button.setAttribute( 'aria-busy', 'true' );
 				} );
 				form.setMessageContent();
-				form.style.opacity = 0.5;
 			};
 
 			form.isVerifying = false;
 			form.endLoginFlow = ( message = null, status = 500, data = null ) => {
 				container.setAttribute( 'data-form-status', status );
-				// Only reset opacity if modal should close on success.
-				if ( container.config?.closeOnSuccess ) {
-					form.style.opacity = 1;
-				}
 				if ( status !== 200 ) {
-					// Any non-success outcome must restore the form so the reader can retry: undim it,
-					// clear the loading spinner, and re-enable the button. This is the only reset for the
+					// Any non-success outcome must restore the form so the reader can retry: clear the
+					// loading spinner and re-enable the button. This is the only reset for the
 					// null-message network/parse failures from the fetch .catch() paths — they have no
-					// other opacity/spinner restore and would otherwise leave the form dimmed with a stuck
-					// spinner. Show an inline error only when we actually have a message.
+					// other spinner restore and would otherwise leave a stuck spinner. Show an inline
+					// error only when we actually have a message.
 					form.isVerifying = false;
-					form.style.opacity = 1;
 					if ( message ) {
 						form.setMessageContent( message, true );
 						messageContentElement.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
@@ -338,6 +333,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					submitButtons.forEach( button => {
 						button.disabled = false;
 						button.classList.remove( 'newspack-ui__button--loading' );
+						button.removeAttribute( 'aria-busy' );
 					} );
 				}
 				if ( status === 200 ) {
@@ -417,17 +413,17 @@ window.newspackRAS.push( function ( readerActivation ) {
 							authModal.style.display = 'none';
 						}
 
-						// startLoginFlow() disabled the submit buttons and dimmed the form for the in-flight
-						// register request. Restore them now so the auth form is interactive when we switch
-						// back to it in OTP state on Send code.
+						// startLoginFlow() disabled the submit buttons for the in-flight register request.
+						// Restore them now so the auth form is interactive when we switch back to it in
+						// OTP state on Send code.
 						submitButtons.forEach( button => {
 							button.disabled = false;
 							// startLoginFlow() added the spinner; this branch opens the verification modal
 							// instead of routing through setFormAction(), so clear it here in lockstep
 							// with the disabled attribute.
 							button.classList.remove( 'newspack-ui__button--loading' );
+							button.removeAttribute( 'aria-busy' );
 						} );
-						form.style.opacity = 1;
 
 						// Restore the auth modal's inline display before invoking any callback
 						// that might close or re-open it. Skipping this leaves data-state='open'
@@ -604,9 +600,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 												readerActivation.setOTPTimer();
 												handleOTPTimer();
 											}
-											if ( data.action === 'otp' || data.action === 'pwd' ) {
-												form.style.opacity = 1;
-											}
 											// The spinner is already cleared by setFormAction() above; just
 											// re-enable the button for the new step.
 											submitButtons.forEach( button => {
@@ -618,16 +611,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 									} )
 									.catch( () => {
 										form.endLoginFlow();
-									} )
-									.finally( () => {
-										const status = res.status;
-										// Check if modal should close on success. If no, reset opacity to 1.
-										// If yes, only reset opacity to 1 if the status is not successful.
-										if ( container.config?.closeOnSuccess ) {
-											form.style.opacity = 1;
-										} else if ( status !== 200 && ! container.config?.closeOnSuccess ) {
-											form.style.opacity = 1;
-										}
 									} );
 							} )
 							.catch( () => {
@@ -649,8 +632,8 @@ window.newspackRAS.push( function ( readerActivation ) {
 									// without routing through setFormAction(), so clear it here in lockstep
 									// with the disabled attribute.
 									button.classList.remove( 'newspack-ui__button--loading' );
+									button.removeAttribute( 'aria-busy' );
 								} );
-								form.style.opacity = 1;
 							},
 						} );
 					} else {
