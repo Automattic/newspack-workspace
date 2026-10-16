@@ -459,13 +459,13 @@ domReady( () => {
 			// Add some animation to the Checkout Button while the non-modal checkout is loading.
 			// For now, don't do it when any popup opens, just when we go right to the checkout page.
 			if ( ! ( checkoutData.is_variable && ! checkoutData.variation_id ) ) {
-				const buttons = form.querySelectorAll( 'button[type=submit]:focus' );
-				buttons.forEach( button => {
+				const button = ev.submitter || form.querySelector( 'button[type=submit]' );
+				if ( button ) {
 					button.classList.add( 'non-modal-checkout-loading' );
 					button.setAttribute( 'aria-busy', 'true' );
 					const buttonText = button.innerHTML;
 					button.innerHTML = '<span>' + buttonText + '</span>';
-				} );
+				}
 			}
 			return;
 		}

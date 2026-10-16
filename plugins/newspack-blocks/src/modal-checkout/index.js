@@ -47,6 +47,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			$(
 				'[aria-describedby="modal-checkout-coupon-result"], [aria-describedby="modal-checkout-nyp-result"], [aria-describedby="modal-checkout-quantity-result"]'
 			).removeAttr( 'aria-invalid aria-describedby' );
+			$(
+				'form.modal_checkout_coupon h3, form.modal_checkout_coupon input[name="coupon_code"], form.modal_checkout_nyp h3, form.modal_checkout_nyp input[name="price"], form.modal_checkout_quantity h3, form.modal_checkout_quantity input[name="quantity"]'
+			).removeClass( 'newspack-ui__field-error' );
 		}
 
 		/**
@@ -476,14 +479,15 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						type: 'POST',
 						url: newspackBlocksModalCheckout.ajax_url,
 						data,
-						success: ( { success, data: res } ) => {
+						success: response => {
+							const success = Boolean( response?.success );
 							clearNotices();
 							$nyp.find( '.result' ).remove();
 							$nyp.append(
 								`<p id="modal-checkout-nyp-result" class="result ${ CLASS_PREFIX }__helper-text ${
 									! success ? CLASS_PREFIX + '__inline-error' : ''
 								}">` +
-									res.message +
+									( response?.data?.message || newspackBlocksModalCheckout.quantity_error ) +
 									'</p>'
 							);
 							if ( success ) {
