@@ -379,6 +379,8 @@ class Test_Push_Log extends \WP_UnitTestCase {
 	 * definition. One it misreads (a type alias such as `integer`, which the
 	 * database reports as `int`) would look like a change on every run: the
 	 * version would never be recorded, and the ALTER would run every hour.
+	 * A missing integer display width is misread on MariaDB but not on MySQL
+	 * 8.0, which CI runs, so the widths are checked on the definition itself.
 	 */
 	public function test_the_table_definition_reads_back_as_applied() {
 		$definition         = null;
@@ -393,6 +395,8 @@ class Test_Push_Log extends \WP_UnitTestCase {
 		Push_Log::maybe_create_table();
 
 		remove_filter( 'dbdelta_queries', $capture_definition );
+		preg_match_all( '/\b(?:tiny|small|medium|big)?int(?:eger)?\b(?!\()/i', implode( "\n", (array) $definition ), $integers_without_width );
+		$this->assertSame( [], $integers_without_width[0], 'Every integer column declares its display width.' );
 		$this->assertSame( [], dbDelta( $definition, false ) );
 		$this->assertSame( Push_Log::TABLE_VERSION, get_option( Push_Log::TABLE_VERSION_OPTION ) );
 	}
