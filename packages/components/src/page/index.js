@@ -91,7 +91,12 @@ const Page = ( { breadcrumbItems = [], badges, subTitle, actions, tabbedNavigati
 						) }
 					</Stack>
 					{ subTitle && (
-						<Text render={ <p /> } variant="body-md" className="newspack-page__header-subtitle">
+						<Text
+							render={ <p /> }
+							variant="body-md"
+							// Helper text, not needed to use the screen: on phones it would cost the header a second line.
+							className={ classnames( 'newspack-page__header-subtitle', { 'screen-reader-text': ! isWide } ) }
+						>
 							{ subTitle }
 						</Text>
 					) }
