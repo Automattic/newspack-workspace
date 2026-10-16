@@ -10,6 +10,8 @@ import { maybeConfirmRegistration } from '../../reader-activation-auth/confirmat
 import { openNewslettersSignupModal } from '../../reader-activation-newsletters/newsletters-modal';
 import { wireInlineVerificationBox } from '../../reader-activation-auth/inline-verification';
 
+const EMAIL_ERROR_CODES = [ 'invalid_email', 'newspack_register_reader_empty_email', 'unauthorized' ];
+
 window.newspackRAS = window.newspackRAS || [];
 
 window.newspackRAS.push( function ( readerActivation ) {
@@ -248,7 +250,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						}
 					}
 				} else {
-					setEmailError( true );
+					setEmailError( EMAIL_ERROR_CODES.some( code => data?.errors?.[ code ] ) );
 					if ( messageNode ) {
 						messageNode.classList.add( 'newspack-ui__inline-error' );
 						messageNode.setAttribute( 'role', 'alert' );
@@ -264,12 +266,14 @@ window.newspackRAS.push( function ( readerActivation ) {
 				form.startLoginFlow();
 
 				if ( ! form.npe?.value ) {
-					return form.endLoginFlow( 'Please enter a valid email address.', 400 );
+					form.endLoginFlow( 'Please enter a valid email address.', 400 );
+					return setEmailError( true );
 				}
 
 				body = new FormData( form );
 				if ( ! body.has( 'npe' ) || ! body.get( 'npe' ) ) {
-					return form.endLoginFlow( 'Please enter a valid email address.', 400 );
+					form.endLoginFlow( 'Please enter a valid email address.', 400 );
+					return setEmailError( true );
 				}
 
 				const submitForm = () => {
