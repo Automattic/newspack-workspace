@@ -82,15 +82,24 @@ window.newspackRAS.push( function ( readerActivation ) {
 			let flowCompleted = false; // Guard to prevent re-running endLoginFlow
 			const messageElement = container.querySelector( '.newspack-registration__response' );
 			const submitElement = form.querySelector( 'button[type="submit"]' );
-			const spinner = document.createElement( 'span' );
-			spinner.classList.add( 'spinner' );
+			const emailInput = form.querySelector( 'input[name="npe"]' );
+
+			const setLoading = isLoading => {
+				submitElement.disabled = isLoading;
+				submitElement.classList.toggle( 'newspack-ui__button--loading', isLoading );
+				if ( isLoading ) {
+					submitElement.setAttribute( 'aria-busy', 'true' );
+				} else {
+					submitElement.removeAttribute( 'aria-busy' );
+				}
+				container.classList.toggle( 'newspack-registration--in-progress', isLoading );
+			};
 
 			form.startLoginFlow = () => {
 				messageElement.classList.add( 'newspack-registration--hidden' );
 				messageElement.innerHTML = '';
-				submitElement.disabled = true;
-				submitElement.appendChild( spinner );
-				container.classList.add( 'newspack-registration--in-progress' );
+				emailInput?.classList.remove( 'newspack-ui__field-error' );
+				setLoading( true );
 			};
 
 			form.endLoginFlow = ( message = null, status = 500, data = null ) => {
@@ -104,11 +113,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				// For existing users, open the auth modal with the appropriate state
 				if ( data?.existing_user && ! data?.authenticated && data?.action ) {
 					const email = data.email || form.npe?.value;
-					if ( submitElement.contains( spinner ) ) {
-						submitElement.removeChild( spinner );
-					}
-					submitElement.disabled = false;
-					container.classList.remove( 'newspack-registration--in-progress' );
+					setLoading( false );
 
 					// Set the reader email before opening the modal
 					readerActivation.setReaderEmail( email );
@@ -226,15 +231,15 @@ window.newspackRAS.push( function ( readerActivation ) {
 							}
 						}
 					}
-				} else if ( messageNode ) {
-					messageElement.appendChild( messageNode );
-					messageElement.classList.remove( 'newspack-registration--hidden' );
+				} else {
+					emailInput?.classList.add( 'newspack-ui__field-error' );
+					if ( messageNode ) {
+						messageNode.classList.add( 'newspack-ui__inline-error' );
+						messageElement.appendChild( messageNode );
+						messageElement.classList.remove( 'newspack-registration--hidden' );
+					}
 				}
-				if ( submitElement.contains( spinner ) ) {
-					submitElement.removeChild( spinner );
-				}
-				submitElement.disabled = false;
-				container.classList.remove( 'newspack-registration--in-progress' );
+				setLoading( false );
 			};
 
 			form.addEventListener( 'submit', ev => {
@@ -274,11 +279,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					onProceed: submitForm,
 					onCancel: () => {
 						flowCompleted = false;
-						if ( submitElement.contains( spinner ) ) {
-							submitElement.removeChild( spinner );
-						}
-						submitElement.disabled = false;
-						container.classList.remove( 'newspack-registration--in-progress' );
+						setLoading( false );
 					},
 				} );
 			} );
