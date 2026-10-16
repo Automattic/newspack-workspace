@@ -509,6 +509,23 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A partial push that left out other fields is a different problem, so it
+	 * adds a row naming those fields instead of folding into the earlier one.
+	 */
+	public function test_a_partial_push_missing_other_fields_adds_its_own_row() {
+		$this->sync_reader_with_results(
+			'other-partial-spy',
+			[
+				[ 'unsynced_fields' => [ 'NP_Membership_Status' ] ],
+				[ 'unsynced_fields' => [ 'NP_Account_Deleted' ] ],
+			]
+		);
+
+		$this->assertSame( 2, $this->count_rows() );
+		$this->assertStringContainsString( 'NP_Account_Deleted', $this->get_rows_by_integration()['other-partial-spy']['error_message'] );
+	}
+
+	/**
 	 * A partial push after a full one is a new problem, so it must not fold
 	 * into the success row and hide there.
 	 */
