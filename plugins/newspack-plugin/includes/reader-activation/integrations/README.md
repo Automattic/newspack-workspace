@@ -652,7 +652,7 @@ public function get_my_account_menu_item() {
     return [
         'slug'     => 'my-rewards',
         'label'    => __( 'My Rewards', 'my-plugin' ),
-        'position' => 2, // Optional zero-based menu index; appended if omitted.
+        'position' => 2, // Optional zero-based index into WooCommerce's menu; appended if omitted.
     ];
 }
 
@@ -662,7 +662,7 @@ public function render_my_account_page( $value ) {
 }
 ```
 
-With WooCommerce, the registry handles rewrite endpoint registration, query var registration, menu item insertion, and a one-off `flush_rewrite_rules()` whenever the set of declared slugs changes. `position` is a zero-based index into the menu. An item without one is appended before `customer-logout`; a position at or past the end of the menu lands after it. Without WooCommerce, Newspack's own My Account page registers and flushes the endpoints itself, appends the tabs (ignoring `position`), and calls `render_my_account_page( '' )`.
+With WooCommerce, the registry handles rewrite endpoint registration, query var registration, menu item insertion, and a one-off `flush_rewrite_rules()` whenever the set of declared slugs changes. `position` is a zero-based index into WooCommerce's menu as it stands before Newspack's own My Account filters drop and reorder tabs. An item without one is appended before `customer-logout`; a position at or past the end lands after it on WooCommerce's own account page. Newspack's default account UI moves Log out to its footer, so there such an item is last. Without WooCommerce, Newspack's own My Account page registers and flushes the endpoints itself, appends the tabs (ignoring `position`), and calls `render_my_account_page( '' )`.
 
 Slug collisions between integrations resolve to first-wins in the order integrations were enabled; one enabled later silently skips. Pick a slug that no core WooCommerce endpoint or other plugin's My Account tab uses (`newsletters` belongs to Newspack Newsletters): the menu shows a single item, but the integration's page still renders under that endpoint, so two tab bodies show.
 
