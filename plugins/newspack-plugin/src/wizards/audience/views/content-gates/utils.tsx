@@ -5,6 +5,11 @@ import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 
 /**
+ * Internal dependencies.
+ */
+import { PUBLISHED_AGE_RULE, normalizePublishedAgeValue } from '../../../../content-gate/utils/published-age';
+
+/**
  * Get edit gate layout URL.
  */
 export function getEditGateLayoutUrl( gateId: number, gateMode: string ) {
@@ -202,6 +207,30 @@ const getContentScope = ( gate: Gate ): ContentScope => {
 };
 
 /**
+ * Whether no post can be young enough for one clause's age rule and old enough for the other's at
+ * the same moment, as with "less than 30 days" on one gate and "more than 30 days" on the next.
+ * A post's own time window replaces both durations with one, which keeps the two apart.
+ * Durations in different units are not compared, so those clauses count as overlapping.
+ *
+ * @param a One gate's clause.
+ * @param b The other gate's clause.
+ */
+const ageWindowsNeverOverlap = ( a: GateContentRule[], b: GateContentRule[] ) => {
+	const ages = [ a, b ]
+		.flatMap( clause => clause.filter( rule => rule.slug === PUBLISHED_AGE_RULE ) )
+		.map( rule => normalizePublishedAgeValue( rule.value ) );
+	const older = ages.find( age => age.comparison === 'more_than' );
+	const newer = ages.find( age => age.comparison === 'less_than' );
+	return (
+		ages.length === 2 &&
+		Boolean( older && newer ) &&
+		older!.duration_unit !== '' &&
+		older!.duration_unit === newer!.duration_unit &&
+		older!.duration_value >= newer!.duration_value
+	);
+};
+
+/**
  * The values a post needs, rule by rule, to fall under two clauses at once: the shared values where
  * both clauses set a rule, and one clause's values where only it does.
  *
@@ -210,8 +239,12 @@ const getContentScope = ( gate: Gate ): ContentScope => {
  * @return The combined values by rule slug, or null when a rule both clauses set shares no value.
  */
 const combineClauses = ( a: GateContentRule[], b: GateContentRule[] ): Map< string, string[] > | null => {
+	if ( ageWindowsNeverOverlap( a, b ) ) {
+		return null;
+	}
 	const combined = new Map< string, string[] >();
-	for ( const rule of [ ...a, ...b ] ) {
+	// An age rule stores no list of values to share; ageWindowsNeverOverlap() has judged it.
+	for ( const rule of [ ...a, ...b ].filter( ( { slug } ) => slug !== PUBLISHED_AGE_RULE ) ) {
 		const values = getRuleValues( rule );
 		const current = combined.get( rule.slug );
 		const next = current ? current.filter( value => values.includes( value ) ) : values;

@@ -1813,6 +1813,8 @@ class Content_Gate {
 		}
 		$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-post-settings.asset.php';
 		wp_enqueue_script( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.js', $asset['dependencies'], $asset['version'], true );
+		wp_enqueue_style( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.css', [], $asset['version'] );
+		wp_style_add_data( 'newspack-content-gate-post-settings', 'rtl', 'replace' );
 
 		// Localize active gates data for reactive matching in the editor.
 		$gates      = self::get_gates( self::GATE_CPT, 'publish' );

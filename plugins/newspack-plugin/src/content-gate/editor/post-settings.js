@@ -1,24 +1,31 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useMemo } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
 import { ExternalLink, ToggleControl } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { gateMatchesPost } from './gate-matching';
+import { AgeDurationFields } from '../components/published-age-rule-control';
+import { PUBLISHED_AGE_RULE, formatAgeDuration, normalizeAgeDuration } from '../utils/published-age';
 
 const { gates = [], taxonomyMap = {}, canEditGates = false } = window.newspackContentGates || {};
+
+const AGE_OVERRIDE_META_KEY = 'newspack_content_gate_age_override';
+
+const getAgeRule = gate => gate.content_rules.find( rule => rule.slug === PUBLISHED_AGE_RULE );
 
 const renderGateLink = gate => ( canEditGates && gate.edit_url ? <a href={ gate.edit_url }>{ gate.title }</a> : gate.title );
 
 function PostSettings() {
-	const { meta, postId, postType, termsByTax } = useSelect( select => {
+	const { meta, postId, postType, termsByTax, publishedGmt } = useSelect( select => {
 		const { getEditedPostAttribute, getCurrentPostId } = select( 'core/editor' );
 		const terms = {};
 		Object.values( taxonomyMap ).forEach( restBase => {
@@ -29,14 +36,38 @@ function PostSettings() {
 			postId: getCurrentPostId(),
 			postType: getEditedPostAttribute( 'type' ),
 			termsByTax: terms,
+			// Mirrors the server: only a published post has an age. The date is the saved one: the
+			// date picker edits the local `date` only, so a new date shows here once the post is saved.
+			publishedGmt: 'publish' === getEditedPostAttribute( 'status' ) ? getEditedPostAttribute( 'date_gmt' ) : null,
 		};
 	} );
+	const ageOverride = meta[ AGE_OVERRIDE_META_KEY ];
+	// The schema stores only a known unit, so a unit is set exactly when the override is on.
+	const isAgeOverrideOn = Boolean( ageOverride?.duration_unit );
 	const { editPost } = useDispatch( 'core/editor' );
 
-	const matchingGates = useMemo(
-		() => gates.filter( gate => gateMatchesPost( gate.content_rules, postType, termsByTax, postId, gate.content_rules_match, taxonomyMap ) ),
-		[ postId, postType, termsByTax ]
-	);
+	const { matchingGates, matchingGatesWithoutOverride, seedAgeRule } = useMemo( () => {
+		// REST dates carry no zone, and are UTC.
+		const published = publishedGmt ? new Date( `${ publishedGmt }Z` ) : null;
+		const matches = ( gate, rules, override ) =>
+			gateMatchesPost( rules, postType, termsByTax, postId, gate.content_rules_match, taxonomyMap, published, override );
+		// The override starts from the duration it replaces: the age rule of a gate that covers
+		// this post on its other rules, or of any gate when none does.
+		const coveringGate = gates.find(
+			gate =>
+				getAgeRule( gate ) &&
+				matches(
+					gate,
+					gate.content_rules.filter( rule => rule.slug !== PUBLISHED_AGE_RULE ),
+					null
+				)
+		);
+		return {
+			matchingGates: gates.filter( gate => matches( gate, gate.content_rules, ageOverride ) ),
+			matchingGatesWithoutOverride: gates.filter( gate => matches( gate, gate.content_rules, null ) ),
+			seedAgeRule: getAgeRule( coveringGate ?? gates.find( getAgeRule ) ?? { content_rules: [] } ),
+		};
+	}, [ postId, postType, termsByTax, publishedGmt, ageOverride ] );
 
 	return (
 		<PluginDocumentSettingPanel
@@ -66,25 +97,71 @@ function PostSettings() {
 					) }
 				</>
 			) : (
-				<p>{ __( 'No gates apply to this post.', 'newspack-plugin' ) }</p>
+				<p>
+					{ isAgeOverrideOn && matchingGatesWithoutOverride.length > 0
+						? __(
+								'No gates apply to this post: its own time window keeps it outside the gates that would otherwise apply.',
+								'newspack-plugin'
+						  )
+						: __( 'No gates apply to this post.', 'newspack-plugin' ) }
+				</p>
 			) }
 			<hr />
-			<ToggleControl
-				label={ __( 'Disable access control restrictions for this post', 'newspack-plugin' ) }
-				help={
-					<>
-						{ __(
-							'If enabled, this post will be accessible to all readers regardless of content restriction rules.',
-							'newspack-plugin'
-						) }{ ' ' }
-						<ExternalLink href="/wp-admin/admin.php?page=newspack-audience-access-control">
-							{ __( 'Manage access control', 'newspack-plugin' ) }
-						</ExternalLink>
-					</>
-				}
-				checked={ meta.newspack_content_restriction_is_exempt }
-				onChange={ value => editPost( { meta: { newspack_content_restriction_is_exempt: value } } ) }
-			/>
+			<Stack direction="column" gap="lg">
+				<ToggleControl
+					label={ __( 'Disable access control restrictions for this post', 'newspack-plugin' ) }
+					help={
+						<>
+							{ __(
+								'If enabled, this post will be accessible to all readers regardless of content restriction rules.',
+								'newspack-plugin'
+							) }{ ' ' }
+							<ExternalLink href="/wp-admin/admin.php?page=newspack-audience-access-control">
+								{ __( 'Manage access control', 'newspack-plugin' ) }
+							</ExternalLink>
+						</>
+					}
+					checked={ meta.newspack_content_restriction_is_exempt }
+					onChange={ value => editPost( { meta: { newspack_content_restriction_is_exempt: value } } ) }
+					__nextHasNoMarginBottom
+				/>
+				{ seedAgeRule && (
+					<Stack direction="column" gap="lg">
+						<ToggleControl
+							label={ __( 'Use a different time window for this post', 'newspack-plugin' ) }
+							help={
+								meta.newspack_content_restriction_is_exempt
+									? __( 'Has no effect while access control restrictions are disabled for this post.', 'newspack-plugin' )
+									: sprintf(
+											// translators: %s: the gate's own time window, such as "7 days".
+											__(
+												'Replaces the time window in each gate’s publication date rule (%s) for this post only.',
+												'newspack-plugin'
+											),
+											formatAgeDuration( normalizeAgeDuration( seedAgeRule.value ) )
+									  )
+							}
+							checked={ isAgeOverrideOn }
+							onChange={ isOn =>
+								editPost( {
+									meta: {
+										[ AGE_OVERRIDE_META_KEY ]: isOn
+											? { duration_value: seedAgeRule.value.duration_value, duration_unit: seedAgeRule.value.duration_unit }
+											: null,
+									},
+								} )
+							}
+							__nextHasNoMarginBottom
+						/>
+						{ isAgeOverrideOn && (
+							<AgeDurationFields
+								value={ ageOverride }
+								onChange={ duration => editPost( { meta: { [ AGE_OVERRIDE_META_KEY ]: duration } } ) }
+							/>
+						) }
+					</Stack>
+				) }
+			</Stack>
 		</PluginDocumentSettingPanel>
 	);
 }
