@@ -180,6 +180,19 @@ describe( 'SyncActivityDetails', () => {
 		expect( screen.getByText( 'Already removed' ) ).toBeTruthy();
 	} );
 
+	it( 'reads a benign success as data that did not arrive', async () => {
+		// A deletion flag for a reader the provider holds no contact for ends
+		// as a benign success, but nothing was written.
+		await renderDetails( {
+			entry: entry( { operation: 'flag', error_class: 'benign', error_code: 'ras_contact_not_found', error_message: 'No contact to update' } ),
+			compared_to: null,
+			fields,
+		} );
+
+		expect( screen.getByRole( 'heading', { name: 'Not delivered' } ) ).toBeTruthy();
+		expect( screen.queryByRole( 'heading', { name: 'Fields sent' } ) ).toBeNull();
+	} );
+
 	it( 'reads a flag whose list cleanup failed as data that did arrive', async () => {
 		await renderDetails( {
 			entry: entry( {

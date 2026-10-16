@@ -8,10 +8,12 @@
 namespace Newspack\Tests\Unit\Integrations;
 
 use Newspack\Reader_Activation\Contact_Sync;
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Push_Log;
 
 require_once __DIR__ . '/class-deletion-spy-integration.php';
+require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 
 /**
  * Push log wiring test case.
@@ -41,6 +43,7 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		$this->clear_scheduled_retries();
+		\Newspack_Newsletters_Contacts::reset_calls();
 		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
 		delete_option( Integrations::OPTION_NAME );
 		$this->reset_integrations();
@@ -470,6 +473,40 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Mailchimp answers a hard delete of a reader it has no member for with
+	 * its own "Contact not found". The reader is already gone there, and no
+	 * retry can change that, so the row is done and nothing is retried.
+	 */
+	public function test_a_hard_delete_of_a_reader_mailchimp_does_not_hold_is_final() {
+		$this->require_action_scheduler();
+		\Newspack_Newsletters_Contacts::$next_return = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+		Integrations::register( $esp );
+		$esp->update_settings_field_value( 'sync_account_deletion', true );
+		$esp->update_settings_field_value( 'account_deletion_handling', 'delete' );
+		Integrations::enable( 'esp' );
+
+		$this->delete_sample_reader();
+
+		$delete_calls = \Newspack_Newsletters_Contacts::$delete_calls;
+
+		$row     = $this->get_rows_by_integration()['esp'];
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'esp' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			]
+		);
+		$this->assertCount( 1, $delete_calls, 'The delete reached Mailchimp.' );
+		$this->assertEmpty( $pending, 'Nothing is retried.' );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertSame( 'benign', $row['error_class'] );
+	}
+
+	/**
 	 * A deletion flag that fails is retried on the same row, and the row
 	 * shows the flag that was pushed.
 	 */
@@ -531,6 +568,49 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
 		$this->assertSame( 'flag_cleanup_failed', $row['error_code'] );
 		$this->assertStringContainsString( 'Lists API down', $row['error_message'] );
+	}
+
+	/**
+	 * A reader the integration holds no contact for has nothing to flag, and
+	 * no retry can make the contact appear. The row is done, nothing is
+	 * retried, and the cleanup still runs.
+	 */
+	public function test_a_deletion_flag_for_a_reader_without_a_contact_is_final() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'missing-spy', 'flag' );
+		$spy->push_result = new \WP_Error( Integration::CONTACT_NOT_FOUND_ERROR_CODE, 'The reader has no live member in the configured Mailchimp audience.' );
+
+		$this->delete_sample_reader();
+
+		$row     = $this->get_rows_by_integration()['missing-spy'];
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'group'  => Integrations::get_action_group( 'missing-spy' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			]
+		);
+		$this->assertEmpty( $pending, 'Nothing is retried.' );
+		$this->assertSame( Push_Log::STATUS_SUCCESS, $row['status'] );
+		$this->assertSame( 'benign', $row['error_class'] );
+		$this->assertSame( Integration::CONTACT_NOT_FOUND_ERROR_CODE, $row['error_code'], 'The row keeps what the integration answered.' );
+		$this->assertCount( 1, $spy->cleanup_calls, 'The cleanup still runs.' );
+	}
+
+	/**
+	 * A not-found answer that comes with another failure is that failure,
+	 * not a finished deletion, so it is retried.
+	 */
+	public function test_a_deletion_flag_whose_missing_contact_comes_with_another_failure_is_retried() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'mixed-spy', 'flag' );
+		$spy->push_result = new \WP_Error( Integration::CONTACT_NOT_FOUND_ERROR_CODE, 'No contact to update.' );
+		$spy->push_result->add( 'provider_down', 'Provider down' );
+
+		$this->delete_sample_reader();
+
+		$this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'mixed-spy' );
+		$this->assertSame( Push_Log::STATUS_RETRYING, $this->get_rows_by_integration()['mixed-spy']['status'] );
 	}
 
 	/**

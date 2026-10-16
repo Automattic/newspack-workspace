@@ -527,6 +527,27 @@ class Test_Push_Log_Reading extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A benign push ends as a success, but the provider changed nothing, so
+	 * it is not what the next push is compared with.
+	 */
+	public function test_predecessor_skips_a_benign_push() {
+		$first = $this->record();
+		$this->record(
+			[
+				'operation'   => Push_Log::OPERATION_FLAG,
+				'payload'     => $this->sample_payload( [ 'NP_Account_Deleted' => '2026-10-15 12:00:00' ] ),
+				'result'      => new \WP_Error( 'ras_contact_not_found', 'No contact to update.' ),
+				'error_class' => 'benign',
+			]
+		);
+		$latest = $this->record( [ 'payload' => $this->sample_payload( [ 'NP_Total Paid' => '180' ] ) ] );
+
+		$predecessor = Push_Log::get_predecessor( Push_Log::get( $latest, 'sample' ) );
+
+		$this->assertSame( $first, $predecessor['id'] );
+	}
+
+	/**
 	 * A change of address does not cut the history: the predecessor follows
 	 * the account.
 	 */
