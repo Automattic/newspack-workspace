@@ -9,7 +9,6 @@
 	line-height: var(--newspack-ui-line-height-xs);
 	padding: calc(var(--newspack-ui-spacer-1) / 4) calc(var(--newspack-ui-spacer-1) * 0.75);
 	place-items: center;
-	text-transform: uppercase;
 
 	&--primary {
 		background: var(--newspack-ui-color-neutral-90);
