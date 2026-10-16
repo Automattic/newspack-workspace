@@ -5,6 +5,7 @@
  */
 import * as a11y from './accessibility.js';
 import { sendVerificationOTP } from './inline-verification.js';
+import { isButtonLoading, setButtonLoading } from '../utils';
 
 /**
  * Helpers for the post-registration verification modal rendered in wp_footer
@@ -69,11 +70,10 @@ export function openVerificationModal( config = {} ) {
 	};
 
 	function handleSendClick() {
-		if ( 'true' === sendOtpButton.getAttribute( 'aria-busy' ) ) {
+		if ( isButtonLoading( sendOtpButton ) ) {
 			return;
 		}
-		sendOtpButton.setAttribute( 'aria-busy', 'true' );
-		sendOtpButton.setAttribute( 'aria-disabled', 'true' );
+		setButtonLoading( sendOtpButton, true );
 		sendVerificationOTP( { url: newspack_ras_config.verification_url, nonce: config.verificationNonce } )
 			.then( () => {
 				codeSent = true;
@@ -88,8 +88,7 @@ export function openVerificationModal( config = {} ) {
 				}
 			} )
 			.catch( error => {
-				sendOtpButton.removeAttribute( 'aria-busy' );
-				sendOtpButton.removeAttribute( 'aria-disabled' );
+				setButtonLoading( sendOtpButton, false );
 				sendOtpButton.textContent = sendOtpButton.textContent.trim();
 				const errorP = modal.querySelector( '[data-error-target]' );
 				if ( ! errorP ) {
@@ -121,8 +120,7 @@ export function openVerificationModal( config = {} ) {
 		}
 	}
 
-	sendOtpButton.removeAttribute( 'aria-busy' );
-	sendOtpButton.removeAttribute( 'aria-disabled' );
+	setButtonLoading( sendOtpButton, false );
 	sendOtpButton.addEventListener( 'click', handleSendClick, { signal } );
 	modal.addEventListener( 'closeModal', handleClose, { signal } );
 

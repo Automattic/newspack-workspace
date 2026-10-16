@@ -138,12 +138,16 @@ export function setButtonLoading( button, isLoading ) {
 	}
 	if ( ! button.dataset.loadingGuard ) {
 		button.dataset.loadingGuard = '1';
-		button.addEventListener( 'click', event => {
-			if ( isButtonLoading( button ) ) {
-				event.preventDefault();
-				event.stopImmediatePropagation();
-			}
-		} );
+		button.addEventListener(
+			'click',
+			event => {
+				if ( isButtonLoading( button ) ) {
+					event.preventDefault();
+					event.stopImmediatePropagation();
+				}
+			},
+			true
+		);
 	}
 	button.classList.toggle( 'newspack-ui__button--loading', isLoading );
 	if ( isLoading ) {

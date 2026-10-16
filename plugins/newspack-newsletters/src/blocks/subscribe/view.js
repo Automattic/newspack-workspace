@@ -198,10 +198,21 @@ domReady( function () {
 				}
 			}
 		};
+		// The button and field stay focusable while the request runs, so the busy state
+		// is announced and focus stays put. A second press does nothing: cancelling the
+		// click also cancels a submit from Enter in the field, before reCAPTCHA sees it.
+		submit.addEventListener(
+			'click',
+			ev => {
+				if ( form.classList.contains( 'in-progress' ) ) {
+					ev.preventDefault();
+					ev.stopImmediatePropagation();
+				}
+			},
+			true
+		);
 		form.addEventListener( 'submit', ev => {
 			ev.preventDefault();
-			// The button and field stay focusable while the request runs, so the busy state
-			// is announced and focus stays put. A second submit does nothing.
 			if ( form.classList.contains( 'in-progress' ) ) {
 				return;
 			}

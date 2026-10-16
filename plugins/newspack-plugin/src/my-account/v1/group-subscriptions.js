@@ -4,7 +4,7 @@
  * Initialize functions for the Subscriptions page.
  */
 
-import { domReady, isButtonLoading, setButtonLoading } from '../../utils';
+import { domReady, setButtonLoading } from '../../utils';
 import { initGroupMemberSearch } from './group-member-search';
 
 domReady( function () {
@@ -334,16 +334,21 @@ domReady( function () {
 	};
 
 	// Run an async action while a button shows its loading state, always restoring the
-	// button afterwards. A press while it's already loading does nothing. The action owns
-	// its own waitForMinLoading() timing.
+	// button afterwards. A press while its action is still running does nothing. This
+	// tracks its own runs rather than reading the loading state, which newspack-ui's
+	// modal script sets on submit before this runs. The action owns its own
+	// waitForMinLoading() timing.
+	const runningButtons = new WeakSet();
 	const withLoadingButton = async ( button, action ) => {
-		if ( isButtonLoading( button ) ) {
+		if ( runningButtons.has( button ) ) {
 			return;
 		}
+		runningButtons.add( button );
 		setButtonLoading( button, true );
 		try {
 			return await action();
 		} finally {
+			runningButtons.delete( button );
 			setButtonLoading( button, false );
 		}
 	};

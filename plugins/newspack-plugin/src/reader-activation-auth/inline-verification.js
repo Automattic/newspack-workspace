@@ -5,6 +5,8 @@
  * the auth modal's OTP state; only what happens after they verify differs.
  */
 
+import { isButtonLoading, setButtonLoading } from '../utils';
+
 /**
  * Send the verification OTP email.
  *
@@ -76,8 +78,7 @@ export function wireInlineVerificationBox( box, { url, nonce, onSent, errorText 
 	// The box marks its own error element. Deriving one structurally would land on a
 	// different paragraph in each of the markups that use this.
 	const showError = error => {
-		button.removeAttribute( 'aria-busy' );
-		button.removeAttribute( 'aria-disabled' );
+		setButtonLoading( button, false );
 		button.textContent = button.textContent.trim();
 		const errorEl = box.querySelector( '[data-error-target]' );
 		if ( ! errorEl ) {
@@ -95,13 +96,10 @@ export function wireInlineVerificationBox( box, { url, nonce, onSent, errorText 
 	};
 
 	button.addEventListener( 'click', () => {
-		// The button stays focusable while the code sends, so the busy state is announced
-		// and focus stays put. A second press does nothing.
-		if ( 'true' === button.getAttribute( 'aria-busy' ) ) {
+		if ( isButtonLoading( button ) ) {
 			return;
 		}
-		button.setAttribute( 'aria-busy', 'true' );
-		button.setAttribute( 'aria-disabled', 'true' );
+		setButtonLoading( button, true );
 		sendVerificationOTP( { url, nonce } )
 			.then( () => {
 				if ( typeof onSent !== 'function' ) {
