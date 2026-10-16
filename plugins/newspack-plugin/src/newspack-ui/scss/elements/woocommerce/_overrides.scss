@@ -73,8 +73,7 @@
 		&.is-error,
 		&.is-success {
 			background: var(--newspack-ui-color-warning-0);
-			border: none;
-			border-left: 3px solid var(--newspack-ui-color-warning-30);
+			border: 1px solid var(--newspack-ui-color-warning-30);
 			font-family: var(--newspack-ui-font-family);
 
 			> svg {
@@ -84,12 +83,12 @@
 
 		&.is-error {
 			background: var(--newspack-ui-color-error-0);
-			border-left-color: var(--newspack-ui-color-error-50);
+			border-color: var(--newspack-ui-color-error-50);
 		}
 
 		&.is-success {
 			background: var(--newspack-ui-color-success-0);
-			border-left-color: var(--newspack-ui-color-success-50);
+			border-color: var(--newspack-ui-color-success-50);
 		}
 	}
 	.woocommerce-NoticeGroup {
