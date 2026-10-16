@@ -252,12 +252,16 @@ export default function ContentGateSettings( {
 					noMargin: true,
 					header: (
 						<>
-							<h3>
-								<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
-							</h3>
 							<Stack direction="row" gap="sm" wrap="wrap" align="center">
-								<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
-								{ priorityWarning && <TooltipBadge label={ getPriorityWarningLabel() } tooltip={ priorityWarning } intent="low" /> }
+								<h3>
+									<a href={ `#/edit/${ gate.id }` }>{ gate.title }</a>
+								</h3>
+								<Stack direction="row" gap="sm" wrap="wrap" align="center">
+									<Badge intent={ getGateStatusBadgeIntent( gate.status ) }>{ getGateStatus( gate.status ) }</Badge>
+									{ priorityWarning && (
+										<TooltipBadge label={ getPriorityWarningLabel() } tooltip={ priorityWarning } intent="low" />
+									) }
+								</Stack>
 							</Stack>
 						</>
 					),
