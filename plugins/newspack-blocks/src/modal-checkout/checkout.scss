@@ -913,6 +913,11 @@
 		margin-top: var(--newspack-ui-spacer-5, 24px);
 		padding: var(--newspack-ui-spacer-5, 24px);
 
+		&.woocommerce-invalid {
+			--newspack-ui-color-input-border: var(--newspack-ui-color-error-60, np-colors.$error-600);
+			--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60, np-colors.$error-600);
+		}
+
 		label {
 			display: flex !important; // to override grid on more generic labels with checkboxes.
 			justify-content: flex-start;
@@ -925,7 +930,7 @@
 				margin: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - var(--newspack-ui-control-size, 20px)) / 2) var(--newspack-ui-spacer-2, 12px) 0 0;
 			}
 
-			&:has(> span) > input {
+			&:has(> .woocommerce-terms-and-conditions-checkbox-text) > input {
 				margin-top: calc((var(--newspack-ui-font-size-xs, 14px) * var(--newspack-ui-line-height-xs, 1.4286) - var(--newspack-ui-control-size, 20px)) / 2);
 			}
 
@@ -1008,7 +1013,9 @@
 
 		.woocommerce-message,
 		.woocommerce-error,
-		.woocommerce-info {
+		.woocommerce-info,
+		.wc-block-components-notice-banner {
+			background: none;
 			border: 0;
 			font-size: inherit;
 			line-height: inherit;

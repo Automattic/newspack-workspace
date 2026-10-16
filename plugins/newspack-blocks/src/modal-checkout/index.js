@@ -44,6 +44,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			$(
 				`.woocommerce-NoticeGroup-checkout, .${ CLASS_PREFIX }__inline-error, .woocommerce-error, .woocommerce-message, .wc-block-components-notice-banner`
 			).remove();
+			$(
+				'[aria-describedby="modal-checkout-coupon-result"], [aria-describedby="modal-checkout-nyp-result"], [aria-describedby="modal-checkout-quantity-result"]'
+			).removeAttr( 'aria-invalid aria-describedby' );
 		}
 
 		/**
