@@ -1661,6 +1661,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$this->capture_alerts( 'integration_health_issue_url_failed' );
 		add_filter(
 			'newspack_integration_health_issue_url',
+			// phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement -- Throwing is what this test is about.
 			function () {
 				throw new \RuntimeException( 'Simulated hub failure.' );
 			}
@@ -1685,7 +1686,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			'no scheme'         => [ fn() => 'NP-1' ],
 			'relative'          => [ fn() => '/issue/NP-1' ],
 			'protocol-relative' => [ fn() => '//linear.app/example/issue/NP-1' ],
-			'no host'           => [ fn() => 'https://' ],
+			'no host'           => [ fn() => 'https:NP-1' ],
 			'not a string'      => [ fn() => [ 'https://linear.app/example/issue/NP-1' ] ],
 		];
 	}
