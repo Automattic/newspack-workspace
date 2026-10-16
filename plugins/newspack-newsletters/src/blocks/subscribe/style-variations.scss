@@ -63,18 +63,40 @@
 				margin-right: var(--newspack-ui-spacer-3, 16px);
 
 				input[type="checkbox"] {
+					border-color: var(--newspack-ui-color-input-border, var(--newspack-theme-color-border));
+					border-radius: var(--newspack-ui-border-radius-2xs, 2px);
+					height: var(--newspack-ui-control-size, 24px) !important;
+					transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
+					width: var(--newspack-ui-control-size, 24px) !important;
+
+					&:hover:not(:checked, :disabled) {
+						border-color: var(--newspack-ui-color-input-border-hover);
+					}
+
 					&:focus {
 						outline: none;
 					}
 
 					&:focus-visible {
-						outline: 2px solid var(--newspack-ui-color-neutral-90, #1e1e1e);
-						outline-offset: 1px;
+						outline: 2px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
+						outline-offset: 2px;
 					}
 
 					&:checked {
 						background: var(--newspack-ui-color-neutral-90, #1e1e1e);
+						border-color: transparent;
 						color: var(--newspack-ui-color-neutral-0, #fff);
+					}
+
+					&:disabled {
+						background: var(--newspack-ui-color-input-bg-disabled);
+						border-color: var(--newspack-ui-color-input-border-disabled);
+						opacity: 1;
+					}
+
+					&:checked:disabled {
+						background: var(--newspack-ui-color-neutral-60);
+						border-color: var(--newspack-ui-color-neutral-60);
 					}
 				}
 			}
@@ -134,10 +156,22 @@
 				color: var(--newspack-ui-color-neutral-60, #6c6c6c);
 			}
 
+			&:hover:not(:disabled) {
+				border-color: var(--newspack-ui-color-input-border-hover);
+			}
+
 			&:focus {
-				border-color: var(--newspack-ui-color-input-border-focus, #1e1e1e);
-				outline: 1px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
-				outline-offset: 0;
+				outline: 2px solid var(--newspack-ui-color-input-border-focus, #1e1e1e);
+				outline-offset: -1px;
+			}
+
+			&:disabled {
+				-webkit-text-fill-color: currentcolor;
+				background: var(--newspack-ui-color-input-bg-disabled);
+				border-color: var(--newspack-ui-color-input-border-disabled);
+				color: var(--newspack-ui-color-neutral-60);
+				cursor: not-allowed;
+				opacity: 1;
 			}
 		}
 
@@ -210,7 +244,7 @@
 				margin-top: var(--newspack-ui-spacer-base, 8px);
 
 				p {
-					color: var(--newspack-ui-color-error-50, #d63638);
+					color: var(--newspack-ui-color-error-text, #d63638);
 					font-size: var(--newspack-ui-font-size-xs, 14px);
 					font-weight: 400;
 					line-height: var(--newspack-ui-line-height-xs, 1.4286);
@@ -219,17 +253,11 @@
 			}
 
 			.newspack-newsletters-email-input {
-				label {
-					color: var(--newspack-ui-color-error-50, #d63638);
-				}
+				--newspack-ui-color-input-border: var(--newspack-ui-color-error-60);
+				--newspack-ui-color-input-border-hover: var(--newspack-ui-color-error-60);
 
 				input[type="email"] {
-					border-color: var(--newspack-ui-color-error-50, #d63638);
-
-					&:focus {
-						border-color: var(--newspack-ui-color-error-50, #d63638);
-						outline-color: var(--newspack-ui-color-error-50, #d63638);
-					}
+					box-shadow: inset 0 0 0 1px var(--newspack-ui-color-input-border);
 				}
 			}
 		}

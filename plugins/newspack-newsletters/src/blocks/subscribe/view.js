@@ -144,6 +144,7 @@ domReady( function () {
 			emailInput.removeAttribute( 'disabled' );
 			submit.removeChild( spinner );
 			submit.removeAttribute( 'disabled' );
+			submit.removeAttribute( 'aria-busy' );
 			form.classList.remove( 'in-progress' );
 			messageNode.innerHTML = wasSubscribed ? container.getAttribute( 'data-success-message' ) : message;
 			messageContainer.appendChild( messageNode );
@@ -186,6 +187,7 @@ domReady( function () {
 			messageContainer.innerHTML = '';
 			form.classList.add( 'in-progress' );
 			submit.disabled = true;
+			submit.setAttribute( 'aria-busy', 'true' );
 			submit.appendChild( spinner );
 
 			if ( ! form.npe?.value ) {
