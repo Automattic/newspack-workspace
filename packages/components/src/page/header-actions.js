@@ -5,7 +5,7 @@ import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useViewportMatch } from '@wordpress/compose';
 import { isValidElement } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { moreHorizontal, moreVertical } from '@wordpress/icons';
+import { moreVertical } from '@wordpress/icons';
 
 /**
  * Internal dependencies.
@@ -88,8 +88,8 @@ const runMenuAction = async ( action, event ) => {
 	window.location.href = action.href;
 };
 
-const ActionsMenu = ( { groups, icon } ) => (
-	<DropdownMenu icon={ icon } label={ __( 'More actions', 'newspack-plugin' ) } className="newspack-page__header-menu">
+const ActionsMenu = ( { groups } ) => (
+	<DropdownMenu icon={ moreVertical } label={ __( 'More actions', 'newspack-plugin' ) } className="newspack-page__header-menu">
 		{ ( { onClose } ) =>
 			groups.map( ( group, groupIndex ) => (
 				<MenuGroup key={ groupIndex }>
@@ -138,7 +138,7 @@ const HeaderActions = ( { actions } ) => {
 				{ buttons.map( ( action, index ) => (
 					<ActionButton key={ keyFor( action, index ) } action={ action } />
 				) ) }
-				{ menuOnly.length > 0 && <ActionsMenu groups={ groupBySeparator( menuOnly ) } icon={ moreVertical } /> }
+				{ menuOnly.length > 0 && <ActionsMenu groups={ groupBySeparator( menuOnly ) } /> }
 			</>
 		);
 	}
@@ -153,7 +153,7 @@ const HeaderActions = ( { actions } ) => {
 	return (
 		<>
 			{ visible && <ActionButton action={ visible } iconOnly={ Boolean( visible.mobileIcon ) } /> }
-			{ groups.length > 0 && <ActionsMenu groups={ groups } icon={ moreHorizontal } /> }
+			{ groups.length > 0 && <ActionsMenu groups={ groups } /> }
 		</>
 	);
 };
