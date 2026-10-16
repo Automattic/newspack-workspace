@@ -556,20 +556,21 @@ class ESP extends Integration {
 	}
 
 	/**
-	 * Remove the deleted reader from every ESP list when flagged instead of
-	 * hard-deleted.
+	 * Stop outreach to a deleted reader who is flagged instead of hard-deleted.
 	 *
 	 * For legacy `sync_esp_delete=false` sites, this keeps the contact record
 	 * (carrying the Account_Deleted / Membership_Status flags from the
-	 * flag-mode metadata push) but stops further outreach by clearing all
-	 * list membership.
+	 * flag-mode metadata push) and removes the reader from the lists offered
+	 * for sign-up.
 	 *
 	 * Mailchimp keeps the subscription on the audience member, not on its
 	 * groups or tags, and update_lists() clears only the lists offered for
-	 * sign-up. So on Mailchimp the reader also leaves every audience they are
-	 * still subscribed to; otherwise a reader who joined through a group or
+	 * sign-up. So on Mailchimp the reader also leaves the audience this
+	 * integration syncs to; otherwise a reader who joined through a group or
 	 * tag, or whose audience is no longer offered, keeps receiving campaigns
-	 * sent to the whole audience.
+	 * sent to the whole audience. Other audiences are left alone, as the flag
+	 * push leaves them, since one account can hold other publications'
+	 * audiences.
 	 *
 	 * A provider without list management (Campaign Monitor) has no lists to
 	 * clear, so its "not supported" answer is success, not failure — returning
@@ -603,18 +604,12 @@ class ESP extends Integration {
 		if ( \is_wp_error( $contact_data ) ) {
 			return $this->is_provider_not_found_error( $contact_data ) ? $result : $contact_data;
 		}
-		$subscribed_audiences = array_keys(
-			array_filter(
-				$contact_data['lists'] ?? [],
-				function ( $member ) {
-					return 'subscribed' === ( $member['status'] ?? '' );
-				}
-			)
-		);
-		if ( empty( $subscribed_audiences ) ) {
+		$audience_id = $this->get_master_list_id();
+		$member      = $contact_data['lists'][ $audience_id ] ?? null;
+		if ( 'subscribed' !== ( $member['status'] ?? '' ) ) {
 			return $result;
 		}
-		return \Newspack_Newsletters_Contacts::add_and_remove_lists( $email, [], $subscribed_audiences, 'Reader account deleted' );
+		return \Newspack_Newsletters_Contacts::add_and_remove_lists( $email, [], [ $audience_id ], 'Reader account deleted' );
 	}
 
 	/**

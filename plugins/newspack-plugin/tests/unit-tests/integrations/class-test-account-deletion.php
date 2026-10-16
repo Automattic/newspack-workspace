@@ -1200,19 +1200,20 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	 * Mailchimp keeps the subscription on the reader's audience member, not on
 	 * its groups or tags, and update_lists() clears only the lists offered for
 	 * sign-up. A reader who joined through a group or tag, or whose audience is
-	 * no longer offered, must still leave the audience, or campaigns sent to the
-	 * whole audience keep reaching them. A member with any other status gets no
-	 * campaigns and is left as it is.
+	 * no longer offered, must still leave the audience this integration syncs
+	 * to, or campaigns sent to the whole audience keep reaching them. Another
+	 * audience in the account may belong to another publication, so it is left
+	 * alone.
 	 */
-	public function test_esp_flag_cleanup_unsubscribes_the_reader_from_mailchimp_audiences() {
+	public function test_esp_flag_cleanup_unsubscribes_the_reader_from_the_synced_mailchimp_audience() {
 		\Newspack_Newsletters_Contacts::reset_calls();
 		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
 		\Newspack_Newsletters_Subscription::$contact_data = [
 			'reader@example.com' => [
 				'lists' => [
+					'list-other' => [ 'status' => 'subscribed' ],
 					'list-abc'   => [ 'status' => 'subscribed' ],
-					'list-other' => [ 'status' => 'transactional' ],
-					'list-left'  => [ 'status' => 'unsubscribed' ],
 				],
 			],
 		];
@@ -1224,22 +1225,29 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 		\Newspack_Newsletters_Subscription::reset_calls();
 
 		$this->assertTrue( $result );
-		$this->assertCount( 2, $calls, 'The offered lists are cleared first, then the audiences.' );
+		$this->assertCount( 2, $calls, 'The offered lists are cleared first, then the synced audience.' );
 		$this->assertSame( [], $calls[1]['lists_to_add'] );
 		$this->assertSame( [ 'list-abc' ], $calls[1]['lists_to_remove'] );
 		$this->assertSame( 'Reader account deleted', $calls[1]['context'] );
 	}
 
 	/**
-	 * Other providers hold the subscription on the lists update_lists() clears,
-	 * so no audience membership is read for them.
+	 * Without a subscribed member of the synced audience, the cleanup stops
+	 * after update_lists(): a member that gets no campaigns and a reader with
+	 * no Mailchimp contact have nothing to leave, and on another provider the
+	 * step does not apply, since this integration is set up only for Mailchimp
+	 * (is_set_up()).
+	 *
+	 * @dataProvider data_esp_flag_cleanup_without_a_subscribed_synced_member
+	 *
+	 * @param string          $provider     Newsletters service provider.
+	 * @param array|\WP_Error $contact_data Contact lookup result.
 	 */
-	public function test_esp_flag_cleanup_leaves_audiences_to_mailchimp() {
+	public function test_esp_flag_cleanup_clears_only_the_offered_lists_without_a_subscribed_synced_member( $provider, $contact_data ) {
 		\Newspack_Newsletters_Contacts::reset_calls();
-		\update_option( 'newspack_newsletters_service_provider', 'active_campaign' );
-		\Newspack_Newsletters_Subscription::$contact_data = [
-			'reader@example.com' => [ 'lists' => [ 'list-abc' => [ 'status' => 'subscribed' ] ] ],
-		];
+		\update_option( 'newspack_newsletters_service_provider', $provider );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => $contact_data ];
 
 		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
 
@@ -1252,23 +1260,16 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A reader with no Mailchimp contact has no audience to leave.
+	 * Cases with no subscribed member of the synced audience to unsubscribe.
+	 *
+	 * @return array[]
 	 */
-	public function test_esp_flag_cleanup_is_done_for_a_reader_with_no_mailchimp_contact() {
-		\Newspack_Newsletters_Contacts::reset_calls();
-		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
-		\Newspack_Newsletters_Subscription::$contact_data = [
-			'reader@example.com' => new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' ),
+	public function data_esp_flag_cleanup_without_a_subscribed_synced_member() {
+		return [
+			'member gets no campaigns' => [ 'mailchimp', [ 'lists' => [ 'list-abc' => [ 'status' => 'transactional' ] ] ] ],
+			'no Mailchimp contact'     => [ 'mailchimp', new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' ) ],
+			'provider not Mailchimp'   => [ 'active_campaign', [ 'lists' => [ 'list-abc' => [ 'status' => 'subscribed' ] ] ] ],
 		];
-
-		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
-
-		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
-		\Newspack_Newsletters_Contacts::reset_calls();
-		\Newspack_Newsletters_Subscription::reset_calls();
-
-		$this->assertTrue( $result );
-		$this->assertCount( 1, $calls, 'Only update_lists() runs.' );
 	}
 
 	/**
