@@ -492,12 +492,12 @@ class ESP extends Integration {
 	 * @param array  $contact The contact data to push.
 	 * @param string $context The context of the sync.
 	 *
-	 * @return true|\WP_Error True on success. A WP_Error with
-	 *                        CONTACT_NOT_FOUND_ERROR_CODE when the audience has no
-	 *                        live member for the reader, any other WP_Error when the
-	 *                        lookup or the push failed.
+	 * @return array|true|\WP_Error The upsert's answer on success. A WP_Error with
+	 *                              CONTACT_NOT_FOUND_ERROR_CODE when the audience has
+	 *                              no live member for the reader, any other WP_Error
+	 *                              when the lookup or the push failed.
 	 */
-	private function push_to_existing_member( $contact, $context ) {
+	private function push_to_existing_member( array $contact, string $context ) {
 		$exists = $this->contact_exists( (string) ( $contact['email'] ?? '' ) );
 		if ( \is_wp_error( $exists ) ) {
 			return $exists;
@@ -505,7 +505,7 @@ class ESP extends Integration {
 		if ( ! $exists ) {
 			return new \WP_Error(
 				self::CONTACT_NOT_FOUND_ERROR_CODE,
-				__( 'The configured Mailchimp audience has no live member for this reader, so there was nothing to update.', 'newspack-plugin' )
+				__( 'The selected Mailchimp audience has no contact for this reader, or only an archived one, so there was nothing to update.', 'newspack-plugin' )
 			);
 		}
 
