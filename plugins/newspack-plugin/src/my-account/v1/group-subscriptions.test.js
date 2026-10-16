@@ -1,7 +1,7 @@
 /**
- * The rename modal's form is also wired by newspack-ui's modal script, which marks
- * its submit button busy before this file's own handler runs. Saving still has to
- * send exactly one request and release the button afterwards.
+ * Renaming a group runs inside a newspack-ui modal, alongside the modal script's own
+ * submit handling. A save has to send exactly one request however often it's
+ * pressed, and release the button afterwards.
  */
 
 /**

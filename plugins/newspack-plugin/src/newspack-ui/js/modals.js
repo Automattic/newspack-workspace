@@ -6,8 +6,8 @@ import { domReady, isButtonLoading, setButtonLoading } from '../../utils';
 
 window.newspackRAS = window.newspackRAS || [];
 
-// Submit buttons whose form submitted without leaving the page, such as a form
-// that posts into the modal checkout iframe. Nothing else will release them.
+// Submit buttons this script marked busy. A form that submits but keeps the page,
+// like one posting into the modal checkout iframe, has nothing else to release them.
 const handedOffButtons = new WeakSet();
 
 /**
@@ -91,22 +91,18 @@ domReady( function () {
 		} );
 
 		// Form-submit modals: show the loading state on the submit button while the
-		// form navigates away. For forms that reload the page this is the whole story.
-		// Forms that intercept submit and stay on the page (e.g. the reader auth form)
-		// release the button with setButtonLoading( button, false ) themselves; the auth
-		// form does this in reader-activation-auth/auth-form.js, where it also sets the
-		// state for its inline (non-modal) instances. A form that submits without
-		// intercepting but still keeps the page, like one targeting an iframe, is
-		// released when its modal opens again. Covers both shapes: form IS the modal
-		// content, or form lives inside a content section.
+		// form submits. A form that intercepts its own submit owns its button, so this
+		// only marks submits that go ahead, once every listener has had its say. A form
+		// that keeps the page, like one posting into an iframe, is released when its
+		// modal opens again. Covers both shapes: form IS the modal content, or form
+		// lives inside a content section.
 		const modalForm = modal.querySelector( 'form.newspack-ui__modal__content, .newspack-ui__modal__content form' );
 		if ( modalForm ) {
 			modalForm.addEventListener( 'submit', event => {
 				const submitButton = modalForm.querySelector( 'button[type="submit"]' );
-				setButtonLoading( submitButton, true );
-				// Listeners after this one may still intercept the submit.
 				setTimeout( () => {
 					if ( submitButton && ! event.defaultPrevented ) {
+						setButtonLoading( submitButton, true );
 						handedOffButtons.add( submitButton );
 					}
 				} );

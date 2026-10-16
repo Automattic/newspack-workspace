@@ -334,10 +334,10 @@ domReady( function () {
 	};
 
 	// Run an async action while a button shows its loading state, always restoring the
-	// button afterwards. A press while its action is still running does nothing. This
-	// tracks its own runs rather than reading the loading state, which newspack-ui's
-	// modal script sets on submit before this runs. The action owns its own
-	// waitForMinLoading() timing.
+	// button afterwards. A press while its action is still running does nothing. Runs
+	// are tracked here rather than read from the loading state, so another script
+	// setting or clearing that state can't skip or repeat a request. The action owns
+	// its own waitForMinLoading() timing.
 	const runningButtons = new WeakSet();
 	const withLoadingButton = async ( button, action ) => {
 		if ( runningButtons.has( button ) ) {

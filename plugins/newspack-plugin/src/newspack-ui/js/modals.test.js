@@ -1,7 +1,7 @@
 /**
- * A modal form that submits without leaving the page has nothing to release its
- * busy submit button, so reopening the modal does. A form that handles its own
- * submit keeps its button until its own request finishes.
+ * The modal script marks a submit button busy only when its form actually submits,
+ * and releases it when the modal opens again, since a form that keeps the page has
+ * nothing else to release it. A form that handles its own submit owns its button.
  */
 
 import { isButtonLoading } from '../../utils';
@@ -35,6 +35,7 @@ function renderModal( interceptSubmit ) {
 const nextTask = () => new Promise( resolve => setTimeout( resolve, 0 ) );
 
 afterEach( () => {
+	jest.restoreAllMocks();
 	document.body.innerHTML = '';
 } );
 
@@ -42,7 +43,7 @@ describe( 'newspack-ui modal forms', () => {
 	it( 'releases a submit button whose form handed off, when its modal opens again', async () => {
 		const { modal, form, button } = renderModal( false );
 		// jsdom reports the form navigation it can't perform; the page staying is the point.
-		const consoleError = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+		jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 
 		form.requestSubmit( button );
 		await nextTask();
@@ -50,24 +51,19 @@ describe( 'newspack-ui modal forms', () => {
 
 		modal.setAttribute( 'data-state', 'closed' );
 		await nextTask();
+		expect( isButtonLoading( button ) ).toBe( true );
+
 		modal.setAttribute( 'data-state', 'open' );
 		await nextTask();
-
-		consoleError.mockRestore();
 		expect( isButtonLoading( button ) ).toBe( false );
 	} );
 
-	it( 'leaves the button of a form that handles its own submit', async () => {
-		const { modal, form, button } = renderModal( true );
+	it( 'leaves the button of a form that handles its own submit to that form', async () => {
+		const { form, button } = renderModal( true );
 
 		form.requestSubmit( button );
 		await nextTask();
 
-		modal.setAttribute( 'data-state', 'closed' );
-		await nextTask();
-		modal.setAttribute( 'data-state', 'open' );
-		await nextTask();
-
-		expect( isButtonLoading( button ) ).toBe( true );
+		expect( isButtonLoading( button ) ).toBe( false );
 	} );
 } );

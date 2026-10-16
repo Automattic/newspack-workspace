@@ -31,7 +31,6 @@ function renderForm() {
 			<button type="submit">Add payment method</button>
 		</form>
 	`;
-	Element.prototype.scrollIntoView = jest.fn();
 	jest.isolateModules( () => {
 		require( './payment-methods' );
 	} );
@@ -39,6 +38,7 @@ function renderForm() {
 }
 
 beforeEach( () => {
+	Element.prototype.scrollIntoView = jest.fn();
 	global.XMLHttpRequest = FakeXMLHttpRequest;
 	global.newspack_my_account = {
 		labels: { generic_error: 'Something went wrong. Please try again.' },
@@ -49,6 +49,7 @@ beforeEach( () => {
 } );
 
 afterEach( () => {
+	delete Element.prototype.scrollIntoView;
 	global.XMLHttpRequest = RealXMLHttpRequest;
 	delete global.newspack_my_account;
 	document.body.innerHTML = '';
