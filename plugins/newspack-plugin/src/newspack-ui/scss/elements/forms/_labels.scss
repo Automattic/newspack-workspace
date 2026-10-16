@@ -12,15 +12,17 @@
 		&:has(input[type="checkbox"]),
 		&:has(input[type="radio"]) {
 			display: grid !important;
+			font-weight: normal;
 			gap: 0 var(--newspack-ui-spacer-1);
-			grid-template-columns: var(--newspack-ui-spacer-4) 1fr;
+			grid-template-columns: var(--newspack-ui-control-size) 1fr;
 
 			> *:not(input) {
 				grid-column: 2 / span 1;
 			}
 
-			input {
-				margin-top: 0.125em; // TODO: improve the way alignment is being achieved here.
+			&:has(input:disabled) {
+				color: var(--newspack-ui-color-neutral-60);
+				cursor: not-allowed;
 			}
 
 			// For creating a bordered 'list' of radio, checkbox inputs:
@@ -50,7 +52,7 @@
 
 			// 'Selected' badge
 			&:has(.newspack-ui__badge) {
-				grid-template-columns: var(--newspack-ui-spacer-4) 1fr min-content;
+				grid-template-columns: var(--newspack-ui-control-size) 1fr min-content;
 			}
 
 			.newspack-ui__badge {

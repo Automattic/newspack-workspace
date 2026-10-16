@@ -13,4 +13,6 @@
 	--newspack-ui-spacer-10: calc(var(--newspack-ui-spacer-base) * 7); // 56px - TODO: clamp?
 	--newspack-ui-spacer-11: calc(var(--newspack-ui-spacer-base) * 8); // 64px - TODO: clamp?
 	--newspack-ui-spacer-12: calc(var(--newspack-ui-spacer-base) * 9); // 72px - TODO: clamp?
+
+	--newspack-ui-control-size: var(--newspack-ui-spacer-5);
 }
