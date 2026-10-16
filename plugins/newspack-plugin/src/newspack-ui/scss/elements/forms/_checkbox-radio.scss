@@ -8,6 +8,7 @@
 		color: var(--newspack-ui-color-neutral-0);
 		cursor: pointer;
 		display: inline-grid;
+		flex-shrink: 0;
 		font: inherit;
 		height: var(--newspack-ui-control-size) !important;
 		margin: 0;

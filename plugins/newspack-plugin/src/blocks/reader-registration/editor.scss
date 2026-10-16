@@ -118,7 +118,7 @@
 		}
 	}
 
-	&__response {
+	&__response:empty {
 		display: none;
 	}
 

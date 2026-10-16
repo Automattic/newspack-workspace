@@ -20,6 +20,10 @@
 				grid-column: 2 / span 1;
 			}
 
+			> input {
+				margin-top: calc((1lh - var(--newspack-ui-control-size)) / 2);
+			}
+
 			&:has(input:disabled) {
 				color: var(--newspack-ui-color-neutral-60);
 				cursor: not-allowed;
