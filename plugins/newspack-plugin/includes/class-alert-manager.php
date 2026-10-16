@@ -621,7 +621,8 @@ class Alert_Manager {
 	 * history; those after the transition add nothing to Slack, since the
 	 * condition is already reported and the record carries it until a
 	 * passing check, or a run that no longer checks the integration, clears
-	 * it.
+	 * it. When an issue tracks the outage (get_tracking_issue_url()), the
+	 * transition reaches the log with the issue URL instead of paging.
 	 *
 	 * The record is written before dispatch so a `newspack_alert` handler
 	 * that throws cannot leave the transition unrecorded and page again on
@@ -684,17 +685,25 @@ class Alert_Manager {
 			return;
 		}
 
-		self::fire_health_changed(
-			[
-				'integration_id'   => $integration_id,
-				'integration_name' => $integration_name,
-				'state'            => 'broken',
-				'error_class'      => $record['error_class'],
-				'error'            => $message,
-				'first_failed_at'  => (int) $record['first_failed_at'],
-				'failures'         => $record['failures'],
-			]
-		);
+		$change = [
+			'integration_id'   => $integration_id,
+			'integration_name' => $integration_name,
+			'state'            => 'broken',
+			'error_class'      => $record['error_class'],
+			'error'            => $message,
+			'first_failed_at'  => (int) $record['first_failed_at'],
+			'failures'         => $record['failures'],
+		];
+
+		$issue_url = self::get_tracking_issue_url( $change );
+		if ( '' !== $issue_url ) {
+			$record['issue_url']      = $issue_url;
+			$state[ $integration_id ] = $record;
+			update_option( self::HEALTH_STATE_OPTION, $state, false );
+			$context = array_merge( $payload, [ 'health' => $record ] );
+		}
+
+		self::fire_health_changed( $change + [ 'issue_url' => $issue_url ] );
 
 		$alert_message = sprintf(
 			'Integration "%s" has failed %d consecutive health checks since %s. Last error: %s',
@@ -706,18 +715,63 @@ class Alert_Manager {
 		if ( 'publisher' === $record['error_class'] ) {
 			$alert_message .= ' The ESP account itself is the problem, so the fix is on the publisher side.';
 		}
+		if ( '' !== $issue_url ) {
+			$alert_message .= sprintf( ' Tracked in %s.', $issue_url );
+		}
 
 		/** This action is documented in includes/class-alert-manager.php */
 		do_action(
 			'newspack_alert',
 			[
 				'type'      => 'integration_health_check_failed',
-				'severity'  => 'error',
+				'severity'  => '' !== $issue_url ? 'warning' : 'error',
 				'message'   => $alert_message,
 				'context'   => $context,
 				'timestamp' => time(),
 			]
 		);
+	}
+
+	/**
+	 * Ask whether something outside the site tracks a broken integration, and
+	 * where.
+	 *
+	 * A tracking issue gives the outage an owner, so its page would only repeat
+	 * it in the on-call channel. Any failure to get one, a listener that throws
+	 * included, leaves the page in place: an outage nobody tracks must page.
+	 *
+	 * @param array $change The 'broken' state change, as documented on `newspack_integration_health_changed`.
+	 * @return string The issue URL, or '' when nothing tracks the outage.
+	 */
+	private static function get_tracking_issue_url( $change ) {
+		try {
+			/**
+			 * Filters the URL of an issue that tracks an integration that has just
+			 * turned broken. Returning a URL moves the outage's page from Slack to
+			 * the log, with the URL in the message; returning '' keeps the page.
+			 * The URL also travels with the outage's later 'recovered' or
+			 * 'disconnected' change, so the issue can be updated.
+			 *
+			 * @param string $issue_url The issue URL, '' when nothing tracks the outage.
+			 * @param array  $change    The 'broken' state change, as documented on
+			 *                          `newspack_integration_health_changed`.
+			 */
+			$issue_url = apply_filters( 'newspack_integration_health_issue_url', '', $change );
+		} catch ( \Throwable $e ) {
+			/** This action is documented in includes/class-alert-manager.php */
+			do_action(
+				'newspack_alert',
+				[
+					'type'      => 'integration_health_issue_url_failed',
+					'severity'  => 'warning',
+					'message'   => sprintf( 'A newspack_integration_health_issue_url callback failed for integration "%s": %s', $change['integration_id'], $e->getMessage() ),
+					'context'   => $change,
+					'timestamp' => time(),
+				]
+			);
+			return '';
+		}
+		return is_string( $issue_url ) ? esc_url_raw( $issue_url, [ 'https' ] ) : '';
 	}
 
 	/**
@@ -765,6 +819,7 @@ class Alert_Manager {
 				'error'            => (string) ( $record['last_error'] ?? '' ),
 				'first_failed_at'  => (int) ( $record['first_failed_at'] ?? 0 ),
 				'failures'         => $failures,
+				'issue_url'        => (string) ( $record['issue_url'] ?? '' ),
 			]
 		);
 
@@ -825,6 +880,7 @@ class Alert_Manager {
 					'error'            => (string) ( $record['last_error'] ?? '' ),
 					'first_failed_at'  => (int) ( $record['first_failed_at'] ?? 0 ),
 					'failures'         => $failures,
+					'issue_url'        => (string) ( $record['issue_url'] ?? '' ),
 				]
 			);
 
@@ -875,6 +931,9 @@ class Alert_Manager {
 			 *     @type string $error            The last health-check error message.
 			 *     @type int    $first_failed_at  Unix timestamp of the first failure in this outage.
 			 *     @type int    $failures         Consecutive failed checks so far.
+			 *     @type string $issue_url        The issue tracking this outage, from the
+			 *                                    `newspack_integration_health_issue_url`
+			 *                                    filter, or '' when nothing tracks it.
 			 * }
 			 */
 			do_action( 'newspack_integration_health_changed', $payload );

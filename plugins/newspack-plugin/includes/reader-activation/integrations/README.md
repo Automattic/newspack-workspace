@@ -631,11 +631,25 @@ do_action(
         'error'            => '403: API Access has been disabled for this account.',
         'first_failed_at'  => 1790000000,
         'failures'         => 3,
+        'issue_url'        => '', // the issue tracking this outage, if any (see below)
     ]
 );
 ```
 
 One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself. Staging hosts (`*.newspackstaging.com`) fire it too; only their alerts are capped at Watch, so a consumer that should skip staging has to check the host itself.
+
+Just before the `broken` event, the `newspack_integration_health_issue_url` filter asks whether an issue tracks the outage. A callback that returns an `https` URL takes ownership: the transition reaches the log with the URL instead of paging Slack, and the URL is stored with the record and sent with the outage's `recovered` or `disconnected` event. A callback that returns `''`, or throws, leaves the page in place. Newspack Manager uses it to open a Linear issue for a publisher-side break.
+
+```php
+add_filter(
+    'newspack_integration_health_issue_url',
+    function ( $issue_url, $change ) {
+        return 'publisher' === $change['error_class'] ? open_tracking_issue( $change ) : $issue_url;
+    },
+    10,
+    2
+);
+```
 
 While an integration is broken, its contact-sync failures don't page either: retry exhaustion reaches the log at warning severity, and its failures stay out of the failure log the pattern alerts read. A record whose last failure is older than `Alert_Manager::HEALTH_STREAK_MAX_GAP` no longer counts, so a check that stops running cannot keep an integration muted.
 
