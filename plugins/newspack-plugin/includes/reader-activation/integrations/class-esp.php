@@ -564,6 +564,13 @@ class ESP extends Integration {
 	 * flag-mode metadata push) but stops further outreach by clearing all
 	 * list membership.
 	 *
+	 * Mailchimp keeps the subscription on the audience member, not on its
+	 * groups or tags, and update_lists() clears only the lists offered for
+	 * sign-up. So on Mailchimp the reader also leaves every audience they are
+	 * still subscribed to; otherwise a reader who joined through a group or
+	 * tag, or whose audience is no longer offered, keeps receiving campaigns
+	 * sent to the whole audience.
+	 *
 	 * A provider without list management (Campaign Monitor) has no lists to
 	 * clear, so its "not supported" answer is success, not failure — returning
 	 * the error would schedule five retries that can never succeed and alert
@@ -585,10 +592,29 @@ class ESP extends Integration {
 			);
 		}
 		$result = \Newspack_Newsletters_Contacts::update_lists( $email, [], 'Reader account deleted' );
-		if ( \is_wp_error( $result ) && self::LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE === $result->get_error_code() ) {
-			return true;
+		if ( \is_wp_error( $result ) ) {
+			return self::LIST_MANAGEMENT_UNSUPPORTED_ERROR_CODE === $result->get_error_code() ? true : $result;
 		}
-		return $result;
+		if ( 'mailchimp' !== $this->get_provider_slug() ) {
+			return $result;
+		}
+
+		$contact_data = Newspack_Newsletters_Subscription::get_contact_data( $email );
+		if ( \is_wp_error( $contact_data ) ) {
+			return $this->is_provider_not_found_error( $contact_data ) ? $result : $contact_data;
+		}
+		$subscribed_audiences = array_keys(
+			array_filter(
+				$contact_data['lists'] ?? [],
+				function ( $member ) {
+					return 'subscribed' === ( $member['status'] ?? '' );
+				}
+			)
+		);
+		if ( empty( $subscribed_audiences ) ) {
+			return $result;
+		}
+		return \Newspack_Newsletters_Contacts::add_and_remove_lists( $email, [], $subscribed_audiences, 'Reader account deleted' );
 	}
 
 	/**

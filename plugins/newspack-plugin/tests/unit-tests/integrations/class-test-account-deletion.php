@@ -1197,6 +1197,101 @@ class Test_Account_Deletion extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Mailchimp keeps the subscription on the reader's audience member, not on
+	 * its groups or tags, and update_lists() clears only the lists offered for
+	 * sign-up. A reader who joined through a group or tag, or whose audience is
+	 * no longer offered, must still leave the audience, or campaigns sent to the
+	 * whole audience keep reaching them. A member with any other status gets no
+	 * campaigns and is left as it is.
+	 */
+	public function test_esp_flag_cleanup_unsubscribes_the_reader_from_mailchimp_audiences() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		\Newspack_Newsletters_Subscription::$contact_data = [
+			'reader@example.com' => [
+				'lists' => [
+					'list-abc'   => [ 'status' => 'subscribed' ],
+					'list-other' => [ 'status' => 'transactional' ],
+					'list-left'  => [ 'status' => 'unsubscribed' ],
+				],
+			],
+		];
+
+		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Subscription::reset_calls();
+
+		$this->assertTrue( $result );
+		$this->assertCount( 2, $calls, 'The offered lists are cleared first, then the audiences.' );
+		$this->assertSame( [], $calls[1]['lists_to_add'] );
+		$this->assertSame( [ 'list-abc' ], $calls[1]['lists_to_remove'] );
+		$this->assertSame( 'Reader account deleted', $calls[1]['context'] );
+	}
+
+	/**
+	 * Other providers hold the subscription on the lists update_lists() clears,
+	 * so no audience membership is read for them.
+	 */
+	public function test_esp_flag_cleanup_leaves_audiences_to_mailchimp() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\update_option( 'newspack_newsletters_service_provider', 'active_campaign' );
+		\Newspack_Newsletters_Subscription::$contact_data = [
+			'reader@example.com' => [ 'lists' => [ 'list-abc' => [ 'status' => 'subscribed' ] ] ],
+		];
+
+		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Subscription::reset_calls();
+
+		$this->assertTrue( $result );
+		$this->assertCount( 1, $calls, 'Only update_lists() runs.' );
+	}
+
+	/**
+	 * A reader with no Mailchimp contact has no audience to leave.
+	 */
+	public function test_esp_flag_cleanup_is_done_for_a_reader_with_no_mailchimp_contact() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		\Newspack_Newsletters_Subscription::$contact_data = [
+			'reader@example.com' => new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' ),
+		];
+
+		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
+
+		$calls = \Newspack_Newsletters_Contacts::$add_and_remove_lists_calls;
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Subscription::reset_calls();
+
+		$this->assertTrue( $result );
+		$this->assertCount( 1, $calls, 'Only update_lists() runs.' );
+	}
+
+	/**
+	 * When the audience membership can't be read, the reader may still be
+	 * subscribed, so the cleanup reports the failure instead of success.
+	 */
+	public function test_esp_flag_cleanup_reports_a_failed_mailchimp_audience_lookup() {
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		\Newspack_Newsletters_Subscription::$contact_data = [
+			'reader@example.com' => new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Error reaching to search-members endpoint' ),
+		];
+
+		$result = ( new \Newspack\Reader_Activation\Integrations\ESP() )->flag_deletion_cleanup( 'reader@example.com' );
+
+		\Newspack_Newsletters_Contacts::reset_calls();
+		\Newspack_Newsletters_Subscription::reset_calls();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_newsletters_mailchimp_search_members', $result->get_error_code() );
+	}
+
+	/**
 	 * The flag_deletion_cleanup() hook must still run even when the flag push
 	 * itself fails, so outreach stops regardless of whether the metadata push
 	 * succeeded.
