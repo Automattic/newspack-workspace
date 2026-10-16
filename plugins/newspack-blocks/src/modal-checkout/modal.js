@@ -443,10 +443,19 @@ domReady( () => {
 
 		// Populate cart and redirect to checkout if there is an unsupported payment gateway.
 		if ( ! isModalCheckout && ! shouldPromptRegistration() ) {
-			generateCart( checkoutData ).then( url => {
-				// Remove modal checkout query string and trailing question mark (if any).
-				window.location.href = url;
-			} );
+			generateCart( checkoutData )
+				.then( url => {
+					// Remove modal checkout query string and trailing question mark (if any).
+					window.location.href = url;
+				} )
+				.catch( error => {
+					console.warn( 'Unable to generate cart:', error ); // eslint-disable-line no-console
+					form.classList.remove( 'modal-processing' );
+					form.querySelectorAll( '.non-modal-checkout-loading' ).forEach( button => {
+						button.classList.remove( 'non-modal-checkout-loading' );
+						button.removeAttribute( 'aria-busy' );
+					} );
+				} );
 			// Add some animation to the Checkout Button while the non-modal checkout is loading.
 			// For now, don't do it when any popup opens, just when we go right to the checkout page.
 			if ( ! ( checkoutData.is_variable && ! checkoutData.variation_id ) ) {

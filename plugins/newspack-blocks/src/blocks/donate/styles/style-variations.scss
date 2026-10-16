@@ -362,7 +362,7 @@
 	}
 
 	.money-input {
-		border-color: var(--newspack-ui-color-input-border, np-colors.$neutral-400);
+		border-color: var(--newspack-ui-color-input-border, np-colors.$neutral-500);
 		color: var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		left: var(--newspack-ui-spacer-5, 24px);
@@ -372,12 +372,8 @@
 		right: var(--newspack-ui-spacer-5, 24px);
 		transition: border-color 125ms ease-in-out, outline 125ms ease-in-out;
 
-		&:hover:not(:focus-within, :has(input[readonly])) {
+		&:hover:not(:focus-within) {
 			border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700);
-		}
-
-		&:has(input[readonly]) {
-			border-color: var(--newspack-ui-color-input-border-disabled, np-colors.$neutral-300);
 		}
 
 		&:focus-within {
@@ -405,12 +401,6 @@
 			max-width: 100%;
 			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px);
 			width: 100%;
-
-			&[readonly] {
-				background: var(--newspack-ui-color-input-bg-disabled, np-colors.$neutral-100);
-				color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
-				cursor: not-allowed;
-			}
 		}
 	}
 

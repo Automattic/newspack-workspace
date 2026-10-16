@@ -548,7 +548,7 @@
 
 			> input + label::before {
 				background: var(--newspack-ui-color-neutral-0, #fff) !important;
-				border: 1px solid var(--newspack-ui-color-input-border, #ccc) !important;
+				border: 1px solid var(--newspack-ui-color-input-border, np-colors.$neutral-500) !important;
 				box-shadow: none;
 				height: var(--newspack-ui-control-size, 24px);
 				width: var(--newspack-ui-control-size, 24px);
@@ -631,7 +631,7 @@
 		}
 		.wc-stripe-elements-field,
 		.wc-stripe-iban-element-field {
-			border: 1px solid var(--newspack-ui-color-input-border, np-colors.$neutral-300);
+			border: 1px solid var(--newspack-ui-color-input-border, np-colors.$neutral-500);
 			border-radius: var(--newspack-ui-border-radius-m, 6px);
 			display: block;
 			font-family: var(--newspack-ui-font-family, system-ui);
@@ -897,6 +897,8 @@
 	p#newspack_subscription_confirmation_field,
 	//Terms and Conditions checkbox
 	.woocommerce-terms-and-conditions-wrapper > p.form-row {
+		--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+
 		background: var(--newspack-ui-color-neutral-5, np-colors.$neutral-050);
 		border-color: var(--newspack-ui-color-border, np-colors.$neutral-300);
 		box-shadow: none;
