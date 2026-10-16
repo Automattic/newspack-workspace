@@ -46,6 +46,33 @@ $is_active           = Group_Subscription_MyAccount::is_subscription_active( $su
 $active_tab          = ( isset( $_GET['activeTab'] ) && 'invites' === sanitize_key( wp_unslash( $_GET['activeTab'] ) ) ) ? 'invites' : 'members'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $group_label_lower   = Group_Subscription::get_label_lower( 'singular' );
 $is_completely_empty = empty( $members ) && empty( $all_invites );
+
+/**
+ * Render a search field that narrows a table's rows client-side (see
+ * src/my-account/v1/group-member-search.js). The page renders every row, so a group
+ * of a few hundred filters without a request.
+ *
+ * @param string $list            'members' or 'invites'; keys the element IDs.
+ * @param string $label           Accessible label; says what the field matches on.
+ * @param string $status_template Result count announced to screen readers, with %1$d
+ *                                (matching rows) and %2$d (all rows) placeholders.
+ */
+$render_search_field = static function ( string $list, string $label, string $status_template ): void {
+	$input_id = 'newspack-my-account__group_subscription__search-' . $list;
+	?>
+	<div class="newspack-my-account__group_subscription__search" data-status-template="<?php echo esc_attr( $status_template ); ?>">
+		<label for="<?php echo esc_attr( $input_id ); ?>" class="screen-reader-text"><?php echo esc_html( $label ); ?></label>
+		<input
+			type="search"
+			id="<?php echo esc_attr( $input_id ); ?>"
+			aria-controls="newspack-my-account__group_subscription__table-<?php echo esc_attr( $list ); ?>"
+			placeholder="<?php echo esc_attr( $label ); ?>"
+			autocomplete="off"
+		>
+		<p class="newspack-ui__helper-text newspack-my-account__group_subscription__search-status" data-search-status aria-live="polite"></p>
+	</div>
+	<?php
+};
 ?>
 <?php if ( ! $is_manageable ) : ?>
 	<div class="newspack-ui__notice newspack-ui__notice--info newspack-my-account__group_subscription__inactive-notice" role="status">
@@ -129,7 +156,15 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 			<?php esc_html_e( 'Your invitations are still pending. Anyone who accepts will appear here.', 'newspack-plugin' ); ?>
 		</p>
 	<?php endif; ?>
-	<table class="shop_table shop_table_responsive newspack-my-account__group_subscription__members">
+	<?php
+	$render_search_field(
+		'members',
+		__( 'Search by name or email', 'newspack-plugin' ),
+		/* translators: 1: number of members matching the search, 2: total number of members. */
+		_n( 'Showing %1$d of %2$d member', 'Showing %1$d of %2$d members', count( $members_by_id ), 'newspack-plugin' )
+	);
+	?>
+	<table id="newspack-my-account__group_subscription__table-members" class="shop_table shop_table_responsive newspack-my-account__group_subscription__members">
 		<thead>
 			<tr>
 				<th><?php esc_html_e( 'Name', 'newspack-plugin' ); ?></th>
@@ -150,16 +185,17 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 			// the managers and group settings every iteration. Apply the same
 			// newspack_group_subscription_user_is_manager filter user_is_manager() applies, so the
 			// extension point is preserved.
-			$is_manager  = (bool) apply_filters( 'newspack_group_subscription_user_is_manager', in_array( $user_id, $managers, true ), $user_id, $subscription );
-			$is_owner    = $user_id === (int) $subscription->get_user_id();
-			$member_role = $is_manager ? __( 'Manager', 'newspack-plugin' ) : __( 'Member', 'newspack-plugin' );
+			$is_manager    = (bool) apply_filters( 'newspack_group_subscription_user_is_manager', in_array( $user_id, $managers, true ), $user_id, $subscription );
+			$is_owner      = $user_id === (int) $subscription->get_user_id();
+			$display_label = newspack_get_user_display_label( $user );
+			$member_role   = $is_manager ? __( 'Manager', 'newspack-plugin' ) : __( 'Member', 'newspack-plugin' );
 			if ( $is_owner ) {
 				$member_role = __( 'Owner', 'newspack-plugin' );
 			}
 			?>
-			<tr>
+			<tr data-search-text="<?php echo esc_attr( $display_label . ' ' . sanitize_email( $user->user_email ) ); ?>">
 				<td data-title="<?php esc_attr_e( 'Name', 'newspack-plugin' ); ?>">
-					<strong><?php echo esc_html( newspack_get_user_display_label( $user ) ); ?></strong>
+					<strong><?php echo esc_html( $display_label ); ?></strong>
 					<?php if ( $user_id === $current_user_id ) : ?>
 						<?php esc_html_e( ' (you)', 'newspack-plugin' ); ?>
 					<?php endif; ?>
@@ -200,7 +236,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 											type="button"
 											class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--destructive newspack-my-account__group_subscription__remove-member"
 											data-member-id="<?php echo esc_attr( $user->ID ); ?>"
-											data-member-name="<?php echo esc_attr( newspack_get_user_display_label( $user ) ); ?>"
+											data-member-name="<?php echo esc_attr( $display_label ); ?>"
 										>
 											<?php \esc_html_e( 'Remove member', 'newspack-plugin' ); ?>
 										</button>
@@ -214,6 +250,9 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 		<?php endforeach; ?>
 		</tbody>
 	</table>
+	<p class="newspack-my-account__group_subscription__panel-info" data-search-empty hidden>
+		<?php esc_html_e( 'No members match your search.', 'newspack-plugin' ); ?>
+	</p>
 			</div><!-- .newspack-ui__tabs__panel (members) -->
 			<div
 			id="newspack-my-account__group_subscription__panel-invites"
@@ -227,7 +266,15 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 			<?php esc_html_e( 'No pending invitations.', 'newspack-plugin' ); ?>
 		</p>
 	<?php else : ?>
-	<table class="shop_table shop_table_responsive newspack-my-account__group_subscription__invites">
+		<?php
+		$render_search_field(
+			'invites',
+			__( 'Search by email', 'newspack-plugin' ),
+			/* translators: 1: number of invitations matching the search, 2: total number of invitations. */
+			_n( 'Showing %1$d of %2$d invitation', 'Showing %1$d of %2$d invitations', count( $all_invites ), 'newspack-plugin' )
+		);
+		?>
+	<table id="newspack-my-account__group_subscription__table-invites" class="shop_table shop_table_responsive newspack-my-account__group_subscription__invites">
 		<thead>
 			<tr>
 				<th><?php esc_html_e( 'Sent to', 'newspack-plugin' ); ?></th>
@@ -239,7 +286,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 		<?php
 		foreach ( $all_invites as $key => $invite ) :
 			?>
-			<tr>
+			<tr data-search-text="<?php echo esc_attr( sanitize_email( $invite['email'] ) ); ?>">
 				<td data-title="<?php esc_attr_e( 'Sent to', 'newspack-plugin' ); ?>"><a href="mailto:<?php echo esc_attr( sanitize_email( $invite['email'] ) ); ?>"><?php echo esc_html( sanitize_email( $invite['email'] ) ); ?></a></td>
 				<td data-title="<?php esc_attr_e( 'Status', 'newspack-plugin' ); ?>"><?php echo esc_html( Group_Subscription_Invite::is_invite_expired( $invite ) ? __( 'Expired', 'newspack-plugin' ) : __( 'Pending', 'newspack-plugin' ) ); ?></td>
 				<td class="newspack-my-account__group_subscription__invites--actions order-actions">
@@ -278,6 +325,9 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 		<?php endforeach; ?>
 		</tbody>
 	</table>
+	<p class="newspack-my-account__group_subscription__panel-info" data-search-empty hidden>
+		<?php esc_html_e( 'No invitations match your search.', 'newspack-plugin' ); ?>
+	</p>
 	<?php endif; ?>
 			</div><!-- .newspack-ui__tabs__panel (invites) -->
 		</div><!-- .newspack-ui__tabs__content -->
