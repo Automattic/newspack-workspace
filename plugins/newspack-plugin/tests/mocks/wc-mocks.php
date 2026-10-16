@@ -2018,11 +2018,28 @@ function wcs_get_subscriptions_for_order( $order, $args = [] ) {
 	if ( ! $order instanceof \WC_Order ) {
 		return [];
 	}
-	$subscription_id = (int) $order->get_meta( '_subscription_renewal' );
-	if ( $subscription_id <= 0 || ! isset( $subscriptions_database[ $subscription_id ] ) ) {
-		return [];
+	// Real WCS returns the union of the relationships `order_type` asks for. A renewal
+	// match is the subscription the order's `_subscription_renewal` meta points at; a
+	// parent match is one whose parent ID is this order. Renewal comes first so callers
+	// reading the first result keep getting it. With no `order_type` the mock answers
+	// renewals only, unlike real WCS, whose default is parent and switch orders.
+	$order_types = (array) ( $args['order_type'] ?? [] );
+	$wants_any   = in_array( 'any', $order_types, true );
+	$matches     = [];
+	if ( empty( $order_types ) || $wants_any || in_array( 'renewal', $order_types, true ) ) {
+		$subscription_id = (int) $order->get_meta( '_subscription_renewal' );
+		if ( $subscription_id > 0 && isset( $subscriptions_database[ $subscription_id ] ) ) {
+			$matches[ $subscription_id ] = $subscriptions_database[ $subscription_id ];
+		}
 	}
-	return [ $subscriptions_database[ $subscription_id ] ];
+	if ( $wants_any || in_array( 'parent', $order_types, true ) ) {
+		foreach ( (array) $subscriptions_database as $id => $subscription ) {
+			if ( (int) $subscription->get_parent_id() === (int) $order->get_id() ) {
+				$matches[ $id ] = $subscription;
+			}
+		}
+	}
+	return array_values( $matches );
 }
 
 /**

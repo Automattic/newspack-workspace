@@ -56,7 +56,8 @@ class Group_Subscription_MyAccount {
 		// Access Control feature flag. None of these hooks need to run on sites
 		// that haven't been migrated, and the `group` endpoint / management
 		// flows should not exist there. The flag composes with the
-		// `Memberships::is_active()` redirect in `resolve_group_landing()`: the
+		// `is_group_page_available()` redirect in `resolve_group_landing()`, which the
+		// post-checkout prompt also checks before linking to the group page: the
 		// flag is the outer gate, the Memberships check the inner redirect.
 		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
 			return;
@@ -119,6 +120,15 @@ class Group_Subscription_MyAccount {
 	}
 
 	/**
+	 * Whether the group page renders, rather than redirecting to the dashboard.
+	 *
+	 * @return bool
+	 */
+	public static function is_group_page_available(): bool {
+		return ! Memberships::is_active() && class_exists( __NAMESPACE__ . '\\My_Account_UI_V1' );
+	}
+
+	/**
 	 * Add manage members query var.
 	 *
 	 * @param array $query_vars Query vars.
@@ -148,7 +158,7 @@ class Group_Subscription_MyAccount {
 	 * @param mixed $value Subscription ID passed as the endpoint value, if any.
 	 */
 	public static function resolve_group_landing( $value ) {
-		if ( Memberships::is_active() || ! class_exists( __NAMESPACE__ . '\\My_Account_UI_V1' ) ) {
+		if ( ! self::is_group_page_available() ) {
 			wp_safe_redirect( wc_get_account_endpoint_url( 'dashboard' ) );
 			exit;
 		}
