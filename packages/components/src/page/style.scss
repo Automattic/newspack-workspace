@@ -94,6 +94,17 @@ $dataviews-compact-max-width: 430px;
 	min-height: wp-vars.$button-size;
 }
 
+.newspack-page__header-menu-popover a.components-menu-item__button:not(.is-destructive) {
+	&:focus,
+	&:active {
+		color: var(--wp-components-color-foreground, var(--wpds-color-foreground-content-neutral, #{wp-colors.$gray-900}));
+	}
+
+	&:hover {
+		color: var(--wp-admin-theme-color, #{np-colors.$primary-600});
+	}
+}
+
 .newspack-page__header-subtitle {
 	color: var(--wpds-color-foreground-content-neutral-weak);
 	padding-block-end: var(--wpds-dimension-padding-xs);

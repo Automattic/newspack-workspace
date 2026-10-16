@@ -89,7 +89,12 @@ const runMenuAction = async ( action, event ) => {
 };
 
 const ActionsMenu = ( { groups } ) => (
-	<DropdownMenu icon={ moreVertical } label={ __( 'More actions', 'newspack-plugin' ) } className="newspack-page__header-menu">
+	<DropdownMenu
+		icon={ moreVertical }
+		label={ __( 'More actions', 'newspack-plugin' ) }
+		className="newspack-page__header-menu"
+		popoverProps={ { className: 'newspack-page__header-menu-popover' } }
+	>
 		{ ( { onClose } ) =>
 			groups.map( ( group, groupIndex ) => (
 				<MenuGroup key={ groupIndex }>
