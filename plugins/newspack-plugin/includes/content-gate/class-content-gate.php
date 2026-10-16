@@ -399,16 +399,16 @@ class Content_Gate {
 	 * their own published post sees the comment form, though posting is still
 	 * refused, because the submission arrives without that post in view. Two
 	 * effects outlast that page: a newsletter sign-up made there keeps any
-	 * premium list it joined, and the paid-member body class can stay for up to
-	 * ten minutes while it is cached. Both are left as is on purpose; they reach
-	 * only the publisher's own writers.
+	 * premium list it joined, and the paid-member body class can stay for as long
+	 * as its cached answer lasts ({@see Member_Body_Class}). Both are left as is on
+	 * purpose; they reach only the publisher's own writers.
 	 *
 	 * Two neighbouring questions are answered elsewhere. Who may change gate
 	 * settings stays a capability check, so adding an account here grants it no
 	 * say over them. Who gets reader account features is
 	 * {@see Reader_Activation::is_user_reader()}.
 	 *
-	 * @param int|\WP_User|null $user User ID or object. Defaults to the current user.
+	 * @param int|string|\WP_User|null $user User ID (an int or a string of digits) or object. Defaults to the current user.
 	 *
 	 * @return bool
 	 */
@@ -416,7 +416,7 @@ class Content_Gate {
 		if ( null === $user ) {
 			$user = \wp_get_current_user();
 		} elseif ( ! $user instanceof \WP_User ) {
-			// Only a whole number is an ID. Casting anything else would turn `true`, 1.5 or '1e0' into user 1.
+			// Only an int or a string of digits is an ID. Casting anything else would turn `true`, 1.5 or '1e0' into user 1.
 			$is_id = is_int( $user ) || ( is_string( $user ) && ctype_digit( $user ) );
 			$user  = $is_id ? \get_user_by( 'id', (int) $user ) : false;
 		}
@@ -433,10 +433,10 @@ class Content_Gate {
 		 * gates, restricted blocks, comment restrictions and newsletter-link
 		 * checks. The account also gets the paid-member body class, can see and
 		 * join premium newsletter lists, and, unless it is a reader, stops
-		 * qualifying for a group subscription seat by default. It grants no
-		 * permission to change gate settings.
-		 * The Teams migration also skips such an account when it grants personal
-		 * subscriptions, and that outcome stays after the filter changes.
+		 * qualifying for a group subscription seat by default. In individual
+		 * mode, the Teams migration gives it no comped subscription, and changing
+		 * the filter later doesn't add one. Returning true grants no permission
+		 * to change gate settings.
 		 *
 		 * Returning false applies the checks to an account that would skip them.
 		 * Gates, blocks and comments still let that account through on any post

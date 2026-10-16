@@ -140,8 +140,7 @@ class Comment_Restriction {
 	 *
 	 * Whoever can edit a post is never restricted on it, as with the content gate
 	 * itself. That keeps an author able to reply under their own article when the
-	 * gate would otherwise refuse them. Memoized per user and post, apart from the
-	 * per-user verdict.
+	 * gate would otherwise refuse them.
 	 *
 	 * @param int $user_id User ID; 0 for a logged-out visitor.
 	 * @param int $post_id Post ID; 0 when there is no post to ask about.
@@ -162,8 +161,7 @@ class Comment_Restriction {
 	/**
 	 * Whether a user is refused commenting on a post.
 	 *
-	 * The site-wide verdict comes first because it is memoized: the comment form
-	 * asks once per reply link, and most askers are settled there without a
+	 * The site-wide verdict comes first: most askers are settled there without a
 	 * capability check. Whoever can edit the post is then let through.
 	 *
 	 * @param int $user_id User ID; 0 for a logged-out visitor.
