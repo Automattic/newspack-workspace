@@ -39,6 +39,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-membership-segments-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-memberships-audit.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-discounts-migration.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-product-restrictions-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-migration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-premium-newsletters-verify.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
@@ -136,6 +137,7 @@ class Initializer {
 			WP_CLI::add_command( 'newspack migrate-team-products', [ 'Newspack\CLI\Teams_Migration', 'migrate_team_products' ] );
 			WP_CLI::add_command( 'newspack migrate-manual-members', [ 'Newspack\CLI\Teams_Migration', 'migrate_manual_members' ] );
 			WP_CLI::add_command( 'newspack migrate-discounts', [ 'Newspack\CLI\Discounts_Migration', 'migrate_discounts' ] );
+			WP_CLI::add_command( 'newspack migrate-product-restrictions', [ 'Newspack\CLI\Product_Restrictions_Migration', 'migrate_product_restrictions' ] );
 			WP_CLI::add_command( 'newspack backfill-team-managers', [ 'Newspack\CLI\Teams_Migration', 'backfill_team_managers' ] );
 			WP_CLI::add_command( 'newspack audit-membership-subscriptions', [ 'Newspack\CLI\Memberships_Audit', 'audit_membership_subscriptions' ] );
 			WP_CLI::add_command( 'newspack migrate-institutions', [ 'Newspack\CLI\Institutions_Migration', 'migrate_institutions' ] );
