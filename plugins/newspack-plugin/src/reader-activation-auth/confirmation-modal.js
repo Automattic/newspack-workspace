@@ -102,7 +102,8 @@ function openConfirmationModal( config = {} ) {
  *
  * Behavior:
  *   - Post-registration verification ON (the default): immediately invoke onProceed.
- *     The verification modal will run *after* registration to catch typos.
+ *     The verification modal will run *after* registration to catch typos, unless
+ *     the opener passed `skipVerification`.
  *   - Post-registration verification OFF: preflight the check-email endpoint to see
  *     whether the email already belongs to a registered reader.
  *       - Exists → invoke onProceed (the server will route to the appropriate

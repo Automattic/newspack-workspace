@@ -7,8 +7,8 @@
 	padding: 0;
 
 	> li {
-		flex-shrink: 0;
 		margin: 0;
+		min-width: 0;
 
 		a {
 			color: wp-colors.$gray-900;
@@ -19,11 +19,6 @@
 				color: wp-colors.$gray-900;
 			}
 		}
-	}
-
-	> li:last-child {
-		flex-shrink: 1;
-		min-width: 0;
 	}
 }
 
@@ -39,9 +34,7 @@
 }
 
 .newspack-breadcrumbs__list h1.newspack-breadcrumbs__current {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: break-word;
 	padding: 0;
-	line-height: normal;
+	line-height: var(--wpds-typography-line-height-md, #{wp-vars.$grid-unit-30});
 }

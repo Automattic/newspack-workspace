@@ -1,3 +1,10 @@
+# newspack-scripts [5.12.0](https://github.com/Automattic/newspack-workspace/compare/newspack-scripts@5.11.0...newspack-scripts@5.12.0) (2026-10-12)
+
+
+### Features
+
+* **components:** update @wordpress/ui and match its card borders ([#1195](https://github.com/Automattic/newspack-workspace/issues/1195)) ([9b62fe7](https://github.com/Automattic/newspack-workspace/commit/9b62fe7b69d824616ca931069c3a32738517d365))
+
 # newspack-scripts [5.11.0](https://github.com/Automattic/newspack-workspace/compare/newspack-scripts@5.10.0...newspack-scripts@5.11.0) (2026-08-17)
 
 

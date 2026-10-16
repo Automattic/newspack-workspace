@@ -318,13 +318,12 @@ describe( 'Drawer sections', () => {
 	} );
 
 	// The `> * { flex: none }` rule that stops sections compressing depends on this.
-	it( 'lays the scroll container out as a flush VStack', () => {
+	it( 'lays the scroll container out as a flush column', () => {
 		renderDrawer( { contents: [ <Drawer.Content key="one">One</Drawer.Content> ] } );
 
 		const body = bodyOf( screen.getByText( 'One' ) );
-		expect( body ).toHaveClass( 'components-v-stack' );
-		expect( window.getComputedStyle( body ).gap ).toBe( '0' );
-		expect( window.getComputedStyle( body ).justifyContent ).toBe( 'flex-start' );
+		expect( body.style.flexDirection ).toBe( 'column' );
+		expect( body.style.gap ).toBe( '' );
 	} );
 
 	it( 'starts a new container after a non-content child', () => {
