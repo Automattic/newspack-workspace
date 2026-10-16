@@ -13,6 +13,7 @@ use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Push_Log;
 
 require_once __DIR__ . '/class-deletion-spy-integration.php';
+require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 
 /**
  * Push log wiring test case.
@@ -42,6 +43,7 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		$this->clear_scheduled_retries();
+		\Newspack_Newsletters_Contacts::reset_calls();
 		remove_filter( 'newspack_reader_activation_is_syncing_allowed', '__return_true' );
 		delete_option( Integrations::OPTION_NAME );
 		$this->reset_integrations();
@@ -477,7 +479,6 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	 */
 	public function test_a_hard_delete_of_a_reader_mailchimp_does_not_hold_is_final() {
 		$this->require_action_scheduler();
-		\Newspack_Newsletters_Contacts::reset_calls();
 		\Newspack_Newsletters_Contacts::$next_return = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
 		\update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
 		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
@@ -490,9 +491,6 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->delete_sample_reader();
 
 		$delete_calls = \Newspack_Newsletters_Contacts::$delete_calls;
-		\Newspack_Newsletters_Contacts::reset_calls();
-		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
-		\delete_option( 'newspack_newsletters_service_provider' );
 
 		$row     = $this->get_rows_by_integration()['esp'];
 		$pending = \as_get_scheduled_actions(
