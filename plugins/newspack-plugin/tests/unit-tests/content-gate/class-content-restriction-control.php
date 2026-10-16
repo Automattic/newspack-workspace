@@ -42,9 +42,11 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 	/**
 	 * Create a published gate with an active registration wall applying to all posts.
 	 *
+	 * @param bool $require_verification Whether the wall requires a verified email.
+	 *
 	 * @return int Gate ID.
 	 */
-	private function create_regwall_gate_for_posts() {
+	private function create_regwall_gate_for_posts( $require_verification = false ) {
 		$regwall_gate_id = Content_Gate::create_gate( [ 'title' => 'Regwall Gate' ] );
 		Content_Gate::update_gate_settings(
 			$regwall_gate_id,
@@ -65,7 +67,7 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 						'count'   => 0,
 						'period'  => 'month',
 					],
-					'require_verification' => false,
+					'require_verification' => $require_verification,
 					'gate_id'              => 0,
 				],
 				'custom_access' => [
@@ -82,6 +84,48 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 		);
 		$this->reset_post_gates_cache();
 		return $regwall_gate_id;
+	}
+
+	/**
+	 * Create a published gate that only a subscriber to a product passes.
+	 *
+	 * @param string[] $post_types Post types the gate covers.
+	 *
+	 * @return int Gate ID.
+	 */
+	private function create_paid_gate_for( $post_types ) {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		global $subscriptions_database, $products_database;
+		$subscriptions_database = [];
+		$products_database      = [];
+
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Paid Gate' ] );
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'status'        => 'publish',
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => $post_types,
+					],
+				],
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							[
+								'slug'  => 'subscription',
+								'value' => [ 50 ],
+							],
+						],
+					],
+				],
+			]
+		);
+		Content_Gate::flush_gates_cache();
+		$this->reset_post_gates_cache();
+		return $gate_id;
 	}
 
 	/**
@@ -234,5 +278,120 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 		$this->assertTrue(
 			(bool) get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true )
 		);
+	}
+
+	/**
+	 * Skipping access checks grants no say over gate settings. That stays with
+	 * whoever can edit other people's posts.
+	 */
+	public function test_skipping_access_checks_does_not_grant_the_exempt_meta() {
+		$this->enable_gates_and_register();
+		$author  = self::factory()->user->create( [ 'role' => 'author' ] );
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'   => 'post',
+				'post_author' => $author,
+			]
+		);
+		$skip    = function ( $skips, $user_id ) use ( $author ) {
+			return $user_id === $author ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		wp_set_current_user( $author );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $post_id );
+		$request->set_body_params(
+			[ 'meta' => [ Content_Restriction_Control::IS_EXEMPT_META_KEY => true ] ]
+		);
+		$response = rest_do_request( $request );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEmpty(
+			get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true ),
+			'The exempt meta must not be written by an account that only skips access checks.'
+		);
+	}
+
+	/**
+	 * An account Access Control never restricts reads a gated post whether or
+	 * not it can edit that post.
+	 */
+	public function test_accounts_that_skip_access_checks_read_gated_posts() {
+		$this->enable_gates_and_register();
+		$this->create_paid_gate_for( [ 'post' ] );
+		$post_id    = self::factory()->post->create();
+		$held_id    = self::factory()->user->create( [ 'role' => 'author' ] );
+		$skipped_id = self::factory()->user->create( [ 'role' => 'author' ] );
+		$skip       = function ( $skips, $user_id ) use ( $skipped_id ) {
+			return $user_id === $skipped_id ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		$held    = Content_Restriction_Control::is_post_restricted( false, $post_id, $held_id );
+		$skipped = Content_Restriction_Control::is_post_restricted( false, $post_id, $skipped_id );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertTrue( $held, 'An author meets the paywall on a post they cannot edit.' );
+		$this->assertFalse( $skipped, 'An account filtered in does not.' );
+	}
+
+	/**
+	 * Staff are never gated, including on a post type they cannot edit.
+	 */
+	public function test_staff_read_gated_posts_of_a_type_they_cannot_edit() {
+		$this->enable_gates_and_register();
+		register_post_type(
+			'np_test_locked',
+			[
+				'public'          => true,
+				'show_in_rest'    => true,
+				'capability_type' => 'np_test_locked',
+				'map_meta_cap'    => true,
+			]
+		);
+		$this->create_paid_gate_for( [ 'np_test_locked' ] );
+		$post_id   = self::factory()->post->create( [ 'post_type' => 'np_test_locked' ] );
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		$author_id = self::factory()->user->create( [ 'role' => 'author' ] );
+
+		$editor_can_edit   = user_can( $editor_id, 'edit_post', $post_id );
+		$editor_restricted = Content_Restriction_Control::is_post_restricted( false, $post_id, $editor_id );
+		$author_restricted = Content_Restriction_Control::is_post_restricted( false, $post_id, $author_id );
+		unregister_post_type( 'np_test_locked' );
+
+		$this->assertFalse( $editor_can_edit, 'The premise: an editor cannot edit this type.' );
+		$this->assertTrue( $author_restricted, 'An author is gated here, which shows the gate covers the type.' );
+		$this->assertFalse( $editor_restricted, 'An editor is never gated.' );
+	}
+
+	/**
+	 * A registration wall that requires a verified email holds readers only.
+	 * Reader Activation verifies no one else, so any other account held there
+	 * would have no way through.
+	 */
+	public function test_verification_wall_holds_readers_only() {
+		$this->enable_gates_and_register();
+		$gate          = Content_Gate::get_gate( $this->create_regwall_gate_for_posts( true ) );
+		$is_restricted = function ( $user_id ) use ( $gate ) {
+			return Content_Restriction_Control::evaluate_gate( $gate, $user_id )['restricted'];
+		};
+
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$this->assertTrue( $is_restricted( $reader_id ), 'An unverified reader is held.' );
+		update_user_meta( $reader_id, \Newspack\Reader_Activation::EMAIL_VERIFIED, true );
+		$this->assertFalse( $is_restricted( $reader_id ), 'A verified reader passes.' );
+
+		foreach ( [ 'author', 'contributor', 'editor' ] as $role ) {
+			$user_id = self::factory()->user->create( [ 'role' => $role ] );
+			$this->assertFalse( $is_restricted( $user_id ), "A $role cannot verify, so is not held." );
+		}
+
+		// An author who registered as a reader can verify, so is held until they do.
+		$reader_author_id = self::factory()->user->create( [ 'role' => 'author' ] );
+		update_user_meta( $reader_author_id, \Newspack\Reader_Activation::READER, true );
+		$this->assertTrue( $is_restricted( $reader_author_id ), 'A reader who is also an author is held.' );
+
+		$this->assertTrue( $is_restricted( 0 ), 'A logged-out visitor still meets the wall.' );
+		$this->assertTrue( $is_restricted( 999999 ), 'An ID that matches no user is held.' );
 	}
 }
