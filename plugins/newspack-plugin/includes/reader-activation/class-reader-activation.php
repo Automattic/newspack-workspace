@@ -1483,12 +1483,19 @@ final class Reader_Activation {
 				}
 				$auth_callback_url = add_query_arg( $params, \wc_get_page_permalink( 'myaccount' ) );
 			} elseif ( function_exists( 'wc_get_page_permalink' ) && function_exists( 'is_account_page' ) && \is_account_page() ) {
-				// If we are already on the my account page, set the my account URL so the page reloads on submit.
+				// The signed-out My Account page renders this form in place of the
+				// requested endpoint (a group, a subscription), so return the reader
+				// there. The lost-password form is no use to a signed-in reader.
 				$auth_callback_url = \wc_get_page_permalink( 'myaccount' );
+				$endpoint          = \WC()->query->get_current_endpoint();
+				if ( $endpoint && 'lost-password' !== $endpoint ) {
+					$auth_callback_url = \wc_get_endpoint_url( $endpoint, \get_query_var( $endpoint ), $auth_callback_url );
+				}
 			} elseif ( class_exists( 'Newspack\My_Account' ) && My_Account::is_account_page() ) {
-				// Native (WooCommerce-less) account page: reload it on submit so the
-				// signed-in reader lands on their account.
-				$auth_callback_url = My_Account::get_endpoint_url();
+				// Native (WooCommerce-less) account page: likewise return the
+				// signed-in reader to the endpoint they asked for.
+				$endpoint          = My_Account::get_current_endpoint();
+				$auth_callback_url = My_Account::get_endpoint_url( $endpoint, (string) \get_query_var( $endpoint ) );
 			}
 		}
 		?>
