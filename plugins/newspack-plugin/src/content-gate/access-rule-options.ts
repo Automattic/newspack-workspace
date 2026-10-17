@@ -28,7 +28,15 @@ import { decodeEntities } from '@wordpress/html-entities';
 import type { ComponentProps } from 'react';
 import type { FormTokenField } from '@wordpress/components';
 
-export type AccessRuleOption = { value: string | number; label: string };
+/**
+ * An option in an access-rule picker.
+ *
+ * `ineligible` marks a product whose status is outside the ones a publisher currently
+ * sells under (published or private); its label already carries the status marker.
+ * `selectable: false` marks an entry that only names a stored value — a scheduled or
+ * trashed product — and is never offered as a suggestion.
+ */
+export type AccessRuleOption = { value: string | number; label: string; ineligible?: boolean; selectable?: boolean };
 
 export type TokenItem = Exclude< NonNullable< ComponentProps< typeof FormTokenField >[ 'value' ] >[ number ], string >;
 
@@ -132,6 +140,30 @@ export function findAccessRuleOption( options: AccessRuleOption[], value: unknow
  */
 export function formatAccessRuleOptionLabel( option: AccessRuleOption ): string {
 	return `${ decodeEntities( option.label ) } (#${ option.value })`;
+}
+
+/**
+ * Whether a picker has anything to offer. Label-only entries name stored values but are
+ * never suggested, so a list made only of them offers nothing.
+ *
+ * @param options The rule options.
+ *
+ * @return Whether any option is selectable.
+ */
+export function hasSelectableAccessRuleOptions( options: AccessRuleOption[] ): boolean {
+	return options.some( option => option.selectable !== false );
+}
+
+/**
+ * Build the suggestion labels for a picker: every option it may offer, leaving out the
+ * label-only entries that exist to name stored values.
+ *
+ * @param options The rule options.
+ *
+ * @return The suggestion labels.
+ */
+export function getAccessRuleOptionSuggestions( options: AccessRuleOption[] ): string[] {
+	return options.filter( option => option.selectable !== false ).map( formatAccessRuleOptionLabel );
 }
 
 /**
@@ -306,28 +338,37 @@ export function getAccessRuleOptionsFetchFailedNotice(): string {
 }
 
 /**
- * Whether a rule holds values that no option describes.
+ * Whether a rule holds values that no option describes, or that name a product with an
+ * ineligible status. Both still count when access is evaluated, and both read as dead
+ * configuration, so both get the same caution.
  *
  * @param options The available rule options.
  * @param value   The selected option values.
  *
- * @return Whether any stored value is absent from the option list.
+ * @return Whether any stored value is absent from the option list or ineligible.
  */
 export function hasUnlistedAccessRuleValues( options: AccessRuleOption[], value: unknown ): boolean {
-	return Array.isArray( value ) && value.some( stored => ! findAccessRuleOption( options, stored ) );
+	return (
+		Array.isArray( value ) &&
+		value.some( stored => {
+			const option = findAccessRuleOption( options, stored );
+			return ! option || option.ineligible;
+		} )
+	);
 }
 
 /**
- * Caution shown alongside a picker holding values no option describes, keyed by rule slug
- * the way `MISSING_OPTION_LABELS` is. What a picker can fail to list differs per rule: the
+ * Caution shown alongside a picker holding values no option describes, or products marked
+ * with an ineligible status, keyed by rule slug the way `MISSING_OPTION_LABELS` is. What a picker can fail to list differs per rule: the
  * subscription picker offers a variable subscription's variations, while the institution
  * picker offers published institutions only, so naming a cause the rule cannot have sends
  * a publisher looking for the wrong thing.
  */
 const UNLISTED_VALUES_NOTICES: Record< string, () => string > = {
 	subscription: () =>
+		// translators: "invalid status" quotes the product label marker, a separate PHP string ('%1$s [invalid status: %2$s]'); keep the two in step.
 		__(
-			'Entries marked “not listed” are not in this list — a product or variation that was deleted, or a product that is no longer a subscription. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+			'Entries marked “not listed” or “invalid status” are not products you currently sell — a draft, pending, scheduled or trashed product, a product or variation that was deleted, or a product that is no longer a subscription. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
 			'newspack-plugin'
 		),
 	institution: () =>
@@ -348,8 +389,8 @@ const DEFAULT_UNLISTED_VALUES_NOTICE = () =>
 	);
 
 /**
- * The caution shown alongside a picker holding values no option describes, so the reading
- * that the token invites — stale entry, safe to delete — does not go unchallenged.
+ * The caution shown alongside a picker holding values no option describes, or products
+ * marked with an ineligible status, so the reading that the token invites — stale entry, safe to delete — does not go unchallenged.
  *
  * @param slug The rule slug.
  *

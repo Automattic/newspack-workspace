@@ -58,6 +58,7 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			wp_delete_user( $user_id );
 		}
 		$this->user_ids = [];
+		remove_role( 'test_custom_reader' );
 		parent::tear_down();
 	}
 
@@ -232,6 +233,77 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		sort( $expected );
 
 		$this->assertSame( $expected, $all, 'get_all_members should return the owner and member IDs.' );
+	}
+
+	/**
+	 * Newspack Network's `Group_Seats::get_member_ids()` query (in its
+	 * woocommerce-subscriptions/class-group-seats.php), copied verbatim so the test doesn't
+	 * need Network loaded; update it if that query changes. WordPress caches user queries by
+	 * their SQL alone, and this one builds the same SQL as get_members(), so the two share a
+	 * cache entry.
+	 *
+	 * @param int $subscription_id Subscription ID.
+	 * @return int[]
+	 */
+	private function network_get_member_ids( int $subscription_id ): array {
+		return array_map(
+			'intval',
+			get_users(
+				[
+					'fields'      => 'ID',
+					'count_total' => false,
+					'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						[
+							'key'   => Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY,
+							'value' => absint( $subscription_id ),
+						],
+					],
+				]
+			)
+		);
+	}
+
+	/**
+	 * Data provider: which query runs first in the request.
+	 *
+	 * @return array
+	 */
+	public function data_member_query_order() {
+		return [
+			'Network first'     => [ true ],
+			'get_members first' => [ false ],
+		];
+	}
+
+	/**
+	 * Group_Subscription::get_members() and Network's member query share a user-query
+	 * cache entry, so both must ask for the same result shape to agree on the members.
+	 *
+	 * @dataProvider data_member_query_order
+	 *
+	 * @param bool $network_first Whether Network's query runs before get_members().
+	 */
+	public function test_get_members_and_network_member_query_agree_in_either_order( $network_first ) {
+		$owner_id = $this->create_reader_user();
+		$expected = [ $this->create_reader_user(), $this->create_reader_user() ];
+		$sub      = $this->create_group_subscription( $owner_id );
+		foreach ( $expected as $member_id ) {
+			$this->add_member( $member_id, $sub );
+		}
+		Group_Subscription::reset_cache();
+
+		if ( $network_first ) {
+			$network_ids = $this->network_get_member_ids( $sub->get_id() );
+			$members     = Group_Subscription::get_members( $sub );
+		} else {
+			$members     = Group_Subscription::get_members( $sub );
+			$network_ids = $this->network_get_member_ids( $sub->get_id() );
+		}
+		sort( $members );
+		sort( $network_ids );
+
+		$this->assertSame( $expected, $members, 'get_members() should return the member IDs as ints.' );
+		$this->assertSame( $expected, $network_ids, "Network's query should return the member IDs." );
 	}
 
 	/**
@@ -439,6 +511,26 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			Group_Subscription_Settings::get_subscription_settings( $sub )['limit'],
 			'Unlimited (0) is left untouched by the floor.'
 		);
+	}
+
+	/**
+	 * A settings save announces which settings changed, so other plugins (Newspack
+	 * Network reports members when a group is turned on or off) can react; a save
+	 * that changes nothing announces nothing.
+	 */
+	public function test_settings_update_announces_changed_keys() {
+		$sub       = $this->create_group_subscription( $this->create_reader_user() );
+		$announced = [];
+		$listener  = function ( $subscription, $changed_keys ) use ( &$announced ) {
+			$announced[] = [ $subscription->get_id(), $changed_keys ];
+		};
+		add_action( 'newspack_group_subscription_settings_updated', $listener, 10, 2 );
+
+		Group_Subscription_Settings::update_subscription_settings( $sub, [ 'enabled' => true ] );
+		Group_Subscription_Settings::update_subscription_settings( $sub, [ 'enabled' => false ] );
+
+		remove_action( 'newspack_group_subscription_settings_updated', $listener, 10 );
+		$this->assertSame( [ [ $sub->get_id(), [ 'enabled' ] ] ], $announced );
 	}
 
 	/**
@@ -697,28 +789,34 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Readers, authors and contributors are eligible group members by default;
-	 * administrators and editors are not (they bypass the content gate already).
+	 * Any user without `edit_others_posts` is an eligible group member, whatever their role,
+	 * so a reader on a custom role the gate restricts can reach content through a group.
+	 * Staff hold the capability and bypass the gate already.
 	 */
 	public function test_is_eligible_member_defaults() {
+		add_role( 'test_custom_reader', 'Custom reader', [ 'read_custom_content' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+		$custom_role_id = $this->create_role_user( 'test_custom_reader' );
+		$no_role_id     = $this->create_role_user( '' );
+
+		$this->assertTrue( Group_Subscription::is_eligible_member( $custom_role_id ), 'A user whose only role is a custom role is eligible.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $no_role_id ), 'A user with no role is eligible.' );
 		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_reader_user() ), 'Readers are eligible.' );
-		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'author' ) ), 'Authors are eligible by default.' );
-		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible by default.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible members.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible members.' );
+		$this->assertTrue( Group_Subscription::is_eligible_member( $this->create_role_user( 'contributor' ) ), 'Contributors are eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'editor' ) ), 'Editors are not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $this->create_role_user( 'administrator' ) ), 'Administrators are not eligible.' );
 	}
 
 	/**
-	 * A user holding a privileged role (Editor or Administrator) alongside Author must not
-	 * gain default eligibility from the Author/Contributor fallback -- that fallback exists
-	 * for plain content-creator roles, not for staff who happen to also hold one.
+	 * A staff user stays ineligible when they also hold a non-staff role.
 	 */
 	public function test_is_eligible_member_excludes_privileged_multi_role_users() {
-		$editor_author_id = $this->create_multi_role_user( [ 'editor', 'author' ] );
-		$admin_author_id  = $this->create_multi_role_user( [ 'administrator', 'author' ] );
+		$editor_author_id      = $this->create_multi_role_user( [ 'editor', 'author' ] );
+		$admin_author_id       = $this->create_multi_role_user( [ 'administrator', 'author' ] );
+		$contributor_editor_id = $this->create_multi_role_user( [ 'contributor', 'editor' ] );
 
-		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author must not gain eligibility from the Author role.' );
-		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author must not gain eligibility from the Author role.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $editor_author_id ), 'Editor+Author is not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $admin_author_id ), 'Administrator+Author is not eligible.' );
+		$this->assertFalse( Group_Subscription::is_eligible_member( $contributor_editor_id ), 'Contributor+Editor is not eligible.' );
 	}
 
 	/**
@@ -861,5 +959,102 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			'example.test,example.org',
 			Group_Subscription_Settings::sanitize_email_domains( " @Example.test,  example.org\nexample.test, " )
 		);
+	}
+
+	/**
+	 * The slug is taken from the group name the first time settings are saved and
+	 * then kept: renaming the group must not move readers to a new identifier in
+	 * the systems that key on it.
+	 */
+	public function test_slug_is_set_on_first_save_and_survives_a_rename() {
+		$saved_first   = $this->create_group_subscription( $this->create_reader_user() );
+		$renamed_first = $this->create_group_subscription( $this->create_reader_user() );
+
+		Group_Subscription_Settings::update_subscription_settings( $saved_first, [ 'name' => 'Acme Newsroom' ] );
+		Group_Subscription_Settings::update_subscription_name( $saved_first, 'Acme Holdings' );
+		Group_Subscription_Settings::update_subscription_name( $renamed_first, 'Beta Desk' );
+		Group_Subscription_Settings::update_subscription_name( $renamed_first, 'Beta Holdings' );
+
+		$this->assertSame( 'acme-newsroom', $saved_first->get_meta( Group_Subscription::SLUG_META_KEY, true ), 'The first save stores the slug.' );
+		$this->assertSame( 'acme-newsroom', Group_Subscription::get_slug( $saved_first ) );
+		$this->assertSame( 'beta-desk', Group_Subscription::get_slug( $renamed_first ), 'A rename can be the first save.' );
+	}
+
+	/**
+	 * Two groups with the same name get distinct slugs, so one group's readers are
+	 * never merged into another's downstream. A group whose settings were never
+	 * saved still gets a slug on first read; a plain subscription gets none.
+	 */
+	public function test_slugs_are_unique_and_only_groups_have_one() {
+		$first  = $this->create_group_subscription( $this->create_reader_user() );
+		$second = $this->create_group_subscription( $this->create_reader_user() );
+		$first->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Acme' );
+		$second->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Acme' );
+		$plain = wcs_create_subscription(
+			[
+				'customer_id' => $this->create_reader_user(),
+				'status'      => 'active',
+			]
+		);
+
+		$this->assertSame( 'acme', Group_Subscription::get_slug( $first ) );
+		$this->assertSame( 'acme-2', Group_Subscription::get_slug( $second ) );
+		$third = $this->create_group_subscription( $this->create_reader_user() );
+		$third->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Acme' );
+		$this->assertSame( 'acme-3', Group_Subscription::get_slug( $third ) );
+		$this->assertSame( '', Group_Subscription::get_slug( $plain ) );
+	}
+
+	/**
+	 * Every membership change is announced for each reader, with the groups they
+	 * joined and left, so integrations need not watch the membership user meta. A
+	 * no-op add (an existing member) announces nothing.
+	 */
+	public function test_membership_changes_are_announced() {
+		$sub       = $this->create_group_subscription( $this->create_reader_user() );
+		$joiner    = $this->create_reader_user();
+		$leaver    = $this->create_reader_user();
+		$announced = [];
+		$listener  = function ( $user_id, $added, $removed ) use ( &$announced ) {
+			$announced[] = [ $user_id, $added, $removed ];
+		};
+		$this->add_member( $leaver, $sub );
+		add_action( 'newspack_group_subscription_memberships_changed', $listener, 10, 3 );
+
+		Group_Subscription::update_members( $sub, [ $joiner ], [ $leaver ] );
+		Group_Subscription::update_members( $sub, [ $joiner ] );
+		$this->add_member( $leaver, $sub );
+		Newspack\Group_Subscription_MyAccount::remove_deleted_user_from_groups( $leaver );
+
+		remove_action( 'newspack_group_subscription_memberships_changed', $listener, 10 );
+		$this->assertSame(
+			[
+				[ $leaver, [], [ $sub->get_id() ] ],
+				[ $joiner, [ $sub->get_id() ], [] ],
+				[ $leaver, [], [ $sub->get_id() ] ],
+			],
+			$announced
+		);
+	}
+
+	/**
+	 * Removals are saved before the member limit is checked, so a call whose
+	 * additions the limit rejects still announces the readers it removed.
+	 */
+	public function test_removals_are_announced_when_the_limit_rejects_additions() {
+		$sub    = $this->create_group_subscription( $this->create_reader_user(), 2 );
+		$leaver = $this->create_reader_user();
+		$this->add_member( $leaver, $sub );
+		$announced = [];
+		$listener  = function ( $user_id, $added, $removed ) use ( &$announced ) {
+			$announced[] = [ $user_id, $added, $removed ];
+		};
+		add_action( 'newspack_group_subscription_memberships_changed', $listener, 10, 3 );
+
+		$result = Group_Subscription::update_members( $sub, [ $this->create_reader_user(), $this->create_reader_user() ], [ $leaver ] );
+
+		remove_action( 'newspack_group_subscription_memberships_changed', $listener, 10 );
+		$this->assertWPError( $result, 'The additions exceed the limit.' );
+		$this->assertSame( [ [ $leaver, [], [ $sub->get_id() ] ] ], $announced );
 	}
 }

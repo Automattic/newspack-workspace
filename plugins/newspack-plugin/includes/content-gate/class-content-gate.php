@@ -281,6 +281,7 @@ class Content_Gate {
 		include __DIR__ . '/class-access-rules.php';
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
+		include __DIR__ . '/class-member-body-class.php';
 		include __DIR__ . '/class-block-patterns.php';
 		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
@@ -292,10 +293,12 @@ class Content_Gate {
 		include __DIR__ . '/class-newsletters-access.php';
 		include __DIR__ . '/class-user-gate-access.php';
 		include __DIR__ . '/class-premium-newsletters.php';
+		include __DIR__ . '/class-gate-access-reader-data.php';
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 		include __DIR__ . '/class-email-verification-prompt.php';
 		include __DIR__ . '/class-institutional-access-prompt.php';
+		include __DIR__ . '/class-comment-restriction.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
@@ -1248,7 +1251,7 @@ class Content_Gate {
 	/**
 	 * The staged pieces a 'the_content' pass over a restricted post is answered
 	 * from — the teaser to substitute, and the gate that pass owes — or null when
-	 * nothing is staged for the post.
+	 * nothing is staged for the post or the request is a feed.
 	 *
 	 * One post can be both the article being read and a card in a listing on that
 	 * same page, and the two are not answered alike. The article's entry holds a
@@ -1272,6 +1275,15 @@ class Content_Gate {
 	 * @return array{teaser: string, gate: string}|null
 	 */
 	private static function get_staged_restriction_for_render( $post_id ) {
+		// Feeds answer to Content_Gate_Advanced_Settings, as in restrict_post().
+		// Asked again here because staging can happen inside a feed request with
+		// the feed flag off: newspack-manager's Pugpig homepage feed renders the
+		// front page to learn which posts to list, and the teasers its listings
+		// stage would otherwise replace those posts' feed items.
+		if ( is_feed() ) {
+			return null;
+		}
+
 		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
 			return null;
 		}

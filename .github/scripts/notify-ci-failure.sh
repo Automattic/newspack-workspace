@@ -23,6 +23,20 @@ if [ -z "$TOKEN" ] || [ -z "$CHANNEL" ]; then
   exit 0
 fi
 
+# GitHub cancels a push's run when a newer push queues behind it, and the newer
+# run tests the cancelled one's commits too (see ci-push-base.sh), so nothing
+# went untested. A run cancelled with no newer run behind it still reports.
+if [ "${RUN_CONCLUSION:-}" = "cancelled" ]; then
+  LATEST_RUN_NUMBER=$(
+    gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?branch=${HEAD_BRANCH}&event=push&per_page=1" \
+      --jq '.workflow_runs[0].run_number // empty' 2>/dev/null || true
+  )
+  if [ -n "$LATEST_RUN_NUMBER" ] && [ "$LATEST_RUN_NUMBER" -gt "${RUN_NUMBER:-0}" ]; then
+    echo "[notify-ci-failure] Run ${RUN_ID} was cancelled for newer run #${LATEST_RUN_NUMBER}, which tests its commits. Skipping."
+    exit 0
+  fi
+fi
+
 # Failing job names, one per line. A run cancelled before any job reported
 # leaves this empty, which the message handles rather than treating as an error.
 FAILED_JOBS=$(

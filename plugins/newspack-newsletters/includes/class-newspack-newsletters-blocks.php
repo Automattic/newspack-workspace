@@ -20,6 +20,33 @@ final class Newspack_Newsletters_Blocks {
 	}
 
 	/**
+	 * Get the access gates that restrict each subscription list.
+	 *
+	 * Newsletters has no notion of gates itself. Whatever restricts lists (Access
+	 * Control in Newspack) reports them here. The subscribe block reads the map in
+	 * the editor, to mark and preview gated lists, and on every front-end render,
+	 * to badge premium lists and to tell which hidden lists it may show.
+	 *
+	 * @return array[] Gates keyed by public list ID. Each gate is an array with
+	 *                 `id` and `title`, plus `edit_url` when the current user may edit it.
+	 */
+	public static function get_list_gates() {
+		/**
+		 * Filters the gates that restrict each subscription list.
+		 *
+		 * The subscribe block reads this map in the editor and on every front-end
+		 * render. A list counts as gated only when its entry is a non-empty array of
+		 * gates. A list hidden from a reader shows as a premium row only when it is
+		 * gated here, so report every list a gate hides. Each gate holds `id`, `title`
+		 * and, for a user who may edit it, `edit_url`.
+		 *
+		 * @param array[] $list_gates Gates keyed by public list ID.
+		 */
+		$list_gates = apply_filters( 'newspack_newsletters_subscription_list_gates', [] );
+		return is_array( $list_gates ) ? $list_gates : [];
+	}
+
+	/**
 	 * Enqueue blocks scripts and styles for editor.
 	 */
 	public static function enqueue_block_assets() {
@@ -45,6 +72,9 @@ final class Newspack_Newsletters_Blocks {
 				'supports_recaptcha' => class_exists( 'Newspack\Recaptcha' ),
 				'has_recaptcha'      => class_exists( 'Newspack\Recaptcha' ) && \Newspack\Recaptcha::can_use_captcha(),
 				'recaptcha_url'      => admin_url( 'admin.php?page=newspack-settings#/' ),
+				// Cast so the editor always gets an object: list IDs can be numeric, and
+				// PHP would encode sequential numeric keys as a JSON array.
+				'list_gates'         => (object) self::get_list_gates(),
 			]
 		);
 		wp_enqueue_style(

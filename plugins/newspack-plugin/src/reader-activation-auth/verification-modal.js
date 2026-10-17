@@ -5,6 +5,7 @@
  */
 import * as a11y from './accessibility.js';
 import { sendVerificationOTP } from './inline-verification.js';
+import { isButtonLoading, setButtonLoading } from '../utils';
 
 /**
  * Helpers for the post-registration verification modal rendered in wp_footer
@@ -52,8 +53,9 @@ export function openVerificationModal( config = {} ) {
 	if ( currentController ) {
 		currentController.abort();
 	}
-	currentController = new AbortController();
-	const { signal } = currentController;
+	const controller = new AbortController();
+	currentController = controller;
+	const { signal } = controller;
 
 	const emailNode = modal.querySelector( '.email-address' );
 	if ( emailNode && config.email ) {
@@ -68,7 +70,10 @@ export function openVerificationModal( config = {} ) {
 	};
 
 	function handleSendClick() {
-		sendOtpButton.disabled = true;
+		if ( isButtonLoading( sendOtpButton ) ) {
+			return;
+		}
+		setButtonLoading( sendOtpButton, true );
 		sendVerificationOTP( { url: newspack_ras_config.verification_url, nonce: config.verificationNonce } )
 			.then( () => {
 				codeSent = true;
@@ -83,9 +88,8 @@ export function openVerificationModal( config = {} ) {
 				}
 			} )
 			.catch( error => {
-				sendOtpButton.disabled = false;
+				setButtonLoading( sendOtpButton, false );
 				sendOtpButton.textContent = sendOtpButton.textContent.trim();
-				sendOtpButton.focus();
 				const errorP = modal.querySelector( '[data-error-target]' );
 				if ( ! errorP ) {
 					return;
@@ -106,13 +110,17 @@ export function openVerificationModal( config = {} ) {
 		if ( codeSent ) {
 			return;
 		}
+		// The modal element stays in the page and is closed again whenever another script
+		// closes every modal at once, as modal checkout does when a purchase completes. Stop
+		// listening after the first dismissal so onDismiss, and the flow waiting on it, runs once.
+		controller.abort();
 		releaseController();
 		if ( typeof config.onDismiss === 'function' ) {
 			config.onDismiss();
 		}
 	}
 
-	sendOtpButton.disabled = false;
+	setButtonLoading( sendOtpButton, false );
 	sendOtpButton.addEventListener( 'click', handleSendClick, { signal } );
 	modal.addEventListener( 'closeModal', handleClose, { signal } );
 

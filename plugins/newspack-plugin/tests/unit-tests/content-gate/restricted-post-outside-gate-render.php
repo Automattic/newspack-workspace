@@ -348,6 +348,29 @@ class Test_Restricted_Post_Outside_Gate_Render extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A listing rendered earlier in a feed request leaves the feed's items to the
+	 * feed subsystem too.
+	 *
+	 * The Pugpig homepage feed in newspack-manager learns which posts to list by
+	 * rendering the front page, with the feed flag off so its listing blocks
+	 * draw. The teasers those listings stage last for the whole request, so the
+	 * feed's own pass over the same posts must not be answered from them.
+	 */
+	public function test_a_listing_rendered_during_a_feed_request_leaves_feed_items_to_the_feed_subsystem() {
+		$post_id = $this->create_restricted_post();
+		$this->go_to( home_url( '/?feed=rss2' ) );
+
+		$GLOBALS['wp_query']->is_feed = false;
+		$listing                      = $this->render_in_secondary_loop( $post_id );
+		$GLOBALS['wp_query']->is_feed = true;
+		$this->assertStringNotContainsString( self::PAID_MARKER, $listing, 'The listing withholds the body, which is the premise of this test.' );
+
+		$rendered = $this->render_in_secondary_loop( $post_id );
+
+		$this->assertStringContainsString( self::PAID_MARKER, $rendered, 'A teaser staged by an earlier listing must not stand in for the feed item.' );
+	}
+
+	/**
 	 * A `<!--more-->` tag at the very top of a post leaves no free preview.
 	 *
 	 * The tag is the author's own mark for where the free part ends, and at the

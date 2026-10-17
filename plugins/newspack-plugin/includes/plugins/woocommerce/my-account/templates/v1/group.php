@@ -117,6 +117,9 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 									<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-my-account__subscription--invite-member"><?php esc_html_e( 'Invite by email', 'newspack-plugin' ); ?></button>
 								</li>
 								<li>
+									<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-my-account__subscription--invite-bulk"><?php esc_html_e( 'Invite in bulk', 'newspack-plugin' ); ?></button>
+								</li>
+								<li>
 									<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-my-account__group_subscription__invite-link__copy" data-error-text="<?php echo esc_attr( __( 'Could not copy. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Copy invite link', 'newspack-plugin' ); ?></span></button>
 								</li>
 								<li class="<?php echo esc_attr( ! $invite_link ? 'hidden' : '' ); ?>">
@@ -140,6 +143,7 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 				<?php endif; ?>
 				<?php if ( $show_invite_actions ) : ?>
 					<button type="button" class="newspack-my-account__subscription--action-link newspack-ui__button newspack-ui__button--secondary newspack-my-account__subscription--invite-member"><?php esc_html_e( 'Invite by email', 'newspack-plugin' ); ?></button>
+					<button type="button" class="newspack-my-account__subscription--action-link newspack-ui__button newspack-ui__button--secondary newspack-my-account__subscription--invite-bulk"><?php esc_html_e( 'Invite in bulk', 'newspack-plugin' ); ?></button>
 					<button type="button" class="newspack-my-account__subscription--action-link newspack-ui__button newspack-ui__button--secondary newspack-my-account__group_subscription__invite-link__copy" data-error-text="<?php echo esc_attr( __( 'Could not copy. Please try again.', 'newspack-plugin' ) ); ?>"><span><?php esc_html_e( 'Copy invite link', 'newspack-plugin' ); ?></span></button>
 					<button type="button" class="<?php echo esc_attr( ! $invite_link ? 'hidden' : '' ); ?> newspack-my-account__subscription--action-link newspack-ui__button newspack-ui__button--secondary newspack-my-account__group_subscription__invite-link__confirm-regenerate"><?php esc_html_e( 'Regenerate invite link', 'newspack-plugin' ); ?></button>
 					<button type="button" class="<?php echo esc_attr( ! $invite_link ? 'hidden' : '' ); ?> newspack-my-account__subscription--action-link newspack-ui__button newspack-ui__button--secondary newspack-ui__button--destructive newspack-my-account__group_subscription__invite-link__confirm-disable"><?php esc_html_e( 'Disable invite link', 'newspack-plugin' ); ?></button>
