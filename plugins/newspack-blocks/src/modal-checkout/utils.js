@@ -53,6 +53,8 @@ function hasDomContentLoadedFired() {
 	return ! navigation || navigation.domContentLoadedEventStart > 0;
 }
 
+// The focus rules of newspack-ui's modals (newspack-plugin's focus.js), which this
+// plugin can't depend on.
 const FOCUSABLE = 'a[href], button, iframe, input, select, textarea, [tabindex]';
 const FIELDS = 'input:not([type="button"], [type="submit"], [type="reset"], [type="image"], [readonly]), select, textarea:not([readonly])';
 
@@ -88,7 +90,8 @@ export function getInitialFocus( root ) {
 	return tabbable.find( element => element.matches( FIELDS ) ) || tabbable[ 0 ] || null;
 }
 
-// Payment providers put card fields on the page too. Only their overlays, fixed over it, are challenges.
+// Payment providers put card fields on the page too. Only their overlays, fixed over it,
+// are challenges. Matches the frames newspack-ui's modals step down for.
 const PAYMENT_FRAMES = 'iframe[src*="js.stripe.com"], iframe[src*="hooks.stripe.com"], iframe[src*="paypal.com"]';
 
 /**

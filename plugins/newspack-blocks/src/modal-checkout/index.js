@@ -120,6 +120,30 @@ import { domReady, getTabbableElements, isPaymentChallengeShown, onCheckoutPlace
 				handlePaymentMethodSelect();
 
 				/**
+				 * Tell the modal when a payment challenge, like 3D Secure, shows or goes while
+				 * an order is being placed, so its processing screen doesn't cover it.
+				 */
+				let challengeShown = false;
+				let challengeFrame = null;
+				const syncPaymentChallenge = () => {
+					challengeFrame = null;
+					const shown = isPaymentChallengeShown( document );
+					if ( shown !== challengeShown ) {
+						challengeShown = shown;
+						container.dispatchEvent( new CustomEvent( 'checkout-payment-challenge', { detail: { shown } } ) );
+					}
+				};
+				const challengeObserver = new MutationObserver( () => {
+					if ( ! challengeFrame ) {
+						challengeFrame = window.requestAnimationFrame( syncPaymentChallenge );
+					}
+				} );
+				container.addEventListener( 'checkout-place-order-error', () => {
+					challengeObserver.disconnect();
+					challengeShown = false;
+				} );
+
+				/**
 				 * Bubble up checkout place order event.
 				 */
 				let placedOrder = false;
@@ -129,6 +153,12 @@ import { domReady, getTabbableElements, isPaymentChallengeShown, onCheckoutPlace
 					}
 					placedOrder = true;
 					container.dispatchEvent( placeOrderStartEvent );
+					challengeObserver.observe( document.body, {
+						childList: true,
+						subtree: true,
+						attributes: true,
+						attributeFilter: [ 'style', 'class' ],
+					} );
 				} );
 				onCheckoutPlaceOrderProcessing( container, function () {
 					if ( ! placedOrder ) {
@@ -144,26 +174,6 @@ import { domReady, getTabbableElements, isPaymentChallengeShown, onCheckoutPlace
 					placedOrder = false;
 					container.dispatchEvent( placeOrderSuccessEvent );
 				} );
-
-				/**
-				 * Tell the modal when a payment challenge, like 3D Secure, shows or goes, so
-				 * its processing screen doesn't cover it.
-				 */
-				let challengeShown = false;
-				let challengeFrame = null;
-				const syncPaymentChallenge = () => {
-					challengeFrame = null;
-					const shown = isPaymentChallengeShown( document );
-					if ( shown !== challengeShown ) {
-						challengeShown = shown;
-						container.dispatchEvent( new CustomEvent( 'checkout-payment-challenge', { detail: { shown } } ) );
-					}
-				};
-				new MutationObserver( () => {
-					if ( ! challengeFrame ) {
-						challengeFrame = window.requestAnimationFrame( syncPaymentChallenge );
-					}
-				} ).observe( document.body, { childList: true, subtree: true, attributes: true, attributeFilter: [ 'style', 'class' ] } );
 
 				$( document.body ).on( 'checkout_error', function ( event, errors ) {
 					if ( ! placedOrder ) {
@@ -1079,6 +1089,10 @@ import { domReady, getTabbableElements, isPaymentChallengeShown, onCheckoutPlace
 		document.addEventListener( 'keydown', function ( ev ) {
 			const dialog = window.frameElement?.closest( 'dialog' );
 			if ( ev.key === 'Escape' ) {
+				// An open dropdown, like the country field's, closes on its own Escape.
+				if ( ev.defaultPrevented || ev.target.closest?.( '.select2-dropdown, .select2-container--open' ) ) {
+					return;
+				}
 				if ( dialog ) {
 					dialog.dispatchEvent( new Event( 'cancel', { cancelable: true } ) );
 				} else {

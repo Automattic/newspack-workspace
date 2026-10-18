@@ -168,65 +168,154 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 	} );
 } );
 
-describe( 'modal checkout, closing with Escape', () => {
+describe( 'modal checkout as a dialog', () => {
 	const setPendingCheckout = jest.fn();
+	const nativeDialog = {};
 	let checkout;
+	let spinner;
+	let loads = 0;
 
 	beforeAll( () => {
+		[ 'showModal', 'close' ].forEach( method => {
+			nativeDialog[ method ] = HTMLDialogElement.prototype[ method ];
+		} );
+		HTMLDialogElement.prototype.showModal = function () {
+			this.setAttribute( 'open', '' );
+		};
+		HTMLDialogElement.prototype.close = function () {
+			this.removeAttribute( 'open' );
+		};
 		document.body.innerHTML = PAGE;
 		window.newspackBlocksModal = {
 			newspack_class_prefix: 'newspack-ui',
+			ajax_url: '/wp-admin/admin-ajax.php',
 			labels: { checkout_modal_title: 'Checkout', thankyou_modal_title: 'Thank you' },
 			processing_payment_messages: [],
 		};
 		window.newspackReaderActivation = { setPendingCheckout };
 		window.fetch = jest.fn().mockResolvedValue( { ok: true } );
-		// The checkout iframe never loads here, so closing it finds no checkout data to report.
+		// The checkout iframe holds no product details here, which modal checkout reports.
 		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 		jest.isolateModules( () => {
 			require( './modal' );
 		} );
 		checkout = document.getElementById( 'newspack_modal_checkout' );
+		spinner = checkout.querySelector( '.newspack-ui__spinner' );
 	} );
 
 	afterAll( () => {
+		Object.assign( HTMLDialogElement.prototype, nativeDialog );
 		delete window.fetch;
 		jest.restoreAllMocks();
 	} );
 
 	beforeEach( () => {
 		setPendingCheckout.mockClear();
-		window.newspackOpenModalCheckout( { url: 'about:blank' } );
+		window.fetch.mockClear();
 	} );
 
-	it( 'closes checkout and empties the cart, like its Close button', () => {
+	afterEach( () => {
+		spinner.removeAttribute( 'aria-busy' );
+		if ( 'open' === checkout.dataset.state ) {
+			window.newspackCloseModalCheckout();
+		}
+	} );
+
+	/**
+	 * Open checkout and load a checkout screen into its iframe.
+	 *
+	 * @param {string} screen The checkout screen's markup.
+	 *
+	 * @return {Promise<Element>} The checkout container inside the iframe.
+	 */
+	async function loadCheckout( screen = '<input id="billing_first_name" />' ) {
+		window.newspackOpenModalCheckout( { url: 'about:blank' } );
+		checkout.setAttribute( 'open', '' );
+		const iframe = checkout.querySelector( 'iframe' );
+		const doc = iframe.contentDocument;
+		doc.open();
+		doc.write( `<html><body><div id="newspack_modal_checkout_container">${ screen }</div></body></html>` );
+		doc.close();
+		// jsdom loads no page into the iframe, so the checkout's own address is faked.
+		Object.defineProperty( doc, 'URL', { configurable: true, value: `http://localhost/checkout/?load=${ ++loads }` } );
+		iframe.contentWindow.Element.prototype.getClientRects = () => [ {} ];
+		await new Promise( resolve => setTimeout( resolve, 100 ) );
+		return doc.getElementById( 'newspack_modal_checkout_container' );
+	}
+
+	const placeOrder = container => container.dispatchEvent( new CustomEvent( 'checkout-place-order-start' ) );
+	const pressEscape = () => {
 		const cancel = new Event( 'cancel', { cancelable: true } );
-
 		checkout.dispatchEvent( cancel );
+		return cancel;
+	};
 
-		expect( cancel.defaultPrevented ).toBe( true );
+	it( 'moves focus to the first field once the checkout shows', async () => {
+		const container = await loadCheckout( '<a href="#terms">Terms</a><input id="billing_first_name" />' );
+
+		container.dispatchEvent( new CustomEvent( 'checkout-ready' ) );
+
+		expect( container.ownerDocument.activeElement.id ).toBe( 'billing_first_name' );
+	} );
+
+	it( 'leaves focus on the Close button when the reader moved there while it loaded', async () => {
+		const container = await loadCheckout();
+		const close = checkout.querySelector( '.newspack-ui__modal__close' );
+		close.focus();
+
+		container.dispatchEvent( new CustomEvent( 'checkout-ready' ) );
+
+		expect( document.activeElement ).toBe( close );
+	} );
+
+	it( 'closes on Escape and empties the cart, like its Close button', async () => {
+		await loadCheckout();
+
+		expect( pressEscape().defaultPrevented ).toBe( true );
+
 		expect( checkout.dataset.state ).toBe( 'closed' );
-		expect( checkout.querySelector( 'iframe' ) ).toBeNull();
+		expect( window.fetch.mock.calls[ 0 ][ 1 ].body.get( 'action' ) ).toBe( 'abandon_modal_checkout' );
 		expect( setPendingCheckout ).toHaveBeenCalledWith();
 	} );
 
-	it( 'stays open while a payment is processing', () => {
-		checkout.querySelector( '.newspack-ui__spinner' ).setAttribute( 'aria-busy', 'true' );
+	it( 'stays open on Escape while a payment is processing', async () => {
+		placeOrder( await loadCheckout() );
 
-		checkout.dispatchEvent( new Event( 'cancel', { cancelable: true } ) );
+		pressEscape();
 
 		expect( checkout.dataset.state ).toBe( 'open' );
-		expect( checkout.querySelector( 'iframe' ) ).not.toBeNull();
-
-		checkout.querySelector( '.newspack-ui__spinner' ).removeAttribute( 'aria-busy' );
-		window.newspackCloseModalCheckout();
+		expect( window.fetch ).not.toHaveBeenCalled();
 	} );
 
-	it( 'leaves a cancel from a file picker inside it alone', () => {
-		checkout.querySelector( '.newspack-ui__modal__content' ).dispatchEvent( new Event( 'cancel', { bubbles: true } ) );
+	it( 'stays open when the browser closes it during a payment', async () => {
+		placeOrder( await loadCheckout() );
 
+		checkout.removeAttribute( 'open' );
+		checkout.dispatchEvent( new Event( 'close' ) );
+
+		expect( checkout.open ).toBe( true );
 		expect( checkout.dataset.state ).toBe( 'open' );
+	} );
 
+	it( 'steps the processing screen aside for a payment challenge, and back once it is done', async () => {
+		const container = await loadCheckout();
+		placeOrder( container );
+		const challenge = shown => container.dispatchEvent( new CustomEvent( 'checkout-payment-challenge', { detail: { shown } } ) );
+
+		challenge( true );
+		expect( spinner.style.display ).toBe( 'none' );
+
+		challenge( false );
+		expect( spinner.style.display ).toBe( 'flex' );
+	} );
+
+	it( 'closes on Escape again after the reader closed it during a payment', async () => {
+		placeOrder( await loadCheckout() );
 		window.newspackCloseModalCheckout();
+
+		await loadCheckout();
+		pressEscape();
+
+		expect( checkout.dataset.state ).toBe( 'closed' );
 	} );
 } );

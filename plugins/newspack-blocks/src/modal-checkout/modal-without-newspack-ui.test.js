@@ -28,8 +28,10 @@ describe( 'modal checkout without newspack-ui', () => {
 		[ 'showModal', 'close' ].forEach( method => {
 			nativeDialog[ method ] = HTMLDialogElement.prototype[ method ];
 		} );
+		// Browsers focus the first focusable descendant on open, which is the header's Close button.
 		HTMLDialogElement.prototype.showModal = function () {
 			this.setAttribute( 'open', '' );
+			this.querySelector( 'button' )?.focus();
 		};
 		HTMLDialogElement.prototype.close = function () {
 			this.removeAttribute( 'open' );
@@ -61,19 +63,22 @@ describe( 'modal checkout without newspack-ui', () => {
 		trigger.closest( 'form' ).dispatchEvent( Object.assign( new Event( 'submit', { cancelable: true } ), { submitter: trigger } ) );
 	}
 
-	it( 'opens checkout as a modal dialog', () => {
+	it( 'opens checkout as a modal dialog, with focus off its Close button', () => {
 		openFromTrigger();
 
 		expect( checkout.dataset.state ).toBe( 'open' );
 		expect( checkout.open ).toBe( true );
+		expect( document.activeElement ).toBe( checkout.querySelector( 'h2' ) );
 
 		window.newspackCloseModalCheckout();
 	} );
 
 	it( 'closes the dialog and returns focus to the button that opened it', () => {
 		openFromTrigger();
+		const close = checkout.querySelector( '.newspack-blocks__modal__close' );
+		close.focus();
 
-		checkout.querySelector( '.newspack-blocks__modal__close' ).click();
+		close.click();
 
 		expect( checkout.dataset.state ).toBe( 'closed' );
 		expect( checkout.open ).toBe( false );

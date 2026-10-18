@@ -165,9 +165,9 @@ domReady( () => {
 		let hasFocused = false;
 
 		/**
-		 * Move focus into this checkout screen once it shows. The shared modal rule can't
-		 * see into the iframe, so it lands on the heading until then. Focus the reader
-		 * has moved to the Close button in the meantime stays there.
+		 * Move focus into this checkout screen once it shows. Opening the dialog can't
+		 * see into the iframe, so focus waits on the heading until then. Focus the
+		 * reader has moved to the Close button in the meantime stays there.
 		 */
 		const focusCheckout = () => {
 			if ( hasFocused || 'open' !== modalCheckout.dataset.state ) {
@@ -652,6 +652,8 @@ domReady( () => {
 		const shouldCloseModal = ! iframe.contentDocument || ! afterSuccessUrlInput || ! afterSuccessBehaviorInput || ! container?.checkoutComplete;
 		if ( shouldCloseModal || hasNewsletterPopup ) {
 			spinner.style.display = 'flex';
+			// A payment abandoned mid-way would otherwise keep the next checkout from closing on Escape.
+			spinner.removeAttribute( 'aria-busy' );
 			if ( iframe && modalContent.contains( iframe ) ) {
 				// Reset iframe and modal content heights.
 				iframe._ready = false;
@@ -771,6 +773,12 @@ domReady( () => {
 		el.setAttribute( 'data-state', 'open' );
 		if ( OPENS_OWN_DIALOGS && ! el.open && typeof el.showModal === 'function' ) {
 			el.showModal();
+			// The browser puts focus on the Close button; newspack-ui's rule never does.
+			const heading = el.querySelector( `.${ MODAL_CLASS_PREFIX }__header h2` );
+			if ( heading ) {
+				heading.tabIndex = -1;
+				heading.focus();
+			}
 		}
 		document.body.style.overflow = 'hidden';
 	};
@@ -848,6 +856,15 @@ domReady( () => {
 				closeCheckout();
 			}
 		} );
+	} );
+
+	// The browser can close the dialog itself, such as on a repeated Escape. A
+	// payment in progress keeps checkout open.
+	modalCheckout.addEventListener( 'close', () => {
+		if ( ! modalCheckout.open && 'true' === spinner.getAttribute( 'aria-busy' ) ) {
+			modalCheckout.showModal();
+			modalCheckout.setAttribute( 'data-state', 'open' );
+		}
 	} );
 
 	/**
@@ -1108,6 +1125,9 @@ domReady( () => {
 		onCheckoutComplete = null,
 		onClose = null,
 	} ) => {
+		// The dialog returns focus to whatever opened it, not to an earlier checkout's button.
+		modalTrigger = null;
+
 		/**
 		 * Title configuration.
 		 */
