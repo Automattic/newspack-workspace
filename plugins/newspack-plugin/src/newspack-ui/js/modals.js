@@ -204,6 +204,19 @@ function closeDialog( modal ) {
 }
 
 /**
+ * Focus an element. A frame showing a page from this site, like modal checkout,
+ * gets focus on the first or last element Tab reaches inside it.
+ *
+ * @param {HTMLElement} element The element.
+ * @param {boolean}     last    Whether to focus the last element inside a frame.
+ */
+function focusInto( element, last = false ) {
+	const frameBody = 'IFRAME' === element.tagName ? element.contentDocument?.body : null;
+	const inside = frameBody ? getFocusableElements( frameBody ) : [];
+	( inside.length ? inside[ last ? inside.length - 1 : 0 ] : element ).focus();
+}
+
+/**
  * Set up a dialog's keyboard handling and label.
  *
  * @param {HTMLDialogElement} modal The modal element.
@@ -247,10 +260,10 @@ function setupDialog( modal ) {
 		const position = elements.indexOf( active );
 		if ( event.shiftKey && ! focusable.some( element => elements.indexOf( element ) < position ) ) {
 			event.preventDefault();
-			focusable[ focusable.length - 1 ].focus();
+			focusInto( focusable[ focusable.length - 1 ], true );
 		} else if ( ! event.shiftKey && ! focusable.some( element => elements.indexOf( element ) > position ) ) {
 			event.preventDefault();
-			focusable[ 0 ].focus();
+			focusInto( focusable[ 0 ] );
 		}
 	} );
 }
@@ -283,17 +296,14 @@ function handleModalOverlay( modal, state ) {
  *
  * @param {HTMLElement} modal    The modal element.
  * @param {string}      oldState The previous state.
- * @return {boolean} Whether a dialog closed.
  */
 function applyModalState( modal, oldState ) {
 	const newState = modal.dataset.state;
-	let dialogClosed = false;
 	if ( isDialog( modal ) ) {
 		if ( 'open' === newState ) {
 			openDialog( modal );
 		} else if ( modal.open || openDialogs.includes( modal ) ) {
 			closeDialog( modal );
-			dialogClosed = true;
 		}
 	}
 	handleModalOverlay( modal, newState );
@@ -308,7 +318,6 @@ function applyModalState( modal, oldState ) {
 	if ( newState === 'closed' ) {
 		modal.dispatchEvent( new CustomEvent( 'closeModal' ) );
 	}
-	return dialogClosed;
 }
 
 // One observer for every modal, so a modal that closes and one that opens in the
@@ -323,16 +332,7 @@ const modalObserver = new MutationObserver( mutations => {
 		changes.delete( mutation.target );
 		changes.set( mutation.target, oldState );
 	} );
-	let dialogClosed = false;
-	changes.forEach( ( oldState, modal ) => {
-		const closed = applyModalState( modal, oldState );
-		// Closing a dialog returns focus to its opener, which would pull it out of a
-		// modal that isn't a dialog, like modal checkout, opened in the same task.
-		if ( ! isDialog( modal ) && 'open' === modal.dataset.state && dialogClosed && ! modal.contains( modal.ownerDocument.activeElement ) ) {
-			getFocusableElements( modal )[ 0 ]?.focus();
-		}
-		dialogClosed = dialogClosed || closed;
-	} );
+	changes.forEach( ( oldState, modal ) => applyModalState( modal, oldState ) );
 } );
 
 /**

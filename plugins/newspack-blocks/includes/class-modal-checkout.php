@@ -1294,9 +1294,9 @@ final class Modal_Checkout {
 		$title        = self::get_modal_checkout_labels( 'checkout_modal_title' );
 		$class_prefix = self::get_class_prefix();
 		?>
-		<div id="newspack_modal_checkout" class="<?php echo esc_attr( "$class_prefix {$class_prefix}__modal-container" ); ?>">
+		<dialog id="newspack_modal_checkout" class="<?php echo esc_attr( "$class_prefix {$class_prefix}__modal-container" ); ?>" aria-labelledby="newspack-modal-checkout-label">
 			<div class="<?php echo esc_attr( "{$class_prefix}__modal-container__overlay" ); ?>"></div>
-			<div class="<?php echo esc_attr( "{$class_prefix}__modal" ); ?>" role="dialog" aria-modal="true" aria-labelledby="newspack-modal-checkout-label">
+			<div class="<?php echo esc_attr( "{$class_prefix}__modal" ); ?>">
 				<header class="<?php echo esc_attr( "{$class_prefix}__modal__header" ); ?>">
 					<h2 id="newspack-modal-checkout-label"><?php echo esc_html( $title ); ?></h2>
 					<button class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--icon {$class_prefix}__button--ghost {$class_prefix}__modal__close" ); ?>">
@@ -1311,12 +1311,8 @@ final class Modal_Checkout {
 						<span></span>
 					</div>
 				</section>
-				<?php
-					// Hacky way to help trap focus in the modal for accessibility, without involving the iframe.
-					echo '<span tabindex="0" id="newspack-a11y-last-element"></span>';
-				?>
 			</div>
-		</div>
+		</dialog>
 		<?php
 	}
 
@@ -1374,14 +1370,15 @@ final class Modal_Checkout {
 				continue;
 			}
 			?>
-			<div
+			<dialog
 				class="<?php echo esc_attr( "$class_prefix {$class_prefix}__modal-container newspack-blocks__modal-variation" ); ?>"
 				data-product-id="<?php echo esc_attr( $product_id ); ?>"
+				aria-labelledby="newspack-modal-variation-label-<?php echo esc_attr( $product_id ); ?>"
 			>
 				<div class="<?php echo esc_attr( "{$class_prefix}__modal-container__overlay" ); ?>"></div>
-				<div class="<?php echo esc_attr( "{$class_prefix}__modal {$class_prefix}__modal--small" ); ?>" role="dialog" aria-modal="true" aria-labelledby="newspack-modal-checkout-label">
+				<div class="<?php echo esc_attr( "{$class_prefix}__modal {$class_prefix}__modal--small" ); ?>">
 					<header class="<?php echo esc_attr( "{$class_prefix}__modal__header" ); ?>">
-						<h2 id="newspack-modal-checkout-label"><?php echo esc_html( $title ); ?></h2>
+						<h2 id="newspack-modal-variation-label-<?php echo esc_attr( $product_id ); ?>"><?php echo esc_html( $title ); ?></h2>
 						<button class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--icon {$class_prefix}__button--ghost {$class_prefix}__modal__close" ); ?>">
 							<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-blocks' ); ?></span>
 							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">
@@ -1393,7 +1390,7 @@ final class Modal_Checkout {
 						<?php \Newspack\Subscriptions_Tiers::render_form( $product ); ?>
 					</section>
 				</div>
-			</div>
+			</dialog>
 			<?php
 		}
 	}

@@ -2,7 +2,7 @@
  * Focus helpers shared by Newspack UI modals.
  */
 
-const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]';
+const FOCUSABLE = 'a[href], button, iframe, input, select, textarea, [tabindex]';
 const FIELDS = 'input:not([type="button"], [type="submit"], [type="reset"], [type="image"], [readonly]), select, textarea:not([readonly])';
 
 /**

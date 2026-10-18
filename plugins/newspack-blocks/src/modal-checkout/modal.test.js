@@ -10,7 +10,7 @@
  */
 
 const PAGE = `
-	<div id="newspack_modal_checkout" class="newspack-ui__modal-container" data-state="closed">
+	<dialog id="newspack_modal_checkout" class="newspack-ui__modal-container" data-state="closed">
 		<div class="newspack-ui__modal">
 			<div class="newspack-ui__modal__header">
 				<h2></h2>
@@ -19,10 +19,9 @@ const PAGE = `
 			<div class="newspack-ui__modal__content">
 				<div class="newspack-ui__spinner"></div>
 			</div>
-			<span id="newspack-a11y-last-element" tabindex="0"></span>
 		</div>
-	</div>
-	<div class="newspack-ui__modal-container newspack-newsletters-signup-modal" data-state="closed"></div>
+	</dialog>
+	<dialog class="newspack-ui__modal-container newspack-newsletters-signup-modal" data-state="closed"></dialog>
 `;
 
 // jsdom cannot load a new page, so the destinations here are ones it can reach:
@@ -111,12 +110,14 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 		expect( setPendingCheckout ).toHaveBeenCalledWith();
 	} );
 
-	it( 'keeps the Escape that closes the checkout from also closing the signup modal', () => {
-		const escape = new KeyboardEvent( 'keydown', { key: 'Escape', cancelable: true } );
+	it( 'offers the signup modal when the reader leaves the thank-you screen with Escape', () => {
+		const cancel = new Event( 'cancel', { cancelable: true } );
 
-		finishCheckout( GO_BACK, () => document.dispatchEvent( escape ) );
+		const signupModal = finishCheckout( GO_BACK, () => document.getElementById( 'newspack_modal_checkout' ).dispatchEvent( cancel ) );
 
-		expect( escape.defaultPrevented ).toBe( true );
+		expect( cancel.defaultPrevented ).toBe( true );
+		signupModal.onDismiss();
+		expect( goBack ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'sends the reader on once when they answer the signup modal and then close it', () => {
@@ -164,5 +165,68 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 		jest.advanceTimersByTime( 1 );
 
 		expect( overlays.remove ).toHaveBeenCalledWith( heldOverlay );
+	} );
+} );
+
+describe( 'modal checkout, closing with Escape', () => {
+	const setPendingCheckout = jest.fn();
+	let checkout;
+
+	beforeAll( () => {
+		document.body.innerHTML = PAGE;
+		window.newspackBlocksModal = {
+			newspack_class_prefix: 'newspack-ui',
+			labels: { checkout_modal_title: 'Checkout', thankyou_modal_title: 'Thank you' },
+			processing_payment_messages: [],
+		};
+		window.newspackReaderActivation = { setPendingCheckout };
+		window.fetch = jest.fn().mockResolvedValue( { ok: true } );
+		// The checkout iframe never loads here, so closing it finds no checkout data to report.
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		jest.isolateModules( () => {
+			require( './modal' );
+		} );
+		checkout = document.getElementById( 'newspack_modal_checkout' );
+	} );
+
+	afterAll( () => {
+		delete window.fetch;
+		jest.restoreAllMocks();
+	} );
+
+	beforeEach( () => {
+		setPendingCheckout.mockClear();
+		window.newspackOpenModalCheckout( { url: 'about:blank' } );
+	} );
+
+	it( 'closes checkout and empties the cart, like its Close button', () => {
+		const cancel = new Event( 'cancel', { cancelable: true } );
+
+		checkout.dispatchEvent( cancel );
+
+		expect( cancel.defaultPrevented ).toBe( true );
+		expect( checkout.dataset.state ).toBe( 'closed' );
+		expect( checkout.querySelector( 'iframe' ) ).toBeNull();
+		expect( setPendingCheckout ).toHaveBeenCalledWith();
+	} );
+
+	it( 'stays open while a payment is processing', () => {
+		checkout.querySelector( '.newspack-ui__spinner' ).setAttribute( 'aria-busy', 'true' );
+
+		checkout.dispatchEvent( new Event( 'cancel', { cancelable: true } ) );
+
+		expect( checkout.dataset.state ).toBe( 'open' );
+		expect( checkout.querySelector( 'iframe' ) ).not.toBeNull();
+
+		checkout.querySelector( '.newspack-ui__spinner' ).removeAttribute( 'aria-busy' );
+		window.newspackCloseModalCheckout();
+	} );
+
+	it( 'leaves a cancel from a file picker inside it alone', () => {
+		checkout.querySelector( '.newspack-ui__modal__content' ).dispatchEvent( new Event( 'cancel', { bubbles: true } ) );
+
+		expect( checkout.dataset.state ).toBe( 'open' );
+
+		window.newspackCloseModalCheckout();
 	} );
 } );

@@ -8,7 +8,7 @@ import './checkout.scss';
  * Internal dependencies
  */
 import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination } from './analytics';
-import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
+import { domReady, getTabbableElements, isPaymentChallengeShown, onCheckoutPlaceOrderProcessing } from './utils';
 
 ( $ => {
 	domReady( () => {
@@ -144,6 +144,26 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					placedOrder = false;
 					container.dispatchEvent( placeOrderSuccessEvent );
 				} );
+
+				/**
+				 * Tell the modal when a payment challenge, like 3D Secure, shows or goes, so
+				 * its processing screen doesn't cover it.
+				 */
+				let challengeShown = false;
+				let challengeFrame = null;
+				const syncPaymentChallenge = () => {
+					challengeFrame = null;
+					const shown = isPaymentChallengeShown( document );
+					if ( shown !== challengeShown ) {
+						challengeShown = shown;
+						container.dispatchEvent( new CustomEvent( 'checkout-payment-challenge', { detail: { shown } } ) );
+					}
+				};
+				new MutationObserver( () => {
+					if ( ! challengeFrame ) {
+						challengeFrame = window.requestAnimationFrame( syncPaymentChallenge );
+					}
+				} ).observe( document.body, { childList: true, subtree: true, attributes: true, attributeFilter: [ 'style', 'class' ] } );
 
 				$( document.body ).on( 'checkout_error', function ( event, errors ) {
 					if ( ! placedOrder ) {
@@ -1053,10 +1073,30 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			setReady( false );
 		} );
 
-		// Close modal when 'Esc' key is pressed and focus is inside of the iframe.
+		// The checkout dialog can't see keys pressed in here. Escape reaches it as the
+		// dialog's own cancel, so a payment in progress keeps it open, and Tab from the
+		// last control wraps to the dialog's first.
 		document.addEventListener( 'keydown', function ( ev ) {
+			const dialog = window.frameElement?.closest( 'dialog' );
 			if ( ev.key === 'Escape' ) {
-				parent.newspackCloseModalCheckout();
+				if ( dialog ) {
+					dialog.dispatchEvent( new Event( 'cancel', { cancelable: true } ) );
+				} else {
+					parent.newspackCloseModalCheckout();
+				}
+				return;
+			}
+			if ( ev.key !== 'Tab' || ev.shiftKey || ev.defaultPrevented || ! dialog ) {
+				return;
+			}
+			const tabbable = getTabbableElements( document.body );
+			if ( ev.target !== tabbable[ tabbable.length - 1 ] ) {
+				return;
+			}
+			const first = getTabbableElements( dialog )[ 0 ];
+			if ( first && first !== window.frameElement ) {
+				ev.preventDefault();
+				first.focus();
 			}
 		} );
 

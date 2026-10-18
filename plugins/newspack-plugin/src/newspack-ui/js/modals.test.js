@@ -299,19 +299,49 @@ describe( 'newspack-ui modal dialogs', () => {
 		expect( notices.parentElement ).toBe( document.body );
 	} );
 
-	it( 'leaves focus in a non-dialog modal opened as a dialog closes', async () => {
-		const { modal } = renderDialog(
-			'<button type="submit">Continue</button>',
-			'<div id="checkout" class="newspack-ui__modal-container" data-state="closed"><button id="checkout-close">Close</button></div>'
+	it.each( [
+		[ 'after', [ 'modal', 'checkout' ] ],
+		[ 'before', [ 'checkout', 'modal' ] ],
+	] )( 'moves focus into a dialog that opens %s another closes, and back to the first trigger', async ( _, order ) => {
+		const { trigger, modal } = renderDialog(
+			'<button type="submit" id="continue">Continue</button>',
+			`<dialog id="checkout" class="newspack-ui__modal-container" data-state="closed">
+				<header class="newspack-ui__modal__header"><h2>Checkout</h2><button class="newspack-ui__modal__close">Close</button></header>
+				<section class="newspack-ui__modal__content"><input type="email" id="checkout-email" /></section>
+			</dialog>`
 		);
 		const checkout = document.getElementById( 'checkout' );
 		await open( modal );
+		document.getElementById( 'continue' ).focus();
 
-		modal.setAttribute( 'data-state', 'closed' );
-		checkout.setAttribute( 'data-state', 'open' );
+		const states = { modal: [ modal, 'closed' ], checkout: [ checkout, 'open' ] };
+		order.forEach( name => states[ name ][ 0 ].setAttribute( 'data-state', states[ name ][ 1 ] ) );
 		await nextTask();
+		expect( document.activeElement.id ).toBe( 'checkout-email' );
 
-		expect( document.activeElement.id ).toBe( 'checkout-close' );
+		checkout.setAttribute( 'data-state', 'closed' );
+		await nextTask();
+		expect( document.activeElement ).toBe( trigger );
+	} );
+
+	it( 'wraps Shift+Tab into the last control of a frame showing a page from this site', async () => {
+		const { modal } = renderDialog( '<iframe id="frame"></iframe>' );
+		const frame = document.getElementById( 'frame' );
+		frame.contentDocument.body.innerHTML = '<input id="first" /><button id="last">Pay</button>';
+		frame.contentWindow.Element.prototype.checkVisibility = Element.prototype.checkVisibility;
+		await open( modal );
+		modal.querySelector( '.newspack-ui__modal__close' ).focus();
+
+		expect( pressTab( modal, true ).defaultPrevented ).toBe( true );
+		expect( frame.contentDocument.activeElement.id ).toBe( 'last' );
+	} );
+
+	it( 'leaves Tab from the Close button to the browser when a frame follows it', async () => {
+		const { modal } = renderDialog( '<iframe></iframe>' );
+		await open( modal );
+		modal.querySelector( '.newspack-ui__modal__close' ).focus();
+
+		expect( pressTab( modal ).defaultPrevented ).toBe( false );
 	} );
 
 	it( 'stays modal for payment fields inside it, and steps down for a challenge outside it', async () => {

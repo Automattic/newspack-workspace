@@ -4,7 +4,6 @@
  * Style dependencies
  */
 import './modal.scss';
-import * as a11y from './accessibility.js';
 
 /**
  * Internal dependencies
@@ -24,6 +23,7 @@ import {
 	triggerFormSubmit,
 	getCheckoutData,
 	getFormattedAmount,
+	getInitialFocus,
 } from './utils';
 import {
 	resolveCheckoutButtonForm,
@@ -45,6 +45,8 @@ const MODAL_CLASS_PREFIX = `${ CLASS_PREFIX }__modal`;
 const VARIATON_MODAL_CLASS_PREFIX = 'newspack-blocks__modal-variation';
 const PROCESSING_PAYMENT_TEXT_CLASS = `${ CLASS_PREFIX }__processing-payment-text`;
 const PROCESSING_PAYMENT_MESSAGES = newspackBlocksModal.processing_payment_messages;
+// newspack-ui opens its dialogs itself. Without it, this script does.
+const OPENS_OWN_DIALOGS = 'newspack-ui' !== CLASS_PREFIX;
 
 // Track the checkout intent to avoid multiple analytics events.
 let inCheckoutIntent = false;
@@ -61,6 +63,11 @@ const closeModal = el => {
 		window.newspackReaderActivation?.overlays.remove( el.overlayId );
 	}
 	el.setAttribute( 'data-state', 'closed' );
+	// Closed now rather than when newspack-ui catches up, so the page behind is no
+	// longer inert and focus can go back to the trigger.
+	if ( el.open ) {
+		el.close();
+	}
 	document.body.style.overflow = 'auto';
 };
 
@@ -155,6 +162,25 @@ domReady( () => {
 		const productDetails = container.querySelector( '#modal-checkout-product-details' );
 		const checkoutData = getCheckoutData( productDetails );
 
+		let hasFocused = false;
+
+		/**
+		 * Move focus into this checkout screen once it shows. The shared modal rule can't
+		 * see into the iframe, so it lands on the heading until then. Focus the reader
+		 * has moved to the Close button in the meantime stays there.
+		 */
+		const focusCheckout = () => {
+			if ( hasFocused || 'open' !== modalCheckout.dataset.state ) {
+				return;
+			}
+			hasFocused = true;
+			const active = modalCheckout.ownerDocument.activeElement;
+			if ( active && active !== iframe && active !== modalCheckout && modalCheckout.contains( active ) && active.tabIndex >= 0 ) {
+				return;
+			}
+			getInitialFocus( container )?.focus();
+		};
+
 		const processingPaymentText = document.createElement( 'p' );
 		processingPaymentText.classList.add( PROCESSING_PAYMENT_TEXT_CLASS );
 		let processingPaymentTimeouts = [];
@@ -167,6 +193,8 @@ domReady( () => {
 		const renderProcessingPaymentScreen = event => {
 			spinner.querySelectorAll( `.${ PROCESSING_PAYMENT_TEXT_CLASS }` ).forEach( node => node.remove() );
 			spinner.style.display = 'flex';
+			// Escape leaves a checkout that is taking a payment open.
+			spinner.setAttribute( 'aria-busy', 'true' );
 			clearProcessingPaymentTimeouts();
 			processingPaymentText.textContent = PROCESSING_PAYMENT_MESSAGES[ 0 ]?.text ?? '';
 			PROCESSING_PAYMENT_MESSAGES.slice( 1 ).forEach( ( { text, delay } ) => {
@@ -181,6 +209,7 @@ domReady( () => {
 
 		const hideProcessingPaymentScreen = () => {
 			spinner.style.display = 'none';
+			spinner.removeAttribute( 'aria-busy' );
 			clearProcessingPaymentTimeouts();
 			spinner.querySelectorAll( `.${ PROCESSING_PAYMENT_TEXT_CLASS }` ).forEach( node => node.remove() );
 		};
@@ -192,6 +221,14 @@ domReady( () => {
 		onCheckoutPlaceOrderStart( container, renderProcessingPaymentScreen );
 
 		onCheckoutPlaceOrderError( container, hideProcessingPaymentScreen );
+
+		// The processing screen steps aside for a payment challenge, and comes back
+		// while the payment finishes.
+		container.addEventListener( 'checkout-payment-challenge', ( { detail } ) => {
+			if ( 'true' === spinner.getAttribute( 'aria-busy' ) ) {
+				spinner.style.display = detail.shown ? 'none' : 'flex';
+			}
+		} );
 
 		onCheckoutReady( container, () => {
 			// Display initial errors if any.
@@ -212,6 +249,7 @@ domReady( () => {
 				modalCheckout.checkout_nonce = iframe.contentWindow.newspackBlocksModalCheckout.checkout_nonce;
 			}
 			setModalReady( container );
+			focusCheckout();
 		} );
 
 		onCheckoutComplete( container, () => {
@@ -227,9 +265,8 @@ domReady( () => {
 			setModalSize( 'small' );
 			setModalTitle( newspackBlocksModal.labels.thankyou_modal_title );
 			setModalReady( container );
-			a11y.trapFocus( modalCheckout.querySelector( `.${ MODAL_CLASS_PREFIX }` ) );
-
 			hideProcessingPaymentScreen();
+			focusCheckout();
 		} );
 
 		// Resubmit modal checkout form if an unrecoverable error is encountered.
@@ -431,7 +468,6 @@ domReady( () => {
 				ev.preventDefault();
 				form.classList.remove( 'modal-processing' );
 				openModal( variationModal );
-				a11y.trapFocus( variationModal, false );
 
 				// For the variation modal we will not set `inCheckoutIntent = true` and
 				// let the `opened` event get triggered once the user selects a
@@ -711,7 +747,6 @@ domReady( () => {
 			inCheckoutIntent = false;
 			document.getElementById( 'newspack_modal_checkout' ).removeAttribute( 'data-checkout' );
 		}
-		document.removeEventListener( 'keydown', handleKeydown );
 	};
 
 	const openCheckout = url => {
@@ -727,10 +762,6 @@ domReady( () => {
 				closeCheckout();
 			}
 		} );
-
-		a11y.trapFocus( modalCheckout, iframe );
-
-		document.addEventListener( 'keydown', handleKeydown );
 	};
 
 	const openModal = el => {
@@ -738,6 +769,9 @@ domReady( () => {
 			el.overlayId = window.newspackReaderActivation?.overlays.add();
 		}
 		el.setAttribute( 'data-state', 'open' );
+		if ( OPENS_OWN_DIALOGS && ! el.open && typeof el.showModal === 'function' ) {
+			el.showModal();
+		}
 		document.body.style.overflow = 'hidden';
 	};
 
@@ -801,15 +835,20 @@ domReady( () => {
 	} );
 
 	/**
-	 * Escape key handler to close the modal checkout.
+	 * Escape closes checkout and the variations modal the way their Close buttons do,
+	 * so the cart is emptied and the dismissal tracked.
 	 */
-	const handleKeydown = ev => {
-		if ( ev.key === 'Escape' ) {
-			// Closing checkout can open the newsletters dialog, which this key press would otherwise close too.
+	[ modalCheckout, ...document.querySelectorAll( `.${ VARIATON_MODAL_CLASS_PREFIX }` ) ].forEach( dialog => {
+		dialog.addEventListener( 'cancel', ev => {
+			if ( ev.target !== dialog ) {
+				return;
+			}
 			ev.preventDefault();
-			closeCheckout();
-		}
-	};
+			if ( ! dialog.querySelector( '[aria-busy="true"]' ) ) {
+				closeCheckout();
+			}
+		} );
+	} );
 
 	/**
 	 * Handle modal checkout triggers.
