@@ -24,6 +24,19 @@
 		justify-content: center;
 		visibility: hidden;
 		pointer-events: none;
+		width: 100%;
+		max-width: none;
+		height: 100%;
+		max-height: none;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: inherit;
+
+		&::backdrop {
+			background: transparent;
+		}
 
 		&__overlay {
 			position: absolute;
@@ -75,6 +88,10 @@
 					justify-content: space-between;
 					h2 {
 						font-size: 16px;
+
+						&[tabindex="-1"]:focus {
+							outline: none;
+						}
 					}
 				}
 
