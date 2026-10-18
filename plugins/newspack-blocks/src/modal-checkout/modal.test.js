@@ -81,11 +81,12 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 	/**
 	 * Take a checkout to its thank-you screen and close it, as the reader's "Continue" does.
 	 *
-	 * @param {Object} afterSuccess Where the reader goes after the purchase.
+	 * @param {Object}   afterSuccess Where the reader goes after the purchase.
+	 * @param {Function} close        How the reader closes the checkout.
 	 *
 	 * @return {Object} The options modal checkout opened the newsletter signup modal with.
 	 */
-	function finishCheckout( afterSuccess ) {
+	function finishCheckout( afterSuccess, close = () => window.newspackCloseModalCheckout() ) {
 		window.newspackOpenModalCheckout( { url: 'about:blank' } );
 		const iframe = document.querySelector( 'iframe[name="newspack_modal_checkout_iframe"]' );
 		iframe.contentDocument.open();
@@ -93,7 +94,7 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 		iframe.contentDocument.close();
 		iframe.contentDocument.querySelector( '#newspack_modal_checkout_container' ).checkoutComplete = true;
 		openNewslettersSignupModal.mockClear();
-		window.newspackCloseModalCheckout();
+		close();
 		const signupModal = openNewslettersSignupModal.mock.calls[ 0 ][ 0 ];
 		setPendingCheckout.mockClear();
 		overlays.add.mockClear();
@@ -108,6 +109,14 @@ describe( 'modal checkout, leaving the newsletter signup modal after a purchase'
 
 		expect( goBack ).toHaveBeenCalledTimes( 1 );
 		expect( setPendingCheckout ).toHaveBeenCalledWith();
+	} );
+
+	it( 'keeps the Escape that closes the checkout from also closing the signup modal', () => {
+		const escape = new KeyboardEvent( 'keydown', { key: 'Escape', cancelable: true } );
+
+		finishCheckout( GO_BACK, () => document.dispatchEvent( escape ) );
+
+		expect( escape.defaultPrevented ).toBe( true );
 	} );
 
 	it( 'sends the reader on once when they answer the signup modal and then close it', () => {

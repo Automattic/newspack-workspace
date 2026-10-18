@@ -80,9 +80,15 @@ function announce( message, assertive ) {
 	const region = getLiveRegion( assertive );
 	const line = document.createElement( 'div' );
 	line.textContent = message;
-	region.appendChild( line );
-	// Remove once announced so repeated messages re-announce and the region stays tidy.
-	setTimeout( () => line.remove(), 1000 );
+	// Two frames later, so a region moved by a modal opening or closing in the same task
+	// reaches assistive tech before its new line does.
+	requestAnimationFrame( () =>
+		requestAnimationFrame( () => {
+			region.appendChild( line );
+			// Remove once announced so repeated messages re-announce and the region stays tidy.
+			setTimeout( () => line.remove(), 1000 );
+		} )
+	);
 }
 
 /**

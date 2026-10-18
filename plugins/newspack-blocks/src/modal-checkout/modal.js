@@ -805,6 +805,8 @@ domReady( () => {
 	 */
 	const handleKeydown = ev => {
 		if ( ev.key === 'Escape' ) {
+			// Closing checkout can open the newsletters dialog, which this key press would otherwise close too.
+			ev.preventDefault();
 			closeCheckout();
 		}
 	};

@@ -589,7 +589,7 @@ class Content_Gifting {
 		}
 		?>
 		<div class="newspack-ui">
-			<div id="newspack-content-gifting-modal" class="newspack-ui__modal-container" data-state="closed">
+			<dialog id="newspack-content-gifting-modal" class="newspack-ui__modal-container" data-state="closed">
 				<div class="newspack-ui__modal-container__overlay"></div>
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 					<header class="newspack-ui__modal__header">
@@ -614,7 +614,7 @@ class Content_Gifting {
 						<div class="newspack-ui__spinner"><span></span></div>
 					</div>
 				</div>
-			</div>
+			</dialog>
 		</div>
 		<?php
 	}

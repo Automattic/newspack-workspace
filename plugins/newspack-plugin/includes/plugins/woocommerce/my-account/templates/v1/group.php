@@ -166,7 +166,7 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 	</div>
 
 	<!-- .newspack-ui__modal: rename group -->
-	<div id="newspack-my-account__group_subscription--rename" class="newspack-ui__modal-container">
+	<dialog id="newspack-my-account__group_subscription--rename" class="newspack-ui__modal-container">
 		<div class="newspack-ui__modal-container__overlay"></div>
 		<div class="newspack-ui__modal newspack-ui__modal--small">
 			<header class="newspack-ui__modal__header">
@@ -204,5 +204,5 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 				<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 			</form>
 		</div><!-- .newspack-ui__modal--small -->
-	</div> <!-- .newspack-ui__modal-container -->
+	</dialog>
 </div>
