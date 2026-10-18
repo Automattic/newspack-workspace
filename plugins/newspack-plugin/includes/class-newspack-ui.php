@@ -256,7 +256,7 @@ class Newspack_UI {
 			]
 		);
 		?>
-		<div id="newspack-my-account__<?php echo esc_attr( $args['id'] ); ?>" class="newspack-ui__modal-container" data-state="<?php echo esc_attr( $args['state'] ); ?>">
+		<dialog id="newspack-my-account__<?php echo esc_attr( $args['id'] ); ?>" class="newspack-ui__modal-container" data-state="<?php echo esc_attr( $args['state'] ); ?>">
 			<div class="newspack-ui__modal-container__overlay"></div>
 			<div class="newspack-ui__modal newspack-ui__modal--<?php echo esc_attr( $args['size'] ); ?>">
 				<header class="newspack-ui__modal__header">
@@ -364,7 +364,7 @@ class Newspack_UI {
 				</footer>
 				<?php endif; ?>
 			</div><!-- .newspack-ui__modal__small -->
-		</div> <!-- .newspack-ui__modal-container -->
+		</dialog>
 		<?php
 	}
 
@@ -1435,7 +1435,7 @@ class Newspack_UI {
 			</div><!-- .newspack-ui__box -->
 
 			<button id="open-modal-example" class="newspack-ui__button newspack-ui__button--primary">Open Modal</button>
-			<div id="newspack-modal-example" class="newspack-ui__modal-container">
+			<dialog id="newspack-modal-example" class="newspack-ui__modal-container">
 				<div class="newspack-ui__modal-container__overlay"></div>
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 						<header class="newspack-ui__modal__header">
@@ -1473,7 +1473,7 @@ class Newspack_UI {
 							<p>This is the modal footer.</p>
 						</footer>
 					</div><!-- .newspack-ui__modal__small -->
-			</div> <!-- .newspack-ui__modal-container -->
+			</dialog>
 			<script>
 				( function() {
 					var newspackModal = document.getElementById( 'newspack-modal-example' );

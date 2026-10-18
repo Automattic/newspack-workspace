@@ -1601,9 +1601,9 @@ final class Reader_Activation {
 		$terms = self::get_auth_footer();
 		$label = self::get_reader_activation_labels( 'title' );
 		?>
-		<div class="newspack-ui newspack-ui__modal-container newspack-reader-auth-modal">
+		<dialog class="newspack-ui newspack-ui__modal-container newspack-reader-auth-modal" aria-labelledby="newspack-reader-auth-modal-label">
 			<div class="newspack-ui__modal-container__overlay"></div>
-			<div class="newspack-ui__modal newspack-ui__modal--small" role="dialog" aria-modal="true" aria-labelledby="newspack-reader-auth-modal-label">
+			<div class="newspack-ui__modal newspack-ui__modal--small">
 				<div class="newspack-ui__modal__header">
 					<h2 id="newspack-reader-auth-modal-label"><?php echo \esc_html( $label ); ?></h2>
 					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
@@ -1622,7 +1622,7 @@ final class Reader_Activation {
 					</footer>
 				<?php endif; ?>
 			</div>
-		</div>
+		</dialog>
 		<?php
 	}
 
@@ -1844,7 +1844,7 @@ final class Reader_Activation {
 		}
 		$newsletter_list_initial_size = self::get_newsletters_list_initial_size();
 		?>
-		<div class="newspack-ui newspack-ui__modal-container newspack-newsletters-signup-modal">
+		<dialog class="newspack-ui newspack-ui__modal-container newspack-newsletters-signup-modal">
 			<div class="newspack-ui__modal-container__overlay"></div>
 			<div class="newspack-ui__modal newspack-ui__modal--small">
 				<div class="newspack-ui__modal__header">
@@ -1869,7 +1869,7 @@ final class Reader_Activation {
 					<?php self::render_newsletters_signup_form( $email_address, $newsletters_lists, $newsletter_list_initial_size ); ?>
 				</div>
 			</div>
-		</div>
+		</dialog>
 		<?php
 	}
 

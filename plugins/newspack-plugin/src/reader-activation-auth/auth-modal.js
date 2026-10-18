@@ -1,6 +1,6 @@
 /* globals newspack_reader_activation_labels */
 export const SIGN_IN_MODAL_HASHES = [ 'signin_modal', 'register_modal' ];
-import * as a11y from './accessibility.js';
+import { getInitialFocus, isVisible } from '../newspack-ui/js/focus';
 
 /**
  * Get the authentication modal container.
@@ -62,17 +62,6 @@ export function openAuthModal( config = {} ) {
 	}
 
 	/**
-	 * Handle keydown events.
-	 *
-	 * @param {KeyboardEvent} ev The keyboard event.
-	 */
-	const handleKeydown = ev => {
-		if ( ev.key === 'Escape' ) {
-			close();
-		}
-	};
-
-	/**
 	 * Handle close button click.
 	 *
 	 * @param {MouseEvent} ev The mouse event.
@@ -121,7 +110,6 @@ export function openAuthModal( config = {} ) {
 			config.onClose();
 		}
 
-		document.removeEventListener( 'keydown', handleKeydown );
 		closeButtons.forEach( closeButton => {
 			closeButton.removeEventListener( 'click', handleCloseButtonClick );
 		} );
@@ -137,8 +125,6 @@ export function openAuthModal( config = {} ) {
 			closeButton.addEventListener( 'click', handleCloseButtonClick );
 		} );
 	}
-
-	document.addEventListener( 'keydown', handleKeydown );
 
 	config.labels = {
 		...newspack_reader_activation_labels,
@@ -173,7 +159,11 @@ export function openAuthModal( config = {} ) {
 		modal.querySelectorAll( '[data-action~="' + action + '"]' ).forEach( item => {
 			item.style.display = item.prevDisplay;
 		} );
-		a11y.trapFocus( modal );
+		// A step change hides the control that had focus unless the step focused its own field.
+		const active = modal.ownerDocument.activeElement;
+		if ( 'open' === modal.dataset.state && ( ! modal.contains( active ) || ! isVisible( active ) ) ) {
+			getInitialFocus( modal )?.focus();
+		}
 	};
 
 	if ( config.content ) {
@@ -209,7 +199,6 @@ export function openAuthModal( config = {} ) {
 	modal.setAttribute( 'data-state', 'open' );
 	if ( window.newspackReaderActivation?.overlays ) {
 		modal.overlayId = window.newspackReaderActivation.overlays.add( 'auth-modal' );
-		a11y.trapFocus( modal );
 	}
 
 	/** Remove the modal hash from the URL if any. */

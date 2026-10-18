@@ -3,12 +3,207 @@
  */
 
 import { domReady, isButtonLoading, setButtonLoading } from '../../utils';
+import { getFocusableElements, getInitialFocus, isVisible } from './focus';
 
 window.newspackRAS = window.newspackRAS || [];
 
 // Submit buttons this script marked busy. A form that submits but keeps the page,
 // like one posting into the modal checkout iframe, has nothing else to release them.
 const handedOffButtons = new WeakSet();
+
+// Third-party layers rendered at the end of the body. A modal dialog would leave
+// them under the top layer and inert, so the dialog steps down while one shows.
+const EXTERNAL_LAYERS = 'iframe[src*="/recaptcha/api2/bframe"], iframe[src*="/recaptcha/enterprise/bframe"]';
+
+// Dialogs open on the page, oldest first.
+const openDialogs = [];
+
+let layersObserver = null;
+let layersFrame = null;
+
+/**
+ * Whether a modal is built on a dialog element this browser can open as a modal.
+ *
+ * @param {HTMLElement} modal The modal element.
+ * @return {boolean} Whether it's a dialog.
+ */
+function isDialog( modal ) {
+	return 'DIALOG' === modal.tagName && typeof modal.showModal === 'function';
+}
+
+/**
+ * Label a dialog with its heading, unless its markup already labels it.
+ *
+ * @param {HTMLElement} modal The modal element.
+ */
+function labelDialog( modal ) {
+	if ( modal.hasAttribute( 'aria-labelledby' ) || modal.hasAttribute( 'aria-label' ) ) {
+		return;
+	}
+	const heading = modal.querySelector( '.newspack-ui__modal__header h2' );
+	if ( ! heading ) {
+		return;
+	}
+	if ( ! heading.id ) {
+		heading.id = `${ modal.id || 'newspack-ui-modal-' + Math.random().toString( 36 ).slice( 2 ) }-title`;
+	}
+	modal.setAttribute( 'aria-labelledby', heading.id );
+}
+
+/**
+ * Keep snackbars and screen reader announcements inside the top open dialog,
+ * where a modal dialog doesn't make them inert.
+ */
+function moveNotices() {
+	const notices = document.getElementById( 'newspack-ui__notices' );
+	const host = openDialogs[ openDialogs.length - 1 ] || document.body;
+	if ( notices && notices.parentElement !== host ) {
+		host.appendChild( notices );
+	}
+}
+
+/**
+ * Step every open dialog down to non-modal while a third-party layer shows, and back
+ * up once it's gone.
+ */
+function syncExternalLayers() {
+	layersFrame = null;
+	const layerShown = [ ...document.querySelectorAll( EXTERNAL_LAYERS ) ].some( isVisible );
+	openDialogs.forEach( modal => {
+		if ( layerShown && ! modal._steppedDown ) {
+			const active = modal.ownerDocument.activeElement;
+			modal._focusBeforeStepDown = modal.contains( active ) ? active : null;
+			modal._steppedDown = true;
+			modal.close();
+			modal.show();
+		} else if ( ! layerShown && modal._steppedDown ) {
+			modal._steppedDown = false;
+			modal.close();
+			modal.showModal();
+			const target = modal._focusBeforeStepDown;
+			modal._focusBeforeStepDown = null;
+			( target && target.isConnected && isVisible( target ) ? target : getInitialFocus( modal ) || modal ).focus();
+		}
+	} );
+}
+
+/**
+ * Watch for third-party layers only while a dialog is open.
+ */
+function watchExternalLayers() {
+	if ( openDialogs.length && ! layersObserver ) {
+		layersObserver = new MutationObserver( () => {
+			if ( ! layersFrame ) {
+				layersFrame = window.requestAnimationFrame( syncExternalLayers );
+			}
+		} );
+		layersObserver.observe( document.body, { childList: true, subtree: true, attributes: true, attributeFilter: [ 'style', 'class' ] } );
+	} else if ( ! openDialogs.length && layersObserver ) {
+		layersObserver.disconnect();
+		layersObserver = null;
+	}
+}
+
+/**
+ * Open a dialog as a modal and move focus into it.
+ *
+ * @param {HTMLDialogElement} modal The modal element.
+ */
+function openDialog( modal ) {
+	if ( modal.open ) {
+		return;
+	}
+	// A modal opened from one that is closing returns focus to where the first was opened from.
+	const active = modal.ownerDocument.activeElement;
+	const fromModal = active?.closest?.( '.newspack-ui__modal-container' );
+	modal._opener = fromModal && fromModal !== modal && 'open' !== fromModal.dataset.state && fromModal._opener ? fromModal._opener : active;
+
+	modal.showModal();
+	openDialogs.push( modal );
+	moveNotices();
+	watchExternalLayers();
+	syncExternalLayers();
+	if ( ! modal._steppedDown ) {
+		( getInitialFocus( modal ) || modal ).focus();
+	}
+}
+
+/**
+ * Close a dialog and return focus to where it was opened from.
+ *
+ * @param {HTMLDialogElement} modal The modal element.
+ */
+function closeDialog( modal ) {
+	const index = openDialogs.indexOf( modal );
+	if ( index > -1 ) {
+		openDialogs.splice( index, 1 );
+	}
+	modal._steppedDown = false;
+	modal._focusBeforeStepDown = null;
+	if ( modal.open ) {
+		modal.close();
+	}
+	moveNotices();
+	watchExternalLayers();
+
+	const opener = modal._opener;
+	modal._opener = null;
+	const active = modal.ownerDocument.activeElement;
+	if (
+		opener?.isConnected &&
+		typeof opener.focus === 'function' &&
+		( ! active || active === modal.ownerDocument.body || modal.contains( active ) )
+	) {
+		opener.focus();
+	}
+}
+
+/**
+ * Set up a dialog's keyboard handling and label.
+ *
+ * @param {HTMLDialogElement} modal The modal element.
+ */
+function setupDialog( modal ) {
+	labelDialog( modal );
+
+	// Escape goes through data-state, so every close path runs the same teardown.
+	// A modal with a request in flight stays open.
+	modal.addEventListener( 'cancel', event => {
+		event.preventDefault();
+		if ( ! modal.querySelector( '[aria-busy="true"]' ) ) {
+			modal.setAttribute( 'data-state', 'closed' );
+		}
+	} );
+
+	// The browser can still close a dialog itself, such as on a repeated Escape.
+	modal.addEventListener( 'close', () => {
+		if ( ! modal.open && 'open' === modal.dataset.state ) {
+			modal.setAttribute( 'data-state', 'closed' );
+		}
+	} );
+
+	// A modal dialog makes the page inert, but Tab would still leave for the browser's own controls.
+	modal.addEventListener( 'keydown', event => {
+		if ( 'Tab' !== event.key || event.defaultPrevented || modal._steppedDown ) {
+			return;
+		}
+		const focusable = getFocusableElements( modal );
+		const active = modal.ownerDocument.activeElement;
+		if ( ! focusable.length ) {
+			event.preventDefault();
+			return;
+		}
+		const first = focusable[ 0 ];
+		const last = focusable[ focusable.length - 1 ];
+		if ( event.shiftKey && ( active === first || active === modal ) ) {
+			event.preventDefault();
+			last.focus();
+		} else if ( ! event.shiftKey && active === last ) {
+			event.preventDefault();
+			first.focus();
+		}
+	} );
+}
 
 /**
  * Handle overlays for a modal based on its state.
@@ -34,39 +229,75 @@ function handleModalOverlay( modal, state ) {
 }
 
 /**
- * Set up mutation observer for a modal to watch for state changes.
+ * Apply a modal's new state.
+ *
+ * @param {HTMLElement} modal    The modal element.
+ * @param {string}      oldState The previous state.
+ * @return {boolean} Whether a dialog closed.
+ */
+function applyModalState( modal, oldState ) {
+	const newState = modal.dataset.state;
+	let dialogClosed = false;
+	if ( isDialog( modal ) ) {
+		if ( 'open' === newState ) {
+			openDialog( modal );
+		} else if ( modal.open || openDialogs.includes( modal ) ) {
+			closeDialog( modal );
+			dialogClosed = true;
+		}
+	}
+	handleModalOverlay( modal, newState );
+	if ( newState === 'open' && oldState !== 'open' ) {
+		modal.querySelectorAll( 'button[type="submit"]' ).forEach( button => {
+			if ( handedOffButtons.has( button ) ) {
+				handedOffButtons.delete( button );
+				setButtonLoading( button, false );
+			}
+		} );
+	}
+	if ( newState === 'closed' ) {
+		modal.dispatchEvent( new CustomEvent( 'closeModal' ) );
+	}
+	return dialogClosed;
+}
+
+// One observer for every modal, so a modal that closes and one that opens in the
+// same task are handled in the order they changed.
+const modalObserver = new MutationObserver( mutations => {
+	const changes = new Map();
+	mutations.forEach( mutation => {
+		if ( mutation.type !== 'attributes' || mutation.attributeName !== 'data-state' ) {
+			return;
+		}
+		const oldState = changes.has( mutation.target ) ? changes.get( mutation.target ) : mutation.oldValue;
+		changes.delete( mutation.target );
+		changes.set( mutation.target, oldState );
+	} );
+	let dialogClosed = false;
+	changes.forEach( ( oldState, modal ) => {
+		const closed = applyModalState( modal, oldState );
+		// Closing a dialog returns focus to its opener, which would pull it out of a
+		// modal that isn't a dialog, like modal checkout, opened in the same task.
+		if ( ! isDialog( modal ) && 'open' === modal.dataset.state && dialogClosed && ! modal.contains( modal.ownerDocument.activeElement ) ) {
+			getFocusableElements( modal )[ 0 ]?.focus();
+		}
+		dialogClosed = dialogClosed || closed;
+	} );
+} );
+
+/**
+ * Set up a modal's state handling.
  *
  * @param {HTMLElement} modal The modal element.
  */
 function setupModalObserver( modal ) {
-	// Handle initial state
-	const initialState = modal.dataset.state;
-	if ( initialState === 'open' ) {
-		handleModalOverlay( modal, 'open' );
+	if ( isDialog( modal ) ) {
+		setupDialog( modal );
 	}
-
-	// Watch for state changes
-	const observer = new MutationObserver( mutations => {
-		mutations.forEach( mutation => {
-			if ( mutation.type === 'attributes' && mutation.attributeName === 'data-state' ) {
-				const newState = modal.dataset.state;
-				handleModalOverlay( modal, newState );
-				if ( newState === 'open' && mutation.oldValue !== 'open' ) {
-					modal.querySelectorAll( 'button[type="submit"]' ).forEach( button => {
-						if ( handedOffButtons.has( button ) ) {
-							handedOffButtons.delete( button );
-							setButtonLoading( button, false );
-						}
-					} );
-				}
-				if ( newState === 'closed' ) {
-					modal.dispatchEvent( new CustomEvent( 'closeModal' ) );
-				}
-			}
-		} );
-	} );
-
-	observer.observe( modal, {
+	if ( modal.dataset.state === 'open' ) {
+		applyModalState( modal, null );
+	}
+	modalObserver.observe( modal, {
 		attributes: true,
 		attributeFilter: [ 'data-state' ],
 		attributeOldValue: true,
@@ -87,7 +318,27 @@ window.addEventListener( 'pageshow', event => {
 	} );
 } );
 
+/**
+ * Open select2 dropdowns, like WooCommerce's country and state fields, inside the
+ * dialog that holds them. Rendered at the end of the body, they would be inert.
+ */
+function keepSelect2InDialogs() {
+	const $ = window.jQuery;
+	if ( ! $ ) {
+		return;
+	}
+	$( document ).on( 'select2:opening', event => {
+		const dialog = event.target.closest?.( 'dialog.newspack-ui__modal-container' );
+		const dropdown = $( event.target ).data( 'select2' )?.dropdown;
+		if ( dialog && dropdown?.$dropdownParent ) {
+			dropdown.$dropdownParent = $( dialog );
+		}
+	} );
+}
+
 domReady( function () {
+	keepSelect2InDialogs();
+
 	const modals = [ ...document.querySelectorAll( '.newspack-ui__modal-container' ) ];
 
 	modals.forEach( modal => {

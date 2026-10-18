@@ -1,4 +1,3 @@
-import * as a11y from '../reader-activation-auth/accessibility.js';
 import { getApiNonce } from '../reader-activation/session';
 import { EVENTS, on } from '../reader-activation/events';
 
@@ -159,7 +158,6 @@ export function openNewslettersSignupModal( config = {} ) {
 	}
 
 	modal.setAttribute( 'data-state', 'open' );
-	a11y.trapFocus( modal );
 	if ( window?.newspackReaderActivation?.overlays ) {
 		modal.overlayId = window.newspackReaderActivation.overlays.add();
 	}
