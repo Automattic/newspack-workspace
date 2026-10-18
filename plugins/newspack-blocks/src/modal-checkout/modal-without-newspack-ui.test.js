@@ -94,4 +94,19 @@ describe( 'modal checkout without newspack-ui', () => {
 		expect( cancel.defaultPrevented ).toBe( true );
 		expect( checkout.open ).toBe( false );
 	} );
+
+	it( 'opens again when the browser closes it during a payment, with focus off its Close button', () => {
+		openFromTrigger();
+		const spinner = checkout.querySelector( '.newspack-blocks__spinner' );
+		spinner.setAttribute( 'aria-busy', 'true' );
+
+		checkout.removeAttribute( 'open' );
+		checkout.dispatchEvent( new Event( 'close' ) );
+
+		expect( checkout.open ).toBe( true );
+		expect( document.activeElement ).toBe( checkout.querySelector( 'h2' ) );
+
+		spinner.removeAttribute( 'aria-busy' );
+		window.newspackCloseModalCheckout();
+	} );
 } );

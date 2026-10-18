@@ -250,6 +250,24 @@ describe( 'newspack-ui modal dialogs', () => {
 		expect( modal.open ).toBe( true );
 	} );
 
+	it( 'opens again when the browser closes it while a request is in flight', async () => {
+		const { modal } = renderDialog( '<input type="email" id="email" /><button type="submit">Save</button>' );
+		const notices = document.createElement( 'div' );
+		notices.id = 'newspack-ui__notices';
+		document.body.appendChild( notices );
+		await open( modal );
+		setButtonLoading( modal.querySelector( 'button[type="submit"]' ), true );
+
+		modal.removeAttribute( 'open' );
+		modal.dispatchEvent( new Event( 'close' ) );
+		await nextTask();
+
+		expect( modal.open ).toBe( true );
+		expect( modal.dataset.state ).toBe( 'open' );
+		expect( document.activeElement.id ).toBe( 'email' );
+		expect( notices.parentElement ).toBe( modal );
+	} );
+
 	it( 'stays open when a file picker inside it is dismissed', async () => {
 		const { modal } = renderDialog( '<input type="file" id="csv" />' );
 		await open( modal );

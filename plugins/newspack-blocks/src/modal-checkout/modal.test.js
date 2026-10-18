@@ -287,16 +287,6 @@ describe( 'modal checkout as a dialog', () => {
 		expect( window.fetch ).not.toHaveBeenCalled();
 	} );
 
-	it( 'stays open when the browser closes it during a payment', async () => {
-		placeOrder( await loadCheckout() );
-
-		checkout.removeAttribute( 'open' );
-		checkout.dispatchEvent( new Event( 'close' ) );
-
-		expect( checkout.open ).toBe( true );
-		expect( checkout.dataset.state ).toBe( 'open' );
-	} );
-
 	it( 'steps the processing screen aside for a payment challenge, and back once it is done', async () => {
 		const container = await loadCheckout();
 		placeOrder( container );

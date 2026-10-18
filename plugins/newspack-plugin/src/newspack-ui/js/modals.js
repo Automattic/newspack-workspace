@@ -237,11 +237,18 @@ function setupDialog( modal ) {
 		}
 	} );
 
-	// The browser can still close a dialog itself, such as on a repeated Escape.
+	// The browser can still close a dialog itself, such as on a repeated Escape. A
+	// modal with a request in flight comes straight back.
 	modal.addEventListener( 'close', () => {
-		if ( ! modal.open && 'open' === modal.dataset.state ) {
-			modal.setAttribute( 'data-state', 'closed' );
+		if ( modal.open || 'open' !== modal.dataset.state ) {
+			return;
 		}
+		if ( modal.querySelector( '[aria-busy="true"]' ) ) {
+			modal.showModal();
+			( getInitialFocus( modal ) || modal ).focus();
+			return;
+		}
+		modal.setAttribute( 'data-state', 'closed' );
 	} );
 
 	// A modal dialog makes the page inert, but Tab would still leave for the browser's own controls.

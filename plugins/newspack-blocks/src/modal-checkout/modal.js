@@ -90,6 +90,8 @@ window.onpageshow = event => {
 	if ( event.persisted ) {
 		// If the page is loaded from the back button, find and remove any loading-related classes and modals:
 		document.querySelectorAll( '.modal-processing' ).forEach( el => el.classList.remove( 'modal-processing' ) );
+		// The payment that was processing belongs to the page the reader left.
+		document.querySelector( `#${ MODAL_CHECKOUT_ID } .${ CLASS_PREFIX }__spinner` )?.removeAttribute( 'aria-busy' );
 		document.querySelectorAll( '.non-modal-checkout-loading' ).forEach( el => {
 			el.classList.remove( 'non-modal-checkout-loading' );
 			el.removeAttribute( 'aria-busy' );
@@ -766,6 +768,22 @@ domReady( () => {
 		} );
 	};
 
+	/**
+	 * Move focus off the Close button the browser puts it on when a dialog opens,
+	 * following newspack-ui's rule: first field, else first action, else the heading.
+	 *
+	 * @param {HTMLDialogElement} el The dialog.
+	 */
+	const focusOpenedDialog = el => {
+		const content = el.querySelector( `.${ MODAL_CLASS_PREFIX }__content` );
+		const heading = el.querySelector( `.${ MODAL_CLASS_PREFIX }__header h2` );
+		const target = ( content && getInitialFocus( content ) ) || heading;
+		if ( target === heading && heading ) {
+			heading.tabIndex = -1;
+		}
+		target?.focus();
+	};
+
 	const openModal = el => {
 		if ( window.newspackReaderActivation?.overlays ) {
 			el.overlayId = window.newspackReaderActivation?.overlays.add();
@@ -773,12 +791,7 @@ domReady( () => {
 		el.setAttribute( 'data-state', 'open' );
 		if ( OPENS_OWN_DIALOGS && ! el.open && typeof el.showModal === 'function' ) {
 			el.showModal();
-			// The browser puts focus on the Close button; newspack-ui's rule never does.
-			const heading = el.querySelector( `.${ MODAL_CLASS_PREFIX }__header h2` );
-			if ( heading ) {
-				heading.tabIndex = -1;
-				heading.focus();
-			}
+			focusOpenedDialog( el );
 		}
 		document.body.style.overflow = 'hidden';
 	};
@@ -859,13 +872,15 @@ domReady( () => {
 	} );
 
 	// The browser can close the dialog itself, such as on a repeated Escape. A
-	// payment in progress keeps checkout open.
-	modalCheckout.addEventListener( 'close', () => {
-		if ( ! modalCheckout.open && 'true' === spinner.getAttribute( 'aria-busy' ) ) {
-			modalCheckout.showModal();
-			modalCheckout.setAttribute( 'data-state', 'open' );
-		}
-	} );
+	// payment in progress keeps checkout open; newspack-ui handles this for its dialogs.
+	if ( OPENS_OWN_DIALOGS ) {
+		modalCheckout.addEventListener( 'close', () => {
+			if ( ! modalCheckout.open && 'true' === spinner.getAttribute( 'aria-busy' ) ) {
+				modalCheckout.showModal();
+				focusOpenedDialog( modalCheckout );
+			}
+		} );
+	}
 
 	/**
 	 * Handle modal checkout triggers.
