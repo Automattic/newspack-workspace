@@ -115,6 +115,10 @@ domReady( () => {
 						urlInput.disabled = false;
 						delete urlInput.style.pointerEvents;
 						copyButton.disabled = false;
+						// The modal opens before its link arrives, so focus moves to Copy link once it's there.
+						if ( 'open' === modal.dataset.state ) {
+							copyButton.focus();
+						}
 					}
 				} )
 				.catch( err => {

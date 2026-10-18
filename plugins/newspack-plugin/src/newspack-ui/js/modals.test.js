@@ -171,13 +171,13 @@ describe( 'newspack-ui modal dialogs', () => {
 		expect( document.activeElement.id ).toBe( 'email' );
 	} );
 
-	it( 'focuses the first action that is not destructive when there is no field', async () => {
+	it( 'focuses the first action, not the Close button, when there is no field', async () => {
 		const { modal } = renderDialog(
-			'<button class="newspack-ui__button--destructive">Delete</button><button class="newspack-ui__modal__close" id="cancel">Cancel</button>'
+			'<button class="newspack-ui__button--destructive" id="delete">Delete</button><button class="newspack-ui__modal__close">Cancel</button>'
 		);
 		await open( modal );
 
-		expect( document.activeElement.id ).toBe( 'cancel' );
+		expect( document.activeElement.id ).toBe( 'delete' );
 	} );
 
 	it( 'focuses the heading when there is nothing else to focus', async () => {

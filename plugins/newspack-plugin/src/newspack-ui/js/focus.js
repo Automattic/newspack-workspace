@@ -36,18 +36,15 @@ export function getFocusableElements( modal ) {
 }
 
 /**
- * Where focus lands when a modal opens: its first field, else its first action that
- * isn't destructive, else its heading. Never the header's Close button.
+ * Where focus lands when a modal opens: its first field, else its first action, else
+ * its heading. Never the header's Close button.
  *
  * @param {HTMLElement} modal The modal element.
  * @return {HTMLElement|null} The element to focus.
  */
 export function getInitialFocus( modal ) {
 	const candidates = getFocusableElements( modal ).filter( element => ! element.closest( '.newspack-ui__modal__header' ) );
-	const target =
-		candidates.find( element => element.matches( FIELDS ) ) ||
-		candidates.find( element => ! element.classList.contains( 'newspack-ui__button--destructive' ) ) ||
-		candidates[ 0 ];
+	const target = candidates.find( element => element.matches( FIELDS ) ) || candidates[ 0 ];
 	if ( target ) {
 		return target;
 	}
