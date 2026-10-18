@@ -105,7 +105,7 @@ describe( 'newspack-ui modal dialogs', () => {
 			}
 		};
 		Element.prototype.checkVisibility = function () {
-			return ! this.closest( '[hidden]' ) && 'hidden' !== window.getComputedStyle( this ).visibility;
+			return ! this.closest( '[hidden], [data-faded]' ) && 'hidden' !== window.getComputedStyle( this ).visibility;
 		};
 	} );
 
@@ -249,6 +249,17 @@ describe( 'newspack-ui modal dialogs', () => {
 		expect( modal.open ).toBe( true );
 	} );
 
+	it( 'stays open when a file picker inside it is dismissed', async () => {
+		const { modal } = renderDialog( '<input type="file" id="csv" />' );
+		await open( modal );
+
+		document.getElementById( 'csv' ).dispatchEvent( new Event( 'cancel', { bubbles: true } ) );
+		await nextTask();
+
+		expect( modal.dataset.state ).toBe( 'open' );
+		expect( modal.open ).toBe( true );
+	} );
+
 	it( 'closes when a script sets its state', async () => {
 		const { trigger, modal } = renderDialog( '<input type="email" />' );
 		await open( modal );
@@ -330,6 +341,27 @@ describe( 'newspack-ui modal dialogs', () => {
 		await new Promise( resolve => requestAnimationFrame( resolve ) );
 
 		expect( show.mock.contexts.filter( context => context === modal ) ).toHaveLength( 0 );
+	} );
+
+	it( 'steps back up when a reCAPTCHA challenge finishes fading out', async () => {
+		const { modal } = renderDialog( '<input type="email" />' );
+		const showModal = jest.spyOn( HTMLDialogElement.prototype, 'showModal' );
+		const callsOn = spy => spy.mock.contexts.filter( context => context === modal ).length;
+		const nextFrame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
+		await open( modal );
+		document.body.insertAdjacentHTML( 'beforeend', '<div id="layer"><iframe src="https://www.google.com/recaptcha/api2/bframe"></iframe></div>' );
+		await nextFrame();
+		expect( modal._steppedDown ).toBe( true );
+
+		// reCAPTCHA's visibility transition ends after its last style change, so only transitionend reports it.
+		const layer = document.getElementById( 'layer' );
+		layer.dataset.faded = '';
+		await nextFrame();
+		expect( callsOn( showModal ) ).toBe( 1 );
+		layer.dispatchEvent( new Event( 'transitionend', { bubbles: true } ) );
+		await nextFrame();
+
+		expect( callsOn( showModal ) ).toBe( 2 );
 	} );
 
 	it( 'steps down to non-modal while a reCAPTCHA challenge shows', async () => {

@@ -84,6 +84,16 @@ describe( 'newsletters signup modal', () => {
 		expect( modal.dataset.state ).toBe( 'open' );
 	} );
 
+	it( 'dismisses when the browser closes it on a repeated Escape mid-signup', async () => {
+		const modal = renderModal( '<button type="submit" aria-busy="true">Sign up</button>' );
+		const onDismiss = jest.fn();
+		await open( { onDismiss } );
+
+		modal.dispatchEvent( new Event( 'cancel', { cancelable: false } ) );
+
+		expect( onDismiss ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	it( 'dismisses once after being opened more than once', async () => {
 		const modal = renderModal();
 		const onDismiss = jest.fn();

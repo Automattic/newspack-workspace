@@ -139,7 +139,7 @@ export function openNewslettersSignupModal( config = {} ) {
 	modal.addEventListener(
 		'cancel',
 		event => {
-			if ( 'closed' === modal.dataset.state || ! event.cancelable ) {
+			if ( event.target === modal && ( 'closed' === modal.dataset.state || ! event.cancelable ) ) {
 				close();
 			}
 		},

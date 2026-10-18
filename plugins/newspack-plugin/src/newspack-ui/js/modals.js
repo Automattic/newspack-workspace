@@ -12,9 +12,9 @@ window.newspackRAS = window.newspackRAS || [];
 // like one posting into the modal checkout iframe, has nothing else to release them.
 const handedOffButtons = new WeakSet();
 
-// Challenges third parties render at the end of the body, like reCAPTCHA or a card's
-// 3D Secure check. A modal dialog would leave them under the top layer and inert, so
-// the dialog steps down while one shows.
+// Third parties render their challenges at the end of the body. A modal dialog would
+// leave them under the top layer and inert, so the dialog steps down while one shows.
+// reCAPTCHA's challenge frame is only ever a challenge.
 const CHALLENGE_FRAMES = 'iframe[src*="/recaptcha/api2/bframe"], iframe[src*="/recaptcha/enterprise/bframe"]';
 
 // Payment providers also put card fields and buttons on the page. Only their overlays,
@@ -214,6 +214,10 @@ function setupDialog( modal ) {
 	// Escape goes through data-state, so every close path runs the same teardown.
 	// A modal with a request in flight stays open.
 	modal.addEventListener( 'cancel', event => {
+		// A file input inside the modal fires its own cancel when its picker is dismissed.
+		if ( event.target !== modal ) {
+			return;
+		}
 		event.preventDefault();
 		if ( ! modal.querySelector( '[aria-busy="true"]' ) ) {
 			modal.setAttribute( 'data-state', 'closed' );

@@ -98,8 +98,9 @@ export function openAuthModal( config = {} ) {
 			openerContent.remove();
 		}
 
+		// The dialog stays modal, and the trigger inert, until the modal script closes it in a microtask.
 		if ( modalTrigger ) {
-			modalTrigger.focus();
+			queueMicrotask( () => modalTrigger.focus() );
 		}
 
 		if ( ! succeeded && config.onDismiss && typeof config.onDismiss === 'function' ) {
