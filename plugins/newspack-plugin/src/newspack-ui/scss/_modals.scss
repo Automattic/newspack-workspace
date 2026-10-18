@@ -1,5 +1,9 @@
 @use "mixins";
 
+:where(.newspack-ui__modal-container) {
+	color: inherit;
+}
+
 .newspack-ui {
 	&__modal-container {
 		position: fixed;
@@ -19,7 +23,6 @@
 		padding: 0;
 		border: 0;
 		background: transparent;
-		color: inherit;
 		&::backdrop {
 			background: transparent;
 		}

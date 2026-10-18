@@ -37,7 +37,7 @@ export function getFocusableElements( modal ) {
 
 /**
  * Where focus lands when a modal opens: its first field, else its first action that
- * isn't destructive, else its heading. Never the Close button.
+ * isn't destructive, else its heading. Never the header's Close button.
  *
  * @param {HTMLElement} modal The modal element.
  * @return {HTMLElement|null} The element to focus.

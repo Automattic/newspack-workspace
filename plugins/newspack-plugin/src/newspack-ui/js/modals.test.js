@@ -1,6 +1,9 @@
 /**
- * The modal script marks a submit button busy only when its form actually submits,
- * and releases it when the modal opens again, since a form that keeps the page has
+ * The modal script runs every newspack-ui modal: a dialog opens as a modal with
+ * focus on its first field, keeps Tab inside, closes on Escape and returns focus.
+ *
+ * It also marks a submit button busy only when its form actually submits, and
+ * releases it when the modal opens again, since a form that keeps the page has
  * nothing else to release it. A form that handles its own submit owns its button.
  */
 
@@ -89,12 +92,12 @@ describe( 'newspack-ui modal dialogs', () => {
 		[ 'showModal', 'show', 'close' ].forEach( method => {
 			nativeDialog[ method ] = HTMLDialogElement.prototype[ method ];
 		} );
+		// Browsers focus the first focusable descendant on open, which is the header's Close button.
 		HTMLDialogElement.prototype.showModal = function () {
 			this.setAttribute( 'open', '' );
+			this.querySelector( 'button' )?.focus();
 		};
-		HTMLDialogElement.prototype.show = function () {
-			this.setAttribute( 'open', '' );
-		};
+		HTMLDialogElement.prototype.show = HTMLDialogElement.prototype.showModal;
 		HTMLDialogElement.prototype.close = function () {
 			if ( this.hasAttribute( 'open' ) ) {
 				this.removeAttribute( 'open' );
@@ -240,6 +243,8 @@ describe( 'newspack-ui modal dialogs', () => {
 	it( 'closes when a script sets its state', async () => {
 		const { trigger, modal } = renderDialog( '<input type="email" />' );
 		await open( modal );
+		expect( modal.open ).toBe( true );
+		expect( modal.contains( document.activeElement ) ).toBe( true );
 
 		modal.setAttribute( 'data-state', 'closed' );
 		await nextTask();
@@ -288,6 +293,22 @@ describe( 'newspack-ui modal dialogs', () => {
 		expect( document.activeElement.id ).toBe( 'checkout-close' );
 	} );
 
+	it( 'stays modal for payment fields inside it, and steps down for a challenge outside it', async () => {
+		const { modal } = renderDialog( '<iframe src="https://js.stripe.com/v3/elements-inner-card.html"></iframe><input type="email" />' );
+		const show = jest.spyOn( HTMLDialogElement.prototype, 'show' );
+		const callsOn = spy => spy.mock.contexts.filter( context => context === modal ).length;
+		const nextFrame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
+		await open( modal );
+
+		modal.querySelector( '.newspack-ui__modal__content' ).classList.add( 'ready' );
+		await nextFrame();
+		expect( callsOn( show ) ).toBe( 0 );
+
+		document.body.insertAdjacentHTML( 'beforeend', '<div><iframe src="https://js.stripe.com/v3/three-ds-2-challenge.html"></iframe></div>' );
+		await nextFrame();
+		expect( callsOn( show ) ).toBe( 1 );
+	} );
+
 	it( 'steps down to non-modal while a reCAPTCHA challenge shows', async () => {
 		const { modal } = renderDialog( '<input type="email" id="email" />' );
 		const showModal = jest.spyOn( HTMLDialogElement.prototype, 'showModal' );
@@ -305,6 +326,7 @@ describe( 'newspack-ui modal dialogs', () => {
 		await nextFrame();
 		expect( callsOn( show ) ).toBe( 1 );
 		expect( modal.dataset.state ).toBe( 'open' );
+		expect( document.activeElement.id ).toBe( 'email' );
 
 		layer.style.visibility = 'hidden';
 		await nextFrame();

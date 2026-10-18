@@ -418,7 +418,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 							setOTPTimer: readerActivation.setOTPTimer,
 							onSendCode: () => {
 								restoreAuthModal();
-								container.setFormAction( 'otp', true );
+								// The verification dialog stays modal until the modal script closes it in a
+								// microtask, and focus can't move into the auth modal before then.
+								queueMicrotask( () => container.setFormAction( 'otp', true ) );
 							},
 							onDismiss: () => {
 								restoreAuthModal();

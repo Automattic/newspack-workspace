@@ -11,9 +11,15 @@ window.newspackRAS = window.newspackRAS || [];
 // like one posting into the modal checkout iframe, has nothing else to release them.
 const handedOffButtons = new WeakSet();
 
-// Third-party layers rendered at the end of the body. A modal dialog would leave
-// them under the top layer and inert, so the dialog steps down while one shows.
-const EXTERNAL_LAYERS = 'iframe[src*="/recaptcha/api2/bframe"], iframe[src*="/recaptcha/enterprise/bframe"]';
+// Challenges third parties render at the end of the body, like reCAPTCHA or a card's
+// 3D Secure check. A modal dialog would leave them under the top layer and inert, so
+// the dialog steps down while one shows.
+const EXTERNAL_LAYERS = [
+	'iframe[src*="/recaptcha/api2/bframe"]',
+	'iframe[src*="/recaptcha/enterprise/bframe"]',
+	'iframe[src*="js.stripe.com"]',
+	'iframe[src*="hooks.stripe.com"]',
+].join( ', ' );
 
 // Dialogs open on the page, oldest first.
 const openDialogs = [];
@@ -68,7 +74,9 @@ function moveNotices() {
  */
 function syncExternalLayers() {
 	layersFrame = null;
-	const layerShown = [ ...document.querySelectorAll( EXTERNAL_LAYERS ) ].some( isVisible );
+	const layerShown = [ ...document.querySelectorAll( EXTERNAL_LAYERS ) ].some(
+		frame => ! frame.closest( '.newspack-ui__modal-container' ) && isVisible( frame )
+	);
 	openDialogs.forEach( modal => {
 		if ( layerShown && ! modal._steppedDown ) {
 			const active = modal.ownerDocument.activeElement;
@@ -76,6 +84,8 @@ function syncExternalLayers() {
 			modal._steppedDown = true;
 			modal.close();
 			modal.show();
+			// show() focuses the first control, Close, one keypress from closing the modal mid-challenge.
+			active?.focus?.( { preventScroll: true } );
 		} else if ( ! layerShown && modal._steppedDown ) {
 			modal._steppedDown = false;
 			modal.close();
