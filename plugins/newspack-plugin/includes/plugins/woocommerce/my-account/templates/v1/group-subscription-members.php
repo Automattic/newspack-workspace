@@ -460,10 +460,12 @@ $render_search_field = static function ( string $list, string $label, string $st
 								?>
 							</span>
 						</p>
-						<input type="file" id="newspack-group-subscription-invite-bulk-csv" class="newspack-my-account__group_subscription__invite-bulk__file" name="csv" accept=".csv,text/csv">
-						<label for="newspack-group-subscription-invite-bulk-csv" class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide"><?php esc_html_e( 'Upload CSV', 'newspack-plugin' ); ?></label>
-						<span class="newspack-my-account__group_subscription__invite-bulk__filename"></span>
-						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-my-account__group_subscription__invite-bulk__remove-file hidden"><?php esc_html_e( 'Remove file', 'newspack-plugin' ); ?></button>
+						<input type="file" class="newspack-my-account__group_subscription__invite-bulk__file" name="csv" accept=".csv,text/csv" hidden>
+						<button type="button" class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--wide newspack-my-account__group_subscription__invite-bulk__upload"><?php esc_html_e( 'Upload CSV', 'newspack-plugin' ); ?></button>
+						<div class="newspack-my-account__group_subscription__invite-bulk__file-row">
+							<span class="newspack-my-account__group_subscription__invite-bulk__filename"></span>
+							<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-my-account__group_subscription__invite-bulk__remove-file hidden"><?php esc_html_e( 'Remove file', 'newspack-plugin' ); ?></button>
+						</div>
 						<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide"><span><?php esc_html_e( 'Review', 'newspack-plugin' ); ?></span></button>
 						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
 					</form>

@@ -1,6 +1,7 @@
 /**
  * The modal script runs every newspack-ui modal: a dialog opens as a modal with
- * focus on its first field, keeps Tab inside, closes on Escape and returns focus.
+ * focus on its first field, else its first action, else its heading; it keeps Tab
+ * inside, closes on Escape and returns focus.
  *
  * It also marks a submit button busy only when its form actually submits, and
  * releases it when the modal opens again, since a form that keeps the page has
@@ -171,7 +172,7 @@ describe( 'newspack-ui modal dialogs', () => {
 		expect( document.activeElement.id ).toBe( 'email' );
 	} );
 
-	it( 'focuses the first action, not the Close button, when there is no field', async () => {
+	it( 'focuses the first action, even a destructive one, not the Close button', async () => {
 		const { modal } = renderDialog(
 			'<button class="newspack-ui__button--destructive" id="delete">Delete</button><button class="newspack-ui__modal__close">Cancel</button>'
 		);
