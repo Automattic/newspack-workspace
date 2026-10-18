@@ -211,6 +211,15 @@ describe( 'newspack-ui modal dialogs', () => {
 		expect( pressTab( modal ).defaultPrevented ).toBe( false );
 	} );
 
+	it( 'keeps Shift+Tab inside the modal from its heading', async () => {
+		const { modal } = renderDialog( '<p>Done.</p>' );
+		await open( modal );
+		expect( document.activeElement ).toBe( modal.querySelector( 'h2' ) );
+
+		expect( pressTab( modal, true ).defaultPrevented ).toBe( true );
+		expect( document.activeElement ).toBe( modal.querySelector( '.newspack-ui__modal__close' ) );
+	} );
+
 	it( 'closes on Escape and returns focus to the trigger', async () => {
 		const { trigger, modal } = renderDialog( '<input type="email" />' );
 		const onClose = jest.fn();
@@ -307,6 +316,17 @@ describe( 'newspack-ui modal dialogs', () => {
 		document.body.insertAdjacentHTML( 'beforeend', '<div><iframe src="https://js.stripe.com/v3/three-ds-2-challenge.html"></iframe></div>' );
 		await nextFrame();
 		expect( callsOn( show ) ).toBe( 1 );
+	} );
+
+	it( 'stays modal for payment fields that were already on the page', async () => {
+		const { modal } = renderDialog( '<input type="email" />', '<iframe src="https://js.stripe.com/v3/elements-inner-card.html"></iframe>' );
+		const show = jest.spyOn( HTMLDialogElement.prototype, 'show' );
+		await open( modal );
+
+		modal.querySelector( '.newspack-ui__modal__content' ).classList.add( 'ready' );
+		await new Promise( resolve => requestAnimationFrame( resolve ) );
+
+		expect( show.mock.contexts.filter( context => context === modal ) ).toHaveLength( 0 );
 	} );
 
 	it( 'steps down to non-modal while a reCAPTCHA challenge shows', async () => {

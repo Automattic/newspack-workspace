@@ -1,5 +1,6 @@
 /**
- * Common functions for Newspack UI modals throughout My Account.
+ * The one implementation behind every newspack-ui modal: scripts open and close a
+ * modal by setting its data-state, and this runs the dialog behind it.
  */
 
 import { domReady, isButtonLoading, setButtonLoading } from '../../utils';
@@ -19,6 +20,7 @@ const EXTERNAL_LAYERS = [
 	'iframe[src*="/recaptcha/enterprise/bframe"]',
 	'iframe[src*="js.stripe.com"]',
 	'iframe[src*="hooks.stripe.com"]',
+	'iframe[src*="paypal.com"]',
 ].join( ', ' );
 
 // Dialogs open on the page, oldest first.
@@ -69,23 +71,37 @@ function moveNotices() {
 }
 
 /**
+ * Third-party frames showing outside the modals.
+ *
+ * @return {HTMLIFrameElement[]} Visible frames.
+ */
+function getShownLayers() {
+	return [ ...document.querySelectorAll( EXTERNAL_LAYERS ) ].filter(
+		frame => ! frame.closest( '.newspack-ui__modal-container' ) && isVisible( frame )
+	);
+}
+
+/**
  * Step every open dialog down to non-modal while a third-party layer shows, and back
  * up once it's gone.
  */
 function syncExternalLayers() {
 	layersFrame = null;
-	const layerShown = [ ...document.querySelectorAll( EXTERNAL_LAYERS ) ].some(
-		frame => ! frame.closest( '.newspack-ui__modal-container' ) && isVisible( frame )
-	);
+	const shownLayers = getShownLayers();
 	openDialogs.forEach( modal => {
+		// Frames already showing when the dialog opened belong to the page, like the card fields on the checkout page.
+		const layerShown = shownLayers.some( frame => ! modal._pageLayers.includes( frame ) );
 		if ( layerShown && ! modal._steppedDown ) {
 			const active = modal.ownerDocument.activeElement;
-			modal._focusBeforeStepDown = modal.contains( active ) ? active : null;
+			const focusInDialog = modal.contains( active );
+			modal._focusBeforeStepDown = focusInDialog ? active : null;
 			modal._steppedDown = true;
 			modal.close();
 			modal.show();
-			// show() focuses the first control, Close, one keypress from closing the modal mid-challenge.
-			active?.focus?.( { preventScroll: true } );
+			// show() focuses Close, one keypress from closing the modal mid-challenge. Focus already in the challenge stays there.
+			const target =
+				focusInDialog || ! active || active === modal.ownerDocument.body ? modal._focusBeforeStepDown || getInitialFocus( modal ) : active;
+			target?.focus?.( { preventScroll: true } );
 		} else if ( ! layerShown && modal._steppedDown ) {
 			modal._steppedDown = false;
 			modal.close();
@@ -128,14 +144,13 @@ function openDialog( modal ) {
 	const fromModal = active?.closest?.( '.newspack-ui__modal-container' );
 	modal._opener = fromModal && fromModal !== modal && 'open' !== fromModal.dataset.state && fromModal._opener ? fromModal._opener : active;
 
+	modal._pageLayers = getShownLayers();
 	modal.showModal();
 	openDialogs.push( modal );
 	moveNotices();
+	( getInitialFocus( modal ) || modal ).focus();
 	watchExternalLayers();
 	syncExternalLayers();
-	if ( ! modal._steppedDown ) {
-		( getInitialFocus( modal ) || modal ).focus();
-	}
 }
 
 /**
@@ -203,14 +218,15 @@ function setupDialog( modal ) {
 			event.preventDefault();
 			return;
 		}
-		const first = focusable[ 0 ];
-		const last = focusable[ focusable.length - 1 ];
-		if ( event.shiftKey && ( active === first || active === modal ) ) {
+		// Measured by position, so focus on the heading or the dialog itself wraps too.
+		const elements = [ ...modal.querySelectorAll( '*' ) ];
+		const position = elements.indexOf( active );
+		if ( event.shiftKey && ! focusable.some( element => elements.indexOf( element ) < position ) ) {
 			event.preventDefault();
-			last.focus();
-		} else if ( ! event.shiftKey && active === last ) {
+			focusable[ focusable.length - 1 ].focus();
+		} else if ( ! event.shiftKey && ! focusable.some( element => elements.indexOf( element ) > position ) ) {
 			event.preventDefault();
-			first.focus();
+			focusable[ 0 ].focus();
 		}
 	} );
 }

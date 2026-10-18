@@ -13,7 +13,7 @@ const FIELDS = 'input:not([type="button"], [type="submit"], [type="reset"], [typ
  */
 export function isVisible( element ) {
 	if ( typeof element.checkVisibility === 'function' ) {
-		return element.checkVisibility( { visibilityProperty: true } );
+		return element.checkVisibility( { visibilityProperty: true, checkVisibilityCSS: true } );
 	}
 	return element.getClientRects().length > 0 && 'hidden' !== window.getComputedStyle( element ).visibility;
 }
