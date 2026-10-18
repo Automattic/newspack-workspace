@@ -134,11 +134,12 @@ export function openNewslettersSignupModal( config = {} ) {
 		} );
 	}
 
-	// Escape dismisses it like the close buttons, once the modal script has let it close.
+	// Escape dismisses it like the close buttons, once the modal script has let it close or
+	// the browser closes it anyway on a repeated Escape.
 	modal.addEventListener(
 		'cancel',
-		() => {
-			if ( 'closed' === modal.dataset.state ) {
+		event => {
+			if ( 'closed' === modal.dataset.state || ! event.cancelable ) {
 				close();
 			}
 		},

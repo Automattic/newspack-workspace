@@ -15,13 +15,11 @@ const handedOffButtons = new WeakSet();
 // Challenges third parties render at the end of the body, like reCAPTCHA or a card's
 // 3D Secure check. A modal dialog would leave them under the top layer and inert, so
 // the dialog steps down while one shows.
-const EXTERNAL_LAYERS = [
-	'iframe[src*="/recaptcha/api2/bframe"]',
-	'iframe[src*="/recaptcha/enterprise/bframe"]',
-	'iframe[src*="js.stripe.com"]',
-	'iframe[src*="hooks.stripe.com"]',
-	'iframe[src*="paypal.com"]',
-].join( ', ' );
+const CHALLENGE_FRAMES = 'iframe[src*="/recaptcha/api2/bframe"], iframe[src*="/recaptcha/enterprise/bframe"]';
+
+// Payment providers also put card fields and buttons on the page. Only their overlays,
+// fixed over the page, are challenges.
+const PAYMENT_FRAMES = 'iframe[src*="js.stripe.com"], iframe[src*="hooks.stripe.com"], iframe[src*="paypal.com"]';
 
 // Dialogs open on the page, oldest first.
 const openDialogs = [];
@@ -71,14 +69,40 @@ function moveNotices() {
 }
 
 /**
- * Third-party frames showing outside the modals.
+ * Whether an element or one of its ancestors is fixed over the page.
  *
- * @return {HTMLIFrameElement[]} Visible frames.
+ * @param {HTMLElement} element The element.
+ * @return {boolean} Whether it's in a fixed layer.
  */
-function getShownLayers() {
-	return [ ...document.querySelectorAll( EXTERNAL_LAYERS ) ].filter(
-		frame => ! frame.closest( '.newspack-ui__modal-container' ) && isVisible( frame )
+function isInFixedLayer( element ) {
+	for ( let node = element; node && node !== document.body; node = node.parentElement ) {
+		if ( 'fixed' === window.getComputedStyle( node ).position ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Whether a third-party challenge is showing outside the modals.
+ *
+ * @return {boolean} Whether one is showing.
+ */
+function isChallengeShown() {
+	const isOutsideAndVisible = frame => ! frame.closest( '.newspack-ui__modal-container' ) && isVisible( frame );
+	return (
+		[ ...document.querySelectorAll( CHALLENGE_FRAMES ) ].some( isOutsideAndVisible ) ||
+		[ ...document.querySelectorAll( PAYMENT_FRAMES ) ].some( frame => isOutsideAndVisible( frame ) && isInFixedLayer( frame ) )
 	);
+}
+
+/**
+ * Re-check third-party layers on the next frame.
+ */
+function scheduleLayersSync() {
+	if ( ! layersFrame ) {
+		layersFrame = window.requestAnimationFrame( syncExternalLayers );
+	}
 }
 
 /**
@@ -87,10 +111,8 @@ function getShownLayers() {
  */
 function syncExternalLayers() {
 	layersFrame = null;
-	const shownLayers = getShownLayers();
+	const layerShown = isChallengeShown();
 	openDialogs.forEach( modal => {
-		// Frames already showing when the dialog opened belong to the page, like the card fields on the checkout page.
-		const layerShown = shownLayers.some( frame => ! modal._pageLayers.includes( frame ) );
 		if ( layerShown && ! modal._steppedDown ) {
 			const active = modal.ownerDocument.activeElement;
 			const focusInDialog = modal.contains( active );
@@ -118,15 +140,14 @@ function syncExternalLayers() {
  */
 function watchExternalLayers() {
 	if ( openDialogs.length && ! layersObserver ) {
-		layersObserver = new MutationObserver( () => {
-			if ( ! layersFrame ) {
-				layersFrame = window.requestAnimationFrame( syncExternalLayers );
-			}
-		} );
+		layersObserver = new MutationObserver( scheduleLayersSync );
 		layersObserver.observe( document.body, { childList: true, subtree: true, attributes: true, attributeFilter: [ 'style', 'class' ] } );
+		// reCAPTCHA hides its challenge with a delayed visibility transition, after the last style change.
+		document.addEventListener( 'transitionend', scheduleLayersSync );
 	} else if ( ! openDialogs.length && layersObserver ) {
 		layersObserver.disconnect();
 		layersObserver = null;
+		document.removeEventListener( 'transitionend', scheduleLayersSync );
 	}
 }
 
@@ -144,7 +165,6 @@ function openDialog( modal ) {
 	const fromModal = active?.closest?.( '.newspack-ui__modal-container' );
 	modal._opener = fromModal && fromModal !== modal && 'open' !== fromModal.dataset.state && fromModal._opener ? fromModal._opener : active;
 
-	modal._pageLayers = getShownLayers();
 	modal.showModal();
 	openDialogs.push( modal );
 	moveNotices();

@@ -313,12 +313,15 @@ describe( 'newspack-ui modal dialogs', () => {
 		await nextFrame();
 		expect( callsOn( show ) ).toBe( 0 );
 
-		document.body.insertAdjacentHTML( 'beforeend', '<div><iframe src="https://js.stripe.com/v3/three-ds-2-challenge.html"></iframe></div>' );
+		document.body.insertAdjacentHTML(
+			'beforeend',
+			'<div style="position: fixed"><iframe src="https://js.stripe.com/v3/three-ds-2-challenge.html"></iframe></div>'
+		);
 		await nextFrame();
 		expect( callsOn( show ) ).toBe( 1 );
 	} );
 
-	it( 'stays modal for payment fields that were already on the page', async () => {
+	it( 'stays modal for payment fields and buttons on the page', async () => {
 		const { modal } = renderDialog( '<input type="email" />', '<iframe src="https://js.stripe.com/v3/elements-inner-card.html"></iframe>' );
 		const show = jest.spyOn( HTMLDialogElement.prototype, 'show' );
 		await open( modal );
