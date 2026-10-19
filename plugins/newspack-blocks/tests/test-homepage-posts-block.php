@@ -974,7 +974,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 	/**
 	 * Blocks saved before the post type picker required a selection carry an empty
-	 * postType, which WP_Query read as `post`. They keep listing posts.
+	 * postType. They keep listing posts.
 	 */
 	public function test_empty_post_type_falls_back_to_post() {
 		$post_id = self::factory()->post->create(

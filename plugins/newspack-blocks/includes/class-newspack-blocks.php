@@ -874,8 +874,9 @@ class Newspack_Blocks {
 	 * dropped; the returned list may be empty when none qualify (the caller then
 	 * returns no results).
 	 *
-	 * An empty request means `post`, as it did when WP_Query read it directly: blocks
-	 * saved before the post type picker required a selection carry `"postType":[]`.
+	 * An empty request means `post`: blocks saved before the post type picker required
+	 * a selection carry `"postType":[]`. WP_Query's own default widened to every type
+	 * sharing a queried custom taxonomy, which this deliberately does not.
 	 *
 	 * @param array|string $post_types Requested post type(s).
 	 * @return array Allowed post types (may be empty).
