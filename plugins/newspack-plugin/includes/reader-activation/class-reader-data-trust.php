@@ -227,14 +227,81 @@ final class Reader_Data_Trust {
 		if ( ! self::is_trusted_key( $key ) ) {
 			return null;
 		}
-		$value = Reader_Data::get_data( $user_id, $key );
-		if ( ! is_string( $value ) || '' === $value ) {
+		$value  = Reader_Data::get_data( $user_id, $key );
+		$is_set = is_string( $value ) && '' !== $value;
+		if ( 'is_donor' === $key && ( ! $is_set || ! self::has_valid_mark( $user_id, $key ) ) ) {
+			// Donor status is derived from orders and subscriptions, so a value the
+			// server never wrote can be recomputed from them instead of dropped.
+			$computed = self::compute_is_donor( $user_id );
+			if ( null !== $computed ) {
+				Reader_Data::update_item( $user_id, $key, $computed );
+				$value  = Reader_Data::get_data( $user_id, $key );
+				$is_set = is_string( $value ) && '' !== $value;
+			}
+		}
+		if ( ! $is_set ) {
 			return null;
 		}
 		if ( ! self::has_valid_mark( $user_id, $key ) ) {
 			return null;
 		}
 		return $value;
+	}
+
+	/**
+	 * Whether the user is a donor, according to their orders and subscriptions.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool|null Null when the platform does not track donors server-side.
+	 */
+	public static function compute_is_donor( int $user_id ): ?bool {
+		if ( ! Donations::has_server_side_donor_tracking() ) {
+			return null;
+		}
+
+		/**
+		 * Filters the computed donor status. A non-null boolean replaces the
+		 * WooCommerce lookup.
+		 *
+		 * @param bool|null $is_donor Donor status, or null to compute it.
+		 * @param int       $user_id  User ID.
+		 */
+		$filtered = apply_filters( 'newspack_reader_data_compute_is_donor', null, $user_id );
+		if ( is_bool( $filtered ) ) {
+			return $filtered;
+		}
+
+		if ( function_exists( 'wcs_get_users_subscriptions' ) ) {
+			foreach ( \wcs_get_users_subscriptions( $user_id ) as $subscription ) {
+				if ( ! $subscription->has_status( [ 'active', 'pending-cancel' ] ) ) {
+					continue;
+				}
+				foreach ( $subscription->get_items() as $item ) {
+					if ( Donations::is_donation_product( $item->get_product_id() ) ) {
+						return true;
+					}
+				}
+			}
+		}
+
+		if ( function_exists( 'wc_get_orders' ) ) {
+			$orders = \wc_get_orders(
+				[
+					'customer_id' => $user_id,
+					'status'      => [ 'completed', 'processing' ],
+					'limit'       => -1,
+					'return'      => 'objects',
+				]
+			);
+			foreach ( $orders as $order ) {
+				if ( Donations::is_donation_order( $order ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
