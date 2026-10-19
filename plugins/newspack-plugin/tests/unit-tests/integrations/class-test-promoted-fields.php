@@ -798,6 +798,61 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An exclusion rule fails for a reader whose stored value the server did not
+	 * write, even when that value is the excluded one.
+	 */
+	public function test_exclusion_rule_fails_on_unmarked_value() {
+		$this->integration->update_enabled_incoming_fields( [ 'tier' ] );
+		$user_id = $this->factory->user->create();
+		$field   = ( new Incoming_Field( 'tier' ) )->set_matching_function( 'list__not_in' );
+
+		\Newspack\Reader_Data::update_item( $user_id, 'tier', wp_json_encode( 'gold' ), false );
+		$this->assertTrue( \Newspack\Reader_Data_Trust::has_unmarked_value( $user_id, 'tier' ) );
+		$this->assertFalse( $this->evaluate( $field, $user_id, [ 'gold' ] ) );
+		$this->assertFalse( $this->evaluate( $field, $user_id, [ 'silver' ] ) );
+
+		\Newspack\Reader_Data::update_item( $user_id, 'tier', wp_json_encode( 'gold' ) );
+		$this->assertFalse( \Newspack\Reader_Data_Trust::has_unmarked_value( $user_id, 'tier' ) );
+		$this->assertFalse( $this->evaluate( $field, $user_id, [ 'gold' ] ) );
+		$this->assertTrue( $this->evaluate( $field, $user_id, [ 'silver' ] ) );
+	}
+
+	/**
+	 * An exclusion rule still passes a reader with no stored value.
+	 */
+	public function test_exclusion_rule_passes_unset_value() {
+		$this->integration->update_enabled_incoming_fields( [ 'tier' ] );
+		$user_id = $this->factory->user->create();
+		$field   = ( new Incoming_Field( 'tier' ) )->set_matching_function( 'list__not_in' );
+
+		$this->assertFalse( \Newspack\Reader_Data_Trust::has_unmarked_value( $user_id, 'tier' ) );
+		$this->assertTrue( $this->evaluate( $field, $user_id, [ 'gold' ] ) );
+	}
+
+	/**
+	 * A range rule fails for a stored value the server did not write, and matches
+	 * once the server writes the same value.
+	 */
+	public function test_range_rule_fails_on_unmarked_value() {
+		$this->integration->update_enabled_incoming_fields( [ 'amount' ] );
+		$user_id = $this->factory->user->create();
+		$field   = ( new Incoming_Field( 'amount' ) )
+			->set_value_type( 'number' )
+			->set_matching_function( 'range' );
+		$bounds  = [
+			'min' => 10,
+			'max' => 100,
+		];
+
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 50 ), false );
+		$this->assertFalse( $this->evaluate( $field, $user_id, $bounds ) );
+		$this->assertFalse( $this->evaluate( $field, $user_id, [] ) );
+
+		\Newspack\Reader_Data::update_item( $user_id, 'amount', wp_json_encode( 50 ) );
+		$this->assertTrue( $this->evaluate( $field, $user_id, $bounds ) );
+	}
+
+	/**
 	 * A value written without the server mark before the field was enabled does
 	 * not match once the field is enabled.
 	 */

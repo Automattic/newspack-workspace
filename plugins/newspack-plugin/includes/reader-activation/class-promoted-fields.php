@@ -310,13 +310,17 @@ class Promoted_Fields {
 		}
 
 		// Only values the server wrote for a server-managed key count. Every
-		// matching function fails on an untrusted key, including the exclusion
-		// ones that would otherwise pass a reader holding nothing.
+		// matching function fails on an untrusted key, and on a stored value the
+		// server did not write, including the exclusion ones that would otherwise
+		// pass a reader holding nothing. An unset value is still read as empty.
 		if ( ! Reader_Data_Trust::is_trusted_key( $field->get_key() ) ) {
 			return false;
 		}
 		$raw_value = Reader_Data_Trust::get_trusted_value( (int) $user_id, $field->get_key() );
-		$value     = null === $raw_value ? false : self::decode_value( $raw_value );
+		if ( null === $raw_value && Reader_Data_Trust::has_unmarked_value( (int) $user_id, $field->get_key() ) ) {
+			return false;
+		}
+		$value = null === $raw_value ? false : self::decode_value( $raw_value );
 
 		// Boolean fields: access rules pass no args (just check truthiness),
 		// segmentation passes 'yes'/'no'.

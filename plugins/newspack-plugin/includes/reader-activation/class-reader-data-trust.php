@@ -249,6 +249,29 @@ final class Reader_Data_Trust {
 	}
 
 	/**
+	 * Whether the key holds a stored value that the server did not write.
+	 *
+	 * For such a value get_trusted_value() returns null, just as it does for an
+	 * unset key. A rule that passes readers without a value must still fail for
+	 * this one, so callers that need to tell the two apart ask here.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $key     Reader data key.
+	 *
+	 * @return bool
+	 */
+	public static function has_unmarked_value( int $user_id, string $key ): bool {
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		$value = Reader_Data::get_data( $user_id, $key );
+		if ( ! is_string( $value ) || '' === $value ) {
+			return false;
+		}
+		return ! self::has_valid_mark( $user_id, $key );
+	}
+
+	/**
 	 * Whether the user is a donor, according to their orders and subscriptions.
 	 *
 	 * A recurring donor counts only through an active subscription, so a former
