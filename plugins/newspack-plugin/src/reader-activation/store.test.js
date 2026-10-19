@@ -212,9 +212,20 @@ describe( 'Store', () => {
 			const [ store ] = Store();
 			expect( () => store.delete( 'active_memberships' ) ).toThrow( "Key 'active_memberships' is read-only." );
 		} );
-		it( 'should throw when adding to a read-only key', () => {
+		it( 'should warn once and leave the value alone when adding to a read-only key', () => {
+			window.newspack_reader_data = {
+				read_only_keys: [ 'is_donor', 'active_memberships' ],
+				items: { active_memberships: '["gold"]' },
+			};
+			const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 			const [ store ] = Store();
-			expect( () => store.add( 'is_donor', { foo: 'bar' } ) ).toThrow( "Key 'is_donor' is read-only." );
+			store.rehydrate();
+			expect( () => store.add( 'active_memberships', 'silver' ) ).not.toThrow();
+			expect( () => store.add( 'active_memberships', 'silver' ) ).not.toThrow();
+			expect( store.get( 'active_memberships' ) ).toEqual( [ 'gold' ] );
+			expect( warn ).toHaveBeenCalledTimes( 1 );
+			expect( warn ).toHaveBeenCalledWith( expect.stringContaining( 'active_memberships' ) );
+			warn.mockRestore();
 		} );
 		it( 'should allow getting read-only keys populated via rehydration', () => {
 			window.newspack_reader_data = {

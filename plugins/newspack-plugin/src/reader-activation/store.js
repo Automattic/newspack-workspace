@@ -246,7 +246,7 @@ function decode( str ) {
 export const NEWSLETTER_SIGNUP_CLIENT_KEY = 'newsletter_signup_client';
 
 /**
- * Read-only keys already reported by set(), so each warns once per page load.
+ * Read-only keys already reported by set() or add(), so each warns once per page load.
  *
  * @type {Set<string>}
  */
@@ -262,6 +262,26 @@ function assertNotReadOnly( key ) {
 	if ( ( newspack_reader_data?.read_only_keys || [] ).includes( key ) ) {
 		throw new Error( `Key '${ key }' is read-only.` );
 	}
+}
+
+/**
+ * Whether a write to the key should be dropped because the key is read-only,
+ * warning the first time. Server-managed keys are ignored rather than thrown on,
+ * so a caller written for a site where the key is writable keeps working.
+ *
+ * @param {string} key Key to check.
+ * @return {boolean} True when the key is read-only and the write must not happen.
+ */
+function dropReadOnlyWrite( key ) {
+	if ( ! ( newspack_reader_data?.read_only_keys || [] ).includes( key ) ) {
+		return false;
+	}
+	if ( ! warnedReadOnlyKeys.has( key ) ) {
+		warnedReadOnlyKeys.add( key );
+		// eslint-disable-next-line no-console
+		console.warn( `Key '${ key }' is read-only and was not written.` );
+	}
+	return true;
 }
 
 /**
@@ -504,14 +524,7 @@ export default function Store() {
 		 * @param {boolean} sync  Whether to sync the value with the server. Default true.
 		 */
 		set: ( key, value, sync = true ) => {
-			// Server-managed keys are ignored with a warning rather than an error, so a
-			// caller written for a site where the key is writable keeps working.
-			if ( ( newspack_reader_data?.read_only_keys || [] ).includes( key ) ) {
-				if ( ! warnedReadOnlyKeys.has( key ) ) {
-					warnedReadOnlyKeys.add( key );
-					// eslint-disable-next-line no-console
-					console.warn( `Key '${ key }' is read-only and was not written.` );
-				}
+			if ( dropReadOnlyWrite( key ) ) {
 				return;
 			}
 			_set( key, value, false );
@@ -548,7 +561,9 @@ export default function Store() {
 			if ( ! key ) {
 				throw new Error( 'Key cannot be empty.' );
 			}
-			assertNotReadOnly( key );
+			if ( dropReadOnlyWrite( key ) ) {
+				return;
+			}
 			if ( ! value ) {
 				throw new Error( 'Value cannot be empty.' );
 			}
