@@ -140,7 +140,6 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/tracking/class-pixel.php';
 		include_once NEWSPACK_ABSPATH . 'includes/tracking/class-meta-pixel.php';
 		include_once NEWSPACK_ABSPATH . 'includes/tracking/class-twitter-pixel.php';
-		include_once NEWSPACK_ABSPATH . 'includes/revisions-control/class-revisions-control.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/tags/class-private-tags.php';
 		include_once NEWSPACK_ABSPATH . 'includes/authors/class-authors-custom-fields.php';
@@ -574,9 +573,9 @@ final class Newspack {
 		} else {
 			// Surface a missing .asset.php so a misbuilt deploy is visible to
 			// anyone tailing the debug log. Gated by NEWSPACK_LOG_LEVEL so
-			// production stays quiet; legitimate non-webpack enqueues (e.g.
-			// dist/revisions-control.css) will log too, which is the intended
-			// signal for "this enqueue is not content-hash-busted".
+			// production stays quiet; legitimate non-webpack enqueues will log
+			// too, which is the intended signal for "this enqueue is not
+			// content-hash-busted".
 			Logger::log( "asset_version() fallback: {$path} not found, using NEWSPACK_PLUGIN_VERSION", 'NEWSPACK-ASSETS' );
 		}
 		self::$asset_version_cache[ $name ] = $version;
