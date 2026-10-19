@@ -1162,8 +1162,8 @@ class Teams_Migration {
 	 *
 	 * By default, iterates through membership plans with manual-only access and
 	 * creates free WooCommerce Subscriptions for active members, skipping only
-	 * staff who bypass the content gate outright -- users with a privileged
-	 * capability like `edit_others_posts` (i.e. administrators/editors).
+	 * accounts Access Control never restricts -- by default administrators and
+	 * editors.
 	 * `Group_Subscription::is_eligible_member()` does not gate this path;
 	 * eligibility only applies to group mode, below.
 	 *
@@ -1529,13 +1529,13 @@ class Teams_Migration {
 					continue;
 				}
 
-				// Individual mode: staff who already bypass the content gate via
-				// edit_others_posts don't need a comped $0 subscription -- they can
-				// already read everything without one. This is distinct from group
-				// eligibility below: it is about whether the user *needs* a grant,
-				// not whether they qualify as a group member.
-				if ( ! $as_group && \user_can( $user_id, 'edit_others_posts' ) ) {
-					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — user has edit_others_posts.', $membership_id, $user_id, $user->user_email ) );
+				// Individual mode: an account Access Control never restricts
+				// ({@see Content_Gate::should_skip_access_checks()}) already reads
+				// everything, so it doesn't need a comped $0 subscription. This is
+				// distinct from group eligibility below: it is about whether the user
+				// *needs* a grant, not whether they qualify as a group member.
+				if ( ! $as_group && Content_Gate::should_skip_access_checks( $user_id ) ) {
+					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — Access Control never restricts this account.', $membership_id, $user_id, $user->user_email ) );
 					continue;
 				}
 
@@ -2035,7 +2035,7 @@ class Teams_Migration {
 	 *
 	 * Routing through update_members() (rather than a raw user-meta write) records
 	 * the joined-at timestamp and auto-enables the group. Eligible members only — the
-	 * data layer skips staff (users who can edit others' posts).
+	 * data layer skips accounts Access Control never restricts (by default, staff).
 	 * Exposed for testing.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
