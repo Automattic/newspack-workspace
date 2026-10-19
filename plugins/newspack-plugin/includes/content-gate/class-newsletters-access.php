@@ -362,15 +362,19 @@ class Newsletters_Access {
 	}
 
 	/**
-	 * Whether the inbound handler will take the newsletter pass out of the URL
-	 * on this request. Other plugins that read the pass from the same link
+	 * Whether the inbound handler will act on a signed token on this request:
+	 * it is hooked, verification is enabled, and it doesn't skip the current
+	 * user. When it does, a token that verifies is taken out of the URL; one
+	 * that doesn't stays. Other plugins that read the token from the same link
 	 * strip it themselves when this is false, so it doesn't linger in landing
 	 * URLs readers share.
 	 *
 	 * @return bool
 	 */
 	public static function will_consume_inbound_pass() {
-		return false !== has_action( 'init', [ __CLASS__, 'handle_inbound_request_action' ] ) && ! self::is_skipped_user();
+		return false !== has_action( 'init', [ __CLASS__, 'handle_inbound_request_action' ] )
+			&& self::is_verification_enabled()
+			&& ! self::is_skipped_user();
 	}
 
 	/**

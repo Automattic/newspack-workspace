@@ -278,19 +278,29 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 
 	/**
 	 * Test that will_consume_inbound_pass() reports the handler's own decision:
-	 * only while it is hooked, and never for a user it skips. Other plugins
-	 * strip the pass themselves when it says no.
+	 * only while it is hooked with verification enabled, and never for a user
+	 * it skips. Other plugins strip the token themselves when it says no.
 	 */
 	public function test_will_consume_inbound_pass_follows_the_handler() {
 		$callback   = [ Newsletters_Access::class, 'handle_inbound_request_action' ];
 		$was_hooked = has_action( 'init', $callback );
-		remove_action( 'init', $callback, 2 );
+		if ( false !== $was_hooked ) {
+			remove_action( 'init', $callback, $was_hooked );
+		}
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 		try {
-			$this->assertFalse( Newsletters_Access::will_consume_inbound_pass(), 'Not hooked: nothing consumes the pass.' );
+			$this->assertFalse( Newsletters_Access::will_consume_inbound_pass(), 'Not hooked: nothing consumes the token.' );
 
 			add_action( 'init', $callback, 2 );
 			$this->assertTrue( Newsletters_Access::will_consume_inbound_pass(), 'Hooked, for a reader it handles.' );
 
+			update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 0, false );
+			\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+			$this->assertFalse( Newsletters_Access::will_consume_inbound_pass(), 'Hooked, but verification is off.' );
+
+			update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+			\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 			wp_set_current_user( $this->factory->user->create( [ 'role' => 'editor' ] ) );
 			$this->assertFalse( Newsletters_Access::will_consume_inbound_pass(), 'Hooked, but it skips editors.' );
 		} finally {
@@ -299,6 +309,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 			if ( false !== $was_hooked ) {
 				add_action( 'init', $callback, $was_hooked );
 			}
+			\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 		}
 	}
 
