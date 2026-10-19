@@ -17,7 +17,7 @@ use WP_CLI;
 abstract class Abstract_Backfiller {
 
 	/**
-	 * How many items load_in_batches() loads between frees of the object cache's in-memory copy.
+	 * How many items a backfiller loads between frees of the object cache's in-memory copy.
 	 *
 	 * @var int
 	 */
@@ -164,9 +164,15 @@ abstract class Abstract_Backfiller {
 	 * Process the events.
 	 */
 	public function process_events() {
-		$events = $this->get_events();
+		$events    = $this->get_events();
+		$processed = 0;
 
 		foreach ( $events as $event ) {
+			// Covers backfillers that build their events up front, as well as those that batch.
+			++$processed;
+			if ( 0 === $processed % static::BATCH_SIZE ) {
+				$this->free_runtime_cache();
+			}
 
 			if ( Site_Role::is_node() ) {
 				$requests = $this->find_webhook_requests( $event->get_action_name(), $event->get_timestamp(), $event->get_data() );

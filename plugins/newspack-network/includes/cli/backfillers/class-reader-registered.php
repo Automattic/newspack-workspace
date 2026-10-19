@@ -111,7 +111,6 @@ class Reader_Registered extends Abstract_Backfiller {
 
 				yield new \Newspack_Network\Incoming_Events\Reader_Registered( get_bloginfo( 'url' ), $user_data, strtotime( $user->user_registered ) );
 			}
-			$this->free_runtime_cache();
 		}
 	}
 }
