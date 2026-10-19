@@ -69,6 +69,18 @@ class Newspack_Test_Access_Rules_Reader_Data extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A rule value written JSON-quoted still matches the stored JSON string.
+	 */
+	public function test_quoted_rule_value_matches_stored_string() {
+		Reader_Data::update_item( $this->uid, 'plan', '"premium"' );
+
+		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'plan="premium"' ) );
+
+		Reader_Data::update_item( $this->uid, 'plan', '"gold"' );
+		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'plan="premium"' ) );
+	}
+
+	/**
 	 * A stored value that is not JSON compares as the raw string.
 	 */
 	public function test_bare_string_value_matches() {
@@ -91,6 +103,7 @@ class Newspack_Test_Access_Rules_Reader_Data extends WP_UnitTestCase {
 		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'score=5' ) );
 		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'score=5.0' ) );
 		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'score=05' ) );
+		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'score=5e0' ) );
 		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'score=6' ) );
 		$this->assertFalse( Access_Rules::has_reader_data( $this->uid, 'score=five' ) );
 		$this->assertTrue( Access_Rules::has_reader_data( $this->uid, 'is_newsletter_subscriber=true;score=5' ) );

@@ -782,10 +782,10 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A promoted field's rule matches a value the server wrote, and not one
-	 * relayed from the browser through the reader data endpoint.
+	 * A promoted field's rule matches a value the server wrote, and not a value
+	 * written without the server mark.
 	 */
-	public function test_promoted_rule_rejects_endpoint_value() {
+	public function test_promoted_rule_ignores_reader_written_value() {
 		$this->integration->update_enabled_incoming_fields( [ 'tier' ] );
 		$user_id = $this->factory->user->create();
 		$field   = new Incoming_Field( 'tier' );
@@ -798,8 +798,8 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A value the reader stored through the endpoint before the field was enabled
-	 * does not match once the field is enabled.
+	 * A value written without the server mark before the field was enabled does
+	 * not match once the field is enabled.
 	 */
 	public function test_promoted_rule_ignores_value_stored_before_enable() {
 		$user_id = $this->factory->user->create();

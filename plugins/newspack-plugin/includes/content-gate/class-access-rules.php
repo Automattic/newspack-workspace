@@ -1496,6 +1496,9 @@ class Access_Rules {
 	/**
 	 * Determine reader data key-values the reader must have.
 	 *
+	 * Only trusted (server-managed) keys holding a value the server wrote can
+	 * match; any other key, or a malformed item, fails the rule.
+	 *
 	 * @param int    $user_id User ID.
 	 * @param string $data    Key-value pairs separate by semicolon.
 	 *
