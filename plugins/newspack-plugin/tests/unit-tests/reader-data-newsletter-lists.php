@@ -219,6 +219,41 @@ class Newspack_Test_Reader_Data_Newsletter_Lists extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Refreshing by user ID looks up the reader's own email and reports the
+	 * subscriber flag it stored.
+	 */
+	public function test_refresh_by_user_id_stores_and_returns_the_subscriber_flag() {
+		Newspack_Newsletters_Subscription::$contact_lists[ $this->email ] = [ 'list-1' ];
+		$this->assertTrue( Reader_Data::refresh_newsletter_subscription( $this->user_id ) );
+		$this->assertSame( '["list-1"]', $this->stored_lists() );
+		$this->assertSame( 'true', Reader_Data::get_data( $this->user_id, 'is_newsletter_subscriber' ) );
+	}
+
+	/**
+	 * A refresh whose empty read cannot be confirmed reports unknown and keeps
+	 * the stored lists, the same guard the login refresh applies.
+	 */
+	public function test_refresh_by_user_id_returns_null_when_the_contact_cannot_be_read() {
+		Reader_Data::update_item( $this->user_id, 'newsletter_subscribed_lists', [ 'list-1' ] );
+		$this->assertNull( Reader_Data::refresh_newsletter_subscription( $this->user_id ) );
+		$this->assertSame( '["list-1"]', $this->stored_lists() );
+	}
+
+	/**
+	 * Without a configured provider a refresh reports unknown and stores nothing.
+	 */
+	public function test_refresh_by_user_id_returns_null_without_a_configured_provider() {
+		Newspack_Newsletters::$is_service_provider_configured             = false;
+		Newspack_Newsletters_Subscription::$contact_lists[ $this->email ] = [ 'list-1' ];
+		try {
+			$this->assertNull( Reader_Data::refresh_newsletter_subscription( $this->user_id ) );
+			$this->assertFalse( $this->stored_lists() );
+		} finally {
+			Newspack_Newsletters::reset_calls();
+		}
+	}
+
+	/**
 	 * The typed accessor returns the stored list as strings.
 	 */
 	public function test_get_newsletter_subscribed_lists_returns_the_stored_ids() {

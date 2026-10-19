@@ -21,6 +21,15 @@ final class Reader_Data {
 	// Maximum number of items per user.
 	const MAX_ITEMS = 100;
 
+	// Scheduled follow-up check of a reader's newsletter subscription.
+	const RECHECK_HOOK = 'newspack_reader_data_newsletter_recheck';
+
+	// Seconds between newsletter checks a reader can request.
+	const NEWSLETTER_CHECK_INTERVAL = 30;
+
+	// Seconds before the follow-up check runs.
+	const RECHECK_DELAY = 120;
+
 	/**
 	 * Reader activity to push.
 	 *
@@ -37,6 +46,7 @@ final class Reader_Data {
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'config_script' ] );
 		add_action( 'init', [ __CLASS__, 'register_data_event_handlers' ] );
 		add_filter( 'newspack_session_hydration_response', [ __CLASS__, 'add_reader_data_to_hydration' ], 10, 2 );
+		add_action( self::RECHECK_HOOK, [ __CLASS__, 'handle_recheck' ] );
 	}
 
 	/**
@@ -206,6 +216,16 @@ final class Reader_Data {
 						'type' => 'string',
 					],
 				],
+			]
+		);
+		\register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/reader-data/newsletter-check',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ __CLASS__, 'api_check_newsletter_subscription' ],
+				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'args'                => [],
 			]
 		);
 	}
@@ -637,6 +657,114 @@ final class Reader_Data {
 	}
 
 	/**
+	 * API callback to check the current reader's newsletter subscription with
+	 * the newsletter provider. The request carries nothing: the stored value
+	 * comes only from the provider's answer.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_check_newsletter_subscription() {
+		$user_id       = \get_current_user_id();
+		$transient_key = 'newspack_reader_data_nl_check_' . $user_id;
+		if ( false !== \get_transient( $transient_key ) ) {
+			return new \WP_Error( 'rate_limited', __( 'Please wait before checking again.', 'newspack-plugin' ), [ 'status' => 429 ] );
+		}
+		// Set before the lookup, so overlapping requests cannot both reach the provider.
+		\set_transient( $transient_key, time(), self::NEWSLETTER_CHECK_INTERVAL );
+
+		if ( true !== self::refresh_newsletter_subscription( $user_id ) ) {
+			// A provider can lag behind a signup form, so check again shortly.
+			self::schedule_recheck( $user_id );
+		}
+
+		$stored = self::get_data( $user_id, 'is_newsletter_subscriber' );
+		return new \WP_REST_Response(
+			[
+				'items' => [
+					'is_newsletter_subscriber' => false === $stored ? null : $stored,
+				],
+			]
+		);
+	}
+
+	/**
+	 * Queue one follow-up check of the reader's newsletter subscription. Does
+	 * nothing when one is already queued.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public static function schedule_recheck( int $user_id ): void {
+		if ( \wp_next_scheduled( self::RECHECK_HOOK, [ $user_id ] ) ) {
+			return;
+		}
+		\wp_schedule_single_event( time() + self::RECHECK_DELAY, self::RECHECK_HOOK, [ $user_id ] );
+	}
+
+	/**
+	 * Run a queued follow-up check.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public static function handle_recheck( $user_id ) {
+		self::refresh_newsletter_subscription( (int) $user_id );
+	}
+
+	/**
+	 * Check a reader's newsletter subscription with the newsletter provider and
+	 * store the result.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool|null Whether the reader is subscribed, or null when it could not be checked.
+	 */
+	public static function refresh_newsletter_subscription( int $user_id ): ?bool {
+		if ( ! class_exists( '\Newspack_Newsletters' ) || ! class_exists( '\Newspack_Newsletters_Subscription' ) ) {
+			return null;
+		}
+		if ( ! \Newspack_Newsletters::is_service_provider_configured() ) {
+			return null;
+		}
+		$user = \get_userdata( $user_id );
+		if ( ! $user || empty( $user->user_email ) ) {
+			return null;
+		}
+		return self::store_newsletter_subscription( $user_id, $user->user_email );
+	}
+
+	/**
+	 * Look up the email's lists with the newsletter provider and store them for
+	 * the reader.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $email   Email address to look up.
+	 *
+	 * @return bool|null Whether the reader is subscribed, or null when the lookup failed.
+	 */
+	private static function store_newsletter_subscription( int $user_id, string $email ): ?bool {
+		$subscribed_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $email );
+		if ( is_wp_error( $subscribed_lists ) || ! is_array( $subscribed_lists ) ) {
+			return null;
+		}
+		// The providers answer [] for a failed contact lookup as well as for a
+		// contact on no lists. Only trust an empty read when the contact itself
+		// is readable; otherwise a transient ESP error would store "unsubscribed
+		// from everything" and the next sync would push that to the ESP. The
+		// second lookup only happens for readers on no lists. A contact that
+		// does not exist is treated like one that could not be read, so a reader
+		// deleted at the ESP keeps their stored lists: the conservative side,
+		// since a blank pushed by mistake cannot be recovered. Known gap:
+		// ActiveCampaign fetches the lists in a second request and answers []
+		// when that one fails, which this check cannot tell from a real empty.
+		if ( empty( $subscribed_lists ) && is_wp_error( \Newspack_Newsletters_Subscription::get_contact_data( $email ) ) ) {
+			return null;
+		}
+		$is_subscriber = ! empty( $subscribed_lists );
+		self::update_item( $user_id, 'is_newsletter_subscriber', $is_subscriber );
+		self::update_item( $user_id, 'newsletter_subscribed_lists', wp_json_encode( $subscribed_lists ) );
+		return $is_subscriber;
+	}
+
+	/**
 	 * Keep the reader's newsletter lists in step with the newsletter data events.
 	 *
 	 * `lists` (newsletter_subscribed) and `lists_added` (newsletter_updated)
@@ -761,25 +889,8 @@ final class Reader_Data {
 		if ( ! class_exists( '\Newspack_Newsletters' ) || ! class_exists( '\Newspack_Newsletters_Subscription' ) ) {
 			return;
 		}
-		$subscribed_lists = \Newspack_Newsletters_Subscription::get_contact_lists( $data['email'] );
-		if ( is_wp_error( $subscribed_lists ) || ! is_array( $subscribed_lists ) ) {
-			return;
-		}
-		// The providers answer [] for a failed contact lookup as well as for a
-		// contact on no lists. Only trust an empty read when the contact itself
-		// is readable; otherwise a transient ESP error would store "unsubscribed
-		// from everything" and the next sync would push that to the ESP. The
-		// second lookup only happens for readers on no lists. A contact that
-		// does not exist is treated like one that could not be read, so a reader
-		// deleted at the ESP keeps their stored lists: the conservative side,
-		// since a blank pushed by mistake cannot be recovered. Known gap:
-		// ActiveCampaign fetches the lists in a second request and answers []
-		// when that one fails, which this check cannot tell from a real empty.
-		if ( empty( $subscribed_lists ) && is_wp_error( \Newspack_Newsletters_Subscription::get_contact_data( $data['email'] ) ) ) {
-			return;
-		}
-		self::update_item( $data['user_id'], 'is_newsletter_subscriber', ! empty( $subscribed_lists ) );
-		self::update_item( $data['user_id'], 'newsletter_subscribed_lists', wp_json_encode( $subscribed_lists ) );
+		// Looks up the email the login event carries, not the one on the user record.
+		self::store_newsletter_subscription( (int) $data['user_id'], (string) $data['email'] );
 	}
 
 	/**
