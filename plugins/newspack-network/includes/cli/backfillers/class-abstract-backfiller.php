@@ -172,7 +172,8 @@ abstract class Abstract_Backfiller {
 		$processed = 0;
 
 		foreach ( $events as $event ) {
-			// Covers backfillers that build their events up front, as well as those that batch.
+			// Free the cache every batch of events. For backfillers that build their events up
+			// front, this limits growth while they're processed, not the peak of the build itself.
 			++$processed;
 			if ( 0 === $processed % static::BATCH_SIZE ) {
 				$this->free_runtime_cache();
