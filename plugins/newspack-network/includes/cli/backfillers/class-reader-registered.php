@@ -34,7 +34,7 @@ class Reader_Registered extends Abstract_Backfiller {
 	 *
 	 * @return \Generator<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> The events.
 	 */
-	public function get_events() {
+	public function get_events(): \Generator {
 		$roles_to_sync = \Newspack_Network\Utils\Users::get_synced_user_roles();
 		if ( empty( $roles_to_sync ) ) {
 			WP_CLI::error( 'Incompatible Newspack plugin version or no roles to sync.' );
@@ -80,9 +80,6 @@ class Reader_Registered extends Abstract_Backfiller {
 			}
 		);
 
-		// Sliced one batch at a time rather than array_chunk()ed up front: chunking
-		// copies the whole ID list into an array of arrays, which is a second full copy
-		// of it held for the length of the run.
 		$total = count( $user_ids );
 
 		for ( $offset = 0; $offset < $total; $offset += self::BATCH_SIZE ) {
