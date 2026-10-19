@@ -19,8 +19,7 @@ abstract class Abstract_Backfiller {
 	/**
 	 * How often, in events, to drop WordPress's in-process object cache.
 	 *
-	 * Bounds the memory a backfill uses so it no longer scales with the length of the
-	 * range being backfilled.
+	 * Keeps the object cache from growing with the number of events processed.
 	 */
 	const CLEAR_CACHE_EVERY = 100;
 
@@ -120,16 +119,11 @@ abstract class Abstract_Backfiller {
 	public function process_events() {
 		$events    = $this->get_events();
 		$processed = 0;
+		// The in-process cache only grows. WP-CLI's helper empties it and the query log
+		// without touching the persistent backend, unlike wp_cache_flush().
 		$can_clear = function_exists( 'WP_CLI\Utils\wp_clear_object_cache' );
 
 		foreach ( $events as $event ) {
-
-			// Every event read populates the object cache, which never shrinks, so a
-			// long enough backfill exhausts the memory limit no matter how little each
-			// event costs. WP-CLI's helper empties the in-process cache and the query
-			// log without flushing a persistent backend, so this frees our own memory
-			// rather than the cache the whole site is sharing — which is what
-			// wp_cache_flush() would do.
 			++$processed;
 			if ( $can_clear && 0 === $processed % self::CLEAR_CACHE_EVERY ) {
 				\WP_CLI\Utils\wp_clear_object_cache();

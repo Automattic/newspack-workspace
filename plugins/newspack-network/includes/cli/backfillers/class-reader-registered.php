@@ -28,17 +28,9 @@ class Reader_Registered extends Abstract_Backfiller {
 	/**
 	 * Gets the events to be processed
 	 *
-	 * Yields one event at a time rather than returning them all, and loads the users
-	 * behind them in batches. Building the full list up front meant a year's worth of
-	 * registrations on a busy site — tens of thousands of users and an event object
-	 * each — had to fit in memory before the first one could be processed, which on a
-	 * site with a heavy plugin set exhausts the memory limit. The caller only ever
-	 * iterates the result, so yielding costs nothing.
-	 *
-	 * The IDs are collected in one pass and the batches drawn from that list rather
-	 * than from repeated offset queries. An offset walks a result set that processing
-	 * could change underneath it, and every record after the change would be silently
-	 * skipped; a list of IDs captured up front cannot drift.
+	 * Yields one event per user, loading users in batches of `BATCH_SIZE` from an ID
+	 * list captured before the first event, so changes made while processing cannot
+	 * shift later batches.
 	 *
 	 * @return \Generator<\Newspack_Network\Incoming_Events\Abstract_Incoming_Event> The events.
 	 */
@@ -51,16 +43,17 @@ class Reader_Registered extends Abstract_Backfiller {
 		// list is held for the whole run, and the user data is loaded a batch at a time.
 		$user_ids = get_users(
 			[
-				'role__in'   => $roles_to_sync,
-				'date_query' => [
+				'role__in'      => $roles_to_sync,
+				'date_query'    => [
 					'after'     => $this->start,
 					'before'    => $this->end,
 					'inclusive' => true,
 				],
-				'orderby'    => 'user_registered',
-				'fields'     => 'ID',
-				'number'     => -1,
-				'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				'orderby'       => 'user_registered',
+				'fields'        => 'ID',
+				'number'        => -1,
+				'cache_results' => false,
+				'meta_query'    => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
 						'key'     => \Newspack_Network\Utils\Users::USER_META_REMOTE_SITE,
 						'compare' => 'NOT EXISTS',
@@ -97,10 +90,11 @@ class Reader_Registered extends Abstract_Backfiller {
 
 			$users = get_users(
 				[
-					'include' => $batch,
-					'orderby' => 'include',
-					'fields'  => [ 'id', 'user_email', 'user_registered' ],
-					'number'  => -1,
+					'include'       => $batch,
+					'orderby'       => 'include',
+					'fields'        => [ 'id', 'user_email', 'user_registered' ],
+					'number'        => -1,
+					'cache_results' => false,
 				]
 			);
 
