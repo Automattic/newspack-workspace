@@ -7,7 +7,8 @@
  * Author URI:      https://newspack.com
  * Text Domain:     newspack-listings
  * Domain Path:     /languages
- * Version:         3.7.8
+ * Version:         3.7.10
+ * Requires PHP:    8.1
  *
  * @package         Newspack_Listings
  */
@@ -19,7 +20,7 @@ if ( ! defined( 'NEWSPACK_LISTINGS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniff
 	define( 'NEWSPACK_LISTINGS_FILE', __FILE__ );
 	define( 'NEWSPACK_LISTINGS_PLUGIN_FILE', plugin_dir_path( NEWSPACK_LISTINGS_FILE ) );
 	define( 'NEWSPACK_LISTINGS_URL', plugin_dir_url( NEWSPACK_LISTINGS_FILE ) );
-	define( 'NEWSPACK_LISTINGS_VERSION', '3.7.8' );
+	define( 'NEWSPACK_LISTINGS_VERSION', '3.7.10' );
 }
 
 // Include plugin resources.

@@ -1,4 +1,8 @@
-body.newspack-post-with-fullscreen-iframe {
+// Only while the iframe itself is on the page: a content gate may have replaced the block
+// with a teaser, and hiding the page then would hide the gate too. The teaser can keep the
+// wrapper figure, since its sanitizing drops the iframe but not the figure, so key on the
+// fullscreen iframe rather than the wrapper.
+body.newspack-post-with-fullscreen-iframe:has( .wp-block-newspack-blocks-iframe iframe[layout="fill"] ) {
 	#page {
 		visibility: hidden;
 	}

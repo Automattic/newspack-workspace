@@ -1,11 +1,12 @@
 name: Merge feed
 
-# Posts a one-sentence, plain-English summary of every PR merged to main to
-# Slack, so the wider team can follow what lands without reading commit
-# subjects or changelogs.
+# Posts a one-sentence, plain-English summary of every PR merged to main,
+# alpha or release to Slack, so the wider team can follow what lands without
+# reading commit subjects or changelogs. Merges to alpha and release are
+# marked as fixes or promotions.
 on:
   push:
-    branches: [main]
+    branches: [main, alpha, release]
 
 permissions:
   contents: read
@@ -16,8 +17,8 @@ jobs:
     name: Post merges to Slack
     if: github.repository == 'Automattic/newspack-workspace'
     runs-on: ubuntu-latest
-    # Holds the Anthropic key. The environment only admits main, so a workflow
-    # pushed on any other branch cannot read it.
+    # Holds the Anthropic key. The environment only admits main, alpha and
+    # release, so a workflow pushed on any other branch cannot read it.
     environment: merge-feed
     steps:
       - uses: actions/checkout@v4

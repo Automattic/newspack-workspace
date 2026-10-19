@@ -314,6 +314,27 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * An account a site filters in skips the signed-link check, as staff do.
+	 */
+	public function test_handle_inbound_skips_for_filtered_in_account() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		$author = $this->factory->user->create( [ 'role' => 'author' ] );
+		$skip   = function ( $skips, $user_id ) use ( $author ) {
+			return $user_id === $author ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		wp_set_current_user( $author );
+		$post_id = $this->create_newsletter( time() );
+		$_GET[ Newsletters_Access::QUERY_PARAM ] = Newsletters_Access::sign( $post_id );
+		$result = Newsletters_Access::process_inbound_request( false );
+		unset( $_GET[ Newsletters_Access::QUERY_PARAM ] );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+		wp_set_current_user( 0 );
+		$this->assertSame( 'skipped', $result['action'] );
+	}
+
+	/**
 	 * Create a sent newsletter for the given list ID containing the given URL in its email HTML.
 	 *
 	 * @param string $list_id Send list ID to store in `send_list_id` meta.
@@ -543,6 +564,37 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		unset( $_GET['utm_medium'], $_GET['utm_source'] );
+		wp_set_current_user( 0 );
+		$this->assertSame( 'skipped', $result['action'] );
+	}
+
+	/**
+	 * An account a site filters in skips the UTM fallback, as staff do.
+	 */
+	public function test_utm_fallback_skips_for_filtered_in_account() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		$author = $this->factory->user->create( [ 'role' => 'author' ] );
+		$skip   = function ( $skips, $user_id ) use ( $author ) {
+			return $user_id === $author ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		wp_set_current_user( $author );
+
+		$post_id     = $this->factory->post->create( [ 'post_type' => 'post' ] );
+		$request_url = add_query_arg(
+			[
+				'utm_medium' => 'email',
+				'utm_source' => 'list_abc',
+			],
+			get_permalink( $post_id )
+		);
+		$this->create_sent_newsletter_with_link( 'list_abc', get_permalink( $post_id ) );
+		$this->go_to( $request_url );
+
+		$result = Newsletters_Access::process_utm_fallback_request( false );
+
+		unset( $_GET['utm_medium'], $_GET['utm_source'] );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
 		wp_set_current_user( 0 );
 		$this->assertSame( 'skipped', $result['action'] );
 	}

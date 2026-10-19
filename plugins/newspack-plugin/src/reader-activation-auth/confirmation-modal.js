@@ -1,11 +1,6 @@
 /* globals newspack_ras_config */
 
 /**
- * Internal dependencies.
- */
-import * as a11y from './accessibility.js';
-
-/**
  * Helpers for the pre-registration confirmation modal rendered in wp_footer by
  * Reader_Activation::render_confirmation_modal().
  *
@@ -93,7 +88,6 @@ function openConfirmationModal( config = {} ) {
 	modal.addEventListener( 'closeModal', handleClose, { signal } );
 
 	modal.setAttribute( 'data-state', 'open' );
-	a11y.trapFocus( modal );
 	return true;
 }
 
@@ -102,7 +96,8 @@ function openConfirmationModal( config = {} ) {
  *
  * Behavior:
  *   - Post-registration verification ON (the default): immediately invoke onProceed.
- *     The verification modal will run *after* registration to catch typos.
+ *     The verification modal will run *after* registration to catch typos, unless
+ *     the opener passed `skipVerification`.
  *   - Post-registration verification OFF: preflight the check-email endpoint to see
  *     whether the email already belongs to a registered reader.
  *       - Exists → invoke onProceed (the server will route to the appropriate

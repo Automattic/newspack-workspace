@@ -1852,14 +1852,15 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 * Given a contact metadata array, build the `merge_fields` array to be sent to Mailchimp
 	 * by sarching for existing merge fields and creating new ones as needed.
 	 *
-	 * @param string $audience_id Audience ID.
-	 * @param array  $contact     The contact.
+	 * @param string   $audience_id Audience ID.
+	 * @param array    $contact     The contact.
+	 * @param string[] $not_created Receives the metadata keys whose merge fields could not be created.
 	 *
 	 * @return array Merge fields.
 	 *
 	 * @throws Exception Error message.
 	 */
-	private function prepare_merge_fields( $audience_id, $contact ) {
+	private function prepare_merge_fields( $audience_id, $contact, &$not_created = [] ) {
 		$mc           = new Mailchimp( $this->api_key() );
 		$merge_fields = [];
 		$data         = $contact['metadata'];
@@ -1961,7 +1962,8 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			];
 			$created_field = $mc->post( "lists/$audience_id/merge-fields", $field_data );
 			if ( empty( $created_field['merge_id'] ) ) {
-				$message = sprintf(
+				$not_created[] = $field_name;
+				$message       = sprintf(
 					// Translators: %1$s is the merge field key, %2$s is the error message.
 					__( 'Failed to create merge field %1$s. Error response: %2$s', 'newspack-newsletters' ),
 					$field_name,
@@ -2055,7 +2057,10 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	 * @param array  $tags      An array of tag names to be added to the contact. Tags are always appended.
 	 * @param array  $interests An array of interests as expected by the API, where the key is the interest ID and the value is a bool (add or remove).
 	 *
-	 * @return array|WP_Error Contact data if it was added, or error otherwise.
+	 * @return array|WP_Error Contact data if it was added, or error otherwise. When some metadata
+	 *                        could not be saved because its merge field could not be created
+	 *                        (for example at the audience's merge field cap), the contact data
+	 *                        lists those metadata keys under `unsynced_fields`.
 	 *
 	 * @throws Exception Error message.
 	 */
@@ -2086,6 +2091,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			}
 		}
 
+		$unsynced_fields = [];
 		try {
 			$mc = new Mailchimp( $this->api_key() );
 
@@ -2095,7 +2101,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				 *
 				 * @param array $merge_fields The merge fields payload to pass to the Mailchimp API.
 				 */
-				$merge_fields = apply_filters( 'newspack_mailchimp_merge_fields', $this->prepare_merge_fields( $list_id, $contact ) );
+				$merge_fields = apply_filters( 'newspack_mailchimp_merge_fields', $this->prepare_merge_fields( $list_id, $contact, $unsynced_fields ) );
 				if ( is_wp_error( $merge_fields ) ) {
 					throw new Exception( $merge_fields->get_error_message() );
 				}
@@ -2139,6 +2145,12 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				} catch ( \Exception $e ) {
 					Newspack_Newsletters_Logger::log( 'Failed to migrate merge fields: ' . $e->getMessage() );
 				}
+			}
+
+			// Mailchimp rejects the whole upsert when merge_fields is an empty JSON array rather than an object.
+			// It is empty when no field could be matched or created, for example at the audience's merge field cap.
+			if ( empty( $update_payload['merge_fields'] ) ) {
+				unset( $update_payload['merge_fields'] );
 			}
 
 			Newspack_Newsletters_Logger::log( 'Mailchimp add_contact PUT payload: ' . wp_json_encode( $update_payload ) );
@@ -2188,6 +2200,10 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				'newspack_newsletters_mailchimp_api_error',
 				$e->getMessage()
 			);
+		}
+		// The upsert succeeds without these fields, so only the result can tell the caller they are missing.
+		if ( ! empty( $unsynced_fields ) ) {
+			$result['unsynced_fields'] = $unsynced_fields;
 		}
 		self::$contacts_added[ $cache_key ] = $result;
 		return $result;

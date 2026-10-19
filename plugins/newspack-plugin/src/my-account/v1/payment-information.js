@@ -4,7 +4,7 @@
  * Initialize functions for the Payment Information page.
  */
 
-import { domReady } from '../../utils';
+import { domReady, setButtonLoading } from '../../utils';
 
 /**
  * Handle form submission with loading state.
@@ -14,11 +14,12 @@ import { domReady } from '../../utils';
 function handleFormSubmission( e ) {
 	const modal = e.target.closest( '[id*="newspack-my-account__"]' );
 	if ( modal ) {
-		const submitButton = e.target.querySelector( 'button[type="submit"]' );
-		if ( submitButton && ! submitButton.disabled ) {
-			submitButton.disabled = true;
-			submitButton.classList.add( 'newspack-ui--loading' );
-		}
+		// A script that intercepts the submit, such as a payment gateway, owns the button.
+		setTimeout( () => {
+			if ( ! e.defaultPrevented ) {
+				setButtonLoading( e.target.querySelector( 'button[type="submit"]' ), true );
+			}
+		} );
 	}
 }
 

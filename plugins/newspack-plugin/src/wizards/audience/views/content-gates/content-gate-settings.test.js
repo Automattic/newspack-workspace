@@ -52,7 +52,6 @@ jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
 	return {
 		CardBody: ( { children } ) => React.createElement( 'div', null, children ),
-		Notice: ( { children } ) => React.createElement( 'div', null, children ),
 	};
 } );
 
@@ -73,6 +72,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 				children
 			),
 		Router: { useHistory: () => ( { push: () => {} } ) },
+		TooltipBadge: () => null,
 		useConfirmDialog: () => ( { confirmDialog: null, requestConfirm: cb => cb() } ),
 	};
 } );

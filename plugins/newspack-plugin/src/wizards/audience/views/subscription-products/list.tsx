@@ -144,6 +144,7 @@ export default function SubscriptionProductsList( { scope = 'subscriptions' }: {
 				{
 					type: 'primary',
 					label: __( 'Add Plan', 'newspack-plugin' ),
+					mobileIcon: 'plus',
 					href: '#/new',
 				},
 			],

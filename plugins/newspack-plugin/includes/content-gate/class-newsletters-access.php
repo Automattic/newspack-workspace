@@ -378,14 +378,14 @@ class Newsletters_Access {
 	}
 
 	/**
-	 * Whether the inbound handlers skip the current user. Logged-in editors
-	 * and admins bypass the gate through capability checks, so they shouldn't
-	 * burn a signature on every click.
+	 * Whether the inbound handlers skip the current user: an account the gate
+	 * never restricts has nothing to bypass and shouldn't burn a signature on
+	 * every click.
 	 *
 	 * @return bool
 	 */
 	private static function is_skipped_user() {
-		return is_user_logged_in() && current_user_can( 'edit_others_posts' );
+		return Content_Gate::should_skip_access_checks();
 	}
 
 	/**

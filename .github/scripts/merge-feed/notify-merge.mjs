@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 //
-// Posts one Slack message per PR merged to main: a plain-English sentence
-// saying what changed and for whom, plus a link to the PR. Run by the
-// "Merge feed" workflow on every push to main.
+// Posts one Slack message per PR merged to main, alpha or release: a
+// plain-English sentence saying what changed and for whom, plus a link to the
+// PR. Run by the "Merge feed" workflow on every push to those branches.
 //
-// A push to main carries merges that are not PRs into main - release version
-// bumps, `Merge branch 'release'`, and the hotfix commits a forward-port brings
-// along. Those are skipped by asking GitHub which PR a commit is the merge
-// commit of, and requiring that PR's base to be main.
+// A push carries merges that are not PRs into the pushed branch - release
+// version bumps, `Merge branch 'release'`, and the hotfix commits a
+// forward-port brings along. Those are skipped by asking GitHub which PR a
+// commit is the merge commit of, and requiring that PR's base to be the pushed
+// branch.
+//
+// Merges outside main are marked by kind (see MERGE_KINDS). A promotion (main
+// into alpha, alpha into release) posts a count instead of a summary: each PR
+// it carries was announced when it merged.
 //
 // A failure never fails the job: the merge already happened, and a red run for
 // a missed Slack post is noise. Errors become workflow warnings instead.
@@ -21,6 +26,22 @@ import Anthropic from '@anthropic-ai/sdk';
 const REPO = process.env.GITHUB_REPOSITORY || 'Automattic/newspack-workspace';
 const DRY_RUN = !! process.env.SLACK_DRY_RUN;
 const MODEL = 'claude-opus-5-5';
+
+// The branch this push landed on. Actions sets it; a local run defaults to main.
+const PUSHED_BRANCH = process.env.GITHUB_REF_NAME || 'main';
+
+// How a merge is marked, keyed by base branch and whether the head is the
+// branch that promotes into it. A merge to main carries no marker: it is the
+// common case, and the rest should stand out against it.
+const MERGE_KINDS = {
+	hotfix: { marker: '🚑 *Hotfix*' },
+	'alpha-fix': { marker: '🩹 *Alpha fix*' },
+	'alpha-release': { marker: '🧪 *Alpha release*', promotion: true },
+	release: { marker: '🚢 *Release*', promotion: true },
+};
+
+// A promotion's commit list is capped by the API; past this the count reads "250+".
+const MAX_PROMOTION_COMMITS = 250;
 
 // Bodies past this are mostly test steps and screenshots, which say nothing
 // about the change's effect.
@@ -82,6 +103,30 @@ function highestType( subjects ) {
 	return TYPE_LADDER.find( ( [ name ] ) => types.includes( name ) )?.[ 0 ] ?? FALLBACK_TYPE;
 }
 
+// The subject of the commit that landed wins: the merger can retype a PR when
+// squashing, and that subject is what semantic-release reads. The PR title and
+// branch commits decide only when the landed subject has no type.
+async function prType( pr ) {
+	try {
+		const landed = await github( `/commits/${ pr.merge_commit_sha }` );
+		const type = commitType( landed.commit.message.split( '\n' )[ 0 ] );
+		if ( type ) {
+			return type;
+		}
+	} catch ( error ) {
+		warn( `#${ pr.number }: typing from the branch, landed commit unreadable: ${ error.message }` );
+	}
+
+	let subjects = [ pr.title ];
+	try {
+		const commits = await github( `/pulls/${ pr.number }/commits?per_page=100` );
+		subjects = subjects.concat( commits.map( commit => commit.commit.message.split( '\n' )[ 0 ] ) );
+	} catch ( error ) {
+		warn( `#${ pr.number }: typing from the title alone: ${ error.message }` );
+	}
+	return highestType( subjects );
+}
+
 function typeEmoji( type ) {
 	return TYPE_LADDER.find( ( [ name ] ) => name === type )[ 1 ];
 }
@@ -104,12 +149,45 @@ async function github( path ) {
 	return response.json();
 }
 
-// The PR whose merge into main produced this commit, or null. A commit that
-// reached main any other way (direct push, a forward-ported hotfix whose PR
-// targeted release) has no such PR.
+// The PR whose merge into the pushed branch produced this commit, or null. A
+// commit that reached the branch any other way (direct push, a forward-ported
+// hotfix whose PR targeted release) has no such PR.
 async function prMergedAs( sha ) {
 	const pulls = await github( `/commits/${ sha }/pulls` );
-	return pulls.find( pr => pr.base.ref === 'main' && pr.merge_commit_sha === sha ) || null;
+	return pulls.find( pr => pr.base.ref === PUSHED_BRANCH && pr.merge_commit_sha === sha ) || null;
+}
+
+// The MERGE_KINDS key for a PR, or null for a regular merge to main.
+function mergeKind( pr ) {
+	if ( pr.base.ref === 'release' ) {
+		return pr.head.ref === 'alpha' ? 'release' : 'hotfix';
+	}
+	if ( pr.base.ref === 'alpha' ) {
+		return pr.head.ref === 'main' ? 'alpha-release' : 'alpha-fix';
+	}
+	return null;
+}
+
+// How many PRs a promotion carries, counted from the PR numbers its squashed
+// commits end with ("... (#123)" or "... (NPPD-1, #123)"). Release bot commits
+// carry none and are not counted.
+async function promotedPrCount( pr ) {
+	const numbers = new Set();
+	let commitCount = 0;
+	for ( let page = 1; commitCount < MAX_PROMOTION_COMMITS; page++ ) {
+		const commits = await github( `/pulls/${ pr.number }/commits?per_page=100&page=${ page }` );
+		for ( const commit of commits ) {
+			const number = commit.commit.message.split( '\n' )[ 0 ].match( /#(\d+)\)\s*$/ )?.[ 1 ];
+			if ( number ) {
+				numbers.add( number );
+			}
+		}
+		commitCount += commits.length;
+		if ( commits.length < 100 ) {
+			return `${ numbers.size }`;
+		}
+	}
+	return `${ numbers.size }+`;
 }
 
 // Merges that change nothing a reader of the feed would act on. Forward-ports
@@ -221,7 +299,7 @@ async function pullRequestsToPost() {
 			continue;
 		}
 		if ( ! pr ) {
-			console.log( `[merge-feed] ${ commit.id.slice( 0, 9 ) } is not a PR merge into main. Skipping.` );
+			console.log( `[merge-feed] ${ commit.id.slice( 0, 9 ) } is not a PR merge into ${ PUSHED_BRANCH }. Skipping.` );
 			continue;
 		}
 		prs.push( pr );
@@ -243,14 +321,26 @@ async function main() {
 			continue;
 		}
 
-		let subjects = [ pr.title ];
-		try {
-			const commits = await github( `/pulls/${ pr.number }/commits?per_page=100` );
-			subjects = subjects.concat( commits.map( commit => commit.commit.message.split( '\n' )[ 0 ] ) );
-		} catch ( error ) {
-			warn( `#${ pr.number }: typing from the title alone: ${ error.message }` );
+		const kind = MERGE_KINDS[ mergeKind( pr ) ];
+		const link = `<${ pr.html_url }|#${ pr.number }>`;
+
+		if ( kind?.promotion ) {
+			let count = '';
+			try {
+				const prCount = await promotedPrCount( pr );
+				count = ` · ${ prCount } ${ prCount === '1' ? 'change' : 'changes' }`;
+			} catch ( error ) {
+				warn( `#${ pr.number }: posting without a change count: ${ error.message }` );
+			}
+			try {
+				await post( `${ kind.marker }${ count } ${ link }` );
+			} catch ( error ) {
+				warn( `#${ pr.number }: ${ error.message }` );
+			}
+			continue;
 		}
-		const type = highestType( subjects );
+
+		const type = await prType( pr );
 
 		let summary;
 		try {
@@ -263,7 +353,8 @@ async function main() {
 		}
 
 		try {
-			await post( `${ typeEmoji( type ) } ${ slackEscape( summary ) } <${ pr.html_url }|#${ pr.number }>` );
+			const marker = kind ? `${ kind.marker } ` : '';
+			await post( `${ marker }${ typeEmoji( type ) } ${ slackEscape( summary ) } ${ link }` );
 		} catch ( error ) {
 			warn( `#${ pr.number }: ${ error.message }` );
 		}
