@@ -87,17 +87,13 @@ final class Newsletter_Signup_Detection {
 	}
 
 	/**
-	 * Check the current reader's newsletter subscription, and check again
-	 * shortly when the provider does not yet show one.
+	 * Check the current reader's newsletter subscription.
 	 */
 	private static function check_current_reader() {
 		if ( ! self::can_check_current_reader() ) {
 			return;
 		}
-		$user_id = \get_current_user_id();
-		if ( true !== Reader_Data::refresh_newsletter_subscription( $user_id ) ) {
-			Reader_Data::schedule_recheck( $user_id );
-		}
+		Reader_Data::refresh_newsletter_subscription_and_recheck( \get_current_user_id() );
 	}
 }
 Newsletter_Signup_Detection::init();

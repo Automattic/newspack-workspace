@@ -169,6 +169,33 @@ class Newspack_Test_Reader_Data_Newsletter_Check extends WP_UnitTestCase {
 		$this->assertSame( [ 'items' => [ 'is_newsletter_subscriber' => null ] ], $response->get_data() );
 		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'is_newsletter_subscriber' ) );
 		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'newsletter_subscribed_lists' ) );
+		$this->assertSame( 0, $this->count_rechecks() );
+	}
+
+	/**
+	 * A provider without list management cannot answer, so the route queues
+	 * no recheck.
+	 */
+	public function test_endpoint_queues_no_recheck_without_subscription_management() {
+		wp_set_current_user( $this->user_id );
+		Newspack_Newsletters_Subscription::$has_subscription_management = false;
+
+		$response = $this->check_request();
+
+		$this->assertSame( [ 'items' => [ 'is_newsletter_subscriber' => null ] ], $response->get_data() );
+		$this->assertSame( 0, $this->count_rechecks() );
+	}
+
+	/**
+	 * A lookup that ran but could not read the contact queues a recheck, since
+	 * a provider can lag behind a signup form.
+	 */
+	public function test_endpoint_queues_recheck_when_contact_not_yet_readable() {
+		wp_set_current_user( $this->user_id );
+
+		$this->check_request();
+
+		$this->assertSame( 1, $this->count_rechecks() );
 	}
 
 	/**
@@ -243,6 +270,31 @@ class Newspack_Test_Reader_Data_Newsletter_Check extends WP_UnitTestCase {
 		do_action( 'mc4wp_form_subscribed', null, $this->email, [], [] );
 
 		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'is_newsletter_subscriber' ) );
+	}
+
+	/**
+	 * Without a configured provider an MC4WP signup queues no recheck.
+	 */
+	public function test_mc4wp_hook_queues_no_recheck_without_newsletters() {
+		wp_set_current_user( $this->user_id );
+		Newspack_Newsletters::$is_service_provider_configured = false;
+
+		do_action( 'mc4wp_form_subscribed', null, $this->email, [], [] );
+
+		$this->assertSame( 0, $this->count_rechecks() );
+	}
+
+	/**
+	 * Without a configured provider a Gravity Forms signup queues no recheck.
+	 */
+	public function test_gform_hook_queues_no_recheck_without_newsletters() {
+		wp_set_current_user( $this->user_id );
+		Newspack_Newsletters::$is_service_provider_configured = false;
+		GFAPI::$feeds[7]['gravityformsmailchimp']             = [ [ 'id' => 1 ] ];
+
+		do_action( 'gform_after_submission', [ 'id' => 1 ], [ 'id' => 7 ] );
+
+		$this->assertSame( 0, $this->count_rechecks() );
 	}
 
 	/**

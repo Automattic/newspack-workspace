@@ -190,11 +190,24 @@ if ( ! class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 		 */
 		public static $get_lists_calls = 0;
 
+		/**
+		 * Return value of has_subscription_management(). Tests of a provider
+		 * without list management flip this to false.
+		 *
+		 * @var bool
+		 */
+		public static $has_subscription_management = true;
+
 		public static function reset_calls() {
-			self::$contact_lists   = [];
-			self::$contact_data    = [];
-			self::$lists           = null;
-			self::$get_lists_calls = 0;
+			self::$contact_lists               = [];
+			self::$contact_data                = [];
+			self::$lists                       = null;
+			self::$get_lists_calls             = 0;
+			self::$has_subscription_management = true;
+		}
+
+		public static function has_subscription_management() {
+			return self::$has_subscription_management;
 		}
 
 		public static function get_contact_lists( $email ) {

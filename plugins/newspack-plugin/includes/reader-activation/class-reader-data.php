@@ -672,10 +672,7 @@ final class Reader_Data {
 		// Set before the lookup, so overlapping requests cannot both reach the provider.
 		\set_transient( $transient_key, time(), self::NEWSLETTER_CHECK_INTERVAL );
 
-		if ( true !== self::refresh_newsletter_subscription( $user_id ) ) {
-			// A provider can lag behind a signup form, so check again shortly.
-			self::schedule_recheck( $user_id );
-		}
+		self::refresh_newsletter_subscription_and_recheck( $user_id );
 
 		$stored = self::get_data( $user_id, 'is_newsletter_subscriber' );
 		return new \WP_REST_Response(
@@ -685,6 +682,39 @@ final class Reader_Data {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Check a reader's newsletter subscription, and queue a follow-up check
+	 * when the provider could be asked but did not show a subscription. A
+	 * provider can lag behind a signup form.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool|null Whether the reader is subscribed, or null when it could not be checked.
+	 */
+	public static function refresh_newsletter_subscription_and_recheck( int $user_id ): ?bool {
+		$is_subscriber = self::refresh_newsletter_subscription( $user_id );
+		// Where no lookup can run, a follow-up check could only fail the same way.
+		if ( true !== $is_subscriber && self::can_check_newsletter_subscription() ) {
+			self::schedule_recheck( $user_id );
+		}
+		return $is_subscriber;
+	}
+
+	/**
+	 * Whether the newsletter provider can be asked for a reader's lists.
+	 *
+	 * @return bool
+	 */
+	public static function can_check_newsletter_subscription(): bool {
+		if ( ! class_exists( '\Newspack_Newsletters' ) || ! class_exists( '\Newspack_Newsletters_Subscription' ) ) {
+			return false;
+		}
+		if ( ! \Newspack_Newsletters::is_service_provider_configured() ) {
+			return false;
+		}
+		return \Newspack_Newsletters_Subscription::has_subscription_management();
 	}
 
 	/**
@@ -718,10 +748,7 @@ final class Reader_Data {
 	 * @return bool|null Whether the reader is subscribed, or null when it could not be checked.
 	 */
 	public static function refresh_newsletter_subscription( int $user_id ): ?bool {
-		if ( ! class_exists( '\Newspack_Newsletters' ) || ! class_exists( '\Newspack_Newsletters_Subscription' ) ) {
-			return null;
-		}
-		if ( ! \Newspack_Newsletters::is_service_provider_configured() ) {
+		if ( ! self::can_check_newsletter_subscription() ) {
 			return null;
 		}
 		$user = \get_userdata( $user_id );
