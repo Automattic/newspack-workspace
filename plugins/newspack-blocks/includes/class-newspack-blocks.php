@@ -874,10 +874,16 @@ class Newspack_Blocks {
 	 * dropped; the returned list may be empty when none qualify (the caller then
 	 * returns no results).
 	 *
+	 * An empty request means `post`, as it did when WP_Query read it directly: blocks
+	 * saved before the post type picker required a selection carry `"postType":[]`.
+	 *
 	 * @param array|string $post_types Requested post type(s).
 	 * @return array Allowed post types (may be empty).
 	 */
 	public static function filter_viewable_post_types( $post_types ) {
+		if ( empty( $post_types ) ) {
+			$post_types = [ 'post' ];
+		}
 		/**
 		 * Post types Homepage Posts and Carousel blocks may query in addition to the
 		 * publicly-viewable ones. Each entry is an explicit, per-CPT decision to

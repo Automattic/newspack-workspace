@@ -973,6 +973,36 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Blocks saved before the post type picker required a selection carry an empty
+	 * postType, which WP_Query read as `post`. They keep listing posts.
+	 */
+	public function test_empty_post_type_falls_back_to_post() {
+		$post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_title'  => 'Regular post title',
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		// Before the render, which records the post for deduplication.
+		self::assertSame(
+			[ $post_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [], 'postsToShow' => 10 ] ),
+			'The editor route lists posts for an empty postType.'
+		);
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/block-renderer/newspack-blocks/homepage-articles' );
+		$request->set_query_params(
+			[
+				'context'    => 'edit',
+				'attributes' => [ 'postType' => [] ],
+			]
+		);
+		self::assertStringContainsString( 'Regular post title', rest_do_request( $request )->get_data()['rendered'], 'The render lists posts for an empty postType.' );
+	}
+
+	/**
 	 * The editor routes keep serving a non-viewable post type a plugin opted in, which is
 	 * how the Sponsors CPT stays usable in the block's post type picker.
 	 */
