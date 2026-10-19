@@ -747,10 +747,20 @@ class Alert_Manager {
 		try {
 			/**
 			 * Filters the URL of an issue that tracks an integration that has just
-			 * turned broken. Returning a URL moves the outage's page from Slack to
-			 * the log, with the URL in the message; returning '' keeps the page.
-			 * The URL also travels with the outage's later 'recovered' or
-			 * 'disconnected' change, so the issue can be updated.
+			 * turned broken. Only an absolute `https` URL with a host takes over:
+			 * the outage's page moves from Slack to the log, with the URL in the
+			 * message. Anything else, '' included, keeps the page. The URL also
+			 * travels with the outage's later 'recovered' or 'disconnected'
+			 * change, so the issue can be updated.
+			 *
+			 * Unlike `newspack_integration_health_changed`, this can run more than
+			 * once for one outage: a run that stops after a callback answers, and
+			 * before the record is written, asks again on the next check. An
+			 * answer can also be dropped after a callback acted on it, when it is
+			 * not a usable URL or a later callback throws; the outage then pages,
+			 * and its 'recovered' change carries ''. So find or reuse an issue by
+			 * site and `integration_id`, with `first_failed_at` to tell outages
+			 * apart, not by the `issue_url` a later change carries.
 			 *
 			 * @param string $issue_url The issue URL, '' when nothing tracks the outage.
 			 * @param array  $change    The 'broken' state change, as documented on

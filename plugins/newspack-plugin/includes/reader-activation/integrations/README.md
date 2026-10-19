@@ -638,7 +638,9 @@ do_action(
 
 One event per outage in each direction, so a consumer can open and close a ticket without deduplicating hourly repeats itself. Staging hosts (`*.newspackstaging.com`) fire it too; only their alerts are capped at Watch, so a consumer that should skip staging has to check the host itself.
 
-Just before the `broken` event, the `newspack_integration_health_issue_url` filter asks whether an issue tracks the outage. A callback that returns an absolute `https` URL takes ownership: the transition reaches the log with the URL instead of paging Slack, and the URL is stored with the record and sent with the outage's `recovered` or `disconnected` event. A callback that returns `''`, or throws, leaves the page in place. Newspack Manager uses it to open a Linear issue for a publisher-side break.
+Just before the `broken` event, the `newspack_integration_health_issue_url` filter asks whether an issue tracks the outage. A callback that returns an absolute `https` URL with a host takes ownership: the transition reaches the log with the URL instead of paging Slack, and the URL is stored with the record and sent with the outage's `recovered` or `disconnected` event. Any other answer, `''` included, or a callback that throws, leaves the page in place. Newspack Manager uses it to open a Linear issue for a publisher-side break.
+
+Unlike the event, the filter can run more than once for one outage, and an answer can be dropped after a callback acted on it: the outage then pages, and `recovered` carries `''`. Find or reuse an issue by site and `integration_id`, with `first_failed_at` to tell outages apart, not by the `issue_url` a later event carries.
 
 ```php
 add_filter(
