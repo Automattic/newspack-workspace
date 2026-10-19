@@ -207,6 +207,9 @@ class Newspack_Test_Reader_Data_Trust_Keys extends WP_UnitTestCase {
 		}
 
 		$this->assertContains( 'referrer', $found, 'The scan should find browser writes.' );
+		// The browser must never write a key the server always manages: the store would drop the write.
+		$always_read_only = [ 'is_newsletter_subscriber', 'newsletter_subscribed_lists', 'active_memberships', 'active_subscriptions', 'is_former_donor' ];
+		$this->assertSame( [], array_values( array_intersect( array_unique( $found ), $always_read_only ) ), 'Browser code writes a server-managed key.' );
 		$excluded = array_merge( Reader_Data::get_read_only_keys(), [ 'newsletter_signup_client' ] );
 		$missing  = array_diff( array_unique( $found ), $excluded, Reader_Data_Trust::BROWSER_KEYS );
 		$this->assertSame( [], array_values( $missing ), 'Browser-written keys missing from Reader_Data_Trust::BROWSER_KEYS.' );

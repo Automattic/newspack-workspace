@@ -7,7 +7,9 @@ import { matchNewsletter, isFromEmail } from './newsletter';
  * @param {boolean} value Value returned by store.get( 'is_newsletter_subscriber' ).
  * @return {Object} Stubbed reader activation object.
  */
-const makeRas = value => ( { store: { get: () => value } } );
+const makeRas = ( value, clientSignal = false ) => ( {
+	store: { get: key => ( 'newsletter_signup_client' === key ? clientSignal : value ) },
+} );
 
 describe( 'newsletter criteria matching', () => {
 	beforeEach( () => {
@@ -23,6 +25,11 @@ describe( 'newsletter criteria matching', () => {
 	it( 'treats a reader with the stored subscriber flag as a subscriber', () => {
 		expect( matchNewsletter( { value: 'subscribers' }, makeRas( true ) ) ).toBe( true );
 		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( true ) ) ).toBe( false );
+	} );
+
+	it( 'treats a reader with the browser-side signup signal as a subscriber', () => {
+		expect( matchNewsletter( { value: 'subscribers' }, makeRas( false, true ) ) ).toBe( true );
+		expect( matchNewsletter( { value: 'non-subscribers' }, makeRas( false, true ) ) ).toBe( false );
 	} );
 
 	it( 'treats a reader arriving with utm_medium=email as a subscriber', () => {

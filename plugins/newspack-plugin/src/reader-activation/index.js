@@ -2,7 +2,7 @@
 
 window.newspack_ras_config = window.newspack_ras_config || {};
 
-import Store from './store.js';
+import Store, { NEWSLETTER_SIGNUP_CLIENT_KEY } from './store.js';
 import { getPendingCheckout, setPendingCheckout } from './checkout.js';
 import { EVENTS, on, off, emit } from './events.js';
 import { getCookie, setCookie, generateID, debugLog } from './utils.js';
@@ -414,13 +414,58 @@ function attachAuthCookiesListener() {
 }
 
 /**
- * Set the reader as newsletter subscriber once a newsletter form is submitted.
+ * Ask the server to re-check the logged-in reader's newsletter status and load
+ * the result into the store. A failed or rate-limited check is ignored: the
+ * server also re-checks on its own hooks, so this is only a faster refresh.
  */
-function attachNewsletterFormListener() {
+function checkNewsletterSubscription() {
+	const apiNonce = getApiNonce();
+	const apiUrl = window.newspack_reader_data?.api_url;
+	if ( ! window.newspack_ras_config?.is_logged_in || ! apiUrl || ! apiNonce ) {
+		return;
+	}
+	const req = new XMLHttpRequest();
+	req.open( 'POST', `${ apiUrl }/newsletter-check`, true );
+	req.setRequestHeader( 'X-WP-Nonce', apiNonce );
+	req.onreadystatechange = () => {
+		if ( 4 !== req.readyState || 200 !== req.status ) {
+			return;
+		}
+		try {
+			const items = {};
+			for ( const [ key, value ] of Object.entries( JSON.parse( req.responseText )?.items || {} ) ) {
+				// rehydrate() cannot store a null, and a key the server omitted stays as it was.
+				if ( null !== value && undefined !== value ) {
+					items[ key ] = value;
+				}
+			}
+			store.rehydrate( items );
+		} catch ( err ) {
+			// Ignored on purpose, see above.
+		}
+	};
+	req.send();
+}
+
+/**
+ * Record that a newsletter form was submitted in this browser.
+ *
+ * Only the browser-side hint is written here. The subscriber flag itself is
+ * set by the server, and `.newspack-subscribe-form` (a generic class for
+ * third-party forms) additionally asks the server to re-check it.
+ */
+export function attachNewsletterFormListener() {
 	const newspackForms = [ '.newspack-newsletters-subscribe' ];
 
-	// newspack-subscribe-form is a generic class that can be added to any 3rd party form. Once it's submitted, we consider the reader a newsletter subscriber.
 	const thirdPartyForms = [ '.mc4wp-form', '.newspack-subscribe-form' ];
+
+	const markSignup = () => {
+		try {
+			store.set( NEWSLETTER_SIGNUP_CLIENT_KEY, true, false );
+		} catch ( err ) {
+			// A storage failure must not interrupt the form submission.
+		}
+	};
 
 	const attachHandler = ( el, eventToListenTo = 'submit' ) => {
 		const form = 'FORM' === el.tagName ? el : el.querySelector( 'form' );
@@ -428,7 +473,10 @@ function attachNewsletterFormListener() {
 			return;
 		}
 		form.addEventListener( eventToListenTo, () => {
-			store.set( 'is_newsletter_subscriber', true );
+			markSignup();
+			if ( form.matches( '.newspack-subscribe-form' ) || el.matches( '.newspack-subscribe-form' ) ) {
+				checkNewsletterSubscription();
+			}
 		} );
 	};
 
@@ -453,7 +501,7 @@ function attachNewsletterFormListener() {
 	document.addEventListener( 'gform/post_render', event => {
 		if ( window.gform?.utils?.addAsyncFilter && gformIds.includes( event.detail?.formId ) ) {
 			gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
-				store.set( 'is_newsletter_subscriber', true );
+				markSignup();
 				return data;
 			} );
 		}

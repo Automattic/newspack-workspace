@@ -237,6 +237,22 @@ function decode( str ) {
 }
 
 /**
+ * Browser-only key recording that this browser submitted a newsletter signup
+ * form. It is never synced and is a segmentation hint, not proof of a
+ * subscription; the server-managed `is_newsletter_subscriber` is the latter.
+ *
+ * @type {string}
+ */
+export const NEWSLETTER_SIGNUP_CLIENT_KEY = 'newsletter_signup_client';
+
+/**
+ * Read-only keys already reported by set(), so each warns once per page load.
+ *
+ * @type {Set<string>}
+ */
+const warnedReadOnlyKeys = new Set();
+
+/**
  * Assert that a key is not read-only.
  *
  * @param {string} key Key to check.
@@ -488,7 +504,16 @@ export default function Store() {
 		 * @param {boolean} sync  Whether to sync the value with the server. Default true.
 		 */
 		set: ( key, value, sync = true ) => {
-			assertNotReadOnly( key );
+			// Server-managed keys are ignored with a warning rather than an error, so a
+			// caller written for a site where the key is writable keeps working.
+			if ( ( newspack_reader_data?.read_only_keys || [] ).includes( key ) ) {
+				if ( ! warnedReadOnlyKeys.has( key ) ) {
+					warnedReadOnlyKeys.add( key );
+					// eslint-disable-next-line no-console
+					console.warn( `Key '${ key }' is read-only and was not written.` );
+				}
+				return;
+			}
 			_set( key, value, false );
 			if ( sync && ! neverSyncs() ) {
 				setPendingSync( key );

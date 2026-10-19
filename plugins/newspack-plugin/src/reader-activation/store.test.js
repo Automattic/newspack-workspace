@@ -193,9 +193,20 @@ describe( 'Store', () => {
 				read_only_keys: [ 'is_donor', 'active_memberships' ],
 			};
 		} );
-		it( 'should throw when setting a read-only key', () => {
+		it( 'should warn once and leave the value alone when setting a read-only key', () => {
+			window.newspack_reader_data = {
+				read_only_keys: [ 'is_donor', 'active_memberships' ],
+				items: { is_donor: 'false' },
+			};
+			const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
 			const [ store ] = Store();
-			expect( () => store.set( 'is_donor', true ) ).toThrow( "Key 'is_donor' is read-only." );
+			store.rehydrate();
+			expect( () => store.set( 'is_donor', true ) ).not.toThrow();
+			expect( () => store.set( 'is_donor', true ) ).not.toThrow();
+			expect( store.get( 'is_donor' ) ).toEqual( false );
+			expect( warn ).toHaveBeenCalledTimes( 1 );
+			expect( warn ).toHaveBeenCalledWith( expect.stringContaining( 'is_donor' ) );
+			warn.mockRestore();
 		} );
 		it( 'should throw when deleting a read-only key', () => {
 			const [ store ] = Store();

@@ -36,7 +36,7 @@ export function isFromEmail() {
  * @return {boolean} Whether the criteria matches.
  */
 export function matchNewsletter( config, { store } ) {
-	const isSubscriber = store.get( 'is_newsletter_subscriber' ) || isFromEmail();
+	const isSubscriber = store.get( 'is_newsletter_subscriber' ) || store.get( 'newsletter_signup_client' ) || isFromEmail();
 	switch ( config.value ) {
 		case 'subscribers':
 			return isSubscriber;
