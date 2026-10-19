@@ -20,6 +20,62 @@ class Mailchimp_For_WooCommerce {
 		// MC4WC fires it's hook at priority 10 so we need to move quicker.
 		add_action( 'init', [ __CLASS__, 'remove_campaign_tracking_cookie' ], 9 );
 		add_action( 'wp_loaded', [ __CLASS__, 'remove_account_details_opt_in' ] );
+		add_action( 'profile_update', [ __CLASS__, 'skip_profile_update_without_opt_in' ], 99 );
+		add_action( 'profile_update', [ __CLASS__, 'restore_profile_update_handler' ], 101 );
+		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'keep_subscribed_customer_subscribed' ] );
+	}
+
+	/**
+	 * Stop MC4WC from unsubscribing a reader whose opt-in it never stored.
+	 *
+	 * On a profile update in wp-admin or admin-ajax, MC4WC sends the reader's stored opt-in to
+	 * Mailchimp, and sends a reader with none as "transactional". Readers who sign up through
+	 * Newspack have none, and Newspack's contact sync updates their profile from admin-ajax
+	 * after registration, so MC4WC would unsubscribe them right after they subscribe.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public static function skip_profile_update_without_opt_in( $user_id ) {
+		if ( ! \class_exists( '\MailChimp_Service' ) ) {
+			return;
+		}
+		if ( '' === get_user_meta( $user_id, 'mailchimp_woocommerce_is_subscribed', true ) ) {
+			remove_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ], 100 );
+		}
+	}
+
+	/**
+	 * Re-hook MC4WC's profile update handler for the next user updated in this request.
+	 */
+	public static function restore_profile_update_handler() {
+		if ( \class_exists( '\MailChimp_Service' ) && ! has_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ] ) ) {
+			add_action( 'profile_update', [ \MailChimp_Service::instance(), 'handleUserUpdated' ], 100, 2 );
+		}
+	}
+
+	/**
+	 * Stop MC4WC from unsubscribing a customer who places an order.
+	 *
+	 * MC4WC sends an order's customer to Mailchimp as "transactional" unless its stored opt-in
+	 * says "subscribed", and the stored opt-in misses subscriptions made outside MC4WC, such as
+	 * Newspack's newsletter signup. For a registered customer MC4WC did not mark as subscribed,
+	 * this reads the status from Mailchimp, and keeps a subscribed customer subscribed.
+	 *
+	 * @param \MailChimp_WooCommerce_Order $order The order MC4WC is about to send.
+	 *
+	 * @return \MailChimp_WooCommerce_Order
+	 */
+	public static function keep_subscribed_customer_subscribed( $order ) {
+		$customer = $order->getCustomer();
+		// MC4WC reads the Mailchimp status itself for guests, and during a sync.
+		if ( ! $customer || ! $customer->getWordpressUser() || $customer->getOptInStatus() || null !== $customer->getMailchimpStatus() ) {
+			return $order;
+		}
+		if ( 'subscribed' === \mailchimp_get_subscriber_status( $customer->getEmailAddress() ) ) {
+			$customer->setOptInStatus( true );
+			update_user_meta( $customer->getWordpressUser()->ID, 'mailchimp_woocommerce_is_subscribed', '1' );
+		}
+		return $order;
 	}
 
 	/**
