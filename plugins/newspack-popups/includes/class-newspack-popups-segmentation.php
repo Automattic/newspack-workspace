@@ -843,7 +843,8 @@ final class Newspack_Popups_Segmentation {
 	 * pass on the same link, and a free slot in the per-IP account cap.
 	 *
 	 * The pass is stripped too unless newspack-plugin's handler will consume it
-	 * on the next request. Left in place it would stay in the landing URL, where
+	 * on the next request: that handler is hooked, and it doesn't skip the
+	 * current user. Left in place it would stay in the landing URL, where
 	 * anyone the reader shares it with could pair it with other account IDs
 	 * for the rest of its lifetime. For the same reason a pass arriving without
 	 * an account param is redirected away when nothing consumes it.
@@ -900,14 +901,21 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
-	 * Whether newspack-plugin will consume the newsletter pass on this request.
-	 * Its inbound handler registers only while the newsletter-link bypass is on
-	 * and gating is active; otherwise nothing strips the pass from the URL.
+	 * Whether newspack-plugin's handler will take the newsletter pass out of
+	 * the URL on this request. It registers only while the newsletter-link
+	 * bypass is on and gating is active, and it skips users who can
+	 * `edit_others_posts` (they bypass the gate anyway), so for them the pass
+	 * would stay in the landing URL. A pass that fails verification also
+	 * stays, which is harmless since it resolves nothing.
 	 *
 	 * @return bool
 	 */
 	private static function is_newsletter_pass_consumed(): bool {
-		return false !== has_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ] );
+		if ( false === has_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ] ) ) {
+			return false;
+		}
+		// Mirrors Newsletters_Access::process_inbound_request().
+		return ! ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) );
 	}
 
 	/**

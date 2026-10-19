@@ -483,6 +483,26 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The pass consumer in newspack-plugin skips users who can edit others' posts, so for
+	 * them the pass is stripped here even with the handler hooked; otherwise a
+	 * staff member's landing URL would hand on a working pass.
+	 */
+	public function test_strips_the_pass_for_users_the_consumer_skips() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		\Newspack\Reader_Data::$matched_segments = [ 42 => [ $this->segment_ids['carried-one'] ] ];
+		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&np_account=42&npnl=ABC123' ) );
+		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&npnl=ABC123' ) );
+	}
+
+	/**
+	 * A logged-in reader the consumer doesn't skip leaves the pass for it.
+	 */
+	public function test_leaves_a_consumed_pass_for_a_logged_in_reader() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		$this->assertNull( $this->arrive( '/p/?a=1&npnl=ABC123' ) );
+	}
+
+	/**
 	 * Past the per-IP cap, new accounts carry nothing; accounts the IP already
 	 * resolved keep working, and another IP has its own allowance.
 	 */
@@ -646,6 +666,70 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 			$this->assertSame( 2, wp_cache_get( $counter, 'newspack_popups_carried_accounts' ), 'A turned-away account counts once, not per click.' );
 		} finally {
 			wp_using_ext_object_cache( $was_external );
+		}
+	}
+
+	/**
+	 * A repeat click still carries under an object cache that keeps a failed
+	 * add()'s value in its runtime cache, as the memcached drop-in does: the
+	 * marker read has to go past that copy, or it sees 'pending' rather than
+	 * the outcome. Core's WP_Object_Cache ignores `$force`, hence the double.
+	 */
+	public function test_object_cache_repeat_click_reads_past_the_runtime_cache() {
+		\Newspack\Reader_Data::$matched_segments = [ 1 => [ $this->segment_ids['carried-one'] ] ];
+		global $wp_object_cache;
+		$original_cache  = $wp_object_cache;
+		$wp_object_cache = new class() extends WP_Object_Cache { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			/**
+			 * Values left behind by failed add() calls, by group and key.
+			 *
+			 * @var array
+			 */
+			private $stale = [];
+
+			/**
+			 * Add, keeping the attempted value locally when the key exists.
+			 *
+			 * @param int|string $key    Cache key.
+			 * @param mixed      $data   Data to add.
+			 * @param string     $group  Cache group.
+			 * @param int        $expire Expiry in seconds.
+			 * @return bool
+			 */
+			public function add( $key, $data, $group = 'default', $expire = 0 ) {
+				$added = parent::add( $key, $data, $group, $expire );
+				if ( ! $added ) {
+					$this->stale[ $group ][ $key ] = $data;
+				}
+				return $added;
+			}
+
+			/**
+			 * Get, serving the stale local value unless forced.
+			 *
+			 * @param int|string $key   Cache key.
+			 * @param string     $group Cache group.
+			 * @param bool       $force Whether to skip the local value.
+			 * @param bool|null  $found Whether the key was found.
+			 * @return mixed
+			 */
+			public function get( $key, $group = 'default', $force = false, &$found = null ) {
+				if ( ! $force && isset( $this->stale[ $group ][ $key ] ) ) {
+					$found = true;
+					return $this->stale[ $group ][ $key ];
+				}
+				return parent::get( $key, $group, $force, $found );
+			}
+		};
+		$was_external = wp_using_ext_object_cache( true );
+		try {
+			$this->arrive( '/p/?np_account=1' );
+			unset( $_COOKIE[ Newspack_Popups_Segmentation::get_carried_segments_cookie_name() ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			$this->arrive( '/p/?np_account=1' );
+			$this->assertSame( $this->segment_ids['carried-one'], $this->cookie(), 'A repeat click must read the recorded outcome.' );
+		} finally {
+			wp_using_ext_object_cache( $was_external );
+			$wp_object_cache = $original_cache; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		}
 	}
 
