@@ -1,5 +1,5 @@
 import { buildQueryParams, toQueryString } from './build-query';
-import { PER_PAGE_ALL } from '../../utils/per-page';
+import { FETCH_ALL_CHUNK_SIZE, PER_PAGE_ALL } from '../../utils/per-page';
 
 describe( 'ads buildQueryParams', () => {
 	it( 'sets page and per_page from the view, defaulting to 1 and 20', () => {
@@ -11,7 +11,7 @@ describe( 'ads buildQueryParams', () => {
 	} );
 
 	it( 'maps the All sentinel to max-size chunks starting at page 1', () => {
-		expect( buildQueryParams( { perPage: PER_PAGE_ALL, page: 4 } ) ).toMatchObject( { page: 1, per_page: 100 } );
+		expect( buildQueryParams( { perPage: PER_PAGE_ALL, page: 4 } ) ).toMatchObject( { page: 1, per_page: FETCH_ALL_CHUNK_SIZE } );
 	} );
 
 	it( 'restricts fields so content/excerpt are never rendered server-side', () => {
@@ -19,24 +19,33 @@ describe( 'ads buildQueryParams', () => {
 		expect( _fields ).not.toContain( 'content' );
 		expect( _fields ).not.toContain( 'excerpt' );
 		expect( _fields.split( ',' ) ).toEqual( expect.arrayContaining( [ 'id', 'meta', 'newspack_newsletters_ad_status' ] ) );
-		// Without `_links`, `_embed` expands nothing and the terms columns go blank.
-		expect( _fields.split( ',' ) ).toContain( '_links' );
 	} );
 
 	it( 'requests context=edit so meta and private fields are returned', () => {
 		expect( buildQueryParams( {} ).context ).toBe( 'edit' );
 	} );
 
-	it( 'embeds wp:term so the advertiser and placement columns can read terms', () => {
-		expect( buildQueryParams( {} )._embed ).toBe( 'wp:term' );
+	it( 'never asks for _links or embeds', () => {
+		const params = buildQueryParams( {} );
+		expect( params ).not.toHaveProperty( '_embed' );
+		expect( params._fields.split( ',' ) ).not.toContain( '_links' );
 	} );
 
-	it.each( [ 'advertiser', 'ad_placement', 'categories' ] )( 'embeds wp:term while the %s column is visible', field => {
-		expect( buildQueryParams( { fields: [ 'title', field ] } )._embed ).toBe( 'wp:term' );
+	it( 'always requests term names, whatever the visible columns', () => {
+		for ( const view of [ {}, { fields: [ 'status' ] }, { fields: [ 'advertiser' ] } ] ) {
+			expect( buildQueryParams( view )._fields.split( ',' ) ).toContain( 'newspack_newsletters_terms' );
+		}
 	} );
 
-	it( 'drops the embed when no term-backed column is visible', () => {
-		expect( buildQueryParams( { fields: [ 'title', 'start_date', 'price' ] } )._embed ).toBeUndefined();
+	// The dedicated terms field carries the names, so no request on this
+	// screen embeds anything — that is what keeps `_links` out too.
+	it.each( [
+		[ 'a term-backed column', [ 'title', 'advertiser' ] ],
+		[ 'no term-backed column', [ 'title', 'start_date' ] ],
+	] )( 'never embeds terms, with %s visible', ( unused, fields ) => {
+		const params = buildQueryParams( { fields } );
+		expect( params._embed ).toBeUndefined();
+		expect( params._fields.split( ',' ) ).toContain( 'newspack_newsletters_terms' );
 	} );
 
 	it( 'always requests the raw term IDs so Quick Edit can hydrate without the embed', () => {

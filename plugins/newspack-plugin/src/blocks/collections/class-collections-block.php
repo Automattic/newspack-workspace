@@ -119,7 +119,9 @@ final class Collections_Block {
 		}
 
 		if ( empty( $collections ) ) {
-			return '<div class="wp-block-newspack-collections"><p>' . esc_html__( 'No collections found.', 'newspack-plugin' ) . '</p></div>';
+			$post_type = get_post_type_object( Post_Type::get_post_type() );
+			$not_found = $post_type ? $post_type->labels->not_found : __( 'No collections found.', 'newspack-plugin' );
+			return '<div class="wp-block-newspack-collections"><p>' . esc_html( $not_found ) . '</p></div>';
 		}
 
 		/**

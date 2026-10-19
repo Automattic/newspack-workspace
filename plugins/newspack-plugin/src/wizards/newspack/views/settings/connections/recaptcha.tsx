@@ -192,7 +192,7 @@ function Recaptcha() {
 		>
 			{ settings.use_captcha && (
 				<Fragment>
-					<Grid noMargin rowGap={ 16 }>
+					<Grid rowGap={ 16 }>
 						<BaseControl
 							id="recaptcha-version"
 							label={ __( 'reCAPTCHA Version', 'newspack-plugin' ) }
@@ -226,7 +226,7 @@ function Recaptcha() {
 							/>
 						</BaseControl>
 					</Grid>
-					<Grid noMargin rowGap={ 16 }>
+					<Grid rowGap={ 16 }>
 						<TextControl
 							value={ versionCredentials.site_key || '' }
 							label={ __( 'Site Key', 'newspack-plugin' ) }

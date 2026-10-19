@@ -40,7 +40,11 @@ class Subscriptions_Meta {
 	 */
 	public static function maybe_record_cancelled_subscription_meta( $subscription, $to_status, $from_status ) {
 		// We only care about active, cancelled, expired, and pending statuses.
-		if ( ! in_array( $to_status, [ 'active', 'cancelled', 'expired', 'pending-cancel' ], true ) || in_array( $from_status, [ 'cancelled', 'expired' ], true ) ) {
+		if ( ! in_array( $to_status, [ 'active', 'cancelled', 'expired', 'pending-cancel' ], true ) ) {
+			return;
+		}
+		// An ended subscription keeps the reason it ended unless it's reactivated.
+		if ( 'active' !== $to_status && in_array( $from_status, [ 'cancelled', 'expired' ], true ) ) {
 			return;
 		}
 

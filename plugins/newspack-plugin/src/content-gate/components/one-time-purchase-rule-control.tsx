@@ -13,12 +13,12 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Flex, FlexBlock, FormTokenField as CoreFormTokenField, SelectControl, TextControl } from '@wordpress/components';
-import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
 
 /**
  * Internal dependencies.
  */
 import {
+	type TokenItem,
 	formatAccessRuleOptionLabel,
 	getAccessRuleOptionTokens,
 	getAccessRuleTokenFieldMessages,

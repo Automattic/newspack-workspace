@@ -281,6 +281,7 @@ class Content_Gate {
 		include __DIR__ . '/class-access-rules.php';
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
+		include __DIR__ . '/class-member-body-class.php';
 		include __DIR__ . '/class-block-patterns.php';
 		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
@@ -295,6 +296,7 @@ class Content_Gate {
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 		include __DIR__ . '/class-email-verification-prompt.php';
+		include __DIR__ . '/class-institutional-access-prompt.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
@@ -1247,7 +1249,7 @@ class Content_Gate {
 	/**
 	 * The staged pieces a 'the_content' pass over a restricted post is answered
 	 * from — the teaser to substitute, and the gate that pass owes — or null when
-	 * nothing is staged for the post.
+	 * nothing is staged for the post or the request is a feed.
 	 *
 	 * One post can be both the article being read and a card in a listing on that
 	 * same page, and the two are not answered alike. The article's entry holds a
@@ -1271,6 +1273,15 @@ class Content_Gate {
 	 * @return array{teaser: string, gate: string}|null
 	 */
 	private static function get_staged_restriction_for_render( $post_id ) {
+		// Feeds answer to Content_Gate_Advanced_Settings, as in restrict_post().
+		// Asked again here because staging can happen inside a feed request with
+		// the feed flag off: newspack-manager's Pugpig homepage feed renders the
+		// front page to learn which posts to list, and the teasers its listings
+		// stage would otherwise replace those posts' feed items.
+		if ( is_feed() ) {
+			return null;
+		}
+
 		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
 			return null;
 		}
@@ -1754,7 +1765,8 @@ class Content_Gate {
 		if ( Content_Gifting::should_enqueue_assets() || Metering_Countdown::is_enabled() ) {
 			$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-banner.asset.php';
 
-			// Ensure the content gate metering script is enqueued first.
+			// Order the banner after the meter so the meter has already locked or unlocked
+			// the article by the time the banner reads the view count.
 			if ( is_singular() && self::has_gate() && self::is_post_restricted() && Metering::is_frontend_metering() ) {
 				$asset['dependencies'][] = 'newspack-content-gate-metering';
 			}
@@ -2839,6 +2851,10 @@ class Content_Gate {
 			'metering'             => isset( $registration['metering'] ) && is_array( $registration['metering'] ) ? wp_parse_args( $registration['metering'], $default_metering ) : $default_metering,
 			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
 			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
+			// Conditions that let a visitor count as registered without an account.
+			// Only rules that can judge a signed-out visitor belong here; today that
+			// is `institution`. See Content_Restriction_Control::is_post_restricted().
+			'access_rules'         => Access_Rules::normalize_rules( isset( $registration['access_rules'] ) && is_array( $registration['access_rules'] ) ? $registration['access_rules'] : [] ),
 		];
 	}
 

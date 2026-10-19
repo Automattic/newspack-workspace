@@ -1,3 +1,4 @@
+import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
@@ -22,6 +23,15 @@ function readPaginationInfo( response ) {
 	};
 }
 
+// Read back off the path rather than taken as a second argument: the page
+// ceiling has to agree with the `per_page` the caller actually asked for, and
+// two independent sources could drift apart silently.
+function chunkSizeFromPath( path ) {
+	const query = path.split( '?' )[ 1 ];
+	const perPage = query ? parseInt( new URLSearchParams( query ).get( 'per_page' ), 10 ) : NaN;
+	return Number.isInteger( perPage ) && perPage > 0 ? perPage : FETCH_ALL_CHUNK_SIZE;
+}
+
 // The collection got shorter mid-walk — retrying won't help.
 const OUT_OF_RANGE_PAGE_CODES = [ 'rest_post_invalid_page_number', 'rest_term_invalid_page_number' ];
 
@@ -37,10 +47,11 @@ function isOutOfRangePageError( error ) {
  * trash sub-fetch — `hasResolved` flips solely on the main resolution.
  *
  * When `fetchAll` is set, the first response's `X-WP-TotalPages` drives
- * a walk over the remaining pages (the REST API caps `per_page` at 100).
- * `data` commits once the walk finishes (or aborts); `progress` reports
- * the walk meanwhile (`{ loaded, total }`, `null` outside a walk) and
- * `totalPages` is clamped to 1 so the footer doesn't offer pagination.
+ * a walk over the remaining pages, capped at `FETCH_ALL_MAX_ITEMS` rows
+ * using the `per_page` read off `path`.
+ * `data` commits once the walk finishes (or aborts), and `totalPages` is
+ * clamped to 1 so the footer doesn't offer pagination. DataViews shows
+ * the walk via its own loading state; there is no separate indicator.
  *
  * @param {Object}  options
  * @param {string}  options.path             Pre-computed REST path. Falsy ⇒ defer.
@@ -49,7 +60,7 @@ function isOutOfRangePageError( error ) {
  * @param {string}  [options.errorMessage]   notifyError message on fetch failure.
  * @param {string}  [options.errorNoticeId]  notifyError dedupe id.
  * @param {boolean} [options.fetchAll]       Walk every page of the collection.
- * @return {{ data: Array, paginationInfo: Object, isLoading: boolean, hasResolved: boolean, hasLoadedOnce: boolean, trashCount: number|null, progress: Object|null, refresh: () => void }} Hook state.
+ * @return {{ data: Array, paginationInfo: Object, isLoading: boolean, hasResolved: boolean, hasLoadedOnce: boolean, trashCount: number|null, refresh: () => void }} Hook state.
  */
 export default function useCollectionData( { path, trashCountPath = null, mutationKey = 0, errorMessage, errorNoticeId, fetchAll = false } ) {
 	const [ data, setData ] = useState( [] );
@@ -61,7 +72,6 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 	const [ hasLoadedOnce, setHasLoadedOnce ] = useState( false );
 	// `null` ⇒ unknown; failed trash fetch stays `null` so `=== 0` stays false and the banner stays hidden.
 	const [ trashCount, setTrashCount ] = useState( null );
-	const [ progress, setProgress ] = useState( null );
 
 	const refresh = useCallback( () => setRefreshKey( key => key + 1 ), [] );
 
@@ -74,7 +84,6 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 		}
 		let cancelled = false;
 		setIsLoading( true );
-		setProgress( null );
 
 		apiFetch( { path, parse: false } )
 			.then( async response => {
@@ -101,9 +110,12 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 					return;
 				}
 
-				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / FETCH_ALL_CHUNK_SIZE ) );
+				// DataViews' loading treatment is visual only, so a multi-page
+				// walk is otherwise silent to a screen reader.
+				speak( __( 'Loading all items. This may take a moment.', 'newspack-newsletters' ), 'polite' );
 
-				setProgress( { loaded: all.length, total: pagination.totalItems } );
+				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / chunkSizeFromPath( path ) ) );
+
 				let endedEarly = false;
 				let cappedByMax = false;
 				// Settled, so one bad page doesn't discard its siblings.
@@ -150,7 +162,6 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 						}
 					}
 
-					setProgress( { loaded: all.length, total: pagination.totalItems } );
 					if ( failedAt !== -1 ) {
 						endedEarly = true;
 						break;
@@ -167,6 +178,12 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 				}
 
 				setData( all );
+				speak(
+					endedEarly
+						? __( 'Stopped loading items before the end of the list.', 'newspack-newsletters' )
+						: __( 'Finished loading items.', 'newspack-newsletters' ),
+					'polite'
+				);
 
 				if ( endedEarly ) {
 					setPaginationInfo( { totalItems: all.length, totalPages: 1 } );
@@ -193,7 +210,6 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 				if ( ! cancelled ) {
 					setIsLoading( false );
 					setMainResolved( true );
-					setProgress( null );
 				}
 			} );
 
@@ -228,5 +244,5 @@ export default function useCollectionData( { path, trashCountPath = null, mutati
 
 	const hasResolved = mainResolved && trashResolved;
 
-	return { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, progress, refresh };
+	return { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, refresh };
 }

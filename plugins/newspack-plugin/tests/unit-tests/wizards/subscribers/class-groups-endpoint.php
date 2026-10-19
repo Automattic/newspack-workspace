@@ -175,6 +175,29 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A renamed group carries both names: `plan` is the group's own name, `product`
+	 * the subscription's product, so the list can show and search each.
+	 */
+	public function test_group_carries_group_name_and_product_name() {
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Team Annual',
+			]
+		);
+
+		$renamed_group = $this->create_group_subscription( $this->create_reader_user(), 5 );
+		$renamed_group->add_product( $product );
+
+		$group = $this->dispatch()->get_data()['items'][0];
+
+		$this->assertSame( 'Acme Team', $group['plan'] );
+		$this->assertSame( 'Team Annual', $group['product'] );
+	}
+
+	/**
 	 * A subscription that is not group-enabled is excluded, even though the test mock's
 	 * get_group_subscription_ids() over-returns (it ignores the meta_query).
 	 */

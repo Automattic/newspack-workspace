@@ -266,6 +266,36 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Disabling the card on Audience → Integrations must also stop the retries
+	 * queued while it was enabled. The card stays registered with outbound
+	 * sync on, so neither of the guards above notices.
+	 */
+	public function test_a_retry_that_finds_the_integration_disabled_ends_the_row_as_failed() {
+		$this->require_action_scheduler();
+		$this->factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
+		$spy              = $this->register_spy( 'disabled-spy' );
+		$spy->push_result = new \WP_Error( 'provider_down', 'Provider down' );
+		Contact_Sync::sync(
+			[
+				'email'    => 'reader@example.test',
+				'metadata' => [],
+			],
+			'Test context'
+		);
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_HOOK, 'disabled-spy' );
+
+		Integrations::disable( 'disabled-spy' );
+		Contact_Sync::execute_integration_retry( $retry['args'] );
+
+		$row = $this->get_rows_by_integration()['disabled-spy'];
+		$this->assertCount( 1, $spy->push_calls, 'The retry of a disabled integration does not push.' );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'retry_aborted', $row['error_code'] );
+		$this->assertStringContainsString( 'disabled', $row['error_message'] );
+		$this->assertStringContainsString( 'Last error: Provider down', $row['error_message'] );
+	}
+
+	/**
 	 * An email change pushes the new address while asking the provider to
 	 * match the old one. The row records which address was matched against,
 	 * so a support question about a reader whose CRM record moved can be
@@ -541,6 +571,28 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 		$this->assertCount( 1, $spy->delete_calls, 'The abandoned retry does not call the provider.' );
 		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
 		$this->assertSame( 'retry_aborted', $row['error_code'] );
+		$this->assertStringContainsString( 'Last error: Provider down', $row['error_message'] );
+	}
+
+	/**
+	 * A deletion retry queued before the card was disabled must not reach the
+	 * provider either: the card stays registered with outbound sync on.
+	 */
+	public function test_a_deletion_retry_that_finds_the_integration_disabled_ends_the_row_as_failed() {
+		$this->require_action_scheduler();
+		$spy                = $this->register_deletion_spy( 'disabled-gone-spy', 'delete' );
+		$spy->delete_result = new \WP_Error( 'provider_down', 'Provider down' );
+		$this->delete_sample_reader();
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'disabled-gone-spy' );
+
+		Integrations::disable( 'disabled-gone-spy' );
+		Contact_Sync::execute_deletion_retry( $retry['args'] );
+
+		$row = $this->get_rows_by_integration()['disabled-gone-spy'];
+		$this->assertCount( 1, $spy->delete_calls, 'The retry of a disabled integration does not call the provider.' );
+		$this->assertSame( Push_Log::STATUS_FAILED, $row['status'] );
+		$this->assertSame( 'retry_aborted', $row['error_code'] );
+		$this->assertStringContainsString( 'disabled', $row['error_message'] );
 		$this->assertStringContainsString( 'Last error: Provider down', $row['error_message'] );
 	}
 }

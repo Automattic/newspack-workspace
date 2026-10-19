@@ -15,7 +15,6 @@ import { Fragment } from '@wordpress/element';
  */
 import './style.scss';
 import sections from './sections';
-import BrandHeader from '../../components/brand-header';
 import QuickActions from '../../components/quick-actions';
 import SiteStatuses from '../../components/site-statuses';
 import { Divider, GlobalNotices, Wizard } from '../../../../../packages/components/src';
@@ -29,7 +28,6 @@ function Dashboard() {
 				sections={ sections }
 				renderAboveSections={ () => (
 					<>
-						<BrandHeader />
 						<SiteStatuses />
 						<Divider variant="tertiary" />
 						<QuickActions />

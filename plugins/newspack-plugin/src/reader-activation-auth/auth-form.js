@@ -178,7 +178,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 					emailInput.value = reader?.email || '';
 				}
 				setTimeout( function () {
-					if ( reader?.authenticated && formAction !== 'success' ) {
+					// A reader who has just registered is authenticated but still owes the
+					// verification step. Resolving the flow here would report success to the
+					// opener while the verification modal is up, and modal checkout answers
+					// that by opening the checkout over it.
+					if ( reader?.authenticated && formAction !== 'success' && ! form.isVerifying ) {
 						form.endLoginFlow( null, 200 );
 					}
 				}, 1000 );
@@ -367,8 +371,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 					// Post-registration email verification: detour the new reader through the verification
 					// modal before completing the auth flow. The newsletters signup modal is shown after the
 					// verification step (or its dismissal) and before the original onSuccess/onClose callbacks.
+					// An opener whose own flow verifies the reader, as a checkout does, passes skipVerification.
 					const needsVerification =
-						data?.registered && newspack_ras_config?.verify_new_reader_accounts && data?.verified !== true && data?.verification_nonce;
+						! container.config?.skipVerification &&
+						data?.registered &&
+						newspack_ras_config?.verify_new_reader_accounts &&
+						data?.verified !== true &&
+						data?.verification_nonce;
 
 					let callback;
 					if ( ! container.config?.skipNewslettersSignup && data?.registered && container.authCallback ) {
@@ -440,7 +449,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 							},
 							onDismiss: () => {
 								restoreAuthModal();
-								callback?.( message, data );
+								if ( callback ) {
+									callback( message, data );
+								} else {
+									// An inline form has no opener to hand back to, so it finishes by
+									// itself. No data: passing the registration would reopen this step.
+									form.endLoginFlow( null, 200 );
+								}
 								form.isVerifying = false;
 							},
 						} );

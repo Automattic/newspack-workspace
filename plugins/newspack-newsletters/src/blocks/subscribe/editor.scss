@@ -106,7 +106,7 @@
 		}
 	}
 
-	&.is-style-modern {
+	&:not(.is-style-legacy):not(.is-style-modern--grid) {
 		.newspack-newsletters-subscribe__response {
 			padding: 24px;
 
@@ -132,4 +132,8 @@
 .components-panel__body.styles-container .components-tools-panel {
 	border: 0;
 	padding: 0;
+}
+
+.newspack-newsletters-subscribe__edit-lists {
+	justify-content: center;
 }

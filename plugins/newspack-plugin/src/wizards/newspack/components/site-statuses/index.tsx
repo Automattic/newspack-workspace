@@ -11,7 +11,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import SiteStatus from './site-status';
-import { Grid } from '../../../../../packages/components/src';
+import { Grid, SectionHeader } from '../../../../../packages/components/src';
 import './index.scss';
 
 const {
@@ -42,8 +42,8 @@ const actions: Statuses = {
 const SiteStatuses = () => {
 	return (
 		<div className="newspack-dashboard__section">
-			<h3>{ __( 'Site status', 'newspack-plugin' ) }</h3>
-			<Grid columns={ 3 } gutter={ 24 }>
+			<SectionHeader heading={ 3 } title={ __( 'Site status', 'newspack-plugin' ) } />
+			<Grid columns={ 3 } gutter={ 16 }>
 				{ Object.keys( actions ).map( id => {
 					return <SiteStatus key={ id } { ...actions[ id ] } />;
 				} ) }
