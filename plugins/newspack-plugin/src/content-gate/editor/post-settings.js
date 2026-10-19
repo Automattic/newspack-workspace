@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useMemo } from '@wordpress/element';
+import { useEffect, useMemo } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
@@ -14,7 +14,8 @@ import { Stack } from '@wordpress/ui';
  */
 import { gateMatchesPost } from './gate-matching';
 import { AgeDurationFields } from '../components/published-age-rule-control';
-import { AGE_OVERRIDE_META_KEY, PUBLISHED_AGE_RULE, formatAgeDuration, normalizeAgeDuration } from '../utils/published-age';
+import { AGE_OVERRIDE_META_KEY, PUBLISHED_AGE_RULE, formatAgeDuration, isUsableAgeDuration, normalizeAgeDuration } from '../utils/published-age';
+import './post-settings.scss';
 
 const { gates = [], taxonomyMap = {}, canEditGates = false } = window.newspackContentGates || {};
 
@@ -29,14 +30,15 @@ const seedAgeOverride = value => {
 const renderGateLink = gate => ( canEditGates && gate.edit_url ? <a href={ gate.edit_url }>{ gate.title }</a> : gate.title );
 
 function PostSettings() {
-	const { meta, postId, postType, termsByTax, publishedGmt } = useSelect( select => {
-		const { getEditedPostAttribute, getCurrentPostId } = select( 'core/editor' );
+	const { meta, savedAgeOverride, postId, postType, termsByTax, publishedGmt } = useSelect( select => {
+		const { getEditedPostAttribute, getCurrentPostAttribute, getCurrentPostId } = select( 'core/editor' );
 		const terms = {};
 		Object.values( taxonomyMap ).forEach( restBase => {
 			terms[ restBase ] = getEditedPostAttribute( restBase ) || [];
 		} );
 		return {
 			meta: getEditedPostAttribute( 'meta' ),
+			savedAgeOverride: getCurrentPostAttribute( 'meta' )?.[ AGE_OVERRIDE_META_KEY ],
 			postId: getCurrentPostId(),
 			postType: getEditedPostAttribute( 'type' ),
 			termsByTax: terms,
@@ -48,7 +50,26 @@ function PostSettings() {
 	const ageOverride = meta[ AGE_OVERRIDE_META_KEY ];
 	// The schema stores only a known unit, so a unit is set exactly when the override is on.
 	const isAgeOverrideOn = Boolean( ageOverride?.duration_unit );
-	const { editPost } = useDispatch( 'core/editor' );
+	const editedDuration = normalizeAgeDuration( ageOverride );
+	const savedDuration = normalizeAgeDuration( savedAgeOverride );
+	// Only an unsaved edit locks saving: a stored value may have no control on screen to correct it.
+	const isUnusableEdit =
+		isAgeOverrideOn &&
+		! isUsableAgeDuration( editedDuration ) &&
+		( editedDuration.duration_value !== savedDuration.duration_value || editedDuration.duration_unit !== savedDuration.duration_unit );
+	const { editPost, lockPostSaving, unlockPostSaving, lockPostAutosaving, unlockPostAutosaving } = useDispatch( 'core/editor' );
+
+	useEffect( () => {
+		if ( ! isUnusableEdit ) {
+			return;
+		}
+		lockPostSaving( AGE_OVERRIDE_META_KEY );
+		lockPostAutosaving( AGE_OVERRIDE_META_KEY );
+		return () => {
+			unlockPostSaving( AGE_OVERRIDE_META_KEY );
+			unlockPostAutosaving( AGE_OVERRIDE_META_KEY );
+		};
+	}, [ isUnusableEdit ] );
 
 	const { hasSeveralAgeGates, matchingGates, matchingGatesWithoutOverride, seedAgeRule } = useMemo( () => {
 		// REST dates carry no zone, and are UTC.
@@ -94,39 +115,38 @@ function PostSettings() {
 			className="newspack-content-gate-panel"
 			title={ __( 'Access Control Settings', 'newspack-plugin' ) }
 		>
-			{ matchingGates.length > 0 ? (
-				<>
-					{ /* Gates arrive in priority order, and the first matching gate decides access alone (NPPD-2289). */ }
-					<p>
-						{ meta.newspack_content_restriction_is_exempt
-							? __( 'Gate that would decide access if this post weren’t exempt: ', 'newspack-plugin' )
-							: __( 'Gate that decides access to this post: ', 'newspack-plugin' ) }
-						{ renderGateLink( matchingGates[ 0 ] ) }
-					</p>
-					{ matchingGates.length > 1 && (
+			<Stack className="newspack-content-gate-panel__settings" direction="column" gap="lg">
+				{ matchingGates.length > 0 ? (
+					<>
+						{ /* Gates arrive in priority order, and the first matching gate decides access alone (NPPD-2289). */ }
 						<p>
-							{ __( 'Also matching, but ranked lower: ', 'newspack-plugin' ) }
-							{ matchingGates.slice( 1 ).map( ( gate, index ) => (
-								<span key={ gate.id }>
-									{ index > 0 && ', ' }
-									{ renderGateLink( gate ) }
-								</span>
-							) ) }
+							{ meta.newspack_content_restriction_is_exempt
+								? __( 'Gate that would decide access if this post weren’t exempt: ', 'newspack-plugin' )
+								: __( 'Gate that decides access to this post: ', 'newspack-plugin' ) }
+							{ renderGateLink( matchingGates[ 0 ] ) }
 						</p>
-					) }
-				</>
-			) : (
-				<p>
-					{ isAgeOverrideOn && matchingGatesWithoutOverride.length > 0
-						? __(
-								'No gates apply to this post: its own time window keeps it outside the gates that would otherwise apply.',
-								'newspack-plugin'
-						  )
-						: __( 'No gates apply to this post.', 'newspack-plugin' ) }
-				</p>
-			) }
-			<hr />
-			<Stack direction="column" gap="lg">
+						{ matchingGates.length > 1 && (
+							<p>
+								{ __( 'Also matching, but ranked lower: ', 'newspack-plugin' ) }
+								{ matchingGates.slice( 1 ).map( ( gate, index ) => (
+									<span key={ gate.id }>
+										{ index > 0 && ', ' }
+										{ renderGateLink( gate ) }
+									</span>
+								) ) }
+							</p>
+						) }
+					</>
+				) : (
+					<p>
+						{ isAgeOverrideOn && matchingGatesWithoutOverride.length > 0
+							? __(
+									'No gates apply to this post: its own time window keeps it outside the gates that would otherwise apply.',
+									'newspack-plugin'
+							  )
+							: __( 'No gates apply to this post.', 'newspack-plugin' ) }
+					</p>
+				) }
 				<ToggleControl
 					label={ __( 'Disable access control restrictions for this post', 'newspack-plugin' ) }
 					help={

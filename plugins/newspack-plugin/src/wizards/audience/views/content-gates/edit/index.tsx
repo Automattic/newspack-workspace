@@ -39,6 +39,7 @@ import { getGateSummarySections } from '../gate-summary';
 import { useAccessRuleOptions } from '../use-access-rule-options';
 import SavePanel from './save-panel';
 import PreferencesModal from './preferences-modal';
+import { PUBLISHED_AGE_RULE, isUsableAgeDuration, normalizeAgeDuration } from '../../../../../content-gate/utils/published-age';
 
 const { useHistory } = Router;
 
@@ -456,6 +457,10 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		resetError();
 	}, [ gates, id, isDeleting, isFetching, isSaving, isNew ] );
 
+	const hasUnusableAgeRule = contentRules.some(
+		rule => PUBLISHED_AGE_RULE === rule.slug && ! isUsableAgeDuration( normalizeAgeDuration( rule.value ) )
+	);
+
 	// Set header actions.
 	useEffect( () => {
 		const actions: HeaderAction[] = [
@@ -468,6 +473,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					! isDirty ||
 					! title ||
 					! contentRules.length ||
+					hasUnusableAgeRule ||
 					( ! registration.active && ! customAccess.active ) ||
 					( ! registration.active &&
 						! customAccess.access_rules.some( ruleGroup =>
@@ -520,6 +526,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		handleCreate,
 		handleSave,
 		handleSaveButtonClick,
+		hasUnusableAgeRule,
 		isDirty,
 		isFetching,
 		isNew,
