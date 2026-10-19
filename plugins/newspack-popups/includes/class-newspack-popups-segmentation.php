@@ -842,14 +842,16 @@ final class Newspack_Popups_Segmentation {
 	 * (which rejects every unsubstituted merge-tag shape), a valid newsletter
 	 * pass on the same link, and a free slot in the per-IP account cap.
 	 *
-	 * The pass is stripped too when the site has active segments, unless
+	 * The pass is stripped too when the site has any segment, unless
 	 * newspack-plugin's handler will consume it on the next request. Left in
 	 * place it would stay in the landing URL, where anyone the reader shares
 	 * it with could pair it with other account IDs for the rest of its
 	 * lifetime. For the same reason a pass arriving without an account param
-	 * is redirected away when nothing consumes it. Without active segments an
-	 * account resolves to nothing, so the pass is left alone and those clicks
-	 * keep their cacheable landing page.
+	 * is redirected away when nothing consumes it. A disabled segment counts,
+	 * since enabling it would make a lingering pass resolve. On a site with no
+	 * segments the pass is left alone so those clicks keep their cacheable
+	 * landing page; one created within the pass's lifetime makes those
+	 * landing URLs resolvable until the pass expires.
 	 */
 	public static function handle_account_param() {
 		if ( is_admin() ) {
@@ -865,7 +867,7 @@ final class Newspack_Popups_Segmentation {
 		// Reading a URL param to decide where to redirect; there is no form
 		// submission or state change here to nonce-verify.
 		$has_account = isset( $_GET[ self::ACCOUNT_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$strip_pass  = isset( $_GET[ self::NEWSLETTER_PASS_QUERY_PARAM ] ) && ! self::is_newsletter_pass_consumed() && self::has_active_segments(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$strip_pass  = isset( $_GET[ self::NEWSLETTER_PASS_QUERY_PARAM ] ) && ! self::is_newsletter_pass_consumed() && self::has_segments(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( ! $has_account && ! $strip_pass ) {
 			return;
 		}
@@ -918,13 +920,13 @@ final class Newspack_Popups_Segmentation {
 	}
 
 	/**
-	 * Whether the site has any active segment an account could resolve to.
+	 * Whether the site has any segment, active or not.
 	 *
 	 * @return bool
 	 */
-	private static function has_active_segments(): bool {
+	private static function has_segments(): bool {
 		self::ensure_segments_taxonomy();
-		return ! empty( self::get_segments( false ) );
+		return ! empty( self::get_segments() );
 	}
 
 	/**

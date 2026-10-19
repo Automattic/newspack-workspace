@@ -100,6 +100,7 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		}
 		\Newspack\Reader_Data::$matched_segments    = [];
 		\Newspack\Newsletters_Access::$valid_passes = [ self::VALID_PASS => 99 ];
+		\Newspack\Newsletters_Access::$will_consume = null;
 		$key_method = new ReflectionMethod( 'Newspack_Popups_Segmentation', 'get_carried_accounts_key' );
 		$key_method->setAccessible( true );
 		foreach ( [ self::IP, '198.51.100.9', '2001:db8:1:1::1', '2001:db8:1:2::1' ] as $ip ) {
@@ -474,15 +475,53 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Without active segments an account resolves to nothing, so an unconsumed
-	 * pass is left in place: a bare pass costs no redirect, and an account
-	 * param is still redirected away on its own.
+	 * On a site with no segments an account resolves to nothing, so an
+	 * unconsumed pass is left in place: a bare pass costs no redirect, and an
+	 * account param is still redirected away on its own.
 	 */
-	public function test_leaves_an_unconsumed_pass_when_no_segment_is_active() {
+	public function test_leaves_an_unconsumed_pass_when_the_site_has_no_segments() {
 		remove_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ], 2 );
 		Newspack_Segments_Model::delete_all_segments();
 		$this->assertNull( $this->arrive( '/p/?a=1&npnl=ABC123' ) );
 		$this->assertSame( '/p/?a=1&npnl=ABC123', $this->arrive( '/p/?a=1&np_account=42&npnl=ABC123' ) );
+	}
+
+	/**
+	 * A disabled segment still counts: enabling it later would make a pass left
+	 * in a landing URL resolve.
+	 */
+	public function test_strips_an_unconsumed_pass_when_only_a_disabled_segment_exists() {
+		remove_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ], 2 );
+		Newspack_Popups_Segmentation::delete_segment( $this->segment_ids['carried-one'] );
+		Newspack_Popups_Segmentation::delete_segment( $this->segment_ids['carried-two'] );
+		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&npnl=ABC123' ) );
+	}
+
+	/**
+	 * The segment check runs before the segments taxonomy registers on `init`,
+	 * so it must register it itself; otherwise the site reads as having no
+	 * segments and the pass is never stripped.
+	 */
+	public function test_strips_an_unconsumed_pass_before_the_segments_taxonomy_registers() {
+		remove_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ], 2 );
+		unregister_taxonomy( Newspack_Segments_Model::TAX_SLUG );
+		try {
+			$redirect = $this->arrive( '/p/?a=1&npnl=ABC123' );
+		} finally {
+			if ( ! taxonomy_exists( Newspack_Segments_Model::TAX_SLUG ) ) {
+				Newspack_Segments_Model::register_segments_taxonomy();
+			}
+		}
+		$this->assertSame( '/p/?a=1', $redirect );
+	}
+
+	/**
+	 * The handler's own answer decides, not whether it is hooked: when
+	 * newspack-plugin says it won't consume the pass, it is stripped here.
+	 */
+	public function test_defers_to_the_consumer_on_whether_it_takes_the_pass() {
+		\Newspack\Newsletters_Access::$will_consume = false;
+		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&npnl=ABC123' ) );
 	}
 
 	/**

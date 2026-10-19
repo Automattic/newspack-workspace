@@ -4,7 +4,7 @@
  *
  * The account-param arrival handler requires a valid newsletter pass on the
  * same link before it resolves an account (verify()), and strips the pass
- * unless handle_inbound_request_action() is hooked to consume it.
+ * unless will_consume_inbound_pass() says the handler will consume it.
  *
  * @package Newspack_Popups
  */
@@ -22,6 +22,28 @@ if ( ! class_exists( __NAMESPACE__ . '\Newsletters_Access' ) ) {
 		 * @var array<string, int>
 		 */
 		public static $valid_passes = [];
+
+		/**
+		 * Overrides will_consume_inbound_pass() when not null.
+		 *
+		 * @var bool|null
+		 */
+		public static $will_consume = null;
+
+		/**
+		 * Whether the inbound handler will consume the pass: the override if
+		 * set, else whether it is hooked and doesn't skip the current user, as
+		 * in newspack-plugin.
+		 *
+		 * @return bool
+		 */
+		public static function will_consume_inbound_pass() {
+			if ( null !== self::$will_consume ) {
+				return self::$will_consume;
+			}
+			return false !== has_action( 'init', [ __CLASS__, 'handle_inbound_request_action' ] )
+				&& ! ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) );
+		}
 
 		/**
 		 * Verify a newsletter pass.
