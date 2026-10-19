@@ -517,10 +517,11 @@ final class Reader_Data {
 	 * @param string $user_id User ID.
 	 * @param string $key     Key.
 	 * @param string $value   Value.
+	 * @param bool   $server_written Whether the server is the source of the value. False for values relayed from a client.
 	 *
 	 * @return true|WP_Error True on success, error object on failure.
 	 */
-	public static function update_item( $user_id, $key, $value ) {
+	public static function update_item( $user_id, $key, $value, bool $server_written = true ) {
 		$value = self::prepare_item_value( $value );
 		if ( \is_wp_error( $value ) ) {
 			return $value;
@@ -539,6 +540,11 @@ final class Reader_Data {
 		}
 
 		\update_user_meta( $user_id, self::get_meta_key_name( $key ), $value );
+		if ( $server_written ) {
+			Reader_Data_Trust::set_mark( (int) $user_id, $key );
+		} else {
+			Reader_Data_Trust::clear_mark( (int) $user_id, $key );
+		}
 
 		/**
 		 * Fires after a reader data item is updated.
@@ -567,6 +573,7 @@ final class Reader_Data {
 			\update_user_meta( $user_id, 'newspack_reader_data_keys', $user_keys );
 		}
 		\delete_user_meta( $user_id, self::get_meta_key_name( $key ) );
+		Reader_Data_Trust::clear_mark( (int) $user_id, $key );
 
 		/**
 		 * Fires after a reader data item is deleted.
@@ -599,7 +606,7 @@ final class Reader_Data {
 		if ( null === json_decode( $value ) ) {
 			return new \WP_Error( 'invalid_value', __( 'Invalid value.', 'newspack' ), [ 'status' => 400 ] );
 		}
-		$res = self::update_item( \get_current_user_id(), $key, $value );
+		$res = self::update_item( \get_current_user_id(), $key, $value, false );
 		if ( \is_wp_error( $res ) ) {
 			return $res;
 		}
