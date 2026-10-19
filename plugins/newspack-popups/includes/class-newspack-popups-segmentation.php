@@ -842,12 +842,14 @@ final class Newspack_Popups_Segmentation {
 	 * (which rejects every unsubstituted merge-tag shape), a valid newsletter
 	 * pass on the same link, and a free slot in the per-IP account cap.
 	 *
-	 * The pass is stripped too unless newspack-plugin's handler will consume it
-	 * on the next request: that handler is hooked, and it doesn't skip the
-	 * current user. Left in place it would stay in the landing URL, where
-	 * anyone the reader shares it with could pair it with other account IDs
-	 * for the rest of its lifetime. For the same reason a pass arriving without
-	 * an account param is redirected away when nothing consumes it.
+	 * The pass is stripped too when the site has active segments, unless
+	 * newspack-plugin's handler will consume it on the next request. Left in
+	 * place it would stay in the landing URL, where anyone the reader shares
+	 * it with could pair it with other account IDs for the rest of its
+	 * lifetime. For the same reason a pass arriving without an account param
+	 * is redirected away when nothing consumes it. Without active segments an
+	 * account resolves to nothing, so the pass is left alone and those clicks
+	 * keep their cacheable landing page.
 	 */
 	public static function handle_account_param() {
 		if ( is_admin() ) {
@@ -863,7 +865,7 @@ final class Newspack_Popups_Segmentation {
 		// Reading a URL param to decide where to redirect; there is no form
 		// submission or state change here to nonce-verify.
 		$has_account = isset( $_GET[ self::ACCOUNT_QUERY_PARAM ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$strip_pass  = isset( $_GET[ self::NEWSLETTER_PASS_QUERY_PARAM ] ) && ! self::is_newsletter_pass_consumed(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$strip_pass  = isset( $_GET[ self::NEWSLETTER_PASS_QUERY_PARAM ] ) && ! self::is_newsletter_pass_consumed() && self::has_active_segments(); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( ! $has_account && ! $strip_pass ) {
 			return;
 		}
@@ -874,12 +876,7 @@ final class Newspack_Popups_Segmentation {
 			self::has_valid_newsletter_pass() &&
 			self::claim_carried_account_slot( (int) $raw )
 		) {
-			// This runs ahead of `init` priority 10, where the segments taxonomy
-			// registers; without it every segment reads as unknown and the reader
-			// would carry "no segments". Registering again later is harmless.
-			if ( ! taxonomy_exists( Newspack_Segments_Model::TAX_SLUG ) ) {
-				Newspack_Segments_Model::register_segments_taxonomy();
-			}
+			self::ensure_segments_taxonomy();
 			// Gates passed, so the value asserts something real — including "no
 			// segments" when the resolved set is empty.
 			self::set_carried_segments_cookie( self::get_carried_segments_for_account( (int) $raw ) );
@@ -902,20 +899,44 @@ final class Newspack_Popups_Segmentation {
 
 	/**
 	 * Whether newspack-plugin's handler will take the newsletter pass out of
-	 * the URL on this request. It registers only while the newsletter-link
-	 * bypass is on and gating is active, and it skips users who can
-	 * `edit_others_posts` (they bypass the gate anyway), so for them the pass
-	 * would stay in the landing URL. A pass that fails verification also
-	 * stays, which is harmless since it resolves nothing.
+	 * the URL on this request. A pass that fails verification stays either
+	 * way, which is harmless since it resolves nothing.
 	 *
 	 * @return bool
 	 */
 	private static function is_newsletter_pass_consumed(): bool {
+		if ( method_exists( '\Newspack\Newsletters_Access', 'will_consume_inbound_pass' ) ) {
+			return (bool) \Newspack\Newsletters_Access::will_consume_inbound_pass();
+		}
+		// Older newspack-plugin: its handler registers only while the
+		// newsletter-link bypass is on and gating is active, and skips users
+		// who can `edit_others_posts`.
 		if ( false === has_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ] ) ) {
 			return false;
 		}
-		// Mirrors Newsletters_Access::process_inbound_request().
 		return ! ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) );
+	}
+
+	/**
+	 * Whether the site has any active segment an account could resolve to.
+	 *
+	 * @return bool
+	 */
+	private static function has_active_segments(): bool {
+		self::ensure_segments_taxonomy();
+		return ! empty( self::get_segments( false ) );
+	}
+
+	/**
+	 * Register the segments taxonomy if it isn't yet. The arrival handler runs
+	 * ahead of `init` priority 10, where the taxonomy registers; without it
+	 * every segment reads as unknown and the reader would carry "no segments".
+	 * Registering again later is harmless.
+	 */
+	private static function ensure_segments_taxonomy() {
+		if ( ! taxonomy_exists( Newspack_Segments_Model::TAX_SLUG ) ) {
+			Newspack_Segments_Model::register_segments_taxonomy();
+		}
 	}
 
 	/**

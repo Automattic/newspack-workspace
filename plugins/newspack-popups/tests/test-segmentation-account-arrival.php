@@ -313,10 +313,9 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 	/**
 	 * `np_account[]=…` puts an array in $_GET rather than a string — the one
 	 * value shape not covered by unresolvable_value_provider(), because it
-	 * can't be interpolated into a URL as a scalar. Confirmed safe rather than
-	 * assumed: core's sanitize_text_field() (via _sanitize_text_fields())
-	 * returns '' for an array, so preg_match() never sees one, and the
-	 * redirect still fires with nothing carried.
+	 * can't be interpolated into a URL as a scalar. Core's sanitize_text_field()
+	 * (via _sanitize_text_fields()) returns '' for an array, so preg_match()
+	 * never sees one, and the redirect still fires with nothing carried.
 	 *
 	 * Account 42 is seeded with a real snapshot so this also catches a
 	 * regression where the array is naively reduced to its first element
@@ -472,6 +471,18 @@ class SegmentationAccountArrivalTest extends WP_UnitTestCase {
 		remove_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ], 2 );
 		$this->assertSame( '/p/?a=1', $this->arrive( '/p/?a=1&npnl=ABC123' ) );
 		$this->assertNull( $this->cookie() );
+	}
+
+	/**
+	 * Without active segments an account resolves to nothing, so an unconsumed
+	 * pass is left in place: a bare pass costs no redirect, and an account
+	 * param is still redirected away on its own.
+	 */
+	public function test_leaves_an_unconsumed_pass_when_no_segment_is_active() {
+		remove_action( 'init', [ 'Newspack\Newsletters_Access', 'handle_inbound_request_action' ], 2 );
+		Newspack_Segments_Model::delete_all_segments();
+		$this->assertNull( $this->arrive( '/p/?a=1&npnl=ABC123' ) );
+		$this->assertSame( '/p/?a=1&npnl=ABC123', $this->arrive( '/p/?a=1&np_account=42&npnl=ABC123' ) );
 	}
 
 	/**
