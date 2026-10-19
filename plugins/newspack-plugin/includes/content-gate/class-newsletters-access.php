@@ -362,6 +362,29 @@ class Newsletters_Access {
 	}
 
 	/**
+	 * Whether the inbound handler will take the newsletter pass out of the URL
+	 * on this request. Other plugins that read the pass from the same link
+	 * strip it themselves when this is false, so it doesn't linger in landing
+	 * URLs readers share.
+	 *
+	 * @return bool
+	 */
+	public static function will_consume_inbound_pass() {
+		return false !== has_action( 'init', [ __CLASS__, 'handle_inbound_request_action' ] ) && ! self::is_skipped_user();
+	}
+
+	/**
+	 * Whether the inbound handlers skip the current user. Logged-in editors
+	 * and admins bypass the gate through capability checks, so they shouldn't
+	 * burn a signature on every click.
+	 *
+	 * @return bool
+	 */
+	private static function is_skipped_user() {
+		return is_user_logged_in() && current_user_can( 'edit_others_posts' );
+	}
+
+	/**
 	 * Action callback for the `init` hook. Thin wrapper around
 	 * process_inbound_request() so the action signature doesn't need to
 	 * accommodate WordPress's empty-string arg padding.
@@ -391,9 +414,7 @@ class Newsletters_Access {
 			return [ 'action' => 'disabled' ];
 		}
 
-		// Don't trigger for logged-in editors/admins — they bypass the gate
-		// via capability checks and shouldn't burn a signature on every click.
-		if ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) ) {
+		if ( self::is_skipped_user() ) {
 			return [ 'action' => 'skipped' ];
 		}
 
@@ -515,7 +536,7 @@ class Newsletters_Access {
 		if ( ! self::is_verification_enabled() ) {
 			return [ 'action' => 'disabled' ];
 		}
-		if ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) ) {
+		if ( self::is_skipped_user() ) {
 			return [ 'action' => 'skipped' ];
 		}
 
