@@ -303,16 +303,16 @@ class Test_Published_Age_Rule extends WP_UnitTestCase {
 
 	/**
 	 * An import can leave a published post's GMT date zeroed; its age then comes from the local date,
-	 * as the editor reads it, rather than counting as brand new.
+	 * as the editor reads it, rather than from a zero date that makes every such post centuries old.
 	 */
 	public function test_published_post_with_zeroed_gmt_date_ages_from_local_date() {
 		$this->create_age_gate( 'more_than', 7 );
-		$imported_post_id = $this->create_post_published_ago( '10 days' );
+		$imported_post_id = $this->create_post_published_ago( '3 days' );
 		global $wpdb;
 		$wpdb->update( $wpdb->posts, [ 'post_date_gmt' => '0000-00-00 00:00:00' ], [ 'ID' => $imported_post_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		clean_post_cache( $imported_post_id );
 
-		$this->assertTrue( $this->is_gated( $imported_post_id ) );
+		$this->assertFalse( $this->is_gated( $imported_post_id ) );
 	}
 
 	/**
@@ -348,5 +348,24 @@ class Test_Published_Age_Rule extends WP_UnitTestCase {
 
 		$this->assertSame( 200, $response->get_status(), 'The rest of the save goes through.' );
 		$this->assertEmpty( get_post_meta( $post_id, Content_Rules::AGE_OVERRIDE_META_KEY, true ) );
+	}
+
+	/**
+	 * The editor echoes an unset time window back as `[]` with every meta edit; that save stores no row.
+	 */
+	public function test_echoed_empty_time_window_stores_no_row() {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+		Content_Restriction_Control::register_meta();
+		$post_id = self::factory()->post->create();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $post_id );
+		$request->set_body_params( [ 'meta' => [ Content_Rules::AGE_OVERRIDE_META_KEY => [] ] ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( metadata_exists( 'post', $post_id, Content_Rules::AGE_OVERRIDE_META_KEY ) );
 	}
 }

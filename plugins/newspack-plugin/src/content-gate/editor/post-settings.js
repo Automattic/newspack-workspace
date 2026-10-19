@@ -14,13 +14,17 @@ import { Stack } from '@wordpress/ui';
  */
 import { gateMatchesPost } from './gate-matching';
 import { AgeDurationFields } from '../components/published-age-rule-control';
-import { PUBLISHED_AGE_RULE, formatAgeDuration, normalizeAgeDuration } from '../utils/published-age';
+import { AGE_OVERRIDE_META_KEY, PUBLISHED_AGE_RULE, formatAgeDuration, normalizeAgeDuration } from '../utils/published-age';
 
 const { gates = [], taxonomyMap = {}, canEditGates = false } = window.newspackContentGates || {};
 
-const AGE_OVERRIDE_META_KEY = 'newspack_content_gate_age_override';
-
 const getAgeRule = gate => gate.content_rules.find( rule => rule.slug === PUBLISHED_AGE_RULE );
+
+// A stored rule with an unreadable unit would fail the meta's schema and with it every post save.
+const seedAgeOverride = value => {
+	const duration = normalizeAgeDuration( value );
+	return { duration_value: duration.duration_value, duration_unit: duration.duration_unit || 'days' };
+};
 
 const renderGateLink = gate => ( canEditGates && gate.edit_url ? <a href={ gate.edit_url }>{ gate.title }</a> : gate.title );
 
@@ -46,7 +50,7 @@ function PostSettings() {
 	const isAgeOverrideOn = Boolean( ageOverride?.duration_unit );
 	const { editPost } = useDispatch( 'core/editor' );
 
-	const { matchingGates, matchingGatesWithoutOverride, seedAgeRule } = useMemo( () => {
+	const { hasSeveralAgeGates, matchingGates, matchingGatesWithoutOverride, seedAgeRule } = useMemo( () => {
 		// REST dates carry no zone, and are UTC.
 		const published = publishedGmt ? new Date( `${ publishedGmt }Z` ) : null;
 		const matches = ( gate, rules, override ) =>
@@ -63,11 +67,26 @@ function PostSettings() {
 				)
 		);
 		return {
+			hasSeveralAgeGates: gates.filter( getAgeRule ).length > 1,
 			matchingGates: gates.filter( gate => matches( gate, gate.content_rules, ageOverride ) ),
 			matchingGatesWithoutOverride: gates.filter( gate => matches( gate, gate.content_rules, null ) ),
 			seedAgeRule: getAgeRule( coveringGate ?? gates.find( getAgeRule ) ?? { content_rules: [] } ),
 		};
 	}, [ postId, postType, termsByTax, publishedGmt, ageOverride ] );
+
+	const getAgeOverrideHelp = () => {
+		if ( meta.newspack_content_restriction_is_exempt ) {
+			return __( 'Has no effect while access control restrictions are disabled for this post.', 'newspack-plugin' );
+		}
+		if ( hasSeveralAgeGates ) {
+			return __( 'Replaces the time window in each gate’s publication date rule for this post only.', 'newspack-plugin' );
+		}
+		return sprintf(
+			// translators: %s: the gate's own time window, such as "7 days".
+			__( 'Replaces the time window in the gate’s publication date rule (%s) for this post only.', 'newspack-plugin' ),
+			formatAgeDuration( normalizeAgeDuration( seedAgeRule.value ) )
+		);
+	};
 
 	return (
 		<PluginDocumentSettingPanel
@@ -129,25 +148,12 @@ function PostSettings() {
 					<Stack direction="column" gap="lg">
 						<ToggleControl
 							label={ __( 'Use a different time window for this post', 'newspack-plugin' ) }
-							help={
-								meta.newspack_content_restriction_is_exempt
-									? __( 'Has no effect while access control restrictions are disabled for this post.', 'newspack-plugin' )
-									: sprintf(
-											// translators: %s: the gate's own time window, such as "7 days".
-											__(
-												'Replaces the time window in each gate’s publication date rule (%s) for this post only.',
-												'newspack-plugin'
-											),
-											formatAgeDuration( normalizeAgeDuration( seedAgeRule.value ) )
-									  )
-							}
+							help={ getAgeOverrideHelp() }
 							checked={ isAgeOverrideOn }
 							onChange={ isOn =>
 								editPost( {
 									meta: {
-										[ AGE_OVERRIDE_META_KEY ]: isOn
-											? { duration_value: seedAgeRule.value.duration_value, duration_unit: seedAgeRule.value.duration_unit }
-											: null,
+										[ AGE_OVERRIDE_META_KEY ]: isOn ? seedAgeOverride( seedAgeRule.value ) : null,
 									},
 								} )
 							}

@@ -11,6 +11,9 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 
 export const PUBLISHED_AGE_RULE = 'published_age';
 
+// Mirrors Content_Rules::AGE_OVERRIDE_META_KEY.
+export const AGE_OVERRIDE_META_KEY = 'newspack_content_gate_age_override';
+
 export const AGE_UNITS = [ 'days', 'months', 'years' ] as const;
 
 // Mirrors Content_Rules::AGE_MAX_COUNT.

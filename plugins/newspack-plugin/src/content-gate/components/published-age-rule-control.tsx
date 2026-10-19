@@ -7,6 +7,7 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { speak } from '@wordpress/a11y';
 import {
 	SelectControl,
 	TextControl,
@@ -29,38 +30,48 @@ import {
 } from '../utils/published-age';
 import './published-age-rule-control.scss';
 
+const isUsableCount = ( duration: AgeDuration ) => isUsableAgeDuration( { ...duration, duration_unit: duration.duration_unit || 'days' } );
+
+const invalidCountMessage = () =>
+	sprintf(
+		// translators: %d: the largest number the field takes.
+		__( 'Enter a whole number from 1 to %d.', 'newspack-plugin' ),
+		AGE_MAX_COUNT
+	);
+
 /**
  * A number of days, months or years.
  */
 export function AgeDurationFields( { value, onChange }: { value: unknown; onChange: ( value: AgeDuration ) => void } ) {
 	const duration = normalizeAgeDuration( value );
+	const isCountUsable = isUsableCount( duration );
 	return (
 		<Stack align="flex-start" gap="sm">
 			<div className="newspack-published-age-rule__field">
 				<TextControl
-					label={ __( 'Number', 'newspack-plugin' ) }
+					label={ __( 'Duration', 'newspack-plugin' ) }
 					type="number"
 					min={ 1 }
 					max={ AGE_MAX_COUNT }
 					step={ 1 }
 					value={ duration.duration_value || '' }
-					help={
-						isUsableAgeDuration( { ...duration, duration_unit: duration.duration_unit || 'days' } )
-							? undefined
-							: sprintf(
-									// translators: %d: the largest number the field takes.
-									__( 'Enter a whole number from 1 to %d.', 'newspack-plugin' ),
-									AGE_MAX_COUNT
-							  )
-					}
-					onChange={ ( count: string ) => onChange( { ...duration, duration_value: Math.max( 0, parseInt( count, 10 ) || 0 ) } ) }
+					help={ isCountUsable ? undefined : invalidCountMessage() }
+					aria-invalid={ ! isCountUsable }
+					onChange={ ( count: string ) => {
+						// A fractional count stays as typed, so the field says why the server would refuse it.
+						const next = { ...duration, duration_value: Math.max( 0, Number( count ) || 0 ) };
+						if ( isCountUsable && ! isUsableCount( next ) ) {
+							speak( invalidCountMessage() );
+						}
+						onChange( next );
+					} }
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
 			</div>
 			<div className="newspack-published-age-rule__field">
 				<SelectControl
-					label={ __( 'Unit', 'newspack-plugin' ) }
+					label={ __( 'Duration unit', 'newspack-plugin' ) }
 					value={ duration.duration_unit }
 					options={ [
 						...( '' === duration.duration_unit

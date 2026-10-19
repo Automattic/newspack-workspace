@@ -847,9 +847,10 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Register the REST guards that keep the exemption meta out of saves that
-	 * should not carry it: one for a user who cannot toggle it, one for a value
-	 * this class inferred rather than a person choosing it. Registered
+	 * Register the REST guards that keep the exemption and time-window meta out of
+	 * saves that should not carry them: one for a user who cannot toggle them, one
+	 * for an exemption this class inferred rather than a person choosing it, and one
+	 * for an empty time window the editor only echoes back. Registered
 	 * unconditionally — independent of whether the meta itself is registered —
 	 * so their lifetime never depends on when the content-gate feature flag
 	 * resolves. Both are harmless no-ops when the key is absent from the request.
@@ -859,7 +860,28 @@ class Content_Restriction_Control {
 		foreach ( $post_types as $post_type ) {
 			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_unauthorized_exempt_meta' ], 10, 2 );
 			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_inherited_exempt_meta' ], 10, 2 );
+			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'drop_empty_age_override_meta' ], 10, 2 );
 		}
+	}
+
+	/**
+	 * Turn an echoed empty time window into a delete.
+	 *
+	 * REST reads an unset object meta as `[]`, and the block editor sends it back with every
+	 * meta edit, so without this each such save would store an empty row on a post that never
+	 * set a time window. A delete is a no-op when no row exists.
+	 *
+	 * @param stdClass|WP_Error $prepared_post Prepared post object (returned unchanged).
+	 * @param WP_REST_Request   $request       Incoming request.
+	 * @return stdClass|WP_Error
+	 */
+	public static function drop_empty_age_override_meta( $prepared_post, $request ) {
+		$meta = $request['meta'];
+		if ( is_array( $meta ) && isset( $meta[ Content_Rules::AGE_OVERRIDE_META_KEY ] ) && [] === $meta[ Content_Rules::AGE_OVERRIDE_META_KEY ] ) {
+			$meta[ Content_Rules::AGE_OVERRIDE_META_KEY ] = null;
+			$request['meta']                               = $meta;
+		}
+		return $prepared_post;
 	}
 
 	/**
