@@ -234,15 +234,24 @@ const formatRangeValue = ( value: unknown ): string =>
  */
 const formatAccessRuleValue = ( rule: GateAccessRule, optionsBySlug: Record< string, AccessRuleOption[] > ): string | string[] => {
 	const config = availableAccessRules[ rule.slug ];
+	const unmatched = ( shown: string ) =>
+		'' === shown
+			? __( 'Matches no reader', 'newspack-plugin' )
+			: sprintf(
+					// translators: %s: the stored value. Shown when the rule reads data the server never sets; the rule then matches no reader.
+					__( '%s (matches no reader)', 'newspack-plugin' ),
+					shown
+			  );
+	// A field the server doesn't manage matches no reader whatever the value is or
+	// looks like. Its own flag for unusable range bounds is dropped so the line carries
+	// one marker, not two.
+	if ( config?.is_untrusted ) {
+		const shown = config.is_range ? formatRangeBounds( rule.value ) : formatKnownAccessRuleValue( rule, optionsBySlug );
+		return unmatched( Array.isArray( shown ) ? shown.join( ', ' ) : shown );
+	}
 	const text = formatKnownAccessRuleValue( rule, optionsBySlug );
-	// The server never sets the key, so the rule matches no reader whatever the value
-	// reads as. Only a single line can carry the flag; a list is flagged in the editor.
-	if ( 'string' === typeof text && '' !== text && ( config?.is_untrusted || getUntrustedReaderDataKeys( config, rule.value ).length > 0 ) ) {
-		return sprintf(
-			// translators: %s: the stored value. Shown when the rule names reader data the server never sets; the rule then matches no reader.
-			__( '%s (matches no reader)', 'newspack-plugin' ),
-			text
-		);
+	if ( 'string' === typeof text && '' !== text && getUntrustedReaderDataKeys( config, rule.value ).length > 0 ) {
+		return unmatched( text );
 	}
 	return text;
 };

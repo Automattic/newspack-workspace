@@ -333,6 +333,9 @@ const AccessRulesControls = ( { activeRules, onChange }: { activeRules: ActiveRu
 									onChange={ v => handleValueChange( slug, v ) }
 								/>
 							) }
+							{ activeRule && config.is_boolean && config.is_untrusted && (
+								<p className="newspack-access-rule-values-notice">{ getUntrustedAccessRuleNotice( config, activeRule.value ) }</p>
+							) }
 						</div>
 					</PanelRow>
 				);

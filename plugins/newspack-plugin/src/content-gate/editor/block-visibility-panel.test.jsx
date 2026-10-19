@@ -51,6 +51,7 @@ window.newspackBlockVisibility = {
 	available_access_rules: {
 		subscription: { name: 'Active subscription', description: '', default: [], options: DUPLICATE_NAME_PRODUCTS },
 		// The one rule whose options are fetched at edit time rather than localised.
+		flag_untrusted: { name: 'Flag field', description: '', default: true, is_boolean: true, is_untrusted: true },
 		reader_data: { name: 'Reader data', description: '', default: '', has_options: false, trusted_keys: [ 'plan' ] },
 		institution: { name: 'Institutional access', description: '', default: [], options: [ { value: 12, label: 'City Library' } ] },
 	},
@@ -186,5 +187,16 @@ describe( 'block visibility panel, reader data rule', () => {
 		renderReaderData( 'plan=x' );
 
 		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'block visibility panel, untrusted boolean field', () => {
+	it( 'says the field matches no reader even though it has no control', () => {
+		renderPanel( {
+			newspackAccessControlMode: 'custom',
+			newspackAccessControlRules: { custom_access: { active: true, access_rules: [ [ { slug: 'flag_untrusted', value: true } ] ] } },
+		} );
+
+		expect( screen.getByText( /also used for data the browser records, so this rule matches no reader/ ) ).toBeInTheDocument();
 	} );
 } );

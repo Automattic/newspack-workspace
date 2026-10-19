@@ -31,8 +31,13 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 	const rule = window.newspackAudienceContentGates.available_access_rules[ slug ];
 	const options = useAccessRuleOptions()[ slug ] ?? [];
 
-	if ( ! rule || rule.is_boolean ) {
+	if ( ! rule ) {
 		return null;
+	}
+	if ( rule.is_boolean ) {
+		// No control to render, but a field the server doesn't manage still needs saying.
+		const untrustedNotice = getUntrustedAccessRuleNotice( rule, value );
+		return untrustedNotice ? <p className="newspack-access-rule-values-notice">{ untrustedNotice }</p> : null;
 	}
 	if ( 'one_time_purchase' === slug ) {
 		return <OneTimePurchaseRuleControl value={ value } onChange={ onChange } options={ options } TokenField={ FormTokenField } />;

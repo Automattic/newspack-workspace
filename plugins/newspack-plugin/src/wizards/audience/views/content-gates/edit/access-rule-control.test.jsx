@@ -291,3 +291,14 @@ describe( 'AccessRuleControl reader data rule', () => {
 		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
 	} );
 } );
+
+describe( 'AccessRuleControl untrusted boolean field', () => {
+	it( 'says the field matches no reader even though it has no control', () => {
+		window.newspackAudienceContentGates = {
+			available_access_rules: { flag: { name: 'Flag', is_boolean: true, is_untrusted: true } },
+		};
+		render( <AccessRuleControl slug="flag" value={ true } onChange={ jest.fn() } /> );
+
+		expect( screen.getByText( /also used for data the browser records, so this rule matches no reader/ ) ).toBeInTheDocument();
+	} );
+} );
