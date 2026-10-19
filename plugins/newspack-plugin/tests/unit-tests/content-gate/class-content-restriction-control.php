@@ -25,6 +25,7 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 		}
 		$this->reset_post_gates_cache();
 		remove_all_filters( 'newspack_reader_activation_enabled' );
+		remove_role( 'newspack_test_member' );
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -381,7 +382,9 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 		update_user_meta( $reader_id, \Newspack\Reader_Activation::EMAIL_VERIFIED, true );
 		$this->assertFalse( $is_restricted( $reader_id ), 'A verified reader passes.' );
 
-		foreach ( [ 'author', 'contributor', 'editor' ] as $role ) {
+		// A custom role outside the reader roles, as a membership plugin might add.
+		add_role( 'newspack_test_member', 'Member', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+		foreach ( [ 'author', 'contributor', 'editor', 'newspack_test_member' ] as $role ) {
 			$user_id = self::factory()->user->create( [ 'role' => $role ] );
 			$this->assertFalse( $is_restricted( $user_id ), "A $role cannot verify, so is not held." );
 		}

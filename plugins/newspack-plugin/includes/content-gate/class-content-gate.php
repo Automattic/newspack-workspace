@@ -388,6 +388,11 @@ class Content_Gate {
 	 * Author or Contributor meets the same gates and comment restrictions a
 	 * subscriber does. A site can move the line in either direction with the filter.
 	 *
+	 * Verification walls are the exception: they hold readers only, since Reader
+	 * Activation verifies no one else. An unverified account that isn't a reader,
+	 * such as an Author or custom-role account added in wp-admin, passes one; an
+	 * unverified subscriber is held ({@see self::is_email_verification_met()}).
+	 *
 	 * Gates, block visibility and comment restrictions also let through whoever
 	 * can edit the post in hand, so an account can pass on its own post and still
 	 * be checked elsewhere.
