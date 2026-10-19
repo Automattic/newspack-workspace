@@ -282,6 +282,8 @@ class Access_Rules {
 				'callback'            => [ __CLASS__, 'has_reader_data' ],
 				'empty_grants_access' => true,
 				'requires_value'      => true,
+				// The keys this rule can match, for the editor.
+				'trusted_keys'        => Reader_Data_Trust::get_trusted_keys(),
 			],
 			'institution'       => [
 				'name'               => __( 'Institutional access', 'newspack-plugin' ),
@@ -1503,18 +1505,19 @@ class Access_Rules {
 		if ( empty( $data ) ) {
 			return true;
 		}
-		$data = explode( ';', $data );
-		$data = array_map( 'trim', $data );
-		$data = array_filter( $data );
-		$data = array_map(
-			function( $item ) {
-				return explode( '=', $item );
-			},
-			$data
-		);
-		$reader_data = Reader_Data::get_data( $user_id );
-		foreach ( $data as $item ) {
-			if ( ! isset( $reader_data[ $item[0] ] ) || $reader_data[ $item[0] ] !== $item[1] ) {
+		$items = array_filter( array_map( 'trim', explode( ';', (string) $data ) ), 'strlen' );
+		foreach ( $items as $item ) {
+			// Split on the first `=` only, so a value may itself contain one.
+			$pair = explode( '=', $item, 2 );
+			if ( 2 !== count( $pair ) ) {
+				return false;
+			}
+			$key = trim( $pair[0] );
+			if ( '' === $key ) {
+				return false;
+			}
+			$stored = Reader_Data_Trust::get_trusted_value( (int) $user_id, $key );
+			if ( null === $stored || ! Reader_Data_Trust::values_match( $stored, trim( $pair[1] ) ) ) {
 				return false;
 			}
 		}

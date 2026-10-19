@@ -204,6 +204,70 @@ final class Reader_Data_Trust {
 	}
 
 	/**
+	 * Whether reader-data rules may rely on the key's server-written value.
+	 *
+	 * @param string $key Reader data key.
+	 *
+	 * @return bool
+	 */
+	public static function is_trusted_key( string $key ): bool {
+		return in_array( $key, self::get_trusted_keys(), true );
+	}
+
+	/**
+	 * The stored value of a trusted key, if the server wrote it.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $key     Reader data key.
+	 *
+	 * @return string|null The raw stored value, or null when the key is not
+	 *                     trusted, is unset, or holds a value the server did not write.
+	 */
+	public static function get_trusted_value( int $user_id, string $key ): ?string {
+		if ( ! self::is_trusted_key( $key ) ) {
+			return null;
+		}
+		$value = Reader_Data::get_data( $user_id, $key );
+		if ( ! is_string( $value ) || '' === $value ) {
+			return null;
+		}
+		if ( ! self::has_valid_mark( $user_id, $key ) ) {
+			return null;
+		}
+		return $value;
+	}
+
+	/**
+	 * Whether a stored value equals a reader-data rule value.
+	 *
+	 * Values are stored JSON-encoded, so the stored side is decoded and compared by
+	 * type: strings exactly, booleans as `true`/`false`, numbers numerically.
+	 * Arrays, objects and null never match. A stored value that is not JSON is
+	 * compared as the raw string. Callers trim the rule value.
+	 *
+	 * @param string $stored     Raw stored value.
+	 * @param string $rule_value Rule value.
+	 *
+	 * @return bool
+	 */
+	public static function values_match( string $stored, string $rule_value ): bool {
+		$decoded = json_decode( $stored, true );
+		if ( null === $decoded && JSON_ERROR_NONE !== json_last_error() ) {
+			return $stored === $rule_value;
+		}
+		if ( is_string( $decoded ) ) {
+			return $decoded === $rule_value;
+		}
+		if ( is_bool( $decoded ) ) {
+			return ( $decoded ? 'true' : 'false' ) === $rule_value;
+		}
+		if ( is_int( $decoded ) || is_float( $decoded ) ) {
+			return is_numeric( $rule_value ) && (float) $decoded === (float) $rule_value;
+		}
+		return false;
+	}
+
+	/**
 	 * Read the raw value as stored in user meta.
 	 *
 	 * @param int    $user_id User ID.

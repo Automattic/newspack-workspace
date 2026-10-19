@@ -8,7 +8,7 @@
 namespace Newspack\Reader_Activation;
 
 use Newspack\Access_Rules;
-use Newspack\Reader_Data;
+use Newspack\Reader_Data_Trust;
 use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations\Date_Value;
 use Newspack\Reader_Activation\Integrations\Incoming_Field;
@@ -158,6 +158,9 @@ class Promoted_Fields {
 				// the granting ones are refused a save here. Closing the gap belongs
 				// with the rest of the unconfigured-rule warnings, in NPPD-2227.
 				'requires_value'      => $empty_grants_access,
+				// A key the browser also writes is not server-managed, so the rule
+				// matches nobody; the editor says so.
+				'is_untrusted'        => ! Reader_Data_Trust::is_trusted_key( $field->get_key() ),
 				'callback'            => function ( $user_id, $args ) use ( $field ) {
 					return self::evaluate_field( $field, $user_id, $args );
 				},
@@ -306,8 +309,14 @@ class Promoted_Fields {
 			return (bool) call_user_func( $callback, $user_id, $args );
 		}
 
-		$raw_value = Reader_Data::get_data( $user_id, $field->get_key() );
-		$value     = self::decode_value( $raw_value );
+		// Only values the server wrote for a server-managed key count. Every
+		// matching function fails on an untrusted key, including the exclusion
+		// ones that would otherwise pass a reader holding nothing.
+		if ( ! Reader_Data_Trust::is_trusted_key( $field->get_key() ) ) {
+			return false;
+		}
+		$raw_value = Reader_Data_Trust::get_trusted_value( (int) $user_id, $field->get_key() );
+		$value     = null === $raw_value ? false : self::decode_value( $raw_value );
 
 		// Boolean fields: access rules pass no args (just check truthiness),
 		// segmentation passes 'yes'/'no'.
