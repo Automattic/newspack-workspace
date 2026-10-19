@@ -785,7 +785,7 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 	 * A promoted field's rule matches a value the server wrote, and not a value
 	 * written without the server mark.
 	 */
-	public function test_promoted_rule_ignores_reader_written_value() {
+	public function test_promoted_rule_ignores_unmarked_value() {
 		$this->integration->update_enabled_incoming_fields( [ 'tier' ] );
 		$user_id = $this->factory->user->create();
 		$field   = new Incoming_Field( 'tier' );
