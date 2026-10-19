@@ -152,4 +152,32 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->assertNull( Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
 		$this->assertFalse( Reader_Data_Trust::has_valid_mark( $this->user_id, 'is_donor' ) );
 	}
+
+	/**
+	 * User 0 gets no value and nothing is written.
+	 */
+	public function test_user_zero_returns_null_and_writes_nothing() {
+		global $wpdb;
+		$this->set_tracking( true );
+		add_filter( 'newspack_reader_data_compute_is_donor', '__return_true' );
+
+		$this->assertNull( Reader_Data_Trust::compute_is_donor( 0 ) );
+		$this->assertNull( Reader_Data_Trust::get_trusted_value( 0, 'is_donor' ) );
+		$this->assertSame( 0, (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE user_id = 0" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * A lookup that could not be made writes nothing.
+	 */
+	public function test_unavailable_lookup_writes_nothing() {
+		if ( function_exists( 'wc_get_orders' ) ) {
+			$this->markTestSkipped( 'WooCommerce order lookup is available.' );
+		}
+		$this->set_tracking( true );
+
+		$this->assertNull( Reader_Data_Trust::compute_is_donor( $this->user_id ) );
+		$this->assertNull( Reader_Data_Trust::get_trusted_value( $this->user_id, 'is_donor' ) );
+		$this->assertSame( '', (string) get_user_meta( $this->user_id, Reader_Data::get_meta_key_name( 'is_donor' ), true ) );
+		$this->assertFalse( Reader_Data_Trust::has_valid_mark( $this->user_id, 'is_donor' ) );
+	}
 }

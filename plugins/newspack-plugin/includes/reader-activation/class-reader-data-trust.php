@@ -224,7 +224,7 @@ final class Reader_Data_Trust {
 	 *                     trusted, is unset, or holds a value the server did not write.
 	 */
 	public static function get_trusted_value( int $user_id, string $key ): ?string {
-		if ( ! self::is_trusted_key( $key ) ) {
+		if ( $user_id <= 0 || ! self::is_trusted_key( $key ) ) {
 			return null;
 		}
 		$value  = Reader_Data::get_data( $user_id, $key );
@@ -251,18 +251,23 @@ final class Reader_Data_Trust {
 	/**
 	 * Whether the user is a donor, according to their orders and subscriptions.
 	 *
+	 * A recurring donor counts only through an active subscription, so a former
+	 * recurring donor (whose parent and renewal orders remain) is not a donor.
+	 * Only one-time donation orders count.
+	 *
 	 * @param int $user_id User ID.
 	 *
-	 * @return bool|null Null when the platform does not track donors server-side.
+	 * @return bool|null Null when the platform does not track donors server-side,
+	 *                   or when the order lookup is unavailable and nothing could be checked.
 	 */
 	public static function compute_is_donor( int $user_id ): ?bool {
-		if ( ! Donations::has_server_side_donor_tracking() ) {
+		if ( $user_id <= 0 || ! Donations::has_server_side_donor_tracking() ) {
 			return null;
 		}
 
 		/**
-		 * Filters the computed donor status. A non-null boolean replaces the
-		 * WooCommerce lookup.
+		 * Filters the computed donor status. A boolean replaces the WooCommerce
+		 * lookup; any other return value is ignored.
 		 *
 		 * @param bool|null $is_donor Donor status, or null to compute it.
 		 * @param int       $user_id  User ID.
@@ -272,9 +277,13 @@ final class Reader_Data_Trust {
 			return $filtered;
 		}
 
+		if ( ! function_exists( 'wc_get_orders' ) ) {
+			return null;
+		}
+
 		if ( function_exists( 'wcs_get_users_subscriptions' ) ) {
 			foreach ( \wcs_get_users_subscriptions( $user_id ) as $subscription ) {
-				if ( ! $subscription->has_status( [ 'active', 'pending-cancel' ] ) ) {
+				if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
 					continue;
 				}
 				foreach ( $subscription->get_items() as $item ) {
@@ -285,19 +294,20 @@ final class Reader_Data_Trust {
 			}
 		}
 
-		if ( function_exists( 'wc_get_orders' ) ) {
-			$orders = \wc_get_orders(
-				[
-					'customer_id' => $user_id,
-					'status'      => [ 'completed', 'processing' ],
-					'limit'       => -1,
-					'return'      => 'objects',
-				]
-			);
-			foreach ( $orders as $order ) {
-				if ( Donations::is_donation_order( $order ) ) {
-					return true;
-				}
+		$orders = \wc_get_orders(
+			[
+				'customer_id' => $user_id,
+				'status'      => WooCommerce_Connection::ACTIVE_ORDER_STATUSES,
+				'limit'       => -1,
+				'return'      => 'objects',
+			]
+		);
+		foreach ( $orders as $order ) {
+			if ( function_exists( 'wcs_order_contains_subscription' ) && \wcs_order_contains_subscription( $order, [ 'parent', 'renewal' ] ) ) {
+				continue;
+			}
+			if ( Donations::is_donation_order( $order ) ) {
+				return true;
 			}
 		}
 
