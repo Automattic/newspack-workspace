@@ -3,37 +3,18 @@
  * Internal dependencies
  */
 import './style.scss';
-import { domReady } from '../../utils';
+import { domReady, setButtonLoading } from '../../utils';
 import { openAuthModal } from '../../reader-activation-auth/auth-modal';
 import { openVerificationModal } from '../../reader-activation-auth/verification-modal';
 import { maybeConfirmRegistration } from '../../reader-activation-auth/confirmation-modal';
 import { openNewslettersSignupModal } from '../../reader-activation-newsletters/newsletters-modal';
+import { wireInlineVerificationBox } from '../../reader-activation-auth/inline-verification';
+
+const EMAIL_ERROR_CODES = [ 'invalid_email', 'newspack_register_reader_empty_email', 'unauthorized' ];
 
 window.newspackRAS = window.newspackRAS || [];
 
 window.newspackRAS.push( function ( readerActivation ) {
-	/**
-	 * Send verification OTP via the dedicated AJAX endpoint.
-	 *
-	 * @return {Promise} Resolves on success, rejects on failure.
-	 */
-	const sendVerificationOTP = () => {
-		const body = new FormData();
-		body.set( 'action', 'newspack_reader_registration_verification' );
-		body.set( 'nonce', reader_registration_block_config.verification_nonce );
-		return fetch( reader_registration_block_config.verification_url, {
-			method: 'POST',
-			headers: { Accept: 'application/json' },
-			body,
-		} ).then( res => {
-			if ( ! res.ok ) {
-				throw new Error( res.statusText );
-			}
-			readerActivation.setOTPTimer();
-			return res.json();
-		} );
-	};
-
 	const openAuth = ( initialState = 'otp', overrides = {} ) => {
 		openAuthModal( {
 			skipAuthenticatedCheck: true,
@@ -80,24 +61,14 @@ window.newspackRAS.push( function ( readerActivation ) {
 			box => ! box.querySelector( '.newspack-ui__modal-container' )
 		);
 		inlineVerificationBoxes.forEach( box => {
-			const sendOtpButton = box.querySelector( '[data-send-otp]' );
-			if ( ! sendOtpButton ) {
-				return;
-			}
-			sendOtpButton.addEventListener( 'click', () => {
-				sendOtpButton.disabled = true;
-				sendVerificationOTP()
-					.then( () => {
-						openAuth( 'otp' );
-					} )
-					.catch( () => {
-						sendOtpButton.disabled = false;
-						sendOtpButton.textContent = sendOtpButton.textContent.trim();
-						const errorP = box.querySelector( 'p:not(:has(button))' );
-						if ( errorP ) {
-							errorP.textContent = 'Something went wrong. Please try again.';
-						}
-					} );
+			wireInlineVerificationBox( box, {
+				url: reader_registration_block_config.verification_url,
+				nonce: reader_registration_block_config.verification_nonce,
+				errorText: reader_registration_block_config.verification_error,
+				onSent: () => {
+					readerActivation.setOTPTimer();
+					openAuth( 'otp' );
+				},
 			} );
 		} );
 
@@ -113,15 +84,34 @@ window.newspackRAS.push( function ( readerActivation ) {
 			let flowCompleted = false; // Guard to prevent re-running endLoginFlow
 			const messageElement = container.querySelector( '.newspack-registration__response' );
 			const submitElement = form.querySelector( 'button[type="submit"]' );
-			const spinner = document.createElement( 'span' );
-			spinner.classList.add( 'spinner' );
+			const emailInput = form.querySelector( 'input[name="npe"]' );
+
+			const setLoading = isLoading => {
+				setButtonLoading( submitElement, isLoading );
+				container.classList.toggle( 'newspack-registration--in-progress', isLoading );
+			};
+
+			const setEmailError = hasError => {
+				if ( ! emailInput ) {
+					return;
+				}
+				emailInput.classList.toggle( 'newspack-ui__field-error', hasError );
+				if ( hasError ) {
+					emailInput.setAttribute( 'aria-invalid', 'true' );
+					if ( messageElement?.id ) {
+						emailInput.setAttribute( 'aria-describedby', messageElement.id );
+					}
+				} else {
+					emailInput.removeAttribute( 'aria-invalid' );
+					emailInput.removeAttribute( 'aria-describedby' );
+				}
+			};
 
 			form.startLoginFlow = () => {
 				messageElement.classList.add( 'newspack-registration--hidden' );
 				messageElement.innerHTML = '';
-				submitElement.disabled = true;
-				submitElement.appendChild( spinner );
-				container.classList.add( 'newspack-registration--in-progress' );
+				setEmailError( false );
+				setLoading( true );
 			};
 
 			form.endLoginFlow = ( message = null, status = 500, data = null ) => {
@@ -135,11 +125,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				// For existing users, open the auth modal with the appropriate state
 				if ( data?.existing_user && ! data?.authenticated && data?.action ) {
 					const email = data.email || form.npe?.value;
-					if ( submitElement.contains( spinner ) ) {
-						submitElement.removeChild( spinner );
-					}
-					submitElement.disabled = false;
-					container.classList.remove( 'newspack-registration--in-progress' );
+					setLoading( false );
 
 					// Set the reader email before opening the modal
 					readerActivation.setReaderEmail( email );
@@ -257,15 +243,16 @@ window.newspackRAS.push( function ( readerActivation ) {
 							}
 						}
 					}
-				} else if ( messageNode ) {
-					messageElement.appendChild( messageNode );
-					messageElement.classList.remove( 'newspack-registration--hidden' );
+				} else {
+					setEmailError( EMAIL_ERROR_CODES.some( code => data?.errors?.[ code ] ) );
+					if ( messageNode ) {
+						messageNode.classList.add( 'newspack-ui__inline-error' );
+						messageNode.setAttribute( 'role', 'alert' );
+						messageElement.appendChild( messageNode );
+						messageElement.classList.remove( 'newspack-registration--hidden' );
+					}
 				}
-				if ( submitElement.contains( spinner ) ) {
-					submitElement.removeChild( spinner );
-				}
-				submitElement.disabled = false;
-				container.classList.remove( 'newspack-registration--in-progress' );
+				setLoading( false );
 			};
 
 			form.addEventListener( 'submit', ev => {
@@ -273,12 +260,14 @@ window.newspackRAS.push( function ( readerActivation ) {
 				form.startLoginFlow();
 
 				if ( ! form.npe?.value ) {
-					return form.endLoginFlow( 'Please enter a valid email address.', 400 );
+					form.endLoginFlow( 'Please enter a valid email address.', 400 );
+					return setEmailError( true );
 				}
 
 				body = new FormData( form );
 				if ( ! body.has( 'npe' ) || ! body.get( 'npe' ) ) {
-					return form.endLoginFlow( 'Please enter a valid email address.', 400 );
+					form.endLoginFlow( 'Please enter a valid email address.', 400 );
+					return setEmailError( true );
 				}
 
 				const submitForm = () => {
@@ -305,11 +294,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					onProceed: submitForm,
 					onCancel: () => {
 						flowCompleted = false;
-						if ( submitElement.contains( spinner ) ) {
-							submitElement.removeChild( spinner );
-						}
-						submitElement.disabled = false;
-						container.classList.remove( 'newspack-registration--in-progress' );
+						setLoading( false );
 					},
 				} );
 			} );

@@ -1,3 +1,9 @@
+# shellcheck shell=sh
+# A directive rather than a shebang: husky runs hook files with sh and its own
+# deprecation notice asks for the shebang line to be removed ("WILL FAIL in
+# v10.0.0"). This tells shellcheck the dialect without reintroducing that line,
+# so CI's shellcheck gate can read this file — the one script here that runs on
+# every commit, where a syntax error silently takes every other linter with it.
 # The lint's contract is "check what the author staged". A merge breaks that
 # assumption: completing one stages the entire base integration — every file the
 # merge brings in, hundreds on a typical `main` merge — so lint-staged would

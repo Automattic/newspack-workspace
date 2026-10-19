@@ -1211,6 +1211,88 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A page configured as excluded from gating (the site's Privacy Policy
+	 * page here) is never gated, even when it matches a published gate's
+	 * content rules.
+	 */
+	public function test_excluded_page_is_never_gated() {
+		$excluded_post_id = $this->post_ids[0];
+		wp_set_current_user( 0 );
+
+		// Precondition: this post matches the published 'post_types' => ['post']
+		// gate from set_up() and would ordinarily be restricted.
+		$this->assertNotFalse(
+			Content_Gate::is_post_restricted( $excluded_post_id ),
+			'Precondition: the post must be restricted before the exclusion is configured.'
+		);
+
+		update_option( 'wp_page_for_privacy_policy', $excluded_post_id );
+
+		$this->assertNull(
+			Content_Gate::get_restriction_for_post( get_post( $excluded_post_id ) ),
+			'The Privacy Policy page must never be gated, regardless of content rules.'
+		);
+
+		// Control: an ordinary post matching the same gate, not configured as
+		// any excluded page, is still gated.
+		$control_post_id  = $this->factory->post->create();
+		$this->post_ids[] = $control_post_id;
+
+		$this->assertIsArray(
+			Content_Gate::get_restriction_for_post( get_post( $control_post_id ) ),
+			'An ordinary post matching the gate must still be restricted.'
+		);
+	}
+
+	/**
+	 * Every exclusion source in is_excluded_from_gating() defaults to a
+	 * non-positive value when unconfigured: get_option( 'wp_page_for_privacy_policy' )
+	 * and Accessibility_Statement_Page::get_page_id() both return 0, and
+	 * wc_get_page_id() returns -1. Confirms a post ID of 0 -- a
+	 * degenerate value a caller with no real post in context could pass --
+	 * cannot spuriously match those unconfigured defaults (the
+	 * `array_filter( …, $id > 0 )` guard this pins), and that a WooCommerce
+	 * page which IS configured is excluded exactly like the Privacy Policy
+	 * page.
+	 */
+	public function test_non_positive_ids_do_not_spuriously_match_unconfigured_pages() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		wp_set_current_user( 0 );
+
+		// is_excluded_from_gating() is private; reach it directly via
+		// reflection so this can assert on its actual output rather than
+		// inferring it from a real post's ID. A real ID is always positive,
+		// and comparing a positive ID against an all-negative/zero excluded
+		// array cannot fail whether or not the array_filter() is there, so a
+		// post-based version of this test would pass either way.
+		$method = new \ReflectionMethod( Content_Gate::class, 'is_excluded_from_gating' );
+		$method->setAccessible( true );
+
+		$this->assertFalse(
+			$method->invoke( null, 0 ),
+			'A post ID of 0 must not spuriously match unconfigured (non-positive) exclusion sources.'
+		);
+
+		// A real post matching the gate is still restricted while every
+		// exclusion source is unconfigured.
+		$this->assertIsArray(
+			Content_Gate::get_restriction_for_post( get_post( $this->post_ids[0] ) ),
+			'An unconfigured WooCommerce page must not exclude a real post from gating.'
+		);
+
+		// Configured: a real myaccount page ID is excluded, same as the
+		// Privacy Policy page.
+		$myaccount_post_id = $this->factory->post->create();
+		$this->post_ids[]  = $myaccount_post_id;
+		update_option( 'woocommerce_myaccount_page_id', $myaccount_post_id );
+
+		$this->assertNull(
+			Content_Gate::get_restriction_for_post( get_post( $myaccount_post_id ) ),
+			'A configured WooCommerce myaccount page must never be gated.'
+		);
+	}
+
+	/**
 	 * Test that already grouped access_rules remain unchanged.
 	 */
 	public function test_custom_access_preserves_grouped_rules() {
@@ -1996,11 +2078,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Blocker: an institution rule saved with no institutions selected
-	 * (`value => []`) must not silently grant anonymous access. Without a
-	 * value, the rule is "not configured" — Institution::evaluate(0, [])
-	 * returns true as the rule's own no-constraint semantics, but for the
-	 * registration bypass we require a populated rule that actually matches.
+	 * An institution rule saved with no institutions selected (`value => []`)
+	 * must not grant anonymous access. The rule names no condition, so
+	 * Institution::evaluate() satisfies nobody with it, and the registration
+	 * bypass requires a populated rule that actually matches.
 	 */
 	public function test_anonymous_with_unpopulated_institution_rule_is_restricted() {
 		$this->configure_published_gate(
@@ -2240,6 +2321,276 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		wp_delete_user( $matching_user );
 		wp_delete_user( $other_user );
 		$this->reset_visitor_state();
+	}
+
+	// =========================================================================
+	// Institutions on registered access (NPPD-2310)
+	//
+	// A registration wall can name institutions whose visitors count as
+	// registered. Unlike institutions in paid access, which count as paying and
+	// so skip both walls, these skip registration only: a gate that also has
+	// paid access still asks the visitor to pay.
+	// =========================================================================
+
+	/**
+	 * Create an institution matching the 10.0.0.0/8 range.
+	 *
+	 * @return int Institution ID.
+	 */
+	private function create_ip_institution() {
+		$inst_id          = Institution::create( 'University', '', [ 'ip_range' => '10.0.0.0/8' ] );
+		$this->post_ids[] = $inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		return $inst_id;
+	}
+
+	/**
+	 * Access rules naming one institution, in grouped format.
+	 *
+	 * @param int $inst_id Institution ID.
+	 *
+	 * @return array
+	 */
+	private function institution_rules( $inst_id ) {
+		return [
+			[
+				[
+					'slug'  => 'institution',
+					'value' => [ $inst_id ],
+				],
+			],
+		];
+	}
+
+	/**
+	 * The case the setting exists for: a registration wall with no paid access
+	 * lets an on-campus visitor read without an account.
+	 */
+	public function test_registration_institutions_admit_a_matching_anonymous_visitor() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Any other anonymous visitor still meets the registration wall.
+	 */
+	public function test_registration_institutions_show_other_anonymous_visitors_the_registration_layout() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '192.168.1.1' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame( $layouts['registration_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Institutions add a way past the wall and take nothing from readers who
+	 * registered. Under Paid Access, institutions wall these readers (NPPD-2310);
+	 * this pins that Registered Access doesn't.
+	 */
+	public function test_registration_institutions_never_narrow_access_for_logged_in_readers() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'subscriber' ] ) );
+		$this->set_visitor_ip( '192.168.1.1' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Counting as registered is not counting as paying. The visitor gets past
+	 * the registration wall and meets paid access, like a registered reader
+	 * without a subscription would.
+	 */
+	public function test_registration_institutions_do_not_skip_paid_access() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => 'paid.example',
+						],
+					],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame(
+			$layouts['custom_access_layout_id'],
+			Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ),
+			'The visitor got past registration, so the wall they meet is the paid one.'
+		);
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * Institutions in paid access keep skipping both walls when registered
+	 * access names institutions of its own.
+	 */
+	public function test_paid_access_institutions_still_skip_both_walls() {
+		$paid_inst_id         = $this->create_ip_institution();
+		$registration_inst_id = Institution::create( 'Library', '', [ 'ip_range' => '172.16.0.0/12' ] );
+		$this->post_ids[]     = $registration_inst_id;
+		delete_transient( Institution::TRANSIENT_KEY );
+		$this->configure_published_gate(
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $registration_inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => $this->institution_rules( $paid_inst_id ),
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertFalse( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * A reader who signed in but hasn't verified still has to verify. The
+	 * institutions stand in for an account, not for verifying one.
+	 */
+	public function test_registration_institutions_do_not_skip_email_verification() {
+		$inst_id = $this->create_ip_institution();
+		$this->configure_published_gate(
+			[
+				'active'               => true,
+				'require_verification' => true,
+				'access_rules'         => $this->institution_rules( $inst_id ),
+			],
+			[ 'active' => false ]
+		);
+
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+
+		wp_delete_user( $user_id );
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The institutions belong to the registration wall, so a gate with
+	 * registered access off doesn't apply them.
+	 */
+	public function test_registration_institutions_do_nothing_while_registered_access_is_off() {
+		$inst_id = $this->create_ip_institution();
+		$layouts = $this->configure_published_gate(
+			[
+				'active'       => false,
+				'access_rules' => $this->institution_rules( $inst_id ),
+			],
+			[
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'email_domain',
+							'value' => 'paid.example',
+						],
+					],
+				],
+			]
+		);
+
+		wp_set_current_user( 0 );
+		$this->set_visitor_ip( '10.1.2.3' );
+		$this->reset_restriction_cache();
+
+		$this->assertTrue( apply_filters( 'newspack_is_post_restricted', false, $this->post_ids[0] ) );
+		$this->assertSame( $layouts['custom_access_layout_id'], Content_Restriction_Control::get_gate_layout_id( $this->post_ids[0] ) );
+
+		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The stored rules come back in grouped format, and a gate saved before
+	 * the setting existed reads as naming none.
+	 */
+	public function test_registration_settings_carry_access_rules() {
+		$gate_id = $this->gate_ids[2];
+		$this->assertSame( [], Content_Gate::get_registration_settings( $gate_id )['access_rules'] );
+
+		Content_Gate::update_registration_settings(
+			$gate_id,
+			[
+				'access_rules' => [
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					[
+						'slug'  => 'institution',
+						'value' => [ 12 ],
+					],
+				],
+			],
+			Content_Gate::get_registration_settings( $gate_id )['access_rules']
+		);
 	}
 
 	/**
@@ -3173,13 +3524,15 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$premium_newsletters_wizard = \Newspack\Wizards::get_wizard( 'premium-newsletters' );
 
 		$content_gate_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $this->gate_ids[2] . '/duplicate' );
-		$content_gate_request->set_param( 'id', $this->gate_ids[2] );
+		// Where the server puts a route's captures when it dispatches, and where the
+		// handlers read the gate ID from — a body parameter must not name the gate.
+		$content_gate_request->set_url_params( [ 'id' => $this->gate_ids[2] ] );
 		$rejection = $premium_newsletters_wizard->api_duplicate_gate( $content_gate_request );
 		$this->assertWPError( $rejection, 'The premium newsletters wizard rejects content gates' );
 		$this->assertSame( 400, $rejection->get_error_data()['status'] );
 
 		$newsletter_request = new \WP_REST_Request( 'POST', '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-premium-newsletters/' . $newsletter_gate_id . '/duplicate' );
-		$newsletter_request->set_param( 'id', $newsletter_gate_id );
+		$newsletter_request->set_url_params( [ 'id' => $newsletter_gate_id ] );
 		$success = $premium_newsletters_wizard->api_duplicate_gate( $newsletter_request );
 		$this->assertNotWPError( $success );
 		$this->assertSame( 'Premium Newsletter Gate copy', $success->get_data()['title'] );

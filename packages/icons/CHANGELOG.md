@@ -1,3 +1,34 @@
+# newspack-icons [1.2.0](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.1.3...newspack-icons@1.2.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **icons:** accept React 19 and drop React 16.8 as peers ([#1187](https://github.com/Automattic/newspack-workspace/issues/1187)) ([a03530b](https://github.com/Automattic/newspack-workspace/commit/a03530bcf44a98f0443d56c23ef97b194b547441))
+
+
+### Features
+
+* **settings:** add an empty state to the Print tab ([#1123](https://github.com/Automattic/newspack-workspace/issues/1123)) ([04bbd0b](https://github.com/Automattic/newspack-workspace/commit/04bbd0b99f2e62174273642b64d01116988139a5))
+
+
+### Dependencies
+
+* **newspack-scripts:** upgraded to 5.12.0
+
+## newspack-icons [1.1.3](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.1.2...newspack-icons@1.1.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **icons:** accept React 19 and drop React 16.8 as peers ([#1189](https://github.com/Automattic/newspack-workspace/issues/1189)) ([cb647aa](https://github.com/Automattic/newspack-workspace/commit/cb647aaba04c4d767365025346b39da65e0e9340))
+
+## newspack-icons [1.1.2](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.1.1...newspack-icons@1.1.2) (2026-08-31)
+
+
+### Bug Fixes
+
+* **icons:** accept @wordpress/primitives 4.x as a peer ([#835](https://github.com/Automattic/newspack-workspace/issues/835)) ([3913c72](https://github.com/Automattic/newspack-workspace/commit/3913c726b57c5920aa5d68b02872471798c05486))
+
 ## newspack-icons [1.1.1](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.1.0...newspack-icons@1.1.1) (2026-08-17)
 
 

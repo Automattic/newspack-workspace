@@ -3,11 +3,12 @@
 /**
  * Internal dependencies.
  */
-import { domReady, formatTime } from '../utils';
+import { domReady, formatTime, setButtonLoading } from '../utils';
 import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
 import { openVerificationModal } from './verification-modal';
 import { maybeConfirmRegistration } from './confirmation-modal';
+import { getBackTarget, shouldReuseActiveCode } from './auth-form-helpers';
 
 import './google-oauth';
 import './otp-input';
@@ -80,7 +81,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 					if ( isError ) {
 						messageContentElement.classList.remove( 'newspack-ui__helper-text' );
 						messageContentElement.classList.add( 'newspack-ui__inline-error' );
-						form.style.opacity = 1;
 					} else {
 						messageContentElement.classList.remove( 'newspack-ui__inline-error' );
 						messageContentElement.classList.add( 'newspack-ui__helper-text' );
@@ -97,17 +97,19 @@ window.newspackRAS.push( function ( readerActivation ) {
 			 * Handle auth form action selection.
 			 */
 			let formAction;
+			// Whether a one-time code has been sent in this modal session. A per-session flag,
+			// not the np_otp_hash cookie, which persists ~29 minutes across sessions and would
+			// make a genuine first "email me a code" click skip the send (NPPM-3054).
+			let codeSent = false;
 			container.setFormAction = ( action, shouldFocus = false ) => {
 				if ( ! FORM_ALLOWED_ACTIONS.includes( action ) ) {
 					action = 'signin';
 				}
-				// Moving to any form step ends the previous step's in-flight request, so clear the
-				// submit button's loading spinner here. This is the single owner for the transition
-				// case (signin -> pwd/otp, -> success, back button): startLoginFlow() adds the class,
-				// every step change removes it. Same-state errors clear it in endLoginFlow() instead.
-				submitButtons.forEach( button => {
-					button.classList.remove( 'newspack-ui__button--loading' );
-				} );
+				// Moving to any form step ends the previous step's in-flight request, so release the
+				// submit button's loading state here. This is the single owner for the transition
+				// case (signin -> pwd/otp, -> success, back button): startLoginFlow() sets it, every
+				// step change clears it. Same-state errors clear it in endLoginFlow() instead.
+				submitButtons.forEach( button => setButtonLoading( button, false ) );
 				// Signin and success steps should clear any modal errors or messages.
 				if ( 'signin' === action || 'success' === action ) {
 					form.setMessageContent();
@@ -173,7 +175,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 					emailInput.value = reader?.email || '';
 				}
 				setTimeout( function () {
-					if ( reader?.authenticated && formAction !== 'success' ) {
+					// A reader who has just registered is authenticated but still owes the
+					// verification step. Resolving the flow here would report success to the
+					// opener while the verification modal is up, and modal checkout answers
+					// that by opening the checkout over it.
+					if ( reader?.authenticated && formAction !== 'success' && ! form.isVerifying ) {
 						form.endLoginFlow( null, 200 );
 					}
 				}, 1000 );
@@ -193,7 +199,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						}
 					}
 					form.setMessageContent();
-					container.setFormAction( 'signin', true );
+					container.setFormAction( getBackTarget( formAction, container.readerHasPassword ), true );
 				} );
 			} );
 
@@ -230,6 +236,16 @@ window.newspackRAS.push( function ( readerActivation ) {
 					button.addEventListener( 'click', function ( ev ) {
 						ev.preventDefault();
 						form.setMessageContent();
+						// A reader who already requested a code and returned to the password step can
+						// choose the code again. Show the existing code-entry step instead of asking the
+						// server for a new code, which would restart the resend cooldown and strand the
+						// code already in their inbox. Only the "email me a code" button reuses; resend
+						// always requests a fresh code.
+						if ( shouldReuseActiveCode( ev.currentTarget === sendCodeButton, codeSent ) ) {
+							container.setFormAction( 'otp' );
+							handleOTPTimer();
+							return;
+						}
 						form.startLoginFlow();
 						const body = new FormData();
 						body.set( 'reader-activation-auth-form', 1 );
@@ -260,20 +276,16 @@ window.newspackRAS.push( function ( readerActivation ) {
 									formAction === 'pwd' ? newspack_reader_activation_labels.code_sent : newspack_reader_activation_labels.code_resent
 								);
 								container.setFormAction( 'otp' );
+								codeSent = true;
 								if ( ! readerActivation.getOTPTimeRemaining() ) {
 									readerActivation.setOTPTimer();
 								}
 							} )
 							.finally( () => {
 								handleOTPTimer();
-								form.style.opacity = 1;
-								submitButtons.forEach( submitButton => {
-									submitButton.disabled = false;
-									// startLoginFlow() added the spinner for this send/resend request; this
-									// branch doesn't route through setFormAction() on error, so clear it here
-									// in lockstep with the disabled attribute.
-									submitButton.classList.remove( 'newspack-ui__button--loading' );
-								} );
+								// startLoginFlow() set the loading state for this send/resend request; this
+								// branch doesn't route through setFormAction() on error, so clear it here.
+								submitButtons.forEach( submitButton => setButtonLoading( submitButton, false ) );
 							} );
 					} );
 				} );
@@ -283,42 +295,29 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 			form.startLoginFlow = () => {
 				container.removeAttribute( 'data-form-status' );
-				submitButtons.forEach( button => {
-					button.disabled = true;
-					// Add the loading spinner here so both the modal and the inline auth form (e.g.
-					// /my-account) show it — newspack-ui/js/modals.js also adds it, but only for forms
-					// inside a modal. Removal is centralized in setFormAction() (on every step change)
-					// and endLoginFlow() (on errors), with the few AJAX branches that bypass those
-					// clearing it directly.
-					button.classList.add( 'newspack-ui__button--loading' );
-				} );
+				// Set the loading state here for both the modal and the inline auth form (e.g.
+				// /my-account). Removal is centralized in setFormAction() (on every step change)
+				// and endLoginFlow() (on errors), with the few AJAX branches that bypass those
+				// clearing it directly.
+				submitButtons.forEach( button => setButtonLoading( button, true ) );
 				form.setMessageContent();
-				form.style.opacity = 0.5;
 			};
 
 			form.isVerifying = false;
 			form.endLoginFlow = ( message = null, status = 500, data = null ) => {
 				container.setAttribute( 'data-form-status', status );
-				// Only reset opacity if modal should close on success.
-				if ( container.config?.closeOnSuccess ) {
-					form.style.opacity = 1;
-				}
 				if ( status !== 200 ) {
-					// Any non-success outcome must restore the form so the reader can retry: undim it,
-					// clear the loading spinner, and re-enable the button. This is the only reset for the
+					// Any non-success outcome must restore the form so the reader can retry: clear the
+					// loading spinner and re-enable the button. This is the only reset for the
 					// null-message network/parse failures from the fetch .catch() paths — they have no
-					// other opacity/spinner restore and would otherwise leave the form dimmed with a stuck
-					// spinner. Show an inline error only when we actually have a message.
+					// other spinner restore and would otherwise leave a stuck spinner. Show an inline
+					// error only when we actually have a message.
 					form.isVerifying = false;
-					form.style.opacity = 1;
 					if ( message ) {
 						form.setMessageContent( message, true );
 						messageContentElement.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
 					}
-					submitButtons.forEach( button => {
-						button.disabled = false;
-						button.classList.remove( 'newspack-ui__button--loading' );
-					} );
+					submitButtons.forEach( button => setButtonLoading( button, false ) );
 				}
 				if ( status === 200 ) {
 					if ( data?.email ) {
@@ -351,8 +350,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 					// Post-registration email verification: detour the new reader through the verification
 					// modal before completing the auth flow. The newsletters signup modal is shown after the
 					// verification step (or its dismissal) and before the original onSuccess/onClose callbacks.
+					// An opener whose own flow verifies the reader, as a checkout does, passes skipVerification.
 					const needsVerification =
-						data?.registered && newspack_ras_config?.verify_new_reader_accounts && data?.verified !== true && data?.verification_nonce;
+						! container.config?.skipVerification &&
+						data?.registered &&
+						newspack_ras_config?.verify_new_reader_accounts &&
+						data?.verified !== true &&
+						data?.verification_nonce;
 
 					let callback;
 					if ( ! container.config?.skipNewslettersSignup && data?.registered && container.authCallback ) {
@@ -392,17 +396,11 @@ window.newspackRAS.push( function ( readerActivation ) {
 							authModal.style.display = 'none';
 						}
 
-						// startLoginFlow() disabled the submit buttons and dimmed the form for the in-flight
-						// register request. Restore them now so the auth form is interactive when we switch
-						// back to it in OTP state on Send code.
-						submitButtons.forEach( button => {
-							button.disabled = false;
-							// startLoginFlow() added the spinner; this branch opens the verification modal
-							// instead of routing through setFormAction(), so clear it here in lockstep
-							// with the disabled attribute.
-							button.classList.remove( 'newspack-ui__button--loading' );
-						} );
-						form.style.opacity = 1;
+						// startLoginFlow() set the loading state for the in-flight register request. This
+						// branch opens the verification modal instead of routing through setFormAction(),
+						// so clear it now, leaving the auth form interactive when we switch back to it in
+						// OTP state on Send code.
+						submitButtons.forEach( button => setButtonLoading( button, false ) );
 
 						// Restore the auth modal's inline display before invoking any callback
 						// that might close or re-open it. Skipping this leaves data-state='open'
@@ -420,11 +418,19 @@ window.newspackRAS.push( function ( readerActivation ) {
 							setOTPTimer: readerActivation.setOTPTimer,
 							onSendCode: () => {
 								restoreAuthModal();
-								container.setFormAction( 'otp', true );
+								// The verification dialog stays modal until the modal script closes it in a
+								// microtask, and focus can't move into the auth modal before then.
+								queueMicrotask( () => container.setFormAction( 'otp', true ) );
 							},
 							onDismiss: () => {
 								restoreAuthModal();
-								callback?.( message, data );
+								if ( callback ) {
+									callback( message, data );
+								} else {
+									// An inline form has no opener to hand back to, so it finishes by
+									// itself. No data: passing the registration would reopen this step.
+									form.endLoginFlow( null, 200 );
+								}
 								form.isVerifying = false;
 							},
 						} );
@@ -561,35 +567,24 @@ window.newspackRAS.push( function ( readerActivation ) {
 											readerActivation.setReaderEmail( body.get( 'npe' ) );
 										}
 										if ( data.action ) {
+											// A `signin` response of 'pwd' means the reader has a password; 'otp' means
+											// they don't. Remember it so "Go Back" from the code step can return them to
+											// the password step (NPPM-3054). Other transitions (resend, verify) don't set
+											// data.action here, so the flag survives them.
+											if ( 'pwd' === data.action || 'otp' === data.action ) {
+												container.readerHasPassword = 'pwd' === data.action;
+											}
 											container.setFormAction( data.action, true );
 											if ( data.action === 'otp' ) {
 												readerActivation.setOTPTimer();
 												handleOTPTimer();
 											}
-											if ( data.action === 'otp' || data.action === 'pwd' ) {
-												form.style.opacity = 1;
-											}
-											// The spinner is already cleared by setFormAction() above; just
-											// re-enable the button for the new step.
-											submitButtons.forEach( button => {
-												button.disabled = false;
-											} );
 										} else {
 											form.endLoginFlow( message, status, data );
 										}
 									} )
 									.catch( () => {
 										form.endLoginFlow();
-									} )
-									.finally( () => {
-										const status = res.status;
-										// Check if modal should close on success. If no, reset opacity to 1.
-										// If yes, only reset opacity to 1 if the status is not successful.
-										if ( container.config?.closeOnSuccess ) {
-											form.style.opacity = 1;
-										} else if ( status !== 200 && ! container.config?.closeOnSuccess ) {
-											form.style.opacity = 1;
-										}
 									} );
 							} )
 							.catch( () => {
@@ -605,14 +600,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 							email: body.get( 'npe' ),
 							onProceed: submitForm,
 							onCancel: () => {
-								submitButtons.forEach( button => {
-									button.disabled = false;
-									// startLoginFlow() added the spinner; cancelling keeps us on the signin step
-									// without routing through setFormAction(), so clear it here in lockstep
-									// with the disabled attribute.
-									button.classList.remove( 'newspack-ui__button--loading' );
-								} );
-								form.style.opacity = 1;
+								// startLoginFlow() set the loading state; cancelling keeps us on the signin step
+								// without routing through setFormAction(), so clear it here.
+								submitButtons.forEach( button => setButtonLoading( button, false ) );
 							},
 						} );
 					} else {

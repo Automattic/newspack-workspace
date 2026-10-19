@@ -87,11 +87,10 @@ class Newspack_Test_GoogleSiteKit_Data_Layer extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The hashed email is sent to Site Kit's own gtag config but deliberately kept
-	 * out of the dataLayer, so it is not exposed to every third-party tag in the
-	 * publisher's GTM container.
+	 * The reader's email is never sent to GA4: no `email_hash` param is produced for Site
+	 * Kit's gtag config or for the dataLayer, even for a logged-in reader with an email.
 	 */
-	public function test_email_hash_is_excluded_from_data_layer() {
+	public function test_email_hash_is_not_sent_to_ga4() {
 		$user_id = $this->factory->user->create(
 			[
 				'role'       => 'subscriber',
@@ -100,31 +99,10 @@ class Newspack_Test_GoogleSiteKit_Data_Layer extends WP_UnitTestCase {
 		);
 		wp_set_current_user( $user_id );
 
-		// The gtag set (get_custom_event_parameters) does include the hashed email...
 		$gtag_params = GoogleSiteKit::get_custom_event_parameters();
-		$this->assertArrayHasKey( 'email_hash', $gtag_params );
-
-		// ...but the dataLayer set must not.
-		$data_layer_params = GoogleSiteKit::get_data_layer_params();
-		$this->assertArrayNotHasKey( 'email_hash', $data_layer_params );
-		$this->assertArrayHasKey( 'logged_in', $data_layer_params );
-	}
-
-	/**
-	 * The exclusion is enforced after the filter runs, so a filter cannot re-introduce
-	 * `email_hash` into the dataLayer.
-	 */
-	public function test_filter_cannot_reintroduce_email_hash() {
-		add_filter(
-			'newspack_ga4_data_layer_params',
-			function ( $params ) {
-				$params['email_hash'] = 'should-not-survive';
-				return $params;
-			}
-		);
+		$this->assertArrayNotHasKey( 'email_hash', $gtag_params );
 
 		$data_layer_params = GoogleSiteKit::get_data_layer_params();
-
 		$this->assertArrayNotHasKey( 'email_hash', $data_layer_params );
 	}
 

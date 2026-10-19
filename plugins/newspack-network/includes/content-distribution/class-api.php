@@ -52,9 +52,7 @@ class API {
 						'default' => 'draft',
 					],
 				],
-				'permission_callback' => function ( $request ) {
-					return current_user_can( Admin::CAPABILITY ) && current_user_can( 'edit_post', $request['post_id'] );
-				},
+				'permission_callback' => [ __CLASS__, 'check_post_permission' ],
 			]
 		);
 
@@ -70,9 +68,7 @@ class API {
 						'type'     => 'boolean',
 					],
 				],
-				'permission_callback' => function () {
-					return current_user_can( Admin::CAPABILITY );
-				},
+				'permission_callback' => [ __CLASS__, 'check_post_permission' ],
 			]
 		);
 
@@ -93,9 +89,7 @@ class API {
 						'default' => 'draft',
 					],
 				],
-				'permission_callback' => function () {
-					return current_user_can( Admin::CAPABILITY );
-				},
+				'permission_callback' => [ __CLASS__, 'check_post_permission' ],
 			]
 		);
 
@@ -116,6 +110,21 @@ class API {
 				},
 			]
 		);
+	}
+
+	/**
+	 * Permission callback for the routes that act on the post named in the URL.
+	 *
+	 * The capability is granted to the 'author' role by default and only
+	 * authorizes the caller. The edit_post check is what holds an author to the
+	 * posts they can edit, and it refuses a post ID that resolves to nothing.
+	 *
+	 * @param WP_REST_Request $request The REST request object.
+	 *
+	 * @return bool
+	 */
+	public static function check_post_permission( $request ): bool {
+		return current_user_can( Admin::CAPABILITY ) && current_user_can( 'edit_post', $request['post_id'] );
 	}
 
 	/**

@@ -7,6 +7,13 @@
 		margin-top: 16px;
 	}
 
+	// The per-correction Delete button follows the description field directly, and
+	// neither BaseControl nor the button carries a bottom/top margin of its own, so
+	// without this it sits flush against the textarea above it.
+	&-item .components-button.is-destructive {
+		margin-top: 8px;
+	}
+
 	&-date-popover {
 		.components-popover__content {
 			padding: 16px;

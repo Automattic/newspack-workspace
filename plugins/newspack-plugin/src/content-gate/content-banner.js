@@ -1,11 +1,9 @@
 /* globals newspack_content_gifting */
 import domReady from '@wordpress/dom-ready';
 import { queuePageReload } from '../reader-activation/utils';
+import { getMeteringSettings, getMeteringStoreKey } from './utils/metering-settings';
 
 import './content-banner.scss';
-
-const settings = window.newspack_metering_settings || {};
-const storeKey = 'metering-' + ( settings.meter_key || settings.gate_id || 0 );
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -42,7 +40,8 @@ domReady( () => {
 		if ( ! views || 0 < parseInt( views.textContent ) ) {
 			return;
 		}
-		const data = ras?.store?.get( storeKey ) || {
+		const settings = getMeteringSettings();
+		const data = ( settings && ras?.store?.get( getMeteringStoreKey( settings ) ) ) || {
 			content: [],
 		};
 		const total = parseInt( document.querySelector( '.newspack-countdown-banner__total_views' )?.textContent || 0 );
@@ -73,14 +72,19 @@ domReady( () => {
 
 	const copy = ev => {
 		ev.preventDefault();
+		if ( 'true' === copyButton.getAttribute( 'aria-disabled' ) ) {
+			return;
+		}
 		urlInput.select();
 		document.execCommand( 'copy' );
 		const originalText = copyButton.textContent;
-		copyButton.setAttribute( 'disabled', true );
+		// aria-disabled rather than disabled, which would drop focus out of the modal.
+		copyButton.setAttribute( 'aria-disabled', 'true' );
 		copyButton.textContent = newspack_content_gifting.copied_label;
+		copyButton.focus();
 		setTimeout( () => {
 			copyButton.textContent = originalText;
-			copyButton.removeAttribute( 'disabled' );
+			copyButton.removeAttribute( 'aria-disabled' );
 		}, 5000 );
 	};
 
@@ -90,6 +94,8 @@ domReady( () => {
 	[ ...buttons ].forEach( button => {
 		button.addEventListener( 'click', ev => {
 			ev.preventDefault();
+			linkContainer.style.display = 'none';
+			info.style.display = 'none';
 			modal.setAttribute( 'data-state', 'open' );
 			spinner.style.display = 'flex';
 			fetch( newspack_content_gifting.ajax_url, {
@@ -116,6 +122,12 @@ domReady( () => {
 						urlInput.disabled = false;
 						delete urlInput.style.pointerEvents;
 						copyButton.disabled = false;
+						// The modal opens before its link arrives, so focus moves to Copy link once it's
+						// there, unless the reader has already moved it.
+						const active = modal.ownerDocument.activeElement;
+						if ( 'open' === modal.dataset.state && ( ! modal.contains( active ) || active === modal || active.matches( 'h2' ) ) ) {
+							copyButton.focus();
+						}
 					}
 				} )
 				.catch( err => {

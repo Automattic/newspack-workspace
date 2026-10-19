@@ -11,20 +11,22 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useMemo, useState } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
+import { people } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Modal, Notice, SectionHeader, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
+import { Button, DataViews, Modal, Notice, StatusIndicator, Waiting } from '../../../../../../../packages/components/src';
+import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
 import { registerTab } from '../registry';
-import { SEARCH_ENDPOINTS } from '../../constants';
+import { allSubscriptionsLabel, SEARCH_ENDPOINTS } from '../../constants';
 import { useRestrictions } from './use-restrictions';
-import { useNames } from './use-names';
+import { useNames } from '../../use-names';
 import { excludedLabel, leadingProductNames, moreProductsLabel, scopeLabel } from './labels';
 import RestrictionEditor from './restriction-editor';
 import type { Restriction, RestrictionSettings } from './types';
@@ -95,9 +97,17 @@ function SubscriberOnlyProducts() {
 				id: 'availableTo',
 				label: __( 'Available to', 'newspack-plugin' ),
 				enableSorting: false,
+				// The cell's own text is what the list's search matches, so a rule open
+				// to every subscriber stays findable by the name the editor gives it.
+				enableGlobalSearch: true,
 				getValue: ( { item }: { item: Restriction } ) =>
-					( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] || '' ).join( ', ' ),
+					'all' === item.subscription_targeting
+						? allSubscriptionsLabel()
+						: ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] || '' ).join( ', ' ),
 				render: ( { item }: { item: Restriction } ) => {
+					if ( 'all' === item.subscription_targeting ) {
+						return <span>{ allSubscriptionsLabel() }</span>;
+					}
 					const names = ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] ).filter( Boolean );
 					return <span>{ names.length ? names.join( ', ' ) : __( 'No subscriptions', 'newspack-plugin' ) }</span>;
 				},
@@ -186,7 +196,8 @@ function SubscriberOnlyProducts() {
 							_n( 'Subscriber-only products (%d)', 'Subscriber-only products (%d)', total, 'newspack-plugin' ),
 							total
 					  )
-					: __( 'Subscriber-only products', 'newspack-plugin' )
+					: // The empty state carries its own heading, and the breadcrumb already names the screen.
+					  undefined
 			}
 		>
 			<WizardSection>
@@ -202,7 +213,7 @@ function SubscriberOnlyProducts() {
 										{ __( 'Settings', 'newspack-plugin' ) }
 									</Button>
 									<Button variant="primary" onClick={ () => setEditing( {} ) }>
-										{ __( 'Add restriction', 'newspack-plugin' ) }
+										{ __( 'Add Restriction', 'newspack-plugin' ) }
 									</Button>
 								</HStack>
 								{ /* The DataViews wrapper isn't generic — its props resolve to
@@ -221,18 +232,21 @@ function SubscriberOnlyProducts() {
 								/>
 							</>
 						) : (
-							<SectionHeader
-								title={ __( 'Get started with subscriber-only products', 'newspack-plugin' ) }
-								description={ __(
-									'Make selected products purchasable only by subscribers. Readers still see the product and its price — only the purchase is blocked.',
-									'newspack-plugin'
-								) }
-								noMargin
-							>
-								<Button variant="primary" onClick={ () => setEditing( {} ) }>
-									{ __( 'Add restriction', 'newspack-plugin' ) }
-								</Button>
-							</SectionHeader>
+							<EmptyState.Root>
+								<EmptyState.Header
+									icon={ people }
+									title={ __( 'Get started with subscriber-only products', 'newspack-plugin' ) }
+									description={ __(
+										'Make selected products purchasable only by subscribers. Readers still see the product and its price — only the purchase is blocked.',
+										'newspack-plugin'
+									) }
+								/>
+								<EmptyState.Actions>
+									<Button variant="primary" onClick={ () => setEditing( {} ) }>
+										{ __( 'Add Restriction', 'newspack-plugin' ) }
+									</Button>
+								</EmptyState.Actions>
+							</EmptyState.Root>
 						) }
 					</>
 				) }

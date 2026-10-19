@@ -7,17 +7,38 @@ export const randomString = (length = 8) =>
 
 export const randomEmailAddress = () => `test-${randomString()}@example.com`;
 
+// The /_email sendbox is gated behind a per-run shared secret (see e2e-plugin.php
+// and e2e-setup.sh). The suite sends it as a request header — never in the URL — so
+// it stays out of access logs, published Playwright artifacts and browser history.
+// The value is read from the environment, falling back to the committed local-dev
+// default that e2e-setup.sh also uses for local targets, so zero-config local runs
+// work.
+export const SENDBOX_SECRET_HEADER = "X-Newspack-E2E-Sendbox-Secret";
+export const emailSendboxSecret = (): string =>
+  process.env.E2E_EMAIL_SENDBOX_SECRET || "newspack-e2e-local";
+
 // Open an email in the dev "Email Sendbox" (/_email) by its subject + recipient.
 // Emails are saved asynchronously and the sendbox is a static page, so we reload
 // until the message shows up instead of trusting a single load (otherwise a
-// message that arrives after the page render is never seen).
+// message that arrives after the page render is never seen). The secret header is
+// scoped to these sendbox reads and cleared before returning, so it never rides the
+// reader's subsequent navigations (which load assets from other hosts).
 export const openEmail = async (page, subjectPrefix, emailAddress) => {
   const emailLink = page.getByText(`${subjectPrefix} (${emailAddress}`);
-  await expect(async () => {
-    await page.goto(`/_email?cachebust=${emailAddress}-${Date.now()}`);
-    await expect(emailLink).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 30000 });
-  await emailLink.click();
+  await page.setExtraHTTPHeaders({ [SENDBOX_SECRET_HEADER]: emailSendboxSecret() });
+  try {
+    await expect(async () => {
+      await page.goto(`/_email?cachebust=${emailAddress}-${Date.now()}`);
+      await expect(emailLink).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 30000 });
+    await emailLink.click();
+  } finally {
+    // Clearing replaces the whole extra-header set, which is fine while this is the
+    // only code that sets page-level headers (playwright.config.ts sets none). If a
+    // global header is ever added there, capture and restore it here instead —
+    // otherwise this clear silently drops it for the rest of the page's life.
+    await page.setExtraHTTPHeaders({});
+  }
 };
 
 // Navigate to the reader's My Account page. We go directly rather than clicking

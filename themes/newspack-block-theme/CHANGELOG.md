@@ -1,3 +1,63 @@
+# newspack-block-theme [1.32.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.8...newspack-block-theme@1.32.0) (2026-10-14)
+
+
+### Features
+
+* **newsletters:** show premium lists in the subscription form ([#1291](https://github.com/Automattic/newspack-workspace/issues/1291)) ([456d762](https://github.com/Automattic/newspack-workspace/commit/456d762ba465aafc6e5be08ed47836acafaad1a6))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
+## newspack-block-theme [1.31.8](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.7...newspack-block-theme@1.31.8) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
+## newspack-block-theme [1.31.7](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.6...newspack-block-theme@1.31.7) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+
+## newspack-block-theme [1.31.6](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.5...newspack-block-theme@1.31.6) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.1
+
+## newspack-block-theme [1.31.5](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.4...newspack-block-theme@1.31.5) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
+## newspack-block-theme [1.31.4](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.3...newspack-block-theme@1.31.4) (2026-09-14)
+
+
+### Bug Fixes
+
+* **blocks:** keep tag labels clear of cat-links styling ([#736](https://github.com/Automattic/newspack-workspace/issues/736)) ([4cb3fb7](https://github.com/Automattic/newspack-workspace/commit/4cb3fb76849ca05bf29d06788e0148afab204227))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
+## newspack-block-theme [1.31.3](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.2...newspack-block-theme@1.31.3) (2026-08-31)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.7.0
+
 ## newspack-block-theme [1.31.2](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.31.1...newspack-block-theme@1.31.2) (2026-08-20)
 
 

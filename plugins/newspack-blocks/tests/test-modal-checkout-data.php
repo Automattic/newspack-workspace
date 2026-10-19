@@ -57,6 +57,13 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		private $parent_id;
 
 		/**
+		 * Post status.
+		 *
+		 * @var string
+		 */
+		private $status;
+
+		/**
 		 * Constructor.
 		 *
 		 * @param int    $id        Product ID.
@@ -65,14 +72,16 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		 * @param string $price     Product price.
 		 * @param string $name      Product name.
 		 * @param int    $parent_id Parent product ID.
+		 * @param string $status    Post status.
 		 */
-		public function __construct( $id = 1, $type = 'simple', $children = [], $price = '1', $name = 'Product', $parent_id = 0 ) {
+		public function __construct( $id = 1, $type = 'simple', $children = [], $price = '1', $name = 'Product', $parent_id = 0, $status = 'publish' ) {
 			$this->id        = $id;
 			$this->type      = $type;
 			$this->children  = $children;
 			$this->price     = $price;
 			$this->name      = $name;
 			$this->parent_id = $parent_id;
+			$this->status    = $status;
 		}
 
 		/**
@@ -138,6 +147,15 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		public function get_name() {
 			return $this->name;
 		}
+
+		/**
+		 * Get the post status.
+		 *
+		 * @return string
+		 */
+		public function get_status() {
+			return $this->status;
+		}
 	}
 }
 
@@ -169,14 +187,23 @@ if ( ! class_exists( 'WC_Order_Item_Product' ) ) {
 		private $subtotal;
 
 		/**
+		 * Line-item quantity.
+		 *
+		 * @var int
+		 */
+		private $quantity;
+
+		/**
 		 * Constructor.
 		 *
 		 * @param int    $product_id Product ID.
 		 * @param string $subtotal   Line subtotal.
+		 * @param int    $quantity   Line-item quantity.
 		 */
-		public function __construct( $product_id, $subtotal = '25' ) {
+		public function __construct( $product_id, $subtotal = '25', $quantity = 1 ) {
 			$this->product_id = $product_id;
 			$this->subtotal   = $subtotal;
+			$this->quantity   = $quantity;
 		}
 
 		public function get_product_id() {
@@ -189,6 +216,93 @@ if ( ! class_exists( 'WC_Order_Item_Product' ) ) {
 
 		public function get_subtotal() {
 			return $this->subtotal;
+		}
+
+		public function get_quantity() {
+			return $this->quantity;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Cart' ) ) {
+	/**
+	 * Minimal WooCommerce cart stub whose get_cart() returns pre-set line items.
+	 */
+	class WC_Cart {
+		/**
+		 * Cart items, keyed by cart item key.
+		 *
+		 * @var array
+		 */
+		private $items;
+
+		/**
+		 * Constructor.
+		 *
+		 * @param array $items Cart items, keyed by cart item key.
+		 */
+		public function __construct( $items ) {
+			$this->items = $items;
+		}
+
+		/**
+		 * Get cart items.
+		 *
+		 * @return array
+		 */
+		public function get_cart() {
+			return $this->items;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
+	/**
+	 * Minimal WC_Subscriptions_Product stub exposing only what get_price_summary() reads.
+	 */
+	class WC_Subscriptions_Product {
+		/**
+		 * Billing interval.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return int
+		 */
+		public static function get_interval( $product ) {
+			unset( $product );
+			return 1;
+		}
+
+		/**
+		 * Trial length.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return int
+		 */
+		public static function get_trial_length( $product ) {
+			unset( $product );
+			return 0;
+		}
+
+		/**
+		 * Trial period.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return string
+		 */
+		public static function get_trial_period( $product ) {
+			unset( $product );
+			return '';
+		}
+
+		/**
+		 * Sign-up fee, read from a test-controlled global so a single test can set it.
+		 *
+		 * @param WC_Product $product Product.
+		 * @return float
+		 */
+		public static function get_sign_up_fee( $product ) {
+			unset( $product );
+			return $GLOBALS['newspack_blocks_test_sign_up_fee'] ?? 0;
 		}
 	}
 }
@@ -249,8 +363,264 @@ class Newspack_Blocks_Modal_Checkout_Data_Test extends WP_UnitTestCase_Blocks {
 	 * Clean up product fixtures.
 	 */
 	public function tear_down() {
-		unset( $GLOBALS['newspack_blocks_test_products'] );
+		unset(
+			$GLOBALS['newspack_blocks_test_products'],
+			$GLOBALS['newspack_blocks_test_sign_up_fee'],
+			$GLOBALS['newspack_blocks_test_last_wcs_price_string_args']
+		);
 		parent::tear_down();
+	}
+
+	/**
+	 * Build a minimal WC_Cart stub whose get_cart() returns a single, given item.
+	 *
+	 * @param array $cart_item Cart item array (product_id, variation_id, quantity, data, ...).
+	 * @return WC_Cart
+	 */
+	private function make_cart( $cart_item ) {
+		return new WC_Cart( [ 'cart_item_key' => $cart_item ] );
+	}
+
+	/**
+	 * Build a simple WC_Product stub for cart/order quantity fixtures.
+	 *
+	 * @param int    $id    Product ID.
+	 * @param string $price Product price.
+	 * @return WC_Product
+	 */
+	private function make_product( $id, $price ) {
+		return new WC_Product( $id, 'simple', [], (string) $price, 'Product ' . $id );
+	}
+
+	/**
+	 * Build a WC_Order stub carrying a single line item and the given order meta.
+	 *
+	 * @param array $meta Order meta, keyed by meta key.
+	 * @return WC_Order
+	 */
+	private function order_with_meta( array $meta ) {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			82 => new WC_Product( 82, 'simple', [], '10', 'Product 82' ),
+		];
+		return new WC_Order( 951, '', [ new WC_Order_Item_Product( 82, '40', 4 ) ], $meta );
+	}
+
+	/**
+	 * Build a WC_Cart stub whose single item carries product/quantity defaults
+	 * plus whatever extra cart-item keys the test needs to assert on.
+	 *
+	 * @param array $extra Extra cart-item keys.
+	 * @return WC_Cart
+	 */
+	private function cart_with_item( array $extra ) {
+		return $this->make_cart(
+			array_merge(
+				[
+					'product_id'   => 83,
+					'variation_id' => 0,
+					'quantity'     => 1,
+					'data'         => $this->make_product( 83, 10 ),
+				],
+				$extra
+			)
+		);
+	}
+
+	/**
+	 * A cart line item's quantity flows into `quantity`, and the per-unit price is
+	 * multiplied into `amount` — a cart's price is per unit, unlike an order's.
+	 */
+	public function test_cart_checkout_data_includes_quantity_and_multiplied_amount() {
+		$cart = $this->make_cart( [ 'product_id' => 77, 'variation_id' => 0, 'quantity' => 4, 'data' => $this->make_product( 77, 10 ) ] );
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 4, $data['quantity'] );
+		$this->assertSame( 40.0, $data['amount'] );
+	}
+
+	/**
+	 * A cart item missing `quantity` (version skew, or a non-WooCommerce caller)
+	 * must not fatal, and behaves as a single seat. At quantity 1 the multiply is
+	 * skipped entirely, so `amount` stays byte-identical to the pre-quantity
+	 * behavior (the raw string `get_price()` returns) rather than becoming a float.
+	 */
+	public function test_cart_checkout_data_defaults_missing_quantity_to_one() {
+		$cart = $this->make_cart( [ 'product_id' => 78, 'variation_id' => 0, 'data' => $this->make_product( 78, 10 ) ] );
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 1, $data['quantity'] );
+		$this->assertSame( '10', $data['amount'] );
+	}
+
+	/**
+	 * A product with no price set (`get_price()` returns '', e.g. a blank `_price`
+	 * meta) must not fatal when a quantity above one multiplies it. PHP 8 throws a
+	 * TypeError on `'' * int`; the multiply must coerce to float first so a
+	 * Checkout Button, metering countdown, or gifting CTA pointing at such a
+	 * product doesn't white-screen.
+	 */
+	public function test_cart_checkout_data_handles_empty_price_with_quantity() {
+		$cart = $this->make_cart( [ 'product_id' => 81, 'variation_id' => 0, 'quantity' => 3, 'data' => $this->make_product( 81, '' ) ] );
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 3, $data['quantity'] );
+		$this->assertSame( 0.0, $data['amount'] );
+	}
+
+	/**
+	 * An order line item's `get_subtotal()` already reflects quantity, so it must
+	 * not be multiplied again — only `quantity` itself is surfaced.
+	 */
+	public function test_order_checkout_data_does_not_double_multiply_amount() {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			79 => new WC_Product( 79, 'simple', [], '10', 'Product 79' ),
+		];
+		$order = new WC_Order( 950, '', [ new WC_Order_Item_Product( 79, '40', 4 ) ] );
+
+		$data = Checkout_Data::get_checkout_data( $order );
+
+		$this->assertSame( 4, $data['quantity'] );
+		$this->assertSame( '40', $data['amount'], 'The order subtotal already reflects quantity and must not be multiplied again.' );
+	}
+
+	/**
+	 * An order that started from a contextual prompt carries the source triple
+	 * in the checkout payload, so the success event can report it.
+	 */
+	public function test_order_checkout_data_carries_contextual_prompt_source() {
+		$order = $this->order_with_meta(
+			[
+				'_newspack_contextual_prompt_post_id'   => 12,
+				'_newspack_contextual_prompt_placement' => 'mid',
+				'_newspack_contextual_prompt_condition' => 'generic_control',
+			]
+		);
+		$data  = Checkout_Data::get_checkout_data( $order );
+		$this->assertSame( 12, (int) $data['contextual_prompt_post_id'] );
+		$this->assertSame( 'mid', $data['contextual_prompt_placement'] );
+		$this->assertSame( 'generic_control', $data['contextual_prompt_condition'] );
+	}
+
+	/**
+	 * The same from a cart item, before the order exists.
+	 */
+	public function test_cart_checkout_data_carries_contextual_prompt_source() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12',
+				'contextual_prompt_placement' => 'end',
+				'contextual_prompt_condition' => 'story_aware',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 'end', $data['contextual_prompt_placement'] );
+		$this->assertSame( 'story_aware', $data['contextual_prompt_condition'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt condition isn't one of the three
+	 * known values is dropped rather than passed through to the checkout
+	 * payload; the other, valid keys in the same triple still pass.
+	 */
+	public function test_cart_checkout_data_drops_invalid_contextual_prompt_condition() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12',
+				'contextual_prompt_placement' => 'end',
+				'contextual_prompt_condition' => 'winner',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertArrayNotHasKey( 'contextual_prompt_condition', $data );
+		$this->assertSame( 'end', $data['contextual_prompt_placement'] );
+		$this->assertSame( 12, (int) $data['contextual_prompt_post_id'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt placement isn't one of the known
+	 * values is dropped the same way.
+	 */
+	public function test_cart_checkout_data_drops_invalid_contextual_prompt_placement() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12',
+				'contextual_prompt_placement' => 'sidebar',
+				'contextual_prompt_condition' => 'story_aware',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertArrayNotHasKey( 'contextual_prompt_placement', $data );
+		$this->assertSame( 'story_aware', $data['contextual_prompt_condition'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt post id isn't a positive integer is
+	 * dropped the same way. Uses a non-numeric id rather than '0': that value
+	 * is already falsy and gets dropped by the pre-existing truthiness guard
+	 * before is_valid_contextual_prompt_value() ever runs, so it wouldn't
+	 * actually exercise that check.
+	 */
+	public function test_cart_checkout_data_drops_invalid_contextual_prompt_post_id() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => 'abc',
+				'contextual_prompt_placement' => 'top',
+				'contextual_prompt_condition' => 'override',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertArrayNotHasKey( 'contextual_prompt_post_id', $data );
+		$this->assertSame( 'top', $data['contextual_prompt_placement'] );
+	}
+
+	/**
+	 * A cart item whose contextual prompt post id is a mixed numeric/alpha
+	 * string still passes is_valid_contextual_prompt_value() (absint() > 0),
+	 * so the payload must carry the normalized int, not the raw string.
+	 */
+	public function test_cart_checkout_data_normalizes_contextual_prompt_post_id() {
+		$cart = $this->cart_with_item(
+			[
+				'contextual_prompt_post_id'   => '12abc',
+				'contextual_prompt_placement' => 'top',
+				'contextual_prompt_condition' => 'override',
+			]
+		);
+		$data = Checkout_Data::get_checkout_data( $cart );
+		$this->assertSame( 12, $data['contextual_prompt_post_id'] );
+	}
+
+	/**
+	 * A bare product source (no cart or order) carries no `quantity` at all.
+	 * Only a cart or order line item has a real seat count to report; for a
+	 * bare product, the block's hidden field (or a reader's later in-modal
+	 * edit) is the source of truth, and `data-checkout` has nothing to say
+	 * about it. Emitting a hardcoded `quantity: 1` here would let it
+	 * overwrite that real value when `getCheckoutData()` merges the two.
+	 */
+	public function test_product_checkout_data_omits_quantity() {
+		$product = new WC_Product( 80, 'simple', [], '10', 'Product 80' );
+
+		$data = Checkout_Data::get_checkout_data( $product );
+
+		$this->assertArrayNotHasKey( 'quantity', $data );
+		$this->assertSame( '10', $data['amount'] );
+	}
+
+	/**
+	 * The subscription sign-up fee is charged per seat by WCS, so get_price_summary()
+	 * must multiply it by quantity before handing it to wcs_price_string().
+	 */
+	public function test_price_summary_multiplies_signup_fee_by_quantity() {
+		$GLOBALS['newspack_blocks_test_sign_up_fee'] = 5;
+		$GLOBALS['newspack_blocks_test_products']    = [
+			321 => new WC_Product( 321, 'subscription', [], '10', 'Supporter' ),
+		];
+
+		Checkout_Data::get_price_summary( 'Supporter', 10, 'month', 321, 3 );
+
+		$this->assertEquals(
+			15,
+			$GLOBALS['newspack_blocks_test_last_wcs_price_string_args']['initial_amount'],
+			'The sign-up fee should be multiplied by quantity, since WCS charges it per seat.'
+		);
 	}
 
 	/**

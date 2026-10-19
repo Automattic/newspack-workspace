@@ -4,8 +4,8 @@ A card component for presenting a named setting or feature with an expandable in
 
 ## Layout rules
 
-- Stack multiple `CardForm` cards inside a `<VStack>` — they are designed to appear as a list.
-- The `actions` slot sits to the right of the badge. Keep it to one button; if you need multiple actions, use an `HStack` with `expanded={ false }`.
+- Stack multiple `CardForm` cards inside a `<Stack direction="column" gap="lg">` from `@wordpress/ui`; they are designed to appear as a list.
+- The `actions` slot sits to the right of the badge. Keep it to one button; if you need multiple actions, wrap them in a `<Stack gap="sm" align="center">` from `@wordpress/ui`.
 - The form body (`children`) is only mounted when `isOpen` is `true`.
 
 ## States

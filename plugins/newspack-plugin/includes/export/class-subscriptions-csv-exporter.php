@@ -20,8 +20,11 @@ require_once __DIR__ . '/class-csv-batch-exporter.php';
  * the same way Memberships-for-Teams extended the WC Memberships export):
  * - `newspack_subscriptions_export_headers` filters the column id => label map.
  * - `newspack_subscriptions_export_row` filters each row (keyed by column id).
+ *   In per-member mode it runs once per subscription, before the reader
+ *   columns are added; `newspack_subscriptions_export_member_row` then runs
+ *   on each reader's row.
  * - `newspack_subscriptions_export_query_args` filters the query args built
- *   from the captured list params.
+ *   from the captured list params and the chosen export options.
  *
  * This class must only be loaded after WooCommerce's WC_CSV_Batch_Exporter
  * abstract (see CSV_Exports::load_exporter_dependencies()).
@@ -34,6 +37,14 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * @var string
 	 */
 	protected $export_type = 'newspack_subscriptions';
+
+	/**
+	 * How many subscriptions the current page fetched. In per-member mode the
+	 * page writes more rows than that, so progress is counted in these.
+	 *
+	 * @var int
+	 */
+	private int $page_subscription_count = 0;
 
 	/**
 	 * Constructor.
@@ -49,6 +60,17 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * @return array
 	 */
 	public function get_default_column_names() {
+		$member_columns = $this->is_per_member()
+			? [
+				'member_id'         => __( 'User ID', 'newspack-plugin' ),
+				'member_username'   => __( 'Username', 'newspack-plugin' ),
+				'member_email'      => __( 'Email', 'newspack-plugin' ),
+				'member_first_name' => __( 'First Name', 'newspack-plugin' ),
+				'member_last_name'  => __( 'Last Name', 'newspack-plugin' ),
+				'access_through'    => __( 'Access Through', 'newspack-plugin' ),
+				'group_name'        => __( 'Group Name', 'newspack-plugin' ),
+			]
+			: [];
 		/**
 		 * Filters the subscriptions export columns.
 		 *
@@ -59,6 +81,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		return apply_filters(
 			'newspack_subscriptions_export_headers',
 			array_merge(
+				$member_columns,
 				[
 					'subscription_id'     => __( 'Subscription ID', 'newspack-plugin' ),
 					'status'              => __( 'Status', 'newspack-plugin' ),
@@ -103,9 +126,10 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 *                          memoize the product-filter ID set across the
 	 *                          run's pages; '' disables caching (the default,
 	 *                          keeping the method pure for direct callers).
+	 * @param array  $config    Export options chosen in the export dialog.
 	 * @return array Query args.
 	 */
-	public static function build_query_args( array $params, string $cache_key = '' ): array {
+	public static function build_query_args( array $params, string $cache_key = '', array $config = [] ): array {
 		// Array-shaped params (a mangled ?m[]=... URL) would TypeError in the
 		// string handling below; degrade to "filter ignored" instead.
 		$params = array_filter( \wc_clean( $params ), 'is_scalar' );
@@ -115,16 +139,26 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			'order'   => 'ASC',
 		];
 
-		// Status: CPT lists send post_status, HPOS lists send status. Default
-		// to every subscription status, matching the admin list's "All" view.
+		// Status: the dialog's selection supersedes the list's status tab, which
+		// can only ever hold one status. CPT lists send post_status, HPOS lists
+		// send status. With neither, export every status, matching the admin
+		// list's "All" view — and once a selection has been submitted, clearing
+		// every checkbox means every status rather than "keep the status tab",
+		// except on a view the dialog has no checkbox for (Trash), where there
+		// was nothing to clear.
 		$status = '';
 		if ( ! empty( $params['post_status'] ) ) {
 			$status = $params['post_status'];
 		} elseif ( ! empty( $params['status'] ) ) {
 			$status = $params['status'];
 		}
-		if ( '' === $status || 'all' === $status ) {
-			$args['status'] = array_keys( \wcs_get_subscription_statuses() );
+		$offered_statuses = array_keys( \wcs_get_subscription_statuses() );
+		if ( ! empty( $config['statuses'] ) ) {
+			$args['status'] = $config['statuses'];
+		} elseif ( '' === $status || 'all' === $status ) {
+			$args['status'] = $offered_statuses;
+		} elseif ( ! empty( $config['selection_submitted'] ) && in_array( \wcs_sanitize_subscription_status_key( $status ), $offered_statuses, true ) ) {
+			$args['status'] = $offered_statuses;
 		} else {
 			$args['status'] = [ \wcs_sanitize_subscription_status_key( $status ) ];
 		}
@@ -178,8 +212,13 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			}
 		}
 
-		// Month filter (m=YYYYMM) becomes an inclusive date_created range.
-		if ( ! empty( $params['m'] ) && preg_match( '/^\d{6}$/', $params['m'] ) ) {
+		// Month filter (m=YYYYMM) becomes an inclusive date_created range. The
+		// dialog's own range supersedes it — it is the same filter, expressed
+		// with day precision — and clearing the range in the dialog clears the
+		// month filter with it rather than quietly restoring it.
+		if ( ! empty( $config['date_from'] ) || ! empty( $config['date_to'] ) ) {
+			$args['date_created'] = self::build_date_created_arg( $config );
+		} elseif ( empty( $config['selection_submitted'] ) && ! empty( $params['m'] ) && preg_match( '/^\d{6}$/', $params['m'] ) ) {
 			$year                 = substr( $params['m'], 0, 4 );
 			$month                = substr( $params['m'], 4, 2 );
 			$last_day             = gmdate( 't', gmmktime( 0, 0, 0, (int) $month, 1, (int) $year ) );
@@ -191,8 +230,30 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		 *
 		 * @param array $args   wc_get_orders-style query args.
 		 * @param array $params The captured admin-list params.
+		 * @param array $config The export options chosen in the export dialog.
 		 */
-		return apply_filters( 'newspack_subscriptions_export_query_args', $args, $params );
+		return apply_filters( 'newspack_subscriptions_export_query_args', $args, $params, $config );
+	}
+
+	/**
+	 * Build the wc_get_orders date_created argument for the export's date range.
+	 *
+	 * WooCommerce reads a date argument at day precision in the site's
+	 * timezone, so the bounds are passed as bare dates: a time component would
+	 * be discarded, and writing one would suggest the boundary can be tuned by
+	 * editing it. An open end is left open with the `<=` / `>=` prefixes
+	 * WooCommerce's date arguments accept.
+	 *
+	 * @param array $config Export config.
+	 * @return string
+	 */
+	private static function build_date_created_arg( array $config ): string {
+		$from = ! empty( $config['date_from'] ) ? $config['date_from'] : '';
+		$to   = ! empty( $config['date_to'] ) ? $config['date_to'] : '';
+		if ( '' !== $from && '' !== $to ) {
+			return $from . '...' . $to;
+		}
+		return '' !== $from ? '>=' . $from : '<=' . $to;
 	}
 
 	/**
@@ -240,7 +301,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	public function prepare_data_to_export(): void {
 		// Pass the run's filename so a product filter's ID set is resolved once
 		// per run rather than re-queried on every page.
-		$args             = self::build_query_args( $this->list_params, $this->get_filename() );
+		$args             = self::build_query_args( $this->list_params, $this->get_filename(), $this->export_config );
 		$args['limit']    = $this->get_limit();
 		$args['offset']   = ( $this->get_page() - 1 ) * $this->get_limit();
 		$args['paginate'] = true;
@@ -270,7 +331,169 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			\cache_users( array_unique( $customer_ids ) );
 		}
 
-		$this->row_data = array_map( [ $this, 'get_row_data' ], $subscriptions );
+		$this->page_subscription_count = count( $results->orders );
+		if ( ! $this->is_per_member() ) {
+			$this->row_data = array_map( [ $this, 'get_row_data' ], $subscriptions );
+			return;
+		}
+
+		$groups     = array_map( [ __CLASS__, 'get_group' ], $subscriptions );
+		$member_ids = array_merge( [], ...array_map( fn( $group ) => $group ? $group['member_ids'] : [], $groups ) );
+		if ( ! empty( $member_ids ) && function_exists( 'cache_users' ) ) {
+			\cache_users( array_unique( $member_ids ) );
+		}
+
+		$this->row_data = [];
+		foreach ( $subscriptions as $index => $subscription ) {
+			array_push( $this->row_data, ...$this->get_member_rows( $subscription, $groups[ $index ] ) );
+		}
+	}
+
+	/**
+	 * Progress through the run, in subscriptions.
+	 *
+	 * The batch cursor pages over subscriptions. In per-member mode one
+	 * subscription becomes several rows, so counting rows, as the parent does,
+	 * would overshoot the subscription total and end the run with later
+	 * subscriptions never exported.
+	 *
+	 * @return int
+	 */
+	public function get_total_exported() {
+		if ( ! $this->is_per_member() ) {
+			return parent::get_total_exported();
+		}
+		return ( ( $this->get_page() - 1 ) * $this->get_limit() ) + $this->page_subscription_count;
+	}
+
+	/**
+	 * Whether the data file should hold rows by now.
+	 *
+	 * In per-member mode progress is counted in subscriptions, and a run can
+	 * match subscriptions that yield no reader at all (a deleted owner, no
+	 * members), so only the rows this page actually wrote say the file should
+	 * have content.
+	 *
+	 * @return bool
+	 */
+	public function expects_written_rows(): bool {
+		if ( ! $this->is_per_member() ) {
+			return parent::expects_written_rows();
+		}
+		return $this->exported_row_count > 0;
+	}
+
+	/**
+	 * Whether the export writes one row per reader with access rather than one
+	 * per subscription.
+	 *
+	 * @return bool
+	 */
+	private function is_per_member(): bool {
+		return ! empty( $this->export_config['per_member'] );
+	}
+
+	/**
+	 * A group subscription's name and members, or null for a subscription
+	 * that is not a group.
+	 *
+	 * Members exclude the owner and come in ID order. Pending invites are not
+	 * members: an invitee joins only by accepting.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @return array|null { name: string, member_ids: int[] }, or null.
+	 */
+	private static function get_group( \WC_Subscription $subscription ): ?array {
+		if ( ! class_exists( __NAMESPACE__ . '\Group_Subscription_Settings' ) ) {
+			return null;
+		}
+		// Read once rather than through Group_Subscription::is_group_subscription(),
+		// which resolves the same settings; its My Account exception never applies
+		// to an admin or CLI export.
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		if ( empty( $settings['enabled'] ) ) {
+			return null;
+		}
+		$owner_id   = (int) $subscription->get_customer_id();
+		$member_ids = array_unique( array_map( 'intval', Group_Subscription::get_members( $subscription ) ) );
+		$member_ids = array_values( array_filter( $member_ids, fn( $member_id ) => $member_id && $member_id !== $owner_id ) );
+		sort( $member_ids );
+		return [
+			'name'       => (string) $settings['name'],
+			'member_ids' => $member_ids,
+		];
+	}
+
+	/**
+	 * Build the per-member rows for one subscription: the owner's row, then
+	 * one row per group member. Every row carries the subscription's own
+	 * columns unchanged, so each one can be matched back to its subscription.
+	 *
+	 * An owner whose account was deleted has no access and gets no row; the
+	 * subscription still appears through its members, if it has any.
+	 *
+	 * The Access Through values are fixed English strings rather than
+	 * translations, so spreadsheet filters and formulas built on them work on
+	 * any site language.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @param array|null       $group        The group, from get_group().
+	 * @return array[] Rows keyed by column id.
+	 */
+	private function get_member_rows( \WC_Subscription $subscription, ?array $group ): array {
+		$subscription_row = $this->get_row_data( $subscription );
+		$group_name       = $group ? $group['name'] : '';
+		$readers          = [];
+		$owner_id         = (int) $subscription->get_customer_id();
+		if ( $owner_id && \get_user_by( 'id', $owner_id ) ) {
+			$readers[ $owner_id ] = 'owner';
+		}
+		foreach ( $group ? $group['member_ids'] : [] as $member_id ) {
+			$readers[ $member_id ] = 'group member';
+		}
+
+		$rows = [];
+		foreach ( $readers as $user_id => $access_through ) {
+			/**
+			 * Filters a per-member subscriptions export row.
+			 *
+			 * Runs on each reader's row after `newspack_subscriptions_export_row`
+			 * has run once on the subscription's columns, so it sees the reader
+			 * columns too.
+			 *
+			 * @param array            $row          Row values keyed by column id.
+			 * @param \WC_Subscription $subscription The subscription granting access.
+			 * @param int              $user_id      The reader's user ID.
+			 */
+			$rows[] = apply_filters(
+				'newspack_subscriptions_export_member_row',
+				array_merge( $subscription_row, self::get_member_columns( $user_id, $access_through, $group_name ) ),
+				$subscription,
+				$user_id
+			);
+		}
+		return $rows;
+	}
+
+	/**
+	 * The reader columns of a per-member row.
+	 *
+	 * @param int    $user_id        The reader's user ID.
+	 * @param string $access_through 'owner' or 'group member'.
+	 * @param string $group_name     The group's name, or '' when not a group.
+	 * @return array Values keyed by column id.
+	 */
+	private static function get_member_columns( int $user_id, string $access_through, string $group_name ): array {
+		$user = $user_id ? \get_user_by( 'id', $user_id ) : false;
+		return [
+			'member_id'         => $user ? $user_id : '',
+			'member_username'   => $user ? $user->user_login : '',
+			'member_email'      => $user ? $user->user_email : '',
+			'member_first_name' => $user ? $user->first_name : '',
+			'member_last_name'  => $user ? $user->last_name : '',
+			'access_through'    => $access_through,
+			'group_name'        => $group_name,
+		];
 	}
 
 	/**
@@ -303,12 +526,12 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		$row = [
 			'subscription_id'     => $subscription->get_id(),
 			'status'              => $subscription->get_status(),
-			'date_created'        => $date_created ? $date_created->date( 'Y-m-d H:i:s' ) : '',
-			'start_date'          => self::get_date_field( $subscription, 'start' ),
-			'trial_end_date'      => self::get_date_field( $subscription, 'trial_end' ),
-			'next_payment_date'   => self::get_date_field( $subscription, 'next_payment' ),
-			'last_payment_date'   => self::get_date_field( $subscription, 'last_order_date_created' ),
-			'end_date'            => self::get_date_field( $subscription, 'end' ),
+			'date_created'        => $this->format_export_date( $date_created ? $date_created->date( CSV_Exports::DEFAULT_DATE_FORMAT ) : '' ),
+			'start_date'          => $this->format_export_date( self::get_date_field( $subscription, 'start' ) ),
+			'trial_end_date'      => $this->format_export_date( self::get_date_field( $subscription, 'trial_end' ) ),
+			'next_payment_date'   => $this->format_export_date( self::get_date_field( $subscription, 'next_payment' ) ),
+			'last_payment_date'   => $this->format_export_date( self::get_date_field( $subscription, 'last_order_date_created' ) ),
+			'end_date'            => $this->format_export_date( self::get_date_field( $subscription, 'end' ) ),
 			'billing_period'      => $subscription->get_billing_period(),
 			'billing_interval'    => $subscription->get_billing_interval(),
 			'product_ids'         => implode( ', ', $product_ids ),

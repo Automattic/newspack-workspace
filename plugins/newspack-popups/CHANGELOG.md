@@ -1,3 +1,110 @@
+## newspack-popups [3.20.2](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.1...newspack-popups@3.20.2) (2026-10-14)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
+## newspack-popups [3.20.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.0...newspack-popups@3.20.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **campaigns:** support on-page links on prompt buttons (NPPD-2348) ([#1271](https://github.com/Automattic/newspack-workspace/issues/1271)) ([439cfc1](https://github.com/Automattic/newspack-workspace/commit/439cfc1209b6ff36587433611e3f9c32ef4e3409))
+
+# newspack-popups [3.20.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.19.3...newspack-popups@3.20.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **campaigns:** fall back from a Donate CTA the platform won't render ([26fb6eb](https://github.com/Automattic/newspack-workspace/commit/26fb6eb657a50b7c64a4dc40584312a90f7271e3))
+* **campaigns:** harden prompt CTA locks and keep an admin's pattern CTA ([1f421d4](https://github.com/Automattic/newspack-workspace/commit/1f421d490d13f2802ba8d6547f32b4acaa8bade2))
+* **campaigns:** keep a publisher's pattern CTA through saves and resets ([53f4321](https://github.com/Automattic/newspack-workspace/commit/53f4321b9fcdd2d92a681f8bd319ce32fbe2db7c))
+* **campaigns:** lift only the seeded CTA lock on a detached prompt card ([1b47d2f](https://github.com/Automattic/newspack-workspace/commit/1b47d2ffafa0e278a9fc6bc6716238ae742a647c))
+* **phpcs:** point constant ignores at the documenting file ([#1130](https://github.com/Automattic/newspack-workspace/issues/1130)) ([9468c79](https://github.com/Automattic/newspack-workspace/commit/9468c79ef60ae098237278bbdd774574b95caa0e))
+* **popups:** match former donors in Donation segments ([#1122](https://github.com/Automattic/newspack-workspace/issues/1122)) ([54d240c](https://github.com/Automattic/newspack-workspace/commit/54d240c7f2ec783d5b364a6d4ed65ad9c6bc627d))
+* **reader-activation:** switched sessions never write reader data ([#1081](https://github.com/Automattic/newspack-workspace/issues/1081)) ([da090aa](https://github.com/Automattic/newspack-workspace/commit/da090aa01ba578ff763c1cb657f7b61d5a8a3cd9))
+
+
+### Features
+
+* **campaigns:** let editors replace a detached prompt's call to action ([df681aa](https://github.com/Automattic/newspack-workspace/commit/df681aac559cc271645fcefef54ee4cb5b57fce7))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.5
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
+## newspack-popups [3.19.3](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.19.2...newspack-popups@3.19.3) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.2
+
+## newspack-popups [3.19.2](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.19.1...newspack-popups@3.19.2) (2026-09-28)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.9.0
+
+## newspack-popups [3.19.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.19.0...newspack-popups@3.19.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* make block centring more specific ([#1158](https://github.com/Automattic/newspack-workspace/issues/1158)) ([a8c86f7](https://github.com/Automattic/newspack-workspace/commit/a8c86f7d5265f2c25092035ee711993df1fe8b10))
+
+# newspack-popups [3.19.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.18.1...newspack-popups@3.19.0) (2026-09-18)
+
+
+### Features
+
+* **campaigns:** control test for contextual prompts with donation attribution ([#1058](https://github.com/Automattic/newspack-workspace/issues/1058)) ([49a00c4](https://github.com/Automattic/newspack-workspace/commit/49a00c4e1bfa141c9c67cc1786f9d80b1eee5863))
+
+## newspack-popups [3.18.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.18.0...newspack-popups@3.18.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **popups:** drop a range max of 0 or less as invalid (NPPM-3389) ([#1071](https://github.com/Automattic/newspack-workspace/issues/1071)) ([193406c](https://github.com/Automattic/newspack-workspace/commit/193406c81054ec4f9a436831f25898518129e079))
+
+# newspack-popups [3.18.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.17.0...newspack-popups@3.18.0) (2026-09-14)
+
+
+### Features
+
+* **audience:** date range segmentation for ESP date fields ([#767](https://github.com/Automattic/newspack-workspace/issues/767)) ([21c4732](https://github.com/Automattic/newspack-workspace/commit/21c4732a2b8cbadea1e7d6710ca22d22b3282cef))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.8.0
+
+# newspack-popups [3.17.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.5...newspack-popups@3.17.0) (2026-08-31)
+
+
+### Bug Fixes
+
+* **popups:** preview ignores autosave older than saved prompt (NPPM-2940) ([#382](https://github.com/Automattic/newspack-workspace/issues/382)) ([f7e429b](https://github.com/Automattic/newspack-workspace/commit/f7e429bf86f7ae57babbe7a5398ee8f4df496b27))
+
+
+### Features
+
+* **campaigns:** Contextual Prompts, AI-assisted story donation asks ([#686](https://github.com/Automattic/newspack-workspace/issues/686)) ([f896387](https://github.com/Automattic/newspack-workspace/commit/f896387b5c3c096b6ed0cacbf2fe89b3e7f6b703)), closes [#719](https://github.com/Automattic/newspack-workspace/issues/719)
+* **campaigns:** pick donor landing page via autocomplete search ([#761](https://github.com/Automattic/newspack-workspace/issues/761)) ([01fa615](https://github.com/Automattic/newspack-workspace/commit/01fa61514954742094dff2fd0e5a4ff3bb4c04b6))
+* **popups:** move A/B variant selection into the view engine ([#656](https://github.com/Automattic/newspack-workspace/issues/656)) ([ccd81b8](https://github.com/Automattic/newspack-workspace/commit/ccd81b88373aeab92d13410c4803cdce91c2e398))
+* **segments:** report matched segments to GA4 ([#800](https://github.com/Automattic/newspack-workspace/issues/800)) ([a02c613](https://github.com/Automattic/newspack-workspace/commit/a02c613c7aae350aa7b38750e476e76eab2babf1))
+
+
+### Dependencies
+
+* **newspack-colors:** upgraded to 1.1.4
+* **newspack-components:** upgraded to 4.7.0
+
 ## newspack-popups [3.16.5](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.16.4...newspack-popups@3.16.5) (2026-08-20)
 
 

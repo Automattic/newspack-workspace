@@ -199,7 +199,13 @@ export default {
 		// non-numeric reader value to 0.0. ESP numeric fields are typically non-negative,
 		// so the divergence is narrow in practice.
 		const hasBound = value => undefined !== value && null !== value && '' !== value;
-		if ( ( hasBound( min ) && criteria.value < min ) || ( hasBound( max ) && criteria.value > max ) ) {
+		// A max of 0 or less is invalid and is discarded, so it never bounds the value.
+		// The segment editor stores max: 0 when the Max bound is unticked, and the
+		// pre-criteria migration stored it for every "at least N" segment; the model
+		// drops it on save and read, and this keeps a client with older stored
+		// criteria in agreement. A fractional max (e.g. 0.8) is still a bound.
+		const hasMax = hasBound( max ) && Number( max ) > 0;
+		if ( ( hasBound( min ) && criteria.value < min ) || ( hasMax && criteria.value > max ) ) {
 			return false;
 		}
 		return true;

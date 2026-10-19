@@ -109,7 +109,10 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 				'lists'           => $lists,
 				'context'         => $context,
 			];
-			return true;
+			// Honors $next_return like its siblings, so tests can drive the
+			// provider-error branches (e.g. the 'not supported' answer a
+			// provider without list management returns).
+			return null === self::$next_return ? true : self::$next_return;
 		}
 
 		public static function get_fields( $list_id = null ) {
@@ -172,9 +175,26 @@ if ( ! class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 		 */
 		public static $contact_data = [];
 
+		/**
+		 * Configurable lists config returned by get_lists(). Null keeps the
+		 * default single list; a WP_Error is returned as-is.
+		 *
+		 * @var array|\WP_Error|null
+		 */
+		public static $lists = null;
+
+		/**
+		 * Number of get_lists() calls since the last reset.
+		 *
+		 * @var int
+		 */
+		public static $get_lists_calls = 0;
+
 		public static function reset_calls() {
-			self::$contact_lists = [];
-			self::$contact_data  = [];
+			self::$contact_lists   = [];
+			self::$contact_data    = [];
+			self::$lists           = null;
+			self::$get_lists_calls = 0;
 		}
 
 		public static function get_contact_lists( $email ) {
@@ -189,6 +209,10 @@ if ( ! class_exists( 'Newspack_Newsletters_Subscription' ) ) {
 		}
 
 		public static function get_lists() {
+			self::$get_lists_calls++;
+			if ( null !== self::$lists ) {
+				return self::$lists;
+			}
 			return [
 				[
 					'active' => true,

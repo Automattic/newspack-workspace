@@ -21,6 +21,102 @@ export function domReady( callback ) {
 }
 
 /**
+ * Run a callback once every deferred script on the page has executed.
+ *
+ * Deferred scripts run after parsing ends and before DOMContentLoaded, and
+ * this bundle is async, so it can execute in between — domReady() only waits
+ * for parsing. readyState is `interactive` on both sides of DOMContentLoaded,
+ * so in that state navigation timing settles whether the event already fired.
+ *
+ * @param {Function} callback The function to run.
+ * @return {void}
+ */
+export function afterDeferredScripts( callback ) {
+	const { readyState } = document;
+	if ( readyState === 'complete' || ( readyState === 'interactive' && hasDomContentLoadedFired() ) ) {
+		return void callback();
+	}
+	document.addEventListener( 'DOMContentLoaded', callback, { once: true } );
+}
+
+/**
+ * Whether DOMContentLoaded has fired, according to navigation timing.
+ *
+ * Without a navigation entry there is nothing to consult, and waiting would
+ * risk an event that never comes: report it as fired, which degrades to
+ * running immediately.
+ *
+ * @return {boolean} Whether the event has fired.
+ */
+function hasDomContentLoadedFired() {
+	const [ navigation ] = window.performance?.getEntriesByType?.( 'navigation' ) || [];
+	return ! navigation || navigation.domContentLoadedEventStart > 0;
+}
+
+// The focus rules of newspack-ui's modals (newspack-plugin's focus.js), which this
+// plugin can't depend on.
+const FOCUSABLE = 'a[href], button, iframe, input, select, textarea, [tabindex]';
+const FIELDS = 'input:not([type="button"], [type="submit"], [type="reset"], [type="image"], [readonly]), select, textarea:not([readonly])';
+
+/**
+ * The elements Tab can reach inside an element, in order.
+ *
+ * @param {HTMLElement} root The element to look in.
+ *
+ * @return {HTMLElement[]} The reachable elements.
+ */
+export function getTabbableElements( root ) {
+	const view = root.ownerDocument.defaultView;
+	return [ ...root.querySelectorAll( FOCUSABLE ) ].filter(
+		element =>
+			! element.disabled &&
+			'hidden' !== element.type &&
+			element.tabIndex >= 0 &&
+			! element.closest( '[inert], [aria-hidden="true"]' ) &&
+			element.getClientRects().length > 0 &&
+			'hidden' !== view.getComputedStyle( element ).visibility
+	);
+}
+
+/**
+ * Where focus lands in a checkout screen: its first field, else its first action.
+ *
+ * @param {HTMLElement} root The element to look in.
+ *
+ * @return {HTMLElement|null} The element to focus.
+ */
+export function getInitialFocus( root ) {
+	const tabbable = getTabbableElements( root );
+	return tabbable.find( element => element.matches( FIELDS ) ) || tabbable[ 0 ] || null;
+}
+
+// Payment providers put card fields on the page too. Only their overlays, fixed over it,
+// are challenges. Matches the frames newspack-ui's modals step down for.
+const PAYMENT_FRAMES = 'iframe[src*="js.stripe.com"], iframe[src*="hooks.stripe.com"], iframe[src*="paypal.com"]';
+
+/**
+ * Whether a payment challenge, like 3D Secure, is showing over a page.
+ *
+ * @param {Document} doc The page's document.
+ *
+ * @return {boolean} Whether one is showing.
+ */
+export function isPaymentChallengeShown( doc ) {
+	const view = doc.defaultView;
+	const isInFixedLayer = element => {
+		for ( let node = element; node && node !== doc.body; node = node.parentElement ) {
+			if ( 'fixed' === view.getComputedStyle( node ).position ) {
+				return true;
+			}
+		}
+		return false;
+	};
+	return [ ...doc.querySelectorAll( PAYMENT_FRAMES ) ].some(
+		frame => frame.getClientRects().length > 0 && 'hidden' !== view.getComputedStyle( frame ).visibility && isInFixedLayer( frame )
+	);
+}
+
+/**
  * Create a hidden input field.
  *
  * @param {string} name  The name of the input field.

@@ -116,20 +116,25 @@ export const getCardClassName = ( status, forceDisabled = false ) => {
 	return 'newspack-card__is-supported';
 };
 
+const ensureTermArray = terms => ( Array.isArray( terms ) ? terms.filter( Boolean ) : [] );
+
 export const promptDescription = prompt => {
 	const { categories, tags, campaign_groups: campaigns, status } = prompt;
 	const descriptionMessages = [];
-	if ( campaigns.length > 0 ) {
-		const campaignsList = campaigns.map( ( { name } ) => name ).join( ', ' );
+	const validCampaigns = ensureTermArray( campaigns );
+	const validCategories = ensureTermArray( categories );
+	const validTags = ensureTermArray( tags );
+	if ( validCampaigns.length > 0 ) {
+		const campaignsList = validCampaigns.map( ( { name } ) => name ).join( ', ' );
 		descriptionMessages.push(
-			( campaigns.length === 1 ? __( 'Campaign: ', 'newspack-plugin' ) : __( 'Campaigns: ', 'newspack-plugin' ) ) + campaignsList
+			( validCampaigns.length === 1 ? __( 'Campaign: ', 'newspack-plugin' ) : __( 'Campaigns: ', 'newspack-plugin' ) ) + campaignsList
 		);
 	}
-	if ( categories.length > 0 ) {
-		descriptionMessages.push( __( 'Categories: ', 'newspack-plugin' ) + categories.map( category => category.name ).join( ', ' ) );
+	if ( validCategories.length > 0 ) {
+		descriptionMessages.push( __( 'Categories: ', 'newspack-plugin' ) + validCategories.map( category => category.name ).join( ', ' ) );
 	}
-	if ( tags.length > 0 ) {
-		descriptionMessages.push( __( 'Tags: ', 'newspack-plugin' ) + tags.map( tag => tag.name ).join( ', ' ) );
+	if ( validTags.length > 0 ) {
+		descriptionMessages.push( __( 'Tags: ', 'newspack-plugin' ) + validTags.map( tag => tag.name ).join( ', ' ) );
 	}
 	if ( 'pending' === status ) {
 		descriptionMessages.push( __( 'Pending review', 'newspack-plugin' ) );
@@ -322,16 +327,18 @@ const getItems = memoize( async path => {
 			label: item.title || item.name,
 		} ) );
 	} catch ( e ) {
-		return [];
+		return null;
 	}
 } );
 
 const ItemNames = ( { label, ids, path, deletedItemLabel } ) => {
-	const [ items, setItems ] = useState( [] );
+	// `null` until the lookup resolves, and after a failed one. An empty list is a real
+	// answer: none of the saved items exist any more, so each reads as deleted.
+	const [ items, setItems ] = useState( null );
 	useEffect( () => {
 		getItems( path ).then( setItems );
 	}, [ ids ] );
-	if ( ! items.length ) {
+	if ( ! items ) {
 		return null;
 	}
 	const labels = ids.map( id => {
@@ -381,7 +388,7 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 						: __( 'Does not have active subscription(s):', 'newspack-plugin' )
 				}
 				ids={ item.value }
-				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
+				path={ addQueryArgs( `${ newspackAudienceCampaigns.api }/subscription-products`, { include: item.value } ) }
 				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }
 			/>
 		);
@@ -406,6 +413,20 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 				deletedItemLabel={ __( 'Deleted membership', 'newspack-plugin' ) }
 			/>
 		);
+	}
+	return message;
+} );
+
+addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.gateAccess', ( message, value, config, item ) => {
+	if ( [ 'can_access_gates', 'cannot_access_gates' ].includes( config.id ) ) {
+		if ( ! Array.isArray( item.value ) || ! item.value.length ) {
+			return null;
+		}
+		const labels = item.value.map(
+			id => config.options?.find( option => option.value === String( id ) )?.label || __( 'Unavailable gate', 'newspack-plugin' )
+		);
+		/* translators: 1: criterion name, 2: comma-separated content gate names. */
+		return sprintf( __( '%1$s: %2$s', 'newspack-plugin' ), config.name, labels.join( ', ' ) );
 	}
 	return message;
 } );
@@ -440,9 +461,9 @@ export const warningForPopup = ( prompts, prompt ) => {
 	const warningMessages = [];
 
 	if ( 'publish' === prompt.status && ( isAboveHeader( prompt ) || isOverlay( prompt ) || isCustomPlacement( prompt ) ) ) {
-		const promptCategories = prompt.categories;
+		const promptCategories = ensureTermArray( prompt.categories );
 		const conflictingPrompts = prompts.filter( conflict => {
-			const conflictCategories = conflict.categories;
+			const conflictCategories = ensureTermArray( conflict.categories );
 
 			// There's a conflict if both campaigns have zero categories, or if they share at least one category.
 			const hasConflictingCategory =

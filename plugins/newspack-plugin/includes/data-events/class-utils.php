@@ -48,23 +48,24 @@ final class Utils {
 		}
 
 		return [
-			'user_id'         => $order->get_customer_id(),
-			'email'           => $order->get_billing_email(),
-			'amount'          => (float) $order->get_total(),
-			'currency'        => $order->get_currency(),
-			'recurrence'      => empty( $recurrence ) ? 'once' : $recurrence,
-			'platform'        => \Newspack\Donations::get_platform_slug(),
-			'referer'         => $order->get_meta( '_newspack_referer' ),
-			'popup_id'        => $order->get_meta( '_newspack_popup_id' ),
-			'is_renewal'      => $is_renewal,
-			'subscription_id' => $subscription_id,
-			'platform_data'   => [
+			'user_id'           => $order->get_customer_id(),
+			'email'             => $order->get_billing_email(),
+			'amount'            => (float) $order->get_total(),
+			'currency'          => $order->get_currency(),
+			'recurrence'        => empty( $recurrence ) ? 'once' : $recurrence,
+			'platform'          => \Newspack\Donations::get_platform_slug(),
+			'referer'           => $order->get_meta( '_newspack_referer' ),
+			'popup_id'          => $order->get_meta( '_newspack_popup_id' ),
+			'contextual_prompt' => self::get_contextual_prompt_source( $order ),
+			'is_renewal'        => $is_renewal,
+			'subscription_id'   => $subscription_id,
+			'platform_data'     => [
 				'order_id'   => $order_id,
 				'product_id' => $product_id,
 				'client_id'  => $order->get_meta( NEWSPACK_CLIENT_ID_COOKIE_NAME ),
 			],
-			'user_first_name' => $order->get_billing_first_name(),
-			'user_last_name'  => $order->get_billing_last_name(),
+			'user_first_name'   => $order->get_billing_first_name(),
+			'user_last_name'    => $order->get_billing_last_name(),
 		];
 	}
 
@@ -123,21 +124,22 @@ final class Utils {
 			$product    = $item->get_product();
 			$recurrence = $product instanceof \WC_Product ? $product->get_meta( '_subscription_period', true ) : '';
 			$payloads[] = [
-				'order_id'        => (int) $order->get_id(),
-				'status_from'     => $status_from,
-				'status'          => $status,
-				'user_id'         => (int) $order->get_customer_id(),
-				'email'           => $order->get_billing_email(),
-				'amount'          => (float) $item->get_subtotal(),
-				'currency'        => $order->get_currency(),
-				'recurrence'      => empty( $recurrence ) ? 'once' : $recurrence,
-				'referer'         => $order->get_meta( '_newspack_referer' ),
-				'popup_id'        => $order->get_meta( '_newspack_popup_id' ),
-				'is_renewal'      => $is_renewal,
-				'subscription_id' => $subscription_id,
-				'product_id'      => (int) $product_id,
-				'product_name'    => $item->get_name(),
-				'is_donation'     => (bool) \Newspack\Donations::is_donation_product( $product_id ),
+				'order_id'          => (int) $order->get_id(),
+				'status_from'       => $status_from,
+				'status'            => $status,
+				'user_id'           => (int) $order->get_customer_id(),
+				'email'             => $order->get_billing_email(),
+				'amount'            => (float) $item->get_subtotal(),
+				'currency'          => $order->get_currency(),
+				'recurrence'        => empty( $recurrence ) ? 'once' : $recurrence,
+				'referer'           => $order->get_meta( '_newspack_referer' ),
+				'popup_id'          => $order->get_meta( '_newspack_popup_id' ),
+				'contextual_prompt' => self::get_contextual_prompt_source( $order ),
+				'is_renewal'        => $is_renewal,
+				'subscription_id'   => $subscription_id,
+				'product_id'        => (int) $product_id,
+				'product_name'      => $item->get_name(),
+				'is_donation'       => (bool) \Newspack\Donations::is_donation_product( $product_id ),
 			];
 		}
 		return $payloads;
@@ -183,5 +185,27 @@ final class Utils {
 			];
 		}
 		return $payloads;
+	}
+
+	/**
+	 * The contextual prompt an order started from, if any. Written by
+	 * newspack-popups at checkout; empty for every other order.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return array{post_id?:int,placement?:string,condition?:string}
+	 */
+	public static function get_contextual_prompt_source( $order ) {
+		if ( ! is_object( $order ) || ! method_exists( $order, 'get_meta' ) ) {
+			return [];
+		}
+		$post_id = (int) $order->get_meta( '_newspack_contextual_prompt_post_id' );
+		if ( ! $post_id ) {
+			return [];
+		}
+		return [
+			'post_id'   => $post_id,
+			'placement' => (string) $order->get_meta( '_newspack_contextual_prompt_placement' ),
+			'condition' => (string) $order->get_meta( '_newspack_contextual_prompt_condition' ),
+		];
 	}
 }

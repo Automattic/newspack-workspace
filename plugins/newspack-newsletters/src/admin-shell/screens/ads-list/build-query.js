@@ -47,17 +47,15 @@ export function buildQueryParams( view = {} ) {
 		// Active kind filter → custom REST param; no filter → wide post_status default.
 		statusFilterParam: 'newspack_newsletters_ad_status',
 		defaultStatusParam: 'status',
-		// `_fields` short-circuits `content.rendered` / `excerpt.rendered`
-		// and the unused editor REST fields (see newsletters-list note).
-		// `_links` stays in the list — `_embed` only expands links that
-		// survive the `_fields` filter.
+		// No `_embed` and no `_links` — see the newsletters-list note for what
+		// they cost. The terms field is unconditional because Quick Edit has no
+		// other source for the names, so hiding those columns would leave its
+		// pickers empty. The raw ID arrays ride along beside it: Quick Edit
+		// checks them against its own options lists to decide whether a field
+		// can safely be edited.
 		extraParams: {
-			// Unconditional, unlike the newsletters list: Quick Edit here
-			// hydrates advertiser and placement from the embedded terms
-			// alone and sends both taxonomies on every save, so dropping
-			// the embed when those columns are hidden would clear them.
-			_embed: 'wp:term',
-			_fields: 'id,status,title,date,meta,newspack_newsletters_ad_status,_links',
+			_fields:
+				'id,status,title,date,meta,newspack_newsletters_ad_status,newspack_newsletters_terms,newspack_nl_advertiser,ad_placement,categories',
 		},
 	} );
 }

@@ -203,6 +203,45 @@ describe( 'ContextualPromptPanel', () => {
 		expect( screen.getByText( 'Regenerate Suggestions' ) ).toBeTruthy();
 	} );
 
+	it( 'flags a post that is showing the control test copy', () => {
+		window.newspackPopupsContextualPrompt = {
+			...window.newspackPopupsContextualPrompt,
+			condition: 'generic_control',
+			controlSettingsUrl: 'https://example.com/wp-admin/admin.php?page=newspack-audience-campaigns#/contextual-prompts',
+		};
+		useSelect.mockReturnValue( DETACHED );
+
+		render( <ContextualPromptPanel /> );
+
+		expect( screen.getByText( /showing control test copy/ ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: 'Contextual Prompts' } ) ).toHaveAttribute(
+			'href',
+			expect.stringContaining( '#/contextual-prompts' )
+		);
+	} );
+
+	it( 'flags a post whose prompt the site-wide override is replacing', () => {
+		window.newspackPopupsContextualPrompt = {
+			...window.newspackPopupsContextualPrompt,
+			condition: 'override',
+			controlSettingsUrl: 'https://example.com/wp-admin/admin.php?page=newspack-audience-campaigns#/contextual-prompts',
+		};
+		useSelect.mockReturnValue( DETACHED );
+
+		render( <ContextualPromptPanel /> );
+
+		expect( screen.getByText( /site-wide override is currently replacing this prompt/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows no condition notice for a story-aware post', () => {
+		window.newspackPopupsContextualPrompt = { ...window.newspackPopupsContextualPrompt, condition: 'story_aware' };
+		useSelect.mockReturnValue( DETACHED );
+
+		render( <ContextualPromptPanel /> );
+
+		expect( screen.queryByText( /control test copy|site-wide override/ ) ).toBeNull();
+	} );
+
 	it( "rewrites a detached card's copy rather than inserting a second prompt", async () => {
 		useSelect.mockReturnValue( DETACHED );
 

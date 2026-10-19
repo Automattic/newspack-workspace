@@ -116,7 +116,7 @@ class My_Account_UI_V1 {
 				'change_payment_method_title' => __( 'Change payment method', 'newspack-plugin' ),
 				'switch_subscription_title'   => __( 'Change Subscription', 'newspack-plugin' ),
 				'invite_link_copied'          => __( 'Invite link copied.', 'newspack-plugin' ),
-				'invite_link_regenerated'     => __( 'New invite link copied. The old one no longer works.', 'newspack-plugin' ),
+				'invite_link_regenerated'     => __( 'New invite link copied. Any older link no longer works.', 'newspack-plugin' ),
 				'invite_link_copy_failed'     => __( 'Couldn\'t copy the invite link to your clipboard. Copy it manually:', 'newspack-plugin' ),
 				'invite_link_disabled'        => __( 'Invite link disabled. You can create a new link any time.', 'newspack-plugin' ),
 				'group_name_updated'          => __( 'Name updated.', 'newspack-plugin' ),
@@ -366,7 +366,7 @@ class My_Account_UI_V1 {
 		if ( is_string( $active_subscriptions ) ) {
 			$active_subscriptions = json_decode( $active_subscriptions );
 		}
-		$active_donations         = boolval( Reader_Data::get_data( $user->ID, 'is_donor' ) );
+		$active_donations         = Reader_Data::get_bool( $user->ID, 'is_donor' );
 		$newsletter_subscriptions = Reader_Data::get_data( $user->ID, 'newsletter_subscribed_lists' );
 		if ( is_string( $newsletter_subscriptions ) ) {
 			$newsletter_subscriptions = json_decode( $newsletter_subscriptions );
@@ -374,7 +374,7 @@ class My_Account_UI_V1 {
 
 		ob_start();
 		?>
-		<h2 class="font-size newspack-ui__font--l">
+		<h2 class="newspack-ui__font--l">
 			<?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?>
 		</h2>
 		<p>
@@ -422,7 +422,7 @@ class My_Account_UI_V1 {
 				<?php endif; ?>
 				<div class="newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--align-center">
 					<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-0">
-						<p class="font-size newspack-ui__font--s newspack-ui__font--bold"><?php echo esc_html( $row['title'] ); ?></p>
+						<p class="newspack-ui__font--s newspack-ui__font--bold"><?php echo esc_html( $row['title'] ); ?></p>
 						<p class="newspack-ui__helper-text"><?php echo esc_html( $row['description'] ); ?></p>
 					</div>
 					<div class="newspack-ui__stack newspack-ui__stack--vertical">
@@ -512,13 +512,13 @@ class My_Account_UI_V1 {
 			WooCommerce_Connection::add_wc_notice( __( 'Invalid nonce.', 'newspack-plugin' ), 'error' );
 			return;
 		}
-		if ( ! $token || ! $transient_token || $transient_token !== $token ) {
+		if ( ! $token || ! $transient_token || ! hash_equals( (string) $transient_token, (string) $token ) ) {
 			WooCommerce_Connection::add_wc_notice( __( 'Invalid token.', 'newspack-plugin' ), 'error' );
 			return;
 		}
 		ob_start();
 		?>
-		<h2 class="font-size newspack-ui__font--l">
+		<h2 class="newspack-ui__font--l">
 			<?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?>
 		</h2>
 		<p>
@@ -612,7 +612,7 @@ class My_Account_UI_V1 {
 			$next_payment_date = $next_payment ? $subscription->get_date_to_display( 'next_payment' ) : null;
 			ob_start();
 			?>
-			<h2 class="font-size newspack-ui__font--l">
+			<h2 class="newspack-ui__font--l">
 				<?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?>
 			</h2>
 			<p>

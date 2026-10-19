@@ -7,10 +7,10 @@
  * the article post id, reusing the shared gtag wrapper.
  *
  * Params: action, action_type, contextual_prompt_post_id, contextual_prompt_placement,
- * button_text (click, plain-button mode), link_url + prompt_text. The first four plus
- * button_text are registered GA4 custom dimensions; prompt_text (high-cardinality) and
- * link_url (near-constant) are sent as params only, recoverable via the BigQuery export
- * rather than GA4-UI reporting. See GA4_Custom_Dimensions::get_dimensions().
+ * contextual_prompt_condition, button_text (click, plain-button mode), link_url + prompt_text.
+ * The first five plus button_text are registered GA4 custom dimensions; prompt_text
+ * (high-cardinality) and link_url (near-constant) are sent as params only, recoverable via
+ * the BigQuery export rather than GA4-UI reporting. See GA4_Custom_Dimensions::get_dimensions().
  */
 
 /**
@@ -42,6 +42,9 @@ const payloadFor = ( element, action, extra = {} ) => ( {
 	action_type: element.getAttribute( 'data-newspack-cp-cta' ) || '',
 	contextual_prompt_post_id: element.getAttribute( 'data-newspack-cp-post-id' ) || '',
 	contextual_prompt_placement: element.getAttribute( 'data-newspack-cp-placement' ) || '',
+	// Which side of the story-aware vs. generic comparison this card rendered on.
+	// Empty while the control override is off. See Newspack_Popups_Contextual_Prompt_Render::get_condition().
+	contextual_prompt_condition: element.getAttribute( 'data-newspack-cp-condition' ) || '',
 	prompt_text: promptTextOf( element ),
 	...extra,
 } );

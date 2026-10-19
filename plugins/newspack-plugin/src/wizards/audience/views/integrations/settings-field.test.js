@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -150,5 +150,53 @@ describe( 'SettingsField', () => {
 	it( 'renders nothing for a hidden field', () => {
 		const { container } = renderField( { key: 'secret', type: 'hidden', label: 'Secret' } );
 		expect( container ).toBeEmptyDOMElement();
+	} );
+} );
+
+// The toggle group renders for real from @wordpress/components, so these tests
+// exercise core's own radio-group wiring rather than a stand-in for it.
+describe( 'SettingsField with control: toggle_group', () => {
+	const field = {
+		key: 'deals_enabled',
+		type: 'checkbox',
+		control: 'toggle_group',
+		label: 'Deals',
+		description: 'Push completed orders as deals.',
+	};
+
+	it( 'renders a checkbox field as an Enabled/Disabled toggle group', () => {
+		render( <SettingsField field={ field } value={ true } onChange={ () => {} } /> );
+		expect( screen.getByRole( 'radio', { name: 'Enabled' } ) ).toBeChecked();
+		expect( screen.getByRole( 'radio', { name: 'Disabled' } ) ).not.toBeChecked();
+	} );
+
+	// Stored checkbox values round-trip through WP options as scalar strings,
+	// and `Boolean( '0' )` is `true` in JS — every falsy stored form must land
+	// on Disabled.
+	it( 'maps every falsy stored form to Disabled', () => {
+		[ '', '0', 'false', false, undefined ].forEach( stored => {
+			const { unmount } = render( <SettingsField field={ field } value={ stored } onChange={ () => {} } /> );
+			expect( screen.getByRole( 'radio', { name: 'Disabled' } ) ).toBeChecked();
+			unmount();
+		} );
+	} );
+
+	// The stored value stays a boolean — the option strings are presentation
+	// only, so the save payload matches what a plain checkbox would submit.
+	it( 'emits booleans, not option values', () => {
+		const onChange = jest.fn();
+		render( <SettingsField field={ field } value={ true } onChange={ onChange } /> );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Disabled' } ) );
+		expect( onChange ).toHaveBeenCalledWith( false );
+	} );
+
+	it( 'keeps rendering a plain checkbox without the control parameter', () => {
+		render( <SettingsField field={ { ...field, control: undefined } } value={ true } onChange={ () => {} } /> );
+		expect( screen.getByRole( 'checkbox', { name: 'Deals' } ) ).toBeChecked();
+	} );
+
+	it( 'coerces string forms on the plain checkbox path too', () => {
+		render( <SettingsField field={ { ...field, control: undefined } } value={ '0' } onChange={ () => {} } /> );
+		expect( screen.getByRole( 'checkbox', { name: 'Deals' } ) ).not.toBeChecked();
 	} );
 } );

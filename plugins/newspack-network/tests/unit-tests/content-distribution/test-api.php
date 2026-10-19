@@ -38,13 +38,6 @@ class TestApi extends \WP_UnitTestCase {
 	];
 
 	/**
-	 * The 'distribute' route's permission callback.
-	 *
-	 * @var callable
-	 */
-	private $permission_callback;
-
-	/**
 	 * Set up.
 	 */
 	public function set_up() {
@@ -57,11 +50,6 @@ class TestApi extends \WP_UnitTestCase {
 		rest_get_server();
 
 		API::register_routes();
-
-		$routes = rest_get_server()->get_routes();
-		$route  = $routes['/newspack-network/v1/content-distribution/distribute/(?P<post_id>\d+)'][0];
-
-		$this->permission_callback = $route['permission_callback'];
 	}
 
 	/**
@@ -112,59 +100,139 @@ class TestApi extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * An author cannot distribute a post authored by another user, even
-	 * though the 'author' role is granted the distribute capability by
-	 * default; the capability check alone doesn't guard against posting
-	 * someone else's post ID.
+	 * The routes that act on the post named in the URL, each with the body it
+	 * requires. The server validates the body before it consults the permission
+	 * callback, so a request missing a required field would be refused for the
+	 * wrong reason.
+	 *
+	 * @return array
 	 */
-	public function test_author_cannot_distribute_others_post() {
-		$author       = $this->factory->user->create( [ 'role' => 'author' ] );
-		$other_author = $this->factory->user->create( [ 'role' => 'author' ] );
-		$post         = $this->factory->post->create( [ 'post_author' => $other_author ] );
-
-		wp_set_current_user( $author );
-
-		$this->assertFalse( ( $this->permission_callback )( $this->make_request( $post ) ) );
+	public function post_routes() {
+		return [
+			'distribute' => [ 'distribute', [ 'urls' => [ 'https://node.test' ] ] ],
+			'unlink'     => [ 'unlink', [ 'unlinked' => true ] ],
+			'pull'       => [ 'pull', [ 'url' => 'https://node.test' ] ],
+		];
 	}
 
 	/**
-	 * An author can distribute their own post.
+	 * Create a post the given user authored, shaped so the route's handler
+	 * accepts it: unlink loads the post as an incoming one from its stored payload.
+	 *
+	 * @param string $route  The route slug.
+	 * @param int    $author The author's user ID.
+	 *
+	 * @return int The post ID.
 	 */
-	public function test_author_can_distribute_own_post() {
-		$author = $this->factory->user->create( [ 'role' => 'author' ] );
-		$post   = $this->factory->post->create( [ 'post_author' => $author ] );
+	private function make_post_for( $route, $author ) {
+		$post_id = $this->factory->post->create( [ 'post_author' => $author ] );
+
+		if ( 'unlink' === $route ) {
+			update_post_meta( $post_id, Incoming_Post::PAYLOAD_META, get_sample_payload( 'https://origin.test', get_bloginfo( 'url' ) ) );
+		}
+
+		return $post_id;
+	}
+
+	/**
+	 * Dispatch a request for one of the post routes through the REST server.
+	 *
+	 * The post ID travels in the URL only, the way a real request carries it,
+	 * so a permission callback that cannot see the request fails these.
+	 *
+	 * @param string $route   The route slug.
+	 * @param int    $post_id The post ID.
+	 * @param array  $params  Body parameters.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	private function dispatch( $route, $post_id, array $params ) {
+		$request = new WP_REST_Request( 'POST', '/newspack-network/v1/content-distribution/' . $route . '/' . $post_id );
+		foreach ( $params as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+
+		return rest_get_server()->dispatch( $request );
+	}
+
+	/**
+	 * The 'author' role holds the distribute capability by default, and the
+	 * capability alone says nothing about the post: without the object check,
+	 * an author could read any post by ID through pull and toggle any post's
+	 * link through unlink.
+	 *
+	 * @dataProvider post_routes
+	 *
+	 * @param string $route  The route slug.
+	 * @param array  $params Body parameters the route requires.
+	 */
+	public function test_author_is_refused_another_users_post( $route, array $params ) {
+		$author       = $this->factory->user->create( [ 'role' => 'author' ] );
+		$other_author = $this->factory->user->create( [ 'role' => 'author' ] );
+		$post_id      = $this->make_post_for( $route, $other_author );
 
 		wp_set_current_user( $author );
 
-		$this->assertTrue( ( $this->permission_callback )( $this->make_request( $post ) ) );
+		$this->assertSame( 403, $this->dispatch( $route, $post_id, $params )->get_status() );
+	}
+
+	/**
+	 * The object check must not over-restrict: a caller who can edit the post
+	 * reaches the handler.
+	 *
+	 * @dataProvider post_routes
+	 *
+	 * @param string $route  The route slug.
+	 * @param array  $params Body parameters the route requires.
+	 */
+	public function test_author_can_act_on_their_own_post( $route, array $params ) {
+		$author  = $this->factory->user->create( [ 'role' => 'author' ] );
+		$post_id = $this->make_post_for( $route, $author );
+
+		wp_set_current_user( $author );
+
+		$response = $this->dispatch( $route, $post_id, $params );
+
+		$this->assertSame( 200, $response->get_status(), 'Expected the handler to run, got: ' . wp_json_encode( $response->get_data() ) );
 	}
 
 	/**
 	 * The other half of the '&&': edit rights on the post are not enough on
 	 * their own, the distribute capability is still required.
+	 *
+	 * @dataProvider post_routes
+	 *
+	 * @param string $route  The route slug.
+	 * @param array  $params Body parameters the route requires.
 	 */
-	public function test_edit_rights_without_capability_cannot_distribute() {
-		$author = $this->factory->user->create( [ 'role' => 'author' ] );
-		$post   = $this->factory->post->create( [ 'post_author' => $author ] );
+	public function test_edit_rights_without_the_capability_are_refused( $route, array $params ) {
+		$author  = $this->factory->user->create( [ 'role' => 'author' ] );
+		$post_id = $this->make_post_for( $route, $author );
 
 		// A user-level deny overrides the role grant.
 		get_userdata( $author )->add_cap( Admin::CAPABILITY, false );
 
 		wp_set_current_user( $author );
 
-		$this->assertTrue( current_user_can( 'edit_post', $post ) );
-		$this->assertFalse( ( $this->permission_callback )( $this->make_request( $post ) ) );
+		$this->assertTrue( current_user_can( 'edit_post', $post_id ) );
+		$this->assertSame( 403, $this->dispatch( $route, $post_id, $params )->get_status() );
 	}
 
 	/**
 	 * A post ID that resolves to no post is refused, so the handler is never
-	 * reached with nothing to distribute.
+	 * reached with nothing to act on.
+	 *
+	 * @dataProvider post_routes
+	 *
+	 * @param string $route  The route slug.
+	 * @param array  $params Body parameters the route requires.
 	 */
-	public function test_missing_post_cannot_be_distributed() {
+	public function test_a_missing_post_is_refused( $route, array $params ) {
 		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
 
-		$this->assertFalse( ( $this->permission_callback )( $this->make_request( 0 ) ) );
-		$this->assertFalse( ( $this->permission_callback )( $this->make_request( PHP_INT_MAX ) ) );
+		foreach ( [ 0, PHP_INT_MAX ] as $missing_post_id ) {
+			$this->assertSame( 403, $this->dispatch( $route, $missing_post_id, $params )->get_status(), "Post ID $missing_post_id must be refused." );
+		}
 	}
 
 	/**

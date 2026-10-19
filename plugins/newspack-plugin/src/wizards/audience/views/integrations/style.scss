@@ -1,39 +1,51 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
 .newspack-integration-logs {
 	.dataviews__view-actions {
-		display: flex;
-		align-items: center;
-		margin-bottom: 16px;
-	}
-
-	.dataviews__search {
-		display: flex;
-		align-items: flex-start;
-		gap: 8px;
-	}
-
-	.dataviews-filters__visibility-toggle.components-button {
-		background: #1e1e1e;
-		color: #fff;
-		border-radius: 4px;
-
-		&:hover,
-		&:focus {
-			background: #000;
-			color: #fff;
-		}
-
-		&[aria-expanded='true'] {
-			background: #000;
-			color: #fff;
-		}
-
-		svg {
-			fill: currentcolor;
-		}
+		margin-bottom: wp-vars.$grid-unit-20;
 	}
 
 	.dataviews-item-actions .components-button:not(:disabled) {
 		cursor: pointer;
+	}
+
+	&__status-note {
+		color: wp-colors.$gray-700;
+		font-size: wp-vars.$helptext-font-size;
+	}
+
+	// DataViews keeps cell text on one line, so a push that several events
+	// share would run its trigger into the next column. It wraps inside its
+	// own instead, up to two lines; the full text is in the title and in the
+	// entry's details.
+	&__trigger {
+		display: -webkit-box;
+		overflow: hidden;
+		white-space: normal;
+		overflow-wrap: anywhere;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+	}
+}
+
+.newspack-integration-logs__details-link {
+	background: none;
+	border: 0;
+	color: wp-colors.$gray-900;
+	cursor: pointer;
+	font: inherit;
+	padding: 0;
+	text-align: left;
+
+	&:hover {
+		color: var( --wp-admin-theme-color );
+		text-decoration: underline;
+	}
+
+	&:focus-visible {
+		outline: var( --wp-admin-border-width-focus, 1.5px ) solid var( --wp-admin-theme-color );
+		outline-offset: 2px;
 	}
 }
 
@@ -41,14 +53,13 @@
 	&--loading {
 		display: flex;
 		justify-content: center;
-		padding: 24px 0;
+		padding: wp-vars.$grid-unit-30 0;
 	}
 
 	&__header {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		margin-bottom: 16px;
+		gap: wp-vars.$grid-unit-15;
 
 		h3 {
 			margin: 0;
@@ -57,13 +68,13 @@
 
 	&__meta {
 		display: grid;
-		grid-template-columns: max-content 1fr;
-		column-gap: 16px;
-		row-gap: 4px;
-		margin: 0 0 16px;
+		grid-template-columns: 16 * wp-vars.$grid-unit 1fr;
+		column-gap: wp-vars.$grid-unit-20;
+		row-gap: wp-vars.$grid-unit-10;
+		margin: 0;
 
 		dt {
-			font-weight: 600;
+			font-weight: wp-vars.$font-weight-medium;
 		}
 
 		dd {
@@ -72,23 +83,21 @@
 	}
 
 	&__section {
-		margin-top: 16px;
-
 		h4 {
-			margin: 0 0 8px;
+			margin: 0 0 wp-vars.$grid-unit-10;
 		}
 	}
 
 	&__args {
-		background: #f0f0f1;
-		padding: 12px;
-		border-radius: 4px;
-		max-height: 240px;
+		background: wp-colors.$gray-100;
+		padding: wp-vars.$grid-unit-15;
+		border-radius: wp-vars.$radius-medium;
+		max-height: 30 * wp-vars.$grid-unit;
 		overflow: auto;
 		white-space: pre-wrap;
 		word-break: break-word;
-		font-family: Consolas, monaco, monospace;
-		font-size: 12px;
+		font-family: wp-vars.$font-family-mono;
+		font-size: wp-vars.$font-size-small;
 	}
 
 	&__logs {
@@ -99,9 +108,9 @@
 		li {
 			display: grid;
 			grid-template-columns: max-content 1fr;
-			column-gap: 12px;
-			padding: 4px 0;
-			border-bottom: 1px solid #e0e0e0;
+			column-gap: wp-vars.$grid-unit-15;
+			padding: wp-vars.$grid-unit-05 0;
+			border-bottom: 1px solid wp-colors.$gray-200;
 
 			&:last-child {
 				border-bottom: none;
@@ -110,7 +119,47 @@
 	}
 
 	&__log-date {
-		color: #757575;
+		color: wp-colors.$gray-700;
 		font-variant-numeric: tabular-nums;
+	}
+
+	&__fields {
+		border-collapse: collapse;
+		margin-bottom: wp-vars.$grid-unit-15;
+		width: 100%;
+
+		th,
+		td {
+			border-bottom: 1px solid wp-colors.$gray-100;
+			padding: wp-vars.$grid-unit-15 wp-vars.$grid-unit-15 wp-vars.$grid-unit-15 0;
+			text-align: left;
+			vertical-align: top;
+			word-break: break-word;
+		}
+
+		thead th {
+			color: wp-colors.$gray-900;
+			font-size: wp-vars.$font-size-x-small;
+			font-weight: wp-vars.$font-weight-medium;
+			text-transform: uppercase;
+		}
+
+		tbody th {
+			color: wp-colors.$gray-900;
+			font-weight: wp-vars.$font-weight-regular;
+		}
+
+		td {
+			color: wp-colors.$gray-700;
+		}
+	}
+
+	// Fields that change on every visit are listed, but are not the news.
+	&__field--volatile {
+		th,
+		td {
+			color: wp-colors.$gray-700;
+			font-weight: wp-vars.$font-weight-regular;
+		}
 	}
 }

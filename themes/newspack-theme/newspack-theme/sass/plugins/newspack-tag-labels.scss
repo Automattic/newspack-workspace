@@ -4,10 +4,27 @@
 @use "../variables-site/structure";
 
 // Tag labels
+
+// Sized and spaced like the category row beside it, mirroring the base
+// `.cat-links` rule in `sass/site/primary/_posts-and-pages.scss`. Zero
+// specificity because that rule sits in the theme's own stylesheet, where a
+// style variation's `.cat-links, .tag-labels` rule comes later and wins; this
+// file is enqueued after the theme, so at equal weight it would beat the
+// variation instead. `:where()` restores the order the variations expect.
+:where(.tag-labels) {
+	font-size: var(--newspack-theme-font-size-xs);
+	margin: 0 0 #{0.75 * structure.$size__spacing-unit};
+}
+
 .tag-labels {
 	align-items: stretch;
 	display: inline-flex;
 	position: relative;
+	// Where a category is plain text, wrapped rows can touch without showing it.
+	// A label always has a background, so its rows need separating. This sits on
+	// the container rather than the chips: a bottom margin would also hang below
+	// the last row, which is why the block contexts zero one out.
+	row-gap: #{0.25 * structure.$size__spacing-unit};
 
 	a,
 	a:visited {
@@ -17,12 +34,21 @@
 	a:hover {
 		opacity: 0.8;
 	}
+
+	// Chips are laid out here because every style loads this file. Their spacing
+	// is not: the gap between chips belongs to the Default style, which is the
+	// only one that gives a category a chip to sit beside.
+	a,
+	.tag-label {
+		display: inline-block;
+	}
 }
 
 /* stylelint-disable selector-type-no-unknown  */
 .tag-labels,
 amp-script .tag-labels {
-	// Use `.tag-label.flag` so this beats `.wpnbha .cat-links a` / `.wpnbpc .cat-links a` on specificity.
+	// `.tag-label.flag` rather than `.tag-label`: two classes are what put this
+	// above the white `.tag-labels a` sets, so a chip keeps its own color.
 	.tag-label.flag {
 		background: var(--newspack-theme-color-highlight);
 		color: var(--newspack-theme-color-text-main);
@@ -38,7 +64,7 @@ amp-script .tag-labels {
 
 // Tag labels render after the category (and sponsor) label and sit on the same line,
 // mirroring the sponsor → category convention. The category `.cat-links` is immediately
-// followed by the tag-labels `.cat-links.tag-labels` in every context (single posts,
+// followed by `.tag-labels` in every context (single posts,
 // home, archive, search, and the Content Loop / Carousel blocks), so keep it inline-block
 // and space the tag labels that follow it. The sponsor `.cat-links.sponsor-label` keeps
 // its own layout (from newspack-sponsors), so it is excluded here.
@@ -84,7 +110,7 @@ amp-script .tag-labels {
 
 	// Workaround margin/padding override for featured images.
 	.featured-image-behind {
-		.cat-links.tag-labels {
+		.tag-labels {
 			a,
 			a:hover {
 				padding: 0.3em 0.5em;

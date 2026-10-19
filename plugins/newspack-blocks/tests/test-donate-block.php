@@ -42,6 +42,10 @@ if ( ! function_exists( 'wcs_price_string' ) ) {
 	 * @return string Formatted subscription price string.
 	 */
 	function wcs_price_string( $args ) {
+		// Recorded so other test files can assert on the args this mock received,
+		// e.g. the initial_amount (sign-up fee) passed by Checkout_Data::get_price_summary().
+		$GLOBALS['newspack_blocks_test_last_wcs_price_string_args'] = $args;
+
 		$recurring_amount = isset( $args['recurring_amount'] ) ? $args['recurring_amount'] : '';
 		$period = isset( $args['subscription_period'] ) ? $args['subscription_period'] : 'month';
 

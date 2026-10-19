@@ -25,9 +25,36 @@
  */
 import { __ } from '@wordpress/i18n';
 import { decodeEntities } from '@wordpress/html-entities';
-import type { TokenItem } from '@wordpress/components/build-types/form-token-field/types.d.ts';
+import type { ComponentProps } from 'react';
+import type { FormTokenField } from '@wordpress/components';
 
-export type AccessRuleOption = { value: string | number; label: string };
+/**
+ * An option in an access-rule picker.
+ *
+ * `ineligible` marks a product whose status is outside the ones a publisher currently
+ * sells under (published or private); its label already carries the status marker.
+ * `selectable: false` marks an entry that only names a stored value — a scheduled or
+ * trashed product — and is never offered as a suggestion.
+ */
+export type AccessRuleOption = { value: string | number; label: string; ineligible?: boolean; selectable?: boolean };
+
+export type TokenItem = Exclude< NonNullable< ComponentProps< typeof FormTokenField >[ 'value' ] >[ number ], string >;
+
+/**
+ * How many suggestions a picker renders when nothing has been typed.
+ *
+ * `FormTokenField` defaults to 100, which is a display cap rather than a fetch cap: it
+ * ranks by the typed query before slicing, so an option past the cap is still reachable
+ * by name or ID. But with `__experimentalExpandOnFocus` the unfiltered list is what a
+ * publisher sees on focus, and a site with more than 100 institutions read that as the
+ * rest not existing. This raises the cap far enough that browsing works at realistic list
+ * sizes while still bounding the DOM — the suggestion list is not virtualised, so it
+ * renders one node per suggestion. Past it, an option is reached by typing its name or ID.
+ *
+ * This moves the cliff rather than removing it. NPPD-2132 removes it, by making the picker
+ * query the server as the publisher types instead of rendering a whole list up front.
+ */
+export const MAX_OPTION_SUGGESTIONS = 500;
 
 /**
  * The ID a token carries, e.g. `188250` in `Annual (#188250)`.
@@ -58,13 +85,12 @@ const EXHAUSTIVE_OPTION_RULES = [ 'gate', 'institution' ];
  * so the wording names the right kind of thing.
  *
  * The wording says "not listed", not "deleted" or "unavailable", because the two are not
- * the same and only one of them is safe to remove. An option list holds parent products
- * and published institutions, while evaluation resolves more than that — an "Active
- * subscription" rule matches a variation ID, and a one-time purchase matches the
- * `_variation_id` on an order item. Such an ID grants access every day while never
- * appearing in the list, so a publisher must not read it as dead configuration: removing
- * it widens the gate, and removing a rule's last value widens it further, since an empty
- * value list applies no filter at all.
+ * the same and only one of them is safe to remove. An option list holds what a picker can
+ * currently offer, while evaluation resolves more than that — a one-time purchase rule
+ * matches the `_variation_id` on an order item, and its picker lists parent products only.
+ * Such an ID grants access every day while never appearing in the list, so a publisher
+ * must not read it as dead configuration: removing it widens the gate, and removing a
+ * rule's last value widens it further, since an empty value list applies no filter at all.
  */
 const MISSING_OPTION_LABELS: Record< string, () => string > = {
 	subscription: () => __( '(product not listed)', 'newspack-plugin' ),
@@ -114,6 +140,30 @@ export function findAccessRuleOption( options: AccessRuleOption[], value: unknow
  */
 export function formatAccessRuleOptionLabel( option: AccessRuleOption ): string {
 	return `${ decodeEntities( option.label ) } (#${ option.value })`;
+}
+
+/**
+ * Whether a picker has anything to offer. Label-only entries name stored values but are
+ * never suggested, so a list made only of them offers nothing.
+ *
+ * @param options The rule options.
+ *
+ * @return Whether any option is selectable.
+ */
+export function hasSelectableAccessRuleOptions( options: AccessRuleOption[] ): boolean {
+	return options.some( option => option.selectable !== false );
+}
+
+/**
+ * Build the suggestion labels for a picker: every option it may offer, leaving out the
+ * label-only entries that exist to name stored values.
+ *
+ * @param options The rule options.
+ *
+ * @return The suggestion labels.
+ */
+export function getAccessRuleOptionSuggestions( options: AccessRuleOption[] ): string[] {
+	return options.filter( option => option.selectable !== false ).map( formatAccessRuleOptionLabel );
 }
 
 /**
@@ -288,26 +338,64 @@ export function getAccessRuleOptionsFetchFailedNotice(): string {
 }
 
 /**
- * Whether a rule holds values that no option describes.
+ * Whether a rule holds values that no option describes, or that name a product with an
+ * ineligible status. Both still count when access is evaluated, and both read as dead
+ * configuration, so both get the same caution.
  *
  * @param options The available rule options.
  * @param value   The selected option values.
  *
- * @return Whether any stored value is absent from the option list.
+ * @return Whether any stored value is absent from the option list or ineligible.
  */
 export function hasUnlistedAccessRuleValues( options: AccessRuleOption[], value: unknown ): boolean {
-	return Array.isArray( value ) && value.some( stored => ! findAccessRuleOption( options, stored ) );
+	return (
+		Array.isArray( value ) &&
+		value.some( stored => {
+			const option = findAccessRuleOption( options, stored );
+			return ! option || option.ineligible;
+		} )
+	);
 }
 
 /**
- * Caution shown alongside a picker holding values no option describes, so the reading
- * that the token invites — stale entry, safe to delete — does not go unchallenged.
+ * Caution shown alongside a picker holding values no option describes, or products marked
+ * with an ineligible status, keyed by rule slug the way `MISSING_OPTION_LABELS` is. What a picker can fail to list differs per rule: the
+ * subscription picker offers a variable subscription's variations, while the institution
+ * picker offers published institutions only, so naming a cause the rule cannot have sends
+ * a publisher looking for the wrong thing.
+ */
+const UNLISTED_VALUES_NOTICES: Record< string, () => string > = {
+	subscription: () =>
+		// translators: "invalid status" quotes the product label marker, a separate PHP string ('%1$s [invalid status: %2$s]'); keep the two in step.
+		__(
+			'Entries marked “not listed” or “invalid status” are not products you currently sell — a draft, pending, scheduled or trashed product, a product or variation that was deleted, or a product that is no longer a subscription. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+			'newspack-plugin'
+		),
+	institution: () =>
+		__(
+			'Entries marked “not listed” are not in this list — an institution that was deleted or unpublished. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+			'newspack-plugin'
+		),
+};
+
+/**
+ * Wording for a rule this module knows nothing about. `Access_Rules::register_rule()` is
+ * public, so an options-backed rule may come from anywhere and need not hold products.
+ */
+const DEFAULT_UNLISTED_VALUES_NOTICE = () =>
+	__(
+		'Entries marked “not listed” are not in this list — an item that was deleted, unpublished, or is not offered here. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
+		'newspack-plugin'
+	);
+
+/**
+ * The caution shown alongside a picker holding values no option describes, or products
+ * marked with an ineligible status, so the reading that the token invites — stale entry, safe to delete — does not go unchallenged.
+ *
+ * @param slug The rule slug.
  *
  * @return The caution text.
  */
-export function getUnlistedAccessRuleValuesNotice(): string {
-	return __(
-		'Entries marked “not listed” are not in this list — a product variation, or an item that was deleted or unpublished. They are still checked when access is evaluated, so removing one widens who this gate lets in.',
-		'newspack-plugin'
-	);
+export function getUnlistedAccessRuleValuesNotice( slug: string ): string {
+	return ( UNLISTED_VALUES_NOTICES[ slug ] ?? DEFAULT_UNLISTED_VALUES_NOTICE )();
 }

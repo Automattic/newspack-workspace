@@ -44,13 +44,24 @@ describe( 'the caution for values no option describes', () => {
 	} );
 
 	it( 'is a note, and appears only while a stored value has no option', () => {
-		const { rerender } = render( <UnlistedValuesNotice options={ OPTIONS } value={ [ 188250, 999999 ] } /> );
+		const { rerender } = render( <UnlistedValuesNotice slug="subscription" options={ OPTIONS } value={ [ 188250, 999999 ] } /> );
 
 		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /removing one widens who this gate lets in/ );
 
-		rerender( <UnlistedValuesNotice options={ OPTIONS } value={ [ 188250 ] } /> );
+		rerender( <UnlistedValuesNotice slug="subscription" options={ OPTIONS } value={ [ 188250 ] } /> );
 
 		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'is spoken again for a second rule, whose caution says something the first did not', () => {
+		// The wording names what that rule's picker can fail to list — a deleted
+		// institution, a product that is no longer a subscription — so suppressing the
+		// second one would leave a screen reader with the wrong cause.
+		( speak as jest.Mock ).mockClear();
+
+		render( <UnlistedValuesNotice slug="institution" options={ OPTIONS } value={ [ 188250, 999999 ] } /> );
+
+		expect( speak ).toHaveBeenCalledWith( expect.stringContaining( 'institution that was deleted or unpublished' ), 'polite' );
 	} );
 
 	it( 'reaches the one-time purchase picker', () => {

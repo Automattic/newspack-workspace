@@ -18,10 +18,13 @@ final class Checkout_Data {
 	 * @param string $price      The price. Optional. If not provided, the price string will contain 0.
 	 * @param string $frequency  The frequency. Optional. If not provided, the price will be treated as a one-time payment.
 	 * @param int    $product_id Product ID to get additional subscription details. Optional.
+	 * @param int    $quantity   Seats (line-item quantity) purchased. Optional, defaults to 1. Multiplies
+	 *                           the sign-up fee, since WCS charges it per unit; $price is already the
+	 *                           line amount, so it is not multiplied here.
 	 *
 	 * @return string The price string.
 	 */
-	public static function get_price_summary( $name, $price = '', $frequency = '', $product_id = null ) {
+	public static function get_price_summary( $name, $price = '', $frequency = '', $product_id = null, $quantity = 1 ) {
 		if ( ! $price ) {
 			$price = '0';
 		}
@@ -39,7 +42,8 @@ final class Checkout_Data {
 					$subscription_interval = \WC_Subscriptions_Product::get_interval( $product );
 					$trial_length = \WC_Subscriptions_Product::get_trial_length( $product );
 					$trial_period = \WC_Subscriptions_Product::get_trial_period( $product );
-					$initial_amount = \WC_Subscriptions_Product::get_sign_up_fee( $product );
+					// The sign-up fee is charged per seat, so multiply it by quantity.
+					$initial_amount = \WC_Subscriptions_Product::get_sign_up_fee( $product ) * $quantity;
 
 					if ( empty( $subscription_interval ) ) {
 						$subscription_interval = 1;
@@ -255,6 +259,36 @@ final class Checkout_Data {
 	}
 
 	/**
+	 * Whether a contextual prompt source value read from the cart or the URL
+	 * is shaped the way the rest of the system expects it, so an unrelated
+	 * `contextual_prompt_*` cart item or query arg from another source can't
+	 * make its way into the checkout payload.
+	 *
+	 * The placement and condition allowlists below mirror
+	 * `Newspack_Popups_Contextual_Prompt_Render::PLACEMENTS` and `::CONDITIONS`
+	 * (newspack-popups is not a runtime dependency here; popups may be
+	 * inactive when this runs, so the values are duplicated rather than read
+	 * from that class).
+	 *
+	 * @param string $key   One of `Modal_Checkout::CONTEXTUAL_PROMPT_KEYS`.
+	 * @param mixed  $value The value read from the cart item or `$_GET`.
+	 *
+	 * @return bool
+	 */
+	private static function is_valid_contextual_prompt_value( $key, $value ) {
+		switch ( $key ) {
+			case 'contextual_prompt_post_id':
+				return absint( $value ) > 0;
+			case 'contextual_prompt_placement':
+				return in_array( $value, [ 'top', 'mid', 'end', 'unknown' ], true );
+			case 'contextual_prompt_condition':
+				return in_array( $value, [ 'story_aware', 'generic_control', 'override' ], true );
+			default:
+				return false;
+		}
+	}
+
+	/**
 	 * Returns checkout data given a product, product variation, cart or order object.
 	 *
 	 * @param \WC_Product|\WC_Product_Variation|\WC_Cart|\WC_Order $source Product, product variation, cart or order object.
@@ -273,6 +307,7 @@ final class Checkout_Data {
 		$referrer     = '';
 		$product_id   = null;
 		$amount       = 0;
+		$quantity     = 1;
 		$variation_id = null;
 		$is_variable  = false;
 		$is_grouped   = false;
@@ -304,6 +339,7 @@ final class Checkout_Data {
 			$product_id   = $cart_item['product_id'];
 			$variation_id = $cart_item['variation_id'];
 			$amount       = $cart_item['data']->get_price();
+			$quantity     = max( 1, (int) ( $cart_item['quantity'] ?? 1 ) );
 			$referrer     = $cart_item['referer'] ?? '';
 		} elseif ( $source instanceof \WC_Order ) {
 			// A subscription's purchase details normally live on the order it was
@@ -335,7 +371,8 @@ final class Checkout_Data {
 			}
 			$product_id   = $order_item->get_product_id();
 			$variation_id = $order_item->get_variation_id();
-			$amount       = $order_item->get_subtotal();
+			$amount       = $order_item->get_subtotal(); // Already reflects quantity; do not multiply below.
+			$quantity     = max( 1, (int) $order_item->get_quantity() );
 			$referrer     = $items_source->get_meta( '_newspack_referer' );
 		}
 
@@ -376,9 +413,26 @@ final class Checkout_Data {
 			$data['is_grouped'] = true;
 			$data['child_ids'] = $children;
 		} else {
-			$data['amount']           = $amount;
-			$data['price_summary']    = self::get_price_summary( $name, $amount, $recurrence, $variation_id ? $variation_id : $product_id );
-			$data['summary_template'] = self::get_price_summary( $name, '{{PRICE}}', $recurrence, $variation_id ? $variation_id : $product_id );
+			// An order's amount is a line subtotal already scaled by quantity; a
+			// product's or cart item's is a per-unit price, so scale it here instead.
+			// The quantity-1 short circuit is load-bearing: get_price() returns a
+			// string, and multiplying would hand a float to consumers that have only
+			// ever seen the string.
+			$line_amount              = ( $source instanceof \WC_Order || 1 === $quantity ) ? $amount : (float) $amount * $quantity;
+			$data['amount']           = $line_amount;
+			// Only a cart or order line item has a real seat count to report. For a
+			// bare product source the block's hidden field is the source of truth, so
+			// omitting the key — rather than hardcoding 1 — keeps getCheckoutData()'s
+			// JSON-wins merge in utils.js from overwriting it with a stale default.
+			if ( $source instanceof \WC_Cart || $source instanceof \WC_Order ) {
+				$data['quantity'] = $quantity;
+			}
+			// WooCommerce Subscriptions folds the sign-up fee into the unit price when
+			// it prices an order line, so its subtotal already carries the fee for
+			// every unit and the summary must not scale it a second time.
+			$summary_quantity         = $source instanceof \WC_Order ? 1 : $quantity;
+			$data['price_summary']    = self::get_price_summary( $name, $line_amount, $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );
+			$data['summary_template'] = self::get_price_summary( $name, '{{PRICE}}', $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );
 			$data['recurrence']       = $recurrence;
 		}
 		if ( $variation_id ) {
@@ -449,6 +503,43 @@ final class Checkout_Data {
 		}
 		if ( $prompt_title ) {
 			$data['prompt_title'] = $prompt_title;
+		}
+
+		/**
+		 * Contextual prompt source: which story, placement and test condition the
+		 * reader donated from. Same three-way resolution as the popup id.
+		 *
+		 * The order branch is trusted as-is: an order's meta was written and
+		 * validated once, at checkout time (see the checkout-create-order-line-item
+		 * handler), so it's not re-validated on every later read. The cart and GET
+		 * branches are reader-controlled input read on every request, so a value
+		 * that doesn't match the shape the rest of the system expects is dropped
+		 * rather than passed through.
+		 */
+		foreach ( \Newspack_Blocks\Modal_Checkout::CONTEXTUAL_PROMPT_KEYS as $key ) {
+			$value = null;
+			if ( $order ) {
+				$value = $order->get_meta( '_newspack_' . $key );
+			} else {
+				if ( $cart_item ) {
+					$value = $cart_item[ $key ] ?? null;
+				} else {
+					$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
+				}
+				if ( $value ) {
+					if ( ! self::is_valid_contextual_prompt_value( $key, $value ) ) {
+						$value = null;
+					} elseif ( 'contextual_prompt_post_id' === $key ) {
+						// is_valid_contextual_prompt_value() only checked
+						// absint( $value ) > 0; normalize here so a value like
+						// '12abc' reaches the payload as 12, not that raw string.
+						$value = absint( $value );
+					}
+				}
+			}
+			if ( $value ) {
+				$data[ $key ] = $value;
+			}
 		}
 
 		/**

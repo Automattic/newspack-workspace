@@ -32,6 +32,10 @@
 			margin-bottom: 0;
 		}
 
+		&[role="tab"] {
+			margin-bottom: 0;
+		}
+
 		@media only screen and ( min-width: breakpoints.$tablet_width ) {
 			&:not(.newspack-ui__button--wide) {
 				margin-bottom: 0;
@@ -43,8 +47,8 @@
 			color: var(--newspack-ui-color-neutral-90);
 		}
 
-		&:disabled,
-		&.disabled {
+		&:disabled:where(:not(.newspack-ui__button--loading)),
+		&.disabled:where(:not(.newspack-ui__button--loading)) {
 			background: var(--newspack-ui-color-neutral-5) !important;
 			color: var(--newspack-ui-color-neutral-40) !important;
 			cursor: default;
@@ -99,7 +103,7 @@
 				color: var(--newspack-ui-color-button-text-hover);
 			}
 
-			&:disabled {
+			&:disabled:where(:not(.newspack-ui__button--loading)) {
 				background: var(--newspack-ui-color-neutral-30) !important;
 				color: var(--newspack-ui-color-neutral-0) !important;
 			}
@@ -114,7 +118,7 @@
 				color: var(--newspack-ui-color-neutral-90);
 			}
 
-			&:disabled {
+			&:disabled:where(:not(.newspack-ui__button--loading)) {
 				background: var(--newspack-ui-color-neutral-0) !important;
 				color: var(--newspack-ui-color-neutral-30) !important;
 			}
@@ -134,7 +138,7 @@
 				outline-color: var(--newspack-ui-color-primary);
 			}
 
-			&:disabled {
+			&:disabled:where(:not(.newspack-ui__button--loading)) {
 				background: color-mix(in srgb, var(--newspack-ui-color-primary) 20%, white) !important;
 				color: var(--newspack-ui-color-against-primary) !important;
 			}
@@ -149,7 +153,7 @@
 				color: var(--newspack-ui-color-neutral-90);
 			}
 
-			&:disabled {
+			&:disabled:where(:not(.newspack-ui__button--loading)) {
 				background: var(--newspack-ui-color-neutral-5) !important;
 				color: var(--newspack-ui-color-neutral-40) !important;
 			}
@@ -166,7 +170,7 @@
 				color: var(--newspack-ui-color-neutral-90);
 			}
 
-			&:disabled {
+			&:disabled:where(:not(.newspack-ui__button--loading)) {
 				background: transparent !important;
 				color: var(--newspack-ui-color-neutral-30) !important;
 			}
@@ -194,7 +198,7 @@
 				outline-color: var(--newspack-ui-color-neutral-0);
 			}
 
-			&:disabled {
+			&:disabled:where(:not(.newspack-ui__button--loading)) {
 				background: transparent !important;
 				color: var(--newspack-ui-color-neutral-60) !important;
 			}
@@ -222,7 +226,7 @@
 				border-color: var(--newspack-ui-color-neutral-40);
 			}
 
-			&:disabled {
+			&:disabled:where(:not(.newspack-ui__button--loading)) {
 				border-color: var(--newspack-ui-color-neutral-10);
 			}
 		}
@@ -240,7 +244,7 @@
 				outline-color: var(--newspack-ui-color-error-50);
 			}
 
-			&:disabled {
+			&:disabled:where(:not(.newspack-ui__button--loading)) {
 				background: var(--newspack-ui-color-error-5) !important;
 				color: var(--newspack-ui-color-neutral-0) !important;
 			}
@@ -255,7 +259,7 @@
 					color: var(--newspack-ui-color-error-50);
 				}
 
-				&:disabled {
+				&:disabled:where(:not(.newspack-ui__button--loading)) {
 					background: transparent !important;
 					color: var(--newspack-ui-color-error-5) !important;
 				}
@@ -316,10 +320,13 @@
 
 		// Loading
 		&--loading {
+			-webkit-text-fill-color: transparent;
+			pointer-events: none;
 			position: relative;
 
-			span {
-				visibility: hidden;
+			span,
+			svg {
+				opacity: 0;
 			}
 
 			&::before {

@@ -391,9 +391,9 @@ class Newsletters_Access {
 			return [ 'action' => 'disabled' ];
 		}
 
-		// Don't trigger for logged-in editors/admins — they bypass the gate
-		// via capability checks and shouldn't burn a signature on every click.
-		if ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) ) {
+		// Don't trigger for an account the gate never restricts. It has nothing
+		// to bypass and shouldn't burn a signature on every click.
+		if ( Content_Gate::should_skip_access_checks() ) {
 			return [ 'action' => 'skipped' ];
 		}
 
@@ -515,7 +515,7 @@ class Newsletters_Access {
 		if ( ! self::is_verification_enabled() ) {
 			return [ 'action' => 'disabled' ];
 		}
-		if ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) ) {
+		if ( Content_Gate::should_skip_access_checks() ) {
 			return [ 'action' => 'skipped' ];
 		}
 

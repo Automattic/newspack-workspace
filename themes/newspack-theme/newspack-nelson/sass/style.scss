@@ -259,7 +259,8 @@ h4,
 .accent-header,
 #secondary .widgettitle,
 div.wpnbha .article-section-title,
-.cat-links {
+.cat-links,
+.tag-labels {
 	color: var(--newspack-theme-color-text-light);
 	font-size: var(--newspack-theme-font-size-xs);
 	font-weight: bold;
@@ -281,7 +282,8 @@ div.wpnbha.is-grid .article-section-title {
 	}
 }
 
-.single .cat-links {
+.single .cat-links,
+.single .tag-labels {
 	margin-bottom: structure.$size__spacing-unit;
 	@include utilities.media( tablet ) {
 		margin-bottom: #{2.5 * structure.$size__spacing-unit};

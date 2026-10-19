@@ -24,19 +24,27 @@ function useWizardApiFetchToggle< T >( {
 	apiNamespace: string;
 	refreshOn?: ApiMethods[];
 	data: T;
-	description: string;
+	description?: string;
 } ) {
 	const [ apiData, setApiData ] = useState< T >( data );
 
 	const [ actionText, setActionText ] = useState< React.ReactNode >( null );
 
-	const { wizardApiFetch, isFetching, errorMessage } = useWizardApiFetch( apiNamespace );
+	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( apiNamespace );
+
+	const [ hasLoaded, setHasLoaded ] = useState( false );
 
 	/**
 	 * Perform `GET` request on initial load.
+	 *
+	 * A failed request still settles `hasLoaded`: the error surfaces through
+	 * `errorMessage`, and a view gating its first render on the flag would
+	 * otherwise be stranded on its placeholder.
 	 */
 	useEffect( () => {
-		apiFetchToggle();
+		apiFetchToggle()
+			.catch( () => undefined )
+			.finally( () => setHasLoaded( true ) );
 	}, [] );
 
 	/**
@@ -86,7 +94,9 @@ function useWizardApiFetchToggle< T >( {
 		apiFetchToggle,
 		description: isFetching ? __( 'Loading…', 'newspack-plugin' ) : description,
 		errorMessage,
+		hasLoaded,
 		isFetching,
+		resetError,
 	};
 }
 

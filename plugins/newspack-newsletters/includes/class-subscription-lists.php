@@ -568,14 +568,22 @@ class Subscription_Lists {
 	/**
 	 * Get Lists that are configured for the current provider
 	 *
+	 * @param bool $apply_filters Whether to apply the `newspack_newsletters_subscription_lists`
+	 *                            filter. Pass false to read every configured list, including
+	 *                            ones a callback hides from the current reader.
+	 *
 	 * @return Subscription_List[]
 	 */
-	public static function get_configured_for_current_provider() {
+	public static function get_configured_for_current_provider( $apply_filters = true ) {
 		$lists = self::get_filtered(
 			function ( $list ) {
 				return $list->is_configured_for_current_provider();
 			}
 		);
+
+		if ( ! $apply_filters ) {
+			return $lists;
+		}
 
 		/**
 		 * Filters the available lists for the current provider.
@@ -1078,7 +1086,7 @@ class Subscription_Lists {
 			}
 		}
 
-		add_option( $migrated_option_name, true );
+		update_option( $migrated_option_name, true );
 		// Workaround the options bug on persistent cache.
 		wp_cache_delete( 'notoptions', 'options' );
 		wp_cache_delete( 'alloptions', 'options' );

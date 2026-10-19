@@ -42,7 +42,7 @@ All icons in this package are designed on a **24×24 grid/viewbox**. This ensure
 
 ## Available Icons
 
-This package includes 49 custom icons:
+This package includes 52 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
@@ -59,6 +59,7 @@ This package includes 49 custom icons:
 - `browser` - Browser icon
 - `chartReport` - Chart report icon
 - `collections` - Collections icon
+- `comments` - Comments icon
 - `contentCarousel` - Content carousel icon
 - `contentLocked` - Content locked icon
 - `contentLoop` - Content loop icon
@@ -74,6 +75,7 @@ This package includes 49 custom icons:
 - `hand` - Hand icon
 - `iframe` - Iframe icon
 - `key` - Key icon
+- `liveStreaming` - Live streaming icon
 - `logout` - Logout icon
 - `mergeTags` - Merge tags icon
 - `newspack` - Newspack logo icon
@@ -86,6 +88,7 @@ This package includes 49 custom icons:
 - `phone` - Phone icon
 - `playlist` - Playlist icon
 - `postAvatar` - Post avatar icon
+- `print` - Print icon
 - `priority` - Priority icon
 - `readerRegistration` - Reader registration icon
 - `searchEmpty` - Empty search icon

@@ -8,7 +8,7 @@ import './checkout.scss';
  * Internal dependencies
  */
 import { manageCheckoutAttempt, manageCheckoutSuccess, manageLoaded, managePagination } from './analytics';
-import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
+import { domReady, getTabbableElements, isPaymentChallengeShown, onCheckoutPlaceOrderProcessing } from './utils';
 
 ( $ => {
 	domReady( () => {
@@ -44,6 +44,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			$(
 				`.woocommerce-NoticeGroup-checkout, .${ CLASS_PREFIX }__inline-error, .woocommerce-error, .woocommerce-message, .wc-block-components-notice-banner`
 			).remove();
+			$(
+				'[aria-describedby="modal-checkout-coupon-result"], [aria-describedby="modal-checkout-nyp-result"], [aria-describedby="modal-checkout-quantity-result"]'
+			).removeAttr( 'aria-invalid aria-describedby' );
+			$(
+				'form.modal_checkout_coupon h3, form.modal_checkout_coupon input[name="coupon_code"], form.modal_checkout_nyp h3, form.modal_checkout_nyp input[name="price"], form.modal_checkout_quantity h3, form.modal_checkout_quantity input[name="quantity"]'
+			).removeClass( 'newspack-ui__field-error' );
 		}
 
 		/**
@@ -94,6 +100,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 				const $coupon = $( 'form.modal_checkout_coupon' );
 				const $nyp = $( 'form.modal_checkout_nyp' );
+				const $quantity = $( 'form.modal_checkout_quantity' );
 				const $checkout_continue = $( '#checkout_continue' );
 				const $customer_details = $( '#customer_details' );
 				const $after_customer_details = $( '#after_customer_details' );
@@ -113,6 +120,30 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				handlePaymentMethodSelect();
 
 				/**
+				 * Tell the modal when a payment challenge, like 3D Secure, shows or goes while
+				 * an order is being placed, so its processing screen doesn't cover it.
+				 */
+				let challengeShown = false;
+				let challengeFrame = null;
+				const syncPaymentChallenge = () => {
+					challengeFrame = null;
+					const shown = isPaymentChallengeShown( document );
+					if ( shown !== challengeShown ) {
+						challengeShown = shown;
+						container.dispatchEvent( new CustomEvent( 'checkout-payment-challenge', { detail: { shown } } ) );
+					}
+				};
+				const challengeObserver = new MutationObserver( () => {
+					if ( ! challengeFrame ) {
+						challengeFrame = window.requestAnimationFrame( syncPaymentChallenge );
+					}
+				} );
+				container.addEventListener( 'checkout-place-order-error', () => {
+					challengeObserver.disconnect();
+					challengeShown = false;
+				} );
+
+				/**
 				 * Bubble up checkout place order event.
 				 */
 				let placedOrder = false;
@@ -122,6 +153,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					placedOrder = true;
 					container.dispatchEvent( placeOrderStartEvent );
+					challengeObserver.observe( document.body, {
+						childList: true,
+						subtree: true,
+						attributes: true,
+						attributeFilter: [ 'style', 'class' ],
+					} );
 				} );
 				onCheckoutPlaceOrderProcessing( container, function () {
 					if ( ! placedOrder ) {
@@ -374,6 +411,21 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				}
 
 				/**
+				 * Mark a field invalid and point it at its result message, or clear both.
+				 *
+				 * @param {jQuery}  $input    The field.
+				 * @param {string}  resultId  The id of the field's result message.
+				 * @param {boolean} isInvalid Whether the field holds an error.
+				 */
+				function setFieldInvalid( $input, resultId, isInvalid ) {
+					if ( isInvalid ) {
+						$input.attr( { 'aria-invalid': 'true', 'aria-describedby': resultId } );
+					} else {
+						$input.removeAttr( 'aria-invalid aria-describedby' );
+					}
+				}
+
+				/**
 				 * Handle coupon form submit.
 				 *
 				 * @param {Event} ev
@@ -400,7 +452,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							if ( code ) {
 								const isError = code.includes( 'error' );
 								$coupon.append(
-									`<p class="result ${ CLASS_PREFIX }__helper-text ${ isError ? CLASS_PREFIX + '__inline-error' : '' }">` +
+									`<p id="modal-checkout-coupon-result" class="result ${ CLASS_PREFIX }__helper-text ${
+										isError ? CLASS_PREFIX + '__inline-error' : ''
+									}">` +
 										$( code ).text() +
 										'</p>'
 								);
@@ -411,6 +465,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 									$coupon.find( 'input[name="coupon_code"]' ).focus();
 									$coupon.find( 'h3, input[name="coupon_code"]' ).removeClass( 'newspack-ui__field-error' );
 								}
+								setFieldInvalid( $coupon.find( 'input[name="coupon_code"]' ), 'modal-checkout-coupon-result', isError );
 								$( document.body ).trigger( 'applied_coupon_in_checkout', [ data.coupon_code ] );
 								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 							}
@@ -425,6 +480,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					$( document.body ).on( 'removed_coupon_in_checkout', () => {
 						clearNotices();
 						$coupon.find( '.result' ).remove();
+						setFieldInvalid( $coupon.find( 'input[name="coupon_code"]' ), 'modal-checkout-coupon-result', false );
 						$coupon.find( 'input[name="coupon_code"]' ).val( '' ).focus();
 					} );
 				}
@@ -441,7 +497,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						return false;
 					}
 					const input = $nyp.find( 'input[name="price"]' );
-					input.attr( 'disabled', true );
+					input.prop( 'readOnly', true );
 					const data = {
 						_ajax_nonce: newspackBlocksModalCheckout.nyp_nonce,
 						action: 'process_name_your_price_request',
@@ -453,12 +509,15 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						type: 'POST',
 						url: newspackBlocksModalCheckout.ajax_url,
 						data,
-						success: ( { success, data: res } ) => {
+						success: response => {
+							const success = Boolean( response?.success );
 							clearNotices();
 							$nyp.find( '.result' ).remove();
 							$nyp.append(
-								`<p class="result ${ CLASS_PREFIX }__helper-text ${ ! success ? CLASS_PREFIX + '__inline-error' : '' }">` +
-									res.message +
+								`<p id="modal-checkout-nyp-result" class="result ${ CLASS_PREFIX }__helper-text ${
+									! success ? CLASS_PREFIX + '__inline-error' : ''
+								}">` +
+									( response?.data?.message || newspackBlocksModalCheckout.quantity_error ) +
 									'</p>'
 							);
 							if ( success ) {
@@ -467,17 +526,107 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 								$nyp.find( 'input[name="price"]' ).focus();
 								$nyp.find( 'h3, input[name="price"]' ).addClass( 'newspack-ui__field-error' );
 							}
+							setFieldInvalid( $nyp.find( 'input[name="price"]' ), 'modal-checkout-nyp-result', ! success );
 							$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 						},
 						complete: () => {
 							unblockForm( $nyp );
-							input.attr( 'disabled', false );
+							input.prop( 'readOnly', false );
 							input.focus();
 						},
 					} );
 				}
 				if ( $nyp.length ) {
 					$nyp.on( 'submit', handleNYPFormSubmit );
+				}
+
+				/**
+				 * Replace the quantity form's result line, and mark the field when the
+				 * server refused the change.
+				 *
+				 * @param {boolean} success
+				 * @param {string}  message
+				 */
+				function showQuantityResult( success, message ) {
+					$quantity.find( '.result' ).remove();
+					$quantity.append(
+						`<p id="modal-checkout-quantity-result" class="result ${ CLASS_PREFIX }__helper-text ${
+							! success ? CLASS_PREFIX + '__inline-error' : ''
+						}">` +
+							message +
+							'</p>'
+					);
+					$quantity.find( 'h3, input[name="quantity"]' ).toggleClass( 'newspack-ui__field-error', ! success );
+					setFieldInvalid( $quantity.find( 'input[name="quantity"]' ), 'modal-checkout-quantity-result', ! success );
+				}
+
+				/**
+				 * Handle quantity form submission.
+				 *
+				 * On success the order review is refreshed to show the new total, and the
+				 * `#modal-checkout-product-details` data carrier is rewritten from the
+				 * response — `update_checkout` only replaces the review-order table and
+				 * payment box, and the carrier sits outside both.
+				 *
+				 * On failure the server has already put the original line item back, so
+				 * the review still matches the cart and must be left alone.
+				 *
+				 * @param {Event} ev
+				 */
+				function handleQuantityFormSubmit( ev ) {
+					ev.preventDefault();
+					const blocked = blockForm( $quantity );
+					if ( ! blocked ) {
+						return false;
+					}
+					const input = $quantity.find( 'input[name="quantity"]' );
+					input.prop( 'readOnly', true );
+					const data = {
+						_ajax_nonce: newspackBlocksModalCheckout.quantity_nonce,
+						action: 'process_quantity_request',
+						quantity: input.val(),
+						product_id: $quantity.find( 'input[name="product_id"]' ).val(),
+					};
+					$.ajax( {
+						type: 'POST',
+						url: newspackBlocksModalCheckout.ajax_url,
+						data,
+						success: response => {
+							// A malformed request returns bare (`0`), so there is no envelope
+							// to read and nothing the reader could act on.
+							if ( ! response || typeof response.success === 'undefined' ) {
+								showQuantityResult( false, newspackBlocksModalCheckout.quantity_error );
+								return;
+							}
+							const { success, data: res } = response;
+							clearNotices();
+							showQuantityResult( success, res?.message || newspackBlocksModalCheckout.quantity_error );
+							if ( success ) {
+								if ( res.checkout_data ) {
+									$( '#modal-checkout-product-details' ).attr( 'data-checkout', JSON.stringify( res.checkout_data ) );
+									// The server may accept a quantity other than the one asked
+									// for — a product sold in bounds clamps to them. Show the
+									// count the reader is about to pay for, not the one they typed.
+									if ( res.checkout_data.quantity ) {
+										input.val( res.checkout_data.quantity );
+									}
+								}
+								$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
+							} else {
+								input.focus();
+							}
+						},
+						// An expired nonce dies with a 403, which never reaches success:.
+						error: () => showQuantityResult( false, newspackBlocksModalCheckout.quantity_error ),
+						complete: () => {
+							unblockForm( $quantity );
+							input.prop( 'readOnly', false );
+							input.focus();
+						},
+					} );
+				}
+				if ( $quantity.length ) {
+					$quantity.on( 'submit', handleQuantityFormSubmit );
 				}
 
 				/**
@@ -488,6 +637,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				function handleFormSubmit( ev ) {
 					ev.preventDefault();
 					ev.stopImmediatePropagation();
+					if ( $form.is( '.modal-processing' ) ) {
+						return;
+					}
 					validateForm();
 					managePagination( 'continue' ); // TODOGA4: this is firing whether or not the form validates.
 				}
@@ -514,6 +666,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 						if ( $nyp.length ) {
 							$nyp.hide();
+						}
+						if ( $quantity.length ) {
+							$quantity.hide();
 						}
 						$customer_details.show();
 						$after_customer_details.hide();
@@ -549,6 +704,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 						if ( $nyp.length ) {
 							$nyp.show();
+						}
+						if ( $quantity.length ) {
+							$quantity.show();
 						}
 						$customer_details.hide();
 						$after_customer_details.show();
@@ -744,6 +902,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 							cb( result );
 						},
 						error: ( jqXHR, textStatus, errorThrown ) => {
+							unblockForm( $form );
 							let messages = '';
 							if ( ! silent ) {
 								messages = '<div class="woocommerce-error">' + ( errorThrown || wc_checkout_params.i18n_checkout_error ) + '</div>';
@@ -772,7 +931,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', true );
+						$( el ).attr( 'aria-disabled', 'true' ).attr( 'aria-busy', 'true' ).addClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.addClass( 'modal-processing' );
 					return true;
@@ -791,7 +950,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					const buttons = form.find( 'button[type=submit]' );
 					buttons.each( ( i, el ) => {
-						$( el ).attr( 'disabled', false );
+						$( el ).removeAttr( 'aria-disabled' ).removeAttr( 'aria-busy' ).removeClass( `${ CLASS_PREFIX }__button--loading` );
 					} );
 					form.removeClass( 'modal-processing' );
 					return true;
@@ -924,10 +1083,34 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 			setReady( false );
 		} );
 
-		// Close modal when 'Esc' key is pressed and focus is inside of the iframe.
+		// The checkout dialog can't see keys pressed in here. Escape reaches it as the
+		// dialog's own cancel, so a payment in progress keeps it open, and Tab from the
+		// last control wraps to the dialog's first.
 		document.addEventListener( 'keydown', function ( ev ) {
+			const dialog = window.frameElement?.closest( 'dialog' );
 			if ( ev.key === 'Escape' ) {
-				parent.newspackCloseModalCheckout();
+				// An open dropdown, like the country field's, closes on its own Escape.
+				if ( ev.defaultPrevented || ev.target.closest?.( '.select2-dropdown, .select2-container--open' ) ) {
+					return;
+				}
+				if ( dialog ) {
+					dialog.dispatchEvent( new Event( 'cancel', { cancelable: true } ) );
+				} else {
+					parent.newspackCloseModalCheckout();
+				}
+				return;
+			}
+			if ( ev.key !== 'Tab' || ev.shiftKey || ev.defaultPrevented || ! dialog ) {
+				return;
+			}
+			const tabbable = getTabbableElements( document.body );
+			if ( ev.target !== tabbable[ tabbable.length - 1 ] ) {
+				return;
+			}
+			const first = getTabbableElements( dialog )[ 0 ];
+			if ( first && first !== window.frameElement ) {
+				ev.preventDefault();
+				first.focus();
 			}
 		} );
 

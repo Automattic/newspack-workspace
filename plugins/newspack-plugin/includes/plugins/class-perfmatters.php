@@ -74,13 +74,9 @@ class Perfmatters {
 			'adsbygoogle.js',
 			'ai_insert_code',
 			'doubleclick.net',
+			// Kept out of the delay queue while reader activation is enabled; see get_defaults().
+			'newspack-plugin',
 		];
-
-		// Only delay newspack-plugin if reader activation is not enabled. Because there
-		// are buttons that do things, and they should do those things on the first click.
-		if ( ! Reader_Activation::is_enabled() ) {
-			$scripts_to_delay[] = 'newspack-plugin';
-		}
 
 		return $scripts_to_delay;
 	}
@@ -127,17 +123,34 @@ class Perfmatters {
 
 	/**
 	 * Stylesheets to exclude from the "Unused CSS" feature.
+	 *
+	 * Perfmatters substring-matches each entry against the whole `<link>` tag. An
+	 * entry that stops matching fails silently: the stylesheet is withheld until the
+	 * reader's first interaction, and wherever its rules are not already inlined in
+	 * the generated used-CSS, that part of the page renders unstyled — with no error
+	 * and no log line.
+	 *
+	 * Prefer a component's stable identifier over a path, because both halves of a
+	 * path move. Jetpack relocated its social logos into `_inc/build/` in 15.7 and
+	 * the entry went dead across the fleet for months (NPPM-3167); Jetpack's Asset
+	 * CDN serves the same files from a path with no `plugins/jetpack/` segment, so a
+	 * prefixed entry stops matching wherever those assets are CDN-hosted
+	 * (Automattic/newspack-plugin#3810). The identifier survives both, since the
+	 * tag's handle carries it as well as the URL.
+	 *
+	 * @return string[] Stylesheet identifiers.
 	 */
 	private static function unused_css_excluded_stylesheets() {
 		return [
+			'plugins/newspack-ads', // Newspack Ads; the sticky footer ad never renders if this loads late.
 			'plugins/newspack-blocks', // Newspack Blocks.
 			'plugins/newspack-newsletters', // Newspack Newsletters.
 			'plugins/newspack-plugin', // Newspack main plugin.
 			'plugins/newspack-popups', // Newspack Campaigns.
 			'modules/sharedaddy', // Jetpack's share buttons.
-			'_inc/social-logos', // Jetpack's social logos CSS.
-			'plugins/jetpack/css/jetpack.css', // Jetpack's main CSS.
-			'plugins/jetpack/_inc/blocks/swiper.css', // Jetpack's Swiper CSS.
+			'social-logos', // Jetpack's social logos CSS.
+			'plugins/jetpack/css/jetpack.css', // Jetpack's main CSS; Jetpack no longer ships this file (NPPM-3407).
+			'plugins/jetpack/_inc/blocks/swiper.css', // Jetpack's Swiper CSS; path-based, so it misses the CDN-hosted copy (NPPM-3407).
 			'plugins/the-events-calendar', // The Events Calendar.
 			'plugins/events-calendar-pro', // The Events Calendar Pro.
 			'plugins/complianz-gdpr', // Complianz plugin CSS; substring also matches the premium plugin dir (NPPM-3052).
@@ -238,6 +251,13 @@ class Perfmatters {
 		// scripts and merging alone would put them straight back (NPPM-2934).
 		if ( $reveal_above_header ) {
 			$delay_js_inclusions = array_diff( $delay_js_inclusions, self::above_header_reveal_scripts() );
+		}
+		// With reader activation enabled, newspack-plugin drives the sign-in button and the
+		// `#signin_modal` links, which must work on the first click. Subtracted from the merged
+		// list for the same reason as above: a list saved while reader activation was off
+		// still holds it.
+		if ( Reader_Activation::is_enabled() ) {
+			$delay_js_inclusions = array_diff( $delay_js_inclusions, [ 'newspack-plugin' ] );
 		}
 		$options['assets']['delay_js_inclusions'] = array_values( array_unique( $delay_js_inclusions ) );
 		$options['assets']['delay_timeout'] = true;
@@ -434,6 +454,16 @@ class Perfmatters {
 	public static function should_delay_js( $delay_js ) {
 		// Don't delay JS on lite site requests.
 		if ( Lite_Site::is_lite_site_request() ) {
+			return false;
+		}
+		// The IP-access landing page auto-redirects with no user interaction, so
+		// delayed analytics would never execute and the visit would go unrecorded.
+		// Like the lite-site veto above, this holds even under
+		// NEWSPACK_IGNORE_PERFMATTERS_DEFAULTS: it is a functional requirement of
+		// the page, not a configuration default.
+		// No autoload: the class self-initializes on load, and it is only ever
+		// loaded deliberately, when content gates are enabled.
+		if ( class_exists( 'Newspack\Content_Gate\IP_Access_Rule', false ) && Content_Gate\IP_Access_Rule::is_landing_page_request() ) {
 			return false;
 		}
 		return $delay_js;

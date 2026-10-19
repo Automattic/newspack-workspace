@@ -370,15 +370,17 @@ class Subscriber_Discounts {
 			return new \WP_Error( 'newspack_subscriber_discount_invalid_rule', __( 'Invalid discount rule.', 'newspack-plugin' ) );
 		}
 
-		$subscription_product_ids = self::sanitize_ids( $rule['subscription_product_ids'] ?? [] );
-		if ( empty( $subscription_product_ids ) ) {
+		// Only the named-subscriptions mode needs a list. An unrecognized mode
+		// reads as that one, so a malformed payload is held to the stricter rule
+		// rather than saving a discount that reaches every subscriber.
+		if ( ! Subscriber_Commerce::covers_all_subscriptions( $rule ) && empty( self::sanitize_ids( $rule['subscription_product_ids'] ?? [] ) ) ) {
 			return new \WP_Error(
 				'newspack_subscriber_discount_no_audience',
 				__( 'Choose which subscription’s subscribers get this discount.', 'newspack-plugin' )
 			);
 		}
 
-		$targeting            = $rule['targeting'] ?? '';
+		$targeting             = $rule['targeting'] ?? '';
 		$valid_targeting_modes = [
 			Product_Targeting::TARGETING_PRODUCTS,
 			Product_Targeting::TARGETING_CATEGORY,
@@ -463,6 +465,7 @@ class Subscriber_Discounts {
 		return array_merge(
 			[
 				'id'                       => '',
+				'subscription_targeting'   => Subscriber_Commerce::SUBSCRIPTION_TARGETING_SPECIFIC,
 				'subscription_product_ids' => [],
 				'targeting'                => 'products',
 				'product_ids'              => [],

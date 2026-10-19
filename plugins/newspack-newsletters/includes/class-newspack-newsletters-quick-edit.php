@@ -80,11 +80,13 @@ class Newspack_Newsletters_Quick_Edit {
 		) {
 			return;
 		}
-		update_post_meta(
-			$post_id,
-			'is_public',
-			isset( $_POST['switch_public_page'] ) && sanitize_text_field( $_POST['switch_public_page'] )
-		);
+		$is_public = isset( $_POST['switch_public_page'] ) && sanitize_text_field( $_POST['switch_public_page'] );
+		// Newspack_Newsletters::current_user_can_set_public_status() is the one definition
+		// of who may set this, and it also backs the guard on the write itself.
+		if ( ! \Newspack_Newsletters::current_user_can_set_public_status( $post_id, $is_public ) ) {
+			return;
+		}
+		update_post_meta( $post_id, 'is_public', $is_public );
 	}
 }
 

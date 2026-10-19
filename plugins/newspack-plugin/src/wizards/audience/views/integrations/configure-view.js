@@ -5,7 +5,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { CheckboxControl, SelectControl, ToggleControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
-import { Stack } from '@wordpress/ui';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -13,7 +13,7 @@ import { Stack } from '@wordpress/ui';
 import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
-import { SettingsField, settingsFieldRenders } from './settings-field';
+import { SettingsField, settingsFieldRenders, toBool } from './settings-field';
 
 import './configure-view.scss';
 
@@ -147,11 +147,6 @@ export const reconcileOperators = ( currentMap, options ) => {
 	} );
 	return changed ? next : map;
 };
-
-// Coerce a value to boolean. Values can arrive from WP options as scalar
-// strings (`'1'`/`'0'`/`'true'`/`'false'`/`''`); note `Boolean( '0' )` is `true`
-// in JS, so the falsy string forms are matched explicitly.
-const toBool = value => ( typeof value === 'string' ? ! [ '', '0', 'false' ].includes( value.toLowerCase() ) : Boolean( value ) );
 
 // Push-pipeline settings that render inside the Outbound section: the metadata
 // prefix is only read on push paths (prepare_contact()) and account-deletion
@@ -492,7 +487,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				{ /* Section 2: Inbound */ }
 				{ inboundField && ( inboundOptions.length > 0 || !! inboundToggleField ) && (
 					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
+						<Divider alignment="full-width" variant="tertiary" />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Stack direction="column" gap="xl">
@@ -563,7 +558,7 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				{ /* Section 3: Outbound */ }
 				{ ( outboundGroups.length > 0 || visibleOutboundSettingsFields.length > 0 || !! outboundToggleField ) && (
 					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 64 } marginBottom={ 64 } />
+						<Divider alignment="full-width" variant="tertiary" />
 						<Grid columns={ 2 } gutter={ 32 } noMargin>
 							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
 							<Stack direction="column" gap="xl">
@@ -595,18 +590,34 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 													defaultOpen={ index === 0 }
 												>
 													<Stack direction="column" gap="sm">
-														{ group.fields.map( fieldName => (
-															<CheckboxControl
-																className="newspack-checkbox-control"
-																key={ fieldName }
-																label={ fieldName }
-																checked={ selected.includes( fieldName ) }
-																onChange={ checked =>
-																	handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
-																}
-																__nextHasNoMarginBottom
-															/>
-														) ) }
+														{ group.fields.map( fieldName => {
+															const details = group.field_details?.[ fieldName ];
+															const isNew = 'new' === details?.status || 'updated' === details?.status;
+															return (
+																<div className="newspack-outbound-field-row" key={ fieldName }>
+																	<CheckboxControl
+																		className="newspack-outbound-field-row__checkbox"
+																		label={ fieldName }
+																		help={ details?.description || undefined }
+																		checked={ selected.includes( fieldName ) }
+																		onChange={ checked =>
+																			handleCheckboxListChange(
+																				outboundField.key,
+																				currentValue,
+																				fieldName,
+																				checked
+																			)
+																		}
+																		__nextHasNoMarginBottom
+																	/>
+																	{ isNew && (
+																		<span className="newspack-outbound-field-row__badges">
+																			<Badge intent="stable">{ __( 'New', 'newspack-plugin' ) }</Badge>
+																		</span>
+																	) }
+																</div>
+															);
+														} ) }
 													</Stack>
 												</CollapsibleGroup.Item>
 											);

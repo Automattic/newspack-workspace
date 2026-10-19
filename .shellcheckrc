@@ -1,0 +1,15 @@
+# Follow files pulled in with `source`/`.`, so the `# shellcheck source=`
+# directives already in bin/ and .github/scripts/ resolve for anyone running
+# shellcheck directly or through an editor integration, not only for CI's -x.
+external-sources=true
+
+# Resolve those `source=` paths relative to the script being checked rather than
+# the current directory, so a relative directive like `source=../_common.sh`
+# works whether shellcheck runs from the repo root, from bin/tests/, or from an
+# editor with an arbitrary working directory.
+source-path=SCRIPTDIR
+
+# Severity is deliberately NOT pinned here. CI gates at `error` (see the
+# shellcheck step in .github/workflows/ci.yml); leaving the local default at
+# `style` means an editor still surfaces the warning-level findings this repo
+# has yet to clean up, instead of hiding the very work the gate defers.

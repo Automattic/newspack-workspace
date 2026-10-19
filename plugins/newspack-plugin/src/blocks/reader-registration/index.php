@@ -82,6 +82,7 @@ function enqueue_scripts() {
 		[
 			'verification_url'   => \admin_url( 'admin-ajax.php' ),
 			'verification_nonce' => \wp_create_nonce( 'newspack_reader_registration_verification' ),
+			'verification_error' => __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
 		]
 	);
 }
@@ -128,6 +129,8 @@ function render_verification_box() {
 				);
 				?>
 			</p>
+			<?php // Errors land in their own paragraph, so the line naming the reader's address survives a failed send and still orients them on the retry. ?>
+			<p data-error-target role="status" hidden></p>
 			<p>
 				<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-send-otp>
 					<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
@@ -257,6 +260,8 @@ function render_block( $attrs, $content ) {
 		}
 	}
 
+	$form_id = get_form_id();
+
 	ob_start();
 	?>
 	<div class="newspack-registration newspack-ui <?php echo esc_attr( get_block_classes( $attrs ) ); ?>">
@@ -272,7 +277,7 @@ function render_block( $attrs, $content ) {
 				<?php echo $success_registration_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>
 		<?php else : ?>
-			<form id="<?php echo esc_attr( get_form_id() ); ?>" data-newspack-recaptcha="newspack_register">
+			<form id="<?php echo esc_attr( $form_id ); ?>" data-newspack-recaptcha="newspack_register">
 				<?php if ( ! empty( $attrs['title'] ) ) : ?>
 					<div class="newspack-registration__header">
 						<h3 class="newspack-registration__title"><?php echo \wp_kses_post( $attrs['title'] ); ?></h3>
@@ -346,7 +351,7 @@ function render_block( $attrs, $content ) {
 									<span class="submit"><?php echo \esc_html( $attrs['label'] ); ?></span>
 								</button>
 							</div>
-							<div class="newspack-registration__response <?php echo ( empty( $message ) ) ? 'newspack-registration--hidden' : null; ?>">
+							<div id="<?php echo esc_attr( $form_id . '-response' ); ?>" class="newspack-registration__response <?php echo ( empty( $message ) ) ? 'newspack-registration--hidden' : null; ?>">
 								<?php if ( ! empty( $message ) ) : ?>
 									<p><?php echo \esc_html( $message ); ?></p>
 								<?php endif; ?>

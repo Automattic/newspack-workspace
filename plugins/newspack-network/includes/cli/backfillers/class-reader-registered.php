@@ -82,8 +82,8 @@ class Reader_Registered extends Abstract_Backfiller {
 
 		$total = count( $user_ids );
 
-		for ( $offset = 0; $offset < $total; $offset += self::BATCH_SIZE ) {
-			$batch = array_slice( $user_ids, $offset, self::BATCH_SIZE );
+		for ( $offset = 0; $offset < $total; $offset += static::BATCH_SIZE ) {
+			$batch = array_slice( $user_ids, $offset, static::BATCH_SIZE );
 
 			$users = get_users(
 				[
@@ -111,6 +111,7 @@ class Reader_Registered extends Abstract_Backfiller {
 
 				yield new \Newspack_Network\Incoming_Events\Reader_Registered( get_bloginfo( 'url' ), $user_data, strtotime( $user->user_registered ) );
 			}
+			$this->free_runtime_cache();
 		}
 	}
 }

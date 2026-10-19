@@ -4,13 +4,13 @@
  * Style dependencies
  */
 import './modal.scss';
-import * as a11y from './accessibility.js';
 
 /**
  * Internal dependencies
  */
 import { manageDismissed, manageOpened } from './analytics';
 import {
+	afterDeferredScripts,
 	domReady,
 	iframeReady,
 	onCheckoutReady,
@@ -23,8 +23,16 @@ import {
 	triggerFormSubmit,
 	getCheckoutData,
 	getFormattedAmount,
+	getInitialFocus,
 } from './utils';
-import { resolveCheckoutButtonForm, readCheckoutData, applyContextFields } from './checkout-button-trigger';
+import {
+	resolveCheckoutButtonForm,
+	readCheckoutData,
+	applyContextFields,
+	appendUtmFields,
+	readUtmParams,
+	getDroppedLinkContext,
+} from './checkout-button-trigger';
 import { resolveDonationTrigger } from './donate-trigger';
 import { TIERS_BASED_READY_EVENT } from '../shared/js/tiers-based-ready';
 import { applyCtaAttribution } from '../shared/js/cta-attribution';
@@ -37,6 +45,8 @@ const MODAL_CLASS_PREFIX = `${ CLASS_PREFIX }__modal`;
 const VARIATON_MODAL_CLASS_PREFIX = 'newspack-blocks__modal-variation';
 const PROCESSING_PAYMENT_TEXT_CLASS = `${ CLASS_PREFIX }__processing-payment-text`;
 const PROCESSING_PAYMENT_MESSAGES = newspackBlocksModal.processing_payment_messages;
+// newspack-ui opens its dialogs itself. Without it, this script does.
+const OPENS_OWN_DIALOGS = 'newspack-ui' !== CLASS_PREFIX;
 
 // Track the checkout intent to avoid multiple analytics events.
 let inCheckoutIntent = false;
@@ -53,7 +63,26 @@ const closeModal = el => {
 		window.newspackReaderActivation?.overlays.remove( el.overlayId );
 	}
 	el.setAttribute( 'data-state', 'closed' );
+	// Closed now rather than when newspack-ui catches up, so the page behind is no
+	// longer inert and focus can go back to the trigger.
+	if ( el.open ) {
+		el.close();
+	}
 	document.body.style.overflow = 'auto';
+};
+
+// A content gate on the page reloads it once the last overlay closes after a checkout,
+// which cancels a post-checkout navigation that is still loading. An overlay held from
+// the moment the checkout navigates keeps the gate waiting.
+const heldOverlays = [];
+const holdOverlay = () => {
+	const overlayId = window.newspackReaderActivation?.overlays?.add?.();
+	if ( overlayId ) {
+		heldOverlays.push( overlayId );
+	}
+};
+const releaseHeldOverlays = () => {
+	heldOverlays.splice( 0 ).forEach( overlayId => window.newspackReaderActivation?.overlays?.remove?.( overlayId ) );
 };
 
 // Cleanup if page is loaded via back button.
@@ -61,8 +90,15 @@ window.onpageshow = event => {
 	if ( event.persisted ) {
 		// If the page is loaded from the back button, find and remove any loading-related classes and modals:
 		document.querySelectorAll( '.modal-processing' ).forEach( el => el.classList.remove( 'modal-processing' ) );
-		document.querySelectorAll( '.non-modal-checkout-loading' ).forEach( el => el.classList.remove( 'non-modal-checkout-loading' ) );
+		// The payment that was processing belongs to the page the reader left.
+		document.querySelector( `#${ MODAL_CHECKOUT_ID } .${ CLASS_PREFIX }__spinner` )?.removeAttribute( 'aria-busy' );
+		document.querySelectorAll( '.non-modal-checkout-loading' ).forEach( el => {
+			el.classList.remove( 'non-modal-checkout-loading' );
+			el.removeAttribute( 'aria-busy' );
+		} );
 		document.querySelectorAll( `.${ MODAL_CLASS_PREFIX }-container` ).forEach( el => closeModal( el ) );
+		// The reader is back on a page they were redirected away from, so the gate may reload it.
+		releaseHeldOverlays();
 	}
 };
 
@@ -128,6 +164,25 @@ domReady( () => {
 		const productDetails = container.querySelector( '#modal-checkout-product-details' );
 		const checkoutData = getCheckoutData( productDetails );
 
+		let hasFocused = false;
+
+		/**
+		 * Move focus into this checkout screen once it shows. Opening the dialog can't
+		 * see into the iframe, so focus waits on the heading until then. Focus the
+		 * reader has moved to the Close button in the meantime stays there.
+		 */
+		const focusCheckout = () => {
+			if ( hasFocused || 'open' !== modalCheckout.dataset.state ) {
+				return;
+			}
+			hasFocused = true;
+			const active = modalCheckout.ownerDocument.activeElement;
+			if ( active && active !== iframe && active !== modalCheckout && modalCheckout.contains( active ) && active.tabIndex >= 0 ) {
+				return;
+			}
+			getInitialFocus( container )?.focus();
+		};
+
 		const processingPaymentText = document.createElement( 'p' );
 		processingPaymentText.classList.add( PROCESSING_PAYMENT_TEXT_CLASS );
 		let processingPaymentTimeouts = [];
@@ -140,6 +195,8 @@ domReady( () => {
 		const renderProcessingPaymentScreen = event => {
 			spinner.querySelectorAll( `.${ PROCESSING_PAYMENT_TEXT_CLASS }` ).forEach( node => node.remove() );
 			spinner.style.display = 'flex';
+			// Escape leaves a checkout that is taking a payment open.
+			spinner.setAttribute( 'aria-busy', 'true' );
 			clearProcessingPaymentTimeouts();
 			processingPaymentText.textContent = PROCESSING_PAYMENT_MESSAGES[ 0 ]?.text ?? '';
 			PROCESSING_PAYMENT_MESSAGES.slice( 1 ).forEach( ( { text, delay } ) => {
@@ -154,6 +211,7 @@ domReady( () => {
 
 		const hideProcessingPaymentScreen = () => {
 			spinner.style.display = 'none';
+			spinner.removeAttribute( 'aria-busy' );
 			clearProcessingPaymentTimeouts();
 			spinner.querySelectorAll( `.${ PROCESSING_PAYMENT_TEXT_CLASS }` ).forEach( node => node.remove() );
 		};
@@ -165,6 +223,14 @@ domReady( () => {
 		onCheckoutPlaceOrderStart( container, renderProcessingPaymentScreen );
 
 		onCheckoutPlaceOrderError( container, hideProcessingPaymentScreen );
+
+		// The processing screen steps aside for a payment challenge, and comes back
+		// while the payment finishes.
+		container.addEventListener( 'checkout-payment-challenge', ( { detail } ) => {
+			if ( 'true' === spinner.getAttribute( 'aria-busy' ) ) {
+				spinner.style.display = detail.shown ? 'none' : 'flex';
+			}
+		} );
 
 		onCheckoutReady( container, () => {
 			// Display initial errors if any.
@@ -185,6 +251,7 @@ domReady( () => {
 				modalCheckout.checkout_nonce = iframe.contentWindow.newspackBlocksModalCheckout.checkout_nonce;
 			}
 			setModalReady( container );
+			focusCheckout();
 		} );
 
 		onCheckoutComplete( container, () => {
@@ -200,9 +267,8 @@ domReady( () => {
 			setModalSize( 'small' );
 			setModalTitle( newspackBlocksModal.labels.thankyou_modal_title );
 			setModalReady( container );
-			a11y.trapFocus( modalCheckout.querySelector( `.${ MODAL_CLASS_PREFIX }` ) );
-
 			hideProcessingPaymentScreen();
+			focusCheckout();
 		} );
 
 		// Resubmit modal checkout form if an unrecoverable error is encountered.
@@ -285,6 +351,12 @@ domReady( () => {
 		newspackBlocksModal?.is_registration_required &&
 		window?.newspackReaderActivation?.openAuthModal;
 
+	// Snapshot the landing page's utm params: the form's own GET submission
+	// replaces the query string entirely, so the request the checkout sees
+	// carries only what rides the form. Captured once, applied to every form
+	// (direct, donate, picker) at submit time.
+	const landingUtmParams = readUtmParams( window.location.search );
+
 	/**
 	 * Handle checkout form submit.
 	 *
@@ -296,6 +368,11 @@ domReady( () => {
 			ev.preventDefault();
 		}
 		const form = ev.target;
+		// On the redirect path the form stays on the page while its cart is built, so a
+		// second press would build another.
+		if ( ! isModalCheckout && form.classList.contains( 'modal-processing' ) ) {
+			return;
+		}
 		form.classList.add( 'modal-processing' );
 
 		// NPPD-1887: if the reader arrived here by clicking a paid-intent CTA in a gate
@@ -304,6 +381,11 @@ domReady( () => {
 		// (a form rendered inside the surface itself always wins) or when the form is
 		// inside a gate. Must run BEFORE getCheckoutData(), which snapshots the form.
 		applyCtaAttribution( form );
+
+		// Carry the landing page's utm params into the checkout request itself, so
+		// Modal_Checkout::merge_request_utm_params() reads them from $_GET instead
+		// of depending on the referer.
+		appendUtmFields( form, landingUtmParams );
 
 		const checkoutData = getCheckoutData( form );
 
@@ -388,7 +470,6 @@ domReady( () => {
 				ev.preventDefault();
 				form.classList.remove( 'modal-processing' );
 				openModal( variationModal );
-				a11y.trapFocus( variationModal, false );
 
 				// For the variation modal we will not set `inCheckoutIntent = true` and
 				// let the `opened` event get triggered once the user selects a
@@ -405,19 +486,29 @@ domReady( () => {
 
 		// Populate cart and redirect to checkout if there is an unsupported payment gateway.
 		if ( ! isModalCheckout && ! shouldPromptRegistration() ) {
-			generateCart( checkoutData ).then( url => {
-				// Remove modal checkout query string and trailing question mark (if any).
-				window.location.href = url;
-			} );
+			generateCart( checkoutData )
+				.then( url => {
+					// Remove modal checkout query string and trailing question mark (if any).
+					window.location.href = url;
+				} )
+				.catch( error => {
+					console.warn( 'Unable to generate cart:', error ); // eslint-disable-line no-console
+					form.classList.remove( 'modal-processing' );
+					form.querySelectorAll( '.non-modal-checkout-loading' ).forEach( button => {
+						button.classList.remove( 'non-modal-checkout-loading' );
+						button.removeAttribute( 'aria-busy' );
+					} );
+				} );
 			// Add some animation to the Checkout Button while the non-modal checkout is loading.
 			// For now, don't do it when any popup opens, just when we go right to the checkout page.
 			if ( ! ( checkoutData.is_variable && ! checkoutData.variation_id ) ) {
-				const buttons = form.querySelectorAll( 'button[type=submit]:focus' );
-				buttons.forEach( button => {
+				const button = ev.submitter || form.querySelector( 'button[type=submit]' );
+				if ( button ) {
 					button.classList.add( 'non-modal-checkout-loading' );
+					button.setAttribute( 'aria-busy', 'true' );
 					const buttonText = button.innerHTML;
 					button.innerHTML = '<span>' + buttonText + '</span>';
-				} );
+				}
 			}
 			return;
 		}
@@ -474,6 +565,10 @@ domReady( () => {
 				},
 				skipSuccess: true,
 				skipNewslettersSignup: true,
+				// A payment that completes at checkout verifies the reader, so don't hold a new
+				// reader at the "verify your email" step on the way there. One whose payment is
+				// still pending (a check, a bank transfer) is asked to verify in My Account.
+				skipVerification: true,
 				labels: {
 					signin: {
 						title: newspackBlocksModal.labels.signin_modal_title,
@@ -559,6 +654,8 @@ domReady( () => {
 		const shouldCloseModal = ! iframe.contentDocument || ! afterSuccessUrlInput || ! afterSuccessBehaviorInput || ! container?.checkoutComplete;
 		if ( shouldCloseModal || hasNewsletterPopup ) {
 			spinner.style.display = 'flex';
+			// A payment abandoned mid-way would otherwise keep the next checkout from closing on Escape.
+			spinner.removeAttribute( 'aria-busy' );
 			if ( iframe && modalContent.contains( iframe ) ) {
 				// Reset iframe and modal content heights.
 				iframe._ready = false;
@@ -583,12 +680,19 @@ domReady( () => {
 		}
 
 		if ( container?.checkoutComplete ) {
+			let isComplete = false;
 			const handleCheckoutComplete = () => {
+				// The signup modal can report twice: answered, then closed while the redirect loads.
+				if ( isComplete ) {
+					return;
+				}
+				isComplete = true;
 				if ( afterSuccessUrlInput && afterSuccessBehaviorInput ) {
 					const afterSuccessUrl = afterSuccessUrlInput.getAttribute( 'value' );
 					const afterSuccessBehavior = afterSuccessBehaviorInput.getAttribute( 'value' );
 
 					if ( 'custom' === afterSuccessBehavior ) {
+						holdOverlay();
 						window.location.href = afterSuccessUrl;
 					} else if ( 'referrer' === afterSuccessBehavior ) {
 						// window.history.back() is a no-op when there's no in-session
@@ -601,6 +705,7 @@ domReady( () => {
 						if ( referrer ) {
 							try {
 								if ( new URL( referrer ).origin === window.location.origin ) {
+									holdOverlay();
 									window.location.href = referrer;
 									navigated = true;
 								}
@@ -609,7 +714,10 @@ domReady( () => {
 							}
 						}
 						if ( ! navigated ) {
+							holdOverlay();
 							window.history.back();
+							// With no entry to go back to, the reader stays on this page: let go.
+							setTimeout( releaseHeldOverlays, 1000 );
 						}
 					}
 				}
@@ -621,6 +729,9 @@ domReady( () => {
 				window.newspackReaderActivation.openNewslettersSignupModal( {
 					onSuccess: handleCheckoutComplete,
 					onError: handleCheckoutComplete,
+					// Closing the signup modal ends the checkout the same way as answering it,
+					// or the reader never reaches the post-checkout destination.
+					onDismiss: handleCheckoutComplete,
 					closeOnSuccess: shouldCloseModal,
 				} );
 			} else {
@@ -640,7 +751,6 @@ domReady( () => {
 			inCheckoutIntent = false;
 			document.getElementById( 'newspack_modal_checkout' ).removeAttribute( 'data-checkout' );
 		}
-		document.removeEventListener( 'keydown', handleKeydown );
 	};
 
 	const openCheckout = url => {
@@ -656,10 +766,22 @@ domReady( () => {
 				closeCheckout();
 			}
 		} );
+	};
 
-		a11y.trapFocus( modalCheckout, iframe );
-
-		document.addEventListener( 'keydown', handleKeydown );
+	/**
+	 * Move focus off the Close button the browser puts it on when a dialog opens,
+	 * following newspack-ui's rule: first field, else first action, else the heading.
+	 *
+	 * @param {HTMLDialogElement} el The dialog.
+	 */
+	const focusOpenedDialog = el => {
+		const content = el.querySelector( `.${ MODAL_CLASS_PREFIX }__content` );
+		const heading = el.querySelector( `.${ MODAL_CLASS_PREFIX }__header h2` );
+		const target = ( content && getInitialFocus( content ) ) || heading;
+		if ( target === heading && heading ) {
+			heading.tabIndex = -1;
+		}
+		target?.focus();
 	};
 
 	const openModal = el => {
@@ -667,6 +789,10 @@ domReady( () => {
 			el.overlayId = window.newspackReaderActivation?.overlays.add();
 		}
 		el.setAttribute( 'data-state', 'open' );
+		if ( OPENS_OWN_DIALOGS && ! el.open && typeof el.showModal === 'function' ) {
+			el.showModal();
+			focusOpenedDialog( el );
+		}
 		document.body.style.overflow = 'hidden';
 	};
 
@@ -730,13 +856,31 @@ domReady( () => {
 	} );
 
 	/**
-	 * Escape key handler to close the modal checkout.
+	 * Escape closes checkout and the variations modal the way their Close buttons do,
+	 * so the cart is emptied and the dismissal tracked.
 	 */
-	const handleKeydown = ev => {
-		if ( ev.key === 'Escape' ) {
-			closeCheckout();
-		}
-	};
+	[ modalCheckout, ...document.querySelectorAll( `.${ VARIATON_MODAL_CLASS_PREFIX }` ) ].forEach( dialog => {
+		dialog.addEventListener( 'cancel', ev => {
+			if ( ev.target !== dialog ) {
+				return;
+			}
+			ev.preventDefault();
+			if ( ! dialog.querySelector( '[aria-busy="true"]' ) ) {
+				closeCheckout();
+			}
+		} );
+	} );
+
+	// The browser can close the dialog itself, such as on a repeated Escape. A
+	// payment in progress keeps checkout open; newspack-ui handles this for its dialogs.
+	if ( OPENS_OWN_DIALOGS ) {
+		modalCheckout.addEventListener( 'close', () => {
+			if ( ! modalCheckout.open && 'true' === spinner.getAttribute( 'aria-busy' ) ) {
+				modalCheckout.showModal();
+				focusOpenedDialog( modalCheckout );
+			}
+		} );
+	}
 
 	/**
 	 * Handle modal checkout triggers.
@@ -887,6 +1031,18 @@ domReady( () => {
 			iframeName: IFRAME_NAME,
 		} );
 		if ( form ) {
+			// A page-authored form wins with its own context; say so when that
+			// drops something the link carried, instead of applying list price
+			// or the default thank-you behavior with no trace.
+			const dropped = getDroppedLinkContext( form, window.location.search );
+			if ( dropped.length ) {
+				// eslint-disable-next-line no-console
+				console.warn(
+					`Newspack modal checkout: the resolved checkout form does not carry ${ dropped.join(
+						', '
+					) } from the URL. The page block's own settings apply instead.`
+				);
+			}
 			triggerFormSubmit( form );
 			return true;
 		}
@@ -950,7 +1106,16 @@ domReady( () => {
 			stripCheckoutUrlParams();
 		}
 	};
-	handleModalCheckoutUrlParams();
+	// A click reaches a form long after every script has loaded; the URL trigger
+	// fires as soon as this bundle runs. This bundle is async and the reader
+	// activation scripts are deferred, so firing here can beat them — and then
+	// the checkout opens without the sign-in step and without registering as an
+	// overlay, which lets prompts open on top of it. Deferred scripts are done
+	// by DOMContentLoaded, so the trigger waits for that rather than queueing on
+	// newspackRAS: that queue only flushes once newspack-plugin's reader
+	// activation script runs, and the modal needs only WooCommerce, so on a site
+	// without newspack-plugin a queued trigger would never fire.
+	afterDeferredScripts( handleModalCheckoutUrlParams );
 
 	/**
 	 * Open the modal checkout.
@@ -961,6 +1126,7 @@ domReady( () => {
 	 * @param {string}   options.title              The title to set for the modal.
 	 * @param {string}   options.actionType         The action type to set for the modal.
 	 * @param {Object}   options.afterSuccess       The after success configuration object.
+	 * @param {number}   options.quantity           Optional. Seats/quantity to purchase. Only sent when above 1.
 	 * @param {Function} options.onCheckoutComplete The callback to call when the checkout is complete.
 	 * @param {Function} options.onClose            The callback to call when the modal is closed.
 	 */
@@ -969,10 +1135,14 @@ domReady( () => {
 		title = null,
 		actionType = null,
 		afterSuccess = {},
+		quantity = null,
 		// eslint-disable-next-line @typescript-eslint/no-shadow
 		onCheckoutComplete = null,
 		onClose = null,
 	} ) => {
+		// The dialog returns focus to whatever opened it, not to an earlier checkout's button.
+		modalTrigger = null;
+
 		/**
 		 * Title configuration.
 		 */
@@ -1004,6 +1174,15 @@ domReady( () => {
 		 */
 		if ( actionType ) {
 			url.searchParams.set( 'action_type', actionType );
+		}
+
+		/**
+		 * Seat/quantity configuration. Only sent above 1 — the server already
+		 * defaults to a single seat, so there's nothing to add to the URL when
+		 * the reader is buying just one.
+		 */
+		if ( quantity && parseInt( quantity, 10 ) > 1 ) {
+			url.searchParams.set( 'quantity', String( parseInt( quantity, 10 ) ) );
 		}
 
 		/**

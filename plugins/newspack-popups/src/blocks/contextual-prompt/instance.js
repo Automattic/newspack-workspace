@@ -32,6 +32,7 @@ import {
 	GenerateButton,
 	CandidateList,
 } from './candidates';
+import { ControlConditionNotice } from './condition-notice';
 
 // The block editor and the document-settings panel are separate entries with
 // separate localized objects; either may be the one present. Both stringify the
@@ -53,6 +54,12 @@ export const isPromptInstance = ( name, attributes ) => 'core/block' === name &&
 // the class the pattern's card carries, and the only thing a copy detached from
 // the pattern still has to identify it by.
 export const MARKER_CLASS = 'newspack-contextual-prompt';
+
+// Mirrors BOUND_NAME in class-newspack-popups-contextual-prompt-pattern.php: the
+// name the pattern binds its copy paragraph under. It is a fixed key, not a
+// translated label, so it identifies the generated copy on a detached card,
+// where the detach has dropped the override binding.
+export const BOUND_NAME = 'Prompt Copy';
 
 /**
  * Whether a block is a Contextual Prompt detached from the pattern: the card's
@@ -358,6 +365,7 @@ const PromptInstanceInspector = ( { clientId, attributes } ) => {
 		<InspectorControls group="content">
 			<PanelBody title={ __( 'Prompt Copy', 'newspack-popups' ) } initialOpen>
 				<VStack spacing={ 4 }>
+					<ControlConditionNotice />
 					{ error && (
 						<Notice status="error" isDismissible={ false }>
 							{ error }

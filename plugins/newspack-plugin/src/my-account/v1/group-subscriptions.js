@@ -4,13 +4,16 @@
  * Initialize functions for the Subscriptions page.
  */
 
-import { domReady } from '../../utils';
+import { domReady, setButtonLoading } from '../../utils';
+import { initGroupMemberSearch } from './group-member-search';
 
 domReady( function () {
 	const content = document.querySelector( '.newspack-my-account__group_subscription__content' );
 	if ( ! content ) {
 		return;
 	}
+
+	initGroupMemberSearch( content );
 
 	const subId = parseInt( content.getAttribute( 'data-subscription-id' ), 10 );
 	const baseUrl = newspackMyAccountV1?.rest?.base_url;
@@ -29,6 +32,193 @@ domReady( function () {
 			open.addEventListener( 'click', event => {
 				event.preventDefault();
 				inviteModal.setAttribute( 'data-state', 'open' );
+			} );
+		} );
+	}
+
+	// Invite in bulk: the list goes to the server twice, once for a review and once to send, so
+	// the server's parser and seat check decide both and the reader confirms what is sent.
+	const bulkModal = document.getElementById( 'newspack-my-account__group_subscription--invite-bulk' );
+	const bulkForm = bulkModal?.querySelector( '.newspack-my-account__group_subscription__invite-bulk__input' );
+	const bulkReview = bulkModal?.querySelector( '.newspack-my-account__group_subscription__invite-bulk__review' );
+	// The buttons open the modal even when the group is full: the modal then carries the
+	// at-limit message instead of the form.
+	if ( bulkModal ) {
+		[ ...document.querySelectorAll( '.newspack-my-account__subscription--invite-bulk' ) ].forEach( open => {
+			open.addEventListener( 'click', event => {
+				event.preventDefault();
+				open.closest( '.newspack-ui__dropdown' )?.classList.remove( 'active' );
+				bulkModal.setAttribute( 'data-state', 'open' );
+			} );
+		} );
+	}
+	if ( bulkForm && bulkReview ) {
+		const summary = bulkReview.querySelector( '.newspack-my-account__group_subscription__invite-bulk__summary' );
+		const errorNotice = bulkModal.querySelector( '.newspack-my-account__group_subscription__invite-bulk__error' );
+		const sendButton = bulkReview.querySelector( '.newspack-my-account__group_subscription__invite-bulk__send' );
+		const backButton = bulkReview.querySelector( '.newspack-my-account__group_subscription__invite-bulk__back' );
+		const doneLink = bulkReview.querySelector( '.newspack-my-account__group_subscription__invite-bulk__done' );
+		const textarea = bulkForm.querySelector( 'textarea' );
+		const fileInput = bulkForm.querySelector( 'input[type="file"]' );
+		const fileName = bulkForm.querySelector( '.newspack-my-account__group_subscription__invite-bulk__filename' );
+		const removeFile = bulkForm.querySelector( '.newspack-my-account__group_subscription__invite-bulk__remove-file' );
+		const closeButtons = [ ...bulkModal.querySelectorAll( '.newspack-ui__modal__close' ) ];
+		const errorText = bulkForm.getAttribute( 'data-error-text' );
+		const unfinishedText = bulkForm.getAttribute( 'data-unfinished-text' );
+		let sent = false;
+
+		// Each step hides the button that had focus, so focus moves with the step.
+		const showStep = isReview => {
+			bulkForm.classList.toggle( 'hidden', isReview );
+			bulkReview.classList.toggle( 'hidden', ! isReview );
+			( isReview ? bulkReview : textarea ).focus();
+		};
+		const showError = message => {
+			errorNotice.classList.toggle( 'hidden', ! message );
+			errorNotice.querySelector( 'p' ).textContent = message || '';
+		};
+		// Lines come from the server and may echo what the reader typed, so they are set as text.
+		const renderSummary = lines => {
+			summary.replaceChildren(
+				...( lines || [] ).map( line => {
+					const item = document.createElement( 'li' );
+					item.textContent = line;
+					return item;
+				} )
+			);
+		};
+		const readInput = async () => {
+			const file = fileInput.files?.[ 0 ];
+			return {
+				subscription_id: subId,
+				emails: textarea.value,
+				csv: file ? await file.text() : '',
+			};
+		};
+		// A refusal comes back as a JSON error with a reason. Anything else (a dropped
+		// connection, a timeout page) says nothing about what the server got through.
+		const postBulk = async body => {
+			let response;
+			let data;
+			try {
+				response = await fetch( `${ baseUrl }${ namespace }/invite-bulk`, {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-WP-Nonce': nonce,
+					},
+					body: JSON.stringify( body ),
+				} );
+				data = await response.json();
+			} catch ( error ) {
+				throw Object.assign( new Error( errorText ), { unfinished: true } );
+			}
+			if ( ! response.ok ) {
+				throw Object.assign( new Error( data?.message || errorText ), { unfinished: response.status >= 500 } );
+			}
+			return data;
+		};
+
+		const showFileName = () => {
+			fileName.textContent = fileInput.files?.[ 0 ]?.name || '';
+			removeFile.classList.toggle( 'hidden', ! fileName.textContent );
+		};
+		const uploadButton = bulkForm.querySelector( '.newspack-my-account__group_subscription__invite-bulk__upload' );
+		uploadButton.addEventListener( 'click', () => fileInput.click() );
+		fileInput.addEventListener( 'change', showFileName );
+		removeFile.addEventListener( 'click', event => {
+			event.preventDefault();
+			fileInput.value = '';
+			showFileName();
+			uploadButton.focus();
+		} );
+
+		// Send stays focusable while it can't be used, so a keyboard user can reach it and
+		// hear why; the click handler refuses instead.
+		const setSendable = sendable => {
+			sendButton.setAttribute( 'aria-disabled', sendable ? 'false' : 'true' );
+			sendButton.classList.toggle( 'disabled', ! sendable );
+		};
+
+		// Once something was sent, closing the modal reloads the Invitations tab, as Done does.
+		closeButtons.forEach( close => {
+			close.addEventListener( 'click', () => {
+				if ( sent ) {
+					window.location.href = doneLink.href;
+				}
+			} );
+		} );
+
+		bulkForm.addEventListener( 'submit', event => {
+			event.preventDefault();
+			const reviewButton = bulkForm.querySelector( 'button[type="submit"]' );
+			return withLoadingButton( reviewButton, async () => {
+				showError( '' );
+				try {
+					const data = await postBulk( await readInput() );
+					renderSummary( data.summary );
+					showError( data.over_limit || '' );
+					setSendable( ! data.over_limit && !! data.to_invite?.length );
+					sendButton.classList.remove( 'hidden' );
+					backButton.classList.remove( 'hidden' );
+					doneLink.classList.add( 'hidden' );
+					showStep( true );
+				} catch ( error ) {
+					showError( error.message );
+				}
+			} );
+		} );
+
+		backButton.addEventListener( 'click', event => {
+			event.preventDefault();
+			showError( '' );
+			showStep( false );
+		} );
+
+		// Focus goes to the outcome, so it is read before Done.
+		const showDone = () => {
+			sendButton.classList.add( 'hidden' );
+			backButton.classList.add( 'hidden' );
+			doneLink.classList.remove( 'hidden' );
+			bulkReview.focus();
+		};
+
+		sendButton.addEventListener( 'click', event => {
+			event.preventDefault();
+			if ( 'true' === sendButton.getAttribute( 'aria-disabled' ) ) {
+				return;
+			}
+			// Nothing else in the modal may act while the send is in flight. Closing it then
+			// would leave a review whose list may already have been sent, so a close during
+			// or after a send reloads the Invitations tab, as Done does.
+			sent = true;
+			[ backButton, ...closeButtons ].forEach( button => button.setAttribute( 'disabled', '' ) );
+			let refused = false;
+			return withLoadingButton( sendButton, async () => {
+				showError( '' );
+				try {
+					const data = await postBulk( { ...( await readInput() ), confirm: true } );
+					renderSummary( data.summary );
+					showDone();
+				} catch ( error ) {
+					if ( error.unfinished ) {
+						renderSummary( [] );
+						showError( unfinishedText );
+						showDone();
+						return;
+					}
+					// A refusal, the seat check included, sends nothing, so the review stays
+					// open, and the same list can't be sent again until it changes.
+					refused = true;
+					sent = false;
+					showError( error.message );
+				}
+			} ).finally( () => {
+				[ backButton, ...closeButtons ].forEach( button => button.removeAttribute( 'disabled' ) );
+				if ( refused ) {
+					setSendable( false );
+				}
 			} );
 		} );
 	}
@@ -145,18 +335,22 @@ domReady( function () {
 		return elapsed < MIN_LOADING_MS ? new Promise( resolve => setTimeout( resolve, MIN_LOADING_MS - elapsed ) ) : Promise.resolve();
 	};
 
-	// Run an async action while a button shows its loading state (spinner + disabled + aria-busy),
-	// always restoring the button afterwards. The action owns its own waitForMinLoading() timing.
+	// Run an async action while a button shows its loading state, always restoring the
+	// button afterwards. A press while its action is still running does nothing, even
+	// if something else has cleared the button's loading state in the meantime. The
+	// action owns its own waitForMinLoading() timing.
+	const runningButtons = new WeakSet();
 	const withLoadingButton = async ( button, action ) => {
-		button.classList.add( 'newspack-ui__button--loading' );
-		button.setAttribute( 'aria-busy', 'true' );
-		button.setAttribute( 'disabled', '' );
+		if ( runningButtons.has( button ) ) {
+			return;
+		}
+		runningButtons.add( button );
+		setButtonLoading( button, true );
 		try {
 			return await action();
 		} finally {
-			button.classList.remove( 'newspack-ui__button--loading' );
-			button.removeAttribute( 'aria-busy' );
-			button.removeAttribute( 'disabled' );
+			runningButtons.delete( button );
+			setButtonLoading( button, false );
 		}
 	};
 
@@ -186,7 +380,7 @@ domReady( function () {
 				afterInviteLink( true );
 				if ( await copyToClipboard( data.url ) ) {
 					const message = isRegenerate
-						? newspackMyAccountV1?.labels?.invite_link_regenerated || 'New invite link copied. The old one no longer works.'
+						? newspackMyAccountV1?.labels?.invite_link_regenerated || 'New invite link copied. Any older link no longer works.'
 						: newspackMyAccountV1?.labels?.invite_link_copied || 'Invite link copied.';
 					showSnackbar( message );
 				} else {
@@ -256,7 +450,7 @@ domReady( function () {
 		} );
 	} );
 
-	// Rename group: the pencil button in the header opens a modal; saving POSTs the new name and
+	// Rename group: the "Rename" action in the header (More menu at large viewports, plain button at small ones) opens a modal; saving POSTs the new name and
 	// updates the header (and any other) group-name element in place.
 	const renameModal = document.getElementById( 'newspack-my-account__group_subscription--rename' );
 	const renameForm = renameModal?.querySelector( '.newspack-my-account__group--rename-form' );

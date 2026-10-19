@@ -10,6 +10,7 @@ namespace Newspack_Network\Content_Distribution;
 use Newspack_Network\Content_Distribution as Content_Distribution_Class;
 use Newspack_Network\Debugger;
 use Newspack_Network\User_Update_Watcher;
+use Newspack_Network\Utils\Network;
 use Newspack_Network\Utils\Users as User_Utils;
 use WP_Error;
 use WP_Post;
@@ -461,13 +462,16 @@ class Incoming_Post {
 			}
 		}
 
-		if ( ! function_exists( 'media_sideload_image' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/media.php';
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-			require_once ABSPATH . 'wp-admin/includes/image.php';
+		// The thumbnail URL comes from the peer's payload and is fetched server-side.
+		// Network::is_safe_sideload_url() is the authoritative gate and its docblock carries
+		// the reasoning; this pre-check exists so a refusal gets a message naming the post,
+		// and sideload_peer_image() refuses again on its own regardless.
+		if ( ! Network::is_safe_sideload_url( $thumbnail_url ) ) {
+			self::log( 'Featured image URL is not a valid external URL, skipping sideload for post ' . $this->ID );
+			return;
 		}
 
-		$attachment_id = media_sideload_image( $thumbnail_url, $this->ID, '', 'id' );
+		$attachment_id = Network::sideload_peer_image( $thumbnail_url, $this->ID, '', 'id' );
 		if ( is_wp_error( $attachment_id ) ) {
 			self::log( 'Failed to upload featured image for post ' . $this->ID . ' with message: ' . $attachment_id->get_error_message() );
 

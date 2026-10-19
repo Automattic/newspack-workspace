@@ -34,11 +34,26 @@ class Deletion_Spy_Integration extends Integration {
 	public $delete_result = true;
 
 	/**
-	 * Result that push_contact_data() returns.
+	 * Result that push_contact_data() returns. An array stands in for a
+	 * provider's contact data, such as one naming `unsynced_fields`.
+	 *
+	 * @var true|array|\WP_Error
+	 */
+	public $push_result = true;
+
+	/**
+	 * Captured flag_deletion_cleanup() calls.
+	 *
+	 * @var array
+	 */
+	public $cleanup_calls = [];
+
+	/**
+	 * Result that flag_deletion_cleanup() returns.
 	 *
 	 * @var true|\WP_Error
 	 */
-	public $push_result = true;
+	public $cleanup_result = true;
 
 	/**
 	 * Value returned by is_set_up(). Tests flip this to false to model an
@@ -96,13 +111,15 @@ class Deletion_Spy_Integration extends Integration {
 	 * @param array      $contact          The contact data.
 	 * @param string     $context          The sync context.
 	 * @param array|null $existing_contact Existing contact data if available.
+	 * @param array      $options          Sync options (e.g. skip_lists).
 	 * @return true
 	 */
-	public function push_contact_data( $contact, $context = '', $existing_contact = null ) {
+	public function push_contact_data( $contact, $context = '', $existing_contact = null, $options = [] ) {
 		$this->push_calls[] = [
 			'contact'          => $contact,
 			'context'          => $context,
 			'existing_contact' => $existing_contact,
+			'options'          => $options,
 		];
 		return $this->push_result;
 	}
@@ -116,6 +133,17 @@ class Deletion_Spy_Integration extends Integration {
 	public function delete_contact( $email ) {
 		$this->delete_calls[] = [ 'email' => $email ];
 		return $this->delete_result;
+	}
+
+	/**
+	 * Flag-deletion cleanup (records the call).
+	 *
+	 * @param string $email The email address of the deleted reader.
+	 * @return true|\WP_Error
+	 */
+	public function flag_deletion_cleanup( $email ) {
+		$this->cleanup_calls[] = [ 'email' => $email ];
+		return $this->cleanup_result;
 	}
 
 	/**
