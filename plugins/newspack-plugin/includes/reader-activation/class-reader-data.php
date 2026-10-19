@@ -72,7 +72,11 @@ final class Reader_Data {
 			'active_subscriptions',
 			'is_former_donor',
 			'newsletter_subscribed_lists',
+			'is_newsletter_subscriber',
 		];
+
+		// Contact pull writes these from the integration, so the browser must not.
+		$keys = array_merge( $keys, Reader_Data_Trust::get_incoming_field_keys() );
 
 		// is_donor is only read-only when the platform has a secure server-side
 		// mechanism to manage donor status. Currently only WooCommerce has this

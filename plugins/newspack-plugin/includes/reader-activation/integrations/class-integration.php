@@ -1329,7 +1329,27 @@ abstract class Integration {
 			$fields_to_store[ $key ] = $raw_data;
 		}
 
-		return \update_option( self::INCOMING_FIELDS_OPTION_PREFIX . $this->id, $fields_to_store, false );
+		$updated = \update_option( self::INCOMING_FIELDS_OPTION_PREFIX . $this->id, $fields_to_store, false );
+		\Newspack\Reader_Data_Trust::reset_cache();
+
+		$collisions = array_values( array_intersect( array_keys( $fields_to_store ), \Newspack\Reader_Data_Trust::BROWSER_KEYS ) );
+		if ( ! empty( $collisions ) ) {
+			Logger::newspack_log(
+				'newspack_reader_data_incoming_key_collision',
+				sprintf(
+					'Incoming fields of %s share a name with reader data the browser writes, so they stay writable and reader-data rules will not match them: %s',
+					$this->get_id(),
+					implode( ', ', $collisions )
+				),
+				[
+					'integration' => $this->get_id(),
+					'keys'        => $collisions,
+				],
+				'warning'
+			);
+		}
+
+		return $updated;
 	}
 
 	/**
